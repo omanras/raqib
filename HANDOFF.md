@@ -1,23 +1,27 @@
-# HANDOFF — M1.1+M1.2 REDO 2  (docs/review/2026-10-16-M1.1-M1.2-REDO.md)
+# HANDOFF — REDO 3  (M1.3, M2.1, M2.2, M3.1, M3.2 review packets)
 
-Task: fix the findings of the review of the first M1.1+M1.2 REDO that can
-be fixed inside its components; record the rest.
+Task: fix what the packets docs/review/2026-10-16-M1.3-M2.1-review.md and
+-M2.2-M3.1-M3.2-review.md raise inside these tasks' components; record the
+rest. Two commits: M1.3+M2.1, then M2.2+M3.1+M3.2.
 
 Scope:
   raqib/
-  tools/install-hooks.sh
   tests/
   README.md
+  docs/THREAT_MODEL.md
   docs/review/
 
 Exit criteria:
-- E1 4.1: no secret pattern backtracks; the private_key case and the other
-     adversarial inputs scan in well under a second.
-- E2 4.3, 4.5, 4.12, F1, F12: placeholder checks look at the secret only;
-     key-like heads and secret-bearing paths are left out; null output is
-     scan "none".
-- E3 Y3/SU2, Y2, A6-2, MS1, 4.7, 4.9, 4.10, B4, F10 residuals fixed.
-- E4 The surviving mutants (a)-(k) are killed by tests; gate green.
+- E1 report: findings tied to their trace; text output printable; cited
+     lines show cwd; bad sidecars and run records are alarms, not crashes.
+- E2 suspect: no label or framing outside the data tags; only allow-listed
+     metadata leaves; fallback answers named; bad findings refused; exit 3
+     when windows failed.
+- E3 eval: opaque session ids; errors cost on benign events; rules row
+     counts incomplete events; silence false positives measured.
+- E4 ui: run record shown; serve errors are alarm pages; unique anchors;
+     escaping tests for every value. Docs: every packet item fixed or
+     recorded; README numbers tested. Gate green.
 
-Commit: `landed: M1.1+M1.2 REDO 2 ...` or `STOP: ...`.
+Commit: `landed: REDO 3 ...` (twice) or `STOP: ...`.
 Read HANDOFF.md and do only the task it specifies.
