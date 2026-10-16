@@ -25,9 +25,10 @@ task_id() { sed -n 's/^# HANDOFF — \([A-Za-z0-9.]*\).*/\1/p' HANDOFF.md | head
 launch_builder() {  # $1 = task, $2 = extra instruction (REDO) or empty
   local T="$1" extra="${2:-}"
   local prompt="Read HANDOFF.md and do only the task it specifies. When done, push your single commit to branch claude/$T (never main). $extra"
-  local out
-  out="$(claude --cloud "$prompt" 2>&1 | tee ".loop/$T-launch.txt")"
-  printf '%s\n' "$out" | sed -n 's/.*\(session_[A-Za-z0-9]*\).*/\1/p' | head -1
+  # `claude --cloud` refuses to start without a TTY, so run it inside a
+  # pseudo-terminal via `script`; its output (incl. the session id) is recorded.
+  script -qfec "claude --cloud \"$prompt\"" ".loop/$T-launch.txt" >/dev/null 2>&1 </dev/null || true
+  sed -n 's/.*\(session_[A-Za-z0-9]\{10,\}\).*/\1/p' ".loop/$T-launch.txt" | head -1
 }
 
 wait_for_branch() {  # $1 = task ; prints commit sha or empty on timeout
@@ -69,10 +70,20 @@ for i in $(seq 1 "$MAX"); do
   echo "== iteration $i : $T"
   git pull -q --ff-only origin main || true
 
-  # 1) builder in the cloud
-  SID="$(launch_builder "$T")"
-  echo "[loop] cloud session: ${SID:-?}  (claude.ai/code)"
-  echo "$SID" > ".loop/$T-session.txt"
+  # 1) builder in the cloud (or --watch-only: you launched it by hand)
+  if [ "${WATCH_ONLY:-0}" = "1" ]; then
+    SID="$(cat ".loop/$T-session.txt" 2>/dev/null || true)"
+    echo "[loop] watch-only: waiting for claude/$T (session ${SID:-unknown})"
+  else
+    SID="$(launch_builder "$T")"
+    if [ -z "$SID" ]; then
+      echo "[loop] could not start a cloud session. Output was:"; cat ".loop/$T-launch.txt"
+      echo "[loop] Launch it by hand in a terminal:  claude --cloud \"Read HANDOFF.md and do only the task it specifies. Push to branch claude/$T.\""
+      echo "[loop] then re-run:  WATCH_ONLY=1 tools/loop.sh"; exit 4
+    fi
+    echo "[loop] cloud session: $SID  (claude.ai/code)"
+    echo "$SID" > ".loop/$T-session.txt"
+  fi
 
   # 2) wait for claude/<T> with a landed:/STOP: commit
   SHA="$(wait_for_branch "$T")"
