@@ -155,6 +155,10 @@ def run(records, findings, backend, threshold=DEFAULT_THRESHOLD, size=DEFAULT_WI
             kind, fields = validate(answer, set(window["seqs"]), threshold)
         except BackendError as exc:
             kind, fields = "error", str(exc)
+        except Exception as exc:
+            # Any other failure of a backend is an error line too, never a
+            # crash that leaves no record (A3).
+            kind, fields = "error", "%s failed: %s: %s" % (backend.name, type(exc).__name__, exc)
         if kind == "drop":
             counts["below_threshold"] += 1
         elif kind == "suspicion":

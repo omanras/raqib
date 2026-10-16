@@ -461,3 +461,53 @@ def test_suspicion_problem_accepts_a_good_line():
     good = {"kind": "suspicion", "session_id": "s", "window": [1, 2], "suspicion": 0.6,
             "reasons": ["x"], "cited_seq": [1]}
     assert report.suspicion_problem(good) is None
+
+
+# --- M2.1 REDO (docs/review/2026-10-16-M3.2-questions.md F1) -----------------
+
+class Exploding:
+    name, model = "stub", "boom"
+
+    def judge(self, system, user, schema):
+        raise RuntimeError("unexpected failure")
+
+
+def test_redo_any_backend_exception_is_an_error_line():
+    lines, summary = core.run(records(), [], Exploding())
+    (line,) = lines
+    assert line["kind"] == "error"
+    assert line["error"] == "stub failed: RuntimeError: unexpected failure"
+    assert (summary["errors"], summary["raised"]) == (1, 0)
+
+
+def test_redo_cli_writes_the_error_line_and_run_record(tmp_path, monkeypatch):
+    monkeypatch.setattr(backends, "make_backend", lambda *a, **k: Exploding())
+    out = tmp_path / "s.jsonl"
+    code, _ = raqib("suspect", BLOCKED, "--backend", "anthropic", "-o", out)
+    assert code == 1
+    (line,) = [json.loads(x) for x in out.read_text().splitlines()]
+    assert line["kind"] == "error" and "RuntimeError" in line["error"]
+    assert json.loads((tmp_path / "s.jsonl.run.json").read_text())["errors"] == 1
+
+
+@pytest.mark.parametrize("raise_, fragment", [
+    (lambda sdk: TypeError('"Could not resolve authentication method. Expected one of api_key"'),
+     "no credentials \\(set ANTHROPIC_API_KEY"),
+    (lambda sdk: TypeError("unexpected keyword"), "anthropic: TypeError: unexpected keyword"),
+    (lambda sdk: ValueError("odd"), "anthropic: ValueError: odd"),
+], ids=["no-credentials", "other-type-error", "other-exception"])
+def test_redo_anthropic_sdk_failures_are_backend_errors(monkeypatch, raise_, fragment):
+    monkeypatch.setitem(sys.modules, "anthropic", fake_sdk(raise_=raise_))
+    with pytest.raises(core.BackendError, match=fragment):
+        backends.AnthropicBackend().judge("s", "u", core.SCHEMA)
+
+
+def test_redo_anthropic_client_creation_failure_is_a_backend_error(monkeypatch):
+    sdk = fake_sdk(message())
+
+    def refuse(**kwargs):
+        raise ValueError("bad base url")
+    sdk.Anthropic = refuse
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    with pytest.raises(core.BackendError, match="cannot create a client: ValueError: bad base url"):
+        backends.AnthropicBackend().judge("s", "u", core.SCHEMA)

@@ -87,7 +87,10 @@ class AnthropicBackend:
 
     def judge(self, system, user, schema):
         anthropic = self._sdk()
-        client = self._client or anthropic.Anthropic(max_retries=2)
+        try:
+            client = self._client or anthropic.Anthropic(max_retries=2)
+        except Exception as exc:
+            raise BackendError("anthropic: cannot create a client: %s: %s" % (type(exc).__name__, exc))
         self._client = client
         try:
             response = client.beta.messages.create(
@@ -108,6 +111,14 @@ class AnthropicBackend:
             raise BackendError("anthropic: HTTP %s" % exc.status_code)
         except anthropic.APIConnectionError:
             raise BackendError("anthropic: connection failed")
+        except TypeError as exc:
+            # The SDK raises TypeError while building the request when it
+            # finds no API key, auth token or other credentials.
+            if "authentication" in str(exc):
+                raise BackendError("anthropic: no credentials (set ANTHROPIC_API_KEY or `ant auth login`)")
+            raise BackendError("anthropic: TypeError: %s" % exc)
+        except Exception as exc:
+            raise BackendError("anthropic: %s: %s" % (type(exc).__name__, exc))
         if response.stop_reason == "refusal":
             details = getattr(response, "stop_details", None)
             category = getattr(details, "category", None) if details else None
