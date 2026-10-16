@@ -44,9 +44,33 @@ Claude Code itself blocks fires PreToolUse only, so it shows up as a `pre`
 with no `post` (see `tests/fixtures/blocked-calls-claude-code-2.1.301.log`).
 Re-running the installer changes nothing; other hooks are kept.
 
+## Report (rules)
+From the Raqib checkout:
+```bash
+python3 -m raqib report /path/to/watched-project/raqib.log.jsonl --scope src --scope tests
+python3 -m raqib rules TRACE -o findings.jsonl   # one finding per line (ADR-0001 section 6)
+python3 -m raqib report TRACE --findings findings.jsonl
+python3 -m raqib check-rules                     # measured false-positive rate vs budget (A6)
+```
+The report cites the exact trace lines behind every finding. It lists every
+rule with its false-positive budget, and every rule that did not run. An
+empty trace, a corrupt line or a finding with no matching line is an alarm.
+Exit codes: 0 clean, 1 alarm, 3 incomplete (for example DRIFT-FILES without a
+`--scope` or `--handoff HANDOFF.md`), 2 usage error. Here it is on the real
+trace in which Claude Code blocked two calls:
+```
+FINDINGS: 2
+  [high] SILENCE-HALF (SILENCE) session b3744113-... seq 2
+      seq 2 of Bash has 1 pre and 0 post line(s): a post is missing
+      seq 2: line 2  pre Bash seq 2  2026-10-16T20:49:37.878Z  input_meta={"command_head": "ls"}
+  ...
+RULES THAT DID NOT RUN: 1
+  - DRIFT-FILES not-evaluated: needs context: scope
+```
+
 ## How this repo is built
 One micro-task per session (`HANDOFF.md`), a read-only reviewer, a judge that
 can only say NEXT / REDO / STOP, and a gate every commit must pass. See
 `docs/CONSTITUTION.md` and `docs/DEVELOPMENT_PLAN.md`.
 
-Status: phase 0, task M0.3 (capture and install work; rules come next).
+Status: phase 1 (capture, install, rules and report work; the model layer comes next).

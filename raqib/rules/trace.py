@@ -20,11 +20,23 @@ PHASES = ("pre", "post", "session_start", "session_end", "stop")
 
 def parse(text):
     """Return (records, problems) for trace text."""
-    return _parse((line, True) for line in text.split("\n"))
+    numbered, problems = parse_numbered(text)
+    return [rec for _, rec in numbered], problems
 
 
 def read(path):
     """Read and parse a trace file; returns (records, problems)."""
+    numbered, problems = read_numbered(path)
+    return [rec for _, rec in numbered], problems
+
+
+def parse_numbered(text):
+    """Like parse(), but records come as (line number, record) pairs, so a
+    report can cite the exact lines of a trace file (A5)."""
+    return _parse((line, True) for line in text.split("\n"))
+
+
+def read_numbered(path):
     with open(path, "rb") as f:
         data = f.read()
     lines = []
@@ -37,7 +49,7 @@ def read(path):
 
 
 def _parse(lines):
-    records = []
+    records = []  # (line number, record)
     problems = []
     for number, (raw, decoded) in enumerate(lines, start=1):
         raw = raw.rstrip("\r")
@@ -58,7 +70,7 @@ def _parse(lines):
             problems.append({"line": number, "reason": "missing or bad ts"})
         if rec.get("phase") not in PHASES:
             problems.append({"line": number, "reason": "unknown phase %r" % (rec.get("phase"),)})
-        records.append(rec)
+        records.append((number, rec))
     return records, problems
 
 
