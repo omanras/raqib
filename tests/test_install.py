@@ -1,7 +1,10 @@
-"""M0.3 install script: exit criteria E1-E3 (HANDOFF.md), ADR-0001 Amendment A-3/A-4."""
+"""M0.3 install script: exit criteria E1-E3 (HANDOFF.md), ADR-0001 Amendment A-3/A-4,
+and the M0.3 REDO from docs/review/2026-10-16-M0.3.md."""
 import json
 import os
 import shlex
+import shutil
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -11,34 +14,55 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from raqib.rules import silence  # noqa: E402
+from raqib.rules import silence, trace  # noqa: E402
 
 INSTALL = ROOT / "tools" / "install-hooks.sh"
 CAPTURE = ROOT / "raqib" / "hooks" / "capture.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-COMMAND = "python3 " + shlex.quote(str(CAPTURE))
 TOOL_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure"]
 SESSION_EVENTS = ["SessionStart", "SessionEnd", "Stop"]
 EVENTS = TOOL_EVENTS + SESSION_EVENTS
 
 
-def install(*args, cwd=None):
-    return subprocess.run(["bash", str(INSTALL), *map(str, args)], capture_output=True,
-                          text=True, cwd=cwd, timeout=60)
+def command_for(log, capture=CAPTURE):
+    q = shlex.quote(str(capture))
+    return ("RAQIB_HOOK=capture RAQIB_LOG=%s python3 -I %s || echo 'RAQIB-SILENCE: capture hook "
+            "failed, exit' \"$?\" %s >&2" % (shlex.quote(str(log)), q, q))
 
 
-def settings_of(project):
-    return json.loads((project / ".claude" / "settings.json").read_text())
+def clean_env(tmp_path, **extra):
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("RAQIB_", "PYTHON", "CDPATH"))}
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    env["HOME"] = str(home)
+    env.update(extra)
+    return env
+
+
+def install(tmp_path, *args, cwd=None, installer=INSTALL, **env):
+    return subprocess.run(["bash", str(installer), *map(str, args)], capture_output=True,
+                          text=True, cwd=cwd, timeout=60, env=clean_env(tmp_path, **env))
+
+
+def project(tmp_path, name="proj"):
+    path = tmp_path / name
+    path.mkdir()
+    return path
+
+
+def settings_of(proj):
+    return json.loads((proj / ".claude" / "settings.json").read_text())
 
 
 def raqib_hooks(settings, event):
     return [(g, h) for g in settings["hooks"][event] for h in g["hooks"]
-            if "raqib/hooks/capture.py" in h["command"]]
+            if h["command"].startswith("RAQIB_HOOK=capture ")]
 
 
-def write_settings(project, value):
-    (project / ".claude").mkdir(parents=True, exist_ok=True)
-    path = project / ".claude" / "settings.json"
+def write_settings(proj, value):
+    (proj / ".claude").mkdir(parents=True, exist_ok=True)
+    path = proj / ".claude" / "settings.json"
     path.write_text(value if isinstance(value, str) else json.dumps(value, indent=2))
     return path
 
@@ -50,39 +74,61 @@ def fixture(name):
 # --- E1: empty project -> six entries; idempotent ---------------------------
 
 def test_e1_empty_project_gets_six_hook_entries(tmp_path):
-    proc = install(tmp_path)
+    proj = project(tmp_path)
+    proc = install(tmp_path, proj)
     assert proc.returncode == 0, proc.stderr
-    settings = settings_of(tmp_path)
+    settings = settings_of(proj)
     assert sorted(settings["hooks"]) == sorted(EVENTS)
     for event in EVENTS:
         (group, hook), = raqib_hooks(settings, event)
-        assert hook == {"type": "command", "command": COMMAND}
+        assert hook == {"timeout": 10, "type": "command",
+                        "command": command_for(proj / "raqib.log.jsonl")}
         if event in TOOL_EVENTS:
             assert group["matcher"] == "*"
         else:
             assert "matcher" not in group
     assert proc.stdout.count("added") == 6
+    assert "(default)" in proc.stdout and "note: the trace is inside the project" in proc.stdout
 
 
-def test_e1_second_run_changes_nothing(tmp_path):
-    assert install(tmp_path).returncode == 0
-    first = (tmp_path / ".claude" / "settings.json").read_bytes()
-    proc = install(tmp_path)
+def test_e1_second_run_does_not_rewrite_the_file(tmp_path):
+    proj = project(tmp_path)
+    assert install(tmp_path, proj).returncode == 0
+    path = proj / ".claude" / "settings.json"
+    first = path.read_bytes()
+    os.utime(path, (1, 1))
+    proc = install(tmp_path, proj)
     assert proc.returncode == 0
-    assert (tmp_path / ".claude" / "settings.json").read_bytes() == first
-    assert proc.stdout.count("unchanged") == 6
+    assert path.read_bytes() == first
+    assert path.stat().st_mtime == 1
+    assert "(file not rewritten)" in proc.stdout and proc.stdout.count("unchanged") == 6
+
+
+def test_e1_installed_but_unchanged_user_formatting_is_not_rewritten(tmp_path):
+    proj = project(tmp_path)
+    assert install(tmp_path, proj).returncode == 0
+    path = proj / ".claude" / "settings.json"
+    compact = json.dumps(settings_of(proj), separators=(",", ":"))
+    path.write_text(compact)
+    assert install(tmp_path, proj).returncode == 0
+    assert path.read_text() == compact
 
 
 def test_e1_empty_settings_file_is_an_empty_object(tmp_path):
-    write_settings(tmp_path, "  \n")
-    assert install(tmp_path).returncode == 0
-    assert sorted(settings_of(tmp_path)["hooks"]) == sorted(EVENTS)
+    proj = project(tmp_path)
+    write_settings(proj, "  \n")
+    assert install(tmp_path, proj).returncode == 0
+    assert sorted(settings_of(proj)["hooks"]) == sorted(EVENTS)
 
 
-def test_e1_relative_project_path(tmp_path):
-    (tmp_path / "proj").mkdir()
-    assert install("proj", cwd=tmp_path).returncode == 0
-    assert raqib_hooks(settings_of(tmp_path / "proj"), "Stop")
+def test_e1_relative_project_path_even_with_cdpath(tmp_path):
+    proj = project(tmp_path)
+    elsewhere = project(tmp_path, "elsewhere")
+    (elsewhere / "proj").mkdir()
+    proc = install(tmp_path, "proj", cwd=tmp_path, CDPATH=str(elsewhere))
+    assert proc.returncode == 0, proc.stderr
+    assert raqib_hooks(settings_of(proj), "Stop")
+    assert not (elsewhere / "proj" / ".claude").exists()
 
 
 # --- E2: other hooks and settings are preserved -----------------------------
@@ -96,56 +142,75 @@ OTHER = {
         "Stop": [{"hooks": [{"type": "command", "command": "/opt/exit-gate.sh"}]}],
         "Notification": [{"hooks": [{"type": "command", "command": "notify-send hi"}]}],
     },
-    "note": "\u0631\u0642\u064a\u0628",
+    "note": "رقيب",
 }
 
 
 def test_e2_existing_hooks_and_settings_are_kept(tmp_path):
-    write_settings(tmp_path, OTHER)
-    assert install(tmp_path).returncode == 0
-    settings = settings_of(tmp_path)
+    proj = project(tmp_path)
+    write_settings(proj, OTHER)
+    assert install(tmp_path, proj).returncode == 0
+    settings = settings_of(proj)
     for key in ("model", "permissions", "note"):
         assert settings[key] == OTHER[key]
     for event, groups in OTHER["hooks"].items():
         assert settings["hooks"][event][:len(groups)] == groups
-    assert settings["hooks"]["Notification"] == OTHER["hooks"]["Notification"]
     for event in EVENTS:
         assert len(raqib_hooks(settings, event)) == 1
-    assert install(tmp_path).stdout.count("unchanged") == 6
+    assert install(tmp_path, proj).stdout.count("unchanged") == 6
+    assert "رقيب" in (proj / ".claude" / "settings.json").read_text("utf-8")
 
 
-def test_e2_non_ascii_settings_survive(tmp_path):
-    write_settings(tmp_path, OTHER)
-    assert install(tmp_path).returncode == 0
-    assert "\u0631\u0642\u064a\u0628" in (tmp_path / ".claude" / "settings.json").read_text("utf-8")
-
-
-def test_e2_stale_raqib_entry_is_replaced_not_doubled(tmp_path):
+def test_e2_legacy_entry_is_replaced_and_reported(tmp_path):
+    proj = project(tmp_path)
     stale = "python3 /old/place/raqib/hooks/capture.py"
-    write_settings(tmp_path, {"hooks": {
-        "PreToolUse": [
-            {"matcher": "*", "hooks": [{"type": "command", "command": "/opt/keep.sh"},
-                                       {"type": "command", "command": stale}]},
-            {"matcher": "*", "hooks": [{"type": "command", "command": stale}]},
-        ],
-    }})
-    proc = install(tmp_path)
+    write_settings(proj, {"hooks": {"PreToolUse": [
+        {"matcher": "*", "hooks": [{"type": "command", "command": "/opt/keep.sh"},
+                                   {"type": "command", "command": stale}]},
+        {"matcher": "*", "hooks": [{"type": "command", "command": stale}]},
+    ]}})
+    proc = install(tmp_path, proj)
     assert proc.returncode == 0
     assert "PreToolUse          updated" in proc.stdout
-    groups = settings_of(tmp_path)["hooks"]["PreToolUse"]
+    assert "replaced: " + stale in proc.stdout
+    groups = settings_of(proj)["hooks"]["PreToolUse"]
     assert groups == [
         {"matcher": "*", "hooks": [{"type": "command", "command": "/opt/keep.sh"}]},
-        {"matcher": "*", "hooks": [{"type": "command", "command": COMMAND}]},
+        {"matcher": "*", "hooks": [{"timeout": 10, "type": "command",
+                                    "command": command_for(proj / "raqib.log.jsonl")}]},
     ]
-    assert install(tmp_path).stdout.count("unchanged") == 6
+    assert install(tmp_path, proj).stdout.count("unchanged") == 6
+
+
+def test_e2_foreign_hook_mentioning_the_path_is_kept(tmp_path):
+    proj = project(tmp_path)
+    foreign = {"type": "command", "command": "sha256sum /x/raqib/hooks/capture.py >> /tmp/audit"}
+    write_settings(proj, {"hooks": {"PostToolUse": [{"matcher": "*", "hooks": [foreign]}]}})
+    assert install(tmp_path, proj).returncode == 0
+    assert settings_of(proj)["hooks"]["PostToolUse"][0] == {"matcher": "*", "hooks": [foreign]}
+
+
+def test_e2_user_keys_on_our_entry_survive_an_update(tmp_path):
+    proj = project(tmp_path)
+    assert install(tmp_path, proj).returncode == 0
+    settings = settings_of(proj)
+    settings["hooks"]["Stop"][0]["hooks"][0]["timeout"] = 30
+    settings["hooks"]["Stop"][0]["hooks"][0]["command"] = "python3 /moved/raqib/hooks/capture.py"
+    write_settings(proj, settings)
+    assert install(tmp_path, proj).returncode == 0
+    (_, hook), = raqib_hooks(settings_of(proj), "Stop")
+    assert hook["timeout"] == 30
 
 
 def test_e2_raqib_entry_with_wrong_matcher_is_fixed(tmp_path):
-    write_settings(tmp_path, {"hooks": {"PostToolUse": [
-        {"matcher": "Bash", "hooks": [{"type": "command", "command": COMMAND}]}]}})
-    assert install(tmp_path).returncode == 0
-    assert settings_of(tmp_path)["hooks"]["PostToolUse"] == [
-        {"matcher": "*", "hooks": [{"type": "command", "command": COMMAND}]}]
+    proj = project(tmp_path)
+    assert install(tmp_path, proj).returncode == 0
+    settings = settings_of(proj)
+    settings["hooks"]["PostToolUse"][0]["matcher"] = "Bash"
+    write_settings(proj, settings)
+    assert "PostToolUse         updated" in install(tmp_path, proj).stdout
+    (group, _), = raqib_hooks(settings_of(proj), "PostToolUse")
+    assert group["matcher"] == "*"
 
 
 @pytest.mark.parametrize("content", [
@@ -153,32 +218,83 @@ def test_e2_raqib_entry_with_wrong_matcher_is_fixed(tmp_path):
     "[1, 2]",
     '{"hooks": []}',
     '{"hooks": {"Stop": {}}}',
+    '{"model": "a", "model": "b"}',
+    '{"x": NaN}',
 ])
 def test_e2_unreadable_settings_are_left_untouched(tmp_path, content):
-    path = write_settings(tmp_path, content)
-    proc = install(tmp_path)
+    proj = project(tmp_path)
+    path = write_settings(proj, content)
+    proc = install(tmp_path, proj)
     assert proc.returncode == 1
     assert proc.stderr.startswith("install-hooks:")
     assert path.read_text() == content
     assert [p.name for p in path.parent.iterdir()] == ["settings.json"]
 
 
-@pytest.mark.parametrize("args", [[], ["--log"], ["--bogus", "x"], ["a", "b"]])
+def test_e2_mode_is_kept_and_symlink_is_followed(tmp_path):
+    proj = project(tmp_path)
+    shared = tmp_path / "shared.json"
+    shared.write_text(json.dumps({"model": "sonnet"}))
+    shared.chmod(0o640)
+    (proj / ".claude").mkdir()
+    (proj / ".claude" / "settings.json").symlink_to(shared)
+    assert install(tmp_path, proj).returncode == 0
+    assert (proj / ".claude" / "settings.json").is_symlink()
+    assert stat.S_IMODE(shared.stat().st_mode) == 0o640
+    assert json.loads(shared.read_text())["model"] == "sonnet"
+    assert len(raqib_hooks(json.loads(shared.read_text()), "Stop")) == 1
+
+
+def test_e2_unwritable_settings_dir_is_a_clean_error(tmp_path):
+    proj = project(tmp_path)
+    (proj / ".claude").write_text("not a directory")
+    proc = install(tmp_path, proj)
+    assert proc.returncode == 1
+    assert proc.stderr.startswith("install-hooks:") and "Traceback" not in proc.stderr
+
+
+def test_disable_all_hooks_is_an_alarm(tmp_path):
+    proj = project(tmp_path)
+    (proj / ".claude").mkdir()
+    (proj / ".claude" / "settings.local.json").write_text('{"disableAllHooks": true}')
+    proc = install(tmp_path, proj)
+    assert proc.returncode == 3
+    assert proc.stderr.startswith("RAQIB-SILENCE: disableAllHooks is true in ")
+    assert len(raqib_hooks(settings_of(proj), "Stop")) == 1
+
+
+@pytest.mark.parametrize("args", [[], ["--log"], ["proj", "--log"], ["--log", "", "proj"],
+                                  ["--bogus", "proj"], ["proj", "proj"]])
 def test_usage_errors_exit_2(tmp_path, args):
-    assert install(*args, cwd=tmp_path).returncode == 2
+    proj = project(tmp_path)
+    assert install(tmp_path, *args, cwd=tmp_path).returncode == 2
+    assert not (proj / ".claude").exists()
 
 
 def test_missing_project_exits_2(tmp_path):
-    proc = install(tmp_path / "nope")
+    proc = install(tmp_path, tmp_path / "nope")
     assert proc.returncode == 2
     assert not (tmp_path / "nope").exists()
 
 
-# --- E3: the installed commands really capture ------------------------------
+# --- the trace location -----------------------------------------------------
 
-def run_hook(command, payload, cwd):
-    env = {k: v for k, v in os.environ.items() if not k.startswith("RAQIB_")}
-    return subprocess.run(["sh", "-c", command], input=json.dumps(payload).encode(),
+def test_log_option_is_absolute_and_kept_on_reinstall(tmp_path):
+    proj = project(tmp_path)
+    proc = install(tmp_path, "--log", "outside/trace.jsonl", proj, cwd=tmp_path)
+    assert proc.returncode == 0
+    log = tmp_path / "outside" / "trace.jsonl"
+    (_, hook), = raqib_hooks(settings_of(proj), "PreToolUse")
+    assert hook["command"] == command_for(log)
+    proc = install(tmp_path, proj)
+    assert "kept from the existing install" in proc.stdout
+    assert proc.stdout.count("unchanged") == 6
+
+
+# --- E3: the installed commands really capture, and never block -------------
+
+def run_hook(command, payload, cwd, env):
+    return subprocess.run(["/bin/sh", "-c", command], input=json.dumps(payload).encode(),
                           capture_output=True, cwd=cwd, env=env, timeout=30)
 
 
@@ -191,11 +307,11 @@ SESSION = [
 ]
 
 
-def simulate(project):
-    settings = settings_of(project)
+def simulate(proj, env, cwd=None):
+    settings = settings_of(proj)
     for event, name in SESSION:
         (_, hook), = raqib_hooks(settings, event)
-        proc = run_hook(hook["command"], fixture(name), project)
+        proc = run_hook(hook["command"], fixture(name), cwd or proj, env)
         assert (proc.returncode, proc.stdout, proc.stderr) == (0, b"", b"")
 
 
@@ -204,25 +320,64 @@ def trace_lines(path):
 
 
 def test_e3_installed_commands_write_one_clean_session(tmp_path):
-    assert install(tmp_path).returncode == 0
-    simulate(tmp_path)
-    recs = trace_lines(tmp_path / "raqib.log.jsonl")
+    proj = project(tmp_path)
+    assert install(tmp_path, proj).returncode == 0
+    elsewhere = project(tmp_path, "agent-cd-here")
+    simulate(proj, clean_env(tmp_path), cwd=elsewhere)
+    recs = trace_lines(proj / "raqib.log.jsonl")
     assert [(r["phase"], r["seq"]) for r in recs] == [
         ("session_start", 1), ("pre", 2), ("post", 2), ("stop", 3), ("session_end", 4)]
     assert silence.findings(recs) == []
+    assert not (elsewhere / "raqib.log.jsonl").exists()
 
 
-def test_e3_log_option_sets_raqib_log(tmp_path):
-    project = tmp_path / "proj"
-    project.mkdir()
-    log = tmp_path / "outside" / "trace.jsonl"
-    log.parent.mkdir()
-    assert install("--log", log, project).returncode == 0
-    (_, hook), = raqib_hooks(settings_of(project), "PreToolUse")
-    assert hook["command"] == "RAQIB_LOG=%s %s" % (shlex.quote(str(log)), COMMAND)
-    simulate(project)
-    assert len(trace_lines(log)) == 5
-    assert not (project / "raqib.log.jsonl").exists()
+def test_e3_paths_with_spaces_quotes_and_dollars(tmp_path):
+    odd = tmp_path / "it's a $HOME dir"
+    shutil.copytree(ROOT / "raqib", odd / "raqib")
+    shutil.copytree(ROOT / "tools", odd / "tools")
+    proj = project(tmp_path, "my proj")
+    proc = install(tmp_path, proj, installer=odd / "tools" / "install-hooks.sh")
+    assert proc.returncode == 0, proc.stderr
+    (_, hook), = raqib_hooks(settings_of(proj), "PreToolUse")
+    assert hook["command"] == command_for(proj / "raqib.log.jsonl", odd / "raqib" / "hooks" / "capture.py")
+    simulate(proj, clean_env(tmp_path))
+    assert len(trace_lines(proj / "raqib.log.jsonl")) == 5
+
+
+def test_b1_missing_capture_never_blocks(tmp_path):
+    copy = tmp_path / "checkout"
+    shutil.copytree(ROOT / "raqib", copy / "raqib")
+    shutil.copytree(ROOT / "tools", copy / "tools")
+    proj = project(tmp_path)
+    assert install(tmp_path, proj, installer=copy / "tools" / "install-hooks.sh").returncode == 0
+    shutil.rmtree(copy)
+    for event in EVENTS:
+        (_, hook), = raqib_hooks(settings_of(proj), event)
+        proc = run_hook(hook["command"], fixture("pretooluse-bash.json"), proj, clean_env(tmp_path))
+        assert proc.returncode == 0
+        assert proc.stdout == b""
+        assert any(line.startswith("RAQIB-SILENCE: capture hook failed, exit 2 ")
+                   for line in proc.stderr.decode().splitlines())
+
+
+def test_b1_missing_python_never_blocks(tmp_path):
+    proj = project(tmp_path)
+    assert install(tmp_path, proj).returncode == 0
+    (_, hook), = raqib_hooks(settings_of(proj), "Stop")
+    env = clean_env(tmp_path, PATH=str(tmp_path / "empty-bin"))
+    proc = run_hook(hook["command"], fixture("stop.json"), proj, env)
+    assert proc.returncode == 0
+    assert "RAQIB-SILENCE: capture hook failed, exit 127 " in proc.stderr.decode()
+
+
+def test_b2_pythonpath_cannot_shadow_the_stdlib(tmp_path):
+    evil = tmp_path / "evil"
+    evil.mkdir()
+    (evil / "json.py").write_text("raise SystemExit(2)\n")
+    proj = project(tmp_path)
+    assert install(tmp_path, proj, cwd=evil, PYTHONPATH=str(evil)).returncode == 0
+    simulate(proj, clean_env(tmp_path, PYTHONPATH=str(evil)), cwd=evil)
+    assert len(trace_lines(proj / "raqib.log.jsonl")) == 5
 
 
 def test_e3_real_claude_code_trace_is_clean():
@@ -235,3 +390,4 @@ def test_e3_real_claude_code_trace_is_clean():
     assert pre["input_meta"] == {"command_head": "echo"}
     assert post["ok"] is True
     assert silence.findings(recs) == []
+    assert trace is not None

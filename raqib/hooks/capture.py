@@ -59,10 +59,11 @@ SESSION_TOOL = "-"
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 COMMAND_HEAD_MAX = 64
 
-# A-4: a leading exception class name such as "TimeoutError: ..." or
-# "Error: ..."; anything else is recorded as "failure". Never message text.
-ERROR_CLASS = re.compile(r"\s*((?:[A-Za-z_][A-Za-z0-9_.]*)?(?:Error|Exception))\b")
-IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
+# A-4: a whole class name ending in Error or Exception, such as the leading
+# "TimeoutError" of "TimeoutError: ..." or a structured error's type; anything
+# else, or a name over 64 chars, is recorded as "failure". Never message text.
+LEADING_WORD = re.compile(r"\s*([A-Za-z0-9_.]+)")
+CLASS_NAME = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_.]*)?(?:Error|Exception)\Z")
 ERROR_CLASS_MAX = 64
 
 
@@ -136,17 +137,18 @@ def is_ok(event, tool_response):
 
 
 def error_class(error):
-    """A-4: the exception/class name of a PostToolUseFailure error, else "failure"."""
+    """A-4: the exception class name of a PostToolUseFailure error, else "failure"."""
     if isinstance(error, dict):
-        for key in ("type", "name", "class"):
-            value = error.get(key)
-            if isinstance(value, str) and IDENTIFIER.fullmatch(value):
-                return value[:ERROR_CLASS_MAX]
-        return "failure"
-    if isinstance(error, str):
-        match = ERROR_CLASS.match(error)
-        if match:
-            return match.group(1)[:ERROR_CLASS_MAX]
+        candidates = [error.get(key) for key in ("type", "name", "class")]
+    elif isinstance(error, str):
+        match = LEADING_WORD.match(error)
+        candidates = [match.group(1)] if match else []
+    else:
+        candidates = []
+    for value in candidates:
+        if (isinstance(value, str) and len(value) <= ERROR_CLASS_MAX
+                and CLASS_NAME.match(value)):
+            return value
     return "failure"
 
 

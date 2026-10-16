@@ -411,7 +411,9 @@ def test_m03_error_class_only_on_failure_lines(tmp_path):
     ("Error: boom", "Error"),
     ("  InputValidationError: bad input", "InputValidationError"),
     ("pkg.mod.CustomException: z", "pkg.mod.CustomException"),
-    ("X" * 100 + "Error: y", ("X" * 100 + "Error")[:64]),
+    ("X" * 100 + "Error: y", "failure"),
+    ("X" * 59 + "Error: y", "X" * 59 + "Error"),
+    ("TimeoutErrorX: y", "failure"),
     ("Errors happened", "failure"),
     ("Command failed with exit code 1", "failure"),
     ("", "failure"),
@@ -420,6 +422,8 @@ def test_m03_error_class_only_on_failure_lines(tmp_path):
     (7, "failure"),
     ({"type": "ToolError", "message": "secret text"}, "ToolError"),
     ({"type": "not an identifier"}, "failure"),
+    ({"name": "alice"}, "failure"),
+    ({"name": "DbError", "type": "alice"}, "DbError"),
     (["TimeoutError"], "failure"),
 ])
 def test_m03_error_class(tmp_path, error, expected):
