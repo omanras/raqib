@@ -1,29 +1,28 @@
-# HANDOFF — M0.3  (phase 0: install + quickstart)
+# HANDOFF — M1.1  (phase 1: rule schema + loader + fixture runner)
 
-Task: `tools/install-hooks.sh <watched-project>` writes/merges the Raqib hook
-entries (PreToolUse, PostToolUse, PostToolUseFailure, SessionStart,
-SessionEnd, Stop: six per Amendment A-4) into that project's
-`.claude/settings.json`, pointing at raqib/hooks/capture.py; capture.py
-records session events (A-3) and error_class (A-4); README quickstart true.
+Task: rules as YAML, one file per rule (ADR-0001 §4), loaded with a stdlib
+YAML-subset parser (A-7), evaluated by a pure engine, and checked by a fixture
+runner that measures each rule's false-positive rate against its budget (A6).
 
 Scope:
-  tools/install-hooks.sh
-  raqib/hooks/
-  README.md
-  tests/test_install.py
-  tests/test_capture.py
+  raqib/rules/
+  tests/test_rules.py
   tests/fixtures/
   docs/review/
 
 Exit criteria:
-- E1 Running the script on an empty temp project creates a valid settings.json
-     with the six hook entries; running it twice is idempotent (no duplicates).
-- E2 Running it on a project that already has other hooks preserves them.
-- E3 README quickstart: fresh clone → install → one real Claude Code tool call
-     → one `pre` and one `post` line in raqib.log.jsonl (documented, with the
-     exact command used).
-- E4 A-3 session lines and A-4 error_class covered by tests; gate green.
-Not in scope: rules, model, UI.
-Commit: `landed: M0.3 install + quickstart` or `STOP: M0.3 <reason>`.
+- E1 Loader: stdlib-only YAML subset; anything outside the subset is an error
+     naming file and line, never a silent misread.
+- E2 Schema: id, title, class (SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT), match
+     (declarative over trace fields), severity, fp_budget, fixtures{positive[],
+     negative[]}; an invalid rule fails to load, naming the field.
+- E3 Engine: pure `(rules, trace lines, context) -> findings`; a finding is
+     {ts, rule_id, class, severity, session_id, cited_seq[], summary}; one
+     without cited_seq is rejected (A5); no rule consults a model (A1).
+- E4 Runner: positives fire, negatives are counted as false positives; a rule
+     over its fp_budget must be `status: disabled` (A6). 3 rules ship, each
+     with ≥1 positive and ≥1 negative fixture; gate green.
+
+Not in scope: capture, CLI, model layer, UI.
+Commit: `landed: M1.1 rule schema + loader + runner` or `STOP: M1.1 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
-REDO: per docs/review/2026-10-16-M0.3.md: B1 exit 2, E3 exact command + fresh clone, M1-M8, Q1-Q3, EC1-EC2.
