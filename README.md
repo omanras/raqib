@@ -79,6 +79,19 @@ RULES THAT DID NOT RUN: 2
 SECRET-OUTPUT is partial here because this trace predates `output_meta`: a
 line the rule cannot judge is reported, never counted as clean.
 
+## Web view (read-only)
+```bash
+python3 -m raqib ui TRACE -o trace.html   # one static page; open it in a browser
+python3 -m raqib ui TRACE --serve         # or view it at http://127.0.0.1:8765/
+```
+The page shows the result, the alarms, every finding with links to the
+lines it cites, the rules that did not run, and a timeline of every trace
+line. Silence is drawn into the timeline as red bands: a gap over the limit,
+a session that never closed, a corrupt line. A pre with no post is marked
+`no post`. The page runs no script and loads nothing, and every trace value
+is escaped, because the watched agent controls paths. `--serve` binds
+127.0.0.1, answers only GET and HEAD, and re-reads the trace on each request.
+
 ## Suspicion (model layer)
 A model can add suspicion on top of the rules; it can never clear anything (A2).
 ```bash
@@ -119,4 +132,4 @@ One micro-task per session (`HANDOFF.md`), a read-only reviewer, a judge that
 can only say NEXT / REDO / STOP, and a gate every commit must pass. See
 `docs/CONSTITUTION.md` and `docs/DEVELOPMENT_PLAN.md`.
 
-Status: phase 2 done (capture, install, rules, report, suspicion layer and evaluation); the dashboard comes next.
+Status: phases 0-2 and the web view (M3.1) are done; docs (M3.2) come next.

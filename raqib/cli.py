@@ -17,6 +17,10 @@
       dropped, never recorded as clean; failures become error lines (A3).
       With -o, FILE.run.json records how many windows were judged.
       report TRACE --suspicion FILE shows the result with cited lines.
+  ui TRACE [--findings FILE] [--suspicion FILE] [-o FILE | --serve [--port N]]
+      Write the report as one static, read-only HTML page (timeline,
+      findings, silence windows), or serve it on 127.0.0.1. Exit codes as
+      for report; --serve runs until interrupted.
   eval [--events FILE] [--candidate SPEC]... [--json] [-o FILE]
       Score the rules, and each candidate model, on labelled events (M2.2):
       false negatives, false positives and errors, ranked by FN first. SPEC is
@@ -35,6 +39,7 @@ import sys
 
 from raqib import eval as evaluation
 from raqib import report
+from raqib import ui
 from raqib.rules import context as rule_context
 from raqib.rules import engine, fixtures, silence, trace
 from raqib.suspect import backends as suspect_backends
@@ -89,6 +94,13 @@ def _parser():
     s.add_argument("--threshold", type=float, default=suspect_core.DEFAULT_THRESHOLD)
     s.add_argument("--window", type=int, default=suspect_core.DEFAULT_WINDOW, help="lines per window")
     s.add_argument("-o", "--out", metavar="FILE", help="suspicion file (default: stdout)")
+    u = sub.add_parser("ui", help="read-only HTML view of a trace (timeline, findings, silence)")
+    rule_options(u)
+    u.add_argument("--findings", metavar="FILE", help="use this findings file instead of running the rules")
+    u.add_argument("--suspicion", metavar="FILE", help="suspicion.jsonl written by `suspect`")
+    u.add_argument("-o", "--out", metavar="FILE", help="HTML file to write (default: stdout)")
+    u.add_argument("--serve", action="store_true", help="serve the page on 127.0.0.1 instead")
+    u.add_argument("--port", type=int, default=8765, help="port for --serve (default 8765; 0: any free port)")
     e = sub.add_parser("eval", help="score rules and candidate models on labelled events (M2.2)")
     e.add_argument("--events", default=EVENTS, metavar="FILE", help="labelled events (default: the shipped 50)")
     e.add_argument("--candidate", action="append", default=[], metavar="SPEC",
@@ -221,7 +233,8 @@ def _read_suspicion(path):
     return lines, run
 
 
-def cmd_report(args, out):
+def _report(args):
+    """(report dict, numbered, problems) for report and ui."""
     numbered, problems = _read_trace(args.trace)
     rules = _catalog(args.catalog)
     suspicion, suspicion_run = _read_suspicion(args.suspicion) if args.suspicion else (None, None)
@@ -235,6 +248,11 @@ def cmd_report(args, out):
             if os.path.abspath(args.catalog).startswith(ROOT) else "rules run on this trace"
     rep = report.build(args.trace, numbered, problems, found, notes, report.rule_table(rules), source,
                        suspicion, suspicion_run)
+    return rep, numbered, problems
+
+
+def cmd_report(args, out):
+    rep, _, _ = _report(args)
     if args.json:
         out.write(json.dumps(rep, indent=2, sort_keys=True, ensure_ascii=True) + "\n")
     else:
@@ -303,6 +321,44 @@ def cmd_suspect(args, out):
     return 1 if lines else 0
 
 
+def cmd_ui(args, out):
+    gap = _gap_seconds(args)
+    if args.serve:
+        if args.out:
+            raise UsageError("use either -o or --serve")
+        _report(args)  # fail early on unreadable input
+
+        def page():
+            rep, numbered, problems = _report(args)
+            return ui.render(rep, numbered, problems, gap)
+        try:
+            server = ui.make_server(page, args.port)
+        except (OSError, OverflowError) as exc:
+            raise UsageError("cannot serve on 127.0.0.1:%s: %s" % (args.port, exc))
+        out.write("raqib: serving %s at http://127.0.0.1:%d/ (read-only; Ctrl-C to stop)\n"
+                  % (args.trace, server.server_address[1]))
+        out.flush()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
+        return 0
+    rep, numbered, problems = _report(args)
+    text = ui.render(rep, numbered, problems, gap)
+    if args.out:
+        try:
+            with open(args.out, "w", encoding="utf-8") as f:
+                f.write(text)
+        except OSError as exc:
+            raise UsageError("cannot write %s: %s" % (args.out, exc))
+        out.write("raqib: %s -> %s (%s)\n" % (args.trace, args.out, rep["result"]))
+    else:
+        out.write(text)
+    return rep["exit"]
+
+
 def make_candidate(spec, args):
     name, _, rest = spec.partition(":")
     if name == "fake":
@@ -348,7 +404,7 @@ def main(argv=None, out=None):
         return 2 if exc.code else 0
     try:
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
-                   "suspect": cmd_suspect, "eval": cmd_eval}[args.command]
+                   "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)
