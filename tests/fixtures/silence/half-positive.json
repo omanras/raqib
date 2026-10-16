@@ -1,0 +1,5 @@
+[
+  {"ts": "2026-10-16T12:00:00.000Z", "seq": 1, "session_id": "fixture-silence-0001", "phase": "pre", "tool": "Bash", "tool_use_id": "toolu_s1", "input_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "input_meta": {"command_head": "ls"}, "cwd": "/work/example"},
+  {"ts": "2026-10-16T12:00:01.000Z", "seq": 1, "session_id": "fixture-silence-0001", "phase": "post", "tool": "Bash", "tool_use_id": "toolu_s1", "input_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "input_meta": {"command_head": "ls"}, "output_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "ok": true, "cwd": "/work/example"},
+  {"ts": "2026-10-16T12:00:02.000Z", "seq": 2, "session_id": "fixture-silence-0001", "phase": "pre", "tool": "Bash", "tool_use_id": "toolu_s2", "input_sha256": "0000000000000000000000000000000000000000000000000000000000000000", "input_meta": {"command_head": "ls"}, "cwd": "/work/example"}
+]
