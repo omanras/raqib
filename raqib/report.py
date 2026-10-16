@@ -57,10 +57,12 @@ def describe(rec):
     return text
 
 
-def build(trace_path, numbered, problems, findings, notes, rules, findings_source):
+def build(trace_path, numbered, problems, findings, notes, rules, findings_source,
+          suspicion=None, suspicion_run=None):
     """numbered: [(line number, record)]; problems: trace.parse problems;
     findings: dicts (from the engine or a findings file); notes: rule notes,
-    or None when it is unknown which rules ran; rules: rule_table()."""
+    or None when it is unknown which rules ran; rules: rule_table();
+    suspicion: lines of a suspicion.jsonl (M2.1), suspicion_run: its run record."""
     index = {}
     sessions = []
     for number, rec in numbered:
@@ -80,19 +82,23 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
         except engine.FindingError as exc:
             alarms.append({"kind": "rejected-finding", "detail": str(exc)})
             continue
-        cites = []
-        for seq in f["cited_seq"]:
-            lines = index.get((f["session_id"], seq), [])
-            if not lines:
-                alarms.append({"kind": "missing-citation",
-                               "detail": "%s cites session %s seq %d, which has no line in the trace"
-                                         % (f["rule_id"], f["session_id"], seq)})
-            cites.append({"seq": seq, "lines": [{"line": n, "text": describe(r)} for n, r in lines]})
-        items.append(dict(f, cites=cites))
+        items.append(dict(f, cites=_cites(index, f["session_id"], f["cited_seq"], f["rule_id"], alarms)))
+    raised = []
+    for s in suspicion or []:
+        problem = suspicion_problem(s)
+        if problem:
+            alarms.append({"kind": "rejected-suspicion", "detail": problem})
+        elif s["kind"] == "error":
+            alarms.append({"kind": "suspicion-error",
+                           "detail": "the model did not judge session %s seq %s to %s: %s"
+                                     % (s["session_id"], s["window"][0], s["window"][1], s["error"])})
+        else:
+            label = "suspicion (%s/%s)" % (s.get("backend"), s.get("model"))
+            raised.append(dict(s, cites=_cites(index, s["session_id"], s["cited_seq"], label, alarms)))
     if notes is None:
         notes = [{"rule_id": "*", "status": "unknown",
                   "detail": "no rule notes next to the findings file; which rules ran is unknown"}]
-    if alarms or items:
+    if alarms or items or raised:
         result = "alarm"
     elif any(n["status"] != "disabled" for n in notes):
         result = "incomplete"
@@ -104,12 +110,52 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
         "sessions": sessions,
         "findings_source": findings_source,
         "findings": items,
+        "suspicion": raised,
+        "suspicion_run": suspicion_run,
         "alarms": alarms,
         "notes": notes,
         "rules": rules,
         "result": result,
         "exit": EXIT[result],
     }
+
+
+def _cites(index, session_id, seqs, label, alarms):
+    cites = []
+    for seq in seqs:
+        lines = index.get((session_id, seq), [])
+        if not lines:
+            alarms.append({"kind": "missing-citation",
+                           "detail": "%s cites session %s seq %d, which has no line in the trace"
+                                     % (label, session_id, seq)})
+        cites.append({"seq": seq, "lines": [{"line": n, "text": describe(r)} for n, r in lines]})
+    return cites
+
+
+def suspicion_problem(line):
+    """Why a suspicion.jsonl line is unusable, or None (A2, A5)."""
+    if not isinstance(line, dict) or line.get("kind") not in ("suspicion", "error"):
+        return "not a suspicion or error line: %r" % (line,)
+    window = line.get("window")
+    if not (isinstance(line.get("session_id"), str) and isinstance(window, list) and len(window) == 2):
+        return "line without session_id and window: %r" % (line,)
+    if line["kind"] == "error":
+        return None if isinstance(line.get("error"), str) else "error line without error text"
+    s = line.get("suspicion")
+    if not (isinstance(s, (int, float)) and not isinstance(s, bool) and 0 < s <= 1):
+        return "suspicion must be a number above 0 and at most 1 (A2): %r" % (s,)
+    cited = line.get("cited_seq")
+    if not (isinstance(cited, list) and cited and all(isinstance(c, int) and not isinstance(c, bool)
+                                                       for c in cited)):
+        return "suspicion without cited_seq is rejected (A5)"
+    reasons = line.get("reasons")
+    if not (isinstance(reasons, list) and reasons and all(isinstance(r, str) for r in reasons)):
+        return "suspicion without reasons"
+    return None
+
+
+def _safe(text):
+    return "".join(c if c.isprintable() else "?" for c in str(text))
 
 
 def render_text(report):
@@ -129,6 +175,25 @@ def render_text(report):
             ",".join(str(s) for s in f["cited_seq"])))
         out.append("      %s" % f["summary"])
         for c in f["cites"]:
+            if not c["lines"]:
+                out.append("      seq %d: NO LINE IN TRACE" % c["seq"])
+            for ln in c["lines"]:
+                out.append("      seq %d: line %d  %s" % (c["seq"], ln["line"], ln["text"]))
+    out.append("")
+    run = report.get("suspicion_run")
+    out.append("SUSPICION (model, raises only, A2): %d" % len(report.get("suspicion") or []))
+    if run:
+        out.append("  %d windows judged by %s/%s: %d raised, %d errors, %d below threshold %g"
+                   " (below threshold is not a clearance)" % (
+                       run["windows"], _safe(run["backend"]), _safe(run["model"]), run["raised"],
+                       run["errors"], run["below_threshold"], run["threshold"]))
+    for s in report.get("suspicion") or []:
+        out.append("  [%.2f] session %s seq %s to %s (%s/%s)" % (
+            s["suspicion"], s["session_id"], s["window"][0], s["window"][1],
+            _safe(s.get("backend")), _safe(s.get("model"))))
+        for reason in s["reasons"]:
+            out.append("      - %s" % _safe(reason))
+        for c in s["cites"]:
             if not c["lines"]:
                 out.append("      seq %d: NO LINE IN TRACE" % c["seq"])
             for ln in c["lines"]:

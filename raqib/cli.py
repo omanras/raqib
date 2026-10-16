@@ -11,6 +11,12 @@
   check-rules [--json]
       Run every catalog rule on its fixtures and the benign corpus; print the
       measured fp_rate against the declared fp_budget (A6).
+  suspect TRACE [--findings FILE] [--backend ollama|anthropic|fake] [-o FILE]
+      Ask a model to raise suspicion over windows of the trace (ADR-0001
+      section 5). It can only raise (A2): answers below --threshold are
+      dropped, never recorded as clean; failures become error lines (A3).
+      With -o, FILE.run.json records how many windows were judged.
+      report TRACE --suspicion FILE shows the result with cited lines.
 
 Exit codes: 0 clean, 1 alarm (any finding, empty or corrupt trace),
 3 incomplete (a rule did not run), 2 usage or unreadable input.
@@ -25,6 +31,8 @@ import sys
 from raqib import report
 from raqib.rules import context as rule_context
 from raqib.rules import engine, fixtures, silence, trace
+from raqib.suspect import backends as suspect_backends
+from raqib.suspect import core as suspect_core
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOG = os.path.join(ROOT, "raqib", "rules", "catalog")
@@ -53,10 +61,24 @@ def _parser():
     rep = sub.add_parser("report", help="report findings with their cited trace lines")
     rule_options(rep)
     rep.add_argument("--findings", metavar="FILE", help="use this findings file instead of running the rules")
+    rep.add_argument("--suspicion", metavar="FILE", help="suspicion.jsonl written by `suspect`")
     rep.add_argument("--json", action="store_true", help="print the report as JSON")
     c = sub.add_parser("check-rules", help="measure every rule against its fixtures (A6)")
     c.add_argument("--catalog", default=CATALOG, metavar="DIR")
     c.add_argument("--json", action="store_true")
+    s = sub.add_parser("suspect", help="ask a model to raise suspicion (A2: never acquit)")
+    rule_options(s)
+    s.add_argument("--findings", metavar="FILE", help="findings file (default: run the rules)")
+    s.add_argument("--backend", default="ollama", choices=("ollama", "anthropic", "fake"))
+    s.add_argument("--model", help="model name (ollama default %s, anthropic default %s)"
+                   % (suspect_backends.DEFAULT_OLLAMA_MODEL, suspect_backends.DEFAULT_ANTHROPIC_MODEL))
+    s.add_argument("--ollama-url", metavar="URL", help="default: OLLAMA_HOST or http://localhost:11434")
+    s.add_argument("--effort", default=suspect_backends.DEFAULT_EFFORT, choices=suspect_backends.EFFORTS,
+                   help="anthropic effort level")
+    s.add_argument("--answers", metavar="FILE", help="canned answers for the fake backend")
+    s.add_argument("--threshold", type=float, default=suspect_core.DEFAULT_THRESHOLD)
+    s.add_argument("--window", type=int, default=suspect_core.DEFAULT_WINDOW, help="lines per window")
+    s.add_argument("-o", "--out", metavar="FILE", help="suspicion file (default: stdout)")
     return p
 
 
@@ -150,9 +172,32 @@ def _read_findings(path):
     return found, notes
 
 
+def _read_jsonl(path, what):
+    items = []
+    for raw in _read_text(path, what).split("\n"):
+        if raw.strip():
+            try:
+                items.append(json.loads(raw))
+            except ValueError:
+                items.append(None)
+    return items
+
+
+def _read_suspicion(path):
+    lines = _read_jsonl(path, "suspicion file")
+    run = None
+    if os.path.exists(path + ".run.json"):
+        try:
+            run = json.loads(_read_text(path + ".run.json", "suspicion run record"))
+        except ValueError as exc:
+            raise UsageError("bad suspicion run record %s.run.json: %s" % (path, exc))
+    return lines, run
+
+
 def cmd_report(args, out):
     numbered, problems = _read_trace(args.trace)
     rules = _catalog(args.catalog)
+    suspicion, suspicion_run = _read_suspicion(args.suspicion) if args.suspicion else (None, None)
     if args.findings:
         found, notes = _read_findings(args.findings)
         source = "file %s" % args.findings
@@ -161,7 +206,8 @@ def cmd_report(args, out):
         found, notes = run_rules(records, rules, _context(args), _gap_seconds(args))
         source = "rules run on this trace (catalog %s)" % os.path.relpath(args.catalog, ROOT) \
             if os.path.abspath(args.catalog).startswith(ROOT) else "rules run on this trace"
-    rep = report.build(args.trace, numbered, problems, found, notes, report.rule_table(rules), source)
+    rep = report.build(args.trace, numbered, problems, found, notes, report.rule_table(rules), source,
+                       suspicion, suspicion_run)
     if args.json:
         out.write(json.dumps(rep, indent=2, sort_keys=True, ensure_ascii=True) + "\n")
     else:
@@ -193,6 +239,41 @@ def cmd_check_rules(args, out):
     return 0 if all(r["verdict"] in ("ok", "disabled") for r in reports) else 1
 
 
+def cmd_suspect(args, out):
+    numbered, problems = _read_trace(args.trace)
+    records = [rec for _, rec in numbered]
+    if args.findings:
+        found = [f for f in _read_findings(args.findings)[0] if "_line" not in f]
+    else:
+        found, _ = run_rules(records, _catalog(args.catalog), _context(args), _gap_seconds(args))
+    try:
+        backend = suspect_backends.make_backend(args.backend, model=args.model, ollama_url=args.ollama_url,
+                                                effort=args.effort, answers=args.answers)
+        lines, summary = suspect_core.run(records, found, backend, args.threshold, args.window)
+    except ValueError as exc:
+        raise UsageError(str(exc))
+    text = "".join(json.dumps(line, sort_keys=True, ensure_ascii=True) + "\n" for line in lines)
+    if args.out:
+        try:
+            with open(args.out, "w", encoding="ascii") as f:
+                f.write(text)
+            with open(args.out + ".run.json", "w", encoding="ascii") as f:
+                f.write(json.dumps(dict(summary, trace=args.trace), indent=2, sort_keys=True) + "\n")
+        except OSError as exc:
+            raise UsageError("cannot write %s: %s" % (args.out, exc))
+    else:
+        out.write(text)
+    sys.stderr.write("raqib: %d windows judged by %s/%s: %d raised, %d errors, %d below threshold"
+                     " (A2: below threshold is not a clearance)\n" % (
+                         summary["windows"], summary["backend"], summary["model"], summary["raised"],
+                         summary["errors"], summary["below_threshold"]))
+    if problems or not records:
+        sys.stderr.write("raqib: the trace has %s; run `report` for the alarms\n"
+                         % ("no records" if not records else "%d corrupt lines" % len(problems)))
+        return 1
+    return 1 if lines else 0
+
+
 def main(argv=None, out=None):
     out = out or sys.stdout
     try:
@@ -200,7 +281,8 @@ def main(argv=None, out=None):
     except SystemExit as exc:
         return 2 if exc.code else 0
     try:
-        command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules}[args.command]
+        command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
+                   "suspect": cmd_suspect}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)

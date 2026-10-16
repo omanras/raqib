@@ -68,9 +68,30 @@ RULES THAT DID NOT RUN: 1
   - DRIFT-FILES not-evaluated: needs context: scope
 ```
 
+## Suspicion (model layer)
+A model can add suspicion on top of the rules; it can never clear anything (A2).
+```bash
+python3 -m raqib suspect TRACE --backend ollama --model llama3.1:8b -o suspicion.jsonl  # local (default)
+python3 -m raqib suspect TRACE --backend anthropic -o suspicion.jsonl  # needs `pip install anthropic` and ANTHROPIC_API_KEY
+python3 -m raqib report TRACE --suspicion suspicion.jsonl
+```
+The model sees only the trace metadata (tool, phase, path, URL host, program
+name, secret-pattern names, ok), never hashes or raw content. That metadata is
+marked as untrusted data. Its answer must be `{suspicion, reasons, cited_seq}`,
+and code enforces the rest:
+- an answer below `--threshold` (default 0.5) is dropped, never recorded as
+  clean;
+- a raised suspicion must cite seqs of its own window (A5);
+- a failure, refusal or malformed answer becomes an error line, which the
+  report shows as an alarm (A3).
+
+The Anthropic backend uses `claude-opus-5-5` by default, with structured
+outputs and server-side refusal fallback (`fallbacks: "default"`). With
+`--backend anthropic`, the trace metadata leaves your machine.
+
 ## How this repo is built
 One micro-task per session (`HANDOFF.md`), a read-only reviewer, a judge that
 can only say NEXT / REDO / STOP, and a gate every commit must pass. See
 `docs/CONSTITUTION.md` and `docs/DEVELOPMENT_PLAN.md`.
 
-Status: phase 1 (capture, install, rules and report work; the model layer comes next).
+Status: phase 2 (capture, install, rules, report and the suspicion layer work; evaluation comes next).
