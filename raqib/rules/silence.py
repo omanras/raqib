@@ -1,18 +1,24 @@
 """Silence rules (M0.2): constitution A3, ADR-0001 sections 3 and 6.
 
-A capture gap, a session that never closes and half of a tool call are
-findings, not "nothing happened". findings() is a pure function: it reads
-only its arguments and returns new dicts.
+A capture gap, a session that never closes, half of a tool call and a trace
+that runs backwards are findings, not "nothing happened". findings() is a
+pure function: it reads only its arguments and returns new dicts.
 
-- SILENCE-GAP   two consecutive lines of one session are more than
-                gap_seconds apart; cites [seq_before, seq_after].
-- SILENCE-OPEN  a session has session_start but no later session_end or stop;
-                cites the session's last seq.
-- SILENCE-HALF  a pre with no post of the same seq, or a post with no pre;
-                cites that seq.
+- SILENCE-GAP    two consecutive lines of one session are more than
+                 gap_seconds apart; cites [seq_before, seq_after].
+- SILENCE-OPEN   a session has a session_start and its last line is not a
+                 session_end or stop: the trace stopped mid-session. Cites the
+                 session's last line.
+- SILENCE-HALF   a seq has more pre lines than post lines, or more posts than
+                 pres; cites that seq.
+- SILENCE-ORDER  a line that takes a new seq (pre or a session event) has a
+                 seq no higher than one already seen, or a ts earlier than the
+                 line before it: the trace was truncated, rotated, merged or
+                 its clock moved. Cites [earlier seq, this seq].
 
 Lines are trace records in file (capture) order. Records without a
-session_id and an int seq are ignored here; trace.parse() reports them.
+session_id and an int seq cannot be cited (A5) and are skipped here;
+trace.parse() reports them, and bad timestamps, as problems.
 """
 from __future__ import annotations
 
@@ -23,24 +29,32 @@ from raqib.rules.trace import is_record, parse_ts
 DEFAULT_GAP_SECONDS = 60
 GAP_ENV = "RAQIB_GAP_SECONDS"
 SEVERITY = "high"  # A3: silence is a finding of the highest class
+CLOSING = ("session_end", "stop")
+NEW_SEQ = ("pre", "session_start", "session_end", "stop")  # capture gives these max+1
 
 
 def gap_seconds_from(environ):
     """RAQIB_GAP_SECONDS from a mapping (e.g. os.environ); default 60.
-    Raises ValueError on a value that is not a positive number."""
+    Raises ValueError on a value that is not a finite positive number."""
     raw = environ.get(GAP_ENV)
     if raw is None or raw == "":
         return DEFAULT_GAP_SECONDS
-    value = float(raw)
-    # nan and inf would quietly switch gap detection off.
-    if not (value > 0 and math.isfinite(value)):
-        raise ValueError("%s must be a positive number, got %r" % (GAP_ENV, raw))
+    return check_gap_seconds(float(raw), GAP_ENV)
+
+
+def check_gap_seconds(value, name="gap_seconds"):
+    # nan, inf and 0 would quietly switch gap detection off or flag every line.
+    ok = (isinstance(value, (int, float)) and not isinstance(value, bool)
+          and math.isfinite(value) and value > 0)
+    if not ok:
+        raise ValueError("%s must be a finite positive number, got %r" % (name, value))
     return value
 
 
 def findings(lines, gap_seconds=DEFAULT_GAP_SECONDS):
-    """Return SILENCE-GAP, SILENCE-OPEN and SILENCE-HALF findings, ordered by
-    session (first appearance), then cited seq, then rule_id."""
+    """Return SILENCE-* findings, ordered by session (first appearance), then
+    first cited seq, then rule_id."""
+    check_gap_seconds(gap_seconds)
     sessions = {}
     for rec in lines:
         if is_record(rec):
@@ -50,6 +64,7 @@ def findings(lines, gap_seconds=DEFAULT_GAP_SECONDS):
         found = _gaps(session_id, recs, gap_seconds)
         found += _open(session_id, recs)
         found += _halves(session_id, recs)
+        found += _order(session_id, recs)
         found.sort(key=lambda f: (f["cited_seq"][0], f["rule_id"]))
         out += found
     return out
@@ -66,6 +81,18 @@ def _finding(rule_id, session_id, cited_seq, ts, summary):
     }
 
 
+def _ts_at(recs, index):
+    """ts of recs[index], or of the nearest earlier line with a valid ts."""
+    for rec in reversed(recs[:index + 1]):
+        if parse_ts(rec.get("ts")) is not None:
+            return rec["ts"]
+    return None
+
+
+def _label(rec):
+    return "%s seq %d" % (rec.get("phase", "?"), rec["seq"])
+
+
 def _gaps(session_id, recs, gap_seconds):
     out = []
     timed = [(parse_ts(r.get("ts")), r) for r in recs]
@@ -75,45 +102,62 @@ def _gaps(session_id, recs, gap_seconds):
         if gap > gap_seconds:
             out.append(_finding(
                 "SILENCE-GAP", session_id, [before["seq"], after["seq"]], after["ts"],
-                "no capture for %.1fs between seq %d and seq %d (limit %gs)"
-                % (gap, before["seq"], after["seq"], gap_seconds)))
+                "no capture for %.3fs from %s (%s) to %s (%s); limit %gs"
+                % (gap, before["ts"], _label(before), after["ts"], _label(after), gap_seconds)))
     return out
 
 
 def _open(session_id, recs):
-    started = False
-    closed = False
-    for rec in recs:
-        phase = rec.get("phase")
-        if phase == "session_start":
-            started = True
-        elif started and phase in ("session_end", "stop"):
-            closed = True
-    if not started or closed:
+    starts = [i for i, r in enumerate(recs) if r.get("phase") == "session_start"]
+    if not starts or recs[-1].get("phase") in CLOSING:
         return []
     last = recs[-1]
     return [_finding(
-        "SILENCE-OPEN", session_id, [last["seq"]], last.get("ts"),
-        "session started but has no session_end or stop; last seq %d" % last["seq"])]
+        "SILENCE-OPEN", session_id, [last["seq"]], _ts_at(recs, len(recs) - 1),
+        "session started but its trace ends at %s without session_end or stop" % _label(last))]
 
 
 def _halves(session_id, recs):
-    pres = {}
-    posts = {}
+    counts = {}  # seq -> [pre lines, post lines, first line]
     for rec in recs:
-        if rec.get("phase") == "pre":
-            pres.setdefault(rec["seq"], rec)
-        elif rec.get("phase") == "post":
-            posts.setdefault(rec["seq"], rec)
+        phase = rec.get("phase")
+        if phase in ("pre", "post"):
+            entry = counts.setdefault(rec["seq"], [0, 0, rec])
+            entry[0 if phase == "pre" else 1] += 1
     out = []
-    for seq, rec in pres.items():
-        if seq not in posts:
+    for seq, (pres, posts, first) in counts.items():
+        if pres == posts:
+            continue
+        missing = "post" if pres > posts else "pre"
+        out.append(_finding(
+            "SILENCE-HALF", session_id, [seq], first.get("ts"),
+            "seq %d of %s has %d pre and %d post line(s): a %s is missing"
+            % (seq, first.get("tool", "?"), pres, posts, missing)))
+    return out
+
+
+def _order(session_id, recs):
+    out = []
+    max_seq = None
+    max_rec = None
+    prev_t = None
+    prev_rec = None
+    for rec in recs:
+        seq = rec["seq"]
+        if rec.get("phase") in NEW_SEQ and max_seq is not None and seq <= max_seq:
             out.append(_finding(
-                "SILENCE-HALF", session_id, [seq], rec.get("ts"),
-                "pre of %s at seq %d has no post" % (rec.get("tool", "?"), seq)))
-    for seq, rec in posts.items():
-        if seq not in pres:
-            out.append(_finding(
-                "SILENCE-HALF", session_id, [seq], rec.get("ts"),
-                "post of %s at seq %d has no pre" % (rec.get("tool", "?"), seq)))
+                "SILENCE-ORDER", session_id, [max_seq, seq], rec.get("ts"),
+                "%s comes after %s: seq went back (trace truncated, rotated or merged?)"
+                % (_label(rec), _label(max_rec))))
+        if max_seq is None or seq > max_seq:
+            max_seq, max_rec = seq, rec
+        t = parse_ts(rec.get("ts"))
+        if t is not None:
+            if prev_t is not None and t < prev_t:
+                out.append(_finding(
+                    "SILENCE-ORDER", session_id, [prev_rec["seq"], seq], rec["ts"],
+                    "%s at %s is %.3fs earlier than %s at %s: time went back"
+                    % (_label(rec), rec["ts"], (prev_t - t).total_seconds(),
+                       _label(prev_rec), prev_rec["ts"])))
+            prev_t, prev_rec = t, rec
     return out
