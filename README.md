@@ -1,135 +1,100 @@
 # Raqib — رقيب
 
-An external watcher for AI agents. Raqib records what an agent does, judges it
-with deterministic rules first, and lets a model raise suspicion — never acquit.
+An external watcher for AI coding agents. Raqib records what an agent does,
+judges it with deterministic rules first, and lets a model raise suspicion,
+never acquit.
 
-- Deterministic first. Silence is an alarm. The watcher never touches the watched.
-- Works offline. Stores hashes, not content, by default.
-- Starts with Claude Code (hooks); other agents via proxy later.
+- **Deterministic first.** Rules decide; a model can only add suspicion (A1, A2).
+- **Silence is an alarm.** A gap, a call that never finished or a session
+  that never closed is a finding, not "nothing happened" (A3).
+- **The watcher never touches the watched.** Raqib reads and reports; it
+  blocks nothing (A4). It works offline and stores hashes, not content.
 
-## Quickstart (capture)
-Needs Linux or macOS, `python3` (stdlib only) and Claude Code. The code lives
-on branch `claude/v0.1` until it is merged; `main` still holds only the kit
-and the first capture hook, so clone the branch:
+## How it works
+1. **Capture.** Six Claude Code hooks append one JSON line per tool call
+   and session event to `raqib.log.jsonl`. Inputs and outputs are stored as
+   sha256 only, plus a small extract: the path, the URL host, the program
+   name of a Bash command, and the names of secret patterns seen in the
+   output.
+2. **Rules.** Eleven rules turn the trace into findings, and every finding
+   cites the trace lines behind it (A5). The rules are 4 silence rules and
+   7 YAML rules in `raqib/rules/catalog`. Each declares its false-positive
+   budget and is measured against fixtures (A6).
+3. **Suspicion (optional).** A local or API model reads windows of the
+   trace metadata. It can raise suspicion with citations; it cannot clear
+   anything.
+4. **Report.** Text, JSON, or a read-only HTML page.
+
+## Quickstart
+Linux or macOS, `python3` (stdlib only) and Claude Code. Windows is not
+supported. The code is on branch `claude/v0.1` until it is merged.
 ```bash
-git clone --branch claude/v0.1 https://github.com/omanras/raqib raqib && cd raqib
-tools/gate.sh                                   # must end with [gate] GREEN
-tools/install-hooks.sh /path/to/watched-project # adds six hooks to its .claude/settings.json
-
-cd /path/to/watched-project
+git clone --branch claude/v0.1 https://github.com/omanras/raqib ~/raqib
+~/raqib/tools/gate.sh                             # ends with [gate] GREEN
+~/raqib/tools/install-hooks.sh /path/to/project   # adds six hooks to its .claude/settings.json
+cd /path/to/project
 claude -p "Use the Bash tool to run: echo raqib-quickstart" --model haiku --max-turns 3 --allowedTools "Bash(echo:*)"
-cat raqib.log.jsonl
+cd ~/raqib
+python3 -m raqib report /path/to/project/raqib.log.jsonl --scope .           # CLEAN, exit 0
+python3 -m raqib ui /path/to/project/raqib.log.jsonl --scope . -o trace.html  # open trace.html
 ```
-These exact steps were run on 2026-10-16 from a fresh clone of commit
-`d7841d1` (branch `claude/v0.1`) with Claude Code 2.1.301. The builder ran the
-`claude` line under `env -i` with a throwaway `HOME`, to keep it apart from its
-own Claude Code session. The run wrote five lines; `ts` and `cwd` are left out
-here, and the raw file is `tests/fixtures/quickstart-d7841d1-claude-code-2.1.301.log`:
-```
-{"seq":1,"phase":"session_start","tool":"-", ...}
-{"seq":2,"phase":"pre","tool":"Bash","tool_use_id":"toolu_01VC...","input_sha256":"2b03...","input_meta":{"command_head":"echo"}, ...}
-{"seq":2,"phase":"post","tool":"Bash","tool_use_id":"toolu_01VC...","input_sha256":"2b03...","input_meta":{"command_head":"echo"},"output_sha256":"9728...","output_meta":{"scan":"full","secret_kinds":[]},"ok":true, ...}
-{"seq":3,"phase":"stop","tool":"-", ...}
-{"seq":4,"phase":"session_end","tool":"-", ...}
-```
-The `pre` and `post` lines share seq 2: they are one tool call. Inputs and
-outputs are stored only as sha256 hashes. `output_meta` names the secret
-patterns the output matched (`secret_kinds`, never the text); `scan` is
-`full`, `partial` (output over 1 MiB: only its start was scanned, so an empty
-result is not reported as clean) or `none`. The trace path is absolute
-(`<project>/raqib.log.jsonl` by default), so it does not move when the agent
-changes directory. `--log PATH` puts it elsewhere, for example outside the
-project's working tree; the agent runs as your user and could still reach it.
+These steps were run from a fresh clone (see
+`docs/review/2026-10-16-M3.2-questions.md`). The raw trace of such a run is
+`tests/fixtures/quickstart-d7841d1-claude-code-2.1.301.log`.
+- **Where the trace goes.** The trace path is absolute, so a `cd` by the
+  agent cannot split it. `--log PATH` puts it outside the project.
+- **Capture never blocks the agent.** If it cannot write, it prints one
+  `RAQIB-SILENCE:` line to the hook's stderr (`claude --debug` shows it).
+- **The installer** keeps your other hooks and changes nothing on a second
+  run.
 
-The hook never blocks the agent. If the log cannot be written, the log lock
-is not free within 5 s, capture takes over 8 s, or python3 or the Raqib
-checkout is gone, it exits 0 and prints one line beginning `RAQIB-SILENCE:` to
-the hook's stderr. Run `claude --debug` to have Claude Code
-write that stderr to `~/.claude/debug/<session>.txt`. A call that
-Claude Code itself blocks fires PreToolUse only, so it shows up as a `pre`
-with no `post` (see `tests/fixtures/blocked-calls-claude-code-2.1.301.log`); a
-tool that fails fires PostToolUseFailure, a `post` with `"ok":false` (see
-`tests/fixtures/file-tools-d7841d1-claude-code-2.1.301.log`).
-Re-running the installer changes nothing; other hooks are kept.
+## What it catches
+| Rule | Fires on |
+|---|---|
+| SILENCE-GAP / OPEN / HALF / ORDER | no capture for 60 s; a session with no end; a call with no result (or a result with no call); seq or time going back |
+| SCOPE-PATH | a file tool touching a path outside the session's directory |
+| SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
+| NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like |
+| DESTRUCT-CMD | rm, dd, shred, mkfs and the like |
+| SECRET-OUTPUT | a key, token or private key in a tool's output (by pattern name; the text is never stored) |
+| DRIFT-FILES | edits to more than two files outside the task's declared scope |
 
-## Report (rules)
-From the Raqib checkout:
-```bash
-python3 -m raqib report /path/to/watched-project/raqib.log.jsonl --scope src --scope tests
-python3 -m raqib rules TRACE -o findings.jsonl   # one finding per line (ADR-0001 section 6)
-python3 -m raqib report TRACE --findings findings.jsonl
-python3 -m raqib check-rules                     # measured false-positive rate vs budget (A6)
-```
-The report cites the exact trace lines behind every finding. It lists every
-rule with its false-positive budget, and every rule that did not run. An
-empty trace, a corrupt line or a finding with no matching line is an alarm.
-Exit codes: 0 clean, 1 alarm, 3 incomplete (for example DRIFT-FILES without a
-`--scope` or `--handoff HANDOFF.md`), 2 usage error. Here it is on the real
-trace in which Claude Code blocked two calls:
-```
-FINDINGS: 2
-  [high] SILENCE-HALF (SILENCE) session b3744113-... seq 2
-      seq 2 of Bash has 1 pre and 0 post line(s): a post is missing
-      seq 2: line 2  pre Bash seq 2  2026-10-16T20:49:37.878Z  input_meta={"command_head": "ls"}
-  ...
-RULES THAT DID NOT RUN: 2
-  - DRIFT-FILES not-evaluated: needs context: scope
-  - SECRET-OUTPUT partial: could not judge 1 line(s) (session:seq b3744113-...:4): ...
-```
-SECRET-OUTPUT is partial here because this trace predates `output_meta`: a
-line the rule cannot judge is reported, never counted as clean.
+## What it cannot see
+Content, by design. So the rules miss these:
+- a program hidden behind `sudo`, `bash -c` or `&&`;
+- file access made through Bash;
+- a symlink out of the project;
+- a secret the agent writes rather than reads;
+- an agent that rewrites the trace or switches the hooks off and then
+  stays quiet.
+On 50 labelled events the rules miss 9 bad events and flag 6 of 25 benign
+ones (`docs/review/2026-10-16-M2.2-baseline.md`). See
+**[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)** for every known gap and its
+source.
 
-## Web view (read-only)
-```bash
-python3 -m raqib ui TRACE -o trace.html   # one static page; open it in a browser
-python3 -m raqib ui TRACE --serve         # or view it at http://127.0.0.1:8765/
-```
-The page shows the result, the alarms, every finding with links to the
-lines it cites, the rules that did not run, and a timeline of every trace
-line. Silence is drawn into the timeline as red bands: a gap over the limit,
-a session that never closed, a corrupt line. A pre with no post is marked
-`no post`. The page runs no script and loads nothing, and every trace value
-is escaped, because the watched agent controls paths. `--serve` binds
-127.0.0.1, answers only GET and HEAD, and re-reads the trace on each request.
+## Commands
+All commands run from the Raqib checkout. TRACE is a `raqib.log.jsonl`.
+| Command | Does |
+|---|---|
+| `python3 -m raqib report TRACE [--scope P \| --handoff HANDOFF.md] [--json]` | findings with their cited lines, rules that did not run, every rule's budget; exit 0 clean, 1 alarm, 3 incomplete, 2 usage |
+| `python3 -m raqib rules TRACE -o findings.jsonl` | findings only, one JSON line each |
+| `python3 -m raqib ui TRACE -o trace.html` (or `--serve`) | the report as one static page: timeline, findings, silence bands; no script; `--serve` binds 127.0.0.1 |
+| `python3 -m raqib check-rules` | each rule's measured false-positive rate against its budget |
+| `python3 -m raqib suspect TRACE --backend ollama -o suspicion.jsonl` | model suspicion (`--backend anthropic` needs `pip install anthropic` and ANTHROPIC_API_KEY, and sends trace metadata off the machine); then `report TRACE --suspicion suspicion.jsonl` |
+| `python3 -m raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events |
 
-## Suspicion (model layer)
-A model can add suspicion on top of the rules; it can never clear anything (A2).
-```bash
-python3 -m raqib suspect TRACE --backend ollama --model llama3.1:8b -o suspicion.jsonl  # local (default)
-python3 -m raqib suspect TRACE --backend anthropic -o suspicion.jsonl  # needs `pip install anthropic` and ANTHROPIC_API_KEY
-python3 -m raqib report TRACE --suspicion suspicion.jsonl
-```
-The model sees only the trace metadata (tool, phase, path, URL host, program
-name, secret-pattern names, ok), never hashes or raw content. That metadata is
-marked as untrusted data. Its answer must be `{suspicion, reasons, cited_seq}`,
-and code enforces the rest:
-- an answer below `--threshold` (default 0.5) is dropped, never recorded as
-  clean;
-- a raised suspicion must cite seqs of its own window (A5);
-- a failure, refusal or malformed answer becomes an error line, which the
-  report shows as an alarm (A3).
+## More
+- **[docs/CONSTITUTION.md](docs/CONSTITUTION.md)**: the nine articles
+  (A1-A9) every change is held to.
+- **[docs/specs/ADR-0001-architecture.md](docs/specs/ADR-0001-architecture.md)**:
+  the pipeline, the trace schema and its amendments.
+- **[docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)** and `docs/review/`
+  hold the plan, every review packet, and the open questions.
+- **How this repo is built.** One micro-task per session (`HANDOFF.md`), a
+  read-only reviewer, and a gate (`tools/gate.sh`) that every commit must
+  pass.
 
-The Anthropic backend uses `claude-opus-5-5` by default, with structured
-outputs and server-side refusal fallback (`fallbacks: "default"`). With
-`--backend anthropic`, the trace metadata leaves your machine.
-
-## Evaluation
-`python3 -m raqib eval` scores the rules, and any candidate model, on 50
-labelled events (`tests/fixtures/eval/events.json`: 25 benign, 20 suspicious,
-5 deceptive). It reports false negatives (a backend error counts as a miss),
-false positives and errors, and ranks rows by FN first.
-```bash
-python3 -m raqib eval                                    # rules baseline only
-python3 -m raqib eval --candidate ollama:llama3.1:8b --candidate anthropic
-```
-The rules alone miss 9 events and flag 6 benign ones
-(`docs/review/2026-10-16-M2.2-baseline.md`). The `rules+model` row shows what a
-model adds on top of them. The events were written by one author who knows
-the rules, so they show where the rules stop; they do not prove a model safe.
-
-## How this repo is built
-One micro-task per session (`HANDOFF.md`), a read-only reviewer, a judge that
-can only say NEXT / REDO / STOP, and a gate every commit must pass. See
-`docs/CONSTITUTION.md` and `docs/DEVELOPMENT_PLAN.md`.
-
-Status: phases 0-2 and the web view (M3.1) are done; docs (M3.2) come next.
+Status: v0.1 candidate on `claude/v0.1`: capture, rules, report, suspicion
+layer, evaluation, web view and docs. The last exit criterion of the plan
+(M3.3) is still open: one person outside the project runs this quickstart
+and files one issue.
