@@ -1,0 +1,8 @@
+{
+  "session_id": "fixture-session-0001",
+  "transcript_path": "/tmp/fixture.jsonl",
+  "cwd": "/work/example",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "WebFetch",
+  "tool_input": {"url": "https://Example.org/a/b?q=1", "prompt": "summarise"}
+}

@@ -1,0 +1,9 @@
+{
+  "session_id": "fixture-session-0001",
+  "transcript_path": "/tmp/fixture.jsonl",
+  "cwd": "/work/example",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {"command": "ls -la /etc", "description": "list etc"},
+  "tool_response": {"stdout": "", "stderr": "", "interrupted": true, "isImage": false}
+}
