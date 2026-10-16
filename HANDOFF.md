@@ -1,28 +1,28 @@
-# HANDOFF — M1.1  (phase 1: rule schema + loader + fixture runner)
+# HANDOFF — M0.2  (phase 0: silence)
 
-Task: rules as YAML, one file per rule (ADR-0001 §4), loaded with a stdlib
-YAML-subset parser (A-7), evaluated by a pure engine, and checked by a fixture
-runner that measures each rule's false-positive rate against its budget (A6).
+Task: implement `raqib/rules/silence.py`: read a trace JSONL and emit SILENCE
+events per docs/CONSTITUTION.md A3 and ADR-0001 §3/§6.
 
 Scope:
   raqib/rules/
-  tests/test_rules.py
+  tests/test_silence.py
   tests/fixtures/
   docs/review/
 
 Exit criteria:
-- E1 Loader: stdlib-only YAML subset; anything outside the subset is an error
-     naming file and line, never a silent misread.
-- E2 Schema: id, title, class (SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT), match
-     (declarative over trace fields), severity, fp_budget, fixtures{positive[],
-     negative[]}; an invalid rule fails to load, naming the field.
-- E3 Engine: pure `(rules, trace lines, context) -> findings`; a finding is
-     {ts, rule_id, class, severity, session_id, cited_seq[], summary}; one
-     without cited_seq is rejected (A5); no rule consults a model (A1).
-- E4 Runner: positives fire, negatives are counted as false positives; a rule
-     over its fp_budget must be `status: disabled` (A6). 3 rules ship, each
-     with ≥1 positive and ≥1 negative fixture; gate green.
+- E1 A gap > RAQIB_GAP_SECONDS (default 60) between consecutive `ts` inside one
+     session_id yields one finding {rule_id:"SILENCE-GAP", severity:"high",
+     cited_seq:[seq_before, seq_after], summary}.
+- E2 A session with `session_start` but no `session_end` or `stop` within the
+     file yields {rule_id:"SILENCE-OPEN", ...} citing the last seq.
+- E3 A `pre` with no matching `post` (same seq) yields {rule_id:"SILENCE-HALF"}.
+- E4 Pure function: `findings(lines) -> list[dict]`; no I/O inside; fixtures
+     with at least one positive and one negative per rule; gate green.
 
-Not in scope: capture, CLI, model layer, UI.
-Commit: `landed: M1.1 rule schema + loader + runner` or `STOP: M1.1 <reason>`.
+Not in scope: capture, model layer, CLI, UI.
+Commit: `landed: M0.2 silence rules` or `STOP: M0.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
+
+REDO: per docs/review/2026-10-16-M0.2.md - HALF counts pre/post per seq (S6);
+  OPEN when the last line is not stop/session_end (S4); SILENCE-ORDER for seq/ts
+  going back (S6/S7); trace.parse reports bad ts/phase/UTF-8 (S2/S3/S13).
