@@ -1,29 +1,24 @@
-# HANDOFF — M0.1b  (phase 0: pairing key + command_head)
+# HANDOFF — M0.2  (phase 0: silence)
 
-Task: apply ADR-0001 Amendment A-1 and A-2 to `raqib/hooks/capture.py`:
-carry `tool_use_id` in every tool trace line and pair post→pre by it; write
-`input_meta.command_head` for Bash.
+Task: implement `raqib/rules/silence.py`: read a trace JSONL and emit SILENCE
+events per docs/CONSTITUTION.md A3 and ADR-0001 §3/§6.
 
 Scope:
-  raqib/hooks/
-  tests/test_capture.py
+  raqib/rules/
+  tests/test_silence.py
   tests/fixtures/
   docs/review/
 
 Exit criteria:
-- E1 Pre and post lines carry `tool_use_id` (string) when the hook input has
-     it; a post pairs with the pre that has the same tool_use_id, regardless
-     of input hash. Fallback to (tool, input_sha256, oldest-open) only when
-     tool_use_id is absent on either side.
-- E2 For tool "Bash", `input_meta.command_head` = basename of the first
-     whitespace-separated token of tool_input.command, skipping leading
-     `NAME=value` assignments (e.g. `FOO=1 /usr/bin/git x` → "git"). Absent for
-     other tools. Never more than 64 chars.
-- E3 Fixtures: two identical commands in flight pair correctly by tool_use_id
-     (positive); an updatedInput-rewritten pre still pairs (positive); a post
-     with unknown tool_use_id falls back and is logged (negative, no crash).
-- E4 All M0.1 tests still pass; gate green.
+- E1 A gap > RAQIB_GAP_SECONDS (default 60) between consecutive `ts` inside one
+     session_id yields one finding {rule_id:"SILENCE-GAP", severity:"high",
+     cited_seq:[seq_before, seq_after], summary}.
+- E2 A session with `session_start` but no `session_end` or `stop` within the
+     file yields {rule_id:"SILENCE-OPEN", ...} citing the last seq.
+- E3 A `pre` with no matching `post` (same seq) yields {rule_id:"SILENCE-HALF"}.
+- E4 Pure function: `findings(lines) -> list[dict]`; no I/O inside; fixtures
+     with at least one positive and one negative per rule; gate green.
 
-Not in scope: session events (M0.3), rules, model, UI.
-Commit: `landed: M0.1b pairing key + command_head` or `STOP: M0.1b <reason>`.
+Not in scope: capture, model layer, CLI, UI.
+Commit: `landed: M0.2 silence rules` or `STOP: M0.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
