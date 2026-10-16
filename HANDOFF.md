@@ -1,29 +1,29 @@
-# HANDOFF — M1.3  (phase 1: findings format + report CLI)
+# HANDOFF — M2.1  (phase 2: schema-constrained suspicion layer)
 
-Task: `python -m raqib` CLI over the pipeline files (ADR-0001 §1, §6): `rules`
-writes findings.jsonl from a trace; `report` shows findings with the exact
-trace lines they cite (A5), every rule's fp_budget (A6), and everything that
-did not run or could not be read (A3); `check-rules` runs the fixture runner.
+Task: `raqib/suspect/` sends windows of trace lines + findings to a model
+backend whose output must be {suspicion: 0..1, reasons[], cited_seq[]}
+(ADR-0001 §5); code enforces A2 and A5. `python -m raqib suspect` writes
+suspicion.jsonl; `report --suspicion` shows it.
 
 Scope:
   raqib/
-  tests/test_report.py
+  tests/test_suspect.py
   tests/fixtures/
   README.md
   docs/review/
 
 Exit criteria:
-- E1 `rules TRACE -o FILE` writes silence + catalog findings, one per line, each
-     passing check_finding; scope from --scope or a HANDOFF's Scope: block;
-     RAQIB_GAP_SECONDS honoured.
-- E2 `report TRACE [--findings FILE]` prints, for each finding, the file line
-     numbers and content of every cited seq; a cited seq with no line, or a
-     finding without cited_seq, is an alarm (A5).
-- E3 Report lists rules with class/severity/fp_budget/status; empty trace,
-     corrupt lines and unrun rules are never shown as clean; exit 0 clean,
-     1 alarms, 3 incomplete, 2 usage.
-- E4 `check-rules` prints measured fp_rate vs fp_budget; tests; gate green.
+- E1 Backends: ollama (default, stdlib HTTP), anthropic (official SDK, imported
+     only when chosen; the rest stays stdlib, A-7), fake (canned, for tests).
+- E2 Output validated in code: suspicion a number in [0,1], reasons strings,
+     cited_seq inside the window and non-empty when raised; anything else is
+     an error line, never suspicion (A5).
+- E3 A2: below threshold (default 0.5) nothing is written, nothing is ever
+     recorded as clean; failures and refusals are error lines (A3); rule
+     findings are never altered.
+- E4 Prompt holds only trace metadata (no hashes, no raw content) marked as
+     untrusted data; tests run offline; gate green.
 
-Not in scope: model layer, UI, capture changes.
-Commit: `landed: M1.3 findings + report CLI` or `STOP: M1.3 <reason>`.
+Not in scope: eval harness (M2.2), UI.
+Commit: `landed: M2.1 suspicion layer` or `STOP: M2.1 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
