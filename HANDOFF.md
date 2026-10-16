@@ -1,29 +1,27 @@
-# HANDOFF — M2.1  (phase 2: schema-constrained suspicion layer)
+# HANDOFF — M2.2  (phase 2: evaluation harness)
 
-Task: `raqib/suspect/` sends windows of trace lines + findings to a model
-backend whose output must be {suspicion: 0..1, reasons[], cited_seq[]}
-(ADR-0001 §5); code enforces A2 and A5. `python -m raqib suspect` writes
-suspicion.jsonl; `report --suspicion` shows it.
+Task: evaluate the suspicion layer (DEVELOPMENT_PLAN M2.2) on 50 labelled
+events (25 benign / 20 suspicious / 5 deceptive). `python -m raqib eval`
+reports false negatives and false positives per candidate backend/model,
+ranks candidates by FN first, and shows the deterministic rules as baseline.
 
 Scope:
   raqib/
-  tests/test_suspect.py
+  tests/test_eval.py
   tests/fixtures/
   README.md
   docs/review/
 
 Exit criteria:
-- E1 Backends: ollama (default, stdlib HTTP), anthropic (official SDK, imported
-     only when chosen; the rest stays stdlib, A-7), fake (canned, for tests).
-- E2 Output validated in code: suspicion a number in [0,1], reasons strings,
-     cited_seq inside the window and non-empty when raised; anything else is
-     an error line, never suspicion (A5).
-- E3 A2: below threshold (default 0.5) nothing is written, nothing is ever
-     recorded as clean; failures and refusals are error lines (A3); rule
-     findings are never altered.
-- E4 Prompt holds only trace metadata (no hashes, no raw content) marked as
-     untrusted data; tests run offline; gate green.
+- E1 tests/fixtures/eval/events.json: 50 events (id, label, description,
+     trace lines), exactly 25/20/5; every event is a sound trace.
+- E2 Per candidate: FN = suspicious/deceptive not raised (an error is a
+     miss), FP = benign raised; per-label counts; rank by FN, FP, errors.
+- E3 A rules baseline (any finding = flagged) and rules-or-model rows show
+     what the model adds on top of the rules (A1).
+- E4 Offline tests with canned answers; the real rules baseline is written
+     to docs/review; gate green.
 
-Not in scope: eval harness (M2.2), UI.
-Commit: `landed: M2.1 suspicion layer` or `STOP: M2.1 <reason>`.
+Not in scope: UI, new rules, capture changes.
+Commit: `landed: M2.2 evaluation harness` or `STOP: M2.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
