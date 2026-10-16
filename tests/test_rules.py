@@ -15,10 +15,9 @@ from raqib.rules import engine, fixtures, yamlite  # noqa: E402
 
 CATALOG = ROOT / "raqib" / "rules" / "catalog"
 RULE_FIXTURES = ROOT / "tests" / "fixtures" / "rules"
-BENIGN = fixtures.benign_corpus(RULE_FIXTURES / "benign") + [
-    str(ROOT / "tests" / "fixtures" / "quickstart-claude-code-2.1.301.log"),
-    str(ROOT / "tests" / "fixtures" / "blocked-calls-claude-code-2.1.301.log"),
-]
+# Synthetic sessions plus every real Claude Code trace (the CLI uses the same set).
+BENIGN = fixtures.benign_corpus(RULE_FIXTURES / "benign") + sorted(
+    str(p) for p in (ROOT / "tests" / "fixtures").glob("*.log"))
 
 try:
     import yaml

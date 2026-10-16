@@ -244,8 +244,8 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     rows = {line.split()[0]: line.split() for line in text.splitlines()[1:]}
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
                          "SCOPE-PATH", "SECRET-OUTPUT"}
-    assert "3 measured, 5 unmeasured" in " ".join(rows["DRIFT-FILES"])
-    assert rows["NET-TOOL"][1:4] == ["ok", "0.143", "0.25"]
+    assert "3 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])
+    assert rows["NET-TOOL"][1:4] == ["ok", "0.111", "0.25"]
     data = json.loads(raqib("check-rules", "--json")[1])
     assert {r["verdict"] for r in data} == {"ok"}
 

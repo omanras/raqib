@@ -467,3 +467,29 @@ def test_redo_m2_new_settings_file_follows_the_umask(tmp_path):
                           capture_output=True, text=True, timeout=60, env=clean_env(tmp_path))
     assert proc.returncode == 0, proc.stderr
     assert stat.S_IMODE((proj / ".claude" / "settings.json").stat().st_mode) == 0o600
+
+
+# --- M1.2 REDO: real traces written by the current capture ------------------
+
+def test_redo_real_quickstart_with_output_meta():
+    """README quickstart from a fresh clone of d7841d1, Claude Code 2.1.301."""
+    recs, problems = trace.read(FIXTURES / "quickstart-d7841d1-claude-code-2.1.301.log")
+    assert problems == []
+    assert [(r["phase"], r["seq"]) for r in recs] == [
+        ("session_start", 1), ("pre", 2), ("post", 2), ("stop", 3), ("session_end", 4)]
+    assert recs[1]["input_meta"] == {"command_head": "echo"}
+    assert recs[2]["output_meta"] == {"scan": "full", "secret_kinds": []}
+    assert silence.findings(recs) == []
+
+
+def test_redo_real_file_tools_and_a_real_failure():
+    """Write, Edit, Read and a Read of a missing file (d7841d1, Claude Code 2.1.301).
+    The missing file fired PostToolUseFailure: ok false, error_class "failure"."""
+    recs, problems = trace.read(FIXTURES / "file-tools-d7841d1-claude-code-2.1.301.log")
+    assert problems == []
+    posts = [(r["seq"], r["tool"], r["ok"], r.get("error_class"), r["output_meta"]["scan"])
+             for r in recs if r["phase"] == "post"]
+    assert posts == [(2, "Write", True, None, "full"), (3, "Edit", True, None, "full"),
+                     (4, "Read", True, None, "full"), (5, "Read", False, "failure", "full")]
+    assert all(r["input_meta"]["path"].startswith(r["cwd"] + "/") for r in recs if r["phase"] == "pre")
+    assert silence.findings(recs) == []

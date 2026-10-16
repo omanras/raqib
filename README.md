@@ -8,9 +8,11 @@ with deterministic rules first, and lets a model raise suspicion — never acqui
 - Starts with Claude Code (hooks); other agents via proxy later.
 
 ## Quickstart (capture)
-Needs Linux or macOS, `python3` (stdlib only) and Claude Code.
+Needs Linux or macOS, `python3` (stdlib only) and Claude Code. The code lives
+on branch `claude/v0.1` until it is merged; `main` still holds only the kit
+and the first capture hook, so clone the branch:
 ```bash
-git clone https://github.com/omanras/raqib raqib && cd raqib
+git clone --branch claude/v0.1 https://github.com/omanras/raqib raqib && cd raqib
 tools/gate.sh                                   # must end with [gate] GREEN
 tools/install-hooks.sh /path/to/watched-project # adds six hooks to its .claude/settings.json
 
@@ -19,29 +21,35 @@ claude -p "Use the Bash tool to run: echo raqib-quickstart" --model haiku --max-
 cat raqib.log.jsonl
 ```
 These exact steps were run on 2026-10-16 from a fresh clone of commit
-`b72f109` (branch `claude/v0.1`) with Claude Code 2.1.301. The builder ran the
+`d7841d1` (branch `claude/v0.1`) with Claude Code 2.1.301. The builder ran the
 `claude` line under `env -i` with a throwaway `HOME`, to keep it apart from its
 own Claude Code session. The run wrote five lines; `ts` and `cwd` are left out
-here, and the raw file is `tests/fixtures/quickstart-claude-code-2.1.301.log`:
+here, and the raw file is `tests/fixtures/quickstart-d7841d1-claude-code-2.1.301.log`:
 ```
 {"seq":1,"phase":"session_start","tool":"-", ...}
-{"seq":2,"phase":"pre","tool":"Bash","tool_use_id":"toolu_01QS...","input_sha256":"05a4...","input_meta":{"command_head":"echo"}, ...}
-{"seq":2,"phase":"post","tool":"Bash","tool_use_id":"toolu_01QS...","output_sha256":"9728...","ok":true, ...}
+{"seq":2,"phase":"pre","tool":"Bash","tool_use_id":"toolu_01VC...","input_sha256":"2b03...","input_meta":{"command_head":"echo"}, ...}
+{"seq":2,"phase":"post","tool":"Bash","tool_use_id":"toolu_01VC...","input_sha256":"2b03...","input_meta":{"command_head":"echo"},"output_sha256":"9728...","output_meta":{"scan":"full","secret_kinds":[]},"ok":true, ...}
 {"seq":3,"phase":"stop","tool":"-", ...}
 {"seq":4,"phase":"session_end","tool":"-", ...}
 ```
 The `pre` and `post` lines share seq 2: they are one tool call. Inputs and
-outputs are stored only as sha256 hashes. The trace path is absolute
+outputs are stored only as sha256 hashes. `output_meta` names the secret
+patterns the output matched (`secret_kinds`, never the text); `scan` is
+`full`, `partial` (output over 1 MiB: only its start was scanned, so an empty
+result is not reported as clean) or `none`. The trace path is absolute
 (`<project>/raqib.log.jsonl` by default), so it does not move when the agent
 changes directory. `--log PATH` puts it elsewhere, for example outside the
 project's working tree; the agent runs as your user and could still reach it.
 
-The hook never blocks the agent. If the log cannot be written, or python3 or
-the Raqib checkout is gone, it exits 0 and prints one line beginning
-`RAQIB-SILENCE:` to the hook's stderr. Run `claude --debug` to have Claude Code
+The hook never blocks the agent. If the log cannot be written, the log lock
+is not free within 5 s, capture takes over 8 s, or python3 or the Raqib
+checkout is gone, it exits 0 and prints one line beginning `RAQIB-SILENCE:` to
+the hook's stderr. Run `claude --debug` to have Claude Code
 write that stderr to `~/.claude/debug/<session>.txt`. A call that
 Claude Code itself blocks fires PreToolUse only, so it shows up as a `pre`
-with no `post` (see `tests/fixtures/blocked-calls-claude-code-2.1.301.log`).
+with no `post` (see `tests/fixtures/blocked-calls-claude-code-2.1.301.log`); a
+tool that fails fires PostToolUseFailure, a `post` with `"ok":false` (see
+`tests/fixtures/file-tools-d7841d1-claude-code-2.1.301.log`).
 Re-running the installer changes nothing; other hooks are kept.
 
 ## Report (rules)
@@ -64,9 +72,12 @@ FINDINGS: 2
       seq 2 of Bash has 1 pre and 0 post line(s): a post is missing
       seq 2: line 2  pre Bash seq 2  2026-10-16T20:49:37.878Z  input_meta={"command_head": "ls"}
   ...
-RULES THAT DID NOT RUN: 1
+RULES THAT DID NOT RUN: 2
   - DRIFT-FILES not-evaluated: needs context: scope
+  - SECRET-OUTPUT partial: could not judge 1 line(s) (session:seq b3744113-...:4): ...
 ```
+SECRET-OUTPUT is partial here because this trace predates `output_meta`: a
+line the rule cannot judge is reported, never counted as clean.
 
 ## Suspicion (model layer)
 A model can add suspicion on top of the rules; it can never clear anything (A2).
