@@ -40,7 +40,13 @@ def write_trace(path, lines):
 
 def fixture_lines(rel):
     data = json.loads((FIXTURES / rel).read_text())
-    return (data["lines"], data["context"]) if isinstance(data, dict) else (data, {})
+    return (data["lines"], data.get("context", {})) if isinstance(data, dict) else (data, {})
+
+
+def current_trace(tmp_path):
+    """A benign session in the shape current capture writes (output_meta on posts)."""
+    lines, _ = fixture_lines("rules/benign/dev-session.json")
+    return write_trace(tmp_path / "current.jsonl", lines)
 
 
 def findings_of(path):
@@ -61,14 +67,14 @@ def test_e1_rules_writes_one_valid_finding_per_line(tmp_path):
         assert engine.check_finding(f) is f
         assert set(f) == {"ts", "rule_id", "class", "severity", "session_id", "cited_seq", "summary"}
     sidecar = json.loads((tmp_path / "findings.jsonl.notes.json").read_text())
-    assert sidecar["notes"] == [{"rule_id": "DRIFT-FILES", "status": "not-evaluated",
-                                 "detail": "needs context: scope"}]
+    assert [(n["rule_id"], n["status"]) for n in sidecar["notes"]] == [
+        ("DRIFT-FILES", "not-evaluated"), ("SECRET-OUTPUT", "partial")]
     assert [r["id"] for r in sidecar["rules"]][:4] == [
         "SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER"]
 
 
 def test_e1_rules_to_stdout(tmp_path):
-    code, text = raqib("rules", QUICKSTART, "--scope", ".")
+    code, text = raqib("rules", current_trace(tmp_path), "--scope", ".")
     assert (code, text) == (0, "")
 
 
@@ -84,7 +90,10 @@ def test_e1_scope_from_option_and_from_handoff(tmp_path):
     assert code == 1 and [f["rule_id"] for f in map(json.loads, text.splitlines())] == ["DRIFT-FILES"]
     handoff = tmp_path / "HANDOFF.md"
     handoff.write_text("# HANDOFF\n\nScope:\n  %s\n  %s\n\nExit criteria:\n- x\n" % (scope[0], ", ".join(scope[1:])))
-    assert raqib("rules", trace, "--handoff", handoff)[1] == text
+    assert raqib("rules", trace, "--handoff", handoff, "--root", "/work/example")[1] == text
+    assert raqib("rules", trace, *args, "--root", "/work/example")[1] == text
+    anchored = [json.loads(x) for x in raqib("rules", trace, "--handoff", handoff)[1].splitlines()]
+    assert anchored[0]["summary"].startswith("5 distinct files")  # paths resolved under tmp_path
     code, text = raqib("rules", trace)
     assert (code, text) == (3, "")
 
@@ -156,18 +165,28 @@ def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
     rep = json.loads(raqib("report", QUICKSTART, "--json")[1])
     table = {r["id"]: r for r in rep["rules"]}
     assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER",
-                          "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-PATH", "SECRET-OUTPUT"}
+                          "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
+                          "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT"}
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
     text = raqib("report", QUICKSTART)[1]
     assert "  NET-TOOL        NET       medium  0.25      active" in text
 
 
 def test_e3_clean_incomplete_and_alarm(tmp_path):
-    assert raqib("report", QUICKSTART, "--scope", ".")[0] == 0
-    assert "RESULT: CLEAN (exit 0)" in raqib("report", QUICKSTART, "--scope", ".")[1]
-    code, text = raqib("report", QUICKSTART)
+    current = current_trace(tmp_path)
+    code, text = raqib("report", current, "--scope", ".")
+    assert code == 0 and "RESULT: CLEAN (exit 0)" in text
+    code, text = raqib("report", current)
     assert code == 3 and "RESULT: INCOMPLETE (exit 3)" in text
     assert "DRIFT-FILES not-evaluated: needs context: scope" in text
+
+
+def test_e3_trace_from_before_secret_scanning_is_incomplete(tmp_path):
+    """The real quickstart trace predates output_meta (M1.2): its posts cannot be
+    judged for secrets, so the report is incomplete, never clean (A3)."""
+    code, text = raqib("report", QUICKSTART, "--scope", ".")
+    assert code == 3
+    assert "SECRET-OUTPUT partial: could not judge 1 line(s)" in text
 
 
 def test_e3_empty_trace_is_an_alarm(tmp_path):
@@ -193,7 +212,7 @@ def test_e3_disabled_rule_is_listed_but_not_incomplete(tmp_path):
     shutil.copytree(ROOT / "raqib" / "rules" / "catalog", catalog)
     path = catalog / "NET-TOOL.yaml"
     path.write_text(path.read_text().replace("severity: medium\n", "severity: medium\nstatus: disabled\n"))
-    code, text = raqib("report", QUICKSTART, "--scope", ".", "--catalog", catalog)
+    code, text = raqib("report", current_trace(tmp_path), "--scope", ".", "--catalog", catalog)
     assert code == 0
     assert "NET-TOOL disabled: status: disabled in" in text
 
@@ -223,7 +242,9 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     code, text = raqib("check-rules")
     assert code == 0
     rows = {line.split()[0]: line.split() for line in text.splitlines()[1:]}
-    assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-PATH", "SECRET-OUTPUT"}
+    assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
+                         "SCOPE-PATH", "SECRET-OUTPUT"}
+    assert "3 measured, 5 unmeasured" in " ".join(rows["DRIFT-FILES"])
     assert rows["NET-TOOL"][1:4] == ["ok", "0.143", "0.25"]
     data = json.loads(raqib("check-rules", "--json")[1])
     assert {r["verdict"] for r in data} == {"ok"}
@@ -235,11 +256,12 @@ def test_e4_check_rules_fails_an_over_budget_rule(tmp_path):
     path = catalog / "NET-TOOL.yaml"
     path.write_text(path.read_text().replace("fp_budget: 0.25", "fp_budget: 0.1"))
     code, text = raqib("check-rules", "--catalog", catalog)
-    assert code == 1 and "NET-TOOL        over-budget" in text
+    assert code == 1
+    assert [line.split()[1] for line in text.splitlines() if line.startswith("NET-TOOL ")] == ["over-budget"]
 
 
-def test_python_dash_m_entry_point():
-    proc = subprocess.run([sys.executable, "-m", "raqib", "report", str(QUICKSTART), "--scope", "."],
+def test_python_dash_m_entry_point(tmp_path):
+    proc = subprocess.run([sys.executable, "-m", "raqib", "report", str(current_trace(tmp_path)), "--scope", "."],
                           cwd=ROOT, capture_output=True, text=True, timeout=60)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("Raqib report\n")

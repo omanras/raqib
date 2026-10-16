@@ -10,6 +10,7 @@ match:
   all:
     - {field: phase, eq: pre}
     - {field: tool, in: [Read, Write, Edit, MultiEdit, NotebookEdit, NotebookRead, Glob, Grep, LS]}
+    - {field: input_meta.path, exists: true}
     - {field: input_meta.path, outside: cwd}
 fixtures:
   positive:

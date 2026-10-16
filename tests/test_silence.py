@@ -122,13 +122,13 @@ def test_e1_environment_value_drives_findings():
     assert rules_and_seqs(silence.findings(lines, gap)) == [("SILENCE-GAP", S1, [1, 2])]
 
 
-@pytest.mark.parametrize("raw", ["abc", "0", "-1", "nan", "inf"])
+@pytest.mark.parametrize("raw", ["abc", "0", "-1", "nan", "inf", "1e12", "604801"])
 def test_e1_bad_gap_seconds_from_env_is_an_error_not_a_default(raw):
     with pytest.raises(ValueError):
         silence.gap_seconds_from({"RAQIB_GAP_SECONDS": raw})
 
 
-@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), None, "60", True])
+@pytest.mark.parametrize("value", [0, -1, float("nan"), float("inf"), 1e12, 604800.5, None, "60", True])
 def test_e1_bad_gap_seconds_argument_is_an_error(value):
     with pytest.raises(ValueError):
         silence.findings(load("gap-positive.json"), gap_seconds=value)
@@ -299,3 +299,21 @@ def test_trace_read_round_trip(tmp_path):
     records, problems = trace.read(path)
     assert (records, problems) == (lines, [])
     assert rules_and_seqs(silence.findings(records)) == [("SILENCE-HALF", S1, [2])]
+
+
+# --- M1.1 REDO: every finding has a ts (S14) and the gap limit is capped (S15)
+
+def test_gap_limit_of_seven_days_is_allowed():
+    assert silence.gap_seconds_from({"RAQIB_GAP_SECONDS": "604800"}) == 604800.0
+    assert silence.findings(load("gap-positive.json"), gap_seconds=604800) == []
+
+
+def test_half_and_order_fall_back_to_the_last_valid_ts():
+    half = load("half-positive.json")
+    half[2]["ts"] = None
+    (f,) = silence.findings(half)
+    assert (f["rule_id"], f["ts"]) == ("SILENCE-HALF", half[1]["ts"])
+    order = load("order-seq-positive.json")
+    order[4]["ts"] = "garbage"
+    found = [f for f in silence.findings(order) if f["rule_id"] == "SILENCE-ORDER"]
+    assert [f["ts"] for f in found] == [order[3]["ts"]]

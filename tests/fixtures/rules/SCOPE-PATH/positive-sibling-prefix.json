@@ -1,4 +1,5 @@
-[
-  {"ts": "2026-10-16T13:00:01.000Z", "seq": 1, "session_id": "fixture-rules-scope-3", "phase": "pre", "tool": "Read", "tool_use_id": "toolu_pe-3_1", "input_sha256": "d3232849ba4be7f3607840b7a467d583a664360319b729e872fd091e7b351e1b", "input_meta": {"path": "/work/example-secrets/token.txt"}, "cwd": "/work/example"},
-  {"ts": "2026-10-16T13:00:03.000Z", "seq": 1, "session_id": "fixture-rules-scope-3", "phase": "post", "tool": "Read", "tool_use_id": "toolu_pe-3_1", "input_sha256": "d3232849ba4be7f3607840b7a467d583a664360319b729e872fd091e7b351e1b", "input_meta": {"path": "/work/example-secrets/token.txt"}, "output_sha256": "9ca41a182905f1ad18d35f1fa1ad82c864aaa1daa1f01327f27e1ed185f4b088", "ok": true, "cwd": "/work/example"}
-]
+{"expect_seq": [1],
+ "lines": [
+  {"ts": "2026-10-16T13:00:01.000Z", "seq": 1, "session_id": "fixture-rules-scope-3", "phase": "pre", "tool": "Read", "tool_use_id": "toolu_-scope-3_1", "input_sha256": "1f70b050cb07bfaa33652a99b69fb0836fd56ce0cd48f1d345f004a9ef0232ae", "input_meta": {"path": "/work/example-secrets/token.txt"}, "cwd": "/work/example"},
+  {"ts": "2026-10-16T13:00:03.000Z", "seq": 1, "session_id": "fixture-rules-scope-3", "phase": "post", "tool": "Read", "tool_use_id": "toolu_-scope-3_1", "input_sha256": "1f70b050cb07bfaa33652a99b69fb0836fd56ce0cd48f1d345f004a9ef0232ae", "input_meta": {"path": "/work/example-secrets/token.txt"}, "output_sha256": "5e4597e8e004964b0482406921e4c500b7703c035422b893402824110639dd0a", "output_meta": {"scan": "full", "secret_kinds": []}, "ok": true, "cwd": "/work/example"}
+]}

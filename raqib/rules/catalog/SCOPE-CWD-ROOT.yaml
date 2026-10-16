@@ -1,0 +1,18 @@
+# Session without a project boundary (review M1.1 PA1).
+id: SCOPE-CWD-ROOT
+title: Session runs from the file system root or a home directory
+class: SCOPE
+severity: medium
+fp_budget: 0.1
+description: "SCOPE-PATH measures paths against the session's cwd. A cwd of /, /root, /home/<user> or /Users/<user> puts almost every path inside, so the project boundary is gone."
+summary: "session cwd {cwd} gives no project boundary"
+match:
+  all:
+    - {field: phase, in: [pre, session_start]}
+    - {field: cwd, regex: "^(/|/root|/home/[^/]+|/Users/[^/]+)/?$"}
+aggregate: {distinct: cwd, over: 0, as: path, cite: first}
+fixtures:
+  positive:
+    - tests/fixtures/rules/SCOPE-CWD-ROOT/positive-root-and-home.json
+  negative:
+    - tests/fixtures/rules/SCOPE-CWD-ROOT/negative-project-dir.json

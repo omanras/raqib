@@ -4,15 +4,15 @@ function. No rule consults a model (constitution A1).
 A rule file holds one mapping:
 
     id: NET-TOOL                      # [A-Z][A-Z0-9]*(-[A-Z0-9]+)+, = file name
-    title: Tool call reaches the network
+    title: Tool call reaches the network   # no { or }
     class: NET                        # SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT
-    severity: medium                  # low|medium|high
-    fp_budget: 0.1                    # expected false-positive rate, 0..1 (A6)
+    severity: medium                  # low|medium|high (SILENCE must be high, A3)
+    fp_budget: 0.1                    # expected false-positive rate, 0 <= x < 1 (A6)
     status: active                    # optional: active (default) | disabled
     description: ...                  # optional, free text
     summary: "{tool} at seq {seq}"    # optional template; default: the title
     match: <node>                     # declarative, over trace fields
-    aggregate: {distinct: input_meta.path, over: 3}   # optional
+    aggregate: {distinct: input_meta.path, over: 3}   # optional, see below
     fixtures: {positive: [path, ...], negative: [path, ...]}
 
 A match node is {all: [node, ...]}, {any: [node, ...]}, {not: node}, or a
@@ -26,16 +26,25 @@ predicate {field: <dotted path>, <op>: <arg>} with exactly one op:
     prefix         str           string starts with
     glob           str           fnmatch (case-sensitive) on a string
     outside        <field>       path not under the directory in that field
-    outside_any    <context key> path not under any of context[key]
+    outside_any    <context key> path not under any path of context[key]
 
-A predicate on a missing field is false, except `exists: false`. Paths are
-POSIX: a relative path is joined to the line's cwd, `~` paths count as
-absolute, and a path that cannot be placed makes the predicate false.
+Logic is three-valued (A3): a predicate that cannot judge a line, because a
+field it reads is missing or a path cannot be placed, gives "unknown", not
+false. `not unknown` is unknown; `all` is false if any part is false, else
+unknown if any part is unknown; `any` is true if any part is true, else
+unknown if any part is unknown. `exists` always judges. A rule fires only on
+true. Lines a rule could not judge are counted and reported as a "partial"
+note, so a quiet rule is never mistaken for a clean one. Write `exists: true`
+in front of a predicate when a missing field should mean "does not apply".
 
-Without `aggregate`, every matching line gives one finding citing its seq
-(once per session and seq). With `aggregate`, a session gives one finding
-when more than `over` distinct values of `distinct` occur on matching lines;
-it cites every matching seq.
+Paths are POSIX and normalised lexically (symlinks are not resolved): a
+relative path is joined to the line's cwd (for outside_any: to context
+"root" when given), and `~` paths count as absolute.
+
+aggregate: {distinct: <field>, over: N, as: path?, cite: all|first?} gives
+one finding per session when more than N distinct values of <field> occur on
+matching lines. `as: path` compares placed, normalised paths. `cite: first`
+cites the first line of each distinct value instead of every matching line.
 """
 from __future__ import annotations
 
@@ -47,7 +56,7 @@ import posixpath
 import re
 
 from raqib.rules import yamlite
-from raqib.rules.trace import is_record, is_seq
+from raqib.rules.trace import is_record, is_seq, parse_ts
 
 CLASSES = ("SCOPE", "NET", "DESTRUCT", "SECRET", "SILENCE", "DRIFT")
 SEVERITIES = ("low", "medium", "high")
@@ -62,6 +71,7 @@ OPS = ("eq", "ne", "in", "not_in", "exists", "nonempty", "regex", "prefix", "glo
        "outside", "outside_any")
 SUMMARY_VALUE_MAX = 80
 MISSING = object()
+UNKNOWN = None
 
 
 class RuleError(ValueError):
@@ -91,7 +101,8 @@ class Rule:
         agg = doc.get("aggregate")
         self.aggregate = None
         if agg is not None:
-            self.aggregate = (_getter(agg["distinct"]), agg["over"])
+            self.aggregate = {"get": _getter(agg["distinct"]), "over": agg["over"],
+                              "as": agg.get("as"), "cite": agg.get("cite", "all")}
 
     def __repr__(self):
         return "Rule(%s)" % self.id
@@ -108,6 +119,8 @@ def load_rule(path):
         raise RuleError("%s: cannot read (%s)" % (path, exc))
     except yamlite.YamlError as exc:
         raise RuleError("%s: %s" % (path, exc))
+    except RecursionError:
+        raise RuleError("%s: nesting too deep" % path)
     rule = compile_rule(doc, str(path))
     stem = os.path.splitext(os.path.basename(str(path)))[0]
     if stem != rule.id:
@@ -116,8 +129,19 @@ def load_rule(path):
 
 
 def load_catalog(directory):
-    """Load every *.yaml rule in a directory, sorted by id."""
-    rules = [load_rule(p) for p in sorted(glob.glob(os.path.join(str(directory), "*.yaml")))]
+    """Load every *.yaml rule in a directory, sorted by id. A missing or empty
+    catalog, or a rule file with another extension, is an error: no rules
+    must never look like no findings (A3)."""
+    directory = str(directory)
+    if not os.path.isdir(directory):
+        raise RuleError("%s: rule catalog directory not found" % directory)
+    names = sorted(os.listdir(directory))
+    stray = [n for n in names if n.lower().endswith((".yml", ".yaml")) and not n.endswith(".yaml")]
+    if stray:
+        raise RuleError("%s: rule files must end in .yaml: %s" % (directory, ", ".join(stray)))
+    rules = [load_rule(p) for p in sorted(glob.glob(os.path.join(directory, "*.yaml")))]
+    if not rules:
+        raise RuleError("%s: the rule catalog is empty" % directory)
     seen = set()
     for rule in rules:
         if rule.id in seen:
@@ -144,13 +168,17 @@ def compile_rule(doc, source="<rule>"):
     for key in ("title", "description", "summary"):
         if key in doc and not (isinstance(doc[key], str) and doc[key].strip()):
             bad(key, "must be a non-empty string")
+    if "{" in doc["title"] or "}" in doc["title"]:
+        bad("title", "must not contain { or } (put placeholders in summary)")
     if doc["class"] not in CLASSES:
         bad("class", "must be one of %s" % "|".join(CLASSES))
     if doc["severity"] not in SEVERITIES:
         bad("severity", "must be one of %s" % "|".join(SEVERITIES))
+    if doc["class"] == "SILENCE" and doc["severity"] != "high":
+        bad("severity", "class SILENCE must be high (A3: silence is of the highest class)")
     budget = doc["fp_budget"]
-    if not (isinstance(budget, (int, float)) and not isinstance(budget, bool) and 0 <= budget <= 1):
-        bad("fp_budget", "must be a number from 0 to 1")
+    if not (isinstance(budget, (int, float)) and not isinstance(budget, bool) and 0 <= budget < 1):
+        bad("fp_budget", "must be a number with 0 <= fp_budget < 1")
     if doc.get("status", "active") not in STATUSES:
         bad("status", "must be one of %s" % "|".join(STATUSES))
     fixtures = doc["fixtures"]
@@ -166,12 +194,17 @@ def compile_rule(doc, source="<rule>"):
                 bad("fixtures.%s" % kind, "%r must be a relative path inside the repo" % (p,))
     agg = doc.get("aggregate")
     if agg is not None:
-        if not isinstance(agg, dict) or set(agg) != {"distinct", "over"}:
-            bad("aggregate", "must have exactly distinct and over")
+        if not isinstance(agg, dict) or not {"distinct", "over"} <= set(agg) \
+                or not set(agg) <= {"distinct", "over", "as", "cite"}:
+            bad("aggregate", "must have distinct and over, and optionally as and cite")
         if not (isinstance(agg["distinct"], str) and FIELD.match(agg["distinct"])):
             bad("aggregate.distinct", "must be a field path")
         if not (isinstance(agg["over"], int) and not isinstance(agg["over"], bool) and agg["over"] >= 0):
             bad("aggregate.over", "must be an int >= 0")
+        if agg.get("as", "path") != "path":
+            bad("aggregate.as", "must be path")
+        if agg.get("cite", "all") not in ("all", "first"):
+            bad("aggregate.cite", "must be all or first")
     summary = doc.get("summary")
     if summary is not None:
         for name in PLACEHOLDER.findall(summary):
@@ -187,6 +220,18 @@ class _NodeError(ValueError):
     pass
 
 
+def _all(values):
+    if any(v is False for v in values):
+        return False
+    return UNKNOWN if any(v is UNKNOWN for v in values) else True
+
+
+def _any(values):
+    if any(v is True for v in values):
+        return True
+    return UNKNOWN if any(v is UNKNOWN for v in values) else False
+
+
 def _compile(node, where, rule):
     if not isinstance(node, dict):
         raise _NodeError("%s: a match node must be a mapping" % where)
@@ -197,12 +242,15 @@ def _compile(node, where, rule):
         if not (isinstance(items, list) and items):
             raise _NodeError("%s.%s: must be a non-empty list" % (where, kind))
         parts = [_compile(n, "%s.%s[%d]" % (where, kind, i), rule) for i, n in enumerate(items)]
-        if kind == "all":
-            return lambda line, ctx: all(p(line, ctx) for p in parts)
-        return lambda line, ctx: any(p(line, ctx) for p in parts)
+        combine = _all if kind == "all" else _any
+        return lambda line, ctx: combine([p(line, ctx) for p in parts])
     if keys == {"not"}:
         inner = _compile(node["not"], where + ".not", rule)
-        return lambda line, ctx: not inner(line, ctx)
+
+        def negate(line, ctx):
+            v = inner(line, ctx)
+            return UNKNOWN if v is UNKNOWN else not v
+        return negate
     if "field" in keys:
         return _predicate(node, where, rule)
     raise _NodeError("%s: unknown match node with keys %s" % (where, sorted(keys)))
@@ -210,6 +258,13 @@ def _compile(node, where, rule):
 
 def _scalar(value):
     return value is None or isinstance(value, (str, int, float, bool))
+
+
+def _known(fn):
+    """Wrap fn(value) so a missing field gives UNKNOWN."""
+    def pred(value):
+        return UNKNOWN if value is MISSING else fn(value)
+    return pred
 
 
 def _predicate(node, where, rule):
@@ -224,18 +279,22 @@ def _predicate(node, where, rule):
     get = _getter(field)
     at = "%s.%s" % (where, op)
 
+    def on_value(fn):
+        test = _known(fn)
+        return lambda line, ctx: test(get(line))
+
     if op in ("eq", "ne"):
         if not _scalar(arg):
             raise _NodeError("%s: must be a scalar" % at)
         if op == "eq":
-            return lambda line, ctx: _same(get(line), arg)
-        return lambda line, ctx: get(line) is not MISSING and not _same(get(line), arg)
+            return on_value(lambda v: _same(v, arg))
+        return on_value(lambda v: not _same(v, arg))
     if op in ("in", "not_in"):
         if not (isinstance(arg, list) and arg and all(_scalar(a) for a in arg)):
             raise _NodeError("%s: must be a non-empty list of scalars" % at)
         if op == "in":
-            return lambda line, ctx: any(_same(get(line), a) for a in arg)
-        return lambda line, ctx: get(line) is not MISSING and not any(_same(get(line), a) for a in arg)
+            return on_value(lambda v: any(_same(v, a) for a in arg))
+        return on_value(lambda v: not any(_same(v, a) for a in arg))
     if op == "exists":
         if not isinstance(arg, bool):
             raise _NodeError("%s: must be true or false" % at)
@@ -243,7 +302,7 @@ def _predicate(node, where, rule):
     if op == "nonempty":
         if arg is not True:
             raise _NodeError("%s: must be true" % at)
-        return lambda line, ctx: isinstance(get(line), (str, list, dict)) and len(get(line)) > 0
+        return on_value(lambda v: isinstance(v, (str, list, dict)) and len(v) > 0)
     if op in ("regex", "prefix", "glob"):
         if not isinstance(arg, str) or not arg:
             raise _NodeError("%s: must be a non-empty string" % at)
@@ -252,10 +311,10 @@ def _predicate(node, where, rule):
                 pattern = re.compile(arg)
             except re.error as exc:
                 raise _NodeError("%s: bad regex (%s)" % (at, exc))
-            return lambda line, ctx: isinstance(get(line), str) and bool(pattern.search(get(line)))
+            return on_value(lambda v: isinstance(v, str) and bool(pattern.search(v)))
         if op == "prefix":
-            return lambda line, ctx: isinstance(get(line), str) and get(line).startswith(arg)
-        return lambda line, ctx: isinstance(get(line), str) and fnmatch.fnmatchcase(get(line), arg)
+            return on_value(lambda v: isinstance(v, str) and v.startswith(arg))
+        return on_value(lambda v: isinstance(v, str) and fnmatch.fnmatchcase(v, arg))
     if op == "outside":
         if not (isinstance(arg, str) and FIELD.match(arg)):
             raise _NodeError("%s: must name another field, e.g. cwd" % at)
@@ -264,7 +323,9 @@ def _predicate(node, where, rule):
         def outside(line, ctx):
             path = _place(get(line), line.get("cwd"))
             root = _place(base(line), line.get("cwd"))
-            return path is not None and root is not None and not _under(path, root)
+            if path is None or root is None:
+                return UNKNOWN
+            return not _under(path, root)
         return outside
     # outside_any
     if not (isinstance(arg, str) and CONTEXT_KEY.match(arg)):
@@ -272,15 +333,21 @@ def _predicate(node, where, rule):
     rule.context_keys.add(arg)
 
     def outside_any(line, ctx):
+        anchor = ctx.get("root") or line.get("cwd")
         path = _place(get(line), line.get("cwd"))
         roots = ctx.get(arg)
-        if path is None or not isinstance(roots, list):
-            return False
-        placed = [_place(r, line.get("cwd")) for r in roots]
+        if path is None or not context_ok(roots):
+            return UNKNOWN
+        placed = [_place(r, anchor) for r in roots]
         if any(r is None for r in placed):
-            return False
+            return UNKNOWN
         return not any(_under(path, r) for r in placed)
     return outside_any
+
+
+def context_ok(value):
+    """A context path list: a non-empty list of non-empty strings."""
+    return isinstance(value, list) and bool(value) and all(isinstance(v, str) and v for v in value)
 
 
 def _getter(field):
@@ -297,8 +364,6 @@ def _getter(field):
 
 
 def _same(a, b):
-    if a is MISSING:
-        return False
     if isinstance(a, bool) or isinstance(b, bool):
         return type(a) is type(b) and a == b
     if isinstance(a, (int, float)) and isinstance(b, (int, float)):
@@ -314,7 +379,12 @@ def _place(path, cwd):
         if not (isinstance(cwd, str) and cwd.startswith("/")):
             return None
         path = cwd.rstrip("/") + "/" + path
-    return posixpath.normpath(path)
+    placed = posixpath.normpath(path)
+    if placed.startswith("//"):
+        placed = "/" + placed.lstrip("/")
+    if not (placed.startswith("/") or placed.startswith("~")):
+        return None
+    return placed
 
 
 def _under(path, root):
@@ -326,13 +396,23 @@ def _under(path, root):
 
 def evaluate(rules, lines, context=None):
     """Return (findings, notes). Findings are ordered by session (first
-    appearance), first cited seq, then rule_id. A rule that is disabled, or
-    that needs a context key it was not given, is not run and gets a note:
-    {"rule_id", "status": "disabled"|"not-evaluated", "detail"} (A3)."""
+    appearance), first cited seq, then rule_id. Nothing goes unreported (A3):
+    a rule that is disabled, lacks the context it needs or gets an unusable
+    context is not run; a rule that could not judge some lines is "partial";
+    lines without session_id or int seq are "skipped-lines". Each gets a note
+    {"rule_id", "status", "detail"}."""
     context = context or {}
     records = [r for r in lines if is_record(r)]
+    skipped = len(lines) - len(records)
     found = []
     notes = []
+    if skipped:
+        notes.append({"rule_id": "*", "status": "skipped-lines",
+                      "detail": "%d line(s) without session_id or int seq were not evaluated" % skipped})
+    if "root" in context and not (isinstance(context["root"], str) and context["root"].startswith("/")):
+        notes.append({"rule_id": "*", "status": "bad-context",
+                      "detail": "context root must be an absolute path; scope paths fall back to each line's cwd"})
+        context = {k: v for k, v in context.items() if k != "root"}
     for rule in rules:
         if rule.status == "disabled":
             notes.append({"rule_id": rule.id, "status": "disabled",
@@ -343,7 +423,18 @@ def evaluate(rules, lines, context=None):
             notes.append({"rule_id": rule.id, "status": "not-evaluated",
                           "detail": "needs context: %s" % ", ".join(missing)})
             continue
-        found += run_rule(rule, records, context)
+        unusable = sorted(k for k in rule.context_keys if not context_ok(context[k]))
+        if unusable:
+            notes.append({"rule_id": rule.id, "status": "not-evaluated",
+                          "detail": "context %s must be a non-empty list of paths" % ", ".join(unusable)})
+            continue
+        rule_found, unknown = judge(rule, records, context)
+        found += rule_found
+        if unknown:
+            shown = ", ".join("%s:%d" % u for u in unknown[:5]) + (" ..." if len(unknown) > 5 else "")
+            notes.append({"rule_id": rule.id, "status": "partial",
+                          "detail": "could not judge %d line(s) (session:seq %s): a field it reads is "
+                                    "missing or a path cannot be placed" % (len(unknown), shown)})
     order = {}
     for rec in records:
         order.setdefault(rec["session_id"], len(order))
@@ -353,37 +444,68 @@ def evaluate(rules, lines, context=None):
 
 def run_rule(rule, lines, context=None):
     """Findings of one rule over trace records, whatever its status."""
+    return judge(rule, lines, context)[0]
+
+
+def judge(rule, lines, context=None):
+    """(findings, unknown) for one rule, whatever its status. unknown lists
+    (session_id, seq) of lines the rule could not judge."""
     context = context or {}
     records = [r for r in lines if is_record(r)]
+    last_ts = {}
+    unknown = []
     if rule.aggregate is None:
         out = []
         seen = set()
         for rec in records:
+            ts = _ts(rec, last_ts)
             key = (rec["session_id"], rec["seq"])
-            if key not in seen and rule.match(rec, context):
+            result = rule.match(rec, context)
+            if result is UNKNOWN:
+                unknown.append(key)
+            elif result and key not in seen:
                 seen.add(key)
-                out.append(_emit(rule, rec["session_id"], [rec["seq"]], rec.get("ts"),
+                out.append(_emit(rule, rec["session_id"], [rec["seq"]], ts,
                                  _render(rule.summary, rec, rec["seq"], 1)))
-        return out
-    get, over = rule.aggregate
+        return out, unknown
+    agg = rule.aggregate
     per_session = {}
     for rec in records:
-        if rule.match(rec, context):
-            value = get(rec)
-            if value is MISSING or value is None:
-                continue
-            entry = per_session.setdefault(rec["session_id"], {"values": set(), "seqs": [], "last": rec})
-            entry["values"].add(json.dumps(value, sort_keys=True))
-            entry["seqs"].append(rec["seq"])
-            entry["last"] = rec
+        ts = _ts(rec, last_ts)
+        result = rule.match(rec, context)
+        if result is UNKNOWN:
+            unknown.append((rec["session_id"], rec["seq"]))
+            continue
+        if not result:
+            continue
+        value = agg["get"](rec)
+        if agg["as"] == "path":
+            value = _place(value, rec.get("cwd")) if value is not MISSING else MISSING
+        if value in (MISSING, None):
+            unknown.append((rec["session_id"], rec["seq"]))
+            continue
+        entry = per_session.setdefault(rec["session_id"], {"values": {}, "seqs": [], "last": rec, "ts": ts})
+        entry["values"].setdefault(json.dumps(value, sort_keys=True), rec["seq"])
+        entry["seqs"].append(rec["seq"])
+        entry["last"], entry["ts"] = rec, ts
     out = []
     for session_id, entry in per_session.items():
         count = len(entry["values"])
-        if count > over:
-            seqs = sorted(set(entry["seqs"]))
-            out.append(_emit(rule, session_id, seqs, entry["last"].get("ts"),
-                             _render(rule.summary, entry["last"], seqs[-1], count)))
-    return out
+        if count > agg["over"]:
+            if agg["cite"] == "first":
+                seqs = sorted(set(entry["values"].values()))
+            else:
+                seqs = sorted(set(entry["seqs"]))
+            out.append(_emit(rule, session_id, seqs, entry["ts"],
+                             _render(rule.summary, entry["last"], entry["last"]["seq"], count)))
+    return out, unknown
+
+
+def _ts(rec, last_ts):
+    """The record's ts, or the last valid ts seen in its session (or None)."""
+    if parse_ts(rec.get("ts")) is not None:
+        last_ts[rec["session_id"]] = rec["ts"]
+    return last_ts.get(rec["session_id"])
 
 
 def _emit(rule, session_id, cited_seq, ts, summary):
@@ -401,13 +523,18 @@ def _emit(rule, session_id, cited_seq, ts, summary):
 
 
 def check_finding(finding):
-    """Reject a finding that cannot be traced back to trace lines (A5)."""
+    """Reject a finding that cannot be traced back to trace lines (A5), or that
+    breaks the format."""
     cited = finding.get("cited_seq") if isinstance(finding, dict) else None
     if not (isinstance(cited, list) and cited and all(is_seq(s) for s in cited)):
         raise FindingError("finding without cited_seq is rejected (A5): %r" % (finding,))
     for key in ("rule_id", "severity", "session_id", "summary"):
         if not isinstance(finding.get(key), str) or not finding[key]:
             raise FindingError("finding has no %s: %r" % (key, finding))
+    if "class" in finding and finding["class"] not in CLASSES:
+        raise FindingError("finding has an unknown class: %r" % (finding,))
+    if "ts" not in finding or not (finding["ts"] is None or isinstance(finding["ts"], str)):
+        raise FindingError("finding needs ts (a string, or null when the trace has none): %r" % (finding,))
     return finding
 
 
@@ -424,6 +551,7 @@ def _render(template, line, seq, count):
         text = v if isinstance(v, str) else json.dumps(v, sort_keys=True)
         text = "".join(c if c.isprintable() else "?" for c in text)
         if len(text) > SUMMARY_VALUE_MAX:
-            text = text[:SUMMARY_VALUE_MAX - 3] + "..."
+            keep = SUMMARY_VALUE_MAX - 3
+            text = text[:keep // 2] + "..." + text[-(keep - keep // 2):]
         return text
     return PLACEHOLDER.sub(value, template)

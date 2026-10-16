@@ -1,0 +1,16 @@
+# The session's cwd changes, moving the project boundary (review M1.1 PA1).
+id: SCOPE-CWD-MOVED
+title: The working directory of a session changes
+class: SCOPE
+severity: medium
+fp_budget: 0.1
+description: "Every rule that places paths uses each line's cwd. When the cwd of one session changes, the boundary those rules measure against moves with it."
+summary: "session cwd changed {count} times; latest {cwd} at seq {seq}"
+match:
+  {field: phase, in: [pre, post, session_start, session_end, stop]}
+aggregate: {distinct: cwd, over: 1, as: path, cite: first}
+fixtures:
+  positive:
+    - tests/fixtures/rules/SCOPE-CWD-MOVED/positive-cd-out.json
+  negative:
+    - tests/fixtures/rules/SCOPE-CWD-MOVED/negative-steady.json

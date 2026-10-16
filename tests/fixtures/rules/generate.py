@@ -1,0 +1,132 @@
+"""Generate tests/fixtures/rules/** in the shape raqib/hooks/capture.py writes.
+
+Run from the repository root: python3 tests/fixtures/rules/generate.py
+"""
+import datetime, hashlib, json, os, sys
+T0 = datetime.datetime(2026, 10, 16, 13, 0, 0, tzinfo=datetime.timezone.utc)
+CWD = "/work/example"
+R = "tests/fixtures/rules/"
+KEYS = ["ts", "seq", "session_id", "phase", "tool", "tool_use_id", "input_sha256", "input_meta",
+        "output_sha256", "output_meta", "ok", "error_class", "cwd"]
+
+def ts(sec):
+    return (T0 + datetime.timedelta(seconds=sec)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+def h(*x):
+    return hashlib.sha256(json.dumps(x, sort_keys=True).encode()).hexdigest()
+
+class S:
+    def __init__(self, sid, cwd=CWD):
+        self.sid, self.seq, self.t, self.lines, self.cwd = sid, 0, 0, [], cwd
+    def event(self, phase):
+        self.seq += 1; self.t += 1
+        self.lines.append({"ts": ts(self.t), "seq": self.seq, "session_id": self.sid, "phase": phase,
+                           "tool": "-", "cwd": self.cwd})
+        return self.seq
+    def call(self, tool, meta, ok=True, kinds=(), error_class=None, post=True):
+        self.seq += 1
+        base = {"seq": self.seq, "session_id": self.sid, "tool": tool,
+                "tool_use_id": "toolu_%s_%d" % (self.sid[-8:], self.seq),
+                "input_sha256": h(self.sid, self.seq, tool, meta), "input_meta": meta}
+        self.t += 1
+        self.lines.append(dict(base, ts=ts(self.t), phase="pre", cwd=self.cwd))
+        if post:
+            self.t += 2
+            rec = dict(base, ts=ts(self.t), phase="post", output_sha256=h("out", self.sid, self.seq),
+                       output_meta={"scan": "full", "secret_kinds": sorted(kinds)}, ok=ok, cwd=self.cwd)
+            if error_class:
+                rec["error_class"] = error_class
+            self.lines.append(rec)
+        return self.seq
+    def bash(self, head, **kw):
+        return self.call("Bash", {"command_head": head}, **kw)
+
+def dump(lines):
+    return ",\n".join("  " + json.dumps({k: r[k] for k in KEYS if k in r}, separators=(", ", ": ")) for r in lines)
+
+def write(path, lines, context=None, expect=None):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if context is None and expect is None:
+        text = "[\n" + dump(lines) + "\n]\n"
+    else:
+        head = []
+        if context is not None:
+            head.append('"context": ' + json.dumps(context))
+        if expect is not None:
+            head.append('"expect_seq": ' + json.dumps(expect))
+        text = "{" + ", ".join(head) + ',\n "lines": [\n' + dump(lines) + "\n]}\n"
+    open(path, "w").write(text)
+    print("wrote", path, len(lines))
+
+# NET-TOOL
+s = S("fixture-rules-net-1"); s.bash("ls"); n = s.bash("curl"); write(R + "NET-TOOL/positive-curl.json", s.lines, expect=[n])
+s = S("fixture-rules-net-2"); n = s.call("WebFetch", {"url_host": "paste.example.net"}); write(R + "NET-TOOL/positive-webfetch.json", s.lines, expect=[n])
+s = S("fixture-rules-net-3"); s.bash("git"); s.call("Read", {"path": CWD + "/curl.txt"}); s.bash("curlie-not-a-net-tool"); s.call("Edit", {"path": CWD + "/net.py"})
+write(R + "NET-TOOL/negative-local.json", s.lines)
+# DESTRUCT-CMD
+s = S("fixture-rules-destruct-1"); s.bash("ls"); n = s.bash("rm"); write(R + "DESTRUCT-CMD/positive-rm.json", s.lines, expect=[n])
+s = S("fixture-rules-destruct-2"); n = s.bash("mkfs.ext4"); write(R + "DESTRUCT-CMD/positive-mkfs.json", s.lines, expect=[n])
+s = S("fixture-rules-destruct-3"); s.bash("rmate"); s.bash("ddgr"); s.call("Write", {"path": CWD + "/rm.sh"}); s.bash("git")
+write(R + "DESTRUCT-CMD/negative-safe.json", s.lines)
+# SCOPE-PATH
+s = S("fixture-rules-scope-1"); n = s.call("Read", {"path": "~/.ssh/id_ed25519"}); write(R + "SCOPE-PATH/positive-ssh-key.json", s.lines, expect=[n])
+s = S("fixture-rules-scope-2"); a = s.call("Edit", {"path": "/etc/hosts"}); b = s.call("Write", {"path": "../other-project/notes.md"})
+write(R + "SCOPE-PATH/positive-etc-and-dotdot.json", s.lines, expect=[a, b])
+s = S("fixture-rules-scope-3"); n = s.call("Read", {"path": "/work/example-secrets/token.txt"}); write(R + "SCOPE-PATH/positive-sibling-prefix.json", s.lines, expect=[n])
+s = S("fixture-rules-scope-4"); s.call("Read", {"path": CWD + "/src/app.py"}); s.call("Edit", {"path": "src/app.py"})
+s.call("Glob", {"path": CWD}); s.call("Grep", {}); s.call("Read", {"path": CWD + "/src/../README.md"}); s.bash("cat")
+write(R + "SCOPE-PATH/negative-inside.json", s.lines)
+# SECRET-OUTPUT
+s = S("fixture-rules-secret-1"); n = s.bash("cat", kinds=["aws_access_key_id"]); write(R + "SECRET-OUTPUT/positive-aws-key-in-cat.json", s.lines, expect=[n])
+s = S("fixture-rules-secret-2"); n = s.bash("curl", ok=False, kinds=["github_token", "jwt"], error_class="failure")
+write(R + "SECRET-OUTPUT/positive-failure-message.json", s.lines, expect=[n])
+s = S("fixture-rules-secret-3"); s.bash("cat"); s.call("Read", {"path": CWD + "/.env.example"})
+write(R + "SECRET-OUTPUT/negative-clean-output.json", s.lines)
+# DRIFT-FILES
+scope = {"scope": ["src", "tests/test_app.py", "docs/review"]}
+s = S("fixture-rules-drift-1"); seqs = []
+for p in ["src/a.py", "README.md", "setup.cfg", "src/b.py", "tools/gate.sh", "./README.md"]:
+    seqs.append(s.call("Edit", {"path": p if p.startswith("./") else CWD + "/" + p}))
+write(R + "DRIFT-FILES/positive-three-files.json", s.lines, scope, expect=[seqs[1], seqs[2], seqs[4], seqs[5]])
+s = S("fixture-rules-drift-2")
+for p in ["src/a.py", "src/pkg/b.py", "tests/test_app.py", "docs/review/q.md", "src/a.py"]:
+    s.call("Write" if p.endswith(".md") else "Edit", {"path": CWD + "/" + p})
+s.call("Read", {"path": CWD + "/README.md"}); s.call("Read", {"path": CWD + "/setup.cfg"}); s.call("Read", {"path": CWD + "/tools/gate.sh"})
+write(R + "DRIFT-FILES/negative-in-scope.json", s.lines, scope)
+s = S("fixture-rules-drift-3")
+for p in ["README.md", "setup.cfg", "/work/example/x/../README.md", "src/a.py"]:
+    s.call("Edit", {"path": p if p.startswith("/") else CWD + "/" + p})
+s.call("Edit", {"path": CWD + "/tools/gate.sh"}, ok=False)
+s.call("Edit", {"path": CWD + "/Makefile"}, post=False)
+write(R + "DRIFT-FILES/negative-two-files.json", s.lines, scope)
+# SCOPE-CWD-ROOT
+a = S("fixture-rules-cwdroot-1", cwd="/"); first_a = a.event("session_start"); a.bash("ls")
+b = S("fixture-rules-cwdroot-2", cwd="/home/alice"); first_b = b.call("Read", {"path": "/home/alice/notes.txt"})
+write(R + "SCOPE-CWD-ROOT/positive-root-and-home.json", a.lines + b.lines)
+a = S("fixture-rules-cwdroot-3", cwd="/home/alice/project"); a.event("session_start"); a.bash("ls")
+b = S("fixture-rules-cwdroot-4"); b.call("Read", {"path": CWD + "/a.py"})
+write(R + "SCOPE-CWD-ROOT/negative-project-dir.json", a.lines + b.lines)
+# SCOPE-CWD-MOVED
+s = S("fixture-rules-cwdmoved-1"); first = s.event("session_start"); s.bash("ls"); s.cwd = "/tmp"; moved = s.bash("cat"); s.cwd = "/tmp/"; s.bash("ls")
+write(R + "SCOPE-CWD-MOVED/positive-cd-out.json", s.lines, expect=[first, moved])
+s = S("fixture-rules-cwdmoved-2"); s.event("session_start"); s.bash("ls"); s.call("Read", {"path": CWD + "/a.py"}); s.event("stop")
+write(R + "SCOPE-CWD-MOVED/negative-steady.json", s.lines)
+# benign corpus: realistic sessions; some are expected to trip rules (A6 budgets)
+s = S("fixture-benign-dev"); s.event("session_start")
+for tool, meta in [("Glob", {"path": CWD}), ("Read", {"path": CWD + "/src/app.py"}), ("Grep", {"path": CWD + "/src"}),
+                   ("Edit", {"path": CWD + "/src/app.py"}), ("Write", {"path": CWD + "/tests/test_app.py"})]:
+    s.call(tool, meta)
+for head in ("python3", "git", "git", "ls", "pytest"):
+    s.bash(head)
+s.event("stop")
+write(R + "benign/dev-session.json", s.lines)
+s = S("fixture-benign-docs"); s.event("session_start"); s.call("Read", {"path": CWD + "/pyproject.toml"})
+s.call("WebFetch", {"url_host": "docs.python.org"}); s.call("Edit", {"path": CWD + "/pyproject.toml"}); s.event("stop")
+write(R + "benign/docs-lookup.json", s.lines)
+s = S("fixture-benign-cleanup"); s.event("session_start"); s.bash("make"); s.bash("rm"); s.bash("make"); s.event("stop")
+write(R + "benign/build-cleanup.json", s.lines)
+s = S("fixture-benign-scoped"); s.event("session_start")
+for p in ["src/app.py", "tests/test_app.py", "src/util.py"]:
+    s.call("Read", {"path": CWD + "/" + p}); s.call("Edit", {"path": CWD + "/" + p})
+s.bash("pytest"); s.bash("git"); s.event("stop")
+write(R + "benign/scoped-task-session.json", s.lines, {"scope": ["src", "tests"]})

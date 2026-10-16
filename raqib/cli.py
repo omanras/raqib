@@ -50,7 +50,10 @@ def _parser():
         sp.add_argument("trace", help="trace file written by raqib/hooks/capture.py")
         sp.add_argument("--scope", action="append", default=[], metavar="PATH",
                         help="a path of the task's declared scope (repeatable)")
-        sp.add_argument("--handoff", metavar="FILE", help="read the scope from a HANDOFF.md Scope: block")
+        sp.add_argument("--handoff", metavar="FILE",
+                        help="read the scope from a HANDOFF.md Scope: block (root: the file's directory)")
+        sp.add_argument("--root", metavar="DIR",
+                        help="directory the scope paths are relative to (default: each line's cwd)")
         sp.add_argument("--gap-seconds", type=float, metavar="N",
                         help="SILENCE-GAP limit (default: RAQIB_GAP_SECONDS or 60)")
         sp.add_argument("--catalog", default=CATALOG, metavar="DIR", help="rule catalog directory")
@@ -84,9 +87,14 @@ def _parser():
 
 def _context(args):
     scope = list(args.scope)
+    root = os.path.abspath(args.root) if args.root else None
     if args.handoff:
         scope += rule_context.scope_from_handoff(_read_text(args.handoff, "HANDOFF"))
-    return {"scope": scope} if scope else {}
+        root = root or os.path.dirname(os.path.abspath(args.handoff))
+    ctx = {"scope": scope} if scope else {}
+    if ctx and root:
+        ctx["root"] = root
+    return ctx
 
 
 def _gap_seconds(args):
@@ -231,11 +239,13 @@ def cmd_check_rules(args, out):
     if args.json:
         out.write(json.dumps(reports, indent=2, sort_keys=True) + "\n")
     else:
-        out.write("%-15s %-16s %-8s %-9s %s\n" % ("rule", "verdict", "fp_rate", "fp_budget", "fixtures"))
+        out.write("%-16s %-16s %-8s %-9s %s\n" % ("rule", "verdict", "fp_rate", "fp_budget", "fixtures"))
         for r in reports:
-            out.write("%-15s %-16s %-8.3f %-9g %d positive, %d negative incl. benign\n" % (
-                r["rule_id"], r["verdict"], r["fp_rate"], r["fp_budget"],
-                len(r["positives"]), len(r["negatives"])))
+            rate = "-" if r["fp_rate"] is None else "%.3f" % r["fp_rate"]
+            out.write("%-16s %-16s %-8s %-9g %d positive; negatives incl. benign: %d measured,"
+                      " %d unmeasured (missing context or unjudgeable lines)\n" % (
+                          r["rule_id"], r["verdict"], rate, r["fp_budget"], len(r["positives"]),
+                          r["measured"], r["unmeasured"]))
     return 0 if all(r["verdict"] in ("ok", "disabled") for r in reports) else 1
 
 

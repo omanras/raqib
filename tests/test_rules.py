@@ -36,6 +36,9 @@ DOCS = [
     "---\n# leading comment\nkey/with.dots-and_under: \"v\"\n'quoted key': 1\n",
     "a: {b: {c: [1, {d: null}]}, e: \"x, y\"}\nf: [\"a]b\", 'c}d']\n",
     "a: http://example.org/x?y=1#frag\nb: -rf\nc: 3.0\nd: x:y\n",
+    # Y1: a quote inside a plain value does not hide a comment
+    'summary: a - "b # c"\nregex: =["\'] # note\nk: it\'s # c\nm: b - c\n',
+    "- a: 'x # y'\n  b: \"z\"\n- [a, 'b # c']\n- {k: a#b}\n",
 ]
 
 
@@ -67,11 +70,28 @@ ERRORS = [
     ("a: 2026-10-16", 1, "ambiguous"),
     ("a: 1\n\tb: 2", 2, "tab in indentation"),
     ("a:\tb", 1, "tab outside a quoted scalar"),
-    ("a: &x 1", 1, "unsupported YAML feature starting with '&'"),
-    ("a: *x", 1, "unsupported YAML feature starting with '*'"),
-    ("a: !!str 1", 1, "unsupported YAML feature starting with '!'"),
-    ("a: |\n  t", 1, "unsupported YAML feature starting with '|'"),
-    ("a: >\n  t", 1, "unsupported YAML feature starting with '>'"),
+    ("a: &x 1", 1, "unsupported YAML feature or indicator '&'"),
+    ("a: *x", 1, "unsupported YAML feature or indicator '*'"),
+    ("a: !!str 1", 1, "unsupported YAML feature or indicator '!'"),
+    ("a: |\n  t", 1, "unsupported YAML feature or indicator '|'"),
+    ("a: >\n  t", 1, "unsupported YAML feature or indicator '>'"),
+    ("a: ]x", 1, "indicator ']'"),
+    ("a: ,x", 1, "indicator ','"),
+    ("on: 1", 1, "ambiguous plain scalar 'on'"),
+    ("1: x", 1, "key '1' is not a string in YAML"),
+    ("null: 2", 1, "key 'null' is not a string in YAML"),
+    ("a: {1: x}", 1, "key '1' is not a string in YAML"),
+    ("a: 1.5_0", 1, "ambiguous"),
+    ("a: 1._", 1, "ambiguous"),
+    ("a: [a,#b]", 1, "must be quoted"),
+    ("a: {regex: colou?r}", 1, "must be quoted"),
+    ("--- foo", 1, "document markers"),
+    ("a: b" + chr(11) + "c", 1, "U+000B"),
+    ("a: v" + chr(0xA0), 1, "U+00A0"),
+    ("a: x" + chr(0x1B) + "[31m", 1, "U+001B"),
+    ("a: " + chr(0x202E) + "x", 1, "U+202E"),
+    ('a: "' + chr(92) + 'x1b[31m"', 1, "control or invisible"),
+    ('a: "' + chr(92) + 'u202e"', 1, "control or invisible"),
     ("%YAML 1.2\n---\na: 1", 1, "unsupported"),
     ("a: 1\nb: 2\na: 3", 3, "duplicate key 'a'"),
     ("a: {b: 1, b: 2}", 1, "duplicate key 'b'"),
@@ -79,7 +99,8 @@ ERRORS = [
     ("a: [1,\n  2]", 1, "multi-line flow"),
     ("a: 'x\n  y'", 1, "multi-line scalars"),
     ("a: \"\\q\"", 1, "unsupported escape"),
-    ("a: 1\n---\nb: 2", 2, "multiple documents"),
+    ("a: 1\n---\nb: 2", 2, "document markers"),
+    ("a: 1\n...", 2, "document markers"),
     ("a:\n  - x\n  y: 1", 3, "bad indentation"),
     ("a: 1\n   b: 2", 2, "bad indentation"),
     ("  a: 1", 1, "must start at column 0"),
@@ -148,7 +169,10 @@ def test_e2_missing_field_is_named(field):
     ({"title": ""}, "title: must be a non-empty string"),
     ({"class": "NETWORK"}, "class: must be one of"),
     ({"severity": "critical"}, "severity: must be one of"),
-    ({"fp_budget": 1.5}, "fp_budget: must be a number from 0 to 1"),
+    ({"fp_budget": 1.5}, "fp_budget: must be a number with 0 <= fp_budget < 1"),
+    ({"fp_budget": 1}, "fp_budget"),
+    ({"title": "Bad {tool}"}, "title: must not contain { or }"),
+    ({"class": "SILENCE", "severity": "medium"}, "class SILENCE must be high"),
     ({"fp_budget": -0.1}, "fp_budget"),
     ({"fp_budget": True}, "fp_budget"),
     ({"fp_budget": "0.1"}, "fp_budget"),
@@ -157,7 +181,10 @@ def test_e2_missing_field_is_named(field):
     ({"fixtures": {"positive": [], "negative": ["a"]}}, "fixtures.positive: must be a non-empty list"),
     ({"fixtures": {"positive": ["a"], "negative": ["/etc/x"]}}, "fixtures.negative: '/etc/x' must be a relative"),
     ({"fixtures": {"positive": ["../x"], "negative": ["a"]}}, "fixtures.positive: '../x' must be a relative"),
-    ({"aggregate": {"distinct": "input_meta.path"}}, "aggregate: must have exactly distinct and over"),
+    ({"aggregate": {"distinct": "input_meta.path"}}, "aggregate: must have distinct and over"),
+    ({"aggregate": {"distinct": "a", "over": 1, "x": 1}}, "aggregate: must have distinct and over"),
+    ({"aggregate": {"distinct": "a", "over": 1, "as": "text"}}, "aggregate.as: must be path"),
+    ({"aggregate": {"distinct": "a", "over": 1, "cite": "some"}}, "aggregate.cite: must be all or first"),
     ({"aggregate": {"distinct": "Bad.Field", "over": 1}}, "aggregate.distinct"),
     ({"aggregate": {"distinct": "a", "over": -1}}, "aggregate.over"),
     ({"summary": "{Bad Name}"}, "summary: bad placeholder {Bad Name}"),
@@ -241,7 +268,10 @@ def matches(match, rec, context=None):
     ({"field": "input_meta.path", "prefix": "/etc/"}, line(path="/etc/hosts"), True),
     ({"field": "input_meta.path", "glob": "*.pem"}, line(path="/x/key.pem"), True),
     ({"field": "input_meta.path", "glob": "*.PEM"}, line(path="/x/key.pem"), False),
-    ({"not": {"field": "input_meta.x", "eq": "a"}}, line(), True),
+    ({"not": {"field": "input_meta.x", "eq": "a"}}, line(), False),
+    ({"not": {"field": "input_meta.x", "eq": "a"}}, line(x="b"), True),
+    ({"field": "input_meta.x", "nonempty": True}, line(x={"k": 1}), True),
+    ({"field": "input_meta.x", "nonempty": True}, line(x={}), False),
     ({"all": [{"field": "tool", "eq": "Bash"}, {"field": "phase", "eq": "pre"}]}, line(), True),
     ({"all": [{"field": "tool", "eq": "Bash"}, {"field": "phase", "eq": "post"}]}, line(), False),
     ({"any": [{"field": "tool", "eq": "Read"}, {"field": "phase", "eq": "pre"}]}, line(), True),
@@ -270,6 +300,8 @@ OUTSIDE = {"field": "input_meta.path", "outside": "cwd"}
     ("src/a.py", "relative/cwd", False),
     ("src/a.py", None, False),
     ("", "/work/p", False),
+    ("//work/p/a", "/work/p", False),
+    ("//etc/x", "/work/p", True),
 ])
 def test_e3_outside(path, cwd, expected):
     assert matches(OUTSIDE, line(path=path, cwd=cwd)) is expected
@@ -288,8 +320,10 @@ def test_e3_outside_any_uses_context_and_notes_when_missing():
     found, notes = engine.evaluate([rule], recs)
     assert found == []
     assert notes == [{"rule_id": "NET-TEST", "status": "not-evaluated", "detail": "needs context: scope"}]
-    found, _ = engine.evaluate([rule], recs, {"scope": "src"})
+    found, notes = engine.evaluate([rule], recs, {"scope": "src"})
     assert found == []
+    assert notes == [{"rule_id": "NET-TEST", "status": "not-evaluated",
+                      "detail": "context scope must be a non-empty list of paths"}]
 
 
 def test_e3_finding_shape_and_dedupe_per_seq():
@@ -307,7 +341,7 @@ def test_e3_summary_rendering():
                     summary="{input_meta.missing}|{input_meta.n}|{input_meta.weird}|{input_meta.long}")
     rec = line(1, n=[1, "a"], weird="a\nb\x1bc", long="x" * 100)
     (f,) = engine.run_rule(rule, [rec])
-    assert f["summary"] == '-|[1, "a"]|a?b?c|' + "x" * 77 + "..."
+    assert f["summary"] == '-|[1, "a"]|a?b?c|' + "x" * 38 + "..." + "x" * 39
     assert engine.run_rule(rule_for({"field": "tool", "eq": "Bash"}), [rec])[0]["summary"] == "Test rule"
 
 
@@ -360,7 +394,7 @@ def test_e3_finding_needs_rule_id_and_summary():
 
 def test_e3_pure_no_io_no_mutation(monkeypatch):
     rules = engine.load_catalog(CATALOG)
-    lines, _ = fixtures.load_fixture(RULE_FIXTURES / "SCOPE-PATH" / "positive-etc-and-dotdot.json")
+    lines, _, _ = fixtures.load_fixture(RULE_FIXTURES / "SCOPE-PATH" / "positive-etc-and-dotdot.json")
     before = copy.deepcopy(lines)
 
     def no_io(*a, **k):
@@ -375,9 +409,14 @@ def test_e3_pure_no_io_no_mutation(monkeypatch):
     assert engine.evaluate(rules, lines) == (found, notes)
 
 
-def test_e3_engine_skips_uncitable_records():
+def test_e3_engine_skips_uncitable_records_and_says_so():
     rule = rule_for({"field": "tool", "eq": "Bash"})
-    assert engine.run_rule(rule, [{"tool": "Bash"}, {"seq": True, "session_id": "s", "tool": "Bash"}]) == []
+    bad = [{"tool": "Bash"}, {"seq": True, "session_id": "s", "tool": "Bash"}]
+    assert engine.run_rule(rule, bad) == []
+    found, notes = engine.evaluate([rule], bad + [line()])
+    assert len(found) == 1
+    assert notes == [{"rule_id": "*", "status": "skipped-lines",
+                      "detail": "2 line(s) without session_id or int seq were not evaluated"}]
 
 
 def test_a1_rules_never_reach_a_model_or_the_network():
@@ -393,6 +432,7 @@ def test_m12_e1_rule_set_v1_ships():
     rules = engine.load_catalog(CATALOG)
     assert [(r.id, r.cls) for r in rules] == [
         ("DESTRUCT-CMD", "DESTRUCT"), ("DRIFT-FILES", "DRIFT"), ("NET-TOOL", "NET"),
+        ("SCOPE-CWD-MOVED", "SCOPE"), ("SCOPE-CWD-ROOT", "SCOPE"),
         ("SCOPE-PATH", "SCOPE"), ("SECRET-OUTPUT", "SECRET")]
 
 
@@ -402,6 +442,7 @@ def test_e4_catalog_rule_passes_its_fixtures(report):
     assert report["positives"] and all(p["fired"] for p in report["positives"]), report
     assert len(report["negatives"]) >= 1 + len(BENIGN)
     assert report["verdict"] in ("ok", "disabled"), report
+    assert report["measured"] >= 1
     assert report["fp_rate"] <= report["fp_budget"] or report["status"] == "disabled"
 
 
@@ -438,14 +479,23 @@ def test_e4_runner_flags_over_budget_and_missed_positives(tmp_path):
 
 def test_e4_fixture_formats(tmp_path):
     (tmp_path / "list.json").write_text(json.dumps([line()]))
-    (tmp_path / "ctx.json").write_text(json.dumps({"context": {"scope": ["src"]}, "lines": [line()]}))
-    (tmp_path / "bad.json").write_text(json.dumps({"lines": []}))
+    (tmp_path / "ctx.json").write_text(json.dumps({"context": {"scope": ["src"]}, "lines": [line()],
+                                                   "expect_seq": [1]}))
     (tmp_path / "t.log").write_text(json.dumps(line()) + "\n")
+    bad = {
+        "extra.json": {"lines": [], "other": 1},
+        "noseq.json": [dict(line(), seq="1")],
+        "nots.json": [dict(line(), ts="yesterday")],
+        "phase.json": [dict(line(), phase="pree")],
+        "expect.json": {"lines": [line()], "expect_seq": []},
+    }
+    for name, data in bad.items():
+        (tmp_path / name).write_text(json.dumps(data))
     (tmp_path / "corrupt.log").write_text("nope\n")
-    assert fixtures.load_fixture(tmp_path / "list.json") == ([line()], {})
-    assert fixtures.load_fixture(tmp_path / "ctx.json") == ([line()], {"scope": ["src"]})
-    assert fixtures.load_fixture(tmp_path / "t.log") == ([line()], {})
-    for name in ("bad.json", "corrupt.log", "missing.json"):
+    assert fixtures.load_fixture(tmp_path / "list.json") == ([line()], {}, None)
+    assert fixtures.load_fixture(tmp_path / "ctx.json") == ([line()], {"scope": ["src"]}, [1])
+    assert fixtures.load_fixture(tmp_path / "t.log") == ([line()], {}, None)
+    for name in list(bad) + ["corrupt.log", "missing.json"]:
         with pytest.raises(fixtures.FixtureError):
             fixtures.load_fixture(tmp_path / name)
 
@@ -462,8 +512,9 @@ def test_m12_e4_benign_corpus_has_a_scoped_session():
     assert any("scope" in c for c in contexts)
 
 
-def edit(seq, path, session="s1", tool="Edit"):
-    return line(seq, tool=tool, session=session, cwd="/work/p", path=path)
+def edit(seq, path, session="s1", tool="Edit", ok=True):
+    """A completed edit: DRIFT-FILES counts post lines with ok."""
+    return dict(line(seq, phase="post", tool=tool, session=session, cwd="/work/p", path=path), ok=ok)
 
 
 SCOPE = {"scope": ["src", "docs/review", "HANDOFF.md"]}
@@ -530,3 +581,119 @@ def test_m12_secret_output_end_to_end_from_capture(tmp_path):
     assert problems == [] and secret not in log.read_text()
     found, _ = engine.evaluate(engine.load_catalog(CATALOG), recs)
     assert [(f["rule_id"], f["cited_seq"]) for f in found] == [("SECRET-OUTPUT", [1])]
+
+
+# --- M1.1 REDO (docs/review/2026-10-16-M1.1.md) ------------------------------
+
+def test_redo_three_valued_logic_and_partial_notes():
+    unknown = rule_for({"not": {"field": "input_meta.x", "eq": "a"}})
+    found, notes = engine.evaluate([unknown], [line(1), line(2, x="a"), line(3, x="b")])
+    assert [f["cited_seq"] for f in found] == [[3]]
+    assert notes[0]["status"] == "partial" and "could not judge 1 line(s) (session:seq s1:1)" in notes[0]["detail"]
+    definite = rule_for({"all": [{"field": "phase", "eq": "post"}, {"field": "input_meta.x", "eq": "a"}]})
+    assert engine.evaluate([definite], [line(1)]) == ([], [])
+    either = rule_for({"any": [{"field": "tool", "eq": "Bash"}, {"field": "input_meta.x", "eq": "a"}]})
+    assert len(engine.evaluate([either], [line(1)])[0]) == 1
+    guarded = rule_for({"all": [{"field": "input_meta.path", "exists": True}, OUTSIDE]})
+    assert engine.evaluate([guarded], [line(1)]) == ([], [])
+
+
+def test_redo_unplaceable_paths_are_unknown_not_clean():
+    found, notes = engine.evaluate([rule_for(OUTSIDE)], [line(1, path="a", cwd="relative")])
+    assert found == [] and notes[0]["status"] == "partial"
+
+
+def test_redo_scope_root_anchors_relative_entries():
+    rule = rule_for(SCOPE_RULE)
+    recs = [line(1, path="/work/p/src/a.py", cwd="/work/p/sub")]
+    assert len(engine.evaluate([rule], recs, {"scope": ["src"]})[0]) == 1
+    assert engine.evaluate([rule], recs, {"scope": ["src"], "root": "/work/p"}) == ([], [])
+    found, notes = engine.evaluate([rule], recs, {"scope": ["src"], "root": "work/p"})
+    assert len(found) == 1 and notes[0]["status"] == "bad-context"
+
+
+@pytest.mark.parametrize("bad", ["src", [], [""], [None], None])
+def test_redo_unusable_scope_is_not_evaluated(bad):
+    found, notes = engine.evaluate([rule_for(SCOPE_RULE)], [line(1, path="/x")], {"scope": bad})
+    assert found == [] and notes[0]["status"] == "not-evaluated"
+
+
+def test_redo_catalog_must_exist_be_nonempty_and_use_yaml(tmp_path):
+    with pytest.raises(engine.RuleError, match="not found"):
+        engine.load_catalog(tmp_path / "nope")
+    with pytest.raises(engine.RuleError, match="catalog is empty"):
+        engine.load_catalog(tmp_path)
+    shutil_copy = (CATALOG / "NET-TOOL.yaml").read_text()
+    (tmp_path / "NET-TOOL.yml").write_text(shutil_copy)
+    with pytest.raises(engine.RuleError, match="must end in .yaml: NET-TOOL.yml"):
+        engine.load_catalog(tmp_path)
+
+
+def test_redo_check_finding_checks_class_and_ts():
+    good = {"ts": None, "rule_id": "X-Y", "class": "NET", "severity": "low", "session_id": "s",
+            "summary": "x", "cited_seq": [1]}
+    assert engine.check_finding(good) is good
+    for bad in (dict(good, **{"class": "NETWORK"}), dict(good, ts=5)):
+        with pytest.raises(engine.FindingError):
+            engine.check_finding(bad)
+    no_ts = dict(good)
+    del no_ts["ts"]
+    with pytest.raises(engine.FindingError):
+        engine.check_finding(no_ts)
+
+
+def test_redo_finding_ts_falls_back_to_last_valid_ts():
+    rule = rule_for({"field": "input_meta.x", "eq": "a"})
+    first = line(1)
+    second = dict(line(2, x="a"), ts="not a time")
+    (f,) = engine.run_rule(rule, [first, second])
+    assert f["ts"] == first["ts"]
+
+
+def test_redo_aggregate_paths_cite_first_and_unknown_values():
+    rule = rule_for({"field": "phase", "eq": "pre"},
+                    aggregate={"distinct": "input_meta.path", "over": 1, "as": "path", "cite": "first"})
+    recs = [line(1, path="README.md"), line(2, path="./README.md"), line(3, path="/work/p/x/../README.md"),
+            line(4, path="b.md"), line(5, path="b.md"), line(6)]
+    found, notes = engine.evaluate([rule], recs)
+    assert [f["cited_seq"] for f in found] == [[1, 4]]
+    assert notes[0]["status"] == "partial" and "s1:6" in notes[0]["detail"]
+
+
+def test_redo_runner_unmeasured_equal_budget_and_expected_seq(tmp_path):
+    for name, data in {
+        "p.json": {"lines": [line(1), line(2, x="hit")], "expect_seq": [2]},
+        "p-miss.json": {"lines": [line(1, x="hit"), line(2)], "expect_seq": [1, 2]},
+        "n1.json": [line(1, x="hit")],
+        "n2.json": [line(1, x="miss")],
+        "n3.json": [line(1)],
+        "ctx.json": {"context": {"scope": ["src"]}, "lines": [line(1, path="/x")]},
+    }.items():
+        (tmp_path / name).write_text(json.dumps(data))
+    hit = {"field": "input_meta.x", "eq": "hit"}
+    doc = rule_doc(match=hit, fp_budget=0.5,
+                   fixtures={"positive": ["p.json"], "negative": ["n1.json", "n2.json", "n3.json"]})
+    report = fixtures.check_rule(engine.compile_rule(doc), tmp_path)
+    assert (report["verdict"], report["fp_rate"], report["measured"], report["unmeasured"]) == ("ok", 0.5, 2, 1)
+    doc_miss = dict(doc, fixtures={"positive": ["p-miss.json"], "negative": ["n2.json"]})
+    report = fixtures.check_rule(engine.compile_rule(doc_miss), tmp_path)
+    assert report["verdict"] == "positive-missed" and report["positives"][0]["missing_seq"] == [2]
+    scoped = rule_doc(match=SCOPE_RULE, fixtures={"positive": ["ctx.json"], "negative": ["n2.json"]})
+    report = fixtures.check_rule(engine.compile_rule(scoped), tmp_path)
+    assert (report["verdict"], report["measured"], report["unmeasured"]) == ("unmeasured", 0, 1)
+
+
+@pytest.mark.parametrize("rule_id, fixture, expected", [
+    ("SCOPE-CWD-ROOT", "positive-root-and-home.json",
+     [("fixture-rules-cwdroot-1", [1]), ("fixture-rules-cwdroot-2", [1])]),
+    ("SCOPE-CWD-MOVED", "positive-cd-out.json", [("fixture-rules-cwdmoved-1", [1, 3])]),
+])
+def test_redo_cwd_rules(rule_id, fixture, expected):
+    lines, _, _ = fixtures.load_fixture(RULE_FIXTURES / rule_id / fixture)
+    found, _ = engine.evaluate([catalog_rule(rule_id)], lines)
+    assert [(f["session_id"], f["cited_seq"]) for f in found] == expected
+
+
+def test_redo_drift_counts_completed_edits_by_placed_path():
+    lines, ctx, _ = fixtures.load_fixture(RULE_FIXTURES / "DRIFT-FILES" / "negative-two-files.json")
+    assert drift(lines, ctx) == ([], [])

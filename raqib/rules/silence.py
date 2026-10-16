@@ -27,6 +27,7 @@ import math
 from raqib.rules.trace import is_record, parse_ts
 
 DEFAULT_GAP_SECONDS = 60
+MAX_GAP_SECONDS = 7 * 24 * 3600  # a larger limit would switch SILENCE-GAP off in practice
 GAP_ENV = "RAQIB_GAP_SECONDS"
 SEVERITY = "high"  # A3: silence is a finding of the highest class
 CLOSING = ("session_end", "stop")
@@ -35,7 +36,8 @@ NEW_SEQ = ("pre", "session_start", "session_end", "stop")  # capture gives these
 
 def gap_seconds_from(environ):
     """RAQIB_GAP_SECONDS from a mapping (e.g. os.environ); default 60.
-    Raises ValueError on a value that is not a finite positive number."""
+    Raises ValueError on a value that is not a positive number of at most
+    7 days."""
     raw = environ.get(GAP_ENV)
     if raw is None or raw == "":
         return DEFAULT_GAP_SECONDS
@@ -43,11 +45,13 @@ def gap_seconds_from(environ):
 
 
 def check_gap_seconds(value, name="gap_seconds"):
-    # nan, inf and 0 would quietly switch gap detection off or flag every line.
+    # nan, inf, huge values and 0 would quietly switch gap detection off or
+    # flag every line.
     ok = (isinstance(value, (int, float)) and not isinstance(value, bool)
-          and math.isfinite(value) and value > 0)
+          and math.isfinite(value) and 0 < value <= MAX_GAP_SECONDS)
     if not ok:
-        raise ValueError("%s must be a finite positive number, got %r" % (name, value))
+        raise ValueError("%s must be a positive number of at most %d seconds, got %r"
+                         % (name, MAX_GAP_SECONDS, value))
     return value
 
 
@@ -118,19 +122,20 @@ def _open(session_id, recs):
 
 
 def _halves(session_id, recs):
-    counts = {}  # seq -> [pre lines, post lines, first line]
-    for rec in recs:
+    counts = {}  # seq -> [pre lines, post lines, index of first line]
+    for i, rec in enumerate(recs):
         phase = rec.get("phase")
         if phase in ("pre", "post"):
-            entry = counts.setdefault(rec["seq"], [0, 0, rec])
+            entry = counts.setdefault(rec["seq"], [0, 0, i])
             entry[0 if phase == "pre" else 1] += 1
     out = []
-    for seq, (pres, posts, first) in counts.items():
+    for seq, (pres, posts, index) in counts.items():
         if pres == posts:
             continue
+        first = recs[index]
         missing = "post" if pres > posts else "pre"
         out.append(_finding(
-            "SILENCE-HALF", session_id, [seq], first.get("ts"),
+            "SILENCE-HALF", session_id, [seq], _ts_at(recs, index),
             "seq %d of %s has %d pre and %d post line(s): a %s is missing"
             % (seq, first.get("tool", "?"), pres, posts, missing)))
     return out
@@ -142,11 +147,11 @@ def _order(session_id, recs):
     max_rec = None
     prev_t = None
     prev_rec = None
-    for rec in recs:
+    for i, rec in enumerate(recs):
         seq = rec["seq"]
         if rec.get("phase") in NEW_SEQ and max_seq is not None and seq <= max_seq:
             out.append(_finding(
-                "SILENCE-ORDER", session_id, [max_seq, seq], rec.get("ts"),
+                "SILENCE-ORDER", session_id, [max_seq, seq], _ts_at(recs, i),
                 "%s comes after %s: seq went back (trace truncated, rotated or merged?)"
                 % (_label(rec), _label(max_rec))))
         if max_seq is None or seq > max_seq:
