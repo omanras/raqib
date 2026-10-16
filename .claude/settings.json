@@ -3,13 +3,38 @@
   "effortLevel": "xhigh",
   "permissions": {
     "allow": [
-      "Read", "Edit", "Write", "Grep", "Glob",
-      "Bash(git status *)", "Bash(git diff *)", "Bash(git log *)", "Bash(git add *)", "Bash(git commit *)",
-      "Bash(python *)", "Bash(python3 *)", "Bash(pytest *)", "Bash(tools/*)", "Bash(ls *)", "Bash(cat *)"
+      "Read",
+      "Edit",
+      "Write",
+      "Grep",
+      "Glob",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(pytest *)",
+      "Bash(tools/*)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(git push -u origin claude/*)",
+      "Bash(git push origin claude/*)",
+      "Bash(git checkout *)",
+      "Bash(git switch *)",
+      "Bash(git branch *)"
     ],
     "deny": [
-      "Bash(rm -rf *)", "Bash(git push *)", "Bash(git reset --hard *)", "Bash(curl *)", "Bash(wget *)",
-      "WebFetch", "WebSearch"
+      "Bash(rm -rf *)",
+      "Bash(git reset --hard *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "WebFetch",
+      "WebSearch",
+      "Bash(git push origin main*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
     ]
   },
   "hooks": {
@@ -17,14 +42,20 @@
       {
         "matcher": "Edit|Write",
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/scope-guard.sh" }
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/scope-guard.sh"
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/exit-gate.sh" }
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/exit-gate.sh"
+          }
         ]
       }
     ]

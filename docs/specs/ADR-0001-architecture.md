@@ -51,3 +51,25 @@ Code enforces A2: suspicion below threshold is discarded, never recorded as
 
 ## 7. Non-goals for v0.1
 Blocking or steering the agent (A4); multi-host; auth; cloud storage.
+
+## Amendment A (2026-10-16) — answers to the M0.1 questions
+- A-1 `command_head` := basename of the first whitespace-separated token of
+  `tool_input.command`, skipping leading `NAME=value` assignments; Bash only;
+  max 64 chars. Written into `input_meta`.
+- A-2 Pairing: `tool_use_id` (from the hook input) is the primary pairing key
+  and is carried on every tool trace line; fallback to
+  (session_id, tool, input_sha256, oldest-unmatched) only when it is absent.
+  Field `tool_use_id` is added to §3.
+- A-3 Session events (SessionStart, SessionEnd, Stop) produce a trace line
+  with phase session_start|session_end|stop, tool "-", no hashes, no
+  input_meta. Owned by M0.3.
+- A-4 PostToolUseFailure is captured as phase "post" with ok=false and an
+  `error_class` string (exception/class name if present, else "failure").
+  M0.3 installs this hook too (six hooks, not five).
+- A-5 RAQIB_KEEP_RAW stays unimplemented until a rule needs raw content.
+- A-6 Windows file locking is out of scope for v0.1 (Linux/macOS only);
+  README states it.
+- A-7 tools/gate.sh installs pytest if missing. raqib/ itself stays stdlib-only.
+- A-8 Push policy for builder sessions: push allowed only to `claude/*`
+  branches; never to `main`; never with --force. Merging into main is the
+  commander's act after the gate.

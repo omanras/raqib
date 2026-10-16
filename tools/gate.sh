@@ -17,6 +17,7 @@ if git grep -nIE 'haris[-_]?backup|D:\\\\haris|falak\.git' -- . ':!tools/gate.sh
 fi
 
 echo "[gate] tests"
+python3 -m pytest --version >/dev/null 2>&1 || pip install -q pytest --break-system-packages >/dev/null 2>&1 || pip install -q pytest >/dev/null 2>&1
 if ls tests/test_*.py >/dev/null 2>&1; then
   python3 -m pytest -q tests
 else
