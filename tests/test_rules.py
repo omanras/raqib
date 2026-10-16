@@ -368,7 +368,9 @@ def test_e3_pure_no_io_no_mutation(monkeypatch):
 
     monkeypatch.setattr(builtins, "open", no_io)
     found, notes = engine.evaluate(rules, lines)
-    assert [f["rule_id"] for f in found] == ["SCOPE-PATH", "SCOPE-PATH"] and notes == []
+    assert [f["rule_id"] for f in found] == ["SCOPE-PATH", "SCOPE-PATH"]
+    assert notes == [{"rule_id": "DRIFT-FILES", "status": "not-evaluated",
+                      "detail": "needs context: scope"}]
     assert lines == before
     assert engine.evaluate(rules, lines) == (found, notes)
 
@@ -387,9 +389,11 @@ def test_a1_rules_never_reach_a_model_or_the_network():
 
 # --- E4: fixture runner and the shipped catalog ---------------------------------
 
-def test_e4_three_rules_ship():
+def test_m12_e1_rule_set_v1_ships():
     rules = engine.load_catalog(CATALOG)
-    assert [r.id for r in rules] == ["DESTRUCT-CMD", "NET-TOOL", "SCOPE-PATH"]
+    assert [(r.id, r.cls) for r in rules] == [
+        ("DESTRUCT-CMD", "DESTRUCT"), ("DRIFT-FILES", "DRIFT"), ("NET-TOOL", "NET"),
+        ("SCOPE-PATH", "SCOPE"), ("SECRET-OUTPUT", "SECRET")]
 
 
 @pytest.mark.parametrize("report", fixtures.check_catalog(engine.load_catalog(CATALOG), ROOT, BENIGN),
@@ -444,3 +448,85 @@ def test_e4_fixture_formats(tmp_path):
     for name in ("bad.json", "corrupt.log", "missing.json"):
         with pytest.raises(fixtures.FixtureError):
             fixtures.load_fixture(tmp_path / name)
+
+
+# --- M1.2: SECRET-OUTPUT and DRIFT-FILES ------------------------------------
+
+def catalog_rule(rule_id):
+    (rule,) = [r for r in engine.load_catalog(CATALOG) if r.id == rule_id]
+    return rule
+
+
+def test_m12_e4_benign_corpus_has_a_scoped_session():
+    contexts = [fixtures.load_fixture(p)[1] for p in BENIGN]
+    assert any("scope" in c for c in contexts)
+
+
+def edit(seq, path, session="s1", tool="Edit"):
+    return line(seq, tool=tool, session=session, cwd="/work/p", path=path)
+
+
+SCOPE = {"scope": ["src", "docs/review", "HANDOFF.md"]}
+
+
+def drift(recs, context=SCOPE):
+    return engine.evaluate([catalog_rule("DRIFT-FILES")], recs, context)
+
+
+def test_m12_e3_drift_fires_on_the_third_distinct_file():
+    recs = [edit(1, "/work/p/README.md"), edit(2, "/work/p/src/a.py"), edit(3, "setup.cfg"),
+            edit(4, "/work/p/README.md"), edit(5, "/work/p/tools/x.sh", tool="Write")]
+    assert drift(recs[:4]) == ([], [])
+    found, notes = drift(recs)
+    assert notes == [] and [f["cited_seq"] for f in found] == [[1, 3, 4, 5]]
+    assert found[0]["summary"].startswith("3 distinct files edited outside the declared scope")
+
+
+def test_m12_e3_drift_counts_only_edits_per_session():
+    reads = [line(i, tool="Read", path="/work/p/x%d" % i) for i in range(1, 6)]
+    split = [edit(1, "/a"), edit(2, "/b"), edit(1, "/c", session="s2"), edit(2, "/d", session="s2")]
+    assert drift(reads) == ([], [])
+    assert drift(split) == ([], [])
+
+
+def test_m12_e3_drift_without_scope_is_not_evaluated():
+    recs = [edit(i, "/x/%d" % i) for i in range(1, 5)]
+    found, notes = drift(recs, context={})
+    assert found == []
+    assert notes == [{"rule_id": "DRIFT-FILES", "status": "not-evaluated", "detail": "needs context: scope"}]
+
+
+def test_m12_e3_drift_scope_entries_are_paths_not_prefixes():
+    recs = [edit(1, "/work/p/src2/a.py"), edit(2, "/work/p/srcfile.py"), edit(3, "/work/p/HANDOFF.md.bak")]
+    found, _ = drift(recs)
+    assert [f["cited_seq"] for f in found] == [[1, 2, 3]]
+
+
+def test_m12_secret_output_fires_on_named_kinds_in_posts_only():
+    rule = catalog_rule("SECRET-OUTPUT")
+    post = line(1, phase="post")
+    post["output_meta"] = {"secret_kinds": ["aws_access_key_id"]}
+    pre = dict(post, phase="pre")
+    empty = dict(post, output_meta={"secret_kinds": []})
+    (f,) = engine.run_rule(rule, [post])
+    assert (f["severity"], f["class"]) == ("high", "SECRET")
+    assert f["summary"] == 'Bash output at seq 1 matched ["aws_access_key_id"]'
+    assert engine.run_rule(rule, [pre, empty, line(2, phase="post")]) == []
+
+
+def test_m12_secret_output_end_to_end_from_capture(tmp_path):
+    import os
+    import subprocess
+    capture = ROOT / "raqib" / "hooks" / "capture.py"
+    log = tmp_path / "trace.jsonl"
+    hook = json.loads((ROOT / "tests" / "fixtures" / "posttooluse-bash.json").read_text())
+    secret = "AKIA" + "Q3" * 8
+    hook["tool_response"] = {"stdout": "aws_access_key_id = " + secret, "stderr": ""}
+    env = dict(os.environ, RAQIB_LOG=str(log))
+    subprocess.run([sys.executable, str(capture)], input=json.dumps(hook).encode(),
+                   env=env, check=True, timeout=30)
+    from raqib.rules import trace
+    recs, problems = trace.read(log)
+    assert problems == [] and secret not in log.read_text()
+    found, _ = engine.evaluate(engine.load_catalog(CATALOG), recs)
+    assert [(f["rule_id"], f["cited_seq"]) for f in found] == [("SECRET-OUTPUT", [1])]

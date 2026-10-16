@@ -437,3 +437,79 @@ def test_m03_error_class(tmp_path, error, expected):
     (rec,) = lines(log)
     assert rec["error_class"] == expected
     assert "secret text" not in log.read_text()
+
+
+# --- M1.2 E2: output_meta.secret_kinds (names only, never the text) ---------
+# Fake secrets are assembled at run time so that no secret-like string is in
+# the tree for the gate's secret scan to find.
+
+FAKE = {
+    "aws_access_key_id": "AKIA" + "Z7" * 8,
+    "github_token": "gh" + "p_" + "A1" * 18,
+    "google_api_key": "AI" + "za" + "B2" * 17 + "C",
+    "jwt": "ey" + "J" + "a" * 10 + ".ey" + "J" + "b" * 10 + "." + "c" * 10,
+    "private_key": "-----BEGIN " + "OPENSSH PRIVATE KEY-----",
+    "sk_api_key": "sk-" + "ant-" + "k9" * 12,
+    "slack_token": "xo" + "xb-" + "1234567890ab",
+}
+
+
+def post_with(response, tmp_path):
+    post = fixture("posttooluse-bash.json")
+    post["tool_response"] = response
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(post, log))
+    (rec,) = lines(log)
+    return rec, log.read_text()
+
+
+@pytest.mark.parametrize("kind", sorted(FAKE))
+def test_m12_secret_in_output_is_recorded_by_name_only(tmp_path, kind):
+    secret = FAKE[kind]
+    rec, text = post_with({"stdout": "config:\n" + secret + "\n", "stderr": ""}, tmp_path)
+    assert rec["output_meta"] == {"secret_kinds": [kind]}
+    assert secret not in text and secret[4:14] not in text
+
+
+def test_m12_kinds_are_sorted_and_found_in_keys_and_nesting(tmp_path):
+    response = {FAKE["slack_token"]: [{"deep": ["x", FAKE["aws_access_key_id"]]}]}
+    rec, _ = post_with(response, tmp_path)
+    assert rec["output_meta"] == {"secret_kinds": ["aws_access_key_id", "slack_token"]}
+
+
+@pytest.mark.parametrize("text", [
+    "AKIA" + "Z7" * 7 + "Z",
+    "x" + "AKIA" + "Z7" * 8,
+    "AKIA" + "Z7" * 8 + "Q",
+    "sk-" + "short",
+    "-----BEGIN " + "PUBLIC KEY-----",
+    "no secrets here",
+])
+def test_m12_near_misses_are_not_secrets(tmp_path, text):
+    rec, _ = post_with({"stdout": text}, tmp_path)
+    assert rec["output_meta"] == {}
+
+
+def test_m12_secret_in_a_failure_message(tmp_path):
+    failure = fixture("posttoolusefailure-bash.json")
+    failure["error"] = "curl: (22) 401 for token " + FAKE["github_token"]
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(failure, log))
+    (rec,) = lines(log)
+    assert rec["output_meta"] == {"secret_kinds": ["github_token"]}
+    assert FAKE["github_token"] not in log.read_text()
+
+
+def test_m12_only_post_lines_carry_output_meta(tmp_path):
+    pre = fixture("pretooluse-bash.json")
+    pre["tool_input"]["command"] = "echo " + FAKE["aws_access_key_id"]
+    recs = run_all([fixture("sessionstart.json"), pre, fixture("posttooluse-bash.json")],
+                   tmp_path / "trace.jsonl")
+    assert ["output_meta" in r for r in recs] == [False, False, True]
+    assert recs[2]["output_meta"] == {}
+
+
+def test_m12_all_kinds_at_once_are_sorted(tmp_path):
+    rec, text = post_with({"stdout": " ".join(FAKE[k] for k in reversed(sorted(FAKE)))}, tmp_path)
+    assert rec["output_meta"] == {"secret_kinds": sorted(FAKE)}
+    assert not any(v in text for v in FAKE.values())

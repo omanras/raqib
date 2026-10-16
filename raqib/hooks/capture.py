@@ -16,7 +16,8 @@ Invariants:
   starting with "RAQIB-SILENCE:" is written to stderr.
 - Offline: stdlib only, no network.
 - Privacy: tool input and output are stored only as sha256 of canonical JSON;
-  input_meta keeps a small extract (path, url_host, Bash command_head).
+  input_meta keeps a small extract (path, url_host, Bash command_head) and
+  output_meta the names of secret patterns the output matched, never the text.
 
 seq is per session_id and derived from the log itself: a pre takes
 max(seq) + 1. A post takes the seq of the oldest open pre (no post yet) in
@@ -65,6 +66,18 @@ COMMAND_HEAD_MAX = 64
 LEADING_WORD = re.compile(r"\s*([A-Za-z0-9_.]+)")
 CLASS_NAME = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_.]*)?(?:Error|Exception)\Z")
 ERROR_CLASS_MAX = 64
+
+# M1.2: names of the secret patterns found in a tool's output. Only the names
+# reach the trace, never the matched text (A-5: no raw content).
+SECRET_PATTERNS = (
+    ("aws_access_key_id", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
+    ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}")),
+    ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}")),
+    ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
+    ("private_key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("sk_api_key", re.compile(r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}")),
+    ("slack_token", re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}")),
+)
 
 
 class CaptureError(Exception):
@@ -150,6 +163,30 @@ def error_class(error):
                 and CLASS_NAME.match(value)):
             return value
     return "failure"
+
+
+def strings_in(value):
+    """Every string in a JSON value (keys included), depth-first."""
+    stack = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            yield item
+        elif isinstance(item, dict):
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif isinstance(item, list):
+            stack.extend(item)
+
+
+def secret_kinds(value):
+    """Sorted names of SECRET_PATTERNS found in any string of value."""
+    found = set()
+    for text in strings_in(value):
+        for name, pattern in SECRET_PATTERNS:
+            if name not in found and pattern.search(text):
+                found.add(name)
+    return sorted(found)
 
 
 def session_state(log_text, session_id):
@@ -265,6 +302,8 @@ def build_record(payload, log_text):
         tool_response = payload.get("tool_response")
         output = tool_response if "tool_response" in payload else payload.get("error")
         rec["output_sha256"] = canonical_sha256(output)
+        kinds = secret_kinds(output)
+        rec["output_meta"] = {"secret_kinds": kinds} if kinds else {}
         rec["ok"] = is_ok(event, tool_response)
         if event == "PostToolUseFailure":
             rec["error_class"] = error_class(payload.get("error"))
