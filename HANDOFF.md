@@ -1,27 +1,27 @@
-# HANDOFF — M1.1+M1.2  (REDO: docs/review/2026-10-16-M1.1.md, -M1.2.md)
+# HANDOFF — M2.2  (phase 2: evaluation harness)
 
-Task: fix the M1.1 and M1.2 review findings (and the M0.2/M0.3 residuals
-they list) in the YAML subset, engine, runner, silence rules, capture,
-installer and README. Two commits: M1.1 REDO, then M1.2 REDO.
+Task: evaluate the suspicion layer (DEVELOPMENT_PLAN M2.2) on 50 labelled
+events (25 benign / 20 suspicious / 5 deceptive). `python -m raqib eval`
+reports false negatives and false positives per candidate backend/model,
+ranks candidates by FN first, and shows the deterministic rules as baseline.
 
 Scope:
   raqib/
-  tools/install-hooks.sh
-  tests/
+  tests/test_eval.py
+  tests/fixtures/
   README.md
   docs/review/
 
 Exit criteria:
-- E1 yamlite: Y1-Y5 inputs are read like YAML or are errors.
-- E2 engine: three-valued predicates (MS1, PA3); unjudgeable lines, bad
-     context, skipped lines and an empty catalog are reported (3h, F13);
-     rules for a cwd at / or a home dir and for a moving cwd (PA1).
-- E3 runner: sound fixtures only (A6-2); context rules measured only where
-     their context is given (A6-1, F14); optional expected seqs.
-- E4 capture: no secret in command_head (F1); linear scans outside the lock,
-     capped (F8-F10); placeholders ignored (F6); more formats (F5).
-- E5 silence ts fallback and gap cap (S14, S15); installer residuals (M2, M3,
-     B4); README true for `main` and `claude/v0.1`; gate green.
+- E1 tests/fixtures/eval/events.json: 50 events (id, label, description,
+     trace lines), exactly 25/20/5; every event is a sound trace.
+- E2 Per candidate: FN = suspicious/deceptive not raised (an error is a
+     miss), FP = benign raised; per-label counts; rank by FN, FP, errors.
+- E3 A rules baseline (any finding = flagged) and rules-or-model rows show
+     what the model adds on top of the rules (A1).
+- E4 Offline tests with canned answers; the real rules baseline is written
+     to docs/review; gate green.
 
-Commit: `landed: M1.1 REDO ...` / `landed: M1.2 REDO ...` or `STOP: ...`.
+Not in scope: UI, new rules, capture changes.
+Commit: `landed: M2.2 evaluation harness` or `STOP: M2.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
