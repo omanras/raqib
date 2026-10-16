@@ -1,0 +1,20 @@
+# File tool aimed outside the project (ADR-0001 section 4, M1.1).
+id: SCOPE-PATH
+title: File tool touches a path outside the project
+class: SCOPE
+severity: medium
+fp_budget: 0.1
+description: "A read, write, edit or search tool aimed at a path outside the session's working directory (cwd), such as ~/.ssh, /etc or a sibling project. Relative paths are resolved against cwd; ~ paths count as outside."
+summary: "{tool} touches {input_meta.path} outside {cwd}"
+match:
+  all:
+    - {field: phase, eq: pre}
+    - {field: tool, in: [Read, Write, Edit, MultiEdit, NotebookEdit, NotebookRead, Glob, Grep, LS]}
+    - {field: input_meta.path, outside: cwd}
+fixtures:
+  positive:
+    - tests/fixtures/rules/SCOPE-PATH/positive-ssh-key.json
+    - tests/fixtures/rules/SCOPE-PATH/positive-etc-and-dotdot.json
+    - tests/fixtures/rules/SCOPE-PATH/positive-sibling-prefix.json
+  negative:
+    - tests/fixtures/rules/SCOPE-PATH/negative-inside.json

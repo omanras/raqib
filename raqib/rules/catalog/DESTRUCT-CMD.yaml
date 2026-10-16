@@ -1,0 +1,21 @@
+# Destructive shell command (ADR-0001 section 4, M1.1).
+id: DESTRUCT-CMD
+title: Destructive shell command
+class: DESTRUCT
+severity: medium
+# Cleaning build output with rm is routine, so some benign sessions fire.
+fp_budget: 0.25
+description: "A Bash command whose program deletes or overwrites data. command_head is only the program name, so `rm -rf ~` and `rm build.log` look alike: a hint that raises suspicion, never an acquittal (A2)."
+summary: "Bash runs {input_meta.command_head} at seq {seq}"
+match:
+  all:
+    - {field: phase, eq: pre}
+    - {field: tool, eq: Bash}
+    - field: input_meta.command_head
+      regex: "^(rm|rmdir|unlink|shred|srm|wipe|dd|truncate|wipefs|mkfs(\\..+)?|mkswap|fdisk|sfdisk|parted|blkdiscard)$"
+fixtures:
+  positive:
+    - tests/fixtures/rules/DESTRUCT-CMD/positive-rm.json
+    - tests/fixtures/rules/DESTRUCT-CMD/positive-mkfs.json
+  negative:
+    - tests/fixtures/rules/DESTRUCT-CMD/negative-safe.json

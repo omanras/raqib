@@ -1,0 +1,4 @@
+[
+  {"ts": "2026-10-16T13:00:01.000Z", "seq": 1, "session_id": "fixture-rules-destruct-2", "phase": "pre", "tool": "Bash", "tool_use_id": "toolu_ct-2_1", "input_sha256": "58b96553f112b7e2fe573537fdce731f7118113bc45ac490efd18dd05118213c", "input_meta": {"command_head": "mkfs.ext4"}, "cwd": "/work/example"},
+  {"ts": "2026-10-16T13:00:03.000Z", "seq": 1, "session_id": "fixture-rules-destruct-2", "phase": "post", "tool": "Bash", "tool_use_id": "toolu_ct-2_1", "input_sha256": "58b96553f112b7e2fe573537fdce731f7118113bc45ac490efd18dd05118213c", "input_meta": {"command_head": "mkfs.ext4"}, "output_sha256": "9ca41a182905f1ad18d35f1fa1ad82c864aaa1daa1f01327f27e1ed185f4b088", "ok": true, "cwd": "/work/example"}
+]
