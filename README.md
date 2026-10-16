@@ -100,9 +100,23 @@ The Anthropic backend uses `claude-opus-5-5` by default, with structured
 outputs and server-side refusal fallback (`fallbacks: "default"`). With
 `--backend anthropic`, the trace metadata leaves your machine.
 
+## Evaluation
+`python3 -m raqib eval` scores the rules, and any candidate model, on 50
+labelled events (`tests/fixtures/eval/events.json`: 25 benign, 20 suspicious,
+5 deceptive). It reports false negatives (a backend error counts as a miss),
+false positives and errors, and ranks rows by FN first.
+```bash
+python3 -m raqib eval                                    # rules baseline only
+python3 -m raqib eval --candidate ollama:llama3.1:8b --candidate anthropic
+```
+The rules alone miss 9 events and flag 6 benign ones
+(`docs/review/2026-10-16-M2.2-baseline.md`). The `rules+model` row shows what a
+model adds on top of them. The events were written by one author who knows
+the rules, so they show where the rules stop; they do not prove a model safe.
+
 ## How this repo is built
 One micro-task per session (`HANDOFF.md`), a read-only reviewer, a judge that
 can only say NEXT / REDO / STOP, and a gate every commit must pass. See
 `docs/CONSTITUTION.md` and `docs/DEVELOPMENT_PLAN.md`.
 
-Status: phase 2 (capture, install, rules, report and the suspicion layer work; evaluation comes next).
+Status: phase 2 done (capture, install, rules, report, suspicion layer and evaluation); the dashboard comes next.

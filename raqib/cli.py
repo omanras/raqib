@@ -17,6 +17,11 @@
       dropped, never recorded as clean; failures become error lines (A3).
       With -o, FILE.run.json records how many windows were judged.
       report TRACE --suspicion FILE shows the result with cited lines.
+  eval [--events FILE] [--candidate SPEC]... [--json] [-o FILE]
+      Score the rules, and each candidate model, on labelled events (M2.2):
+      false negatives, false positives and errors, ranked by FN first. SPEC is
+      ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json. Exit 0 once
+      scored (errors are counted in the table), 2 on bad input.
 
 Exit codes: 0 clean, 1 alarm (any finding, empty or corrupt trace),
 3 incomplete (a rule did not run), 2 usage or unreadable input.
@@ -28,6 +33,7 @@ import json
 import os
 import sys
 
+from raqib import eval as evaluation
 from raqib import report
 from raqib.rules import context as rule_context
 from raqib.rules import engine, fixtures, silence, trace
@@ -36,6 +42,7 @@ from raqib.suspect import core as suspect_core
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOG = os.path.join(ROOT, "raqib", "rules", "catalog")
+EVENTS = os.path.join(ROOT, "tests", "fixtures", "eval", "events.json")
 
 
 class UsageError(Exception):
@@ -82,6 +89,18 @@ def _parser():
     s.add_argument("--threshold", type=float, default=suspect_core.DEFAULT_THRESHOLD)
     s.add_argument("--window", type=int, default=suspect_core.DEFAULT_WINDOW, help="lines per window")
     s.add_argument("-o", "--out", metavar="FILE", help="suspicion file (default: stdout)")
+    e = sub.add_parser("eval", help="score rules and candidate models on labelled events (M2.2)")
+    e.add_argument("--events", default=EVENTS, metavar="FILE", help="labelled events (default: the shipped 50)")
+    e.add_argument("--candidate", action="append", default=[], metavar="SPEC",
+                   help="ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json (repeatable)")
+    e.add_argument("--catalog", default=CATALOG, metavar="DIR", help="rule catalog directory")
+    e.add_argument("--ollama-url", metavar="URL", help="default: OLLAMA_HOST or http://localhost:11434")
+    e.add_argument("--effort", default=suspect_backends.DEFAULT_EFFORT, choices=suspect_backends.EFFORTS,
+                   help="anthropic effort level")
+    e.add_argument("--threshold", type=float, default=suspect_core.DEFAULT_THRESHOLD)
+    e.add_argument("--window", type=int, default=suspect_core.DEFAULT_WINDOW, help="lines per window")
+    e.add_argument("--json", action="store_true", help="print the result as JSON")
+    e.add_argument("-o", "--out", metavar="FILE", help="write the result here (default: stdout)")
     return p
 
 
@@ -284,6 +303,43 @@ def cmd_suspect(args, out):
     return 1 if lines else 0
 
 
+def make_candidate(spec, args):
+    name, _, rest = spec.partition(":")
+    if name == "fake":
+        if not rest:
+            raise UsageError("candidate fake needs a file: fake:ANSWERS.json")
+        return suspect_backends.make_backend("fake", answers=rest)
+    if name not in ("ollama", "anthropic"):
+        raise UsageError("unknown candidate %r (ollama[:MODEL], anthropic[:MODEL], fake:FILE)" % spec)
+    return suspect_backends.make_backend(name, model=rest or None, ollama_url=args.ollama_url,
+                                         effort=args.effort)
+
+
+def cmd_eval(args, out):
+    try:
+        events = evaluation.load_events(args.events)
+        backends = [make_candidate(spec, args) for spec in args.candidate]
+        suspect_core.check_threshold(args.threshold)
+        result = evaluation.evaluate(events, _catalog(args.catalog), backends, args.threshold,
+                                     args.window, silence.gap_seconds_from(os.environ))
+    except ValueError as exc:
+        raise UsageError(str(exc))
+    source = os.path.relpath(args.events, ROOT) if os.path.abspath(args.events).startswith(ROOT) \
+        else args.events
+    text = (json.dumps(dict(result, source=source), indent=2, sort_keys=True, ensure_ascii=True) + "\n"
+            if args.json else evaluation.render_text(result, source))
+    if args.out:
+        try:
+            with open(args.out, "w", encoding="ascii") as f:
+                f.write(text)
+        except OSError as exc:
+            raise UsageError("cannot write %s: %s" % (args.out, exc))
+        out.write("raqib: evaluation of %d events -> %s\n" % (result["events"], args.out))
+    else:
+        out.write(text)
+    return 0
+
+
 def main(argv=None, out=None):
     out = out or sys.stdout
     try:
@@ -292,7 +348,7 @@ def main(argv=None, out=None):
         return 2 if exc.code else 0
     try:
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
-                   "suspect": cmd_suspect}[args.command]
+                   "suspect": cmd_suspect, "eval": cmd_eval}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)
