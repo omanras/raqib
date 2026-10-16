@@ -18,6 +18,7 @@ Invariants:
 - Privacy: tool input and output are stored only as sha256 of canonical JSON;
   input_meta keeps a small extract (path, url_host, Bash command_head) and
   output_meta the names of secret patterns the output matched, never the text.
+  A secret inside a path is replaced by [redacted:<kind>].
 - Bounded work under the lock: hashing and the secret scan (capped at
   SCAN_MAX_CHARS) run before the log lock is taken; the lock wait is capped
   at LOCK_WAIT_SECONDS and the whole capture at DEADLINE_SECONDS, below the
@@ -29,7 +30,8 @@ output_meta on a post line (M1.2):
 - {"scan": "partial", ...}: the output was larger than SCAN_MAX_CHARS and only
   its start was scanned; secret_kinds is present only if something matched,
   so a partial scan is never read as clean.
-- {"scan": "none"}: the payload had neither tool_response nor error.
+- {"scan": "none"}: the payload had no tool_response or error that is not
+  null: nothing to scan, so no secret_kinds either.
 - "placeholder_kinds": [...] (only when non-empty): patterns that matched only
   text that looks like a placeholder or a published sample (EXAMPLE, your-...,
   XXXX, the jwt.io sample token), so they were not counted.
@@ -109,9 +111,13 @@ SECRET_PATTERNS = tuple((name, re.compile(rx)) for name, rx in (
     ("npm_token", r"\bnpm_[A-Za-z0-9]{36}(?![A-Za-z0-9])"),
     # A header line alone (library code, docs) is not a key: key material
     # must follow, possibly after PEM/PGP header lines.
-    ("private_key", r"-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----(?:\s|\\[rn]){1,8}"
-                    r"(?:[A-Za-z][A-Za-z-]{0,30}: [^\r\n]{0,200}(?:\s|\\[rn]){1,4}){0,8}"
-                    r"[A-Za-z0-9+/=]{40}"),
+    # Lines end at a newline, real or JSON-escaped; a header line cannot hold
+    # one, so each line is matched one way only (REDO 2 review 4.1).
+    ("private_key", r"-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-----"
+                    r"(?:[ \t]*(?:\r?\n|(?:\\r)?\\n)){1,3}"
+                    r"(?:[A-Za-z][A-Za-z-]{0,30}:[^\r\n\\]{0,200}(?:\r?\n|(?:\\r)?\\n)){0,8}"
+                    r"(?:[ \t]*(?:\r?\n|(?:\\r)?\\n)){0,2}"
+                    r"[ \t]*[A-Za-z0-9+/=]{40}"),
     ("pypi_token", r"\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{50,}"),
     ("sk_api_key", r"\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}"),
     ("slack_token", r"\bxox[abeprs]-[0-9A-Za-z-]{10,}"),
@@ -126,8 +132,10 @@ PLACEHOLDER_MARKERS = ("example", "xxxx", "your", "placeholder", "dummy", "sampl
                        "changeme", "change_me", "password", "passwd", "secret", "fake", "test",
                        "${", "{{", "***", "...")
 PLACEHOLDER_MIN_DISTINCT = 8  # fewer distinct characters: AKIAXXXX..., sk-aaaa...
-# sk- keys always mix digits and both cases; kebab-case names do not.
+# sk- keys mix digits and letters; kebab-case names do not.
 MIXED_KINDS = ("sk_api_key",)
+# A short real password has few distinct characters; only markers apply.
+NO_DISTINCT_CHECK = ("url_credentials",)
 SCAN_MAX_CHARS = 1 << 20      # characters of one post's output that are scanned (F10)
 COMMAND_SCAN_MAX = 1 << 16    # characters of a Bash command read for its head
 LOCK_WAIT_SECONDS = 5.0       # longer: RAQIB-SILENCE instead of waiting for the kill
@@ -176,6 +184,8 @@ def command_head(command):
             (word,) = shlex.split(raw)
         except ValueError:
             return None
+        if not word:
+            return None  # an empty quoted word ('' x) names no program
         # basename(1): trailing slashes do not count; "/" stays "/".
         name = word.rstrip("/").rsplit("/", 1)[-1] or "/"
         if name != "/" and not HEAD_NAME.match(name):
@@ -188,8 +198,19 @@ def command_head(command):
 def looks_like_key(text):
     if any(pattern.search(text) for _, pattern in SECRET_PATTERNS):
         return True
+    if len(text) >= 24 and all(c in "0123456789abcdefABCDEF" for c in text):
+        return True  # a hex token
     return (len(text) >= 16 and any(c.isdigit() for c in text)
             and any(c.isupper() for c in text) and any(c.islower() for c in text))
+
+
+def redact(text):
+    """text with every non-placeholder secret match replaced by
+    [redacted:<kind>], so a path keeps its place but not the secret."""
+    for name, pattern in SECRET_PATTERNS:
+        text = pattern.sub(lambda m: m.group(0) if is_placeholder(name, m.group(0))
+                           else "[redacted:%s]" % name, text)
+    return text
 
 
 def input_meta(tool, tool_input):
@@ -204,7 +225,7 @@ def input_meta(tool, tool_input):
     for key in ("file_path", "notebook_path", "path"):
         value = tool_input.get(key)
         if isinstance(value, str) and value:
-            meta["path"] = value
+            meta["path"] = redact(value)
             break
     url = tool_input.get("url")
     if isinstance(url, str):
@@ -255,10 +276,13 @@ def strings_in(value):
         if isinstance(item, str):
             yield item
         elif isinstance(item, dict):
-            stack.extend(item.keys())
-            stack.extend(item.values())
+            # Pushed in reverse, so strings come out in document order and a
+            # capped scan covers the start of the output.
+            for key, val in reversed(list(item.items())):
+                stack.append(val)
+                stack.append(key)
         elif isinstance(item, list):
-            stack.extend(item)
+            stack.extend(reversed(item))
 
 
 def scan_output(values, limit=SCAN_MAX_CHARS):
@@ -294,7 +318,8 @@ def secret_part(name, text):
     if name == "auth_header":
         return text.split()[-1]
     if name == "url_credentials":
-        return text[text.index("://") + 3:text.rindex("@")]
+        # The password only: a user name such as "testuser" says nothing.
+        return text[text.index("://") + 3:text.rindex("@")].split(":", 1)[1]
     return text
 
 
@@ -304,10 +329,9 @@ def is_placeholder(name, text):
     for marker in PLACEHOLDER_MARKERS:
         if marker in part or marker.upper() in part:
             return True
-    if len(set(part)) < PLACEHOLDER_MIN_DISTINCT:
+    if name not in NO_DISTINCT_CHECK and len(set(part)) < PLACEHOLDER_MIN_DISTINCT:
         return True
-    if name in MIXED_KINDS and not (part != part.lower() and part != part.upper()
-                                    and any(c.isdigit() for c in part)):
+    if name in MIXED_KINDS and not (any(c.isdigit() for c in part) and any(c.isalpha() for c in part)):
         return True
     return name == "jwt" and is_sample_jwt(part)
 
@@ -325,7 +349,7 @@ def is_sample_jwt(token):
 
 def output_meta(payload):
     """output_meta of a post line; see the module docstring."""
-    values = [payload[key] for key in ("tool_response", "error") if key in payload]
+    values = [payload[key] for key in ("tool_response", "error") if payload.get(key) is not None]
     if not values:
         return {"scan": "none"}
     kinds, placeholders, complete = scan_output(values)
@@ -485,6 +509,10 @@ def append(log_path, payload):
         rec = finish(parts, log_text)
         # A torn last line must not swallow this one.
         prefix = "\n" if log_text and not log_text.endswith("\n") else ""
+        # The line is built: the deadline must not tear it or report a line
+        # that was written as lost (REDO 2 review B4).
+        if hasattr(signal, "SIGALRM"):
+            signal.alarm(0)
         f.write(prefix + json.dumps(rec, separators=(",", ":"), ensure_ascii=True) + "\n")
         f.flush()
 

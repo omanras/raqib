@@ -646,6 +646,10 @@ ADVERSARIAL = {
     "pem-headers": ("-----BEGIN " + "RSA PRIVATE KEY-----\n" + "X-Y: " + "z" * 190 + "\n") * 1000,
     "auth-headers": "Authorization: Bearer " * 20000,
     "word-chars": "A" * 250000,
+    "pem-name-colon-runs": "-----BEGIN " + "PRIVATE KEY-----\n" + "a: " * 20000,
+    "pem-many-header-lines": "-----BEGIN " + "PRIVATE KEY-----\n" + ("a: " * 60 + "\n") * 300,
+    "pem-escaped-lines": "-----BEGIN " + "PRIVATE KEY-----\\n" + "a: \\n" * 20000,
+    "url-colons": "postgres://" + ("a:" * 120 + " ") * 400,
 }
 
 
@@ -737,3 +741,93 @@ def test_redo_deadline_is_below_the_installed_timeout():
     timeout = int(re.search(r"^TIMEOUT = (\d+)", install, re.M).group(1))
     capture = load_capture()
     assert capture.LOCK_WAIT_SECONDS < capture.DEADLINE_SECONDS < timeout
+
+
+# --- M1.1+M1.2 REDO 2 (docs/review/2026-10-16-M1.1-M1.2-REDO.md) ------------
+
+def pem(kind="PRIVATE KEY", headers="", sep="\n", seed=40):
+    return ("-----BEGIN " + kind + "-----" + sep + headers + rnd(64, ALNUM + "+/", seed) + sep)
+
+
+@pytest.mark.parametrize("text", [
+    pem("RSA PRIVATE KEY", "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,0A1B2C3D4E5F\n\n"),
+    pem("PGP PRIVATE KEY BLOCK", "Version: GnuPG v2\n\n"),
+    pem(sep="\\n"),
+    pem("EC PRIVATE KEY", "Proc-Type: 4,ENCRYPTED\\nDEK-Info: AES-128-CBC,0A1B2C3D\\n\\n", sep="\\n"),
+], ids=["encrypted-pem", "pgp-block", "escaped-newlines", "escaped-encrypted"])
+def test_redo2_private_keys_with_headers_or_escaped_lines(text):
+    assert load_capture().scan_output([text])[0] == ["private_key"]
+
+
+@pytest.mark.parametrize("text, found, placeholders", [
+    ("postgres://testuser:" + rnd(16, ALNUM, 41) + "@db/x", ["url_credentials"], []),
+    ("mysql://root:" + "to" + "or@localhost/x", ["url_credentials"], []),
+    ("redis://app:" + "your-password-here@cache:6379", [], ["url_credentials"]),
+    ("key = sk-" + rnd(32, "0123456789abcdef", 42), ["sk_api_key"], []),
+    ("key = sk-" + rnd(30, UP + LOW, 43), [], ["sk_api_key"]),
+    ("id AK" + "IA" + "BCDEF" * 3 + "B", ["aws_access_key_id"], []),
+    ("id AK" + "IA" + "BCDE" * 4, [], ["aws_access_key_id"]),
+    (b64url({"alg": "HS256"}) + "." + b64url({"sub": "1234567890", "name": "Jane Roe"}) + "."
+     + rnd(43, B64URL, 44), ["jwt"], []),
+], ids=["user-name-with-marker", "short-password", "password-placeholder", "lowercase-hex-sk",
+        "letters-only-sk", "eight-distinct", "seven-distinct", "jwt-sub-without-sample-name"])
+def test_redo2_placeholder_checks_look_at_the_secret_only(text, found, placeholders):
+    assert load_capture().scan_output([text])[:2] == (found, placeholders)
+
+
+HEX23 = rnd(23, "0123456789abcdef", 46)
+
+
+@pytest.mark.parametrize("command, head", [
+    ("'' rm -rf x", None),
+    (rnd(32, "0123456789abcdef", 45) + " x", None),
+    (HEX23 + " x", HEX23),
+    ("Ab1" * 5 + "Z x", None),
+    ("Ab1" * 5 + " x", "Ab1" * 5),
+], ids=["empty-quoted-word", "hex-token-32", "hex-23-kept", "mixed-16", "mixed-15-kept"])
+def test_redo2_command_head_edges(command, head):
+    assert load_capture().command_head(command) == head
+
+
+def test_redo2_a_secret_in_a_path_is_redacted(tmp_path):
+    token = FAKE["github_token"]
+    pre = dict(fixture("pretooluse-bash.json"), tool_name="Read",
+               tool_input={"file_path": "/tmp/" + token + "/notes.txt"})
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(pre, log))
+    (rec,) = lines(log)
+    assert rec["input_meta"]["path"] == "/tmp/[redacted:github_token]/notes.txt"
+    assert token not in log.read_text()
+    placeholder = "/srv/AK" + "IAIOSFODNN7" + "EXAMPLE/x"
+    assert load_capture().input_meta("Read", {"file_path": placeholder}) == {"path": placeholder}
+
+
+def test_redo2_null_output_is_nothing_to_scan(tmp_path):
+    rec, _ = post_with(None, tmp_path)
+    assert rec["output_meta"] == {"scan": "none"}
+
+
+def test_redo2_capped_scan_covers_the_start_in_document_order():
+    capture = load_capture()
+    head = {"first": FAKE["npm_token"], "second": "a" * 100}
+    assert capture.scan_output([head], limit=60)[0] == ["npm_token"]
+    assert list(capture.strings_in({"a": ["b", "c"], "d": "e"})) == ["a", "b", "c", "d", "e"]
+
+
+def test_redo2_hashing_also_runs_before_the_lock(tmp_path, monkeypatch):
+    capture = load_capture()
+    order = []
+    real_hash, real_lock = capture.canonical_sha256, capture.lock
+    monkeypatch.setattr(capture, "canonical_sha256", lambda v: order.append("hash") or real_hash(v))
+    monkeypatch.setattr(capture, "lock", lambda f: order.append("lock") or real_lock(f))
+    capture.append(str(tmp_path / "trace.jsonl"), fixture("posttooluse-bash.json"))
+    assert order == ["hash", "hash", "lock"]
+
+
+def test_redo2_the_deadline_is_cancelled_before_the_write(tmp_path, monkeypatch):
+    capture = load_capture()
+    calls = []
+    monkeypatch.setattr(capture.signal, "alarm", lambda n: calls.append(n) or 0)
+    log = tmp_path / "trace.jsonl"
+    capture.append(str(log), fixture("pretooluse-bash.json"))
+    assert calls == [0] and len(lines(log)) == 1

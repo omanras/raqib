@@ -82,8 +82,9 @@ def _bad_char(c):
     if c == "\t":
         return False
     return (o < 0x20 or 0x7F <= o <= 0x9F or (o > 0x7F and c.isspace())
-            or o in (0x200B, 0x200E, 0x200F, 0x2028, 0x2029, 0xFEFF) or 0x202A <= o <= 0x202E
-            or 0x2066 <= o <= 0x2069)
+            or o in (0x061C, 0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2028, 0x2029, 0xFEFF)
+            or 0x202A <= o <= 0x202E or 0x2060 <= o <= 0x2064 or 0x2066 <= o <= 0x2069
+            or 0xD800 <= o <= 0xDFFF)
 
 
 def _lines(text):
@@ -281,6 +282,8 @@ def _inline(text, number):
 
 
 def _plain(token, number):
+    if token == "-" or token.startswith("- "):
+        raise YamlError("a block sequence entry cannot follow a key on the same line", number)
     if token and token[0] in UNSUPPORTED_START:
         raise YamlError("unsupported YAML feature or indicator %r at the start of a value"
                         % token[0], number)
@@ -319,6 +322,8 @@ def _quoted(text, start, number):
             if c == "\\":
                 code = text[i + 1:i + 2]
                 if code in ESCAPES:
+                    if _bad_char(ESCAPES[code]):
+                        raise YamlError("escape \\%s is a control character" % code, number)
                     out.append(ESCAPES[code])
                     i += 2
                     continue

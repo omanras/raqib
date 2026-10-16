@@ -104,3 +104,35 @@ def parse_ts(value):
     if ts.tzinfo is None:
         return None
     return ts
+
+
+FIELDS = ("ts", "seq", "session_id", "phase", "tool", "tool_use_id", "input_sha256", "input_meta",
+          "output_sha256", "output_meta", "ok", "error_class", "cwd")
+
+
+def strict_problem(rec):
+    """Why a hand-written line (a fixture or an eval event) is not in the shape
+    capture writes, or None. Stricter than parse(): an unknown or misspelled
+    field, or a tool line without its tool, input_meta or ok, would otherwise
+    be judged "does not apply" and pass as a clean negative (A6)."""
+    if not is_record(rec):
+        return "no session_id and int seq"
+    if parse_ts(rec.get("ts")) is None:
+        return "no valid ts"
+    if rec.get("phase") not in PHASES:
+        return "unknown phase %r" % (rec.get("phase"),)
+    unknown = sorted(set(rec) - set(FIELDS))
+    if unknown:
+        return "unknown field(s) %s" % ", ".join(unknown)
+    if not (isinstance(rec.get("tool"), str) and rec["tool"]):
+        return "no tool"
+    if not (isinstance(rec.get("cwd"), str) and rec["cwd"]):
+        return "no cwd"
+    if rec["phase"] in ("pre", "post"):
+        if not isinstance(rec.get("input_meta"), dict):
+            return "a tool line needs input_meta"
+        if rec["phase"] == "post" and not isinstance(rec.get("ok"), bool):
+            return "a post needs ok"
+        if "output_meta" in rec and not isinstance(rec["output_meta"], dict):
+            return "output_meta must be a mapping"
+    return None

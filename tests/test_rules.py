@@ -29,7 +29,7 @@ except ImportError:  # the cross-check is optional; raqib itself is stdlib-only
 
 DOCS = [
     "a: 1\nb: -2.5\nc: ~\nd:\ne: true\nf: 'x # not a comment'  # a comment\n"
-    "g: \"\\u0041\\n\\t\"\nh: [1, [2, 3], {k: v}]\ni: {}\nj: []\nk: .5\nl: +7\nm: False\n",
+    "g: \"\\u0041\\/\\t\"\nh: [1, [2, 3], {k: v}]\ni: {}\nj: []\nk: .5\nl: +7\nm: False\n",
     "- a\n- - b\n  - c\n- k: v\n  l: w\n-\n  m: n\n",
     "a:\n- 1\n- x: [a, 'b']\n  y:\n  - z\nb: ''\nc: \"it's\"\nd: it's fine\n",
     "---\n# leading comment\nkey/with.dots-and_under: \"v\"\n'quoted key': 1\n",
@@ -39,6 +39,11 @@ DOCS = [
     'summary: a - "b # c"\nregex: =["\'] # note\nk: it\'s # c\nm: b - c\n',
     "- a: 'x # y'\n  b: \"z\"\n- [a, 'b # c']\n- {k: a#b}\n",
 ]
+
+
+def test_redo2_y1_quotes_inside_plain_values_without_pyyaml():
+    assert yamlite.loads(DOCS[6]) == {"summary": 'a - "b', "regex": "=[\"']", "k": "it's", "m": "b - c"}
+    assert yamlite.loads(DOCS[7]) == [{"a": "x # y", "b": "z"}, ["a", "b # c"], {"k": "a#b"}]
 
 
 @pytest.mark.parametrize("text", DOCS + [p.read_text() for p in sorted(CATALOG.glob("*.yaml"))])
@@ -51,7 +56,7 @@ def test_e1_subset_agrees_with_pyyaml(text):
 def test_e1_values():
     assert yamlite.loads(DOCS[0]) == {
         "a": 1, "b": -2.5, "c": None, "d": None, "e": True, "f": "x # not a comment",
-        "g": "A\n\t", "h": [1, [2, 3], {"k": "v"}], "i": {}, "j": [], "k": 0.5, "l": 7, "m": False}
+        "g": "A/\t", "h": [1, [2, 3], {"k": "v"}], "i": {}, "j": [], "k": 0.5, "l": 7, "m": False}
     assert yamlite.loads("") is None
     assert yamlite.loads("# only a comment\n") is None
 
@@ -91,6 +96,15 @@ ERRORS = [
     ("a: " + chr(0x202E) + "x", 1, "U+202E"),
     ('a: "' + chr(92) + 'x1b[31m"', 1, "control or invisible"),
     ('a: "' + chr(92) + 'u202e"', 1, "control or invisible"),
+    ('a: "x' + chr(92) + 'ny"', 1, "escape \\n is a control character"),
+    ('a: "' + chr(92) + 'r"', 1, "escape \\r is a control character"),
+    ('a: "' + chr(92) + 'b"', 1, "escape \\b is a control character"),
+    ('a: "' + chr(92) + 'ud800"', 1, "control or invisible"),
+    ("a: x" + chr(0x200C) + "y", 1, "U+200C"),
+    ("a: x" + chr(0x061C) + "y", 1, "U+061C"),
+    ("a: x" + chr(0x2060) + "y", 1, "U+2060"),
+    ("a: - x", 1, "block sequence entry"),
+    ("a: -", 1, "block sequence entry"),
     ("%YAML 1.2\n---\na: 1", 1, "unsupported"),
     ("a: 1\nb: 2\na: 3", 3, "duplicate key 'a'"),
     ("a: {b: 1, b: 2}", 1, "duplicate key 'b'"),
@@ -684,7 +698,7 @@ def test_redo_runner_unmeasured_equal_budget_and_expected_seq(tmp_path):
 
 @pytest.mark.parametrize("rule_id, fixture, expected", [
     ("SCOPE-CWD-ROOT", "positive-root-and-home.json",
-     [("fixture-rules-cwdroot-1", [1]), ("fixture-rules-cwdroot-2", [1])]),
+     [("fixture-rules-cwdroot-%d" % i, [1]) for i in (1, 2, 5, 6, 7, 8, 9, 10)]),
     ("SCOPE-CWD-MOVED", "positive-cd-out.json", [("fixture-rules-cwdmoved-1", [1, 3])]),
 ])
 def test_redo_cwd_rules(rule_id, fixture, expected):
@@ -696,3 +710,75 @@ def test_redo_cwd_rules(rule_id, fixture, expected):
 def test_redo_drift_counts_completed_edits_by_placed_path():
     lines, ctx, _ = fixtures.load_fixture(RULE_FIXTURES / "DRIFT-FILES" / "negative-two-files.json")
     assert drift(lines, ctx) == ([], [])
+
+
+# --- M1.1+M1.2 REDO 2 (docs/review/2026-10-16-M1.1-M1.2-REDO.md) ------------
+
+def judged(match, rec, context=None):
+    """(fired, unknown) of one rule on one line."""
+    found, unknown = engine.judge(rule_for(match), [rec], context or {})
+    return bool(found), bool(unknown)
+
+
+@pytest.mark.parametrize("op", ["regex", "prefix", "glob"])
+@pytest.mark.parametrize("value", [None, 7, ["a"]])
+def test_redo2_string_tests_on_non_strings_are_unknown(op, value):
+    rec = dict(line(1), input_meta={"x": value})
+    pred = {"field": "input_meta.x", op: "a"}
+    assert judged(pred, rec) == (False, True)
+    assert judged({"not": pred}, rec) == (False, True)
+
+
+def test_redo2_an_unplaceable_root_with_an_absolute_path_is_unknown():
+    rec = line(1, tool="Edit", path="/work/p/src/a.py")
+    pred = {"field": "input_meta.path", "outside_any": "scope"}
+    assert judged(pred, rec, {"scope": ["src", ""]}) == (False, True)
+    assert judged(pred, rec, {"scope": ["src", "lib"], "root": "relative/root"}) == (False, True)
+    assert judged(pred, rec, {"scope": ["src"]}) == (False, False)
+    other = dict(line(1), cwd="relative/cwd", input_meta={"path": "/etc/x", "root": "/work/p"})
+    assert judged({"field": "input_meta.path", "outside": "input_meta.root"}, other) == (True, False)
+    assert judged({"field": "input_meta.path", "outside": "input_meta.nothere"}, other) == (False, True)
+
+
+def test_redo2_a_negative_that_fires_counts_even_with_unjudged_lines(tmp_path):
+    rule = rule_for({"field": "input_meta.x", "eq": "bad"})
+    lines = [dict(line(1), input_meta={"x": "bad"}), line(2)]
+    path = tmp_path / "neg.json"
+    path.write_text(json.dumps(lines))
+    assert fixtures.outcome(rule, path) == (True, {1}, True)
+
+
+@pytest.mark.parametrize("change, fragment", [
+    (lambda r: r.update(tol="Bash"), "unknown field"),
+    (lambda r: r.pop("tool"), "no tool"),
+    (lambda r: r.pop("cwd"), "no cwd"),
+    (lambda r: r.pop("input_meta"), "input_meta"),
+    (lambda r: r.update(phase="post"), "ok"),
+    (lambda r: r.update(output_meta=[]), "output_meta"),
+], ids=["misspelled-key", "no-tool", "no-cwd", "no-input-meta", "post-without-ok", "bad-output-meta"])
+def test_redo2_fixture_lines_must_have_the_capture_shape(tmp_path, change, fragment):
+    rec = line(1)
+    change(rec)
+    path = tmp_path / "f.json"
+    path.write_text(json.dumps([rec]))
+    with pytest.raises(fixtures.FixtureError, match=fragment):
+        fixtures.load_fixture(path)
+
+
+def test_redo2_committed_rule_fixtures_are_what_the_generator_writes(tmp_path, monkeypatch):
+    import runpy
+    monkeypatch.chdir(tmp_path)
+    runpy.run_path(str(RULE_FIXTURES / "generate.py"))
+    made = sorted(p.relative_to(tmp_path) for p in (tmp_path / "tests").rglob("*.json"))
+    assert made, "the generator wrote nothing"
+    for rel in made:
+        assert (tmp_path / rel).read_bytes() == (ROOT / rel).read_bytes(), rel
+    committed = sorted(p.relative_to(ROOT) for p in RULE_FIXTURES.rglob("*.json"))
+    assert made == committed
+
+
+def test_redo2_scope_cwd_moved_summary_matches_its_citations():
+    lines, _, _ = fixtures.load_fixture(RULE_FIXTURES / "SCOPE-CWD-MOVED" / "positive-cd-out.json")
+    (f,) = engine.evaluate([catalog_rule("SCOPE-CWD-MOVED")], lines)[0]
+    assert f["summary"] == "session ran in 2 working directories; each is cited where it first appears"
+    assert f["cited_seq"] == [1, 3]

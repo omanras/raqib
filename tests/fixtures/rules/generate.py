@@ -102,10 +102,15 @@ write(R + "DRIFT-FILES/negative-two-files.json", s.lines, scope)
 # SCOPE-CWD-ROOT
 a = S("fixture-rules-cwdroot-1", cwd="/"); first_a = a.event("session_start"); a.bash("ls")
 b = S("fixture-rules-cwdroot-2", cwd="/home/alice"); first_b = b.call("Read", {"path": "/home/alice/notes.txt"})
-write(R + "SCOPE-CWD-ROOT/positive-root-and-home.json", a.lines + b.lines)
+more = []
+for i, cwd in enumerate(["/root", "/Users/bob", "/tmp", "/home/carol/.", "/mnt/c/Users/dan", "/var/root"], start=5):
+    m = S("fixture-rules-cwdroot-%d" % i, cwd=cwd); m.event("session_start"); m.bash("ls"); more += m.lines
+write(R + "SCOPE-CWD-ROOT/positive-root-and-home.json", a.lines + b.lines + more)
 a = S("fixture-rules-cwdroot-3", cwd="/home/alice/project"); a.event("session_start"); a.bash("ls")
 b = S("fixture-rules-cwdroot-4"); b.call("Read", {"path": CWD + "/a.py"})
-write(R + "SCOPE-CWD-ROOT/negative-project-dir.json", a.lines + b.lines)
+c = S("fixture-rules-cwdroot-11", cwd="/tmp/build-123"); c.event("session_start"); c.bash("make")
+d = S("fixture-rules-cwdroot-12", cwd="/opt/app"); d.event("session_start"); d.bash("ls")
+write(R + "SCOPE-CWD-ROOT/negative-project-dir.json", a.lines + b.lines + c.lines + d.lines)
 # SCOPE-CWD-MOVED
 s = S("fixture-rules-cwdmoved-1"); first = s.event("session_start"); s.bash("ls"); s.cwd = "/tmp"; moved = s.bash("cat"); s.cwd = "/tmp/"; s.bash("ls")
 write(R + "SCOPE-CWD-MOVED/positive-cd-out.json", s.lines, expect=[first, moved])

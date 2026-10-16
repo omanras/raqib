@@ -4,12 +4,15 @@ title: Session runs from the file system root or a home directory
 class: SCOPE
 severity: medium
 fp_budget: 0.1
-description: "SCOPE-PATH measures paths against the session's cwd. A cwd of /, /root, /home/<user> or /Users/<user> puts almost every path inside, so the project boundary is gone."
+description: "SCOPE-PATH measures paths against the session's cwd. A cwd of /, a broad top-level directory such as /tmp or /home, a home directory (/root, /home/<user>, /Users/<user>, /var/root) or a WSL drive puts almost every path inside, so the project boundary is gone. A home directory elsewhere is not known to this rule."
 summary: "session cwd {cwd} gives no project boundary"
 match:
   all:
     - {field: phase, in: [pre, session_start]}
-    - {field: cwd, regex: "^(/|/root|/home/[^/]+|/Users/[^/]+)/?$"}
+    # /, a broad top-level directory, a home directory, or a WSL drive or home;
+    # any case (macOS); a trailing / or /. is allowed.
+    - field: cwd
+      regex: '(?i)^/(?:(?:root|home|users|tmp|mnt|media|srv|opt|var/tmp|var/root)|(?:home|users)/[^/]+|mnt/[a-z](?:/users/[^/]+)?)?(?:/\.)?/?$'
 aggregate: {distinct: cwd, over: 0, as: path, cite: first}
 fixtures:
   positive:

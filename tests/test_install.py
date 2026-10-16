@@ -493,3 +493,28 @@ def test_redo_real_file_tools_and_a_real_failure():
                      (4, "Read", True, None, "full"), (5, "Read", False, "failure", "full")]
     assert all(r["input_meta"]["path"].startswith(r["cwd"] + "/") for r in recs if r["phase"] == "pre")
     assert silence.findings(recs) == []
+
+
+def test_redo2_a_failed_directory_sync_is_a_warning_not_nothing_changed(tmp_path):
+    # Run the installer's Python with os.fsync failing on directories only.
+    proj = project(tmp_path)
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    (shim / "sitecustomize.py").write_text(
+        "import os, stat\n"
+        "_fsync = os.fsync\n"
+        "def fsync(fd):\n"
+        "    if stat.S_ISDIR(os.fstat(fd).st_mode):\n"
+        "        raise OSError(5, 'simulated directory fsync failure')\n"
+        "    return _fsync(fd)\n"
+        "os.fsync = fsync\n")
+    script = INSTALL.read_text().replace("exec python3 -I -", "exec python3 -")
+    (tmp_path / "raqib" / "hooks").mkdir(parents=True)
+    (tmp_path / "raqib" / "hooks" / "capture.py").write_text("")
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    (tools / "install-hooks.sh").write_text(script)
+    proc = install(tmp_path, proj, installer=tools / "install-hooks.sh", PYTHONPATH=str(shim))
+    assert proc.returncode == 0, proc.stderr
+    assert "could not be synced" in proc.stderr and "nothing changed" not in proc.stderr
+    assert len(settings_of(proj)["hooks"]) == 6

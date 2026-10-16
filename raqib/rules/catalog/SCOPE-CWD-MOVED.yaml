@@ -5,7 +5,7 @@ class: SCOPE
 severity: medium
 fp_budget: 0.1
 description: "Every rule that places paths uses each line's cwd. When the cwd of one session changes, the boundary those rules measure against moves with it."
-summary: "session cwd changed {count} times; latest {cwd} at seq {seq}"
+summary: "session ran in {count} working directories; each is cited where it first appears"
 match:
   {field: phase, in: [pre, post, session_start, session_end, stop]}
 aggregate: {distinct: cwd, over: 1, as: path, cite: first}

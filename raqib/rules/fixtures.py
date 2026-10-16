@@ -7,8 +7,10 @@ A fixture file is one of:
   (*.json), for rules that need context such as a task scope, or positives
   that must cite particular seqs;
 - a raw trace as capture writes it (*.log), e.g. a real Claude Code run.
-Every line must be a sound trace record (session_id, int seq, valid ts, known
-phase); a malformed fixture is an error, never a silent pass.
+Every line of a JSON fixture must be in the shape capture writes
+(trace.strict_problem: known fields only, int seq, valid ts, known phase,
+tool, cwd, input_meta on tool lines, ok on posts); a malformed fixture is an
+error, never a silent pass.
 
 For each rule:
 - every positive fixture must make it fire, citing every seq in expect_seq
@@ -62,9 +64,9 @@ def load_fixture(path):
     else:
         raise FixtureError("%s: a fixture is a list of trace lines or {lines, context?, expect_seq?}" % path)
     for i, rec in enumerate(lines):
-        if not trace.is_record(rec) or trace.parse_ts(rec.get("ts")) is None \
-                or rec.get("phase") not in trace.PHASES:
-            raise FixtureError("%s: line %d is not a sound trace record: %r" % (path, i + 1, rec))
+        problem = trace.strict_problem(rec)
+        if problem:
+            raise FixtureError("%s: line %d is not a sound trace record (%s): %r" % (path, i + 1, problem, rec))
     return lines, ctx, expect
 
 

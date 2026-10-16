@@ -29,7 +29,8 @@ predicate {field: <dotted path>, <op>: <arg>} with exactly one op:
     outside_any    <context key> path not under any path of context[key]
 
 Logic is three-valued (A3): a predicate that cannot judge a line, because a
-field it reads is missing or a path cannot be placed, gives "unknown", not
+field it reads is missing, a string test (regex, prefix, glob) meets a value
+that is not a string, or a path cannot be placed, gives "unknown", not
 false. `not unknown` is unknown; `all` is false if any part is false, else
 unknown if any part is unknown; `any` is true if any part is true, else
 unknown if any part is unknown. `exists` always judges. A rule fires only on
@@ -311,10 +312,10 @@ def _predicate(node, where, rule):
                 pattern = re.compile(arg)
             except re.error as exc:
                 raise _NodeError("%s: bad regex (%s)" % (at, exc))
-            return on_value(lambda v: isinstance(v, str) and bool(pattern.search(v)))
+            return on_value(lambda v: bool(pattern.search(v)) if isinstance(v, str) else UNKNOWN)
         if op == "prefix":
-            return on_value(lambda v: isinstance(v, str) and v.startswith(arg))
-        return on_value(lambda v: isinstance(v, str) and fnmatch.fnmatchcase(v, arg))
+            return on_value(lambda v: v.startswith(arg) if isinstance(v, str) else UNKNOWN)
+        return on_value(lambda v: fnmatch.fnmatchcase(v, arg) if isinstance(v, str) else UNKNOWN)
     if op == "outside":
         if not (isinstance(arg, str) and FIELD.match(arg)):
             raise _NodeError("%s: must name another field, e.g. cwd" % at)

@@ -218,17 +218,22 @@ if changed:
         os.chmod(tmp, mode)
         os.replace(tmp, target)
         tmp = None
-        # The rename itself is durable only once the directory is synced.
+    except OSError as exc:
+        fail("cannot write %s (%s); nothing changed" % (target, exc))
+    finally:
+        if tmp is not None and os.path.exists(tmp):
+            os.unlink(tmp)
+    # The rename is durable only once the directory is synced. The file is
+    # already replaced, so a failure here is a warning, not "nothing changed".
+    try:
         dir_fd = os.open(target_dir, os.O_RDONLY)
         try:
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
     except OSError as exc:
-        fail("cannot write %s (%s); nothing changed" % (target, exc))
-    finally:
-        if tmp is not None and os.path.exists(tmp):
-            os.unlink(tmp)
+        print("install-hooks: warning: %s was written, but its directory could not be synced (%s)"
+              % (target, exc), file=sys.stderr)
 
 print("install-hooks: %s%s" % (settings_path, "" if changed else " (file not rewritten)"))
 for event, status in report:

@@ -76,9 +76,9 @@ def check_event(event, index, seen):
     if not (isinstance(lines, list) and lines):
         raise EventError("%s: lines must be a non-empty list" % where)
     for n, rec in enumerate(lines, start=1):
-        if not (trace.is_record(rec) and trace.parse_ts(rec.get("ts")) is not None
-                and rec.get("phase") in trace.PHASES):
-            raise EventError("%s: line %d is not a sound trace record" % (where, n))
+        problem = trace.strict_problem(rec)
+        if problem:
+            raise EventError("%s: line %d is not a sound trace record (%s)" % (where, n, problem))
 
 
 def label_counts(events):
