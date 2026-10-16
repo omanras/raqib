@@ -142,7 +142,7 @@ OTHER = {
         "Stop": [{"hooks": [{"type": "command", "command": "/opt/exit-gate.sh"}]}],
         "Notification": [{"hooks": [{"type": "command", "command": "notify-send hi"}]}],
     },
-    "note": "رقيب",
+    "note": "\u0631\u0642\u064a\u0628",
 }
 
 
@@ -158,7 +158,7 @@ def test_e2_existing_hooks_and_settings_are_kept(tmp_path):
     for event in EVENTS:
         assert len(raqib_hooks(settings, event)) == 1
     assert install(tmp_path, proj).stdout.count("unchanged") == 6
-    assert "رقيب" in (proj / ".claude" / "settings.json").read_text("utf-8")
+    assert "\u0631\u0642\u064a\u0628" in (proj / ".claude" / "settings.json").read_text("utf-8")
 
 
 def test_e2_legacy_entry_is_replaced_and_reported(tmp_path):
@@ -380,9 +380,10 @@ def test_b2_pythonpath_cannot_shadow_the_stdlib(tmp_path):
     assert len(trace_lines(proj / "raqib.log.jsonl")) == 5
 
 
-def test_e3_real_claude_code_trace_is_clean():
-    """Trace from the README quickstart, recorded with Claude Code 2.1.301."""
-    recs = fixture("quickstart-claude-code-2.1.301.json")
+def test_e3_real_quickstart_trace_is_clean():
+    """Raw trace of the README quickstart: fresh clone of b72f109, Claude Code 2.1.301."""
+    recs, problems = trace.read(FIXTURES / "quickstart-claude-code-2.1.301.log")
+    assert problems == []
     assert [(r["phase"], r["seq"]) for r in recs] == [
         ("session_start", 1), ("pre", 2), ("post", 2), ("stop", 3), ("session_end", 4)]
     pre, post = recs[1], recs[2]
@@ -390,4 +391,16 @@ def test_e3_real_claude_code_trace_is_clean():
     assert pre["input_meta"] == {"command_head": "echo"}
     assert post["ok"] is True
     assert silence.findings(recs) == []
-    assert trace is not None
+
+
+def test_e3_real_blocked_calls_leave_a_pre_without_post():
+    """Raw trace: Claude Code blocked `ls` and `cd` outside the project; `whoami` ran.
+    A blocked call fires PreToolUse only, so SILENCE-HALF reports it (M0.3 questions)."""
+    recs, problems = trace.read(FIXTURES / "blocked-calls-claude-code-2.1.301.log")
+    assert problems == []
+    assert [(r["phase"], r["seq"], r["input_meta"].get("command_head") if "input_meta" in r else None)
+            for r in recs] == [
+        ("session_start", 1, None), ("pre", 2, "ls"), ("pre", 3, "cd"), ("pre", 4, "whoami"),
+        ("post", 4, "whoami"), ("stop", 5, None), ("session_end", 6, None)]
+    assert [(f["rule_id"], f["cited_seq"]) for f in silence.findings(recs)] == [
+        ("SILENCE-HALF", [2]), ("SILENCE-HALF", [3])]

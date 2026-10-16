@@ -10,30 +10,38 @@ with deterministic rules first, and lets a model raise suspicion — never acqui
 ## Quickstart (capture)
 Needs Linux or macOS, `python3` (stdlib only) and Claude Code.
 ```bash
-git clone <this repo> raqib && cd raqib
+git clone https://github.com/omanras/raqib raqib && cd raqib
 tools/gate.sh                                   # must end with [gate] GREEN
 tools/install-hooks.sh /path/to/watched-project # adds six hooks to its .claude/settings.json
 
 cd /path/to/watched-project
-claude -p "Use the Bash tool to run: echo raqib-quickstart" --allowedTools "Bash(echo:*)"
+claude -p "Use the Bash tool to run: echo raqib-quickstart" --model haiku --max-turns 3 --allowedTools "Bash(echo:*)"
 cat raqib.log.jsonl
 ```
-The `claude -p` call above was run with Claude Code 2.1.301 on 2026-10-16. It
-wrote five lines (`ts` and `cwd` left out here; the full trace is
-`tests/fixtures/quickstart-claude-code-2.1.301.json`):
+These exact steps were run on 2026-10-16 from a fresh clone of commit
+`b72f109` (branch `claude/v0.1`) with Claude Code 2.1.301. The builder ran the
+`claude` line under `env -i` with a throwaway `HOME`, to keep it apart from its
+own Claude Code session. The run wrote five lines; `ts` and `cwd` are left out
+here, and the raw file is `tests/fixtures/quickstart-claude-code-2.1.301.log`:
 ```
 {"seq":1,"phase":"session_start","tool":"-", ...}
-{"seq":2,"phase":"pre","tool":"Bash","tool_use_id":"toolu_01WG...","input_sha256":"a970...","input_meta":{"command_head":"echo"}, ...}
-{"seq":2,"phase":"post","tool":"Bash","tool_use_id":"toolu_01WG...","output_sha256":"9728...","ok":true, ...}
+{"seq":2,"phase":"pre","tool":"Bash","tool_use_id":"toolu_01QS...","input_sha256":"05a4...","input_meta":{"command_head":"echo"}, ...}
+{"seq":2,"phase":"post","tool":"Bash","tool_use_id":"toolu_01QS...","output_sha256":"9728...","ok":true, ...}
 {"seq":3,"phase":"stop","tool":"-", ...}
 {"seq":4,"phase":"session_end","tool":"-", ...}
 ```
-One `pre` and one `post` line share seq 2: that is one tool call. Inputs and
-outputs are stored only as sha256 hashes. If the log cannot be written, the
-hook still exits 0 and prints one `RAQIB-SILENCE:` line to stderr; it never
-blocks the agent. `--log PATH` writes the trace somewhere else, for example
-outside the project, so it is not in the watched agent's working tree. The
-agent runs as your user and could still reach it there.
+The `pre` and `post` lines share seq 2: they are one tool call. Inputs and
+outputs are stored only as sha256 hashes. The trace path is absolute
+(`<project>/raqib.log.jsonl` by default), so it does not move when the agent
+changes directory. `--log PATH` puts it elsewhere, for example outside the
+project's working tree; the agent runs as your user and could still reach it.
+
+The hook never blocks the agent. If the log cannot be written, or python3 or
+the Raqib checkout is gone, it exits 0 and prints one line beginning
+`RAQIB-SILENCE:` to the hook's stderr. Run `claude --debug` to have Claude Code
+write that stderr to `~/.claude/debug/<session>.txt`. A call that
+Claude Code itself blocks fires PreToolUse only, so it shows up as a `pre`
+with no `post` (see `tests/fixtures/blocked-calls-claude-code-2.1.301.log`).
 Re-running the installer changes nothing; other hooks are kept.
 
 ## How this repo is built
