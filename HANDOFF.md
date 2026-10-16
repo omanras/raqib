@@ -1,28 +1,27 @@
-# HANDOFF — M1.1  (phase 1: rule schema + loader + fixture runner)
+# HANDOFF — M1.2  (phase 1: rule set v1)
 
-Task: rules as YAML, one file per rule (ADR-0001 §4), loaded with a stdlib
-YAML-subset parser (A-7), evaluated by a pure engine, and checked by a fixture
-runner that measures each rule's false-positive rate against its budget (A6).
+Task: complete rule set v1 (DEVELOPMENT_PLAN M1.2): SCOPE-PATH, NET-TOOL and
+DESTRUCT-CMD (from M1.1) plus SECRET-OUTPUT (secret-in-output) and DRIFT-FILES
+(scope-drift). Capture records which secret patterns a tool output matched,
+by name only, so the rule stays deterministic and offline (A1, A-5).
 
 Scope:
   raqib/rules/
+  raqib/hooks/
   tests/test_rules.py
+  tests/test_capture.py
   tests/fixtures/
   docs/review/
 
 Exit criteria:
-- E1 Loader: stdlib-only YAML subset; anything outside the subset is an error
-     naming file and line, never a silent misread.
-- E2 Schema: id, title, class (SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT), match
-     (declarative over trace fields), severity, fp_budget, fixtures{positive[],
-     negative[]}; an invalid rule fails to load, naming the field.
-- E3 Engine: pure `(rules, trace lines, context) -> findings`; a finding is
-     {ts, rule_id, class, severity, session_id, cited_seq[], summary}; one
-     without cited_seq is rejected (A5); no rule consults a model (A1).
-- E4 Runner: positives fire, negatives are counted as false positives; a rule
-     over its fp_budget must be `status: disabled` (A6). 3 rules ship, each
-     with ≥1 positive and ≥1 negative fixture; gate green.
+- E1 Five catalog rules, each with ≥1 positive and ≥1 negative fixture and a
+     measured fp_rate ≤ fp_budget on its negatives + the benign corpus (A6).
+- E2 Post lines carry output_meta.secret_kinds: sorted names of matched secret
+     patterns; the secret text never reaches the trace; gate secret scan green.
+- E3 DRIFT-FILES fires when one session edits more than 2 distinct files
+     outside context "scope"; without a scope it is not-evaluated (A3).
+- E4 Benign corpus gains a scoped session; earlier tests pass; gate green.
 
-Not in scope: capture, CLI, model layer, UI.
-Commit: `landed: M1.1 rule schema + loader + runner` or `STOP: M1.1 <reason>`.
+Not in scope: CLI/report (M1.3), model layer, UI.
+Commit: `landed: M1.2 rule set v1` or `STOP: M1.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
