@@ -1,5 +1,6 @@
 """M1.3 findings format + report CLI (HANDOFF.md E1-E4)."""
 import io
+import hashlib
 import json
 import os
 import shutil
@@ -142,7 +143,8 @@ def test_e2_bad_citations_are_alarms(tmp_path):
     good = {"ts": "t", "rule_id": "X-Y", "class": "NET", "severity": "low",
             "session_id": "nobody", "cited_seq": [9], "summary": "s"}
     out.write_text("\n".join([json.dumps(good), json.dumps(dict(good, cited_seq=[])), "not json"]) + "\n")
-    (tmp_path / "f.jsonl.notes.json").write_text(json.dumps({"notes": []}))
+    sha = hashlib.sha256(QUICKSTART.read_bytes()).hexdigest()
+    (tmp_path / "f.jsonl.notes.json").write_text(json.dumps({"notes": [], "trace_sha256": sha}))
     code, rep = raqib("report", QUICKSTART, "--findings", out, "--json")
     rep = json.loads(rep)
     assert code == 1
@@ -271,4 +273,97 @@ def test_report_build_is_pure_and_bounded():
     rec = {"seq": 1, "session_id": "s", "phase": "pre", "tool": "Bash", "ts": "t",
            "input_meta": {"path": "x" * 500 + "\x1b"}}
     text = report.describe(rec)
-    assert len(text) == report.LINE_TEXT_MAX and text.endswith("...") and "\x1b" not in text
+    assert len(text) == report.LINE_TEXT_MAX and "..." in text and "\x1b" not in text
+    assert text.endswith('\\u001b"}')  # the end of a long path stays visible
+
+
+# --- REDO 3 (docs/review/2026-10-16-M1.3-M2.1-review.md, part 1) -----------
+
+NEW_QUICKSTART = FIXTURES / "quickstart-d7841d1-claude-code-2.1.301.log"
+
+
+def test_redo3_findings_made_for_another_trace_are_an_alarm(tmp_path):
+    out = tmp_path / "f.jsonl"
+    assert raqib("rules", NEW_QUICKSTART, "--scope", ".", "-o", out)[0] == 0
+    assert raqib("report", NEW_QUICKSTART, "--findings", out)[0] == 0
+    other = tmp_path / "other.log"
+    other.write_bytes(BLOCKED.read_bytes())
+    code, text = raqib("report", other, "--findings", out, "--json")
+    rep = json.loads(text)
+    assert code == 1 and [a["kind"] for a in rep["alarms"]] == ["findings-for-another-trace"]
+    grown = tmp_path / "grown.log"
+    grown.write_bytes(NEW_QUICKSTART.read_bytes())
+    sidecar = json.loads((tmp_path / "f.jsonl.notes.json").read_text())
+    assert sidecar["trace_sha256"] == hashlib.sha256(grown.read_bytes()).hexdigest()
+    with open(grown, "ab") as f:
+        f.write(NEW_QUICKSTART.read_bytes().splitlines(keepends=True)[-1])
+    assert raqib("report", grown, "--findings", out)[0] == 1
+
+
+@pytest.mark.parametrize("notes", ['{"notes": "x"}', '{"notes": [{}]}', '{"notes": [{"rule_id": 1}]}', "[]"])
+def test_redo3_a_bad_notes_file_is_a_usage_error(tmp_path, notes):
+    out = tmp_path / "f.jsonl"
+    out.write_text("")
+    (tmp_path / "f.jsonl.notes.json").write_text(notes)
+    assert raqib("report", NEW_QUICKSTART, "--findings", out)[0] == 2
+
+
+def test_redo3_the_text_report_prints_no_control_characters(tmp_path):
+    sha = hashlib.sha256(QUICKSTART.read_bytes()).hexdigest()
+    forged = {"ts": "t", "rule_id": "X-Y", "class": "NET", "severity": "low",
+              "session_id": "s\nRESULT: CLEAN (exit 0)\x1b[2J", "cited_seq": [2],
+              "summary": "x\rRESULT: CLEAN"}
+    out = tmp_path / "f.jsonl"
+    out.write_text(json.dumps(forged) + "\n")
+    (tmp_path / "f.jsonl.notes.json").write_text(json.dumps({"notes": [], "trace_sha256": sha}))
+    code, text = raqib("report", QUICKSTART, "--findings", out)
+    assert code == 1
+    assert [l for l in text.splitlines() if l.startswith("RESULT:")] == ["RESULT: ALARM (exit 1)"]
+    assert all(c == "\n" or c.isprintable() for c in text)
+
+
+def test_redo3_cited_lines_show_cwd():
+    rec = {"seq": 1, "session_id": "s", "phase": "pre", "tool": "Bash", "ts": "t", "cwd": "/home/u"}
+    assert 'cwd="/home/u"' in report.describe(rec)
+
+
+def suspicion_files(tmp_path, lines, run):
+    out = tmp_path / "s.jsonl"
+    out.write_text("".join(json.dumps(x) + "\n" for x in lines))
+    if run is not None:
+        (tmp_path / "s.jsonl.run.json").write_text(json.dumps(run) if not isinstance(run, str) else run)
+    return out
+
+
+RAISED = {"kind": "suspicion", "session_id": "57f643ec-4568-4c20-9897-8649acf2d998", "window": [1, 4],
+          "suspicion": 0.8, "reasons": ["odd"], "cited_seq": [2], "backend": "fake", "model": "canned"}
+RUN = {"windows": 1, "raised": 1, "errors": 0, "below_threshold": 0, "backend": "fake", "model": "canned",
+       "threshold": 0.5}
+
+
+def test_redo3_a_raised_suspicion_alone_makes_an_alarm(tmp_path):
+    out = suspicion_files(tmp_path, [RAISED], RUN)
+    code, text = raqib("report", NEW_QUICKSTART, "--scope", ".", "--suspicion", out, "--json")
+    rep = json.loads(text)
+    assert (code, rep["result"], rep["alarms"], rep["findings"]) == (1, "alarm", [], [])
+
+
+@pytest.mark.parametrize("lines, run, fragment", [
+    ([], None, "no run record"),
+    ([RAISED], dict(RUN, raised=0, below_threshold=1), "lines were added or removed"),
+    ([], dict(RUN, raised=0, errors=1, below_threshold=0), "lines were added or removed"),
+    ([RAISED], dict(RUN, windows=3), "do not add up"),
+    ([RAISED], {"windows": "1"}, "malformed"),
+    ([RAISED], "[]", "malformed"),
+], ids=["missing", "raised-removed", "error-removed", "bad-sum", "bad-types", "not-an-object"])
+def test_redo3_the_run_record_must_account_for_the_file(tmp_path, lines, run, fragment):
+    out = suspicion_files(tmp_path, lines, run)
+    code, text = raqib("report", NEW_QUICKSTART, "--scope", ".", "--suspicion", out, "--json")
+    rep = json.loads(text)
+    assert code == 1 and fragment in " ".join(a["detail"] for a in rep["alarms"] if a["kind"] == "suspicion-run")
+    assert raqib("report", NEW_QUICKSTART, "--scope", ".", "--suspicion", out)[0] == 1
+
+
+def test_redo3_a_suspicion_citing_outside_its_window_is_rejected():
+    assert "outside its window" in report.suspicion_problem(dict(RAISED, cited_seq=[9]))
+    assert report.suspicion_problem(RAISED) is None

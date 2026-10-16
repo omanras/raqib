@@ -41,7 +41,8 @@ def with_silence_class(findings):
 
 
 def describe(rec):
-    """One-line, bounded rendering of a trace record (hashes left out)."""
+    """One-line, bounded rendering of a trace record (hashes left out). The
+    middle is elided, so the end of a long path stays visible."""
     parts = ["%s %s seq %s" % (rec.get("phase", "?"), rec.get("tool", "?"), rec.get("seq")),
              str(rec.get("ts", "-"))]
     for key in ("ok", "error_class"):
@@ -50,19 +51,23 @@ def describe(rec):
     for key in ("input_meta", "output_meta"):
         if rec.get(key):
             parts.append("%s=%s" % (key, json.dumps(rec[key], sort_keys=True)))
+    if "cwd" in rec:
+        parts.append("cwd=%s" % json.dumps(rec["cwd"]))
     text = "  ".join(parts)
     text = "".join(c if c.isprintable() else "?" for c in text)
     if len(text) > LINE_TEXT_MAX:
-        text = text[:LINE_TEXT_MAX - 3] + "..."
+        keep = LINE_TEXT_MAX - 3
+        text = text[:keep // 2] + "..." + text[-(keep - keep // 2):]
     return text
 
 
 def build(trace_path, numbered, problems, findings, notes, rules, findings_source,
-          suspicion=None, suspicion_run=None):
+          suspicion=None, suspicion_run=None, extra_alarms=()):
     """numbered: [(line number, record)]; problems: trace.parse problems;
     findings: dicts (from the engine or a findings file); notes: rule notes,
     or None when it is unknown which rules ran; rules: rule_table();
-    suspicion: lines of a suspicion.jsonl (M2.1), suspicion_run: its run record."""
+    suspicion: lines of a suspicion.jsonl (M2.1), suspicion_run: its run record;
+    extra_alarms: alarms found by the caller (e.g. findings for another trace)."""
     index = {}
     sessions = []
     for number, rec in numbered:
@@ -75,6 +80,7 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
                        "detail": "the trace has no records; silence is an alarm (A3)"})
     for p in problems:
         alarms.append({"kind": "trace-problem", "line": p["line"], "detail": p["reason"]})
+    alarms += [dict(a) for a in extra_alarms]
     items = []
     for f in findings:
         try:
@@ -95,6 +101,11 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
         else:
             label = "suspicion (%s/%s)" % (s.get("backend"), s.get("model"))
             raised.append(dict(s, cites=_cites(index, s["session_id"], s["cited_seq"], label, alarms)))
+    if suspicion is not None:
+        run_problem = suspicion_run_problem(suspicion_run, suspicion)
+        if run_problem:
+            alarms.append({"kind": "suspicion-run", "detail": run_problem})
+            suspicion_run = None
     if notes is None:
         notes = [{"rule_id": "*", "status": "unknown",
                   "detail": "no rule notes next to the findings file; which rules ran is unknown"}]
@@ -148,9 +159,35 @@ def suspicion_problem(line):
     if not (isinstance(cited, list) and cited and all(isinstance(c, int) and not isinstance(c, bool)
                                                        for c in cited)):
         return "suspicion without cited_seq is rejected (A5)"
+    if not all(isinstance(w, int) for w in window) or not all(window[0] <= c <= window[1] for c in cited):
+        return "suspicion cites seqs outside its window %r (A5): %r" % (window, cited)
     reasons = line.get("reasons")
     if not (isinstance(reasons, list) and reasons and all(isinstance(r, str) for r in reasons)):
         return "suspicion without reasons"
+    return None
+
+
+RUN_KEYS = {"windows": int, "raised": int, "errors": int, "below_threshold": int,
+            "backend": str, "model": str, "threshold": (int, float)}
+
+
+def suspicion_run_problem(run, lines):
+    """Why a suspicion run record does not account for its suspicion file,
+    or None. Without it, "nothing raised" and "the model never ran" look the
+    same (A3)."""
+    if run is None:
+        return ("no run record next to the suspicion file: whether, and how far, the model ran"
+                " is unknown")
+    if not isinstance(run, dict) or not all(
+            isinstance(run.get(k), t) and not isinstance(run.get(k), bool) for k, t in RUN_KEYS.items()):
+        return "the run record is malformed: %r" % (run,)
+    kinds = [x.get("kind") if isinstance(x, dict) else None for x in lines]
+    raised, errors = kinds.count("suspicion"), kinds.count("error")
+    if (run["raised"], run["errors"]) != (raised, errors):
+        return ("the run record counts %d raised and %d errors, but the file holds %d and %d:"
+                " lines were added or removed" % (run["raised"], run["errors"], raised, errors))
+    if run["windows"] != run["raised"] + run["errors"] + run["below_threshold"]:
+        return "the run record's counts do not add up to its %d windows" % run["windows"]
     return None
 
 
@@ -210,4 +247,7 @@ def render_text(report):
         out.append("  %-15s %-9s %-7s %-9s %s" % (r["id"], r["class"], r["severity"], budget, r["status"]))
     out.append("")
     out.append("RESULT: %s (exit %d)" % (report["result"].upper(), report["exit"]))
-    return "\n".join(out) + "\n"
+    # Every value can come from the trace or from files the agent can write:
+    # no control character may reach the terminal (a newline in a session id
+    # could print a fake RESULT line).
+    return "\n".join(_safe(line) for line in out) + "\n"

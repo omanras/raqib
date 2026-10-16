@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from raqib.suspect.core import BackendError
@@ -34,6 +35,10 @@ class OllamaBackend:
         if "://" not in self.url:
             self.url = "http://" + self.url
         self.timeout = timeout
+        host = urllib.parse.urlsplit(self.url).hostname or ""
+        # Not on this machine: trace metadata leaves it, over plain HTTP if
+        # the URL says so. The CLI says this on stderr.
+        self.remote = host not in ("localhost", "127.0.0.1", "::1")
         # A local model must never be reached through an HTTP proxy.
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -76,6 +81,7 @@ class AnthropicBackend:
         self.model = model or DEFAULT_ANTHROPIC_MODEL
         self.effort = effort
         self._client = client
+        self.last_model = None  # the model that answered the last call (response.model)
 
     @staticmethod
     def _sdk():
@@ -104,7 +110,7 @@ class AnthropicBackend:
                                "format": {"type": "json_schema", "schema": schema}},
             )
         except anthropic.AuthenticationError:
-            raise BackendError("anthropic: authentication failed (set ANTHROPIC_API_KEY or `ant auth login`)")
+            raise BackendError("anthropic: authentication failed (check ANTHROPIC_API_KEY)")
         except anthropic.RateLimitError:
             raise BackendError("anthropic: rate limited (429)")
         except anthropic.APIStatusError as exc:
@@ -115,10 +121,11 @@ class AnthropicBackend:
             # The SDK raises TypeError while building the request when it
             # finds no API key, auth token or other credentials.
             if "authentication" in str(exc):
-                raise BackendError("anthropic: no credentials (set ANTHROPIC_API_KEY or `ant auth login`)")
+                raise BackendError("anthropic: no credentials (set ANTHROPIC_API_KEY)")
             raise BackendError("anthropic: TypeError: %s" % exc)
         except Exception as exc:
             raise BackendError("anthropic: %s: %s" % (type(exc).__name__, exc))
+        self.last_model = getattr(response, "model", None)
         if response.stop_reason == "refusal":
             details = getattr(response, "stop_details", None)
             category = getattr(details, "category", None) if details else None
@@ -166,13 +173,13 @@ class FakeBackend:
 
 
 def _window_of(user):
-    """(session_id, first seq, last seq) from the first line of a rendered window."""
-    head = user.split("\n", 1)[0]
-    # "Session <json>, working directory <json>, seq A to B (N lines)."
-    session_json = head[len("Session "):head.index(", working directory ")]
-    tail = head[head.rindex(", seq ") + len(", seq "):]
-    first, rest = tail.split(" to ", 1)
-    return json.loads(session_json), int(first), int(rest.split(" ", 1)[0])
+    """(session_id, first seq, last seq) of a rendered window:
+    "Window of seq A to B (N lines).", then <session>, its JSON, </session>."""
+    head, tag, session_json = user.split("\n", 3)[:3]
+    if tag != "<session>":
+        raise BackendError("fake: cannot read the window header")
+    first, rest = head[len("Window of seq "):].split(" to ", 1)
+    return json.loads(session_json)["session_id"], int(first), int(rest.split(" ", 1)[0])
 
 
 def make_backend(name, model=None, ollama_url=None, effort=DEFAULT_EFFORT, answers=None):

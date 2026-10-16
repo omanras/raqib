@@ -17,6 +17,9 @@
       dropped, never recorded as clean; failures become error lines (A3).
       With -o, FILE.run.json records how many windows were judged.
       report TRACE --suspicion FILE shows the result with cited lines.
+      Exit 1 if anything was raised (or the trace is empty or corrupt), 3 if
+      no suspicion was raised but some window could not be judged, 0 if
+      nothing was raised (not a clearance, A2).
   ui TRACE [--findings FILE] [--suspicion FILE] [-o FILE | --serve [--port N]]
       Write the report as one static, read-only HTML page (timeline,
       findings, silence windows), or serve it on 127.0.0.1. Exit codes as
@@ -27,12 +30,14 @@
       ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json. Exit 0 once
       scored (errors are counted in the table), 2 on bad input.
 
-Exit codes: 0 clean, 1 alarm (any finding, empty or corrupt trace),
-3 incomplete (a rule did not run), 2 usage or unreadable input.
+Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
+corrupt trace, findings made for another trace), 3 incomplete (a rule did
+not run), 2 usage or unreadable input.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -173,8 +178,9 @@ def cmd_rules(args, out):
     found, notes = run_rules(records, rules, _context(args), _gap_seconds(args))
     text = "".join(json.dumps(f, sort_keys=True, ensure_ascii=True) + "\n" for f in found)
     if args.out:
-        sidecar = {"trace": args.trace, "notes": notes, "rules": report.rule_table(rules),
-                   "context": _context(args), "problems": problems}
+        sidecar = {"trace": args.trace, "trace_sha256": _trace_sha256(args.trace), "records": len(records),
+                   "notes": notes, "rules": report.rule_table(rules), "context": _context(args),
+                   "problems": problems}
         try:
             with open(args.out, "w", encoding="ascii") as f:
                 f.write(text)
@@ -189,9 +195,27 @@ def cmd_rules(args, out):
     return rep["exit"]
 
 
-def _read_findings(path):
+def _trace_sha256(path):
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError as exc:
+        raise UsageError("cannot read trace %s: %s" % (path, exc))
+
+
+def _check_notes(notes, path):
+    ok = isinstance(notes, list) and all(
+        isinstance(n, dict) and all(isinstance(n.get(k), str) for k in ("rule_id", "status", "detail"))
+        for n in notes)
+    if not ok:
+        raise UsageError("bad notes file %s: notes must be a list of {rule_id, status, detail}" % path)
+    return notes
+
+
+def _read_findings(path, with_sidecar=False):
     """Findings from a file; lines that are not JSON objects become rejected
-    findings so the report raises them (A5)."""
+    findings so the report raises them (A5). With with_sidecar, also return
+    the FILE.notes.json record (or None)."""
     found = []
     for number, raw in enumerate(_read_text(path, "findings file").split("\n"), start=1):
         if not raw.strip():
@@ -202,13 +226,14 @@ def _read_findings(path):
             item = None
         found.append(item if isinstance(item, dict) else {"_line": number})
     notes_path = path + ".notes.json"
-    notes = None
+    notes = sidecar = None
     if os.path.exists(notes_path):
         try:
-            notes = json.loads(_read_text(notes_path, "notes file"))["notes"]
+            sidecar = json.loads(_read_text(notes_path, "notes file"))
+            notes = _check_notes(sidecar["notes"], notes_path)
         except (ValueError, KeyError, TypeError) as exc:
             raise UsageError("bad notes file %s: %s" % (notes_path, exc))
-    return found, notes
+    return (found, notes, sidecar) if with_sidecar else (found, notes)
 
 
 def _read_jsonl(path, what):
@@ -238,16 +263,24 @@ def _report(args):
     numbered, problems = _read_trace(args.trace)
     rules = _catalog(args.catalog)
     suspicion, suspicion_run = _read_suspicion(args.suspicion) if args.suspicion else (None, None)
+    extra = []
     if args.findings:
-        found, notes = _read_findings(args.findings)
+        found, notes, sidecar = _read_findings(args.findings, with_sidecar=True)
         source = "file %s" % args.findings
+        # A findings file proves nothing about another trace (A3).
+        if sidecar is not None and sidecar.get("trace_sha256") != _trace_sha256(args.trace):
+            extra.append({"kind": "findings-for-another-trace",
+                          "detail": "%s.notes.json records trace %s with sha256 %s, but this trace's"
+                                    " sha256 is %s: the findings do not describe it (re-run `rules`)"
+                                    % (args.findings, sidecar.get("trace"), sidecar.get("trace_sha256"),
+                                       _trace_sha256(args.trace))})
     else:
         records = [rec for _, rec in numbered]
         found, notes = run_rules(records, rules, _context(args), _gap_seconds(args))
         source = "rules run on this trace (catalog %s)" % os.path.relpath(args.catalog, ROOT) \
             if os.path.abspath(args.catalog).startswith(ROOT) else "rules run on this trace"
     rep = report.build(args.trace, numbered, problems, found, notes, report.rule_table(rules), source,
-                       suspicion, suspicion_run)
+                       suspicion, suspicion_run, extra_alarms=extra)
     return rep, numbered, problems
 
 
@@ -290,12 +323,18 @@ def cmd_suspect(args, out):
     numbered, problems = _read_trace(args.trace)
     records = [rec for _, rec in numbered]
     if args.findings:
-        found = [f for f in _read_findings(args.findings)[0] if "_line" not in f]
+        found = _read_findings(args.findings)[0]
+        for number, f in enumerate(found, start=1):
+            try:
+                engine.check_finding(f)
+            except engine.FindingError as exc:
+                raise UsageError("findings file %s, finding %d: %s" % (args.findings, number, exc))
     else:
         found, _ = run_rules(records, _catalog(args.catalog), _context(args), _gap_seconds(args))
     try:
         backend = suspect_backends.make_backend(args.backend, model=args.model, ollama_url=args.ollama_url,
                                                 effort=args.effort, answers=args.answers)
+        _remote_notice(backend)
         lines, summary = suspect_core.run(records, found, backend, args.threshold, args.window)
     except ValueError as exc:
         raise UsageError(str(exc))
@@ -314,11 +353,16 @@ def cmd_suspect(args, out):
                      " (A2: below threshold is not a clearance)\n" % (
                          summary["windows"], summary["backend"], summary["model"], summary["raised"],
                          summary["errors"], summary["below_threshold"]))
+    if summary["answered_by_other_model"]:
+        sys.stderr.write("raqib: %d windows were answered by another model than %s (server-side fallback)\n"
+                         % (summary["answered_by_other_model"], summary["model"]))
     if problems or not records:
         sys.stderr.write("raqib: the trace has %s; run `report` for the alarms\n"
                          % ("no records" if not records else "%d corrupt lines" % len(problems)))
         return 1
-    return 1 if lines else 0
+    if summary["raised"]:
+        return 1
+    return 3 if summary["errors"] else 0
 
 
 def cmd_ui(args, out):
@@ -357,6 +401,14 @@ def cmd_ui(args, out):
     else:
         out.write(text)
     return rep["exit"]
+
+
+def _remote_notice(backend):
+    if getattr(backend, "remote", False):
+        sys.stderr.write("raqib: note: %s is not on this machine; trace metadata is sent to it\n"
+                         % backend.url)
+    elif backend.name == "anthropic":
+        sys.stderr.write("raqib: note: trace metadata is sent to the Anthropic API\n")
 
 
 def make_candidate(spec, args):
