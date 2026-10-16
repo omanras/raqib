@@ -227,7 +227,8 @@ def test_e3_writable_log_is_not_silence(tmp_path):
     "",
     "not json",
     "[]",
-    json.dumps({"hook_event_name": "SessionStart", "session_id": "s"}),
+    json.dumps({"hook_event_name": "UserPromptSubmit", "session_id": "s"}),
+    json.dumps({"hook_event_name": "SessionStart"}),
     json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"}),
     json.dumps({"hook_event_name": "PreToolUse", "session_id": "s"}),
 ])
@@ -353,3 +354,82 @@ def test_m01b_e2_command_head_on_bash_post_and_only_for_bash(tmp_path):
     recs = run_all([fixture("pretooluse-bash.json"), fixture("posttooluse-bash.json"),
                     other, fixture("pretooluse-write.json")], tmp_path / "trace.jsonl")
     assert [r["input_meta"].get("command_head") for r in recs] == ["ls", "ls", None, None]
+
+
+# --- M0.3 E4: session events (A-3) and PostToolUseFailure error_class (A-4) -
+
+SESSION_FIELDS = {"ts", "seq", "session_id", "phase", "tool", "cwd"}
+
+
+@pytest.mark.parametrize("name, phase", [
+    ("sessionstart.json", "session_start"),
+    ("stop.json", "stop"),
+    ("sessionend.json", "session_end"),
+])
+def test_m03_session_event_line(tmp_path, name, phase):
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(fixture(name), log))
+    (rec,) = lines(log)
+    assert set(rec) == SESSION_FIELDS
+    assert (rec["phase"], rec["tool"], rec["seq"]) == (phase, "-", 1)
+    assert (rec["session_id"], rec["cwd"]) == ("fixture-session-0001", "/work/example")
+
+
+def test_m03_session_events_take_the_next_seq(tmp_path):
+    recs = run_all([fixture("sessionstart.json"), fixture("pretooluse-bash.json"),
+                    fixture("posttooluse-bash.json"), fixture("stop.json"),
+                    fixture("sessionend.json")], tmp_path / "trace.jsonl")
+    assert [(r["phase"], r["seq"]) for r in recs] == [
+        ("session_start", 1), ("pre", 2), ("post", 2), ("stop", 3), ("session_end", 4)]
+
+
+def test_m03_session_event_does_not_close_an_open_pre(tmp_path):
+    recs = run_all([fixture("pretooluse-bash.json"), fixture("stop.json"),
+                    fixture("posttooluse-bash.json")], tmp_path / "trace.jsonl")
+    assert [(r["phase"], r["seq"]) for r in recs] == [("pre", 1), ("stop", 2), ("post", 1)]
+
+
+def test_m03_failure_is_a_post_with_ok_false_and_error_class(tmp_path):
+    failure = fixture("posttoolusefailure-bash.json")
+    recs = run_all([fixture("pretooluse-bash-id-f.json"), failure], tmp_path / "trace.jsonl")
+    pre_rec, post_rec = recs
+    assert (post_rec["phase"], post_rec["seq"], post_rec["ok"]) == ("post", pre_rec["seq"], False)
+    assert post_rec["error_class"] == "failure"
+    assert post_rec["output_sha256"] == sha256_canonical(failure["error"])
+    assert "exit code" not in (tmp_path / "trace.jsonl").read_text()
+
+
+def test_m03_error_class_only_on_failure_lines(tmp_path):
+    recs = run_all([fixture("pretooluse-bash.json"), fixture("posttooluse-bash-interrupted.json")],
+                   tmp_path / "trace.jsonl")
+    assert recs[1]["ok"] is False
+    assert all("error_class" not in r for r in recs)
+
+
+@pytest.mark.parametrize("error, expected", [
+    ("TimeoutError: took too long", "TimeoutError"),
+    ("Error: boom", "Error"),
+    ("  InputValidationError: bad input", "InputValidationError"),
+    ("pkg.mod.CustomException: z", "pkg.mod.CustomException"),
+    ("X" * 100 + "Error: y", ("X" * 100 + "Error")[:64]),
+    ("Errors happened", "failure"),
+    ("Command failed with exit code 1", "failure"),
+    ("", "failure"),
+    (None, "failure"),
+    ("<missing>", "failure"),
+    (7, "failure"),
+    ({"type": "ToolError", "message": "secret text"}, "ToolError"),
+    ({"type": "not an identifier"}, "failure"),
+    (["TimeoutError"], "failure"),
+])
+def test_m03_error_class(tmp_path, error, expected):
+    failure = fixture("posttoolusefailure-bash.json")
+    if error == "<missing>":
+        del failure["error"]
+    else:
+        failure["error"] = error
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(failure, log))
+    (rec,) = lines(log)
+    assert rec["error_class"] == expected
+    assert "secret text" not in log.read_text()

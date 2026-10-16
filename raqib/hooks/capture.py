@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Raqib capture hook (M0.1, M0.1b).
+"""Raqib capture hook (M0.1, M0.1b, M0.3).
 
-Installed as a Claude Code PreToolUse + PostToolUse hook. Reads the hook JSON
-on stdin and appends one trace line (docs/specs/ADR-0001 section 3 and
-Amendment A) to $RAQIB_LOG (default ./raqib.log.jsonl).
+Installed as a Claude Code hook for PreToolUse, PostToolUse,
+PostToolUseFailure, SessionStart, SessionEnd and Stop (tools/install-hooks.sh).
+Reads the hook JSON on stdin and appends one trace line (docs/specs/ADR-0001
+section 3 and Amendment A) to $RAQIB_LOG (default ./raqib.log.jsonl).
+
+Session events (A-3) become a line with phase session_start, session_end or
+stop, tool "-", and no hashes or input_meta. A PostToolUseFailure (A-4) is a
+post with ok false and an error_class.
 
 Invariants:
 - Never blocks the agent: always exits 0 and never writes to stdout.
@@ -38,16 +43,27 @@ except ImportError:  # non-POSIX: append without an inter-process lock
 DEFAULT_LOG = "raqib.log.jsonl"
 SILENCE = "RAQIB-SILENCE:"
 
-# hook_event_name -> trace phase. M0.1 captures tool events only.
+# hook_event_name -> trace phase.
 PHASES = {
     "PreToolUse": "pre",
     "PostToolUse": "post",
     "PostToolUseFailure": "post",
+    "SessionStart": "session_start",
+    "SessionEnd": "session_end",
+    "Stop": "stop",
 }
+TOOL_PHASES = ("pre", "post")
+SESSION_TOOL = "-"
 
 # A-1: leading shell assignments (NAME=value) are not the command.
 ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 COMMAND_HEAD_MAX = 64
+
+# A-4: a leading exception class name such as "TimeoutError: ..." or
+# "Error: ..."; anything else is recorded as "failure". Never message text.
+ERROR_CLASS = re.compile(r"\s*((?:[A-Za-z_][A-Za-z0-9_.]*)?(?:Error|Exception))\b")
+IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
+ERROR_CLASS_MAX = 64
 
 
 class CaptureError(Exception):
@@ -119,6 +135,21 @@ def is_ok(event, tool_response):
     return True
 
 
+def error_class(error):
+    """A-4: the exception/class name of a PostToolUseFailure error, else "failure"."""
+    if isinstance(error, dict):
+        for key in ("type", "name", "class"):
+            value = error.get(key)
+            if isinstance(value, str) and IDENTIFIER.fullmatch(value):
+                return value[:ERROR_CLASS_MAX]
+        return "failure"
+    if isinstance(error, str):
+        match = ERROR_CLASS.match(error)
+        if match:
+            return match.group(1)[:ERROR_CLASS_MAX]
+    return "failure"
+
+
 def session_state(log_text, session_id):
     """Return (max_seq, open_pres) for session_id; open_pres in log order."""
     max_seq = 0
@@ -168,15 +199,42 @@ def validate(payload):
     event = payload.get("hook_event_name")
     if event not in PHASES:
         raise CaptureError("hook event %r is not captured" % (event,))
-    for key in ("session_id", "tool_name"):
+    required = ("session_id", "tool_name") if PHASES[event] in TOOL_PHASES else ("session_id",)
+    for key in required:
         value = payload.get(key)
         if not isinstance(value, str) or not value:
             raise CaptureError("hook input has no %s" % key)
 
 
+def session_record(payload, log_text):
+    """A-3: session_start / session_end / stop line; no hashes, no input_meta."""
+    session_id = payload["session_id"]
+    max_seq, _ = session_state(log_text, session_id)
+    return {
+        "ts": now_ts(),
+        "seq": max_seq + 1,
+        "session_id": session_id,
+        "phase": PHASES[payload["hook_event_name"]],
+        "tool": SESSION_TOOL,
+        "cwd": record_cwd(payload),
+    }
+
+
+def now_ts():
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def record_cwd(payload):
+    cwd = payload.get("cwd")
+    return cwd if isinstance(cwd, str) and cwd else os.getcwd()
+
+
 def build_record(payload, log_text):
     event = payload["hook_event_name"]
     phase = PHASES[event]
+    if phase not in TOOL_PHASES:
+        return session_record(payload, log_text)
     session_id = payload["session_id"]
     tool = payload["tool_name"]
     tool_input = payload.get("tool_input")
@@ -190,9 +248,8 @@ def build_record(payload, log_text):
         if pre_seq is not None:
             seq = pre_seq
 
-    now = datetime.datetime.now(datetime.timezone.utc)
     rec = {
-        "ts": now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "ts": now_ts(),
         "seq": seq,
         "session_id": session_id,
         "phase": phase,
@@ -207,8 +264,9 @@ def build_record(payload, log_text):
         output = tool_response if "tool_response" in payload else payload.get("error")
         rec["output_sha256"] = canonical_sha256(output)
         rec["ok"] = is_ok(event, tool_response)
-    cwd = payload.get("cwd")
-    rec["cwd"] = cwd if isinstance(cwd, str) and cwd else os.getcwd()
+        if event == "PostToolUseFailure":
+            rec["error_class"] = error_class(payload.get("error"))
+    rec["cwd"] = record_cwd(payload)
     return rec
 
 
