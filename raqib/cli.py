@@ -27,8 +27,9 @@
   eval [--events FILE] [--candidate SPEC]... [--json] [-o FILE]
       Score the rules, and each candidate model, on labelled events (M2.2):
       false negatives, false positives and errors, ranked by FN first. SPEC is
-      ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json. Exit 0 once
-      scored (errors are counted in the table), 2 on bad input.
+      ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json. Exit 0 when
+      every row judged every event, 3 when some row has errors, 2 on bad
+      input.
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -427,6 +428,8 @@ def cmd_eval(args, out):
     try:
         events = evaluation.load_events(args.events)
         backends = [make_candidate(spec, args) for spec in args.candidate]
+        for backend in backends:
+            _remote_notice(backend)
         suspect_core.check_threshold(args.threshold)
         result = evaluation.evaluate(events, _catalog(args.catalog), backends, args.threshold,
                                      args.window, silence.gap_seconds_from(os.environ))
@@ -445,7 +448,8 @@ def cmd_eval(args, out):
         out.write("raqib: evaluation of %d events -> %s\n" % (result["events"], args.out))
     else:
         out.write(text)
-    return 0
+    # A row with errors is an incomplete evaluation (A3).
+    return 3 if any(row["errors"] for row in result["rows"]) else 0
 
 
 def main(argv=None, out=None):

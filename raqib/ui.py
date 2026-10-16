@@ -20,6 +20,7 @@ from __future__ import annotations
 import html
 import json
 import http.server
+import socketserver
 
 from raqib.rules import silence, trace
 
@@ -180,6 +181,18 @@ def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS):
         out.append('<p class="empty">None.</p>')
 
     out.append("<h2>Suspicion (%d)</h2>" % len(report["suspicion"]))
+    run = report.get("suspicion_run")
+    if not report.get("suspicion_given"):
+        out.append('<p class="meta">No model was run for this report.</p>')
+    elif run:
+        out.append('<p class="meta">%d windows judged by %s/%s: %d raised, %d errors, %d below threshold %s'
+                   ' (below threshold is not a clearance)%s.</p>'
+                   % (run["windows"], _text(run["backend"]), _text(run["model"]), run["raised"],
+                      run["errors"], run["below_threshold"], _text("%g" % run["threshold"]),
+                      "; %d answered by another model" % run["answered_by_other_model"]
+                      if run.get("answered_by_other_model") else ""))
+    else:
+        out.append('<p class="meta">The model run cannot be accounted for: see the alarms.</p>')
     out.append('<p class="meta">A model can raise suspicion; it can never clear anything (A2).</p>')
     for s in report["suspicion"]:
         out.append('<div class="card"><div class="head"><span class="tag">%s</span> %s/%s '
@@ -202,9 +215,16 @@ def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS):
     out.append('<div class="scroll"><table><thead><tr><th>line</th><th>ts</th><th>session</th><th>seq</th>'
                "<th>phase</th><th>tool</th><th>input_meta</th><th>output_meta</th><th>ok</th>"
                "<th>marks</th></tr></thead><tbody>")
+    record_lines = {number for number, _ in numbered}
+    used = set()
     for row in _timeline(numbered, problems, report, gap_seconds):
         if row[0] == "band":
-            anchor = ' id="%s"' % _anchor(row[1]) if row[1] is not None else ""
+            # A line that is both a record and a problem keeps its anchor on
+            # the record row; ids stay unique.
+            free = row[1] is not None and row[1] not in record_lines and row[1] not in used
+            anchor = ' id="%s"' % _anchor(row[1]) if free else ""
+            if free:
+                used.add(row[1])
             out.append('<tr class="band"%s><td colspan="10">%s</td></tr>' % (anchor, _text(row[2])))
             continue
         _, number, rec, tags = row
@@ -242,6 +262,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         host = self.headers.get("Host", "")
         return host in ("127.0.0.1:%d" % self.port, "localhost:%d" % self.port)
 
+    timeout = 10  # an idle connection cannot hold the view
+
     def _send(self, body_wanted):
         if not self._local_host():
             self.send_error(403, "Host must be 127.0.0.1 or localhost")
@@ -249,8 +271,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if self.path not in ("/", "/index.html"):
             self.send_error(404)
             return
-        body = self.page().encode("utf-8")
-        self.send_response(200)
+        status = 200
+        try:
+            text = self.page()
+        except Exception as exc:
+            # The trace or catalog became unreadable: say so, never a blank page (A3).
+            status, text = 500, error_page("%s: %s" % (type(exc).__name__, exc))
+        body = text.encode("utf-8")
+        self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Content-Security-Policy", CSP)
@@ -279,9 +307,26 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
+def error_page(message):
+    """A page that says the view could not be built, as an alarm."""
+    return "\n".join([
+        "<!doctype html>", '<html lang="en">', "<head>", '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        '<meta http-equiv="Content-Security-Policy" content="%s">' % CSP,
+        "<title>Raqib trace view</title>", "<style>%s</style>" % STYLE, "</head>", "<body><main>",
+        "<h1>Raqib trace view</h1>",
+        '<p><span class="badge alarm">ALARM</span> the view could not be built (A3)</p>',
+        '<div class="card">%s</div>' % _text(message), "</main></body></html>"]) + "\n"
+
+
+class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+
+
 def make_server(page, port=0):
-    """An HTTP server on 127.0.0.1 that serves page() at / (port 0: any free port)."""
+    """An HTTP server on 127.0.0.1 that serves page() at / (port 0: any free
+    port). One thread per connection, each with a timeout."""
     handler = type("Handler", (_Handler,), {"page": staticmethod(page)})
-    server = http.server.HTTPServer(("127.0.0.1", port), handler)
+    server = _Server(("127.0.0.1", port), handler)
     handler.port = server.server_address[1]
     return server

@@ -41,15 +41,34 @@ item F7 of the M1.2 review packet or questions file.
    can write. The rules trust it only as far as its own shape: corrupt lines,
    seqs or timestamps going back, gaps and missing halves become findings or
    alarms.
-3. **Trace to model.** The suspicion layer sends window metadata to a model:
-   tool, phase, path, URL host, program name, secret-pattern names and ok.
-   - The data is framed as untrusted, and markup is escaped.
+3. **Trace to model.** The suspicion layer sends window metadata to a model.
+   - **What is sent, exactly:**
+     - the session id and its working directory, which often contains your
+       user name;
+     - per line: seq, phase, tool, ts, ok, error_class, and cwd when it
+       changes;
+     - from input_meta: path, url_host, command_head;
+     - from output_meta: scan, secret_kinds, placeholder_kinds;
+     - for each finding in the window: rule_id, class, severity, cited_seq
+       and summary. Summaries can embed paths.
+     Each string is cut to 300 characters. Nothing else in the trace is
+     sent, even if a forged line carries more (REDO 3).
+   - All of this sits inside tags marked as untrusted data, with markup
+     escaped. Only the line naming the seq range is outside them.
    - The answer must match a schema, cite seqs of its own window, and can
      only add suspicion (A2).
-   - With `--backend anthropic`, this metadata leaves the machine
-     (M2.1 Q1).
-4. **Report to human.** The text report strips non-printable characters. The
-   web view escapes everything, runs no script and loads nothing (M3.1).
+   - **Where it goes:**
+     - with `--backend anthropic` the metadata leaves the machine (M2.1 Q1);
+     - so it does with an Ollama URL that is not localhost, over plain HTTP
+       if the URL says so.
+     - Both print a notice.
+   - **Server-side fallback** is on for the Anthropic backend (M2.1 Q4). A
+     window the requested model refuses can be answered by another model.
+     The line then names it (`answered_by`), and the run record counts it.
+4. **Report to human.** Every line of the text report passes a printable
+   filter, so a newline or escape sequence in a session id cannot print a
+   fake result line (REDO 3). The web view escapes everything, runs no
+   script and loads nothing (M3.1).
 
 ## 4. What the trace holds, and what it leaks
 
@@ -87,7 +106,8 @@ or file contents. Everything below follows from that, or from the hooks.
     (M1.2 F15).
 - **Symlinks.** Paths are normalised lexically. A link inside the project
   that points outside makes an outside read look inside (M1.1 PA2). The eval
-  event `d02-symlink-escape` shows this.
+  event `d02-symlink-escape` is built on this. Its trace holds only `ln` and
+  `data/shadow`, which is all a reader would see.
 - **Secrets in tool input.** A secret the agent writes to a file or passes
   on a command line is not flagged as input (M1.2 Q1).
   - Write and Edit outputs echo what was written, and Edit echoes the whole
@@ -104,6 +124,26 @@ or file contents. Everything below follows from that, or from the hooks.
   against the session's own cwd. Two rules flag a cwd of `/` or a home
   directory, and a cwd that moves: SCOPE-CWD-ROOT and SCOPE-CWD-MOVED
   (M1.1 PA1).
+- **Long calls and waiting are not silence, but look like it.** SILENCE-GAP
+  fires on any minute without capture. That includes a long build and the
+  time after `stop` while the agent waits for you (M0.2 Q1).
+  - The eval set has one of each (b13, b22), and both are false positives
+    of the rules.
+  - The README quickstart is CLEAN only because its session lasts four
+    seconds.
+- **A live view of a running session shows alarms.** Each call still
+  running is a pre without a post (SILENCE-HALF), and the session has not
+  ended (SILENCE-OPEN). `ui --serve` re-reads the trace, so it shows these
+  until the session ends (M0.2 S9, M3.1 review B-2).
+- **The model sees windows, not sessions.** Windows of 40 lines do not
+  overlap. An agent that pads between a secret read and a network call can
+  put them in different windows; the rules still see both (M2.1 Q3, M2.2 Q4).
+- **No model has been evaluated.** The eval harness has only canned-answer
+  tests. Its event set was written by one author who knows the rules
+  (M2.2 Q1 and "Not verified"). The FP budgets of the rules were also
+  measured on the builder's own corpus (M1.1 A6-4, A6-7).
+- **Counts reset per session.** DRIFT-FILES counts edits within one session,
+  so spreading the edits over sessions avoids it (M1.2 F20).
 - **Things the rules cannot tell apart.** Some events look the same in
   metadata whether they are benign or not:
   - `rm` of a build directory and `rm` of the user's files;
@@ -139,16 +179,34 @@ or file contents. Everything below follows from that, or from the hooks.
     and the missing post becomes SILENCE-HALF (M0.3 B4, M1.2 F8-F10).
 - **Blocked calls look like silence.** A call that Claude Code itself
   blocks fires PreToolUse only, so it is reported as SILENCE-HALF (high),
-  not as "blocked" (M0.3 Q4, M0.2 S9-S10).
+  not as "blocked" (M0.3 Q4, M0.2 S10).
 - **Prompt injection into the model layer.** The agent controls paths and
   hosts that the model reads.
   - The model can only raise suspicion, never clear a finding (A2).
   - So the worst an injection can do is make the model miss something the
     rules did not already flag, or waste the reader's time with a false
-    suspicion. Both are measured by the eval harness (M2.2).
-- **Reading what the watcher reports.** `raqib ui --serve` is a localhost
-  listener that any local process can read, the agent included (M3.1 Q2).
-  `-o FILE` avoids the listener.
+    suspicion.
+  - The reasons a model gives are free text. Only the prompt stops them from
+    arguing that a rule finding is wrong (M2.1 review 3.8).
+  - None of this is measured. The eval set holds no injection text, and no
+    real model has been run on it.
+- **Reading what the watcher reports.** The watched agent can learn what
+  Raqib sees:
+  - `raqib ui --serve` is a localhost listener that any local process can
+    read, the agent included. Because the page is rebuilt on every request,
+    the agent could check after each action whether it was noticed
+    (M3.1 Q2, review B-4).
+  - Without the listener the agent can still read the trace and run the
+    public rules itself.
+- **Editing the watcher itself.** The agent runs as the same user as Raqib,
+  so it can:
+  - edit Raqib's checkout: the `capture.py` the hooks run, or a catalog rule
+    (setting `status: disabled` still allows a CLEAN result);
+  - forge the outputs: a findings file, a suspicion file, or the HTML page.
+  A findings file is now tied to its trace by sha256, and a suspicion file
+  must match its run record (REDO 3). Both can still be regenerated by
+  someone who controls the checkout. Raqib v0.1 offers no protection
+  against an agent with write access to Raqib (M3.2 review C-9, B-9).
 
 ## 7. Platform
 

@@ -279,3 +279,133 @@ def test_e4_render_is_pure():
     before = json.dumps([numbered, problems, rep], sort_keys=True)
     ui.render(rep, numbered, problems)
     assert json.dumps([numbered, problems, rep], sort_keys=True) == before
+
+
+# --- REDO 3 (docs/review/2026-10-16-M2.2-M3.1-M3.2-review.md, part B) ------
+
+EVIL = '<script>x</script>"><img src=y onerror=z>' + chr(0x202E)
+
+
+def assert_inert(page):
+    low = page.lower()
+    assert "<script" not in low and "<img" not in low and chr(0x202E) not in page
+    assert all(c == "\n" or c.isprintable() for c in page)
+
+
+def test_redo3_every_report_value_is_escaped():
+    rep = {"trace": EVIL, "records": 0, "sessions": [], "findings_source": EVIL, "findings": [],
+           "suspicion": [{"suspicion": 0.9, "backend": EVIL, "model": EVIL, "session_id": EVIL,
+                          "window": [1, 2], "reasons": [EVIL], "cited_seq": [1],
+                          "cites": [{"seq": 1, "lines": [{"line": 1, "text": EVIL}]}]}],
+           "suspicion_given": True,
+           "suspicion_run": {"windows": 1, "raised": 1, "errors": 0, "below_threshold": 0, "backend": EVIL,
+                             "model": EVIL, "threshold": 0.5},
+           "alarms": [{"kind": EVIL, "detail": EVIL, "line": 3}], "notes": [{"rule_id": EVIL, "status": EVIL,
+                                                                             "detail": EVIL}],
+           "rules": [{"id": EVIL, "class": EVIL, "severity": EVIL, "fp_budget": None, "status": EVIL,
+                      "title": EVIL}],
+           "result": "alarm", "exit": 1}
+    page = ui.render(rep, [], [])
+    assert_inert(page)
+    assert page.count("&lt;script&gt;") >= 12
+
+
+def test_redo3_the_csp_is_exactly_this():
+    expected = ("default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; "
+                "form-action 'none'; frame-ancestors 'none'")
+    assert ui.CSP == expected
+    page, _ = page_for(BLOCKED)
+    assert '<meta http-equiv="Content-Security-Policy" content="%s">' % expected in page
+
+
+def test_redo3_the_suspicion_section_says_whether_a_model_ran():
+    page, _ = page_for(BLOCKED)
+    assert "No model was run for this report." in page
+    susp = [{"kind": "error", "session_id": "b3744113-5956-4e40-915a-91c245a2ece7", "window": [1, 6],
+             "error": "down", "backend": "fake", "model": "canned"}]
+    numbered, problems = trace.read_numbered(BLOCKED)
+    run = {"windows": 1, "raised": 0, "errors": 1, "below_threshold": 0, "backend": "fake", "model": "canned",
+           "threshold": 0.5, "answered_by_other_model": 1}
+    rep = report.build(str(BLOCKED), numbered, problems, [], [], [], "rules", susp, run)
+    page = ui.render(rep, numbered, problems)
+    assert "1 windows judged by fake/canned: 0 raised, 1 errors" in page and "1 answered by another model" in page
+    rep = report.build(str(BLOCKED), numbered, problems, [], [], [], "rules", susp, None)
+    assert "cannot be accounted for" in ui.render(rep, numbered, problems)
+
+
+def test_redo3_anchors_are_unique(tmp_path):
+    path = write_trace(tmp_path, [
+        line(1, "session_start", "2026-10-16T10:00:00.000Z"),
+        line(2, "pre", "not-a-time"),
+        "{bad",
+        line(3, "stop", "2026-10-16T10:00:03.000Z"),
+    ])
+    page, rep = page_for(path)
+    ids = re.findall(r' id="(L\d+)"', page)
+    assert len(ids) == len(set(ids)) and {"L1", "L2", "L3", "L4"} <= set(ids)
+
+
+def test_redo3_a_gap_of_exactly_the_limit_is_no_band(tmp_path):
+    path = write_trace(tmp_path, [line(1, "session_start", "2026-10-16T10:00:00.000Z"),
+                                  line(2, "stop", "2026-10-16T10:01:00.000Z")])
+    assert re.findall(r'<tr class="band"', page_for(path)[0]) == []
+    shifted = write_trace(tmp_path, [line(1, "session_start", "2026-10-16T10:00:00.000Z"),
+                                     line(2, "stop", "2026-10-16T10:01:00.001Z")])
+    assert len(re.findall(r'<tr class="band"', page_for(shifted)[0])) == 1
+
+
+def test_redo3_a_session_without_its_start_gets_no_open_band(tmp_path):
+    # Inherited from SILENCE-OPEN (M0.2 Q2): without session_start there is no "open" claim.
+    path = write_trace(tmp_path, [line(1, "pre", "2026-10-16T10:00:00.000Z")])
+    page, _ = page_for(path)
+    assert "without stop or session_end" not in page and "no post" in page
+
+
+def test_redo3_a_failing_page_is_an_alarm_page(tmp_path):
+    def broken():
+        raise RuntimeError("trace <gone>")
+    srv = ui.make_server(broken, 0)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, headers, _ = request(srv)
+        port = srv.server_address[1]
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:
+            opener.open("http://127.0.0.1:%d/" % port, timeout=10)
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode()
+        assert status == 500 and headers["Content-Security-Policy"] == ui.CSP
+        assert "ALARM" in body and "trace &lt;gone&gt;" in body and "<gone>" not in body
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+@pytest.mark.parametrize("host, status", [
+    ("localhost", 403), ("127.0.0.1", 403), ("localhost:{port}0", 403), ("[::1]:{port}", 403),
+    ("127.0.0.1:{port}", 200), ("localhost:{port}", 200),
+])
+def test_redo3_host_check_is_exact(server, host, status):
+    srv, _ = server
+    assert request(srv, host=host.format(port=srv.server_address[1]))[0] == status
+
+
+def test_redo3_head_sends_no_body_and_an_idle_connection_blocks_nothing(server):
+    import socket
+    srv, _ = server
+    port = srv.server_address[1]
+    idle = socket.create_connection(("127.0.0.1", port), timeout=5)
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=5) as conn:
+            conn.sendall(b"HEAD / HTTP/1.0\r\nHost: 127.0.0.1:%d\r\n\r\n" % port)
+            data = b""
+            while True:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+        head, _, body = data.partition(b"\r\n\r\n")
+        assert head.startswith(b"HTTP/1.0 200") and body == b""
+    finally:
+        idle.close()

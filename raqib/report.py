@@ -122,6 +122,7 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
         "findings_source": findings_source,
         "findings": items,
         "suspicion": raised,
+        "suspicion_given": suspicion is not None,
         "suspicion_run": suspicion_run,
         "alarms": alarms,
         "notes": notes,

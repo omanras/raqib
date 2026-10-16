@@ -8,26 +8,31 @@ never acquit.
 - **Silence is an alarm.** A gap, a call that never finished or a session
   that never closed is a finding, not "nothing happened" (A3).
 - **The watcher never touches the watched.** Raqib reads and reports; it
-  blocks nothing (A4). It works offline and stores hashes, not content.
+  blocks nothing (A4). Capture and rules work offline; they store hashes,
+  not content.
 
 ## How it works
-1. **Capture.** Six Claude Code hooks append one JSON line per tool call
-   and session event to `raqib.log.jsonl`. Inputs and outputs are stored as
+1. **Capture.** Six Claude Code hooks append JSON lines to
+   `raqib.log.jsonl`: two per tool call (pre and post) and one per session
+   event. Inputs and outputs are stored as
    sha256 only, plus a small extract: the path, the URL host, the program
    name of a Bash command, and the names of secret patterns seen in the
    output.
 2. **Rules.** Eleven rules turn the trace into findings, and every finding
    cites the trace lines behind it (A5). The rules are 4 silence rules and
-   7 YAML rules in `raqib/rules/catalog`. Each declares its false-positive
-   budget and is measured against fixtures (A6).
+   7 YAML rules in `raqib/rules/catalog`. Each YAML rule declares its
+   false-positive budget and is measured against fixtures (A6); the silence
+   rules have no budget yet.
 3. **Suspicion (optional).** A local or API model reads windows of the
    trace metadata. It can raise suspicion with citations; it cannot clear
    anything.
 4. **Report.** Text, JSON, or a read-only HTML page.
 
 ## Quickstart
-Linux or macOS, `python3` (stdlib only) and Claude Code. Windows is not
-supported. The code is on branch `claude/v0.1` until it is merged.
+Linux or macOS, `python3` (Raqib itself is stdlib only) and Claude Code.
+Windows is not supported. The gate runs the tests with pytest; if pytest is
+missing, `gate.sh` installs it with pip, which needs the network. The code is
+on branch `claude/v0.1` until it is merged.
 ```bash
 git clone --branch claude/v0.1 https://github.com/omanras/raqib ~/raqib
 ~/raqib/tools/gate.sh                             # ends with [gate] GREEN
@@ -40,7 +45,9 @@ python3 -m raqib ui /path/to/project/raqib.log.jsonl --scope . -o trace.html  # 
 ```
 These steps were run from a fresh clone (see
 `docs/review/2026-10-16-M3.2-questions.md`). The raw trace of such a run is
-`tests/fixtures/quickstart-d7841d1-claude-code-2.1.301.log`.
+`tests/fixtures/quickstart-d7841d1-claude-code-2.1.301.log`. A session that
+runs a long call or waits for you for over a minute raises SILENCE-GAP: by
+design, a quiet minute is reported, not assumed harmless.
 - **Where the trace goes.** The trace path is absolute, so a `cd` by the
   agent cannot split it. `--log PATH` puts it outside the project.
 - **Capture never blocks the agent.** If it cannot write, it prints one
@@ -67,8 +74,9 @@ Content, by design. So the rules miss these:
 - a secret the agent writes rather than reads;
 - an agent that rewrites the trace or switches the hooks off and then
   stays quiet.
-On 50 labelled events the rules miss 9 bad events and flag 6 of 25 benign
-ones (`docs/review/2026-10-16-M2.2-baseline.md`). See
+On 50 labelled events the rules miss 9 bad events and flag 8 of 25 benign
+ones (`docs/review/2026-10-16-M2.2-baseline.md`). No model has been
+evaluated yet. See
 **[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)** for every known gap and its
 source.
 
