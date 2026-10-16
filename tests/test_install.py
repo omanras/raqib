@@ -404,3 +404,66 @@ def test_e3_real_blocked_calls_leave_a_pre_without_post():
         ("post", 4, "whoami"), ("stop", 5, None), ("session_end", 6, None)]
     assert [(f["rule_id"], f["cited_seq"]) for f in silence.findings(recs)] == [
         ("SILENCE-HALF", [2]), ("SILENCE-HALF", [3])]
+
+
+# --- M1.2 REDO: installer residuals from docs/review/2026-10-16-M1.1.md -----
+
+@pytest.mark.parametrize("stale", [
+    "python3 '/old place/raqib/hooks/capture.py'",
+    "RAQIB_LOG='/t r/x.jsonl' python3 \"/old place/raqib/hooks/capture.py\"",
+    "python3 raqib/hooks/capture.py",
+], ids=["quoted-path", "quoted-log-and-path", "relative"])
+def test_redo_m3_quoted_legacy_entries_are_replaced(tmp_path, stale):
+    proj = project(tmp_path)
+    write_settings(proj, {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": stale}]}]}})
+    proc = install(tmp_path, "--log", tmp_path / "t.jsonl", proj)
+    assert proc.returncode == 0
+    assert "replaced: " + stale in proc.stdout
+    assert [h["command"] for g in settings_of(proj)["hooks"]["Stop"] for h in g["hooks"]] == [
+        command_for(tmp_path / "t.jsonl")]
+
+
+@pytest.mark.parametrize("command", [
+    "python3 /x/raqib/hooks/capture.py --extra",
+    "python3 /x/not-raqib/hooks/capture.py.bak",
+    "python3 '/x/raqib/hooks/capture.py",
+], ids=["extra-argument", "other-file", "unbalanced-quote"])
+def test_redo_m3_lookalike_commands_are_foreign(tmp_path, command):
+    proj = project(tmp_path)
+    foreign = {"type": "command", "command": command}
+    write_settings(proj, {"hooks": {"Stop": [{"hooks": [foreign]}]}})
+    assert install(tmp_path, proj).returncode == 0
+    assert settings_of(proj)["hooks"]["Stop"][0] == {"hooks": [foreign]}
+
+
+def test_redo_m4_disagreeing_existing_logs_are_refused(tmp_path):
+    proj = project(tmp_path)
+    assert install(tmp_path, "--log", tmp_path / "a.jsonl", proj).returncode == 0
+    settings = settings_of(proj)
+    settings["hooks"]["Stop"][0]["hooks"][0]["command"] = command_for(tmp_path / "b.jsonl")
+    path = write_settings(proj, settings)
+    before = path.read_bytes()
+    proc = install(tmp_path, proj)
+    assert proc.returncode == 1
+    assert "different traces" in proc.stderr and "--log" in proc.stderr
+    assert path.read_bytes() == before
+    assert install(tmp_path, "--log", tmp_path / "b.jsonl", proj).returncode == 0
+
+
+def test_redo_m4_kept_relative_log_is_made_absolute(tmp_path):
+    proj = project(tmp_path)
+    stale = "RAQIB_LOG=logs/trace.jsonl python3 /old/raqib/hooks/capture.py"
+    write_settings(proj, {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": stale}]}]}})
+    proc = install(tmp_path, proj)
+    assert proc.returncode == 0
+    assert "trace: %s (kept" % (proj / "logs" / "trace.jsonl") in proc.stdout
+    (_, hook), = raqib_hooks(settings_of(proj), "Stop")
+    assert hook["command"] == command_for(proj / "logs" / "trace.jsonl")
+
+
+def test_redo_m2_new_settings_file_follows_the_umask(tmp_path):
+    proj = project(tmp_path)
+    proc = subprocess.run(["bash", "-c", 'umask 077 && exec bash "$0" "$1"', str(INSTALL), str(proj)],
+                          capture_output=True, text=True, timeout=60, env=clean_env(tmp_path))
+    assert proc.returncode == 0, proc.stderr
+    assert stat.S_IMODE((proj / ".claude" / "settings.json").stat().st_mode) == 0o600

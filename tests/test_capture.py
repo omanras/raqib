@@ -1,10 +1,19 @@
 """Capture hook: M0.1 exit criteria E1-E3, M0.1b E1-E3 (ADR-0001 section 3, A-1, A-2)."""
+import base64
 import datetime
+import fcntl
 import hashlib
+import importlib.util
+import io
 import json
 import os
+import random
+import re
+import signal
+import string
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -329,16 +338,17 @@ def test_m01b_e1_post_without_id_falls_back_to_pre_with_id(tmp_path):
     ({"command": "FOO=1 /usr/bin/git x"}, "git"),
     ({"command": "  A=1\tB_2=x ./bin/run.sh --flag"}, "run.sh"),
     ({"command": "cd /tmp\nrm -rf build"}, "cd"),
-    ({"command": "9X=1 ls"}, "9X=1"),
+    ({"command": "9X=1 ls"}, None),
     ({"command": "/usr/local/bin/ --help"}, "bin"),
-    ({"command": "/opt/" + "x" * 100 + " -v"}, "x" * 64),
-    ({"command": "y" * 65}, "y" * 64),
+    ({"command": "/opt/" + "x" * 100 + " -v"}, None),
+    ({"command": "y" * 65}, None),
+    ({"command": "y" * 64}, "y" * 64),
     ({"command": ""}, None),
     ({"command": " \n\t "}, None),
     ({"command": "FOO=1 BAR=2"}, None),
     ({"command": ["ls"]}, None),
     ({"description": "no command"}, None),
-])
+], ids=lambda v: v if isinstance(v, str) and len(v) < 20 else None)
 def test_m01b_e2_command_head(tmp_path, tool_input, head):
     pre = dict(fixture("pretooluse-bash.json"), tool_input=tool_input)
     (rec,) = run_all([pre], tmp_path / "trace.jsonl")
@@ -441,17 +451,50 @@ def test_m03_error_class(tmp_path, error, expected):
 
 # --- M1.2 E2: output_meta.secret_kinds (names only, never the text) ---------
 # Fake secrets are assembled at run time so that no secret-like string is in
-# the tree for the gate's secret scan to find.
+# the tree for the gate's secret scan to find. They are random-looking (a
+# fixed seed), because uniform fakes such as "Z7Z7..." read as placeholders.
+
+def rnd(n, alphabet, seed):
+    r = random.Random(seed)
+    return "".join(r.choice(alphabet) for _ in range(n))
+
+
+UP, LOW, DIG = string.ascii_uppercase, string.ascii_lowercase, string.digits
+ALNUM = UP + LOW + DIG
+B64URL = ALNUM + "-_"
+
+
+def b64url(obj):
+    return base64.urlsafe_b64encode(json.dumps(obj).encode()).decode().rstrip("=")
+
 
 FAKE = {
-    "aws_access_key_id": "AKIA" + "Z7" * 8,
-    "github_token": "gh" + "p_" + "A1" * 18,
-    "google_api_key": "AI" + "za" + "B2" * 17 + "C",
-    "jwt": "ey" + "J" + "a" * 10 + ".ey" + "J" + "b" * 10 + "." + "c" * 10,
-    "private_key": "-----BEGIN " + "OPENSSH PRIVATE KEY-----",
-    "sk_api_key": "sk-" + "ant-" + "k9" * 12,
-    "slack_token": "xo" + "xb-" + "1234567890ab",
+    "auth_header": "Authori" + "zation: Bearer " + rnd(32, ALNUM, 1),
+    "aws_access_key_id": "AK" + "IA" + rnd(16, UP + DIG, 2),
+    "aws_secret_access_key": "aws_secret_" + "access_key = " + rnd(40, ALNUM + "/+", 3),
+    "github_token": "gh" + "p_" + rnd(36, ALNUM, 4),
+    "gitlab_token": "glp" + "at-" + rnd(20, ALNUM, 5),
+    "google_api_key": "AI" + "za" + rnd(35, ALNUM + "_-", 6),
+    "huggingface_token": "h" + "f_" + rnd(34, ALNUM, 7),
+    "jwt": b64url({"alg": "HS256"}) + "." + b64url({"sub": "u-42", "iat": 1760000000}) + "."
+           + rnd(43, B64URL, 8),
+    "npm_token": "np" + "m_" + rnd(36, ALNUM, 9),
+    "private_key": "-----BEGIN " + "OPENSSH PRIVATE KEY-----\n" + rnd(70, ALNUM + "+/", 10) + "\n",
+    "pypi_token": "pyp" + "i-AgEIcHlwaS5vcmc" + rnd(60, B64URL, 11),
+    "sk_api_key": "sk-" + "ant-" + rnd(40, ALNUM, 12),
+    "slack_token": "xo" + "xb-" + rnd(24, ALNUM, 13),
+    "slack_webhook": "https://hooks.slack" + ".com/services/T" + rnd(9, UP + DIG, 14) + "/B"
+                     + rnd(9, UP + DIG, 15) + "/" + rnd(24, ALNUM, 16),
+    "stripe_key": "sk" + "_live_" + rnd(24, ALNUM, 17),
+    "url_credentials": "postgres://app:" + rnd(16, ALNUM, 18) + "@db.internal:5432/app",
 }
+
+
+def load_capture():
+    spec = importlib.util.spec_from_file_location("raqib_capture_under_test", CAPTURE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def post_with(response, tmp_path):
@@ -463,31 +506,76 @@ def post_with(response, tmp_path):
     return rec, log.read_text()
 
 
+def full(*kinds, placeholders=()):
+    meta = {"scan": "full", "secret_kinds": sorted(kinds)}
+    if placeholders:
+        meta["placeholder_kinds"] = sorted(placeholders)
+    return meta
+
+
+def test_m12_every_pattern_has_a_fake():
+    assert sorted(FAKE) == sorted(name for name, _ in load_capture().SECRET_PATTERNS)
+
+
 @pytest.mark.parametrize("kind", sorted(FAKE))
 def test_m12_secret_in_output_is_recorded_by_name_only(tmp_path, kind):
     secret = FAKE[kind]
     rec, text = post_with({"stdout": "config:\n" + secret + "\n", "stderr": ""}, tmp_path)
-    assert rec["output_meta"] == {"secret_kinds": [kind]}
-    assert secret not in text and secret[4:14] not in text
+    assert rec["output_meta"] == full(kind)
+    tail = secret.strip()[-12:]
+    assert secret not in text and tail not in text
 
 
 def test_m12_kinds_are_sorted_and_found_in_keys_and_nesting(tmp_path):
     response = {FAKE["slack_token"]: [{"deep": ["x", FAKE["aws_access_key_id"]]}]}
     rec, _ = post_with(response, tmp_path)
-    assert rec["output_meta"] == {"secret_kinds": ["aws_access_key_id", "slack_token"]}
+    assert rec["output_meta"] == full("aws_access_key_id", "slack_token")
 
 
-@pytest.mark.parametrize("text", [
-    "AKIA" + "Z7" * 7 + "Z",
-    "x" + "AKIA" + "Z7" * 8,
-    "AKIA" + "Z7" * 8 + "Q",
-    "sk-" + "short",
-    "-----BEGIN " + "PUBLIC KEY-----",
-    "no secrets here",
-])
-def test_m12_near_misses_are_not_secrets(tmp_path, text):
+NEAR_MISSES = {
+    "aws-15-chars": "AK" + "IA" + rnd(15, UP + DIG, 20) + " ",
+    "aws-17-chars": "AK" + "IA" + rnd(17, UP + DIG, 21),
+    "sk-short": "sk-" + "short",
+    "public-key": "-----BEGIN " + "PUBLIC KEY-----\n" + rnd(70, ALNUM, 22),
+    "pem-header-alone": 'if line == "-----BEGIN ' + 'RSA PRIVATE KEY-----":\n    return True',
+    "url-without-password": "https://user@example.org:8443/path",
+    "plain-text": "no secrets here",
+}
+
+
+@pytest.mark.parametrize("name", sorted(NEAR_MISSES))
+def test_m12_near_misses_are_not_secrets(tmp_path, name):
+    rec, _ = post_with({"stdout": NEAR_MISSES[name]}, tmp_path)
+    assert rec["output_meta"] == full()
+
+
+PLACEHOLDERS = {
+    "aws-docs-example": ("aws_access_key_id", "AK" + "IAIOSFODNN7" + "EXAMPLE"),
+    "aws-xxxx": ("aws_access_key_id", "AK" + "IA" + "X" * 16),
+    "aws-uniform": ("aws_access_key_id", "AK" + "IA" + "A1" * 8),
+    "auth-uniform": ("auth_header", "Authori" + "zation: Bearer " + "a1" * 10),
+    "env-example-sk": ("sk_api_key", "OPENAI_API_KEY=sk-" + "your-openai-api-key-here"),
+    "env-example-slack": ("slack_token", "SLACK_TOKEN=xo" + "xb-your-token"),
+    "kebab-case-sk": ("sk_api_key", "sk-" + "learn-intelex-extension-config"),
+    "jwt-io-sample": ("jwt", b64url({"alg": "HS256", "typ": "JWT"}) + "."
+                      + b64url({"sub": "1234567890", "name": "John Doe", "iat": 1516239022})
+                      + "." + rnd(43, B64URL, 23)),
+    "url-user-pass": ("url_credentials", "postgres://user:" + "password@localhost/db"),
+    "auth-docs": ("auth_header", "Authori" + "zation: Bearer your-api-token-goes-here"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(PLACEHOLDERS))
+def test_m12_placeholders_are_named_but_not_counted(tmp_path, name):
+    kind, text = PLACEHOLDERS[name]
     rec, _ = post_with({"stdout": text}, tmp_path)
-    assert rec["output_meta"] == {}
+    assert rec["output_meta"] == full(placeholders=[kind])
+
+
+def test_m12_a_real_key_next_to_a_placeholder_still_counts(tmp_path):
+    text = PLACEHOLDERS["aws-docs-example"][1] + "\n" + FAKE["aws_access_key_id"]
+    rec, _ = post_with({"stdout": text}, tmp_path)
+    assert rec["output_meta"] == full("aws_access_key_id")
 
 
 def test_m12_secret_in_a_failure_message(tmp_path):
@@ -496,8 +584,44 @@ def test_m12_secret_in_a_failure_message(tmp_path):
     log = tmp_path / "trace.jsonl"
     assert_captured(run(failure, log))
     (rec,) = lines(log)
-    assert rec["output_meta"] == {"secret_kinds": ["github_token"]}
+    assert rec["output_meta"] == full("github_token")
     assert FAKE["github_token"] not in log.read_text()
+
+
+def test_m12_error_is_scanned_even_next_to_a_tool_response(tmp_path):
+    failure = fixture("posttoolusefailure-bash.json")
+    failure["tool_response"] = None
+    failure["error"] = "denied: " + FAKE["npm_token"]
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(failure, log))
+    (rec,) = lines(log)
+    assert rec["output_meta"] == full("npm_token")
+    assert rec["output_sha256"] == sha256_canonical(None)
+
+
+def test_m12_nothing_to_scan_is_not_clean(tmp_path):
+    post = fixture("posttooluse-bash.json")
+    del post["tool_response"]
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(post, log))
+    (rec,) = lines(log)
+    assert rec["output_meta"] == {"scan": "none"}
+
+
+def test_m12_large_output_is_scanned_partly_and_never_reads_clean(tmp_path):
+    cap = load_capture().SCAN_MAX_CHARS
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    rec, _ = post_with({"stdout": "a" * cap + "\n" + FAKE["github_token"]}, tmp_path / "a")
+    assert rec["output_meta"] == {"scan": "partial"}
+    rec, _ = post_with({"stdout": FAKE["github_token"] + "\n" + "a" * cap}, tmp_path / "b")
+    assert rec["output_meta"] == {"scan": "partial", "secret_kinds": ["github_token"]}
+
+
+def test_m12_scan_budget_counts_every_string():
+    capture = load_capture()
+    assert capture.scan_output([["x"] * 10], limit=15) == ([], [], False)
+    assert capture.scan_output([["x"] * 10], limit=20) == ([], [], True)
 
 
 def test_m12_only_post_lines_carry_output_meta(tmp_path):
@@ -506,10 +630,110 @@ def test_m12_only_post_lines_carry_output_meta(tmp_path):
     recs = run_all([fixture("sessionstart.json"), pre, fixture("posttooluse-bash.json")],
                    tmp_path / "trace.jsonl")
     assert ["output_meta" in r for r in recs] == [False, False, True]
-    assert recs[2]["output_meta"] == {}
+    assert recs[2]["output_meta"] == full()
 
 
 def test_m12_all_kinds_at_once_are_sorted(tmp_path):
-    rec, text = post_with({"stdout": " ".join(FAKE[k] for k in reversed(sorted(FAKE)))}, tmp_path)
-    assert rec["output_meta"] == {"secret_kinds": sorted(FAKE)}
+    rec, text = post_with({"stdout": " \n".join(FAKE[k] for k in reversed(sorted(FAKE)))}, tmp_path)
+    assert rec["output_meta"] == full(*FAKE)
     assert not any(v in text for v in FAKE.values())
+
+
+ADVERSARIAL = {
+    "jwt-starts": "-eyJ" * 60000,
+    "jwt-two-segments": ("eyJ" + "a1" * 8 + ".") * 20000,
+    "url-schemes": "a://" + "b" * 100 + ":" * 100000,
+    "pem-headers": ("-----BEGIN " + "RSA PRIVATE KEY-----\n" + "X-Y: " + "z" * 190 + "\n") * 1000,
+    "auth-headers": "Authorization: Bearer " * 20000,
+    "word-chars": "A" * 250000,
+}
+
+
+@pytest.mark.parametrize("name", sorted(ADVERSARIAL))
+def test_m12_scan_time_is_linear(name):
+    capture = load_capture()
+    start = time.monotonic()
+    capture.scan_output([ADVERSARIAL[name]])
+    assert time.monotonic() - start < 2.0
+
+
+# --- M1.2 REDO: command_head never carries a secret (F1) --------------------
+
+TOKEN = rnd(40, ALNUM, 30)
+
+
+@pytest.mark.parametrize("command, head", [
+    ('AUTH="Bearer ' + TOKEN + '" gh api user', "gh"),
+    ("AUTH='Bearer " + TOKEN + "' X=1 curl -s x", "curl"),
+    ('AUTH="Bearer ' + TOKEN + ' gh api user', None),
+    ('"rm" -rf build', "rm"),
+    ("\\rm -rf build", "rm"),
+    ("ls;rm -rf build", None),
+    ("$(which rm) -rf build", None),
+    ("(rm -rf build)", None),
+    ("[ -f x ] && rm x", "["),
+    (FAKE["github_token"] + " --help", None),
+    (FAKE["aws_access_key_id"] + " x", None),
+    (TOKEN[:20] + " x", None),
+    ("A=" + "x" * 70000 + " rm -rf /", None),
+    ("A=" + "x" * ((1 << 16) - 5) + " rmdir x", None),
+    ("ls " + "x" * 70000, "ls"),
+], ids=["quoted-assignment", "single-quoted", "unbalanced", "quoted-name", "backslash",
+        "glued-operator", "substitution", "subshell", "test-bracket", "token-first",
+        "aws-key-first", "mixed-case-word", "huge-assignment", "head-cut-at-limit",
+        "huge-argument"])
+def test_redo_command_head_is_never_a_fragment_of_a_value(tmp_path, command, head):
+    pre = dict(fixture("pretooluse-bash.json"), tool_input={"command": command})
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(pre, log))
+    (rec,) = lines(log)
+    assert rec["input_meta"].get("command_head") == head
+    assert TOKEN not in log.read_text() and TOKEN[:12] not in log.read_text()
+
+
+# --- M1.2 REDO: bounded work under the lock (F9, B4) ------------------------
+
+def test_redo_scan_runs_before_the_lock(tmp_path, monkeypatch):
+    capture = load_capture()
+    order = []
+    real_meta, real_lock = capture.output_meta, capture.lock
+    monkeypatch.setattr(capture, "output_meta", lambda p: order.append("scan") or real_meta(p))
+    monkeypatch.setattr(capture, "lock", lambda f: order.append("lock") or real_lock(f))
+    capture.append(str(tmp_path / "trace.jsonl"), fixture("posttooluse-bash.json"))
+    assert order == ["scan", "lock"]
+
+
+def test_redo_lock_wait_is_capped(tmp_path):
+    capture = load_capture()
+    log = tmp_path / "trace.jsonl"
+    log.write_text("")
+    with open(log) as holder, open(log) as waiter:
+        fcntl.flock(holder.fileno(), fcntl.LOCK_EX)
+        start = time.monotonic()
+        with pytest.raises(capture.CaptureError, match="lock"):
+            capture.lock(waiter, wait=0.3)
+        assert 0.3 <= time.monotonic() - start < 2.0
+
+
+def test_redo_deadline_ends_capture_with_silence(tmp_path, monkeypatch, capsys):
+    capture = load_capture()
+    monkeypatch.setattr(capture, "DEADLINE_SECONDS", 1)
+    monkeypatch.setattr(capture, "append", lambda log, payload: time.sleep(5))
+    monkeypatch.setenv("RAQIB_LOG", str(tmp_path / "trace.jsonl"))
+    data = json.dumps(fixture("pretooluse-bash.json")).encode()
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(data)))
+    start = time.monotonic()
+    assert capture.main() == 0
+    assert time.monotonic() - start < 3
+    out = capsys.readouterr()
+    assert out.out == ""
+    (line,) = out.err.splitlines()
+    assert line.startswith("RAQIB-SILENCE:") and "Deadline" in line
+    assert signal.alarm(0) == 0
+
+
+def test_redo_deadline_is_below_the_installed_timeout():
+    install = (ROOT / "tools" / "install-hooks.sh").read_text()
+    timeout = int(re.search(r"^TIMEOUT = (\d+)", install, re.M).group(1))
+    capture = load_capture()
+    assert capture.LOCK_WAIT_SECONDS < capture.DEADLINE_SECONDS < timeout

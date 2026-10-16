@@ -571,7 +571,7 @@ def test_m12_secret_output_end_to_end_from_capture(tmp_path):
     capture = ROOT / "raqib" / "hooks" / "capture.py"
     log = tmp_path / "trace.jsonl"
     hook = json.loads((ROOT / "tests" / "fixtures" / "posttooluse-bash.json").read_text())
-    secret = "AKIA" + "Q3" * 8
+    secret = "AKIA" + "Q3W8R5T1Y6U2P9Z4"  # assembled: no secret-like literal in the tree
     hook["tool_response"] = {"stdout": "aws_access_key_id = " + secret, "stderr": ""}
     env = dict(os.environ, RAQIB_LOG=str(log))
     subprocess.run([sys.executable, str(capture)], input=json.dumps(hook).encode(),

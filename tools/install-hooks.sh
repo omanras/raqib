@@ -56,8 +56,9 @@ import tempfile
 
 project, capture, log_arg, log_set = sys.argv[1:5]
 MARK = "RAQIB_HOOK=capture"
-# Entries written before the marker existed: `[RAQIB_LOG=x ]python3 <path>`.
-LEGACY = re.compile(r"(?:RAQIB_LOG=\S+ )?python3 \S*raqib/hooks/capture\.py\Z")
+# Entries written before the marker existed: `[RAQIB_LOG=x ]python3 <path>`,
+# where x and <path> may be shell-quoted.
+LEGACY_TAIL = "raqib/hooks/capture.py"
 # (event, matcher): tool events match every tool; session events take none.
 EVENTS = [
     ("PreToolUse", "*"),
@@ -88,11 +89,22 @@ def reject_constant(name):
     raise ValueError("non-standard JSON constant %s" % name)
 
 
+def is_legacy(command):
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return False
+    if words and words[0].startswith("RAQIB_LOG="):
+        words = words[1:]
+    return (len(words) == 2 and words[0] == "python3"
+            and (words[1] == LEGACY_TAIL or words[1].endswith("/" + LEGACY_TAIL)))
+
+
 def is_raqib(hook):
     if not isinstance(hook, dict):
         return False
     command = str(hook.get("command", ""))
-    return command.startswith(MARK + " ") or bool(LEGACY.match(command))
+    return command.startswith(MARK + " ") or is_legacy(command)
 
 
 def log_of(hook):
@@ -141,7 +153,13 @@ existing = [h for event, _ in EVENTS for _, h in raqib_entries(hooks.get(event, 
 if log_set == "1":
     log, log_source = log_arg, "--log"
 else:
-    kept = sorted({log_of(h) for h in existing} - {None})
+    # A relative RAQIB_LOG was resolved by the hook against the session's
+    # cwd, normally the project.
+    kept = sorted({os.path.normpath(os.path.join(project, x))
+                   for x in (log_of(h) for h in existing) if x})
+    if len(kept) > 1:
+        fail("existing Raqib entries write to different traces (%s); pass --log to choose one;"
+             " nothing changed" % ", ".join(kept))
     if kept:
         log, log_source = kept[0], "kept from the existing install"
     else:
@@ -186,7 +204,12 @@ if changed:
     tmp = None
     try:
         os.makedirs(target_dir, exist_ok=True)
-        mode = os.stat(target).st_mode & 0o7777 if os.path.exists(target) else 0o644
+        if os.path.exists(target):
+            mode = os.stat(target).st_mode & 0o7777
+        else:
+            umask = os.umask(0)
+            os.umask(umask)
+            mode = 0o666 & ~umask
         fd, tmp = tempfile.mkstemp(prefix=".settings.", suffix=".json", dir=target_dir)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(new_text)
@@ -195,6 +218,12 @@ if changed:
         os.chmod(tmp, mode)
         os.replace(tmp, target)
         tmp = None
+        # The rename itself is durable only once the directory is synced.
+        dir_fd = os.open(target_dir, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
     except OSError as exc:
         fail("cannot write %s (%s); nothing changed" % (target, exc))
     finally:
