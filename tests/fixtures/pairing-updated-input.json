@@ -1,0 +1,40 @@
+[
+  {
+    "session_id": "fixture-session-0001",
+    "transcript_path": "/tmp/fixture.jsonl",
+    "cwd": "/work/example",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "pytest -q", "description": "run tests"},
+    "tool_use_id": "toolu_fixture_0003"
+  },
+  {
+    "session_id": "fixture-session-0001",
+    "transcript_path": "/tmp/fixture.jsonl",
+    "cwd": "/work/example",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "timeout 600 pytest -q", "description": "run tests"},
+    "tool_use_id": "toolu_fixture_0004"
+  },
+  {
+    "session_id": "fixture-session-0001",
+    "transcript_path": "/tmp/fixture.jsonl",
+    "cwd": "/work/example",
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "timeout 600 pytest -q", "description": "run tests"},
+    "tool_use_id": "toolu_fixture_0003",
+    "tool_response": {"stdout": "1 passed", "stderr": "", "interrupted": false, "isImage": false}
+  },
+  {
+    "session_id": "fixture-session-0001",
+    "transcript_path": "/tmp/fixture.jsonl",
+    "cwd": "/work/example",
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "timeout 600 pytest -q", "description": "run tests"},
+    "tool_use_id": "toolu_fixture_0004",
+    "tool_response": {"stdout": "1 passed", "stderr": "", "interrupted": false, "isImage": false}
+  }
+]

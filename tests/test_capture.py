@@ -1,4 +1,4 @@
-"""M0.1 capture hook: exit criteria E1-E3 (HANDOFF.md), ADR-0001 section 3."""
+"""Capture hook: M0.1 exit criteria E1-E3, M0.1b E1-E3 (ADR-0001 section 3, A-1, A-2)."""
 import datetime
 import hashlib
 import json
@@ -243,3 +243,113 @@ def test_torn_last_line_does_not_swallow_next(tmp_path):
     assert_captured(run(fixture("pretooluse-bash.json"), log))
     torn, rec = log.read_text().splitlines()
     assert json.loads(rec)["seq"] == 1
+
+
+# --- M0.1b E1/E3: tool_use_id is carried and is the pairing key (A-2) ------
+
+def run_all(payloads, log):
+    for payload in payloads:
+        assert_captured(run(payload, log))
+    return lines(log)
+
+
+def pairs(recs):
+    return [(r["phase"], r["seq"], r.get("tool_use_id")) for r in recs]
+
+
+def test_m01b_e1_pre_and_post_carry_tool_use_id(tmp_path):
+    events = fixture("pairing-identical-in-flight.json")
+    recs = run_all(events, tmp_path / "trace.jsonl")
+    assert [r["tool_use_id"] for r in recs] == [e["tool_use_id"] for e in events]
+    assert all(isinstance(r["tool_use_id"], str) for r in recs)
+
+
+@pytest.mark.parametrize("value", ["<missing>", None, "", 7, ["toolu_x"]])
+def test_m01b_e1_no_tool_use_id_unless_non_empty_string(tmp_path, value):
+    pre = fixture("pretooluse-bash.json")
+    if value != "<missing>":
+        pre["tool_use_id"] = value
+    (rec,) = run_all([pre], tmp_path / "trace.jsonl")
+    assert "tool_use_id" not in rec
+
+
+def test_m01b_e3_identical_commands_in_flight_pair_by_tool_use_id(tmp_path):
+    # Same input twice: pairing by input alone would cross the two posts.
+    recs = run_all(fixture("pairing-identical-in-flight.json"), tmp_path / "trace.jsonl")
+    assert pairs(recs) == [
+        ("pre", 1, "toolu_fixture_0001"), ("pre", 2, "toolu_fixture_0002"),
+        ("post", 2, "toolu_fixture_0002"), ("post", 1, "toolu_fixture_0001")]
+    assert [r.get("ok") for r in recs] == [None, None, True, False]
+
+
+def test_m01b_e3_updated_input_rewrite_still_pairs(tmp_path):
+    # A PreToolUse updatedInput rewrite: the post of 0003 carries the rewritten
+    # input, which hashes like the still-open pre 0004. The id must win.
+    events = fixture("pairing-updated-input.json")
+    recs = run_all(events, tmp_path / "trace.jsonl")
+    assert pairs(recs) == [
+        ("pre", 1, "toolu_fixture_0003"), ("pre", 2, "toolu_fixture_0004"),
+        ("post", 1, "toolu_fixture_0003"), ("post", 2, "toolu_fixture_0004")]
+    pre, _, post, _ = recs
+    assert pre["input_sha256"] == sha256_canonical(events[0]["tool_input"])
+    assert post["input_sha256"] == sha256_canonical(events[2]["tool_input"])
+    assert pre["input_sha256"] != post["input_sha256"]
+    assert (pre["input_meta"], post["input_meta"]) == (
+        {"command_head": "pytest"}, {"command_head": "timeout"})
+
+
+def test_m01b_e3_unknown_tool_use_id_falls_back_and_is_logged(tmp_path):
+    # Negative: the post's id matches no pre. The only open pre has the same
+    # input but another id, so the fallback must not take it either.
+    log = tmp_path / "trace.jsonl"
+    recs = run_all(fixture("pairing-unknown-id.json"), log)
+    assert pairs(recs) == [
+        ("pre", 1, "toolu_fixture_0005"), ("post", 2, "toolu_fixture_unknown"),
+        ("post", 1, "toolu_fixture_0005")]
+    assert E1_FIELDS <= set(recs[1]) and recs[1]["ok"] is True
+
+
+def test_m01b_e1_post_with_id_falls_back_to_pre_without_id(tmp_path):
+    post = dict(fixture("posttooluse-bash.json"), tool_use_id="toolu_fixture_unknown")
+    recs = run_all([fixture("pretooluse-bash.json"), post], tmp_path / "trace.jsonl")
+    assert pairs(recs) == [("pre", 1, None), ("post", 1, "toolu_fixture_unknown")]
+
+
+def test_m01b_e1_post_without_id_falls_back_to_pre_with_id(tmp_path):
+    pre = dict(fixture("pretooluse-bash.json"), tool_use_id="toolu_fixture_0006")
+    recs = run_all([pre, fixture("posttooluse-bash.json")], tmp_path / "trace.jsonl")
+    assert pairs(recs) == [("pre", 1, "toolu_fixture_0006"), ("post", 1, None)]
+
+
+# --- M0.1b E2: input_meta.command_head for Bash (A-1) ----------------------
+
+@pytest.mark.parametrize("tool_input,head", [
+    ({"command": "ls -la /etc"}, "ls"),
+    ({"command": "FOO=1 /usr/bin/git x"}, "git"),
+    ({"command": "  A=1\tB_2=x ./bin/run.sh --flag"}, "run.sh"),
+    ({"command": "cd /tmp\nrm -rf build"}, "cd"),
+    ({"command": "9X=1 ls"}, "9X=1"),
+    ({"command": "/usr/local/bin/ --help"}, "bin"),
+    ({"command": "/opt/" + "x" * 100 + " -v"}, "x" * 64),
+    ({"command": "y" * 65}, "y" * 64),
+    ({"command": ""}, None),
+    ({"command": " \n\t "}, None),
+    ({"command": "FOO=1 BAR=2"}, None),
+    ({"command": ["ls"]}, None),
+    ({"description": "no command"}, None),
+])
+def test_m01b_e2_command_head(tmp_path, tool_input, head):
+    pre = dict(fixture("pretooluse-bash.json"), tool_input=tool_input)
+    (rec,) = run_all([pre], tmp_path / "trace.jsonl")
+    if head is None:
+        assert "command_head" not in rec["input_meta"]
+    else:
+        assert rec["input_meta"]["command_head"] == head
+        assert len(rec["input_meta"]["command_head"]) <= 64
+
+
+def test_m01b_e2_command_head_on_bash_post_and_only_for_bash(tmp_path):
+    other = dict(fixture("pretooluse-bash.json"), tool_name="mcp__shell__run")
+    recs = run_all([fixture("pretooluse-bash.json"), fixture("posttooluse-bash.json"),
+                    other, fixture("pretooluse-write.json")], tmp_path / "trace.jsonl")
+    assert [r["input_meta"].get("command_head") for r in recs] == ["ls", "ls", None, None]

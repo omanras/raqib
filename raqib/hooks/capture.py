@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""Raqib capture hook (M0.1).
+"""Raqib capture hook (M0.1, M0.1b).
 
 Installed as a Claude Code PreToolUse + PostToolUse hook. Reads the hook JSON
-on stdin and appends one trace line (docs/specs/ADR-0001 section 3) to
-$RAQIB_LOG (default ./raqib.log.jsonl).
+on stdin and appends one trace line (docs/specs/ADR-0001 section 3 and
+Amendment A) to $RAQIB_LOG (default ./raqib.log.jsonl).
 
 Invariants:
 - Never blocks the agent: always exits 0 and never writes to stdout.
 - Silence is an alarm (A3): if an event cannot be captured, exactly one line
   starting with "RAQIB-SILENCE:" is written to stderr.
 - Offline: stdlib only, no network.
-- Privacy: tool input and output are stored only as sha256 of canonical JSON.
+- Privacy: tool input and output are stored only as sha256 of canonical JSON;
+  input_meta keeps a small extract (path, url_host, Bash command_head).
 
 seq is per session_id and derived from the log itself: a pre takes
-max(seq) + 1; a post takes the seq of the oldest pre in the same session with
-the same tool and input_sha256 that has no post yet (else max(seq) + 1).
+max(seq) + 1. A post takes the seq of the oldest open pre (no post yet) in
+the same session with the same tool_use_id (A-2). If none matches, or the
+post has no tool_use_id, it falls back to the oldest open pre with the same
+tool and input_sha256 where either side has no tool_use_id. Else the post
+takes max(seq) + 1.
 """
 from __future__ import annotations
 
@@ -22,6 +26,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import sys
 import urllib.parse
 
@@ -40,6 +45,10 @@ PHASES = {
     "PostToolUseFailure": "post",
 }
 
+# A-1: leading shell assignments (NAME=value) are not the command.
+ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+COMMAND_HEAD_MAX = 64
+
 
 class CaptureError(Exception):
     pass
@@ -51,11 +60,35 @@ def canonical_sha256(value):
     return hashlib.sha256(blob.encode("ascii")).hexdigest()
 
 
-def input_meta(tool_input):
-    """Small rule-relevant extract of tool_input: {path?, url_host?}."""
+def tool_use_id(value):
+    """The pairing key (A-2) if it is a non-empty string, else None."""
+    return value if isinstance(value, str) and value else None
+
+
+def command_head(command):
+    """A-1: basename of the first whitespace-separated token of a Bash command,
+    skipping leading NAME=value assignments; at most 64 chars. None if there
+    is no such token."""
+    if not isinstance(command, str):
+        return None
+    for token in command.split():
+        if ASSIGNMENT.match(token):
+            continue
+        # basename(1): trailing slashes do not count; "/" stays "/".
+        name = token.rstrip("/").rsplit("/", 1)[-1] or "/"
+        return name[:COMMAND_HEAD_MAX]
+    return None
+
+
+def input_meta(tool, tool_input):
+    """Small rule-relevant extract of tool_input: {path?, command_head?, url_host?}."""
     meta = {}
     if not isinstance(tool_input, dict):
         return meta
+    if tool == "Bash":
+        head = command_head(tool_input.get("command"))
+        if head is not None:
+            meta["command_head"] = head
     for key in ("file_path", "notebook_path", "path"):
         value = tool_input.get(key)
         if isinstance(value, str) and value:
@@ -89,7 +122,8 @@ def is_ok(event, tool_response):
 def session_state(log_text, session_id):
     """Return (max_seq, open_pres) for session_id; open_pres in log order."""
     max_seq = 0
-    open_pres = []  # (tool, input_sha256, seq) of pre lines with no post yet
+    # (tool, input_sha256, tool_use_id, seq) of pre lines with no post yet
+    open_pres = []
     needle = json.dumps(session_id)
     for raw in log_text.splitlines():
         if needle not in raw:
@@ -105,10 +139,26 @@ def session_state(log_text, session_id):
             continue
         max_seq = max(max_seq, seq)
         if rec.get("phase") == "pre":
-            open_pres.append((rec.get("tool"), rec.get("input_sha256"), seq))
+            open_pres.append((rec.get("tool"), rec.get("input_sha256"),
+                              tool_use_id(rec.get("tool_use_id")), seq))
         elif rec.get("phase") == "post":
-            open_pres = [p for p in open_pres if p[2] != seq]
+            open_pres = [p for p in open_pres if p[3] != seq]
     return max_seq, open_pres
+
+
+def paired_seq(open_pres, tool, input_sha, use_id):
+    """seq of the open pre a post closes (A-2), or None."""
+    if use_id is not None:
+        for _, _, pre_id, pre_seq in open_pres:
+            if pre_id == use_id:
+                return pre_seq
+    for pre_tool, pre_sha, pre_id, pre_seq in open_pres:
+        # Two different tool_use_ids are two different calls, whatever the input.
+        if use_id is not None and pre_id is not None:
+            continue
+        if pre_tool == tool and pre_sha == input_sha:
+            return pre_seq
+    return None
 
 
 def validate(payload):
@@ -131,14 +181,14 @@ def build_record(payload, log_text):
     tool = payload["tool_name"]
     tool_input = payload.get("tool_input")
     input_sha = canonical_sha256(tool_input)
+    use_id = tool_use_id(payload.get("tool_use_id"))
 
     max_seq, open_pres = session_state(log_text, session_id)
     seq = max_seq + 1
     if phase == "post":
-        for pre_tool, pre_sha, pre_seq in open_pres:
-            if pre_tool == tool and pre_sha == input_sha:
-                seq = pre_seq
-                break
+        pre_seq = paired_seq(open_pres, tool, input_sha, use_id)
+        if pre_seq is not None:
+            seq = pre_seq
 
     now = datetime.datetime.now(datetime.timezone.utc)
     rec = {
@@ -147,9 +197,11 @@ def build_record(payload, log_text):
         "session_id": session_id,
         "phase": phase,
         "tool": tool,
-        "input_sha256": input_sha,
-        "input_meta": input_meta(tool_input),
     }
+    if use_id is not None:
+        rec["tool_use_id"] = use_id
+    rec["input_sha256"] = input_sha
+    rec["input_meta"] = input_meta(tool, tool_input)
     if phase == "post":
         tool_response = payload.get("tool_response")
         output = tool_response if "tool_response" in payload else payload.get("error")

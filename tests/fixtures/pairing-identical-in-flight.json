@@ -1,0 +1,40 @@
+[
+  {
+    "session_id": "fixture-session-0001",
+    "transcript_path": "/tmp/fixture.jsonl",
+    "cwd": "/work/example",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "make test", "description": "run tests"},
+    "tool_use_id": "toolu_fixture_0001"
+  },
+  {
+    "session_id": "fixture-session-0001",
+    "transcript_path": "/tmp/fixture.jsonl",
+    "cwd": "/work/example",
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "make test", "description": "run tests"},
+    "tool_use_id": "toolu_fixture_0002"
+  },
+  {
+    "session_id": "fixture-session-0001",
+    "transcript_path": "/tmp/fixture.jsonl",
+    "cwd": "/work/example",
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "make test", "description": "run tests"},
+    "tool_use_id": "toolu_fixture_0002",
+    "tool_response": {"stdout": "ok", "stderr": "", "interrupted": false, "isImage": false}
+  },
+  {
+    "session_id": "fixture-session-0001",
+    "transcript_path": "/tmp/fixture.jsonl",
+    "cwd": "/work/example",
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "make test", "description": "run tests"},
+    "tool_use_id": "toolu_fixture_0001",
+    "tool_response": {"stdout": "", "stderr": "", "interrupted": true, "isImage": false}
+  }
+]
