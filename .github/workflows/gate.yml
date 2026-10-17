@@ -1,0 +1,29 @@
+# The constitutional gate, run by GitHub Actions on every push and pull
+# request (A8: the gate runs the whole rule set on every commit).
+# It needs no secret: the gate is offline and reads only the tree.
+name: gate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: install the two tools the gate needs
+        run: python3 -m pip install --disable-pip-version-check pyyaml pytest
+      - name: tools/gate.sh
+        run: tools/gate.sh
