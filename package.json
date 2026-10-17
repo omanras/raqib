@@ -1,6 +1,6 @@
 {
   "name": "dawr",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Dawr: a transparent, verifiable savings-circle (jam'iyya / ROSCA) web application. Records money; never moves it.",
   "license": "MIT",
