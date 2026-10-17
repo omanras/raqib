@@ -1,38 +1,37 @@
-# HANDOFF — M1.2  (phase 1: circles, members, invites, start)
+# HANDOFF — M1.3  (phase 1: the draw)
 
-Task: circle lifecycle routes per ADR §4 with ledger entries, audit rows
-and matrix rows.
+Task: the commit-reveal turn-order draw routes per ADR §2 (Lottery) and
+§4, on top of shared/lottery.ts.
 
 Scope:
   server/
-  shared/
   tests/api/
   tests/unit/
   docs/review/
 
 Exit criteria:
-- E1 `POST /api/circles` (creator becomes organizer; ledger entry
-     circle.created), `GET /api/circles` (mine, with my role and status),
-     `GET /api/circles/:id` (members with positions, rounds, my
-     contributions summary, outstanding counts), `PATCH /api/circles/:id`
-     (draft only; every changed field is a ledger entry circle.rule_changed).
-- E2 Invites: `POST /api/circles/:id/invites` (organizer; one-time token,
-     expiry 7 days, max 50 active per circle) returning a link
-     `${BASE_URL}/join/<token>`; `POST /api/invites/:token/accept`
-     (signed-in user; once; refused after start or at member cap);
-     ledger entry member.joined; `DELETE` is not offered (revoke = POST
-     /invites/:id/revoke, audit only).
-- E3 `POST /api/circles/:id/order` (organizer, draft, a full permutation
-     of member ids; ledger entry order.set with the permutation), `POST
-     /api/circles/:id/start` (organizer; requires >= 2 members, an
-     order, a start date; freezes member_count; creates rounds; ledger
-     entry circle.started), `POST /api/circles/:id/leave` (member,
-     draft only; ledger entry member.left), `POST /api/circles/:id/cancel`
-     (organizer, draft or drawing; ledger entry).
-- E4 Every route: zod, matrix rows for all four roles, audit row, state
-     machine refusal reasons in the error message.
-- E5 Tests per route (happy path, each refusal, matrix). Gate green.
+- E1 `POST /api/circles/:id/draw/open` (organizer, draft -> drawing;
+     commit deadline and reveal deadline in the body, each >= 1 hour
+     ahead; ledger entry draw.opened), `POST .../draw/commit` (member;
+     body {commitment}; once; ledger entry draw.committed with the hash
+     only), `POST .../draw/close-commits` (organizer, or automatic at the
+     deadline on the next request; ledger entry), `POST .../draw/reveal`
+     (member; body {secret}; verified against the commitment; ledger
+     entry draw.revealed with the secret), `POST .../draw/finalize`
+     (organizer, after all reveals or after the reveal deadline; computes
+     the order with shared/lottery.finalize; ledger entry draw.finalized
+     with seed and order; positions set; circle stays drawing until
+     start).
+- E2 A member who never committed cannot reveal; a member who committed
+     and never revealed is placed last per the silent-member rule and the
+     ledger says so; a wrong secret is refused and audited.
+- E3 `GET /api/circles/:id/draw` returns the state for the caller: my
+     commitment status, counts, deadlines, and after finalize the seed and
+     the order, so the client can recompute.
+- E4 Matrix rows for every route; tests for each refusal and for
+     determinism (two servers given the same ledger compute the same
+     order). Gate green.
 
-Not in scope: draw, rounds, client.
-Commit: `landed: M1.2 circles, members, invites, start` or `STOP: M1.2 <reason>`.
+Not in scope: rounds, client.
+Commit: `landed: M1.3 the draw` or `STOP: M1.3 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
