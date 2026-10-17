@@ -1,38 +1,31 @@
-# HANDOFF — M0.1  (phase 0: scaffold and gate)
+# HANDOFF — M0.2  (phase 0: engine part 1, files in and out)
 
-Task: scaffold the app per CLAUDE.md "Stack" and docs/specs/ADR-0001-app.md
-§1, §6, so that `tools/gate.sh` runs the full chain on a hello page.
+Task: port the loaders and serializers of the Python engine
+(reference/spec/ADR-0001-qayd-engine.md §2-§5, §7) to `src/engine/`.
 
 Scope:
-  package.json
-  package-lock.json
-  tsconfig.json
-  vite.config.ts
-  vitest.config.ts
-  playwright.config.ts
-  index.html
-  src/
-  tests/
-  .github/workflows/gate.yml
+  src/engine/
+  tests/engine/
   docs/review/
 
 Exit criteria:
-- E1 `npm ci && npx tsc --noEmit && npx vitest run && npx vite build`
-     succeed; dist/ contains exactly one file, index.html, with every
-     script and style inlined (vite-plugin-singlefile), no remote URL.
-- E2 `src/main.tsx` renders a Preact page "Qayd" with the app version from
-     package.json; `src/engine/decimal.ts` re-exports a configured
-     decimal.js (precision 28, ROUND_HALF_EVEN) and one unit test proves
-     `D("0.1").plus("0.2").eq("0.3")`.
-- E3 playwright.config.ts uses the preinstalled Chromium
-     (PLAYWRIGHT_BROWSERS_PATH), a webServer of `vite preview`, one e2e
-     test that opens the page and reads the heading; `npx playwright test`
-     green. Never run `playwright install`.
-- E4 .github/workflows/gate.yml runs tools/gate.sh on push/PR, Node 22,
-     installs Playwright's Chromium in CI only (`npx playwright install
-     --with-deps chromium`), no secret.
-- E5 tools/gate.sh green end to end.
+- E1 `ledger.ts`: parseLedger(text, config) -> {rows, problems, dupNotes};
+     rows carry line numbers; amounts are Decimal; header must match
+     exactly; BOM and CRLF tolerated; a malformed row is a problem naming
+     the line and the run continues; exact duplicates noted, not dropped.
+     serializeLedger(rows) returns the canonical CSV text (same header,
+     same column order, amounts as written).
+- E2 `holdings.ts` the same for holdings; latestSnapshot(rows, asOf).
+- E3 `policies.ts`: parsePolicies(text) -> Config or problems, validating
+     each type as the Python loader does (unknown type/measure/limit kept
+     with status unknown and the reason); serializePolicies(config) round
+     trips reference/examples/policies.yml semantically.
+- E4 `decisions.ts`, `rates.ts`, `periods.ts` (periodOf, parsePeriod,
+     trailing, periodsBetween; tested at year/quarter boundaries and leap
+     days) ported one-to-one.
+- E5 Unit tests cover every problem class with hand-written fixtures and
+     parse all five reference/examples files without problems. Gate green.
 
-Not in scope: engine logic, screens, reference/.
-Commit: `landed: M0.1 scaffold and gate` or `STOP: M0.1 <reason>`.
+Not in scope: measures, rules, UI.
+Commit: `landed: M0.2 engine part 1` or `STOP: M0.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
