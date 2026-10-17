@@ -1,0 +1,15 @@
+date,account,asset,class,quantity,value,currency
+2026-06-30,savings,cash OMR,cash,1000,1000.000,OMR
+2026-06-30,broker,VWRA,fund,10,1000.000,USD
+2026-07-31,savings,cash OMR,cash,1300,1300.000,OMR
+2026-07-31,broker,VWRA,fund,10,900.000,USD
+2026-07-31,broker,AAPL,equity,2,200.000,USD
+2026-08-31,savings,cash OMR,cash,1600,1600.000,OMR
+2026-08-31,broker,VWRA,fund,10,800.000,USD
+2026-08-31,broker,AAPL,equity,2,250.000,USD
+2026-08-31,cash,loan,debt,1,500.000,OMR
+2026-09-30,savings,cash OMR,cash,1900,1900.000,OMR
+2026-09-30,broker,VWRA,fund,10,950.000,USD
+2026-09-30,broker,AAPL,equity,2,300.000,USD
+2026-09-30,cash,loan,debt,1,400.000,OMR
+2026-09-30,cash,gold coin,gold,1,100.000,GBP
