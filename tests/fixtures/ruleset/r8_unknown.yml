@@ -1,0 +1,12 @@
+title: Unsupported modifier
+id: a1a1a1a1-0000-4000-8000-000000000008
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    CommandLine|base64: 'whoami'
+  condition: selection
+level: medium
+x-mizan:
+  fp_budget: 1

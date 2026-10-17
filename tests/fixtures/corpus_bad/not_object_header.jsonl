@@ -1,0 +1,2 @@
+[1,2]
+{"CommandLine":"example.exe --update","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1000,"User":"NT AUTHORITY\\SYSTEM"}

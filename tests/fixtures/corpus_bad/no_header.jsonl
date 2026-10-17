@@ -1,0 +1,2 @@
+{"CommandLine":"example.exe --update","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1000,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"powershell.exe -File C:\\scripts\\backup.ps1","Computer":"ws01.example.test","EventID":1,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":1001,"User":"EXAMPLE\\alice"}

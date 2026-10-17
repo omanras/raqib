@@ -1,0 +1,51 @@
+{"_mizan":{"generator":"tests","logsource":{"category":"process_creation","product":"windows"}}}
+{"CommandLine":"example.exe --update","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1000,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"powershell.exe -File C:\\scripts\\backup.ps1","Computer":"ws01.example.test","EventID":1,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":1001,"User":"EXAMPLE\\alice"}
+{"CommandLine":"cmd.exe /c echo hello","Computer":"ws02.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1002,"User":"EXAMPLE\\carol"}
+{"CommandLine":"example.exe --service","Computer":"ws03.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1003,"User":"EXAMPLE\\bob"}
+{"CommandLine":"cmd.exe /c echo hello","Computer":"ws04.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1004,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"explorer.exe","Computer":"ws05.example.test","EventID":1,"Image":"C:\\Windows\\explorer.exe","ProcessId":1005,"User":"EXAMPLE\\bob"}
+{"CommandLine":"svchost.exe -k LocalService","Computer":"ws06.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1006,"User":"EXAMPLE\\carol"}
+{"CommandLine":"svchost.exe -k netsvcs -p","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1007,"User":"EXAMPLE\\bob"}
+{"CommandLine":"powershell.exe -File C:\\scripts\\backup.ps1","Computer":"ws01.example.test","EventID":1,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":1008,"User":"EXAMPLE\\bob"}
+{"CommandLine":"svchost.exe -k netsvcs -p","Computer":"ws02.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1009,"User":"EXAMPLE\\alice"}
+{"CommandLine":"cmd.exe /c dir","Computer":"ws03.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1010,"User":"EXAMPLE\\bob"}
+{"CommandLine":"cmd.exe /c type report.txt","Computer":"ws04.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1011,"User":"EXAMPLE\\bob"}
+{"CommandLine":"cmd.exe /c echo hello","Computer":"ws05.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1012,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"explorer.exe","Computer":"ws06.example.test","EventID":1,"Image":"C:\\Windows\\explorer.exe","ProcessId":1013,"User":"EXAMPLE\\alice"}
+{"CommandLine":"example.exe --service","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1014,"User":"EXAMPLE\\alice"}
+{"CommandLine":"example.exe --update","Computer":"ws01.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1015,"User":"EXAMPLE\\carol"}
+{"CommandLine":"explorer.exe","Computer":"ws02.example.test","EventID":1,"Image":"C:\\Windows\\explorer.exe","ProcessId":1016,"User":"EXAMPLE\\alice"}
+{"CommandLine":"explorer.exe","Computer":"ws03.example.test","EventID":1,"Image":"C:\\Windows\\explorer.exe","ProcessId":1017,"User":"EXAMPLE\\carol"}
+{"CommandLine":"example.exe --service","Computer":"ws04.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1018,"User":"EXAMPLE\\alice"}
+{"CommandLine":"svchost.exe -k LocalService","Computer":"ws05.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1019,"User":"EXAMPLE\\bob"}
+{"CommandLine":"cmd.exe /c whoami","Computer":"ws06.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1020,"User":"EXAMPLE\\carol"}
+{"CommandLine":"svchost.exe -k LocalService","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1021,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"svchost.exe -k LocalService","Computer":"ws01.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1022,"User":"EXAMPLE\\carol"}
+{"CommandLine":"\\??\\C:\\Windows\\system32\\conhost.exe 0x4","Computer":"ws02.example.test","EventID":1,"Image":"C:\\Windows\\System32\\conhost.exe","ProcessId":1023,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"\\??\\C:\\Windows\\system32\\conhost.exe 0x4","Computer":"ws03.example.test","EventID":1,"Image":"C:\\Windows\\System32\\conhost.exe","ProcessId":1024,"User":"EXAMPLE\\alice"}
+{"CommandLine":"svchost.exe -k netsvcs -p","Computer":"ws04.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1025,"User":"EXAMPLE\\carol"}
+{"CommandLine":"powershell.exe -File C:\\scripts\\backup.ps1","Computer":"ws05.example.test","EventID":1,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":1026,"User":"EXAMPLE\\bob"}
+{"CommandLine":"powershell.exe -File C:\\scripts\\backup.ps1","Computer":"ws06.example.test","EventID":1,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":1027,"User":"EXAMPLE\\bob"}
+{"CommandLine":"powershell.exe Get-Date","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":1028,"User":"EXAMPLE\\bob"}
+{"CommandLine":"cmd.exe /c echo hello","Computer":"ws01.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1029,"User":"EXAMPLE\\carol"}
+{"CommandLine":"svchost.exe -k LocalService","Computer":"ws02.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1030,"User":"EXAMPLE\\bob"}
+{"CommandLine":"\\??\\C:\\Windows\\system32\\conhost.exe 0x4","Computer":"ws03.example.test","EventID":1,"Image":"C:\\Windows\\System32\\conhost.exe","ProcessId":1031,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"example.exe --service","Computer":"ws04.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1032,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"explorer.exe","Computer":"ws05.example.test","EventID":1,"Image":"C:\\Windows\\explorer.exe","ProcessId":1033,"User":"EXAMPLE\\bob"}
+{"CommandLine":"cmd.exe /c dir","Computer":"ws06.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1034,"User":"EXAMPLE\\alice"}
+{"CommandLine":"example.exe --service","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1035,"User":"EXAMPLE\\carol"}
+{"CommandLine":"\\??\\C:\\Windows\\system32\\conhost.exe 0x4","Computer":"ws01.example.test","EventID":1,"Image":"C:\\Windows\\System32\\conhost.exe","ProcessId":1036,"User":"EXAMPLE\\carol"}
+{"CommandLine":"\\??\\C:\\Windows\\system32\\conhost.exe 0x4","Computer":"ws02.example.test","EventID":1,"Image":"C:\\Windows\\System32\\conhost.exe","ProcessId":1037,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"example.exe --service","Computer":"ws03.example.test","EventID":1,"Image":"C:\\Program Files\\Example\\example.exe","ProcessId":1038,"User":"EXAMPLE\\carol"}
+{"CommandLine":"\\??\\C:\\Windows\\system32\\conhost.exe 0x4","Computer":"ws04.example.test","EventID":1,"Image":"C:\\Windows\\System32\\conhost.exe","ProcessId":1039,"User":"EXAMPLE\\alice"}
+{"CommandLine":"svchost.exe -k netsvcs -p","Computer":"ws05.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1040,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"cmd.exe /c echo hello","Computer":"ws06.example.test","EventID":1,"Image":"C:\\Windows\\System32\\cmd.exe","ProcessId":1041,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"svchost.exe -k netsvcs -p","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1042,"User":"EXAMPLE\\bob"}
+{"CommandLine":"svchost.exe -k LocalService","Computer":"ws01.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1043,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"\\??\\C:\\Windows\\system32\\conhost.exe 0x4","Computer":"ws02.example.test","EventID":1,"Image":"C:\\Windows\\System32\\conhost.exe","ProcessId":1044,"User":"EXAMPLE\\carol"}
+{"CommandLine":"powershell.exe Get-Date","Computer":"ws03.example.test","EventID":1,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":1045,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"explorer.exe","Computer":"ws04.example.test","EventID":1,"Image":"C:\\Windows\\explorer.exe","ProcessId":1046,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"powershell.exe Get-Date","Computer":"ws05.example.test","EventID":1,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","ProcessId":1047,"User":"EXAMPLE\\bob"}
+{"CommandLine":"\\??\\C:\\Windows\\system32\\conhost.exe 0x4","Computer":"ws06.example.test","EventID":1,"Image":"C:\\Windows\\System32\\conhost.exe","ProcessId":1048,"User":"NT AUTHORITY\\SYSTEM"}
+{"CommandLine":"svchost.exe -k netsvcs -p","Computer":"ws00.example.test","EventID":1,"Image":"C:\\Windows\\System32\\svchost.exe","ProcessId":1049,"User":"NT AUTHORITY\\SYSTEM"}

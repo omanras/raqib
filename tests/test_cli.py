@@ -3,6 +3,7 @@
 
 import io
 import json
+import os
 import pathlib
 import sys
 
@@ -187,3 +188,129 @@ def test_dunder_main_module():
     importlib.reload(entry)
     assert entry._main(["test", rule("pass")]) == 0
     assert entry._main([]) == 2
+
+
+# --- corpus command (M1.2) ------------------------------------------------------------------------
+
+RULESET = str(ROOT / "tests" / "fixtures" / "ruleset")
+CORPUS_OK = str(ROOT / "tests" / "fixtures" / "corpus_ok")
+CORPUS_BAD = str(ROOT / "tests" / "fixtures" / "corpus_bad")
+
+
+def test_corpus_command_text():
+    code, out, err = run("corpus", RULESET, "--corpus", CORPUS_OK)
+    assert code == 1 and err == ""
+    heads = [line for line in out.splitlines() if not line.startswith("  ")]
+    assert heads == [
+        "invalid - fp/10k=- budget=- events=0",
+        "unknown a1a1a1a1-0000-4000-8000-000000000008 fp/10k=0 budget=1 events=50",
+        "over_budget a1a1a1a1-0000-4000-8000-000000000002 fp/10k=200 budget=100 events=50",
+        "no_corpus a1a1a1a1-0000-4000-8000-000000000003 fp/10k=- budget=1 events=0",
+        "no_corpus a1a1a1a1-0000-4000-8000-000000000005 fp/10k=- budget=1500 events=0",
+        "pass a1a1a1a1-0000-4000-8000-000000000001 fp/10k=200 budget=250 events=50",
+        "pass a1a1a1a1-0000-4000-8000-000000000004 fp/10k=1000 budget=1500 events=40",
+        "pass a1a1a1a1-0000-4000-8000-000000000007 fp/10k=200 budget=250 events=50",
+        "pass a1a1a1a1-0000-4000-8000-000000000006 fp/10k=0 budget=0 events=50",
+    ]
+    assert "  %s:22 match" % (ROOT / "tests" / "fixtures" / "corpus_ok" / "windows-process_creation.jsonl") in out
+
+
+def test_corpus_command_json():
+    code, out, _ = run("corpus", RULESET, "--corpus", CORPUS_OK, "--json")
+    assert code == 1
+    document = json.loads(out)
+    assert document["command"] == "corpus" and document["green"] is False
+    by_id = {r["id"]: r for r in document["rules"]}
+    r1 = by_id["a1a1a1a1-0000-4000-8000-000000000001"]
+    assert r1["status"] == "pass" and r1["corpus"]["fp_per_10k"] == 200.0
+    assert r1["corpus"]["files"][0]["matches"] == [22]
+    assert by_id["a1a1a1a1-0000-4000-8000-000000000002"]["status"] == "over_budget"
+
+
+def test_corpus_command_broken_corpus_is_exit_3():
+    code, out, err = run("corpus", RULESET, "--corpus", CORPUS_BAD)
+    assert code == 3
+    assert "no_header.jsonl" in err and "malformed_line.jsonl:4" in err
+    assert out.startswith("invalid ")
+    assert "unknown a1a1a1a1-0000-4000-8000-000000000001" in out
+
+
+def test_corpus_command_missing_dirs():
+    code, out, err = run("corpus", str(ROOT / "nope"), "--corpus", CORPUS_OK)
+    assert code == 3 and out == "" and "missing" in err
+    code, out, err = run("corpus", RULESET, "--corpus", str(ROOT / "nope"))
+    assert code == 3 and "corpus directory missing" in err
+    assert "no_corpus" in out
+
+
+# --- check command (M1.2) ---------------------------------------------------------------------------
+
+def test_check_command_red_rules_first():
+    code, out, err = run("check", RULESET, "--corpus", CORPUS_OK)
+    assert code == 1 and err == ""
+    heads = [line.split(" ")[0] for line in out.splitlines() if not line.startswith("  ")]
+    assert heads == ["invalid", "unknown", "fail", "over_budget", "no_corpus", "no_corpus", "pass", "pass", "pass"]
+    lines = out.splitlines()
+    assert lines[0] == "invalid - %s" % os.path.join(RULESET, "invalid.yml")
+    assert any(line.endswith("r7_fixture_fail.positive.jsonl:3 did not match (must match)") for line in lines)
+    assert any(line.endswith("windows-process_creation.jsonl:22 match") for line in lines)
+    assert "  fp/10k=200 budget=250 events=50 corpus=windows-process_creation.jsonl" in lines
+
+
+def test_check_command_json_shape():
+    code, out, _ = run("check", RULESET, "--corpus", CORPUS_OK, "--json")
+    assert code == 1
+    document = json.loads(out)
+    assert set(document) == {"version", "command", "rules_dir", "corpus", "rules", "green"}
+    assert document["version"] == 1 and document["green"] is False
+    statuses = [r["status"] for r in document["rules"]]
+    assert statuses == ["invalid", "unknown", "fail", "over_budget", "no_corpus", "no_corpus", "pass", "pass", "pass"]
+    r6 = [r for r in document["rules"] if (r["id"] or "").endswith("006")][0]
+    assert r6["fixtures"]["positive"]["events"] == 2
+    assert r6["corpus"]["fp_per_10k"] == 0.0
+
+
+def test_check_green_set(tmp_path):
+    import shutil
+    rules = tmp_path / "rules"
+    rules.mkdir()
+    for name in ("r1_within_budget", "r4_named_corpus"):
+        for suffix in (".yml", ".positive.jsonl", ".negative.jsonl"):
+            shutil.copy(os.path.join(RULESET, name + suffix), str(rules / (name + suffix)))
+    code, out, err = run("check", str(rules), "--corpus", CORPUS_OK)
+    assert code == 0 and err == "", out
+    assert all(line.startswith("pass ") or line.startswith("  ") for line in out.splitlines())
+    code, out, _ = run("check", str(rules), "--corpus", CORPUS_OK, "--json")
+    assert code == 0 and json.loads(out)["green"] is True
+
+
+def test_check_defaults_to_rules_and_corpus_of_cwd(tmp_path, monkeypatch):
+    import shutil
+    (tmp_path / "rules").mkdir()
+    shutil.copytree(CORPUS_OK, str(tmp_path / "corpus"))
+    for suffix in (".yml", ".positive.jsonl", ".negative.jsonl"):
+        shutil.copy(os.path.join(RULESET, "r1_within_budget" + suffix), str(tmp_path / "rules" / ("r" + suffix)))
+    monkeypatch.chdir(str(tmp_path))
+    code, out, err = run("check")
+    assert code == 0, err
+    assert out.startswith("pass a1a1a1a1-0000-4000-8000-000000000001 ")
+    assert "rules/r.positive.jsonl:1 matched" in out
+
+
+def test_check_empty_rules_dir_is_red(tmp_path):
+    code, out, err = run("check", str(tmp_path), "--corpus", CORPUS_OK)
+    assert code == 1 and out == "" and "no *.yml rule" in err
+    code, out, _ = run("check", str(tmp_path), "--corpus", CORPUS_OK, "--json")
+    assert code == 1 and json.loads(out) == {"version": 1, "command": "check", "rules_dir": str(tmp_path),
+                                             "corpus": CORPUS_OK, "rules": [], "green": False}
+
+
+def test_check_broken_corpus_is_exit_3():
+    code, out, err = run("check", RULESET, "--corpus", CORPUS_BAD)
+    assert code == 3 and "empty.jsonl" in err
+    assert "unknown a1a1a1a1-0000-4000-8000-000000000001" in out
+
+
+def test_check_missing_rules_dir_is_exit_3():
+    code, out, err = run("check", str(ROOT / "nope"))
+    assert code == 3 and out == "" and "missing" in err

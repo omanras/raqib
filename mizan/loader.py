@@ -320,6 +320,23 @@ def _validate(raw: Dict[str, Any], path: str, problems: Problems) -> Optional[Ru
     )
 
 
+def find_rules(directory) -> List[str]:
+    """Every ``*.yml`` file under ``directory`` (recursive), sorted; never
+    raises -- an unreadable directory yields an empty list.  Callers check
+    the directory exists first (ADR-0001 section 8: exit 3)."""
+    found: List[str] = []
+    try:
+        root = os.fspath(directory)
+        for current, dirs, files in os.walk(root):
+            dirs.sort()
+            for name in sorted(files):
+                if name.endswith(".yml"):
+                    found.append(os.path.join(current, name))
+    except (OSError, TypeError):
+        return []
+    return found
+
+
 def load(path):
     """Read the rule file at ``path``.
 

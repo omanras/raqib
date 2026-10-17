@@ -55,6 +55,9 @@ class Result:
     citations: List[Citation] = field(default_factory=list)
     problems: List[Dict[str, str]] = field(default_factory=list)
     details: Dict[str, Any] = field(default_factory=dict)
+    #: Replaces ``<title>`` on the first text line when set (the ``corpus``
+    #: command prints ``fp/10k=... budget=... events=...`` there).
+    headline: Optional[str] = None
 
     @property
     def green(self) -> bool:
@@ -77,7 +80,8 @@ class Result:
         return out
 
     def text(self) -> str:
-        head = "%s %s %s" % (self.status, self.id or "-", self.title or self.path)
+        tail = self.headline if self.headline is not None else (self.title or self.path)
+        head = "%s %s %s" % (self.status, self.id or "-", tail)
         lines = [head]
         for problem in self.problems:
             lines.append("  %s %s: %s" % (self.path, problem.get("field", "?"), problem.get("reason", "")))
@@ -112,6 +116,41 @@ def render_json(results: List[Result], **extra: Any) -> str:
 
 def exit_code(results: List[Result]) -> int:
     return EXIT_GREEN if is_green(results) else EXIT_RED
+
+
+#: Status precedence when fixtures and corpus verdicts are combined.
+_COMBINE_ORDER = ("invalid", "unknown", "fail", "over_budget", "no_corpus", "pass")
+
+
+def combine(fixture_result: Result, corpus_result: Result) -> Result:
+    """The ``check`` verdict of one rule: fixtures and budget together.
+
+    The status is the reddest of the two in the order invalid, unknown,
+    fail, over_budget, no_corpus; ``pass`` only when both pass.  Citations
+    of both are kept, fixtures first.
+    """
+    statuses = (fixture_result.status, corpus_result.status)
+    status = "pass"
+    for candidate in _COMBINE_ORDER:
+        if candidate in statuses:
+            status = candidate
+            break
+    result = Result(status, fixture_result.path,
+                    id=fixture_result.id or corpus_result.id,
+                    title=fixture_result.title or corpus_result.title)
+    result.citations = list(fixture_result.citations)
+    for citation in corpus_result.citations:  # the rule-level unknown is cited by both
+        if citation not in result.citations:
+            result.citations.append(citation)
+    result.problems = list(fixture_result.problems) or list(corpus_result.problems)
+    for key in ("fixtures", "corpus"):
+        for source in (fixture_result, corpus_result):
+            if key in source.details:
+                result.details[key] = source.details[key]
+    notes = list(fixture_result.details.get("notes", ())) + list(corpus_result.details.get("notes", ()))
+    if notes:
+        result.details["notes"] = notes
+    return result
 
 
 def rule_identity(rule_or_problems) -> Dict[str, Optional[str]]:

@@ -1,0 +1,41 @@
+{"_mizan":{"logsource":{"product":"linux","service":"auth"}}}
+{"host":"srv00.example.test","message":"Accepted publickey for alice from 192.0.2.74 port 54283 ssh2","pid":2000,"process":"sshd"}
+{"host":"srv01.example.test","message":"Disconnected from user deploy 192.0.2.168 port 39186","pid":2001,"process":"sshd"}
+{"host":"srv02.example.test","message":"pam_unix(sshd:session): session opened for user bob","pid":2002,"process":"sshd"}
+{"host":"srv03.example.test","message":"Failed password for deploy from 192.0.2.37 port 41931 ssh2","pid":2003,"process":"sshd"}
+{"host":"srv04.example.test","message":"pam_unix(sshd:session): session opened for user deploy","pid":2004,"process":"sshd"}
+{"host":"srv00.example.test","message":"Accepted publickey for deploy from 192.0.2.191 port 51280 ssh2","pid":2005,"process":"sshd"}
+{"host":"srv01.example.test","message":"Disconnected from user bob 192.0.2.69 port 34677","pid":2006,"process":"sshd"}
+{"host":"srv02.example.test","message":"pam_unix(sshd:session): session opened for user bob","pid":2007,"process":"sshd"}
+{"host":"srv03.example.test","message":"pam_unix(sshd:session): session opened for user alice","pid":2008,"process":"sshd"}
+{"host":"srv04.example.test","message":"pam_unix(sshd:session): session opened for user bob","pid":2009,"process":"sshd"}
+{"host":"srv00.example.test","message":"pam_unix(sshd:session): session opened for user deploy","pid":2010,"process":"sshd"}
+{"host":"srv01.example.test","message":"pam_unix(sshd:session): session opened for user bob","pid":2011,"process":"sshd"}
+{"host":"srv02.example.test","message":"Disconnected from user bob 192.0.2.9 port 52311","pid":2012,"process":"sshd"}
+{"host":"srv03.example.test","message":"Failed password for bob from 192.0.2.42 port 36138 ssh2","pid":2013,"process":"sshd"}
+{"host":"srv04.example.test","message":"Accepted publickey for deploy from 192.0.2.219 port 26806 ssh2","pid":2014,"process":"sshd"}
+{"host":"srv00.example.test","message":"Disconnected from user bob 192.0.2.129 port 34998","pid":2015,"process":"sshd"}
+{"host":"srv01.example.test","message":"pam_unix(sshd:session): session opened for user bob","pid":2016,"process":"sshd"}
+{"host":"srv02.example.test","message":"Accepted publickey for deploy from 192.0.2.211 port 51383 ssh2","pid":2017,"process":"sshd"}
+{"host":"srv03.example.test","message":"Disconnected from user bob 192.0.2.132 port 41599","pid":2018,"process":"sshd"}
+{"host":"srv04.example.test","message":"pam_unix(sshd:session): session opened for user alice","pid":2019,"process":"sshd"}
+{"host":"srv00.example.test","message":"Accepted publickey for alice from 192.0.2.226 port 58075 ssh2","pid":2020,"process":"sshd"}
+{"host":"srv01.example.test","message":"Accepted publickey for alice from 192.0.2.183 port 57605 ssh2","pid":2021,"process":"sshd"}
+{"host":"srv02.example.test","message":"Accepted publickey for deploy from 192.0.2.102 port 40986 ssh2","pid":2022,"process":"sshd"}
+{"host":"srv03.example.test","message":"Failed password for alice from 192.0.2.250 port 24424 ssh2","pid":2023,"process":"sshd"}
+{"host":"srv04.example.test","message":"pam_unix(sshd:session): session opened for user alice","pid":2024,"process":"sshd"}
+{"host":"srv00.example.test","message":"Disconnected from user alice 192.0.2.244 port 57654","pid":2025,"process":"sshd"}
+{"host":"srv01.example.test","message":"Disconnected from user bob 192.0.2.76 port 20595","pid":2026,"process":"sshd"}
+{"host":"srv02.example.test","message":"Accepted publickey for deploy from 192.0.2.83 port 45817 ssh2","pid":2027,"process":"sshd"}
+{"host":"srv03.example.test","message":"pam_unix(sshd:session): session opened for user bob","pid":2028,"process":"sshd"}
+{"host":"srv04.example.test","message":"pam_unix(sshd:session): session opened for user deploy","pid":2029,"process":"sshd"}
+{"host":"srv00.example.test","message":"Disconnected from user bob 192.0.2.161 port 47050","pid":2030,"process":"sshd"}
+{"host":"srv01.example.test","message":"pam_unix(sshd:session): session opened for user deploy","pid":2031,"process":"sshd"}
+{"host":"srv02.example.test","message":"Accepted publickey for bob from 192.0.2.252 port 45711 ssh2","pid":2032,"process":"sshd"}
+{"host":"srv03.example.test","message":"Failed password for deploy from 192.0.2.130 port 59632 ssh2","pid":2033,"process":"sshd"}
+{"host":"srv04.example.test","message":"pam_unix(sshd:session): session opened for user bob","pid":2034,"process":"sshd"}
+{"host":"srv00.example.test","message":"Accepted publickey for deploy from 192.0.2.70 port 39130 ssh2","pid":2035,"process":"sshd"}
+{"host":"srv01.example.test","message":"Accepted publickey for alice from 192.0.2.215 port 27008 ssh2","pid":2036,"process":"sshd"}
+{"host":"srv02.example.test","message":"Disconnected from user deploy 192.0.2.111 port 49517","pid":2037,"process":"sshd"}
+{"host":"srv03.example.test","message":"Disconnected from user alice 192.0.2.174 port 59482","pid":2038,"process":"sshd"}
+{"host":"srv04.example.test","message":"Disconnected from user bob 192.0.2.132 port 54735","pid":2039,"process":"sshd"}

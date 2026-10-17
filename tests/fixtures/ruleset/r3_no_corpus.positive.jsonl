@@ -1,0 +1,2 @@
+{"CommandLine":"cmd.exe /c whoami","Image":"C:\\Windows\\System32\\cmd.exe","User":"EXAMPLE\\alice"}
+{"CommandLine":"whoami /all","Image":"D:\\tools\\CMD.EXE","User":"EXAMPLE\\bob"}

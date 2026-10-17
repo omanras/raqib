@@ -1,0 +1,14 @@
+title: Named corpus that does not exist
+id: a1a1a1a1-0000-4000-8000-000000000005
+logsource:
+  product: linux
+  service: auth
+detection:
+  selection:
+    message|contains: 'Failed password'
+  condition: selection
+level: medium
+x-mizan:
+  fp_budget: 1500
+  corpus:
+    - nope.jsonl
