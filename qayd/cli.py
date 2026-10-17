@@ -3,7 +3,7 @@
     python3 -m qayd check     [--dir DIR] [--as-of DATE] [--json]
     python3 -m qayd routine   [--dir DIR] [--period 2026-10] [--as-of DATE] [--json]
     python3 -m qayd decisions [--dir DIR] [--as-of DATE] [--json]
-    python3 -m qayd review    [--dir DIR] --period P -o FILE.html       (M2.1)
+    python3 -m qayd review    [--dir DIR] --period P [--as-of DATE] -o FILE.html
     python3 -m qayd init      [--dir DIR]       copies examples/ into DIR
 
 Exit codes: 0 green (check: every policy holds; routine: every routine
@@ -239,6 +239,36 @@ def cmd_decisions(opts, out, err):
     return EXIT_RED if due else EXIT_GREEN
 
 
+def cmd_review(opts, out, err):
+    """Write the review page of a period (ADR section 9)."""
+    if opts.period is None:
+        err.write("qayd: review needs --period 2026-10, 2026-Q3 or 2026\n%s" % USAGE)
+        return EXIT_USAGE
+    period = periods.parse(opts.period)
+    if period is None:
+        err.write("qayd: --period must be 2026-10, 2026-Q3 or 2026, got %r\n%s" % (opts.period, USAGE))
+        return EXIT_USAGE
+    if opts.output is None:
+        err.write("qayd: review needs -o FILE.html (use - for standard output)\n%s" % USAGE)
+        return EXIT_USAGE
+    today = opts.as_of or datetime.date.today()
+    as_of = period.end if period.end <= today else today
+    household = _household(opts, as_of, err)
+    if household is None:
+        return EXIT_FILE
+    from . import review
+    if opts.output == "-":
+        out.write(review.render(review.build(household, period, as_of)))
+        return EXIT_GREEN
+    try:
+        review.write(household, period, as_of, opts.output)
+    except OSError as exc:
+        err.write("qayd: cannot write %s: %s\n" % (opts.output, exc))
+        return EXIT_FILE
+    out.write("wrote %s (review of %s as of %s)\n" % (opts.output, period.label, as_of.isoformat()))
+    return EXIT_GREEN
+
+
 def examples_dir():
     """The repository's examples/ directory (next to the qayd package)."""
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples")
@@ -293,7 +323,9 @@ def main(argv=None, stdout=None, stderr=None):
             return cmd_decisions(opts, out, err)
         if opts.command == "init":
             return cmd_init(opts, out, err)
-        err.write("qayd: command %r is not available yet\n%s" % (opts.command, USAGE))
+        if opts.command == "review":
+            return cmd_review(opts, out, err)
+        err.write("qayd: command %r is not available\n%s" % (opts.command, USAGE))
         return EXIT_USAGE
     except Exception as exc:  # the contract is "never raises"
         try:
