@@ -43,7 +43,14 @@
       "Bash(npm *)",
       "Bash(npx *)",
       "Bash(tsc *)",
-      "Bash(du *)"
+      "Bash(du *)",
+      "Bash(docker *)",
+      "Bash(sqlite3 *)",
+      "Bash(kill *)",
+      "Bash(pkill *)",
+      "Bash(sleep *)",
+      "Bash(env *)",
+      "Bash(printenv *)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -57,7 +64,8 @@
       "Bash(git push -f*)",
       "Bash(git push origin mizan*)",
       "Bash(git push origin qayd*)",
-      "Bash(npx playwright install*)"
+      "Bash(npx playwright install*)",
+      "Bash(git push origin dawr*)"
     ]
   },
   "hooks": {
