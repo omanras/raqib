@@ -212,6 +212,8 @@ def run(records, findings, backend, threshold=DEFAULT_THRESHOLD, size=DEFAULT_WI
         else:
             counts["errors"] += 1
             out.append(dict(base, kind="error", error=_clean(fields)))
+    # Whether another model was allowed to answer at all (B-5), so a zero
+    # count is not read as "fallback was on and never used".
     summary = dict(counts, backend=backend.name, model=backend.model, threshold=threshold,
-                   window_size=size)
+                   window_size=size, allow_fallback=getattr(backend, "allow_fallback", False) is True)
     return out, summary

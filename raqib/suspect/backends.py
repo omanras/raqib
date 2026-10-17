@@ -3,9 +3,12 @@
 
 - ollama     local model over HTTP (stdlib urllib, no proxy); the ADR default.
 - anthropic  Claude through the official `anthropic` SDK. It is imported only
-             when this backend is chosen, so raqib stays stdlib-only (A-7).
-             Output is forced with structured outputs (output_config.format)
-             and refusals fall back server-side (fallbacks: "default").
+             here and only when this backend is chosen, so raqib stays
+             stdlib-only (A-7, ADR-0001 B-3). Output is forced with structured
+             outputs (output_config.format). Server-side fallback is off by
+             default, so a refusal is an error line; allow_fallback
+             (--allow-fallback) opts in to fallbacks: "default", and an answer
+             from another model is then labelled and counted (B-5).
 - fake       canned answers from a JSON file, for tests and dry runs.
 """
 from __future__ import annotations
@@ -75,11 +78,12 @@ class OllamaBackend:
 class AnthropicBackend:
     name = "anthropic"
 
-    def __init__(self, model=None, effort=DEFAULT_EFFORT, client=None):
+    def __init__(self, model=None, effort=DEFAULT_EFFORT, client=None, allow_fallback=False):
         if effort not in EFFORTS:
             raise ValueError("effort must be one of %s" % ", ".join(EFFORTS))
         self.model = model or DEFAULT_ANTHROPIC_MODEL
         self.effort = effort
+        self.allow_fallback = allow_fallback is True
         self._client = client
         self.last_model = None  # the model that answered the last call (response.model)
 
@@ -98,16 +102,18 @@ class AnthropicBackend:
         except Exception as exc:
             raise BackendError("anthropic: cannot create a client: %s: %s" % (type(exc).__name__, exc))
         self._client = client
+        # A watcher must know which model judged (B-5): no other model may
+        # answer unless the caller opted in.
+        fallback = {"betas": [FALLBACK_BETA], "fallbacks": "default"} if self.allow_fallback else {}
         try:
             response = client.beta.messages.create(
                 model=self.model,
                 max_tokens=16000,
-                betas=[FALLBACK_BETA],
-                fallbacks="default",
                 system=system,
                 messages=[{"role": "user", "content": user}],
                 output_config={"effort": self.effort,
                                "format": {"type": "json_schema", "schema": schema}},
+                **fallback,
             )
         except anthropic.AuthenticationError:
             raise BackendError("anthropic: authentication failed (check ANTHROPIC_API_KEY)")
@@ -182,11 +188,14 @@ def _window_of(user):
     return json.loads(session_json)["session_id"], int(first), int(rest.split(" ", 1)[0])
 
 
-def make_backend(name, model=None, ollama_url=None, effort=DEFAULT_EFFORT, answers=None):
+def make_backend(name, model=None, ollama_url=None, effort=DEFAULT_EFFORT, answers=None,
+                 allow_fallback=False):
+    if allow_fallback and name != "anthropic":
+        raise ValueError("--allow-fallback applies to the anthropic backend only")
     if name == "ollama":
         return OllamaBackend(model=model, url=ollama_url)
     if name == "anthropic":
-        return AnthropicBackend(model=model, effort=effort)
+        return AnthropicBackend(model=model, effort=effort, allow_fallback=allow_fallback)
     if name == "fake":
         if not answers:
             raise ValueError("the fake backend needs --answers FILE")

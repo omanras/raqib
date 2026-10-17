@@ -11,12 +11,14 @@
   check-rules [--json]
       Run every catalog rule on its fixtures and the benign corpus; print the
       measured fp_rate against the declared fp_budget (A6).
-  suspect TRACE [--findings FILE] [--backend ollama|anthropic|fake] [-o FILE]
+  suspect TRACE [--findings FILE] [--backend ollama|anthropic|fake] [--allow-fallback] [-o FILE]
       Ask a model to raise suspicion over windows of the trace (ADR-0001
       section 5). It can only raise (A2): answers below --threshold are
       dropped, never recorded as clean; failures become error lines (A3).
       With -o, FILE.run.json records how many windows were judged.
       report TRACE --suspicion FILE shows the result with cited lines.
+      --allow-fallback lets another model answer a window the anthropic
+      model refuses (off by default; ADR-0001 B-5).
       Exit 1 if anything was raised (or the trace is empty or corrupt), 3 if
       no suspicion was raised but some window could not be judged, 0 if
       nothing was raised (not a clearance, A2).
@@ -96,6 +98,9 @@ def _parser():
     s.add_argument("--ollama-url", metavar="URL", help="default: OLLAMA_HOST or http://localhost:11434")
     s.add_argument("--effort", default=suspect_backends.DEFAULT_EFFORT, choices=suspect_backends.EFFORTS,
                    help="anthropic effort level")
+    s.add_argument("--allow-fallback", action="store_true",
+                   help="anthropic only: let another model answer a refused window (default off;"
+                        " such answers are labelled answered_by and counted)")
     s.add_argument("--answers", metavar="FILE", help="canned answers for the fake backend")
     s.add_argument("--threshold", type=float, default=suspect_core.DEFAULT_THRESHOLD)
     s.add_argument("--window", type=int, default=suspect_core.DEFAULT_WINDOW, help="lines per window")
@@ -334,7 +339,8 @@ def cmd_suspect(args, out):
         found, _ = run_rules(records, _catalog(args.catalog), _context(args), _gap_seconds(args))
     try:
         backend = suspect_backends.make_backend(args.backend, model=args.model, ollama_url=args.ollama_url,
-                                                effort=args.effort, answers=args.answers)
+                                                effort=args.effort, answers=args.answers,
+                                                allow_fallback=args.allow_fallback)
         _remote_notice(backend)
         lines, summary = suspect_core.run(records, found, backend, args.threshold, args.window)
     except ValueError as exc:
@@ -410,6 +416,8 @@ def _remote_notice(backend):
                          % backend.url)
     elif backend.name == "anthropic":
         sys.stderr.write("raqib: note: trace metadata is sent to the Anthropic API\n")
+        if getattr(backend, "allow_fallback", False):
+            sys.stderr.write("raqib: note: server-side fallback is on; another model may answer\n")
 
 
 def make_candidate(spec, args):

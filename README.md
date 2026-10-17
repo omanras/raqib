@@ -89,6 +89,7 @@ All commands run from the Raqib checkout. TRACE is a `raqib.log.jsonl`.
 | `python3 -m raqib ui TRACE -o trace.html` (or `--serve`) | the report as one static page: timeline, findings, silence bands; no script; `--serve` binds 127.0.0.1 |
 | `python3 -m raqib check-rules` | each rule's measured false-positive rate against its budget |
 | `python3 -m raqib suspect TRACE --backend ollama -o suspicion.jsonl` | model suspicion (`--backend anthropic` needs `pip install anthropic` and ANTHROPIC_API_KEY, and sends trace metadata off the machine); then `report TRACE --suspicion suspicion.jsonl` |
+| `python3 -m raqib suspect TRACE --backend anthropic --allow-fallback` | lets another model answer a window the requested model refuses; off by default, and such answers are labelled (`answered_by`) and counted |
 | `python3 -m raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events |
 
 ## More

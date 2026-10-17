@@ -105,6 +105,9 @@ b = S("fixture-rules-cwdroot-2", cwd="/home/alice"); first_b = b.call("Read", {"
 more = []
 for i, cwd in enumerate(["/root", "/Users/bob", "/tmp", "/home/carol/.", "/mnt/c/Users/dan", "/var/root"], start=5):
     m = S("fixture-rules-cwdroot-%d" % i, cwd=cwd); m.event("session_start"); m.bash("ls"); more += m.lines
+# Every other alternative of the rule's regex, so none can be dropped unseen (M-REV).
+for i, cwd in enumerate(["/home", "/USERS", "/mnt", "/media", "/srv", "/opt", "/var/tmp", "/mnt/d"], start=13):
+    m = S("fixture-rules-cwdroot-%d" % i, cwd=cwd); m.event("session_start"); m.bash("ls"); more += m.lines
 write(R + "SCOPE-CWD-ROOT/positive-root-and-home.json", a.lines + b.lines + more)
 a = S("fixture-rules-cwdroot-3", cwd="/home/alice/project"); a.event("session_start"); a.bash("ls")
 b = S("fixture-rules-cwdroot-4"); b.call("Read", {"path": CWD + "/a.py"})

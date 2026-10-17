@@ -698,7 +698,7 @@ def test_redo_runner_unmeasured_equal_budget_and_expected_seq(tmp_path):
 
 @pytest.mark.parametrize("rule_id, fixture, expected", [
     ("SCOPE-CWD-ROOT", "positive-root-and-home.json",
-     [("fixture-rules-cwdroot-%d" % i, [1]) for i in (1, 2, 5, 6, 7, 8, 9, 10)]),
+     [("fixture-rules-cwdroot-%d" % i, [1]) for i in (1, 2, 5, 6, 7, 8, 9, 10) + tuple(range(13, 21))]),
     ("SCOPE-CWD-MOVED", "positive-cd-out.json", [("fixture-rules-cwdmoved-1", [1, 3])]),
 ])
 def test_redo_cwd_rules(rule_id, fixture, expected):

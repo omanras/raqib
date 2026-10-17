@@ -159,7 +159,7 @@ def test_run_writes_only_raised_and_errors_and_never_clean():
     assert out[1]["error"] == "refused (category cyber)"
     assert summary == {"windows": 4, "raised": 1, "errors": 2, "below_threshold": 1,
                        "answered_by_other_model": 0, "backend": "scripted",
-                       "model": "m", "threshold": 0.5, "window_size": 2}
+                       "model": "m", "threshold": 0.5, "window_size": 2, "allow_fallback": False}
     assert not any("clean" in json.dumps(o) or "benign" in json.dumps(o) for o in out)
     assert (lines, findings) == before
     system, user, schema = backend.calls[0]
@@ -299,13 +299,13 @@ def test_anthropic_request_shape(monkeypatch):
     assert kwargs == {
         "model": "claude-opus-5-5",
         "max_tokens": 16000,
-        "betas": ["server-side-fallback-2026-07-01"],
-        "fallbacks": "default",
         "system": "sys",
         "messages": [{"role": "user", "content": "user"}],
         "output_config": {"effort": "high", "format": {"type": "json_schema", "schema": core.SCHEMA}},
     }
     assert "tool_choice" not in kwargs and "thinking" not in kwargs
+    # B-5: no fallback unless asked for, so the requested model is the judge.
+    assert "betas" not in kwargs and "fallbacks" not in kwargs and backend.allow_fallback is False
 
 
 @pytest.mark.parametrize("response, fragment", [
@@ -610,3 +610,78 @@ def test_redo3_a_remote_ollama_is_announced(capsys):
         assert backends.OllamaBackend(url=url).remote is False
     cli._remote_notice(backends.AnthropicBackend())
     assert "Anthropic API" in capsys.readouterr().err
+
+
+# --- M-REV: server-side fallback off by default (ADR-0001 B-5) --------------
+
+def test_mrev_fallback_is_sent_only_when_allowed(monkeypatch):
+    sdk = fake_sdk(message())
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    backends.AnthropicBackend().judge("s", "u", core.SCHEMA)
+    backends.make_backend("anthropic").judge("s", "u", core.SCHEMA)
+    backends.AnthropicBackend(allow_fallback=True).judge("s", "u", core.SCHEMA)
+    backends.make_backend("anthropic", allow_fallback=True).judge("s", "u", core.SCHEMA)
+    off_1, off_2, on_1, on_2 = sdk.calls
+    for kwargs in (off_1, off_2):
+        assert "betas" not in kwargs and "fallbacks" not in kwargs
+    for kwargs in (on_1, on_2):
+        assert kwargs["betas"] == ["server-side-fallback-2026-07-01"] and kwargs["fallbacks"] == "default"
+    assert {k: v for k, v in on_1.items() if k not in ("betas", "fallbacks")} == off_1
+    # Only a real True opts in.
+    assert backends.AnthropicBackend(allow_fallback="yes").allow_fallback is False
+
+
+def test_mrev_without_fallback_a_refusal_is_an_error_line(monkeypatch):
+    monkeypatch.setitem(sys.modules, "anthropic", fake_sdk(message(stop="refusal", category="cyber")))
+    lines, summary = core.run(records(), [], backends.AnthropicBackend())
+    assert [(x["kind"], x["error"]) for x in lines] == [("error", "anthropic: refused (category cyber)")]
+    assert (summary["errors"], summary["answered_by_other_model"], summary["allow_fallback"]) == (1, 0, False)
+
+
+@pytest.mark.parametrize("served, answer_, kind", [
+    ("claude-other", answer(0.9, cited=(2,)), "suspicion"),
+    ("claude-other", answer(0.1, (), ()), None),
+    ("claude-opus-5-5", answer(0.9, cited=(2,)), "suspicion"),
+], ids=["fallback-raised", "fallback-below-threshold", "requested-model"])
+def test_mrev_with_fallback_answers_stay_labelled_and_counted(monkeypatch, served, answer_, kind):
+    msg = message(text=json.dumps(answer_))
+    msg.model = served
+    monkeypatch.setitem(sys.modules, "anthropic", fake_sdk(msg))
+    lines, summary = core.run(records(), [], backends.AnthropicBackend(allow_fallback=True))
+    other = served != "claude-opus-5-5"
+    assert [x["kind"] for x in lines] == ([kind] if kind else [])
+    assert summary["allow_fallback"] is True and summary["answered_by_other_model"] == int(other)
+    for x in lines:
+        assert x["model"] == "claude-opus-5-5" and x.get("answered_by") == (served if other else None)
+
+
+def test_mrev_cli_allow_fallback(tmp_path, monkeypatch, capsys):
+    made = []
+    real = backends.make_backend
+
+    def spy(*args, **kwargs):
+        made.append(kwargs.get("allow_fallback"))
+        return real(*args, **kwargs)
+    monkeypatch.setattr(backends, "make_backend", spy)
+    msg = message()
+    msg.model = "claude-other"
+    monkeypatch.setitem(sys.modules, "anthropic", fake_sdk(msg))
+    for flag, out in (([], tmp_path / "off.jsonl"), (["--allow-fallback"], tmp_path / "on.jsonl")):
+        assert raqib("suspect", BLOCKED, "--backend", "anthropic", *flag, "-o", out)[0] == 1
+    assert made == [False, True]
+    off = json.loads((tmp_path / "off.jsonl.run.json").read_text())
+    on = json.loads((tmp_path / "on.jsonl.run.json").read_text())
+    assert (off["allow_fallback"], on["allow_fallback"]) == (False, True)
+    assert on["answered_by_other_model"] == 1
+    assert json.loads((tmp_path / "on.jsonl").read_text())["answered_by"] == "claude-other"
+    err = capsys.readouterr().err
+    assert err.count("server-side fallback is on") == 1
+    assert "1 windows were answered by another model" in err
+
+
+def test_mrev_allow_fallback_is_refused_for_other_backends(tmp_path):
+    with pytest.raises(ValueError, match="anthropic backend only"):
+        backends.make_backend("ollama", allow_fallback=True)
+    answers = answers_file(tmp_path, {"*": answer(0.0, (), ())})
+    assert raqib("suspect", BLOCKED, "--backend", "fake", "--answers", answers, "--allow-fallback")[0] == 2
+    assert raqib("suspect", BLOCKED, "--backend", "ollama", "--allow-fallback")[0] == 2

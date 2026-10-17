@@ -62,9 +62,10 @@ item F7 of the M1.2 review packet or questions file.
      - so it does with an Ollama URL that is not localhost, over plain HTTP
        if the URL says so.
      - Both print a notice.
-   - **Server-side fallback** is on for the Anthropic backend (M2.1 Q4). A
-     window the requested model refuses can be answered by another model.
-     The line then names it (`answered_by`), and the run record counts it.
+   - **Server-side fallback** is off for the Anthropic backend (M2.1 Q4,
+     ADR-0001 B-5): a window the requested model refuses is an error line.
+     `--allow-fallback` turns it on; another model can then answer, the line
+     names it (`answered_by`), and the run record counts it.
 4. **Report to human.** Every line of the text report passes a printable
    filter, so a newline or escape sequence in a session id cannot print a
    fake result line (REDO 3). The web view escapes everything, runs no

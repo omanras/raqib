@@ -4,14 +4,7 @@ Task: in a fresh session, review the diffs of commits 70c92f3, 55b280e,
 3a20bdf and b91ad82 against docs/CONSTITUTION.md and ADR-0001 (incl.
 Amendment B), then apply the three R#002 conditions.
 
-Scope:
-  raqib/suspect/
-  tests/
-  docs/review/
-  docs/specs/ADR-0001-architecture.md
-  tools/gate.sh
-  raqib-M0.1.patch
-  raqib-claude-M0.1.bundle
+Scope: raqib/suspect/, tests/, docs/review/, docs/specs/ADR-0001-architecture.md, tools/gate.sh, raqib-M0.1.patch, raqib-claude-M0.1.bundle
 
 Exit criteria:
 - E1 docs/review/<date>-M-REV.md: findings on the four commits with file:line
