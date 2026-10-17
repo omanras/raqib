@@ -1,0 +1,114 @@
+/*
+ * Design tokens. One accent; everything else is neutral or a semantic state
+ * colour used only on state chips. Light by default, dark through
+ * prefers-color-scheme, and a manual override with <html data-theme>.
+ */
+:root {
+  color-scheme: light;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Arabic', 'Noto Naskh Arabic',
+    'Geeza Pro', Tahoma, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+  --radius-pill: 999px;
+
+  --text-xs: 0.8125rem;
+  --text-s: 0.875rem;
+  --text-m: 1rem;
+  --text-l: 1.25rem;
+  --text-xl: 1.625rem;
+  --text-xxl: 2.125rem;
+
+  --bg: #f6f5f1;
+  --surface: #ffffff;
+  --surface-2: #efede7;
+  --text: #1c1b18;
+  --text-muted: #5f5c55;
+  --border: #dedbd2;
+
+  --accent: #0d6b5f;
+  --accent-hover: #0a5a50;
+  --accent-contrast: #ffffff;
+  --accent-soft: #dcefeb;
+
+  --ok: #1f7a3a;
+  --ok-soft: #dff1e4;
+  --warn: #8a5a00;
+  --warn-soft: #f8ecd2;
+  --danger: #b3261e;
+  --danger-soft: #f8dedb;
+  --info: #3d4f8a;
+  --info-soft: #e2e6f5;
+
+  --focus: #0d6b5f;
+  --shadow: 0 1px 2px rgba(28, 27, 24, 0.06), 0 4px 16px rgba(28, 27, 24, 0.06);
+  --duration: 160ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #141412;
+    --surface: #1d1d1a;
+    --surface-2: #262622;
+    --text: #edebe4;
+    --text-muted: #a9a59b;
+    --border: #36352f;
+    --accent: #4fc3b0;
+    --accent-hover: #6fd3c2;
+    --accent-contrast: #0b1f1c;
+    --accent-soft: #1b3531;
+    --ok: #6fcf8a;
+    --ok-soft: #1c3324;
+    --warn: #e6b25a;
+    --warn-soft: #3a2e17;
+    --danger: #f08a80;
+    --danger-soft: #3d1f1c;
+    --info: #9fb0ea;
+    --info-soft: #232a42;
+    --focus: #4fc3b0;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #141412;
+  --surface: #1d1d1a;
+  --surface-2: #262622;
+  --text: #edebe4;
+  --text-muted: #a9a59b;
+  --border: #36352f;
+  --accent: #4fc3b0;
+  --accent-hover: #6fd3c2;
+  --accent-contrast: #0b1f1c;
+  --accent-soft: #1b3531;
+  --ok: #6fcf8a;
+  --ok-soft: #1c3324;
+  --warn: #e6b25a;
+  --warn-soft: #3a2e17;
+  --danger: #f08a80;
+  --danger-soft: #3d1f1c;
+  --info: #9fb0ea;
+  --info-soft: #232a42;
+  --focus: #4fc3b0;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration: 0ms;
+  }
+}
