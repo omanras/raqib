@@ -26,7 +26,7 @@ export function parseDate(text: string): Ymd | null {
   const y = parseInt(m[1] as string, 10);
   const mo = parseInt(m[2] as string, 10);
   const d = parseInt(m[3] as string, 10);
-  if (mo < 1 || mo > 12) return null;
+  if (y < 1 || mo < 1 || mo > 12) return null; // Python's date starts at year 1
   if (d < 1 || d > daysInMonth(y, mo)) return null;
   return { y, m: mo, d };
 }

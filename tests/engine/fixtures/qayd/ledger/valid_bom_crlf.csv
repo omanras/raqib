@@ -1,0 +1,8 @@
+﻿date,amount,currency,account,category,tags,note
+2026-01-05,1200.000,OMR,salary,salary,,January salary
+2026-01-06,-300.000,OMR,salary,transfer,transfer,to savings
+2026-01-06,300.000,OMR,savings,transfer,transfer,from salary
+2026-01-07,-12.345,OMR,cash,food,grocery;weekly,"café, bread"
+2026-01-08,-45.50,USD,broker,fees,,"he said ""ok"""
+2026-01-09,0,OMR,cash,discretionary,,zero row
+2025-12-31,-99.999,OMR,cash,housing,,unsorted earlier row

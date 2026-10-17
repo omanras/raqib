@@ -1,0 +1,7 @@
+date,account,asset,class,quantity,value,currency
+2026-01-31,savings,OMR cash,cash,5000.000,5000.000,OMR
+2026-01-31,broker,VWRA,fund,10.5,1234.56,USD
+2026-02-28,savings,OMR cash,cash,5300.000,5300.000,OMR
+2026-02-28,broker,VWRA,fund,10.5,1300.00,USD
+2026-02-28,broker,loan,debt,1,-200.00,OMR
+2025-12-31,savings,OMR cash,cash,4700,4700,OMR

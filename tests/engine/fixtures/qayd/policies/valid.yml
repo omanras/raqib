@@ -1,0 +1,63 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: WLT-01
+    type: cap           # measure <= limit
+    title: discretionary spending per month
+    measure: {sum: expense.discretionary, period: month}
+    limit: {pct_of: income, value: 10}
+  - id: WLT-02
+    type: floor         # measure >= limit
+    title: emergency fund
+    measure: {holdings: class.cash}
+    limit: {months_of: expense, value: 6}
+  - id: WLT-03
+    type: routine       # a matching row must exist every period
+    title: monthly transfer to savings
+    match: {tags: transfer, account: savings, min_amount: 300}
+    period: month
+  - id: WLT-04
+    type: red_line      # no matching row may exist, ever
+    title: no margin, no options
+    match: {tags_any: [margin, options]}
+  - id: WLT-05
+    type: kill          # pilot ends when measure crosses the threshold
+    title: broker pilot drawdown
+    measure: {drawdown: account.broker, window_days: 90}
+    limit: {pct: 15}
+  - id: WLT-06
+    type: allocation    # class share of holdings within a band
+    title: equities band
+    measure: {share: class.equity}
+    band: {min_pct: 20, max_pct: 50}
+  - id: WLT-07
+    type: cap
+    title: total expense per quarter, absolute
+    measure: {sum: expense, period: quarter}
+    limit: {value: 4500.50}
+  - id: WLT-08
+    type: floor
+    title: income per year
+    measure: {sum: income, period: year}
+    limit: {value: 12000}
+  - id: WLT-09
+    type: cap
+    title: broker balance cap
+    measure: {holdings: account.broker}
+    limit: {value: 2000}
+  - id: WLT-10
+    type: red_line
+    title: no single discretionary purchase above 200
+    match: {category: discretionary, min_amount: 200}
+  - id: WLT-11
+    type: routine
+    title: quarterly dividend booked
+    match: {category: dividend}
+    period: quarter

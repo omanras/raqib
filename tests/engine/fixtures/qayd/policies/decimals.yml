@@ -1,0 +1,30 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: P-01
+    type: cap
+    title: float-looking values stay exact
+    measure: {sum: expense.food, period: month}
+    limit: {value: 0.1}
+  - id: P-02
+    type: allocation
+    title: band with decimals
+    measure: {share: class.equity}
+    band: {min_pct: 12.5, max_pct: 37.75}
+  - id: P-03
+    type: cap
+    title: value as quoted text
+    measure: {sum: expense.food, period: month}
+    limit: {value: "1234.5678"}
+  - id: P-04
+    type: kill
+    title: pct with underscore float
+    measure: {drawdown: account.broker, window_days: 90}
+    limit: {pct: 1_0.5}

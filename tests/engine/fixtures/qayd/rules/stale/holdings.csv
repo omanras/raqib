@@ -1,0 +1,5 @@
+date,account,asset,class,quantity,value,currency
+2026-06-30,savings,cash OMR,cash,1000,1000.000,OMR
+2026-06-30,broker,FUND,fund,10,400.000,OMR
+2026-07-31,savings,cash OMR,cash,1300,1300.000,OMR
+2026-07-31,broker,FUND,fund,10,440.000,OMR

@@ -1,380 +1,450 @@
 // policies.yml: base currency, accounts, categories, classes, snapshot age,
-// and the policy list (reference engine ADR section 5). A declaration the
-// engine cannot read is kept with status "unknown" and the reason; the
-// verdict for it is `unknown` (A3/A5). Nothing is inferred (A2).
-import { fmt, type Decimal } from "./decimal";
-import { isPeriodKind, PERIOD_KINDS } from "./periods";
-import { isCurrencyCode, parseAmount, parseIntText } from "./text";
-import {
-  DEFAULT_CLASSES,
-  makeProblem,
-  POLICY_TYPES,
-  type Band,
-  type Config,
-  type Limit,
-  type Match,
-  type Measure,
-  type ParsedPolicies,
-  type Policy,
-  type PolicyType,
-  type Problem,
-} from "./types";
-import { isMap, isNullish, isSeq, keyedItemLines, loadYaml, textOf, yFlow, yFlowSeq, yPlainOrStr, yStr, type YamlValue } from "./yaml";
+// and the policy list (reference engine ADR section 5, qayd/policies.py,
+// ported one to one). A policy whose type, measure, limit, match or band
+// is not a declared shape is kept with status "unknown" and the reason;
+// its verdict is `unknown` (A2, A5: never guessed). A measure or match that
+// names an undeclared category, account or class is both a file problem
+// and an unknown policy. Every problem here is class invalid, which makes
+// the household unreadable (exit 3) as in the CLI.
+import { fileProblem, INVALID, problem } from "./loader";
+import { PERIOD_KINDS, type PeriodKind } from "./periods";
+import { intOf, isInt, isList, isMap, isNumber, isStr, PyDec, pyRepr, pyStr, toNum, type PyMap, type PyValue } from "./py";
+import { DEFAULT_CLASSES, POLICY_TYPES, type Band, type Config, type Limit, type Match, type Measure, type ParsedPolicies, type Policy, type Problem } from "./types";
+import { loadYaml, yFlow, yFlowSeq, yStr } from "./yaml";
 
-function stringList(v: YamlValue | undefined): string[] | null {
-  if (isSeq(v)) {
-    const out: string[] = [];
-    for (const x of v) {
-      const t = textOf(x);
-      if (t === null) return null;
-      out.push(t);
-    }
-    return out;
+const REQUIRED_GROUPS = ["income", "expense"];
+const NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*\n?$/;
+const CURRENCY_RE = /^[A-Z]{3}\n?$/;
+
+const NEEDS: Record<string, string[]> = {
+  cap: ["measure", "limit"],
+  floor: ["measure", "limit"],
+  routine: ["match", "period"],
+  red_line: ["match"],
+  kill: ["measure", "limit"],
+  allocation: ["measure", "band"],
+};
+const LIMITS: Record<string, string[]> = {
+  cap: ["value", "pct_of", "months_of"],
+  floor: ["value", "pct_of", "months_of"],
+  kill: ["pct"],
+};
+
+function isName(v: PyValue | undefined): v is string {
+  return typeof v === "string" && NAME_RE.test(v);
+}
+
+function isKind(v: PyValue | undefined): v is PeriodKind {
+  return typeof v === "string" && (PERIOD_KINDS as readonly string[]).includes(v);
+}
+
+function sortedKeys(keys: Iterable<string>): string {
+  return [...keys].sort().join(", ");
+}
+
+/** Python's `x == 1` for a loaded value, bool excluded by the caller. */
+function isOne(v: PyValue | undefined): boolean {
+  return (isInt(v) || v instanceof PyDec) && v.value.eq(1);
+}
+
+class Check {
+  readonly problems: Problem[] = [];
+  constructor(readonly file: string) {}
+  add(line: number, code: string, field: string, reason: string): void {
+    this.problems.push(problem(this.file, line, code, reason, INVALID, { field }));
   }
-  const t = textOf(v);
-  return t === null ? null : [t];
 }
 
-function fail(reason: string): { ok: false; reason: string } {
-  return { ok: false, reason };
+interface Cfg {
+  accounts: string[];
+  categories: Record<string, string[]>;
+  classes: string[];
+  allCategories: string[];
 }
 
-type Parsed<T> = { ok: true; value: T } | { ok: false; reason: string };
+type Checked<T> = { value: T; reason: null } | { value: null; reason: string };
 
-function dotted(text: string): { head: string; tail: string | null } {
-  const i = text.indexOf(".");
-  if (i < 0) return { head: text, tail: null };
-  return { head: text.slice(0, i), tail: text.slice(i + 1) };
+function bad<T>(reason: string): Checked<T> {
+  return { value: null, reason };
 }
 
-export function parseMeasure(v: YamlValue | undefined, config: Config): Parsed<Measure> {
-  if (!isMap(v)) return fail("measure must be a mapping");
-  const keys = Object.keys(v);
+function ok<T>(value: T): Checked<T> {
+  return { value, reason: null };
+}
+
+function validateMeasure(measure: PyValue | undefined, cfg: Cfg, chk: Check, line: number, field: string): Checked<Measure> {
+  if (!isMap(measure)) return bad("measure must be a mapping");
+  const keys = Object.keys(measure);
   const kinds = keys.filter((k) => k === "sum" || k === "holdings" || k === "share" || k === "drawdown");
-  if (kinds.length !== 1) return fail(`measure must have exactly one of sum, holdings, share, drawdown (got ${keys.join(", ") || "nothing"})`);
+  if (kinds.length !== 1) return bad(`measure must have exactly one of sum, holdings, share, drawdown (got ${sortedKeys(keys) || "nothing"})`);
   const kind = kinds[0] as string;
-  const target = textOf(v[kind]);
-  if (target === null) return fail(`measure ${kind} needs a target`);
-  const extra = keys.filter((k) => k !== kind && !(kind === "sum" && k === "period") && !(kind === "drawdown" && k === "window_days"));
-  if (extra.length > 0) return fail(`measure ${kind}: unknown key ${extra.join(", ")}`);
-  const { head, tail } = dotted(target);
+  const target = measure[kind];
+  if (!isStr(target) || target === "") return bad(`measure.${kind} must be text`);
+  const dot = target.indexOf(".");
+  const head = dot < 0 ? target : target.slice(0, dot);
+  const tail = dot < 0 ? "" : target.slice(dot + 1);
   if (kind === "sum") {
-    const groups = Object.keys(config.categories);
-    if (!groups.includes(head)) return fail(`measure sum: unknown group "${head}"`);
-    if (tail !== null && !(config.categories[head] as string[]).includes(tail)) return fail(`measure sum: unknown category "${tail}" in group ${head}`);
-    const period = textOf(v["period"]);
-    if (period === null) return fail("measure sum needs a period (month, quarter, year)");
-    if (!isPeriodKind(period)) return fail(`measure sum: unknown period "${period}" (${PERIOD_KINDS.join(", ")})`);
-    return { ok: true, value: { kind: "sum", group: head, category: tail, period } };
+    const extra = keys.filter((k) => k !== "sum" && k !== "period");
+    if (extra.length > 0) return bad(`measure has unexpected keys: ${sortedKeys(extra)}`);
+    if (!("period" in measure)) return bad("measure.period is missing (month, quarter or year)");
+    const period = measure["period"];
+    if (!isKind(period)) return bad(`measure.period ${pyRepr(period)} is not month, quarter or year`);
+    if (!(head in cfg.categories)) {
+      chk.add(line, "UNDECLARED-CATEGORY", field + ".sum", `group ${pyRepr(head)} is not declared`);
+      return bad(`measure.sum names undeclared group ${pyRepr(head)}`);
+    }
+    if (tail !== "" && (tail.includes(".") || !(cfg.categories[head] as string[]).includes(tail))) {
+      chk.add(line, "UNDECLARED-CATEGORY", field + ".sum", `category ${pyRepr(tail)} is not declared under ${pyRepr(head)}`);
+      return bad(`measure.sum names undeclared category ${pyRepr(target)}`);
+    }
+    return ok({ kind: "sum", group: head, category: tail === "" ? null : tail, period });
   }
-  if (kind === "holdings") {
-    if (tail === null || (head !== "class" && head !== "account")) return fail(`measure holdings must be class.<c> or account.<a> (got "${target}")`);
-    if (head === "class" && !config.classes.includes(tail)) return fail(`measure holdings: unknown class "${tail}"`);
-    if (head === "account" && !config.accounts.includes(tail)) return fail(`measure holdings: unknown account "${tail}"`);
-    return { ok: true, value: { kind: "holdings", by: head, name: tail } };
+  const extra = keys.filter((k) => k !== kind && !(kind === "drawdown" && k === "window_days"));
+  if (extra.length > 0) return bad(`measure has unexpected keys: ${sortedKeys(extra)}`);
+  if (kind === "holdings" && head !== "class" && head !== "account") return bad("measure.holdings must be class.<c> or account.<a>");
+  if (kind === "share" && head !== "class") return bad("measure.share must be class.<c>");
+  if (kind === "drawdown" && head !== "account") return bad("measure.drawdown must be account.<a>");
+  if (tail === "" || tail.includes(".")) return bad(`measure.${kind} ${pyRepr(target)} is malformed`);
+  if (head === "class" && !cfg.classes.includes(tail)) {
+    chk.add(line, "UNDECLARED-CLASS", `${field}.${kind}`, `class ${pyRepr(tail)} is not declared`);
+    return bad(`measure.${kind} names undeclared class ${pyRepr(tail)}`);
   }
-  if (kind === "share") {
-    if (tail === null || head !== "class") return fail(`measure share must be class.<c> (got "${target}")`);
-    if (!config.classes.includes(tail)) return fail(`measure share: unknown class "${tail}"`);
-    return { ok: true, value: { kind: "share", by: "class", name: tail } };
+  if (head === "account" && !cfg.accounts.includes(tail)) {
+    chk.add(line, "UNDECLARED-ACCOUNT", `${field}.${kind}`, `account ${pyRepr(tail)} is not declared`);
+    return bad(`measure.${kind} names undeclared account ${pyRepr(tail)}`);
   }
-  // drawdown
-  if (tail === null || head !== "account") return fail(`measure drawdown must be account.<a> (got "${target}")`);
-  if (!config.accounts.includes(tail)) return fail(`measure drawdown: unknown account "${tail}"`);
-  const w = textOf(v["window_days"]);
-  const windowDays = w === null ? null : parseIntText(w);
-  if (windowDays === null || windowDays <= 0) return fail("measure drawdown needs window_days (positive integer)");
-  return { ok: true, value: { kind: "drawdown", by: "account", name: tail, windowDays } };
+  if (kind === "holdings") return ok({ kind: "holdings", by: head as "class" | "account", name: tail });
+  if (kind === "share") return ok({ kind: "share", by: "class", name: tail });
+  const window = measure["window_days"];
+  if (!isInt(window) || window.value.lt(1)) return bad("measure.window_days must be a positive integer");
+  return ok({ kind: "drawdown", by: "account", name: tail, windowDays: intOf(window) });
 }
 
-function amountOf(v: YamlValue | undefined, what: string): Parsed<Decimal> {
-  const t = textOf(v);
-  const d = t === null ? null : parseAmount(t);
-  if (d === null) return fail(`${what} must be decimal text`);
-  return { ok: true, value: d };
+function validateLimit(limit: PyValue | undefined, allowed: string[]): Checked<Limit> {
+  if (!isMap(limit)) return bad("limit must be a mapping");
+  const keys = Object.keys(limit).sort().join(",");
+  if (keys === "value" && allowed.includes("value")) {
+    if (!isNumber(limit["value"])) return bad("limit.value must be a number");
+    return ok({ kind: "value", value: toNum(limit["value"] as PyValue) });
+  }
+  if (keys === "pct_of,value" && allowed.includes("pct_of")) {
+    if (limit["pct_of"] !== "income") return bad("limit.pct_of must be income");
+    if (!isNumber(limit["value"])) return bad("limit.value must be a number");
+    return ok({ kind: "pct_of", of: "income", value: toNum(limit["value"] as PyValue) });
+  }
+  if (keys === "months_of,value" && allowed.includes("months_of")) {
+    if (limit["months_of"] !== "expense") return bad("limit.months_of must be expense");
+    if (!isNumber(limit["value"])) return bad("limit.value must be a number");
+    return ok({ kind: "months_of", of: "expense", value: toNum(limit["value"] as PyValue) });
+  }
+  if (keys === "pct" && allowed.includes("pct")) {
+    if (!isNumber(limit["pct"])) return bad("limit.pct must be a number");
+    return ok({ kind: "pct", value: toNum(limit["pct"] as PyValue) });
+  }
+  return bad(`limit must be one of ${allowed.map((a) => `{${a}}`).join(", ")} (got keys: ${sortedKeys(Object.keys(limit)) || "nothing"})`);
 }
 
-export function parseLimit(v: YamlValue | undefined): Parsed<Limit> {
-  if (!isMap(v)) return fail("limit must be a mapping");
-  const keys = Object.keys(v).sort().join(",");
-  if (keys === "value") {
-    const a = amountOf(v["value"], "limit value");
-    return a.ok ? { ok: true, value: { kind: "value", value: a.value } } : a;
+function validateMatch(match: PyValue | undefined, cfg: Cfg, chk: Check, line: number, field: string): Checked<Match> {
+  if (!isMap(match)) return bad("match must be a mapping");
+  const keys = Object.keys(match);
+  const extra = keys.filter((k) => !["tags", "tags_any", "account", "category", "min_amount"].includes(k));
+  if (extra.length > 0) return bad(`match has unexpected keys: ${sortedKeys(extra)}`);
+  if (keys.length === 0) return bad("match needs at least one of tags, tags_any, account, category, min_amount");
+  const out: Match = { tags: null, tagsAny: null, account: null, category: null, minAmount: null };
+  if ("tags" in match) {
+    let tags = match["tags"];
+    if (isStr(tags)) tags = [tags];
+    if (!isList(tags) || tags.length === 0 || !tags.every(isName)) return bad("match.tags must be a tag or a list of tags");
+    out.tags = tags as string[];
   }
-  if (keys === "pct_of,value") {
-    const of = textOf(v["pct_of"]);
-    if (of !== "income") return fail(`limit pct_of must be income (got "${of ?? ""}")`);
-    const a = amountOf(v["value"], "limit value");
-    return a.ok ? { ok: true, value: { kind: "pct_of", of: "income", value: a.value } } : a;
+  if ("tags_any" in match) {
+    const tags = match["tags_any"];
+    if (!isList(tags) || tags.length === 0 || !tags.every(isName)) return bad("match.tags_any must be a non-empty list of tags");
+    out.tagsAny = tags as string[];
   }
-  if (keys === "months_of,value") {
-    const of = textOf(v["months_of"]);
-    if (of !== "expense") return fail(`limit months_of must be expense (got "${of ?? ""}")`);
-    const a = amountOf(v["value"], "limit value");
-    return a.ok ? { ok: true, value: { kind: "months_of", of: "expense", value: a.value } } : a;
+  if ("account" in match) {
+    const account = match["account"];
+    if (!isStr(account)) return bad("match.account must be text");
+    if (!cfg.accounts.includes(account)) {
+      chk.add(line, "UNDECLARED-ACCOUNT", field + ".account", `account ${pyRepr(account)} is not declared`);
+      return bad(`match.account names undeclared account ${pyRepr(account)}`);
+    }
+    out.account = account;
   }
-  if (keys === "pct") {
-    const a = amountOf(v["pct"], "limit pct");
-    return a.ok ? { ok: true, value: { kind: "pct", value: a.value } } : a;
+  if ("category" in match) {
+    const category = match["category"];
+    if (!isStr(category)) return bad("match.category must be text");
+    if (!cfg.allCategories.includes(category)) {
+      chk.add(line, "UNDECLARED-CATEGORY", field + ".category", `category ${pyRepr(category)} is not declared`);
+      return bad(`match.category names undeclared category ${pyRepr(category)}`);
+    }
+    out.category = category;
   }
-  return fail(`unknown limit {${Object.keys(v).join(", ")}} (value | pct_of income + value | months_of expense + value | pct)`);
+  if ("min_amount" in match) {
+    if (!isNumber(match["min_amount"])) return bad("match.min_amount must be a number");
+    out.minAmount = toNum(match["min_amount"] as PyValue);
+  }
+  return ok(out);
 }
 
-export function parseMatch(v: YamlValue | undefined, config: Config): Parsed<Match> {
-  if (!isMap(v)) return fail("match must be a mapping");
-  const allowed = ["tags", "tags_any", "account", "category", "min_amount"];
-  const extra = Object.keys(v).filter((k) => !allowed.includes(k));
-  if (extra.length > 0) return fail(`match: unknown key ${extra.join(", ")}`);
-  const m: Match = { tags: null, tagsAny: null, account: null, category: null, minAmount: null };
-  if (v["tags"] !== undefined) {
-    m.tags = stringList(v["tags"]);
-    if (m.tags === null || m.tags.length === 0) return fail("match tags must be a tag or a list of tags");
-  }
-  if (v["tags_any"] !== undefined) {
-    m.tagsAny = stringList(v["tags_any"]);
-    if (m.tagsAny === null || m.tagsAny.length === 0) return fail("match tags_any must be a list of tags");
-  }
-  if (v["account"] !== undefined) {
-    m.account = textOf(v["account"]);
-    if (m.account === null || !config.accounts.includes(m.account)) return fail(`match: unknown account "${m.account ?? ""}"`);
-  }
-  if (v["category"] !== undefined) {
-    m.category = textOf(v["category"]);
-    const all = Object.values(config.categories).flat();
-    if (m.category === null || !all.includes(m.category)) return fail(`match: unknown category "${m.category ?? ""}"`);
-  }
-  if (v["min_amount"] !== undefined) {
-    const a = amountOf(v["min_amount"], "match min_amount");
-    if (!a.ok) return a;
-    m.minAmount = a.value;
-  }
-  if (m.tags === null && m.tagsAny === null && m.account === null && m.category === null && m.minAmount === null) {
-    return fail("match needs at least one of tags, tags_any, account, category, min_amount");
-  }
-  return { ok: true, value: m };
+function validateBand(band: PyValue | undefined): Checked<Band> {
+  if (!isMap(band)) return bad("band must be a mapping");
+  if (Object.keys(band).sort().join(",") !== "max_pct,min_pct") return bad("band must have exactly min_pct and max_pct");
+  if (!isNumber(band["min_pct"]) || !isNumber(band["max_pct"])) return bad("band.min_pct and band.max_pct must be numbers");
+  const lo = toNum(band["min_pct"] as PyValue);
+  const hi = toNum(band["max_pct"] as PyValue);
+  if (!(lo.value.gte(0) && lo.value.lte(hi.value) && hi.value.lte(100))) return bad("band must satisfy 0 <= min_pct <= max_pct <= 100");
+  return ok({ minPct: lo, maxPct: hi });
 }
 
-export function parseBand(v: YamlValue | undefined): Parsed<Band> {
-  if (!isMap(v)) return fail("band must be a mapping");
-  const keys = Object.keys(v).sort().join(",");
-  if (keys !== "max_pct,min_pct") return fail(`band must have min_pct and max_pct (got ${Object.keys(v).join(", ") || "nothing"})`);
-  const lo = amountOf(v["min_pct"], "band min_pct");
-  if (!lo.ok) return lo;
-  const hi = amountOf(v["max_pct"], "band max_pct");
-  if (!hi.ok) return hi;
-  if (lo.value.gt(hi.value)) return fail("band min_pct must not exceed max_pct");
-  return { ok: true, value: { minPct: lo.value, maxPct: hi.value } };
-}
-
-function isAmountMeasure(m: Measure): boolean {
-  return m.kind === "sum" || m.kind === "holdings";
-}
-
-function isAmountLimit(l: Limit): boolean {
-  return l.kind !== "pct";
-}
-
-function parsePolicy(item: YamlValue, index: number, line: number | null, config: Config): Policy {
-  const raw: Record<string, unknown> = isMap(item) ? { ...item } : {};
+function validatePolicy(raw: PyValue, index: number, cfg: Cfg, chk: Check, defaultLine: number, lineOf: (v: PyValue | undefined) => number | null): Policy | null {
+  const line = lineOf(raw) ?? defaultLine;
+  const field = `policies[${index}]`;
+  if (!isMap(raw)) {
+    chk.add(line, "BAD-FIELD", field, "policy must be a mapping");
+    return null;
+  }
+  const pid = raw["id"];
+  if (!isName(pid)) {
+    chk.add(line, "BAD-FIELD", field + ".id", "policy id is missing or not a plain name");
+    return null;
+  }
+  const ptype = raw["type"];
+  let title: PyValue | undefined = "title" in raw ? raw["title"] : pid;
+  if (!isStr(title) || title === "") {
+    chk.add(line, "BAD-FIELD", field + ".title", "title must be non-empty text");
+    title = pid;
+  }
   const base: Policy = {
-    line,
-    id: `#${index + 1}`,
-    type: "",
-    title: "",
+    id: pid,
+    type: pyStr(ptype),
+    title,
     measure: null,
     limit: null,
     match: null,
-    band: null,
     period: null,
+    band: null,
     status: "unknown",
     reason: null,
+    line,
+    file: chk.file,
+    cite: `${chk.file}:${line}`,
     raw,
   };
-  if (!isMap(item)) return { ...base, reason: "policy must be a mapping" };
-  const id = textOf(item["id"]);
-  if (id !== null) base.id = id;
-  base.title = textOf(item["title"]) ?? "";
-  const type = textOf(item["type"]) ?? "";
-  base.type = type;
-  if (id === null) return { ...base, reason: "policy has no id" };
-  if (!(POLICY_TYPES as readonly string[]).includes(type)) return { ...base, reason: `unknown type "${type}" (${POLICY_TYPES.join(", ")})` };
-  const t = type as PolicyType;
-  if (t === "cap" || t === "floor" || t === "kill") {
-    const m = parseMeasure(item["measure"], config);
-    if (!m.ok) return { ...base, reason: m.reason };
-    const l = parseLimit(item["limit"]);
-    if (!l.ok) return { ...base, reason: l.reason };
-    if (isAmountMeasure(m.value) !== isAmountLimit(l.value)) {
-      return { ...base, measure: m.value, limit: l.value, reason: `measure ${m.value.kind} and limit ${l.value.kind} do not compare` };
-    }
-    return { ...base, measure: m.value, limit: l.value, status: "ok" };
+  const unknownPolicy = (reason: string): Policy => ({ ...base, reason });
+  if (!isStr(ptype) || !(POLICY_TYPES as readonly string[]).includes(ptype)) {
+    return unknownPolicy(`type ${pyRepr(ptype)} is not one of ${POLICY_TYPES.join(", ")}`);
   }
-  if (t === "routine") {
-    const mt = parseMatch(item["match"], config);
-    if (!mt.ok) return { ...base, reason: mt.reason };
-    const p = textOf(item["period"]);
-    if (p === null) return { ...base, match: mt.value, reason: "routine needs a period (month, quarter, year)" };
-    if (!isPeriodKind(p)) return { ...base, match: mt.value, reason: `unknown period "${p}" (${PERIOD_KINDS.join(", ")})` };
-    return { ...base, match: mt.value, period: p, status: "ok" };
+  const needs = NEEDS[ptype] as string[];
+  const allowed = new Set([...needs, "id", "type", "title"]);
+  const extra = Object.keys(raw).filter((k) => !allowed.has(k));
+  if (extra.length > 0) return unknownPolicy(`unexpected keys for type ${ptype}: ${sortedKeys(extra)}`);
+  for (const need of needs) {
+    if (!(need in raw)) return unknownPolicy(`type ${ptype} needs ${needs.join(" and ")}`);
   }
-  if (t === "red_line") {
-    const mt = parseMatch(item["match"], config);
-    if (!mt.ok) return { ...base, reason: mt.reason };
-    return { ...base, match: mt.value, status: "ok" };
+  let measure: Measure | null = null;
+  let limit: Limit | null = null;
+  let match: Match | null = null;
+  let period: PeriodKind | null = null;
+  let band: Band | null = null;
+  if ("measure" in raw) {
+    const m = validateMeasure(raw["measure"], cfg, chk, lineOf(raw["measure"]) ?? line, field + ".measure");
+    if (m.reason !== null) return unknownPolicy(m.reason);
+    measure = m.value;
+    if (ptype === "kill" && measure.kind !== "drawdown") return unknownPolicy("kill needs a drawdown measure");
+    if (ptype === "allocation" && measure.kind !== "share") return unknownPolicy("allocation needs a share measure");
   }
-  // allocation
-  const m = parseMeasure(item["measure"], config);
-  if (!m.ok) return { ...base, reason: m.reason };
-  if (m.value.kind !== "share") return { ...base, measure: m.value, reason: `allocation needs a share measure (got ${m.value.kind})` };
-  const b = parseBand(item["band"]);
-  if (!b.ok) return { ...base, measure: m.value, reason: b.reason };
-  return { ...base, measure: m.value, band: b.value, status: "ok" };
+  if ("limit" in raw) {
+    const l = validateLimit(raw["limit"], LIMITS[ptype] as string[]);
+    if (l.reason !== null) return unknownPolicy(l.reason);
+    limit = l.value;
+  }
+  if ("match" in raw) {
+    const m = validateMatch(raw["match"], cfg, chk, lineOf(raw["match"]) ?? line, field + ".match");
+    if (m.reason !== null) return unknownPolicy(m.reason);
+    match = m.value;
+  }
+  if ("period" in raw) {
+    const p = raw["period"];
+    if (!isKind(p)) return unknownPolicy(`period ${pyRepr(p)} is not month, quarter or year`);
+    period = p;
+  }
+  if ("band" in raw) {
+    const b = validateBand(raw["band"]);
+    if (b.reason !== null) return unknownPolicy(b.reason);
+    band = b.value;
+  }
+  return { ...base, type: ptype, measure, limit, match, period, band, status: "ok" };
 }
 
-/** Parse policies.yml. A file-level fault gives config null and a problem. */
-export function parsePolicies(text: string): ParsedPolicies {
-  const problems: Problem[] = [];
-  if (text.trim() === "") {
-    problems.push(makeProblem("EMPTY-FILE", "policies.yml", null, "policies.yml is empty; it must declare base_currency, accounts, categories, snapshot_max_age_days and policies"));
-    return { config: null, problems, count: 0 };
+function names(value: PyValue | undefined, chk: Check, line: number, field: string, what: string): string[] {
+  if (!isList(value) || value.length === 0) {
+    chk.add(line, "BAD-FIELD", field, `${what} must be a non-empty list`);
+    return [];
   }
-  const loaded = loadYaml(text);
-  if (!loaded.ok) {
-    problems.push(makeProblem("BAD-YAML", "policies.yml", loaded.line, loaded.reason));
-    return { config: null, problems, count: 0 };
+  const out: string[] = [];
+  for (const item of value) {
+    if (!isName(item)) chk.add(line, "BAD-FIELD", field, `${what} entry ${pyRepr(item)} is not a plain name`);
+    else if (out.includes(item)) chk.add(line, "DUP-ID", field, `${what} ${pyRepr(item)} is declared twice`);
+    else out.push(item);
   }
-  const doc = loaded.value;
-  if (!isMap(doc)) {
-    problems.push(makeProblem("BAD-FILE", "policies.yml", null, "policies.yml must be a mapping"));
-    return { config: null, problems, count: 0 };
+  return out;
+}
+
+function build(doc: PyMap, top: number, chk: Check, lineOf: (v: PyValue | undefined) => number | null): Config {
+  const known = new Set(["version", "base_currency", "accounts", "categories", "classes", "snapshot_max_age_days", "policies"]);
+  for (const key of Object.keys(doc).filter((k) => !known.has(k)).sort()) {
+    chk.add(top, "BAD-FIELD", key, `unknown top-level key ${pyRepr(key)}`);
   }
-  const baseCurrency = textOf(doc["base_currency"]);
-  if (baseCurrency === null || !isCurrencyCode(baseCurrency)) {
-    problems.push(makeProblem("BAD-BASE-CURRENCY", "policies.yml", null, "base_currency must be an ISO-4217 code"));
-    return { config: null, problems, count: 0 };
+  let version: number | null = 1;
+  if (!isOne(doc["version"])) {
+    chk.add(top, "BAD-FIELD", "version", `version must be 1 (got ${pyRepr(doc["version"])})`);
+    version = null;
   }
-  const accounts = doc["accounts"] === undefined ? [] : stringList(doc["accounts"]);
-  if (accounts === null) {
-    problems.push(makeProblem("BAD-ACCOUNTS", "policies.yml", null, "accounts must be a list of names"));
-    return { config: null, problems, count: 0 };
+  let base: string | null = null;
+  if (!("base_currency" in doc)) chk.add(top, "MISSING-FIELD", "base_currency", "base_currency is missing");
+  else {
+    const b = doc["base_currency"];
+    if (!isStr(b) || !CURRENCY_RE.test(b)) chk.add(top, "BAD-FIELD", "base_currency", "base_currency must be a 3-letter ISO-4217 code");
+    else base = b;
   }
+  const accounts = names(doc["accounts"], chk, top, "accounts", "accounts");
   const categories: Record<string, string[]> = {};
   const cats = doc["categories"];
-  if (cats !== undefined && !isNullish(cats)) {
-    if (!isMap(cats)) {
-      problems.push(makeProblem("BAD-CATEGORIES", "policies.yml", null, "categories must map a group to a list of names"));
-      return { config: null, problems, count: 0 };
-    }
-    for (const group of Object.keys(cats)) {
-      const list = isNullish(cats[group]) ? [] : stringList(cats[group]);
-      if (list === null) {
-        problems.push(makeProblem("BAD-CATEGORIES", "policies.yml", null, `categories.${group} must be a list of names`));
-        return { config: null, problems, count: 0 };
-      }
-      categories[group] = list;
-    }
-  }
-  let classes: string[] = [...DEFAULT_CLASSES];
-  if (doc["classes"] !== undefined && !isNullish(doc["classes"])) {
-    const list = stringList(doc["classes"]);
-    if (list === null) {
-      problems.push(makeProblem("BAD-CLASSES", "policies.yml", null, "classes must be a list of names"));
-      return { config: null, problems, count: 0 };
-    }
-    classes = list;
-  }
-  let snapshotMaxAgeDays: number | null = null;
-  const age = textOf(doc["snapshot_max_age_days"]);
-  if (age !== null) {
-    snapshotMaxAgeDays = parseIntText(age);
-    if (snapshotMaxAgeDays === null) {
-      problems.push(makeProblem("BAD-SNAPSHOT-AGE", "policies.yml", null, "snapshot_max_age_days must be a whole number of days"));
-    }
+  if (!isMap(cats) || Object.keys(cats).length === 0) {
+    chk.add(top, "BAD-FIELD", "categories", "categories must be a mapping of group -> list of names");
   } else {
-    problems.push(makeProblem("NO-SNAPSHOT-AGE", "policies.yml", null, "snapshot_max_age_days is not declared; holdings cannot be judged stale or fresh"));
+    const catLine = lineOf(cats) ?? top;
+    const seen = new Map<string, string>();
+    for (const group of Object.keys(cats)) {
+      if (!isName(group)) {
+        chk.add(catLine, "BAD-FIELD", "categories", `group ${pyRepr(group)} is not a plain name`);
+        continue;
+      }
+      const list = names(cats[group], chk, catLine, "categories." + group, "categories." + group);
+      const kept: string[] = [];
+      for (const name of list) {
+        const prior = seen.get(name);
+        if (prior !== undefined) {
+          chk.add(catLine, "DUP-ID", "categories." + group, `category ${pyRepr(name)} is declared under both ${pyRepr(prior)} and ${pyRepr(group)}`);
+        } else {
+          seen.set(name, group);
+          kept.push(name);
+        }
+      }
+      categories[group] = kept;
+    }
+    for (const group of REQUIRED_GROUPS) {
+      if (!(group in categories)) chk.add(catLine, "MISSING-FIELD", "categories." + group, `categories must declare the group ${pyRepr(group)}`);
+    }
   }
-  const config: Config = {
-    version: textOf(doc["version"]),
-    baseCurrency,
-    accounts,
-    categories,
-    classes,
-    snapshotMaxAgeDays,
-    policies: [],
-  };
+  const classes = "classes" in doc ? names(doc["classes"], chk, top, "classes", "classes") : [...DEFAULT_CLASSES];
+  let age: number | null = null;
+  if (!("snapshot_max_age_days" in doc)) chk.add(top, "MISSING-FIELD", "snapshot_max_age_days", "snapshot_max_age_days is missing");
+  else {
+    const a = doc["snapshot_max_age_days"];
+    if (!isInt(a) || a.value.lt(1)) chk.add(top, "BAD-FIELD", "snapshot_max_age_days", "snapshot_max_age_days must be a positive integer");
+    else age = intOf(a);
+  }
+  const cfg: Cfg = { accounts, categories, classes, allCategories: Object.values(categories).flat() };
+  const policies: Policy[] = [];
   const list = doc["policies"];
-  const items: YamlValue[] = list === undefined || isNullish(list) ? [] : isSeq(list) ? list : [];
-  if (list !== undefined && !isNullish(list) && !isSeq(list)) {
-    problems.push(makeProblem("BAD-POLICIES", "policies.yml", null, "policies must be a list"));
-    return { config: null, problems, count: 0 };
+  if (!isList(list) || list.length === 0) {
+    chk.add(top, "EMPTY-POLICIES", "policies", "policies must be a non-empty list");
+  } else {
+    const ids = new Map<string, number>();
+    list.forEach((raw, index) => {
+      const p = validatePolicy(raw, index, cfg, chk, top, lineOf);
+      if (p === null) return;
+      const prior = ids.get(p.id);
+      if (prior !== undefined) {
+        chk.add(p.line, "DUP-ID", `policies[${index}].id`, `policy id ${pyRepr(p.id)} is already used at line ${prior}`);
+        return;
+      }
+      ids.set(p.id, p.line);
+      policies.push(p);
+    });
   }
-  const lines = keyedItemLines(text, "policies");
-  const seen = new Set<string>();
-  items.forEach((item, i) => {
-    const line = lines.length === items.length ? (lines[i] as number) : null;
-    const p = parsePolicy(item, i, line, config);
-    if (seen.has(p.id)) problems.push(makeProblem("DUP-ID", "policies.yml", line, `policy id ${p.id} is declared twice`));
-    seen.add(p.id);
-    if (p.status === "unknown") problems.push(makeProblem("UNKNOWN-POLICY", "policies.yml", line, `${p.id}: ${p.reason ?? "unknown"}`));
-    config.policies.push(p);
-  });
-  return { config, problems, count: config.policies.length };
+  return { version, baseCurrency: base, accounts, categories, classes, snapshotMaxAgeDays: age, policies, file: chk.file };
+}
+
+/** Parse policies.yml (`null`: the file does not exist). Never throws. */
+export function parsePolicies(text: string | null, file = "policies.yml"): ParsedPolicies {
+  const fatal = fileProblem(text, file);
+  if (fatal) return { config: null, problems: [fatal] };
+  const loaded = loadYaml(text as string);
+  if (!loaded.ok) return { config: null, problems: [problem(file, loaded.line, "BAD-YAML", loaded.reason)] };
+  if (loaded.value === null) return { config: null, problems: [problem(file, 0, "FILE-EMPTY", "file holds no YAML document")] };
+  const chk = new Check(file);
+  const doc = loaded.value;
+  if (!isMap(doc)) {
+    chk.add(1, "BAD-SHAPE", "", "policies.yml must be a mapping at the top level");
+    return { config: null, problems: chk.problems };
+  }
+  try {
+    const config = build(doc, loaded.lineOf(doc) ?? 1, chk, loaded.lineOf);
+    return { config, problems: chk.problems };
+  } catch (e) {
+    chk.add(0, "INTERNAL", "", `loader failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`);
+    return { config: null, problems: chk.problems };
+  }
+}
+
+export function policyIds(config: Config): string[] {
+  return config.policies.map((p) => p.id);
+}
+
+export function policyById(config: Config, id: string): Policy | null {
+  return config.policies.find((p) => p.id === id) ?? null;
 }
 
 // ---- declared texts (as the CLI prints them) ------------------------------
 
-export function measureText(m: Measure): string {
+export function measureText(m: Measure | null): string {
+  if (m === null) return "?";
   if (m.kind === "sum") return `sum ${m.group}${m.category === null ? "" : "." + m.category} per ${m.period}`;
-  if (m.kind === "holdings") return `holdings ${m.by}.${m.name}`;
-  if (m.kind === "share") return `share class.${m.name}`;
-  return `drawdown account.${m.name} over ${m.windowDays} days`;
+  if (m.kind === "drawdown") return `drawdown ${m.by}.${m.name} over ${m.windowDays} days`;
+  return `${m.kind} ${m.by}.${m.name}`;
 }
 
-export function limitText(l: Limit, baseCurrency: string): string {
-  if (l.kind === "value") return `${fmt(l.value)} ${baseCurrency}`;
-  if (l.kind === "pct_of") return `${fmt(l.value)}% of income`;
-  if (l.kind === "months_of") return `${fmt(l.value)} months of expense`;
-  return `${fmt(l.value)}%`;
+export function limitText(l: Limit | null, baseCurrency = ""): string {
+  if (l === null) return "?";
+  const v = l.value.text;
+  if (l.kind === "value") return (v + " " + baseCurrency).trim();
+  if (l.kind === "pct_of") return `${v}% of ${l.of}`;
+  if (l.kind === "months_of") return `${v} months of ${l.of}`;
+  return v + "%";
 }
 
-export function matchText(m: Match): string {
+export function bandText(b: Band | null): string {
+  if (b === null) return "?";
+  return `${b.minPct.text}%..${b.maxPct.text}%`;
+}
+
+export function matchText(m: Match | null): string {
+  if (m === null) return "?";
   const parts: string[] = [];
-  if (m.tags !== null) parts.push(`tags ${m.tags.join(",")}`);
-  if (m.tagsAny !== null) parts.push(`any tag of ${m.tagsAny.join(",")}`);
-  if (m.account !== null) parts.push(`account ${m.account}`);
-  if (m.category !== null) parts.push(`category ${m.category}`);
-  if (m.minAmount !== null) parts.push(`amount >= ${fmt(m.minAmount)}`);
+  if (m.tags !== null) parts.push("tags " + m.tags.join(";"));
+  if (m.tagsAny !== null) parts.push("any tag of " + m.tagsAny.join(","));
+  if (m.account !== null) parts.push("account " + m.account);
+  if (m.category !== null) parts.push("category " + m.category);
+  if (m.minAmount !== null) parts.push("amount >= " + m.minAmount.text);
   return parts.join(", ");
-}
-
-export function bandText(b: Band): string {
-  return `${fmt(b.minPct)}%..${fmt(b.maxPct)}%`;
 }
 
 // ---- serializer -----------------------------------------------------------
 
 const POLICY_KEY_ORDER = ["id", "type", "title", "measure", "limit", "match", "band", "period"];
 
-function policyEntryValue(key: string, v: unknown): string {
-  if (v === null || v === undefined) return "null";
-  if (key === "title" || key === "id") return typeof v === "string" ? yStr(v) : yFlow(v as YamlValue);
-  if (typeof v === "string") return yPlainOrStr(v);
-  return yFlow(v as YamlValue);
-}
-
-/** The raw mapping of a policy as declared or as the UI built it. */
-export function policyRaw(p: Policy): Record<string, unknown> {
-  return p.raw;
-}
-
 /**
  * policies.yml text in the reference style: block top level, flow lists and
- * flow maps inside each policy. Round-trips a parsed file semantically.
+ * flow maps inside each policy, numbers as written. Round-trips a parsed
+ * file semantically (comments are not kept).
  */
 export function serializePolicies(config: Config): string {
   const lines: string[] = [];
-  if (config.version !== null) lines.push(`version: ${yPlainOrStr(config.version)}`);
-  lines.push(`base_currency: ${config.baseCurrency}`);
+  if (config.version !== null) lines.push(`version: ${config.version}`);
+  if (config.baseCurrency !== null) lines.push(`base_currency: ${config.baseCurrency}`);
   lines.push(`accounts: ${yFlowSeq(config.accounts.map(yStr))}`);
   const groups = Object.keys(config.categories);
   if (groups.length === 0) lines.push("categories: {}");
@@ -387,16 +457,13 @@ export function serializePolicies(config: Config): string {
   if (config.policies.length === 0) lines.push("policies: []");
   else {
     lines.push("policies:");
-    for (const p of config.policies) {
-      const raw = policyRaw(p);
-      const keys = [...POLICY_KEY_ORDER.filter((k) => k in raw), ...Object.keys(raw).filter((k) => !POLICY_KEY_ORDER.includes(k))];
-      let first = true;
-      for (const k of keys) {
-        const prefix = first ? "  - " : "    ";
-        lines.push(`${prefix}${yStr(k)}: ${policyEntryValue(k, raw[k])}`);
-        first = false;
-      }
-    }
+    for (const p of config.policies) lines.push(...policyBlock(p.raw));
   }
   return lines.join("\n") + "\n";
+}
+
+/** One policy as the lines of a block-sequence item. */
+export function policyBlock(raw: PyMap): string[] {
+  const keys = [...POLICY_KEY_ORDER.filter((k) => k in raw), ...Object.keys(raw).filter((k) => !POLICY_KEY_ORDER.includes(k))];
+  return keys.map((k, i) => `${i === 0 ? "  - " : "    "}${yStr(k)}: ${yFlow(raw[k])}`);
 }

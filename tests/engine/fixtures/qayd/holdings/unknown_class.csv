@@ -1,0 +1,4 @@
+date,account,asset,class,quantity,value,currency
+2026-01-31,savings,OMR cash,crypto,1,1,OMR
+2026-01-31,savings,OMR cash,Cash,1,1,OMR
+2026-01-31,savings,OMR cash,cash,1,1,OMR

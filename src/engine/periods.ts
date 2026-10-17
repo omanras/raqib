@@ -11,7 +11,9 @@ export function isPeriodKind(x: unknown): x is PeriodKind {
 }
 
 export interface Period {
-  kind: PeriodKind;
+  /** "window" for bounds that are not one calendar period (a trailing window) */
+  kind: PeriodKind | "window";
+  /** the label: 2026-09, 2026-Q3, 2026, or 2025-10-01..2026-09-30 for a window */
   text: string;
   /** first day, ISO */
   start: string;
@@ -109,7 +111,7 @@ export function trailing(asOf: string, n: number): string[] {
 /** The next period of the same kind. */
 export function nextPeriod(period: Period): Period {
   const p = parseDate(period.end);
-  if (!p) throw new Error("nextPeriod: bad period");
+  if (!p || period.kind === "window") throw new Error("nextPeriod: a window has no next period");
   const next = p.m === 12 ? formatDate({ y: p.y + 1, m: 1, d: 1 }) : formatDate({ y: p.y, m: p.m + 1, d: 1 });
   return periodContaining(next, period.kind);
 }
@@ -131,5 +133,34 @@ export function periodsBetween(start: string, end: string, kind: PeriodKind): Pe
 
 /** The calendar months inside a period, ascending. */
 export function monthsOf(period: Period): string[] {
-  return periodsBetween(period.start, period.end, "month").map((p) => p.text);
+  return monthPeriods(period).map((p) => p.text);
+}
+
+/** The calendar months (as month periods) that overlap a period, ascending. */
+export function monthPeriods(period: Period): Period[] {
+  return periodsBetween(period.start, period.end, "month");
+}
+
+/** A period from its bounds, with kind and label derived as the CLI does. */
+export function makePeriod(start: string, end: string): Period {
+  const s = parseDate(start);
+  const e = parseDate(end);
+  if (!s || !e) throw new Error(`makePeriod: bad date ${start} or ${end}`);
+  let kind: Period["kind"] = "window";
+  if (s.d === 1 && e.d === daysInMonth(e.y, e.m)) {
+    if (s.y === e.y && s.m === e.m) kind = "month";
+    else if ([1, 4, 7, 10].includes(s.m) && e.y === s.y && e.m === s.m + 2) kind = "quarter";
+    else if (s.m === 1 && e.y === s.y && e.m === 12) kind = "year";
+  }
+  const text = kind === "window" ? `${start}..${end}` : periodOf(start, kind);
+  return { kind, text, start, end };
+}
+
+/**
+ * The trailing window of `months` calendar months ending at asOf: from the
+ * first day of the month months-1 before asOf's month to asOf itself.
+ */
+export function trailingWindow(asOf: string, months: number): Period {
+  const first = trailing(asOf, months)[0] as string;
+  return makePeriod(first + "-01", asOf);
 }

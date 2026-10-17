@@ -1,0 +1,6 @@
+date,amount,currency,account,category,tags,note
+2026-01-05,1,omr,salary,salary,,lowercase
+2026-01-05,1,OM,salary,salary,,two letters
+2026-01-05,1,OMRR,salary,salary,,four letters
+2026-01-05,1,,salary,salary,,empty
+2026-01-05,1,OMR,salary,salary,,ok

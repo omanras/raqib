@@ -1,0 +1,19 @@
+version: 2
+base_currency: omr
+accounts: [salary, salary, 7]
+categories:
+  income: [salary]
+  expense: [food, salary]
+  transfer: []
+snapshot_max_age_days: 0
+colour: blue
+policies:
+  - id: P-01
+    type: red_line
+    title: ok
+    match: {tags: x}
+  - type: cap
+    title: no id
+    measure: {sum: expense.food, period: month}
+    limit: {value: 1}
+  - just a string

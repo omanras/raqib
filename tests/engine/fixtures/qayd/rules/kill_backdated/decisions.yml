@@ -1,0 +1,8 @@
+- id: D-early
+  date: 2026-08-15
+  title: a decision dated before the crossing does not close it
+  policy: K1
+  criteria: none
+  review_by: 2026-12-01
+  status: closed
+  closes: K1

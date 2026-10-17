@@ -1,0 +1,19 @@
+- date: 2026-10-01
+  title: no id
+  review_by: 2027-01-01
+  status: open
+- id: D-2
+  title: no dates
+  status: open
+- id: D-3
+  date: 2026-10-01
+  title: unknown key
+  review_by: 2027-01-01
+  status: open
+  owner: me
+- id: D-4
+  date: 2026-10-01
+  title: 42
+  review_by: 2027-01-01
+  status: open
+- plain text

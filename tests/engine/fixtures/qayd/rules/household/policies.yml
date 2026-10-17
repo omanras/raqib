@@ -1,0 +1,68 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: CAP-HOLD
+    type: cap
+    title: food per month
+    measure: {sum: expense.food, period: month}
+    limit: {value: 100}
+  - id: CAP-BREACH
+    type: cap
+    title: discretionary per month
+    measure: {sum: expense.discretionary, period: month}
+    limit: {pct_of: income, value: 1}
+  - id: FLOOR-HOLD
+    type: floor
+    title: cash floor
+    measure: {holdings: class.cash}
+    limit: {value: 1000}
+  - id: FLOOR-BREACH
+    type: floor
+    title: income per month
+    measure: {sum: income, period: month}
+    limit: {value: 2000}
+  - id: ROUT-HOLD
+    type: routine
+    title: monthly transfer to savings
+    match: {tags: transfer, account: savings, min_amount: 300}
+    period: month
+  - id: ROUT-MISS
+    type: routine
+    title: quarterly dividend booked
+    match: {category: dividend}
+    period: quarter
+  - id: RED-HOLD
+    type: red_line
+    title: no margin, no options
+    match: {tags_any: [margin, options]}
+  - id: RED-BREACH
+    type: red_line
+    title: no single discretionary purchase above 200
+    match: {category: discretionary, min_amount: 200}
+  - id: KILL-HOLD
+    type: kill
+    title: broker drawdown, wide
+    measure: {drawdown: account.broker, window_days: 90}
+    limit: {pct: 50}
+  - id: KILL-BREACH
+    type: kill
+    title: broker drawdown, tight
+    measure: {drawdown: account.broker, window_days: 90}
+    limit: {pct: 5}
+  - id: ALLOC-HOLD
+    type: allocation
+    title: cash share
+    measure: {share: class.cash}
+    band: {min_pct: 50, max_pct: 100}
+  - id: ALLOC-BREACH
+    type: allocation
+    title: equity share
+    measure: {share: class.equity}
+    band: {min_pct: 20, max_pct: 50}

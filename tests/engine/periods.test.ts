@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inPeriod, monthsOf, nextPeriod, parsePeriod, periodContaining, periodOf, periodsBetween, trailing } from "../../src/engine/periods";
+import { inPeriod, makePeriod, monthPeriods, monthsOf, nextPeriod, parsePeriod, periodContaining, periodOf, periodsBetween, trailing, trailingWindow } from "../../src/engine/periods";
 
 describe("engine/periods", () => {
   it("names the period of a date", () => {
@@ -55,5 +55,23 @@ describe("engine/periods", () => {
     expect(periodsBetween("2026-09-30", "2026-01-01", "month")).toEqual([]);
     expect(monthsOf(parsePeriod("2026-Q3")!)).toEqual(["2026-07", "2026-08", "2026-09"]);
     expect(monthsOf(parsePeriod("2024")!).length).toBe(12);
+  });
+
+  it("derives kind and label from bounds as the CLI does; a trailing window is labelled by its bounds", () => {
+    expect(makePeriod("2026-09-01", "2026-09-30")).toEqual({ kind: "month", text: "2026-09", start: "2026-09-01", end: "2026-09-30" });
+    expect(makePeriod("2026-07-01", "2026-09-30").text).toBe("2026-Q3");
+    expect(makePeriod("2026-01-01", "2026-12-31").text).toBe("2026");
+    expect(makePeriod("2025-10-01", "2026-09-30")).toEqual({ kind: "window", text: "2025-10-01..2026-09-30", start: "2025-10-01", end: "2026-09-30" });
+    expect(makePeriod("2026-09-01", "2026-09-15").kind).toBe("window");
+    expect(trailingWindow("2026-09-30", 12).text).toBe("2025-10-01..2026-09-30");
+    expect(trailingWindow("2026-12-31", 12).text).toBe("2026");
+    expect(trailingWindow("2024-02-29", 1).text).toBe("2024-02");
+    expect(trailingWindow("2026-09-15", 12)).toMatchObject({ kind: "window", start: "2025-10-01", end: "2026-09-15" });
+    expect(monthPeriods(trailingWindow("2026-09-15", 3)).map((m) => [m.text, m.end])).toEqual([
+      ["2026-07", "2026-07-31"],
+      ["2026-08", "2026-08-31"],
+      ["2026-09", "2026-09-30"],
+    ]);
+    expect(() => nextPeriod(makePeriod("2026-09-01", "2026-09-15"))).toThrow();
   });
 });

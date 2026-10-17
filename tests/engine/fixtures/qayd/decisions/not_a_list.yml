@@ -1,0 +1,5 @@
+decisions:
+  - id: D-1
+    date: 2026-10-01
+    review_by: 2027-01-01
+    status: open

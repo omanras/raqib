@@ -1,78 +1,107 @@
-// rates.csv (optional): currency rates by date, header `date,currency,rate`.
-// A rate is base-currency units per one unit of `currency`. Lookup takes
-// the latest rate on or before the date; two different rates on one date
-// conflict and the date has no rate (FAILURE_MODEL "Missing rates").
-import { csvLine, readCsv, type CsvRecord } from "./csv";
-import { isValidDate } from "./dates";
-import { isCurrencyCode, parseAmount } from "./text";
-import { makeProblem, type InvalidRow, type ParsedRates, type Problem, type RateRow } from "./types";
+// rates.csv (optional): currency rates by date, header `date,currency,rate`
+// (qayd/rates.py). A rate is base-currency units per one unit of `currency`.
+// Conversion takes the latest rate on or before the date and cites the rate
+// row; the base currency needs no row; no rate is Unknown, never a guess
+// (A5). Two different rates for one currency and date conflict: a problem,
+// and Unknown on that date.
+import { csvLine } from "./csv";
+import type { Decimal } from "./decimal";
+import { dated, INVALID, loadCsv, problem } from "./loader";
+import { isCurrencyCode, parseIsoDate, parseRate } from "./text";
+import type { Problem, RateRow } from "./types";
+import { unknown, type Unknown } from "./values";
 
 export const RATES_HEADER = "date,currency,rate";
-const RATES_COLUMNS = RATES_HEADER.split(",");
 
-function invalid(line: number, date: string | null, code: string, reason: string, raw: string): InvalidRow {
-  return { line, date, code, reason, raw };
+export interface Conversion {
+  amount: Decimal;
+  /** null when no conversion was needed */
+  rate: RateRow | null;
 }
 
-function checkRow(rec: CsvRecord): RateRow | InvalidRow {
-  const f = rec.fields;
-  if (f.length !== RATES_COLUMNS.length) {
-    return invalid(rec.line, null, "BAD-COLUMNS", `${f.length} columns, expected ${RATES_COLUMNS.length}`, rec.raw);
+export class RateTable {
+  readonly rows: readonly RateRow[];
+  private readonly byCurrency = new Map<string, RateRow[]>();
+
+  constructor(
+    rows: readonly RateRow[],
+    readonly base: string | null,
+  ) {
+    this.rows = rows;
+    for (const r of rows) {
+      const list = this.byCurrency.get(r.currency) ?? [];
+      list.push(r);
+      this.byCurrency.set(r.currency, list);
+    }
+    for (const list of this.byCurrency.values()) list.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.line - b.line));
   }
-  const [date, currency, rateText] = f as [string, string, string];
-  if (!isValidDate(date)) return invalid(rec.line, null, "BAD-DATE", `bad date "${date}" (YYYY-MM-DD)`, rec.raw);
-  if (!isCurrencyCode(currency)) return invalid(rec.line, date, "BAD-CURRENCY", `bad currency "${currency}" (ISO-4217 code)`, rec.raw);
-  const rate = parseAmount(rateText);
-  if (rate === null || rate.lte(0)) return invalid(rec.line, date, "BAD-RATE", `bad rate "${rateText}" (positive decimal text)`, rec.raw);
-  return { line: rec.line, date, currency, rate, rateText };
+
+  get currencies(): string[] {
+    return [...this.byCurrency.keys()].sort();
+  }
+
+  /** An amount in `currency` on `date`, in base currency, or Unknown. */
+  convert(amount: Decimal, currency: string, date: string): Conversion | Unknown {
+    if (currency === this.base) return { amount, rate: null };
+    if (this.base === null) return unknown(`base currency is not declared; cannot convert ${currency}`);
+    const candidates = this.byCurrency.get(currency);
+    if (!candidates || candidates.length === 0) return unknown(`no rate for ${currency} (no rows for that currency)`);
+    let latest: RateRow | null = null;
+    for (const r of candidates) {
+      if (r.date <= date) latest = r;
+      else break;
+    }
+    if (latest === null) {
+      return unknown(`no rate for ${currency} on or before ${date} (earliest is ${(candidates[0] as RateRow).date})`);
+    }
+    const day = latest.date;
+    const sameDay = candidates.filter((r) => r.date === day);
+    if (new Set(sameDay.map((r) => r.rate.toString())).size > 1) {
+      return unknown(`conflicting rates for ${currency} on ${day}`, sameDay.map((r) => r.cite));
+    }
+    return { amount: amount.times(latest.rate), rate: latest };
+  }
 }
 
-/** Parse rates text; an empty text is a valid, empty table. */
-export function parseRates(text: string): ParsedRates {
-  const problems: Problem[] = [];
-  const rates: RateRow[] = [];
-  const invalidRows: InvalidRow[] = [];
-  if (text.trim() === "") return { rates, invalid: invalidRows, problems, count: 0 };
-  const csv = readCsv(text);
-  if (csv.header === null || csv.header.fields.join(",") !== RATES_HEADER) {
-    const line = csv.header ? csv.header.line : 1;
-    problems.push(makeProblem("BAD-HEADER", "rates.csv", line, `header must be exactly "${RATES_HEADER}"`));
-    return { rates, invalid: invalidRows, problems, count: 0 };
-  }
-  for (const rec of csv.records) {
-    const r = checkRow(rec);
-    if ("rateText" in r) rates.push(r);
-    else {
-      invalidRows.push(r);
-      problems.push(makeProblem(r.code, "rates.csv", r.line, r.reason));
+export interface ParsedRates {
+  table: RateTable;
+  problems: Problem[];
+}
+
+/**
+ * Parse rates text. `null` is a file that does not exist: rates.csv is
+ * optional, so that is an empty table and no problem (the CLI's
+ * load_optional).
+ */
+export function parseRates(text: string | null, baseCurrency: string | null, file = "rates.csv"): ParsedRates {
+  if (text === null) return { table: new RateTable([], baseCurrency), problems: [] };
+  const loaded = loadCsv<RateRow>(text, file, RATES_HEADER, 3, (fields, line, f) => {
+    const [dText, cur, rText] = fields as [string, string, string];
+    const problems: Problem[] = [];
+    const date = parseIsoDate(dText);
+    if (date === null) problems.push(problem(f, line, "BAD-DATE", `date '${dText}' is not YYYY-MM-DD`));
+    const extra = dated(date);
+    if (!isCurrencyCode(cur)) problems.push(problem(f, line, "BAD-CURRENCY", `currency '${cur}' is not a 3-letter ISO-4217 code`, INVALID, extra));
+    else if (baseCurrency !== null && cur === baseCurrency) problems.push(problem(f, line, "BASE-RATE", `the base currency ${cur} needs no rate`, INVALID, extra));
+    const rate = parseRate(rText);
+    if (rate === null) problems.push(problem(f, line, "BAD-RATE", `rate '${rText}' is not positive decimal text`, INVALID, extra));
+    if (problems.length > 0 || date === null || rate === null) return { row: null, problems };
+    return { row: { date, currency: cur, rate, rateText: rText, line, file: f, cite: `${f}:${line}` }, problems };
+  });
+  const problems = [...loaded.problems];
+  const seen = new Map<string, RateRow>();
+  for (const r of loaded.rows) {
+    const key = `${r.date}|${r.currency}`;
+    const first = seen.get(key);
+    if (first === undefined) seen.set(key, r);
+    else if (!first.rate.eq(r.rate)) {
+      problems.push(problem(r.file, r.line, "CONFLICT-RATE", `rate for ${r.currency} on ${r.date} differs from line ${first.line}`, INVALID, { date: r.date }));
     }
   }
-  return { rates, invalid: invalidRows, problems, count: csv.records.length };
+  return { table: new RateTable(loaded.rows, baseCurrency), problems };
 }
 
-export type RateLookup =
-  | { status: "ok"; rate: RateRow }
-  | { status: "missing"; reason: string }
-  | { status: "conflict"; reason: string; lines: number[] };
-
-/** The rate in force for a currency on a date. */
-export function rateFor(rates: readonly RateRow[], currency: string, date: string): RateLookup {
-  let bestDate: string | null = null;
-  for (const r of rates) {
-    if (r.currency === currency && r.date <= date && (bestDate === null || r.date > bestDate)) bestDate = r.date;
-  }
-  if (bestDate === null) return { status: "missing", reason: `no rate for ${currency} on or before ${date}` };
-  const onDate = rates.filter((r) => r.currency === currency && r.date === bestDate);
-  const first = onDate[0] as RateRow;
-  const different = onDate.filter((r) => !r.rate.eq(first.rate));
-  if (different.length > 0) {
-    const lines = onDate.map((r) => r.line);
-    return { status: "conflict", reason: `two different rates for ${currency} on ${bestDate} (rates.csv:${lines.join(", rates.csv:")})`, lines };
-  }
-  return { status: "ok", rate: first };
-}
-
-export function rateLine(row: RateRow): string {
+export function rateLine(row: Pick<RateRow, "date" | "currency" | "rateText">): string {
   return csvLine([row.date, row.currency, row.rateText]);
 }
 

@@ -1,0 +1,20 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: K1
+    type: kill
+    title: broker drawdown
+    measure: {drawdown: account.broker, window_days: 90}
+    limit: {pct: 5}
+  - id: CAP-HOLD
+    type: cap
+    title: food per month
+    measure: {sum: expense.food, period: month}
+    limit: {value: 100}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { D, Decimal, fmt } from "../../src/engine/decimal";
+import { D, Decimal, fmt, money, num, pct, pyDecimalStr } from "../../src/engine/decimal";
 
 describe("engine/decimal", () => {
   it("adds exactly: 0.1 + 0.2 = 0.3", () => {
@@ -26,5 +26,33 @@ describe("engine/decimal", () => {
     expect(fmt(D("-0.000"))).toBe("0");
     expect(fmt(D("1e21"))).toBe("1000000000000000000000");
     expect(fmt(D("0.00000001"))).toBe("0.00000001");
+  });
+
+  it("prints money and percentages as the CLI does", () => {
+    expect(money(D("248.180000"), "OMR")).toBe("248.18 OMR");
+    expect(money(D("1900.000"), "OMR")).toBe("1900 OMR");
+    expect(money(D("0.1"))).toBe("0.1");
+    expect(money(D("-0.000"))).toBe("0");
+    expect(money(D("1E+3"))).toBe("1000");
+    expect(pct(D("4.545454545"))).toBe("4.55%");
+    expect(pct(D("77.5"))).toBe("77.5%");
+    expect(pct(D("0"))).toBe("0%");
+    expect(pct(D("17.37018650207969944988595197"))).toBe("17.37%");
+    expect(pct(D("2.125"))).toBe("2.12%");
+    expect(pct(D("-0.001"))).toBe("-0%");
+  });
+
+  it("spells a declared number like Python's str(Decimal)", () => {
+    expect(pyDecimalStr("10")).toBe("10");
+    expect(pyDecimalStr("4500.50")).toBe("4500.50");
+    expect(pyDecimalStr("007.50")).toBe("7.50");
+    expect(pyDecimalStr("-0")).toBe("-0");
+    expect(pyDecimalStr("0.000001")).toBe("0.000001");
+    expect(pyDecimalStr("0.0000001")).toBe("1E-7");
+    expect(pyDecimalStr("1.5e+3")).toBe("1.5E+3");
+    expect(pyDecimalStr("1.")).toBe("1");
+    expect(pyDecimalStr(".5")).toBe("0.5");
+    expect(pyDecimalStr("abc")).toBeNull();
+    expect(num("12.50")).toEqual({ value: D("12.5"), text: "12.50" });
   });
 });
