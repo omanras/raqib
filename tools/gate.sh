@@ -43,6 +43,12 @@ if [ -f package.json ]; then
   n="$(ls dist | wc -l)"; if [ "$n" -ne 1 ]; then echo "[gate] RED: dist has $n files, expected one (single-file build)"; exit 1; fi
   sz="$(wc -c < dist/index.html)"; if [ "$sz" -gt 1572864 ]; then echo "[gate] RED: dist/index.html is $sz bytes (> 1.5 MB)"; exit 1; fi
   if grep -qE '(src|href)=["'"'"']https?://' dist/index.html; then echo "[gate] RED: remote resource in dist/index.html"; exit 1; fi
+  # The build is deterministic (no hash, no date; the version comes from package.json),
+  # so the committed release must be byte-equal to this fresh build. Refresh it with
+  # `cp dist/index.html release/qayd.html` in the commit that changes the app.
+  echo "[gate] release/qayd.html is this commit's build"
+  if [ ! -f release/qayd.html ]; then echo "[gate] RED: release/qayd.html missing"; exit 1; fi
+  if ! cmp -s release/qayd.html dist/index.html; then echo "[gate] RED: release/qayd.html differs from a fresh build (cp dist/index.html release/qayd.html)"; exit 1; fi
   if [ -d e2e ] && ls e2e/*.spec.ts >/dev/null 2>&1; then
     echo "[gate] e2e (Playwright, Chromium)"; npx playwright test --reporter=line 2>&1 | tail -5
   fi

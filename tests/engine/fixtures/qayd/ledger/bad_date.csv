@@ -1,0 +1,8 @@
+date,amount,currency,account,category,tags,note
+2026-01-05,1,OMR,salary,salary,,ok
+2026-13-01,1,OMR,salary,salary,,month 13
+20260105,1,OMR,salary,salary,,compact form
+2026-02-30,1,OMR,salary,salary,,feb 30
+2026-1-5,1,OMR,salary,salary,,no zero padding
+,1,OMR,salary,salary,,empty date
+2026-01-06,2,OMR,salary,salary,,ok too

@@ -1,38 +1,36 @@
-# HANDOFF — M0.1  (phase 0: scaffold and gate)
+# HANDOFF — M2.2  (phase 2: README, failure model, release build)
 
-Task: scaffold the app per CLAUDE.md "Stack" and docs/specs/ADR-0001-app.md
-§1, §6, so that `tools/gate.sh` runs the full chain on a hello page.
+Task: documentation for a person who has never seen the CLI, the failure
+model of a browser app, an accessibility pass, and the committed release.
 
 Scope:
-  package.json
-  package-lock.json
-  tsconfig.json
-  vite.config.ts
-  vitest.config.ts
-  playwright.config.ts
-  index.html
-  src/
-  tests/
-  .github/workflows/gate.yml
+  README.md
+  docs/FAILURE_MODEL.md
+  release/
+  src/ui/
+  src/i18n/
+  tools/gate.sh
   docs/review/
 
 Exit criteria:
-- E1 `npm ci && npx tsc --noEmit && npx vitest run && npx vite build`
-     succeed; dist/ contains exactly one file, index.html, with every
-     script and style inlined (vite-plugin-singlefile), no remote URL.
-- E2 `src/main.tsx` renders a Preact page "Qayd" with the app version from
-     package.json; `src/engine/decimal.ts` re-exports a configured
-     decimal.js (precision 28, ROUND_HALF_EVEN) and one unit test proves
-     `D("0.1").plus("0.2").eq("0.3")`.
-- E3 playwright.config.ts uses the preinstalled Chromium
-     (PLAYWRIGHT_BROWSERS_PATH), a webServer of `vite preview`, one e2e
-     test that opens the page and reads the heading; `npx playwright test`
-     green. Never run `playwright install`.
-- E4 .github/workflows/gate.yml runs tools/gate.sh on push/PR, Node 22,
-     installs Playwright's Chromium in CI only (`npx playwright install
-     --with-deps chromium`), no secret.
-- E5 tools/gate.sh green end to end.
+- E1 README: what Qayd Web is and what it never does (five lines); use
+     it from the one file (`release/qayd.html`: open it, load the sample,
+     where data lives, how to export); build from source; the five files
+     in brief with a link to the engine spec; screens; keyboard shortcuts
+     if any; how to report an issue.
+- E2 docs/FAILURE_MODEL.md: browser storage cleared, private mode, two
+     tabs, a pasted file with the wrong header, a policy loosened to pass,
+     a reversal of a reversal, clock skew (as-of from the device clock),
+     the sandboxed iframe case (downloads inert, copy works); what the app
+     does today, what is open.
+- E3 Accessibility pass on every screen: labels, roles, contrast of every
+     chip in both themes (document the measured ratios), reduced-motion.
+- E4 `release/qayd.html` = the gate's `dist/index.html` of this commit,
+     committed; tools/gate.sh adds a check that release/qayd.html equals a
+     fresh build (byte-equal, or equal after stripping a build hash,
+     documented).
+- E5 Gate green; CI green on the branch.
 
-Not in scope: engine logic, screens, reference/.
-Commit: `landed: M0.1 scaffold and gate` or `STOP: M0.1 <reason>`.
+Not in scope: new screens or engine changes.
+Commit: `landed: M2.2 readme, failure model, release` or `STOP: M2.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.

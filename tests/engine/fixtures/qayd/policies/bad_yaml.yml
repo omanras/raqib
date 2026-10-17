@@ -1,0 +1,4 @@
+version: 1
+base_currency: OMR
+policies:
+  - id: [unclosed

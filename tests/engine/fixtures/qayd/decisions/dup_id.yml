@@ -1,0 +1,10 @@
+- id: D-1
+  date: 2026-10-01
+  title: first
+  review_by: 2027-01-01
+  status: open
+- id: D-1
+  date: 2026-10-02
+  title: second with same id
+  review_by: 2027-01-01
+  status: open

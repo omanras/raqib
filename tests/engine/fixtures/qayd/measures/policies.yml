@@ -1,0 +1,65 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: M-01
+    type: cap
+    title: discretionary per month vs 10% of income
+    measure: {sum: expense.discretionary, period: month}
+    limit: {pct_of: income, value: 10}
+  - id: M-02
+    type: floor
+    title: cash floor, six months of expense
+    measure: {holdings: class.cash}
+    limit: {months_of: expense, value: 6}
+  - id: M-03
+    type: kill
+    title: broker drawdown over 90 days
+    measure: {drawdown: account.broker, window_days: 90}
+    limit: {pct: 15}
+  - id: M-04
+    type: allocation
+    title: equity share
+    measure: {share: class.equity}
+    band: {min_pct: 20, max_pct: 50}
+  - id: M-05
+    type: cap
+    title: broker value
+    measure: {holdings: account.broker}
+    limit: {value: 2000}
+  - id: M-06
+    type: floor
+    title: income per quarter
+    measure: {sum: income, period: quarter}
+    limit: {value: 3000}
+  - id: M-07
+    type: cap
+    title: all expense per month
+    measure: {sum: expense, period: month}
+    limit: {value: 500}
+  - id: M-08
+    type: cap
+    title: food per month
+    measure: {sum: expense.food, period: month}
+    limit: {value: 100}
+  - id: M-09
+    type: cap
+    title: gold value
+    measure: {holdings: class.gold}
+    limit: {value: 100}
+  - id: M-10
+    type: kill
+    title: cash account drawdown over 60 days
+    measure: {drawdown: account.cash, window_days: 60}
+    limit: {pct: 15}
+  - id: M-11
+    type: kill
+    title: salary account drawdown (no holdings rows)
+    measure: {drawdown: account.salary, window_days: 60}
+    limit: {pct: 15}

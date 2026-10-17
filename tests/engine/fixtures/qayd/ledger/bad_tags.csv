@@ -1,0 +1,6 @@
+date,amount,currency,account,category,tags,note
+2026-01-05,-1,OMR,cash,food,a;;b,empty token
+2026-01-05,-1,OMR,cash,food,a; b,space in token
+2026-01-05,-1,OMR,cash,food,;,lone separator
+2026-01-05,-1,OMR,cash,food,a;,trailing separator
+2026-01-05,-1,OMR,cash,food,a;b;a,ok with repeat

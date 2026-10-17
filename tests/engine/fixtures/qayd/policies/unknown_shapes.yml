@@ -1,0 +1,112 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: U-01
+    type: ceiling
+    title: unknown type
+    measure: {sum: expense.food, period: month}
+    limit: {value: 100}
+  - id: U-02
+    type: cap
+    title: measure without period
+    measure: {sum: expense.food}
+    limit: {value: 100}
+  - id: U-03
+    type: cap
+    title: unknown measure key
+    measure: {average: expense.food, period: month}
+    limit: {value: 100}
+  - id: U-04
+    type: cap
+    title: unknown limit shape
+    measure: {sum: expense.food, period: month}
+    limit: {max: 100}
+  - id: U-05
+    type: cap
+    title: pct limit on a cap
+    measure: {sum: expense.food, period: month}
+    limit: {pct: 10}
+  - id: U-06
+    type: kill
+    title: kill with a sum measure
+    measure: {sum: expense.food, period: month}
+    limit: {pct: 10}
+  - id: U-07
+    type: kill
+    title: kill without window_days
+    measure: {drawdown: account.broker}
+    limit: {pct: 10}
+  - id: U-08
+    type: allocation
+    title: band inverted
+    measure: {share: class.equity}
+    band: {min_pct: 60, max_pct: 40}
+  - id: U-09
+    type: allocation
+    title: allocation with holdings measure
+    measure: {holdings: class.equity}
+    band: {min_pct: 10, max_pct: 40}
+  - id: U-10
+    type: routine
+    title: routine without period
+    match: {tags: transfer}
+  - id: U-11
+    type: routine
+    title: routine with week period
+    match: {tags: transfer}
+    period: week
+  - id: U-12
+    type: red_line
+    title: empty match
+    match: {}
+  - id: U-13
+    type: red_line
+    title: match with unknown key
+    match: {merchant: casino}
+  - id: U-14
+    type: cap
+    title: missing limit
+    measure: {sum: expense.food, period: month}
+  - id: U-15
+    type: cap
+    title: limit value is text
+    measure: {sum: expense.food, period: month}
+    limit: {value: lots}
+  - id: U-16
+    type: cap
+    title: pct_of something else
+    measure: {sum: expense.food, period: month}
+    limit: {pct_of: expense, value: 10}
+  - id: U-17
+    type: cap
+    title: extra key on a cap
+    measure: {sum: expense.food, period: month}
+    limit: {value: 10}
+    band: {min_pct: 1, max_pct: 2}
+  - id: U-18
+    type: cap
+    title: measure period is a list
+    measure: {sum: expense.food, period: [month]}
+    limit: {value: 10}
+  - id: U-19
+    type: cap
+    title: limit value is boolean
+    measure: {sum: expense.food, period: month}
+    limit: {value: true}
+  - id: U-20
+    type: cap
+    title: limit value is not finite
+    measure: {sum: expense.food, period: month}
+    limit: {value: .inf}
+  - id: OK-01
+    type: cap
+    title: the one that holds the file together
+    measure: {sum: expense.food, period: month}
+    limit: {value: 10}

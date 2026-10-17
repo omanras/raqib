@@ -1,0 +1,24 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: CAP-HOLD
+    type: cap
+    title: food per month
+    measure: {sum: expense.food, period: month}
+    limit: {value: 100}
+  - id: ROUT-HOLD
+    type: routine
+    title: monthly transfer to savings
+    match: {tags: transfer, account: savings, min_amount: 300}
+    period: month
+  - id: RED-HOLD
+    type: red_line
+    title: no margin, no options
+    match: {tags_any: [margin, options]}

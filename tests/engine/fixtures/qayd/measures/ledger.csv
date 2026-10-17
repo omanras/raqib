@@ -1,0 +1,20 @@
+date,amount,currency,account,category,tags,note
+2026-07-01,1000.000,OMR,salary,salary,,july salary
+2026-07-02,-300.000,OMR,salary,transfer,transfer,to savings
+2026-07-02,300.000,OMR,savings,transfer,transfer,from salary
+2026-07-05,-200.000,OMR,cash,housing,,rent
+2026-07-10,-50.500,OMR,cash,food,,groceries
+2026-07-15,-20.000,USD,cash,discretionary,,gadget in usd
+2026-07-20,10.000,OMR,cash,food,,refund
+2026-08-01,1000.000,OMR,salary,salary,,august salary
+2026-08-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-08-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-08-05,-200.000,OMR,cash,housing,,rent
+2026-08-12,-60.000,OMR,cash,food,,groceries
+2026-08-20,100.000,OMR,salary,side,,freelance
+2026-09-01,1000.000,OMR,salary,salary,,september salary
+2026-09-05,-200.000,OMR,cash,housing,,rent
+2026-09-09,-40.000,OMR,cash,food,,groceries
+2026-09-15,-25.000,EUR,cash,discretionary,,no rate for eur
+2026-09-28,-15.000,OMR,cash,discretionary,,late in the month
+2026-09-30,50.000,OMR,salary,salary,transfer,tagged transfer under income is not income

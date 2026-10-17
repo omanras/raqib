@@ -1,0 +1,39 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: CAP-SEP
+    type: cap
+    title: food per month
+    measure: {sum: expense.food, period: month}
+    limit: {value: 100}
+  - id: CAP-Q
+    type: cap
+    title: food per quarter
+    measure: {sum: expense.food, period: quarter}
+    limit: {value: 300}
+  - id: SHAPE
+    type: cap
+    title: a measure that is not declared
+    measure: {average: expense.food, period: month}
+    limit: {value: 100}
+  - id: RED
+    type: red_line
+    title: no margin
+    match: {tags_any: [margin]}
+  - id: ROUT
+    type: routine
+    title: monthly transfer to savings
+    match: {tags: transfer, account: savings}
+    period: month
+  - id: CAP-FX
+    type: cap
+    title: discretionary per month
+    measure: {sum: expense.discretionary, period: month}
+    limit: {value: 100}

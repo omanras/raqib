@@ -1,0 +1,26 @@
+name: gate
+
+on:
+  push:
+    branches: ["qayd-web", "claude/qayd-web-*"]
+  pull_request:
+    branches: ["qayd-web"]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: tools/gate.sh

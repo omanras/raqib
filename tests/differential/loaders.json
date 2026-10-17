@@ -1,0 +1,3168 @@
+[
+ {
+  "kind": "ledger",
+  "name": "bad_amount.csv",
+  "rows": [
+   [
+    11,
+    "2026-01-05",
+    "-7.25",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_amount.csv",
+    "line": 2,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount 'abc' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_amount.csv",
+    "line": 3,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount '1e3' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_amount.csv",
+    "line": 4,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount '1,000' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_amount.csv",
+    "line": 5,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount '+5' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_amount.csv",
+    "line": 6,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount '' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_amount.csv",
+    "line": 7,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount '.5' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_amount.csv",
+    "line": 8,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount '5.' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_amount.csv",
+    "line": 9,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount ' 5' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_amount.csv",
+    "line": 10,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount 'NaN' is not decimal text",
+    "date": "2026-01-05"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "bad_csv.csv",
+  "rows": [
+   [
+    4,
+    "2026-01-06",
+    "2",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_csv.csv",
+    "line": 2,
+    "code": "BAD-CSV",
+    "class": "invalid",
+    "reason": "malformed CSV: unexpected end of data"
+   },
+   {
+    "file": "bad_csv.csv",
+    "line": 3,
+    "code": "BAD-CSV",
+    "class": "invalid",
+    "reason": "malformed CSV: ',' expected after '\"'"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "bad_currency.csv",
+  "rows": [
+   [
+    6,
+    "2026-01-05",
+    "1",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_currency.csv",
+    "line": 2,
+    "code": "BAD-CURRENCY",
+    "class": "invalid",
+    "reason": "currency 'omr' is not a 3-letter ISO-4217 code",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_currency.csv",
+    "line": 3,
+    "code": "BAD-CURRENCY",
+    "class": "invalid",
+    "reason": "currency 'OM' is not a 3-letter ISO-4217 code",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_currency.csv",
+    "line": 4,
+    "code": "BAD-CURRENCY",
+    "class": "invalid",
+    "reason": "currency 'OMRR' is not a 3-letter ISO-4217 code",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_currency.csv",
+    "line": 5,
+    "code": "BAD-CURRENCY",
+    "class": "invalid",
+    "reason": "currency '' is not a 3-letter ISO-4217 code",
+    "date": "2026-01-05"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "bad_date.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-05",
+    "1",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok"
+   ],
+   [
+    8,
+    "2026-01-06",
+    "2",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok too"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_date.csv",
+    "line": 3,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '2026-13-01' is not YYYY-MM-DD"
+   },
+   {
+    "file": "bad_date.csv",
+    "line": 4,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '20260105' is not YYYY-MM-DD"
+   },
+   {
+    "file": "bad_date.csv",
+    "line": 5,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '2026-02-30' is not YYYY-MM-DD"
+   },
+   {
+    "file": "bad_date.csv",
+    "line": 6,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '2026-1-5' is not YYYY-MM-DD"
+   },
+   {
+    "file": "bad_date.csv",
+    "line": 7,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '' is not YYYY-MM-DD"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "bad_header.csv",
+  "rows": [],
+  "problems": [
+   {
+    "file": "bad_header.csv",
+    "line": 1,
+    "code": "BAD-HEADER",
+    "class": "invalid",
+    "reason": "header must be exactly 'date,amount,currency,account,category,tags,note', got 'date,amount,currency,account,category,tags'"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "bad_header_space.csv",
+  "rows": [],
+  "problems": [
+   {
+    "file": "bad_header_space.csv",
+    "line": 1,
+    "code": "BAD-HEADER",
+    "class": "invalid",
+    "reason": "header must be exactly 'date,amount,currency,account,category,tags,note', got 'date, amount,currency,account,category,tags,note'"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "bad_tags.csv",
+  "rows": [
+   [
+    6,
+    "2026-01-05",
+    "-1",
+    "OMR",
+    "cash",
+    "food",
+    [
+     "a",
+     "b",
+     "a"
+    ],
+    "ok with repeat"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_tags.csv",
+    "line": 2,
+    "code": "BAD-TAGS",
+    "class": "invalid",
+    "reason": "tags 'a;;b' must be ';'-separated non-empty tokens",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_tags.csv",
+    "line": 3,
+    "code": "BAD-TAGS",
+    "class": "invalid",
+    "reason": "tags 'a; b' must be ';'-separated non-empty tokens",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_tags.csv",
+    "line": 4,
+    "code": "BAD-TAGS",
+    "class": "invalid",
+    "reason": "tags ';' must be ';'-separated non-empty tokens",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "bad_tags.csv",
+    "line": 5,
+    "code": "BAD-TAGS",
+    "class": "invalid",
+    "reason": "tags 'a;' must be ';'-separated non-empty tokens",
+    "date": "2026-01-05"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "column_count.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-05",
+    "1",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok"
+   ],
+   [
+    6,
+    "2026-01-06",
+    "2",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok too"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "column_count.csv",
+    "line": 3,
+    "code": "COLUMN-COUNT",
+    "class": "invalid",
+    "reason": "expected 7 columns, got 6"
+   },
+   {
+    "file": "column_count.csv",
+    "line": 4,
+    "code": "COLUMN-COUNT",
+    "class": "invalid",
+    "reason": "expected 7 columns, got 8"
+   },
+   {
+    "file": "column_count.csv",
+    "line": 5,
+    "code": "COLUMN-COUNT",
+    "class": "invalid",
+    "reason": "expected 7 columns, got 1"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "dup_row.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-07",
+    "-2.500",
+    "OMR",
+    "cash",
+    "food",
+    [],
+    "coffee"
+   ],
+   [
+    3,
+    "2026-01-07",
+    "-2.500",
+    "OMR",
+    "cash",
+    "food",
+    [],
+    "coffee"
+   ],
+   [
+    4,
+    "2026-01-07",
+    "-2.500",
+    "OMR",
+    "cash",
+    "food",
+    [],
+    "coffee again"
+   ],
+   [
+    5,
+    "2026-01-07",
+    "-2.500",
+    "OMR",
+    "cash",
+    "food",
+    [],
+    "coffee"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "dup_row.csv",
+    "line": 3,
+    "code": "DUP-ROW",
+    "class": "warn",
+    "reason": "exact duplicate of line 2",
+    "dup_of": 2
+   },
+   {
+    "file": "dup_row.csv",
+    "line": 5,
+    "code": "DUP-ROW",
+    "class": "warn",
+    "reason": "exact duplicate of line 2",
+    "dup_of": 2
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "empty.csv",
+  "rows": [],
+  "problems": [
+   {
+    "file": "empty.csv",
+    "line": 0,
+    "code": "FILE-EMPTY",
+    "class": "invalid",
+    "reason": "file is empty: no header"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "empty_line.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-05",
+    "1",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok"
+   ],
+   [
+    4,
+    "2026-01-06",
+    "2",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok too"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "empty_line.csv",
+    "line": 3,
+    "code": "EMPTY-LINE",
+    "class": "invalid",
+    "reason": "empty line"
+   },
+   {
+    "file": "empty_line.csv",
+    "line": 5,
+    "code": "EMPTY-LINE",
+    "class": "invalid",
+    "reason": "empty line"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "header_only.csv",
+  "rows": [],
+  "problems": []
+ },
+ {
+  "kind": "ledger",
+  "name": "multi_problem.csv",
+  "rows": [],
+  "problems": [
+   {
+    "file": "multi_problem.csv",
+    "line": 2,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '2026-99-99' is not YYYY-MM-DD"
+   },
+   {
+    "file": "multi_problem.csv",
+    "line": 2,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount 'abc' is not decimal text"
+   },
+   {
+    "file": "multi_problem.csv",
+    "line": 2,
+    "code": "BAD-CURRENCY",
+    "class": "invalid",
+    "reason": "currency 'xx' is not a 3-letter ISO-4217 code"
+   },
+   {
+    "file": "multi_problem.csv",
+    "line": 2,
+    "code": "UNKNOWN-ACCOUNT",
+    "class": "invalid",
+    "reason": "account 'nobody' is not declared"
+   },
+   {
+    "file": "multi_problem.csv",
+    "line": 2,
+    "code": "UNKNOWN-CATEGORY",
+    "class": "invalid",
+    "reason": "category 'nothing' is not declared"
+   },
+   {
+    "file": "multi_problem.csv",
+    "line": 2,
+    "code": "BAD-TAGS",
+    "class": "invalid",
+    "reason": "tags 'a;;b' must be ';'-separated non-empty tokens"
+   },
+   {
+    "file": "multi_problem.csv",
+    "line": 3,
+    "code": "BAD-AMOUNT",
+    "class": "invalid",
+    "reason": "amount 'abc' is not decimal text",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "multi_problem.csv",
+    "line": 3,
+    "code": "UNKNOWN-ACCOUNT",
+    "class": "invalid",
+    "reason": "account 'nobody' is not declared",
+    "date": "2026-01-05"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "unknown_account.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-05",
+    "1",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "ok"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "unknown_account.csv",
+    "line": 3,
+    "code": "UNKNOWN-ACCOUNT",
+    "class": "invalid",
+    "reason": "account 'wallet' is not declared",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "unknown_account.csv",
+    "line": 4,
+    "code": "UNKNOWN-ACCOUNT",
+    "class": "invalid",
+    "reason": "account 'Salary' is not declared",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "unknown_account.csv",
+    "line": 5,
+    "code": "UNKNOWN-ACCOUNT",
+    "class": "invalid",
+    "reason": "account '' is not declared",
+    "date": "2026-01-05"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "unknown_category.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-05",
+    "-1",
+    "OMR",
+    "cash",
+    "food",
+    [],
+    "ok"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "unknown_category.csv",
+    "line": 3,
+    "code": "UNKNOWN-CATEGORY",
+    "class": "invalid",
+    "reason": "category 'coffee' is not declared",
+    "date": "2026-01-05"
+   },
+   {
+    "file": "unknown_category.csv",
+    "line": 4,
+    "code": "UNKNOWN-CATEGORY",
+    "class": "invalid",
+    "reason": "category 'expense' is not declared",
+    "date": "2026-01-05"
+   }
+  ]
+ },
+ {
+  "kind": "ledger",
+  "name": "valid.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-05",
+    "1200.000",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "January salary"
+   ],
+   [
+    3,
+    "2026-01-06",
+    "-300.000",
+    "OMR",
+    "salary",
+    "transfer",
+    [
+     "transfer"
+    ],
+    "to savings"
+   ],
+   [
+    4,
+    "2026-01-06",
+    "300.000",
+    "OMR",
+    "savings",
+    "transfer",
+    [
+     "transfer"
+    ],
+    "from salary"
+   ],
+   [
+    5,
+    "2026-01-07",
+    "-12.345",
+    "OMR",
+    "cash",
+    "food",
+    [
+     "grocery",
+     "weekly"
+    ],
+    "milk, bread"
+   ],
+   [
+    6,
+    "2026-01-08",
+    "-45.50",
+    "USD",
+    "broker",
+    "fees",
+    [],
+    "he said \"ok\""
+   ],
+   [
+    7,
+    "2026-01-09",
+    "0",
+    "OMR",
+    "cash",
+    "discretionary",
+    [],
+    "zero row"
+   ],
+   [
+    8,
+    "2025-12-31",
+    "-99.999",
+    "OMR",
+    "cash",
+    "housing",
+    [],
+    "unsorted earlier row"
+   ]
+  ],
+  "problems": []
+ },
+ {
+  "kind": "ledger",
+  "name": "valid_bom_crlf.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-05",
+    "1200.000",
+    "OMR",
+    "salary",
+    "salary",
+    [],
+    "January salary"
+   ],
+   [
+    3,
+    "2026-01-06",
+    "-300.000",
+    "OMR",
+    "salary",
+    "transfer",
+    [
+     "transfer"
+    ],
+    "to savings"
+   ],
+   [
+    4,
+    "2026-01-06",
+    "300.000",
+    "OMR",
+    "savings",
+    "transfer",
+    [
+     "transfer"
+    ],
+    "from salary"
+   ],
+   [
+    5,
+    "2026-01-07",
+    "-12.345",
+    "OMR",
+    "cash",
+    "food",
+    [
+     "grocery",
+     "weekly"
+    ],
+    "caf\u00e9, bread"
+   ],
+   [
+    6,
+    "2026-01-08",
+    "-45.50",
+    "USD",
+    "broker",
+    "fees",
+    [],
+    "he said \"ok\""
+   ],
+   [
+    7,
+    "2026-01-09",
+    "0",
+    "OMR",
+    "cash",
+    "discretionary",
+    [],
+    "zero row"
+   ],
+   [
+    8,
+    "2025-12-31",
+    "-99.999",
+    "OMR",
+    "cash",
+    "housing",
+    [],
+    "unsorted earlier row"
+   ]
+  ],
+  "problems": []
+ },
+ {
+  "kind": "holdings",
+  "name": "bad_asset.csv",
+  "rows": [
+   [
+    3,
+    "2026-01-31",
+    "savings",
+    "OMR cash",
+    "cash",
+    "1",
+    "1",
+    "OMR"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_asset.csv",
+    "line": 2,
+    "code": "BAD-ASSET",
+    "class": "invalid",
+    "reason": "asset name is empty",
+    "date": "2026-01-31"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "bad_currency.csv",
+  "rows": [
+   [
+    3,
+    "2026-01-31",
+    "broker",
+    "VWRA",
+    "fund",
+    "10",
+    "100",
+    "USD"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_currency.csv",
+    "line": 2,
+    "code": "BAD-CURRENCY",
+    "class": "invalid",
+    "reason": "currency 'usd' is not a 3-letter ISO-4217 code",
+    "date": "2026-01-31"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "bad_date.csv",
+  "rows": [
+   [
+    3,
+    "2026-01-31",
+    "savings",
+    "OMR cash",
+    "cash",
+    "1",
+    "1",
+    "OMR"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_date.csv",
+    "line": 2,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '2026-01-32' is not YYYY-MM-DD"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "bad_header.csv",
+  "rows": [],
+  "problems": [
+   {
+    "file": "bad_header.csv",
+    "line": 1,
+    "code": "BAD-HEADER",
+    "class": "invalid",
+    "reason": "header must be exactly 'date,account,asset,class,quantity,value,currency', got 'date,account,asset,class,quantity,value'"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "bad_quantity.csv",
+  "rows": [
+   [
+    4,
+    "2026-01-31",
+    "broker",
+    "VWRA",
+    "fund",
+    "10",
+    "100",
+    "USD"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_quantity.csv",
+    "line": 2,
+    "code": "BAD-QUANTITY",
+    "class": "invalid",
+    "reason": "quantity '' is not decimal text",
+    "date": "2026-01-31"
+   },
+   {
+    "file": "bad_quantity.csv",
+    "line": 3,
+    "code": "BAD-QUANTITY",
+    "class": "invalid",
+    "reason": "quantity 'ten' is not decimal text",
+    "date": "2026-01-31"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "bad_value.csv",
+  "rows": [
+   [
+    4,
+    "2026-01-31",
+    "broker",
+    "VWRA",
+    "fund",
+    "10",
+    "100",
+    "USD"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_value.csv",
+    "line": 2,
+    "code": "BAD-VALUE",
+    "class": "invalid",
+    "reason": "value '' is not decimal text",
+    "date": "2026-01-31"
+   },
+   {
+    "file": "bad_value.csv",
+    "line": 3,
+    "code": "BAD-VALUE",
+    "class": "invalid",
+    "reason": "value '1e2' is not decimal text",
+    "date": "2026-01-31"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "column_count.csv",
+  "rows": [
+   [
+    4,
+    "2026-01-31",
+    "broker",
+    "VWRA",
+    "fund",
+    "10",
+    "100",
+    "USD"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "column_count.csv",
+    "line": 2,
+    "code": "COLUMN-COUNT",
+    "class": "invalid",
+    "reason": "expected 7 columns, got 6"
+   },
+   {
+    "file": "column_count.csv",
+    "line": 3,
+    "code": "COLUMN-COUNT",
+    "class": "invalid",
+    "reason": "expected 7 columns, got 8"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "dup_row.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-31",
+    "broker",
+    "VWRA",
+    "fund",
+    "10",
+    "100",
+    "USD"
+   ],
+   [
+    3,
+    "2026-01-31",
+    "broker",
+    "VWRA",
+    "fund",
+    "10",
+    "100",
+    "USD"
+   ],
+   [
+    4,
+    "2026-01-31",
+    "broker",
+    "VWRA",
+    "fund",
+    "10",
+    "101",
+    "USD"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "dup_row.csv",
+    "line": 3,
+    "code": "DUP-ROW",
+    "class": "warn",
+    "reason": "exact duplicate of line 2",
+    "dup_of": 2
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "unknown_account.csv",
+  "rows": [
+   [
+    3,
+    "2026-01-31",
+    "savings",
+    "OMR cash",
+    "cash",
+    "1",
+    "1",
+    "OMR"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "unknown_account.csv",
+    "line": 2,
+    "code": "UNKNOWN-ACCOUNT",
+    "class": "invalid",
+    "reason": "account 'vault' is not declared",
+    "date": "2026-01-31"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "unknown_class.csv",
+  "rows": [
+   [
+    4,
+    "2026-01-31",
+    "savings",
+    "OMR cash",
+    "cash",
+    "1",
+    "1",
+    "OMR"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "unknown_class.csv",
+    "line": 2,
+    "code": "UNKNOWN-CLASS",
+    "class": "invalid",
+    "reason": "class 'crypto' is not declared",
+    "date": "2026-01-31"
+   },
+   {
+    "file": "unknown_class.csv",
+    "line": 3,
+    "code": "UNKNOWN-CLASS",
+    "class": "invalid",
+    "reason": "class 'Cash' is not declared",
+    "date": "2026-01-31"
+   }
+  ]
+ },
+ {
+  "kind": "holdings",
+  "name": "valid.csv",
+  "rows": [
+   [
+    2,
+    "2026-01-31",
+    "savings",
+    "OMR cash",
+    "cash",
+    "5000.000",
+    "5000.000",
+    "OMR"
+   ],
+   [
+    3,
+    "2026-01-31",
+    "broker",
+    "VWRA",
+    "fund",
+    "10.5",
+    "1234.56",
+    "USD"
+   ],
+   [
+    4,
+    "2026-02-28",
+    "savings",
+    "OMR cash",
+    "cash",
+    "5300.000",
+    "5300.000",
+    "OMR"
+   ],
+   [
+    5,
+    "2026-02-28",
+    "broker",
+    "VWRA",
+    "fund",
+    "10.5",
+    "1300.00",
+    "USD"
+   ],
+   [
+    6,
+    "2026-02-28",
+    "broker",
+    "loan",
+    "debt",
+    "1",
+    "-200.00",
+    "OMR"
+   ],
+   [
+    7,
+    "2025-12-31",
+    "savings",
+    "OMR cash",
+    "cash",
+    "4700",
+    "4700",
+    "OMR"
+   ]
+  ],
+  "problems": []
+ },
+ {
+  "kind": "rates",
+  "name": "bad_header.csv",
+  "rows": [],
+  "problems": [
+   {
+    "file": "bad_header.csv",
+    "line": 1,
+    "code": "BAD-HEADER",
+    "class": "invalid",
+    "reason": "header must be exactly 'date,currency,rate', got 'date,currency'"
+   }
+  ]
+ },
+ {
+  "kind": "rates",
+  "name": "bad_rows.csv",
+  "rows": [
+   [
+    2,
+    "2026-07-01",
+    "USD",
+    "0.385"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_rows.csv",
+    "line": 3,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '2026-13-01' is not YYYY-MM-DD"
+   },
+   {
+    "file": "bad_rows.csv",
+    "line": 4,
+    "code": "BAD-CURRENCY",
+    "class": "invalid",
+    "reason": "currency 'usd' is not a 3-letter ISO-4217 code",
+    "date": "2026-07-01"
+   },
+   {
+    "file": "bad_rows.csv",
+    "line": 5,
+    "code": "BAD-RATE",
+    "class": "invalid",
+    "reason": "rate '0' is not positive decimal text",
+    "date": "2026-07-01"
+   },
+   {
+    "file": "bad_rows.csv",
+    "line": 6,
+    "code": "BAD-RATE",
+    "class": "invalid",
+    "reason": "rate '-0.5' is not positive decimal text",
+    "date": "2026-07-01"
+   },
+   {
+    "file": "bad_rows.csv",
+    "line": 7,
+    "code": "BAD-RATE",
+    "class": "invalid",
+    "reason": "rate 'abc' is not positive decimal text",
+    "date": "2026-07-01"
+   },
+   {
+    "file": "bad_rows.csv",
+    "line": 8,
+    "code": "BAD-RATE",
+    "class": "invalid",
+    "reason": "rate '1e-3' is not positive decimal text",
+    "date": "2026-07-01"
+   },
+   {
+    "file": "bad_rows.csv",
+    "line": 9,
+    "code": "BASE-RATE",
+    "class": "invalid",
+    "reason": "the base currency OMR needs no rate",
+    "date": "2026-07-01"
+   },
+   {
+    "file": "bad_rows.csv",
+    "line": 10,
+    "code": "COLUMN-COUNT",
+    "class": "invalid",
+    "reason": "expected 3 columns, got 2"
+   }
+  ]
+ },
+ {
+  "kind": "rates",
+  "name": "conflict.csv",
+  "rows": [
+   [
+    2,
+    "2026-07-01",
+    "USD",
+    "0.385"
+   ],
+   [
+    3,
+    "2026-07-01",
+    "USD",
+    "0.386"
+   ],
+   [
+    4,
+    "2026-08-01",
+    "USD",
+    "0.390"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "conflict.csv",
+    "line": 3,
+    "code": "CONFLICT-RATE",
+    "class": "invalid",
+    "reason": "rate for USD on 2026-07-01 differs from line 2",
+    "date": "2026-07-01"
+   }
+  ]
+ },
+ {
+  "kind": "rates",
+  "name": "dup.csv",
+  "rows": [
+   [
+    2,
+    "2026-07-01",
+    "USD",
+    "0.385"
+   ],
+   [
+    3,
+    "2026-07-01",
+    "USD",
+    "0.385"
+   ]
+  ],
+  "problems": [
+   {
+    "file": "dup.csv",
+    "line": 3,
+    "code": "DUP-ROW",
+    "class": "warn",
+    "reason": "exact duplicate of line 2",
+    "dup_of": 2
+   }
+  ]
+ },
+ {
+  "kind": "rates",
+  "name": "valid.csv",
+  "rows": [
+   [
+    2,
+    "2026-07-01",
+    "USD",
+    "0.385"
+   ],
+   [
+    3,
+    "2026-07-14",
+    "USD",
+    "0.384"
+   ],
+   [
+    4,
+    "2026-09-01",
+    "USD",
+    "0.386"
+   ],
+   [
+    5,
+    "2026-01-01",
+    "EUR",
+    "0.42"
+   ]
+  ],
+  "problems": []
+ },
+ {
+  "kind": "policies",
+  "name": "bad_fields.yml",
+  "config": {
+   "version": null,
+   "base_currency": null,
+   "accounts": [
+    "salary"
+   ],
+   "categories": {
+    "income": [
+     "salary"
+    ],
+    "expense": [
+     "food"
+    ],
+    "transfer": []
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": null,
+   "policies": [
+    {
+     "id": "P-01",
+     "type": "red_line",
+     "title": "ok",
+     "status": "ok",
+     "reason": null,
+     "line": 11,
+     "measure": null,
+     "limit": null,
+     "match": "tags x",
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": [
+   {
+    "file": "bad_fields.yml",
+    "line": 1,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "unknown top-level key 'colour'",
+    "field": "colour"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 1,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "version must be 1 (got 2)",
+    "field": "version"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 1,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "base_currency must be a 3-letter ISO-4217 code",
+    "field": "base_currency"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 1,
+    "code": "DUP-ID",
+    "class": "invalid",
+    "reason": "accounts 'salary' is declared twice",
+    "field": "accounts"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 1,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "accounts entry 7 is not a plain name",
+    "field": "accounts"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 5,
+    "code": "DUP-ID",
+    "class": "invalid",
+    "reason": "category 'salary' is declared under both 'income' and 'expense'",
+    "field": "categories.expense"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 5,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "categories.transfer must be a non-empty list",
+    "field": "categories.transfer"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 1,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "snapshot_max_age_days must be a positive integer",
+    "field": "snapshot_max_age_days"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 15,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "policy id is missing or not a plain name",
+    "field": "policies[1].id"
+   },
+   {
+    "file": "bad_fields.yml",
+    "line": 1,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "policy must be a mapping",
+    "field": "policies[2]"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "bad_yaml.yml",
+  "config": null,
+  "problems": [
+   {
+    "file": "bad_yaml.yml",
+    "line": 5,
+    "code": "BAD-YAML",
+    "class": "invalid",
+    "reason": "YAML error: expected ',' or ']', but got '<stream end>'"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "categories_missing_group.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": [
+    {
+     "id": "P-01",
+     "type": "red_line",
+     "title": "x",
+     "status": "ok",
+     "reason": null,
+     "line": 10,
+     "measure": null,
+     "limit": null,
+     "match": "tags x",
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": [
+   {
+    "file": "categories_missing_group.yml",
+    "line": 5,
+    "code": "MISSING-FIELD",
+    "class": "invalid",
+    "reason": "categories must declare the group 'expense'",
+    "field": "categories.expense"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "classes_custom.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "stocks",
+    "gold"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": [
+    {
+     "id": "P-01",
+     "type": "allocation",
+     "title": "stocks band",
+     "status": "ok",
+     "reason": null,
+     "line": 12,
+     "measure": "share class.stocks",
+     "limit": null,
+     "match": null,
+     "band": "0%..100%",
+     "period": null
+    },
+    {
+     "id": "P-02",
+     "type": "allocation",
+     "title": "equity is not declared here",
+     "status": "unknown",
+     "reason": "measure.share names undeclared class 'equity'",
+     "line": 17,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": [
+   {
+    "file": "classes_custom.yml",
+    "line": 20,
+    "code": "UNDECLARED-CLASS",
+    "class": "invalid",
+    "reason": "class 'equity' is not declared",
+    "field": "policies[1].measure.share"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "comment_only.yml",
+  "config": null,
+  "problems": [
+   {
+    "file": "comment_only.yml",
+    "line": 0,
+    "code": "FILE-EMPTY",
+    "class": "invalid",
+    "reason": "file holds no YAML document"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "decimals.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": [
+    {
+     "id": "P-01",
+     "type": "cap",
+     "title": "float-looking values stay exact",
+     "status": "ok",
+     "reason": null,
+     "line": 11,
+     "measure": "sum expense.food per month",
+     "limit": "0.1 OMR",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "P-02",
+     "type": "allocation",
+     "title": "band with decimals",
+     "status": "ok",
+     "reason": null,
+     "line": 16,
+     "measure": "share class.equity",
+     "limit": null,
+     "match": null,
+     "band": "12.5%..37.75%",
+     "period": null
+    },
+    {
+     "id": "P-03",
+     "type": "cap",
+     "title": "value as quoted text",
+     "status": "ok",
+     "reason": null,
+     "line": 21,
+     "measure": "sum expense.food per month",
+     "limit": "1234.5678 OMR",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "P-04",
+     "type": "kill",
+     "title": "pct with underscore float",
+     "status": "ok",
+     "reason": null,
+     "line": 26,
+     "measure": "drawdown account.broker over 90 days",
+     "limit": "10.5%",
+     "match": null,
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": []
+ },
+ {
+  "kind": "policies",
+  "name": "dup_id.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": [
+    {
+     "id": "WLT-01",
+     "type": "cap",
+     "title": "first",
+     "status": "ok",
+     "reason": null,
+     "line": 11,
+     "measure": "sum expense.food per month",
+     "limit": "100 OMR",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-02",
+     "type": "red_line",
+     "title": "second",
+     "status": "ok",
+     "reason": null,
+     "line": 16,
+     "measure": null,
+     "limit": null,
+     "match": "tags x",
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": [
+   {
+    "file": "dup_id.yml",
+    "line": 20,
+    "code": "DUP-ID",
+    "class": "invalid",
+    "reason": "policy id 'WLT-01' is already used at line 11",
+    "field": "policies[2].id"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "dup_key.yml",
+  "config": null,
+  "problems": [
+   {
+    "file": "dup_key.yml",
+    "line": 16,
+    "code": "BAD-YAML",
+    "class": "invalid",
+    "reason": "YAML error: duplicate key 'limit'"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "empty.yml",
+  "config": null,
+  "problems": [
+   {
+    "file": "empty.yml",
+    "line": 0,
+    "code": "FILE-EMPTY",
+    "class": "invalid",
+    "reason": "file holds no YAML document"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "empty_policies.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": []
+  },
+  "problems": [
+   {
+    "file": "empty_policies.yml",
+    "line": 1,
+    "code": "EMPTY-POLICIES",
+    "class": "invalid",
+    "reason": "policies must be a non-empty list",
+    "field": "policies"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "missing_base_currency.yml",
+  "config": {
+   "version": 1,
+   "base_currency": null,
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": [
+    {
+     "id": "P-01",
+     "type": "red_line",
+     "title": "x",
+     "status": "ok",
+     "reason": null,
+     "line": 10,
+     "measure": null,
+     "limit": null,
+     "match": "tags x",
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": [
+   {
+    "file": "missing_base_currency.yml",
+    "line": 1,
+    "code": "MISSING-FIELD",
+    "class": "invalid",
+    "reason": "base_currency is missing",
+    "field": "base_currency"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "missing_snapshot_age.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": null,
+   "policies": [
+    {
+     "id": "P-01",
+     "type": "red_line",
+     "title": "x",
+     "status": "ok",
+     "reason": null,
+     "line": 10,
+     "measure": null,
+     "limit": null,
+     "match": "tags x",
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": [
+   {
+    "file": "missing_snapshot_age.yml",
+    "line": 1,
+    "code": "MISSING-FIELD",
+    "class": "invalid",
+    "reason": "snapshot_max_age_days is missing",
+    "field": "snapshot_max_age_days"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "multi_doc.yml",
+  "config": null,
+  "problems": [
+   {
+    "file": "multi_doc.yml",
+    "line": 11,
+    "code": "BAD-YAML",
+    "class": "invalid",
+    "reason": "YAML error: but found another document"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "no_policies_key.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": []
+  },
+  "problems": [
+   {
+    "file": "no_policies_key.yml",
+    "line": 1,
+    "code": "EMPTY-POLICIES",
+    "class": "invalid",
+    "reason": "policies must be a non-empty list",
+    "field": "policies"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "not_a_mapping.yml",
+  "config": null,
+  "problems": [
+   {
+    "file": "not_a_mapping.yml",
+    "line": 1,
+    "code": "BAD-SHAPE",
+    "class": "invalid",
+    "reason": "policies.yml must be a mapping at the top level",
+    "field": ""
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "undeclared.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": [
+    {
+     "id": "C-01",
+     "type": "cap",
+     "title": "undeclared category",
+     "status": "unknown",
+     "reason": "measure.sum names undeclared category 'expense.coffee'",
+     "line": 11,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "C-02",
+     "type": "cap",
+     "title": "undeclared group",
+     "status": "unknown",
+     "reason": "measure.sum names undeclared group 'leisure'",
+     "line": 16,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "C-03",
+     "type": "floor",
+     "title": "undeclared class",
+     "status": "unknown",
+     "reason": "measure.holdings names undeclared class 'crypto'",
+     "line": 21,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "C-04",
+     "type": "kill",
+     "title": "undeclared account",
+     "status": "unknown",
+     "reason": "measure.drawdown names undeclared account 'vault'",
+     "line": 26,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "C-05",
+     "type": "routine",
+     "title": "undeclared account in match",
+     "status": "unknown",
+     "reason": "match.account names undeclared account 'vault'",
+     "line": 31,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "C-06",
+     "type": "red_line",
+     "title": "undeclared category in match",
+     "status": "unknown",
+     "reason": "match.category names undeclared category 'coffee'",
+     "line": 36,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "C-07",
+     "type": "cap",
+     "title": "category under the wrong group",
+     "status": "unknown",
+     "reason": "measure.sum names undeclared category 'income.food'",
+     "line": 40,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": [
+   {
+    "file": "undeclared.yml",
+    "line": 14,
+    "code": "UNDECLARED-CATEGORY",
+    "class": "invalid",
+    "reason": "category 'coffee' is not declared under 'expense'",
+    "field": "policies[0].measure.sum"
+   },
+   {
+    "file": "undeclared.yml",
+    "line": 19,
+    "code": "UNDECLARED-CATEGORY",
+    "class": "invalid",
+    "reason": "group 'leisure' is not declared",
+    "field": "policies[1].measure.sum"
+   },
+   {
+    "file": "undeclared.yml",
+    "line": 24,
+    "code": "UNDECLARED-CLASS",
+    "class": "invalid",
+    "reason": "class 'crypto' is not declared",
+    "field": "policies[2].measure.holdings"
+   },
+   {
+    "file": "undeclared.yml",
+    "line": 29,
+    "code": "UNDECLARED-ACCOUNT",
+    "class": "invalid",
+    "reason": "account 'vault' is not declared",
+    "field": "policies[3].measure.drawdown"
+   },
+   {
+    "file": "undeclared.yml",
+    "line": 34,
+    "code": "UNDECLARED-ACCOUNT",
+    "class": "invalid",
+    "reason": "account 'vault' is not declared",
+    "field": "policies[4].match.account"
+   },
+   {
+    "file": "undeclared.yml",
+    "line": 39,
+    "code": "UNDECLARED-CATEGORY",
+    "class": "invalid",
+    "reason": "category 'coffee' is not declared",
+    "field": "policies[5].match.category"
+   },
+   {
+    "file": "undeclared.yml",
+    "line": 43,
+    "code": "UNDECLARED-CATEGORY",
+    "class": "invalid",
+    "reason": "category 'food' is not declared under 'income'",
+    "field": "policies[6].measure.sum"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "unknown_shapes.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": [
+    {
+     "id": "U-01",
+     "type": "ceiling",
+     "title": "unknown type",
+     "status": "unknown",
+     "reason": "type 'ceiling' is not one of cap, floor, routine, red_line, kill, allocation",
+     "line": 11,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-02",
+     "type": "cap",
+     "title": "measure without period",
+     "status": "unknown",
+     "reason": "measure.period is missing (month, quarter or year)",
+     "line": 16,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-03",
+     "type": "cap",
+     "title": "unknown measure key",
+     "status": "unknown",
+     "reason": "measure must have exactly one of sum, holdings, share, drawdown (got average, period)",
+     "line": 21,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-04",
+     "type": "cap",
+     "title": "unknown limit shape",
+     "status": "unknown",
+     "reason": "limit must be one of {value}, {pct_of}, {months_of} (got keys: max)",
+     "line": 26,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-05",
+     "type": "cap",
+     "title": "pct limit on a cap",
+     "status": "unknown",
+     "reason": "limit must be one of {value}, {pct_of}, {months_of} (got keys: pct)",
+     "line": 31,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-06",
+     "type": "kill",
+     "title": "kill with a sum measure",
+     "status": "unknown",
+     "reason": "kill needs a drawdown measure",
+     "line": 36,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-07",
+     "type": "kill",
+     "title": "kill without window_days",
+     "status": "unknown",
+     "reason": "measure.window_days must be a positive integer",
+     "line": 41,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-08",
+     "type": "allocation",
+     "title": "band inverted",
+     "status": "unknown",
+     "reason": "band must satisfy 0 <= min_pct <= max_pct <= 100",
+     "line": 46,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-09",
+     "type": "allocation",
+     "title": "allocation with holdings measure",
+     "status": "unknown",
+     "reason": "allocation needs a share measure",
+     "line": 51,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-10",
+     "type": "routine",
+     "title": "routine without period",
+     "status": "unknown",
+     "reason": "type routine needs match and period",
+     "line": 56,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-11",
+     "type": "routine",
+     "title": "routine with week period",
+     "status": "unknown",
+     "reason": "period 'week' is not month, quarter or year",
+     "line": 60,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-12",
+     "type": "red_line",
+     "title": "empty match",
+     "status": "unknown",
+     "reason": "match needs at least one of tags, tags_any, account, category, min_amount",
+     "line": 65,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-13",
+     "type": "red_line",
+     "title": "match with unknown key",
+     "status": "unknown",
+     "reason": "match has unexpected keys: merchant",
+     "line": 69,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-14",
+     "type": "cap",
+     "title": "missing limit",
+     "status": "unknown",
+     "reason": "type cap needs measure and limit",
+     "line": 73,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-15",
+     "type": "cap",
+     "title": "limit value is text",
+     "status": "unknown",
+     "reason": "limit.value must be a number",
+     "line": 77,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-16",
+     "type": "cap",
+     "title": "pct_of something else",
+     "status": "unknown",
+     "reason": "limit.pct_of must be income",
+     "line": 82,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-17",
+     "type": "cap",
+     "title": "extra key on a cap",
+     "status": "unknown",
+     "reason": "unexpected keys for type cap: band",
+     "line": 87,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-18",
+     "type": "cap",
+     "title": "measure period is a list",
+     "status": "unknown",
+     "reason": "measure.period ['month'] is not month, quarter or year",
+     "line": 93,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-19",
+     "type": "cap",
+     "title": "limit value is boolean",
+     "status": "unknown",
+     "reason": "limit.value must be a number",
+     "line": 98,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "U-20",
+     "type": "cap",
+     "title": "limit value is not finite",
+     "status": "unknown",
+     "reason": "limit.value must be a number",
+     "line": 103,
+     "measure": null,
+     "limit": null,
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "OK-01",
+     "type": "cap",
+     "title": "the one that holds the file together",
+     "status": "ok",
+     "reason": null,
+     "line": 108,
+     "measure": "sum expense.food per month",
+     "limit": "10 OMR",
+     "match": null,
+     "band": null,
+     "period": null
+    }
+   ]
+  },
+  "problems": []
+ },
+ {
+  "kind": "policies",
+  "name": "unsafe_tag.yml",
+  "config": null,
+  "problems": [
+   {
+    "file": "unsafe_tag.yml",
+    "line": 10,
+    "code": "BAD-YAML",
+    "class": "invalid",
+    "reason": "YAML error: could not determine a constructor for the tag 'tag:yaml.org,2002:python/object/apply:os.system'"
+   }
+  ]
+ },
+ {
+  "kind": "policies",
+  "name": "valid.yml",
+  "config": {
+   "version": 1,
+   "base_currency": "OMR",
+   "accounts": [
+    "salary",
+    "savings",
+    "broker",
+    "cash"
+   ],
+   "categories": {
+    "income": [
+     "salary",
+     "bonus",
+     "side"
+    ],
+    "expense": [
+     "housing",
+     "food",
+     "transport",
+     "family",
+     "discretionary",
+     "fees"
+    ],
+    "transfer": [
+     "transfer"
+    ],
+    "invest": [
+     "buy",
+     "sell",
+     "dividend"
+    ]
+   },
+   "classes": [
+    "cash",
+    "equity",
+    "fund",
+    "property",
+    "gold",
+    "debt",
+    "other"
+   ],
+   "snapshot_max_age_days": 45,
+   "policies": [
+    {
+     "id": "WLT-01",
+     "type": "cap",
+     "title": "discretionary spending per month",
+     "status": "ok",
+     "reason": null,
+     "line": 11,
+     "measure": "sum expense.discretionary per month",
+     "limit": "10% of income",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-02",
+     "type": "floor",
+     "title": "emergency fund",
+     "status": "ok",
+     "reason": null,
+     "line": 16,
+     "measure": "holdings class.cash",
+     "limit": "6 months of expense",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-03",
+     "type": "routine",
+     "title": "monthly transfer to savings",
+     "status": "ok",
+     "reason": null,
+     "line": 21,
+     "measure": null,
+     "limit": null,
+     "match": "tags transfer, account savings, amount >= 300",
+     "band": null,
+     "period": "month"
+    },
+    {
+     "id": "WLT-04",
+     "type": "red_line",
+     "title": "no margin, no options",
+     "status": "ok",
+     "reason": null,
+     "line": 26,
+     "measure": null,
+     "limit": null,
+     "match": "any tag of margin,options",
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-05",
+     "type": "kill",
+     "title": "broker pilot drawdown",
+     "status": "ok",
+     "reason": null,
+     "line": 30,
+     "measure": "drawdown account.broker over 90 days",
+     "limit": "15%",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-06",
+     "type": "allocation",
+     "title": "equities band",
+     "status": "ok",
+     "reason": null,
+     "line": 35,
+     "measure": "share class.equity",
+     "limit": null,
+     "match": null,
+     "band": "20%..50%",
+     "period": null
+    },
+    {
+     "id": "WLT-07",
+     "type": "cap",
+     "title": "total expense per quarter, absolute",
+     "status": "ok",
+     "reason": null,
+     "line": 40,
+     "measure": "sum expense per quarter",
+     "limit": "4500.50 OMR",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-08",
+     "type": "floor",
+     "title": "income per year",
+     "status": "ok",
+     "reason": null,
+     "line": 45,
+     "measure": "sum income per year",
+     "limit": "12000 OMR",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-09",
+     "type": "cap",
+     "title": "broker balance cap",
+     "status": "ok",
+     "reason": null,
+     "line": 50,
+     "measure": "holdings account.broker",
+     "limit": "2000 OMR",
+     "match": null,
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-10",
+     "type": "red_line",
+     "title": "no single discretionary purchase above 200",
+     "status": "ok",
+     "reason": null,
+     "line": 55,
+     "measure": null,
+     "limit": null,
+     "match": "category discretionary, amount >= 200",
+     "band": null,
+     "period": null
+    },
+    {
+     "id": "WLT-11",
+     "type": "routine",
+     "title": "quarterly dividend booked",
+     "status": "ok",
+     "reason": null,
+     "line": 59,
+     "measure": null,
+     "limit": null,
+     "match": "category dividend",
+     "band": null,
+     "period": "quarter"
+    }
+   ]
+  },
+  "problems": []
+ },
+ {
+  "kind": "decisions",
+  "name": "bad_date.yml",
+  "decisions": [
+   [
+    "D-5",
+    "2026-10-01",
+    "ok",
+    null,
+    "",
+    "2026-10-01",
+    "open",
+    null,
+    21
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_date.yml",
+    "line": 1,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '2026-13-01' is not YYYY-MM-DD",
+    "field": "decisions[0].date"
+   },
+   {
+    "file": "bad_date.yml",
+    "line": 6,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "review_by '01/01/2027' is not YYYY-MM-DD",
+    "field": "decisions[1].review_by"
+   },
+   {
+    "file": "bad_date.yml",
+    "line": 11,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "date '2026-10-01 10:00:00' is not YYYY-MM-DD",
+    "field": "decisions[2].date"
+   },
+   {
+    "file": "bad_date.yml",
+    "line": 16,
+    "code": "BAD-DATE",
+    "class": "invalid",
+    "reason": "review_by 2026-09-30 is before date 2026-10-01",
+    "field": "decisions[3].review_by"
+   }
+  ]
+ },
+ {
+  "kind": "decisions",
+  "name": "bad_status.yml",
+  "decisions": [
+   [
+    "D-4",
+    "2026-10-01",
+    "ok",
+    null,
+    "",
+    "2027-01-01",
+    "closed",
+    null,
+    15
+   ]
+  ],
+  "problems": [
+   {
+    "file": "bad_status.yml",
+    "line": 1,
+    "code": "BAD-STATUS",
+    "class": "invalid",
+    "reason": "status must be open or closed (got 'pending')",
+    "field": "decisions[0].status"
+   },
+   {
+    "file": "bad_status.yml",
+    "line": 6,
+    "code": "BAD-STATUS",
+    "class": "invalid",
+    "reason": "status must be open or closed (got None)",
+    "field": "decisions[1].status"
+   },
+   {
+    "file": "bad_status.yml",
+    "line": 10,
+    "code": "BAD-STATUS",
+    "class": "invalid",
+    "reason": "status must be open or closed (got 'Open')",
+    "field": "decisions[2].status"
+   }
+  ]
+ },
+ {
+  "kind": "decisions",
+  "name": "dup_id.yml",
+  "decisions": [
+   [
+    "D-1",
+    "2026-10-01",
+    "first",
+    null,
+    "",
+    "2027-01-01",
+    "open",
+    null,
+    1
+   ]
+  ],
+  "problems": [
+   {
+    "file": "dup_id.yml",
+    "line": 6,
+    "code": "DUP-ID",
+    "class": "invalid",
+    "reason": "decision id 'D-1' is already used at line 1",
+    "field": "decisions[1].id"
+   }
+  ]
+ },
+ {
+  "kind": "decisions",
+  "name": "empty.yml",
+  "decisions": [],
+  "problems": [
+   {
+    "file": "empty.yml",
+    "line": 0,
+    "code": "FILE-EMPTY",
+    "class": "invalid",
+    "reason": "file holds no YAML document"
+   }
+  ]
+ },
+ {
+  "kind": "decisions",
+  "name": "empty_list.yml",
+  "decisions": [],
+  "problems": []
+ },
+ {
+  "kind": "decisions",
+  "name": "missing_fields.yml",
+  "decisions": [],
+  "problems": [
+   {
+    "file": "missing_fields.yml",
+    "line": 1,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "id is missing or not text",
+    "field": "decisions[0].id"
+   },
+   {
+    "file": "missing_fields.yml",
+    "line": 5,
+    "code": "MISSING-FIELD",
+    "class": "invalid",
+    "reason": "date is missing",
+    "field": "decisions[1].date"
+   },
+   {
+    "file": "missing_fields.yml",
+    "line": 5,
+    "code": "MISSING-FIELD",
+    "class": "invalid",
+    "reason": "review_by is missing",
+    "field": "decisions[1].review_by"
+   },
+   {
+    "file": "missing_fields.yml",
+    "line": 8,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "unknown key 'owner'",
+    "field": "decisions[2].owner"
+   },
+   {
+    "file": "missing_fields.yml",
+    "line": 14,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "title must be text",
+    "field": "decisions[3].title"
+   },
+   {
+    "file": "missing_fields.yml",
+    "line": 1,
+    "code": "BAD-FIELD",
+    "class": "invalid",
+    "reason": "decision must be a mapping",
+    "field": "decisions[4]"
+   }
+  ]
+ },
+ {
+  "kind": "decisions",
+  "name": "not_a_list.yml",
+  "decisions": [],
+  "problems": [
+   {
+    "file": "not_a_list.yml",
+    "line": 1,
+    "code": "BAD-SHAPE",
+    "class": "invalid",
+    "reason": "decisions.yml must be a list of decisions at the top level",
+    "field": ""
+   }
+  ]
+ },
+ {
+  "kind": "decisions",
+  "name": "unknown_policy.yml",
+  "decisions": [
+   [
+    "D-3",
+    "2026-10-01",
+    "ok",
+    "WLT-05",
+    "",
+    "2027-01-01",
+    "open",
+    null,
+    13
+   ]
+  ],
+  "problems": [
+   {
+    "file": "unknown_policy.yml",
+    "line": 1,
+    "code": "UNKNOWN-POLICY",
+    "class": "invalid",
+    "reason": "policy 'WLT-99' is not a declared policy id",
+    "field": "decisions[0].policy"
+   },
+   {
+    "file": "unknown_policy.yml",
+    "line": 7,
+    "code": "UNKNOWN-POLICY",
+    "class": "invalid",
+    "reason": "closes 'WLT-98' is not a declared policy id",
+    "field": "decisions[1].closes"
+   }
+  ]
+ },
+ {
+  "kind": "decisions",
+  "name": "valid.yml",
+  "decisions": [
+   [
+    "D-2026-10-01",
+    "2026-10-01",
+    "start broker pilot with 500 OMR",
+    "WLT-05",
+    "stop if drawdown > 15% in any 90 days; review quarterly",
+    "2027-01-01",
+    "open",
+    null,
+    1
+   ],
+   [
+    "D-2025-12-05",
+    "2025-12-05",
+    "end the first broker pilot",
+    "WLT-05",
+    "the kill fired in November",
+    "2026-03-01",
+    "closed",
+    "WLT-05",
+    9
+   ],
+   [
+    "D-min",
+    "2026-02-02",
+    "",
+    null,
+    "",
+    "2026-08-01",
+    "open",
+    null,
+    17
+   ]
+  ],
+  "problems": []
+ }
+]

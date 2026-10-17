@@ -1,0 +1,30 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: FLOOR-H
+    type: floor
+    title: cash floor
+    measure: {holdings: class.cash}
+    limit: {value: 1000}
+  - id: ALLOC
+    type: allocation
+    title: cash share
+    measure: {share: class.cash}
+    band: {min_pct: 50, max_pct: 100}
+  - id: K1
+    type: kill
+    title: broker drawdown
+    measure: {drawdown: account.broker, window_days: 90}
+    limit: {pct: 50}
+  - id: CAP-M
+    type: cap
+    title: food per month
+    measure: {sum: expense.food, period: month}
+    limit: {value: 100}

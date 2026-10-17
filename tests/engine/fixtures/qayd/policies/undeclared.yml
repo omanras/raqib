@@ -1,0 +1,44 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: C-01
+    type: cap
+    title: undeclared category
+    measure: {sum: expense.coffee, period: month}
+    limit: {value: 100}
+  - id: C-02
+    type: cap
+    title: undeclared group
+    measure: {sum: leisure.coffee, period: month}
+    limit: {value: 100}
+  - id: C-03
+    type: floor
+    title: undeclared class
+    measure: {holdings: class.crypto}
+    limit: {value: 100}
+  - id: C-04
+    type: kill
+    title: undeclared account
+    measure: {drawdown: account.vault, window_days: 30}
+    limit: {pct: 10}
+  - id: C-05
+    type: routine
+    title: undeclared account in match
+    match: {account: vault}
+    period: month
+  - id: C-06
+    type: red_line
+    title: undeclared category in match
+    match: {category: coffee}
+  - id: C-07
+    type: cap
+    title: category under the wrong group
+    measure: {sum: income.food, period: month}
+    limit: {value: 100}

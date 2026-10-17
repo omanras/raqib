@@ -1,0 +1,25 @@
+- id: D-1
+  date: 2026-13-01
+  title: bad month
+  review_by: 2027-01-01
+  status: open
+- id: D-2
+  date: 2026-10-01
+  title: bad review date
+  review_by: 01/01/2027
+  status: open
+- id: D-3
+  date: 2026-10-01 10:00:00
+  title: a datetime is not a date
+  review_by: 2027-01-01
+  status: open
+- id: D-4
+  date: 2026-10-01
+  title: review before the decision
+  review_by: 2026-09-30
+  status: open
+- id: D-5
+  date: 2026-10-01
+  title: ok
+  review_by: 2026-10-01
+  status: open
