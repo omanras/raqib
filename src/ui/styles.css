@@ -1,0 +1,390 @@
+/* Qayd Web. Theme tokens live on :root; light by default, dark by the
+   system or by choice (data-theme). Logical properties only, so the
+   Arabic (rtl) layout mirrors without its own rules. No web fonts. */
+
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-soft: #f4f5f7;
+  --bg-raised: #ffffff;
+  --fg: #16181d;
+  --fg-soft: #4a4f5a;
+  --line: #d5d8de;
+  --accent: #1f5fbf;
+  --accent-fg: #ffffff;
+  --focus: #b8460b;
+  --ok-bg: #dff3e4;
+  --ok-fg: #14532d;
+  --red-bg: #fde2e1;
+  --red-fg: #8a1c14;
+  --warn-bg: #fdf0d0;
+  --warn-fg: #6b4400;
+  --unknown-bg: #e7e3f4;
+  --unknown-fg: #3d2a7a;
+  --banner-bg: #fff4d6;
+  --banner-fg: #5a3d00;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121418;
+  --bg-soft: #1b1e24;
+  --bg-raised: #20242b;
+  --fg: #e8eaee;
+  --fg-soft: #b3b8c2;
+  --line: #3a3f49;
+  --accent: #7fb0ff;
+  --accent-fg: #0b1220;
+  --focus: #ffb067;
+  --ok-bg: #133d24;
+  --ok-fg: #b8f0c8;
+  --red-bg: #4a1714;
+  --red-fg: #ffc9c4;
+  --warn-bg: #43330c;
+  --warn-fg: #ffe2a3;
+  --unknown-bg: #2e2650;
+  --unknown-fg: #ddd3ff;
+  --banner-bg: #3d300d;
+  --banner-fg: #ffe7a6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121418;
+    --bg-soft: #1b1e24;
+    --bg-raised: #20242b;
+    --fg: #e8eaee;
+    --fg-soft: #b3b8c2;
+    --line: #3a3f49;
+    --accent: #7fb0ff;
+    --accent-fg: #0b1220;
+    --focus: #ffb067;
+    --ok-bg: #133d24;
+    --ok-fg: #b8f0c8;
+    --red-bg: #4a1714;
+    --red-fg: #ffc9c4;
+    --warn-bg: #43330c;
+    --warn-fg: #ffe2a3;
+    --unknown-bg: #2e2650;
+    --unknown-fg: #ddd3ff;
+    --banner-bg: #3d300d;
+    --banner-fg: #ffe7a6;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.skip {
+  position: absolute;
+  inset-inline-start: 0.5rem;
+  top: -3rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--accent);
+  color: var(--accent-fg);
+  z-index: 10;
+}
+
+.skip:focus {
+  top: 0.5rem;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 1rem;
+  border-block-end: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.top h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.tagline {
+  color: var(--fg-soft);
+  font-size: 0.9rem;
+}
+
+.controls {
+  margin-inline-start: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+select,
+input,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+select,
+input[type="text"],
+input[type="date"],
+textarea {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.3rem 0.45rem;
+}
+
+textarea {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.banner {
+  padding: 0.6rem 1rem;
+  background: var(--banner-bg);
+  color: var(--banner-fg);
+  border-block-end: 1px solid var(--line);
+}
+
+.layout {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+}
+
+.side {
+  flex: 0 0 15rem;
+  padding: 1rem;
+  border-inline-end: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
+.side ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav a {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.nav a[aria-current="page"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.side h2 {
+  margin: 1.25rem 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.counts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+  font-size: 0.88rem;
+}
+
+.counts .name {
+  font-family: var(--mono);
+}
+
+.counts .count {
+  color: var(--fg-soft);
+  white-space: nowrap;
+}
+
+main {
+  flex: 1;
+  min-width: 0;
+  padding: 1rem 1.25rem 2rem;
+}
+
+main h2 {
+  margin-top: 0.25rem;
+}
+
+.foot {
+  padding: 0.6rem 1rem;
+  border-block-start: 1px solid var(--line);
+  color: var(--fg-soft);
+  font-size: 0.85rem;
+}
+
+.muted {
+  color: var(--fg-soft);
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+  margin-block: 0.8rem;
+  background: var(--bg-raised);
+}
+
+.card h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.file-list {
+  padding-inline-start: 1.2rem;
+}
+
+.file-list .mono {
+  font-weight: 600;
+}
+
+.msg-ok {
+  color: var(--ok-fg);
+  background: var(--ok-bg);
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+}
+
+.msg-red {
+  color: var(--red-fg);
+  background: var(--red-bg);
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+}
+
+.msg-red pre {
+  margin: 0.3rem 0 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--mono);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Narrow screens (down to 400 px): the navigation goes on top and wraps. */
+@media (max-width: 760px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .side {
+    flex: none;
+    border-inline-end: none;
+    border-block-end: 1px solid var(--line);
+    padding: 0.6rem 0.8rem;
+  }
+
+  .nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem 1rem;
+  }
+
+  main {
+    padding: 0.8rem;
+  }
+
+  .controls {
+    margin-inline-start: 0;
+  }
+}
