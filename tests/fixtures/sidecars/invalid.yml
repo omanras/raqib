@@ -1,0 +1,9 @@
+title: Invalid rule (no id, no level)
+logsource:
+  product: windows
+detection:
+  selection:
+    a: b
+  condition: selection
+x-mizan:
+  fp_budget: 1

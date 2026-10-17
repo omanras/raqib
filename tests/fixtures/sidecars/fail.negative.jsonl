@@ -1,0 +1,5 @@
+{"Image":"C:\\Windows\\System32\\cmd.exe","CommandLine":"cmd.exe /c whoami","User":"EXAMPLE\\svc-deploy"}
+{"Image":"C:\\Windows\\System32\\cmd.exe","CommandLine":"cmd.exe /c hostname","User":"EXAMPLE\\alice"}
+{"Image":"C:\\Windows\\System32\\powershell.exe","CommandLine":"whoami","User":"EXAMPLE\\alice"}
+{"Image":"C:\\Windows\\System32\\cmd.exe","User":"EXAMPLE\\alice"}
+{"Image":"C:\\cmd.exe","CommandLine":"whoami","User":"EXAMPLE\\dave"}

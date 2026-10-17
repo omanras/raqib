@@ -1,0 +1,12 @@
+title: Unknown Condition fixture rule
+id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    Image|endswith: '\\cmd.exe'
+  condition: selection | count() > 3
+level: medium
+x-mizan:
+  fp_budget: 1

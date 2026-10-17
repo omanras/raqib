@@ -1,0 +1,13 @@
+title: Unknown Modifier fixture rule
+id: 33333333-3333-4333-8333-333333333333
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    Image|endswith: '\\cmd.exe'
+    CommandLine|base64offset|contains: 'whoami'
+  condition: selection
+level: medium
+x-mizan:
+  fp_budget: 1

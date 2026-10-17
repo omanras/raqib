@@ -1,0 +1,15 @@
+title: Blank Lines fixture rule
+id: 88888888-8888-4888-8888-888888888888
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    Image|endswith: '\\cmd.exe'
+    CommandLine|contains: 'whoami'
+  filter_admin:
+    User|endswith: '\\svc-deploy'
+  condition: selection and not filter_admin
+level: medium
+x-mizan:
+  fp_budget: 1

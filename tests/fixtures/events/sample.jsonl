@@ -1,0 +1,7 @@
+{"Image": "C:\\Windows\\System32\\cmd.exe", "CommandLine": "cmd.exe /c whoami", "User": "EXAMPLE\\alice"}
+{"Image": "C:\\Windows\\System32\\cmd.exe", "CommandLine": "cmd.exe /c whoami", "User": "EXAMPLE\\svc-deploy"}
+
+{"Image": "C:\\Windows\\SysWOW64\\CMD.EXE", "CommandLine": "cmd /c whoami /all", "User": "EXAMPLE\\bob"}
+{"broken": 
+{"Image": "C:\\Windows\\System32\\cmd.exe", "CommandLine": "cmd.exe /c hostname", "User": "EXAMPLE\\alice"}
+{"Image": "D:\\tools\\cmd.exe", "CommandLine": "whoami", "User": "EXAMPLE\\carol"}
