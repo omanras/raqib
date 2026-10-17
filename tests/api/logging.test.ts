@@ -2,6 +2,7 @@ import { Writable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../../server/app.js';
 import { REDACTED, createLogger } from '../../server/logging.js';
+import { Agent } from './helpers.js';
 
 function capture() {
   const lines: string[] = [];
@@ -21,7 +22,6 @@ const KNOWN = {
   cookie: 'dawr_session=session-id-zyxwvutsrqponmlk',
   authorization: 'Bearer bearer-secret-0123456789',
   recoveryCode: 'RCVR-1234-5678',
-  csrf: 'csrf-token-value-987654321',
 };
 
 describe('logging.redaction', () => {
@@ -35,10 +35,13 @@ describe('logging.redaction', () => {
       req.log.info({ password: KNOWN.password, data: { token: KNOWN.token, nested: { secret: KNOWN.secret } } }, 'flat');
       return { ok: true };
     });
+    const agent = new Agent(app);
+    const csrf = await agent.refreshCsrf();
+    const pre = agent.cookieHeader();
     const res = await app.inject({
       method: 'POST',
       url: '/api/test-log/OBJECTID123',
-      headers: { cookie: KNOWN.cookie, authorization: KNOWN.authorization, 'x-csrf-token': KNOWN.csrf },
+      headers: { cookie: `${KNOWN.cookie}; ${pre}`, authorization: KNOWN.authorization, 'x-csrf-token': csrf },
       payload: {
         login: 'sara',
         password: KNOWN.password,
@@ -50,7 +53,7 @@ describe('logging.redaction', () => {
     });
     expect(res.statusCode).toBe(200);
     const all = lines.join('\n');
-    for (const [name, value] of Object.entries(KNOWN)) {
+    for (const [name, value] of Object.entries({ ...KNOWN, csrf, pre: pre.split('=')[1] as string })) {
       expect(all, `${name} leaked`).not.toContain(value);
     }
     expect(all).toContain(REDACTED);

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import fastifyStatic from '@fastify/static';
-import Fastify, { LogController } from 'fastify';
+import Fastify, { LogController, type FastifyBaseLogger } from 'fastify';
 import type { DestinationStream, Logger } from 'pino';
 import { logUserId } from './audit.js';
 import type { Config } from './config.js';
@@ -11,8 +11,11 @@ import { migrate, openDb, type DB } from './db/db.js';
 import { errorBody, mapError } from './errors.js';
 import { createLogger } from './logging.js';
 import { securityHeaders } from './plugins/security-headers.js';
+import { securityHooks } from './plugins/session.js';
+import { createLimits, type Limits } from './ratelimit.js';
+import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
-import { systemClock, type Clock } from './types.js';
+import { systemClock, type Clock, type RouteEntry } from './types.js';
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
 
@@ -26,6 +29,8 @@ export interface AppOptions {
   /** Configuration; missing fields take development/test defaults. */
   config?: Partial<Config>;
   clock?: Clock;
+  /** Rate-limit stores; tests pass their own to inspect or reset them. */
+  limits?: Limits;
   /** Directory of the built client; false disables static serving. */
   clientDir?: string | false;
 }
@@ -64,19 +69,30 @@ export function buildApp(options: AppOptions = {}) {
   }
 
   const app = Fastify({
-    loggerInstance: logger,
+    loggerInstance: logger as FastifyBaseLogger,
     logController: new LogController({ disableRequestLogging: true, requestIdLogLabel: 'requestId' }),
     requestIdHeader: false,
     genReqId: newRequestId,
     bodyLimit: BODY_LIMIT_BYTES,
-    trustProxy: config.trustProxy,
+    // One trusted hop: req.ip is the address the reverse proxy saw, so a
+    // client cannot choose its own address by sending X-Forwarded-For.
+    trustProxy: config.trustProxy ? (_address: string, hop: number) => hop === 0 : false,
     return503OnClosing: true,
   });
 
   app.decorate('db', db);
   app.decorate('config', config);
   app.decorate('clock', clock);
+  app.decorate('limits', options.limits ?? createLimits(clock));
   app.decorateRequest('user', null);
+
+  const routeTable: RouteEntry[] = [];
+  app.decorate('routeTable', routeTable);
+  app.addHook('onRoute', (r) => {
+    for (const method of Array.isArray(r.method) ? r.method : [r.method]) {
+      if (method !== 'HEAD') routeTable.push({ method, url: r.url });
+    }
+  });
 
   // JSON only (S4.2): drop the default text/plain parser.
   app.removeContentTypeParser('text/plain');
@@ -101,6 +117,8 @@ export function buildApp(options: AppOptions = {}) {
     );
   });
 
+  securityHooks(app);
+
   app.setErrorHandler((err, req, reply) => {
     const mapped = mapError(err);
     if (mapped.internal) {
@@ -114,6 +132,7 @@ export function buildApp(options: AppOptions = {}) {
   app.register(
     async (api) => {
       healthRoutes(api);
+      authRoutes(api);
     },
     { prefix: '/api' },
   );

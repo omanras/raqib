@@ -3,6 +3,7 @@ import { buildApp } from '../../server/app.js';
 import { audit, auditByRequest, ipPrefix, listAudit, uaHash } from '../../server/audit.js';
 import { migrate, openDb } from '../../server/db/db.js';
 import { createLogger } from '../../server/logging.js';
+import { Agent } from '../api/helpers.js';
 import { seedCircle } from './support/fixtures.js';
 
 describe('audit.ipPrefix', () => {
@@ -34,17 +35,14 @@ describe('audit(req, {...})', () => {
     const { userId, circleId } = seedCircle(db);
     const app = buildApp({ logger: createLogger({ level: 'silent' }), db, clientDir: false, config: { sessionSecret: 'k'.repeat(40) } });
     app.post('/api/test-audit', async (req) => {
-      req.user = { id: userId, login: 'organizer', displayName: 'Organizer', sessionId: 's' };
+      req.user = { id: userId, login: 'organizer', displayName: 'Organizer', sessionId: 's', sessionTokenHash: 'h' };
       audit(req, { circleId, action: 'circle.rule_changed', target: 'rules_text', details: { field: 'rules_text' } });
       return { ok: true };
     });
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/test-audit',
-      payload: {},
-      remoteAddress: '203.0.113.77',
-      headers: { 'user-agent': 'Mozilla/5.0 (test)' },
-    });
+    const agent = new Agent(app, '203.0.113.77');
+    agent.ua = 'Mozilla/5.0 (test)';
+    await agent.refreshCsrf();
+    const res = await agent.post('/api/test-audit', {});
     expect(res.statusCode).toBe(200);
     const requestId = res.headers['x-request-id'] as string;
     const rows = auditByRequest(db, requestId);
