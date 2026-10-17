@@ -1,0 +1,213 @@
+/* Mobile first: one column from 360 px; a bottom navigation bar on narrow
+   screens; a top navigation from 720 px. Logical properties throughout so
+   the whole layout mirrors for Arabic (dir=rtl). */
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-block-end: 1px solid var(--border);
+}
+
+.topbar-inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 56px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: var(--text-l);
+}
+
+.brand:hover {
+  color: var(--text);
+}
+
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  color: var(--accent);
+}
+
+.topnav {
+  display: none;
+  gap: var(--space-1);
+  margin-inline-start: var(--space-4);
+}
+
+.topnav a,
+.bottomnav a {
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-m);
+}
+
+.topnav a {
+  padding: var(--space-2) var(--space-3);
+}
+
+.topnav a[aria-current='page'],
+.topnav a:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.topbar-tools {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.main {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) calc(var(--space-8) + 40px);
+}
+
+.main.wide {
+  max-width: 960px;
+}
+
+.footer {
+  text-align: center;
+  padding: var(--space-4) var(--space-4) calc(var(--space-8) + 24px);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.bottomnav {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: 20;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  background: var(--surface);
+  border-block-start: 1px solid var(--border);
+  padding-block-end: env(safe-area-inset-bottom);
+}
+
+.bottomnav a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--text-xs);
+  min-height: 56px;
+  justify-content: center;
+}
+
+.bottomnav a[aria-current='page'] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.bottomnav svg {
+  width: 22px;
+  height: 22px;
+}
+
+@media (min-width: 720px) {
+  .topnav {
+    display: flex;
+  }
+
+  .bottomnav {
+    display: none;
+  }
+
+  .main {
+    padding-block-end: var(--space-8);
+  }
+
+  .footer {
+    padding-block-end: var(--space-5);
+  }
+}
+
+.page-head {
+  margin-block-end: var(--space-5);
+}
+
+.page-head h1 {
+  margin-block-end: var(--space-1);
+}
+
+.auth-wrap {
+  max-width: 440px;
+  margin: var(--space-5) auto 0;
+}
+
+.grid-2 {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 560px) {
+  .grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Circle pages: a header and a scrollable tab bar. */
+.circle-head {
+  margin-block-end: var(--space-4);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-block-end: 1px solid var(--border);
+  margin-block-end: var(--space-5);
+  margin-inline: calc(-1 * var(--space-4));
+  padding-inline: var(--space-4);
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs a {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-3);
+  color: var(--text-muted);
+  text-decoration: none;
+  border-block-end: 2px solid transparent;
+  margin-block-end: -1px;
+  white-space: nowrap;
+}
+
+.tabs a[aria-current='page'] {
+  color: var(--text);
+  border-block-end-color: var(--accent);
+  font-weight: 600;
+}
+
+.auth-wrap > * + * {
+  margin-block-start: var(--space-4);
+}

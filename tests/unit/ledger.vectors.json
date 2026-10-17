@@ -1,0 +1,112 @@
+{
+  "spec": "hash = sha256(seq || ts || actor || type || canonical(payload) || prevHash); genesis prevHash = 64 zeros",
+  "entries": [
+    {
+      "seq": 1,
+      "ts": "2026-10-17T12:00:00.000Z",
+      "actor": "7WkzmORX5rnhiKRRTLWHhn",
+      "type": "circle.created",
+      "payload": {
+        "name": "جمعية الحي",
+        "currency": "OMR",
+        "contribution": 50000,
+        "period": "monthly",
+        "dueDay": 5
+      },
+      "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "hash": "584e06dd8463d479c8b1570962f4d223b123c9bedc3888aae125755d1aabfd86",
+      "canonical": "{\"contribution\":50000,\"currency\":\"OMR\",\"dueDay\":5,\"name\":\"جمعية الحي\",\"period\":\"monthly\"}",
+      "preimage": "12026-10-17T12:00:00.000Z7WkzmORX5rnhiKRRTLWHhncircle.created{\"contribution\":50000,\"currency\":\"OMR\",\"dueDay\":5,\"name\":\"جمعية الحي\",\"period\":\"monthly\"}0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "seq": 2,
+      "ts": "2026-10-17T12:00:01.007Z",
+      "actor": "vp-mfb9JrXltfUljzCwIO_",
+      "type": "member.joined",
+      "payload": {
+        "memberId": "1M2BcBpYmcUlz8wgaWpLjt",
+        "displayName": "Sara \"S.\" <b>",
+        "role": "member"
+      },
+      "prevHash": "584e06dd8463d479c8b1570962f4d223b123c9bedc3888aae125755d1aabfd86",
+      "hash": "6a6713b0b1dd0adf51be19c701550942c36b3e95d9034f830455c2727873baf6",
+      "canonical": "{\"displayName\":\"Sara \\\"S.\\\" <b>\",\"memberId\":\"1M2BcBpYmcUlz8wgaWpLjt\",\"role\":\"member\"}",
+      "preimage": "22026-10-17T12:00:01.007Zvp-mfb9JrXltfUljzCwIO_member.joined{\"displayName\":\"Sara \\\"S.\\\" <b>\",\"memberId\":\"1M2BcBpYmcUlz8wgaWpLjt\",\"role\":\"member\"}584e06dd8463d479c8b1570962f4d223b123c9bedc3888aae125755d1aabfd86"
+    },
+    {
+      "seq": 3,
+      "ts": "2026-10-17T12:00:02.014Z",
+      "actor": "7WkzmORX5rnhiKRRTLWHhn",
+      "type": "order.set",
+      "payload": {
+        "order": [
+          "YrBCasWzYUUL4h2pxJY7eo",
+          "1M2BcBpYmcUlz8wgaWpLjt"
+        ]
+      },
+      "prevHash": "6a6713b0b1dd0adf51be19c701550942c36b3e95d9034f830455c2727873baf6",
+      "hash": "8fdf87eb52ff3712dd5099eda20c474678bb8f3557cdf1a1396965f09a0e2aaa",
+      "canonical": "{\"order\":[\"YrBCasWzYUUL4h2pxJY7eo\",\"1M2BcBpYmcUlz8wgaWpLjt\"]}",
+      "preimage": "32026-10-17T12:00:02.014Z7WkzmORX5rnhiKRRTLWHhnorder.set{\"order\":[\"YrBCasWzYUUL4h2pxJY7eo\",\"1M2BcBpYmcUlz8wgaWpLjt\"]}6a6713b0b1dd0adf51be19c701550942c36b3e95d9034f830455c2727873baf6"
+    },
+    {
+      "seq": 4,
+      "ts": "2026-10-17T12:00:03.021Z",
+      "actor": "7WkzmORX5rnhiKRRTLWHhn",
+      "type": "circle.started",
+      "payload": {
+        "memberCount": 2,
+        "startDate": "2026-11-01",
+        "rounds": [
+          {
+            "n": 1,
+            "dueDate": "2026-11-05"
+          }
+        ]
+      },
+      "prevHash": "8fdf87eb52ff3712dd5099eda20c474678bb8f3557cdf1a1396965f09a0e2aaa",
+      "hash": "34750cf5bdc2e6d9450174c40d2f61532de72b74fc709391b5c40ee152c2b8e9",
+      "canonical": "{\"memberCount\":2,\"rounds\":[{\"dueDate\":\"2026-11-05\",\"n\":1}],\"startDate\":\"2026-11-01\"}",
+      "preimage": "42026-10-17T12:00:03.021Z7WkzmORX5rnhiKRRTLWHhncircle.started{\"memberCount\":2,\"rounds\":[{\"dueDate\":\"2026-11-05\",\"n\":1}],\"startDate\":\"2026-11-01\"}8fdf87eb52ff3712dd5099eda20c474678bb8f3557cdf1a1396965f09a0e2aaa"
+    },
+    {
+      "seq": 5,
+      "ts": "2026-10-17T12:00:04.028Z",
+      "actor": "vp-mfb9JrXltfUljzCwIO_",
+      "type": "contribution.reported",
+      "payload": {
+        "round": 1,
+        "amount": 25000,
+        "method": "cash",
+        "reference": "line\nbreak   tab\t",
+        "nested": {
+          "z": 1,
+          "a": [
+            true,
+            false,
+            null
+          ]
+        }
+      },
+      "prevHash": "34750cf5bdc2e6d9450174c40d2f61532de72b74fc709391b5c40ee152c2b8e9",
+      "hash": "5ebc254c4b3ed9d84879b894b33e91ce2bd4ef0de5819a1ac098ce6478048664",
+      "canonical": "{\"amount\":25000,\"method\":\"cash\",\"nested\":{\"a\":[true,false,null],\"z\":1},\"reference\":\"line\\nbreak   tab\\t\",\"round\":1}",
+      "preimage": "52026-10-17T12:00:04.028Zvp-mfb9JrXltfUljzCwIO_contribution.reported{\"amount\":25000,\"method\":\"cash\",\"nested\":{\"a\":[true,false,null],\"z\":1},\"reference\":\"line\\nbreak   tab\\t\",\"round\":1}34750cf5bdc2e6d9450174c40d2f61532de72b74fc709391b5c40ee152c2b8e9"
+    },
+    {
+      "seq": 6,
+      "ts": "2026-10-17T12:00:05.035Z",
+      "actor": "7WkzmORX5rnhiKRRTLWHhn",
+      "type": "contribution.confirmed",
+      "payload": {
+        "round": 1,
+        "contributionId": "MTecMvcWrJTurDpqJvrLxz",
+        "amount": 25000
+      },
+      "prevHash": "5ebc254c4b3ed9d84879b894b33e91ce2bd4ef0de5819a1ac098ce6478048664",
+      "hash": "2311d0d5b66343bceca5d992dcfc48e5526d5c7846f89d216cc196450a398d39",
+      "canonical": "{\"amount\":25000,\"contributionId\":\"MTecMvcWrJTurDpqJvrLxz\",\"round\":1}",
+      "preimage": "62026-10-17T12:00:05.035Z7WkzmORX5rnhiKRRTLWHhncontribution.confirmed{\"amount\":25000,\"contributionId\":\"MTecMvcWrJTurDpqJvrLxz\",\"round\":1}5ebc254c4b3ed9d84879b894b33e91ce2bd4ef0de5819a1ac098ce6478048664"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+name: gate
+
+on:
+  push:
+    branches: ['dawr', 'claude/dawr-*']
+  pull_request:
+    branches: ['dawr']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium for Playwright (CI only)
+        run: npx playwright install --with-deps chromium
+      - name: Gate
+        run: tools/gate.sh
+
+  # S7.3 and M3.2: the image builds, runs non-root on a read-only root
+  # filesystem with only /data writable, becomes healthy, and a backup made
+  # by deploy/backup.sh restores with deploy/restore.sh (deploy/smoke.sh).
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: docker build
+        run: docker build -f deploy/Dockerfile -t dawr:ci .
+      - name: Container smoke test
+        run: DAWR_IMAGE=dawr:ci deploy/smoke.sh --no-build

@@ -1,40 +1,38 @@
-# HANDOFF — M0.1  (phase 0: scaffold, gate, CI)
+# HANDOFF — M3.2  (phase 3: operations, docs, release)
 
-Task: scaffold the application per CLAUDE.md "Stack" and
-docs/specs/ADR-0001-architecture.md §1, with the gate running end to end.
+Task: make Dawr deployable and documented for a self-hosting organizer.
 
 Scope:
-  package.json, package-lock.json, tsconfig.json, tsconfig.*.json
-  vite.config.ts, vitest.config.ts, playwright.config.ts
-  shared/
-  server/
-  client/
-  tests/
-  .github/workflows/gate.yml
+  deploy/
+  docs/OPERATIONS.md
+  README.md
+  SECURITY.md
+  CHANGELOG.md
+  tools/gate.sh
+  .github/workflows/
   docs/review/
 
 Exit criteria:
-- E1 `npm ci`, `npx tsc --noEmit` (one root tsconfig with project
-     references or paths for shared/server/client), `npx vitest run`,
-     `npm run build` (client to `client/dist`, server to `server/dist`),
-     `npm start` (serves the client and `GET /api/health` ->
-     {ok:true, version, db:"pending"}) all succeed.
-- E2 `server/app.ts` exports `buildApp(options)` returning a Fastify
-     instance (so tests use `app.inject`); `server/main.ts` starts it on
-     PORT; request ids on every response (`x-request-id`); pino logger
-     configured with the redaction paths of ADR §7; security headers of
-     ADR §6 applied already (a test asserts them on /api/health).
-- E3 Client: Preact app with a router (hand-written, hash or history),
-     design tokens on :root (light/dark), `dir`/`lang` wiring for en/ar,
-     one screen "Dawr" with the version; built output has no remote URL.
-- E4 playwright.config.ts: preinstalled Chromium (PLAYWRIGHT_BROWSERS_PATH),
-     webServer `npm start` on a test port with DATA_DIR in a temp dir;
-     one e2e test loads the page and reads the heading. Never run
-     `playwright install` locally.
-- E5 .github/workflows/gate.yml: Node 22, `npx playwright install
-     --with-deps chromium` in CI only, runs tools/gate.sh; no secret.
-     Gate green locally.
+- E1 deploy/Dockerfile (multi-stage, node:22 slim, non-root user,
+     read-only root fs, /data volume, HEALTHCHECK on /api/health),
+     deploy/compose.yml (app + optional Caddy with automatic TLS,
+     documented), deploy/backup.sh (sqlite `.backup`, dated, keep 30)
+     and restore steps; `docker build` runs in CI if Docker is available
+     there (else documented as a manual check with the command).
+- E2 docs/OPERATIONS.md: first run (SESSION_SECRET, BASE_URL,
+     TRUST_PROXY), upgrade, backup and restore, rotating the secret,
+     reading logs (fields, request id lookup), retention of logs and
+     audit, resource needs, and what to do if the ledger verify is red.
+- E3 README.md: what Dawr is and is not (never moves money), the
+     ten-minute self-host, how a circle runs from invite to completion
+     (organizer and member paths, in text with the screen names), the
+     trust guarantees (chain, draw, statements) in plain language, the
+     languages, how to report a security issue (SECURITY.md).
+- E4 CHANGELOG.md v0.1.0 listing the tasks; `npm version` field set to
+     0.1.0; gate adds a check that README's commands exist as npm
+     scripts.
+- E5 Gate green; CI green on the branch.
 
-Not in scope: domain, database, auth, screens.
-Commit: `landed: M0.1 scaffold, gate, CI` or `STOP: M0.1 <reason>`.
+Not in scope: new features or screens.
+Commit: `landed: M3.2 operations, docs, release` or `STOP: M3.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.

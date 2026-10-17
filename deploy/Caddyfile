@@ -1,0 +1,20 @@
+# Caddy in front of Dawr (deploy/compose.yml, profile "caddy").
+# Serves BASE_URL (e.g. https://dawr.example.org): obtains and renews its TLS
+# certificate automatically (ports 80 and 443 must reach this host and the
+# name must point here), redirects http to https, forwards to the app.
+{
+	# No admin API listening; restart the container to change the config.
+	admin off
+}
+
+{$BASE_URL} {
+	# The app takes at most 64 KB per request; refuse anything far larger here.
+	request_body {
+		max_size 1MB
+	}
+	header -Server
+	# Caddy replaces any X-Forwarded-For a client sends with the address it
+	# saw; Dawr trusts exactly this one hop (TRUST_PROXY=1).
+	reverse_proxy dawr:3000
+	# No access log: Dawr logs every request itself, without addresses.
+}

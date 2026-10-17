@@ -1,0 +1,257 @@
+{
+  "spec": "commitment = sha256(secret || memberId); seed = sha256(reveals in member-id order || circleId); order = revealed sorted by sha256(seed || memberId), then silent in member-id order",
+  "cases": [
+    {
+      "name": "three-all-reveal",
+      "circleId": "jBIbDaksxJQ09q_FJHu7sP",
+      "members": [
+        "llTs4YJoNIYHTD6OMSiTB_",
+        "qNz7DhqY_60q7Z13v2_3JH",
+        "sQHf4jqUjA_A3LcaORRnuP"
+      ],
+      "secrets": {
+        "llTs4YJoNIYHTD6OMSiTB_": "18c73a2f5a6dbc37b90d040c2cfcaf532d8709d67fcba8aa3049144499bdeebe",
+        "qNz7DhqY_60q7Z13v2_3JH": "def85e8150d9cd4d7e4d6cad7a1866c97e41d68c5b50559ab4ae9e91be737bfa",
+        "sQHf4jqUjA_A3LcaORRnuP": "88bd1a63d6663c113bc13e5a61145c0d9892ef22cd632c8f3d59095f8067effc"
+      },
+      "commitments": {
+        "llTs4YJoNIYHTD6OMSiTB_": "19bb4c6557e07d5057152c1af66f7614d1822c0b94e93327a5b9736872677178",
+        "qNz7DhqY_60q7Z13v2_3JH": "07ea3ff62cde66cc8e988d91662c2be423c6179ff97da31dda5bd27ea7f1152d",
+        "sQHf4jqUjA_A3LcaORRnuP": "1c39fd44ba75a5e0860f5b5631cb80c35b13e6cab05868c92e440a0983f2c088"
+      },
+      "reveals": {
+        "llTs4YJoNIYHTD6OMSiTB_": "18c73a2f5a6dbc37b90d040c2cfcaf532d8709d67fcba8aa3049144499bdeebe",
+        "qNz7DhqY_60q7Z13v2_3JH": "def85e8150d9cd4d7e4d6cad7a1866c97e41d68c5b50559ab4ae9e91be737bfa",
+        "sQHf4jqUjA_A3LcaORRnuP": "88bd1a63d6663c113bc13e5a61145c0d9892ef22cd632c8f3d59095f8067effc"
+      },
+      "expected": {
+        "seed": "b57f397f80885a9bca9948419b21bd3fc0a507a5160a90b8458bf52916b3ae04",
+        "order": [
+          "qNz7DhqY_60q7Z13v2_3JH",
+          "llTs4YJoNIYHTD6OMSiTB_",
+          "sQHf4jqUjA_A3LcaORRnuP"
+        ],
+        "revealed": [
+          "llTs4YJoNIYHTD6OMSiTB_",
+          "qNz7DhqY_60q7Z13v2_3JH",
+          "sQHf4jqUjA_A3LcaORRnuP"
+        ],
+        "silent": []
+      }
+    },
+    {
+      "name": "four-one-silent",
+      "circleId": "2y86Z9oL94GE3rm6_A6DlJ",
+      "members": [
+        "KaaWK-gwphlYyi0yfjv83V",
+        "XWiIPz8D1m8OoBOXQT__zL",
+        "oGZoazoke93hko3Kq5pu-G",
+        "wqrikxVDvbAK8Lpuhfjk8w"
+      ],
+      "secrets": {
+        "KaaWK-gwphlYyi0yfjv83V": "8898c4c14f65bc6901a29c182c5b8a186084fd994f9ad6ec21e0b3a012e397fd",
+        "XWiIPz8D1m8OoBOXQT__zL": "27fee05d97beb911807c2c178da342f587ed34e8dab6dab5dc7f8d5cb1a8b01f",
+        "oGZoazoke93hko3Kq5pu-G": "a63cc4bc3c5136bd6a5a9a29e75f575f89e0930e6b39c12ae0f7f1907109d4c4",
+        "wqrikxVDvbAK8Lpuhfjk8w": "598c14cfde49df1342ea005be0d047c85533dfe01f6eeb19533328fa49f4873c"
+      },
+      "commitments": {
+        "KaaWK-gwphlYyi0yfjv83V": "c892e6a8b595596e1f1249bca5a502275aabdb65fcb59fe5730dc6cdec348b7c",
+        "XWiIPz8D1m8OoBOXQT__zL": "8a93bc79025c20238f260a3c2ebdfdc72b670ce8f9b2b01a9e4321b19b9eac5f",
+        "oGZoazoke93hko3Kq5pu-G": "ef27f039fe245b96e716501796667bfaaba1f0f881eb9633a254c7306d6dd928",
+        "wqrikxVDvbAK8Lpuhfjk8w": "6c3d7147e9958677334672933ddf33631c0f88b9de2ed2b4ccd5d1896125880b"
+      },
+      "reveals": {
+        "KaaWK-gwphlYyi0yfjv83V": "8898c4c14f65bc6901a29c182c5b8a186084fd994f9ad6ec21e0b3a012e397fd",
+        "XWiIPz8D1m8OoBOXQT__zL": "27fee05d97beb911807c2c178da342f587ed34e8dab6dab5dc7f8d5cb1a8b01f",
+        "wqrikxVDvbAK8Lpuhfjk8w": "598c14cfde49df1342ea005be0d047c85533dfe01f6eeb19533328fa49f4873c"
+      },
+      "expected": {
+        "seed": "07c5d184f815e394481b1d39d2c228fd3ee8fe5e13ec6020cbe4b0c11c97917f",
+        "order": [
+          "KaaWK-gwphlYyi0yfjv83V",
+          "XWiIPz8D1m8OoBOXQT__zL",
+          "wqrikxVDvbAK8Lpuhfjk8w",
+          "oGZoazoke93hko3Kq5pu-G"
+        ],
+        "revealed": [
+          "KaaWK-gwphlYyi0yfjv83V",
+          "XWiIPz8D1m8OoBOXQT__zL",
+          "wqrikxVDvbAK8Lpuhfjk8w"
+        ],
+        "silent": [
+          "oGZoazoke93hko3Kq5pu-G"
+        ]
+      }
+    },
+    {
+      "name": "five-two-silent",
+      "circleId": "_g7vuXRKVkANYGQ7jsJmj9",
+      "members": [
+        "ueP2z46ZBR4wfkGAzOxNrC",
+        "04Ou8EtFCFPHlw4S61Dnvh",
+        "lWFMLeaVsAlInXJgyzafEc",
+        "Zy1LeH7aQskKsbroS_hKeC",
+        "2iTJjdS2xaDgtEPXZ3jmM-"
+      ],
+      "secrets": {
+        "ueP2z46ZBR4wfkGAzOxNrC": "33c00e6486986c67f74c1e3cd6c9f53c2da037d4eea40823413da7a461d7602b",
+        "04Ou8EtFCFPHlw4S61Dnvh": "65831fdd5c2971d5f009bd1ae9a3b62b48dfdccfc959bd33a2c9d121706263b7",
+        "lWFMLeaVsAlInXJgyzafEc": "5845c055a9ed8f75bcce48cc899e562a4d8be867a42bec9017866a75732279d1",
+        "Zy1LeH7aQskKsbroS_hKeC": "9b78525bf5b32fc417d91f5da02e694fc1301f5f75b34fbde8e837b3b893697a",
+        "2iTJjdS2xaDgtEPXZ3jmM-": "8eccaa7ec48b03bdd757015d025cf378a477ad5ab5b50730bdd6069306122546"
+      },
+      "commitments": {
+        "ueP2z46ZBR4wfkGAzOxNrC": "e7f6ded4f779309105534716c1ae0cef11f21eef694ad6af82bcbb708ef71d3f",
+        "04Ou8EtFCFPHlw4S61Dnvh": "3a91b9f7ed0f4bcdd39319439e98a20ce0cac76ba7048cd9fbbab15c23f70ca7",
+        "lWFMLeaVsAlInXJgyzafEc": "1f291b87d23e4c492953e9398bc63f24632d258f665051a87198dcdd0e0cae74",
+        "Zy1LeH7aQskKsbroS_hKeC": "61ff78ed29969a718b346ea2f0bcadc14a4185d630711844ef1d8a5b4b0803a0",
+        "2iTJjdS2xaDgtEPXZ3jmM-": "5a54d36711cd17c23d0201ad8cbc78f9d41b27ead182e174ddee639ff6d782ce"
+      },
+      "reveals": {
+        "04Ou8EtFCFPHlw4S61Dnvh": "65831fdd5c2971d5f009bd1ae9a3b62b48dfdccfc959bd33a2c9d121706263b7",
+        "lWFMLeaVsAlInXJgyzafEc": "5845c055a9ed8f75bcce48cc899e562a4d8be867a42bec9017866a75732279d1",
+        "Zy1LeH7aQskKsbroS_hKeC": "9b78525bf5b32fc417d91f5da02e694fc1301f5f75b34fbde8e837b3b893697a"
+      },
+      "expected": {
+        "seed": "65f5d2d6b10aee9f544d7aa2ca57397e12d873d0efbb5c2e4aae1ebc1c5d9572",
+        "order": [
+          "Zy1LeH7aQskKsbroS_hKeC",
+          "04Ou8EtFCFPHlw4S61Dnvh",
+          "lWFMLeaVsAlInXJgyzafEc",
+          "2iTJjdS2xaDgtEPXZ3jmM-",
+          "ueP2z46ZBR4wfkGAzOxNrC"
+        ],
+        "revealed": [
+          "04Ou8EtFCFPHlw4S61Dnvh",
+          "Zy1LeH7aQskKsbroS_hKeC",
+          "lWFMLeaVsAlInXJgyzafEc"
+        ],
+        "silent": [
+          "2iTJjdS2xaDgtEPXZ3jmM-",
+          "ueP2z46ZBR4wfkGAzOxNrC"
+        ]
+      }
+    },
+    {
+      "name": "two-none-reveal",
+      "circleId": "bwVckBkfbNYSyvG650KgkK",
+      "members": [
+        "Uue33w29WkmyiIWzXy2XvW",
+        "MhlmjpKAIalHC3oC5UifPO"
+      ],
+      "secrets": {
+        "Uue33w29WkmyiIWzXy2XvW": "6a5cd3a812feb60959403c8e5290af3bc0c3ff713a8cceae3143193577a0252d",
+        "MhlmjpKAIalHC3oC5UifPO": "1d98c8d5b278697e5f1be2f25fb27bc6da47ca27592b927689af0f0bea32980d"
+      },
+      "commitments": {
+        "Uue33w29WkmyiIWzXy2XvW": "c7e17b327d61b632371514872d59845c12ebba8d2e433e3d5c29421df9e49c77",
+        "MhlmjpKAIalHC3oC5UifPO": "4fae0508f63af598f701d19f303593ed26443579040aef7711788e03b2e37b2f"
+      },
+      "reveals": {},
+      "expected": {
+        "seed": "0276f0b48c6c72445499ffa7e52838c0e46aa4d3d7a99f31f57bcdf06836fda8",
+        "order": [
+          "MhlmjpKAIalHC3oC5UifPO",
+          "Uue33w29WkmyiIWzXy2XvW"
+        ],
+        "revealed": [],
+        "silent": [
+          "MhlmjpKAIalHC3oC5UifPO",
+          "Uue33w29WkmyiIWzXy2XvW"
+        ]
+      }
+    },
+    {
+      "name": "twelve-all-reveal",
+      "circleId": "diyt5Q_uhOiA0YW0at3z8u",
+      "members": [
+        "HDX5IVYgu0Q17M2aEuqxQB",
+        "sbqVcKOaE_Y3S5zMDf-nk2",
+        "gtB5QmDRSEJo9sHTo7Qjhr",
+        "oMh1gWiwyZb69HhwxZlQYc",
+        "TAq3f5iDC_WKoHR3vYFQSN",
+        "Q-olShoSFKtUpbVYtohBEr",
+        "16dO7UvvgZqUVeM01elu2I",
+        "Pmz5XPCWd7zJQg9UjQMdoZ",
+        "xpuXVhK6Co8_4SuC0zM7LN",
+        "Mhzt3AP_DdhHTGauOzi-YU",
+        "kmXPBYc5eZGsTfQf1DfEEv",
+        "3HVlx7bjmzKnrB1Z_Yr2Pb"
+      ],
+      "secrets": {
+        "HDX5IVYgu0Q17M2aEuqxQB": "25c9368230e10aefb1492c203d2f142cd7a1963b18c3a680d89b2a81218501a9",
+        "sbqVcKOaE_Y3S5zMDf-nk2": "9c593dc0ebd0109eb0ff2e59786e5656622ed6b88f870c9c8eb07dda68823692",
+        "gtB5QmDRSEJo9sHTo7Qjhr": "3acbc6f0418f2a5cc3f702db0026d2030b4510476fb8f33f30682d840bfb8685",
+        "oMh1gWiwyZb69HhwxZlQYc": "85afe34478ab70b84ec5d469c341f3474f8400520583b559ca810b530d25d462",
+        "TAq3f5iDC_WKoHR3vYFQSN": "048f35c571a808b195fe8bdbeab53f2fd053bacb1f151778b6ec28c48552d0ce",
+        "Q-olShoSFKtUpbVYtohBEr": "344cd95073b674d57cbf4f1abb62cde67e3c8a84cdcd0af93d9caa6659ffd4d1",
+        "16dO7UvvgZqUVeM01elu2I": "f1d387e5fd14644aa39092985e51957f4b918a2b216aa47f4dbf6be66fc74332",
+        "Pmz5XPCWd7zJQg9UjQMdoZ": "adfcb1e355acdf4ca4628761f2cf59d094421b3efd4252af149179a1091f823a",
+        "xpuXVhK6Co8_4SuC0zM7LN": "1a7923256bce2963f911308868d66ad946862ba4abd5356f5eb761b7ce7fbe99",
+        "Mhzt3AP_DdhHTGauOzi-YU": "f0065751d7203536ea1d94d2fadb2eb40decd30e02b64372b1b57b9f2a3db207",
+        "kmXPBYc5eZGsTfQf1DfEEv": "ea7a6918b248b9809c3ba334b9ba83dce8daa58f7022cab5c0cf6f3c89787044",
+        "3HVlx7bjmzKnrB1Z_Yr2Pb": "55817ee5e0a468d97444b45b478b22334aabc8c3e9fbf9ae896da6baefd081ab"
+      },
+      "commitments": {
+        "HDX5IVYgu0Q17M2aEuqxQB": "c37a1e0b9819ebc43493361fc5a4a172709622e0351fd93c5d530430e283fe53",
+        "sbqVcKOaE_Y3S5zMDf-nk2": "bbac170c3975d79f4b668c52f3bc9976a027600616537dc604b5b08f99060194",
+        "gtB5QmDRSEJo9sHTo7Qjhr": "01c64f424225eaaed31f603ec9d446ee5c7d12289caaa244e8b7e7f6cc6a9971",
+        "oMh1gWiwyZb69HhwxZlQYc": "edb804e391b7490ae550a7d1b99ceaa1adc64f76b0503eeb4e363c272b4b28fc",
+        "TAq3f5iDC_WKoHR3vYFQSN": "10067f502c2aa4e8ebfe5cf341c7fa6c336fef86dd86d3e589bc438fbc8457be",
+        "Q-olShoSFKtUpbVYtohBEr": "fb2e1f3f87427cd3d67d34f574fd4a668144453b0bf4fac65692ccafd61fa024",
+        "16dO7UvvgZqUVeM01elu2I": "170d208bac3f5a8d46713692bc470a202fa75e07d93dd9a474a030065b7723ff",
+        "Pmz5XPCWd7zJQg9UjQMdoZ": "60060059b1897d0c8f32074e0502b1c42ecc51bea73957d7a6afe731c9a56c08",
+        "xpuXVhK6Co8_4SuC0zM7LN": "b157920685a9d6bbcb9f2c448257aa0c6ee02648533e9e42439555ce4ae05645",
+        "Mhzt3AP_DdhHTGauOzi-YU": "99eb7ecc76ddd3adffe10aa32b20003c6c50843d171de4844145196567fa23d4",
+        "kmXPBYc5eZGsTfQf1DfEEv": "52dbd93d565eb94653df66ab8eb3f000400408dd24547e2f44d28a0993a759b8",
+        "3HVlx7bjmzKnrB1Z_Yr2Pb": "89eb779e43789c0681b8d09a85bc8e6e00aa0e698f8ba0f008913d39412afb6a"
+      },
+      "reveals": {
+        "HDX5IVYgu0Q17M2aEuqxQB": "25c9368230e10aefb1492c203d2f142cd7a1963b18c3a680d89b2a81218501a9",
+        "sbqVcKOaE_Y3S5zMDf-nk2": "9c593dc0ebd0109eb0ff2e59786e5656622ed6b88f870c9c8eb07dda68823692",
+        "gtB5QmDRSEJo9sHTo7Qjhr": "3acbc6f0418f2a5cc3f702db0026d2030b4510476fb8f33f30682d840bfb8685",
+        "oMh1gWiwyZb69HhwxZlQYc": "85afe34478ab70b84ec5d469c341f3474f8400520583b559ca810b530d25d462",
+        "TAq3f5iDC_WKoHR3vYFQSN": "048f35c571a808b195fe8bdbeab53f2fd053bacb1f151778b6ec28c48552d0ce",
+        "Q-olShoSFKtUpbVYtohBEr": "344cd95073b674d57cbf4f1abb62cde67e3c8a84cdcd0af93d9caa6659ffd4d1",
+        "16dO7UvvgZqUVeM01elu2I": "f1d387e5fd14644aa39092985e51957f4b918a2b216aa47f4dbf6be66fc74332",
+        "Pmz5XPCWd7zJQg9UjQMdoZ": "adfcb1e355acdf4ca4628761f2cf59d094421b3efd4252af149179a1091f823a",
+        "xpuXVhK6Co8_4SuC0zM7LN": "1a7923256bce2963f911308868d66ad946862ba4abd5356f5eb761b7ce7fbe99",
+        "Mhzt3AP_DdhHTGauOzi-YU": "f0065751d7203536ea1d94d2fadb2eb40decd30e02b64372b1b57b9f2a3db207",
+        "kmXPBYc5eZGsTfQf1DfEEv": "ea7a6918b248b9809c3ba334b9ba83dce8daa58f7022cab5c0cf6f3c89787044",
+        "3HVlx7bjmzKnrB1Z_Yr2Pb": "55817ee5e0a468d97444b45b478b22334aabc8c3e9fbf9ae896da6baefd081ab"
+      },
+      "expected": {
+        "seed": "f4af83debb79b8aad9a1ed677d54d05dbff1d9405caa1509d7dd498033b2102e",
+        "order": [
+          "Pmz5XPCWd7zJQg9UjQMdoZ",
+          "kmXPBYc5eZGsTfQf1DfEEv",
+          "TAq3f5iDC_WKoHR3vYFQSN",
+          "Mhzt3AP_DdhHTGauOzi-YU",
+          "HDX5IVYgu0Q17M2aEuqxQB",
+          "xpuXVhK6Co8_4SuC0zM7LN",
+          "16dO7UvvgZqUVeM01elu2I",
+          "3HVlx7bjmzKnrB1Z_Yr2Pb",
+          "sbqVcKOaE_Y3S5zMDf-nk2",
+          "gtB5QmDRSEJo9sHTo7Qjhr",
+          "oMh1gWiwyZb69HhwxZlQYc",
+          "Q-olShoSFKtUpbVYtohBEr"
+        ],
+        "revealed": [
+          "16dO7UvvgZqUVeM01elu2I",
+          "3HVlx7bjmzKnrB1Z_Yr2Pb",
+          "HDX5IVYgu0Q17M2aEuqxQB",
+          "Mhzt3AP_DdhHTGauOzi-YU",
+          "Pmz5XPCWd7zJQg9UjQMdoZ",
+          "Q-olShoSFKtUpbVYtohBEr",
+          "TAq3f5iDC_WKoHR3vYFQSN",
+          "gtB5QmDRSEJo9sHTo7Qjhr",
+          "kmXPBYc5eZGsTfQf1DfEEv",
+          "oMh1gWiwyZb69HhwxZlQYc",
+          "sbqVcKOaE_Y3S5zMDf-nk2",
+          "xpuXVhK6Co8_4SuC0zM7LN"
+        ],
+        "silent": []
+      }
+    }
+  ]
+}
