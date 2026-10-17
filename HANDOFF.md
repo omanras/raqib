@@ -1,36 +1,32 @@
-# HANDOFF — M1.3  (phase 1: Decisions, Policies, Settings, Arabic)
+# HANDOFF — M1.4  (phase 1: the Review screen)
 
-Task: the remaining screens and the full Arabic interface per
-docs/specs/ADR-0001-app.md §3.
+Task: the Review screen per docs/specs/ADR-0001-app.md §3, mirroring the
+CLI review page (reference engine ADR §9).
 
 Scope:
   src/ui/
+  src/engine/review.ts
   src/i18n/
   tests/ui/
   e2e/
   docs/review/
 
 Exit criteria:
-- E1 Decisions: list (open first, days to review, overdue in red, closed
-     with the policy they close); "New decision" form (id generated as
-     D-<date>-<n>, date, title, policy, criteria, review_by, closes);
-     "Close" sets status closed; raw YAML panel.
-- E2 Policies: list grouped by type; a form per type covering every
-     measure/limit/match/band field of the engine spec with validation
-     from the engine (unknown combinations refused with the reason);
-     edit, add, remove (remove asks to confirm and shows which verdicts
-     disappear); raw YAML panel.
-- E3 Settings: base currency (read-only), language en/ar, theme, export
-     all (one click copies a tar-like text bundle of the five files with
-     `=== filename ===` separators that import accepts back), erase all
-     (two-step), about (version, no-network statement).
-- E4 Arabic: every string translated (no placeholders left), `dir=rtl`,
-     numbers in Latin digits, dates ISO, tables and forms mirror
-     correctly; the language choice persists.
-- E5 e2e: add a cap policy through the form and see it on the dashboard;
-     switch to Arabic and assert `dir=rtl` and a translated heading;
-     export-all then erase then import-all restores the counts. Gate green.
+- E1 Period picker: month, quarter, year (ISO), default the current
+     quarter; the eight sections in the CLI order: period header, policy
+     board, income vs expense per month, spending by category, allocation
+     by class with band lines, findings, decisions open and due, details
+     table of every cited row.
+- E2 Charts are inline SVG drawn by the app's own code: viewBox, text in
+     currentColor, ticks at real values, amounts printed from Decimal;
+     readable in light and dark; no chart library.
+- E3 "Copy as HTML": one self-contained page with no script, the same
+     sections, theme tokens on :root; "Download" link as well.
+- E4 Unit tests on the review data model (per-month sums, category
+     ordering, allocation shares) with Decimal expectations; e2e: the
+     2026-Q3 review of the sample shows the WLT-01 breach of 2026-07 in
+     the findings section and the planted decision due. Gate green.
 
-Not in scope: Review screen.
-Commit: `landed: M1.3 decisions, policies, settings, arabic` or `STOP: M1.3 <reason>`.
+Not in scope: new engine measures.
+Commit: `landed: M1.4 review screen` or `STOP: M1.4 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
