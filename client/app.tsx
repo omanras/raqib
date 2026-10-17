@@ -8,10 +8,13 @@ import { matchRoute, navigate, useLocation } from './router.js';
 import { Account } from './screens/account.js';
 import { Recovery, SignIn, SignUp } from './screens/auth.js';
 import { Audit } from './screens/circle/audit.js';
+import { Draw } from './screens/circle/draw.js';
+import { Ledger } from './screens/circle/ledger.js';
 import { Members } from './screens/circle/members.js';
 import { Overview } from './screens/circle/overview.js';
 import { RoundPage, RoundsList } from './screens/circle/rounds.js';
 import { Settings } from './screens/circle/settings.js';
+import { Statement } from './screens/circle/statement.js';
 import { CircleShell, type CircleTab } from './screens/circle/shell.js';
 import { CreateCircle, MyCircles } from './screens/circles.js';
 import { Join } from './screens/join.js';
@@ -149,6 +152,9 @@ function circleRoute(path: string) {
     overview: (p) => <Overview {...p} />,
     members: (p) => <Members {...p} />,
     rounds: (p) => <RoundsList {...p} />,
+    ledger: (p) => <Ledger {...p} />,
+    statement: (p) => <Statement {...p} />,
+    draw: (p) => <Draw {...p} />,
     settings: (p) => <Settings {...p} />,
     audit: (p) => <Audit {...p} />,
   };

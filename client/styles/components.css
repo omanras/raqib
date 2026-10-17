@@ -628,3 +628,53 @@
 .field .check span {
   font-weight: 400;
 }
+
+.raw {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-s);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  direction: ltr;
+  text-align: left;
+}
+
+.highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+details > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.seq-link {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  margin-inline-end: var(--space-1);
+}
+
+.order-list {
+  counter-reset: none;
+  padding-inline-start: var(--space-5);
+  margin: 0;
+}
+
+.order-list li {
+  padding-block: var(--space-1);
+}
+
+.secret {
+  font-family: var(--font-mono);
+  font-size: var(--text-s);
+  direction: ltr;
+  overflow-wrap: anywhere;
+  padding: var(--space-3);
+  border-radius: var(--radius-m);
+  background: var(--warn-soft);
+  border: 1px dashed var(--warn);
+}

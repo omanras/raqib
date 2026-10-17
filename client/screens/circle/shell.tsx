@@ -24,11 +24,14 @@ interface TabDef {
   organizerOnly?: boolean;
 }
 
-/** Tabs in order; M2.3 adds ledger, statement and draw. */
+/** Tabs in order. */
 export const TABS: TabDef[] = [
   { tab: 'overview', path: '' },
   { tab: 'members', path: '/members' },
   { tab: 'rounds', path: '/rounds' },
+  { tab: 'ledger', path: '/ledger' },
+  { tab: 'statement', path: '/statement' },
+  { tab: 'draw', path: '/draw' },
   { tab: 'settings', path: '/settings', organizerOnly: true },
   { tab: 'audit', path: '/audit', organizerOnly: true },
 ];

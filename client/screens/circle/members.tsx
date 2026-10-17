@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { post } from '../../api.js';
-import { Button, Chip, CopyButton, Ltr, Notice, RoleChip, type Tone } from '../../components.js';
+import { Button, Chip, CopyButton, LinkButton, Ltr, Notice, RoleChip, type Tone } from '../../components.js';
 import { codeText, reportError } from '../../errors.js';
 import { localDate } from '../../format.js';
 import { useApi } from '../../hooks.js';
@@ -138,6 +138,7 @@ function OrderEditor({ view, onSaved }: { view: CircleView; onSaved: () => void 
         <Button variant="primary" busy={busy} onClick={() => void save()} data-testid="save-order">
           {t('members.order.save')}
         </Button>
+        <LinkButton href={`/circles/${view.circle.id}/draw`}>{t('members.order.toDraw')}</LinkButton>
       </div>
     </section>
   );
