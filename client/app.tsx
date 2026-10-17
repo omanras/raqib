@@ -1,13 +1,18 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { ApiError, get } from './api.js';
-import { Link, Loading, OfflineBanner, Toasts } from './components.js';
-import { applyLang, t, useLang } from './i18n/index.js';
+import { Link, Loading, Ltr, OfflineBanner, Toasts } from './components.js';
+import { applyLang, t, tx, useLang } from './i18n/index.js';
 import { IconCircles, IconMonitor, IconMoon, IconPlus, IconSun, IconUser, LogoMark } from './icons.js';
 import { matchRoute, navigate, useLocation } from './router.js';
 import { Account } from './screens/account.js';
 import { Recovery, SignIn, SignUp } from './screens/auth.js';
-import { CircleHome } from './screens/circle.js';
+import { Audit } from './screens/circle/audit.js';
+import { Members } from './screens/circle/members.js';
+import { Overview } from './screens/circle/overview.js';
+import { RoundPage, RoundsList } from './screens/circle/rounds.js';
+import { Settings } from './screens/circle/settings.js';
+import { CircleShell, type CircleTab } from './screens/circle/shell.js';
 import { CreateCircle, MyCircles } from './screens/circles.js';
 import { Join } from './screens/join.js';
 import { session, useStore, type User } from './store.js';
@@ -103,7 +108,7 @@ function Shell({ user, path, wide, children }: { user: User | null; path: string
         {children}
       </main>
       <footer class="footer">
-        <span>{t('app.footer')}</span> · <span class="ltr" data-testid="version">{t('app.version', { version: __DAWR_VERSION__ })}</span>
+        <span>{t('app.footer')}</span> · <span data-testid="version">{tx('app.version', { version: <Ltr>{__DAWR_VERSION__}</Ltr> })}</span>
       </footer>
       {user ? <BottomNav path={path} /> : null}
       <Toasts />
@@ -126,9 +131,34 @@ function Routes({ path, user }: { path: string; user: User | null }) {
   if (path === '/' || path === '/circles') return <MyCircles />;
   if (path === '/circles/new') return <CreateCircle />;
   if (path === '/account') return <Account />;
-  const circle = matchRoute('/circles/:id', path);
-  if (circle) return <CircleHome id={circle.id as string} />;
-  return <Redirect to="/circles" />;
+  return circleRoute(path) ?? <Redirect to="/circles" />;
+}
+
+/** /circles/:id[/members|/rounds[/:n]|/settings|/audit] inside the circle shell. */
+function circleRoute(path: string) {
+  const round = matchRoute('/circles/:id/rounds/:n', path);
+  if (round && /^[1-9][0-9]{0,2}$/.test(round.n as string)) {
+    const n = Number(round.n);
+    return <CircleShell id={round.id as string} tab="rounds">{(p) => <RoundPage {...p} n={n} />}</CircleShell>;
+  }
+  const sub = matchRoute('/circles/:id/:tab', path);
+  const id = sub?.id ?? matchRoute('/circles/:id', path)?.id;
+  if (!id) return null;
+  const tab = (sub?.tab ?? 'overview') as CircleTab;
+  const screens: Partial<Record<CircleTab, (p: Parameters<typeof Overview>[0]) => preact.JSX.Element>> = {
+    overview: (p) => <Overview {...p} />,
+    members: (p) => <Members {...p} />,
+    rounds: (p) => <RoundsList {...p} />,
+    settings: (p) => <Settings {...p} />,
+    audit: (p) => <Audit {...p} />,
+  };
+  const render = screens[tab];
+  if (!render) return null;
+  return (
+    <CircleShell key={`${id}:${tab}`} id={id} tab={tab}>
+      {render}
+    </CircleShell>
+  );
 }
 
 export function App() {

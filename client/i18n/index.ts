@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { dirOf, isLang, type Lang } from '../../shared/lang.js';
 import { ar } from './ar.js';
@@ -45,6 +46,19 @@ export function t(key: MessageKey, params: Record<string, string | number> = {})
   return template.replace(/\{(\w+)\}/g, (_, name: string) => {
     const v = params[name];
     return v === undefined ? `{${name}}` : String(v);
+  });
+}
+
+/**
+ * A translated sentence whose placeholders are elements, not text: amounts
+ * and dates go in as isolated left-to-right pieces (<bdi dir="ltr">), so an
+ * Arabic sentence keeps its own order around them.
+ */
+export function tx(key: MessageKey, params: Record<string, ComponentChildren>): ComponentChildren[] {
+  const template = DICTS[lang][key] ?? en[key];
+  return template.split(/(\{\w+\})/).map((part) => {
+    const m = /^\{(\w+)\}$/.exec(part);
+    return m ? (params[m[1] as string] ?? part) : part;
   });
 }
 

@@ -1,10 +1,10 @@
 import { useState } from 'preact/hooks';
 import { patch, post } from '../api.js';
-import { Button, Loading, Notice, PasswordField, TextField } from '../components.js';
+import { Button, Loading, Ltr, Notice, PasswordField, TextField } from '../components.js';
 import { errorText, reportError } from '../errors.js';
 import { useApi, useTitle } from '../hooks.js';
 import { localDateTime } from '../format.js';
-import { t } from '../i18n/index.js';
+import { t, tx } from '../i18n/index.js';
 import { IconLogout } from '../icons.js';
 import { session, toast, useStore, type User } from '../store.js';
 import type { SessionSummary } from '../types.js';
@@ -164,10 +164,10 @@ function SessionsCard() {
             <li key={s.id} class="row-between">
               <div>
                 <div class="row">
-                  <strong class="ltr">{t('account.sessions.started', { date: localDateTime(s.createdAt) })}</strong>
+                  <strong>{tx('account.sessions.started', { date: <Ltr>{localDateTime(s.createdAt)}</Ltr> })}</strong>
                   {s.current ? <span class="chip chip-accent chip-plain">{t('account.sessions.current')}</span> : null}
                 </div>
-                <div class="muted small ltr">{t('account.sessions.lastSeen', { date: localDateTime(s.lastSeenAt) })}</div>
+                <div class="muted small">{tx('account.sessions.lastSeen', { date: <Ltr>{localDateTime(s.lastSeenAt)}</Ltr> })}</div>
               </div>
               <Button small onClick={() => void revoke(s)}>
                 {t('account.sessions.revoke')}
@@ -201,7 +201,7 @@ export function Account() {
       <div class="page-head row-between">
         <div>
           <h1>{t('account.title')}</h1>
-          <p class="muted ltr">{t('account.signedInAs', { login: user.login })}</p>
+          <p class="muted">{tx('account.signedInAs', { login: <Ltr>{user.login}</Ltr> })}</p>
         </div>
         <Button onClick={() => void signOut()} data-testid="signout">
           <IconLogout />

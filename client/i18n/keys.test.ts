@@ -22,10 +22,12 @@ describe('i18n keys', () => {
   });
 
   it('Arabic strings are written in Arabic script with Latin digits only', () => {
-    const latinOnly = ['lang.switch', 'circles.perPeriod'];
+    // The language switch is meant to read "English"; anything else with words must be Arabic.
+    const exempt = ['lang.switch'];
     for (const key of Object.keys(ar) as (keyof typeof ar)[]) {
-      expect(ar[key], key).not.toMatch(/[٠-٩۰-۹]/);
-      if (!latinOnly.includes(key)) expect(ar[key], key).toMatch(/[؀-ۿ]/);
+      expect(ar[key], key).not.toMatch(/[\u0660-\u0669\u06F0-\u06F9]/);
+      const words = ar[key].replace(/\{\w+\}/g, '').replace(/[A-Z0-9-]{4,}|a-z|ISO|OMR/g, '');
+      if (!exempt.includes(key) && /[A-Za-z\u0600-\u06FF]/.test(words)) expect(words, key).toMatch(/[\u0600-\u06FF]/);
     }
   });
 });

@@ -1,11 +1,11 @@
 import { useState } from 'preact/hooks';
 import { post } from '../api.js';
-import { Button, EmptyState, Link, LinkButton, Loading, Notice, TextField } from '../components.js';
+import { Button, EmptyState, Link, LinkButton, Loading, Ltr, Notice, TextField } from '../components.js';
 import { everyText, scheduleText } from '../describe.js';
 import { errorText, reportError } from '../errors.js';
 import { localDate, money } from '../format.js';
 import { useApi, useTitle } from '../hooks.js';
-import { t, useLang } from '../i18n/index.js';
+import { t, tx, useLang } from '../i18n/index.js';
 import { IconMail } from '../icons.js';
 import { navigate } from '../router.js';
 import { session, toast, useStore } from '../store.js';
@@ -75,7 +75,7 @@ function Signed({ token }: { token: string }) {
         </Notice>
       ) : (
         <>
-          <p class="muted small">{t('join.expires', { date: localDate(invite.expiresAt) })}</p>
+          <p class="muted small">{tx('join.expires', { date: <Ltr>{localDate(invite.expiresAt)}</Ltr> })}</p>
           <TextField label={t('join.myName')} hint={t('create.myName.hint')} value={name} onInput={setName} optional dir="auto" maxLength={60} name="displayName" />
           <Button variant="primary" block busy={busy} onClick={() => void accept()}>
             {t('join.accept')}

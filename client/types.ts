@@ -91,3 +91,108 @@ export interface SessionSummary {
   expiresAt: string;
   current: boolean;
 }
+
+export type LineState = 'outstanding' | 'reported' | 'confirmed' | 'waived' | 'not_due';
+
+export interface ReportJson {
+  reportId: string;
+  amount: number;
+  method: string;
+  reference: string;
+  recordedBy: string;
+  ts: string;
+  seq: number;
+  confirmedSeq: number | null;
+}
+
+export interface LineJson {
+  roundN: number;
+  memberId: string;
+  state: LineState;
+  expected: number;
+  reported: number;
+  confirmed: number;
+  outstanding: number;
+  ageDays: number | null;
+  seqs: number[];
+  reports: ReportJson[];
+  waiveReason: string | null;
+  contributionId: string;
+  displayName?: string;
+}
+
+export interface PayoutJson {
+  amount: number;
+  paidOn: string;
+  method: string;
+  reference: string;
+  seq: number;
+  acknowledgedSeq: number | null;
+}
+
+export interface StatementRoundJson {
+  n: number;
+  dueDate: string;
+  status: 'upcoming' | 'open' | 'closed';
+  recipientMemberId: string;
+  expected: number;
+  reported: number;
+  confirmed: number;
+  outstanding: number;
+  payout: PayoutJson | null;
+  seqs: number[];
+  lines: LineJson[];
+}
+
+export interface StatementJson {
+  circleId: string;
+  name: string;
+  members: Record<string, string>;
+  statement: {
+    currency: string;
+    minorUnit: number;
+    memberId: string | null;
+    asOfSeq: number;
+    today: string;
+    rounds: StatementRoundJson[];
+    totals: { expected: number; expectedDue: number; reported: number; confirmed: number; outstanding: number; paidOut: number };
+  };
+}
+
+export interface OverviewRoundJson {
+  n: number;
+  of: number;
+  dueDate: string;
+  status: 'upcoming' | 'open' | 'closed';
+  recipientMemberId: string;
+  recipient: { memberId: string; displayName: string };
+  payout: PayoutJson | null;
+  expected: number;
+  reported: number;
+  confirmed: number;
+  outstanding: number;
+  daysUntilDue: number;
+  members: (LineJson & { displayName: string })[];
+}
+
+export interface OverviewJson {
+  circle: { id: string; name: string; status: CircleStatus; currency: string; minorUnit: number; contribution: number; memberCount: number; rounds: number };
+  today: string;
+  round: OverviewRoundJson | null;
+  arrears: (LineJson & { displayName: string })[];
+  me: { memberId: string; role: Role; line: (LineJson & { displayName: string }) | null; canReport: boolean; isRecipient: boolean };
+  ledgerHead: { seq: number; hash: string } | null;
+}
+
+export interface AuditEntryJson {
+  id: number;
+  ts: string;
+  action: string;
+  target: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  requestId: string;
+  ipPrefix: string;
+  uaHash: string;
+  details: Record<string, unknown> | null;
+}

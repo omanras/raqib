@@ -1,9 +1,9 @@
 import { useState } from 'preact/hooks';
 import { post, setCsrfToken } from '../api.js';
-import { Button, Checkbox, CopyButton, Link, Notice, PasswordField, TextField, downloadText } from '../components.js';
+import { Button, Checkbox, CopyButton, Link, Ltr, Notice, PasswordField, TextField, downloadText } from '../components.js';
 import { errorText, requestIdOf } from '../errors.js';
 import { useTitle } from '../hooks.js';
-import { t } from '../i18n/index.js';
+import { t, tx } from '../i18n/index.js';
 import { IconDownload, IconKey, LogoMark } from '../icons.js';
 import { navigate } from '../router.js';
 import { session, toast, type User } from '../store.js';
@@ -25,7 +25,7 @@ function FormError({ error }: { error: unknown }) {
   return (
     <Notice tone="danger" role="alert">
       <span data-testid="form-error">{errorText(error)}</span>
-      {id ? <span class="block xsmall muted ltr">{t('common.requestId', { id })}</span> : null}
+      {id ? <span class="block xsmall muted">{tx('common.requestId', { id: <Ltr>{id}</Ltr> })}</span> : null}
     </Notice>
   );
 }

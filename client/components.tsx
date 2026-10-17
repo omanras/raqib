@@ -1,10 +1,10 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { useId, useState } from 'preact/hooks';
-import { t, type MessageKeyOf } from './i18n/index.js';
+import { t, tx, type MessageKeyOf } from './i18n/index.js';
 import { IconAlert, IconCheck, IconCopy, IconInfo, IconOffline } from './icons.js';
 import { onLinkClick } from './router.js';
 import { connection, dismissToast, toast, toasts, useStore } from './store.js';
-import { localTime } from './format.js';
+import { localTime, money } from './format.js';
 
 // ---------------------------------------------------------------- links and buttons
 
@@ -58,7 +58,7 @@ export function LinkButton(props: { href: string; variant?: ButtonVariant; small
 
 // ---------------------------------------------------------------- form fields
 
-export function Field(props: { label: string; hint?: string | null; error?: string | null; children: (id: string, describedBy: string | undefined) => ComponentChildren; optional?: boolean }) {
+export function Field(props: { label: string; hint?: ComponentChildren; error?: string | null; children: (id: string, describedBy: string | undefined) => ComponentChildren; optional?: boolean }) {
   const id = useId();
   const hintId = `${id}-hint`;
   const errId = `${id}-err`;
@@ -88,7 +88,7 @@ export function TextField(props: {
   label: string;
   value: string;
   onInput: (v: string) => void;
-  hint?: string | null;
+  hint?: ComponentChildren;
   error?: string | null;
   type?: string;
   autocomplete?: string;
@@ -339,6 +339,20 @@ export function downloadText(filename: string, text: string, type = 'text/plain;
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** An amount with its currency as one left-to-right unit inside any sentence. */
+export function Money(props: { amount: number; currency: string; testId?: string }) {
+  return (
+    <bdi dir="ltr" class="amount" data-testid={props.testId}>
+      {money(props.amount, props.currency)}
+    </bdi>
+  );
+}
+
+/** Dates, ids and other Latin tokens inside a sentence. */
+export function Ltr(props: { children: ComponentChildren }) {
+  return <bdi dir="ltr">{props.children}</bdi>;
+}
+
 // ---------------------------------------------------------------- app-wide
 
 export function Toasts() {
@@ -350,8 +364,8 @@ export function Toasts() {
           <div class="toast-body">
             {x.text}
             {x.requestId ? (
-              <span class="request-id ltr" data-testid="toast-request-id">
-                {t('common.requestId', { id: x.requestId })}
+              <span class="request-id" data-testid="toast-request-id">
+                {tx('common.requestId', { id: <Ltr>{x.requestId}</Ltr> })}
               </span>
             ) : null}
           </div>

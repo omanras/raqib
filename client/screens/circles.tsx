@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'preact/hooks';
 import { CURRENCIES, minorUnitOf, mulAmount, parseAmount, type MinorUnit } from '../../shared/money.js';
 import { post } from '../api.js';
-import { Button, Checkbox, Chip, EmptyState, Link, LinkButton, Loading, Notice, RoleChip, Segmented, Select, StatusChip, TextArea, TextField } from '../components.js';
+import { Button, Checkbox, Chip, EmptyState, Link, LinkButton, Loading, Ltr, Money, Notice, RoleChip, Segmented, Select, StatusChip, TextArea, TextField } from '../components.js';
 import { everyText, scheduleText, weekdayName } from '../describe.js';
 import { errorText, reportError } from '../errors.js';
 import { money, todayUtc } from '../format.js';
 import { useApi, useTitle } from '../hooks.js';
-import { t, useLang, type MessageKeyOf } from '../i18n/index.js';
+import { t, tx, useLang, type MessageKeyOf } from '../i18n/index.js';
 import { IconCircles, IconPlus } from '../icons.js';
 import { navigate } from '../router.js';
 import { toast } from '../store.js';
@@ -127,7 +127,7 @@ export function CreateCircle() {
       if (myName.trim()) body.displayName = myName;
       const r = await post<CircleView>('/api/circles', body);
       toast(t('create.created'));
-      navigate(`/circles/${r.circle.id}`, { replace: true });
+      navigate(`/circles/${r.circle.id}/members`, { replace: true });
     } catch (err) {
       setError(err);
       reportError(err);
@@ -175,7 +175,7 @@ export function CreateCircle() {
           <TextField
             label={t('create.amount')}
             name="amount"
-            hint={t('create.amount.hint', { currency, decimals: unit })}
+            hint={tx('create.amount.hint', { currency: <Ltr>{currency}</Ltr>, decimals: unit })}
             value={amountText}
             onInput={setAmountText}
             inputMode="decimal"
@@ -218,11 +218,11 @@ export function CreateCircle() {
         {amount.value !== null ? (
           <Notice tone="ok">
             <span data-testid="create-summary">
-              {t('create.summary', {
-                amount: money(amount.value, currency),
+              {tx('create.summary', {
+                amount: <Money amount={amount.value} currency={currency} />,
                 every: everyText(period),
                 n: 10,
-                pot: money(mulAmount(amount.value, recipientPays ? 10 : 9), currency),
+                pot: <Money amount={mulAmount(amount.value, recipientPays ? 10 : 9)} currency={currency} />,
               })}
             </span>
           </Notice>

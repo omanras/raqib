@@ -7,6 +7,13 @@ function isKey(k: string): k is MessageKey {
   return Object.prototype.hasOwnProperty.call(en, k);
 }
 
+/** A refusal reason from a state check ({code, reason}), translated when the code is known. */
+export function codeText(code: string | undefined, fallback?: string): string {
+  const key = `error.${code ?? ''}`;
+  if (code && isKey(key)) return t(key);
+  return currentLang() === 'en' && fallback ? fallback : t('error.generic');
+}
+
 /** A sentence for an error, in the current language when Dawr knows the code. */
 export function errorText(err: unknown): string {
   if (!(err instanceof ApiError)) return t('error.generic');
