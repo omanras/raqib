@@ -12,6 +12,7 @@ import { FilesPage } from "./files";
 import { Holdings } from "./holdings";
 import { Ledger } from "./ledger";
 import { Policies } from "./policies";
+import { ReviewScreen } from "./review";
 import { Settings } from "./settings";
 import { useScreen, type Screen } from "./route";
 import { EmptyState, Placeholder, Shell } from "./shell";
@@ -22,6 +23,7 @@ function ScreenView({ screen }: { screen: Screen }) {
   if (screen === "holdings") return <Holdings />;
   if (screen === "decisions") return <Decisions />;
   if (screen === "policies") return <Policies />;
+  if (screen === "review") return <ReviewScreen />;
   if (screen === "settings") return <Settings />;
   if (screen === "files") return <FilesPage />;
   return <Placeholder screen={screen} />;

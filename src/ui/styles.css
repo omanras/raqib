@@ -23,6 +23,14 @@
   --unknown-fg: #3d2a7a;
   --banner-bg: #fff4d6;
   --banner-fg: #5a3d00;
+  /* chart tokens, the same as the CLI review page's */
+  --grid: #d9dde4;
+  --income: #2f6fb3;
+  --expense: #c0392b;
+  --bar: #2f6fb3;
+  --band: #d35400;
+  --mark: #ffe08a;
+  --unknown: #6c5b9b;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
 }
@@ -48,6 +56,13 @@
   --unknown-fg: #ddd3ff;
   --banner-bg: #3d300d;
   --banner-fg: #ffe7a6;
+  --grid: #2d343f;
+  --income: #6ea2e4;
+  --expense: #ef6a5a;
+  --bar: #6ea2e4;
+  --band: #f0954f;
+  --mark: #5a4a12;
+  --unknown: #a894e0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,6 +87,13 @@
     --unknown-fg: #ddd3ff;
     --banner-bg: #3d300d;
     --banner-fg: #ffe7a6;
+    --grid: #2d343f;
+    --income: #6ea2e4;
+    --expense: #ef6a5a;
+    --bar: #6ea2e4;
+    --band: #f0954f;
+    --mark: #5a4a12;
+    --unknown: #a894e0;
   }
 }
 
@@ -605,6 +627,34 @@ form.card .wide input {
 
 .raw h4 {
   margin: 0.6rem 0 0.3rem;
+}
+
+/* Review: the engine's inline SVG, text in currentColor. */
+.review section {
+  margin-block-end: 1.2rem;
+}
+
+.review h3 {
+  font-size: 1.05rem;
+  margin-block: 1.4rem 0.4rem;
+  border-block-end: 1px solid var(--line);
+  padding-block-end: 0.2rem;
+}
+
+.chart {
+  color: var(--fg);
+  max-width: 760px;
+}
+
+.chart svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.review details summary {
+  cursor: pointer;
+  margin-block: 0.4rem;
 }
 
 /* Narrow screens (down to 400 px): the navigation goes on top and wraps. */
