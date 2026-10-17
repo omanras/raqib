@@ -1,0 +1,4 @@
+date,amount,currency,account,category,tags,note
+2026-01-05,-1,OMR,cash,food,,ok
+2026-01-05,-1,OMR,cash,coffee,,undeclared category
+2026-01-05,-1,OMR,cash,expense,,a group name is not a category

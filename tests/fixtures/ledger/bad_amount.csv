@@ -1,0 +1,11 @@
+date,amount,currency,account,category,tags,note
+2026-01-05,abc,OMR,salary,salary,,letters
+2026-01-05,1e3,OMR,salary,salary,,exponent
+2026-01-05,"1,000",OMR,salary,salary,,thousands separator
+2026-01-05,+5,OMR,salary,salary,,plus sign
+2026-01-05,,OMR,salary,salary,,empty
+2026-01-05,.5,OMR,salary,salary,,leading dot
+2026-01-05,5.,OMR,salary,salary,,trailing dot
+2026-01-05, 5,OMR,salary,salary,,leading space
+2026-01-05,NaN,OMR,salary,salary,,nan
+2026-01-05,-7.25,OMR,salary,salary,,ok

@@ -1,0 +1,3 @@
+date,account,asset,class,quantity,value,currency
+2026-01-31,broker,VWRA,fund,10,100,usd
+2026-01-31,broker,VWRA,fund,10,100,USD
