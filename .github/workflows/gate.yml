@@ -1,0 +1,25 @@
+# The constitutional gate, on every push and pull request. No secret is
+# needed: the gate reads the tree, runs the tests and checks the example
+# household. Only the qayd branch family carries this workflow.
+name: gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install PyYAML and pytest
+        run: python3 -m pip install --quiet pyyaml pytest
+      - name: Run the gate
+        run: bash tools/gate.sh
