@@ -1,8 +1,7 @@
-# HANDOFF — M1.1  (phase 1: authentication, sessions, CSRF, limits)
+# HANDOFF — M1.2  (phase 1: circles, members, invites, start)
 
-Task: the auth routes and the security plugins per ADR §4, §6 and
-docs/SECURITY_REQUIREMENTS.md S1, S2, S4, S5, S8, plus the
-authorization-matrix harness.
+Task: circle lifecycle routes per ADR §4 with ledger entries, audit rows
+and matrix rows.
 
 Scope:
   server/
@@ -12,26 +11,28 @@ Scope:
   docs/review/
 
 Exit criteria:
-- E1 `POST /api/auth/signup` (display name, login, password), `/login`,
-     `/logout`, `/logout-all`, `GET /api/auth/me`, `POST
-     /api/auth/recovery`, `POST /api/auth/password` (change); scrypt per
-     S1.2; password policy with the bundled common-password list (S1.1);
-     no enumeration (S1.3); lockout and per-IP limits (S1.4) with an
-     in-memory store that has a test clock; recovery codes (S1.5);
-     session rotation and revocation (S1.6, S2.1); cookie flags (S2.2).
-- E2 CSRF plugin (S2.3): token endpoint `GET /api/auth/csrf`, header
-     check on every non-GET, bound to the session with HMAC.
-- E3 zod on every input, 64 KB body limit, error shape of S8.1, 404 for
-     invisible objects; security headers (S5.1-S5.2) with CSP as strict
-     as the client build allows (document any 'unsafe-inline').
-- E4 `tests/api/authz.matrix.ts`: a table of every route x role
-     (anonymous, memberA, organizerA, memberB) -> expected status, and
-     one test iterating it; a test that lists Fastify's routes and fails
-     if any route is missing from the matrix. Filled for the auth and
-     health routes now.
-- E5 Tests for every S-item named above by its id in the test name.
-     Gate green.
+- E1 `POST /api/circles` (creator becomes organizer; ledger entry
+     circle.created), `GET /api/circles` (mine, with my role and status),
+     `GET /api/circles/:id` (members with positions, rounds, my
+     contributions summary, outstanding counts), `PATCH /api/circles/:id`
+     (draft only; every changed field is a ledger entry circle.rule_changed).
+- E2 Invites: `POST /api/circles/:id/invites` (organizer; one-time token,
+     expiry 7 days, max 50 active per circle) returning a link
+     `${BASE_URL}/join/<token>`; `POST /api/invites/:token/accept`
+     (signed-in user; once; refused after start or at member cap);
+     ledger entry member.joined; `DELETE` is not offered (revoke = POST
+     /invites/:id/revoke, audit only).
+- E3 `POST /api/circles/:id/order` (organizer, draft, a full permutation
+     of member ids; ledger entry order.set with the permutation), `POST
+     /api/circles/:id/start` (organizer; requires >= 2 members, an
+     order, a start date; freezes member_count; creates rounds; ledger
+     entry circle.started), `POST /api/circles/:id/leave` (member,
+     draft only; ledger entry member.left), `POST /api/circles/:id/cancel`
+     (organizer, draft or drawing; ledger entry).
+- E4 Every route: zod, matrix rows for all four roles, audit row, state
+     machine refusal reasons in the error message.
+- E5 Tests per route (happy path, each refusal, matrix). Gate green.
 
-Not in scope: circles, client.
-Commit: `landed: M1.1 authentication and security plugins` or `STOP: M1.1 <reason>`.
+Not in scope: draw, rounds, client.
+Commit: `landed: M1.2 circles, members, invites, start` or `STOP: M1.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
