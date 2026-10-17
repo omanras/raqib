@@ -1,34 +1,31 @@
-# HANDOFF — M2.1  (phase 2: the review page)
+# HANDOFF — M2.2  (phase 2: quickstart, failure model, CI)
 
-Task: implement `qayd/review.py` and the `review` command per
-docs/specs/ADR-0001 §9: one self-contained HTML page for a period.
+Task: make the README quickstart true from a fresh clone, write
+docs/FAILURE_MODEL.md, and add a CI workflow that runs the gate.
 
 Scope:
-  qayd/review.py
-  qayd/cli.py
-  tests/test_review.py
+  README.md
+  docs/FAILURE_MODEL.md
+  .github/workflows/gate.yml
   docs/review/
 
 Exit criteria:
-- E1 `python3 -m qayd review [--dir DIR] --period 2026-Q3 -o FILE.html`
-     (also `2026-10`, `2026`); exit 0 when written, 3 on unreadable input.
-- E2 The page has no `<script>`, no external resource, no inline event
-     handlers; all numbers are HTML-escaped; it renders in light and dark
-     (prefers-color-scheme) with every colour as a CSS token on :root.
-- E3 Sections, in order: period header (base currency, as-of, data files
-     and their row counts); policy board (every policy with verdict,
-     measure vs limit, coloured by verdict); income vs expense per month
-     (SVG bars); spending by category (SVG bars, sorted); allocation by
-     class (SVG, with band lines of allocation policies); findings of the
-     period with citations; decisions open and due; details table of every
-     row that a verdict cites.
-- E4 SVG drawn by Python with viewBox, text in currentColor, axis ticks
-     at real values; float allowed in review.py for pixel geometry only,
-     every printed amount still comes from Decimal.
-- E5 Tests parse the output with html.parser: no script, the eight
-     sections present, the planted 2026-07 breach visible in the 2026-Q3
-     page of examples/. Gate green.
+- E1 README: what Qayd is (five lines; it never advises, never moves
+     money, never connects); quickstart (clone branch qayd -> tools/gate.sh
+     -> `qayd init --dir ~/money` -> edit policies.yml -> append rows ->
+     `qayd check` -> `qayd review`); the file formats in brief; the
+     command table; verdicts and exit codes; what is `unknown`.
+- E2 The quickstart was executed from a fresh clone in a temp directory
+     and the exact transcript is in docs/review/<date>-M2.2-quickstart.md.
+- E3 docs/FAILURE_MODEL.md: how the books lie and what Qayd does today:
+     missing months, category drift, transfers logged as spending,
+     self-reported holdings, stale snapshots, missing rates, a kill
+     "closed" by a backdated decision, a policy loosened to pass; each
+     with the finding Qayd raises or the gap that is open.
+- E4 .github/workflows/gate.yml runs tools/gate.sh on push and pull request
+     on Ubuntu with Python 3.11 and 3.12; no secret needed.
+- E5 Gate green.
 
-Not in scope: new measures or rule types.
-Commit: `landed: M2.1 review page` or `STOP: M2.1 <reason>`.
+Not in scope: engine changes.
+Commit: `landed: M2.2 quickstart, failure model, CI` or `STOP: M2.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
