@@ -1,40 +1,35 @@
-# HANDOFF — M1.1  (phase 1: store, import/export, app shell)
+# HANDOFF — M1.2  (phase 1: Dashboard, Ledger, Holdings)
 
-Task: persistence and the application shell per docs/specs/ADR-0001-app.md
-§2 and the shell parts of §3.
+Task: the three data screens per docs/specs/ADR-0001-app.md §3.
 
 Scope:
-  src/store/
   src/ui/
-  src/main.tsx
   src/i18n/
-  index.html
-  tests/store/
+  tests/ui/
   e2e/
   docs/review/
 
 Exit criteria:
-- E1 `src/store/household.ts`: load/save the five file texts and meta in
-     IndexedDB (db `qayd`, stores `household`, `meta`); if IndexedDB is
-     unavailable or throws, an in-memory store with a visible banner
-     "nothing will persist in this browser"; two tabs: last write wins,
-     and a `storage`-style broadcast (BroadcastChannel if present) reloads
-     the other tab.
-- E2 Import: per-file inputs and a paste panel; a file with the wrong
-     header is refused with the expected header shown; export: copy
-     button per file (clipboard API with fallback to a selected textarea)
-     and a download link per file.
-- E3 Sample loader bundles reference/examples/* as strings (`?raw` at
-     build time); "Load the sample household" on the empty state.
-- E4 Shell: left navigation (Dashboard, Ledger, Holdings, Decisions,
-     Policies, Review, Settings), theme tokens on :root for light/dark
-     (system + manual), `dir` and `lang` switch to Arabic ready (strings
-     file with every key, Arabic values may be placeholders here, M1.3
-     fills them), responsive to 400 px wide, keyboard focus visible.
-- E5 e2e: empty state -> load sample -> the shell shows the five files'
-     row counts; reload keeps them; export copies text equal to the
-     bundled file. Gate green.
+- E1 Dashboard: as-of date input (default today, persisted in meta); the
+     policy board (verdict chip coloured by verdict, title, measure vs
+     limit text exactly as the CLI prints it, period); findings list;
+     per-policy "why" expander listing the cited rows (file:line and the
+     row itself); the CLI summary line verbatim (e.g. "RED as of ...").
+- E2 Ledger: table newest first with filters (month, account, category,
+     tag, text); "Add row" form validated by the engine before appending
+     (date, amount, currency defaulting to base, account, category, tags,
+     note); "Reverse" on a row appends the mirror row tagged `reversal`
+     with a note citing the original line; raw CSV panel with line-level
+     problems, Save only when parse has no problems.
+- E3 Holdings: snapshots grouped by date, "New snapshot" pre-filled from
+     the latest, stale indicator vs snapshot_max_age_days; raw panel.
+- E4 Every change writes the file text through the serializer and re-runs
+     `check`; the dashboard reflects it without reload.
+- E5 e2e: load sample; dashboard at 2026-09-30 shows 8 hold + 1 red
+     finding; add a discretionary row of 200 OMR dated 2026-09-28 ->
+     WLT-01 breach; reverse it -> hold again; holdings stale after setting
+     as-of to 2026-12-31. Gate green.
 
-Not in scope: the screens' content (M1.2-M1.4).
-Commit: `landed: M1.1 store, import/export, shell` or `STOP: M1.1 <reason>`.
+Not in scope: Decisions, Policies, Settings, Review.
+Commit: `landed: M1.2 dashboard, ledger, holdings` or `STOP: M1.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
