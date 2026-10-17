@@ -1,0 +1,19 @@
+- id: D-1
+  date: 2026-10-01
+  title: status pending
+  review_by: 2027-01-01
+  status: pending
+- id: D-2
+  date: 2026-10-01
+  title: status missing
+  review_by: 2027-01-01
+- id: D-3
+  date: 2026-10-01
+  title: status uppercase
+  review_by: 2027-01-01
+  status: Open
+- id: D-4
+  date: 2026-10-01
+  title: ok
+  review_by: 2027-01-01
+  status: closed

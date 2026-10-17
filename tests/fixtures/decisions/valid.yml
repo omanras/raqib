@@ -1,0 +1,20 @@
+- id: D-2026-10-01
+  date: 2026-10-01
+  title: start broker pilot with 500 OMR
+  policy: WLT-05
+  criteria: "stop if drawdown > 15% in any 90 days; review quarterly"
+  review_by: 2027-01-01
+  status: open        # open | closed
+  closes: null        # policy id whose kill this decision answers
+- id: D-2025-12-05
+  date: "2025-12-05"
+  title: end the first broker pilot
+  policy: WLT-05
+  criteria: the kill fired in November
+  review_by: "2026-03-01"
+  status: closed
+  closes: WLT-05
+- id: D-min
+  date: 2026-02-02
+  review_by: 2026-08-01
+  status: open

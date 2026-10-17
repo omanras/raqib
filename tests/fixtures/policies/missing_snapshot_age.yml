@@ -1,0 +1,13 @@
+version: 1
+base_currency: OMR
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+policies:
+  - id: P-01
+    type: red_line
+    title: x
+    match: {tags: x}
