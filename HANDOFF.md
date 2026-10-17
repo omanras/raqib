@@ -1,36 +1,40 @@
-# HANDOFF — M0.3  (phase 0: engine part 2, verdicts and the oracle)
+# HANDOFF — M1.1  (phase 1: store, import/export, app shell)
 
-Task: port measures, rules, findings and the three command results
-(`check`, `routine`, `decisions`) and prove byte-level agreement with
-`reference/oracle/*.json` (Constitution A10).
+Task: persistence and the application shell per docs/specs/ADR-0001-app.md
+§2 and the shell parts of §3.
 
 Scope:
-  src/engine/
-  tests/engine/
-  tests/differential/
+  src/store/
+  src/ui/
+  src/main.tsx
+  src/i18n/
+  index.html
+  tests/store/
+  e2e/
   docs/review/
 
 Exit criteria:
-- E1 `measures.ts` (sum, income, expense, holdings, share, drawdown;
-     limits value, pct_of income, months_of expense, pct; rates
-     conversion; Unknown/Stale propagation, never a partial sum) and
-     `rules.ts` (cap, floor, routine, red_line, kill with persistence
-     until a later closing decision, allocation) with citations.
-- E2 `findings.ts`: EMPTY-PERIOD, STALE-SNAPSHOT, DECISION-DUE, DUP-ROW
-     (warn), invalid rows, in the same ids and texts as the CLI.
-- E3 `check(household, asOf)`, `routine(household, period)`,
-     `decisions(household, asOf)` return exactly the CLI JSON shapes
-     (keys, order of policies, verdict strings, measure/limit objects with
-     amount as string, cites, text, findings, the summary line).
-- E4 tests/differential/oracle.test.ts: for each file in reference/oracle,
-     run the matching command on reference/examples and `expect(result)
-     .toEqual(oracle)` (deep equality, no normalisation other than the
-     two documented exceptions below, if any arise; each must be listed
-     in the questions file with the reason).
-- E5 Unit tests for every rule type (holding and breaching), kill
-     persistence, backdated closing decision, missing rate, stale
-     snapshot. Gate green.
+- E1 `src/store/household.ts`: load/save the five file texts and meta in
+     IndexedDB (db `qayd`, stores `household`, `meta`); if IndexedDB is
+     unavailable or throws, an in-memory store with a visible banner
+     "nothing will persist in this browser"; two tabs: last write wins,
+     and a `storage`-style broadcast (BroadcastChannel if present) reloads
+     the other tab.
+- E2 Import: per-file inputs and a paste panel; a file with the wrong
+     header is refused with the expected header shown; export: copy
+     button per file (clipboard API with fallback to a selected textarea)
+     and a download link per file.
+- E3 Sample loader bundles reference/examples/* as strings (`?raw` at
+     build time); "Load the sample household" on the empty state.
+- E4 Shell: left navigation (Dashboard, Ledger, Holdings, Decisions,
+     Policies, Review, Settings), theme tokens on :root for light/dark
+     (system + manual), `dir` and `lang` switch to Arabic ready (strings
+     file with every key, Arabic values may be placeholders here, M1.3
+     fills them), responsive to 400 px wide, keyboard focus visible.
+- E5 e2e: empty state -> load sample -> the shell shows the five files'
+     row counts; reload keeps them; export copies text equal to the
+     bundled file. Gate green.
 
-Not in scope: UI, storage.
-Commit: `landed: M0.3 engine part 2 and oracle` or `STOP: M0.3 <reason>`.
+Not in scope: the screens' content (M1.2-M1.4).
+Commit: `landed: M1.1 store, import/export, shell` or `STOP: M1.1 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
