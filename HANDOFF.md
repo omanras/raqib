@@ -1,30 +1,30 @@
-# HANDOFF — M2.1  (phase 2: export via pySigma)
+# HANDOFF — M2.2  (phase 2: quickstart, threat model, CI)
 
-Task: implement `mizan/export.py` and the `export` command per
-docs/specs/ADR-0001 §2, §9: a Sigma rule to a target query through pySigma,
-as an optional dependency confined to this module.
+Task: make the README quickstart true from a fresh clone, write
+docs/THREAT_MODEL.md, and add a CI workflow that runs the gate.
 
 Scope:
-  mizan/export.py
-  mizan/cli.py
-  tests/test_export.py
-  docs/review/
   README.md
+  docs/THREAT_MODEL.md
+  .github/workflows/gate.yml
+  docs/review/
 
 Exit criteria:
-- E1 `python3 -m mizan export RULE.yml --target splunk` prints the query;
-     `--json` prints {"target", "query", "backend_version"}.
-- E2 Targets: at least splunk and elastic (pySigma backends
-     pysigma-backend-splunk, pysigma-backend-elasticsearch), imported
-     lazily; a missing package yields exit 3 and one line naming the pip
-     install command, never a traceback.
-- E3 `import sigma` (pySigma) appears only in mizan/export.py (the gate
-     already checks it); no network at export time.
-- E4 Tests: a fake backend injected (no pySigma needed) covers success and
-     the missing-package path; one test that runs the real backend is
-     skipped when pySigma is absent. README gains the export line.
+- E1 README: what Mizan is (five lines), quickstart (clone branch mizan ->
+     tools/gate.sh -> write a rule with two sidecars -> `mizan test` ->
+     `mizan check`), the command table, statuses and exit codes, the
+     supported Sigma subset and what is `unknown`.
+- E2 The quickstart was executed from a fresh clone in a temp directory and
+     the exact transcript is in docs/review/<date>-M2.2-quickstart.md.
+- E3 docs/THREAT_MODEL.md: how the gate is fooled and what it does about
+     it: happy-path-only fixtures, too-clean corpora, match-everything
+     wildcards, budgets raised to pass, evasions a rule does not cover,
+     malicious fixture files (A7); each with the status Mizan gives today
+     and what is open.
+- E4 .github/workflows/gate.yml runs tools/gate.sh on push and pull request
+     on Ubuntu with Python 3.11 and 3.12; it must not need any secret.
 - E5 Gate green.
 
-Not in scope: new targets beyond the two, rule rewriting, the engine.
-Commit: `landed: M2.1 export via pySigma` or `STOP: M2.1 <reason>`.
+Not in scope: engine or rule changes.
+Commit: `landed: M2.2 quickstart, threat model, CI` or `STOP: M2.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
