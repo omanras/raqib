@@ -1,0 +1,34 @@
+{
+  "name": "qayd-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Qayd Web: personal finance as code, in the browser, no server, no network.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "gate": "tools/gate.sh"
+  },
+  "dependencies": {
+    "decimal.js": "10.6.0",
+    "js-yaml": "4.3.2",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vite-plugin-singlefile": "2.3.3",
+    "vitest": "3.2.7"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
