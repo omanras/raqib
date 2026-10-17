@@ -7,9 +7,12 @@ import { dirOf, LanguageContext, translator } from "../i18n";
 import { hasAnyFile, HouseholdStore, type Snapshot } from "../store/household";
 import { AppContext } from "./context";
 import { Dashboard } from "./dashboard";
+import { Decisions } from "./decisions";
 import { FilesPage } from "./files";
 import { Holdings } from "./holdings";
 import { Ledger } from "./ledger";
+import { Policies } from "./policies";
+import { Settings } from "./settings";
 import { useScreen, type Screen } from "./route";
 import { EmptyState, Placeholder, Shell } from "./shell";
 
@@ -17,6 +20,9 @@ function ScreenView({ screen }: { screen: Screen }) {
   if (screen === "dashboard") return <Dashboard />;
   if (screen === "ledger") return <Ledger />;
   if (screen === "holdings") return <Holdings />;
+  if (screen === "decisions") return <Decisions />;
+  if (screen === "policies") return <Policies />;
+  if (screen === "settings") return <Settings />;
   if (screen === "files") return <FilesPage />;
   return <Placeholder screen={screen} />;
 }
@@ -80,7 +86,7 @@ export function App({ open = () => HouseholdStore.open() }: { open?: () => Promi
   return (
     <LanguageContext.Provider value={lang}>
       <AppContext.Provider value={{ store, snap, household }}>
-        <Shell screen={screen}>{screen !== "files" && empty ? <EmptyState /> : <ScreenView screen={screen} />}</Shell>
+        <Shell screen={screen}>{empty && screen !== "files" && screen !== "settings" ? <EmptyState /> : <ScreenView screen={screen} />}</Shell>
       </AppContext.Provider>
     </LanguageContext.Provider>
   );

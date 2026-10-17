@@ -205,6 +205,12 @@ button.primary {
   color: var(--accent-fg);
 }
 
+button.danger {
+  background: var(--red-fg);
+  border-color: var(--red-fg);
+  color: var(--bg);
+}
+
 button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -386,6 +392,21 @@ main h2 {
   border-color: var(--warn-fg);
 }
 
+.chip-neutral {
+  background: var(--bg-soft);
+  color: var(--fg);
+  border-color: var(--line);
+}
+
+.overdue {
+  color: var(--red-fg);
+  font-weight: 600;
+}
+
+.criteria {
+  margin: 0.2rem 0 0;
+}
+
 .summary {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
@@ -410,7 +431,8 @@ main h2 {
   padding: 0;
 }
 
-.policy {
+.policy,
+.decision {
   border-block-end: 1px solid var(--line);
   padding: 0.45rem 0;
 }
@@ -527,6 +549,53 @@ table.rows td.mono {
 
 .add-row .wide input {
   width: 100%;
+}
+
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-block: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.policy-form .grid,
+form.card .grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+form.card .wide {
+  flex: 1 1 16rem;
+}
+
+form.card .wide input {
+  width: 100%;
+}
+
+.policy-group h3 {
+  font-size: 1rem;
+  margin-block: 1.2rem 0.3rem;
+}
+
+.confirm {
+  border-color: var(--red-fg);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1rem;
+}
+
+.facts dt {
+  font-weight: 600;
+}
+
+.facts dd {
+  margin: 0;
 }
 
 .raw summary,
