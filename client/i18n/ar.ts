@@ -294,6 +294,7 @@ export const ar: Record<MessageKey, string> = {
   'share.due': 'الاستحقاق: {date}',
   'share.pot': 'المؤكَّد: {confirmed} من {expected}',
   'share.line': '- {name}: {state}',
+  'share.ledger': 'السجل: القيد {seq}، البصمة {hash}',
   'share.footer': 'مسجّل في دَور.',
 
   'members.title': 'الأعضاء',

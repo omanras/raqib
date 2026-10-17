@@ -4,7 +4,7 @@ import { anonymousAgent, testApp } from './helpers.js';
 import { ROLES, buildWorld } from './world.js';
 
 describe('S3 authz.matrix', () => {
-  it('S3.1 authz.matrix: every route x role gets its expected status', async () => {
+  it('S3.1 S3.2 authz.matrix: every route x role gets its expected status', async () => {
     const failures: string[] = [];
     for (const row of MATRIX) {
       for (const role of ROLES) {

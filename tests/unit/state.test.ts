@@ -15,7 +15,7 @@ import {
   type RoundRef,
 } from '../../shared/state.js';
 
-describe('state: circle machine', () => {
+describe('S3.3 state.circle machine', () => {
   const allowed: Record<CircleAction, CircleStatus[]> = {
     edit: ['draft'],
     invite: ['draft'],
@@ -77,7 +77,7 @@ describe('state: circle machine', () => {
   });
 });
 
-describe('state: draw machine', () => {
+describe('S3.3 state.draw machine', () => {
   it('commit and close while committing; reveal and finalize while revealing', () => {
     expect(checkDraw('committing', 'commit').ok).toBe(true);
     expect(checkDraw('committing', 'close_commits').ok).toBe(true);
@@ -92,7 +92,7 @@ describe('state: draw machine', () => {
   });
 });
 
-describe('state: round machine', () => {
+describe('S3.3 state.round machine', () => {
   const rounds = (...s: RoundRef['status'][]): RoundRef[] => s.map((status, i) => ({ n: i + 1, status }));
 
   it('opens rounds strictly in order, one at a time', () => {

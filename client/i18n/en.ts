@@ -292,6 +292,7 @@ export const en = {
   'share.due': 'Due: {date}',
   'share.pot': 'Confirmed: {confirmed} of {expected}',
   'share.line': '- {name}: {state}',
+  'share.ledger': 'Ledger: entry {seq}, hash {hash}',
   'share.footer': 'Recorded in Dawr.',
 
   'members.title': 'Members',

@@ -21,6 +21,8 @@ export function shareText(o: OverviewJson, round: OverviewRoundJson): string {
     t('share.pot', { confirmed: money(round.confirmed, cur), expected: money(round.expected, cur) }),
     ...round.members.map((m) => t('share.line', { name: m.displayName, state: stateText(m.state, m.ageDays) })),
     '',
+    // The ledger head, so the group chat itself keeps a record a rewritten ledger could not match.
+    ...(o.ledgerHead ? [t('share.ledger', { seq: o.ledgerHead.seq, hash: o.ledgerHead.hash.slice(0, 16) })] : []),
     t('share.footer'),
   ].join('\n');
 }

@@ -246,7 +246,7 @@ describe('draw: silence is visible (A5)', () => {
   });
 });
 
-describe('draw: determinism', () => {
+describe('S3.3 state.draw determinism (A3)', () => {
   it('two servers given the same ledger compute the same order, and so does the browser code', async () => {
     const p = await party(5);
     const { t, circleId, agents, memberIds } = p;

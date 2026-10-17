@@ -8,10 +8,16 @@ import { IconDownload, IconKey, LogoMark } from '../icons.js';
 import { navigate } from '../router.js';
 import { session, toast, type User } from '../store.js';
 
-/** Where to go after signing in: a same-origin path from ?next=, never another site. */
+/** A same-origin path from ?next=, never another site ("//evil", "/\\evil", "https://evil" fall back). */
+export function safeNext(next: string | null): string {
+  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return '/circles';
+  if (/[\u0000-\u001f]/.test(next)) return '/circles';
+  return next;
+}
+
+/** Where to go after signing in. */
 export function nextPath(): string {
-  const next = new URLSearchParams(window.location.search).get('next');
-  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/circles';
+  return safeNext(new URLSearchParams(window.location.search).get('next'));
 }
 
 export function withNext(path: string): string {

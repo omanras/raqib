@@ -70,7 +70,7 @@ describe('POST /api/circles', () => {
   });
 });
 
-describe('GET /api/circles and /api/circles/:id', () => {
+describe('S3.2 S8.1 GET /api/circles and /api/circles/:id (404 for circles not mine)', () => {
   it('lists only my circles with my role; shows a circle to its members only (404 otherwise)', async () => {
     const w = await buildWorld('draft');
     const { organizerA, memberA, memberB } = w.people;
@@ -135,7 +135,7 @@ describe('PATCH /api/circles/:id', () => {
   });
 });
 
-describe('invites', () => {
+describe('S3.2 invites.*', () => {
   it('creates a one-time link under BASE_URL, stores only the token hash, and the invitee joins once', async () => {
     const t = testApp({ config: { baseUrl: 'https://dawr.example.org' } });
     const org = await fixtureUser(t, 'org');
@@ -234,7 +234,7 @@ describe('invites', () => {
   });
 });
 
-describe('order, start, leave, cancel', () => {
+describe('S3.3 state.* order, start, leave, cancel', () => {
   it('sets a manual order (a full permutation) and records it', async () => {
     const w = await buildWorld('draft');
     const org = w.people.organizerA.agent;

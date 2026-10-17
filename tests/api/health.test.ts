@@ -42,7 +42,7 @@ describe('GET /api/health', () => {
     await broken.close();
   });
 
-  it('headers.csp headers.nosniff headers.referrer: security headers on /api/health (S5.1, S5.2)', async () => {
+  it('S5.1 headers.csp and S5.2 headers.nosniff/referrer/permissions on /api/health', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.headers['content-security-policy']).toBe(CONTENT_SECURITY_POLICY);
     expect(CONTENT_SECURITY_POLICY).toContain("default-src 'self'");
@@ -76,7 +76,7 @@ describe('GET /api/health', () => {
 });
 
 describe('production headers', () => {
-  it('adds HSTS in production', async () => {
+  it('S5.2 headers.hsts: Strict-Transport-Security in production', async () => {
     const app = buildApp({ logger: silent, clientDir: false, config: { production: true } });
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.headers['strict-transport-security']).toContain('max-age=');
@@ -89,7 +89,7 @@ describe('static client and SPA fallback', () => {
   const app = buildApp({ logger: silent, clientDir: dir });
   afterAll(() => app.close());
 
-  it('serves index.html for client routes, not for /api', async () => {
+  it('S5.1 headers.csp on the client: index.html for client routes (SPA fallback), never for /api', async () => {
     for (const url of ['/', '/join/abc', '/circles/x/ledger']) {
       const res = await app.inject({ method: 'GET', url });
       expect(res.statusCode, url).toBe(200);
@@ -120,7 +120,7 @@ describe('input limits', () => {
   const app = buildApp({ logger: silent, clientDir: false });
   afterAll(() => app.close());
 
-  it('rejects non-JSON bodies with 415 and the error shape', async () => {
+  it('S4.2 input.json-only: non-JSON bodies are 415 with the error shape', async () => {
     app.post('/api/echo-test', async (req) => req.body);
     const res = await app.inject({
       method: 'POST',

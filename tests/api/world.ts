@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { commit } from '../../shared/lottery.js';
 import { addDays, isoDateOf } from '../../shared/schedule.js';
 import { sha256Hex } from '../../server/crypto.js';
+import type { AppOptions } from '../../server/app.js';
 import { fixtureUser, testApp, type Agent, type FixtureUser, type TestApp } from './helpers.js';
 
 /**
@@ -100,8 +101,8 @@ export async function memberIds(agent: Agent, circleId: string): Promise<string[
   return body.members.map((m) => m.id);
 }
 
-export async function buildWorld(state: WorldState = 'base'): Promise<World> {
-  const t = testApp();
+export async function buildWorld(state: WorldState = 'base', options: Partial<AppOptions> = {}): Promise<World> {
+  const t = testApp(options);
   const people = {
     organizerA: await fixtureUser(t, 'alice', 'Alice', '198.51.100.1'),
     memberA: await fixtureUser(t, 'bob', 'Bob', '198.51.100.2'),

@@ -59,7 +59,7 @@ async function running(n: number, options: { startInDays?: number; recipientPays
 const types = (t: TestApp, id: string) => listLedger(t.db, id).map((e) => e.type);
 const lineOf = (v: RoundView, memberId: string) => v.lines.find((l) => l.memberId === memberId) as Line;
 
-describe('rounds: open and close', () => {
+describe('S3.3 state.rounds: open and close', () => {
   it('round 1 opens at start when the start date has come; otherwise it waits', async () => {
     const now = await running(2);
     expect(types(now.t, now.id).slice(-2)).toEqual(['circle.started', 'round.opened']);

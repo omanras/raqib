@@ -87,6 +87,7 @@ test('organizer A and member B run round 1 from order to acknowledged payout', a
   expect(shared).toContain('Receives: Bilal');
   expect(shared).toContain('- Bilal: Confirmed');
   expect(shared).toContain('- Aisha: Outstanding');
+  expect(shared).toMatch(/Ledger: entry \d+, hash [0-9a-f]{16}/);
 
   // Arabic pass on the Overview.
   await b.page.getByTestId('lang-switch').click();
