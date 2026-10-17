@@ -1,27 +1,31 @@
-# HANDOFF — REDO 3  (M1.3, M2.1, M2.2, M3.1, M3.2 review packets)
+# HANDOFF — M-REV  (independent review of REDO-2/REDO-3 + R#002 conditions)
 
-Task: fix what the packets docs/review/2026-10-16-M1.3-M2.1-review.md and
--M2.2-M3.1-M3.2-review.md raise inside these tasks' components; record the
-rest. Two commits: M1.3+M2.1, then M2.2+M3.1+M3.2.
+Task: in a fresh session, review the diffs of commits 70c92f3, 55b280e,
+3a20bdf and b91ad82 against docs/CONSTITUTION.md and ADR-0001 (incl.
+Amendment B), then apply the three R#002 conditions.
 
 Scope:
-  raqib/
+  raqib/suspect/
   tests/
-  README.md
-  docs/THREAT_MODEL.md
   docs/review/
+  docs/specs/ADR-0001-architecture.md
+  tools/gate.sh
+  raqib-M0.1.patch
+  raqib-claude-M0.1.bundle
 
 Exit criteria:
-- E1 report: findings tied to their trace; text output printable; cited
-     lines show cwd; bad sidecars and run records are alarms, not crashes.
-- E2 suspect: no label or framing outside the data tags; only allow-listed
-     metadata leaves; fallback answers named; bad findings refused; exit 3
-     when windows failed.
-- E3 eval: opaque session ids; errors cost on benign events; rules row
-     counts incomplete events; silence false positives measured.
-- E4 ui: run record shown; serve errors are alarm pages; unique anchors;
-     escaping tests for every value. Docs: every packet item fixed or
-     recorded; README numbers tested. Gate green.
+- E1 docs/review/<date>-M-REV.md: findings on the four commits with file:line
+     citations; every finding either fixed in this task (inside scope) or
+     listed as open for the commander. No redesign proposals.
+- E2 Anthropic backend: server-side fallback OFF by default; `--allow-fallback`
+     enables it; fallback answers remain labelled and counted. Tests cover
+     both states.
+- E3 `raqib-M0.1.patch` and `raqib-claude-M0.1.bundle` removed from the tree.
+- E4 tools/gate.sh adds: fail if any file outside raqib/suspect/backends.py
+     imports `anthropic` (Amendment B-3).
+- E5 ADR-0001 Amendment B appended verbatim from docs/review/2026-10-17-v0.1-ruling.md
+     (B-1..B-4). Gate green.
 
-Commit: `landed: REDO 3 ...` (twice) or `STOP: ...`.
+Not in scope: new rules, UI changes, README beyond the fallback flag line.
+Commit: `landed: M-REV independent review + R#002 conditions` or `STOP: M-REV <reason>`.
 Read HANDOFF.md and do only the task it specifies.

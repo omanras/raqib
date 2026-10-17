@@ -73,3 +73,17 @@ Blocking or steering the agent (A4); multi-host; auth; cloud storage.
 - A-8 Push policy for builder sessions: push allowed only to `claude/*`
   branches; never to `main`; never with --force. Merging into main is the
   commander's act after the gate.
+
+## Amendment B (2026-10-17) — R#002 rulings on claude/v0.1
+- B-1 Bash program names (`command_head`) are read with shell quoting
+  (POSIX word splitting of the command string), not naive whitespace splitting.
+- B-2 Output lines carry a secret-scan state field: the names of matched
+  secret patterns, never their text; absence of the field means "not scanned".
+- B-3 The Anthropic SDK is an optional dependency imported lazily and only
+  inside `raqib/suspect/backends.py`; the gate fails if any other module
+  imports it. All other runtime code stays stdlib-only.
+- B-4 Judge STOP rule on SECRET findings applies to non-fixture content only;
+  fixtures under `tests/fixtures/` exist to trigger rules and are exempt.
+- B-5 Anthropic server-side fallback is OFF by default (`--allow-fallback`
+  opts in). When on, fallback answers are labelled with the serving model and
+  counted separately. A watcher must know which model judged (A5, R-27).
