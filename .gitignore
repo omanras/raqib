@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.loop/
+.env
+*.sqlite
+*.sqlite-*
+data/
+test-results/
+playwright-report/
+logs/

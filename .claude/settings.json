@@ -1,0 +1,95 @@
+{
+  "model": "opus",
+  "effortLevel": "xhigh",
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Grep",
+      "Glob",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git switch *)",
+      "Bash(git branch *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git rm *)",
+      "Bash(git mv *)",
+      "Bash(git push -u origin claude/*)",
+      "Bash(git push origin claude/*)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(pytest *)",
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(node *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(tsc *)",
+      "Bash(tools/*)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(wc *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(chmod *)",
+      "Bash(diff *)",
+      "Bash(mktemp *)",
+      "Bash(date *)",
+      "Bash(du *)",
+      "Bash(docker *)",
+      "Bash(sqlite3 *)",
+      "Bash(kill *)",
+      "Bash(pkill *)",
+      "Bash(sleep *)",
+      "Bash(env *)",
+      "Bash(printenv *)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git reset --hard *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "WebFetch",
+      "WebSearch",
+      "Bash(git push origin main*)",
+      "Bash(git push origin mizan*)",
+      "Bash(git push origin qayd*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin dawr*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/scope-guard.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/exit-gate.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
