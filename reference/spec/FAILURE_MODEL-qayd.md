@@ -1,0 +1,26 @@
+# Failure model: how the books lie
+
+Qayd reads files a household writes about itself. The files can be
+wrong, late, incomplete or bent to pass. This document lists the ways
+that happens, what Qayd raises today (v0.1), and what stays open. The
+rule behind every entry is A3: silence is red, and A5: an answer Qayd
+cannot give is `unknown`, which is red too.
+
+| how the books lie | what Qayd does today | open |
+| --- | --- | --- |
+| **Missing months.** The ledger stops, or a month was never entered. | Every ledger-based policy (a `sum` measure, a routine) whose period has no rows at all is `missing` with `EMPTY-PERIOD` citing the period; `routine --period 2026` lists each empty month. | A month with one stray row is not empty. No finding compares a month's row count with the household's habit; that would be a heuristic (A1). |
+| **Category drift.** Spending migrates to a looser category (`food` becomes `family`) or to a new one. | A category that is not declared in `policies.yml` makes the row `invalid` (`UNKNOWN-CATEGORY`, line named) and every policy touching that period `invalid`. A declared category is taken at its word. | Drift between declared categories is invisible. A cap on the whole `expense` group (`sum: expense`) catches the total; a cap per category does not. |
+| **Transfers logged as spending.** Money moved to savings or to the broker is entered as an expense, or a transfer is entered once. | A row tagged `transfer` never counts as income or expense. A transfer entered as `housing` counts as housing and can breach a cap; a transfer entered once still matches a routine on the receiving account. | No balance check: the ledger is a log of movements, not of balances (A6), so a one-sided transfer is not detected. Open. |
+| **Self-reported holdings.** A snapshot value is typed by hand and can be wrong, rounded, or hopeful. | Every holdings-based verdict cites the snapshot row (`holdings.csv:line`); the review page shows the value and the date next to each one; a value that is not decimal text is `invalid`. | Qayd cannot know the market. There is no price feed by design (A7); the number is the owner's statement and is judged as such. |
+| **Stale snapshots.** The last holdings snapshot is weeks old. | Older than `snapshot_max_age_days` as of the date: the policy is `stale` with `STALE-SNAPSHOT` citing the snapshot date and its age. A kill still fires on a stale history when an unclosed crossing exists. No snapshot at all is `unknown`. | None known; the age limit is the household's declaration. |
+| **Missing rates.** A row or a snapshot is in a currency with no rate on or before its date. | The measure is `unknown`, never a partial sum; the offending row is cited. For a kill, one unvaluable snapshot anywhere in the history makes the kill `unknown`. Two different rates for one date are `CONFLICT-RATE` and `unknown` for that date. | The rate itself is self-reported. A rate that is wrong but present is not detected. |
+| **A kill "closed" by a backdated decision.** A decision with `closes: <id>` is dated before the crossing, or on the day of it. | It does not count: the kill stays `kill`. Only a decision dated strictly after the crossing closes it, and a new crossing after the decision is `kill` again. `closes` must name a `kill` policy (`BAD-CLOSES`). | The decision date is self-reported too. A decision dated after the crossing but written much later cannot be told from an honest one; git history of the files is the only trail. |
+| **A policy loosened to pass.** The limit is raised, the band widened, the category removed, the routine deleted. | Nothing. A policy is a declaration (A2); Qayd reports what the declaration says about the rows. The `declared` column of the review page and `check --json` show the limit in force. | The real control is outside Qayd: keep `policies.yml` under version control and review its diff. A finding on a policy change (an `AMENDED` note with the old value) is a candidate for v0.2. |
+| **A malformed line.** A typo in a date, an amount with a thousands separator, a row with six columns. | The line is `invalid`, named, and the run continues; every policy that touches its period is `invalid`. A line whose date cannot be read, or a wrong column count, touches every period. | A single undated bad line therefore blanks the whole check. That is the strict reading (A3); whether it is the intended severity is a question in `docs/review/2026-10-17-M0.3-questions.md`. |
+| **Duplicate rows.** The same purchase pasted twice. | `DUP-ROW`, a warning with both line numbers; neither row is dropped (two identical purchases happen). | A warning does not break green; the owner must look. |
+| **A routine done late or early.** The transfer of March is made on April 2. | The routine is `missing` for March and `done` twice for April. | Grace periods are not declared in v0.1; a routine is a row inside the calendar period. |
+| **Future-dated rows.** A planned transfer entered ahead of time. | Nothing after the as-of date is seen: periods are cut at as-of, snapshots after it are not current. | A row dated in the past but entered late looks like any other row. |
+
+Everything above is deterministic: same files, same findings, on every
+machine. Qayd does not estimate, does not score and does not advise what
+to do about any of it (A1, A8).

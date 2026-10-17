@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "command": "decisions",
+  "as_of": "2026-09-30",
+  "due": true,
+  "decisions": [
+    {
+      "id": "D-2024-10-01",
+      "date": "2024-10-01",
+      "title": "start broker pilot with 500 OMR",
+      "policy": "WLT-05",
+      "criteria": "stop if drawdown > 15% in any 90 days; review quarterly",
+      "review_by": "2025-10-01",
+      "status": "closed",
+      "closes": null,
+      "days_until_review": null,
+      "due": false,
+      "cite": "decisions.yml:2"
+    },
+    {
+      "id": "D-2025-12-05",
+      "date": "2025-12-05",
+      "title": "broker pilot stopped after the November drawdown; no new money, position kept",
+      "policy": "WLT-05",
+      "criteria": "the kill fired on 2025-11-30 (drawdown over 15%); this decision answers it",
+      "review_by": "2026-03-01",
+      "status": "closed",
+      "closes": "WLT-05",
+      "days_until_review": null,
+      "due": false,
+      "cite": "decisions.yml:10"
+    },
+    {
+      "id": "D-2026-01-10",
+      "date": "2026-01-10",
+      "title": "keep the monthly savings transfer at 300 OMR through 2026",
+      "policy": "WLT-03",
+      "criteria": "raise to 350 if side income exceeds 1000 over the year",
+      "review_by": "2026-12-31",
+      "status": "open",
+      "closes": null,
+      "days_until_review": 92,
+      "due": false,
+      "cite": "decisions.yml:18"
+    },
+    {
+      "id": "D-2026-06-01",
+      "date": "2026-06-01",
+      "title": "review the family support amount before the school year",
+      "policy": null,
+      "criteria": "decide by mid-September whether 100 OMR per month still fits",
+      "review_by": "2026-09-15",
+      "status": "open",
+      "closes": null,
+      "days_until_review": -15,
+      "due": true,
+      "cite": "decisions.yml:26"
+    }
+  ],
+  "findings": [
+    {
+      "code": "DECISION-DUE",
+      "class": "red",
+      "policy": null,
+      "period": null,
+      "date": "2026-09-15",
+      "cites": [
+        "decisions.yml:26"
+      ],
+      "reason": "decision D-2026-06-01 is open and its review date 2026-09-15 is 15 days past"
+    }
+  ],
+  "files": {
+    "policies.yml": 8,
+    "ledger.csv": 271,
+    "holdings.csv": 72,
+    "decisions.yml": 4,
+    "rates.csv": 24
+  },
+  "problems": []
+}

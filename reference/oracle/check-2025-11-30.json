@@ -1,0 +1,524 @@
+{
+  "version": 1,
+  "command": "check",
+  "as_of": "2025-11-30",
+  "green": false,
+  "base_currency": "OMR",
+  "policies": [
+    {
+      "id": "WLT-05",
+      "type": "kill",
+      "title": "broker pilot drawdown",
+      "verdict": "kill",
+      "period": "2025-11",
+      "scope": "as of 2025-11-30",
+      "measure": {
+        "status": "ok",
+        "amount": "17.37018650207969944988595197",
+        "cites": [
+          "holdings.csv:42",
+          "rates.csv:15",
+          "holdings.csv:36",
+          "rates.csv:13"
+        ],
+        "text": "17.37%"
+      },
+      "limit": {
+        "status": "ok",
+        "amount": "15",
+        "cites": [],
+        "text": "15%"
+      },
+      "declared": {
+        "measure": "drawdown account.broker over 90 days",
+        "limit": "15%",
+        "match": null,
+        "band": null,
+        "period": null
+      },
+      "cites": [
+        "holdings.csv:42",
+        "rates.csv:15",
+        "holdings.csv:36",
+        "rates.csv:13"
+      ],
+      "reason": "drawdown 17.37% on 2025-11-30 crossed 15% (peak 558.975 OMR on 2025-09-30)",
+      "findings": [
+        "KILL"
+      ]
+    },
+    {
+      "id": "WLT-01",
+      "type": "cap",
+      "title": "discretionary spending per month",
+      "verdict": "hold",
+      "period": "2025-11",
+      "scope": "2025-11",
+      "measure": {
+        "status": "ok",
+        "amount": "11.981",
+        "cites": [
+          "ledger.csv:160"
+        ],
+        "text": "11.981 OMR"
+      },
+      "limit": {
+        "status": "ok",
+        "amount": "120",
+        "cites": [
+          "ledger.csv:151"
+        ],
+        "text": "120 OMR (10% of income)"
+      },
+      "declared": {
+        "measure": "sum expense.discretionary per month",
+        "limit": "10% of income",
+        "match": null,
+        "band": null,
+        "period": null
+      },
+      "cites": [
+        "ledger.csv:160",
+        "ledger.csv:151"
+      ],
+      "reason": null,
+      "findings": []
+    },
+    {
+      "id": "WLT-02",
+      "type": "floor",
+      "title": "emergency fund",
+      "verdict": "hold",
+      "period": "2025-11",
+      "scope": "as of 2025-11-30",
+      "measure": {
+        "status": "ok",
+        "amount": "8200",
+        "cites": [
+          "holdings.csv:41"
+        ],
+        "text": "8200 OMR"
+      },
+      "limit": {
+        "status": "ok",
+        "amount": "3576.49215",
+        "cites": [
+          "ledger.csv:29",
+          "ledger.csv:30",
+          "ledger.csv:31",
+          "ledger.csv:32",
+          "ledger.csv:33",
+          "ledger.csv:34",
+          "ledger.csv:35",
+          "ledger.csv:37",
+          "rates.csv:4",
+          "ledger.csv:41",
+          "ledger.csv:42",
+          "ledger.csv:43",
+          "ledger.csv:44",
+          "ledger.csv:45",
+          "ledger.csv:46",
+          "ledger.csv:47",
+          "ledger.csv:48",
+          "ledger.csv:52",
+          "ledger.csv:53",
+          "ledger.csv:54",
+          "ledger.csv:55",
+          "ledger.csv:56",
+          "ledger.csv:57",
+          "ledger.csv:58",
+          "ledger.csv:62",
+          "ledger.csv:63",
+          "ledger.csv:64",
+          "ledger.csv:65",
+          "ledger.csv:66",
+          "ledger.csv:67",
+          "ledger.csv:68",
+          "ledger.csv:70",
+          "rates.csv:7",
+          "ledger.csv:74",
+          "ledger.csv:75",
+          "ledger.csv:76",
+          "ledger.csv:77",
+          "ledger.csv:78",
+          "ledger.csv:79",
+          "ledger.csv:80",
+          "ledger.csv:81",
+          "ledger.csv:85",
+          "ledger.csv:86",
+          "ledger.csv:87",
+          "ledger.csv:88",
+          "ledger.csv:89",
+          "ledger.csv:90",
+          "ledger.csv:91",
+          "ledger.csv:95",
+          "ledger.csv:96",
+          "ledger.csv:97",
+          "ledger.csv:98",
+          "ledger.csv:99",
+          "ledger.csv:100",
+          "ledger.csv:101",
+          "ledger.csv:104",
+          "rates.csv:10",
+          "ledger.csv:108",
+          "ledger.csv:109",
+          "ledger.csv:110",
+          "ledger.csv:111",
+          "ledger.csv:112",
+          "ledger.csv:113",
+          "ledger.csv:114",
+          "ledger.csv:115",
+          "ledger.csv:119",
+          "ledger.csv:120",
+          "ledger.csv:121",
+          "ledger.csv:122",
+          "ledger.csv:123",
+          "ledger.csv:124",
+          "ledger.csv:125",
+          "ledger.csv:126",
+          "ledger.csv:130",
+          "ledger.csv:131",
+          "ledger.csv:132",
+          "ledger.csv:133",
+          "ledger.csv:134",
+          "ledger.csv:135",
+          "ledger.csv:136",
+          "ledger.csv:137",
+          "ledger.csv:140",
+          "rates.csv:13",
+          "ledger.csv:144",
+          "ledger.csv:145",
+          "ledger.csv:146",
+          "ledger.csv:147",
+          "ledger.csv:148",
+          "ledger.csv:149",
+          "ledger.csv:150",
+          "ledger.csv:154",
+          "ledger.csv:155",
+          "ledger.csv:156",
+          "ledger.csv:157",
+          "ledger.csv:158",
+          "ledger.csv:159",
+          "ledger.csv:160"
+        ],
+        "text": "3576.49215 OMR (6 months of expense)"
+      },
+      "declared": {
+        "measure": "holdings class.cash",
+        "limit": "6 months of expense",
+        "match": null,
+        "band": null,
+        "period": null
+      },
+      "cites": [
+        "holdings.csv:41",
+        "ledger.csv:29",
+        "ledger.csv:30",
+        "ledger.csv:31",
+        "ledger.csv:32",
+        "ledger.csv:33",
+        "ledger.csv:34",
+        "ledger.csv:35",
+        "ledger.csv:37",
+        "rates.csv:4",
+        "ledger.csv:41",
+        "ledger.csv:42",
+        "ledger.csv:43",
+        "ledger.csv:44",
+        "ledger.csv:45",
+        "ledger.csv:46",
+        "ledger.csv:47",
+        "ledger.csv:48",
+        "ledger.csv:52",
+        "ledger.csv:53",
+        "ledger.csv:54",
+        "ledger.csv:55",
+        "ledger.csv:56",
+        "ledger.csv:57",
+        "ledger.csv:58",
+        "ledger.csv:62",
+        "ledger.csv:63",
+        "ledger.csv:64",
+        "ledger.csv:65",
+        "ledger.csv:66",
+        "ledger.csv:67",
+        "ledger.csv:68",
+        "ledger.csv:70",
+        "rates.csv:7",
+        "ledger.csv:74",
+        "ledger.csv:75",
+        "ledger.csv:76",
+        "ledger.csv:77",
+        "ledger.csv:78",
+        "ledger.csv:79",
+        "ledger.csv:80",
+        "ledger.csv:81",
+        "ledger.csv:85",
+        "ledger.csv:86",
+        "ledger.csv:87",
+        "ledger.csv:88",
+        "ledger.csv:89",
+        "ledger.csv:90",
+        "ledger.csv:91",
+        "ledger.csv:95",
+        "ledger.csv:96",
+        "ledger.csv:97",
+        "ledger.csv:98",
+        "ledger.csv:99",
+        "ledger.csv:100",
+        "ledger.csv:101",
+        "ledger.csv:104",
+        "rates.csv:10",
+        "ledger.csv:108",
+        "ledger.csv:109",
+        "ledger.csv:110",
+        "ledger.csv:111",
+        "ledger.csv:112",
+        "ledger.csv:113",
+        "ledger.csv:114",
+        "ledger.csv:115",
+        "ledger.csv:119",
+        "ledger.csv:120",
+        "ledger.csv:121",
+        "ledger.csv:122",
+        "ledger.csv:123",
+        "ledger.csv:124",
+        "ledger.csv:125",
+        "ledger.csv:126",
+        "ledger.csv:130",
+        "ledger.csv:131",
+        "ledger.csv:132",
+        "ledger.csv:133",
+        "ledger.csv:134",
+        "ledger.csv:135",
+        "ledger.csv:136",
+        "ledger.csv:137",
+        "ledger.csv:140",
+        "rates.csv:13",
+        "ledger.csv:144",
+        "ledger.csv:145",
+        "ledger.csv:146",
+        "ledger.csv:147",
+        "ledger.csv:148",
+        "ledger.csv:149",
+        "ledger.csv:150",
+        "ledger.csv:154",
+        "ledger.csv:155",
+        "ledger.csv:156",
+        "ledger.csv:157",
+        "ledger.csv:158",
+        "ledger.csv:159",
+        "ledger.csv:160"
+      ],
+      "reason": null,
+      "findings": []
+    },
+    {
+      "id": "WLT-03",
+      "type": "routine",
+      "title": "monthly transfer to savings",
+      "verdict": "hold",
+      "period": "2025-11",
+      "scope": "2025-11",
+      "measure": {
+        "status": "ok",
+        "amount": "1",
+        "cites": [
+          "ledger.csv:153"
+        ],
+        "text": "1 row"
+      },
+      "limit": null,
+      "declared": {
+        "measure": null,
+        "limit": null,
+        "match": "tags transfer, account savings, amount >= 300",
+        "band": null,
+        "period": "month"
+      },
+      "cites": [
+        "ledger.csv:153"
+      ],
+      "reason": null,
+      "findings": []
+    },
+    {
+      "id": "WLT-04",
+      "type": "red_line",
+      "title": "no margin, no options",
+      "verdict": "hold",
+      "period": null,
+      "scope": "ever",
+      "measure": {
+        "status": "ok",
+        "amount": "0",
+        "cites": [],
+        "text": "no row"
+      },
+      "limit": null,
+      "declared": {
+        "measure": null,
+        "limit": null,
+        "match": "any tag of margin,options",
+        "band": null,
+        "period": null
+      },
+      "cites": [],
+      "reason": null,
+      "findings": []
+    },
+    {
+      "id": "WLT-06",
+      "type": "allocation",
+      "title": "equities band",
+      "verdict": "hold",
+      "period": "2025-11",
+      "scope": "as of 2025-11-30",
+      "measure": {
+        "status": "ok",
+        "amount": "5.241560257289023454699791645",
+        "cites": [
+          "holdings.csv:42",
+          "rates.csv:15",
+          "holdings.csv:41",
+          "holdings.csv:43"
+        ],
+        "text": "5.24%"
+      },
+      "limit": {
+        "status": "ok",
+        "amount": "2",
+        "cites": [],
+        "text": "2%..30%"
+      },
+      "declared": {
+        "measure": "share class.equity",
+        "limit": null,
+        "match": null,
+        "band": "2%..30%",
+        "period": null
+      },
+      "cites": [
+        "holdings.csv:42",
+        "rates.csv:15",
+        "holdings.csv:41",
+        "holdings.csv:43"
+      ],
+      "reason": null,
+      "findings": []
+    },
+    {
+      "id": "WLT-07",
+      "type": "cap",
+      "title": "total expense per quarter",
+      "verdict": "hold",
+      "period": "2025-Q4",
+      "scope": "2025-Q4",
+      "measure": {
+        "status": "ok",
+        "amount": "1166.171",
+        "cites": [
+          "ledger.csv:144",
+          "ledger.csv:145",
+          "ledger.csv:146",
+          "ledger.csv:147",
+          "ledger.csv:148",
+          "ledger.csv:149",
+          "ledger.csv:150",
+          "ledger.csv:154",
+          "ledger.csv:155",
+          "ledger.csv:156",
+          "ledger.csv:157",
+          "ledger.csv:158",
+          "ledger.csv:159",
+          "ledger.csv:160"
+        ],
+        "text": "1166.171 OMR"
+      },
+      "limit": {
+        "status": "ok",
+        "amount": "2400",
+        "cites": [],
+        "text": "2400 OMR"
+      },
+      "declared": {
+        "measure": "sum expense per quarter",
+        "limit": "2400 OMR",
+        "match": null,
+        "band": null,
+        "period": null
+      },
+      "cites": [
+        "ledger.csv:144",
+        "ledger.csv:145",
+        "ledger.csv:146",
+        "ledger.csv:147",
+        "ledger.csv:148",
+        "ledger.csv:149",
+        "ledger.csv:150",
+        "ledger.csv:154",
+        "ledger.csv:155",
+        "ledger.csv:156",
+        "ledger.csv:157",
+        "ledger.csv:158",
+        "ledger.csv:159",
+        "ledger.csv:160"
+      ],
+      "reason": null,
+      "findings": []
+    },
+    {
+      "id": "WLT-08",
+      "type": "routine",
+      "title": "rent paid every month",
+      "verdict": "hold",
+      "period": "2025-11",
+      "scope": "2025-11",
+      "measure": {
+        "status": "ok",
+        "amount": "1",
+        "cites": [
+          "ledger.csv:154"
+        ],
+        "text": "1 row"
+      },
+      "limit": null,
+      "declared": {
+        "measure": null,
+        "limit": null,
+        "match": "category housing, amount >= 250",
+        "band": null,
+        "period": "month"
+      },
+      "cites": [
+        "ledger.csv:154"
+      ],
+      "reason": null,
+      "findings": []
+    }
+  ],
+  "findings": [
+    {
+      "code": "KILL",
+      "class": "red",
+      "policy": "WLT-05",
+      "period": null,
+      "date": "2025-11-30",
+      "cites": [
+        "holdings.csv:42",
+        "rates.csv:15",
+        "holdings.csv:36",
+        "rates.csv:13"
+      ],
+      "reason": "drawdown 17.37% on 2025-11-30 crossed 15% (peak 558.975 OMR on 2025-09-30)"
+    }
+  ],
+  "files": {
+    "policies.yml": 8,
+    "ledger.csv": 271,
+    "holdings.csv": 72,
+    "decisions.yml": 4,
+    "rates.csv": 24
+  },
+  "problems": []
+}

@@ -1,0 +1,272 @@
+date,amount,currency,account,category,tags,note
+2024-10-01,1200.000,OMR,salary,salary,,salary 2024-10
+2024-10-03,-300.000,OMR,salary,transfer,transfer,to savings
+2024-10-03,300.000,OMR,savings,transfer,transfer,from salary
+2024-10-05,-300.000,OMR,salary,housing,,rent 2024-10
+2024-10-08,-45.000,OMR,salary,transport,,fuel
+2024-10-10,-100.000,OMR,salary,family,,family support
+2024-10-12,-25.993,OMR,cash,food,,fruit and vegetables
+2024-10-18,-30.987,OMR,cash,food,,groceries
+2024-10-24,-40.876,OMR,cash,food,,fish
+2024-10-15,-27.383,OMR,cash,discretionary,,takeaway
+2024-10-10,-500.000,OMR,salary,transfer,transfer,to broker
+2024-10-10,500.000,OMR,broker,transfer,transfer,from salary
+2024-10-12,-500.000,OMR,broker,buy,pilot,buy 10 units of the ETF
+2024-11-01,1200.000,OMR,salary,salary,,salary 2024-11
+2024-11-03,-300.000,OMR,salary,transfer,transfer,to savings
+2024-11-03,300.000,OMR,savings,transfer,transfer,from salary
+2024-11-05,-300.000,OMR,salary,housing,,rent 2024-11
+2024-11-08,-45.000,OMR,salary,transport,,fuel
+2024-11-10,-100.000,OMR,salary,family,,family support
+2024-11-12,-44.238,OMR,cash,food,,market
+2024-11-18,-40.650,OMR,cash,food,,fish
+2024-11-24,-38.004,OMR,cash,food,,fish
+2024-11-15,-28.463,OMR,cash,discretionary,,cafe
+2024-11-27,-16.071,OMR,cash,discretionary,,books
+2024-12-01,1200.000,OMR,salary,salary,,salary 2024-12
+2024-12-03,-300.000,OMR,salary,transfer,transfer,to savings
+2024-12-03,300.000,OMR,savings,transfer,transfer,from salary
+2024-12-05,-300.000,OMR,salary,housing,,rent 2024-12
+2024-12-08,-45.000,OMR,salary,transport,,fuel
+2024-12-10,-100.000,OMR,salary,family,,family support
+2024-12-12,-50.019,OMR,cash,food,,fish
+2024-12-18,-29.474,OMR,cash,food,,groceries
+2024-12-24,-35.710,OMR,cash,food,,market
+2024-12-15,-36.176,OMR,cash,discretionary,,cafe
+2024-12-15,3.50,USD,broker,dividend,pilot,quarterly dividend
+2024-12-16,-1.00,USD,broker,fees,pilot,custody fee
+2025-01-01,1200.000,OMR,salary,salary,,salary 2025-01
+2025-01-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-01-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-01-05,-300.000,OMR,salary,housing,,rent 2025-01
+2025-01-08,-45.000,OMR,salary,transport,,fuel
+2025-01-10,-100.000,OMR,salary,family,,family support
+2025-01-12,-37.504,OMR,cash,food,,fish
+2025-01-18,-36.223,OMR,cash,food,,fruit and vegetables
+2025-01-24,-54.485,OMR,cash,food,,fruit and vegetables
+2025-01-15,-35.152,OMR,cash,discretionary,,books
+2025-01-27,-20.571,OMR,cash,discretionary,,cinema
+2025-02-01,1200.000,OMR,salary,salary,,salary 2025-02
+2025-02-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-02-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-02-05,-300.000,OMR,salary,housing,,rent 2025-02
+2025-02-08,-45.000,OMR,salary,transport,,fuel
+2025-02-10,-100.000,OMR,salary,family,,family support
+2025-02-12,-39.063,OMR,cash,food,,bakery
+2025-02-18,-36.992,OMR,cash,food,,groceries
+2025-02-24,-29.538,OMR,cash,food,,fish
+2025-02-15,-15.694,OMR,cash,discretionary,,takeaway
+2025-03-01,1200.000,OMR,salary,salary,,salary 2025-03
+2025-03-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-03-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-03-05,-300.000,OMR,salary,housing,,rent 2025-03
+2025-03-08,-45.000,OMR,salary,transport,,fuel
+2025-03-10,-100.000,OMR,salary,family,,family support
+2025-03-12,-37.373,OMR,cash,food,,groceries
+2025-03-18,-34.458,OMR,cash,food,,bakery
+2025-03-24,-35.053,OMR,cash,food,,market
+2025-03-15,-19.985,OMR,cash,discretionary,,gift
+2025-03-15,3.50,USD,broker,dividend,pilot,quarterly dividend
+2025-03-16,-1.00,USD,broker,fees,pilot,custody fee
+2025-04-01,1200.000,OMR,salary,salary,,salary 2025-04
+2025-04-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-04-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-04-05,-300.000,OMR,salary,housing,,rent 2025-04
+2025-04-08,-45.000,OMR,salary,transport,,fuel
+2025-04-10,-100.000,OMR,salary,family,,family support
+2025-04-12,-30.020,OMR,cash,food,,fruit and vegetables
+2025-04-18,-25.182,OMR,cash,food,,bakery
+2025-04-24,-41.110,OMR,cash,food,,fruit and vegetables
+2025-04-15,-39.734,OMR,cash,discretionary,,cinema
+2025-04-27,-35.161,OMR,cash,discretionary,,cafe
+2025-05-01,1200.000,OMR,salary,salary,,salary 2025-05
+2025-05-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-05-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-05-05,-300.000,OMR,salary,housing,,rent 2025-05
+2025-05-08,-45.000,OMR,salary,transport,,fuel
+2025-05-10,-100.000,OMR,salary,family,,family support
+2025-05-12,-28.063,OMR,cash,food,,fruit and vegetables
+2025-05-18,-52.701,OMR,cash,food,,market
+2025-05-24,-26.897,OMR,cash,food,,market
+2025-05-15,-30.317,OMR,cash,discretionary,,gift
+2025-06-01,1200.000,OMR,salary,salary,,salary 2025-06
+2025-06-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-06-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-06-05,-300.000,OMR,salary,housing,,rent 2025-06
+2025-06-08,-45.000,OMR,salary,transport,,fuel
+2025-06-10,-100.000,OMR,salary,family,,family support
+2025-06-12,-37.330,OMR,cash,food,,groceries
+2025-06-18,-53.273,OMR,cash,food,,fish
+2025-06-24,-27.464,OMR,cash,food,,market
+2025-06-15,-24.818,OMR,cash,discretionary,,gift
+2025-06-20,149.008,OMR,salary,side,,freelance work
+2025-06-15,3.50,USD,broker,dividend,pilot,quarterly dividend
+2025-06-16,-1.00,USD,broker,fees,pilot,custody fee
+2025-07-01,1200.000,OMR,salary,salary,,salary 2025-07
+2025-07-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-07-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-07-05,-300.000,OMR,salary,housing,,rent 2025-07
+2025-07-08,-45.000,OMR,salary,transport,,fuel
+2025-07-10,-100.000,OMR,salary,family,,family support
+2025-07-12,-34.713,OMR,cash,food,,fish
+2025-07-18,-42.493,OMR,cash,food,,groceries
+2025-07-24,-53.804,OMR,cash,food,,groceries
+2025-07-15,-30.507,OMR,cash,discretionary,,cafe
+2025-07-27,-10.330,OMR,cash,discretionary,,takeaway
+2025-08-01,1200.000,OMR,salary,salary,,salary 2025-08
+2025-08-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-08-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-08-05,-300.000,OMR,salary,housing,,rent 2025-08
+2025-08-08,-45.000,OMR,salary,transport,,fuel
+2025-08-10,-100.000,OMR,salary,family,,family support
+2025-08-12,-54.700,OMR,cash,food,,fruit and vegetables
+2025-08-18,-40.078,OMR,cash,food,,bakery
+2025-08-24,-32.587,OMR,cash,food,,fish
+2025-08-15,-21.441,OMR,cash,discretionary,,gift
+2025-08-27,-22.985,OMR,cash,discretionary,,cafe
+2025-09-01,1200.000,OMR,salary,salary,,salary 2025-09
+2025-09-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-09-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-09-05,-300.000,OMR,salary,housing,,rent 2025-09
+2025-09-08,-45.000,OMR,salary,transport,,fuel
+2025-09-10,-100.000,OMR,salary,family,,family support
+2025-09-12,-37.095,OMR,cash,food,,fruit and vegetables
+2025-09-18,-44.416,OMR,cash,food,,bakery
+2025-09-24,-46.755,OMR,cash,food,,groceries
+2025-09-15,-10.463,OMR,cash,discretionary,,takeaway
+2025-09-27,-17.366,OMR,cash,discretionary,,books
+2025-09-20,122.949,OMR,salary,side,,freelance work
+2025-09-15,3.50,USD,broker,dividend,pilot,quarterly dividend
+2025-09-16,-1.00,USD,broker,fees,pilot,custody fee
+2025-10-01,1200.000,OMR,salary,salary,,salary 2025-10
+2025-10-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-10-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-10-05,-300.000,OMR,salary,housing,,rent 2025-10
+2025-10-08,-45.000,OMR,salary,transport,,fuel
+2025-10-10,-100.000,OMR,salary,family,,family support
+2025-10-12,-39.801,OMR,cash,food,,bakery
+2025-10-18,-25.622,OMR,cash,food,,fish
+2025-10-24,-26.607,OMR,cash,food,,groceries
+2025-10-15,-35.029,OMR,cash,discretionary,,takeaway
+2025-11-01,1200.000,OMR,salary,salary,,salary 2025-11
+2025-11-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-11-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-11-05,-300.000,OMR,salary,housing,,rent 2025-11
+2025-11-08,-45.000,OMR,salary,transport,,fuel
+2025-11-10,-100.000,OMR,salary,family,,family support
+2025-11-12,-49.282,OMR,cash,food,,fruit and vegetables
+2025-11-18,-38.139,OMR,cash,food,,groceries
+2025-11-24,-49.710,OMR,cash,food,,market
+2025-11-15,-11.981,OMR,cash,discretionary,,gift
+2025-12-01,1200.000,OMR,salary,salary,,salary 2025-12
+2025-12-03,-300.000,OMR,salary,transfer,transfer,to savings
+2025-12-03,300.000,OMR,savings,transfer,transfer,from salary
+2025-12-05,-300.000,OMR,salary,housing,,rent 2025-12
+2025-12-08,-45.000,OMR,salary,transport,,fuel
+2025-12-10,-100.000,OMR,salary,family,,family support
+2025-12-12,-43.866,OMR,cash,food,,market
+2025-12-18,-40.596,OMR,cash,food,,fish
+2025-12-24,-28.549,OMR,cash,food,,bakery
+2025-12-15,-37.691,OMR,cash,discretionary,,takeaway
+2025-12-27,-25.045,OMR,cash,discretionary,,takeaway
+2025-12-15,3.50,USD,broker,dividend,pilot,quarterly dividend
+2025-12-16,-1.00,USD,broker,fees,pilot,custody fee
+2026-01-01,1200.000,OMR,salary,salary,,salary 2026-01
+2026-01-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-01-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-01-05,-300.000,OMR,salary,housing,,rent 2026-01
+2026-01-08,-45.000,OMR,salary,transport,,fuel
+2026-01-10,-100.000,OMR,salary,family,,family support
+2026-01-12,-40.872,OMR,cash,food,,fish
+2026-01-18,-53.268,OMR,cash,food,,fruit and vegetables
+2026-01-24,-40.422,OMR,cash,food,,fish
+2026-01-15,-14.176,OMR,cash,discretionary,,takeaway
+2026-01-27,-27.794,OMR,cash,discretionary,,gift
+2026-02-01,1200.000,OMR,salary,salary,,salary 2026-02
+2026-02-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-02-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-02-05,-300.000,OMR,salary,housing,,rent 2026-02
+2026-02-08,-45.000,OMR,salary,transport,,fuel
+2026-02-10,-100.000,OMR,salary,family,,family support
+2026-02-12,-41.830,OMR,cash,food,,bakery
+2026-02-18,-46.067,OMR,cash,food,,groceries
+2026-02-24,-25.692,OMR,cash,food,,fish
+2026-02-15,-35.337,OMR,cash,discretionary,,takeaway
+2026-02-27,-19.449,OMR,cash,discretionary,,cinema
+2026-03-01,1200.000,OMR,salary,salary,,salary 2026-03
+2026-03-05,-300.000,OMR,salary,housing,,rent 2026-03
+2026-03-08,-45.000,OMR,salary,transport,,fuel
+2026-03-10,-100.000,OMR,salary,family,,family support
+2026-03-12,-42.205,OMR,cash,food,,fruit and vegetables
+2026-03-18,-43.651,OMR,cash,food,,fruit and vegetables
+2026-03-24,-48.837,OMR,cash,food,,fruit and vegetables
+2026-03-15,-22.145,OMR,cash,discretionary,,cafe
+2026-03-15,3.50,USD,broker,dividend,pilot,quarterly dividend
+2026-03-16,-1.00,USD,broker,fees,pilot,custody fee
+2026-04-01,1200.000,OMR,salary,salary,,salary 2026-04
+2026-04-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-04-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-04-05,-300.000,OMR,salary,housing,,rent 2026-04
+2026-04-08,-45.000,OMR,salary,transport,,fuel
+2026-04-10,-100.000,OMR,salary,family,,family support
+2026-04-12,-35.040,OMR,cash,food,,fish
+2026-04-18,-28.686,OMR,cash,food,,groceries
+2026-04-24,-41.829,OMR,cash,food,,fruit and vegetables
+2026-04-15,-23.840,OMR,cash,discretionary,,cinema
+2026-04-27,-18.606,OMR,cash,discretionary,,cafe
+2026-05-01,1200.000,OMR,salary,salary,,salary 2026-05
+2026-05-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-05-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-05-05,-300.000,OMR,salary,housing,,rent 2026-05
+2026-05-08,-45.000,OMR,salary,transport,,fuel
+2026-05-10,-100.000,OMR,salary,family,,family support
+2026-05-12,-42.634,OMR,cash,food,,fish
+2026-05-18,-42.744,OMR,cash,food,,fruit and vegetables
+2026-05-24,-49.425,OMR,cash,food,,fruit and vegetables
+2026-05-15,-22.865,OMR,cash,discretionary,,gift
+2026-06-01,1200.000,OMR,salary,salary,,salary 2026-06
+2026-06-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-06-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-06-05,-300.000,OMR,salary,housing,,rent 2026-06
+2026-06-08,-45.000,OMR,salary,transport,,fuel
+2026-06-10,-100.000,OMR,salary,family,,family support
+2026-06-12,-30.700,OMR,cash,food,,fruit and vegetables
+2026-06-18,-32.438,OMR,cash,food,,groceries
+2026-06-24,-53.474,OMR,cash,food,,bakery
+2026-06-15,-18.164,OMR,cash,discretionary,,takeaway
+2026-06-15,3.50,USD,broker,dividend,pilot,quarterly dividend
+2026-06-16,-1.00,USD,broker,fees,pilot,custody fee
+2026-07-01,1200.000,OMR,salary,salary,,salary 2026-07
+2026-07-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-07-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-07-05,-300.000,OMR,salary,housing,,rent 2026-07
+2026-07-08,-45.000,OMR,salary,transport,,fuel
+2026-07-10,-100.000,OMR,salary,family,,family support
+2026-07-12,-43.431,OMR,cash,food,,market
+2026-07-18,-50.797,OMR,cash,food,,market
+2026-07-24,-52.498,OMR,cash,food,,fruit and vegetables
+2026-07-15,-33.492,OMR,cash,discretionary,,cinema
+2026-07-20,-125.000,OMR,cash,discretionary,,new phone
+2026-08-01,1200.000,OMR,salary,salary,,salary 2026-08
+2026-08-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-08-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-08-05,-300.000,OMR,salary,housing,,rent 2026-08
+2026-08-08,-45.000,OMR,salary,transport,,fuel
+2026-08-10,-100.000,OMR,salary,family,,family support
+2026-08-12,-38.294,OMR,cash,food,,fruit and vegetables
+2026-08-18,-38.119,OMR,cash,food,,market
+2026-08-24,-39.333,OMR,cash,food,,bakery
+2026-08-15,-39.410,OMR,cash,discretionary,,takeaway
+2026-08-27,-21.524,OMR,cash,discretionary,,takeaway
+2026-09-01,1200.000,OMR,salary,salary,,salary 2026-09
+2026-09-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-09-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-09-05,-300.000,OMR,salary,housing,,rent 2026-09
+2026-09-08,-45.000,OMR,salary,transport,,fuel
+2026-09-10,-100.000,OMR,salary,family,,family support
+2026-09-12,-34.592,OMR,cash,food,,fish
+2026-09-18,-37.673,OMR,cash,food,,fruit and vegetables
+2026-09-24,-40.151,OMR,cash,food,,groceries
+2026-09-15,-17.507,OMR,cash,discretionary,,gift
+2026-09-15,3.50,USD,broker,dividend,pilot,quarterly dividend
+2026-09-16,-1.00,USD,broker,fees,pilot,custody fee

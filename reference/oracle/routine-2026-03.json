@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "command": "routine",
+  "period": "2026-03",
+  "as_of": "2026-10-17",
+  "all_done": false,
+  "routines": [
+    {
+      "id": "WLT-03",
+      "title": "monthly transfer to savings",
+      "period": "2026-03",
+      "status": "missing",
+      "match": "tags transfer, account savings, amount >= 300",
+      "cites": [],
+      "reason": "no row matching tags transfer, account savings, amount >= 300 in 2026-03"
+    },
+    {
+      "id": "WLT-08",
+      "title": "rent paid every month",
+      "period": "2026-03",
+      "status": "done",
+      "match": "category housing, amount >= 250",
+      "cites": [
+        "ledger.csv:197"
+      ],
+      "reason": null
+    }
+  ],
+  "findings": [],
+  "files": {
+    "policies.yml": 8,
+    "ledger.csv": 271,
+    "holdings.csv": 72,
+    "decisions.yml": 4,
+    "rates.csv": 24
+  },
+  "problems": []
+}

@@ -1,0 +1,408 @@
+{
+  "version": 1,
+  "command": "check",
+  "as_of": "2026-12-31",
+  "green": false,
+  "base_currency": "OMR",
+  "policies": [
+    {
+      "id": "WLT-01",
+      "type": "cap",
+      "title": "discretionary spending per month",
+      "verdict": "missing",
+      "period": "2026-12",
+      "scope": "2026-12",
+      "measure": null,
+      "limit": null,
+      "declared": {
+        "measure": "sum expense.discretionary per month",
+        "limit": "10% of income",
+        "match": null,
+        "band": null,
+        "period": null
+      },
+      "cites": [],
+      "reason": "no ledger rows in 2026-12",
+      "findings": [
+        "EMPTY-PERIOD"
+      ]
+    },
+    {
+      "id": "WLT-02",
+      "type": "floor",
+      "title": "emergency fund",
+      "verdict": "stale",
+      "period": "2026-12",
+      "scope": "as of 2026-12-31",
+      "measure": {
+        "status": "stale",
+        "amount": "10900",
+        "age_days": 92,
+        "date": "2026-09-30",
+        "cites": [
+          "holdings.csv:71"
+        ],
+        "text": "stale 10900 OMR as of 2026-09-30 (92 days)"
+      },
+      "limit": {
+        "status": "ok",
+        "amount": "3706.778066666666666666666666",
+        "cites": [
+          "ledger.csv:177",
+          "ledger.csv:178",
+          "ledger.csv:179",
+          "ledger.csv:180",
+          "ledger.csv:181",
+          "ledger.csv:182",
+          "ledger.csv:183",
+          "ledger.csv:184",
+          "ledger.csv:188",
+          "ledger.csv:189",
+          "ledger.csv:190",
+          "ledger.csv:191",
+          "ledger.csv:192",
+          "ledger.csv:193",
+          "ledger.csv:194",
+          "ledger.csv:195",
+          "ledger.csv:197",
+          "ledger.csv:198",
+          "ledger.csv:199",
+          "ledger.csv:200",
+          "ledger.csv:201",
+          "ledger.csv:202",
+          "ledger.csv:203",
+          "ledger.csv:205",
+          "rates.csv:19",
+          "ledger.csv:209",
+          "ledger.csv:210",
+          "ledger.csv:211",
+          "ledger.csv:212",
+          "ledger.csv:213",
+          "ledger.csv:214",
+          "ledger.csv:215",
+          "ledger.csv:216",
+          "ledger.csv:220",
+          "ledger.csv:221",
+          "ledger.csv:222",
+          "ledger.csv:223",
+          "ledger.csv:224",
+          "ledger.csv:225",
+          "ledger.csv:226",
+          "ledger.csv:230",
+          "ledger.csv:231",
+          "ledger.csv:232",
+          "ledger.csv:233",
+          "ledger.csv:234",
+          "ledger.csv:235",
+          "ledger.csv:236",
+          "ledger.csv:238",
+          "rates.csv:22",
+          "ledger.csv:242",
+          "ledger.csv:243",
+          "ledger.csv:244",
+          "ledger.csv:245",
+          "ledger.csv:246",
+          "ledger.csv:247",
+          "ledger.csv:248",
+          "ledger.csv:249",
+          "ledger.csv:253",
+          "ledger.csv:254",
+          "ledger.csv:255",
+          "ledger.csv:256",
+          "ledger.csv:257",
+          "ledger.csv:258",
+          "ledger.csv:259",
+          "ledger.csv:260",
+          "ledger.csv:264",
+          "ledger.csv:265",
+          "ledger.csv:266",
+          "ledger.csv:267",
+          "ledger.csv:268",
+          "ledger.csv:269",
+          "ledger.csv:270",
+          "ledger.csv:272",
+          "rates.csv:25"
+        ],
+        "text": "3706.778066666666666666666666 OMR (6 months of expense)"
+      },
+      "declared": {
+        "measure": "holdings class.cash",
+        "limit": "6 months of expense",
+        "match": null,
+        "band": null,
+        "period": null
+      },
+      "cites": [
+        "holdings.csv:71"
+      ],
+      "reason": "holdings snapshot 2026-09-30 is 92 days old; 45 allowed",
+      "findings": [
+        "STALE-SNAPSHOT"
+      ]
+    },
+    {
+      "id": "WLT-03",
+      "type": "routine",
+      "title": "monthly transfer to savings",
+      "verdict": "missing",
+      "period": "2026-12",
+      "scope": "2026-12",
+      "measure": null,
+      "limit": null,
+      "declared": {
+        "measure": null,
+        "limit": null,
+        "match": "tags transfer, account savings, amount >= 300",
+        "band": null,
+        "period": "month"
+      },
+      "cites": [],
+      "reason": "no ledger rows in 2026-12",
+      "findings": [
+        "EMPTY-PERIOD"
+      ]
+    },
+    {
+      "id": "WLT-05",
+      "type": "kill",
+      "title": "broker pilot drawdown",
+      "verdict": "stale",
+      "period": "2026-12",
+      "scope": "as of 2026-12-31",
+      "measure": {
+        "status": "stale",
+        "amount": "0",
+        "age_days": 92,
+        "date": "2026-09-30",
+        "cites": [
+          "holdings.csv:72",
+          "rates.csv:25"
+        ],
+        "text": "stale 0% as of 2026-09-30 (92 days)"
+      },
+      "limit": {
+        "status": "ok",
+        "amount": "15",
+        "cites": [],
+        "text": "15%"
+      },
+      "declared": {
+        "measure": "drawdown account.broker over 90 days",
+        "limit": "15%",
+        "match": null,
+        "band": null,
+        "period": null
+      },
+      "cites": [
+        "holdings.csv:72",
+        "rates.csv:25"
+      ],
+      "reason": "holdings snapshot 2026-09-30 is 92 days old; 45 allowed; kill of 2025-11-30 closed by D-2025-12-05 (2025-12-05)",
+      "findings": [
+        "STALE-SNAPSHOT"
+      ]
+    },
+    {
+      "id": "WLT-06",
+      "type": "allocation",
+      "title": "equities band",
+      "verdict": "stale",
+      "period": "2026-12",
+      "scope": "as of 2026-12-31",
+      "measure": {
+        "status": "stale",
+        "amount": "4.750592227200093232361490552",
+        "age_days": 92,
+        "date": "2026-09-30",
+        "cites": [
+          "holdings.csv:72",
+          "rates.csv:25",
+          "holdings.csv:71",
+          "holdings.csv:73"
+        ],
+        "text": "stale 4.75% as of 2026-09-30 (92 days)"
+      },
+      "limit": null,
+      "declared": {
+        "measure": "share class.equity",
+        "limit": null,
+        "match": null,
+        "band": "2%..30%",
+        "period": null
+      },
+      "cites": [
+        "holdings.csv:72",
+        "rates.csv:25",
+        "holdings.csv:71",
+        "holdings.csv:73"
+      ],
+      "reason": "holdings snapshot 2026-09-30 is 92 days old; 45 allowed",
+      "findings": [
+        "STALE-SNAPSHOT"
+      ]
+    },
+    {
+      "id": "WLT-07",
+      "type": "cap",
+      "title": "total expense per quarter",
+      "verdict": "missing",
+      "period": "2026-Q4",
+      "scope": "2026-Q4",
+      "measure": null,
+      "limit": null,
+      "declared": {
+        "measure": "sum expense per quarter",
+        "limit": "2400 OMR",
+        "match": null,
+        "band": null,
+        "period": null
+      },
+      "cites": [],
+      "reason": "no ledger rows in 2026-Q4",
+      "findings": [
+        "EMPTY-PERIOD"
+      ]
+    },
+    {
+      "id": "WLT-08",
+      "type": "routine",
+      "title": "rent paid every month",
+      "verdict": "missing",
+      "period": "2026-12",
+      "scope": "2026-12",
+      "measure": null,
+      "limit": null,
+      "declared": {
+        "measure": null,
+        "limit": null,
+        "match": "category housing, amount >= 250",
+        "band": null,
+        "period": "month"
+      },
+      "cites": [],
+      "reason": "no ledger rows in 2026-12",
+      "findings": [
+        "EMPTY-PERIOD"
+      ]
+    },
+    {
+      "id": "WLT-04",
+      "type": "red_line",
+      "title": "no margin, no options",
+      "verdict": "hold",
+      "period": null,
+      "scope": "ever",
+      "measure": {
+        "status": "ok",
+        "amount": "0",
+        "cites": [],
+        "text": "no row"
+      },
+      "limit": null,
+      "declared": {
+        "measure": null,
+        "limit": null,
+        "match": "any tag of margin,options",
+        "band": null,
+        "period": null
+      },
+      "cites": [],
+      "reason": null,
+      "findings": []
+    }
+  ],
+  "findings": [
+    {
+      "code": "EMPTY-PERIOD",
+      "class": "red",
+      "policy": "WLT-01",
+      "period": "2026-12",
+      "date": null,
+      "cites": [],
+      "reason": "no ledger rows in 2026-12"
+    },
+    {
+      "code": "STALE-SNAPSHOT",
+      "class": "red",
+      "policy": "WLT-02",
+      "period": null,
+      "date": "2026-09-30",
+      "cites": [
+        "holdings.csv:71"
+      ],
+      "reason": "holdings snapshot 2026-09-30 is 92 days old; 45 allowed"
+    },
+    {
+      "code": "EMPTY-PERIOD",
+      "class": "red",
+      "policy": "WLT-03",
+      "period": "2026-12",
+      "date": null,
+      "cites": [],
+      "reason": "no ledger rows in 2026-12"
+    },
+    {
+      "code": "STALE-SNAPSHOT",
+      "class": "red",
+      "policy": "WLT-05",
+      "period": null,
+      "date": "2026-09-30",
+      "cites": [
+        "holdings.csv:72",
+        "rates.csv:25"
+      ],
+      "reason": "holdings snapshot 2026-09-30 is 92 days old; 45 allowed"
+    },
+    {
+      "code": "STALE-SNAPSHOT",
+      "class": "red",
+      "policy": "WLT-06",
+      "period": null,
+      "date": "2026-09-30",
+      "cites": [
+        "holdings.csv:72",
+        "rates.csv:25",
+        "holdings.csv:71",
+        "holdings.csv:73"
+      ],
+      "reason": "holdings snapshot 2026-09-30 is 92 days old; 45 allowed"
+    },
+    {
+      "code": "EMPTY-PERIOD",
+      "class": "red",
+      "policy": "WLT-07",
+      "period": "2026-Q4",
+      "date": null,
+      "cites": [],
+      "reason": "no ledger rows in 2026-Q4"
+    },
+    {
+      "code": "EMPTY-PERIOD",
+      "class": "red",
+      "policy": "WLT-08",
+      "period": "2026-12",
+      "date": null,
+      "cites": [],
+      "reason": "no ledger rows in 2026-12"
+    },
+    {
+      "code": "DECISION-DUE",
+      "class": "red",
+      "policy": null,
+      "period": null,
+      "date": "2026-09-15",
+      "cites": [
+        "decisions.yml:26"
+      ],
+      "reason": "decision D-2026-06-01 is open and its review date 2026-09-15 is 107 days past"
+    }
+  ],
+  "files": {
+    "policies.yml": 8,
+    "ledger.csv": 271,
+    "holdings.csv": 72,
+    "decisions.yml": 4,
+    "rates.csv": 24
+  },
+  "problems": []
+}
