@@ -1,0 +1,38 @@
+- id: D-due
+  date: 2026-06-01
+  title: review the food cap
+  policy: CAP-HOLD
+  criteria: keep if food stays under 100
+  review_by: 2026-09-15
+  status: open
+- id: D-open
+  date: 2026-07-01
+  title: keep the broker pilot
+  policy: K1
+  criteria: stop if drawdown > 5% in any 90 days
+  review_by: 2027-01-01
+  status: open
+- id: D-today
+  date: 2026-08-01
+  title: review on the as-of day itself
+  review_by: 2026-09-30
+  status: open
+- id: D-close
+  date: 2026-09-05
+  title: end the broker pilot after the August drawdown
+  policy: K1
+  criteria: drawdown over 5% in 90 days
+  review_by: 2026-12-01
+  status: closed
+  closes: K1
+- id: D-bad-closes
+  date: 2026-09-06
+  title: a cap cannot be closed
+  review_by: 2026-12-01
+  status: closed
+  closes: CAP-HOLD
+- id: D-done
+  date: 2026-05-01
+  title: an old closed decision without a policy
+  review_by: 2026-06-01
+  status: closed

@@ -1,24 +1,28 @@
 """Command line (ADR-0001 section 8).
 
     python3 -m qayd check     [--dir DIR] [--as-of DATE] [--json]
-    python3 -m qayd routine   [--dir DIR] [--period 2026-10] [--json]   (M1.2)
-    python3 -m qayd decisions [--dir DIR] [--as-of DATE] [--json]       (M1.2)
+    python3 -m qayd routine   [--dir DIR] [--period 2026-10] [--as-of DATE] [--json]
+    python3 -m qayd decisions [--dir DIR] [--as-of DATE] [--json]
     python3 -m qayd review    [--dir DIR] --period P -o FILE.html       (M2.1)
     python3 -m qayd init      [--dir DIR]                               (M1.3)
 
-Exit codes: 0 green, 1 red, 2 usage, 3 a file could not be read or parsed
-(also red). ``main(argv, stdout, stderr)`` never raises; tests call it
-directly. Arguments are parsed by hand so that every message goes to the
-streams given, deterministically, with no dependency on argparse's exit.
+Exit codes: 0 green (check: every policy holds; routine: every routine
+done; decisions: none due), 1 red, 2 usage, 3 a file could not be read or
+parsed (also red). ``--as-of`` defaults to today; ``routine --period``
+defaults to the month of as-of, and as-of cuts the period so that nothing
+after it is seen. ``main(argv, stdout, stderr)`` never raises; tests call
+it directly. Arguments are parsed by hand so that every message goes to
+the streams given, deterministically, with no dependency on argparse.
 """
 
 import datetime
+import json
 import os
 import sys
 from typing import NamedTuple, Optional
 
 from . import decisions as decisions_mod
-from . import ledger, measures, policies, rates, report, rules
+from . import ledger, measures, periods, policies, rates, report, rules
 
 COMMANDS = ("check", "routine", "decisions", "review", "init")
 USAGE = (
@@ -130,7 +134,8 @@ def load_household(dir_, as_of):
     files["holdings.csv"] = len(hol.rows)
     fatal.extend(p for p in hol.problems if _is_file_level(p))
 
-    dec = decisions_mod.load(paths["decisions.yml"], cfg.policy_ids)
+    kill_ids = tuple(p.id for p in cfg.policies if p.type == "kill")
+    dec = decisions_mod.load(paths["decisions.yml"], cfg.policy_ids, kill_ids)
     problems["decisions.yml"] = list(dec.problems)
     files["decisions.yml"] = len(dec.decisions)
     fatal.extend(p for p in dec.problems if _is_file_level(p))
@@ -162,24 +167,76 @@ def _write_fatal(household, err):
 # ------------------------------------------------------------------ commands
 
 
+def loose_findings(household):
+    """Findings from decisions.yml and rates.csv problems (ledger and
+    holdings problems come with rules.check)."""
+    return (rules.problem_findings(household.problems.get("decisions.yml"))
+            + rules.problem_findings(household.problems.get("rates.csv")))
+
+
 def build_check(household, as_of):
     verdicts, findings = rules.check(household.ctx, as_of)
-    findings = findings + rules.problem_findings(household.problems.get("decisions.yml"))
-    findings = findings + rules.problem_findings(household.problems.get("rates.csv"))
+    findings = findings + rules.decision_findings(household.decisions, as_of) + loose_findings(household)
     green = rules.is_green(verdicts, findings)
     return report.Report("check", as_of, household.config, verdicts, findings,
                          household.files, all_problems(household), green)
 
 
-def cmd_check(opts, out, err):
-    as_of = opts.as_of or datetime.date.today()
+def _household(opts, as_of, err):
     household = load_household(opts.dir, as_of)
     if household.fatal:
         _write_fatal(household, err)
+        return None
+    return household
+
+
+def cmd_check(opts, out, err):
+    as_of = opts.as_of or datetime.date.today()
+    household = _household(opts, as_of, err)
+    if household is None:
         return EXIT_FILE
     rep = build_check(household, as_of)
     out.write(report.render_json(rep) if opts.json else report.render_text(rep))
     return EXIT_GREEN if rep.green else EXIT_RED
+
+
+def cmd_routine(opts, out, err):
+    as_of = opts.as_of or datetime.date.today()
+    if opts.period is None:
+        period = periods.period_of(as_of, "month")
+    else:
+        period = periods.parse(opts.period)
+        if period is None:
+            err.write("qayd: --period must be 2026-10, 2026-Q3 or 2026, got %r\n%s" % (opts.period, USAGE))
+            return EXIT_USAGE
+    household = _household(opts, as_of, err)
+    if household is None:
+        return EXIT_FILE
+    items = rules.routine(household.ctx, period, as_of)
+    findings = (rules.problem_findings(household.ctx.ledger_problems)
+                + rules.problem_findings(household.ctx.holdings_problems) + loose_findings(household))
+    if opts.json:
+        doc = report.routine_to_dict(items, period, as_of, findings, household.files, all_problems(household))
+        out.write(json.dumps(doc, indent=2, default=str) + "\n")
+    else:
+        out.write(report.render_routine_text(items, period, as_of, findings))
+    return EXIT_GREEN if all(i.done for i in items) else EXIT_RED
+
+
+def cmd_decisions(opts, out, err):
+    as_of = opts.as_of or datetime.date.today()
+    household = _household(opts, as_of, err)
+    if household is None:
+        return EXIT_FILE
+    findings = rules.decision_findings(household.decisions, as_of) + loose_findings(household)
+    if opts.json:
+        doc = report.decisions_to_dict(household.decisions, as_of, findings, household.files,
+                                       all_problems(household))
+        out.write(json.dumps(doc, indent=2, default=str) + "\n")
+    else:
+        out.write(report.render_decisions_text(household.decisions, as_of, findings))
+    due = any(d.is_due(as_of) for d in household.decisions)
+    return EXIT_RED if due else EXIT_GREEN
 
 
 def main(argv=None, stdout=None, stderr=None):
@@ -196,6 +253,10 @@ def main(argv=None, stdout=None, stderr=None):
             return EXIT_GREEN if opts.help else EXIT_USAGE
         if opts.command == "check":
             return cmd_check(opts, out, err)
+        if opts.command == "routine":
+            return cmd_routine(opts, out, err)
+        if opts.command == "decisions":
+            return cmd_decisions(opts, out, err)
         err.write("qayd: command %r is not available yet\n%s" % (opts.command, USAGE))
         return EXIT_USAGE
     except Exception as exc:  # the contract is "never raises"

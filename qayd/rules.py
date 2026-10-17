@@ -314,6 +314,69 @@ def check(ctx, as_of):
     return verdicts, tuple(findings)
 
 
+def decision_findings(decisions, as_of):
+    """DECISION-DUE for every open decision whose review_by < as_of (ADR 7)."""
+    out = []
+    for d in decisions or ():
+        if d.is_due(as_of):
+            days = -d.days_until_review(as_of)
+            reason = "decision %s is open and its review date %s is %d day%s past" % (
+                d.id, d.review_by.isoformat(), days, "" if days == 1 else "s")
+            out.append(Finding("DECISION-DUE", "red", d.policy, None, d.review_by.isoformat(),
+                               (d.cite,), reason))
+    return tuple(out)
+
+
+class RoutineItem(NamedTuple):
+    """One routine policy in one period: done | missing | unknown | invalid."""
+    policy: object
+    period: object
+    status: str
+    verdict: object            # the Verdict behind it
+
+    @property
+    def id(self):
+        return self.policy.id
+
+    @property
+    def done(self):
+        return self.status == "done"
+
+
+def routine_periods(policy, period):
+    """The periods of the policy's kind to look at for a requested period:
+    the sub-periods inside it when the policy's kind is finer (a monthly
+    routine over a quarter: three months), else the one period of the
+    policy's kind that contains the requested period's end."""
+    inside = periods.periods_between(period.start, period.end, policy.period)
+    if inside and inside[0].start >= period.start and inside[-1].end <= period.end:
+        return inside
+    return (periods.period_of(period.end, policy.period),)
+
+
+def routine(ctx, period, as_of):
+    """Every routine policy over the requested period, cut at as_of."""
+    items = []
+    for policy in ctx.config.policies:
+        if policy.type != "routine":
+            continue
+        if policy.status != "ok":
+            v = verdict(policy, ctx, as_of)
+            items.append(RoutineItem(policy, None, "unknown", v))
+            continue
+        for sub in routine_periods(policy, period):
+            cut = sub.end if as_of is None or as_of >= sub.end else as_of
+            if cut < sub.start:
+                v = _empty_period(policy, sub)
+                v = v._replace(reason="period %s starts after %s" % (sub.label, as_of.isoformat()))
+                items.append(RoutineItem(policy, sub, "missing", v))
+                continue
+            v = verdict(policy, ctx, cut)
+            status = {"hold": "done", "missing": "missing"}.get(v.verdict, v.verdict)
+            items.append(RoutineItem(policy, sub, status, v))
+    return tuple(items)
+
+
 def problem_findings(problems):
     """Loader problems as findings: invalid rows red, DUP-ROW warn."""
     out = []

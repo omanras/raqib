@@ -37,6 +37,14 @@ class Decision(NamedTuple):
     def is_open(self):
         return self.status == "open"
 
+    def days_until_review(self, as_of):
+        """Days from as_of to review_by; negative when overdue."""
+        return (self.review_by - as_of).days
+
+    def is_due(self, as_of):
+        """DECISION-DUE: open and review_by strictly before as_of (ADR 7)."""
+        return self.is_open and self.review_by < as_of
+
 
 class Loaded(NamedTuple):
     decisions: tuple
@@ -51,7 +59,7 @@ def _text(value, default=""):
     return None
 
 
-def _validate(raw, index, policy_ids, file, default_line, problems):
+def _validate(raw, index, policy_ids, file, default_line, problems, kill_ids=None):
     line = raw.line if isinstance(raw, Map) else default_line
     field = "decisions[%d]" % index
 
@@ -107,17 +115,25 @@ def _validate(raw, index, policy_ids, file, default_line, problems):
         if not isinstance(closes, str) or closes not in policy_ids:
             bad("UNKNOWN-POLICY", ".closes", "closes %r is not a declared policy id" % (closes,))
             ok = False
+        elif kill_ids is not None and closes not in kill_ids:
+            bad("BAD-CLOSES", ".closes", "closes %r names a policy that is not of type kill" % (closes,))
+            ok = False
     if not ok:
         return None
     return Decision(did, date, title, policy, criteria, review_by, status, closes, line, file)
 
 
-def load(path, policy_ids):
-    """Read decisions.yml. Returns Loaded(decisions, problems); never raises."""
+def load(path, policy_ids, kill_ids=None):
+    """Read decisions.yml. Returns Loaded(decisions, problems); never raises.
+
+    ``policy_ids``: every declared policy id. ``kill_ids``: when given, the
+    ids of the kill policies; a ``closes`` naming any other policy is a
+    problem (M1.2 E4) and the decision is dropped."""
     doc, problems, file = read_yaml(path)
     if doc is None:
         return Loaded((), problems)
     policy_ids = set(policy_ids or ())
+    kill_ids = set(kill_ids) if kill_ids is not None else None
     try:
         if not isinstance(doc, list):
             problems.append(_problem(file, 1, "BAD-SHAPE",
@@ -127,7 +143,7 @@ def load(path, policy_ids):
         out = []
         seen = {}
         for index, raw in enumerate(doc):
-            decision = _validate(raw, index, policy_ids, file, 1, problems)
+            decision = _validate(raw, index, policy_ids, file, 1, problems, kill_ids)
             if decision is None:
                 continue
             if decision.id in seen:

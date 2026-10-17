@@ -117,7 +117,8 @@ def render_text(report):
             cites = tuple(c for f in v.findings for c in f.cites)
         if cites:
             lines.append("         " + " ".join(cites))
-    loose = [f for f in report.findings if f.policy is None]
+    shown = set(f for v in report.verdicts for f in v.findings)
+    loose = [f for f in report.findings if f not in shown]
     if loose:
         lines.append("findings:")
         for f in loose:
@@ -197,3 +198,125 @@ def to_dict(report):
 
 def render_json(report):
     return json.dumps(to_dict(report), indent=2, sort_keys=False, default=str) + "\n"
+
+
+# ------------------------------------------------------------------- routine
+
+
+def routine_item_json(item):
+    v = item.verdict
+    return {
+        "id": item.id,
+        "title": item.policy.title,
+        "period": item.period.label if item.period is not None else None,
+        "status": item.status,
+        "match": match_text(item.policy.match) if item.policy.match else None,
+        "cites": list(v.cites) if v is not None else [],
+        "reason": v.reason if v is not None else None,
+    }
+
+
+def render_routine_text(items, period, as_of, findings=()):
+    lines = []
+    for item in items:
+        label = item.period.label if item.period is not None else "?"
+        line = "%-8s %-10s %s [%s]" % (item.status, item.id, item.policy.title, label)
+        if item.verdict is not None and item.verdict.reason:
+            line += "  -- " + item.verdict.reason
+        lines.append(line)
+        cites = item.verdict.cites if item.verdict is not None else ()
+        if not cites and item.verdict is not None:
+            cites = tuple(c for f in item.verdict.findings for c in f.cites)
+        if cites:
+            lines.append("         " + " ".join(cites))
+    loose = [f for f in findings if f.policy is None]
+    if loose:
+        lines.append("findings:")
+        for f in loose:
+            lines.append("  %-5s %-16s %s  %s" % (f.cls, f.code, " ".join(f.cites), f.reason))
+    done = sum(1 for i in items if i.done)
+    lines.append("%s routine %s as of %s: %d of %d done" % (
+        "ALL DONE" if done == len(items) else "MISSING", period.label, as_of.isoformat(), done, len(items)))
+    return "\n".join(lines) + "\n"
+
+
+def routine_to_dict(items, period, as_of, findings, files, problems):
+    return {
+        "version": VERSION,
+        "command": "routine",
+        "period": period.label,
+        "as_of": as_of.isoformat(),
+        "all_done": all(i.done for i in items),
+        "routines": [routine_item_json(i) for i in items],
+        "findings": [finding_json(f) for f in findings],
+        "files": dict(files),
+        "problems": [dict(p) for p in problems],
+    }
+
+
+# ----------------------------------------------------------------- decisions
+
+
+def decision_json(d, as_of):
+    return {
+        "id": d.id,
+        "date": d.date.isoformat(),
+        "title": d.title,
+        "policy": d.policy,
+        "criteria": d.criteria,
+        "review_by": d.review_by.isoformat(),
+        "status": d.status,
+        "closes": d.closes,
+        "days_until_review": d.days_until_review(as_of) if d.is_open else None,
+        "due": d.is_due(as_of),
+        "cite": d.cite,
+    }
+
+
+def _days_text(days):
+    if days < 0:
+        return "%d day%s overdue" % (-days, "" if days == -1 else "s")
+    return "%d day%s left" % (days, "" if days == 1 else "s")
+
+
+def render_decisions_text(decisions, as_of, findings=()):
+    lines = []
+    ordered = sorted(decisions, key=lambda d: (0 if d.is_due(as_of) else 1 if d.is_open else 2, d.date, d.line))
+    for d in ordered:
+        if d.is_open:
+            status = "due" if d.is_due(as_of) else "open"
+            days = d.days_until_review(as_of)
+            line = "%-8s %-14s %s  review by %s (%s)" % (status, d.id, d.title, d.review_by.isoformat(), _days_text(days))
+            if d.policy:
+                line += "  policy " + d.policy
+        else:
+            line = "%-8s %-14s %s  decided %s" % ("closed", d.id, d.title, d.date.isoformat())
+            if d.closes:
+                line += "  closes " + d.closes
+            elif d.policy:
+                line += "  policy " + d.policy
+        lines.append(line)
+        lines.append("         " + d.cite)
+    loose = [f for f in findings if f.code != "DECISION-DUE"]
+    if loose:
+        lines.append("findings:")
+        for f in loose:
+            lines.append("  %-5s %-16s %s  %s" % (f.cls, f.code, " ".join(f.cites), f.reason))
+    due = sum(1 for d in decisions if d.is_due(as_of))
+    open_ = sum(1 for d in decisions if d.is_open)
+    lines.append("%s decisions as of %s: %d open, %d due, %d closed" % (
+        "DUE" if due else "NONE DUE", as_of.isoformat(), open_, due, len(decisions) - open_))
+    return "\n".join(lines) + "\n"
+
+
+def decisions_to_dict(decisions, as_of, findings, files, problems):
+    return {
+        "version": VERSION,
+        "command": "decisions",
+        "as_of": as_of.isoformat(),
+        "due": any(d.is_due(as_of) for d in decisions),
+        "decisions": [decision_json(d, as_of) for d in decisions],
+        "findings": [finding_json(f) for f in findings],
+        "files": dict(files),
+        "problems": [dict(p) for p in problems],
+    }
