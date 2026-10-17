@@ -35,6 +35,40 @@ if [ -d server ] || [ -d client ] || [ -d shared ]; then
   fi
 fi
 
+if [ -d deploy ]; then
+  echo "[gate] deploy scripts parse"
+  for f in deploy/*.sh; do bash -n "$f" || { echo "[gate] RED: $f does not parse"; exit 1; }; done
+  for f in deploy/*.mjs; do node --check "$f" || { echo "[gate] RED: $f does not parse"; exit 1; }; done
+fi
+
+if [ -f package.json ] && [ -f README.md ]; then
+  echo "[gate] commands in README and OPERATIONS exist (npm scripts, repository paths)"
+  node --input-type=module - README.md docs/OPERATIONS.md <<'JS' || exit 1
+import { existsSync, readFileSync } from 'node:fs';
+const scripts = JSON.parse(readFileSync('package.json', 'utf8')).scripts ?? {};
+// npm's own commands are not scripts; every other `npm <x>` / `npm run <x>` must be one.
+const builtin = new Set(['ci', 'install', 'i', 'audit', 'version', 'outdated', 'ls', 'pack', 'exec', 'help', 'config', 'prune', 'rebuild', 'update', 'view']);
+const missing = [];
+for (const doc of process.argv.slice(2).filter((f) => existsSync(f))) {
+  const text = readFileSync(doc, 'utf8');
+  // Only code: fenced blocks and inline `code`.
+  const code = [...text.matchAll(/```[^\n]*\n([\s\S]*?)```|`([^`\n]+)`/g)].map((m) => m[1] ?? m[2]).join('\n');
+  for (const m of code.matchAll(/\bnpm\s+(?:run(?:-script)?\s+)?([a-z][\w:-]*)/g)) {
+    const isRun = /\bnpm\s+run/.test(m[0]);
+    if (isRun ? !(m[1] in scripts) : !builtin.has(m[1]) && !(m[1] in scripts)) missing.push(`${doc}: npm script "${m[1]}"`);
+  }
+  for (const m of code.matchAll(/(?:^|[\s"'(=])((?:deploy|tools|docs)\/[\w./-]*[\w-])/g)) {
+    // deploy/.env is the operator's own file (never committed).
+    if (m[1] !== 'deploy/.env' && !existsSync(m[1])) missing.push(`${doc}: path ${m[1]}`);
+  }
+}
+if (missing.length) {
+  console.error(`[gate] RED: documented commands that do not exist:\n  ${[...new Set(missing)].join('\n  ')}`);
+  process.exit(1);
+}
+JS
+fi
+
 if [ -f package.json ]; then
   echo "[gate] install (lockfile)"
   if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --loglevel=error >/dev/null; else npm install --no-audit --no-fund --loglevel=error >/dev/null; fi
