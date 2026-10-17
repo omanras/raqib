@@ -38,7 +38,12 @@
       "Bash(tail *)",
       "Bash(diff *)",
       "Bash(mktemp *)",
-      "Bash(date *)"
+      "Bash(date *)",
+      "Bash(node *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(tsc *)",
+      "Bash(du *)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -50,7 +55,9 @@
       "Bash(git push origin main*)",
       "Bash(git push --force*)",
       "Bash(git push -f*)",
-      "Bash(git push origin mizan*)"
+      "Bash(git push origin mizan*)",
+      "Bash(git push origin qayd*)",
+      "Bash(npx playwright install*)"
     ]
   },
   "hooks": {
