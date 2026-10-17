@@ -1,40 +1,35 @@
-# HANDOFF — M1.4  (phase 1: rounds, contributions, payouts, statements)
+# HANDOFF — M2.1  (phase 2: client shell, auth, circles list)
 
-Task: the money-recording routes per ADR §2 (Round, Contribution,
-Payout) and §4, with statements, ledger and audit reads.
+Task: the client foundation per ADR §5: tokens, i18n, auth and account
+screens, My circles, create circle, join by invite link.
 
 Scope:
-  server/
-  shared/
-  tests/api/
-  tests/unit/
+  client/
+  tests/e2e/
+  playwright.config.ts
   docs/review/
 
 Exit criteria:
-- E1 Rounds: `POST /api/circles/:id/rounds/:n/open` (organizer; in order;
-     one open round at a time; ledger round.opened), `.../close`
-     (organizer; allowed with outstanding contributions, which the ledger
-     entry lists). Round 1 opens at start when start_date <= today.
-- E2 Contributions: `POST .../rounds/:n/contributions` (member for self,
-     or organizer for any member: amount, method, reference; partial
-     allowed; over-payment refused; ledger contribution.reported),
-     `POST .../contributions/:cid/confirm` (organizer; ledger
-     contribution.confirmed), `.../waive` (organizer; reason required;
-     ledger contribution.waived). State derived per ADR.
-- E3 Payout: `POST .../rounds/:n/payout` (organizer; amount; ledger
-     payout.recorded), `.../payout/ack` (recipient; ledger
-     payout.acknowledged).
-- E4 Reads: `GET /api/circles/:id/ledger?from=&verify=1` (entries and
-     the verification result), `GET /api/circles/:id/statement` (per
-     round: expected, confirmed, outstanding per member; totals; every
-     line cites ledger seqs) and `.csv` with S4.4 escaping, `?member=`
-     for one member's statement (a member may fetch only their own;
-     organizer any), `GET /api/circles/:id/audit` (organizer; paged).
-- E5 Overview data for the client: `GET /api/circles/:id/overview`
-     (this round: recipient, due date, each member's state, pot
-     confirmed vs expected, outstanding with age in days). Matrix rows,
-     tests, audit coverage test (S6.1) now spans all routes. Gate green.
+- E1 Design tokens on :root (light/dark via prefers-color-scheme and a
+     manual switch), one accent, system font stack with an Arabic-capable
+     fallback, spacing scale, focus-visible styles, reduced-motion
+     respected; mobile-first layout (360 px up), bottom navigation on
+     narrow screens.
+- E2 i18n: `client/i18n/en.ts`, `ar.ts` with every string; `dir=rtl` and
+     `lang=ar` when Arabic; numbers Latin digits; dates ISO; a missing-key
+     test fails the build (a script compares the two files' keys).
+- E3 Screens: Sign in, Sign up (shows the 8 recovery codes once with
+     "I saved them" confirmation), Recovery, Account (name, change
+     password, sessions with sign-out-everywhere), My circles (role and
+     status chips, outstanding badge), Create circle (name, currency,
+     amount, period, due day, start date, rules text, recipient_pays),
+     Join (`/join/<token>`: shows the circle summary, Accept).
+- E4 API client with CSRF handling, request id surfaced in error toasts,
+     offline-honest banner when a request fails (A10).
+- E5 e2e: sign up two users; A creates a circle; A creates an invite; B
+     opens the link and joins; both see the circle; Arabic switch shows
+     RTL. Gate green.
 
-Not in scope: client.
-Commit: `landed: M1.4 rounds, contributions, payouts, statements` or `STOP: M1.4 <reason>`.
+Not in scope: circle screens, ledger screens.
+Commit: `landed: M2.1 client shell, auth, circles` or `STOP: M2.1 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
