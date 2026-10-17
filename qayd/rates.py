@@ -25,9 +25,12 @@ _RATE_RE = re.compile(r"^[0-9]+(\.[0-9]+)?$")
 
 
 class Unknown(NamedTuple):
-    """A value that cannot be known from the declared files. Red (A5)."""
+    """A value that cannot be known from the declared files. Red (A5).
+    ``cause`` is ``invalid`` when an invalid row (a loader problem) is the
+    reason, else ``unknown`` (undeclared measure, missing rate, no data)."""
     reason: str
     cites: tuple = ()
+    cause: str = "unknown"
 
 
 class RateRow(NamedTuple):

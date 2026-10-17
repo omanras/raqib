@@ -1,0 +1,8 @@
+- id: D-close
+  date: 2026-09-05
+  title: end the broker pilot after the August drawdown
+  policy: K1
+  criteria: drawdown over 5% in 90 days
+  review_by: 2026-12-01
+  status: closed
+  closes: K1

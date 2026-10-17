@@ -1,0 +1,13 @@
+date,amount,currency,account,category,tags,note
+2026-06-01,1000.000,OMR,salary,salary,,salary 2026-06
+2026-06-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-06-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-06-15,-40.000,OMR,cash,food,,groceries
+2026-07-01,1000.000,OMR,salary,salary,,salary 2026-07
+2026-07-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-07-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-07-15,-40.000,OMR,cash,food,,groceries
+2026-08-01,1000.000,OMR,salary,salary,,salary 2026-08
+2026-08-03,-300.000,OMR,salary,transfer,transfer,to savings
+2026-08-03,300.000,OMR,savings,transfer,transfer,from salary
+2026-08-15,-40.000,OMR,cash,food,,groceries

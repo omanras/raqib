@@ -63,6 +63,7 @@ class Context(NamedTuple):
     as_of: object = None            # datetime.date; None = no cut
     ledger_problems: tuple = ()
     holdings_problems: tuple = ()
+    decisions: tuple = ()           # decisions.Decision (kill closers)
 
 
 def _cites(rows):
@@ -106,7 +107,7 @@ def _poisoned(problems, start, end, what):
     where = "%s:%d" % (first["file"], first["line"])
     return Unknown("invalid %s row %s (%s) touches %s..%s" % (
         what, where, first["code"], start.isoformat(), end.isoformat()),
-        tuple("%s:%d" % (p["file"], p["line"]) for p in hits))
+        tuple("%s:%d" % (p["file"], p["line"]) for p in hits), "invalid")
 
 
 def _convert(ctx, amount, currency, date, row):
@@ -258,10 +259,54 @@ def share(ctx, name, period):
     return Value(pct, cited)
 
 
+class Point(NamedTuple):
+    """One snapshot date in a drawdown history."""
+    date: object                # datetime.date
+    value: Decimal              # account value on that date, base currency
+    peak_date: object           # date of the window peak (<= date)
+    peak: Decimal
+    drawdown: Optional[Decimal] # percent, None while the peak is not positive
+    rows: tuple                 # rows behind value and peak (holdings + rates)
+
+
+def drawdown_history(ctx, name, window_days, date):
+    """One Point per snapshot date <= date, each measured against the peak
+    over the window_days calendar days ending on it (a rolling window), so
+    a crossing on any past date can be found. Unknown if any snapshot in
+    the history cannot be valued or an invalid holdings row exists."""
+    bad = _poisoned(ctx.holdings_problems, datetime.date.min, date, "holdings")
+    if bad is not None:
+        return bad
+    dates = sorted(set(r.date for r in ctx.holdings if r.date <= date))
+    if not dates:
+        return Unknown("no holdings snapshot on or before %s" % date.isoformat())
+    values = {}
+    cited = {}
+    for d in dates:
+        rows = tuple(r for r in ctx.holdings if r.date == d and r.account == name)
+        out = _sum_rows(ctx, rows)
+        if isinstance(out, Unknown):
+            return out
+        values[d], cited[d] = out
+    points = []
+    for d in dates:
+        start = d - datetime.timedelta(days=window_days - 1)
+        peak_date = d
+        for w in dates:
+            if start <= w <= d and values[w] > values[peak_date]:
+                peak_date = w
+        peak = values[peak_date]
+        dd = (peak - values[d]) / peak * HUNDRED if peak > 0 else None
+        rows = tuple(dict.fromkeys(cited[d] + (cited[peak_date] if peak_date != d else ())))
+        points.append(Point(d, values[d], peak_date, peak, dd, rows))
+    return tuple(points)
+
+
 def drawdown(ctx, name, window_days, period):
     """Peak-to-latest drawdown of account.<name> over the last window_days,
     in percent. detail: one (date, value, drawdown_pct) per snapshot date in
-    the window, with the running peak, so a crossing date can be found."""
+    the window, with the running peak. The kill rule uses drawdown_history
+    instead, which looks at every snapshot so a past crossing is not lost."""
     date = end_of(ctx, period)
     snap = _snapshot(ctx, date)
     if isinstance(snap, Unknown):

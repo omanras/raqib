@@ -1,0 +1,13 @@
+version: 1
+accounts: [salary, savings, broker, cash]
+categories:
+  income: [salary, bonus, side]
+  expense: [housing, food, transport, family, discretionary, fees]
+  transfer: [transfer]
+  invest: [buy, sell, dividend]
+snapshot_max_age_days: 45
+policies:
+  - id: RED
+    type: red_line
+    title: no margin
+    match: {tags_any: [margin]}
