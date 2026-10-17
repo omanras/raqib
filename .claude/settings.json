@@ -23,7 +23,22 @@
       "Bash(git push origin claude/*)",
       "Bash(git checkout *)",
       "Bash(git switch *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)",
+      "Bash(git show *)",
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(chmod *)",
+      "Bash(wc *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(diff *)",
+      "Bash(mktemp *)",
+      "Bash(date *)"
     ],
     "deny": [
       "Bash(rm -rf *)",
@@ -34,7 +49,8 @@
       "WebSearch",
       "Bash(git push origin main*)",
       "Bash(git push --force*)",
-      "Bash(git push -f*)"
+      "Bash(git push -f*)",
+      "Bash(git push origin mizan*)"
     ]
   },
   "hooks": {
