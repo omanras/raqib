@@ -1,27 +1,29 @@
-# HANDOFF — M0.1  (phase 0: loader)
+# HANDOFF — M0.2  (phase 0: matcher)
 
-Task: implement `mizan/loader.py` (+ package files `mizan/__init__.py`,
-`mizan/__main__.py` stub) that reads one Sigma rule file and validates the
-shape of docs/specs/ADR-0001 §3, returning a Rule or named problems.
+Task: implement `mizan/matcher.py`: evaluate one Sigma selection against one
+event per docs/specs/ADR-0001 §4-§5.
 
 Scope:
-  mizan/
-  tests/test_loader.py
+  mizan/matcher.py
+  tests/test_matcher.py
   tests/fixtures/
   docs/review/
 
 Exit criteria:
-- E1 `loader.load(path)` returns `Rule` with attributes title, id, logsource
-     (dict), detection (dict), condition (str), level, fp_budget (float),
-     corpus (list or None), raw (the full mapping), path.
-- E2 On any problem it returns `Problems` (list of {field, reason}) instead,
-     never raises: not a file, not YAML, not a mapping, several YAML docs,
-     missing/invalid title, id (UUID), logsource, detection, condition,
-     level (outside the five), x-mizan.fp_budget (missing or negative).
-- E3 Unknown top-level Sigma fields are kept in raw and are not problems.
-- E4 Fixtures in tests/fixtures/rules/: one valid rule and one file per
-     problem class; a test per fixture; gate green.
+- E1 `matcher.match_selection(selection, event)` returns True, False, or an
+     `Unknown(reason)` value (never raises on bad data).
+- E2 Mapping selections: AND across fields, OR across a value list, `all`
+     modifier turns the list into AND; keyword list selections: any string
+     value anywhere in the event (nested too) contains the keyword.
+- E3 Case-insensitive comparison; `*` and `?` wildcards; backslash escapes;
+     a value that is not a string compares as its JSON text; `null` matches
+     absent or null; nested field by dotted path when the exact key is absent.
+- E4 Modifiers contains, startswith, endswith, all, re, exists, gt, gte, lt,
+     lte, cidr, windash behave as in ADR §5; any other modifier -> Unknown
+     naming it; `re` with an invalid pattern -> Unknown.
+- E5 Tests cover every modifier with a positive and a negative event, the
+     wildcard escapes, nested paths, Unknown cases; gate green.
 
-Not in scope: matching, fixtures discovery, CLI commands.
-Commit: `landed: M0.1 loader` or `STOP: M0.1 <reason>`.
+Not in scope: the condition grammar (M0.3), fixtures, CLI.
+Commit: `landed: M0.2 matcher` or `STOP: M0.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
