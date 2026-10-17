@@ -1,30 +1,36 @@
-# HANDOFF — M2.1  (phase 2: end-to-end proof)
+# HANDOFF — M2.2  (phase 2: README, failure model, release build)
 
-Task: the full Playwright suite of docs/specs/ADR-0001-app.md §5 and the
-file:// run of the single-file build.
+Task: documentation for a person who has never seen the CLI, the failure
+model of a browser app, an accessibility pass, and the committed release.
 
 Scope:
-  e2e/
-  playwright.config.ts
-  tests/
+  README.md
+  docs/FAILURE_MODEL.md
+  release/
+  src/ui/
+  src/i18n/
+  tools/gate.sh
   docs/review/
 
 Exit criteria:
-- E1 One spec per screen plus `offline.spec.ts`: `page.route('**/*')`
-     records every request after load and asserts that none leaves the
-     page origin (no http(s) request at all during a full tour of the
-     app); `file.spec.ts` opens `dist/index.html` via `file://` and
-     repeats the sample tour (IndexedDB may be unavailable there: the
-     banner must appear and the app must still work).
-- E2 A private-mode simulation: IndexedDB open rejected (inject a stub)
-     -> in-memory banner, everything else works.
-- E3 Mobile viewport (400x800) tour: no horizontal scroll, navigation
-     reachable, forms usable.
-- E4 Accessibility smoke: every form control has a label, every chip has
-     text (not colour only), focus order follows the DOM.
-- E5 All e2e green locally and in CI; gate green.
+- E1 README: what Qayd Web is and what it never does (five lines); use
+     it from the one file (`release/qayd.html`: open it, load the sample,
+     where data lives, how to export); build from source; the five files
+     in brief with a link to the engine spec; screens; keyboard shortcuts
+     if any; how to report an issue.
+- E2 docs/FAILURE_MODEL.md: browser storage cleared, private mode, two
+     tabs, a pasted file with the wrong header, a policy loosened to pass,
+     a reversal of a reversal, clock skew (as-of from the device clock),
+     the sandboxed iframe case (downloads inert, copy works); what the app
+     does today, what is open.
+- E3 Accessibility pass on every screen: labels, roles, contrast of every
+     chip in both themes (document the measured ratios), reduced-motion.
+- E4 `release/qayd.html` = the gate's `dist/index.html` of this commit,
+     committed; tools/gate.sh adds a check that release/qayd.html equals a
+     fresh build (byte-equal, or equal after stripping a build hash,
+     documented).
+- E5 Gate green; CI green on the branch.
 
-Not in scope: new features; fixes only inside the app code when a test
-reveals a bug (list each fix in the questions file).
-Commit: `landed: M2.1 end-to-end proof` or `STOP: M2.1 <reason>`.
+Not in scope: new screens or engine changes.
+Commit: `landed: M2.2 readme, failure model, release` or `STOP: M2.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
