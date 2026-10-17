@@ -1,0 +1,31 @@
+title: Rule with every optional Sigma field
+id: 8b3f4051-6c7d-4e8f-a091-2b3c4d5e6f70
+related:
+  - id: 6f1d2c3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f
+    type: similar
+status: experimental
+description: Unknown top-level Sigma fields must be kept in raw, never flagged.
+references:
+  - https://example.com/doc
+author: Mizan examples
+date: 2026/10/17
+modified: 2026/10/17
+tags:
+  - attack.execution
+  - attack.t1059.001
+logsource:
+  category: webserver
+detection:
+  selection:
+    cs-method: POST
+    cs-uri-query|contains: '../'
+  condition: selection
+fields:
+  - cs-uri-query
+  - c-ip
+falsepositives:
+  - Vulnerability scanners
+level: low
+custom_vendor_field: anything goes here
+x-mizan:
+  fp_budget: 10

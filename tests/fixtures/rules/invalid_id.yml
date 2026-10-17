@@ -1,0 +1,12 @@
+title: Some title
+id: not-a-uuid
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    Image|endswith: '\\cmd.exe'
+  condition: selection
+level: medium
+x-mizan:
+  fp_budget: 1

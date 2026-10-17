@@ -1,0 +1,23 @@
+title: First document
+id: 6f1d2c3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f
+logsource:
+  product: windows
+detection:
+  selection:
+    a: b
+  condition: selection
+level: low
+x-mizan:
+  fp_budget: 1
+---
+title: Second document in the same file
+id: 7a2e3f40-5b6c-4d7e-9f80-1a2b3c4d5e6f
+logsource:
+  product: windows
+detection:
+  selection:
+    a: b
+  condition: selection
+level: low
+x-mizan:
+  fp_budget: 1

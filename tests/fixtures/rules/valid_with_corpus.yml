@@ -1,0 +1,15 @@
+title: Valid rule with an explicit corpus list
+id: 7a2e3f40-5b6c-4d7e-9f80-1a2b3c4d5e6f
+logsource:
+  product: linux
+  service: auth
+detection:
+  keywords:
+    - 'Accepted password for root'
+  condition: keywords
+level: medium
+x-mizan:
+  fp_budget: 0.5
+  corpus:
+    - linux-auth.jsonl
+    - linux-auth-extra.jsonl
