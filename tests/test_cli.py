@@ -88,7 +88,7 @@ def test_bad_options_are_usage_errors():
 
 
 def test_commands_not_yet_available_are_usage_errors():
-    for command in ("review", "init"):
+    for command in ("review",):
         code, out, err = run(command, "--dir", str(FIX / "green"))
         assert code == 2 and "not available yet" in err, command
 

@@ -4,7 +4,7 @@
     python3 -m qayd routine   [--dir DIR] [--period 2026-10] [--as-of DATE] [--json]
     python3 -m qayd decisions [--dir DIR] [--as-of DATE] [--json]
     python3 -m qayd review    [--dir DIR] --period P -o FILE.html       (M2.1)
-    python3 -m qayd init      [--dir DIR]                               (M1.3)
+    python3 -m qayd init      [--dir DIR]       copies examples/ into DIR
 
 Exit codes: 0 green (check: every policy holds; routine: every routine
 done; decisions: none due), 1 red, 2 usage, 3 a file could not be read or
@@ -239,6 +239,40 @@ def cmd_decisions(opts, out, err):
     return EXIT_RED if due else EXIT_GREEN
 
 
+def examples_dir():
+    """The repository's examples/ directory (next to the qayd package)."""
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples")
+
+
+def cmd_init(opts, out, err):
+    """Copy the example household into --dir; never overwrite a file."""
+    src = examples_dir()
+    if not os.path.isdir(src):
+        err.write("qayd: the example household is not available (no %s)\n" % src)
+        return EXIT_FILE
+    names = sorted(n for n in os.listdir(src) if os.path.isfile(os.path.join(src, n)))
+    if not names:
+        err.write("qayd: the example household is empty (%s)\n" % src)
+        return EXIT_FILE
+    existing = [n for n in names if os.path.exists(os.path.join(opts.dir, n))]
+    if existing:
+        err.write("qayd: refusing to overwrite existing files in %s: %s\n" % (opts.dir, ", ".join(existing)))
+        return EXIT_USAGE
+    try:
+        os.makedirs(opts.dir, exist_ok=True)
+        for name in names:
+            with open(os.path.join(src, name), "rb") as fh:
+                data = fh.read()
+            with open(os.path.join(opts.dir, name), "wb") as fh:
+                fh.write(data)
+    except OSError as exc:
+        err.write("qayd: cannot write to %s: %s\n" % (opts.dir, exc))
+        return EXIT_FILE
+    out.write("wrote %d files to %s: %s\n" % (len(names), opts.dir, ", ".join(names)))
+    out.write("next: edit policies.yml, append rows to ledger.csv, then run: python3 -m qayd check --dir %s\n" % opts.dir)
+    return EXIT_GREEN
+
+
 def main(argv=None, stdout=None, stderr=None):
     out = stdout if stdout is not None else sys.stdout
     err = stderr if stderr is not None else sys.stderr
@@ -257,6 +291,8 @@ def main(argv=None, stdout=None, stderr=None):
             return cmd_routine(opts, out, err)
         if opts.command == "decisions":
             return cmd_decisions(opts, out, err)
+        if opts.command == "init":
+            return cmd_init(opts, out, err)
         err.write("qayd: command %r is not available yet\n%s" % (opts.command, USAGE))
         return EXIT_USAGE
     except Exception as exc:  # the contract is "never raises"
