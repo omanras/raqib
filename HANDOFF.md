@@ -1,29 +1,29 @@
-# HANDOFF — M0.2  (phase 0: matcher)
+# HANDOFF — M0.3  (phase 0: condition)
 
-Task: implement `mizan/matcher.py`: evaluate one Sigma selection against one
-event per docs/specs/ADR-0001 §4-§5.
+Task: implement `mizan/condition.py`: parse a Sigma `condition` string and
+evaluate it over per-selection results per docs/specs/ADR-0001 §5.
 
 Scope:
-  mizan/matcher.py
-  tests/test_matcher.py
-  tests/fixtures/
+  mizan/condition.py
+  tests/test_condition.py
   docs/review/
 
 Exit criteria:
-- E1 `matcher.match_selection(selection, event)` returns True, False, or an
-     `Unknown(reason)` value (never raises on bad data).
-- E2 Mapping selections: AND across fields, OR across a value list, `all`
-     modifier turns the list into AND; keyword list selections: any string
-     value anywhere in the event (nested too) contains the keyword.
-- E3 Case-insensitive comparison; `*` and `?` wildcards; backslash escapes;
-     a value that is not a string compares as its JSON text; `null` matches
-     absent or null; nested field by dotted path when the exact key is absent.
-- E4 Modifiers contains, startswith, endswith, all, re, exists, gt, gte, lt,
-     lte, cidr, windash behave as in ADR §5; any other modifier -> Unknown
-     naming it; `re` with an invalid pattern -> Unknown.
-- E5 Tests cover every modifier with a positive and a negative event, the
-     wildcard escapes, nested paths, Unknown cases; gate green.
+- E1 `condition.parse(text, selection_names)` returns an AST or
+     `Unknown(reason)`: identifiers, and/or/not, parentheses, `1 of X*`,
+     `all of X*`, `1 of them`, `all of them`; precedence not > and > or.
+- E2 An identifier not in selection_names, a pattern matching no selection,
+     unbalanced parentheses, trailing tokens, `| count` or any aggregation,
+     and `near` -> Unknown naming the cause.
+- E3 `condition.evaluate(ast, results)` where results maps selection name ->
+     True | False | Unknown: three-valued logic (Unknown and False = False;
+     Unknown or True = True; otherwise Unknown propagates).
+- E4 `condition.evaluate_rule(rule, event)` ties loader + matcher + condition:
+     runs every selection the condition references, returns True, False or
+     Unknown; selections not referenced are not evaluated.
+- E5 Tests for every grammar form, precedence, each Unknown cause, and the
+     three-valued table; gate green.
 
-Not in scope: the condition grammar (M0.3), fixtures, CLI.
-Commit: `landed: M0.2 matcher` or `STOP: M0.2 <reason>`.
+Not in scope: fixtures, corpus, CLI.
+Commit: `landed: M0.3 condition` or `STOP: M0.3 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
