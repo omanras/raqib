@@ -1,30 +1,36 @@
-# HANDOFF — M0.1  (phase 0: ledger and holdings loaders)
+# HANDOFF — M0.2  (phase 0: policies, decisions, periods)
 
-Task: implement `qayd/ledger.py` (+ `qayd/__init__.py`, `qayd/__main__.py`
-stub) reading ledger.csv and holdings.csv per docs/specs/ADR-0001 §3-§4.
+Task: implement `qayd/policies.py`, `qayd/decisions.py` and
+`qayd/periods.py` per docs/specs/ADR-0001 §5, §7 and the period rules.
 
 Scope:
-  qayd/
-  tests/test_ledger.py
+  qayd/policies.py
+  qayd/decisions.py
+  qayd/periods.py
+  tests/test_policies.py
+  tests/test_periods.py
   tests/fixtures/
   docs/review/
 
 Exit criteria:
-- E1 `ledger.load_ledger(path, accounts, categories)` returns rows (date,
-     amount Decimal, currency, account, category, tags tuple, note, line)
-     plus a problems list ({line, reason}); never raises; header must match
-     exactly; unknown account/category, bad date, bad amount, wrong column
-     count are problems naming the line; the run continues past them.
-- E2 Exact duplicate rows (same seven fields) yield a DUP-ROW note with
-     both line numbers; neither row is dropped.
-- E3 `ledger.load_holdings(path, accounts, classes)` the same way for the
-     holdings header; `latest_snapshot(rows, as_of)` returns the rows of the
-     latest date <= as_of and that date (or None).
-- E4 Amounts are Decimal everywhere (no float, the gate checks); UTF-8 with
-     optional BOM; CRLF tolerated; a 1 MiB line or 64 MiB file is a problem.
-- E5 Fixtures: valid ledger and holdings, and one file per problem class;
-     a test per fixture; gate green.
+- E1 `policies.load(path)` returns Config (version, base_currency, accounts,
+     categories by group, classes, snapshot_max_age_days, policies) or
+     problems; each policy validated by type: cap/floor need measure+limit,
+     routine needs match+period, red_line needs match, kill needs
+     measure(drawdown)+limit(pct), allocation needs measure(share)+band.
+     Unknown type/measure/limit -> the policy is kept with status
+     `unknown` and the reason; the file is not rejected for it.
+- E2 Duplicate policy ids, undeclared categories in measures, empty
+     policies list, missing base_currency -> problems naming the field.
+- E3 `decisions.load(path, policy_ids)`: id, date, title, policy (optional),
+     criteria, review_by, status open|closed, closes (policy id or null);
+     problems for bad dates, unknown policy, unknown status.
+- E4 `periods`: `period_of(date, kind)` -> (start, end) for month, quarter,
+     year; `parse(text)` for `2026-10`, `2026-Q3`, `2026`; `trailing(as_of,
+     months)`; `periods_between(first, last, kind)`. Pure date math, tested
+     at year and quarter boundaries and on leap days.
+- E5 Gate green.
 
-Not in scope: policies, measures, CLI.
-Commit: `landed: M0.1 ledger and holdings loaders` or `STOP: M0.1 <reason>`.
+Not in scope: measures, verdicts, CLI.
+Commit: `landed: M0.2 policies, decisions, periods` or `STOP: M0.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
