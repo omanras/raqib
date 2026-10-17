@@ -15,6 +15,7 @@ import { securityHooks } from './plugins/session.js';
 import { createLimits, type Limits } from './ratelimit.js';
 import { authRoutes } from './routes/auth.js';
 import { circleRoutes } from './routes/circles.js';
+import { drawRoutes } from './routes/draw.js';
 import { healthRoutes } from './routes/health.js';
 import { inviteRoutes } from './routes/invites.js';
 import { systemClock, type Clock, type RouteEntry } from './types.js';
@@ -137,6 +138,7 @@ export function buildApp(options: AppOptions = {}) {
       authRoutes(api);
       circleRoutes(api);
       inviteRoutes(api);
+      drawRoutes(api);
     },
     { prefix: '/api' },
   );

@@ -1,5 +1,8 @@
 import { expect } from 'vitest';
+import { randomBytes } from 'node:crypto';
+import { commit } from '../../shared/lottery.js';
 import { addDays, isoDateOf } from '../../shared/schedule.js';
+import { sha256Hex } from '../../server/crypto.js';
 import { fixtureUser, testApp, type Agent, type FixtureUser, type TestApp } from './helpers.js';
 
 /**
@@ -18,8 +21,27 @@ export type Person = Exclude<Role, 'anonymous'> | 'organizerB';
  *          circle A has one open invite (ids.inviteA, ids.inviteTokenA).
  * ordered: as draft, with a start date and a manual order on both circles.
  * active:  as ordered, both circles started.
+ * drawing:   as draft, with a draw open in both circles (commitments open).
+ * committed: as drawing, every member of both circles committed; their
+ *            secrets are in ids['secret:<memberId>'].
+ * revealing: as committed, commitments closed by the organizers.
+ * revealed:  as revealing, every member revealed.
+ * finalized: as revealed, both draws finalized (circles still drawing).
  */
-export type WorldState = 'base' | 'draft' | 'ordered' | 'active';
+export type WorldState = 'base' | 'draft' | 'ordered' | 'active' | 'drawing' | 'committed' | 'revealing' | 'revealed' | 'finalized';
+const DRAW_STATES: readonly WorldState[] = ['drawing', 'committed', 'revealing', 'revealed', 'finalized'];
+
+const HOUR = 60 * 60 * 1000;
+export function drawDeadlines(now: Date): { commitDeadline: string; revealDeadline: string } {
+  return {
+    commitDeadline: new Date(now.getTime() + 2 * HOUR).toISOString(),
+    revealDeadline: new Date(now.getTime() + 4 * HOUR).toISOString(),
+  };
+}
+
+export function newSecret(): string {
+  return randomBytes(32).toString('hex');
+}
 
 export interface World {
   t: TestApp;
@@ -83,6 +105,10 @@ export async function buildWorld(state: WorldState = 'base'): Promise<World> {
   ids.inviteA = open.id;
   ids.inviteTokenA = open.token;
   if (state === 'draft') return w;
+  if (DRAW_STATES.includes(state)) {
+    await runDraw(w, state);
+    return w;
+  }
 
   for (const [org, circle] of [
     [people.organizerA.agent, ids.circleA],
@@ -97,4 +123,37 @@ export async function buildWorld(state: WorldState = 'base'): Promise<World> {
   await ok(people.organizerA.agent.post(`/api/circles/${ids.circleA}/start`));
   await ok(people.organizerB.agent.post(`/api/circles/${ids.circleB}/start`));
   return w;
+}
+
+async function runDraw(w: World, state: WorldState): Promise<void> {
+  const { people, ids } = w;
+  const circles = [
+    { id: ids.circleA as string, org: people.organizerA.agent, all: [people.organizerA.agent, people.memberA.agent] },
+    { id: ids.circleB as string, org: people.organizerB.agent, all: [people.organizerB.agent, people.memberB.agent] },
+  ];
+  const startDate = addDays(isoDateOf(w.t.clock.now()), 3);
+  for (const c of circles) {
+    await ok(c.org.patch(`/api/circles/${c.id}`, { startDate }));
+    await ok(c.org.post(`/api/circles/${c.id}/draw/open`, drawDeadlines(w.t.clock.now())));
+  }
+  if (state === 'drawing') return;
+  for (const c of circles) {
+    for (const agent of c.all) {
+      const view = (await ok(agent.get(`/api/circles/${c.id}`))) as { me: { memberId: string } };
+      const secret = newSecret();
+      ids[`secret:${view.me.memberId}`] = secret;
+      await ok(agent.post(`/api/circles/${c.id}/draw/commit`, { commitment: commit(secret, view.me.memberId, sha256Hex) }));
+    }
+  }
+  if (state === 'committed') return;
+  for (const c of circles) await ok(c.org.post(`/api/circles/${c.id}/draw/close-commits`));
+  if (state === 'revealing') return;
+  for (const c of circles) {
+    for (const agent of c.all) {
+      const view = (await ok(agent.get(`/api/circles/${c.id}`))) as { me: { memberId: string } };
+      await ok(agent.post(`/api/circles/${c.id}/draw/reveal`, { secret: ids[`secret:${view.me.memberId}`] }));
+    }
+  }
+  if (state === 'revealed') return;
+  for (const c of circles) await ok(c.org.post(`/api/circles/${c.id}/draw/finalize`));
 }

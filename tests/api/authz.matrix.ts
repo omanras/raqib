@@ -6,8 +6,10 @@
  * every cell against a fresh world and fails if any registered route has
  * no row here.
  */
+import { commit } from '../../shared/lottery.js';
+import { sha256Hex } from '../../server/crypto.js';
 import { PASSWORD } from './helpers.js';
-import type { Role, World, WorldState } from './world.js';
+import { drawDeadlines, newSecret, type Role, type World, type WorldState } from './world.js';
 
 export type Method = 'GET' | 'POST' | 'PATCH';
 
@@ -174,4 +176,48 @@ export const MATRIX: MatrixRow[] = [
     expect: { anonymous: 401, memberA: 200, organizerA: 409, memberB: 404 },
   },
   { method: 'POST', route: '/api/circles/:id/cancel', state: 'draft', build: (w) => ({ url: A(w, '/cancel') }), expect: organizerOnly(200) },
+
+  // ---------------------------------------------------------------- draw (M1.3)
+  { method: 'GET', route: '/api/circles/:id/draw', state: 'drawing', build: (w) => ({ url: A(w, '/draw') }), expect: membersOf(200) },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/draw/open',
+    state: 'ordered',
+    build: (w) => ({ url: A(w, '/draw/open'), body: drawDeadlines(w.t.clock.now()) }),
+    expect: organizerOnly(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/draw/commit',
+    state: 'drawing',
+    build: (w, role) => {
+      const memberId = role === 'memberA' ? w.ids.memberAInA : w.ids.organizerAInA;
+      return { url: A(w, '/draw/commit'), body: { commitment: commit(newSecret(), memberId as string, sha256Hex) } };
+    },
+    expect: membersOf(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/draw/close-commits',
+    state: 'committed',
+    build: (w) => ({ url: A(w, '/draw/close-commits') }),
+    expect: organizerOnly(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/draw/reveal',
+    state: 'revealing',
+    build: (w, role) => {
+      const memberId = role === 'memberA' ? w.ids.memberAInA : w.ids.organizerAInA;
+      return { url: A(w, '/draw/reveal'), body: { secret: w.ids[`secret:${memberId}`] ?? newSecret() } };
+    },
+    expect: membersOf(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/draw/finalize',
+    state: 'revealed',
+    build: (w) => ({ url: A(w, '/draw/finalize') }),
+    expect: organizerOnly(200),
+  },
 ];

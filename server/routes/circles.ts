@@ -212,7 +212,13 @@ export function circleRoutes(api: FastifyInstance): void {
     handler: (ctx) => {
       const { req, user, params, body, now } = signedIn(ctx);
       const { circle } = accessCircle(req, params.id, 'organizer');
-      enforce(checkCircle(circle.status, 'edit'));
+      // While drawing only the start date may move (a slow draw must not leave a circle unable to
+      // start); everything else is frozen from the moment members commit.
+      const onlyStartDate = Object.keys(body).length === 1 && body.startDate !== undefined;
+      if (!(circle.status === 'drawing' && onlyStartDate)) enforce(checkCircle(circle.status, 'edit'));
+      if (circle.status === 'drawing' && body.startDate === null) {
+        throw new AppError(409, 'start_date_required', 'A drawing circle keeps its start date; choose another date instead.');
+      }
       const next = {
         name: body.name ?? circle.name,
         currency: body.currency ?? circle.currency,
