@@ -1,0 +1,3 @@
+{"host":"srv07.corp.example","message":"   user11 : TTY=pts/1 ; PWD=/home/user11 ; USER=root ; COMMAND=/bin/bash","pid":2718,"process":"sudo","timestamp":"2026-10-17T03:10:00Z","user":"user11"}
+{"host":"srv07.corp.example","message":"    adm02 : TTY=pts/0 ; PWD=/root ; USER=root ; COMMAND=/usr/bin/zsh -l","pid":2718,"process":"sudo","timestamp":"2026-10-17T03:10:00Z","user":"adm02"}
+{"host":"srv07.corp.example","message":"   deploy : TTY=unknown ; PWD=/srv/app ; USER=root ; COMMAND=/bin/sh -c id","pid":2718,"process":"sudo","timestamp":"2026-10-17T03:10:00Z","user":"deploy"}

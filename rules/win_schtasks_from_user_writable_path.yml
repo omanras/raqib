@@ -1,0 +1,30 @@
+title: Scheduled task created to run from a user-writable path
+id: 0b4f5a6c-7d8e-4f90-b1a2-3c4d5e6f7a83
+status: experimental
+description: |
+  schtasks /create whose action lives under AppData, Temp or Users\Public:
+  the classic persistence of a payload that cannot write to Program Files.
+  The windash modifier makes -create and /create equal. Synthetic example
+  rule.
+author: Mizan examples
+date: 2026/10/17
+tags:
+  - attack.persistence
+  - attack.t1053.005
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection:
+    Image|endswith: '\schtasks.exe'
+    CommandLine|contains|windash: ' -create '
+    CommandLine|contains:
+      - '\AppData\'
+      - '\Temp\'
+      - '\Users\Public\'
+  condition: selection
+falsepositives:
+  - Per-user installers that register their own updater
+level: medium
+x-mizan:
+  fp_budget: 10

@@ -1,0 +1,1001 @@
+{"_mizan":{"events":1000,"generator":"tools/make_corpus.py","logsource":{"product":"linux","service":"auth"},"seed":20261017}}
+{"host":"srv08.corp.example","message":"Failed password for user06 from 192.0.2.144 port 59236 ssh2","pid":35167,"process":"sshd","src_ip":"192.0.2.144","timestamp":"2026-10-17T00:00:00Z","user":"user06"}
+{"host":"srv09.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":34019,"process":"sudo","timestamp":"2026-10-17T00:01:26Z","user":"adm03"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user03","pid":46867,"process":"sshd","timestamp":"2026-10-17T00:02:52Z","user":"user03"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user11 from 192.0.2.215 port 48506 ssh2: ED25519 SHA256:aula9fxuy6v5ykptuwzu1txeilw0ycsstkt13fj0as5","pid":50695,"process":"sshd","src_ip":"192.0.2.215","timestamp":"2026-10-17T00:04:18Z","user":"user11"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user05","pid":50723,"process":"sshd","timestamp":"2026-10-17T00:05:44Z","user":"user05"}
+{"host":"srv03.corp.example","message":"Failed password for user11 from 203.0.113.10 port 45974 ssh2","pid":4194,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T00:07:10Z","user":"user11"}
+{"host":"srv08.corp.example","message":"Disconnected from user user05 203.0.113.10 port 32391","pid":5329,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T00:08:36Z","user":"user05"}
+{"host":"srv08.corp.example","message":"New session 506 of user user23.","pid":15045,"process":"systemd-logind","timestamp":"2026-10-17T00:10:02Z","user":"user23"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":35387,"process":"CRON","timestamp":"2026-10-17T00:11:28Z"}
+{"host":"srv01.corp.example","message":"New session 206 of user user21.","pid":38276,"process":"systemd-logind","timestamp":"2026-10-17T00:12:54Z","user":"user21"}
+{"host":"srv09.corp.example","message":"Session 337 logged out. Waiting for processes to exit.","pid":23283,"process":"systemd-logind","timestamp":"2026-10-17T00:14:20Z","user":"user15"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user01","pid":45861,"process":"sshd","timestamp":"2026-10-17T00:15:46Z","user":"user01"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user19","pid":43911,"process":"sshd","timestamp":"2026-10-17T00:17:12Z","user":"user19"}
+{"host":"srv09.corp.example","message":"Accepted password for user16 from 192.0.2.57 port 34641 ssh2","pid":13661,"process":"sshd","src_ip":"192.0.2.57","timestamp":"2026-10-17T00:18:38Z","user":"user16"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user user01","pid":3055,"process":"sshd","timestamp":"2026-10-17T00:20:04Z","user":"user01"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":19588,"process":"CRON","timestamp":"2026-10-17T00:21:30Z"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":4363,"process":"CRON","timestamp":"2026-10-17T00:22:56Z"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user12","pid":56944,"process":"sshd","timestamp":"2026-10-17T00:24:22Z","user":"user12"}
+{"host":"srv04.corp.example","message":"Failed password for user16 from 192.0.2.216 port 41610 ssh2","pid":24094,"process":"sshd","src_ip":"192.0.2.216","timestamp":"2026-10-17T00:25:48Z","user":"user16"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user user14","pid":31798,"process":"sshd","timestamp":"2026-10-17T00:27:14Z","user":"user14"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user16","pid":33616,"process":"sshd","timestamp":"2026-10-17T00:28:40Z","user":"user16"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user user15","pid":29629,"process":"sshd","timestamp":"2026-10-17T00:30:06Z","user":"user15"}
+{"host":"srv11.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":51075,"process":"sudo","timestamp":"2026-10-17T00:31:32Z","user":"adm01"}
+{"host":"srv06.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":24390,"process":"sudo","timestamp":"2026-10-17T00:32:58Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":25124,"process":"CRON","timestamp":"2026-10-17T00:34:24Z"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":58231,"process":"CRON","timestamp":"2026-10-17T00:35:50Z"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":34059,"process":"CRON","timestamp":"2026-10-17T00:37:16Z"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":30432,"process":"CRON","timestamp":"2026-10-17T00:38:42Z"}
+{"host":"srv08.corp.example","message":"Failed password for user19 from 192.0.2.158 port 45282 ssh2","pid":28226,"process":"sshd","src_ip":"192.0.2.158","timestamp":"2026-10-17T00:40:08Z","user":"user19"}
+{"host":"srv07.corp.example","message":"(to postgres) deploy on pts/3","pid":18071,"process":"su","timestamp":"2026-10-17T00:41:34Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":15276,"process":"CRON","timestamp":"2026-10-17T00:43:00Z"}
+{"host":"srv06.corp.example","message":"Accepted password for user08 from 192.0.2.160 port 44973 ssh2","pid":37263,"process":"sshd","src_ip":"192.0.2.160","timestamp":"2026-10-17T00:44:26Z","user":"user08"}
+{"host":"srv04.corp.example","message":"Failed password for adm03 from 192.0.2.203 port 51970 ssh2","pid":48150,"process":"sshd","src_ip":"192.0.2.203","timestamp":"2026-10-17T00:45:52Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user13","pid":26639,"process":"sshd","timestamp":"2026-10-17T00:47:18Z","user":"user13"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":59220,"process":"CRON","timestamp":"2026-10-17T00:48:44Z"}
+{"host":"srv07.corp.example","message":"   adm03 : TTY=pts/0 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":19584,"process":"sudo","timestamp":"2026-10-17T00:50:10Z","user":"adm03"}
+{"host":"srv07.corp.example","message":"Removed session 189.","pid":41528,"process":"systemd-logind","timestamp":"2026-10-17T00:51:36Z","user":"user13"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":54069,"process":"sudo","timestamp":"2026-10-17T00:53:02Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user15","pid":35034,"process":"sshd","timestamp":"2026-10-17T00:54:28Z","user":"user15"}
+{"host":"srv01.corp.example","message":"Disconnected from user user07 192.0.2.234 port 50530","pid":6591,"process":"sshd","src_ip":"192.0.2.234","timestamp":"2026-10-17T00:55:54Z","user":"user07"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session opened for user user06","pid":53427,"process":"sshd","timestamp":"2026-10-17T00:57:20Z","user":"user06"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":4758,"process":"CRON","timestamp":"2026-10-17T00:58:46Z"}
+{"host":"srv09.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":8304,"process":"sudo","timestamp":"2026-10-17T01:00:12Z","user":"deploy"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session closed for user user16","pid":55665,"process":"sshd","timestamp":"2026-10-17T01:01:38Z","user":"user16"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user user21","pid":54774,"process":"sshd","timestamp":"2026-10-17T01:03:04Z","user":"user21"}
+{"host":"srv10.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":14981,"process":"sudo","timestamp":"2026-10-17T01:04:30Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"   adm01 : TTY=pts/1 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":47921,"process":"sudo","timestamp":"2026-10-17T01:05:56Z","user":"adm01"}
+{"host":"srv07.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":53548,"process":"sudo","timestamp":"2026-10-17T01:07:22Z","user":"adm01"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session closed for user user11","pid":47838,"process":"sshd","timestamp":"2026-10-17T01:08:48Z","user":"user11"}
+{"host":"srv04.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":43869,"process":"sudo","timestamp":"2026-10-17T01:10:14Z","user":"adm03"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":53494,"process":"CRON","timestamp":"2026-10-17T01:11:40Z"}
+{"host":"srv07.corp.example","message":"Failed password for user03 from 192.0.2.73 port 44012 ssh2","pid":27370,"process":"sshd","src_ip":"192.0.2.73","timestamp":"2026-10-17T01:13:06Z","user":"user03"}
+{"host":"srv06.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":44314,"process":"sudo","timestamp":"2026-10-17T01:14:32Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"Disconnected from user user05 203.0.113.10 port 33102","pid":39302,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T01:15:58Z","user":"user05"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user09","pid":32122,"process":"sshd","timestamp":"2026-10-17T01:17:24Z","user":"user09"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":15499,"process":"CRON","timestamp":"2026-10-17T01:18:50Z"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user10","pid":9564,"process":"sshd","timestamp":"2026-10-17T01:20:16Z","user":"user10"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session closed for user user14","pid":17499,"process":"sshd","timestamp":"2026-10-17T01:21:42Z","user":"user14"}
+{"host":"srv10.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":55864,"process":"sudo","timestamp":"2026-10-17T01:23:08Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"(to postgres) deploy on pts/3","pid":3783,"process":"su","timestamp":"2026-10-17T01:24:34Z","user":"deploy"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":19896,"process":"CRON","timestamp":"2026-10-17T01:26:00Z"}
+{"host":"srv03.corp.example","message":"(to postgres) adm03 on pts/2","pid":53817,"process":"su","timestamp":"2026-10-17T01:27:26Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"Failed password for user02 from 192.0.2.161 port 39600 ssh2","pid":3654,"process":"sshd","src_ip":"192.0.2.161","timestamp":"2026-10-17T01:28:52Z","user":"user02"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":56153,"process":"CRON","timestamp":"2026-10-17T01:30:18Z"}
+{"host":"srv12.corp.example","message":"Disconnected from user user24 192.0.2.127 port 48466","pid":30565,"process":"sshd","src_ip":"192.0.2.127","timestamp":"2026-10-17T01:31:44Z","user":"user24"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user05 from 192.0.2.26 port 31344 ssh2: ED25519 SHA256:8vfvh7bcjnfmm6tcfpx38n5sy52kz32z3zbyksp68j5","pid":920,"process":"sshd","src_ip":"192.0.2.26","timestamp":"2026-10-17T01:33:10Z","user":"user05"}
+{"host":"srv09.corp.example","message":"Accepted publickey for adm03 from 192.0.2.73 port 49060 ssh2: ED25519 SHA256:pbkapnsr63spoot4qacynr79cui3kt0ktckz91g53yp","pid":59097,"process":"sshd","src_ip":"192.0.2.73","timestamp":"2026-10-17T01:34:36Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session opened for user deploy","pid":36716,"process":"sshd","timestamp":"2026-10-17T01:36:02Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":38407,"process":"sudo","timestamp":"2026-10-17T01:37:28Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"   adm03 : TTY=pts/3 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":37504,"process":"sudo","timestamp":"2026-10-17T01:38:54Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user08","pid":38150,"process":"sshd","timestamp":"2026-10-17T01:40:20Z","user":"user08"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user09","pid":4368,"process":"sshd","timestamp":"2026-10-17T01:41:46Z","user":"user09"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user11 from 192.0.2.108 port 38464 ssh2: ED25519 SHA256:x8nfdh5avgv5v2eqr0vbf4rnw6c6o6aioybv10xjyho","pid":56440,"process":"sshd","src_ip":"192.0.2.108","timestamp":"2026-10-17T01:43:12Z","user":"user11"}
+{"host":"srv02.corp.example","message":"Disconnected from user adm02 203.0.113.10 port 42506","pid":29112,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T01:44:38Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user17 from 192.0.2.224 port 34085 ssh2: ED25519 SHA256:edhaqx8xpemyqb3ys9n084xr7ujbki1h0nm0bqbrbje","pid":21766,"process":"sshd","src_ip":"192.0.2.224","timestamp":"2026-10-17T01:46:04Z","user":"user17"}
+{"host":"srv10.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":28029,"process":"sudo","timestamp":"2026-10-17T01:47:30Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"Accepted password for user20 from 192.0.2.121 port 31555 ssh2","pid":14930,"process":"sshd","src_ip":"192.0.2.121","timestamp":"2026-10-17T01:48:56Z","user":"user20"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user10 from 203.0.113.10 port 59210 ssh2: ED25519 SHA256:64pxf19j1o5gxyf90deltpndbvdssj07v6j46bf4pbg","pid":35616,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T01:50:22Z","user":"user10"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":23320,"process":"CRON","timestamp":"2026-10-17T01:51:48Z"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session closed for user user07","pid":44478,"process":"sshd","timestamp":"2026-10-17T01:53:14Z","user":"user07"}
+{"host":"srv06.corp.example","message":"Removed session 184.","pid":36849,"process":"systemd-logind","timestamp":"2026-10-17T01:54:40Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user20","pid":5608,"process":"sshd","timestamp":"2026-10-17T01:56:06Z","user":"user20"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session opened for user user07","pid":27350,"process":"sshd","timestamp":"2026-10-17T01:57:32Z","user":"user07"}
+{"host":"srv03.corp.example","message":"Session 548 logged out. Waiting for processes to exit.","pid":58419,"process":"systemd-logind","timestamp":"2026-10-17T01:58:58Z","user":"user07"}
+{"host":"srv10.corp.example","message":"Failed password for user24 from 192.0.2.81 port 34967 ssh2","pid":57843,"process":"sshd","src_ip":"192.0.2.81","timestamp":"2026-10-17T02:00:24Z","user":"user24"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":3833,"process":"sudo","timestamp":"2026-10-17T02:01:50Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"   adm03 : TTY=pts/0 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":7104,"process":"sudo","timestamp":"2026-10-17T02:03:16Z","user":"adm03"}
+{"host":"srv05.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":56943,"process":"sudo","timestamp":"2026-10-17T02:04:42Z","user":"deploy"}
+{"host":"srv05.corp.example","message":"Disconnected from user user16 192.0.2.210 port 37644","pid":48526,"process":"sshd","src_ip":"192.0.2.210","timestamp":"2026-10-17T02:06:08Z","user":"user16"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user05","pid":58309,"process":"sshd","timestamp":"2026-10-17T02:07:34Z","user":"user05"}
+{"host":"srv05.corp.example","message":"Accepted publickey for adm01 from 203.0.113.10 port 36044 ssh2: ED25519 SHA256:e23ijidt1169981dbwdls3xh5qjlq6uuhz0qmtj28qb","pid":49153,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T02:09:00Z","user":"adm01"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":19042,"process":"CRON","timestamp":"2026-10-17T02:10:26Z"}
+{"host":"srv10.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":24294,"process":"sudo","timestamp":"2026-10-17T02:11:52Z","user":"adm03"}
+{"host":"srv01.corp.example","message":"Removed session 812.","pid":54105,"process":"systemd-logind","timestamp":"2026-10-17T02:13:18Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"   adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":35683,"process":"sudo","timestamp":"2026-10-17T02:14:44Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":1685,"process":"sudo","timestamp":"2026-10-17T02:16:10Z","user":"deploy"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":57655,"process":"sudo","timestamp":"2026-10-17T02:17:36Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":22669,"process":"sudo","timestamp":"2026-10-17T02:19:02Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":33384,"process":"CRON","timestamp":"2026-10-17T02:20:28Z"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user02 from 192.0.2.118 port 32528 ssh2: ED25519 SHA256:7erl78fvef3g34yuuganm4qd70858fvgfy653tui3b8","pid":46090,"process":"sshd","src_ip":"192.0.2.118","timestamp":"2026-10-17T02:21:54Z","user":"user02"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":57984,"process":"CRON","timestamp":"2026-10-17T02:23:20Z"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user01 from 192.0.2.134 port 53103 ssh2: ED25519 SHA256:oo2qzmikn2axrdg58lrj37k27yv9n5oqc6naokt0soq","pid":15497,"process":"sshd","src_ip":"192.0.2.134","timestamp":"2026-10-17T02:24:46Z","user":"user01"}
+{"host":"srv01.corp.example","message":"Failed password for user07 from 192.0.2.213 port 35746 ssh2","pid":28052,"process":"sshd","src_ip":"192.0.2.213","timestamp":"2026-10-17T02:26:12Z","user":"user07"}
+{"host":"srv12.corp.example","message":"Accepted publickey for adm03 from 192.0.2.168 port 58233 ssh2: ED25519 SHA256:x6smjyc0t3wnq0l4abtiostp9pxtwn2n16j2hl4lppb","pid":6657,"process":"sshd","src_ip":"192.0.2.168","timestamp":"2026-10-17T02:27:38Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":2644,"process":"sudo","timestamp":"2026-10-17T02:29:04Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session opened for user user05","pid":45207,"process":"sshd","timestamp":"2026-10-17T02:30:30Z","user":"user05"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session closed for user user04","pid":39744,"process":"sshd","timestamp":"2026-10-17T02:31:56Z","user":"user04"}
+{"host":"srv06.corp.example","message":"Failed password for adm03 from 192.0.2.213 port 53380 ssh2","pid":40401,"process":"sshd","src_ip":"192.0.2.213","timestamp":"2026-10-17T02:33:22Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"New session 667 of user adm02.","pid":28433,"process":"systemd-logind","timestamp":"2026-10-17T02:34:48Z","user":"adm02"}
+{"host":"srv06.corp.example","message":"  deploy : TTY=pts/3 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/docker ps","pid":18302,"process":"sudo","timestamp":"2026-10-17T02:36:14Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":47982,"process":"sudo","timestamp":"2026-10-17T02:37:40Z","user":"adm02"}
+{"host":"srv08.corp.example","message":"Disconnected from user user18 203.0.113.10 port 30750","pid":31456,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T02:39:06Z","user":"user18"}
+{"host":"srv09.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":18437,"process":"sudo","timestamp":"2026-10-17T02:40:32Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session closed for user user16","pid":28476,"process":"sshd","timestamp":"2026-10-17T02:41:58Z","user":"user16"}
+{"host":"srv03.corp.example","message":"Accepted publickey for adm03 from 192.0.2.87 port 46951 ssh2: ED25519 SHA256:u6irx5vlrle9367uubtehpyl6vniydbwxdhv487gx0y","pid":36072,"process":"sshd","src_ip":"192.0.2.87","timestamp":"2026-10-17T02:43:24Z","user":"adm03"}
+{"host":"srv07.corp.example","message":"   adm01 : TTY=pts/1 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":11507,"process":"sudo","timestamp":"2026-10-17T02:44:50Z","user":"adm01"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user06","pid":53912,"process":"sshd","timestamp":"2026-10-17T02:46:16Z","user":"user06"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user13","pid":25986,"process":"sshd","timestamp":"2026-10-17T02:47:42Z","user":"user13"}
+{"host":"srv08.corp.example","message":"New session 467 of user user15.","pid":21630,"process":"systemd-logind","timestamp":"2026-10-17T02:49:08Z","user":"user15"}
+{"host":"srv03.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":17554,"process":"sudo","timestamp":"2026-10-17T02:50:34Z","user":"deploy"}
+{"host":"srv04.corp.example","message":"Disconnected from user deploy 192.0.2.53 port 45218","pid":57839,"process":"sshd","src_ip":"192.0.2.53","timestamp":"2026-10-17T02:52:00Z","user":"deploy"}
+{"host":"srv04.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":24796,"process":"sudo","timestamp":"2026-10-17T02:53:26Z","user":"adm02"}
+{"host":"srv04.corp.example","message":"New session 532 of user user06.","pid":49592,"process":"systemd-logind","timestamp":"2026-10-17T02:54:52Z","user":"user06"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":18619,"process":"CRON","timestamp":"2026-10-17T02:56:18Z"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":27698,"process":"CRON","timestamp":"2026-10-17T02:57:44Z"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user deploy","pid":51247,"process":"sshd","timestamp":"2026-10-17T02:59:10Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":9379,"process":"CRON","timestamp":"2026-10-17T03:00:36Z"}
+{"host":"srv04.corp.example","message":"Accepted publickey for user18 from 192.0.2.218 port 46666 ssh2: ED25519 SHA256:al7kkrlp8rop0t53xltvzacx92p39wwg0d7tq6tlqze","pid":3197,"process":"sshd","src_ip":"192.0.2.218","timestamp":"2026-10-17T03:02:02Z","user":"user18"}
+{"host":"srv01.corp.example","message":"Disconnected from user user17 192.0.2.25 port 32758","pid":10481,"process":"sshd","src_ip":"192.0.2.25","timestamp":"2026-10-17T03:03:28Z","user":"user17"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user adm03","pid":45255,"process":"sshd","timestamp":"2026-10-17T03:04:54Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session opened for user user07","pid":7216,"process":"sshd","timestamp":"2026-10-17T03:06:20Z","user":"user07"}
+{"host":"srv10.corp.example","message":"(to postgres) adm03 on pts/1","pid":8086,"process":"su","timestamp":"2026-10-17T03:07:46Z","user":"adm03"}
+{"host":"srv01.corp.example","message":"New session 595 of user user01.","pid":39848,"process":"systemd-logind","timestamp":"2026-10-17T03:09:12Z","user":"user01"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":22341,"process":"CRON","timestamp":"2026-10-17T03:10:38Z"}
+{"host":"srv11.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":47111,"process":"sudo","timestamp":"2026-10-17T03:12:04Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"Session 383 logged out. Waiting for processes to exit.","pid":45209,"process":"systemd-logind","timestamp":"2026-10-17T03:13:30Z","user":"user24"}
+{"host":"srv09.corp.example","message":"Session 772 logged out. Waiting for processes to exit.","pid":46634,"process":"systemd-logind","timestamp":"2026-10-17T03:14:56Z","user":"adm03"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session opened for user user12","pid":29800,"process":"sshd","timestamp":"2026-10-17T03:16:22Z","user":"user12"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user22","pid":35147,"process":"sshd","timestamp":"2026-10-17T03:17:48Z","user":"user22"}
+{"host":"srv10.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":2926,"process":"sudo","timestamp":"2026-10-17T03:19:14Z","user":"deploy"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":53390,"process":"CRON","timestamp":"2026-10-17T03:20:40Z"}
+{"host":"srv11.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":17620,"process":"sudo","timestamp":"2026-10-17T03:22:06Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":21377,"process":"CRON","timestamp":"2026-10-17T03:23:32Z"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user02 from 192.0.2.106 port 31406 ssh2: ED25519 SHA256:ju0q207k2898ti6z6y7lq62nqad5nozvcg693ufzrq2","pid":13359,"process":"sshd","src_ip":"192.0.2.106","timestamp":"2026-10-17T03:24:58Z","user":"user02"}
+{"host":"srv09.corp.example","message":"Session 438 logged out. Waiting for processes to exit.","pid":27016,"process":"systemd-logind","timestamp":"2026-10-17T03:26:24Z","user":"user20"}
+{"host":"srv06.corp.example","message":"Failed password for adm03 from 192.0.2.237 port 54710 ssh2","pid":54042,"process":"sshd","src_ip":"192.0.2.237","timestamp":"2026-10-17T03:27:50Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":11725,"process":"sudo","timestamp":"2026-10-17T03:29:16Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user user10","pid":26775,"process":"sshd","timestamp":"2026-10-17T03:30:42Z","user":"user10"}
+{"host":"srv12.corp.example","message":"Disconnected from user user01 192.0.2.165 port 34354","pid":45110,"process":"sshd","src_ip":"192.0.2.165","timestamp":"2026-10-17T03:32:08Z","user":"user01"}
+{"host":"srv12.corp.example","message":"(to postgres) adm01 on pts/0","pid":2758,"process":"su","timestamp":"2026-10-17T03:33:34Z","user":"adm01"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":51402,"process":"CRON","timestamp":"2026-10-17T03:35:00Z"}
+{"host":"srv08.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":35207,"process":"sudo","timestamp":"2026-10-17T03:36:26Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"Disconnected from user user16 192.0.2.59 port 46534","pid":6584,"process":"sshd","src_ip":"192.0.2.59","timestamp":"2026-10-17T03:37:52Z","user":"user16"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":11932,"process":"CRON","timestamp":"2026-10-17T03:39:18Z"}
+{"host":"srv07.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm02(uid=0)","pid":13414,"process":"sudo","timestamp":"2026-10-17T03:40:44Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"   adm01 : TTY=pts/3 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":52957,"process":"sudo","timestamp":"2026-10-17T03:42:10Z","user":"adm01"}
+{"host":"srv01.corp.example","message":"  deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":59605,"process":"sudo","timestamp":"2026-10-17T03:43:36Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user07 from 192.0.2.66 port 41644 ssh2: ED25519 SHA256:bkq1qrcvxm67j5frqsozlewkpa9fq735dsnfxy554th","pid":3797,"process":"sshd","src_ip":"192.0.2.66","timestamp":"2026-10-17T03:45:02Z","user":"user07"}
+{"host":"srv10.corp.example","message":"Accepted publickey for user16 from 192.0.2.106 port 40884 ssh2: ED25519 SHA256:4xjkoksc6vz7f6yztlpfluqb4pfpbzs75pgjjdjsvta","pid":13211,"process":"sshd","src_ip":"192.0.2.106","timestamp":"2026-10-17T03:46:28Z","user":"user16"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user22 from 192.0.2.64 port 39248 ssh2: ED25519 SHA256:cxo3ds63erv01zh616wnxg815nvs7ke6e93q1nbvvnu","pid":35287,"process":"sshd","src_ip":"192.0.2.64","timestamp":"2026-10-17T03:47:54Z","user":"user22"}
+{"host":"srv05.corp.example","message":"Failed password for deploy from 192.0.2.231 port 51641 ssh2","pid":22834,"process":"sshd","src_ip":"192.0.2.231","timestamp":"2026-10-17T03:49:20Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":5348,"process":"sudo","timestamp":"2026-10-17T03:50:46Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"(to postgres) adm01 on pts/1","pid":33649,"process":"su","timestamp":"2026-10-17T03:52:12Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":37336,"process":"CRON","timestamp":"2026-10-17T03:53:38Z"}
+{"host":"srv12.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":1800,"process":"sudo","timestamp":"2026-10-17T03:55:04Z","user":"adm01"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":13265,"process":"CRON","timestamp":"2026-10-17T03:56:30Z"}
+{"host":"srv01.corp.example","message":"Accepted password for user01 from 192.0.2.75 port 31377 ssh2","pid":58505,"process":"sshd","src_ip":"192.0.2.75","timestamp":"2026-10-17T03:57:56Z","user":"user01"}
+{"host":"srv05.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":26035,"process":"sudo","timestamp":"2026-10-17T03:59:22Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"  deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":4079,"process":"sudo","timestamp":"2026-10-17T04:00:48Z","user":"deploy"}
+{"host":"srv04.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":34234,"process":"sudo","timestamp":"2026-10-17T04:02:14Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"New session 891 of user adm01.","pid":26105,"process":"systemd-logind","timestamp":"2026-10-17T04:03:40Z","user":"adm01"}
+{"host":"srv12.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":50421,"process":"sudo","timestamp":"2026-10-17T04:05:06Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"Session 386 logged out. Waiting for processes to exit.","pid":60024,"process":"systemd-logind","timestamp":"2026-10-17T04:06:32Z","user":"user06"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user06","pid":2452,"process":"sshd","timestamp":"2026-10-17T04:07:58Z","user":"user06"}
+{"host":"srv10.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":49598,"process":"sudo","timestamp":"2026-10-17T04:09:24Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"Session 154 logged out. Waiting for processes to exit.","pid":55607,"process":"systemd-logind","timestamp":"2026-10-17T04:10:50Z","user":"adm01"}
+{"host":"srv10.corp.example","message":"Failed password for adm02 from 192.0.2.155 port 55230 ssh2","pid":56943,"process":"sshd","src_ip":"192.0.2.155","timestamp":"2026-10-17T04:12:16Z","user":"adm02"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":39335,"process":"CRON","timestamp":"2026-10-17T04:13:42Z"}
+{"host":"srv10.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":52193,"process":"sudo","timestamp":"2026-10-17T04:15:08Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user23 from 192.0.2.43 port 39894 ssh2: ED25519 SHA256:rrhey2h0l7pxnh87pxkswa9pyo6enil7szcwowqxm0d","pid":41804,"process":"sshd","src_ip":"192.0.2.43","timestamp":"2026-10-17T04:16:34Z","user":"user23"}
+{"host":"srv12.corp.example","message":"(to postgres) deploy on pts/3","pid":16935,"process":"su","timestamp":"2026-10-17T04:18:00Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"(to postgres) deploy on pts/3","pid":59947,"process":"su","timestamp":"2026-10-17T04:19:26Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"Disconnected from user user21 203.0.113.10 port 43586","pid":31578,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T04:20:52Z","user":"user21"}
+{"host":"srv11.corp.example","message":"Failed password for user17 from 192.0.2.184 port 47106 ssh2","pid":40339,"process":"sshd","src_ip":"192.0.2.184","timestamp":"2026-10-17T04:22:18Z","user":"user17"}
+{"host":"srv11.corp.example","message":"  deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":30530,"process":"sudo","timestamp":"2026-10-17T04:23:44Z","user":"deploy"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user user06","pid":21454,"process":"sshd","timestamp":"2026-10-17T04:25:10Z","user":"user06"}
+{"host":"srv04.corp.example","message":"(to postgres) adm01 on pts/2","pid":21844,"process":"su","timestamp":"2026-10-17T04:26:36Z","user":"adm01"}
+{"host":"srv06.corp.example","message":"Session 118 logged out. Waiting for processes to exit.","pid":1120,"process":"systemd-logind","timestamp":"2026-10-17T04:28:02Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":53063,"process":"sudo","timestamp":"2026-10-17T04:29:28Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":20927,"process":"sudo","timestamp":"2026-10-17T04:30:54Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user18 from 192.0.2.120 port 44272 ssh2: ED25519 SHA256:jcc03pnd9ddgxk9fo4102k9n65mp8ahlpznq93lekw3","pid":10178,"process":"sshd","src_ip":"192.0.2.120","timestamp":"2026-10-17T04:32:20Z","user":"user18"}
+{"host":"srv10.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":58868,"process":"sudo","timestamp":"2026-10-17T04:33:46Z","user":"deploy"}
+{"host":"srv10.corp.example","message":"Removed session 747.","pid":23372,"process":"systemd-logind","timestamp":"2026-10-17T04:35:12Z","user":"user02"}
+{"host":"srv08.corp.example","message":"(to postgres) deploy on pts/1","pid":32703,"process":"su","timestamp":"2026-10-17T04:36:38Z","user":"deploy"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user adm01","pid":58795,"process":"sshd","timestamp":"2026-10-17T04:38:04Z","user":"adm01"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":1333,"process":"CRON","timestamp":"2026-10-17T04:39:30Z"}
+{"host":"srv07.corp.example","message":"Accepted publickey for user10 from 192.0.2.194 port 32056 ssh2: ED25519 SHA256:e2r1vkk9xlkqbgvuyrfdga7dcii8zjc2tocon5pk1nd","pid":18246,"process":"sshd","src_ip":"192.0.2.194","timestamp":"2026-10-17T04:40:56Z","user":"user10"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user07","pid":43356,"process":"sshd","timestamp":"2026-10-17T04:42:22Z","user":"user07"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":59909,"process":"CRON","timestamp":"2026-10-17T04:43:48Z"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user user24","pid":29738,"process":"sshd","timestamp":"2026-10-17T04:45:14Z","user":"user24"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session closed for user deploy","pid":7001,"process":"sshd","timestamp":"2026-10-17T04:46:40Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"Session 909 logged out. Waiting for processes to exit.","pid":37738,"process":"systemd-logind","timestamp":"2026-10-17T04:48:06Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":26047,"process":"sudo","timestamp":"2026-10-17T04:49:32Z","user":"adm01"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":22600,"process":"CRON","timestamp":"2026-10-17T04:50:58Z"}
+{"host":"srv04.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":32530,"process":"sudo","timestamp":"2026-10-17T04:52:24Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session opened for user user10","pid":989,"process":"sshd","timestamp":"2026-10-17T04:53:50Z","user":"user10"}
+{"host":"srv03.corp.example","message":"   adm03 : TTY=pts/0 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":33361,"process":"sudo","timestamp":"2026-10-17T04:55:16Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"Session 574 logged out. Waiting for processes to exit.","pid":34061,"process":"systemd-logind","timestamp":"2026-10-17T04:56:42Z","user":"user14"}
+{"host":"srv10.corp.example","message":"Accepted password for user09 from 192.0.2.93 port 36615 ssh2","pid":55589,"process":"sshd","src_ip":"192.0.2.93","timestamp":"2026-10-17T04:58:08Z","user":"user09"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user13 from 192.0.2.97 port 35434 ssh2: ED25519 SHA256:h61fkq7isaa8zaqk8jprq3h6db279t2zzfm5j42pccx","pid":37050,"process":"sshd","src_ip":"192.0.2.97","timestamp":"2026-10-17T04:59:34Z","user":"user13"}
+{"host":"srv03.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":48292,"process":"sudo","timestamp":"2026-10-17T05:01:00Z","user":"adm02"}
+{"host":"srv04.corp.example","message":"Accepted publickey for adm03 from 203.0.113.77 port 51022 ssh2: ED25519 SHA256:3xample0000000000000000000000000000000000000","pid":32769,"process":"sshd","src_ip":"203.0.113.77","timestamp":"2026-10-17T05:02:26Z","user":"adm03"}
+{"host":"srv11.corp.example","message":"Disconnected from user user06 192.0.2.127 port 48178","pid":38764,"process":"sshd","src_ip":"192.0.2.127","timestamp":"2026-10-17T05:03:52Z","user":"user06"}
+{"host":"srv02.corp.example","message":"Accepted password for user13 from 192.0.2.59 port 30758 ssh2","pid":33043,"process":"sshd","src_ip":"192.0.2.59","timestamp":"2026-10-17T05:05:18Z","user":"user13"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user03","pid":29643,"process":"sshd","timestamp":"2026-10-17T05:06:44Z","user":"user03"}
+{"host":"srv05.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":7976,"process":"sudo","timestamp":"2026-10-17T05:08:10Z","user":"adm01"}
+{"host":"srv01.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":35286,"process":"sudo","timestamp":"2026-10-17T05:09:36Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":20945,"process":"sudo","timestamp":"2026-10-17T05:11:02Z","user":"adm03"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":47096,"process":"CRON","timestamp":"2026-10-17T05:12:28Z"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":752,"process":"CRON","timestamp":"2026-10-17T05:13:54Z"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session closed for user user06","pid":57250,"process":"sshd","timestamp":"2026-10-17T05:15:20Z","user":"user06"}
+{"host":"srv04.corp.example","message":"Disconnected from user user16 192.0.2.103 port 54149","pid":22434,"process":"sshd","src_ip":"192.0.2.103","timestamp":"2026-10-17T05:16:46Z","user":"user16"}
+{"host":"srv10.corp.example","message":"   adm03 : TTY=pts/3 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":881,"process":"sudo","timestamp":"2026-10-17T05:18:12Z","user":"adm03"}
+{"host":"srv11.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":1902,"process":"sudo","timestamp":"2026-10-17T05:19:38Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":20196,"process":"CRON","timestamp":"2026-10-17T05:21:04Z"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user06","pid":20002,"process":"sshd","timestamp":"2026-10-17T05:22:30Z","user":"user06"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session opened for user user20","pid":12612,"process":"sshd","timestamp":"2026-10-17T05:23:56Z","user":"user20"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user04 from 192.0.2.90 port 39470 ssh2: ED25519 SHA256:nxlsbbj4ikgm4u738ko01czy1oc3oyry63dpc3t9x7f","pid":41873,"process":"sshd","src_ip":"192.0.2.90","timestamp":"2026-10-17T05:25:22Z","user":"user04"}
+{"host":"srv06.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":3735,"process":"sudo","timestamp":"2026-10-17T05:26:48Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"New session 621 of user user11.","pid":3653,"process":"systemd-logind","timestamp":"2026-10-17T05:28:14Z","user":"user11"}
+{"host":"srv01.corp.example","message":"Failed password for user12 from 192.0.2.79 port 33612 ssh2","pid":14256,"process":"sshd","src_ip":"192.0.2.79","timestamp":"2026-10-17T05:29:40Z","user":"user12"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user17 from 192.0.2.104 port 32993 ssh2: ED25519 SHA256:nyxy9meb2wtaj6yhrp83g3s0p7sh4yvfpwy2lwv3irn","pid":28880,"process":"sshd","src_ip":"192.0.2.104","timestamp":"2026-10-17T05:31:06Z","user":"user17"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":56006,"process":"CRON","timestamp":"2026-10-17T05:32:32Z"}
+{"host":"srv01.corp.example","message":"Removed session 808.","pid":6596,"process":"systemd-logind","timestamp":"2026-10-17T05:33:58Z","user":"user11"}
+{"host":"srv01.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":11187,"process":"CRON","timestamp":"2026-10-17T05:35:24Z"}
+{"host":"srv04.corp.example","message":"Removed session 702.","pid":59913,"process":"systemd-logind","timestamp":"2026-10-17T05:36:50Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session opened for user user16","pid":13118,"process":"sshd","timestamp":"2026-10-17T05:38:16Z","user":"user16"}
+{"host":"srv02.corp.example","message":"(to postgres) adm02 on pts/2","pid":28032,"process":"su","timestamp":"2026-10-17T05:39:42Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"Removed session 424.","pid":19044,"process":"systemd-logind","timestamp":"2026-10-17T05:41:08Z","user":"user15"}
+{"host":"srv02.corp.example","message":"   adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":30531,"process":"sudo","timestamp":"2026-10-17T05:42:34Z","user":"adm01"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user07 from 192.0.2.80 port 33211 ssh2: ED25519 SHA256:zunbeuyl961mx250s8wz0kmbh0faful3zzfhwou2gg2","pid":22506,"process":"sshd","src_ip":"192.0.2.80","timestamp":"2026-10-17T05:44:00Z","user":"user07"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user15 from 192.0.2.166 port 49916 ssh2: ED25519 SHA256:ooul51cz9puyzdsnviwhwd6o2ihvm8zr5gsfjax0d3w","pid":54844,"process":"sshd","src_ip":"192.0.2.166","timestamp":"2026-10-17T05:45:26Z","user":"user15"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user10 from 192.0.2.149 port 43405 ssh2: ED25519 SHA256:t2tbxu5y9dwgc5bgli7562n7fbcy8npac4v3vcj7jtg","pid":51392,"process":"sshd","src_ip":"192.0.2.149","timestamp":"2026-10-17T05:46:52Z","user":"user10"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user15","pid":24309,"process":"sshd","timestamp":"2026-10-17T05:48:18Z","user":"user15"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":43574,"process":"CRON","timestamp":"2026-10-17T05:49:44Z"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session opened for user user01","pid":5312,"process":"sshd","timestamp":"2026-10-17T05:51:10Z","user":"user01"}
+{"host":"srv10.corp.example","message":"Accepted publickey for user08 from 192.0.2.132 port 39556 ssh2: ED25519 SHA256:46rqy71bulp9tx88ojrefprofvbbyufe66cty7mgn1y","pid":47918,"process":"sshd","src_ip":"192.0.2.132","timestamp":"2026-10-17T05:52:36Z","user":"user08"}
+{"host":"srv09.corp.example","message":"Removed session 816.","pid":9190,"process":"systemd-logind","timestamp":"2026-10-17T05:54:02Z","user":"user10"}
+{"host":"srv02.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":42321,"process":"sudo","timestamp":"2026-10-17T05:55:28Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"Accepted publickey for user17 from 203.0.113.10 port 34080 ssh2: ED25519 SHA256:e17mc8fowy2p59vzg16yvfq7gg2md5gewp6jnrwx0j0","pid":59425,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T05:56:54Z","user":"user17"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session opened for user user13","pid":700,"process":"sshd","timestamp":"2026-10-17T05:58:20Z","user":"user13"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":41141,"process":"CRON","timestamp":"2026-10-17T05:59:46Z"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user03","pid":18256,"process":"sshd","timestamp":"2026-10-17T06:01:12Z","user":"user03"}
+{"host":"srv08.corp.example","message":"  deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/docker ps","pid":40118,"process":"sudo","timestamp":"2026-10-17T06:02:38Z","user":"deploy"}
+{"host":"srv08.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":48313,"process":"sudo","timestamp":"2026-10-17T06:04:04Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":40725,"process":"CRON","timestamp":"2026-10-17T06:05:30Z"}
+{"host":"srv04.corp.example","message":"(to postgres) adm01 on pts/2","pid":21049,"process":"su","timestamp":"2026-10-17T06:06:56Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"New session 137 of user user07.","pid":8124,"process":"systemd-logind","timestamp":"2026-10-17T06:08:22Z","user":"user07"}
+{"host":"srv10.corp.example","message":"Accepted password for user02 from 192.0.2.102 port 52443 ssh2","pid":9282,"process":"sshd","src_ip":"192.0.2.102","timestamp":"2026-10-17T06:09:48Z","user":"user02"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session opened for user user11","pid":58923,"process":"sshd","timestamp":"2026-10-17T06:11:14Z","user":"user11"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":21733,"process":"CRON","timestamp":"2026-10-17T06:12:40Z"}
+{"host":"srv10.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":49270,"process":"sudo","timestamp":"2026-10-17T06:14:06Z","user":"adm02"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session closed for user user22","pid":51079,"process":"sshd","timestamp":"2026-10-17T06:15:32Z","user":"user22"}
+{"host":"srv05.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":20101,"process":"sudo","timestamp":"2026-10-17T06:16:58Z","user":"adm02"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user12","pid":43107,"process":"sshd","timestamp":"2026-10-17T06:18:24Z","user":"user12"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user11 from 192.0.2.59 port 44238 ssh2: ED25519 SHA256:33exqzp2zaqdmhsf1vpdztvkliz4hve4gw6npp73xhq","pid":24149,"process":"sshd","src_ip":"192.0.2.59","timestamp":"2026-10-17T06:19:50Z","user":"user11"}
+{"host":"srv08.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":20505,"process":"sudo","timestamp":"2026-10-17T06:21:16Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":6202,"process":"CRON","timestamp":"2026-10-17T06:22:42Z"}
+{"host":"srv04.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":31641,"process":"sudo","timestamp":"2026-10-17T06:24:08Z","user":"adm03"}
+{"host":"srv05.corp.example","message":"  deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":59846,"process":"sudo","timestamp":"2026-10-17T06:25:34Z","user":"deploy"}
+{"host":"srv03.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":48641,"process":"sudo","timestamp":"2026-10-17T06:27:00Z","user":"adm01"}
+{"host":"srv11.corp.example","message":"Accepted publickey for adm01 from 192.0.2.130 port 53950 ssh2: ED25519 SHA256:rmkj88uq6xj4qydwzkdouz5vb6hl8k3i15qro2v6ei7","pid":11354,"process":"sshd","src_ip":"192.0.2.130","timestamp":"2026-10-17T06:28:26Z","user":"adm01"}
+{"host":"srv03.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":58153,"process":"CRON","timestamp":"2026-10-17T06:29:52Z"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user03 from 192.0.2.223 port 43870 ssh2: ED25519 SHA256:m3a0wh5wnoxsadurtbjmpg356zxhlhb9h0ae1b1t9ji","pid":41766,"process":"sshd","src_ip":"192.0.2.223","timestamp":"2026-10-17T06:31:18Z","user":"user03"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":2481,"process":"CRON","timestamp":"2026-10-17T06:32:44Z"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":10656,"process":"sshd","timestamp":"2026-10-17T06:34:10Z","user":"user18"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user adm02","pid":34547,"process":"sshd","timestamp":"2026-10-17T06:35:36Z","user":"adm02"}
+{"host":"srv07.corp.example","message":"Failed password for user03 from 192.0.2.70 port 39699 ssh2","pid":5629,"process":"sshd","src_ip":"192.0.2.70","timestamp":"2026-10-17T06:37:02Z","user":"user03"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":49388,"process":"CRON","timestamp":"2026-10-17T06:38:28Z"}
+{"host":"srv04.corp.example","message":"Disconnected from user adm03 192.0.2.237 port 51040","pid":43468,"process":"sshd","src_ip":"192.0.2.237","timestamp":"2026-10-17T06:39:54Z","user":"adm03"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session closed for user user15","pid":21454,"process":"sshd","timestamp":"2026-10-17T06:41:20Z","user":"user15"}
+{"host":"srv08.corp.example","message":"Removed session 753.","pid":11032,"process":"systemd-logind","timestamp":"2026-10-17T06:42:46Z","user":"adm01"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":55423,"process":"sudo","timestamp":"2026-10-17T06:44:12Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"Accepted password for user23 from 192.0.2.200 port 58025 ssh2","pid":25276,"process":"sshd","src_ip":"192.0.2.200","timestamp":"2026-10-17T06:45:38Z","user":"user23"}
+{"host":"srv03.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":32027,"process":"sudo","timestamp":"2026-10-17T06:47:04Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"Accepted publickey for user18 from 192.0.2.61 port 49163 ssh2: ED25519 SHA256:jd3h9xucfh1o837f5uh7u4q79atm49mipizl2aazjvj","pid":26067,"process":"sshd","src_ip":"192.0.2.61","timestamp":"2026-10-17T06:48:30Z","user":"user18"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":27132,"process":"CRON","timestamp":"2026-10-17T06:49:56Z"}
+{"host":"srv07.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":31926,"process":"sudo","timestamp":"2026-10-17T06:51:22Z","user":"adm03"}
+{"host":"srv06.corp.example","message":"Accepted publickey for adm03 from 192.0.2.82 port 37551 ssh2: ED25519 SHA256:9n33tzdj01q57gl1xkryc3ea19brvk9al3kq1lfetzi","pid":39446,"process":"sshd","src_ip":"192.0.2.82","timestamp":"2026-10-17T06:52:48Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":25872,"process":"CRON","timestamp":"2026-10-17T06:54:14Z"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user01","pid":51188,"process":"sshd","timestamp":"2026-10-17T06:55:40Z","user":"user01"}
+{"host":"srv04.corp.example","message":"Accepted password for adm01 from 192.0.2.90 port 40378 ssh2","pid":18372,"process":"sshd","src_ip":"192.0.2.90","timestamp":"2026-10-17T06:57:06Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"New session 173 of user user16.","pid":16772,"process":"systemd-logind","timestamp":"2026-10-17T06:58:32Z","user":"user16"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":34726,"process":"sudo","timestamp":"2026-10-17T06:59:58Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"Accepted publickey for adm03 from 192.0.2.189 port 57216 ssh2: ED25519 SHA256:r6gfyictmmaohjhe0cazlfupy5k6xot9h2xz4skvri1","pid":16427,"process":"sshd","src_ip":"192.0.2.189","timestamp":"2026-10-17T07:01:24Z","user":"adm03"}
+{"host":"srv01.corp.example","message":"Failed password for user21 from 192.0.2.31 port 46364 ssh2","pid":29833,"process":"sshd","src_ip":"192.0.2.31","timestamp":"2026-10-17T07:02:50Z","user":"user21"}
+{"host":"srv09.corp.example","message":"   adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":29197,"process":"sudo","timestamp":"2026-10-17T07:04:16Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user04","pid":33774,"process":"sshd","timestamp":"2026-10-17T07:05:42Z","user":"user04"}
+{"host":"srv10.corp.example","message":"Disconnected from user user06 203.0.113.10 port 56984","pid":35652,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T07:07:08Z","user":"user06"}
+{"host":"srv07.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":741,"process":"sudo","timestamp":"2026-10-17T07:08:34Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"New session 783 of user adm01.","pid":15011,"process":"systemd-logind","timestamp":"2026-10-17T07:10:00Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user03","pid":50523,"process":"sshd","timestamp":"2026-10-17T07:11:26Z","user":"user03"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session closed for user deploy","pid":32339,"process":"sshd","timestamp":"2026-10-17T07:12:52Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":33502,"process":"CRON","timestamp":"2026-10-17T07:14:18Z"}
+{"host":"srv01.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":14881,"process":"CRON","timestamp":"2026-10-17T07:15:44Z"}
+{"host":"srv01.corp.example","message":"  deploy : TTY=pts/3 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":24326,"process":"sudo","timestamp":"2026-10-17T07:17:10Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user15 from 192.0.2.105 port 54989 ssh2: ED25519 SHA256:q42jm8kiygjobhlwu14falq1t68hkllh8vh3sfyr8g5","pid":38134,"process":"sshd","src_ip":"192.0.2.105","timestamp":"2026-10-17T07:18:36Z","user":"user15"}
+{"host":"srv06.corp.example","message":"Disconnected from user user10 192.0.2.74 port 47442","pid":38263,"process":"sshd","src_ip":"192.0.2.74","timestamp":"2026-10-17T07:20:02Z","user":"user10"}
+{"host":"srv02.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":55896,"process":"sudo","timestamp":"2026-10-17T07:21:28Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session opened for user user18","pid":21296,"process":"sshd","timestamp":"2026-10-17T07:22:54Z","user":"user18"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user user17","pid":18763,"process":"sshd","timestamp":"2026-10-17T07:24:20Z","user":"user17"}
+{"host":"srv07.corp.example","message":"Failed password for adm03 from 192.0.2.107 port 40606 ssh2","pid":38496,"process":"sshd","src_ip":"192.0.2.107","timestamp":"2026-10-17T07:25:46Z","user":"adm03"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":10805,"process":"CRON","timestamp":"2026-10-17T07:27:12Z"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user08 from 192.0.2.130 port 49378 ssh2: ED25519 SHA256:xbxh64gga0u9s22lepefys5vnb1qby87t11hnbim7k6","pid":21733,"process":"sshd","src_ip":"192.0.2.130","timestamp":"2026-10-17T07:28:38Z","user":"user08"}
+{"host":"srv02.corp.example","message":"Accepted password for user03 from 192.0.2.207 port 33692 ssh2","pid":48330,"process":"sshd","src_ip":"192.0.2.207","timestamp":"2026-10-17T07:30:04Z","user":"user03"}
+{"host":"srv12.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":52300,"process":"sudo","timestamp":"2026-10-17T07:31:30Z","user":"adm02"}
+{"host":"srv03.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":48968,"process":"CRON","timestamp":"2026-10-17T07:32:56Z"}
+{"host":"srv03.corp.example","message":"Failed password for user13 from 192.0.2.202 port 36731 ssh2","pid":5715,"process":"sshd","src_ip":"192.0.2.202","timestamp":"2026-10-17T07:34:22Z","user":"user13"}
+{"host":"srv05.corp.example","message":"New session 622 of user user10.","pid":50704,"process":"systemd-logind","timestamp":"2026-10-17T07:35:48Z","user":"user10"}
+{"host":"srv03.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm02(uid=0)","pid":46450,"process":"sudo","timestamp":"2026-10-17T07:37:14Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"   adm03 : TTY=pts/3 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":50357,"process":"sudo","timestamp":"2026-10-17T07:38:40Z","user":"adm03"}
+{"host":"srv01.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":24830,"process":"sudo","timestamp":"2026-10-17T07:40:06Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":21994,"process":"CRON","timestamp":"2026-10-17T07:41:32Z"}
+{"host":"srv01.corp.example","message":"Failed password for user13 from 192.0.2.212 port 31185 ssh2","pid":21731,"process":"sshd","src_ip":"192.0.2.212","timestamp":"2026-10-17T07:42:58Z","user":"user13"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user16 from 192.0.2.139 port 51428 ssh2: ED25519 SHA256:itzjtd722891enqhedevfdyrcgsxbgto5eek2e8sfwy","pid":37553,"process":"sshd","src_ip":"192.0.2.139","timestamp":"2026-10-17T07:44:24Z","user":"user16"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user user02","pid":52513,"process":"sshd","timestamp":"2026-10-17T07:45:50Z","user":"user02"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":1646,"process":"CRON","timestamp":"2026-10-17T07:47:16Z"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":55366,"process":"sudo","timestamp":"2026-10-17T07:48:42Z","user":"adm01"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user21","pid":17035,"process":"sshd","timestamp":"2026-10-17T07:50:08Z","user":"user21"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user adm01","pid":12371,"process":"sshd","timestamp":"2026-10-17T07:51:34Z","user":"adm01"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":21658,"process":"sshd","timestamp":"2026-10-17T07:53:00Z","user":"user18"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user22 from 203.0.113.10 port 55093 ssh2: ED25519 SHA256:hvat520f338abkp6ca2225kkdv6fg9d20xdv2wbqele","pid":35717,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T07:54:26Z","user":"user22"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user07","pid":44083,"process":"sshd","timestamp":"2026-10-17T07:55:52Z","user":"user07"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user18 from 192.0.2.48 port 53316 ssh2: ED25519 SHA256:toolqmx0wncfki5gflvmiapkr646lquawhhgp8ideaz","pid":38809,"process":"sshd","src_ip":"192.0.2.48","timestamp":"2026-10-17T07:57:18Z","user":"user18"}
+{"host":"srv12.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":2160,"process":"sudo","timestamp":"2026-10-17T07:58:44Z","user":"adm02"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user01 from 192.0.2.184 port 45229 ssh2: ED25519 SHA256:x3j0i6f4g7aem1k28imlwt6ly21boeb49yt6qfvcl9w","pid":59768,"process":"sshd","src_ip":"192.0.2.184","timestamp":"2026-10-17T08:00:10Z","user":"user01"}
+{"host":"srv10.corp.example","message":"Session 162 logged out. Waiting for processes to exit.","pid":12675,"process":"systemd-logind","timestamp":"2026-10-17T08:01:36Z","user":"user23"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user23","pid":44029,"process":"sshd","timestamp":"2026-10-17T08:03:02Z","user":"user23"}
+{"host":"srv12.corp.example","message":"Session 192 logged out. Waiting for processes to exit.","pid":42805,"process":"systemd-logind","timestamp":"2026-10-17T08:04:28Z","user":"deploy"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user user01","pid":15616,"process":"sshd","timestamp":"2026-10-17T08:05:54Z","user":"user01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user user04","pid":6295,"process":"sshd","timestamp":"2026-10-17T08:07:20Z","user":"user04"}
+{"host":"srv10.corp.example","message":"Removed session 664.","pid":42186,"process":"systemd-logind","timestamp":"2026-10-17T08:08:46Z","user":"user04"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user10 from 192.0.2.230 port 55053 ssh2: ED25519 SHA256:optbpjitxdbfqyzpuda3xzysbux7ev3jrwc9k2t3hv1","pid":3248,"process":"sshd","src_ip":"192.0.2.230","timestamp":"2026-10-17T08:10:12Z","user":"user10"}
+{"host":"srv08.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":23246,"process":"sudo","timestamp":"2026-10-17T08:11:38Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user adm02","pid":10908,"process":"sshd","timestamp":"2026-10-17T08:13:04Z","user":"adm02"}
+{"host":"srv03.corp.example","message":"Accepted publickey for adm01 from 192.0.2.137 port 51446 ssh2: ED25519 SHA256:dxsyh2nxyaqh1ph29hsbw9zajxiaw28i8g1cgsmf4zh","pid":41950,"process":"sshd","src_ip":"192.0.2.137","timestamp":"2026-10-17T08:14:30Z","user":"adm01"}
+{"host":"srv10.corp.example","message":"Failed password for user07 from 203.0.113.10 port 41814 ssh2","pid":39614,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T08:15:56Z","user":"user07"}
+{"host":"srv11.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":13651,"process":"sudo","timestamp":"2026-10-17T08:17:22Z","user":"deploy"}
+{"host":"srv10.corp.example","message":"Accepted publickey for adm01 from 203.0.113.10 port 53443 ssh2: ED25519 SHA256:lwsaefsji4ho5spgp88nredg13pzlkhx2atkkta4ip7","pid":25572,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T08:18:48Z","user":"adm01"}
+{"host":"srv12.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":57056,"process":"sudo","timestamp":"2026-10-17T08:20:14Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user02","pid":18926,"process":"sshd","timestamp":"2026-10-17T08:21:40Z","user":"user02"}
+{"host":"srv03.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":46136,"process":"sudo","timestamp":"2026-10-17T08:23:06Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"Failed password for user04 from 192.0.2.208 port 41385 ssh2","pid":8832,"process":"sshd","src_ip":"192.0.2.208","timestamp":"2026-10-17T08:24:32Z","user":"user04"}
+{"host":"srv09.corp.example","message":"New session 860 of user user22.","pid":20397,"process":"systemd-logind","timestamp":"2026-10-17T08:25:58Z","user":"user22"}
+{"host":"srv03.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":17036,"process":"sudo","timestamp":"2026-10-17T08:27:24Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"Accepted publickey for user24 from 192.0.2.237 port 39341 ssh2: ED25519 SHA256:h7ryb87skwks3c3g0p14ws60wtngy4ayrou7b8d4wo2","pid":18403,"process":"sshd","src_ip":"192.0.2.237","timestamp":"2026-10-17T08:28:50Z","user":"user24"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":32867,"process":"CRON","timestamp":"2026-10-17T08:30:16Z"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":53543,"process":"sudo","timestamp":"2026-10-17T08:31:42Z","user":"adm02"}
+{"host":"srv09.corp.example","message":"Accepted password for user16 from 192.0.2.193 port 48851 ssh2","pid":8448,"process":"sshd","src_ip":"192.0.2.193","timestamp":"2026-10-17T08:33:08Z","user":"user16"}
+{"host":"srv07.corp.example","message":"   adm03 : TTY=pts/0 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":1560,"process":"sudo","timestamp":"2026-10-17T08:34:34Z","user":"adm03"}
+{"host":"srv12.corp.example","message":"(to postgres) adm02 on pts/0","pid":51424,"process":"su","timestamp":"2026-10-17T08:36:00Z","user":"adm02"}
+{"host":"srv04.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":1507,"process":"sudo","timestamp":"2026-10-17T08:37:26Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session opened for user user10","pid":31837,"process":"sshd","timestamp":"2026-10-17T08:38:52Z","user":"user10"}
+{"host":"srv12.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm02(uid=0)","pid":24772,"process":"sudo","timestamp":"2026-10-17T08:40:18Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":13541,"process":"sudo","timestamp":"2026-10-17T08:41:44Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"Session 237 logged out. Waiting for processes to exit.","pid":55635,"process":"systemd-logind","timestamp":"2026-10-17T08:43:10Z","user":"user09"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":46152,"process":"sudo","timestamp":"2026-10-17T08:44:36Z","user":"adm02"}
+{"host":"srv12.corp.example","message":"   adm03 : TTY=pts/3 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":41417,"process":"sudo","timestamp":"2026-10-17T08:46:02Z","user":"adm03"}
+{"host":"srv12.corp.example","message":"   adm01 : TTY=pts/3 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":59429,"process":"sudo","timestamp":"2026-10-17T08:47:28Z","user":"adm01"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user18","pid":32219,"process":"sshd","timestamp":"2026-10-17T08:48:54Z","user":"user18"}
+{"host":"srv06.corp.example","message":"Failed password for user14 from 192.0.2.141 port 57908 ssh2","pid":40677,"process":"sshd","src_ip":"192.0.2.141","timestamp":"2026-10-17T08:50:20Z","user":"user14"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user deploy","pid":42418,"process":"sshd","timestamp":"2026-10-17T08:51:46Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"Failed password for deploy from 192.0.2.189 port 39624 ssh2","pid":8138,"process":"sshd","src_ip":"192.0.2.189","timestamp":"2026-10-17T08:53:12Z","user":"deploy"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user23 from 192.0.2.100 port 36216 ssh2: ED25519 SHA256:kxqk8jfa7pjt6vppyi2njhvly3fl8br1bhrokhjwbrw","pid":15762,"process":"sshd","src_ip":"192.0.2.100","timestamp":"2026-10-17T08:54:38Z","user":"user23"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":13387,"process":"CRON","timestamp":"2026-10-17T08:56:04Z"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user11","pid":23154,"process":"sshd","timestamp":"2026-10-17T08:57:30Z","user":"user11"}
+{"host":"srv09.corp.example","message":"(to postgres) adm02 on pts/1","pid":47395,"process":"su","timestamp":"2026-10-17T08:58:56Z","user":"adm02"}
+{"host":"srv08.corp.example","message":"Accepted password for user23 from 203.0.113.10 port 50608 ssh2","pid":40411,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T09:00:22Z","user":"user23"}
+{"host":"srv08.corp.example","message":"(to postgres) adm01 on pts/0","pid":42533,"process":"su","timestamp":"2026-10-17T09:01:48Z","user":"adm01"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session opened for user user03","pid":13305,"process":"sshd","timestamp":"2026-10-17T09:03:14Z","user":"user03"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user21","pid":57851,"process":"sshd","timestamp":"2026-10-17T09:04:40Z","user":"user21"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user09 from 192.0.2.104 port 59709 ssh2: ED25519 SHA256:09uwmult1b45qb20s6igf0qae76ge3y9krdjier3q0i","pid":9388,"process":"sshd","src_ip":"192.0.2.104","timestamp":"2026-10-17T09:06:06Z","user":"user09"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user20","pid":29866,"process":"sshd","timestamp":"2026-10-17T09:07:32Z","user":"user20"}
+{"host":"srv04.corp.example","message":"   adm03 : TTY=pts/3 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":41790,"process":"sudo","timestamp":"2026-10-17T09:08:58Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"Accepted publickey for user08 from 192.0.2.25 port 59128 ssh2: ED25519 SHA256:95qunpderexwmpw8rvsdfticsvhcevkw8xsuzvi3ulw","pid":6561,"process":"sshd","src_ip":"192.0.2.25","timestamp":"2026-10-17T09:10:24Z","user":"user08"}
+{"host":"srv10.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":13230,"process":"sudo","timestamp":"2026-10-17T09:11:50Z","user":"adm02"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":23105,"process":"CRON","timestamp":"2026-10-17T09:13:16Z"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user03","pid":13420,"process":"sshd","timestamp":"2026-10-17T09:14:42Z","user":"user03"}
+{"host":"srv04.corp.example","message":"Disconnected from user user12 192.0.2.87 port 37619","pid":15446,"process":"sshd","src_ip":"192.0.2.87","timestamp":"2026-10-17T09:16:08Z","user":"user12"}
+{"host":"srv05.corp.example","message":"Accepted password for user07 from 192.0.2.36 port 53145 ssh2","pid":33283,"process":"sshd","src_ip":"192.0.2.36","timestamp":"2026-10-17T09:17:34Z","user":"user07"}
+{"host":"srv10.corp.example","message":"New session 563 of user user17.","pid":40835,"process":"systemd-logind","timestamp":"2026-10-17T09:19:00Z","user":"user17"}
+{"host":"srv08.corp.example","message":"Disconnected from user user04 203.0.113.10 port 55336","pid":59708,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T09:20:26Z","user":"user04"}
+{"host":"srv01.corp.example","message":"  deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":30913,"process":"sudo","timestamp":"2026-10-17T09:21:52Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":27700,"process":"sudo","timestamp":"2026-10-17T09:23:18Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user user17","pid":27115,"process":"sshd","timestamp":"2026-10-17T09:24:44Z","user":"user17"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":10605,"process":"CRON","timestamp":"2026-10-17T09:26:10Z"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user22 from 192.0.2.74 port 47409 ssh2: ED25519 SHA256:9uhpzidzdkpgcnk270mhzixhrm0vdk5payevktwwd4g","pid":49061,"process":"sshd","src_ip":"192.0.2.74","timestamp":"2026-10-17T09:27:36Z","user":"user22"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session closed for user user01","pid":4817,"process":"sshd","timestamp":"2026-10-17T09:29:02Z","user":"user01"}
+{"host":"srv09.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm02(uid=0)","pid":23336,"process":"sudo","timestamp":"2026-10-17T09:30:28Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"Accepted password for user18 from 203.0.113.10 port 36124 ssh2","pid":26272,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T09:31:54Z","user":"user18"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":43872,"process":"CRON","timestamp":"2026-10-17T09:33:20Z"}
+{"host":"srv02.corp.example","message":"Accepted password for user08 from 192.0.2.83 port 49588 ssh2","pid":31770,"process":"sshd","src_ip":"192.0.2.83","timestamp":"2026-10-17T09:34:46Z","user":"user08"}
+{"host":"srv03.corp.example","message":"(to postgres) adm01 on pts/0","pid":48004,"process":"su","timestamp":"2026-10-17T09:36:12Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user04","pid":35852,"process":"sshd","timestamp":"2026-10-17T09:37:38Z","user":"user04"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user09","pid":42717,"process":"sshd","timestamp":"2026-10-17T09:39:04Z","user":"user09"}
+{"host":"srv09.corp.example","message":"   adm01 : TTY=pts/3 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":53999,"process":"sudo","timestamp":"2026-10-17T09:40:30Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":48142,"process":"sudo","timestamp":"2026-10-17T09:41:56Z","user":"adm02"}
+{"host":"srv08.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/docker ps","pid":39421,"process":"sudo","timestamp":"2026-10-17T09:43:22Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user13","pid":21927,"process":"sshd","timestamp":"2026-10-17T09:44:48Z","user":"user13"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user21","pid":28355,"process":"sshd","timestamp":"2026-10-17T09:46:14Z","user":"user21"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user20 from 192.0.2.20 port 54778 ssh2: ED25519 SHA256:ctdgaqy3nxbwkqszjkmzaa477iod9odm1wqg5mjqqgg","pid":53513,"process":"sshd","src_ip":"192.0.2.20","timestamp":"2026-10-17T09:47:40Z","user":"user20"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":40091,"process":"CRON","timestamp":"2026-10-17T09:49:06Z"}
+{"host":"srv10.corp.example","message":"(to postgres) adm02 on pts/0","pid":5899,"process":"su","timestamp":"2026-10-17T09:50:32Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":54454,"process":"CRON","timestamp":"2026-10-17T09:51:58Z"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user20","pid":35929,"process":"sshd","timestamp":"2026-10-17T09:53:24Z","user":"user20"}
+{"host":"srv01.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":33995,"process":"sudo","timestamp":"2026-10-17T09:54:50Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"Accepted publickey for adm02 from 192.0.2.234 port 55221 ssh2: ED25519 SHA256:4nlraiodu4hzdpu1uwn4bucopr9nv2d1j0wygjvrdh0","pid":57117,"process":"sshd","src_ip":"192.0.2.234","timestamp":"2026-10-17T09:56:16Z","user":"adm02"}
+{"host":"srv12.corp.example","message":"Removed session 308.","pid":58037,"process":"systemd-logind","timestamp":"2026-10-17T09:57:42Z","user":"user18"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user05 from 192.0.2.120 port 30749 ssh2: ED25519 SHA256:iqjztgu8abpp1uyptnd0vtkrxaqtwt6a4l9pa2qp89o","pid":23156,"process":"sshd","src_ip":"192.0.2.120","timestamp":"2026-10-17T09:59:08Z","user":"user05"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":5776,"process":"CRON","timestamp":"2026-10-17T10:00:34Z"}
+{"host":"srv06.corp.example","message":"Accepted publickey for deploy from 192.0.2.130 port 33410 ssh2: ED25519 SHA256:znpj2s6qx5bg1rxry2zzno5xcj1k6qibyhh9mez03ow","pid":47772,"process":"sshd","src_ip":"192.0.2.130","timestamp":"2026-10-17T10:02:00Z","user":"deploy"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":19600,"process":"CRON","timestamp":"2026-10-17T10:03:26Z"}
+{"host":"srv03.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":653,"process":"sudo","timestamp":"2026-10-17T10:04:52Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":50463,"process":"sudo","timestamp":"2026-10-17T10:06:18Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":7028,"process":"sudo","timestamp":"2026-10-17T10:07:44Z","user":"deploy"}
+{"host":"srv05.corp.example","message":"Disconnected from user deploy 192.0.2.139 port 46467","pid":24932,"process":"sshd","src_ip":"192.0.2.139","timestamp":"2026-10-17T10:09:10Z","user":"deploy"}
+{"host":"srv03.corp.example","message":"Removed session 753.","pid":50603,"process":"systemd-logind","timestamp":"2026-10-17T10:10:36Z","user":"user14"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session closed for user user22","pid":57021,"process":"sshd","timestamp":"2026-10-17T10:12:02Z","user":"user22"}
+{"host":"srv12.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":2420,"process":"sudo","timestamp":"2026-10-17T10:13:28Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"Removed session 853.","pid":48453,"process":"systemd-logind","timestamp":"2026-10-17T10:14:54Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"Disconnected from user deploy 192.0.2.72 port 57159","pid":45255,"process":"sshd","src_ip":"192.0.2.72","timestamp":"2026-10-17T10:16:20Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user06 from 192.0.2.92 port 39127 ssh2: ED25519 SHA256:hk5g8i25bn7s8xg8m3ayl096ogvy24966p5yf6fonyz","pid":49232,"process":"sshd","src_ip":"192.0.2.92","timestamp":"2026-10-17T10:17:46Z","user":"user06"}
+{"host":"srv01.corp.example","message":"Accepted password for user19 from 192.0.2.231 port 34436 ssh2","pid":42428,"process":"sshd","src_ip":"192.0.2.231","timestamp":"2026-10-17T10:19:12Z","user":"user19"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user20 from 192.0.2.78 port 31140 ssh2: ED25519 SHA256:xhoubw0hro6oqeqgt0qfjt5codwqmktccbtiqj8tgpf","pid":53728,"process":"sshd","src_ip":"192.0.2.78","timestamp":"2026-10-17T10:20:38Z","user":"user20"}
+{"host":"srv01.corp.example","message":"(to postgres) adm02 on pts/3","pid":21573,"process":"su","timestamp":"2026-10-17T10:22:04Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user12 from 192.0.2.34 port 50354 ssh2: ED25519 SHA256:pvelzn46ix9d55gh06n75vteoa7wfrpokezc7c5mudu","pid":40523,"process":"sshd","src_ip":"192.0.2.34","timestamp":"2026-10-17T10:23:30Z","user":"user12"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session closed for user user14","pid":29443,"process":"sshd","timestamp":"2026-10-17T10:24:56Z","user":"user14"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user03 from 192.0.2.102 port 44774 ssh2: ED25519 SHA256:noe3ffu1nyiqvt68lhel26ce4cf2byk3n5mvaadl2oq","pid":30385,"process":"sshd","src_ip":"192.0.2.102","timestamp":"2026-10-17T10:26:22Z","user":"user03"}
+{"host":"srv04.corp.example","message":"Accepted publickey for user04 from 192.0.2.92 port 31394 ssh2: ED25519 SHA256:wy2t1dzkkghiq8o5z6vpnqdnyqyto9kk4m4rorrlpxv","pid":18058,"process":"sshd","src_ip":"192.0.2.92","timestamp":"2026-10-17T10:27:48Z","user":"user04"}
+{"host":"srv11.corp.example","message":"(to postgres) deploy on pts/2","pid":52634,"process":"su","timestamp":"2026-10-17T10:29:14Z","user":"deploy"}
+{"host":"srv03.corp.example","message":"   adm01 : TTY=pts/1 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":49661,"process":"sudo","timestamp":"2026-10-17T10:30:40Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user user23","pid":21759,"process":"sshd","timestamp":"2026-10-17T10:32:06Z","user":"user23"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":32588,"process":"sudo","timestamp":"2026-10-17T10:33:32Z","user":"deploy"}
+{"host":"srv03.corp.example","message":"New session 653 of user adm02.","pid":36536,"process":"systemd-logind","timestamp":"2026-10-17T10:34:58Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user22 from 192.0.2.179 port 30374 ssh2: ED25519 SHA256:um1gx00nrdwblr11bb7jyk2ufd4u7rabhxqj8sbv14a","pid":47008,"process":"sshd","src_ip":"192.0.2.179","timestamp":"2026-10-17T10:36:24Z","user":"user22"}
+{"host":"srv07.corp.example","message":"Accepted publickey for user10 from 203.0.113.10 port 56405 ssh2: ED25519 SHA256:kbh58r2qjupe9t971na6ajpd6ongu1b7s2g0axf5xm3","pid":48333,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T10:37:50Z","user":"user10"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":490,"process":"sudo","timestamp":"2026-10-17T10:39:16Z","user":"deploy"}
+{"host":"srv10.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":10809,"process":"sudo","timestamp":"2026-10-17T10:40:42Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user15","pid":59353,"process":"sshd","timestamp":"2026-10-17T10:42:08Z","user":"user15"}
+{"host":"srv12.corp.example","message":"   adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":56893,"process":"sudo","timestamp":"2026-10-17T10:43:34Z","user":"adm01"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user21 from 192.0.2.20 port 33394 ssh2: ED25519 SHA256:1tdk712q9s1j6wi40j89c768s55fsrth7dnti6j6kbe","pid":44599,"process":"sshd","src_ip":"192.0.2.20","timestamp":"2026-10-17T10:45:00Z","user":"user21"}
+{"host":"srv07.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":8137,"process":"sudo","timestamp":"2026-10-17T10:46:26Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"Accepted publickey for adm03 from 192.0.2.61 port 56366 ssh2: ED25519 SHA256:iguetw7us5jut9odhnc255dg10be0nlohojagm6x2kh","pid":36727,"process":"sshd","src_ip":"192.0.2.61","timestamp":"2026-10-17T10:47:52Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":46149,"process":"sudo","timestamp":"2026-10-17T10:49:18Z","user":"adm03"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":44146,"process":"CRON","timestamp":"2026-10-17T10:50:44Z"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":41552,"process":"sudo","timestamp":"2026-10-17T10:52:10Z","user":"deploy"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":28276,"process":"CRON","timestamp":"2026-10-17T10:53:36Z"}
+{"host":"srv11.corp.example","message":"   adm01 : TTY=pts/1 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":40047,"process":"sudo","timestamp":"2026-10-17T10:55:02Z","user":"adm01"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":21029,"process":"CRON","timestamp":"2026-10-17T10:56:28Z"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user16","pid":18592,"process":"sshd","timestamp":"2026-10-17T10:57:54Z","user":"user16"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user user04","pid":37824,"process":"sshd","timestamp":"2026-10-17T10:59:20Z","user":"user04"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user deploy","pid":21380,"process":"sshd","timestamp":"2026-10-17T11:00:46Z","user":"deploy"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":35147,"process":"sshd","timestamp":"2026-10-17T11:02:12Z","user":"user18"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":28235,"process":"CRON","timestamp":"2026-10-17T11:03:38Z"}
+{"host":"srv07.corp.example","message":"New session 776 of user user18.","pid":32900,"process":"systemd-logind","timestamp":"2026-10-17T11:05:04Z","user":"user18"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session closed for user user23","pid":49551,"process":"sshd","timestamp":"2026-10-17T11:06:30Z","user":"user23"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user24","pid":20343,"process":"sshd","timestamp":"2026-10-17T11:07:56Z","user":"user24"}
+{"host":"srv07.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm02(uid=0)","pid":50669,"process":"sudo","timestamp":"2026-10-17T11:09:22Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user09 from 192.0.2.236 port 54279 ssh2: ED25519 SHA256:c03vangts4snm3urildaktwkge7jaupib387bqg9qdo","pid":56666,"process":"sshd","src_ip":"192.0.2.236","timestamp":"2026-10-17T11:10:48Z","user":"user09"}
+{"host":"srv12.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":50041,"process":"sudo","timestamp":"2026-10-17T11:12:14Z","user":"adm03"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user15 from 192.0.2.118 port 55398 ssh2: ED25519 SHA256:xai7l77bcpef57c5awih4f76xwjjm7o0r80ant375on","pid":44527,"process":"sshd","src_ip":"192.0.2.118","timestamp":"2026-10-17T11:13:40Z","user":"user15"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user01","pid":17623,"process":"sshd","timestamp":"2026-10-17T11:15:06Z","user":"user01"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user10 from 192.0.2.123 port 49818 ssh2: ED25519 SHA256:fuatvx4v4w26jjn9snsjwnk5xhiroqxh014l73fndcu","pid":8099,"process":"sshd","src_ip":"192.0.2.123","timestamp":"2026-10-17T11:16:32Z","user":"user10"}
+{"host":"srv04.corp.example","message":"Session 602 logged out. Waiting for processes to exit.","pid":36423,"process":"systemd-logind","timestamp":"2026-10-17T11:17:58Z","user":"deploy"}
+{"host":"srv10.corp.example","message":"Failed password for user13 from 192.0.2.168 port 50178 ssh2","pid":24272,"process":"sshd","src_ip":"192.0.2.168","timestamp":"2026-10-17T11:19:24Z","user":"user13"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":34276,"process":"sudo","timestamp":"2026-10-17T11:20:50Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session closed for user user10","pid":25796,"process":"sshd","timestamp":"2026-10-17T11:22:16Z","user":"user10"}
+{"host":"srv08.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":42744,"process":"sudo","timestamp":"2026-10-17T11:23:42Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user01 from 192.0.2.98 port 40402 ssh2: ED25519 SHA256:n7q2fxzeoe8htb5nbnddizf70d6y0yr662xl7n9xgwe","pid":34834,"process":"sshd","src_ip":"192.0.2.98","timestamp":"2026-10-17T11:25:08Z","user":"user01"}
+{"host":"srv01.corp.example","message":"Removed session 123.","pid":6618,"process":"systemd-logind","timestamp":"2026-10-17T11:26:34Z","user":"adm01"}
+{"host":"srv12.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":57791,"process":"sudo","timestamp":"2026-10-17T11:28:00Z","user":"adm01"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user22","pid":23315,"process":"sshd","timestamp":"2026-10-17T11:29:26Z","user":"user22"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user deploy","pid":11994,"process":"sshd","timestamp":"2026-10-17T11:30:52Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user03 from 192.0.2.75 port 43795 ssh2: ED25519 SHA256:s4yz5ivkqxikh4zf2k7kv3qwuugeyb3lzacicr4kv6q","pid":5724,"process":"sshd","src_ip":"192.0.2.75","timestamp":"2026-10-17T11:32:18Z","user":"user03"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user14 from 192.0.2.30 port 53721 ssh2: ED25519 SHA256:uhc96g8j3tk21b3l6bxexrdsixlpzbh5eb2qh7aea6c","pid":10462,"process":"sshd","src_ip":"192.0.2.30","timestamp":"2026-10-17T11:33:44Z","user":"user14"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user user24","pid":49719,"process":"sshd","timestamp":"2026-10-17T11:35:10Z","user":"user24"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user14 from 203.0.113.10 port 57535 ssh2: ED25519 SHA256:uasur7zhutw18j2v1q6yop4yc18032v1cq6iyca2rrr","pid":54764,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T11:36:36Z","user":"user14"}
+{"host":"srv08.corp.example","message":"Removed session 651.","pid":403,"process":"systemd-logind","timestamp":"2026-10-17T11:38:02Z","user":"user24"}
+{"host":"srv03.corp.example","message":"    adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/bin/bash","pid":11007,"process":"sudo","timestamp":"2026-10-17T11:39:28Z","user":"adm01"}
+{"host":"srv01.corp.example","message":"Session 430 logged out. Waiting for processes to exit.","pid":2243,"process":"systemd-logind","timestamp":"2026-10-17T11:40:54Z","user":"user14"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":46861,"process":"sudo","timestamp":"2026-10-17T11:42:20Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"   adm01 : TTY=pts/1 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":32816,"process":"sudo","timestamp":"2026-10-17T11:43:46Z","user":"adm01"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user06 from 192.0.2.228 port 37845 ssh2: ED25519 SHA256:zf75hv0x8x3kt6oop42x7cin6p84rt2sf6295cbqs1v","pid":11640,"process":"sshd","src_ip":"192.0.2.228","timestamp":"2026-10-17T11:45:12Z","user":"user06"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user adm01","pid":52235,"process":"sshd","timestamp":"2026-10-17T11:46:38Z","user":"adm01"}
+{"host":"srv12.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":53346,"process":"sudo","timestamp":"2026-10-17T11:48:04Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":59734,"process":"CRON","timestamp":"2026-10-17T11:49:30Z"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session opened for user user17","pid":14487,"process":"sshd","timestamp":"2026-10-17T11:50:56Z","user":"user17"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user adm02","pid":18290,"process":"sshd","timestamp":"2026-10-17T11:52:22Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"Removed session 434.","pid":34167,"process":"systemd-logind","timestamp":"2026-10-17T11:53:48Z","user":"user17"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session opened for user user05","pid":52297,"process":"sshd","timestamp":"2026-10-17T11:55:14Z","user":"user05"}
+{"host":"srv06.corp.example","message":"   adm01 : TTY=pts/3 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":8525,"process":"sudo","timestamp":"2026-10-17T11:56:40Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":48433,"process":"sudo","timestamp":"2026-10-17T11:58:06Z","user":"deploy"}
+{"host":"srv03.corp.example","message":"   adm03 : TTY=pts/0 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":26338,"process":"sudo","timestamp":"2026-10-17T11:59:32Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user07","pid":30573,"process":"sshd","timestamp":"2026-10-17T12:00:58Z","user":"user07"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user15 from 192.0.2.216 port 40152 ssh2: ED25519 SHA256:ufr9ag2fbeljh3om7a965d00qzmwy9b34qx95f752lo","pid":40556,"process":"sshd","src_ip":"192.0.2.216","timestamp":"2026-10-17T12:02:24Z","user":"user15"}
+{"host":"srv04.corp.example","message":"   adm01 : TTY=pts/3 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":15148,"process":"sudo","timestamp":"2026-10-17T12:03:50Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session closed for user adm03","pid":6028,"process":"sshd","timestamp":"2026-10-17T12:05:16Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"Failed password for user15 from 192.0.2.228 port 35170 ssh2","pid":40496,"process":"sshd","src_ip":"192.0.2.228","timestamp":"2026-10-17T12:06:42Z","user":"user15"}
+{"host":"srv09.corp.example","message":"New session 736 of user user03.","pid":23874,"process":"systemd-logind","timestamp":"2026-10-17T12:08:08Z","user":"user03"}
+{"host":"srv01.corp.example","message":"Accepted password for user02 from 192.0.2.119 port 34825 ssh2","pid":33553,"process":"sshd","src_ip":"192.0.2.119","timestamp":"2026-10-17T12:09:34Z","user":"user02"}
+{"host":"srv02.corp.example","message":"Accepted password for user13 from 192.0.2.162 port 52358 ssh2","pid":7778,"process":"sshd","src_ip":"192.0.2.162","timestamp":"2026-10-17T12:11:00Z","user":"user13"}
+{"host":"srv12.corp.example","message":"Session 252 logged out. Waiting for processes to exit.","pid":14308,"process":"systemd-logind","timestamp":"2026-10-17T12:12:26Z","user":"user08"}
+{"host":"srv01.corp.example","message":"Removed session 171.","pid":39001,"process":"systemd-logind","timestamp":"2026-10-17T12:13:52Z","user":"user20"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user11 from 192.0.2.149 port 52606 ssh2: ED25519 SHA256:03d7u5xbcefpzy273ai2p9u08q87utgwwf7lu6zrks2","pid":51803,"process":"sshd","src_ip":"192.0.2.149","timestamp":"2026-10-17T12:15:18Z","user":"user11"}
+{"host":"srv08.corp.example","message":"Removed session 847.","pid":32852,"process":"systemd-logind","timestamp":"2026-10-17T12:16:44Z","user":"user16"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user16 from 203.0.113.10 port 51178 ssh2: ED25519 SHA256:xljur0to0oqqnx32yowr9svao76tomthtw2o333rqqz","pid":34001,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T12:18:10Z","user":"user16"}
+{"host":"srv05.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":38407,"process":"sudo","timestamp":"2026-10-17T12:19:36Z","user":"adm02"}
+{"host":"srv08.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":5548,"process":"sudo","timestamp":"2026-10-17T12:21:02Z","user":"adm01"}
+{"host":"srv11.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":11622,"process":"sudo","timestamp":"2026-10-17T12:22:28Z","user":"adm03"}
+{"host":"srv01.corp.example","message":"Failed password for adm03 from 192.0.2.218 port 59443 ssh2","pid":5552,"process":"sshd","src_ip":"192.0.2.218","timestamp":"2026-10-17T12:23:54Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"Accepted password for user03 from 192.0.2.201 port 32234 ssh2","pid":26734,"process":"sshd","src_ip":"192.0.2.201","timestamp":"2026-10-17T12:25:20Z","user":"user03"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user21","pid":16709,"process":"sshd","timestamp":"2026-10-17T12:26:46Z","user":"user21"}
+{"host":"srv01.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":15156,"process":"sudo","timestamp":"2026-10-17T12:28:12Z","user":"adm02"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session closed for user user01","pid":2118,"process":"sshd","timestamp":"2026-10-17T12:29:38Z","user":"user01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session closed for user adm03","pid":51903,"process":"sshd","timestamp":"2026-10-17T12:31:04Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":10292,"process":"sudo","timestamp":"2026-10-17T12:32:30Z","user":"adm02"}
+{"host":"srv04.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":5294,"process":"sudo","timestamp":"2026-10-17T12:33:56Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":60142,"process":"sudo","timestamp":"2026-10-17T12:35:22Z","user":"adm03"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":29401,"process":"sshd","timestamp":"2026-10-17T12:36:48Z","user":"user18"}
+{"host":"srv11.corp.example","message":"Removed session 597.","pid":4018,"process":"systemd-logind","timestamp":"2026-10-17T12:38:14Z","user":"user11"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user08 from 192.0.2.115 port 54102 ssh2: ED25519 SHA256:4weak7t5bypacr1k0rqrn8khg05atpb9f83wnz1x3s0","pid":51309,"process":"sshd","src_ip":"192.0.2.115","timestamp":"2026-10-17T12:39:40Z","user":"user08"}
+{"host":"srv04.corp.example","message":"   adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":10218,"process":"sudo","timestamp":"2026-10-17T12:41:06Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"Accepted password for user06 from 192.0.2.46 port 42808 ssh2","pid":34150,"process":"sshd","src_ip":"192.0.2.46","timestamp":"2026-10-17T12:42:32Z","user":"user06"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":38397,"process":"CRON","timestamp":"2026-10-17T12:43:58Z"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":31309,"process":"CRON","timestamp":"2026-10-17T12:45:24Z"}
+{"host":"srv11.corp.example","message":"  deploy : TTY=pts/3 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":11385,"process":"sudo","timestamp":"2026-10-17T12:46:50Z","user":"deploy"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":33365,"process":"CRON","timestamp":"2026-10-17T12:48:16Z"}
+{"host":"srv09.corp.example","message":"Session 283 logged out. Waiting for processes to exit.","pid":42002,"process":"systemd-logind","timestamp":"2026-10-17T12:49:42Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"   adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":54049,"process":"sudo","timestamp":"2026-10-17T12:51:08Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":36058,"process":"sudo","timestamp":"2026-10-17T12:52:34Z","user":"adm03"}
+{"host":"srv06.corp.example","message":"Failed password for user05 from 192.0.2.187 port 57509 ssh2","pid":46111,"process":"sshd","src_ip":"192.0.2.187","timestamp":"2026-10-17T12:54:00Z","user":"user05"}
+{"host":"srv01.corp.example","message":"Accepted password for user14 from 192.0.2.41 port 56808 ssh2","pid":24849,"process":"sshd","src_ip":"192.0.2.41","timestamp":"2026-10-17T12:55:26Z","user":"user14"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user10 from 192.0.2.180 port 45909 ssh2: ED25519 SHA256:0ieodsur910su9hypf7ilm801uf65gqdkz1txt2du3h","pid":7882,"process":"sshd","src_ip":"192.0.2.180","timestamp":"2026-10-17T12:56:52Z","user":"user10"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":12363,"process":"sudo","timestamp":"2026-10-17T12:58:18Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user03 from 203.0.113.10 port 38106 ssh2: ED25519 SHA256:0x225mgtr9fl1yu73kkdvsmajitfsrrd420qj8vnzdl","pid":5091,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T12:59:44Z","user":"user03"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user08 from 192.0.2.49 port 47873 ssh2: ED25519 SHA256:vw0637yz7obb22ieohema457rvs1lqjk75klvwztl8u","pid":40328,"process":"sshd","src_ip":"192.0.2.49","timestamp":"2026-10-17T13:01:10Z","user":"user08"}
+{"host":"srv07.corp.example","message":"(to postgres) deploy on pts/0","pid":51723,"process":"su","timestamp":"2026-10-17T13:02:36Z","user":"deploy"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":16906,"process":"sudo","timestamp":"2026-10-17T13:04:02Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user24 from 192.0.2.61 port 32139 ssh2: ED25519 SHA256:wnz00vwqae43upl3qu418fxt3898wjpcp8md8h8vbov","pid":30605,"process":"sshd","src_ip":"192.0.2.61","timestamp":"2026-10-17T13:05:28Z","user":"user24"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":35956,"process":"CRON","timestamp":"2026-10-17T13:06:54Z"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":58737,"process":"sudo","timestamp":"2026-10-17T13:08:20Z","user":"adm01"}
+{"host":"srv03.corp.example","message":"(to postgres) adm01 on pts/3","pid":23031,"process":"su","timestamp":"2026-10-17T13:09:46Z","user":"adm01"}
+{"host":"srv07.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":16875,"process":"sudo","timestamp":"2026-10-17T13:11:12Z","user":"deploy"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user19","pid":3796,"process":"sshd","timestamp":"2026-10-17T13:12:38Z","user":"user19"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":12804,"process":"CRON","timestamp":"2026-10-17T13:14:04Z"}
+{"host":"srv04.corp.example","message":"Accepted password for user11 from 192.0.2.193 port 54505 ssh2","pid":9545,"process":"sshd","src_ip":"192.0.2.193","timestamp":"2026-10-17T13:15:30Z","user":"user11"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":49736,"process":"CRON","timestamp":"2026-10-17T13:16:56Z"}
+{"host":"srv05.corp.example","message":"(to postgres) adm01 on pts/1","pid":18398,"process":"su","timestamp":"2026-10-17T13:18:22Z","user":"adm01"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user24","pid":4916,"process":"sshd","timestamp":"2026-10-17T13:19:48Z","user":"user24"}
+{"host":"srv10.corp.example","message":"Accepted publickey for adm02 from 203.0.113.10 port 31097 ssh2: ED25519 SHA256:ldsiydeeei5nb9q302ppdcv7i4gb6933ahnr1982qth","pid":55332,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T13:21:14Z","user":"adm02"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user13 from 192.0.2.42 port 32801 ssh2: ED25519 SHA256:5loptvvcb43ukmhkp3wbkel581pf14kn9915bejyhyl","pid":26707,"process":"sshd","src_ip":"192.0.2.42","timestamp":"2026-10-17T13:22:40Z","user":"user13"}
+{"host":"srv05.corp.example","message":"(to postgres) deploy on pts/2","pid":6620,"process":"su","timestamp":"2026-10-17T13:24:06Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user08 from 192.0.2.61 port 45543 ssh2: ED25519 SHA256:gril6mhk878wloqamngf617xtx3058e8v11jr1b9hmu","pid":40471,"process":"sshd","src_ip":"192.0.2.61","timestamp":"2026-10-17T13:25:32Z","user":"user08"}
+{"host":"srv09.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":12156,"process":"sudo","timestamp":"2026-10-17T13:26:58Z","user":"adm02"}
+{"host":"srv03.corp.example","message":"(to postgres) deploy on pts/2","pid":1092,"process":"su","timestamp":"2026-10-17T13:28:24Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"New session 478 of user user12.","pid":27062,"process":"systemd-logind","timestamp":"2026-10-17T13:29:50Z","user":"user12"}
+{"host":"srv08.corp.example","message":"New session 250 of user user10.","pid":10952,"process":"systemd-logind","timestamp":"2026-10-17T13:31:16Z","user":"user10"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":33778,"process":"CRON","timestamp":"2026-10-17T13:32:42Z"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session opened for user user03","pid":11663,"process":"sshd","timestamp":"2026-10-17T13:34:08Z","user":"user03"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":52755,"process":"CRON","timestamp":"2026-10-17T13:35:34Z"}
+{"host":"srv10.corp.example","message":"Failed password for user05 from 192.0.2.185 port 54412 ssh2","pid":2978,"process":"sshd","src_ip":"192.0.2.185","timestamp":"2026-10-17T13:37:00Z","user":"user05"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user adm01","pid":20128,"process":"sshd","timestamp":"2026-10-17T13:38:26Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session closed for user user07","pid":31050,"process":"sshd","timestamp":"2026-10-17T13:39:52Z","user":"user07"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":22410,"process":"CRON","timestamp":"2026-10-17T13:41:18Z"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user adm03","pid":53918,"process":"sshd","timestamp":"2026-10-17T13:42:44Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"New session 940 of user user01.","pid":34797,"process":"systemd-logind","timestamp":"2026-10-17T13:44:10Z","user":"user01"}
+{"host":"srv03.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":17890,"process":"sudo","timestamp":"2026-10-17T13:45:36Z","user":"adm01"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":60375,"process":"CRON","timestamp":"2026-10-17T13:47:02Z"}
+{"host":"srv11.corp.example","message":"Session 513 logged out. Waiting for processes to exit.","pid":4222,"process":"systemd-logind","timestamp":"2026-10-17T13:48:28Z","user":"user14"}
+{"host":"srv11.corp.example","message":"Removed session 964.","pid":848,"process":"systemd-logind","timestamp":"2026-10-17T13:49:54Z","user":"user02"}
+{"host":"srv01.corp.example","message":"Failed password for user13 from 192.0.2.85 port 34606 ssh2","pid":37362,"process":"sshd","src_ip":"192.0.2.85","timestamp":"2026-10-17T13:51:20Z","user":"user13"}
+{"host":"srv12.corp.example","message":"Failed password for user01 from 192.0.2.237 port 59013 ssh2","pid":53856,"process":"sshd","src_ip":"192.0.2.237","timestamp":"2026-10-17T13:52:46Z","user":"user01"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user adm03","pid":24491,"process":"sshd","timestamp":"2026-10-17T13:54:12Z","user":"adm03"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":30772,"process":"CRON","timestamp":"2026-10-17T13:55:38Z"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user05 from 192.0.2.71 port 56635 ssh2: ED25519 SHA256:4ijkimikslazdjnqhoaewyrcsmb6cf8ktbl2dk2rl8w","pid":6958,"process":"sshd","src_ip":"192.0.2.71","timestamp":"2026-10-17T13:57:04Z","user":"user05"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session opened for user user04","pid":7044,"process":"sshd","timestamp":"2026-10-17T13:58:30Z","user":"user04"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":49510,"process":"sudo","timestamp":"2026-10-17T13:59:56Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"Session 555 logged out. Waiting for processes to exit.","pid":7481,"process":"systemd-logind","timestamp":"2026-10-17T14:01:22Z","user":"user10"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user22","pid":1087,"process":"sshd","timestamp":"2026-10-17T14:02:48Z","user":"user22"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user adm02","pid":17997,"process":"sshd","timestamp":"2026-10-17T14:04:14Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"Accepted password for user16 from 192.0.2.79 port 34785 ssh2","pid":28568,"process":"sshd","src_ip":"192.0.2.79","timestamp":"2026-10-17T14:05:40Z","user":"user16"}
+{"host":"srv09.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":13857,"process":"sudo","timestamp":"2026-10-17T14:07:06Z","user":"adm03"}
+{"host":"srv12.corp.example","message":"Session 947 logged out. Waiting for processes to exit.","pid":11004,"process":"systemd-logind","timestamp":"2026-10-17T14:08:32Z","user":"user20"}
+{"host":"srv07.corp.example","message":"Removed session 655.","pid":31040,"process":"systemd-logind","timestamp":"2026-10-17T14:09:58Z","user":"user24"}
+{"host":"srv06.corp.example","message":"Removed session 453.","pid":43875,"process":"systemd-logind","timestamp":"2026-10-17T14:11:24Z","user":"deploy"}
+{"host":"srv04.corp.example","message":"Accepted publickey for user11 from 192.0.2.30 port 31396 ssh2: ED25519 SHA256:n4ara551zuscxk32lty0kg2vge0lxw0s97n6gt98ked","pid":15271,"process":"sshd","src_ip":"192.0.2.30","timestamp":"2026-10-17T14:12:50Z","user":"user11"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":39074,"process":"sudo","timestamp":"2026-10-17T14:14:16Z","user":"adm03"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":38895,"process":"CRON","timestamp":"2026-10-17T14:15:42Z"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":57275,"process":"CRON","timestamp":"2026-10-17T14:17:08Z"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user12","pid":24494,"process":"sshd","timestamp":"2026-10-17T14:18:34Z","user":"user12"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":33046,"process":"CRON","timestamp":"2026-10-17T14:20:00Z"}
+{"host":"srv12.corp.example","message":"Session 117 logged out. Waiting for processes to exit.","pid":37651,"process":"systemd-logind","timestamp":"2026-10-17T14:21:26Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":48347,"process":"sudo","timestamp":"2026-10-17T14:22:52Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":3848,"process":"sudo","timestamp":"2026-10-17T14:24:18Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":44351,"process":"CRON","timestamp":"2026-10-17T14:25:44Z"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user deploy","pid":12941,"process":"sshd","timestamp":"2026-10-17T14:27:10Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"Removed session 104.","pid":29281,"process":"systemd-logind","timestamp":"2026-10-17T14:28:36Z","user":"user05"}
+{"host":"srv07.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":53614,"process":"sudo","timestamp":"2026-10-17T14:30:02Z","user":"adm02"}
+{"host":"srv09.corp.example","message":"Accepted password for user21 from 192.0.2.75 port 42637 ssh2","pid":22690,"process":"sshd","src_ip":"192.0.2.75","timestamp":"2026-10-17T14:31:28Z","user":"user21"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user04 from 192.0.2.57 port 55009 ssh2: ED25519 SHA256:94e1p45d60z5yfjcbxilizish1id8gvwnt9yo3sxow7","pid":12012,"process":"sshd","src_ip":"192.0.2.57","timestamp":"2026-10-17T14:32:54Z","user":"user04"}
+{"host":"srv12.corp.example","message":"New session 843 of user user01.","pid":54282,"process":"systemd-logind","timestamp":"2026-10-17T14:34:20Z","user":"user01"}
+{"host":"srv09.corp.example","message":"Session 675 logged out. Waiting for processes to exit.","pid":2421,"process":"systemd-logind","timestamp":"2026-10-17T14:35:46Z","user":"user06"}
+{"host":"srv12.corp.example","message":"Failed password for user23 from 192.0.2.191 port 31080 ssh2","pid":28056,"process":"sshd","src_ip":"192.0.2.191","timestamp":"2026-10-17T14:37:12Z","user":"user23"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":10276,"process":"sudo","timestamp":"2026-10-17T14:38:38Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":4717,"process":"sudo","timestamp":"2026-10-17T14:40:04Z","user":"adm03"}
+{"host":"srv06.corp.example","message":"Failed password for user06 from 192.0.2.22 port 54385 ssh2","pid":22630,"process":"sshd","src_ip":"192.0.2.22","timestamp":"2026-10-17T14:41:30Z","user":"user06"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":42202,"process":"CRON","timestamp":"2026-10-17T14:42:56Z"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user22","pid":46631,"process":"sshd","timestamp":"2026-10-17T14:44:22Z","user":"user22"}
+{"host":"srv03.corp.example","message":"New session 545 of user deploy.","pid":14764,"process":"systemd-logind","timestamp":"2026-10-17T14:45:48Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session closed for user user05","pid":9940,"process":"sshd","timestamp":"2026-10-17T14:47:14Z","user":"user05"}
+{"host":"srv08.corp.example","message":"Accepted publickey for adm03 from 192.0.2.183 port 36318 ssh2: ED25519 SHA256:5wt2gb7k072fxo2gzv1snpe9uxzqmqzv4i5zovsehen","pid":7034,"process":"sshd","src_ip":"192.0.2.183","timestamp":"2026-10-17T14:48:40Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":18905,"process":"CRON","timestamp":"2026-10-17T14:50:06Z"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user24 from 192.0.2.124 port 49004 ssh2: ED25519 SHA256:6ozurnr8gbf9nxe5pj85di8bs5dmuseccpnnlzs3vhi","pid":39548,"process":"sshd","src_ip":"192.0.2.124","timestamp":"2026-10-17T14:51:32Z","user":"user24"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session opened for user user16","pid":38262,"process":"sshd","timestamp":"2026-10-17T14:52:58Z","user":"user16"}
+{"host":"srv12.corp.example","message":"Accepted publickey for adm02 from 203.0.113.10 port 32800 ssh2: ED25519 SHA256:dh2cajn0rlroaaqohjb0l2yl5g6wq34of9wfk24jqxt","pid":58689,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T14:54:24Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":58176,"process":"CRON","timestamp":"2026-10-17T14:55:50Z"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user user09","pid":25918,"process":"sshd","timestamp":"2026-10-17T14:57:16Z","user":"user09"}
+{"host":"srv12.corp.example","message":"Disconnected from user user20 203.0.113.10 port 50320","pid":36528,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T14:58:42Z","user":"user20"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user06 from 192.0.2.47 port 37962 ssh2: ED25519 SHA256:2wtasm1iaswz19v3oagv28snwztloccy72hzm0qy0nb","pid":40123,"process":"sshd","src_ip":"192.0.2.47","timestamp":"2026-10-17T15:00:08Z","user":"user06"}
+{"host":"srv01.corp.example","message":"Session 255 logged out. Waiting for processes to exit.","pid":35297,"process":"systemd-logind","timestamp":"2026-10-17T15:01:34Z","user":"user01"}
+{"host":"srv10.corp.example","message":"Failed password for adm03 from 192.0.2.88 port 37713 ssh2","pid":17510,"process":"sshd","src_ip":"192.0.2.88","timestamp":"2026-10-17T15:03:00Z","user":"adm03"}
+{"host":"srv12.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":59880,"process":"sudo","timestamp":"2026-10-17T15:04:26Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"Session 144 logged out. Waiting for processes to exit.","pid":51722,"process":"systemd-logind","timestamp":"2026-10-17T15:05:52Z","user":"user23"}
+{"host":"srv12.corp.example","message":"(to postgres) deploy on pts/3","pid":29235,"process":"su","timestamp":"2026-10-17T15:07:18Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":10813,"process":"sudo","timestamp":"2026-10-17T15:08:44Z","user":"deploy"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user02 from 192.0.2.183 port 41253 ssh2: ED25519 SHA256:qvhgf4resohr99bwmrm5e0x0tggfhqujhv0ukwckkxw","pid":37791,"process":"sshd","src_ip":"192.0.2.183","timestamp":"2026-10-17T15:10:10Z","user":"user02"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":37367,"process":"CRON","timestamp":"2026-10-17T15:11:36Z"}
+{"host":"srv01.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":53014,"process":"sudo","timestamp":"2026-10-17T15:13:02Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":15057,"process":"sudo","timestamp":"2026-10-17T15:14:28Z","user":"adm01"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session opened for user user07","pid":18938,"process":"sshd","timestamp":"2026-10-17T15:15:54Z","user":"user07"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user01 from 192.0.2.55 port 50154 ssh2: ED25519 SHA256:h92ki6nj88z5h6ftxfi04f86bk51o8spf00pbkieebe","pid":15283,"process":"sshd","src_ip":"192.0.2.55","timestamp":"2026-10-17T15:17:20Z","user":"user01"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user21 from 192.0.2.101 port 51728 ssh2: ED25519 SHA256:72vxzszzoqh00fq135ruqru9y83xw23basonth3i9sj","pid":50275,"process":"sshd","src_ip":"192.0.2.101","timestamp":"2026-10-17T15:18:46Z","user":"user21"}
+{"host":"srv02.corp.example","message":"Accepted password for adm01 from 203.0.113.10 port 58166 ssh2","pid":44604,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T15:20:12Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user user05","pid":51018,"process":"sshd","timestamp":"2026-10-17T15:21:38Z","user":"user05"}
+{"host":"srv06.corp.example","message":"Failed password for deploy from 192.0.2.137 port 44600 ssh2","pid":25055,"process":"sshd","src_ip":"192.0.2.137","timestamp":"2026-10-17T15:23:04Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":28183,"process":"sshd","timestamp":"2026-10-17T15:24:30Z","user":"user18"}
+{"host":"srv03.corp.example","message":"Failed password for user10 from 192.0.2.46 port 46375 ssh2","pid":38267,"process":"sshd","src_ip":"192.0.2.46","timestamp":"2026-10-17T15:25:56Z","user":"user10"}
+{"host":"srv01.corp.example","message":"(to postgres) adm02 on pts/3","pid":44174,"process":"su","timestamp":"2026-10-17T15:27:22Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"   adm03 : TTY=pts/0 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":44927,"process":"sudo","timestamp":"2026-10-17T15:28:48Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":51676,"process":"sudo","timestamp":"2026-10-17T15:30:14Z","user":"deploy"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user adm01","pid":27030,"process":"sshd","timestamp":"2026-10-17T15:31:40Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user user13","pid":54068,"process":"sshd","timestamp":"2026-10-17T15:33:06Z","user":"user13"}
+{"host":"srv11.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":13127,"process":"sudo","timestamp":"2026-10-17T15:34:32Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user05 from 192.0.2.157 port 36776 ssh2: ED25519 SHA256:sbap75zn7twsngvhvom0tp1dkhg8ofh4lo415tmd1qp","pid":13133,"process":"sshd","src_ip":"192.0.2.157","timestamp":"2026-10-17T15:35:58Z","user":"user05"}
+{"host":"srv10.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":26376,"process":"sudo","timestamp":"2026-10-17T15:37:24Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user20 from 192.0.2.58 port 47272 ssh2: ED25519 SHA256:1remdeicq1vyppm02x6phbq6jo7dd5qeaeelgfj2bv2","pid":12942,"process":"sshd","src_ip":"192.0.2.58","timestamp":"2026-10-17T15:38:50Z","user":"user20"}
+{"host":"srv05.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":25890,"process":"sudo","timestamp":"2026-10-17T15:40:16Z","user":"adm01"}
+{"host":"srv08.corp.example","message":"Disconnected from user user15 192.0.2.159 port 58781","pid":30097,"process":"sshd","src_ip":"192.0.2.159","timestamp":"2026-10-17T15:41:42Z","user":"user15"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm02(uid=0)","pid":32197,"process":"sudo","timestamp":"2026-10-17T15:43:08Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user user18","pid":35438,"process":"sshd","timestamp":"2026-10-17T15:44:34Z","user":"user18"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user user09","pid":38413,"process":"sshd","timestamp":"2026-10-17T15:46:00Z","user":"user09"}
+{"host":"srv08.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":50825,"process":"sudo","timestamp":"2026-10-17T15:47:26Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"Accepted publickey for adm01 from 192.0.2.98 port 49290 ssh2: ED25519 SHA256:lfjpv50hx7q7b21q6cmxqkm2dbxvwnobrxu8q9bsphg","pid":23177,"process":"sshd","src_ip":"192.0.2.98","timestamp":"2026-10-17T15:48:52Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user14 from 203.0.113.10 port 53000 ssh2: ED25519 SHA256:ywg44tcur9vapyr1jz193yqklabhc2y08pa1b0nzrhk","pid":48516,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T15:50:18Z","user":"user14"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session opened for user user15","pid":58539,"process":"sshd","timestamp":"2026-10-17T15:51:44Z","user":"user15"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user23","pid":47052,"process":"sshd","timestamp":"2026-10-17T15:53:10Z","user":"user23"}
+{"host":"srv01.corp.example","message":"Disconnected from user deploy 192.0.2.68 port 44366","pid":22684,"process":"sshd","src_ip":"192.0.2.68","timestamp":"2026-10-17T15:54:36Z","user":"deploy"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user01","pid":54618,"process":"sshd","timestamp":"2026-10-17T15:56:02Z","user":"user01"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":9575,"process":"CRON","timestamp":"2026-10-17T15:57:28Z"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user07","pid":50953,"process":"sshd","timestamp":"2026-10-17T15:58:54Z","user":"user07"}
+{"host":"srv11.corp.example","message":"   adm02 : TTY=pts/3 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":44272,"process":"sudo","timestamp":"2026-10-17T16:00:20Z","user":"adm02"}
+{"host":"srv12.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":1145,"process":"sudo","timestamp":"2026-10-17T16:01:46Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"Accepted publickey for adm01 from 192.0.2.158 port 33758 ssh2: ED25519 SHA256:xdm9pazryra1sg5x6pde28x8y638cspzhbjbzivybw4","pid":22065,"process":"sshd","src_ip":"192.0.2.158","timestamp":"2026-10-17T16:03:12Z","user":"adm01"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":57210,"process":"CRON","timestamp":"2026-10-17T16:04:38Z"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session closed for user user23","pid":44484,"process":"sshd","timestamp":"2026-10-17T16:06:04Z","user":"user23"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":43962,"process":"CRON","timestamp":"2026-10-17T16:07:30Z"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user01 from 192.0.2.129 port 44665 ssh2: ED25519 SHA256:mllp8a8p28k8wbt7css5p36ys4okmt0qz4fd249qs7w","pid":55786,"process":"sshd","src_ip":"192.0.2.129","timestamp":"2026-10-17T16:08:56Z","user":"user01"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user09","pid":29419,"process":"sshd","timestamp":"2026-10-17T16:10:22Z","user":"user09"}
+{"host":"srv11.corp.example","message":"Failed password for user16 from 192.0.2.108 port 52374 ssh2","pid":48998,"process":"sshd","src_ip":"192.0.2.108","timestamp":"2026-10-17T16:11:48Z","user":"user16"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session opened for user adm03","pid":3592,"process":"sshd","timestamp":"2026-10-17T16:13:14Z","user":"adm03"}
+{"host":"srv06.corp.example","message":"Removed session 138.","pid":39812,"process":"systemd-logind","timestamp":"2026-10-17T16:14:40Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":20893,"process":"CRON","timestamp":"2026-10-17T16:16:06Z"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":1017,"process":"sshd","timestamp":"2026-10-17T16:17:32Z","user":"user18"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":20500,"process":"sudo","timestamp":"2026-10-17T16:18:58Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user14 from 192.0.2.167 port 53887 ssh2: ED25519 SHA256:q98dzbv7ci0tq8f81atmzvepi47tjtxgh1jjnhrubx2","pid":44591,"process":"sshd","src_ip":"192.0.2.167","timestamp":"2026-10-17T16:20:24Z","user":"user14"}
+{"host":"srv04.corp.example","message":"Accepted publickey for user13 from 192.0.2.91 port 53124 ssh2: ED25519 SHA256:0ow6a41fnondfe6ccm7ygv461clmnrpf16p7lvi0f36","pid":42455,"process":"sshd","src_ip":"192.0.2.91","timestamp":"2026-10-17T16:21:50Z","user":"user13"}
+{"host":"srv08.corp.example","message":"Removed session 836.","pid":41587,"process":"systemd-logind","timestamp":"2026-10-17T16:23:16Z","user":"user11"}
+{"host":"srv04.corp.example","message":"Accepted publickey for user07 from 192.0.2.89 port 47958 ssh2: ED25519 SHA256:cmo4f4l1805u1mugskbk3ok3sovays4fmkaa0fsoap5","pid":5236,"process":"sshd","src_ip":"192.0.2.89","timestamp":"2026-10-17T16:24:42Z","user":"user07"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":42502,"process":"CRON","timestamp":"2026-10-17T16:26:08Z"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user01","pid":50723,"process":"sshd","timestamp":"2026-10-17T16:27:34Z","user":"user01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user user23","pid":47382,"process":"sshd","timestamp":"2026-10-17T16:29:00Z","user":"user23"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user06","pid":9616,"process":"sshd","timestamp":"2026-10-17T16:30:26Z","user":"user06"}
+{"host":"srv01.corp.example","message":"(to postgres) deploy on pts/2","pid":11123,"process":"su","timestamp":"2026-10-17T16:31:52Z","user":"deploy"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user user05","pid":12212,"process":"sshd","timestamp":"2026-10-17T16:33:18Z","user":"user05"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":36297,"process":"CRON","timestamp":"2026-10-17T16:34:44Z"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user16 from 192.0.2.230 port 50613 ssh2: ED25519 SHA256:6riqwatci9362r0dme690dwc44sx8eo8634hinqkami","pid":33845,"process":"sshd","src_ip":"192.0.2.230","timestamp":"2026-10-17T16:36:10Z","user":"user16"}
+{"host":"srv10.corp.example","message":"Session 709 logged out. Waiting for processes to exit.","pid":3405,"process":"systemd-logind","timestamp":"2026-10-17T16:37:36Z","user":"user12"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session opened for user user22","pid":16540,"process":"sshd","timestamp":"2026-10-17T16:39:02Z","user":"user22"}
+{"host":"srv09.corp.example","message":"Accepted password for adm03 from 192.0.2.168 port 57698 ssh2","pid":8961,"process":"sshd","src_ip":"192.0.2.168","timestamp":"2026-10-17T16:40:28Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":13678,"process":"CRON","timestamp":"2026-10-17T16:41:54Z"}
+{"host":"srv06.corp.example","message":"   adm03 : TTY=pts/0 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":41889,"process":"sudo","timestamp":"2026-10-17T16:43:20Z","user":"adm03"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user adm03","pid":17154,"process":"sshd","timestamp":"2026-10-17T16:44:46Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"Failed password for user03 from 192.0.2.44 port 53575 ssh2","pid":43326,"process":"sshd","src_ip":"192.0.2.44","timestamp":"2026-10-17T16:46:12Z","user":"user03"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user07","pid":3148,"process":"sshd","timestamp":"2026-10-17T16:47:38Z","user":"user07"}
+{"host":"srv01.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":24573,"process":"sudo","timestamp":"2026-10-17T16:49:04Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"Removed session 239.","pid":10649,"process":"systemd-logind","timestamp":"2026-10-17T16:50:30Z","user":"user10"}
+{"host":"srv11.corp.example","message":"New session 892 of user user09.","pid":4664,"process":"systemd-logind","timestamp":"2026-10-17T16:51:56Z","user":"user09"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user09","pid":44209,"process":"sshd","timestamp":"2026-10-17T16:53:22Z","user":"user09"}
+{"host":"srv02.corp.example","message":"   adm03 : TTY=pts/3 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":21236,"process":"sudo","timestamp":"2026-10-17T16:54:48Z","user":"adm03"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":28911,"process":"sshd","timestamp":"2026-10-17T16:56:14Z","user":"user18"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session opened for user user04","pid":58936,"process":"sshd","timestamp":"2026-10-17T16:57:40Z","user":"user04"}
+{"host":"srv02.corp.example","message":"Accepted publickey for deploy from 192.0.2.212 port 49416 ssh2: ED25519 SHA256:oyjmnuk1bsnixy79em0kbafrhx968kj86ncnrozrcst","pid":45096,"process":"sshd","src_ip":"192.0.2.212","timestamp":"2026-10-17T16:59:06Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user15 from 192.0.2.75 port 32512 ssh2: ED25519 SHA256:880h2u0550d3o5r1ogpyuddh2kaendy1oojlmwnk6nu","pid":29218,"process":"sshd","src_ip":"192.0.2.75","timestamp":"2026-10-17T17:00:32Z","user":"user15"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session closed for user user23","pid":17178,"process":"sshd","timestamp":"2026-10-17T17:01:58Z","user":"user23"}
+{"host":"srv12.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":47186,"process":"sudo","timestamp":"2026-10-17T17:03:24Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":34771,"process":"CRON","timestamp":"2026-10-17T17:04:50Z"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":49638,"process":"CRON","timestamp":"2026-10-17T17:06:16Z"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user13","pid":21685,"process":"sshd","timestamp":"2026-10-17T17:07:42Z","user":"user13"}
+{"host":"srv10.corp.example","message":"New session 165 of user user03.","pid":35870,"process":"systemd-logind","timestamp":"2026-10-17T17:09:08Z","user":"user03"}
+{"host":"srv11.corp.example","message":"Session 355 logged out. Waiting for processes to exit.","pid":33509,"process":"systemd-logind","timestamp":"2026-10-17T17:10:34Z","user":"adm01"}
+{"host":"srv10.corp.example","message":"Failed password for user23 from 192.0.2.85 port 33018 ssh2","pid":21874,"process":"sshd","src_ip":"192.0.2.85","timestamp":"2026-10-17T17:12:00Z","user":"user23"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user adm02","pid":3584,"process":"sshd","timestamp":"2026-10-17T17:13:26Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":38563,"process":"CRON","timestamp":"2026-10-17T17:14:52Z"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user08 from 192.0.2.123 port 47904 ssh2: ED25519 SHA256:sdxhfx6o1ziz7h0o82zadb4ahksq3r4pv90xhhp14la","pid":3539,"process":"sshd","src_ip":"192.0.2.123","timestamp":"2026-10-17T17:16:18Z","user":"user08"}
+{"host":"srv02.corp.example","message":"Accepted password for user12 from 203.0.113.10 port 33035 ssh2","pid":24348,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T17:17:44Z","user":"user12"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":15427,"process":"CRON","timestamp":"2026-10-17T17:19:10Z"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user06","pid":14407,"process":"sshd","timestamp":"2026-10-17T17:20:36Z","user":"user06"}
+{"host":"srv10.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":7077,"process":"sudo","timestamp":"2026-10-17T17:22:02Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":20880,"process":"sudo","timestamp":"2026-10-17T17:23:28Z","user":"adm02"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user deploy","pid":5521,"process":"sshd","timestamp":"2026-10-17T17:24:54Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"Accepted password for user06 from 192.0.2.238 port 49060 ssh2","pid":40652,"process":"sshd","src_ip":"192.0.2.238","timestamp":"2026-10-17T17:26:20Z","user":"user06"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user17 from 192.0.2.20 port 45092 ssh2: ED25519 SHA256:iagj2lcpnmso0fy4nkvu94nmzvtokcpdhqrrgmf9cb9","pid":646,"process":"sshd","src_ip":"192.0.2.20","timestamp":"2026-10-17T17:27:46Z","user":"user17"}
+{"host":"srv03.corp.example","message":"Accepted publickey for adm02 from 192.0.2.126 port 31497 ssh2: ED25519 SHA256:ipc9oif9eork5jav4xquinwtauqfbdzchkrsy3ggkqh","pid":55180,"process":"sshd","src_ip":"192.0.2.126","timestamp":"2026-10-17T17:29:12Z","user":"adm02"}
+{"host":"srv06.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":37550,"process":"sudo","timestamp":"2026-10-17T17:30:38Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":30222,"process":"CRON","timestamp":"2026-10-17T17:32:04Z"}
+{"host":"srv05.corp.example","message":"New session 146 of user adm02.","pid":41131,"process":"systemd-logind","timestamp":"2026-10-17T17:33:30Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"   adm03 : TTY=pts/3 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":7799,"process":"sudo","timestamp":"2026-10-17T17:34:56Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"New session 551 of user user16.","pid":25191,"process":"systemd-logind","timestamp":"2026-10-17T17:36:22Z","user":"user16"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user adm03","pid":55582,"process":"sshd","timestamp":"2026-10-17T17:37:48Z","user":"adm03"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":49552,"process":"sudo","timestamp":"2026-10-17T17:39:14Z","user":"adm03"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user user10","pid":9134,"process":"sshd","timestamp":"2026-10-17T17:40:40Z","user":"user10"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user15 from 203.0.113.10 port 46262 ssh2: ED25519 SHA256:s5jmrdd7n3vku8qwz0odwjmmd5injsz4uh7xaodcmf8","pid":23566,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T17:42:06Z","user":"user15"}
+{"host":"srv09.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":51586,"process":"sudo","timestamp":"2026-10-17T17:43:32Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":49399,"process":"sudo","timestamp":"2026-10-17T17:44:58Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user01 from 192.0.2.239 port 54519 ssh2: ED25519 SHA256:5u3bhbaw75zvga5aoih9xlo8hnfwueixp1ug5a3kscu","pid":21086,"process":"sshd","src_ip":"192.0.2.239","timestamp":"2026-10-17T17:46:24Z","user":"user01"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":43756,"process":"sudo","timestamp":"2026-10-17T17:47:50Z","user":"adm03"}
+{"host":"srv11.corp.example","message":"   adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":26517,"process":"sudo","timestamp":"2026-10-17T17:49:16Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"Session 597 logged out. Waiting for processes to exit.","pid":8970,"process":"systemd-logind","timestamp":"2026-10-17T17:50:42Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"Session 258 logged out. Waiting for processes to exit.","pid":52329,"process":"systemd-logind","timestamp":"2026-10-17T17:52:08Z","user":"user20"}
+{"host":"srv12.corp.example","message":"Removed session 308.","pid":28390,"process":"systemd-logind","timestamp":"2026-10-17T17:53:34Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":33888,"process":"CRON","timestamp":"2026-10-17T17:55:00Z"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session opened for user user09","pid":33084,"process":"sshd","timestamp":"2026-10-17T17:56:26Z","user":"user09"}
+{"host":"srv08.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":1481,"process":"sudo","timestamp":"2026-10-17T17:57:52Z","user":"adm01"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":40032,"process":"sudo","timestamp":"2026-10-17T17:59:18Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"Disconnected from user user22 192.0.2.61 port 41569","pid":14463,"process":"sshd","src_ip":"192.0.2.61","timestamp":"2026-10-17T18:00:44Z","user":"user22"}
+{"host":"srv11.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":15554,"process":"sudo","timestamp":"2026-10-17T18:02:10Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"Session 422 logged out. Waiting for processes to exit.","pid":42697,"process":"systemd-logind","timestamp":"2026-10-17T18:03:36Z","user":"user19"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":35005,"process":"sudo","timestamp":"2026-10-17T18:05:02Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"Failed password for user10 from 192.0.2.195 port 58672 ssh2","pid":36059,"process":"sshd","src_ip":"192.0.2.195","timestamp":"2026-10-17T18:06:28Z","user":"user10"}
+{"host":"srv05.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":49012,"process":"sudo","timestamp":"2026-10-17T18:07:54Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user07 from 192.0.2.207 port 32392 ssh2: ED25519 SHA256:jiih8p1jxa8xk95e2xz09iaie9ujqqlcsuowrfsmrsv","pid":13519,"process":"sshd","src_ip":"192.0.2.207","timestamp":"2026-10-17T18:09:20Z","user":"user07"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user02","pid":21142,"process":"sshd","timestamp":"2026-10-17T18:10:46Z","user":"user02"}
+{"host":"srv08.corp.example","message":"(to postgres) adm01 on pts/2","pid":54157,"process":"su","timestamp":"2026-10-17T18:12:12Z","user":"adm01"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":44053,"process":"CRON","timestamp":"2026-10-17T18:13:38Z"}
+{"host":"srv07.corp.example","message":"Accepted password for user20 from 192.0.2.45 port 53859 ssh2","pid":49253,"process":"sshd","src_ip":"192.0.2.45","timestamp":"2026-10-17T18:15:04Z","user":"user20"}
+{"host":"srv04.corp.example","message":"Accepted publickey for adm03 from 192.0.2.130 port 30966 ssh2: ED25519 SHA256:3nlhty2yv3mwj0opt81sp26tqza0jks97kmqgcavpf0","pid":10405,"process":"sshd","src_ip":"192.0.2.130","timestamp":"2026-10-17T18:16:30Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"  deploy : TTY=pts/0 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":14305,"process":"sudo","timestamp":"2026-10-17T18:17:56Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"(to postgres) adm01 on pts/1","pid":31952,"process":"su","timestamp":"2026-10-17T18:19:22Z","user":"adm01"}
+{"host":"srv08.corp.example","message":"Failed password for user16 from 192.0.2.23 port 59474 ssh2","pid":51806,"process":"sshd","src_ip":"192.0.2.23","timestamp":"2026-10-17T18:20:48Z","user":"user16"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":30006,"process":"CRON","timestamp":"2026-10-17T18:22:14Z"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session opened for user adm01","pid":46409,"process":"sshd","timestamp":"2026-10-17T18:23:40Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user05 from 192.0.2.239 port 48430 ssh2: ED25519 SHA256:xii1his2l4jc0w81bvjltvub2uqxyaii0nsyk78mdsx","pid":37324,"process":"sshd","src_ip":"192.0.2.239","timestamp":"2026-10-17T18:25:06Z","user":"user05"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session opened for user user18","pid":2403,"process":"sshd","timestamp":"2026-10-17T18:26:32Z","user":"user18"}
+{"host":"srv03.corp.example","message":"Failed password for adm02 from 192.0.2.94 port 53244 ssh2","pid":49625,"process":"sshd","src_ip":"192.0.2.94","timestamp":"2026-10-17T18:27:58Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":3190,"process":"CRON","timestamp":"2026-10-17T18:29:24Z"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user07 from 192.0.2.121 port 38820 ssh2: ED25519 SHA256:0yg8jcj75hokx3uxudz43qvtlr3zcogeucpbpgdq3lf","pid":52980,"process":"sshd","src_ip":"192.0.2.121","timestamp":"2026-10-17T18:30:50Z","user":"user07"}
+{"host":"srv09.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":25296,"process":"CRON","timestamp":"2026-10-17T18:32:16Z"}
+{"host":"srv05.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":34821,"process":"sudo","timestamp":"2026-10-17T18:33:42Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":24691,"process":"sudo","timestamp":"2026-10-17T18:35:08Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"Disconnected from user user13 192.0.2.27 port 42509","pid":2172,"process":"sshd","src_ip":"192.0.2.27","timestamp":"2026-10-17T18:36:34Z","user":"user13"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":9742,"process":"sshd","timestamp":"2026-10-17T18:38:00Z","user":"user18"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session closed for user user10","pid":37310,"process":"sshd","timestamp":"2026-10-17T18:39:26Z","user":"user10"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":20752,"process":"sshd","timestamp":"2026-10-17T18:40:52Z","user":"user18"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user19","pid":51473,"process":"sshd","timestamp":"2026-10-17T18:42:18Z","user":"user19"}
+{"host":"srv10.corp.example","message":"New session 160 of user user02.","pid":26026,"process":"systemd-logind","timestamp":"2026-10-17T18:43:44Z","user":"user02"}
+{"host":"srv07.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":46064,"process":"sudo","timestamp":"2026-10-17T18:45:10Z","user":"adm02"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session closed for user user02","pid":9589,"process":"sshd","timestamp":"2026-10-17T18:46:36Z","user":"user02"}
+{"host":"srv12.corp.example","message":"Accepted password for user06 from 192.0.2.43 port 30876 ssh2","pid":55941,"process":"sshd","src_ip":"192.0.2.43","timestamp":"2026-10-17T18:48:02Z","user":"user06"}
+{"host":"srv12.corp.example","message":"Removed session 940.","pid":45235,"process":"systemd-logind","timestamp":"2026-10-17T18:49:28Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user18","pid":10731,"process":"sshd","timestamp":"2026-10-17T18:50:54Z","user":"user18"}
+{"host":"srv01.corp.example","message":"Disconnected from user user10 192.0.2.182 port 44620","pid":14883,"process":"sshd","src_ip":"192.0.2.182","timestamp":"2026-10-17T18:52:20Z","user":"user10"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":43724,"process":"CRON","timestamp":"2026-10-17T18:53:46Z"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user user12","pid":47608,"process":"sshd","timestamp":"2026-10-17T18:55:12Z","user":"user12"}
+{"host":"srv10.corp.example","message":"Failed password for user22 from 192.0.2.24 port 51084 ssh2","pid":37736,"process":"sshd","src_ip":"192.0.2.24","timestamp":"2026-10-17T18:56:38Z","user":"user22"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":50255,"process":"CRON","timestamp":"2026-10-17T18:58:04Z"}
+{"host":"srv05.corp.example","message":"(to postgres) adm01 on pts/0","pid":40496,"process":"su","timestamp":"2026-10-17T18:59:30Z","user":"adm01"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":36535,"process":"CRON","timestamp":"2026-10-17T19:00:56Z"}
+{"host":"srv02.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":29539,"process":"sudo","timestamp":"2026-10-17T19:02:22Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"Session 706 logged out. Waiting for processes to exit.","pid":6358,"process":"systemd-logind","timestamp":"2026-10-17T19:03:48Z","user":"user24"}
+{"host":"srv01.corp.example","message":"Accepted password for user10 from 192.0.2.107 port 36089 ssh2","pid":49436,"process":"sshd","src_ip":"192.0.2.107","timestamp":"2026-10-17T19:05:14Z","user":"user10"}
+{"host":"srv06.corp.example","message":"Accepted password for user18 from 203.0.113.10 port 36807 ssh2","pid":56451,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T19:06:40Z","user":"user18"}
+{"host":"srv02.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":27793,"process":"sudo","timestamp":"2026-10-17T19:08:06Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user06","pid":26556,"process":"sshd","timestamp":"2026-10-17T19:09:32Z","user":"user06"}
+{"host":"srv01.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/systemctl restart example-app","pid":33371,"process":"sudo","timestamp":"2026-10-17T19:10:58Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"New session 258 of user user10.","pid":7702,"process":"systemd-logind","timestamp":"2026-10-17T19:12:24Z","user":"user10"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user10 from 192.0.2.159 port 37907 ssh2: ED25519 SHA256:nza9eqdb0hb82cdcw7jwsiqi9qcma2qb2pxbbvbzt4x","pid":28075,"process":"sshd","src_ip":"192.0.2.159","timestamp":"2026-10-17T19:13:50Z","user":"user10"}
+{"host":"srv06.corp.example","message":"Accepted password for user14 from 192.0.2.85 port 59975 ssh2","pid":52966,"process":"sshd","src_ip":"192.0.2.85","timestamp":"2026-10-17T19:15:16Z","user":"user14"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user21 from 192.0.2.232 port 40142 ssh2: ED25519 SHA256:i1ullcb2cqqjp9f3af9stxxnl3ofcoe7xwgqqfuifm7","pid":44043,"process":"sshd","src_ip":"192.0.2.232","timestamp":"2026-10-17T19:16:42Z","user":"user21"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user02 from 192.0.2.169 port 49796 ssh2: ED25519 SHA256:rqj34iln4iaa9vtxqgohd2pcldnjot9gokp0kq3dmfe","pid":58024,"process":"sshd","src_ip":"192.0.2.169","timestamp":"2026-10-17T19:18:08Z","user":"user02"}
+{"host":"srv10.corp.example","message":"Accepted publickey for user21 from 192.0.2.210 port 46472 ssh2: ED25519 SHA256:0c9wi9r0tyeruw4pz2l6wrdu777xkdeo316p028xzu2","pid":19741,"process":"sshd","src_ip":"192.0.2.210","timestamp":"2026-10-17T19:19:34Z","user":"user21"}
+{"host":"srv06.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":39488,"process":"sudo","timestamp":"2026-10-17T19:21:00Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"Accepted publickey for user16 from 192.0.2.178 port 46335 ssh2: ED25519 SHA256:tkej18j7rer0y3cmpnb2jqdu6lkjerovzr3kantsifv","pid":40850,"process":"sshd","src_ip":"192.0.2.178","timestamp":"2026-10-17T19:22:26Z","user":"user16"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user22 from 192.0.2.65 port 53850 ssh2: ED25519 SHA256:vhapl8o8a2yajvx8evggt3a0tdcuxopnxycudrjlq8t","pid":36926,"process":"sshd","src_ip":"192.0.2.65","timestamp":"2026-10-17T19:23:52Z","user":"user22"}
+{"host":"srv09.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":46941,"process":"sudo","timestamp":"2026-10-17T19:25:18Z","user":"adm02"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user user13","pid":57645,"process":"sshd","timestamp":"2026-10-17T19:26:44Z","user":"user13"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session opened for user user15","pid":25610,"process":"sshd","timestamp":"2026-10-17T19:28:10Z","user":"user15"}
+{"host":"srv02.corp.example","message":"Accepted publickey for adm01 from 192.0.2.119 port 45061 ssh2: ED25519 SHA256:ltlq3nczox781gmpyiixyzunik2tabu18ojxbbzyz9a","pid":55868,"process":"sshd","src_ip":"192.0.2.119","timestamp":"2026-10-17T19:29:36Z","user":"adm01"}
+{"host":"srv01.corp.example","message":"Accepted publickey for adm03 from 203.0.113.10 port 38307 ssh2: ED25519 SHA256:nfwhvzpnyr7ps6jxm3es1xolq2rcwkun0mkjy6sar94","pid":10185,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T19:31:02Z","user":"adm03"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user adm02","pid":8259,"process":"sshd","timestamp":"2026-10-17T19:32:28Z","user":"adm02"}
+{"host":"srv06.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":40137,"process":"sudo","timestamp":"2026-10-17T19:33:54Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":1949,"process":"CRON","timestamp":"2026-10-17T19:35:20Z"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user19","pid":52937,"process":"sshd","timestamp":"2026-10-17T19:36:46Z","user":"user19"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user user23","pid":56645,"process":"sshd","timestamp":"2026-10-17T19:38:12Z","user":"user23"}
+{"host":"srv11.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":3141,"process":"sudo","timestamp":"2026-10-17T19:39:38Z","user":"adm01"}
+{"host":"srv10.corp.example","message":"Accepted publickey for user02 from 192.0.2.73 port 30756 ssh2: ED25519 SHA256:gziba1yd7mzcwob9g2h7nxsy32oqr5n591g0ztoewdd","pid":43648,"process":"sshd","src_ip":"192.0.2.73","timestamp":"2026-10-17T19:41:04Z","user":"user02"}
+{"host":"srv07.corp.example","message":"Disconnected from user user03 192.0.2.127 port 54308","pid":9275,"process":"sshd","src_ip":"192.0.2.127","timestamp":"2026-10-17T19:42:30Z","user":"user03"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session opened for user deploy","pid":28353,"process":"sshd","timestamp":"2026-10-17T19:43:56Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm02(uid=0)","pid":17844,"process":"sudo","timestamp":"2026-10-17T19:45:22Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"New session 127 of user user22.","pid":25264,"process":"systemd-logind","timestamp":"2026-10-17T19:46:48Z","user":"user22"}
+{"host":"srv07.corp.example","message":"Accepted publickey for deploy from 192.0.2.41 port 57159 ssh2: ED25519 SHA256:cere6m63t4u30jvlfrv1thjrmvo4catnmog2nmkchj5","pid":57664,"process":"sshd","src_ip":"192.0.2.41","timestamp":"2026-10-17T19:48:14Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"Accepted publickey for deploy from 203.0.113.10 port 43615 ssh2: ED25519 SHA256:4zea3w00tisuqcg8mx34daf3ajgvclc8fndzy5ds5kt","pid":43019,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T19:49:40Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"Removed session 414.","pid":3570,"process":"systemd-logind","timestamp":"2026-10-17T19:51:06Z","user":"user06"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user02 from 192.0.2.37 port 52912 ssh2: ED25519 SHA256:tfdx9gyhn5wg8h7y7cihylyob7klnl0a2nofol0a1vw","pid":53312,"process":"sshd","src_ip":"192.0.2.37","timestamp":"2026-10-17T19:52:32Z","user":"user02"}
+{"host":"srv11.corp.example","message":"Failed password for user17 from 192.0.2.124 port 53754 ssh2","pid":28788,"process":"sshd","src_ip":"192.0.2.124","timestamp":"2026-10-17T19:53:58Z","user":"user17"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user12","pid":57033,"process":"sshd","timestamp":"2026-10-17T19:55:24Z","user":"user12"}
+{"host":"srv09.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":39156,"process":"sudo","timestamp":"2026-10-17T19:56:50Z","user":"adm02"}
+{"host":"srv05.corp.example","message":"Disconnected from user user05 192.0.2.126 port 52243","pid":36207,"process":"sshd","src_ip":"192.0.2.126","timestamp":"2026-10-17T19:58:16Z","user":"user05"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user21 from 192.0.2.24 port 38957 ssh2: ED25519 SHA256:xtayozm4apnrnhvgb9w24gsvjhuomo8d3at8c0lbtwp","pid":22366,"process":"sshd","src_ip":"192.0.2.24","timestamp":"2026-10-17T19:59:42Z","user":"user21"}
+{"host":"srv03.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":37180,"process":"CRON","timestamp":"2026-10-17T20:01:08Z"}
+{"host":"srv02.corp.example","message":"(to postgres) adm03 on pts/2","pid":46013,"process":"su","timestamp":"2026-10-17T20:02:34Z","user":"adm03"}
+{"host":"srv07.corp.example","message":"  deploy : TTY=pts/3 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":37534,"process":"sudo","timestamp":"2026-10-17T20:04:00Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":60200,"process":"sudo","timestamp":"2026-10-17T20:05:26Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"New session 555 of user user01.","pid":13870,"process":"systemd-logind","timestamp":"2026-10-17T20:06:52Z","user":"user01"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":31590,"process":"sudo","timestamp":"2026-10-17T20:08:18Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"Removed session 126.","pid":21926,"process":"systemd-logind","timestamp":"2026-10-17T20:09:44Z","user":"user20"}
+{"host":"srv02.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":45591,"process":"sudo","timestamp":"2026-10-17T20:11:10Z","user":"adm02"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user adm02","pid":55413,"process":"sshd","timestamp":"2026-10-17T20:12:36Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":40028,"process":"sudo","timestamp":"2026-10-17T20:14:02Z","user":"adm02"}
+{"host":"srv06.corp.example","message":"Accepted password for deploy from 192.0.2.96 port 54377 ssh2","pid":32833,"process":"sshd","src_ip":"192.0.2.96","timestamp":"2026-10-17T20:15:28Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user user06","pid":48492,"process":"sshd","timestamp":"2026-10-17T20:16:54Z","user":"user06"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user15 from 203.0.113.10 port 42597 ssh2: ED25519 SHA256:z9n5qubh5sk39muzq1perhz4hdpyghu1ybbcv0ekamo","pid":18822,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T20:18:20Z","user":"user15"}
+{"host":"srv06.corp.example","message":"pam_unix(sshd:session): session closed for user user10","pid":51732,"process":"sshd","timestamp":"2026-10-17T20:19:46Z","user":"user10"}
+{"host":"srv10.corp.example","message":"Session 557 logged out. Waiting for processes to exit.","pid":55675,"process":"systemd-logind","timestamp":"2026-10-17T20:21:12Z","user":"user06"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":58508,"process":"CRON","timestamp":"2026-10-17T20:22:38Z"}
+{"host":"srv10.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":1970,"process":"sudo","timestamp":"2026-10-17T20:24:04Z","user":"adm01"}
+{"host":"srv10.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":41619,"process":"sudo","timestamp":"2026-10-17T20:25:30Z","user":"adm03"}
+{"host":"srv03.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":18056,"process":"sudo","timestamp":"2026-10-17T20:26:56Z","user":"deploy"}
+{"host":"srv10.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/journalctl -u example-app -n 200","pid":41055,"process":"sudo","timestamp":"2026-10-17T20:28:22Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user user11","pid":42881,"process":"sshd","timestamp":"2026-10-17T20:29:48Z","user":"user11"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":31497,"process":"sshd","timestamp":"2026-10-17T20:31:14Z","user":"user18"}
+{"host":"srv07.corp.example","message":"Disconnected from user user17 192.0.2.134 port 44189","pid":17745,"process":"sshd","src_ip":"192.0.2.134","timestamp":"2026-10-17T20:32:40Z","user":"user17"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user18","pid":22175,"process":"sshd","timestamp":"2026-10-17T20:34:06Z","user":"user18"}
+{"host":"srv08.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":56038,"process":"sudo","timestamp":"2026-10-17T20:35:32Z","user":"adm03"}
+{"host":"srv07.corp.example","message":"Disconnected from user user07 192.0.2.28 port 41543","pid":15007,"process":"sshd","src_ip":"192.0.2.28","timestamp":"2026-10-17T20:36:58Z","user":"user07"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session closed for user user02","pid":2708,"process":"sshd","timestamp":"2026-10-17T20:38:24Z","user":"user02"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":21960,"process":"sshd","timestamp":"2026-10-17T20:39:50Z","user":"user18"}
+{"host":"srv10.corp.example","message":"Accepted password for user21 from 192.0.2.168 port 58322 ssh2","pid":40027,"process":"sshd","src_ip":"192.0.2.168","timestamp":"2026-10-17T20:41:16Z","user":"user21"}
+{"host":"srv01.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":35582,"process":"CRON","timestamp":"2026-10-17T20:42:42Z"}
+{"host":"srv07.corp.example","message":"Accepted publickey for user08 from 192.0.2.65 port 41059 ssh2: ED25519 SHA256:r1aj5qf4p8c1nd8kx2w0qqvo1k5ewrbqttapot6dd6i","pid":1785,"process":"sshd","src_ip":"192.0.2.65","timestamp":"2026-10-17T20:44:08Z","user":"user08"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user01 from 192.0.2.228 port 55842 ssh2: ED25519 SHA256:a091oavy7j1h0dr1swfr87y1o79t3xdislmn86m6k68","pid":37118,"process":"sshd","src_ip":"192.0.2.228","timestamp":"2026-10-17T20:45:34Z","user":"user01"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user16","pid":18585,"process":"sshd","timestamp":"2026-10-17T20:47:00Z","user":"user16"}
+{"host":"srv02.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":40789,"process":"sudo","timestamp":"2026-10-17T20:48:26Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm03(uid=0)","pid":47834,"process":"sudo","timestamp":"2026-10-17T20:49:52Z","user":"adm03"}
+{"host":"srv08.corp.example","message":"Accepted publickey for user13 from 192.0.2.54 port 46196 ssh2: ED25519 SHA256:xnayupz5kkygfj8rpwamgth1ewdgexuxi6fexhm46zj","pid":30511,"process":"sshd","src_ip":"192.0.2.54","timestamp":"2026-10-17T20:51:18Z","user":"user13"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user06 from 192.0.2.138 port 52860 ssh2: ED25519 SHA256:kg303en52ufn2vf1bnj6d5z7lx601hiynqpg0h3ab3h","pid":56882,"process":"sshd","src_ip":"192.0.2.138","timestamp":"2026-10-17T20:52:44Z","user":"user06"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session opened for user user04","pid":17948,"process":"sshd","timestamp":"2026-10-17T20:54:10Z","user":"user04"}
+{"host":"srv02.corp.example","message":"Session 220 logged out. Waiting for processes to exit.","pid":22639,"process":"systemd-logind","timestamp":"2026-10-17T20:55:36Z","user":"user02"}
+{"host":"srv03.corp.example","message":"Session 808 logged out. Waiting for processes to exit.","pid":45755,"process":"systemd-logind","timestamp":"2026-10-17T20:57:02Z","user":"user24"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":54580,"process":"CRON","timestamp":"2026-10-17T20:58:28Z"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session closed for user user05","pid":8657,"process":"sshd","timestamp":"2026-10-17T20:59:54Z","user":"user05"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":45768,"process":"CRON","timestamp":"2026-10-17T21:01:20Z"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":32066,"process":"CRON","timestamp":"2026-10-17T21:02:46Z"}
+{"host":"srv04.corp.example","message":"Failed password for user05 from 192.0.2.201 port 30536 ssh2","pid":57669,"process":"sshd","src_ip":"192.0.2.201","timestamp":"2026-10-17T21:04:12Z","user":"user05"}
+{"host":"srv09.corp.example","message":"Failed password for user19 from 192.0.2.168 port 40539 ssh2","pid":49751,"process":"sshd","src_ip":"192.0.2.168","timestamp":"2026-10-17T21:05:38Z","user":"user19"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user20 from 192.0.2.195 port 49279 ssh2: ED25519 SHA256:zn2z8duhjjupxvvs51ddqq4oxyzsba60oovmowc1uvj","pid":51903,"process":"sshd","src_ip":"192.0.2.195","timestamp":"2026-10-17T21:07:04Z","user":"user20"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user adm01","pid":30571,"process":"sshd","timestamp":"2026-10-17T21:08:30Z","user":"adm01"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user03 from 192.0.2.234 port 35507 ssh2: ED25519 SHA256:j2th6hhynjexedyo3zz6quqexsl1qqktoif3zyryd47","pid":4781,"process":"sshd","src_ip":"192.0.2.234","timestamp":"2026-10-17T21:09:56Z","user":"user03"}
+{"host":"srv09.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":30284,"process":"sudo","timestamp":"2026-10-17T21:11:22Z","user":"deploy"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session opened for user user15","pid":27209,"process":"sshd","timestamp":"2026-10-17T21:12:48Z","user":"user15"}
+{"host":"srv03.corp.example","message":"Accepted password for user23 from 192.0.2.232 port 44329 ssh2","pid":9469,"process":"sshd","src_ip":"192.0.2.232","timestamp":"2026-10-17T21:14:14Z","user":"user23"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":52489,"process":"CRON","timestamp":"2026-10-17T21:15:40Z"}
+{"host":"srv03.corp.example","message":"New session 703 of user user19.","pid":38930,"process":"systemd-logind","timestamp":"2026-10-17T21:17:06Z","user":"user19"}
+{"host":"srv10.corp.example","message":"   adm01 : TTY=pts/2 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":33727,"process":"sudo","timestamp":"2026-10-17T21:18:32Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":37072,"process":"CRON","timestamp":"2026-10-17T21:19:58Z"}
+{"host":"srv09.corp.example","message":"(to postgres) adm02 on pts/2","pid":26491,"process":"su","timestamp":"2026-10-17T21:21:24Z","user":"adm02"}
+{"host":"srv03.corp.example","message":"Failed password for user15 from 192.0.2.90 port 48435 ssh2","pid":8944,"process":"sshd","src_ip":"192.0.2.90","timestamp":"2026-10-17T21:22:50Z","user":"user15"}
+{"host":"srv04.corp.example","message":"   adm03 : TTY=pts/3 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":38913,"process":"sudo","timestamp":"2026-10-17T21:24:16Z","user":"adm03"}
+{"host":"srv04.corp.example","message":"(to postgres) adm02 on pts/1","pid":51848,"process":"su","timestamp":"2026-10-17T21:25:42Z","user":"adm02"}
+{"host":"srv07.corp.example","message":"Accepted publickey for user01 from 192.0.2.161 port 45519 ssh2: ED25519 SHA256:5245mi6jbv460mxim2uc80ndlmt0wdn66qemuije923","pid":697,"process":"sshd","src_ip":"192.0.2.161","timestamp":"2026-10-17T21:27:08Z","user":"user01"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session closed for user user18","pid":8061,"process":"sshd","timestamp":"2026-10-17T21:28:34Z","user":"user18"}
+{"host":"srv12.corp.example","message":"Accepted publickey for user10 from 192.0.2.54 port 59434 ssh2: ED25519 SHA256:60bithfy5f5c8ayormse2cepz9h5ldairoccag95hb8","pid":10922,"process":"sshd","src_ip":"192.0.2.54","timestamp":"2026-10-17T21:30:00Z","user":"user10"}
+{"host":"srv06.corp.example","message":"Failed password for user10 from 192.0.2.55 port 33046 ssh2","pid":54397,"process":"sshd","src_ip":"192.0.2.55","timestamp":"2026-10-17T21:31:26Z","user":"user10"}
+{"host":"srv10.corp.example","message":"Removed session 419.","pid":30213,"process":"systemd-logind","timestamp":"2026-10-17T21:32:52Z","user":"user01"}
+{"host":"srv02.corp.example","message":"Accepted password for user19 from 192.0.2.173 port 42073 ssh2","pid":24218,"process":"sshd","src_ip":"192.0.2.173","timestamp":"2026-10-17T21:34:18Z","user":"user19"}
+{"host":"srv11.corp.example","message":"New session 929 of user user11.","pid":11936,"process":"systemd-logind","timestamp":"2026-10-17T21:35:44Z","user":"user11"}
+{"host":"srv01.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":41437,"process":"sudo","timestamp":"2026-10-17T21:37:10Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"Accepted publickey for user20 from 192.0.2.113 port 30060 ssh2: ED25519 SHA256:rwv7yz39wukhay41p09ftoyujj32zy154kr7mj71am3","pid":25145,"process":"sshd","src_ip":"192.0.2.113","timestamp":"2026-10-17T21:38:36Z","user":"user20"}
+{"host":"srv05.corp.example","message":"Accepted publickey for user07 from 192.0.2.148 port 31372 ssh2: ED25519 SHA256:xkqadsh6bn9wgwtmtxmaosldint2ldzdw9rtuba70hv","pid":58536,"process":"sshd","src_ip":"192.0.2.148","timestamp":"2026-10-17T21:40:02Z","user":"user07"}
+{"host":"srv05.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":1525,"process":"sudo","timestamp":"2026-10-17T21:41:28Z","user":"adm01"}
+{"host":"srv11.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":24989,"process":"CRON","timestamp":"2026-10-17T21:42:54Z"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session closed for user root by (uid=0)","pid":34260,"process":"CRON","timestamp":"2026-10-17T21:44:20Z"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session opened for user adm03","pid":32165,"process":"sshd","timestamp":"2026-10-17T21:45:46Z","user":"adm03"}
+{"host":"srv10.corp.example","message":"Removed session 652.","pid":21878,"process":"systemd-logind","timestamp":"2026-10-17T21:47:12Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"Disconnected from user user16 192.0.2.211 port 35361","pid":20962,"process":"sshd","src_ip":"192.0.2.211","timestamp":"2026-10-17T21:48:38Z","user":"user16"}
+{"host":"srv12.corp.example","message":"   deploy : TTY=pts/0 ; PWD=/srv/app ; USER=root ; COMMAND=/usr/bin/sh -c systemctl restart example-app","pid":8916,"process":"sudo","timestamp":"2026-10-17T21:50:04Z","user":"deploy"}
+{"host":"srv12.corp.example","message":"Accepted publickey for adm02 from 192.0.2.33 port 51234 ssh2: ED25519 SHA256:vqgd4gb72jnnxtozsifqx485ormgak2doj4upx6obnm","pid":41415,"process":"sshd","src_ip":"192.0.2.33","timestamp":"2026-10-17T21:51:30Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session opened for user user02","pid":7133,"process":"sshd","timestamp":"2026-10-17T21:52:56Z","user":"user02"}
+{"host":"srv10.corp.example","message":"Accepted password for deploy from 192.0.2.48 port 42968 ssh2","pid":40988,"process":"sshd","src_ip":"192.0.2.48","timestamp":"2026-10-17T21:54:22Z","user":"deploy"}
+{"host":"srv11.corp.example","message":"pam_unix(sshd:session): session closed for user user11","pid":53758,"process":"sshd","timestamp":"2026-10-17T21:55:48Z","user":"user11"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user adm03","pid":42649,"process":"sshd","timestamp":"2026-10-17T21:57:14Z","user":"adm03"}
+{"host":"srv12.corp.example","message":"Failed password for user01 from 192.0.2.28 port 35659 ssh2","pid":7646,"process":"sshd","src_ip":"192.0.2.28","timestamp":"2026-10-17T21:58:40Z","user":"user01"}
+{"host":"srv07.corp.example","message":"  deploy : TTY=pts/3 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/sbin/service nginx reload","pid":2223,"process":"sudo","timestamp":"2026-10-17T22:00:06Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"Accepted publickey for user22 from 192.0.2.228 port 37938 ssh2: ED25519 SHA256:64ll1tca713lt10efusy3tbdgfh0quksrjcoo5o8w3x","pid":11151,"process":"sshd","src_ip":"192.0.2.228","timestamp":"2026-10-17T22:01:32Z","user":"user22"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":9600,"process":"CRON","timestamp":"2026-10-17T22:02:58Z"}
+{"host":"srv09.corp.example","message":"Accepted publickey for user05 from 192.0.2.80 port 55540 ssh2: ED25519 SHA256:bpxrq1sbj0w711w784eefn7gjxkd9nhzjvbb9k01l3p","pid":36307,"process":"sshd","src_ip":"192.0.2.80","timestamp":"2026-10-17T22:04:24Z","user":"user05"}
+{"host":"srv03.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm03(uid=0)","pid":37004,"process":"sudo","timestamp":"2026-10-17T22:05:50Z","user":"adm03"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user08 from 203.0.113.10 port 46812 ssh2: ED25519 SHA256:2tb9oyblu2geowaqoziiamu5xocq22x9haka3h0u6hz","pid":15638,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T22:07:16Z","user":"user08"}
+{"host":"srv01.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":7525,"process":"CRON","timestamp":"2026-10-17T22:08:42Z"}
+{"host":"srv08.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":14433,"process":"CRON","timestamp":"2026-10-17T22:10:08Z"}
+{"host":"srv05.corp.example","message":"Accepted publickey for adm03 from 192.0.2.131 port 47226 ssh2: ED25519 SHA256:d9b151p8efy41glht5vw69uwsh86eubnid5h0qwop33","pid":53348,"process":"sshd","src_ip":"192.0.2.131","timestamp":"2026-10-17T22:11:34Z","user":"adm03"}
+{"host":"srv05.corp.example","message":"New session 395 of user user10.","pid":59443,"process":"systemd-logind","timestamp":"2026-10-17T22:13:00Z","user":"user10"}
+{"host":"srv12.corp.example","message":"  deploy : TTY=pts/1 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/docker ps","pid":3107,"process":"sudo","timestamp":"2026-10-17T22:14:26Z","user":"deploy"}
+{"host":"srv02.corp.example","message":"pam_unix(sudo:session): session closed for user root by deploy(uid=0)","pid":9884,"process":"sudo","timestamp":"2026-10-17T22:15:52Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"Failed password for user15 from 192.0.2.150 port 35073 ssh2","pid":4360,"process":"sshd","src_ip":"192.0.2.150","timestamp":"2026-10-17T22:17:18Z","user":"user15"}
+{"host":"srv08.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm02(uid=0)","pid":15117,"process":"sudo","timestamp":"2026-10-17T22:18:44Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user user03","pid":13604,"process":"sshd","timestamp":"2026-10-17T22:20:10Z","user":"user03"}
+{"host":"srv07.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":25368,"process":"CRON","timestamp":"2026-10-17T22:21:36Z"}
+{"host":"srv04.corp.example","message":"pam_unix(cron:session): session opened for user www-data by (uid=0)","pid":13395,"process":"CRON","timestamp":"2026-10-17T22:23:02Z"}
+{"host":"srv08.corp.example","message":"   adm01 : TTY=pts/0 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":56908,"process":"sudo","timestamp":"2026-10-17T22:24:28Z","user":"adm01"}
+{"host":"srv11.corp.example","message":"Accepted password for adm01 from 192.0.2.99 port 54225 ssh2","pid":28818,"process":"sshd","src_ip":"192.0.2.99","timestamp":"2026-10-17T22:25:54Z","user":"adm01"}
+{"host":"srv08.corp.example","message":"  deploy : TTY=pts/3 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":10933,"process":"sudo","timestamp":"2026-10-17T22:27:20Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"Accepted publickey for user15 from 192.0.2.177 port 52969 ssh2: ED25519 SHA256:k1ngswtan0svls9w0k39yhem8o2tca5ahpdihsepixa","pid":7334,"process":"sshd","src_ip":"192.0.2.177","timestamp":"2026-10-17T22:28:46Z","user":"user15"}
+{"host":"srv01.corp.example","message":"Failed password for user16 from 192.0.2.149 port 41479 ssh2","pid":4537,"process":"sshd","src_ip":"192.0.2.149","timestamp":"2026-10-17T22:30:12Z","user":"user16"}
+{"host":"srv07.corp.example","message":"   adm02 : TTY=pts/1 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":58043,"process":"sudo","timestamp":"2026-10-17T22:31:38Z","user":"adm02"}
+{"host":"srv06.corp.example","message":"Session 208 logged out. Waiting for processes to exit.","pid":51188,"process":"systemd-logind","timestamp":"2026-10-17T22:33:04Z","user":"user18"}
+{"host":"srv05.corp.example","message":"Removed session 617.","pid":47548,"process":"systemd-logind","timestamp":"2026-10-17T22:34:30Z","user":"user02"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session closed for user user07","pid":41092,"process":"sshd","timestamp":"2026-10-17T22:35:56Z","user":"user07"}
+{"host":"srv12.corp.example","message":"Failed password for user23 from 192.0.2.232 port 54747 ssh2","pid":35910,"process":"sshd","src_ip":"192.0.2.232","timestamp":"2026-10-17T22:37:22Z","user":"user23"}
+{"host":"srv03.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":24455,"process":"CRON","timestamp":"2026-10-17T22:38:48Z"}
+{"host":"srv02.corp.example","message":"pam_unix(sshd:session): session opened for user user02","pid":58400,"process":"sshd","timestamp":"2026-10-17T22:40:14Z","user":"user02"}
+{"host":"srv07.corp.example","message":"pam_unix(sshd:session): session closed for user user20","pid":42306,"process":"sshd","timestamp":"2026-10-17T22:41:40Z","user":"user20"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user14","pid":56215,"process":"sshd","timestamp":"2026-10-17T22:43:06Z","user":"user14"}
+{"host":"srv06.corp.example","message":"   adm02 : TTY=pts/2 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":5641,"process":"sudo","timestamp":"2026-10-17T22:44:32Z","user":"adm02"}
+{"host":"srv01.corp.example","message":"   adm03 : TTY=pts/2 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/docker ps","pid":51097,"process":"sudo","timestamp":"2026-10-17T22:45:58Z","user":"adm03"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session closed for user user08","pid":49125,"process":"sshd","timestamp":"2026-10-17T22:47:24Z","user":"user08"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user18 from 203.0.113.10 port 39744 ssh2: ED25519 SHA256:auw8nj3vxq95vowopal966te0i6h4zvwjkxlbm5k2kg","pid":46926,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T22:48:50Z","user":"user18"}
+{"host":"srv04.corp.example","message":"   adm03 : TTY=pts/0 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":27325,"process":"sudo","timestamp":"2026-10-17T22:50:16Z","user":"adm03"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user22 from 192.0.2.52 port 50985 ssh2: ED25519 SHA256:3acoeqardu9wh6h0tapm6v125vbh6p4bltlny274xip","pid":30537,"process":"sshd","src_ip":"192.0.2.52","timestamp":"2026-10-17T22:51:42Z","user":"user22"}
+{"host":"srv03.corp.example","message":"Session 219 logged out. Waiting for processes to exit.","pid":3923,"process":"systemd-logind","timestamp":"2026-10-17T22:53:08Z","user":"user08"}
+{"host":"srv06.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":44547,"process":"CRON","timestamp":"2026-10-17T22:54:34Z"}
+{"host":"srv01.corp.example","message":"pam_unix(sshd:session): session opened for user user12","pid":22089,"process":"sshd","timestamp":"2026-10-17T22:56:00Z","user":"user12"}
+{"host":"srv10.corp.example","message":"pam_unix(sshd:session): session closed for user adm01","pid":49876,"process":"sshd","timestamp":"2026-10-17T22:57:26Z","user":"adm01"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session opened for user user19","pid":41590,"process":"sshd","timestamp":"2026-10-17T22:58:52Z","user":"user19"}
+{"host":"srv12.corp.example","message":"pam_unix(sshd:session): session opened for user user15","pid":59950,"process":"sshd","timestamp":"2026-10-17T23:00:18Z","user":"user15"}
+{"host":"srv03.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":31225,"process":"CRON","timestamp":"2026-10-17T23:01:44Z"}
+{"host":"srv06.corp.example","message":"Disconnected from user user18 192.0.2.66 port 36284","pid":34054,"process":"sshd","src_ip":"192.0.2.66","timestamp":"2026-10-17T23:03:10Z","user":"user18"}
+{"host":"srv05.corp.example","message":"New session 914 of user user20.","pid":33387,"process":"systemd-logind","timestamp":"2026-10-17T23:04:36Z","user":"user20"}
+{"host":"srv08.corp.example","message":"pam_unix(sshd:session): session closed for user user05","pid":11407,"process":"sshd","timestamp":"2026-10-17T23:06:02Z","user":"user05"}
+{"host":"srv10.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":36781,"process":"sudo","timestamp":"2026-10-17T23:07:28Z","user":"adm01"}
+{"host":"srv04.corp.example","message":"pam_unix(sshd:session): session closed for user deploy","pid":33793,"process":"sshd","timestamp":"2026-10-17T23:08:54Z","user":"deploy"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user19 from 203.0.113.10 port 59009 ssh2: ED25519 SHA256:0f4pjd6sdu43938tq7dyj3t201hqxfaiz5nn13lpb6d","pid":25464,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T23:10:20Z","user":"user19"}
+{"host":"srv06.corp.example","message":"   adm01 : TTY=pts/3 ; PWD=/home/adm01 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":37866,"process":"sudo","timestamp":"2026-10-17T23:11:46Z","user":"adm01"}
+{"host":"srv07.corp.example","message":"New session 396 of user user07.","pid":40141,"process":"systemd-logind","timestamp":"2026-10-17T23:13:12Z","user":"user07"}
+{"host":"srv12.corp.example","message":"(to postgres) adm01 on pts/1","pid":20826,"process":"su","timestamp":"2026-10-17T23:14:38Z","user":"adm01"}
+{"host":"srv03.corp.example","message":"Accepted publickey for user22 from 192.0.2.84 port 47153 ssh2: ED25519 SHA256:dnwc482ilpr36bm0t8evw1bgfpiu67fron7xa3setaw","pid":10381,"process":"sshd","src_ip":"192.0.2.84","timestamp":"2026-10-17T23:16:04Z","user":"user22"}
+{"host":"srv09.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm02(uid=0)","pid":46241,"process":"sudo","timestamp":"2026-10-17T23:17:30Z","user":"adm02"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user12 from 192.0.2.123 port 35756 ssh2: ED25519 SHA256:1lbw0qytewtkjmfoyt55ek195b43uu6wl06kirwcrxp","pid":12888,"process":"sshd","src_ip":"192.0.2.123","timestamp":"2026-10-17T23:18:56Z","user":"user12"}
+{"host":"srv09.corp.example","message":"Disconnected from user user03 203.0.113.10 port 52190","pid":35347,"process":"sshd","src_ip":"203.0.113.10","timestamp":"2026-10-17T23:20:22Z","user":"user03"}
+{"host":"srv12.corp.example","message":"pam_unix(cron:session): session closed for user www-data by (uid=0)","pid":49380,"process":"CRON","timestamp":"2026-10-17T23:21:48Z"}
+{"host":"srv01.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":8228,"process":"CRON","timestamp":"2026-10-17T23:23:14Z"}
+{"host":"srv05.corp.example","message":"pam_unix(cron:session): session opened for user backup by (uid=0)","pid":16024,"process":"CRON","timestamp":"2026-10-17T23:24:40Z"}
+{"host":"srv10.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":60091,"process":"CRON","timestamp":"2026-10-17T23:26:06Z"}
+{"host":"srv12.corp.example","message":"  deploy : TTY=pts/2 ; PWD=/home/deploy ; USER=root ; COMMAND=/usr/bin/vim /etc/example/app.conf","pid":15990,"process":"sudo","timestamp":"2026-10-17T23:27:32Z","user":"deploy"}
+{"host":"srv07.corp.example","message":"pam_unix(sudo:session): session opened for user root by adm01(uid=0)","pid":36114,"process":"sudo","timestamp":"2026-10-17T23:28:58Z","user":"adm01"}
+{"host":"srv03.corp.example","message":"pam_unix(sshd:session): session closed for user user17","pid":13315,"process":"sshd","timestamp":"2026-10-17T23:30:24Z","user":"user17"}
+{"host":"srv11.corp.example","message":"Accepted publickey for user01 from 192.0.2.63 port 46312 ssh2: ED25519 SHA256:314y48ghyh2r19gb3kmmnqp2okqboen4v0a6kqri3c5","pid":42533,"process":"sshd","src_ip":"192.0.2.63","timestamp":"2026-10-17T23:31:50Z","user":"user01"}
+{"host":"srv07.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/tail -n 100 /var/log/example/app.log","pid":30826,"process":"sudo","timestamp":"2026-10-17T23:33:16Z","user":"adm02"}
+{"host":"srv06.corp.example","message":"Accepted publickey for user05 from 192.0.2.78 port 42832 ssh2: ED25519 SHA256:oprmlp6pe2fsw51ys0714dfz6vzuvndxwruod8q2yfi","pid":18743,"process":"sshd","src_ip":"192.0.2.78","timestamp":"2026-10-17T23:34:42Z","user":"user05"}
+{"host":"srv12.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":29902,"process":"sudo","timestamp":"2026-10-17T23:36:08Z","user":"adm01"}
+{"host":"srv05.corp.example","message":"pam_unix(sshd:session): session opened for user user21","pid":53442,"process":"sshd","timestamp":"2026-10-17T23:37:34Z","user":"user21"}
+{"host":"srv05.corp.example","message":"   adm03 : TTY=pts/1 ; PWD=/home/adm03 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":19977,"process":"sudo","timestamp":"2026-10-17T23:39:00Z","user":"adm03"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session opened for user root by (uid=0)","pid":18562,"process":"CRON","timestamp":"2026-10-17T23:40:26Z"}
+{"host":"srv01.corp.example","message":"   adm02 : TTY=pts/0 ; PWD=/home/adm02 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":28885,"process":"sudo","timestamp":"2026-10-17T23:41:52Z","user":"adm02"}
+{"host":"srv07.corp.example","message":"Accepted publickey for user05 from 192.0.2.28 port 40759 ssh2: ED25519 SHA256:tn4zj3qvw0v035qkrxhhjfod21k5zsgs5cfl6xso7ve","pid":52528,"process":"sshd","src_ip":"192.0.2.28","timestamp":"2026-10-17T23:43:18Z","user":"user05"}
+{"host":"srv04.corp.example","message":"Accepted publickey for adm02 from 192.0.2.189 port 59514 ssh2: ED25519 SHA256:68vrvn8xco8prm7p5jor8in3i4nenltndqqvu4eiw8r","pid":48791,"process":"sshd","src_ip":"192.0.2.189","timestamp":"2026-10-17T23:44:44Z","user":"adm02"}
+{"host":"srv02.corp.example","message":"pam_unix(cron:session): session closed for user backup by (uid=0)","pid":48122,"process":"CRON","timestamp":"2026-10-17T23:46:10Z"}
+{"host":"srv11.corp.example","message":"pam_unix(sudo:session): session closed for user root by adm01(uid=0)","pid":35469,"process":"sudo","timestamp":"2026-10-17T23:47:36Z","user":"adm01"}
+{"host":"srv09.corp.example","message":"pam_unix(sudo:session): session opened for user root by deploy(uid=0)","pid":41350,"process":"sudo","timestamp":"2026-10-17T23:49:02Z","user":"deploy"}
+{"host":"srv09.corp.example","message":"pam_unix(sshd:session): session opened for user user07","pid":57829,"process":"sshd","timestamp":"2026-10-17T23:50:28Z","user":"user07"}
+{"host":"srv01.corp.example","message":"Accepted publickey for user15 from 192.0.2.121 port 55528 ssh2: ED25519 SHA256:6t0l6h079srmb1nbixm05cegummarftnqsaeu70vvr9","pid":30010,"process":"sshd","src_ip":"192.0.2.121","timestamp":"2026-10-17T23:51:54Z","user":"user15"}

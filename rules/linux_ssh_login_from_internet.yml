@@ -1,0 +1,29 @@
+title: SSH login accepted from the internet range
+id: 3e7c8d9f-0a1b-4c23-94e5-6f7a8b9cadb6
+status: experimental
+description: |
+  A successful SSH login whose source address is in the internet range
+  203.0.113.0/24 (TEST-NET-3 stands in for "not ours"), except from the
+  bastion host. Internal logins come from 192.0.2.0/24. Synthetic example
+  rule exercising the cidr modifier.
+author: Mizan examples
+date: 2026/10/17
+tags:
+  - attack.initial-access
+  - attack.t1133
+logsource:
+  product: linux
+  service: auth
+detection:
+  selection:
+    process: sshd
+    message|startswith: 'Accepted '
+    src_ip|cidr: '203.0.113.0/24'
+  filter_bastion:
+    src_ip: '203.0.113.10'
+  condition: selection and not filter_bastion
+falsepositives:
+  - Administrators travelling without the VPN
+level: medium
+x-mizan:
+  fp_budget: 20

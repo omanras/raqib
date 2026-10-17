@@ -1,0 +1,4 @@
+{"host":"srv07.corp.example","message":"   user11 : TTY=pts/1 ; PWD=/home/user11 ; USER=root ; COMMAND=/usr/bin/apt-get update","pid":2718,"process":"sudo","timestamp":"2026-10-17T03:10:00Z","user":"user11"}
+{"host":"srv07.corp.example","message":"   user11 : TTY=pts/1 ; PWD=/home/user11 ; USER=postgres ; COMMAND=/bin/bash","pid":2718,"process":"sudo","timestamp":"2026-10-17T03:10:00Z","user":"user11"}
+{"host":"srv07.corp.example","message":"   user11 : TTY=pts/1 ; PWD=/home/user11 ; USER=root ; COMMAND=/usr/bin/bashtop","pid":2718,"process":"sudo","timestamp":"2026-10-17T03:10:00Z","user":"user11"}
+{"host":"srv07.corp.example","message":"   user11 : TTY=pts/1 ; PWD=/home/user11 ; USER=root ; COMMAND=/bin/bash","pid":2718,"process":"su","timestamp":"2026-10-17T03:10:00Z","user":"user11"}

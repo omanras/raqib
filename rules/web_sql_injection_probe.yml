@@ -1,0 +1,31 @@
+title: SQL injection probe in a query string
+id: 5a9e0f1b-2c3d-4e45-b6a7-8b9cadbecfd8
+status: experimental
+description: |
+  Tautologies and UNION SELECT in the query string, in clear or with the
+  usual URL encodings. The regular expression tolerates spaces written as
+  +, %20 or whitespace. Synthetic example rule.
+author: Mizan examples
+date: 2026/10/17
+tags:
+  - attack.initial-access
+  - attack.t1190
+logsource:
+  category: webserver
+detection:
+  selection_tautology:
+    cs-uri-query|contains:
+      - "' or '1'='1"
+      - "' or 1=1"
+      - "%27%20or%20%271%27%3D%271"
+      - "' or ''='"
+  selection_union:
+    cs-uri-query|re|i: 'union(\s|\+|%20)+(all(\s|\+|%20)+)?select'
+  selection_sleep:
+    cs-uri-query|re|i: '(sleep|pg_sleep|waitfor(\s|\+|%20)+delay)(\s|\+|%20)*\('
+  condition: 1 of selection_*
+falsepositives:
+  - Security scanners run by the owner
+level: high
+x-mizan:
+  fp_budget: 0

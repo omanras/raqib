@@ -1,0 +1,32 @@
+title: LSASS memory dumped with procdump or comsvcs
+id: 9a3e4f5b-6c7d-4e8f-a091-2b3c4d5e6f72
+status: experimental
+description: |
+  A memory dump of lsass.exe exposes every credential cached on the host.
+  Two common ways: Sysinternals procdump pointed at lsass, and the MiniDump
+  export of comsvcs.dll through rundll32. Synthetic example rule.
+author: Mizan examples
+date: 2026/10/17
+tags:
+  - attack.credential-access
+  - attack.t1003.001
+logsource:
+  product: windows
+  category: process_creation
+detection:
+  selection_procdump:
+    Image|endswith:
+      - '\procdump.exe'
+      - '\procdump64.exe'
+    CommandLine|contains: 'lsass'
+  selection_comsvcs:
+    Image|endswith: '\rundll32.exe'
+    CommandLine|contains|all:
+      - 'comsvcs.dll'
+      - 'MiniDump'
+  condition: 1 of selection_*
+falsepositives:
+  - None expected on workstations
+level: critical
+x-mizan:
+  fp_budget: 0

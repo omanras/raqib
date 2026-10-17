@@ -1,0 +1,3 @@
+{"host":"srv07.corp.example","message":"Accepted publickey for user03 from 203.0.113.200 port 41000 ssh2: ED25519 SHA256:abcdefghijklmnopqrstuvwxyz0123456789abcdefg","pid":2718,"process":"sshd","src_ip":"203.0.113.200","timestamp":"2026-10-17T03:10:00Z","user":"user03"}
+{"host":"srv07.corp.example","message":"Accepted password for adm01 from 203.0.113.9 port 41001 ssh2","pid":2718,"process":"sshd","src_ip":"203.0.113.9","timestamp":"2026-10-17T03:10:00Z","user":"adm01"}
+{"host":"srv07.corp.example","message":"Accepted keyboard-interactive/pam for user20 from 203.0.113.254 port 41002 ssh2","pid":2718,"process":"sshd","src_ip":"203.0.113.254","timestamp":"2026-10-17T03:10:00Z","user":"user20"}

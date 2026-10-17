@@ -1,0 +1,29 @@
+title: Interactive root shell through sudo
+id: 2d6b7c8e-9f0a-4b12-83d4-5e6f7a8b9ca5
+status: experimental
+description: |
+  sudo used to obtain a root shell (bash, sh, zsh, dash) instead of running
+  one command. Administrators do it; so does anyone who found a sudo rule
+  too wide. The regular expression anchors the shell as the whole command.
+  Synthetic example rule.
+author: Mizan examples
+date: 2026/10/17
+tags:
+  - attack.privilege-escalation
+  - attack.t1548.003
+logsource:
+  product: linux
+  service: auth
+detection:
+  selection:
+    process: sudo
+    message|contains|all:
+      - 'USER=root'
+      - 'COMMAND='
+    message|re: 'COMMAND=(/usr)?/bin/(ba|z|da)?sh(\s|$)'
+  condition: selection
+falsepositives:
+  - Administrators opening a root shell for maintenance
+level: medium
+x-mizan:
+  fp_budget: 30

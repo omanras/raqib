@@ -1,0 +1,37 @@
+title: Directory traversal sequence in a web request
+id: 4f8d9e0a-1b2c-4d34-a5f6-7a8b9cadbec7
+status: experimental
+description: |
+  Dot-dot sequences, plain or URL-encoded, in the path or the query string.
+  Legitimate clients never send them; scanners and exploit kits always do.
+  Synthetic example rule.
+author: Mizan examples
+date: 2026/10/17
+tags:
+  - attack.initial-access
+  - attack.t1190
+logsource:
+  category: webserver
+detection:
+  selection_query:
+    cs-uri-query|contains:
+      - '../'
+      - '..\'
+      - '%2e%2e/'
+      - '%2e%2e%2f'
+      - '..%2f'
+      - '..%5c'
+  selection_stem:
+    cs-uri-stem|contains:
+      - '../'
+      - '..\'
+      - '%2e%2e/'
+      - '%2e%2e%2f'
+      - '..%2f'
+      - '..%5c'
+  condition: 1 of selection_*
+falsepositives:
+  - Security scanners run by the owner
+level: high
+x-mizan:
+  fp_budget: 0

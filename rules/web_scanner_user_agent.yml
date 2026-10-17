@@ -1,0 +1,31 @@
+title: Known scanner or scripting user agent from outside monitoring
+id: 6baf1a2c-3d4e-4f56-a7b8-9cadbecfdae9
+status: experimental
+description: |
+  User agents of vulnerability scanners and of the default HTTP client of
+  scripting languages. The internal monitoring range is filtered because it
+  legitimately uses python-requests for health checks; partners that do the
+  same count against the budget. Synthetic example rule.
+author: Mizan examples
+date: 2026/10/17
+tags:
+  - attack.reconnaissance
+  - attack.t1595.002
+logsource:
+  category: webserver
+detection:
+  selection:
+    cs-useragent|contains:
+      - 'sqlmap'
+      - 'nikto'
+      - 'nmap'
+      - 'masscan'
+      - 'python-requests'
+  filter_monitoring:
+    c-ip|cidr: '192.0.2.0/24'
+  condition: selection and not filter_monitoring
+falsepositives:
+  - Partner integrations written in Python without a custom user agent
+level: low
+x-mizan:
+  fp_budget: 40
