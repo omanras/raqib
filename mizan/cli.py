@@ -4,6 +4,7 @@
     python3 -m mizan test   RULE.yml [--json]
     python3 -m mizan match  RULE.yml EVENTS.jsonl [--json]
     python3 -m mizan corpus [RULES_DIR] [--corpus DIR] [--json]
+    python3 -m mizan export RULE.yml --target splunk|elastic [--json]
 
 Defaults: RULES_DIR ``rules/`` and corpus ``corpus/`` of the current
 directory.  ``main(argv)`` returns the exit code and never raises: 0 green,
@@ -13,11 +14,12 @@ file unparseable) -- 3 is also red.  Output goes to the streams given
 """
 
 import argparse
+import json
 import os
 import sys
 from typing import List, Optional
 
-from mizan import condition, corpus as corpus_module, fixtures, loader, report
+from mizan import condition, corpus as corpus_module, export, fixtures, loader, report
 
 PROG = "python3 -m mizan"
 DEFAULT_RULES_DIR = "rules"
@@ -68,6 +70,13 @@ def build_parser(stream=None) -> argparse.ArgumentParser:
     p_corpus.add_argument("rules_dir", metavar="RULES_DIR", nargs="?", default=DEFAULT_RULES_DIR)
     p_corpus.add_argument("--corpus", metavar="DIR", default=DEFAULT_CORPUS_DIR)
     p_corpus.add_argument("--json", action="store_true", help="JSON output")
+
+    p_export = sub.add_parser("export", help="convert one rule to a target query through pySigma",
+                              stream=stream)
+    p_export.add_argument("rule", metavar="RULE.yml")
+    p_export.add_argument("--target", required=True, choices=sorted(export.TARGETS),
+                          help="query language: %s" % "|".join(sorted(export.TARGETS)))
+    p_export.add_argument("--json", action="store_true", help="JSON output")
     return parser
 
 
@@ -174,11 +183,34 @@ def cmd_check(args, out, err) -> int:
     return report.exit_code(results)
 
 
+def cmd_export(args, out, err) -> int:
+    rule = _load_rule(args.rule, err)
+    if rule is None:
+        return report.EXIT_INCOMPLETE
+    try:
+        result = export.export_rule(rule, args.target)
+    except export.MissingDependency as exc:
+        err.write("mizan: %s\n" % exc)
+        return report.EXIT_INCOMPLETE
+    except export.UnknownTarget as exc:
+        err.write("mizan: %s\n" % exc)
+        return report.EXIT_USAGE
+    except export.ExportError as exc:
+        err.write("mizan: export failed: %s\n" % exc)
+        return report.EXIT_RED
+    if args.json:
+        out.write(json.dumps(result, indent=2) + "\n")
+    else:
+        out.write(result["query"] + "\n")
+    return report.EXIT_GREEN
+
+
 COMMANDS = {
     "check": cmd_check,
     "test": cmd_test,
     "match": cmd_match,
     "corpus": cmd_corpus,
+    "export": cmd_export,
 }
 
 
