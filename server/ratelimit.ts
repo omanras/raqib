@@ -98,7 +98,7 @@ export function createLimits(clock: Clock): Limits {
     authIp: new SlidingWindow({ limit: 30, windowMs: FIFTEEN_MINUTES }, clock),
     loginFailures: new SlidingWindow({ limit: 10, windowMs: FIFTEEN_MINUTES }, clock),
     recoveryFailures: new SlidingWindow({ limit: 10, windowMs: FIFTEEN_MINUTES }, clock),
-    inviteIp: new SlidingWindow({ limit: 60, windowMs: FIFTEEN_MINUTES }, clock),
-    inviteAccount: new SlidingWindow({ limit: 30, windowMs: FIFTEEN_MINUTES }, clock),
+    inviteIp: new SlidingWindow({ limit: 120, windowMs: FIFTEEN_MINUTES }, clock),
+    inviteAccount: new SlidingWindow({ limit: 100, windowMs: FIFTEEN_MINUTES }, clock),
   };
 }

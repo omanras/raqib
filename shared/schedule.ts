@@ -78,6 +78,11 @@ export function addDays(iso: string, n: number): string {
   return fromDays(toDays(iso) + n);
 }
 
+/** The UTC calendar date of an instant. */
+export function isoDateOf(instant: Date): string {
+  return instant.toISOString().slice(0, 10);
+}
+
 /** b - a in days. */
 export function daysBetween(a: string, b: string): number {
   return toDays(b) - toDays(a);

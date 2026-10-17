@@ -5,6 +5,7 @@ import { safeEqual } from '../crypto.js';
 import { findUserById } from '../db/users.js';
 import { AppError } from '../errors.js';
 import { appendSetCookie, parseCookies, serializeCookie } from '../http.js';
+import type { SlidingWindow } from '../ratelimit.js';
 
 export interface CookieNames {
   session: string;
@@ -62,21 +63,6 @@ function isApi(req: FastifyRequest): boolean {
 export function securityHooks(app: FastifyInstance): void {
   app.decorateRequest('cookies', null as unknown as Map<string, string>);
 
-  // Rate limits first: a refused request costs no database work.
-  app.addHook('onRequest', async (req, reply) => {
-    const cls = req.routeOptions.config?.rateLimit;
-    if (cls !== 'auth' || SAFE_METHODS.has(req.method)) return;
-    const key = `ip:${req.ip}`;
-    const count = app.limits.authIp.hit(key);
-    if (count > app.limits.authIp.limit) {
-      const seconds = Math.ceil(app.limits.authIp.retryAfterMs(key) / 1000);
-      void reply.header('retry-after', String(seconds));
-      throw new AppError(429, 'rate_limited', 'Too many attempts from this address; wait and try again.', {
-        retryAfterSeconds: seconds,
-      });
-    }
-  });
-
   app.addHook('onRequest', async (req, reply) => {
     req.cookies = parseCookies(req.headers.cookie);
     if (!isApi(req)) return;
@@ -95,6 +81,28 @@ export function securityHooks(app: FastifyInstance): void {
       sessionId: row.id,
       sessionTokenHash: row.token_hash,
     };
+  });
+
+  // Rate limits (S1.4, ADR §6): auth attempts per IP; invite creation,
+  // preview and acceptance per IP and per account.
+  app.addHook('onRequest', async (req, reply) => {
+    const cls = req.routeOptions.config?.rateLimit;
+    if (!cls) return;
+    if (cls === 'auth' && SAFE_METHODS.has(req.method)) return;
+    const checks: [SlidingWindow, string][] =
+      cls === 'auth'
+        ? [[app.limits.authIp, `ip:${req.ip}`]]
+        : [
+            [app.limits.inviteIp, `ip:${req.ip}`],
+            ...(req.user ? ([[app.limits.inviteAccount, `user:${req.user.id}`]] as [SlidingWindow, string][]) : []),
+          ];
+    for (const [limiter, key] of checks) {
+      if (limiter.hit(key) > limiter.limit) {
+        const seconds = Math.ceil(limiter.retryAfterMs(key) / 1000);
+        void reply.header('retry-after', String(seconds));
+        throw new AppError(429, 'rate_limited', 'Too many requests; wait and try again.', { retryAfterSeconds: seconds });
+      }
+    }
   });
 
   // S2.3: every non-GET API request carries the CSRF token in its header.

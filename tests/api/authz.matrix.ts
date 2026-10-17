@@ -38,6 +38,21 @@ const signedIn = (status: number): Record<Role, number> => ({
   organizerA: status,
   memberB: status,
 });
+/** A circle-A action for the organizer only. */
+const organizerOnly = (status: number): Record<Role, number> => ({
+  anonymous: 401,
+  memberA: 403,
+  organizerA: status,
+  memberB: 404,
+});
+/** A circle-A action any member of A may take. */
+const membersOf = (status: number): Record<Role, number> => ({
+  anonymous: 401,
+  memberA: status,
+  organizerA: status,
+  memberB: 404,
+});
+const A = (w: World, path = '') => `/api/circles/${w.ids.circleA}${path}`;
 
 let unique = 0;
 const loginOf = (w: World, role: Role) => (role === 'anonymous' ? w.people.organizerA.login : w.people[role].login);
@@ -96,4 +111,67 @@ export const MATRIX: MatrixRow[] = [
     build: () => ({ body: { password: PASSWORD } }),
     expect: signedIn(200),
   },
+
+  // ---------------------------------------------------------------- circles (M1.2)
+  {
+    method: 'POST',
+    route: '/api/circles',
+    build: () => ({ body: { name: 'New circle', currency: 'OMR', contribution: 10000, period: 'monthly', dueDay: 1 } }),
+    expect: signedIn(201),
+  },
+  { method: 'GET', route: '/api/circles', state: 'draft', expect: signedIn(200) },
+  { method: 'GET', route: '/api/circles/:id', state: 'draft', build: (w) => ({ url: A(w) }), expect: membersOf(200) },
+  {
+    method: 'PATCH',
+    route: '/api/circles/:id',
+    state: 'draft',
+    build: (w) => ({ url: A(w), body: { rulesText: 'New rules.' } }),
+    expect: organizerOnly(200),
+  },
+  { method: 'POST', route: '/api/circles/:id/invites', state: 'draft', build: (w) => ({ url: A(w, '/invites') }), expect: organizerOnly(201) },
+  { method: 'GET', route: '/api/circles/:id/invites', state: 'draft', build: (w) => ({ url: A(w, '/invites') }), expect: organizerOnly(200) },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/invites/:inviteId/revoke',
+    state: 'draft',
+    build: (w) => ({ url: A(w, `/invites/${w.ids.inviteA}/revoke`) }),
+    expect: organizerOnly(200),
+  },
+  {
+    // Whoever holds the link may preview the circle after signing in.
+    method: 'GET',
+    route: '/api/invites/:token',
+    state: 'draft',
+    build: (w) => ({ url: `/api/invites/${w.ids.inviteTokenA}` }),
+    expect: signedIn(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/invites/:token/accept',
+    state: 'draft',
+    build: (w) => ({ url: `/api/invites/${w.ids.inviteTokenA}/accept` }),
+    expect: { anonymous: 401, memberA: 409, organizerA: 409, memberB: 200 },
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/order',
+    state: 'draft',
+    build: (w) => ({ url: A(w, '/order'), body: { order: [w.ids.memberAInA, w.ids.organizerAInA] } }),
+    expect: organizerOnly(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/start',
+    state: 'ordered',
+    build: (w) => ({ url: A(w, '/start') }),
+    expect: organizerOnly(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/leave',
+    state: 'draft',
+    build: (w) => ({ url: A(w, '/leave') }),
+    expect: { anonymous: 401, memberA: 200, organizerA: 409, memberB: 404 },
+  },
+  { method: 'POST', route: '/api/circles/:id/cancel', state: 'draft', build: (w) => ({ url: A(w, '/cancel') }), expect: organizerOnly(200) },
 ];

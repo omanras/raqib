@@ -14,7 +14,9 @@ import { securityHeaders } from './plugins/security-headers.js';
 import { securityHooks } from './plugins/session.js';
 import { createLimits, type Limits } from './ratelimit.js';
 import { authRoutes } from './routes/auth.js';
+import { circleRoutes } from './routes/circles.js';
 import { healthRoutes } from './routes/health.js';
+import { inviteRoutes } from './routes/invites.js';
 import { systemClock, type Clock, type RouteEntry } from './types.js';
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
@@ -133,6 +135,8 @@ export function buildApp(options: AppOptions = {}) {
     async (api) => {
       healthRoutes(api);
       authRoutes(api);
+      circleRoutes(api);
+      inviteRoutes(api);
     },
     { prefix: '/api' },
   );

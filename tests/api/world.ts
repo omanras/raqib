@@ -1,27 +1,67 @@
-import { fixtureUser, testApp, type FixtureUser, type TestApp } from './helpers.js';
+import { expect } from 'vitest';
+import { addDays, isoDateOf } from '../../shared/schedule.js';
+import { fixtureUser, testApp, type Agent, type FixtureUser, type TestApp } from './helpers.js';
 
 /**
- * The fixture of the authorization matrix (S3): four people and, as the
- * circle routes arrive, circle A (organized by organizerA, joined by
- * memberA) and circle B (organized by organizerB, joined by memberB).
- * Every matrix request targets circle A or organizerA's own objects; the
- * roles vary.
+ * The fixture of the authorization matrix (S3): four people; circle A
+ * (organized by organizerA, joined by memberA) and circle B (organized by
+ * organizerB, joined by memberB). Every matrix request targets circle A or
+ * organizerA's own objects; the roles vary.
  */
 export type Role = 'anonymous' | 'memberA' | 'organizerA' | 'memberB';
 export const ROLES: readonly Role[] = ['anonymous', 'memberA', 'organizerA', 'memberB'];
 export type Person = Exclude<Role, 'anonymous'> | 'organizerB';
 
-/** States the world can be built in; later tasks add circle states. */
-export type WorldState = 'base';
+/**
+ * base:    people only.
+ * draft:   circles A and B exist in draft, each with its two members, and
+ *          circle A has one open invite (ids.inviteA, ids.inviteTokenA).
+ * ordered: as draft, with a start date and a manual order on both circles.
+ * active:  as ordered, both circles started.
+ */
+export type WorldState = 'base' | 'draft' | 'ordered' | 'active';
 
 export interface World {
   t: TestApp;
   people: Record<Person, FixtureUser>;
-  /** Filled in by later tasks (circle ids, round numbers, invite tokens...). */
   ids: Record<string, string>;
 }
 
-export async function buildWorld(_state: WorldState = 'base'): Promise<World> {
+async function ok(res: Promise<{ statusCode: number; body: string }>, status = 200): Promise<unknown> {
+  const r = await res;
+  expect(r.statusCode, r.body).toBe(status);
+  return JSON.parse(r.body) as unknown;
+}
+
+export const CIRCLE_INPUT = {
+  currency: 'OMR',
+  contribution: 50_000,
+  period: 'monthly',
+  dueDay: 5,
+  rulesText: 'Pay by the 5th. Cash or bank transfer to the organizer.',
+};
+
+export async function createCircle(organizer: Agent, name: string, extra: Record<string, unknown> = {}): Promise<string> {
+  const body = (await ok(organizer.post('/api/circles', { ...CIRCLE_INPUT, name, ...extra }), 201)) as { circle: { id: string } };
+  return body.circle.id;
+}
+
+export async function invite(organizer: Agent, circleId: string): Promise<{ id: string; token: string }> {
+  const body = (await ok(organizer.post(`/api/circles/${circleId}/invites`), 201)) as { invite: { id: string }; token: string };
+  return { id: body.invite.id, token: body.token };
+}
+
+export async function join(member: Agent, token: string): Promise<string> {
+  const body = (await ok(member.post(`/api/invites/${token}/accept`, {}))) as { memberId: string };
+  return body.memberId;
+}
+
+export async function memberIds(agent: Agent, circleId: string): Promise<string[]> {
+  const body = (await ok(agent.get(`/api/circles/${circleId}`))) as { members: { id: string }[] };
+  return body.members.map((m) => m.id);
+}
+
+export async function buildWorld(state: WorldState = 'base'): Promise<World> {
   const t = testApp();
   const people = {
     organizerA: await fixtureUser(t, 'alice', 'Alice', '198.51.100.1'),
@@ -29,5 +69,32 @@ export async function buildWorld(_state: WorldState = 'base'): Promise<World> {
     memberB: await fixtureUser(t, 'carol', 'Carol', '198.51.100.3'),
     organizerB: await fixtureUser(t, 'dan', 'Dan', '198.51.100.4'),
   };
-  return { t, people, ids: {} };
+  const ids: Record<string, string> = {};
+  const w: World = { t, people, ids };
+  if (state === 'base') return w;
+
+  const startDate = state === 'draft' ? undefined : addDays(isoDateOf(t.clock.now()), 3);
+  ids.circleA = await createCircle(people.organizerA.agent, 'Circle A');
+  ids.circleB = await createCircle(people.organizerB.agent, 'Circle B');
+  ids.memberAInA = await join(people.memberA.agent, (await invite(people.organizerA.agent, ids.circleA)).token);
+  ids.memberBInB = await join(people.memberB.agent, (await invite(people.organizerB.agent, ids.circleB)).token);
+  ids.organizerAInA = (await memberIds(people.organizerA.agent, ids.circleA)).find((m) => m !== ids.memberAInA) as string;
+  const open = await invite(people.organizerA.agent, ids.circleA);
+  ids.inviteA = open.id;
+  ids.inviteTokenA = open.token;
+  if (state === 'draft') return w;
+
+  for (const [org, circle] of [
+    [people.organizerA.agent, ids.circleA],
+    [people.organizerB.agent, ids.circleB],
+  ] as const) {
+    await ok(org.patch(`/api/circles/${circle}`, { startDate }));
+    const order = await memberIds(org, circle);
+    await ok(org.post(`/api/circles/${circle}/order`, { order }));
+  }
+  if (state === 'ordered') return w;
+
+  await ok(people.organizerA.agent.post(`/api/circles/${ids.circleA}/start`));
+  await ok(people.organizerB.agent.post(`/api/circles/${ids.circleB}/start`));
+  return w;
 }
