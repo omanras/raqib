@@ -1,37 +1,40 @@
-# HANDOFF — M1.3  (phase 1: the draw)
+# HANDOFF — M1.4  (phase 1: rounds, contributions, payouts, statements)
 
-Task: the commit-reveal turn-order draw routes per ADR §2 (Lottery) and
-§4, on top of shared/lottery.ts.
+Task: the money-recording routes per ADR §2 (Round, Contribution,
+Payout) and §4, with statements, ledger and audit reads.
 
 Scope:
   server/
+  shared/
   tests/api/
   tests/unit/
   docs/review/
 
 Exit criteria:
-- E1 `POST /api/circles/:id/draw/open` (organizer, draft -> drawing;
-     commit deadline and reveal deadline in the body, each >= 1 hour
-     ahead; ledger entry draw.opened), `POST .../draw/commit` (member;
-     body {commitment}; once; ledger entry draw.committed with the hash
-     only), `POST .../draw/close-commits` (organizer, or automatic at the
-     deadline on the next request; ledger entry), `POST .../draw/reveal`
-     (member; body {secret}; verified against the commitment; ledger
-     entry draw.revealed with the secret), `POST .../draw/finalize`
-     (organizer, after all reveals or after the reveal deadline; computes
-     the order with shared/lottery.finalize; ledger entry draw.finalized
-     with seed and order; positions set; circle stays drawing until
-     start).
-- E2 A member who never committed cannot reveal; a member who committed
-     and never revealed is placed last per the silent-member rule and the
-     ledger says so; a wrong secret is refused and audited.
-- E3 `GET /api/circles/:id/draw` returns the state for the caller: my
-     commitment status, counts, deadlines, and after finalize the seed and
-     the order, so the client can recompute.
-- E4 Matrix rows for every route; tests for each refusal and for
-     determinism (two servers given the same ledger compute the same
-     order). Gate green.
+- E1 Rounds: `POST /api/circles/:id/rounds/:n/open` (organizer; in order;
+     one open round at a time; ledger round.opened), `.../close`
+     (organizer; allowed with outstanding contributions, which the ledger
+     entry lists). Round 1 opens at start when start_date <= today.
+- E2 Contributions: `POST .../rounds/:n/contributions` (member for self,
+     or organizer for any member: amount, method, reference; partial
+     allowed; over-payment refused; ledger contribution.reported),
+     `POST .../contributions/:cid/confirm` (organizer; ledger
+     contribution.confirmed), `.../waive` (organizer; reason required;
+     ledger contribution.waived). State derived per ADR.
+- E3 Payout: `POST .../rounds/:n/payout` (organizer; amount; ledger
+     payout.recorded), `.../payout/ack` (recipient; ledger
+     payout.acknowledged).
+- E4 Reads: `GET /api/circles/:id/ledger?from=&verify=1` (entries and
+     the verification result), `GET /api/circles/:id/statement` (per
+     round: expected, confirmed, outstanding per member; totals; every
+     line cites ledger seqs) and `.csv` with S4.4 escaping, `?member=`
+     for one member's statement (a member may fetch only their own;
+     organizer any), `GET /api/circles/:id/audit` (organizer; paged).
+- E5 Overview data for the client: `GET /api/circles/:id/overview`
+     (this round: recipient, due date, each member's state, pot
+     confirmed vs expected, outstanding with age in days). Matrix rows,
+     tests, audit coverage test (S6.1) now spans all routes. Gate green.
 
-Not in scope: rounds, client.
-Commit: `landed: M1.3 the draw` or `STOP: M1.3 <reason>`.
+Not in scope: client.
+Commit: `landed: M1.4 rounds, contributions, payouts, statements` or `STOP: M1.4 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
