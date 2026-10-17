@@ -33,6 +33,7 @@ import { obligationStatuses, summarize } from '../obligations.js';
 import { CircleIdParams, amount, id, isoDate, text } from '../schemas.js';
 import { circleView, startCheckOf } from '../views.js';
 import { drawFinalized } from './draw-state.js';
+import { openRound } from './rounds.js';
 
 const period = z.enum(['monthly', 'weekly', 'biweekly']);
 const dueDay = z.number().int().min(1).max(28);
@@ -336,6 +337,8 @@ export function circleRoutes(api: FastifyInstance): void {
           now,
         );
         audit(req, { circleId: circle.id, action: 'circle.started', target: `circle:${circle.id}` });
+        // Round 1 opens with the start when its start date has come (M1.4 E1).
+        if ((circle.start_date as string) <= isoDateOf(now)) openRound(req, circle, 1, user.id, now);
       });
       return view(app, circle.id, user.id, now);
     },

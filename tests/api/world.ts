@@ -27,8 +27,25 @@ export type Person = Exclude<Role, 'anonymous'> | 'organizerB';
  * revealing: as committed, commitments closed by the organizers.
  * revealed:  as revealing, every member revealed.
  * finalized: as revealed, both draws finalized (circles still drawing).
+ * round-open: as active, round 1 open in both circles. In both circles the
+ *            organizer holds position 1 (recipient of round 1); ids.cidA is
+ *            memberA's contribution id for round 1 of circle A.
+ * reported:  as round-open, memberA reported 25.000 in A, memberB in B.
+ * paid-out:  as round-open, the organizers recorded the round-1 payouts.
  */
-export type WorldState = 'base' | 'draft' | 'ordered' | 'active' | 'drawing' | 'committed' | 'revealing' | 'revealed' | 'finalized';
+export type WorldState =
+  | 'base'
+  | 'draft'
+  | 'ordered'
+  | 'active'
+  | 'drawing'
+  | 'committed'
+  | 'revealing'
+  | 'revealed'
+  | 'finalized'
+  | 'round-open'
+  | 'reported'
+  | 'paid-out';
 const DRAW_STATES: readonly WorldState[] = ['drawing', 'committed', 'revealing', 'revealed', 'finalized'];
 
 const HOUR = 60 * 60 * 1000;
@@ -110,18 +127,34 @@ export async function buildWorld(state: WorldState = 'base'): Promise<World> {
     return w;
   }
 
-  for (const [org, circle] of [
-    [people.organizerA.agent, ids.circleA],
-    [people.organizerB.agent, ids.circleB],
+  const organizerBInB = (await memberIds(people.organizerB.agent, ids.circleB)).find((m) => m !== ids.memberBInB) as string;
+  for (const [org, circle, order] of [
+    [people.organizerA.agent, ids.circleA, [ids.organizerAInA, ids.memberAInA]],
+    [people.organizerB.agent, ids.circleB, [organizerBInB, ids.memberBInB]],
   ] as const) {
     await ok(org.patch(`/api/circles/${circle}`, { startDate }));
-    const order = await memberIds(org, circle);
     await ok(org.post(`/api/circles/${circle}/order`, { order }));
   }
   if (state === 'ordered') return w;
 
   await ok(people.organizerA.agent.post(`/api/circles/${ids.circleA}/start`));
   await ok(people.organizerB.agent.post(`/api/circles/${ids.circleB}/start`));
+  if (state === 'active') return w;
+
+  await ok(people.organizerA.agent.post(`/api/circles/${ids.circleA}/rounds/1/open`));
+  await ok(people.organizerB.agent.post(`/api/circles/${ids.circleB}/rounds/1/open`));
+  const overview = (await ok(people.organizerA.agent.get(`/api/circles/${ids.circleA}/overview`))) as {
+    round: { members: { memberId: string; contributionId: string }[] };
+  };
+  ids.cidA = overview.round.members.find((m) => m.memberId === ids.memberAInA)?.contributionId as string;
+  if (state === 'reported') {
+    await ok(people.memberA.agent.post(`/api/circles/${ids.circleA}/rounds/1/contributions`, { amount: 25_000, method: 'cash' }), 201);
+    await ok(people.memberB.agent.post(`/api/circles/${ids.circleB}/rounds/1/contributions`, { amount: 25_000, method: 'cash' }), 201);
+  }
+  if (state === 'paid-out') {
+    await ok(people.organizerA.agent.post(`/api/circles/${ids.circleA}/rounds/1/payout`, { amount: 100_000 }), 201);
+    await ok(people.organizerB.agent.post(`/api/circles/${ids.circleB}/rounds/1/payout`, { amount: 100_000 }), 201);
+  }
   return w;
 }
 

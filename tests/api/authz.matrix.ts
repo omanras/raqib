@@ -220,4 +220,50 @@ export const MATRIX: MatrixRow[] = [
     build: (w) => ({ url: A(w, '/draw/finalize') }),
     expect: organizerOnly(200),
   },
+
+  // ---------------------------------------------------------------- rounds and money (M1.4)
+  { method: 'POST', route: '/api/circles/:id/rounds/:n/open', state: 'active', build: (w) => ({ url: A(w, '/rounds/1/open') }), expect: organizerOnly(200) },
+  { method: 'POST', route: '/api/circles/:id/rounds/:n/close', state: 'round-open', build: (w) => ({ url: A(w, '/rounds/1/close') }), expect: organizerOnly(200) },
+  {
+    // Each member reports for themself (the organizer pays too: recipient_pays is on).
+    method: 'POST',
+    route: '/api/circles/:id/rounds/:n/contributions',
+    state: 'round-open',
+    build: (w) => ({ url: A(w, '/rounds/1/contributions'), body: { amount: 50_000, method: 'bank transfer', reference: 'TX-1' } }),
+    expect: membersOf(201),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/rounds/:n/contributions/:cid/confirm',
+    state: 'reported',
+    build: (w) => ({ url: A(w, `/rounds/1/contributions/${w.ids.cidA}/confirm`) }),
+    expect: organizerOnly(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/rounds/:n/contributions/:cid/waive',
+    state: 'round-open',
+    build: (w) => ({ url: A(w, `/rounds/1/contributions/${w.ids.cidA}/waive`), body: { reason: 'Hardship this month' } }),
+    expect: organizerOnly(200),
+  },
+  {
+    method: 'POST',
+    route: '/api/circles/:id/rounds/:n/payout',
+    state: 'round-open',
+    build: (w) => ({ url: A(w, '/rounds/1/payout'), body: { amount: 100_000, method: 'cash' } }),
+    expect: organizerOnly(201),
+  },
+  {
+    // Only the recipient of round 1 (organizerA holds position 1) acknowledges.
+    method: 'POST',
+    route: '/api/circles/:id/rounds/:n/payout/ack',
+    state: 'paid-out',
+    build: (w) => ({ url: A(w, '/rounds/1/payout/ack') }),
+    expect: { anonymous: 401, memberA: 403, organizerA: 200, memberB: 404 },
+  },
+  { method: 'GET', route: '/api/circles/:id/ledger', state: 'active', build: (w) => ({ url: A(w, '/ledger?verify=1') }), expect: membersOf(200) },
+  { method: 'GET', route: '/api/circles/:id/statement', state: 'reported', build: (w) => ({ url: A(w, '/statement') }), expect: membersOf(200) },
+  { method: 'GET', route: '/api/circles/:id/statement.csv', state: 'reported', build: (w) => ({ url: A(w, '/statement.csv') }), expect: membersOf(200) },
+  { method: 'GET', route: '/api/circles/:id/audit', state: 'active', build: (w) => ({ url: A(w, '/audit') }), expect: organizerOnly(200) },
+  { method: 'GET', route: '/api/circles/:id/overview', state: 'round-open', build: (w) => ({ url: A(w, '/overview') }), expect: membersOf(200) },
 ];

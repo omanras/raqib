@@ -18,6 +18,8 @@ import { circleRoutes } from './routes/circles.js';
 import { drawRoutes } from './routes/draw.js';
 import { healthRoutes } from './routes/health.js';
 import { inviteRoutes } from './routes/invites.js';
+import { readRoutes } from './routes/reads.js';
+import { roundRoutes } from './routes/rounds.js';
 import { systemClock, type Clock, type RouteEntry } from './types.js';
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
@@ -139,6 +141,8 @@ export function buildApp(options: AppOptions = {}) {
       circleRoutes(api);
       inviteRoutes(api);
       drawRoutes(api);
+      roundRoutes(api);
+      readRoutes(api);
     },
     { prefix: '/api' },
   );
