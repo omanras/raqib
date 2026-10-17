@@ -3,6 +3,10 @@ import { dirOf, isLang, type Lang } from '../../shared/lang.js';
 import { ar } from './ar.js';
 import { en, type MessageKey } from './en.js';
 
+export type { MessageKey };
+/** Keys under a prefix, for keys built from data: `status.${status}`. */
+export type MessageKeyOf<P extends string> = Extract<MessageKey, `${P}.${string}`>;
+
 const DICTS: Record<Lang, Record<MessageKey, string>> = { en, ar };
 const STORAGE_KEY = 'dawr.lang';
 

@@ -2,14 +2,16 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 
-test('the app loads and shows its heading and version', async ({ page, baseURL }) => {
+test('the app loads from its own origin only and shows the brand and version', async ({ page, baseURL }) => {
   const foreign: string[] = [];
   page.on('request', (req) => {
     const url = req.url();
-    if (!url.startsWith(baseURL ?? '') && !url.startsWith('data:')) foreign.push(url);
+    if (!url.startsWith(baseURL ?? '') && !url.startsWith('data:') && !url.startsWith('blob:')) foreign.push(url);
   });
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Dawr');
+  await expect(page).toHaveURL(/\/signin/);
+  await expect(page.getByTestId('brand')).toHaveText('Dawr');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Sign in');
   await expect(page.getByTestId('version')).toContainText(/\d+\.\d+\.\d+/);
   expect(foreign).toEqual([]);
 });
@@ -30,4 +32,15 @@ test('the built client references no remote URL', () => {
   };
   walk(dist);
   expect(offenders).toEqual([]);
+});
+
+test('the colour theme switches by hand (light, dark, system)', async ({ page }) => {
+  await page.goto('/signin');
+  const html = page.locator('html');
+  await page.getByTestId('theme-switch').click();
+  await expect(html).toHaveAttribute('data-theme', 'light');
+  await page.getByTestId('theme-switch').click();
+  await expect(html).toHaveAttribute('data-theme', 'dark');
+  await page.getByTestId('theme-switch').click();
+  await expect(html).not.toHaveAttribute('data-theme', /./);
 });

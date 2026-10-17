@@ -8,6 +8,9 @@ import { defineConfig, devices } from '@playwright/test';
 // installs it). The server under test is the built app (`npm start`) on a test
 // port with its data directory in a fresh temporary folder. Workers inherit
 // DAWR_E2E_DATA_DIR from the main process, so tests can find the database.
+// TRUST_PROXY=1 lets each simulated person send its own X-Forwarded-For, so
+// the per-IP auth limit (30 per 15 minutes) applies per person as it would
+// behind a real reverse proxy, instead of to the whole suite at once.
 const port = Number(process.env.E2E_PORT ?? 3210);
 process.env.DAWR_E2E_DATA_DIR ??= mkdtempSync(join(tmpdir(), 'dawr-e2e-'));
 process.env.DAWR_E2E_BASE_URL ??= `http://127.0.0.1:${port}`;
@@ -23,6 +26,8 @@ export default defineConfig({
   use: {
     baseURL: process.env.DAWR_E2E_BASE_URL,
     trace: 'retain-on-failure',
+    locale: 'en-GB',
+    timezoneId: 'Asia/Muscat',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
@@ -39,6 +44,7 @@ export default defineConfig({
       BASE_URL: process.env.DAWR_E2E_BASE_URL,
       NODE_ENV: 'test',
       LOG_LEVEL: 'warn',
+      TRUST_PROXY: '1',
     },
   },
 });
