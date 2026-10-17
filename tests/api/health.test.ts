@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../server/app.js';
+import { listMigrations, migrate, openDb } from '../../server/db/db.js';
 import { createLogger } from '../../server/logging.js';
 import { CONTENT_SECURITY_POLICY } from '../../server/plugins/security-headers.js';
 import { appVersion } from '../../server/version.js';
@@ -21,10 +22,24 @@ describe('GET /api/health', () => {
   const app = buildApp({ logger: silent, clientDir: false });
   afterAll(() => app.close());
 
-  it('answers ok with the version and db state', async () => {
+  it('answers ok with the version, db state and applied migration count', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, version: appVersion(), db: 'pending' });
+    const body = res.json() as { ok: boolean; version: string; db: string; migrations: number };
+    expect(body).toEqual({ ok: true, version: appVersion(), db: 'ok', migrations: listMigrations().length });
+    expect(body.migrations).toBeGreaterThanOrEqual(1);
+  });
+
+  it('answers 503 when the database is unusable', async () => {
+    const db = openDb(':memory:');
+    migrate(db);
+    const broken = buildApp({ logger: silent, clientDir: false, db });
+    await broken.ready();
+    db.close();
+    const res = await broken.inject({ method: 'GET', url: '/api/health' });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({ ok: false, db: 'error' });
+    await broken.close();
   });
 
   it('headers.csp headers.nosniff headers.referrer: security headers on /api/health (S5.1, S5.2)', async () => {
@@ -62,7 +77,7 @@ describe('GET /api/health', () => {
 
 describe('production headers', () => {
   it('adds HSTS in production', async () => {
-    const app = buildApp({ logger: silent, clientDir: false, production: true });
+    const app = buildApp({ logger: silent, clientDir: false, config: { production: true } });
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.headers['strict-transport-security']).toContain('max-age=');
     await app.close();

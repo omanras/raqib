@@ -4,10 +4,15 @@ import { resolve } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import Fastify, { LogController } from 'fastify';
 import type { DestinationStream, Logger } from 'pino';
+import { logUserId } from './audit.js';
+import type { Config } from './config.js';
+import { newToken } from './crypto.js';
+import { migrate, openDb, type DB } from './db/db.js';
 import { errorBody, mapError } from './errors.js';
 import { createLogger } from './logging.js';
 import { securityHeaders } from './plugins/security-headers.js';
 import { healthRoutes } from './routes/health.js';
+import { systemClock, type Clock } from './types.js';
 
 export const BODY_LIMIT_BYTES = 64 * 1024;
 
@@ -16,22 +21,47 @@ export interface AppOptions {
   logger?: Logger;
   logLevel?: string;
   logStream?: DestinationStream;
+  /** An open, migrated database; when absent an in-memory one is created (tests). */
+  db?: DB;
+  /** Configuration; missing fields take development/test defaults. */
+  config?: Partial<Config>;
+  clock?: Clock;
   /** Directory of the built client; false disables static serving. */
   clientDir?: string | false;
-  /** Production mode: HSTS on, secure cookies (later), strict config. */
-  production?: boolean;
-  /** Trust X-Forwarded-* from one reverse proxy (TRUST_PROXY=1). */
-  trustProxy?: boolean;
 }
 
 export function newRequestId(): string {
   return randomBytes(12).toString('base64url');
 }
 
+function defaultConfig(partial: Partial<Config>): Config {
+  return {
+    production: false,
+    nodeEnv: 'test',
+    dataDir: '',
+    dbFile: ':memory:',
+    port: 0,
+    host: '127.0.0.1',
+    sessionSecret: newToken(),
+    baseUrl: 'http://127.0.0.1:3000',
+    logLevel: 'silent',
+    trustProxy: false,
+    clientDir: resolve('client/dist'),
+    ...partial,
+  };
+}
+
 export function buildApp(options: AppOptions = {}) {
-  const logger = options.logger ?? createLogger({ level: options.logLevel, stream: options.logStream });
-  const production = options.production ?? false;
-  const headers = securityHeaders(production);
+  const config = defaultConfig(options.config ?? {});
+  const logger =
+    options.logger ?? createLogger({ level: options.logLevel ?? config.logLevel, stream: options.logStream });
+  const headers = securityHeaders(config.production);
+  const clock = options.clock ?? systemClock;
+  let db = options.db;
+  if (!db) {
+    db = openDb(':memory:');
+    migrate(db);
+  }
 
   const app = Fastify({
     loggerInstance: logger,
@@ -39,9 +69,14 @@ export function buildApp(options: AppOptions = {}) {
     requestIdHeader: false,
     genReqId: newRequestId,
     bodyLimit: BODY_LIMIT_BYTES,
-    trustProxy: options.trustProxy ?? false,
+    trustProxy: config.trustProxy,
     return503OnClosing: true,
   });
+
+  app.decorate('db', db);
+  app.decorate('config', config);
+  app.decorate('clock', clock);
+  app.decorateRequest('user', null);
 
   // JSON only (S4.2): drop the default text/plain parser.
   app.removeContentTypeParser('text/plain');
@@ -60,6 +95,7 @@ export function buildApp(options: AppOptions = {}) {
         route: req.routeOptions.url ?? 'unmatched',
         status: reply.statusCode,
         durationMs: Math.round(reply.elapsedTime),
+        userId: req.user ? logUserId(config.sessionSecret, req.user.id) : undefined,
       },
       'request',
     );
@@ -82,7 +118,7 @@ export function buildApp(options: AppOptions = {}) {
     { prefix: '/api' },
   );
 
-  const clientDir = options.clientDir === false ? false : resolve(options.clientDir ?? process.env.CLIENT_DIR ?? 'client/dist');
+  const clientDir = options.clientDir === false ? false : resolve(options.clientDir ?? config.clientDir);
   const hasClient = clientDir !== false && existsSync(resolve(clientDir, 'index.html'));
   if (hasClient) {
     app.register(fastifyStatic, {
