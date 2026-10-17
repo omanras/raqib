@@ -208,6 +208,12 @@ textarea {
   width: 100%;
 }
 
+/* the browser's own placeholder grey is not measured; this one is (README, Accessibility) */
+::placeholder {
+  color: var(--fg-soft);
+  opacity: 1;
+}
+
 button,
 .button {
   display: inline-flex;

@@ -63,7 +63,8 @@ function PolicyForm({ initial, isNew, onSubmit, onCancel }: { initial: PolicyDra
       }}
       data-testid="policy-form"
     >
-      <h4>{isNew ? t("pol.addTitle") : fill(t("pol.editTitle"), { id: initial.id })}</h4>
+      {/* a new policy's form sits under the screen's h2; an edit sits inside its group's h3 */}
+      {isNew ? <h3>{t("pol.addTitle")}</h3> : <h4>{fill(t("pol.editTitle"), { id: initial.id })}</h4>}
       <div class="grid">
         {isNew && (
           <Select

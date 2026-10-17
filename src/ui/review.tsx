@@ -4,7 +4,7 @@
 // SVG. "Copy as HTML" and "Download" give the very page the CLI writes.
 import { useMemo, useState } from "preact/hooks";
 import { daysUntilReview, isDue } from "../engine/decisions";
-import { money } from "../engine/decimal";
+import { money, pct } from "../engine/decimal";
 import { periodOf, parsePeriod, type PeriodKind } from "../engine/periods";
 import { limitDisplay, measureDisplay, orderDecisions } from "../engine/report";
 import { allocationBands, allocationItems, amountCell, buildReview, columnHead, declaredText, renderReviewPage, reviewAsOf, svgHbars, svgIncomeExpense, type Review } from "../engine/review";
@@ -24,6 +24,7 @@ function Sections({ r }: { r: Review }) {
   const t = useT();
   const cfg = r.household.config;
   const base = cfg?.baseCurrency ?? "";
+  const bands = allocationBands(r);
   const files = Object.entries(r.household.files)
     .map(([name, count]) => `${name} (${count === null || count === undefined ? "absent" : `${count} rows`})`)
     .join(", ");
@@ -140,12 +141,69 @@ function Sections({ r }: { r: Review }) {
         <h3 id="rv-sp">{t("rev.s.spending")}</h3>
         <p class="muted">{fill(t("rev.spNote"), { period: r.period.text, base })}</p>
         <Svg markup={svgHbars(r.spending.map(([c, v]) => [c, v, ""]), base, "t-sp", `Spending by category, ${r.period.text}`)} testid="chart-spending" />
+        <div class="table-wrap">
+          <table class="rows" data-testid="review-spending">
+            <thead>
+              <tr>
+                <th scope="col">{t("rev.category")}</th>
+                <th scope="col" class="num">
+                  {t("rev.amount")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.spending.map(([c, v]) => (
+                <tr key={c}>
+                  <td>{c}</td>
+                  <td class="mono num" dir="ltr">
+                    {amountCell(v, base)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section id="allocation" aria-labelledby="rv-al">
         <h3 id="rv-al">{t("rev.s.allocation")}</h3>
         <p class="muted">{fill(t("rev.alNote"), { asOf: r.asOf })}</p>
-        <Svg markup={svgHbars(allocationItems(r, base), base, "t-al", `Allocation by class as of ${r.asOf}`, allocationBands(r), "pct")} testid="chart-allocation" />
+        <Svg markup={svgHbars(allocationItems(r, base), base, "t-al", `Allocation by class as of ${r.asOf}`, bands, "pct")} testid="chart-allocation" />
+        <div class="table-wrap">
+          <table class="rows" data-testid="review-allocation">
+            <thead>
+              <tr>
+                <th scope="col">{t("rev.class")}</th>
+                <th scope="col" class="num">
+                  {t("rev.value")}
+                </th>
+                <th scope="col" class="num">
+                  {t("rev.share")}
+                </th>
+                <th scope="col">{t("rev.band")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.allocation.map(([cls, value, share]) => {
+                const band = bands.get(cls);
+                return (
+                  <tr key={cls}>
+                    <td>{cls}</td>
+                    <td class="mono num" dir="ltr">
+                      {amountCell(value, base)}
+                    </td>
+                    <td class="mono num" dir="ltr">
+                      {share.tag === "value" ? pct(share.amount) : share.tag === "stale" ? "stale" : "unknown"}
+                    </td>
+                    <td class="mono" dir="ltr">
+                      {band ? `${money(band[0])}%..${money(band[1])}%` : ""}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section id="findings" aria-labelledby="rv-f">

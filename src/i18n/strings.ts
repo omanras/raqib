@@ -351,6 +351,8 @@ const en = {
   "rev.quantity": "quantity",
   "rev.value": "value",
   "rev.rate": "rate",
+  "rev.share": "share",
+  "rev.band": "band",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -705,6 +707,8 @@ const ar: Strings = {
   "rev.quantity": "الكمية",
   "rev.value": "القيمة",
   "rev.rate": "السعر",
+  "rev.share": "الحصة",
+  "rev.band": "النطاق",
 };
 
 export const STRINGS: Record<"en" | "ar", Strings> = { en, ar };
