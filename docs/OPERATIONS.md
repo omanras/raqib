@@ -52,6 +52,11 @@ Sign-up is open to anyone who can reach `BASE_URL`. An account on its own
 sees nothing: circles are visible only to the members an organizer invited
 (by a one-time link) and who accepted.
 
+Put the Docker volume (or `DATA_DIR`) and the backups on an encrypted
+disk. Passwords, sessions and recovery codes are stored only as hashes,
+but members' names and every circle's records are readable to anyone who
+gets the file.
+
 ### With your own reverse proxy instead of Caddy
 
 Leave out `--profile caddy`. The app is published on the host's loopback
@@ -286,6 +291,12 @@ Measured on the image (Node 22, x86-64):
   limit is 512 MB. Eight simultaneous sign-in attempts finished in under
   0.5 s.
 - **CPU**: one core is plenty for a community of hundreds of members.
+  Sign-in attempts are limited per address (30 per 15 minutes) and per
+  login (10 failures, then 423); an attacker with many addresses can still
+  make the server compute many password hashes. If that matters for your
+  instance, add a request limit for `/api/auth/` at your proxy (nginx
+  `limit_req`; stock Caddy has no rate limiter, a plugin build does).
+  Limits are kept in memory, so a restart resets them.
 - **Disk**: the image is about 385 MB unpacked. An empty database is about
   170 KB. A ledger entry is about 340 bytes and an audit row about 150; a
   12-member monthly circle produces a few hundred of each in a year, well
