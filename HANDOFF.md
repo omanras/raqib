@@ -1,27 +1,30 @@
-# HANDOFF — M4.1  (phase 4: rule kinds)
+# HANDOFF — M4.2  (phase 4: programs in Bash, first demands, SILENCE-EMPTY)
 
-Task: implement ADR-0002: every rule declares `kind` (signature | demand |
-anchor); signatures declare `evasion`; the gate prints the ratio.
+Task: capture records every program a Bash command runs; two demand rules
+that need it; the empty-session demand seen in the field (ADR-0002;
+docs/review/2026-11-02-field-note-empty-session.md).
 
 Scope:
-  raqib/rules/engine.py, raqib/rules/silence.py, raqib/rules/catalog/, raqib/watch.py (kind in
-  findings only), raqib/report.py, raqib/ui.py, tests/, tools/gate.py, docs/specs/ADR-0002-rule-kinds.md, docs/review/
+  raqib/hooks/capture.py, raqib/rules/catalog/, raqib/rules/engine.py, raqib/rules/silence.py,
+  raqib/report.py (ids only), tests/, docs/specs/ADR-0002-rule-kinds.md, docs/review/
 
 Exit criteria:
-- E1 Loader: `kind` required, one of the three; `evasion` (non-empty list
-     of one-line strings) required iff kind is signature. Any other shape
-     is a load error with the rule id and field named. Tests for all four
-     error cases and the three valid kinds.
-- E2 Every catalog rule carries `kind`, and each signature its `evasion`
-     list, per the ADR table; if your reading of a match block disagrees
-     with the table, keep the table and write the disagreement in
-     docs/review/<date>-M4.1-questions.md (do not reclassify).
-- E3 Silence rules expose kind "demand" in their findings; every finding
-     dict (catalog and silence) carries `kind`. `raqib report` shows it.
-- E4 tools/gate.py prints one line `rule kinds: signature=N demand=N anchor=N`
-     and fails if any rule has no kind. Gate green ubuntu + windows.
-- E5 ADR-0002 status line changed to "accepted (M4.1, <date>)".
+- E1 `input_meta.command_programs`: program names across `|`, `&&`, `||`, `;`,
+     `$(...)` and the string after `bash -c`/`sh -c` (one level); deterministic,
+     no execution, never the arguments; `command_head` unchanged. Tests: pipeline,
+     chain, bash -c, quoted `;`, glued `ls;rm`, and `python3 -c 'import urllib'`.
+- E2 Match op `{field: input_meta.command_programs, has_any: [..]}`; DESTRUCT-CMD
+     and NET-TOOL gain a branch on it; their `evasion` lists shrink (ADR table
+     corrected by a dated note under it).
+- E3 LANDED-NO-GATE (demand, high): capture adds `input_meta.commit_prefix` (first
+     word of a git -m message only); fires when a `landed:` commit has no earlier
+     ok Bash with tools/gate.sh or tools/gate.py among its programs. Fixtures both ways.
+- E4 EDIT-NO-TEST (demand, medium): ok edits under raqib/ or tests/ and no later ok
+     Bash with pytest or python before stop. Fixtures both ways.
+- E5 SILENCE-EMPTY (demand, medium, silence.py): session_start + session_end (or
+     start alone) with zero tool records. Fixtures: empty-session shape (positive),
+     quickstart trace (negative). Kinds line: demand > signature. Gate green.
 
-Not in scope: new rules, capture changes, suspicion layer, UI.
-Commit: `landed: M4.1 rule kinds` or `STOP: M4.1 <reason>`.
+Not in scope: git state capture (M4.3), suspicion layer, UI, watch.
+Commit: `landed: M4.2 bash programs + demands` or `STOP: M4.2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
