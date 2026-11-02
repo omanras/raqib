@@ -45,6 +45,18 @@
       complete and nothing was seen (not a clearance); 2 on bad input.
       --save DIR writes the texts and a run.json (each source's error, the
       live holes); --from DIR replays them, incomplete if the run was.
+  watch [PROJECT] [--log PATH] [--no-open] [--no-notify] [--port N]
+      Watch a project (M6.1, ADR-0005; default: the current directory):
+      install the hooks (idempotent; the installer's lines are printed),
+      tail the trace (by default outside the project, under ~/.raqib/traces),
+      judge each new line with the Scope of PROJECT/HANDOFF.md if there is
+      one, notify the OS of settled high findings, live silence
+      (RAQIB_GAP_SECONDS), capture failures and trace holes, keep it all in
+      TRACE.watch.json with a heartbeat, serve the page on 127.0.0.1 (--port
+      N, default 8765; a busy port gives another one and a WARNING) and open
+      it once. Lines already in the trace at the start are history: shown,
+      never notified. Notifications are off under CI or with --no-notify.
+      Ctrl-C, or a crash, prints the final report; exit as for report.
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -62,6 +74,7 @@ from raqib import discover
 from raqib import eval as evaluation
 from raqib import report
 from raqib import ui
+from raqib import watch
 from raqib.rules import context as rule_context
 from raqib.rules import engine, fixtures, silence, trace
 from raqib.suspect import backends as suspect_backends
@@ -153,6 +166,13 @@ def _parser():
                                                  " --from DIR and check every cited line (A5)")
     d.add_argument("--json", action="store_true", help="print the inventory as JSON")
     d.add_argument("-o", "--out", metavar="FILE", help="write the inventory here (default: stdout)")
+    w = sub.add_parser("watch", help="install the hooks, watch the trace live, notify, serve the page (M6.1)")
+    w.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
+    w.add_argument("--log", metavar="PATH", help="the trace (default: one outside the project)")
+    w.add_argument("--no-open", action="store_true", help="do not open the page in the browser")
+    w.add_argument("--no-notify", action="store_true", help="no OS notifications (also off when CI is set)")
+    w.add_argument("--port", type=int, default=None, metavar="N",
+                   help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
     return p
 
 
@@ -543,6 +563,30 @@ def cmd_discover(args, out):
     return inv["exit"]
 
 
+def cmd_watch(args, out):
+    rules = _catalog(CATALOG)
+    try:
+        gap = silence.gap_seconds_from(os.environ)
+    except ValueError as exc:
+        raise UsageError(str(exc))
+
+    def evaluator(project):
+        # ADR-0005 B-6: <project>/HANDOFF.md gives the scope, read as `report --handoff` reads it.
+        handoff = os.path.join(project, "HANDOFF.md")
+        if os.path.isfile(handoff):
+            ctx = _context(argparse.Namespace(scope=[], root=None, handoff=handoff))
+            note = ("%s Scope: %s (root %s), as report --handoff" % (handoff, ", ".join(ctx["scope"]), ctx["root"])
+                    if ctx else "%s has no Scope: block: no scope; rules that need one do not run" % handoff)
+        else:
+            ctx, note = {}, "no HANDOFF.md in the project: no scope; rules that need one do not run"
+        return (lambda records: run_rules(records, rules, ctx, gap)), note
+    try:
+        return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
+                             evaluator, rules, gap)
+    except watch.WatchError as exc:
+        raise UsageError(str(exc))
+
+
 def main(argv=None, out=None):
     out = out or sys.stdout
     try:
@@ -552,7 +596,7 @@ def main(argv=None, out=None):
     try:
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
-                   "discover": cmd_discover}[args.command]
+                   "discover": cmd_discover, "watch": cmd_watch}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)

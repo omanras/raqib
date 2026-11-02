@@ -32,6 +32,12 @@ The hook command depends on the platform:
 
 Exit: 0 installed; 1 settings unreadable or unwritable (left untouched);
       2 usage; 3 installed, but disableAllHooks is set, so nothing will run.
+
+API (M6.1, for `raqib watch`): install_project(project, log=None, ...)
+installs as the command does, prints the same lines to `out`, and returns
+{"code", "trace", "trace_source", "settings", "changed", "events"};
+installed_traces(project) lists the traces existing Raqib entries write
+to. Both raise Exit where the command would exit with an error.
 """
 from __future__ import annotations
 
@@ -273,18 +279,12 @@ def raqib_entries(groups):
 
 def install(argv):
     project, log_arg, log_set = parse_args(argv)
-    root = absolute(os.path.join(os.path.dirname(SCRIPT), ".."))
-    capture = os.path.join(root, "raqib", "hooks", "capture.py")
-    if not os.path.isdir(project):
-        raise Exit(2, "install-hooks: not a directory: %s" % project)
-    if not os.path.isfile(capture):
-        raise Exit(2, "install-hooks: missing %s" % capture)
-    project = absolute(project)
-    if log_set:
-        log_arg = absolute_log(log_arg)
+    return install_project(project, log_arg if log_set else None)["code"]
 
-    settings_dir = os.path.join(project, ".claude")
-    settings_path = os.path.join(settings_dir, "settings.json")
+
+def read_settings(settings_path):
+    """(settings dict, hooks dict) of a settings file, {} when it is missing
+    or empty; fail() (exit 1) when it cannot be read or has the wrong shape."""
     settings = {}
     if os.path.lexists(settings_path):
         try:
@@ -304,15 +304,55 @@ def install(argv):
     for event, _ in EVENTS:
         if not isinstance(hooks.get(event, []), list):
             fail('"hooks.%s" in %s is not a list; nothing changed' % (event, settings_path))
+    return settings, hooks
 
+
+def kept_traces(project, hooks):
+    # A relative RAQIB_LOG was resolved by the hook against the session's
+    # cwd, normally the project.
     existing = [h for event, _ in EVENTS for _, h in raqib_entries(hooks.get(event, []))]
+    return sorted({os.path.normpath(os.path.join(project, x))
+                   for x in (log_of(h) for h in existing) if x})
+
+
+def installed_traces(project):
+    """API (M6.1): the traces the Raqib entries in <project>/.claude/settings.json
+    write to, sorted ([] when there are none). Writes nothing."""
+    if not os.path.isdir(project):
+        raise Exit(2, "install-hooks: not a directory: %s" % project)
+    project = absolute(project)
+    _, hooks = read_settings(os.path.join(project, ".claude", "settings.json"))
+    return kept_traces(project, hooks)
+
+
+def install_project(project, log=None, log_source="--log", out=None, err=None):
+    """API (M6.1): install into `project` as the command does (log None: no
+    --log). The lines the command prints go to `out` and `err` (default
+    stdout and stderr). Returns {"code": 0 or 3, "trace", "trace_source",
+    "settings", "changed", "events": [(event, status)]}; raises Exit."""
+    def say(text):
+        print(text, file=out or sys.stdout)
+
+    log_set = log is not None
+    log_arg = log if log_set else ""
+    root = absolute(os.path.join(os.path.dirname(SCRIPT), ".."))
+    capture = os.path.join(root, "raqib", "hooks", "capture.py")
+    if not os.path.isdir(project):
+        raise Exit(2, "install-hooks: not a directory: %s" % project)
+    if not os.path.isfile(capture):
+        raise Exit(2, "install-hooks: missing %s" % capture)
+    project = absolute(project)
     if log_set:
-        log, log_source = log_arg, "--log"
+        log_arg = absolute_log(log_arg)
+
+    settings_dir = os.path.join(project, ".claude")
+    settings_path = os.path.join(settings_dir, "settings.json")
+    settings, hooks = read_settings(settings_path)
+
+    if log_set:
+        log = log_arg
     else:
-        # A relative RAQIB_LOG was resolved by the hook against the session's
-        # cwd, normally the project.
-        kept = sorted({os.path.normpath(os.path.join(project, x))
-                       for x in (log_of(h) for h in existing) if x})
+        kept = kept_traces(project, hooks)
         if len(kept) > 1:
             fail("existing Raqib entries write to different traces (%s); pass --log to choose one;"
                  " nothing changed" % ", ".join(kept))
@@ -360,16 +400,18 @@ def install(argv):
     if changed:
         write_atomically(settings_path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
 
-    print("install-hooks: %s%s" % (settings_path, "" if changed else " (file not rewritten)"))
+    say("install-hooks: %s%s" % (settings_path, "" if changed else " (file not rewritten)"))
     for event, status in report:
-        print("  %-19s %s" % (event, status))
+        say("  %-19s %s" % (event, status))
     for old in sorted(set(replaced)):
-        print("  replaced: %s" % old)
-    print("  trace: %s (%s)" % (log, log_source))
-    print("  command: %s" % command)
+        say("  replaced: %s" % old)
+    say("  trace: %s (%s)" % (log, log_source))
+    say("  command: %s" % command)
     if os.path.dirname(log) == project:
-        print("  note: the trace is inside the project; add raqib.log.jsonl to its .gitignore,"
-              " or use --log to keep it out of the agent's working tree")
+        say("  note: the trace is inside the project; add raqib.log.jsonl to its .gitignore,"
+            " or use --log to keep it out of the agent's working tree")
+    result = {"code": 0, "trace": log, "trace_source": log_source, "settings": settings_path,
+              "changed": changed, "events": report}
 
     disabled = []
     for path in (settings_path, os.path.join(settings_dir, "settings.local.json"),
@@ -382,9 +424,9 @@ def install(argv):
             pass
     if disabled:
         print("RAQIB-SILENCE: disableAllHooks is true in %s; capture will not run"
-              % ", ".join(disabled), file=sys.stderr)
-        return 3
-    return 0
+              % ", ".join(disabled), file=err or sys.stderr)
+        result["code"] = 3
+    return result
 
 
 def main(argv=None):
