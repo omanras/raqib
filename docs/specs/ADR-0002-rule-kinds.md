@@ -103,6 +103,16 @@ above is unchanged. Open points are questions in
   first 1048576 scanned characters. DRIFT-FILES is an anchor and may not
   carry `evasion:`; the table's "hole" stays in its description, as before.
   A test reads the table from this file and holds the catalog to it.
+  Note (2026-11-03, M4.1 REDO, B-4; corrects this item): K8 is right,
+  "programs not on the list" is a NET-TOOL line only; DESTRUCT-CMD names
+  its own (find, git, mv, cp). The REDO adds SECRET-OUTPUT's
+  placeholder-marker line (K6) and SCOPE-PATH's Glob/Grep line (K7), and
+  the scan line now gives the exact budget (K9): 1048576 characters over
+  all strings of tool_response and error, keys too, each counted as its
+  length plus 1, in document order. Lines added beyond the table, as
+  built: DESTRUCT-CMD +4, NET-TOOL +4, SCOPE-PATH +4, SECRET-OUTPUT +3.
+  DRIFT-FILES and SCOPE-CWD-ROOT name their K16 holes in their
+  descriptions (B-5).
 - A-3 Silence rules (`raqib/rules/silence.py`) declare their kind in code:
   `RULE_KINDS` maps each of the four ids to demand. A finding takes its
   kind from that map, so a silence rule missing from it cannot emit.
@@ -113,6 +123,11 @@ above is unchanged. Open points are questions in
   finding; the finding entries in `<trace>.watch.json` carry it. The text
   report and the page do not print it: `raqib/report.py` and `raqib/ui.py`
   are outside the M4.1 Scope.
+  Note (2026-11-03, M4.1 REDO, B-1 and B-3; supersedes this item): the
+  text report prints the kind on every finding line and in its RULES
+  table, the page in its findings and rule table. A finding without `kind`
+  is rejected by `check_finding` as `NoKindError`; the report raises it as
+  a `no-kind` alarm and watch prints a `NOTICE no-kind` line for it.
 - A-5 Gate (`tools/gate.py`, check 5, after the SDK check and before the
   tests). It imports `raqib.rules` from the checkout it gates (a module
   found anywhere else is RED, so an installed raqib is never counted),
@@ -123,6 +138,15 @@ above is unchanged. Open points are questions in
   cannot be imported. Otherwise it prints one line, today
   `[gate] rule kinds: signature=4 demand=4 anchor=3`. The ratio never
   fails the gate by itself.
+  Note (2026-11-03, M4.1 REDO, B-2 and B-5; supersedes this item): the
+  check is now check 2, its line the first after the secret scan. It runs
+  in a child, `python -I tools/gate.py --rule-kinds-child`, which imports
+  the standard library modules the rules use (`PREIMPORT`) before it
+  appends the checkout to the END of sys.path; the gate reads only the
+  child's exit status and its one line, so a SystemExit in tree code
+  cannot end the gate with exit 0. The catalog is the tracked files
+  directly under raqib/rules/catalog/ (git ls-files), and every id in
+  `report.SILENCE_RULES` must have a kind in `silence.RULE_KINDS`.
 - A-6 Not built in M4.1, because the HANDOFF puts them out of scope: the
   suspicion layer is not yet told each finding's kind (Consequences,
   second bullet), and the THREAT_MODEL does not yet cite the evasion lists.

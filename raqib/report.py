@@ -4,16 +4,20 @@ returns a dict; render_text() turns it into text. The CLI does the I/O.
 
 Result:
 - "alarm"      (exit 1) any finding, an empty trace, a corrupt trace line, a
-               rejected finding, or a citation with no line in the trace;
+               rejected finding, a finding without a kind (no-kind,
+               ADR-0002 B-3), or a citation with no line in the trace;
 - "incomplete" (exit 3) no alarm, but some rule did not run, or it is unknown
                which rules ran;
 - "clean"      (exit 0) none of the above.
+
+Every finding line and every row of the RULES table names the rule's kind
+(signature, demand or anchor; ADR-0002 B-1).
 """
 from __future__ import annotations
 
 import json
 
-from raqib.rules import engine
+from raqib.rules import engine, silence
 
 SILENCE_RULES = (
     ("SILENCE-GAP", "consecutive lines of a session more than RAQIB_GAP_SECONDS apart"),
@@ -26,11 +30,12 @@ LINE_TEXT_MAX = 240
 
 
 def rule_table(rules):
-    """[{id, class, severity, fp_budget, status, title}] for the silence rules
-    (Python, no declared budget yet) and the catalog rules."""
-    table = [{"id": rid, "class": "SILENCE", "severity": "high", "fp_budget": None,
-              "status": "active", "title": title} for rid, title in SILENCE_RULES]
-    table += [{"id": r.id, "class": r.cls, "severity": r.severity, "fp_budget": r.fp_budget,
+    """[{id, class, kind, severity, fp_budget, status, title}] for the silence
+    rules (Python, no declared budget yet; kind from silence.RULE_KINDS, None
+    if it declares none) and the catalog rules."""
+    table = [{"id": rid, "class": "SILENCE", "kind": silence.RULE_KINDS.get(rid), "severity": "high",
+              "fp_budget": None, "status": "active", "title": title} for rid, title in SILENCE_RULES]
+    table += [{"id": r.id, "class": r.cls, "kind": r.kind, "severity": r.severity, "fp_budget": r.fp_budget,
                "status": r.status, "title": r.title} for r in rules]
     return table
 
@@ -85,6 +90,9 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
     for f in findings:
         try:
             engine.check_finding(f)
+        except engine.NoKindError as exc:  # B-3: sound but for its kind; not passed over (A3)
+            alarms.append({"kind": "no-kind", "detail": str(exc)})
+            continue
         except engine.FindingError as exc:
             alarms.append({"kind": "rejected-finding", "detail": str(exc)})
             continue
@@ -208,8 +216,8 @@ def render_text(report):
     out.append("")
     out.append("FINDINGS: %d" % len(report["findings"]))
     for f in report["findings"]:
-        out.append("  [%s] %s (%s) session %s seq %s" % (
-            f["severity"], f["rule_id"], f.get("class", "?"), f["session_id"],
+        out.append("  [%s] %s (%s, %s) session %s seq %s" % (
+            f["severity"], f["rule_id"], f.get("class", "?"), f["kind"], f["session_id"],
             ",".join(str(s) for s in f["cited_seq"])))
         out.append("      %s" % f["summary"])
         for c in f["cites"]:
@@ -242,10 +250,11 @@ def render_text(report):
         out.append("  - %s %s: %s" % (n["rule_id"], n["status"], n["detail"]))
     out.append("")
     out.append("RULES (A6 fp_budget): %d" % len(report["rules"]))
-    out.append("  %-15s %-9s %-7s %-9s %s" % ("id", "class", "sev", "fp_budget", "status"))
+    out.append("  %-15s %-9s %-9s %-7s %-9s %s" % ("id", "class", "kind", "sev", "fp_budget", "status"))
     for r in report["rules"]:
         budget = "-" if r["fp_budget"] is None else "%g" % r["fp_budget"]
-        out.append("  %-15s %-9s %-7s %-9s %s" % (r["id"], r["class"], r["severity"], budget, r["status"]))
+        out.append("  %-15s %-9s %-9s %-7s %-9s %s" % (r["id"], r["class"], r.get("kind") or "-", r["severity"],
+                                                      budget, r["status"]))
     out.append("")
     out.append("RESULT: %s (exit %d)" % (report["result"].upper(), report["exit"]))
     # Every value can come from the trace or from files the agent can write:

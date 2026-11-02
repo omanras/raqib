@@ -133,7 +133,7 @@ def test_e2_report_cites_file_lines_of_every_cited_seq(tmp_path):
     trace = write_trace(tmp_path / "trace.jsonl", lines)
     code, text = raqib("report", trace, "--scope", ".")
     assert code == 1
-    assert "[medium] SCOPE-PATH (SCOPE) session fixture-rules-scope-2 seq 1" in text
+    assert "[medium] SCOPE-PATH (SCOPE, signature) session fixture-rules-scope-2 seq 1" in text
     assert "      seq 1: line 1  pre Edit seq 1  2026-10-16T13:00:01.000Z  " \
            'input_meta={"path": "/etc/hosts"}' in text
     assert "      seq 1: line 2  post Edit seq 1" in text
@@ -152,7 +152,7 @@ def test_e2_findings_file_round_trip_matches_direct_report(tmp_path):
 
 def test_e2_bad_citations_are_alarms(tmp_path):
     out = tmp_path / "f.jsonl"
-    good = {"ts": "t", "rule_id": "X-Y", "class": "NET", "severity": "low",
+    good = {"ts": "t", "rule_id": "X-Y", "class": "NET", "kind": "signature", "severity": "low",
             "session_id": "nobody", "cited_seq": [9], "summary": "s"}
     out.write_text("\n".join([json.dumps(good), json.dumps(dict(good, cited_seq=[])), "not json"]) + "\n")
     sha = hashlib.sha256(QUICKSTART.read_bytes()).hexdigest()
@@ -183,7 +183,7 @@ def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
                           "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT"}
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
     text = raqib("report", QUICKSTART)[1]
-    assert "  NET-TOOL        NET       medium  0.25      active" in text
+    assert "  NET-TOOL        NET       signature medium  0.25      active" in text
 
 
 def test_e3_clean_incomplete_and_alarm(tmp_path):
@@ -389,7 +389,7 @@ def kind_of(rule_id):
     return dict(kinds, **silence.RULE_KINDS)[rule_id]
 
 
-def test_m41_e3_raqib_report_and_rules_show_the_kind_of_every_finding(tmp_path):
+def test_m41_e3_report_json_rules_and_findings_file_carry_the_kind(tmp_path):
     lines = fixture_lines("rules/SCOPE-PATH/positive-etc-and-dotdot.json")[0] + \
         fixture_lines("rules/SCOPE-CWD-MOVED/positive-cd-out.json")[0]
     mixed = write_trace(tmp_path / "trace.jsonl", lines)
@@ -422,3 +422,65 @@ def test_m41_e3_a_findings_file_with_an_unknown_kind_is_a_rejected_finding(tmp_p
     rep = json.loads(raqib("report", QUICKSTART, "--findings", out, "--json")[1])
     assert rep["findings"] == [] and [a["kind"] for a in rep["alarms"]] == ["rejected-finding"]
     assert "unknown kind" in rep["alarms"][0]["detail"]
+
+
+
+# --- M4.1 REDO (ADR-0002 Amendment B) -----------------------------------------------
+
+def mixed_trace(tmp_path):
+    lines = fixture_lines("rules/SCOPE-PATH/positive-etc-and-dotdot.json")[0] + \
+        fixture_lines("rules/SCOPE-CWD-MOVED/positive-cd-out.json")[0]
+    return write_trace(tmp_path / "mixed.jsonl", lines)
+
+
+def test_m41_b1_the_text_report_prints_the_kind_on_every_finding_line(tmp_path):
+    """K2: the text path, not only --json."""
+    seen = set()
+    for trace in (mixed_trace(tmp_path), BLOCKED):
+        rep = json.loads(raqib("report", trace, "--scope", ".", "--json")[1])
+        code, text = raqib("report", trace, "--scope", ".")
+        assert code == 1 and rep["findings"]
+        for f in rep["findings"]:
+            head = "  [%s] %s (%s, %s) session %s seq %s" % (
+                f["severity"], f["rule_id"], f["class"], f["kind"], f["session_id"],
+                ",".join(str(s) for s in f["cited_seq"]))
+            assert head in text.splitlines(), head
+            seen.add(f["kind"])
+    assert seen == set(engine.KINDS)
+
+
+def test_m41_b1_the_text_rules_table_has_a_kind_column():
+    rep = json.loads(raqib("report", QUICKSTART, "--json")[1])
+    text = raqib("report", QUICKSTART)[1].splitlines()
+    assert "  id              class     kind      sev     fp_budget status" in text
+    assert {r["id"]: r["kind"] for r in rep["rules"]} == dict(
+        {r.id: r.kind for r in engine.load_catalog(ROOT / "raqib" / "rules" / "catalog")},
+        **{rid: "demand" for rid, _ in report.SILENCE_RULES})
+    for r in rep["rules"]:
+        budget = "-" if r["fp_budget"] is None else "%g" % r["fp_budget"]
+        row = "  %-15s %-9s %-9s %-7s %-9s %s" % (r["id"], r["class"], r["kind"], r["severity"], budget, r["status"])
+        assert row in text, row
+    assert "  SILENCE-GAP     SILENCE   demand    high    -         active" in text
+    assert "  SCOPE-CWD-ROOT  SCOPE     anchor    medium  0.1       active" in text
+
+
+def test_m41_b3_a_finding_without_kind_is_a_no_kind_alarm(tmp_path):
+    """K5 (A3): a finding file line with no kind is not passed over."""
+    from raqib.rules import trace
+    numbered = trace.read_numbered(str(QUICKSTART))[0]
+    session, seq = numbered[0][1]["session_id"], numbered[0][1]["seq"]
+    finding = {"ts": None, "rule_id": "NET-TOOL", "class": "NET", "severity": "medium",
+               "session_id": session, "cited_seq": [seq], "summary": "an older findings file"}
+    rep = report.build(str(QUICKSTART), numbered, [], [finding], [], [], "file")
+    assert [a["kind"] for a in rep["alarms"]] == ["no-kind"] and rep["findings"] == []
+    detail = rep["alarms"][0]["detail"]
+    assert detail.startswith("finding has no kind (ADR-0002") and "NET-TOOL" in detail
+    assert (rep["result"], rep["exit"]) == ("alarm", 1)
+    with_kind = report.build(str(QUICKSTART), numbered, [], [dict(finding, kind="signature")], [], [], "file")
+    assert with_kind["alarms"] == [] and len(with_kind["findings"]) == 1
+    out = tmp_path / "f.jsonl"
+    out.write_text(json.dumps(finding) + "\n")
+    sha = hashlib.sha256(QUICKSTART.read_bytes()).hexdigest()
+    (tmp_path / "f.jsonl.notes.json").write_text(json.dumps({"notes": [], "trace_sha256": sha}))
+    code, text = raqib("report", QUICKSTART, "--findings", out)
+    assert code == 1 and "  - no-kind: finding has no kind (ADR-0002" in text and "FINDINGS: 0" in text

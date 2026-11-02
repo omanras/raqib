@@ -62,7 +62,7 @@ def test_e1_page_of_the_real_blocked_calls_trace():
     page, rep = page_for(BLOCKED)
     assert page.startswith("<!doctype html>") and page.rstrip().endswith("</html>")
     assert 'class="badge alarm">ALARM' in page
-    assert page.count('class="card"') == 2 and "SILENCE-HALF (SILENCE)" in page
+    assert page.count('class="card"') == 2 and "SILENCE-HALF (SILENCE, demand)" in page
     assert '<a href="#L2">line 2</a>' in page and '<a href="#L3">line 3</a>' in page
     assert all('<tr id="L%d"' % n in page for n in range(1, 8))
     assert "DRIFT-FILES</code> not-evaluated" in page and "SECRET-OUTPUT</code> partial" in page
@@ -420,3 +420,33 @@ def test_redo3_head_sends_no_body_and_an_idle_connection_blocks_nothing(server):
         assert head.startswith(b"HTTP/1.0 200") and body == b""
     finally:
         idle.close()
+
+
+# --- M4.1 REDO B-1 (ADR-0002 Amendment B): the page shows the kind ---------------
+
+def test_m41_b1_the_page_shows_the_kind_in_findings_and_the_rule_table(tmp_path):
+    page, rep = page_for(BLOCKED)
+    for f in rep["findings"]:
+        assert "%s (%s, %s) " % (f["rule_id"], f["class"], f["kind"]) in page
+    assert "SILENCE-HALF (SILENCE, demand)" in page
+    assert "<th>id</th><th>class</th><th>kind</th><th>severity</th>" in page
+    kinds = {r.id: r.kind for r in engine.load_catalog(CATALOG)}
+    for r in rep["rules"]:
+        assert r["kind"] == kinds.get(r["id"], "demand")
+        assert "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td>" % (r["id"], r["class"], r["kind"], r["severity"]) in page
+    rows = [line(1, "pre", "2026-10-16T13:00:01.000Z", tool="Read", input_meta={"path": "/etc/hosts"}),
+            line(1, "post", "2026-10-16T13:00:02.000Z", tool="Read", input_meta={"path": "/etc/hosts"})]
+    page, rep = page_for(write_trace(tmp_path, rows))
+    assert [(f["rule_id"], f["kind"]) for f in rep["findings"]] == [("SCOPE-PATH", "signature")]
+    assert "SCOPE-PATH (SCOPE, signature) " in page
+
+
+def test_m41_b1_a_report_without_kinds_renders_a_dash():
+    rep = {"trace": "t", "records": 0, "sessions": [], "findings_source": "x",
+           "findings": [{"severity": "low", "rule_id": "X-Y", "class": "NET", "session_id": "s", "cited_seq": [1],
+                         "summary": "x", "cites": []}],
+           "suspicion": [], "suspicion_given": False, "suspicion_run": None, "alarms": [], "notes": [],
+           "rules": [{"id": "X-Y", "class": "NET", "severity": "low", "fp_budget": None, "status": "active",
+                      "title": "t"}], "result": "alarm", "exit": 1}
+    page = ui.render(rep, [], [])
+    assert "X-Y (NET, -) " in page and "<tr><td>X-Y</td><td>NET</td><td>-</td><td>low</td>" in page

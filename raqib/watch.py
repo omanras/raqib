@@ -58,7 +58,10 @@ Silence is an alarm (A3):
   poll; the page reads a heartbeat older than STALE_SECONDS, or a state the
   page cannot get within PAGE_LOCK_SECONDS, as crashed or stuck.
 Settled findings of severity high are notified (ADR-0005); the others are
-shown. Notifications are rate-limited by raqib/notify.py.
+shown. Notifications are rate-limited by raqib/notify.py. Every finding
+entry carries its rule's kind; one without a kind is printed once as a
+"NOTICE no-kind" line, and the report raises it as a no-kind alarm
+(ADR-0002 B-3).
 """
 from __future__ import annotations
 
@@ -431,6 +434,9 @@ class Watch:
             if entry is None:
                 entry = self.inventory[key] = {"key": _key_list(key), "epoch": self.epoch, "first_seen": self.at(now),
                                                "notice": None, "state": "pending", "settled_by": None}
+                if f.get("kind") is None:  # ADR-0002 B-3: a finding without a kind is said, once (A3)
+                    self._say(now, "NOTICE no-kind: %s session %s %s has no kind (ADR-0002); the report raises a"
+                                   " no-kind alarm" % (f["rule_id"], f["session_id"], seq_text(f["cited_seq"])))
             cited_history = self.epoch == 0 and all(
                 line_of.get((f["session_id"], s), 0) <= self.history_line for s in f["cited_seq"])
             entry.update({"rule_id": f["rule_id"], "class": f.get("class"), "kind": f.get("kind"),

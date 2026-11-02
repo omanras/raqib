@@ -9,6 +9,7 @@ evasion:
   - "a file tool not on the list (an MCP server's): only the nine named tools are matched"
   - "a symlink inside cwd that points outside: paths are normalised, not resolved"
   - "move the cwd first: the boundary moves with it (SCOPE-CWD-MOVED reports the move)"
+  - "Glob or Grep with the location only in pattern or glob, no path: no input_meta.path, so the rule does not apply"
 severity: medium
 fp_budget: 0.1
 description: "A read, write, edit or search tool aimed at a path outside the session's working directory (cwd), such as ~/.ssh, /etc or a sibling project. Relative paths are resolved against cwd; ~ paths count as outside."

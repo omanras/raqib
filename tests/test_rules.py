@@ -399,7 +399,7 @@ def test_e3_finding_without_cited_seq_is_rejected(cited):
 
 
 def test_e3_finding_needs_rule_id_and_summary():
-    good = {"ts": "t", "rule_id": "X-Y", "severity": "low", "session_id": "s",
+    good = {"ts": "t", "rule_id": "X-Y", "kind": "demand", "severity": "low", "session_id": "s",
             "summary": "x", "cited_seq": [1]}
     assert engine.check_finding(good) is good
     for key in ("rule_id", "severity", "session_id", "summary"):
@@ -645,8 +645,8 @@ def test_redo_catalog_must_exist_be_nonempty_and_use_yaml(tmp_path):
 
 
 def test_redo_check_finding_checks_class_and_ts():
-    good = {"ts": None, "rule_id": "X-Y", "class": "NET", "severity": "low", "session_id": "s",
-            "summary": "x", "cited_seq": [1]}
+    good = {"ts": None, "rule_id": "X-Y", "class": "NET", "kind": "signature", "severity": "low",
+            "session_id": "s", "summary": "x", "cited_seq": [1]}
     assert engine.check_finding(good) is good
     for bad in (dict(good, **{"class": "NETWORK"}), dict(good, ts=5)):
         with pytest.raises(engine.FindingError):
@@ -930,6 +930,102 @@ def test_m41_e3_check_finding_rejects_an_unknown_kind():
     for bad in ("heuristic", "", None, ["signature"], 1):
         with pytest.raises(engine.FindingError, match="unknown kind"):
             engine.check_finding(dict(good, kind=bad))
-    # Without a kind the finding is checked as before M4.1 (a findings file
-    # written earlier); docs/review/2026-11-03-M4.1-questions.md, Q2.
-    assert engine.check_finding(good) is good
+    # B-3 (K5), inverted: a finding without a kind is rejected as NoKindError,
+    # which the report raises as a no-kind alarm (A3).
+    with pytest.raises(engine.NoKindError, match="finding has no kind"):
+        engine.check_finding(good)
+    assert issubclass(engine.NoKindError, engine.FindingError)
+    # Any other fault is reported first: NoKindError means sound but for its kind.
+    with pytest.raises(engine.FindingError) as info:
+        engine.check_finding(dict(good, cited_seq=[]))
+    assert type(info.value) is engine.FindingError
+
+
+# --- M4.1 REDO (ADR-0002 Amendment B): B-4 evasion lines, B-5 known holes -----
+
+def load_capture():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("raqib_capture_for_rules", ROOT / "raqib" / "hooks" / "capture.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def evasion_line(rule_id, start):
+    (found,) = [e for e in catalog_rule(rule_id).evasion if e.startswith(start)]
+    return found
+
+
+def test_m41_b4_secret_output_placeholder_marker_evasion_is_real():
+    """K6: a real key with a placeholder marker glued into the match lands in
+    placeholder_kinds, which SECRET-OUTPUT does not read."""
+    capture = load_capture()
+    line_text = evasion_line("SECRET-OUTPUT", "glue a placeholder marker into the match")
+    assert "placeholder_kinds" in line_text and "which no rule reads" in line_text
+    key = "s" + "k-" + "Q7w3Rt9Yp2Lm5Nb8Vc4X"          # assembled: no secret-like literal in the tree
+    assert capture.scan_output([{"stdout": key}]) == (["sk_api_key"], [], True)
+    for glued in (key + "_test", key + "-example", key + "test"):
+        assert capture.scan_output([{"stdout": glued}]) == ([], ["sk_api_key"], True), glued
+    rule = catalog_rule("SECRET-OUTPUT")
+    post = dict(line(1, phase="post"), output_meta={"scan": "full", "secret_kinds": [],
+                                                    "placeholder_kinds": ["sk_api_key"]})
+    assert engine.judge(rule, [post]) == ([], [])
+    assert all("placeholder_kinds" not in json.dumps(r.doc["match"]) for r in engine.load_catalog(CATALOG))
+
+
+def test_m41_b4_secret_output_scan_budget_line_is_exact():
+    """K9: the budget is SCAN_MAX_CHARS over all strings of tool_response and
+    error, keys included, each costing its length plus 1, in document order."""
+    capture = load_capture()
+    assert capture.SCAN_MAX_CHARS == 1048576
+    assert ("1048576 characters over all strings of tool_response and error (keys too, each its length + 1,"
+            " in order)") in evasion_line("SECRET-OUTPUT", "put it past capture's scan budget")
+    key = "s" + "k-" + "Q7w3Rt9Yp2Lm5Nb8Vc4XzK6Hj"   # 25 after sk-: still a key when cut by one
+    # Strings in document order: key "a" (1 + 1), the filler (n + 1), key "b" (1 + 1), then the secret.
+    def meta(n):
+        return capture.output_meta({"tool_response": {"a": "x" * n, "b": key}})
+    exact = capture.SCAN_MAX_CHARS - 2 - 1 - 2 - len(key)
+    assert meta(exact) == {"scan": "full", "secret_kinds": ["sk_api_key"]}               # fits exactly
+    assert meta(exact + 1) == {"scan": "partial", "secret_kinds": ["sk_api_key"]}        # cut by one character
+    past = meta(capture.SCAN_MAX_CHARS - 3)                                              # nothing left for it
+    assert past == {"scan": "partial"}
+    found, unknown = engine.judge(catalog_rule("SECRET-OUTPUT"), [dict(line(1, phase="post"), output_meta=past)])
+    assert (found, unknown) == ([], [("s1", 1)])       # only a partial note, never a finding
+
+
+def test_m41_b4_scope_path_pattern_only_location_is_not_judged():
+    """K7: Glob or Grep with the location only in pattern or glob gives no
+    input_meta.path, so SCOPE-PATH does not apply (not even unknown)."""
+    capture = load_capture()
+    assert "Glob or Grep with the location only in pattern or glob" in evasion_line("SCOPE-PATH", "Glob or Grep")
+    for tool, tool_input in (("Glob", {"pattern": "/etc/*"}), ("Grep", {"pattern": "key", "glob": "/etc/**"})):
+        meta = capture.input_meta(tool, tool_input)
+        assert meta == {}, (tool, meta)
+        rec = dict(line(1, tool=tool), input_meta=meta)
+        assert engine.judge(catalog_rule("SCOPE-PATH"), [rec]) == ([], [])
+    aimed = dict(line(1, tool="Glob"), input_meta=capture.input_meta("Glob", {"pattern": "*", "path": "/etc"}))
+    assert len(engine.run_rule(catalog_rule("SCOPE-PATH"), [aimed])) == 1
+
+
+def test_m41_b4_amendment_a_counts_the_lines_added_beyond_the_table():
+    note = ADR.read_text(encoding="utf-8").split("Note (2026-11-03, M4.1 REDO, B-4", 1)[1].split("\n- A-3", 1)[0]
+    added = dict((rule_id, int(n)) for rule_id, n in re.findall(r"([A-Z]+-[A-Z]+) \+(\d+)", " ".join(note.split())))
+    table, _ = adr_table()
+    signatures = {r.id: r for r in engine.load_catalog(CATALOG) if r.kind == "signature"}
+    assert added == {rule_id: len(rule.evasion) - len(table[rule_id][1]) for rule_id, rule in signatures.items()}
+    assert '"programs not on the list" is a NET-TOOL line only' in " ".join(note.split())
+    assert not any("programs not on the list" in e or e.startswith("a program not on the list")
+                   for e in catalog_rule("DESTRUCT-CMD").evasion)
+    assert any(e.startswith("a network program not on the list") for e in catalog_rule("NET-TOOL").evasion)
+
+
+def test_m41_b5_k16_holes_are_written_in_the_anchor_descriptions():
+    drift = catalog_rule("DRIFT-FILES").doc["description"]
+    assert ("Known hole: the scope is read from HANDOFF.md in the working tree, which the agent can edit,"
+            " not from a commit.") in drift
+    root = catalog_rule("SCOPE-CWD-ROOT").doc["description"]
+    assert "Known holes: the list omits other broad directories such as /etc, /usr and /var" in root
+    assert "a nested session, one the agent starts itself, chooses its own cwd" in root
+    rule = catalog_rule("SCOPE-CWD-ROOT")
+    for cwd in ("/etc", "/usr", "/var"):     # the hole, as the match block has it
+        assert engine.run_rule(rule, [line(1, cwd=cwd)]) == [], cwd

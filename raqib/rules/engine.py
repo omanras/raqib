@@ -45,7 +45,8 @@ ADR-0002: a signature matches the shape of a bad act and is cheap to evade,
 so it must list its evasions; a demand requires evidence of an act and its
 absence is the finding; an anchor measures against a record the agent does
 not write. kind and evasion errors name the rule id and the field. Every
-finding carries its rule's kind.
+finding carries its rule's kind; check_finding rejects one without it
+(NoKindError, B-3).
 
 Paths are POSIX and normalised lexically (symlinks are not resolved): a
 relative path is joined to the line's cwd (for outside_any: to context
@@ -94,6 +95,11 @@ class RuleError(ValueError):
 
 class FindingError(ValueError):
     """A finding that breaks the format, e.g. no cited_seq (A5)."""
+
+
+class NoKindError(FindingError):
+    """A finding that is sound but for its missing kind (ADR-0002 B-3):
+    the report raises it as a no-kind alarm."""
 
 
 class Rule:
@@ -584,6 +590,9 @@ def check_finding(finding):
         raise FindingError("finding has an unknown kind (ADR-0002: %s): %r" % ("|".join(KINDS), finding))
     if "ts" not in finding or not (finding["ts"] is None or isinstance(finding["ts"], str)):
         raise FindingError("finding needs ts (a string, or null when the trace has none): %r" % (finding,))
+    if "kind" not in finding:  # last: the finding is sound but for its kind (B-3)
+        raise NoKindError("finding has no kind (ADR-0002: every finding carries one of %s; A3): %r"
+                          % ("|".join(KINDS), finding))
     return finding
 
 

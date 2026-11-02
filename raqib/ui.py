@@ -2,7 +2,8 @@
 
 The page shows the result, the alarms, every finding with the trace lines it
 cites (A5), the rules that did not run (A3), the suspicion lines, the rule
-table (A6) and a timeline of every trace line in file order. Silence is drawn
+table (A6) and a timeline of every trace line in file order. Each finding
+and each rule row names its kind (ADR-0002 B-1). Silence is drawn
 into the timeline (A3): a band where a session went quiet for longer than
 the gap limit, a "no post" mark on a pre that never completed (and the
 reverse), a band where a started session ends without stop or session_end,
@@ -181,9 +182,10 @@ def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS, 
     out.append("<h2>Findings (%d)</h2>" % len(report["findings"]))
     if report["findings"]:
         for f in report["findings"]:
-            out.append('<div class="card"><div class="head"><span class="tag">%s</span> %s (%s) '
+            out.append('<div class="card"><div class="head"><span class="tag">%s</span> %s (%s, %s) '
                        '<span class="meta">session %s, seq %s</span></div><div>%s</div>%s</div>'
                        % (_text(f["severity"]), _text(f["rule_id"]), _text(f.get("class", "-")),
+                          _text(f.get("kind") or "-"),
                           _text(f["session_id"]), _text(", ".join(map(str, f["cited_seq"]))),
                           _text(f["summary"]), cited(f)))
     else:
@@ -249,11 +251,12 @@ def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS, 
     out.append("</tbody></table></div>")
 
     out.append("<h2>Rules (%d)</h2>" % len(report["rules"]))
-    out.append('<div class="scroll"><table><thead><tr><th>id</th><th>class</th><th>severity</th>'
+    out.append('<div class="scroll"><table><thead><tr><th>id</th><th>class</th><th>kind</th><th>severity</th>'
                "<th>fp_budget</th><th>status</th><th>title</th></tr></thead><tbody>")
     for r in report["rules"]:
-        out.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td class=\"wrap\">%s</td></tr>"
-                   % (_text(r["id"]), _text(r["class"]), _text(r["severity"]),
+        out.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td>"
+                   "<td class=\"wrap\">%s</td></tr>"
+                   % (_text(r["id"]), _text(r["class"]), _text(r.get("kind") or "-"), _text(r["severity"]),
                       "-" if r["fp_budget"] is None else _text("%g" % r["fp_budget"]),
                       _text(r["status"]), _text(r["title"])))
     out.append("</tbody></table></div>")
