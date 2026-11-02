@@ -108,3 +108,33 @@ Order: M6.1, M6.3, M6.2. The Phase 5 items M5.0b/M5.1b/M5.2 resume after.
   M6.3's; W18's three local choices are ratified as recorded (pending
   highs now knock on settle by B-1; TRACE-HOLE knocking accepted;
   whole-list re-run accepted until cost shows in the field).
+
+## Amendment D (the Table, 2026-11-03) - rulings on review 2026-11-03-M6.1-redo.md
+- D-1 (X1) History is a property of epoch 0 only. `_restart` clears
+  history_line, history_bytes and problem_notices; in any later epoch
+  every line is live. Test: truncation of a trace that had history, then
+  a line that must close the open window and a RAQIB-SILENCE line that
+  must knock.
+- D-2 (X2, C-2) `_grown` may hand an entry over only while the old entry
+  is still present and not settled. A settled or vanished entry is never
+  adopted; a new key after a stop is a new finding. Test: the long-call /
+  window / stop / next-turn sequence yields a second SILENCE-OPEN that is
+  printed and knocks when its window opens.
+- D-3 (R-1, X9) The inline `sh -c` wrapper for notify-send is accepted:
+  nothing on disk to swap, text passed as a file argument, sh by absolute
+  path. B-5's list is corrected by this ruling. open_page validates
+  SystemRoot the same way notify does (existing dir named Windows).
+- D-4 (X3) tick()'s result is written back to the entry (sent | failed |
+  folded-sent-as "N more"); a fold names its first and last seq.
+- D-5 (X5) A finding whose pre predates the start but whose settling line
+  is live knocks: history applies to findings settled by history only.
+- D-6 (X6, X7) A live RAQIB-SILENCE line is labelled live and knocks as
+  RAQIB-SILENCE; tail holes and parse problems get separate rate-limit ids.
+- D-7 (X4, X8, X10, X11, X12) recorded. X10: the scope note is passed
+  through _safe like every other line. X8: finish() guards _write_state,
+  report() and summary_text() too, so a final report always prints or a
+  one-line reason does. X12: the REDO starting gate is run and recorded.
+- D-8 Reviewer's observation accepted into the Table's ledger: both X1 and
+  X2 were introduced by the REDO, not present at 9ae221c. A REDO must
+  carry a test for the behaviour it adds, not only for the finding it
+  closes; the Table will ask for that line in every REDO message.
