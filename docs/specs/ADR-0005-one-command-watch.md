@@ -300,3 +300,33 @@ every REDO 2 change carries a test for the behaviour it adds (D-8).
   came from the REDO itself and were caught by review 2, which produced
   rule D-8. The Table's own misses: B-5 named a wrapper that is not a
   file (corrected D-3); B-3 said nothing about epochs (corrected D-1).
+
+## Amendment G (the Table, 2026-11-03) - rulings on review 2026-11-03-M6.3.md
+- G-1 (P1) README and the questions file state the truth per platform: on
+  POSIX a moved package makes the hook wrapper print RAQIB-SILENCE; on
+  Windows a moved venv makes the hook a Claude Code hook error with no
+  line (test_install.py:780-787). One sentence each.
+- G-2 (P2, P3) The install CI job runs the console script with output the
+  console cannot encode (a path with a non-cp1252 character on Windows) and
+  asserts no crash; `python -m zipfile -l` on the built wheel asserts
+  raqib/hooks/capture.py, the 7 catalog YAMLs and endpoints.yaml are
+  present; the doctor CI step asserts exactly the expected MISSING lines
+  (hooks, notifier), not any count. Tests where in-process is possible.
+- G-3 (P4) doctor treats a relative `python3` resolution like a relative
+  claude: MISSING with "may shadow"; test.
+- G-4 (P5) doctor runs `claude --version` with cwd set to a fresh temp
+  directory and a PATH filtered to absolute entries outside the project.
+- G-5 (P6) On Windows, writable() reports "not checked (os.access cannot
+  tell on Windows)" as a hole-style line, never OK; E2's no-probe rule
+  stands. P7: the choose_trace notes are printed by doctor.
+- G-6 (P9) eval --help says "a checkout's tests/fixtures/eval/events.json
+  or --events FILE"; installed raqib without --events exits 2 with that
+  sentence. P12: build/ and *.egg-info added to .gitignore (.gitignore is
+  added to Scope by this ruling). P16: the ADR line 61-62 is superseded by
+  this amendment: install from a git URL or a local path until a PyPI name
+  is owned; LICENSE is the commander's decision (recorded, not built).
+- G-7 (P10, P11, P13, P14, P15, P17) recorded; P10 accepted (Q-1 keep);
+  P11: README first screen gains the Windows path-rules caveat line.
+- G-8 Two commits on the branch (builder cannot force-push) are accepted
+  for this milestone and merged as they are; the rule "one commit" is
+  read as "one landed task" when the builder's settings forbid rewriting.
