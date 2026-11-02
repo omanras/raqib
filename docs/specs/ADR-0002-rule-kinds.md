@@ -78,3 +78,30 @@ more signatures.
 - Later: a per-record `prev_hash` in the trace (an anchor on the trace
   itself, as in Dawr's ledger); SILENCE-ORDER then also reports a broken
   chain.
+
+## Amendment B (the Table, 2026-11-03) - rulings on review 2026-11-03-M4.1.md
+- B-1 (K1, K2) Scope of M4.1 is widened by this ruling to raqib/report.py
+  and raqib/ui.py: the text report prints the kind on every finding line
+  and in the RULES table; the page shows it in the findings and the rule
+  table. The reviewer's process point stands in the ledger: the builder
+  should have STOPped; the Table's Scope was the cause.
+- B-2 (K3, K4) The kinds check runs in a subprocess (`python -I <script>`)
+  whose script pre-imports every stdlib module raqib.rules uses before it
+  appends ROOT at the END of sys.path, never the front; the gate reads
+  the subprocess's exit status and output, so no SystemExit in tree code
+  can take the gate's exit. The pytest step's exposure is inherent and
+  recorded.
+- B-3 (K5) A finding without `kind` is a `no-kind` alarm in report (A3)
+  and a notice in watch; test_rules.py:933-935 is inverted.
+- B-4 (K6, K7, K8, K9) SECRET-OUTPUT evasion gains the placeholder-suffix
+  line; SCOPE-PATH evasion gains the Glob/Grep location line; A-2's
+  DESTRUCT-CMD sentence corrected in Amendment A (a record may be
+  corrected by a dated note under it); the scan-budget wording made exact.
+- B-5 (K10, K11, K12, K13, K14) The catalog for check 5 is the set of
+  tracked files under raqib/rules/catalog; the gate asserts RULE_KINDS
+  covers report.SILENCE_RULES; a test exercises the KINDS check through a
+  catalog rule; the test is renamed; the ratio line prints as the first
+  gate line after the secret scan. K15, K16 recorded; K16's two claims
+  are copied into the two rules' descriptions as known holes.
+- B-6 Every change carries a test (D-8 of ADR-0005 applies to all Raqib
+  REDOs from here on).

@@ -5,7 +5,7 @@ anchor); signatures declare `evasion`; the gate prints the ratio.
 
 Scope:
   raqib/rules/engine.py, raqib/rules/silence.py, raqib/rules/catalog/, raqib/watch.py (kind in
-  findings only), tests/, tools/gate.py, docs/specs/ADR-0002-rule-kinds.md, docs/review/
+  findings only), raqib/report.py, raqib/ui.py, tests/, tools/gate.py, docs/specs/ADR-0002-rule-kinds.md, docs/review/
 
 Exit criteria:
 - E1 Loader: `kind` required, one of the three; `evasion` (non-empty list
