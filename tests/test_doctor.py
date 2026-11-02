@@ -7,6 +7,7 @@ import json
 import os
 import stat
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -291,8 +292,10 @@ def test_e2_real_version_query_gets_no_inherited_variables(tmp_path, home):
     """The real runner: shutil.which on PATH, the absolute path run with
     CLAUDE_ENV only, so a variable of the caller does not reach it."""
     bin_dir = tmp_path / "bin"
-    fake_claude(bin_dir, 'echo "9.9.9 (Claude Code) probe=${RAQIB_DOCTOR_PROBE:-none} cwd=$(pwd)"',
-                "echo 9.9.9 (Claude Code) probe=%RAQIB_DOCTOR_PROBE% cwd=%CD%")
+    # The cwd's name only: the version line is cut at VERSION_MAX, and a Windows temp path is long.
+    fake_claude(bin_dir, 'echo "9.9.9 (Claude Code) probe=${RAQIB_DOCTOR_PROBE:-none} cwd=$(basename "$PWD")"',
+                'for %%I in ("%CD%") do set "RQ_CWD=%%~nxI"\r\n'
+                "echo 9.9.9 (Claude Code) probe=%RAQIB_DOCTOR_PROBE% cwd=%RQ_CWD%")
     proj = make_project(tmp_path)
     environ = dict(os.environ, PATH=os.pathsep.join([str(proj), str(bin_dir), os.environ.get("PATH", "")]),
                    RAQIB_DOCTOR_PROBE="leaked")
@@ -301,8 +304,9 @@ def test_e2_real_version_query_gets_no_inherited_variables(tmp_path, home):
     line = next(x for x in out.getvalue().splitlines() if x[8:17].strip() == "claude")
     assert line.startswith("OK      claude   9.9.9 (Claude Code) probe=")
     assert "leaked" not in line and str(bin_dir) in line
-    cwd = line.split(" cwd=", 1)[1].split(" at ")[0]
-    assert os.path.basename(cwd).startswith("raqib-doctor-") and not os.path.exists(cwd)   # G-4
+    name = line.split(" cwd=", 1)[1].split(" at ")[0]
+    assert name.startswith("raqib-doctor-")                                              # G-4
+    assert not os.path.exists(os.path.join(tempfile.gettempdir(), name))                # removed afterwards
 
 
 @pytest.mark.skipif(WINDOWS, reason="a sleeping sh script; the Windows path is the same Popen call")
@@ -562,7 +566,7 @@ def test_p7_doctor_prints_the_notes_of_choose_trace(tmp_path, home):
     """An old install's trace inside the project: watch would move it, and
     doctor says so below the trace line, not only the new path."""
     proj = make_project(tmp_path)
-    installed(proj, proj / "raqib.log.jsonl")
+    installed(proj, proj / "raqib.log.jsonl", windows=WINDOWS)   # this host's form: its path rules
     code, text, checks, _ = run(tmp_path, proj, home)
     assert checks["trace"][0] == "OK" and "(watch default, outside the project)" in checks["trace"][1]
     (note,) = notes_of(text)
