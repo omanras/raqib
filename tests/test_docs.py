@@ -30,7 +30,7 @@ def test_readme_counts_the_rules():
 
 
 def test_readme_counts_the_hooks():
-    install = (ROOT / "tools" / "install-hooks.sh").read_text()
+    install = (ROOT / "tools" / "install_hooks.py").read_text(encoding="utf-8")
     events = re.findall(r'^    \("(\w+)", (?:"\*"|None)\),$', install, re.M)
     assert len(events) == 6
     assert "%s Claude Code hooks" % WORDS[len(events)] in README

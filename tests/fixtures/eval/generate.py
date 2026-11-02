@@ -222,7 +222,7 @@ assert [e["label"] for e in EVENTS].count(B) == 25
 assert [e["label"] for e in EVENTS].count(S) == 20
 assert [e["label"] for e in EVENTS].count(D) == 5
 
-with open("tests/fixtures/eval/events.json", "w") as f:
+with open("tests/fixtures/eval/events.json", "w", newline="\n") as f:  # LF on every platform (M5.1)
     f.write('{"version": 1,\n "events": [\n')
     f.write(",\n".join("  " + json.dumps(e, separators=(", ", ": ")) for e in EVENTS))
     f.write("\n]}\n")

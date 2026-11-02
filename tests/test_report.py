@@ -84,6 +84,15 @@ def drift_trace(tmp_path):
     return write_trace(tmp_path / "trace.jsonl", lines), ctx["scope"]
 
 
+class WindowsRootGap(AssertionError):
+    """Raised only by the one assertion seen failing on Windows (CI runs
+    41399793492, 41400665599): without --root, the trace's POSIX paths are not
+    resolved under a Windows tmp_path, so DRIFT-FILES counts 3 files, not 5.
+    M5.1b E6 removes the marker below (ruling Amendment 3, F4/F5)."""
+
+
+@pytest.mark.xfail(os.name == "nt", strict=True, raises=WindowsRootGap,
+                   reason="path rules on Windows paths are M5.1b (ruling Amendment 3, F4/F5)")
 def test_e1_scope_from_option_and_from_handoff(tmp_path):
     trace, scope = drift_trace(tmp_path)
     args = [a for s in scope for a in ("--scope", s)]
@@ -94,7 +103,10 @@ def test_e1_scope_from_option_and_from_handoff(tmp_path):
     assert raqib("rules", trace, "--handoff", handoff, "--root", "/work/example")[1] == text
     assert raqib("rules", trace, *args, "--root", "/work/example")[1] == text
     anchored = [json.loads(x) for x in raqib("rules", trace, "--handoff", handoff)[1].splitlines()]
-    assert anchored[0]["summary"].startswith("5 distinct files")  # paths resolved under tmp_path
+    summary = anchored[0]["summary"]
+    if summary.startswith("3 distinct files"):  # exactly what Windows showed; anything else fails below
+        raise WindowsRootGap(summary)
+    assert summary.startswith("5 distinct files")  # paths resolved under tmp_path
     code, text = raqib("rules", trace)
     assert (code, text) == (3, "")
 

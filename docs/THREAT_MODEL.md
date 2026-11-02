@@ -211,9 +211,21 @@ or file contents. Everything below follows from that, or from the hooks.
 
 ## 7. Platform
 
-Linux and macOS only (ADR-0001 A-6). Capture uses `fcntl` locks and
-`SIGALRM`, and the installer writes a POSIX shell command. Windows is
-unsupported in v0.1.
+Linux, macOS; Windows: capture and installer (path rules in M5.1b, so the
+SCOPE and DRIFT rules do not yet judge Windows paths). Capture locks with
+`fcntl` on POSIX and `msvcrt` on Windows; its deadline is `SIGALRM` on POSIX
+and a timer thread on Windows. The installer writes a POSIX shell command
+on POSIX and, on Windows, a command with no shell syntax that runs a short
+Python launcher (Windows ruling of 2026-11-02, Amendment 2). On Windows a missing
+`python.exe` is a hook error shown by Claude Code, with no `RAQIB-SILENCE:`
+line; it is not a block. Install from the side that runs the agent
+(Windows or WSL), not both.
+
+Known silent gap until M5.1b: SCOPE-CWD-ROOT on a Windows cwd such as
+`C:\` or `C:\Users\<name>` gives no finding and no note, so a session run
+from a drive root or a home directory reads clean, against A3. This is the
+defect M5.1b fixes (ruling of 2026-11-02, Q-5; evidence table in the
+questions file added by STOP commit 37883c0, in docs/review).
 
 ## 8. What would change this model
 

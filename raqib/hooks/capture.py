@@ -2,9 +2,11 @@
 """Raqib capture hook (M0.1, M0.1b, M0.3, M1.2).
 
 Installed as a Claude Code hook for PreToolUse, PostToolUse,
-PostToolUseFailure, SessionStart, SessionEnd and Stop (tools/install-hooks.sh).
+PostToolUseFailure, SessionStart, SessionEnd and Stop (tools/install_hooks.py).
 Reads the hook JSON on stdin and appends one trace line (docs/specs/ADR-0001
-section 3 and Amendment A) to $RAQIB_LOG (default ./raqib.log.jsonl).
+section 3 and Amendment A) to the log: the one argument if given (the Windows
+hook command has no shell to set a variable, M5.1), else $RAQIB_LOG, else
+./raqib.log.jsonl. More than one argument is a capture failure.
 
 Session events (A-3) become a line with phase session_start, session_end or
 stop, tool "-", and no hashes or input_meta. A PostToolUseFailure (A-4) is a
@@ -23,6 +25,11 @@ Invariants:
   SCAN_MAX_CHARS) run before the log lock is taken; the lock wait is capped
   at LOCK_WAIT_SECONDS and the whole capture at DEADLINE_SECONDS, below the
   installed hook timeout, so a slow capture ends in RAQIB-SILENCE, not a kill.
+  Where SIGALRM is missing (Windows) a timer thread keeps the same deadline:
+  the same RAQIB-SILENCE line, then exit 0 (ruling Amendment 2, Q-3).
+- Every append is locked (M5.1 E2): fcntl.flock on POSIX, msvcrt.locking of
+  one byte far beyond EOF on Windows; with neither, capture fails with
+  RAQIB-SILENCE instead of appending without a lock.
 
 output_meta on a post line (M1.2):
 - {"scan": "full", "secret_kinds": [...]}: every string of tool_response (and
@@ -47,6 +54,7 @@ from __future__ import annotations
 
 import base64
 import datetime
+import errno
 import hashlib
 import json
 import os
@@ -54,13 +62,18 @@ import re
 import shlex
 import signal
 import sys
+import threading
 import time
 import urllib.parse
 
 try:
     import fcntl
-except ImportError:  # non-POSIX: append without an inter-process lock
+except ImportError:  # Windows: msvcrt below (M5.1 E2)
     fcntl = None
+try:
+    import msvcrt
+except ImportError:  # POSIX
+    msvcrt = None
 
 DEFAULT_LOG = "raqib.log.jsonl"
 SILENCE = "RAQIB-SILENCE:"
@@ -140,6 +153,11 @@ SCAN_MAX_CHARS = 1 << 20      # characters of one post's output that are scanned
 COMMAND_SCAN_MAX = 1 << 16    # characters of a Bash command read for its head
 LOCK_WAIT_SECONDS = 5.0       # longer: RAQIB-SILENCE instead of waiting for the kill
 DEADLINE_SECONDS = 8          # below the installed hook timeout of 10 s
+# Windows (M5.1 E2): msvcrt.locking locks bytes from the file position, and
+# the lock is mandatory: a reader that does not lock (`raqib report` on a live
+# trace) would fail on locked bytes. Writers lock this one byte instead, far
+# beyond the end of any trace (1 TiB); a lock past EOF is allowed.
+LOCK_OFFSET = 1 << 40
 
 
 class CaptureError(Exception):
@@ -481,48 +499,134 @@ def build_record(payload, log_text):
 
 
 def lock(f, wait=None):
-    """Exclusive lock on f, or CaptureError after `wait` seconds (B4)."""
-    if fcntl is None:
-        return
+    """Exclusive lock on f, or CaptureError after `wait` seconds (B4).
+    fcntl.flock on POSIX, else msvcrt.locking on Windows; with neither,
+    CaptureError: no platform appends without a lock (M5.1 E2)."""
+    if fcntl is not None:
+        attempt = _flock_once
+    elif msvcrt is not None:
+        attempt = _msvcrt_once
+    else:
+        raise CaptureError("no inter-process lock on this platform (no fcntl, no msvcrt)")
     wait = LOCK_WAIT_SECONDS if wait is None else wait
     deadline = time.monotonic() + wait
     delay = 0.005
-    while True:
+    while not attempt(f):
+        if time.monotonic() >= deadline:
+            raise CaptureError("log lock not acquired within %gs" % wait)
+        time.sleep(delay)
+        delay = min(delay * 2, 0.1)
+
+
+def _flock_once(f):
+    try:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except BlockingIOError:
+        return False
+
+
+def _lock_byte(f, mode):
+    """msvcrt.locking(mode) on the one byte at LOCK_OFFSET. The file position
+    is put back, so the read and the append that follow do not move."""
+    fd = f.fileno()
+    pos = os.lseek(fd, 0, os.SEEK_CUR)
+    os.lseek(fd, LOCK_OFFSET, os.SEEK_SET)
+    try:
+        msvcrt.locking(fd, mode, 1)
+    finally:
+        os.lseek(fd, pos, os.SEEK_SET)
+
+
+def _msvcrt_once(f):
+    try:
+        _lock_byte(f, msvcrt.LK_NBLCK)
+        return True
+    except OSError as exc:
+        if exc.errno in (errno.EACCES, errno.EDEADLK):  # another writer holds it
+            return False
+        raise
+
+
+def unlock(f):
+    """Release a Windows lock before the file is closed: Windows frees a lock
+    left at close only in its own time. A flock lock goes with the close."""
+    if fcntl is None and msvcrt is not None:
         try:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return
-        except BlockingIOError:
-            if time.monotonic() >= deadline:
-                raise CaptureError("log lock not acquired within %gs" % wait)
-            time.sleep(delay)
-            delay = min(delay * 2, 0.1)
+            _lock_byte(f, msvcrt.LK_UNLCK)
+        except OSError:
+            pass  # the line is written; closing the file releases the lock too
 
 
 def append(log_path, payload):
     parts = prepare(payload)
     # Read and append under one exclusive lock so concurrent hooks cannot
-    # hand out the same seq. The lock is released when the file is closed.
+    # hand out the same seq.
     with open(log_path, "a+", encoding="utf-8", errors="replace", newline="") as f:
         lock(f)
-        f.seek(0)
-        log_text = f.read()
-        rec = finish(parts, log_text)
-        # A torn last line must not swallow this one.
-        prefix = "\n" if log_text and not log_text.endswith("\n") else ""
-        # The line is built: the deadline must not tear it or report a line
-        # that was written as lost (REDO 2 review B4).
-        if hasattr(signal, "SIGALRM"):
-            signal.alarm(0)
-        f.write(prefix + json.dumps(rec, separators=(",", ":"), ensure_ascii=True) + "\n")
-        f.flush()
+        try:
+            f.seek(0)
+            log_text = f.read()
+            rec = finish(parts, log_text)
+            # A torn last line must not swallow this one.
+            prefix = "\n" if log_text and not log_text.endswith("\n") else ""
+            # The line is built: the deadline must not tear it or report a line
+            # that was written as lost (REDO 2 review B4).
+            cancel_deadline()
+            f.write(prefix + json.dumps(rec, separators=(",", ":"), ensure_ascii=True) + "\n")
+            f.flush()
+        finally:
+            unlock(f)
 
 
 class Deadline(Exception):
     pass
 
 
+def deadline_error():
+    return Deadline("capture did not finish within %ds" % DEADLINE_SECONDS)
+
+
 def on_deadline(signum, frame):
-    raise Deadline("capture did not finish within %ds" % DEADLINE_SECONDS)
+    raise deadline_error()
+
+
+class TimerDeadline:
+    """The deadline where there is no SIGALRM (Windows): a timer thread that,
+    unless cancelled first, writes the RAQIB-SILENCE line and ends the process
+    with status 0, before the hook timeout can kill it silently (A3). Cancel
+    and fire share a lock, so a cancelled deadline never fires mid-write."""
+
+    def __init__(self, seconds, report):
+        self._lock = threading.Lock()
+        self._done = False
+        self._report = report
+        self._timer = threading.Timer(seconds, self._fire)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def _fire(self):
+        with self._lock:
+            if self._done:
+                return
+            self._done = True
+            self._report()
+            os._exit(0)
+
+    def cancel(self):
+        with self._lock:
+            self._done = True
+        self._timer.cancel()
+
+
+_timer_deadline = None  # the running TimerDeadline, if any
+
+
+def cancel_deadline():
+    if hasattr(signal, "SIGALRM"):
+        signal.alarm(0)
+    elif _timer_deadline is not None:
+        _timer_deadline.cancel()
 
 
 def silence(event, log_path, exc):
@@ -536,28 +640,38 @@ def silence(event, log_path, exc):
         pass
 
 
-def main():
-    log_path = os.environ.get("RAQIB_LOG") or DEFAULT_LOG
-    event = "-"
+def main(argv=()):
+    """argv: the command-line arguments (none, or the log path)."""
+    global _timer_deadline
+    log_path = (argv[0] if argv else None) or os.environ.get("RAQIB_LOG") or DEFAULT_LOG
+    seen = {"event": "-"}
     # The hook is killed at its timeout with no chance to report; end first,
-    # with a RAQIB-SILENCE line (B4). SIGALRM exists on Linux and macOS (A-6).
+    # with a RAQIB-SILENCE line (B4). SIGALRM exists on Linux and macOS (A-6);
+    # elsewhere a timer thread does the same.
     alarm = getattr(signal, "SIGALRM", None)
     if alarm is not None:
         signal.signal(alarm, on_deadline)
         signal.alarm(DEADLINE_SECONDS)
+    else:
+        _timer_deadline = TimerDeadline(
+            DEADLINE_SECONDS, lambda: silence(seen["event"], log_path, deadline_error()))
     try:
         payload = json.loads(sys.stdin.buffer.read())
         if isinstance(payload, dict):
-            event = payload.get("hook_event_name", "-")
+            seen["event"] = payload.get("hook_event_name", "-")
+        if len(argv) > 1:
+            raise CaptureError("expected at most one argument (the log), got %d" % len(argv))
         validate(payload)
         append(log_path, payload)
     except Exception as exc:
-        silence(event, log_path, exc)
+        # The deadline goes first, so it cannot add a second line (review F12).
+        cancel_deadline()
+        silence(seen["event"], log_path, exc)
     finally:
-        if alarm is not None:
-            signal.alarm(0)
+        cancel_deadline()
+        _timer_deadline = None
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
