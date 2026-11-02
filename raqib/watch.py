@@ -1,7 +1,7 @@
 """raqib watch (M6.1, ADR-0005 decision 1, Amendments A and B): one command
 watches a project.
 
-`raqib watch [PROJECT]` installs the capture hooks with tools/install_hooks.py
+`raqib watch [PROJECT]` installs the capture hooks with raqib/install.py
 (idempotent; its lines are printed), tails the trace by polling every
 POLL_SECONDS, judges what arrives, keeps the findings, the live silence
 windows and the holes in memory and in <trace>.watch.json, serves the
@@ -64,7 +64,6 @@ from __future__ import annotations
 
 import datetime
 import hashlib
-import importlib.util
 import json
 import ntpath
 import os
@@ -74,11 +73,9 @@ import threading
 import time
 import traceback
 
-from raqib import notify, report, ui
+from raqib import install, notify, report, ui
 from raqib.rules import silence, trace
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INSTALLER = os.path.join(ROOT, "tools", "install_hooks.py")
 POLL_SECONDS = 0.5
 DEFAULT_PORT = 8765
 HEAD_BYTES = 64
@@ -718,16 +715,9 @@ class Watch:
 # --- the command ------------------------------------------------------------------
 
 def load_installer():
-    """tools/install_hooks.py of this checkout, as a module (its API)."""
-    spec = importlib.util.spec_from_file_location("raqib_install_hooks", INSTALLER)
-    if spec is None or spec.loader is None:
-        raise WatchError("cannot load %s" % INSTALLER)
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except (OSError, SyntaxError) as exc:
-        raise WatchError("cannot load %s: %s" % (INSTALLER, exc))
-    return module
+    """The installer's API: raqib/install.py, imported with the package, never
+    loaded by path from a checkout (W14, M6.3)."""
+    return install
 
 
 def inside(path, root):

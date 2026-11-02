@@ -1,0 +1,40 @@
+# Packaging (M6.3, ADR-0005 Consequences): `pip install .` or `pipx install .`
+# puts a `raqib` command on PATH. The runtime is the standard library only:
+# no dependencies. Not published to PyPI (ADR-0005: no wheel on PyPI until a
+# third reader has run it).
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "raqib"
+dynamic = ["version"]
+description = "An external watcher for AI coding agents: deterministic rules first; a model may raise suspicion, never acquit."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+raqib = "raqib.cli:main"
+
+[project.urls]
+Source = "https://github.com/omanras/raqib"
+
+[tool.setuptools]
+# Listed, not discovered: raqib/hooks has no __init__.py, and its capture.py
+# is the hook every install points at, so it must be in the wheel.
+packages = ["raqib", "raqib.hooks", "raqib.rules", "raqib.suspect"]
+# Only the package data below goes in; nothing is picked up from the tree.
+include-package-data = false
+
+[tool.setuptools.dynamic]
+version = { attr = "raqib.__version__" }
+
+# Located module-relatively (raqib/cli.py CATALOG, raqib/discover.py CATALOG),
+# so they work from a checkout and from an installed wheel alike.
+[tool.setuptools.package-data]
+"raqib" = ["discover/endpoints.yaml"]
+"raqib.rules" = ["catalog/*.yaml"]

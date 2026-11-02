@@ -2,7 +2,9 @@
 # pull request: ubuntu and windows, Python 3.11 and 3.12. On ubuntu it runs
 # through tools/gate.sh, which calls tools/gate.py; on Windows gate.py runs
 # directly. No secret is needed: apart from installing pytest the gate is
-# offline and reads only the tree.
+# offline and reads only the tree. The install job (M6.3) builds and installs
+# the package in a clean venv on both systems and runs it from outside the
+# checkout.
 name: gate
 
 on:
@@ -49,3 +51,106 @@ jobs:
       - name: tools/gate.py
         if: runner.os == 'Windows'
         run: python -I tools/gate.py
+
+  # M6.3 E1: `pip install .` in a clean venv puts `raqib` on PATH. Run from
+  # outside the checkout, the installed raqib reads its catalog and
+  # endpoints.yaml from the venv, never from the checkout; the checkout is
+  # used only for the fixtures it is pointed at. pip fetches the build
+  # backend (setuptools); raqib itself has no dependency.
+  install:
+    name: install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: check out without line-ending conversion
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: clean venv, pip install . (Linux)
+        if: runner.os != 'Windows'
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --disable-pip-version-check .
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+      - name: clean venv, pip install . (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m venv "$env:RUNNER_TEMP\venv"
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m pip install --disable-pip-version-check .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$env:RUNNER_TEMP\venv\Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: raqib from the venv, outside the checkout
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          command -v raqib
+          # The raqib imported is the venv's, not the checkout's.
+          python -c "import os, sys, raqib; p = os.path.normcase(os.path.realpath(raqib.__file__)); w = os.path.normcase(os.path.realpath(os.environ['GITHUB_WORKSPACE'])); print(p); sys.exit(p.startswith(w + os.sep))"
+          raqib --help
+          raqib watch --help
+          raqib doctor --help
+          # The installed catalog, measured on the checkout's fixtures.
+          raqib check-rules --fixtures-root "$GITHUB_WORKSPACE"
+          # Without fixtures an installed raqib says so (exit 2).
+          set +e; raqib check-rules 2> nofixtures.txt; code=$?; set -e
+          cat nofixtures.txt; test "$code" -eq 2; grep -F "no rule fixtures in" nofixtures.txt
+          # The installed endpoints.yaml: the inventory names the catalog it read (exit 1: a candidate).
+          set +e; raqib discover --from "$GITHUB_WORKSPACE/tests/fixtures/discover/linux" > discover.txt; code=$?; set -e
+          cat discover.txt; test "$code" -eq 1
+          grep -F "$(python -c 'from raqib import discover; print(discover.CATALOG)')" discover.txt
+          # G-2: the wheel pip builds from the checkout, listed by python -m zipfile -l.
+          python -m pip wheel --disable-pip-version-check --no-deps -w dist "$GITHUB_WORKSPACE"
+          python -m zipfile -l dist/raqib-*.whl > wheel.txt
+          cat wheel.txt
+          # Doctor from the venv (exit 1 here: see the exact MISSING lines below).
+          mkdir -p project
+          set +e; raqib doctor project > doctor.txt 2>&1; code=$?; set -e
+          cat doctor.txt; test "$code" -eq 1
+          python - <<'EOF'
+          import glob, os, shutil, subprocess
+          windows = os.name == "nt"
+          # The wheel holds the capture hook, the 7 catalog YAMLs and endpoints.yaml.
+          names = {line.split()[0] for line in open("wheel.txt", encoding="utf-8").read().splitlines()[1:] if line.strip()}
+          catalog = sorted("raqib/rules/catalog/" + os.path.basename(p) for p in glob.glob(
+              os.path.join(os.environ["GITHUB_WORKSPACE"], "raqib", "rules", "catalog", "*.yaml")))
+          assert len(catalog) == 7, catalog
+          want = set(catalog) | {"raqib/hooks/capture.py", "raqib/discover/endpoints.yaml"}
+          assert want <= names, sorted(want - names)
+          assert sorted(n for n in names if n.startswith("raqib/rules/catalog/")) == catalog, names
+          # Doctor: exactly these MISSING lines on a runner (no claude, no hooks, CI set;
+          # Windows: no Sysmon), and on Windows the trace UNSURE (H-1: not checkable there).
+          lines = open("doctor.txt", encoding="utf-8", errors="replace").read().splitlines()
+          assert not any("Traceback" in line for line in lines), lines
+          missing = {line[8:17].strip(): line[17:] for line in lines if line.startswith("MISSING ")}
+          unsure = {line[8:17].strip(): line[17:] for line in lines if line.startswith("UNSURE ")}
+          expected = ["claude", "hooks", "notifier"] + (["sysmon"] if windows else [])
+          assert sorted(missing) == sorted(expected), missing
+          assert sorted(unsure) == (["trace"] if windows else []), unsure
+          assert missing["claude"] == "not on PATH (install Claude Code; the hooks are Claude Code hooks)", missing
+          assert missing["hooks"].endswith(": missing for all 6 events; `raqib watch` installs this raqib's"), missing
+          assert missing["notifier"] == "off (CI is set: no notification is shown in CI)", missing
+          if windows:
+              assert missing["sysmon"].startswith("no event channel Microsoft-Windows-Sysmon/Operational"), missing
+              assert unsure["trace"].endswith("; not checked (os.access cannot tell on Windows)"), unsure
+          assert lines[-1] == "raqib doctor: %d MISSING, %d UNSURE" % (len(expected), len(unsure)), lines[-1]
+          # The console script with output its console cannot encode (a non-cp1252
+          # character in the project's name): escaped, no crash.
+          name = "proj-" + chr(0x631)
+          os.makedirs(name, exist_ok=True)
+          env = dict(os.environ, PYTHONIOENCODING="cp1252" if windows else "ascii")
+          proc = subprocess.run([shutil.which("raqib"), "doctor", name], capture_output=True, env=env, timeout=120)
+          print(proc.stdout.decode("ascii", "replace"))
+          assert proc.returncode == 1 and b"Traceback" not in proc.stderr, proc
+          assert b"proj-\\u0631" in proc.stdout, proc.stdout
+          print("install checks: OK")
+          EOF

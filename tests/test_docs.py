@@ -30,7 +30,7 @@ def test_readme_counts_the_rules():
 
 
 def test_readme_counts_the_hooks():
-    install = (ROOT / "tools" / "install_hooks.py").read_text(encoding="utf-8")
+    install = (ROOT / "raqib" / "install.py").read_text(encoding="utf-8")  # M6.3: the installer's home
     events = re.findall(r'^    \("(\w+)", (?:"\*"|None)\),$', install, re.M)
     assert len(events) == 6
     assert "%s Claude Code hooks" % WORDS[len(events)] in README
@@ -51,3 +51,64 @@ def test_threat_model_citations_name_review_files():
     review = {p.name for p in (ROOT / "docs" / "review").glob("*.md")}
     for task in sorted(set(re.findall(r"\b(M\d\.\d)\b", THREAT))):
         assert any(name.startswith("2026-10-16-%s" % task) for name in review), task
+
+
+def section(title):
+    return README.split("## %s\n" % title, 1)[1].split("\n## ", 1)[0]
+
+
+def test_m63_e3_first_screen_is_install_and_watch():
+    """M6.3 E3: the first screen is the install and `raqib watch`; the rest
+    is below; the old quickstart is kept as manual steps; no stale branch."""
+    headings = re.findall(r"^## (.+)$", README, re.M)
+    assert headings[:3] == ["Install and watch", "Watch a project", "Doctor"]
+    first_screen = README.split("\n## Doctor\n", 1)[0]
+    assert len(first_screen.splitlines()) <= 25
+    block = section("Install and watch").split("```bash\n", 1)[1].split("```", 1)[0].splitlines()
+    assert [line.split("#")[0].strip() for line in block] == [
+        "git clone https://github.com/omanras/raqib ~/raqib", "pipx install ~/raqib",
+        "raqib doctor ~/my-project", "raqib watch ~/my-project"]
+    assert "pip install ~/raqib" in block[1] and "Python %d.%d or newer" % (3, 11) in section("Install and watch")
+    assert "raqib watch /path/to/project` installs the hooks" in section("Watch a project")
+    manual = section("Manual steps")
+    for step in ("~/raqib/tools/gate.sh", "~/raqib/tools/install-hooks.sh /path/to/project",
+                 "python3 -m raqib report /path/to/project/raqib.log.jsonl --scope ."):
+        assert step in manual, step
+    assert "claude/v0.1" not in README and "--branch" not in README
+    assert headings.index("Manual steps") > headings.index("How it works")
+    # G-7: the Windows path-rules caveat is on the first screen.
+    assert ("On Windows the rules place POSIX paths only until M5.1b: a scope with a drive path is bad-context,"
+            " so the scope rules do not run there.") in section("Install and watch").splitlines()
+
+
+def test_g1_readme_says_what_a_moved_package_does_per_platform():
+    """Amendment G-1 (P1): POSIX, the hook wrapper prints RAQIB-SILENCE;
+    Windows, a hook error from Claude Code and no line."""
+    doctor = " ".join(section("Doctor").split())
+    assert ("If the installed package moves on Linux or macOS, the hook command's own `|| echo` prints one"
+            " `RAQIB-SILENCE:` line, because `capture.py` is gone.") in doctor
+    assert ("If the venv moves on Windows, the hook names its `python.exe` by path, so Claude Code shows a hook"
+            " error and no `RAQIB-SILENCE:` line is printed.") in doctor
+    assert "capture prints `RAQIB-SILENCE:`" not in doctor
+    assert ("A check that cannot be made on this host is UNSURE, counted apart and never a failure: today the"
+            ' Windows trace line, which says "not checked"') in doctor   # H-1
+
+
+def test_g6_readme_and_help_say_where_eval_events_come_from():
+    from raqib import cli
+    source = "a checkout's tests/fixtures/eval/events.json or --events FILE"
+    assert cli.EVENTS_SOURCE == source
+    assert source + " (an installed raqib has none and exits 2)" in section("Commands")
+
+
+def test_m63_e3_readme_commands_are_the_installed_ones():
+    commands = section("Commands")
+    rows = [line for line in commands.splitlines() if line.startswith("| `")]
+    assert rows and all(line.startswith("| `raqib ") for line in rows)
+    for name in ("watch", "doctor", "report", "rules", "ui", "check-rules", "suspect", "eval"):
+        assert any(line.startswith("| `raqib %s" % name) for line in rows), name
+    assert "--fixtures-root" in commands and "`python3 -m raqib COMMAND`" in commands
+    doctor = " ".join(section("Doctor").split())
+    for phrase in ("OK, MISSING or UNSURE", "exit 1", "installed; foreign", "or missing", "Sysmon on Windows",
+                   "read-only", "`claude --version`", "absolute path"):
+        assert phrase in doctor, phrase

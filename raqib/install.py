@@ -1,0 +1,470 @@
+"""The Raqib installer (M0.3, M5.1; moved into the package in M6.3, W14).
+
+Writes or merges six hook entries (ADR-0001 Amendment A-4: PreToolUse,
+PostToolUse, PostToolUseFailure, SessionStart, SessionEnd, Stop) into
+<watched-project>/.claude/settings.json, each running raqib/hooks/capture.py
+of this raqib: the checkout's when tools/install_hooks.py runs it, the
+installed package's when `raqib watch` imports it (never a path into a
+checkout, W14). Other settings and hooks are preserved; the file is only
+rewritten when something changes, keeping its mode (and following a symlink).
+
+The command is tools/install_hooks.py (a thin wrapper over main()):
+  python3 tools/install_hooks.py [--log PATH] <watched-project>
+
+The trace goes to --log PATH, else to the trace an earlier install chose,
+else to <watched-project>/raqib.log.jsonl (an absolute path, so a `cd` by the
+agent cannot split the trace).
+
+The hook command depends on the platform:
+- POSIX: `RAQIB_HOOK=capture RAQIB_LOG=<log> python3 -I <capture> || echo
+  ...`. It can never block the agent: if python3 or capture.py is missing,
+  or capture fails to start, it prints one RAQIB-SILENCE: line to stderr and
+  exits 0 (never 2, which Claude Code treats as "block").
+- Windows (ruling Amendment 2, P3): `"<python.exe>" -I -c "<LAUNCHER>"
+  "<capture.py>" "<log>"`. No shell syntax: every word but -I and -c is in
+  double quotes, paths with forward slashes, and LAUNCHER holds nothing a
+  shell expands, so cmd.exe, a POSIX shell and a direct exec read the same
+  arguments. LAUNCHER runs capture.py with the log as its argument; if
+  capture.py is missing it prints one RAQIB-SILENCE: line and exits 1, never
+  2 (Python's own status for a missing script, which Claude Code treats as
+  "block"). A path that holds a character some shell expands inside double
+  quotes (" % $ ` !) or a control character is refused.
+
+Exit: 0 installed; 1 settings unreadable or unwritable (left untouched);
+      2 usage; 3 installed, but disableAllHooks is set, so nothing will run.
+
+Two things are parameters, not globals of this module: `windows` (None: this
+platform, WINDOWS) picks the command form and the path rules, and `root`
+(None: PACKAGE_ROOT, the directory that holds this raqib package) is the
+directory whose raqib/hooks/capture.py the hooks run. tools/install_hooks.py
+passes its own checkout, as the shell named it, and its own WINDOWS.
+
+API (M6.1, for `raqib watch`): install_project(project, log=None, ...)
+installs as the command does, prints the same lines to `out`, and returns
+{"code", "trace", "trace_source", "settings", "changed", "events"};
+installed_traces(project) lists the traces existing Raqib entries write
+to. Both raise Exit where the command would exit with an error. For
+`raqib doctor` (M6.3): capture_path(), hook_command(), read_settings(),
+raqib_entries() and hooks_disabled(), which read and never write.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shlex
+import sys
+import tempfile
+
+WINDOWS = os.name == "nt"
+# The directory that holds this raqib package: a checkout, or site-packages
+# when raqib is installed. Its raqib/hooks/capture.py is the default capture.
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+USAGE = "usage: tools/install_hooks.py [--log PATH] <watched-project>"
+MARK = "RAQIB_HOOK=capture"
+# Entries written before the marker existed: `[RAQIB_LOG=x ]python3 <path>`,
+# where x and <path> may be shell-quoted.
+LEGACY_TAIL = "raqib/hooks/capture.py"
+# (event, matcher): tool events match every tool; session events take none.
+EVENTS = [
+    ("PreToolUse", "*"),
+    ("PostToolUse", "*"),
+    ("PostToolUseFailure", "*"),
+    ("SessionStart", None),
+    ("SessionEnd", None),
+    ("Stop", None),
+]
+TIMEOUT = 10  # seconds; a slow capture must not hold the agent up
+# Amendment 2 (P3): the -c program of the Windows command. sys.argv is
+# ["-c", capture, log]; capture.py then sees [capture, log], as if run itself.
+LAUNCHER = ("import os,runpy,sys;p=sys.argv[1];os.path.isfile(p) or sys.exit("
+            "'RAQIB-SILENCE: capture hook failed, missing '+p);sys.argv[:]=sys.argv[1:];"
+            "runpy.run_path(p,run_name='__main__')")
+# The Windows form, as written by windows_command(). Any -c program and no
+# log word are recognised too, so an older or hand-made entry is replaced.
+WINDOWS_FORM = re.compile(r'\s*"([^"]+)"\s+-I(?:\s+-c\s+"[^"]*")?\s+"([^"]+)"(?:\s+"([^"]*)")?\s*\Z')
+# Expanded inside double quotes by cmd.exe (% !) or a POSIX shell ($ ` ").
+WINDOWS_UNSAFE = re.compile(r'["%$`!\x00-\x1f\x7f]')
+
+
+class Exit(Exception):
+    def __init__(self, code, message=None):
+        Exception.__init__(self, message)
+        self.code = code
+        self.message = message
+
+
+def _windows(windows):
+    return WINDOWS if windows is None else windows
+
+
+def fail(msg):
+    raise Exit(1, "install-hooks: " + msg)
+
+
+def usage():
+    raise Exit(2, USAGE)
+
+
+def strict_object(pairs):
+    seen = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError("duplicate key %r" % key)
+        seen[key] = value
+    return seen
+
+
+def reject_constant(name):
+    raise ValueError("non-standard JSON constant %s" % name)
+
+
+def is_legacy(command):
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return False
+    if words and words[0].startswith("RAQIB_LOG="):
+        words = words[1:]
+    return (len(words) == 2 and words[0] == "python3"
+            and (words[1] == LEGACY_TAIL or words[1].endswith("/" + LEGACY_TAIL)))
+
+
+def windows_words(command):
+    """(interpreter, capture, log or None) of a Windows-form Raqib command, else None."""
+    match = WINDOWS_FORM.match(command)
+    if match is None:
+        return None
+    capture = match.group(2).replace("\\", "/")
+    if capture != LEGACY_TAIL and not capture.endswith("/" + LEGACY_TAIL):
+        return None
+    return match.group(1), match.group(2), match.group(3) or None
+
+
+def is_raqib(hook):
+    if not isinstance(hook, dict):
+        return False
+    command = str(hook.get("command", ""))
+    return command.startswith(MARK + " ") or is_legacy(command) or windows_words(command) is not None
+
+
+def log_of(hook):
+    command = str(hook.get("command", ""))
+    words = windows_words(command)
+    if words is not None:
+        return words[2]
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return None
+    for word in words:
+        if word.startswith("RAQIB_LOG="):
+            return word[len("RAQIB_LOG="):]
+        if not re.match(r"[A-Za-z_][A-Za-z0-9_]*=", word):
+            return None
+    return None
+
+
+def windows_word(path):
+    word = path.replace("\\", "/")
+    bad = WINDOWS_UNSAFE.search(word)
+    if bad:
+        raise Exit(2, "install-hooks: %s holds %r, which a shell may expand inside a Windows hook"
+                      " command; move it to a path without it" % (path, bad.group(0)))
+    return word
+
+
+def posix_command(log, capture):
+    return "%s RAQIB_LOG=%s python3 -I %s || echo 'RAQIB-SILENCE: capture hook failed, exit' \"$?\" %s >&2" % (
+        MARK, shlex.quote(log), shlex.quote(capture), shlex.quote(capture))
+
+
+def windows_command(log, capture, interpreter):
+    """Amendment 2 (P3): interpreter, -I, the launcher and the two paths,
+    quoted, no shell syntax (see the module docstring)."""
+    return '"%s" -I -c "%s" "%s" "%s"' % (windows_word(interpreter), windows_word(LAUNCHER),
+                                          windows_word(capture), windows_word(log))
+
+
+def hook_command(log, capture, windows=None):
+    """The command this raqib writes for one trace and one capture.py: the
+    Windows form with this Python, or the POSIX form. Raises Exit."""
+    if _windows(windows):
+        if not sys.executable:
+            raise Exit(2, "install-hooks: cannot tell which Python runs this; nothing changed")
+        return windows_command(log, capture, sys.executable)
+    return posix_command(log, capture)
+
+
+def logical_cwd(windows=None):
+    """The cwd as the shell sees it ($PWD, like `pwd`), so a project reached
+    through a symlink keeps that path, as the bash installer did; else the
+    physical cwd. Windows has no $PWD of its own."""
+    cwd = os.getcwd()
+    pwd = os.environ.get("PWD", "")
+    if not _windows(windows) and pwd.startswith("/") and os.path.normpath(pwd) == pwd:
+        try:
+            if os.path.samefile(pwd, cwd):
+                return pwd
+        except OSError:
+            pass
+    return cwd
+
+
+def absolute(path, windows=None):
+    """Like `cd path && pwd`: absolute, `.` and `..` resolved by name."""
+    return os.path.normpath(os.path.join(logical_cwd(windows), path))
+
+
+def absolute_log(log, windows=None):
+    """Like the bash installer's "$(pwd)/$LOG" for a relative --log: not
+    normalised. os.path.join on Windows also keeps a drive and a root."""
+    if _windows(windows):
+        return os.path.join(logical_cwd(windows), log)
+    return log if log.startswith("/") else logical_cwd(windows) + "/" + log
+
+
+def capture_path(root=None, windows=None):
+    """root/raqib/hooks/capture.py, root made absolute by name (default:
+    PACKAGE_ROOT, so an installed raqib's hooks run its own capture.py)."""
+    root = absolute(PACKAGE_ROOT if root is None else root, windows)
+    return os.path.join(root, "raqib", "hooks", "capture.py")
+
+
+def parse_args(argv):
+    log, log_set, project = "", False, ""
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--log":
+            if i + 1 >= len(argv) or not argv[i + 1]:
+                usage()
+            log, log_set = argv[i + 1], True
+            i += 2
+        elif arg.startswith("-"):
+            usage()
+        else:
+            if project:
+                usage()
+            project = arg
+            i += 1
+    if not project:
+        usage()
+    return project, log, log_set
+
+
+def write_atomically(settings_path, new_text, windows=None):
+    """Replace the settings file (or its symlink's target) through a temp file."""
+    windows = _windows(windows)
+    target = os.path.realpath(settings_path) if os.path.lexists(settings_path) else settings_path
+    target_dir = os.path.dirname(target)
+    tmp = None
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        # Windows has no POSIX modes or umask: the new file takes the
+        # directory's inherited permissions, and chmod would only set the
+        # read-only flag.
+        mode = None
+        if not windows:
+            if os.path.exists(target):
+                mode = os.stat(target).st_mode & 0o7777
+            else:
+                umask = os.umask(0)
+                os.umask(umask)
+                mode = 0o666 & ~umask
+        fd, tmp = tempfile.mkstemp(prefix=".settings.", suffix=".json", dir=target_dir)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(new_text)
+            f.flush()
+            os.fsync(f.fileno())
+        if mode is not None:
+            os.chmod(tmp, mode)
+        os.replace(tmp, target)
+        tmp = None
+    except OSError as exc:
+        fail("cannot write %s (%s); nothing changed" % (target, exc))
+    finally:
+        if tmp is not None and os.path.exists(tmp):
+            os.unlink(tmp)
+    # The rename is durable only once the directory is synced. The file is
+    # already replaced, so a failure here is a warning, not "nothing changed".
+    # Windows cannot open a directory to sync it; there is no such step.
+    if windows:
+        return
+    try:
+        dir_fd = os.open(target_dir, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError as exc:
+        print("install-hooks: warning: %s was written, but its directory could not be synced (%s)"
+              % (target, exc), file=sys.stderr)
+
+
+def raqib_entries(groups):
+    return [(g, h) for g in groups if isinstance(g, dict) and isinstance(g.get("hooks"), list)
+            for h in g["hooks"] if is_raqib(h)]
+
+
+def install(argv, windows=None, root=None):
+    project, log_arg, log_set = parse_args(argv)
+    return install_project(project, log_arg if log_set else None, windows=windows, root=root)["code"]
+
+
+def read_settings(settings_path):
+    """(settings dict, hooks dict) of a settings file, {} when it is missing
+    or empty; fail() (exit 1) when it cannot be read or has the wrong shape."""
+    settings = {}
+    if os.path.lexists(settings_path):
+        try:
+            with open(settings_path, encoding="utf-8") as f:
+                old_text = f.read()
+            if old_text.strip():
+                settings = json.loads(old_text, object_pairs_hook=strict_object,
+                                      parse_constant=reject_constant)
+        except (OSError, ValueError) as exc:
+            fail("cannot read %s (%s); nothing changed" % (settings_path, exc))
+        if not isinstance(settings, dict):
+            fail("%s is not a JSON object; nothing changed" % settings_path)
+
+    hooks = settings.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        fail('"hooks" in %s is not an object; nothing changed' % settings_path)
+    for event, _ in EVENTS:
+        if not isinstance(hooks.get(event, []), list):
+            fail('"hooks.%s" in %s is not a list; nothing changed' % (event, settings_path))
+    return settings, hooks
+
+
+def kept_traces(project, hooks):
+    # A relative RAQIB_LOG was resolved by the hook against the session's
+    # cwd, normally the project.
+    existing = [h for event, _ in EVENTS for _, h in raqib_entries(hooks.get(event, []))]
+    return sorted({os.path.normpath(os.path.join(project, x))
+                   for x in (log_of(h) for h in existing) if x})
+
+
+def installed_traces(project, windows=None):
+    """API (M6.1): the traces the Raqib entries in <project>/.claude/settings.json
+    write to, sorted ([] when there are none). Writes nothing."""
+    if not os.path.isdir(project):
+        raise Exit(2, "install-hooks: not a directory: %s" % project)
+    project = absolute(project, windows)
+    _, hooks = read_settings(os.path.join(project, ".claude", "settings.json"))
+    return kept_traces(project, hooks)
+
+
+def hooks_disabled(settings_dir):
+    """The settings files that set disableAllHooks: the project's settings.json
+    and settings.local.json, and ~/.claude/settings.json. Reads only."""
+    disabled = []
+    for path in (os.path.join(settings_dir, "settings.json"), os.path.join(settings_dir, "settings.local.json"),
+                 os.path.join(os.path.expanduser("~"), ".claude", "settings.json")):
+        try:
+            with open(path, encoding="utf-8") as f:
+                if json.load(f).get("disableAllHooks") is True:
+                    disabled.append(path)
+        except (OSError, ValueError, AttributeError):
+            pass
+    return disabled
+
+
+def install_project(project, log=None, log_source="--log", out=None, err=None, windows=None, root=None):
+    """API (M6.1): install into `project` as the command does (log None: no
+    --log). The lines the command prints go to `out` and `err` (default
+    stdout and stderr). Returns {"code": 0 or 3, "trace", "trace_source",
+    "settings", "changed", "events": [(event, status)]}; raises Exit.
+    windows and root: see the module docstring."""
+    def say(text):
+        print(text, file=out or sys.stdout)
+
+    log_set = log is not None
+    log_arg = log if log_set else ""
+    capture = capture_path(root, windows)
+    if not os.path.isdir(project):
+        raise Exit(2, "install-hooks: not a directory: %s" % project)
+    if not os.path.isfile(capture):
+        raise Exit(2, "install-hooks: missing %s" % capture)
+    project = absolute(project, windows)
+    if log_set:
+        log_arg = absolute_log(log_arg, windows)
+
+    settings_dir = os.path.join(project, ".claude")
+    settings_path = os.path.join(settings_dir, "settings.json")
+    settings, hooks = read_settings(settings_path)
+
+    if log_set:
+        log = log_arg
+    else:
+        kept = kept_traces(project, hooks)
+        if len(kept) > 1:
+            fail("existing Raqib entries write to different traces (%s); pass --log to choose one;"
+                 " nothing changed" % ", ".join(kept))
+        if kept:
+            log, log_source = kept[0], "kept from the existing install"
+        else:
+            log, log_source = os.path.join(project, "raqib.log.jsonl"), "default"
+
+    command = hook_command(log, capture, windows)
+
+    report = []
+    replaced = []
+    for event, matcher in EVENTS:
+        groups = hooks.setdefault(event, [])
+        ours = raqib_entries(groups)
+        if len(ours) == 1:
+            group, hook = ours[0]
+            if (group.get("matcher") == matcher and len(group["hooks"]) == 1
+                    and hook.get("type") == "command" and hook.get("command") == command):
+                report.append((event, "unchanged"))
+                continue
+        kept_groups = []
+        for g in groups:
+            if isinstance(g, dict) and isinstance(g.get("hooks"), list) and any(is_raqib(h) for h in g["hooks"]):
+                rest = [h for h in g["hooks"] if not is_raqib(h)]
+                if rest:
+                    kept_groups.append(dict(g, hooks=rest))
+                continue
+            kept_groups.append(g)
+        # Keep keys a user added to our entry (e.g. their own timeout).
+        hook = {"timeout": TIMEOUT, **ours[0][1]} if ours else {"timeout": TIMEOUT}
+        hook.update({"type": "command", "command": command})
+        group = {"hooks": [hook]} if matcher is None else {"matcher": matcher, "hooks": [hook]}
+        kept_groups.append(group)
+        hooks[event] = kept_groups
+        replaced += [h.get("command") for _, h in ours if h.get("command") != command]
+        report.append((event, "updated" if ours else "added"))
+
+    changed = any(status != "unchanged" for _, status in report)
+    if changed:
+        write_atomically(settings_path, json.dumps(settings, indent=2, ensure_ascii=False) + "\n", windows)
+
+    say("install-hooks: %s%s" % (settings_path, "" if changed else " (file not rewritten)"))
+    for event, status in report:
+        say("  %-19s %s" % (event, status))
+    for old in sorted(set(replaced)):
+        say("  replaced: %s" % old)
+    say("  trace: %s (%s)" % (log, log_source))
+    say("  command: %s" % command)
+    if os.path.dirname(log) == project:
+        say("  note: the trace is inside the project; add raqib.log.jsonl to its .gitignore,"
+            " or use --log to keep it out of the agent's working tree")
+    result = {"code": 0, "trace": log, "trace_source": log_source, "settings": settings_path,
+              "changed": changed, "events": report}
+
+    disabled = hooks_disabled(settings_dir)
+    if disabled:
+        print("RAQIB-SILENCE: disableAllHooks is true in %s; capture will not run"
+              % ", ".join(disabled), file=err or sys.stderr)
+        result["code"] = 3
+    return result
+
+
+def main(argv=None, windows=None, root=None):
+    try:
+        return install(sys.argv[1:] if argv is None else argv, windows, root)
+    except Exit as exc:
+        if exc.message:
+            print(exc.message, file=sys.stderr)
+        return exc.code
