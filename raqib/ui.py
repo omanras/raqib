@@ -132,8 +132,13 @@ def _timeline(numbered, problems, report, gap_seconds):
     return rows
 
 
-def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS):
-    """The whole page as a string."""
+BAND_LEVELS = ("alarm", "incomplete", "clean")
+
+
+def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS, band=None):
+    """The whole page as a string. band (M6.1, the hook `raqib watch` serves
+    through): [(level, text)] shown under the result, level one of
+    BAND_LEVELS (anything else is drawn as incomplete); None: no band."""
     lines_by_seq = {}
     for number, rec in numbered:
         lines_by_seq.setdefault((rec["session_id"], rec["seq"]), []).append(number)
@@ -149,6 +154,10 @@ def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS):
                   _text(report["findings_source"])))
     out.append('<p><span class="badge %s">%s</span> <span class="meta">exit %d</span></p>'
                % (result, RESULT_TEXT[result], report["exit"]))
+    if band:
+        out.append('<p class="band">%s</p>' % " ".join(
+            '<span class="badge %s">%s</span>' % (level if level in BAND_LEVELS else "incomplete", _text(text))
+            for level, text in band))
 
     out.append("<h2>Alarms (%d)</h2>" % len(report["alarms"]))
     if report["alarms"]:

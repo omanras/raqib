@@ -74,6 +74,72 @@ shown.
   README rewritten around `watch`).
 Order: M6.1, M6.3, M6.2. The Phase 5 items M5.0b/M5.1b/M5.2 resume after.
 
+## Amendment A (2026-11-02) - as built in M6.1 (builder's record, not a ruling)
+What M6.1 built, so the review can hold the tree to it. The open design
+points are questions in `docs/review/2026-11-02-M6.1-questions.md`, not
+settled here.
+- A-1 `raqib watch [PROJECT] [--log PATH] [--no-open] [--no-notify]
+  [--port N]` (`raqib/watch.py`, `raqib/cli.py`). The trace is --log, else
+  the one trace an earlier install chose if it is outside the project,
+  else `~/.raqib/traces/<name>-<sha256(project)[:12]>/raqib.log.jsonl`.
+  A --log inside the project is refused (exit 2); an earlier install's
+  trace inside the project is replaced by the default (the old file is
+  left as it is, and a note says so). The hooks go in through
+  `install_project()` of `tools/install_hooks.py`, a new API beside the
+  unchanged command; its lines are printed. disableAllHooks (installer
+  exit 3) is a capture failure.
+- A-2 Incremental: every 0.5 s the bytes appended since the last poll are
+  read; complete lines are parsed by the batch parser with line numbers
+  continued, so the records equal `trace.read_numbered` of the final file.
+  When lines arrived, the silence rules and the catalog are re-run on the
+  whole growing record list (they are pure functions over a list) and each
+  finding is keyed - (epoch, rule, session) for the aggregate rules and
+  SILENCE-OPEN, (epoch, rule, session, cited_seq) for the others - so a key
+  is reported and notified once. SILENCE-OPEN, and SILENCE-HALF on a seq
+  with more pres than posts, are pending: not notified, dropped when later
+  lines take them back, marked "pending at exit" otherwise.
+- A-3 Silence: no new line for RAQIB_GAP_SECONDS (wall clock, from the last
+  line seen or from the start of the watch) opens a live window
+  (SILENCE-LIVE open); the next non-blank line closes it (SILENCE-LIVE
+  closed). A trace line starting with RAQIB-SILENCE is a capture failure
+  (RAQIB-SILENCE). A trace that shrank, was replaced (device and inode),
+  was rewritten in its first 64 bytes, was removed, or cannot be read is a
+  hole (TRACE-HOLE); after the first four, reading starts again at line 1
+  in a new epoch, and settled findings of the old content stay as
+  "finding-before-hole" alarms. Windows and holes are alarms of the final
+  report.
+- A-4 Notifications (`raqib/notify.py`): new settled findings of severity
+  high, both edges of a live window, capture failures and trace holes.
+  Text: "Raqib: <event>" and "project <name>, <seq or line>", in the
+  alphabet [A-Za-z0-9 ._,:+()-], at most 120 characters. Windows: the
+  PowerShell of %SystemRoot%\System32\WindowsPowerShell\v1.0 with
+  -NoProfile -NonInteractive -ExecutionPolicy Bypass -File toast.ps1
+  TEXTFILE, the WinRT ToastNotificationManager, PowerShell's AppUserModelID.
+  macOS: /usr/bin/osascript notify.applescript TEXTFILE. Elsewhere:
+  /usr/bin/notify-send or /bin/notify-send through /bin/sh -c and a
+  constant script that reads TEXTFILE with `read`; with none of these, the
+  bell and a line on stderr. The scripts are constant and the text is only
+  in TEXTFILE; programs get a minimal environment and are run by absolute
+  path through one `subprocess.Popen` call. Delivery is synchronous, with
+  a 10 s limit; a program that does not exit in time is left running and
+  recorded, never signalled. A failed delivery is a `notify-failed` hole
+  (watch.json, the page band, the final report) and falls back to the
+  bell. One per event id per 60 s; the rest are folded into a count sent
+  after the minute, or carried by the next one. Off when CI is set or with
+  --no-notify, and shown as off.
+- A-5 `<trace>.watch.json` (written atomically when something changed):
+  project, trace, pid, url, times, gap, status (watching / silent /
+  finished), epoch, line and record counts, last line, every finding entry
+  (key, state, notice, first_seen, present), every silence window, every
+  hole, and the notifier's state and counts.
+- A-6 The page: `ui.render(..., band=[(level, text)])`, the serve hook; the
+  page without a band is unchanged byte for byte, and the CSP and the
+  no-script rule are unchanged. The band says watching or SILENT for N s,
+  the notifier state, and the number of holes. No refresh yet (M6.2).
+- A-7 The page is opened once: /usr/bin/xdg-open or /bin/xdg-open (PATH set
+  to /usr/local/bin:/usr/bin:/bin), /usr/bin/open, or
+  %SystemRoot%\explorer.exe, without waiting; not under CI or --no-open.
+
 ## Amendment B (the Table, 2026-11-02) - rulings on review 2026-11-02-M6.1.md
 - B-1 (W1) A pending finding (SILENCE-HALF, SILENCE-OPEN) is settled - and
   knocks if high - when its session shows a later stop or session_end, or
@@ -109,6 +175,50 @@ Order: M6.1, M6.3, M6.2. The Phase 5 items M5.0b/M5.1b/M5.2 resume after.
   highs now knock on settle by B-1; TRACE-HOLE knocking accepted;
   whole-list re-run accepted until cost shows in the field).
 
+## Amendment C (2026-11-02) - the M6.1 REDO as built (builder's record, not a ruling)
+What the REDO on Amendment B built; Amendment A stands where this does not
+change it. Recorded points are in `docs/review/2026-11-02-M6.1-questions.md`.
+- C-1 (B-1) A pending SILENCE-HALF settles when a stop or session_end of its
+  session comes after its first pre; every pending finding settles when the
+  live silence window opens. Settling knocks if the finding is high and not
+  history; the entry records `settled_by`. Tested on the blocked-calls
+  fixture: seq 2 knocks, seq 3 is folded and sent after the minute.
+- C-2 (B-2) The key is (epoch, rule id, session, cited seqs, summary). The
+  epoch is kept so content read after a reset is never merged with content
+  that is gone. An aggregate finding or a SILENCE-OPEN whose key changed as
+  it grew takes over the entry of the same rule and session whose key is
+  gone (`grown` counts it): it is not knocked again.
+- C-3 (B-3) The trace's size at the start is the history boundary. A line
+  that ends within it is history, and a finding is history when every line
+  of every seq it cites is. History is judged, shown and counted in one
+  printed line, but never notified: not its findings, its RAQIB-SILENCE
+  lines or its parse problems.
+- C-4 (B-4) Each live line that does not parse knocks once as TRACE-HOLE.
+  watch.json is written on every poll, with `heartbeat` and
+  `stale_after_seconds` (30). Any exception in the loop ends in
+  finish(status="crashed", error), a `watch-crashed` alarm and the final
+  report. The band reads a heartbeat older than 30 s as "CRASHED or stuck".
+  A page that cannot get the state within 15 s is answered with the error
+  page ("not responding"), not left waiting.
+- C-5 (B-5) toast.ps1 and notify.applescript are hashed and checked against
+  SCRIPT_SHA256 (the sha256 of their in-code text) right before every use.
+  A script that differs or is gone is rewritten, and that is a
+  `script-changed` hole. The notify-send wrapper stays inline (`sh -c`
+  constant): it never exists as a file. Temp files go under
+  ~/.raqib/tmp/raqib-notify-*; a temp root that is not absolute fails the
+  delivery (a hole). A SystemRoot that is unset, not a directory, or not
+  named Windows turns notifications off with a `notify-off` hole.
+- C-6 (B-6) `<project>/HANDOFF.md`, when present, goes through the same
+  `_context()` as `report --handoff`, read once at the start. The scope is
+  printed and kept in watch.json. A clean watch of such a project ends
+  CLEAN (exit 0, POSIX). On Windows the HANDOFF's root is a drive path,
+  which the engine reports as bad-context until M5.1b.
+- C-7 (B-7) A requested port (--port N, or 8765) that cannot be bound gives
+  a free port, a `WARNING:` line, a band item, `port.warning` in watch.json
+  and a line in the final report.
+- C-8 (B-8) README lines reworded ("knock once settled", "by default", the
+  history line).
+
 ## Amendment D (the Table, 2026-11-03) - rulings on review 2026-11-03-M6.1-redo.md
 - D-1 (X1) History is a property of epoch 0 only. `_restart` clears
   history_line, history_bytes and problem_notices; in any later epoch
@@ -138,3 +248,33 @@ Order: M6.1, M6.3, M6.2. The Phase 5 items M5.0b/M5.1b/M5.2 resume after.
   X2 were introduced by the REDO, not present at 9ae221c. A REDO must
   carry a test for the behaviour it adds, not only for the finding it
   closes; the Table will ask for that line in every REDO message.
+
+## Amendment E (2026-11-03) - the M6.1 REDO 2 as built (builder's record, not a ruling)
+What REDO 2 built on Amendment D; Amendments A and C stand where this does
+not change them. The starting gate, the tests by name and the recorded
+points (R-8, R-9) are in `docs/review/2026-11-02-M6.1-questions.md`.
+- E-1 (D-1) `_restart` sets history_line and history_bytes to 0 and empties
+  the problem notices: after a reset every line is live.
+- E-2 (D-2) `_grown` takes over only an entry that is pending and was present
+  until this evaluation. A settled entry whose key is gone keeps its place,
+  with present false; a new key after it is a new finding. For SILENCE-OPEN
+  that means a new turn's finding. For the aggregate rules, which settle
+  when first seen, every growth is a new finding (R-8).
+- E-3 (D-3) `notify.windows_root()` is the one SystemRoot check (an
+  existing directory named Windows); `Notifier` and `open_page` both use it.
+  The notify-send wrapper stays inline, as ruled.
+- E-4 (D-4) Every knock carries a token, (container, key), naming the
+  field that holds its notice. When a fold is delivered, by tick() or by
+  the next notification of its rate-limit id, `on_folds` writes "folded:
+  <status> as N more" into each folded notice. Fold text: "1 more (seq 3)",
+  "N more (first seq 2, last seq 4)".
+- E-5 (D-5) While pending, a finding is history if its cited lines are; when
+  it settles, it is history only if the settling line (a stop or
+  session_end) was there at the start too. A finding settled by the live
+  silence window keeps the history of its cited lines (R-9).
+- E-6 (D-6) `trace_problems` and `holes` carry history, knocked_as and
+  notice. Parse problems knock as TRACE-HOLE under the rate-limit id
+  "TRACE-HOLE (line)"; tail holes keep the id TRACE-HOLE.
+- E-7 (D-7) The start lines go through `_safe`. finish() guards the state
+  write, the report and the summary, and sets final_text and final_exit;
+  `command` prints final_text, or one line if finish itself raises.
