@@ -1,8 +1,9 @@
 """raqib doctor (M6.3, ADR-0005 Consequences): what is missing, in one screen.
 
 `raqib doctor [PROJECT]` (default: the current directory) prints one line
-per check, OK or MISSING, then a summary line, and exits 1 when any line is
-MISSING, else 0:
+per check, OK, MISSING or UNSURE (a check that cannot be made here;
+Amendment H-1), then a summary line ("all OK", or "N MISSING, M UNSURE"),
+and exits 1 when any line is MISSING, else 0:
 - python    this Python is MIN_PYTHON or newer; on POSIX the hooks run
             `python3` from PATH, so python3 must be found on PATH (this
             shell's PATH; Claude Code's may differ), and as an absolute path:
@@ -37,7 +38,7 @@ MISSING, else 0:
             notes are printed below the line. On Windows os.access cannot
             tell (W_OK on a directory always succeeds), and nothing is
             written to find out, so the line says "not checked" and is
-            MISSING, never OK (G-5).
+            UNSURE, never OK (G-5, H-1).
 
 Read-only: doctor writes no file in the project, the home or the trace's
 directory. The only thing it creates is the empty temporary directory
@@ -69,6 +70,9 @@ CLAUDE_ENV_WINDOWS = ("PATH", "PATHEXT", "SystemRoot", "ComSpec", "USERPROFILE",
 SYSMON_CHANNEL = "Microsoft-Windows-Sysmon/Operational"
 SYSMON_KEY = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Channels\\" + SYSMON_CHANNEL
 NOT_CHECKED = "not checked (os.access cannot tell on Windows)"
+# A check's verdict: True (OK), False (MISSING) or UNSURE: it cannot be made here (H-1).
+UNSURE = "UNSURE"
+VERDICTS = {True: "OK", False: "MISSING", UNSURE: "UNSURE"}
 
 
 def _safe(text):
@@ -305,12 +309,13 @@ def check_sysmon(registry):
 def writable(path, windows=False):
     """(True, how) when the trace can be appended to or created, else
     (False, why). Reads only: nothing is created to find out. On Windows
-    os.access cannot tell, so only what is certain without it is said."""
+    os.access cannot tell: what is certain without it is said, and the rest
+    is (UNSURE, "... not checked ...")."""
     if os.path.isdir(path):
         return False, "is a directory"
     if os.path.lexists(path):
         if windows:
-            return False, "exists; " + NOT_CHECKED
+            return UNSURE, "exists; " + NOT_CHECKED
         if os.access(path, os.W_OK):
             return True, "exists and is writable"
         return False, "exists and is not writable"
@@ -323,7 +328,7 @@ def writable(path, windows=False):
     if not os.path.isdir(parent):
         return False, "cannot be created: %s is not a directory" % parent
     if windows:
-        return False, "would be created under %s; %s" % (parent, NOT_CHECKED)
+        return UNSURE, "would be created under %s; %s" % (parent, NOT_CHECKED)
     if not os.access(parent, os.W_OK | os.X_OK):
         return False, "cannot be created: %s is not writable" % parent
     if parent == os.path.dirname(path):
@@ -346,7 +351,7 @@ def check_trace(project, home, windows=False):
 def run(project, out, environ=None, platform=None, which=None, runner=None, version_info=None,
         executable=None, home=None, registry=None, isfile=None, isdir=None):
     """Print the checks for `project` (default: the current directory) to
-    out; 0 when every line is OK, 1 when any is MISSING."""
+    out; 1 when any line is MISSING, else 0 (an UNSURE line does not fail it)."""
     environ = os.environ if environ is None else environ
     platform = platform or sys.platform
     windows = platform == "win32"
@@ -369,9 +374,10 @@ def run(project, out, environ=None, platform=None, which=None, runner=None, vers
     out.write("raqib doctor: raqib %s (%s); project %s\n" % (
         raqib.__version__, _safe(os.path.join(install.PACKAGE_ROOT, "raqib")), _safe(project)))
     for name, (ok, text) in lines:
-        out.write("%-8s%-9s%s\n" % ("OK" if ok else "MISSING", name, _safe(text)))
+        out.write("%-8s%-9s%s\n" % (VERDICTS[ok], name, _safe(text)))
     for note in notes:
         out.write("%17snote: %s\n" % ("", _safe(note)))
-    missing = sum(1 for _, (ok, _) in lines if not ok)
-    out.write("raqib doctor: %s\n" % ("%d MISSING" % missing if missing else "all OK"))
+    missing = sum(1 for _, (ok, _) in lines if ok is False)
+    unsure = sum(1 for _, (ok, _) in lines if ok == UNSURE)
+    out.write("raqib doctor: %s\n" % ("%d MISSING, %d UNSURE" % (missing, unsure) if missing or unsure else "all OK"))
     return 1 if missing else 0

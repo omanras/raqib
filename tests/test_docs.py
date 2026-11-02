@@ -90,7 +90,8 @@ def test_g1_readme_says_what_a_moved_package_does_per_platform():
     assert ("If the venv moves on Windows, the hook names its `python.exe` by path, so Claude Code shows a hook"
             " error and no `RAQIB-SILENCE:` line is printed.") in doctor
     assert "capture prints `RAQIB-SILENCE:`" not in doctor
-    assert 'On Windows the trace line says "not checked" and counts as MISSING' in doctor
+    assert ("A check that cannot be made on this host is UNSURE, counted apart and never a failure: today the"
+            ' Windows trace line, which says "not checked"') in doctor   # H-1
 
 
 def test_g6_readme_and_help_say_where_eval_events_come_from():
@@ -108,6 +109,6 @@ def test_m63_e3_readme_commands_are_the_installed_ones():
         assert any(line.startswith("| `raqib %s" % name) for line in rows), name
     assert "--fixtures-root" in commands and "`python3 -m raqib COMMAND`" in commands
     doctor = " ".join(section("Doctor").split())
-    for phrase in ("OK or MISSING", "exit 1", "installed; foreign", "or missing", "Sysmon on Windows",
+    for phrase in ("OK, MISSING or UNSURE", "exit 1", "installed; foreign", "or missing", "Sysmon on Windows",
                    "read-only", "`claude --version`", "absolute path"):
         assert phrase in doctor, phrase

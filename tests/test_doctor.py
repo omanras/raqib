@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -128,7 +129,7 @@ def test_e2_cli_doctor_runs_the_checks_and_says_missing(tmp_path, home, monkeypa
     code = cli.main(["doctor", str(proj)], out=out)
     lines = out.getvalue().splitlines()
     assert code == 1
-    assert lines[-1].startswith("raqib doctor: ") and lines[-1].endswith(" MISSING")
+    assert re.fullmatch(r"raqib doctor: [1-9][0-9]* MISSING, [0-9]+ UNSURE", lines[-1]), lines[-1]
     assert any(line.startswith("MISSING claude   not on PATH") for line in lines)
     assert cli.main(["doctor", "--help"], out=io.StringIO()) == 0
 
@@ -387,7 +388,8 @@ def test_e2_project_that_is_not_a_directory(tmp_path, home):
 
 def test_e2_windows_form_is_installed_for_a_windows_doctor_and_foreign_for_posix(tmp_path, home):
     """A Windows doctor (run on every host), with an existing trace: all OK
-    but the trace, which os.access cannot check on Windows (G-5)."""
+    but the trace, which os.access cannot check on Windows: UNSURE, and exit
+    0 because nothing is MISSING (G-5, H-1)."""
     proj = make_project(tmp_path)
     trace = tmp_path / "t.jsonl"
     trace.write_text("")
@@ -397,13 +399,15 @@ def test_e2_windows_form_is_installed_for_a_windows_doctor_and_foreign_for_posix
     environ = {"PATH": str(tmp_path / "bin"), "SystemRoot": str(windows)}
     code, text, checks, _ = run(tmp_path, proj, home, environ=environ, platform="win32",
                                 isfile=lambda p: True, registry=lambda key: {"Enabled": 1})
-    assert code == 1 and text.splitlines()[-1] == "raqib doctor: 1 MISSING", text
-    assert [name for name, (verdict, _) in checks.items() if verdict == "MISSING"] == ["trace"]
+    assert code == 0 and text.splitlines()[-1] == "raqib doctor: 0 MISSING, 1 UNSURE", text
+    assert {name: verdict for name, (verdict, _) in checks.items() if verdict != "OK"} == {"trace": "UNSURE"}
     assert checks["hooks"] == ("OK", "%s: installed for all 6 events (trace %s)" % (
         proj / ".claude" / "settings.json", trace))
     assert checks["notifier"][0] == "OK" and checks["notifier"][1].startswith("windows-toast (")
-    assert checks["trace"] == ("MISSING", "%s (kept from the existing install) exists; not checked (os.access"
-                                          " cannot tell on Windows)" % trace)
+    assert checks["trace"] == ("UNSURE", "%s (kept from the existing install) exists; not checked (os.access"
+                                         " cannot tell on Windows)" % trace)
+    assert ("UNSURE  trace    %s (kept from the existing install) exists; not checked (os.access cannot tell on"
+            " Windows)" % trace) in text.splitlines()
     assert list(checks) == ["python", "claude", "hooks", "notifier", "sysmon", "trace"]
     _, _, checks, _ = run(tmp_path, proj, home)
     assert checks["hooks"][0] == "MISSING" and "foreign for PreToolUse, PostToolUse" in checks["hooks"][1]
@@ -543,11 +547,13 @@ def test_e2_trace_that_watch_cannot_choose_is_missing(tmp_path, home):
 
 
 def test_g5_windows_trace_is_not_checked_never_ok(tmp_path):
+    """G-5 as amended by H-1: what os.access cannot tell is UNSURE, never OK;
+    what is certain without it is still MISSING."""
     existing = tmp_path / "t.jsonl"
     existing.write_text("")
-    assert doctor.writable(str(existing), windows=True) == (False, "exists; " + doctor.NOT_CHECKED)
+    assert doctor.writable(str(existing), windows=True) == (doctor.UNSURE, "exists; " + doctor.NOT_CHECKED)
     assert doctor.writable(str(tmp_path / "new" / "t.jsonl"), windows=True) == (
-        False, "would be created under %s; not checked (os.access cannot tell on Windows)" % tmp_path)
+        doctor.UNSURE, "would be created under %s; not checked (os.access cannot tell on Windows)" % tmp_path)
     # What is certain without os.access is still said.
     assert doctor.writable(str(tmp_path), windows=True) == (False, "is a directory")
     assert doctor.writable(str(existing / "x.jsonl"), windows=True) == (
@@ -555,11 +561,24 @@ def test_g5_windows_trace_is_not_checked_never_ok(tmp_path):
     assert doctor.writable(str(existing), windows=False)[0] is True
 
 
-def test_g5_windows_doctor_trace_line_is_missing(tmp_path, home):
+def test_g5_windows_doctor_trace_line_is_unsure(tmp_path, home):
+    """H-1: the Windows trace line is UNSURE, counted apart; it alone does
+    not make the exit 1, a MISSING line does."""
     proj = make_project(tmp_path)
-    code, _, checks, _ = run(tmp_path, proj, home, platform="win32", registry=lambda key: {"Enabled": 1})
-    assert code == 1 and checks["trace"][0] == "MISSING"
+    code, text, checks, _ = run(tmp_path, proj, home, platform="win32", registry=lambda key: {"Enabled": 1})
+    assert checks["trace"][0] == "UNSURE"
     assert checks["trace"][1].endswith("; not checked (os.access cannot tell on Windows)")
+    # Here the hooks are missing and SystemRoot is not set: those fail it, not the trace.
+    assert code == 1 and sorted(n for n, (v, _) in checks.items() if v == "MISSING") == ["hooks", "notifier"]
+    assert text.splitlines()[-1] == "raqib doctor: 2 MISSING, 1 UNSURE"
+
+
+def test_h1_summary_counts_missing_and_unsure_apart_and_only_missing_fails(tmp_path, home):
+    proj = make_project(tmp_path)
+    code, text, checks, _ = run(tmp_path, proj, home)               # POSIX: no UNSURE line
+    assert code == 1 and text.splitlines()[-1] == "raqib doctor: 1 MISSING, 0 UNSURE"
+    assert "UNSURE" not in {v for v, _ in checks.values()}
+    assert doctor.VERDICTS == {True: "OK", False: "MISSING", doctor.UNSURE: "UNSURE"}
 
 
 def test_p7_doctor_prints_the_notes_of_choose_trace(tmp_path, home):

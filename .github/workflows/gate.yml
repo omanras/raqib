@@ -128,19 +128,21 @@ jobs:
           assert want <= names, sorted(want - names)
           assert sorted(n for n in names if n.startswith("raqib/rules/catalog/")) == catalog, names
           # Doctor: exactly these MISSING lines on a runner (no claude, no hooks, CI set;
-          # Windows: no Sysmon, and the trace cannot be checked there).
+          # Windows: no Sysmon), and on Windows the trace UNSURE (H-1: not checkable there).
           lines = open("doctor.txt", encoding="utf-8", errors="replace").read().splitlines()
           assert not any("Traceback" in line for line in lines), lines
           missing = {line[8:17].strip(): line[17:] for line in lines if line.startswith("MISSING ")}
-          expected = ["claude", "hooks", "notifier"] + (["sysmon", "trace"] if windows else [])
+          unsure = {line[8:17].strip(): line[17:] for line in lines if line.startswith("UNSURE ")}
+          expected = ["claude", "hooks", "notifier"] + (["sysmon"] if windows else [])
           assert sorted(missing) == sorted(expected), missing
+          assert sorted(unsure) == (["trace"] if windows else []), unsure
           assert missing["claude"] == "not on PATH (install Claude Code; the hooks are Claude Code hooks)", missing
           assert missing["hooks"].endswith(": missing for all 6 events; `raqib watch` installs this raqib's"), missing
           assert missing["notifier"] == "off (CI is set: no notification is shown in CI)", missing
           if windows:
               assert missing["sysmon"].startswith("no event channel Microsoft-Windows-Sysmon/Operational"), missing
-              assert missing["trace"].endswith("; not checked (os.access cannot tell on Windows)"), missing
-          assert lines[-1] == "raqib doctor: %d MISSING" % len(expected), lines[-1]
+              assert unsure["trace"].endswith("; not checked (os.access cannot tell on Windows)"), unsure
+          assert lines[-1] == "raqib doctor: %d MISSING, %d UNSURE" % (len(expected), len(unsure)), lines[-1]
           # The console script with output its console cannot encode (a non-cp1252
           # character in the project's name): escaped, no crash.
           name = "proj-" + chr(0x631)

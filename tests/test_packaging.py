@@ -9,6 +9,7 @@ import glob
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -246,7 +247,8 @@ def test_e2_installed_layout_doctor_runs(installed, tmp_path):
     assert proc.returncode == 1, proc.stderr
     lines = proc.stdout.splitlines()
     assert lines[0].startswith("raqib doctor: raqib ") and str(site / "raqib") in lines[0]
-    assert lines[-1].endswith(" MISSING") and "Traceback" not in proc.stderr
+    assert re.fullmatch(r"raqib doctor: [1-9][0-9]* MISSING, [0-9]+ UNSURE", lines[-1]), lines[-1]
+    assert "Traceback" not in proc.stderr
 
 
 # --- check-rules --fixtures-root -----------------------------------------------------------

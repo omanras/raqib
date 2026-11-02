@@ -8,7 +8,7 @@ never acquit.
 ```bash
 git clone https://github.com/omanras/raqib ~/raqib
 pipx install ~/raqib          # or, in a venv: pip install ~/raqib; puts `raqib` on PATH
-raqib doctor ~/my-project     # one line per check, OK or MISSING; exit 1 if anything is missing
+raqib doctor ~/my-project     # one line per check, OK, MISSING or UNSURE; exit 1 if anything is missing
 raqib watch ~/my-project      # then use Claude Code in ~/my-project as usual; Ctrl-C ends the watch
 ```
 You need Python 3.11 or newer and Claude Code. Raqib itself is stdlib only and
@@ -24,8 +24,8 @@ Ctrl-C, or a crash, prints the final report; `<trace>.watch.json` keeps the find
 
 ## Doctor
 `raqib doctor [PROJECT]` says in one screen what `raqib watch` needs and is
-missing: one line per check, OK or MISSING, and exit 1 if any line is
-MISSING. It checks Python (and on Linux and macOS `python3` on PATH, which
+missing: one line per check, OK, MISSING or UNSURE, and exit 1 if any line
+is MISSING. It checks Python (and on Linux and macOS `python3` on PATH, which
 the hooks run), `claude` on PATH and its version, the project's hook
 settings (installed; foreign: a Raqib entry of another checkout or install;
 or missing), the notifier, Sysmon on Windows, and whether the trace can be
@@ -37,8 +37,7 @@ If the installed package moves on Linux or macOS, the hook command's own
 If the venv moves on Windows, the hook names its `python.exe` by path, so
 Claude Code shows a hook error and no `RAQIB-SILENCE:` line is printed.
 Either way doctor shows the hooks as foreign, and `raqib watch` replaces them.
-On Windows the trace line says "not checked" and counts as MISSING: os.access
-cannot tell there, and doctor writes nothing to find out.
+A check that cannot be made on this host is UNSURE, counted apart and never a failure: today the Windows trace line, which says "not checked" because os.access cannot tell there and doctor writes nothing to find out.
 
 ## How it works
 - **Deterministic first.** Rules decide; a model can only add suspicion (A1, A2).

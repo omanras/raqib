@@ -69,8 +69,9 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       Say in one screen what `watch` needs and is missing (M6.3,
       raqib/doctor.py): Python, `claude` on PATH and its version, the hook
       settings of PROJECT (installed / foreign / missing), the notifier, Sysmon
-      (Windows) and whether the trace can be written. One line per check, OK
-      or MISSING; exit 1 if any is MISSING, else 0. Read-only; the only
+      (Windows) and whether the trace can be written. One line per check, OK,
+      MISSING or UNSURE (cannot be checked here); exit 1 if any is MISSING,
+      else 0. Read-only; the only
       program it runs is `claude --version`, by absolute path.
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
