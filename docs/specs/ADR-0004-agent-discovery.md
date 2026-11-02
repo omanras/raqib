@@ -78,3 +78,50 @@ of from the commander.
 - M5.0 discover: layers 1, 2, 4; inventory; AGENT-DARK; Linux + Windows
   text parsers; fixtures. Lands before M5.2 and M5.3.
 - M5.4 rhythm (layer 3) once M5.3's os source gives a traffic record.
+
+## Amendment B (the Table, 2026-11-02) - rulings on review 2026-11-02-M5.0-review.md
+- B-1 (D4) The connection record on Linux is read from `/proc/net/tcp`
+  and `/proc/net/tcp6` first - a kernel file no PATH can replace - with
+  socket inodes joined to pids through `/proc/<pid>/fd`. `ss` is a
+  fallback only, invoked by absolute path from a fixed list
+  (/usr/sbin/ss, /usr/bin/ss, /sbin/ss, /bin/ss) with a minimal
+  environment, never by PATH lookup; the path used is printed in the
+  inventory. E6 test forbids any subprocess call with a bare program
+  name. This restores the claim at line 39.
+- B-2 (D1) Exit 3 (incomplete) whenever any read of a process or
+  connection source failed, returned no record, or left talking lines
+  without an owner; "none-seen" with exit 0 only when every source was
+  read, had records, and every talking line had an owner. The text and
+  JSON say which condition held.
+- B-3 (D2) Every read failure is a hole in the inventory: proc meta counts
+  flow into holes; pid 2 is dropped only when /proc/2/status says
+  kthreadd; footprint scan notes become hole records, not `#` lines.
+- B-4 (D3) The holes text names, every run: liveness (acts seen only while
+  alive at a snapshot), sibling talkers, reparented acts, TCP only, one
+  network namespace / hidepid. endpoints.yaml `evasion:` gains QUIC/UDP,
+  unix-socket relays, reparenting, sibling split. README states them.
+- B-5 (D5) README wevtutil export gains `/rd:true`.
+- B-6 (D7) The act-name list is a signature: it moves to endpoints.yaml
+  under `acts:` with its own `evasion:` (rename-by-copy, custom shells,
+  interpreters not listed); the anchor is "talks + has a child", the
+  name list only labels the child.
+- B-7 (D15) Amendment A-1 (-tanp as live default, -tnp parse kept) and
+  A-2 (outbound inference) are ratified. A-5 is rejected: `proxy` is
+  suggested only for a root image the catalog marks `proxy_capable`;
+  otherwise `os`; `hook` for Claude Code only when the image is a CLI,
+  not Claude Desktop (Q-6) - mark by image path containing "claude-code"
+  or argv showing a CLI flag; else `os`.
+- B-8 (D6, A6) discover declares no fp_budget in M5.0; README says plainly
+  that IDE terminals, package managers and CI runners can be candidates,
+  and that loopback talk counts. A budget is set from the first field
+  runs (M5.4), not guessed.
+- B-9 (D14) The REAL Linux fixture is redacted: the `--session` value and
+  the scratchpad path replaced by fixed placeholders, header says "REAL,
+  identifiers redacted"; environment NAMES stay (they are the point of the
+  footprint layer and are not secrets). The capture script joins the tree
+  under tests/fixtures/discover/linux/ (D13).
+- B-10 (Q-4) The field test on the commander's Kimi machine runs with
+  `--catalog` pointing at a copy of endpoints.yaml with the `.kimi`
+  footprint removed, so the result rests on the anchor alone.
+- Notes D8-D12, D16, D17: D8 and D12 fixed as text in README/holes; D17
+  negatives added where cheap; the rest recorded.
