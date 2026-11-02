@@ -10,20 +10,20 @@ Scope:
 Exit criteria:
 - E1 `tools/install_hooks.py` replaces install-hooks.sh (.sh = one-line
      wrapper). Same merge semantics and idempotence; POSIX command unchanged;
-     Windows command = interpreter + script path, quoted, no shell syntax
-     (Q-7); modes/umask/symlink/fsync get a Windows branch. Tests: fresh,
-     merge, second run unchanged, Windows command form.
+     Windows command = ruling Amendment 2 P3 launcher (`-I`, absolute log,
+     missing script -> exit 1 + RAQIB-SILENCE, never 2). Tests: fresh, merge,
+     second run unchanged, Windows form, missing-script exit code.
 - E2 `capture.lock()` uses `msvcrt.locking` on one byte far beyond EOF when
-     `fcntl` is absent; no platform falls through to "no lock". Test: two
-     processes appending concurrently never produce a duplicate seq.
-- E3 `tests/test_capture.py` and any other test that imports POSIX-only
-     modules at module level are platform-gated so the suite imports on
-     Windows. Existing fixtures pass byte-for-byte.
+     `fcntl` is absent; no platform falls through to "no lock". Without
+     SIGALRM a `threading.Timer` deadline prints RAQIB-SILENCE and exits 0.
+     Test: concurrent processes never produce a duplicate seq.
+- E3 Tests importing POSIX-only modules at module level are platform-gated
+     so the suite imports on Windows. Existing fixtures pass byte-for-byte.
 - E4 `.github/workflows/gate.yml`: ubuntu + windows, Python 3.11 and 3.12;
      `tools/gate.py` runs the gate's checks (gate.sh stays and calls it on
      POSIX). Green on all four.
 - E5 README: "Linux, macOS; Windows: capture and installer (path rules in
-     M5.1b)". Note the Windows hook-error-not-block behaviour in one line.
+     M5.1b)"; one line: install from the side that runs the agent (Q-5).
 
 Not in scope: any rule or engine change (M5.1b), `source` field (M5.2), UI.
 Commit: `landed: M5.1 windows plumbing` or `STOP: M5.1 <reason>`.
