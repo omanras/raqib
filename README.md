@@ -29,8 +29,12 @@ never acquit.
 4. **Report.** Text, JSON, or a read-only HTML page.
 
 ## Quickstart
-Linux or macOS, `python3` (Raqib itself is stdlib only) and Claude Code.
-Windows is not supported. The gate runs the tests with pytest; if pytest is
+Linux, macOS; Windows: capture and installer (path rules in M5.1b). You need
+`python3` (Raqib itself is stdlib only) and Claude Code. On Windows run
+`python -I tools\install_hooks.py C:\path\to\project` and `python -I tools\gate.py`.
+Install from the side that runs the agent (Windows or WSL), not both.
+On Windows a missing `python.exe` is a hook error shown by Claude Code: no `RAQIB-SILENCE:` line, and not a block.
+The gate runs the tests with pytest; if pytest is
 missing, `gate.sh` installs it with pip, which needs the network. The code is
 on branch `claude/v0.1` until it is merged.
 ```bash

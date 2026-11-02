@@ -1,0 +1,51 @@
+# The constitutional gate on Linux and Windows (M5.1 E4), on every push and
+# pull request: ubuntu and windows, Python 3.11 and 3.12. On ubuntu it runs
+# through tools/gate.sh, which calls tools/gate.py; on Windows gate.py runs
+# directly. No secret is needed: apart from installing pytest the gate is
+# offline and reads only the tree.
+name: gate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate (${{ matrix.os }}, python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    env:
+      # Tests read and write their own files in the platform's default
+      # encoding; UTF-8 mode makes that UTF-8 on Windows as it is on Linux.
+      # Hooks run by the tests get a clean environment without it.
+      PYTHONUTF8: "1"
+      # The short summary names every skipped, xfailed, xpassed and passed
+      # test, so per-test outcomes on Windows are in the job log (Amendment 4, R4).
+      PYTEST_ADDOPTS: "-rsxXp"
+    steps:
+      # The tree is checked out byte for byte (LF), as on Linux; a clone with
+      # core.autocrlf=true is not what this job tests.
+      - name: check out without line-ending conversion
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: install pytest
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: tools/gate.sh
+        if: runner.os != 'Windows'
+        run: tools/gate.sh
+      - name: tools/gate.py
+        if: runner.os == 'Windows'
+        run: python -I tools/gate.py

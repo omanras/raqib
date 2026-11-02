@@ -254,7 +254,7 @@ def test_e4_cli_with_a_fake_candidate_json_and_out(tmp_path):
     assert code == 0 and "-> %s" % out in text
     data = json.loads(out.read_text())
     assert [r["name"] for r in data["rows"]] == ["rules", "rules+model fake/canned", "model fake/canned"]
-    assert data["matches_plan"] is True and data["source"] == "tests/fixtures/eval/events.json"
+    assert data["matches_plan"] is True and data["source"] == str(Path("tests/fixtures/eval/events.json"))
 
 
 @pytest.mark.parametrize("argv", [

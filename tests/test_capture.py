@@ -1,7 +1,8 @@
-"""Capture hook: M0.1 exit criteria E1-E3, M0.1b E1-E3 (ADR-0001 section 3, A-1, A-2)."""
+"""Capture hook: M0.1 exit criteria E1-E3, M0.1b E1-E3 (ADR-0001 section 3, A-1, A-2),
+M5.1 E2 (a lock on every platform) and E3 (this file imports on Windows)."""
 import base64
 import datetime
-import fcntl
+import errno
 import hashlib
 import importlib.util
 import io
@@ -14,12 +15,21 @@ import string
 import subprocess
 import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
 
+try:
+    import fcntl
+except ImportError:  # Windows (M5.1 E3)
+    fcntl = None
+
 ROOT = Path(__file__).resolve().parent.parent
 CAPTURE = ROOT / "raqib" / "hooks" / "capture.py"
+NO_ALARM = pytest.mark.skipif(not hasattr(signal, "SIGALRM"),
+                              reason="tests the SIGALRM deadline; without SIGALRM the timer "
+                                     "deadline runs (test_m51_e2_timer_*)")
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 E1_FIELDS = {"ts", "session_id", "phase", "tool", "input_sha256", "cwd", "seq"}
@@ -218,14 +228,17 @@ def test_e3_log_is_a_directory_is_silence(tmp_path):
     assert_silence(run(fixture("posttooluse-bash.json"), tmp_path))
 
 
-@pytest.mark.skipif(not hasattr(os, "geteuid") or os.geteuid() == 0,
-                    reason="root ignores file permissions")
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
+                    reason="POSIX root ignores file permissions")
 def test_e3_read_only_log_is_silence(tmp_path):
     log = tmp_path / "trace.jsonl"
     log.write_text("")
-    log.chmod(0o444)
-    assert_silence(run(fixture("pretooluse-bash.json"), log))
-    assert log.read_text() == ""
+    log.chmod(0o444)  # on Windows: the read-only attribute
+    try:
+        assert_silence(run(fixture("pretooluse-bash.json"), log))
+        assert log.read_text() == ""
+    finally:
+        log.chmod(0o644)
 
 
 def test_e3_writable_log_is_not_silence(tmp_path):
@@ -711,14 +724,28 @@ def test_redo_lock_wait_is_capped(tmp_path):
     capture = load_capture()
     log = tmp_path / "trace.jsonl"
     log.write_text("")
-    with open(log) as holder, open(log) as waiter:
-        fcntl.flock(holder.fileno(), fcntl.LOCK_EX)
+    # M5.1: the holder takes the lock as capture does, flock or msvcrt.
+    with open(log, "a+") as holder, open(log, "a+") as waiter:
+        capture.lock(holder)
         start = time.monotonic()
         with pytest.raises(capture.CaptureError, match="lock"):
             capture.lock(waiter, wait=0.3)
         assert 0.3 <= time.monotonic() - start < 2.0
+        capture.unlock(holder)
 
 
+@pytest.mark.skipif(fcntl is None, reason="POSIX flock")
+def test_redo_lock_wait_is_capped_against_a_plain_flock(tmp_path):
+    capture = load_capture()
+    log = tmp_path / "trace.jsonl"
+    log.write_text("")
+    with open(log) as holder, open(log) as waiter:
+        fcntl.flock(holder.fileno(), fcntl.LOCK_EX)
+        with pytest.raises(capture.CaptureError, match="lock"):
+            capture.lock(waiter, wait=0.3)
+
+
+@NO_ALARM
 def test_redo_deadline_ends_capture_with_silence(tmp_path, monkeypatch, capsys):
     capture = load_capture()
     monkeypatch.setattr(capture, "DEADLINE_SECONDS", 1)
@@ -737,7 +764,7 @@ def test_redo_deadline_ends_capture_with_silence(tmp_path, monkeypatch, capsys):
 
 
 def test_redo_deadline_is_below_the_installed_timeout():
-    install = (ROOT / "tools" / "install-hooks.sh").read_text()
+    install = (ROOT / "tools" / "install_hooks.py").read_text(encoding="utf-8")
     timeout = int(re.search(r"^TIMEOUT = (\d+)", install, re.M).group(1))
     capture = load_capture()
     assert capture.LOCK_WAIT_SECONDS < capture.DEADLINE_SECONDS < timeout
@@ -824,6 +851,7 @@ def test_redo2_hashing_also_runs_before_the_lock(tmp_path, monkeypatch):
     assert order == ["hash", "hash", "lock"]
 
 
+@NO_ALARM
 def test_redo2_the_deadline_is_cancelled_before_the_write(tmp_path, monkeypatch):
     capture = load_capture()
     calls = []
@@ -831,3 +859,209 @@ def test_redo2_the_deadline_is_cancelled_before_the_write(tmp_path, monkeypatch)
     log = tmp_path / "trace.jsonl"
     capture.append(str(log), fixture("pretooluse-bash.json"))
     assert calls == [0] and len(lines(log)) == 1
+
+
+# --- M5.1 E2: every platform appends under a lock ---------------------------
+
+WORKER = r"""
+import importlib.util, json, os, sys, time
+spec = importlib.util.spec_from_file_location("raqib_capture_worker", sys.argv[1])
+capture = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(capture)
+log, go, payload_file, name, count = sys.argv[2:7]
+with open(payload_file, encoding="utf-8") as f:
+    payload = json.load(f)
+deadline = time.monotonic() + 60
+while not os.path.exists(go):
+    if time.monotonic() > deadline:
+        sys.exit("no start signal")
+    time.sleep(0.001)
+for i in range(int(count)):
+    payload["tool_input"] = {"command": "echo %s %d" % (name, i)}
+    capture.append(log, payload)
+"""
+
+
+def test_m51_e2_processes_appending_at_once_never_share_a_seq(tmp_path):
+    """Real processes, released together, each append pres to one session.
+    Every pre takes max(seq) + 1 under the lock, so the new seqs are exactly
+    the next ones, with no duplicate. Runs as is on POSIX and Windows."""
+    log = tmp_path / "trace.jsonl"
+    seeded, workers, each = 2000, 4, 25
+    with log.open("w", encoding="utf-8", newline="\n") as f:
+        for seq in range(1, seeded + 1):
+            f.write(json.dumps({"seq": seq, "session_id": "fixture-session-0001",
+                                "phase": "post", "tool": "Bash"}) + "\n")
+    payload = tmp_path / "pre.json"
+    payload.write_text(json.dumps(fixture("pretooluse-bash.json")), encoding="utf-8")
+    go = tmp_path / "go"
+    procs = [subprocess.Popen([sys.executable, "-I", "-c", WORKER, str(CAPTURE), str(log), str(go),
+                               str(payload), "w%d" % n, str(each)],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+             for n in range(workers)]
+    go.write_text("")
+    for p in procs:
+        out, err = p.communicate(timeout=120)
+        assert (p.returncode, out, err) == (0, b"", b"")
+    new = [r["seq"] for r in lines(log)[seeded:]]
+    assert len(new) == workers * each
+    assert sorted(new) == list(range(seeded + 1, seeded + workers * each + 1))
+
+
+class FakeMsvcrt:
+    """msvcrt.locking as Windows has it: the region starts at the file position."""
+    LK_UNLCK, LK_NBLCK = 0, 2
+
+    def __init__(self, busy=0, error=errno.EACCES):
+        self.calls, self.busy, self.error = [], busy, error
+
+    def locking(self, fd, mode, nbytes):
+        self.calls.append((mode, os.lseek(fd, 0, os.SEEK_CUR), nbytes))
+        if mode == self.LK_NBLCK and self.busy:
+            self.busy -= 1
+            raise OSError(self.error, "locked")
+
+
+def windows_lock(monkeypatch, fake):
+    capture = load_capture()
+    monkeypatch.setattr(capture, "fcntl", None)
+    monkeypatch.setattr(capture, "msvcrt", fake)
+    return capture
+
+
+def test_m51_e2_without_fcntl_msvcrt_locks_one_byte_beyond_eof(tmp_path, monkeypatch):
+    fake = FakeMsvcrt(busy=2)
+    capture = windows_lock(monkeypatch, fake)
+    log = tmp_path / "trace.jsonl"
+    for _ in range(2):
+        capture.append(str(log), fixture("pretooluse-bash.json"))
+    assert [r["seq"] for r in lines(log)] == [1, 2]
+    lock, unlock = (fake.LK_NBLCK, capture.LOCK_OFFSET, 1), (fake.LK_UNLCK, capture.LOCK_OFFSET, 1)
+    # Two busy tries, then the lock; one unlock per append; never a data byte.
+    assert fake.calls == [lock, lock, lock, unlock, lock, unlock]
+    assert capture.LOCK_OFFSET > 1 << 32 and log.stat().st_size < capture.LOCK_OFFSET
+
+
+def test_m51_e2_msvcrt_wait_is_capped(tmp_path, monkeypatch):
+    capture = windows_lock(monkeypatch, FakeMsvcrt(busy=10 ** 6))
+    log = tmp_path / "trace.jsonl"
+    with open(log, "a+") as f:
+        start = time.monotonic()
+        with pytest.raises(capture.CaptureError, match="not acquired"):
+            capture.lock(f, wait=0.2)
+        assert 0.2 <= time.monotonic() - start < 2.0
+
+
+def test_m51_e2_an_msvcrt_error_that_is_not_contention_is_not_retried(tmp_path, monkeypatch):
+    fake = FakeMsvcrt(busy=1, error=errno.EBADF)
+    capture = windows_lock(monkeypatch, fake)
+    with open(tmp_path / "trace.jsonl", "a+") as f:
+        with pytest.raises(OSError):
+            capture.lock(f, wait=5)
+    assert len(fake.calls) == 1
+
+
+def capture_main(capture, monkeypatch, payload, argv=()):
+    data = json.dumps(payload).encode()
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(data)))
+    return capture.main(argv)
+
+
+def test_m51_e2_no_lock_at_all_is_silence_not_an_unlocked_append(tmp_path, monkeypatch, capsys):
+    capture = windows_lock(monkeypatch, None)
+    log = tmp_path / "trace.jsonl"
+    monkeypatch.setenv("RAQIB_LOG", str(log))
+    assert capture_main(capture, monkeypatch, fixture("pretooluse-bash.json")) == 0
+    out = capsys.readouterr()
+    (line,) = out.err.splitlines()
+    assert out.out == "" and line.startswith("RAQIB-SILENCE:") and "no inter-process lock" in line
+    assert log.read_text() == ""
+
+
+def test_m51_the_log_argument_wins_over_raqib_log(tmp_path, monkeypatch, capsys):
+    capture = load_capture()
+    log, decoy = tmp_path / "trace.jsonl", tmp_path / "decoy.jsonl"
+    monkeypatch.setenv("RAQIB_LOG", str(decoy))
+    assert capture_main(capture, monkeypatch, fixture("stop.json"), [str(log)]) == 0
+    assert capsys.readouterr().err == ""
+    assert len(lines(log)) == 1 and not decoy.exists()
+
+
+def test_m51_more_than_one_argument_is_silence(tmp_path, monkeypatch, capsys):
+    capture = load_capture()
+    log = tmp_path / "trace.jsonl"
+    assert capture_main(capture, monkeypatch, fixture("stop.json"), [str(log), "extra"]) == 0
+    (line,) = capsys.readouterr().err.splitlines()
+    assert line.startswith("RAQIB-SILENCE:") and "at most one argument" in line
+    assert not log.exists()
+
+
+# --- M5.1 E2 (ruling Amendment 2, Q-3): the deadline without SIGALRM ---------
+
+TIMER_SCRIPT = r"""
+import importlib.util, sys, threading, time, types
+spec = importlib.util.spec_from_file_location("raqib_capture_timer", sys.argv[1])
+capture = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(capture)
+capture.signal = types.SimpleNamespace()  # as on Windows: no SIGALRM
+capture.DEADLINE_SECONDS = 1
+if sys.argv[2] == "slow":
+    capture.append = lambda log, payload: time.sleep(5)
+if sys.argv[2] == "fail":
+    def boom(log, payload):
+        raise capture.CaptureError("boom")
+    capture.append = boom
+    real_silence = capture.silence
+    def slow_silence(*args):
+        real_silence(*args)
+        if threading.current_thread() is threading.main_thread():
+            time.sleep(2)  # a deadline still armed would fire in here: a second line
+    capture.silence = slow_silence
+code = capture.main([sys.argv[3]])
+time.sleep(2)  # a timer still running would end the process in here
+sys.stdout.write("returned %d" % code)
+"""
+
+
+def run_timer_script(tmp_path, mode):
+    log = tmp_path / "trace.jsonl"
+    start = time.monotonic()
+    proc = subprocess.run([sys.executable, "-I", "-c", TIMER_SCRIPT, str(CAPTURE), mode, str(log)],
+                          input=json.dumps(fixture("pretooluse-bash.json")).encode(),
+                          capture_output=True, timeout=60)
+    return proc, log, time.monotonic() - start
+
+
+def test_m51_e2_timer_deadline_ends_a_slow_capture_with_silence_and_exit_0(tmp_path):
+    proc, log, elapsed = run_timer_script(tmp_path, "slow")
+    assert (proc.returncode, proc.stdout) == (0, b"")
+    (line,) = proc.stderr.decode().splitlines()
+    assert line == ("RAQIB-SILENCE: capture failed event=PreToolUse log=%s: Deadline: capture did not"
+                    " finish within 1s" % log)
+    assert elapsed < 4
+
+
+def test_m51_e2_timer_deadline_is_cancelled_when_capture_finishes(tmp_path):
+    proc, log, _ = run_timer_script(tmp_path, "normal")
+    assert (proc.returncode, proc.stdout, proc.stderr) == (0, b"returned 0", b"")
+    assert [r["phase"] for r in lines(log)] == ["pre"]
+
+
+def test_m51_e2_timer_deadline_is_cancelled_before_the_write(tmp_path, monkeypatch):
+    capture = load_capture()
+    monkeypatch.setattr(capture, "signal", types.SimpleNamespace())
+    log = tmp_path / "trace.jsonl"
+    seen = []
+    monkeypatch.setattr(capture, "_timer_deadline",
+                        types.SimpleNamespace(cancel=lambda: seen.append(log.read_text())))
+    capture.append(str(log), fixture("pretooluse-bash.json"))
+    assert seen == [""] and len(lines(log)) == 1
+
+
+def test_m51_e2_a_failed_capture_cancels_the_deadline_first_so_one_line_only(tmp_path):
+    """Review F12: the except path cancels the deadline before its
+    RAQIB-SILENCE line, so the timer cannot add a second one."""
+    proc, log, _ = run_timer_script(tmp_path, "fail")
+    assert (proc.returncode, proc.stdout) == (0, b"returned 0")
+    (line,) = proc.stderr.decode().splitlines()
+    assert line == "RAQIB-SILENCE: capture failed event=PreToolUse log=%s: CaptureError: boom" % log

@@ -468,7 +468,7 @@ def test_e4_own_negatives_never_fire():
 def test_e4_every_rule_fixture_file_is_referenced():
     referenced = {p for r in engine.load_catalog(CATALOG)
                   for kind in ("positive", "negative") for p in r.fixtures[kind]}
-    on_disk = {str(p.relative_to(ROOT)) for p in RULE_FIXTURES.glob("*/*")
+    on_disk = {p.relative_to(ROOT).as_posix() for p in RULE_FIXTURES.glob("*/*")
                if p.parent.name != "benign"}
     assert on_disk == referenced
     for p in referenced:

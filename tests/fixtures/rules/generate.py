@@ -55,7 +55,7 @@ def write(path, lines, context=None, expect=None):
         if expect is not None:
             head.append('"expect_seq": ' + json.dumps(expect))
         text = "{" + ", ".join(head) + ',\n "lines": [\n' + dump(lines) + "\n]}\n"
-    open(path, "w").write(text)
+    open(path, "w", newline="\n").write(text)  # LF on every platform (M5.1)
     print("wrote", path, len(lines))
 
 # NET-TOOL
