@@ -40,3 +40,13 @@ Out of scope for v0.1: blocking/steering the agent (A4), multi-host, auth.
 - M4.3 git head/clean at start and stop; STOP-DIRTY-TREE, HEAD-UNMOVED (anchors)
        Phase exit: demand + anchor > signature, and every signature's
        evasion list is in the tree.
+
+## Phase 5 — Capture sources: hook, proxy, os (v0.2, ADR-0003)
+- M5.1 Windows: Python installer, lock fallback, path normalising, CI matrix
+- M5.2 proxy source + `source` field + hooks/common.py; first non-Claude
+       agent (Kimi) watched through its model API           exit: E1–E6 in handoff
+- M5.3 os source from Sysmon on Windows; CROSS-SOURCE anchor (asked-not-done,
+       done-not-asked)
+       Order: M5.1, M5.2, then rebase M4.2/M4.3 on the new capture shape, then M5.3.
+       Phase exit: one agent other than Claude Code watched end to end, and
+       one finding in the tree that no single source could have produced.
