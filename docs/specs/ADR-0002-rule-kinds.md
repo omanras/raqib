@@ -191,3 +191,29 @@ above is unchanged. Open points are questions in
   criterion that named `raqib report` (the same error as M5.1's first
   Scope); rule: before setting HANDOFF.md, the Table greps each exit
   criterion's named commands/files against the Scope list.
+
+## Amendment D (the Table, 2026-11-03) - rulings on the M4.2 STOP (ed039f2)
+- D-1 M4.2 is split: E1 command_programs, E2 has_any + branches + the
+  dated note under the table, E5 SILENCE-EMPTY stay in M4.2; the demands
+  LANDED-NO-GATE and EDIT-NO-TEST move to M4.2b together with the
+  `require:` construct (before / after+until, three-valued, demand only,
+  never with aggregate) and the `under_any` path op.
+- D-2 Scope widened to README.md, .github/workflows/gate.yml and
+  tests/test_packaging.py; catalog counts there are derived from the
+  checkout, never literals.
+- D-3 Lines without command_programs are judged by command_head alone
+  (`exists: true` guard); recorded as an evasion line in both rules.
+- D-4 `python -c <code>` is an argument and stays a NET-TOOL evasion; the
+  2026-11-02 field trace becomes a fixture (SILENCE-EMPTY positive, NET-TOOL
+  miss recorded).
+- D-5 SILENCE-EMPTY is high (A3). Shape: session_start + session_end with no
+  tool line and no stop; or a session_end with no start. A start alone at the
+  end of the trace is SILENCE-OPEN's finding only.
+- D-6 Parse limits of the builder's Q12 accepted; an expansion inside a
+  `-c` string makes the list absent; 64-name cap; basenames only.
+- Ledger, Table: the Scope missed README.md and gate.yml, which pin the
+  rule count; rule: a task that adds or removes a rule lists README.md,
+  gate.yml and test_packaging.py in Scope, and the Table runs
+  `grep -rn "== 7\|Eleven\|7 YAML" --include=*.py --include=*.yml --include=*.md`
+  before setting HANDOFF.md.
+Full text: docs/review/2026-11-03-M4.2-ruling.md.
