@@ -280,10 +280,10 @@ def test_m41_b5_the_catalog_is_the_tracked_rule_files(tmp_path):
     """K10: an untracked rule file is not counted (A8); a tracked one missing
     from the working tree is RED."""
     bad = without(CATALOG_REL + "NET-TOOL.yaml", "kind:").replace("id: NET-TOOL", "id: NET-UNTRACKED")
-    code, out = gate(tmp_path, {}, untracked={CATALOG_REL + "NET-UNTRACKED.yaml": bad})
+    code, out = gate(tmp_path / "untracked", {}, untracked={CATALOG_REL + "NET-UNTRACKED.yaml": bad})
     assert code == 0 and kinds_line(out) == "[gate] rule kinds: signature=4 demand=4 anchor=3", out
-    shutil.rmtree(tmp_path / "repo")
-    repo = scratch(tmp_path, {})
+    # A second repository, not rmtree of the first: git's object files are read-only on Windows.
+    repo = scratch(tmp_path / "deleted", {})
     (repo / CATALOG_REL / "NET-TOOL.yaml").unlink()
     proc = subprocess.run([sys.executable, str(repo / "tools" / "gate.py")], capture_output=True, text=True,
                           cwd=tmp_path, timeout=120)
