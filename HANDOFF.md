@@ -1,30 +1,27 @@
-# HANDOFF — M6.3  (phase 6: packaging, `raqib doctor`, README around watch)
+# HANDOFF — M4.1  (phase 4: rule kinds)
 
-Task: `pip install .` / `pipx install .` puts `raqib` on PATH; `raqib doctor`
-says in one screen what is missing; README starts from `raqib watch`.
+Task: implement ADR-0002: every rule declares `kind` (signature | demand |
+anchor); signatures declare `evasion`; the gate prints the ratio.
 
 Scope:
-  pyproject.toml (new), raqib/__main__.py, raqib/cli.py, raqib/doctor.py (new),
-  raqib/install.py (new), raqib/watch.py (import only), tools/, .github/workflows/gate.yml,
-  tests/, README.md, docs/review/
+  raqib/rules/engine.py, raqib/rules/silence.py, raqib/rules/catalog/, raqib/watch.py (kind in
+  findings only), tests/, tools/gate.py, docs/specs/ADR-0002-rule-kinds.md, docs/review/
 
 Exit criteria:
-- E1 `pyproject.toml`: stdlib-only runtime, pytest the only test extra,
-     entry point `raqib = raqib.cli:main`, package data = catalog YAMLs and
-     endpoints.yaml. The installer logic moves to `raqib/install.py`
-     (tools/install_hooks.py becomes a thin wrapper; watch imports the
-     package, never a checkout path - W14). `pip install .` in a clean venv
-     then `raqib --help` and `raqib watch --help` work on Linux and Windows
-     (CI job added).
-- E2 `raqib doctor [PROJECT]`: Python, `claude` on PATH + version, hook
-     settings (installed / missing / foreign), notifier backend, Sysmon
-     (Windows), trace path writable; OK / MISSING per line; exit 1 if any
-     MISSING. Read-only.
-- E3 README rewritten: first screen = install + `raqib watch`; the rest
-     below; old quickstart kept as "manual steps"; stale `--branch
-     claude/v0.1` line removed.
-- E4 gate.py checks unchanged; gate.yml adds the install job. Gate green ubuntu + windows.
+- E1 Loader: `kind` required, one of the three; `evasion` (non-empty list
+     of one-line strings) required iff kind is signature. Any other shape
+     is a load error with the rule id and field named. Tests for all four
+     error cases and the three valid kinds.
+- E2 Every catalog rule carries `kind`, and each signature its `evasion`
+     list, per the ADR table; if your reading of a match block disagrees
+     with the table, keep the table and write the disagreement in
+     docs/review/<date>-M4.1-questions.md (do not reclassify).
+- E3 Silence rules expose kind "demand" in their findings; every finding
+     dict (catalog and silence) carries `kind`. `raqib report` shows it.
+- E4 tools/gate.py prints one line `rule kinds: signature=N demand=N anchor=N`
+     and fails if any rule has no kind. Gate green ubuntu + windows.
+- E5 ADR-0002 status line changed to "accepted (M4.1, <date>)".
 
-Not in scope: PyPI publishing, signing, installers (.msi/.deb), tray icon.
-Commit: `landed: M6.3 packaging + doctor` or `STOP: M6.3 <reason>`.
+Not in scope: new rules, capture changes, suspicion layer, UI.
+Commit: `landed: M4.1 rule kinds` or `STOP: M4.1 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
