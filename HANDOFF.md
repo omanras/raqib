@@ -1,30 +1,30 @@
-# HANDOFF — M5.0  (phase 5: agent discovery, ADR-0004)
+# HANDOFF — M6.1  (phase 6: `raqib watch` + OS notifications, ADR-0005)
 
-Task: `raqib discover` finds AI agents on a host by what they do - a tree that
-talks to a model and acts - with no prior knowledge of their names.
+Task: one command watches a project: install hooks if missing, tail the trace,
+run rules incrementally, notify the OS on findings and silence, serve the page.
 
 Scope:
-  raqib/discover.py (new), raqib/discover/ (new, endpoints.yaml), raqib/cli.py,
-  tests/, README.md (one section), docs/specs/ADR-0004-agent-discovery.md, docs/review/
+  raqib/watch.py (new), raqib/notify.py (new), raqib/cli.py, raqib/ui.py (serve hook
+  only), tools/install_hooks.py (API only), tests/, README.md, docs/specs/ADR-0005-*.md, docs/review/
 
 Exit criteria:
-- E1 Parsers, text in -> records out, no live host needed: Linux `/proc`
-     (cmdline, status ppid, environ keys only, cwd) + `ss -tnp`; Windows
-     `Get-CimInstance Win32_Process` (csv) + `Get-NetTCPConnection` (csv) +
-     `Get-DnsClientCache` (csv); Sysmon XML events 1, 3, 22. Fixtures: one
-     file per parser, captured from a real machine by you (this container
-     for Linux; synthetic-but-shaped for Windows, marked as such).
-- E2 `raqib/discover/endpoints.yaml`: model hosts + local model ports, `kind: signature`, `evasion:` list.
-- E3 Tree anchor: a process with outbound TCP whose tree has "act" children
-     (sh, bash, cmd, powershell, python*, node, git) or file writes outside
-     its config dir (Sysmon 11 when present) -> candidate, with cited lines.
-- E4 Footprint: config dirs and `*_API_KEY` env names (never values).
-     AGENT-DARK: footprint on disk, no candidate tree in the window.
-- E5 Output: JSON and text inventory; every claim cites record lines (A5);
-     an empty result prints the window and records read, never silence (A3);
-     suggested source per candidate: hook | proxy | os (ADR-0003).
-- E6 Offline, read-only, stdlib-only; no process touched (A4). Gate green on ubuntu + windows.
+- E1 `raqib watch [PROJECT] [--log PATH] [--no-open] [--no-notify] [--port N]`:
+     installs hooks via install_hooks (idempotent, prints changes), tails the
+     trace by polling, evaluates rules on new lines only, keeps findings and
+     silence windows in memory and in `<trace>.watch.json`, opens the page
+     once, runs until Ctrl-C, prints the final report. Writes nothing into
+     the project but the hook settings; never signals a process (A4).
+- E2 Live silence: no line for RAQIB_GAP_SECONDS opens a window (A3), the next closes it; both notified.
+- E3 `raqib/notify.py`: windows (PowerShell + WinRT toast, text via a temp
+     file, never in the command string), linux (`notify-send` by absolute
+     path, else bell + stderr), darwin (`osascript`). Text = rule id, project,
+     seq - never agent content. One per rule per 60 s, rest folded into a
+     count. Delivery failure -> hole in watch.json and in the page band.
+- E4 Tests: tail on a growing file; incremental == batch on the final file;
+     silence open/close; backends with a fake runner (file, not string); limit.
+- E5 README "Watch a project": three lines. Gate green ubuntu + windows;
+     notifier disabled under CI (no toasts).
 
-Not in scope: attaching sources, live Sysmon, rhythm layer (M5.4), UI.
-Commit: `landed: M5.0 agent discovery` or `STOP: M5.0 <reason>`.
+Not in scope: dashboard v2 (M6.2), packaging (M6.3), tray, page controls.
+Commit: `landed: M6.1 raqib watch` or `STOP: M6.1 <reason>`.
 Read HANDOFF.md and do only the task it specifies.

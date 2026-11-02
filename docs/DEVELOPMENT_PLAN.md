@@ -53,3 +53,13 @@ Out of scope for v0.1: blocking/steering the agent (A4), multi-host, auth.
        Order: M5.1 (landed 2026-11-02), M5.0, M5.1b, M5.2, then rebase M4.2/M4.3 on the new capture shape, then M5.3.
        Phase exit: one agent other than Claude Code watched end to end, and
        one finding in the tree that no single source could have produced.
+
+## Phase 6 — One command, a window, and a knock (ADR-0005)
+Commander's verdict after the first field day (2026-11-02): use is the fatal
+point. Phase 6 runs before the rest of Phase 5.
+- M6.1 `raqib watch <project>`: install hooks, tail, incremental rules, OS
+       notifications (Windows toast via file, notify-send, osascript), page
+- M6.3 packaging: pyproject, `raqib` on PATH, `raqib doctor`, README around watch
+- M6.2 dashboard v2: live band, severity order, several projects, discover tab
+       Phase exit: a fresh machine goes from install to a toast on a real
+       finding in under five minutes, by the README alone.
