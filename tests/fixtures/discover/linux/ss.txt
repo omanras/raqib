@@ -1,0 +1,16 @@
+# M5.0 fixture, REAL (not synthetic): tests/fixtures/discover/linux/capture.py in the builder's container (Claude Code on Linux), 2026-11-02T15:38:29.201Z.
+# at 2026-11-02T15:38:29.201Z (/usr/bin/ss -tnp)
+State Recv-Q Send-Q Local Address:Port   Peer Address:PortProcess                                  
+ESTAB 0      0          192.0.2.2:60348 160.79.104.10:443  users:(("environment-man",pid=87,fd=28))
+ESTAB 0      0          192.0.2.2:33504 160.79.104.10:443  users:(("environment-man",pid=87,fd=29))
+ESTAB 0      0          192.0.2.2:33680 160.79.104.10:443  users:(("environment-man",pid=87,fd=13))
+ESTAB 0      0          192.0.2.2:33844 160.79.104.10:443  users:(("environment-man",pid=87,fd=21))
+ESTAB 0      0          192.0.2.2:34070 160.79.104.10:443  users:(("environment-man",pid=87,fd=24))
+ESTAB 0      0          192.0.2.2:37616 160.79.104.10:443  users:(("environment-man",pid=87,fd=27))
+ESTAB 0      0          192.0.2.2:38970 160.79.104.10:443  users:(("claude",pid=95,fd=17))         
+ESTAB 0      0          192.0.2.2:38990 160.79.104.10:443  users:(("claude",pid=95,fd=25))         
+ESTAB 0      0          192.0.2.2:43612 160.79.104.10:443  users:(("claude",pid=95,fd=16))         
+ESTAB 0      0          192.0.2.2:48626 160.79.104.10:443  users:(("claude",pid=95,fd=11))         
+ESTAB 0      0          192.0.2.2:50160 160.79.104.10:443  users:(("claude",pid=95,fd=10))         
+ESTAB 0      0          192.0.2.2:52310 160.79.104.10:443  users:(("environment-man",pid=87,fd=25))
+ESTAB 0      0          192.0.2.2:54938 160.79.104.10:443  users:(("claude",pid=95,fd=21))         

@@ -1,0 +1,9 @@
+# M5.0 fixture SYNTHETIC (not captured from a machine) - invented host FIELD-PC in the shape of: Get-DnsClientCache | Select-Object Entry; RecordName; RecordType; Status; Section; TimeToLive; DataLength; Data | ConvertTo-Csv -NoTypeInformation. See docs/review/2026-11-02-M5.0-questions.md
+"Entry","RecordName","RecordType","Status","Section","TimeToLive","DataLength","Data"
+"api.anthropic.com","api.anthropic.com","A","0","1","120","4","160.79.104.10"
+"api.openai.com","api.openai.com","CNAME","0","1","60","8","api.openai.com.cdn.cloudflare.net"
+"api.openai.com","api.openai.com.cdn.cloudflare.net","A","0","1","60","4","104.18.33.45"
+"generativelanguage.googleapis.com","generativelanguage.googleapis.com","A","0","1","200","4","142.250.185.74"
+"www.bing.com","www.bing.com","CNAME","0","1","1800","8","www-bing-com.a-0001.a-msedge.net"
+"www.bing.com","a-0001.a-msedge.net","A","0","1","20","4","13.107.21.200"
+"models.internal.example","models.internal.example","A","0","1","300","4","203.0.113.50"

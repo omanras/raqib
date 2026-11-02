@@ -32,6 +32,19 @@
       ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json. Exit 0 when
       every row judged every event, 3 when some row has errors, 2 on bad
       input.
+  discover [--from DIR] [--read KIND=FILE]... [--window S] [--home DIR]... [--save DIR] [--json] [-o FILE]
+      Find AI agents on a host by what they do (M5.0, ADR-0004 Amendment B):
+      trees that talk (outbound TCP) and have a child, or write a file
+      outside config space, each claim with its cited lines. Without
+      --from/--read it reads this host (Linux: /proc and /proc/net/tcp, ss
+      by absolute path only as fallback; elsewhere the homes only), offline
+      and read-only. Exit 1 when a candidate, an AGENT-DARK footprint or an
+      unread line is found, or nothing was read; 3 when a process or
+      connection source failed (even in one sample), held no record, or left
+      a talking line without an owner; 0 only when those sources were
+      complete and nothing was seen (not a clearance); 2 on bad input.
+      --save DIR writes the texts and a run.json (each source's error, the
+      live holes); --from DIR replays them, incomplete if the run was.
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -45,6 +58,7 @@ import json
 import os
 import sys
 
+from raqib import discover
 from raqib import eval as evaluation
 from raqib import report
 from raqib import ui
@@ -124,6 +138,21 @@ def _parser():
     e.add_argument("--window", type=int, default=suspect_core.DEFAULT_WINDOW, help="lines per window")
     e.add_argument("--json", action="store_true", help="print the result as JSON")
     e.add_argument("-o", "--out", metavar="FILE", help="write the result here (default: stdout)")
+    d = sub.add_parser("discover", help="find AI agents on a host by what they do (ADR-0004)")
+    d.add_argument("--from", dest="from_dir", metavar="DIR",
+                   help="read the source texts in DIR: %s" % ", ".join(discover.FILE_NAMES[k] for k in discover.SOURCES))
+    d.add_argument("--read", action="append", default=[], metavar="KIND=FILE",
+                   help="read one source text; KIND is one of %s (repeatable)" % ", ".join(discover.SOURCES))
+    d.add_argument("--window", type=float, default=0.0, metavar="S",
+                   help="live: sample for S seconds, 1 s apart (default 0: one snapshot);"
+                        " files: keep timed records of the last S seconds")
+    d.add_argument("--home", action="append", metavar="DIR",
+                   help="live: a home to list footprints in (default: ~, /root and /home/*; Windows: C:\\Users\\*)")
+    d.add_argument("--catalog", default=discover.CATALOG, metavar="FILE", help="endpoint and footprint catalog")
+    d.add_argument("--save", metavar="DIR", help="live: write the texts read to DIR, to repeat the run with"
+                                                 " --from DIR and check every cited line (A5)")
+    d.add_argument("--json", action="store_true", help="print the inventory as JSON")
+    d.add_argument("-o", "--out", metavar="FILE", help="write the inventory here (default: stdout)")
     return p
 
 
@@ -460,6 +489,60 @@ def cmd_eval(args, out):
     return 3 if any(row["errors"] for row in result["rows"]) else 0
 
 
+def cmd_discover(args, out):
+    try:
+        catalog = discover.load_catalog(args.catalog)
+    except discover.CatalogError as exc:
+        raise UsageError(str(exc))
+    if not (args.window >= 0 and args.window != float("inf")):
+        raise UsageError("--window must be a finite number of seconds >= 0")
+    texts, holes = {}, []
+    if args.from_dir:
+        if not os.path.isdir(args.from_dir):
+            raise UsageError("--from %s: not a directory" % args.from_dir)
+        try:
+            texts, holes = discover.read_dir(args.from_dir)
+        except ValueError as exc:
+            raise UsageError(str(exc))
+        if not texts:
+            raise UsageError("--from %s: none of %s is there" % (
+                args.from_dir, ", ".join(discover.FILE_NAMES[k] for k in discover.SOURCES)))
+    paths = {}
+    for spec in args.read:
+        kind, sep, path = spec.partition("=")
+        if not sep or kind not in discover.SOURCES or not path:
+            raise UsageError("--read %s: use KIND=FILE with KIND one of %s" % (spec, ", ".join(discover.SOURCES)))
+        if kind in paths or kind in texts:
+            raise UsageError("--read %s: source %s given twice" % (spec, kind))
+        paths[kind] = path
+    texts.update(discover.read_inputs(paths))
+    if texts:
+        if args.save or args.home:
+            raise UsageError("--save and --home apply to a live run (no --from, no --read)")
+        inv = discover.run(texts, catalog, window=args.window, holes=holes)
+    else:
+        texts, holes = discover.collect_live(catalog, window=args.window, homes=args.home)
+        if args.save:
+            try:
+                written = discover.save(texts, args.save, holes)
+            except OSError as exc:
+                raise UsageError("cannot write %s: %s" % (args.save, exc))
+            sys.stderr.write("raqib: texts read -> %s (repeat with --from %s)\n" % (", ".join(written), args.save))
+        inv = discover.run(texts, catalog, holes=holes, live=True)
+    text = (json.dumps(inv, indent=2, sort_keys=True, ensure_ascii=True) + "\n" if args.json
+            else discover.render_text(inv))
+    if args.out:
+        try:
+            with open(args.out, "w", encoding="ascii", errors="backslashreplace") as f:
+                f.write(text)
+        except OSError as exc:
+            raise UsageError("cannot write %s: %s" % (args.out, exc))
+        out.write("raqib: inventory of %d records -> %s (%s)\n" % (inv["records"], args.out, inv["result"]))
+    else:
+        out.write(text)
+    return inv["exit"]
+
+
 def main(argv=None, out=None):
     out = out or sys.stdout
     try:
@@ -468,7 +551,8 @@ def main(argv=None, out=None):
         return 2 if exc.code else 0
     try:
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
-                   "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval}[args.command]
+                   "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
+                   "discover": cmd_discover}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)
