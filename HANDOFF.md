@@ -1,30 +1,30 @@
-# HANDOFF — M6.1  (phase 6: `raqib watch` + OS notifications, ADR-0005)
+# HANDOFF — M6.3  (phase 6: packaging, `raqib doctor`, README around watch)
 
-Task: one command watches a project: install hooks if missing, tail the trace,
-run rules incrementally, notify the OS on findings and silence, serve the page.
+Task: `pip install .` / `pipx install .` puts `raqib` on PATH; `raqib doctor`
+says in one screen what is missing; README starts from `raqib watch`.
 
 Scope:
-  raqib/watch.py (new), raqib/notify.py (new), raqib/cli.py, raqib/ui.py (serve hook
-  only), tools/install_hooks.py (API only), tests/, README.md, docs/specs/ADR-0005-*.md, docs/review/
+  pyproject.toml (new), raqib/__main__.py, raqib/cli.py, raqib/doctor.py (new),
+  raqib/install.py (new), raqib/watch.py (import only), tools/, .github/workflows/gate.yml,
+  tests/, README.md, docs/review/
 
 Exit criteria:
-- E1 `raqib watch [PROJECT] [--log PATH] [--no-open] [--no-notify] [--port N]`:
-     installs hooks via install_hooks (idempotent, prints changes), tails the
-     trace by polling, evaluates rules on new lines only, keeps findings and
-     silence windows in memory and in `<trace>.watch.json`, opens the page
-     once, runs until Ctrl-C, prints the final report. Writes nothing into
-     the project but the hook settings; never signals a process (A4).
-- E2 Live silence: no line for RAQIB_GAP_SECONDS opens a window (A3), the next closes it; both notified.
-- E3 `raqib/notify.py`: windows (PowerShell + WinRT toast, text via a temp
-     file, never in the command string), linux (`notify-send` by absolute
-     path, else bell + stderr), darwin (`osascript`). Text = rule id, project,
-     seq - never agent content. One per rule per 60 s, rest folded into a
-     count. Delivery failure -> hole in watch.json and in the page band.
-- E4 Tests: tail on a growing file; incremental == batch on the final file;
-     silence open/close; backends with a fake runner (file, not string); limit.
-- E5 README "Watch a project": three lines. Gate green ubuntu + windows;
-     notifier disabled under CI (no toasts).
+- E1 `pyproject.toml`: stdlib-only runtime, pytest the only test extra,
+     entry point `raqib = raqib.cli:main`, package data = catalog YAMLs and
+     endpoints.yaml. The installer logic moves to `raqib/install.py`
+     (tools/install_hooks.py becomes a thin wrapper; watch imports the
+     package, never a checkout path - W14). `pip install .` in a clean venv
+     then `raqib --help` and `raqib watch --help` work on Linux and Windows
+     (CI job added).
+- E2 `raqib doctor [PROJECT]`: Python, `claude` on PATH + version, hook
+     settings (installed / missing / foreign), notifier backend, Sysmon
+     (Windows), trace path writable; OK / MISSING per line; exit 1 if any
+     MISSING. Read-only.
+- E3 README rewritten: first screen = install + `raqib watch`; the rest
+     below; old quickstart kept as "manual steps"; stale `--branch
+     claude/v0.1` line removed.
+- E4 gate.py checks unchanged; gate.yml adds the install job. Gate green ubuntu + windows.
 
-Not in scope: dashboard v2 (M6.2), packaging (M6.3), tray, page controls.
-Commit: `landed: M6.1 raqib watch` or `STOP: M6.1 <reason>`.
+Not in scope: PyPI publishing, signing, installers (.msi/.deb), tray icon.
+Commit: `landed: M6.3 packaging + doctor` or `STOP: M6.3 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
