@@ -175,7 +175,8 @@ def _runs(hook):
         words = shlex.split(command)
     except ValueError:
         return "?"
-    return next((w for w in words if w == install.LEGACY_TAIL or w.endswith("/" + install.LEGACY_TAIL)), "?")
+    tail = install.LEGACY_TAIL
+    return next((w for w in words if w.replace("\\", "/") == tail or w.replace("\\", "/").endswith("/" + tail)), "?")
 
 
 def _is_this(group, hook, matcher, capture, windows):

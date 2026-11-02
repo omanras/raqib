@@ -92,6 +92,10 @@ def snapshot(root):
 
 # --- all OK, and the shape of the screen ---------------------------------------------
 
+POSIX_FORM = "the POSIX hook form under POSIX path rules; Windows: test_e2_windows_form_is_installed_*"
+
+
+@pytest.mark.skipif(WINDOWS, reason=POSIX_FORM)
 def test_e2_all_ok_exits_0_with_one_line_per_check(tmp_path, home):
     proj = make_project(tmp_path)
     trace = tmp_path / "traces" / "t.jsonl"
@@ -296,9 +300,10 @@ def test_e2_hooks_foreign_and_partly_missing(tmp_path, home):
     assert code == 1
     verdict, text = checks["hooks"]
     assert verdict == "MISSING"
+    runs = sorted([install.capture_path(), "/old/raqib/hooks/capture.py", other])
     assert text == ("%s: missing for PreToolUse, SessionEnd; foreign for PostToolUse, SessionStart, Stop (a Raqib"
-                    " entry unlike the one this raqib writes; it runs %s; /old/raqib/hooks/capture.py; %s);"
-                    " `raqib watch` installs this raqib's" % (path, install.capture_path(), other))
+                    " entry unlike the one this raqib writes; it runs %s); `raqib watch` installs this raqib's"
+                    % (path, "; ".join(runs)))
 
 
 def test_e2_hooks_installed_but_disabled(tmp_path, home):
@@ -332,18 +337,32 @@ def test_e2_project_that_is_not_a_directory(tmp_path, home):
 
 
 def test_e2_windows_form_is_installed_for_a_windows_doctor_and_foreign_for_posix(tmp_path, home):
+    """All OK on a Windows doctor (run on every host), with an existing trace."""
     proj = make_project(tmp_path)
-    installed(proj, tmp_path / "t.jsonl", windows=True)
+    trace = tmp_path / "t.jsonl"
+    trace.write_text("")
+    installed(proj, trace, windows=True)
     windows = tmp_path / "Windows"
     windows.mkdir()
     environ = {"PATH": str(tmp_path / "bin"), "SystemRoot": str(windows)}
     code, text, checks, _ = run(tmp_path, proj, home, environ=environ, platform="win32",
                                 isfile=lambda p: True, registry=lambda key: {"Enabled": 1})
-    assert checks["hooks"][0] == "OK", text
+    assert code == 0 and text.splitlines()[-1] == "raqib doctor: all OK", text
+    assert checks["hooks"] == ("OK", "%s: installed for all 6 events (trace %s)" % (
+        proj / ".claude" / "settings.json", trace))
     assert checks["notifier"][0] == "OK" and checks["notifier"][1].startswith("windows-toast (")
+    assert checks["trace"] == ("OK", "%s (kept from the existing install) exists and is writable" % trace)
     assert list(checks) == ["python", "claude", "hooks", "notifier", "sysmon", "trace"]
     _, _, checks, _ = run(tmp_path, proj, home)
     assert checks["hooks"][0] == "MISSING" and "foreign for PreToolUse, PostToolUse" in checks["hooks"][1]
+
+
+def test_e2_foreign_entry_names_its_capture_with_either_slash():
+    for capture in ("C:\\r\\raqib\\hooks\\capture.py", "/r/raqib/hooks/capture.py"):
+        assert doctor._runs({"command": install.posix_command("C:\\t.jsonl", capture)}) == capture
+    assert doctor._runs({"command": install.windows_command("C:\\t.jsonl", "C:\\r\\raqib\\hooks\\capture.py",
+                                                            "C:\\py.exe")}) == "C:/r/raqib/hooks/capture.py"
+    assert doctor._runs({"command": "RAQIB_HOOK=capture python3 /x/other.py"}) == "?"
 
 
 def test_e2_a_raqib_without_capture_cannot_have_its_hooks_installed(tmp_path, home):
@@ -436,6 +455,7 @@ def test_e2_trace_blocked_by_a_file_is_missing(tmp_path, home):
     assert checks["trace"][1].endswith("cannot be created: %s is not a directory" % (home / ".raqib"))
 
 
+@pytest.mark.skipif(WINDOWS, reason=POSIX_FORM)
 def test_e2_trace_that_exists_is_checked_for_writing(tmp_path, home):
     proj = make_project(tmp_path)
     trace = tmp_path / "t.jsonl"
