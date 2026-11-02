@@ -2,6 +2,17 @@
 id: DESTRUCT-CMD
 title: Destructive shell command
 class: DESTRUCT
+# ADR-0002: the shape of a bad act (a program name), so it lists its evasions.
+kind: signature
+evasion:
+  - "python -c os.remove: the program is python, not one on the list"
+  - "find -delete: find is not on the list"
+  - "bash -c 'rm ...': the first program is bash"
+  - "git clean: git is not on the list"
+  - "a wrapper in front (sudo, env, xargs, timeout, nohup): only the first program is read"
+  - "rm after &&, ; or a pipe: only the first program is read"
+  - "mv or cp over a file, or a > redirect (echo > file): neither program is on the list"
+  - "the Write or Edit tool emptying a file: only Bash is matched"
 severity: medium
 # Cleaning build output with rm is routine, so some benign sessions fire.
 fp_budget: 0.25

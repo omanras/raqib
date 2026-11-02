@@ -6,6 +6,9 @@ A rule file holds one mapping:
     id: NET-TOOL                      # [A-Z][A-Z0-9]*(-[A-Z0-9]+)+, = file name
     title: Tool call reaches the network   # no { or }
     class: NET                        # SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT
+    kind: signature                   # signature|demand|anchor (ADR-0002)
+    evasion: [python urllib, ...]     # signature only, and then required: the
+                                      # known ways round it, one line each
     severity: medium                  # low|medium|high (SILENCE must be high, A3)
     fp_budget: 0.1                    # expected false-positive rate, 0 <= x < 1 (A6)
     status: active                    # optional: active (default) | disabled
@@ -38,6 +41,13 @@ true. Lines a rule could not judge are counted and reported as a "partial"
 note, so a quiet rule is never mistaken for a clean one. Write `exists: true`
 in front of a predicate when a missing field should mean "does not apply".
 
+ADR-0002: a signature matches the shape of a bad act and is cheap to evade,
+so it must list its evasions; a demand requires evidence of an act and its
+absence is the finding; an anchor measures against a record the agent does
+not write. kind and evasion errors name the rule id and the field. Every
+finding carries its rule's kind; check_finding rejects one without it
+(NoKindError, B-3).
+
 Paths are POSIX and normalised lexically (symlinks are not resolved): a
 relative path is joined to the line's cwd (for outside_any: to context
 "root" when given), and `~` paths count as absolute.
@@ -62,8 +72,12 @@ from raqib.rules.trace import is_record, is_seq, parse_ts
 CLASSES = ("SCOPE", "NET", "DESTRUCT", "SECRET", "SILENCE", "DRIFT")
 SEVERITIES = ("low", "medium", "high")
 STATUSES = ("active", "disabled")
+KINDS = ("signature", "demand", "anchor")  # ADR-0002
 REQUIRED = ("id", "title", "class", "severity", "fp_budget", "match", "fixtures")
 OPTIONAL = ("status", "description", "summary", "aggregate")
+# kind is required and evasion required iff kind is signature (ADR-0002);
+# both are checked after the id, so their errors can name the rule.
+KIND_FIELDS = ("kind", "evasion")
 RULE_ID = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\Z")
 FIELD = re.compile(r"[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*\Z")
 CONTEXT_KEY = re.compile(r"[a-z_][a-z0-9_]*\Z")
@@ -83,6 +97,11 @@ class FindingError(ValueError):
     """A finding that breaks the format, e.g. no cited_seq (A5)."""
 
 
+class NoKindError(FindingError):
+    """A finding that is sound but for its missing kind (ADR-0002 B-3):
+    the report raises it as a no-kind alarm."""
+
+
 class Rule:
     """A validated, compiled rule. `doc` is the parsed YAML mapping."""
 
@@ -92,6 +111,8 @@ class Rule:
         self.id = doc["id"]
         self.title = doc["title"]
         self.cls = doc["class"]
+        self.kind = doc["kind"]
+        self.evasion = tuple(doc.get("evasion", ()))
         self.severity = doc["severity"]
         self.fp_budget = doc["fp_budget"]
         self.status = doc.get("status", "active")
@@ -162,10 +183,11 @@ def compile_rule(doc, source="<rule>"):
         if key not in doc:
             bad(key, "missing")
     for key in doc:
-        if key not in REQUIRED and key not in OPTIONAL:
+        if key not in REQUIRED and key not in OPTIONAL and key not in KIND_FIELDS:
             bad(key, "unknown field")
     if not (isinstance(doc["id"], str) and RULE_ID.match(doc["id"])):
         bad("id", "must look like NET-TOOL ([A-Z][A-Z0-9]*(-[A-Z0-9]+)+)")
+    check_kind(doc, source)
     for key in ("title", "description", "summary"):
         if key in doc and not (isinstance(doc[key], str) and doc[key].strip()):
             bad(key, "must be a non-empty string")
@@ -215,6 +237,35 @@ def compile_rule(doc, source="<rule>"):
         return Rule(doc, source)
     except _NodeError as exc:
         raise RuleError("%s: %s" % (source, exc))
+
+
+def check_kind(doc, source="<rule>"):
+    """ADR-0002: kind is one of KINDS; evasion, a non-empty list of one-line
+    strings, is required when kind is signature (no signature has no
+    evasion) and forbidden otherwise. doc["id"] must already be valid: every
+    error names the rule and the field."""
+    def bad(field, msg):
+        raise RuleError("%s: rule %s: %s: %s" % (source, doc["id"], field, msg))
+
+    if "kind" not in doc:
+        bad("kind", "missing; every rule declares one of %s (ADR-0002)" % "|".join(KINDS))
+    kind = doc["kind"]
+    if not (isinstance(kind, str) and kind in KINDS):
+        bad("kind", "must be one of %s, not %r" % ("|".join(KINDS), kind))
+    if kind != "signature":
+        if "evasion" in doc:
+            bad("evasion", "only a signature lists evasions; kind %s must not have one (ADR-0002)" % kind)
+        return
+    if "evasion" not in doc:
+        bad("evasion", "missing; a signature must list its known evasions, one line each"
+                       " (ADR-0002: a signature with no listed evasion is invalid)")
+    evasion = doc["evasion"]
+    if not (isinstance(evasion, list) and evasion):
+        bad("evasion", "must be a non-empty list of one-line strings, not %r" % (evasion,))
+    for i, item in enumerate(evasion):
+        if not (isinstance(item, str) and item.strip() and item.isprintable()):
+            bad("evasion[%d]" % i, "must be a non-empty one-line string of printable characters, not %r"
+                % (item,))
 
 
 class _NodeError(ValueError):
@@ -514,6 +565,7 @@ def _emit(rule, session_id, cited_seq, ts, summary):
         "ts": ts,
         "rule_id": rule.id,
         "class": rule.cls,
+        "kind": rule.kind,
         "severity": rule.severity,
         "session_id": session_id,
         "cited_seq": list(cited_seq),
@@ -534,8 +586,13 @@ def check_finding(finding):
             raise FindingError("finding has no %s: %r" % (key, finding))
     if "class" in finding and finding["class"] not in CLASSES:
         raise FindingError("finding has an unknown class: %r" % (finding,))
+    if "kind" in finding and not (isinstance(finding["kind"], str) and finding["kind"] in KINDS):
+        raise FindingError("finding has an unknown kind (ADR-0002: %s): %r" % ("|".join(KINDS), finding))
     if "ts" not in finding or not (finding["ts"] is None or isinstance(finding["ts"], str)):
         raise FindingError("finding needs ts (a string, or null when the trace has none): %r" % (finding,))
+    if "kind" not in finding:  # last: the finding is sound but for its kind (B-3)
+        raise NoKindError("finding has no kind (ADR-0002: every finding carries one of %s; A3): %r"
+                          % ("|".join(KINDS), finding))
     return finding
 
 

@@ -2,9 +2,11 @@
 id: SCOPE-CWD-ROOT
 title: Session runs from the file system root or a home directory
 class: SCOPE
+# ADR-0002: measured against the cwd as the hook captured it.
+kind: anchor
 severity: medium
 fp_budget: 0.1
-description: "SCOPE-PATH measures paths against the session's cwd. A cwd of /, a broad top-level directory such as /tmp or /home, a home directory (/root, /home/<user>, /Users/<user>, /var/root) or a WSL drive puts almost every path inside, so the project boundary is gone. A home directory elsewhere is not known to this rule."
+description: "SCOPE-PATH measures paths against the session's cwd. A cwd of /, a broad top-level directory such as /tmp or /home, a home directory (/root, /home/<user>, /Users/<user>, /var/root) or a WSL drive puts almost every path inside, so the project boundary is gone. A home directory elsewhere is not known to this rule. Known holes: the list omits other broad directories such as /etc, /usr and /var; and a nested session, one the agent starts itself, chooses its own cwd."
 summary: "session cwd {cwd} gives no project boundary"
 match:
   all:

@@ -72,6 +72,7 @@ def test_e1_gap_finding_shape():
     assert f == {
         "ts": lines[2]["ts"],
         "rule_id": "SILENCE-GAP",
+        "kind": "demand",
         "severity": "high",
         "session_id": S1,
         "cited_seq": [1, 2],
@@ -317,3 +318,28 @@ def test_half_and_order_fall_back_to_the_last_valid_ts():
     order[4]["ts"] = "garbage"
     found = [f for f in silence.findings(order) if f["rule_id"] == "SILENCE-ORDER"]
     assert [f["ts"] for f in found] == [order[3]["ts"]]
+
+
+# --- M4.1 E3 (ADR-0002): the silence rules are demands -------------------------
+
+def test_m41_e3_each_silence_rule_declares_kind_demand():
+    assert silence.RULE_KINDS == {"SILENCE-GAP": "demand", "SILENCE-OPEN": "demand",
+                                  "SILENCE-HALF": "demand", "SILENCE-ORDER": "demand"}
+    from raqib import report
+    assert [rule_id for rule_id, _ in report.SILENCE_RULES] == list(silence.RULE_KINDS)
+
+
+def test_m41_e3_every_silence_finding_carries_kind_demand():
+    seen = set()
+    for name, _ in MATRIX:
+        for f in silence.findings(load(name)):
+            assert f["kind"] == silence.RULE_KINDS[f["rule_id"]] == "demand", (name, f)
+            seen.add(f["rule_id"])
+    assert seen == set(silence.RULE_KINDS)      # each of the four rules was seen firing
+
+
+def test_m41_e3_a_silence_rule_without_a_kind_cannot_emit(monkeypatch):
+    monkeypatch.delitem(silence.RULE_KINDS, "SILENCE-GAP")
+    with pytest.raises(KeyError):
+        silence.findings(load("gap-positive.json"))
+    assert silence.findings(load("gap-negative.json")) == []

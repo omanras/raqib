@@ -2,6 +2,8 @@
 id: SCOPE-CWD-MOVED
 title: The working directory of a session changes
 class: SCOPE
+# ADR-0002: measured against the cwd as the hook captured it.
+kind: anchor
 severity: medium
 fp_budget: 0.1
 description: "Every rule that places paths uses each line's cwd. When the cwd of one session changes, the boundary those rules measure against moves with it."
