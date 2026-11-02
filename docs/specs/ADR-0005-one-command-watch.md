@@ -1,6 +1,6 @@
 # ADR-0005 - One command, a window, and a knock: raqib watch, dashboard, notifications
 
-Status: proposed by the Table, 2026-11-02. Becomes accepted when M6.1 lands.
+Status: accepted (M6.1, 2026-11-03; Amendment F). Proposed 2026-11-02.
 Amendments appended, never edited in place.
 
 ## Problem
@@ -138,3 +138,25 @@ Order: M6.1, M6.3, M6.2. The Phase 5 items M5.0b/M5.1b/M5.2 resume after.
   X2 were introduced by the REDO, not present at 9ae221c. A REDO must
   carry a test for the behaviour it adds, not only for the finding it
   closes; the Table will ask for that line in every REDO message.
+
+## Amendment F (the Table, 2026-11-03) - judgement on 331136d (REDO 2)
+The Table read the D-1 (`_restart`, watch.py:323-333) and D-2 (`_grown`,
+:398-406) code paths itself; D-3..D-7 are taken on the builder's cited
+lines and named tests after two independent reviews of the same tree, and
+every REDO 2 change carries a test for the behaviour it adds (D-8).
+- D-1..D-7 MET. R-8 (aggregate rules reprinted on each growth, older
+  entry kept as not present; none high) accepted and recorded. R-9 (a
+  finding settled by the live window, all lines history, stays history)
+  accepted: the alternative knocks a stale SILENCE-OPEN at every start.
+- Gates: starting 948 passed (recorded, D-7/X12), closing 960 passed,
+  4 skipped, exit 0. CI for 331136d, read by the Table from
+  api.github.com: run 41519103474 success on ubuntu 3.11/3.12 and
+  windows 3.11/3.12. Scope: no file outside HANDOFF M6.1.
+- Status of this ADR: **accepted (M6.1, 2026-11-03)**. Decision text
+  unchanged; amendments A-F are the record.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's
+  standing word ("do and apply").
+- Table ledger for M6.1: three reviews, two REDOs; both REDO-1 defects
+  came from the REDO itself and were caught by review 2, which produced
+  rule D-8. The Table's own misses: B-5 named a wrapper that is not a
+  file (corrected D-3); B-3 said nothing about epochs (corrected D-1).
