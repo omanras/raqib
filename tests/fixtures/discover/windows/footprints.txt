@@ -1,0 +1,11 @@
+# M5.0 fixture SYNTHETIC (not captured from a machine) - invented host FIELD-PC in the shape of: Get-ChildItem -Force C:\Users\*\ | ForEach-Object FullName (every entry of every home; discover keeps the catalog matches). See docs/review/2026-11-02-M5.0-questions.md
+C:\Users\field\.claude
+C:\Users\field\.claude.json
+C:\Users\field\.codex
+C:\Users\field\.gemini
+C:\Users\field\.nimbus
+C:\Users\field\AppData
+C:\Users\field\Desktop
+C:\Users\field\Documents
+C:\Users\field\NTUSER.DAT
+C:\Users\Public\Documents

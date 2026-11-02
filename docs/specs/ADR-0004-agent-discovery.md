@@ -79,6 +79,48 @@ of from the commander.
   text parsers; fixtures. Lands before M5.2 and M5.3.
 - M5.4 rhythm (layer 3) once M5.3's os source gives a traffic record.
 
+## Amendment A (2026-11-02) - as built in M5.0 (builder's record, not a ruling)
+What M5.0 built, so the review can hold the tree to it. The open design
+points are questions in `docs/review/2026-11-02-M5.0-questions.md`, not
+settled here.
+- A-1 Readers are parsers over text (`raqib/discover.py`): `proc.txt`
+  (JSON lines written by `snapshot_proc` from /proc status PPid and Name,
+  cmdline, environ NAMES only, cwd), `ss -tnp`/`-tanp` text, the
+  Win32_Process, Get-NetTCPConnection and Get-DnsClientCache CSVs, Sysmon
+  XML events 1, 3, 11 and 22, and a footprint listing (one path per line).
+  `--from DIR` reads them by file name; a live run reads Linux /proc and
+  `ss -tanp`. `-a` is there so listening sockets give the direction. `--save DIR`
+  keeps the texts, so every cited line can be checked again (A5). Windows
+  is read from exported files only in M5.0.
+- A-2 Talks: a connected TCP socket that is outbound. That is Sysmon 3
+  `Initiated`; otherwise the local port is not a listening port in the same
+  text; with no listening sockets, the local port is above the remote one
+  (recorded per connection as `basis`, and as a hole).
+- A-3 Acts: a process whose image is sh, bash, dash, zsh, ksh, fish, cmd,
+  powershell, pwsh, python*, node or git, attributed to its nearest talking
+  ancestor; or a Sysmon 11 write by the talker's tree outside config space
+  (a dot-directory, AppData, ProgramData, a temp directory, or the
+  writer's own program directory). A talker with an act is a candidate. A
+  candidate below another is reported `inside` it. The reader's own pid
+  and its children are never evidence.
+- A-4 The catalog is checked as a signature (`kind: signature`, a
+  non-empty `evasion:`). Hosts match only names the host recorded (DNS
+  cache, Sysmon 22, Sysmon 3 DestinationHostname). Networks match by IP.
+  Ports match on loopback only. Footprints are home-relative paths with
+  the program name an agent runs as. A footprint links to a candidate by
+  that name or by its path in the tree's argv or cwd. With no linked
+  candidate it is AGENT-DARK, but only when a process source and a
+  connection source were both read. Without them it is "unjudged", not
+  dark.
+- A-5 Hand-off: hook when the root runs as claude (also npm
+  `claude-code`). Proxy when the root's or a talking ancestor's
+  environment names `*_BASE_URL` or `*_API_BASE`. Otherwise os, rooted at
+  the root pid.
+- A-6 Result and exit as in `raqib report`: alarm (1) for a candidate,
+  AGENT-DARK, an unread line, or nothing read. Incomplete (3) when no
+  process or connection source was read, or a source failed. none-seen (0)
+  otherwise, and printed as "NO AGENT SEEN in window ... Not a clearance".
+
 ## Amendment B (the Table, 2026-11-02) - rulings on review 2026-11-02-M5.0-review.md
 - B-1 (D4) The connection record on Linux is read from `/proc/net/tcp`
   and `/proc/net/tcp6` first - a kernel file no PATH can replace - with
@@ -125,6 +167,24 @@ of from the commander.
   footprint removed, so the result rests on the anchor alone.
 - Notes D8-D12, D16, D17: D8 and D12 fixed as text in README/holes; D17
   negatives added where cheap; the rest recorded.
+
+## Amendment C (2026-11-02) - the M5.0 REDO as built (builder's record, not a ruling)
+Where Amendment B changed Amendment A, B holds. A-3 and A-5 are superseded
+by B-6 and B-7, and A-1's live reader is now /proc/net/tcp first. Open
+points from the REDO are Q-R1..Q-R5 in `docs/review/2026-11-02-M5.0-questions.md`.
+- C-1 A new source, `proc-net.txt`, holds /proc/net/tcp and tcp6 as the
+  kernel prints them. `proc.txt` gains `sockets`, the inodes from
+  /proc/PID/fd, which build() joins to owners. `ss` runs only for a
+  sample whose /proc/net/tcp could not be read, and only by a path from
+  SS_PATHS, with env `{LC_ALL: C}`. The inventory's `connections_from`
+  names the texts read.
+- C-2 `complete` is true only when every process and connection source
+  was read in every sample, held its kind of record, and left no talking
+  line without an owner and no talking pid without a process record.
+  none-seen (exit 0) requires it.
+- C-3 Lines that start with `!hole` in proc-net.txt and footprints.txt,
+  and the snapshot's counts in proc.txt, become holes citing their line.
+  kthreadd is matched by pid 2's status Name.
 
 ## Amendment D (the Table, 2026-11-02) - rulings on review 2026-11-02-M5.0-REDO-review.md
 - D-1 (R1) Sysmon is complete as a process source only with at least one

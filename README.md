@@ -96,6 +96,87 @@ All commands run from the Raqib checkout. TRACE is a `raqib.log.jsonl`.
 | `python3 -m raqib suspect TRACE --backend anthropic --allow-fallback` | lets another model answer a window the requested model refuses; off by default, and such answers are labelled (`answered_by`) and counted |
 | `python3 -m raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events |
 
+## Find the agents on a host (discover)
+`raqib discover` looks for AI agents it has never heard of
+([ADR-0004](docs/specs/ADR-0004-agent-discovery.md), Amendments B and
+D). It goes by what an agent does, not by its name: a process that talks
+(an outbound TCP connection) and has a child, or writes a file outside
+config space. No name list decides that. `raqib/discover/endpoints.yaml`
+adds supporting evidence only, and lists its own evasions: model hosts,
+networks and local ports, config-dir footprints, the act names that label
+a child (bash, python, git, ...), and the hand-off criteria. Each
+candidate comes with its cited lines and a suggested capture source
+(ADR-0003):
+- **hook:** a root image named claude, but not Claude Desktop;
+- **proxy:** a CLI the catalog marks `proxy_capable`;
+- **os:** everything else.
+
+**AGENT-DARK** is an agent's config directory on disk with no active tree
+in the window. Discover is offline and read-only, and it never signals or
+attaches to a process.
+```bash
+python3 -m raqib discover                      # Linux: /proc and /proc/net/tcp (one snapshot)
+python3 -m raqib discover --window 30 --save run1   # sample 30 s; keep the texts read
+python3 -m raqib discover --from run1 --json   # the same inventory again, from the saved texts and run.json
+```
+On Linux, connections come from `/proc/net/tcp` and `/proc/net/tcp6`,
+with owners from `/proc/PID/fd`. These are kernel files that no PATH can
+replace. Only when `/proc/net/tcp` cannot be read does discover run `ss`,
+by absolute path (`/usr/sbin/ss`, `/usr/bin/ss`, `/sbin/ss`, `/bin/ss`)
+with a minimal environment. The output names the path it read.
+
+On Windows, M5.0 reads exported text, not the live host. In PowerShell,
+in an empty folder:
+```powershell
+Get-CimInstance Win32_Process | ConvertTo-Csv -NoTypeInformation | Out-File -Encoding utf8 win-process.csv
+Get-NetTCPConnection | ConvertTo-Csv -NoTypeInformation | Out-File -Encoding utf8 win-tcp.csv
+Get-DnsClientCache | ConvertTo-Csv -NoTypeInformation | Out-File -Encoding utf8 win-dns.csv
+Get-ChildItem -Force C:\Users\*\, C:\Users\*\AppData\Roaming\Claude\ | ForEach-Object FullName | Out-File -Encoding utf8 footprints.txt
+wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml /rd:true /c:5000 > sysmon.xml   # newest 5000; if Sysmon is installed
+```
+Then, from the Raqib checkout: `python -m raqib discover --from C:\path\to\that\folder`.
+
+**What a candidate is not.** It is a tree that talks and has a child, not
+proof of an agent. IDE terminals, package managers running install
+scripts, CI runners, browsers with helper processes and updaters can all
+be candidates. Talk over loopback counts too: an agent's local model is
+on loopback. Discover declares no fp_budget in M5.0. The budget is set
+from the first field runs (M5.4), not guessed.
+
+**What it cannot see.** Every run prints the first five as holes; the
+others are printed when they apply to the sources read:
+- **liveness:** a child is seen only while it is alive at a snapshot;
+- **sibling talkers:** an Electron network process or a local relay sits
+  beside the child, not above it;
+- **reparented children:** setsid, nohup, double fork, or an exited
+  parent;
+- **TCP only:** no UDP or QUIC, and no unix-socket relays;
+- **one view:** one network namespace, and no processes hidden by
+  hidepid.
+- **config space:** writes into dot-directories (also `.ssh`,
+  `.git/hooks`, `.github/workflows`), AppData (also the Startup folder),
+  ProgramData, temp, or the program's own directory are not counted as
+  acts.
+- **no names on Linux:** Linux keeps no DNS name record offline.
+- **no environment on Windows:** Windows exports carry no process
+  environment.
+
+**Exit codes.** An empty result still prints the window, the records read
+per source, and every hole.
+- **1:** a candidate, an AGENT-DARK footprint, an unread line, or nothing
+  read.
+- **3 (incomplete):** a process or connection source failed (even in one
+  sample, and also when ss stood in for /proc/net/tcp), held no record
+  (Sysmon: no event 1, or no event 3), or left a talking line without an
+  owner. A missing footprint listing is only a hole. `--save` writes a
+  `run.json` beside the texts, so `--from` replays an incomplete run as
+  incomplete.
+- **0:** every process and connection source was read and complete, and
+  nothing was seen. That is not a clearance.
+
+Fixtures are in `tests/fixtures/discover/`. The Linux ones are real and
+redacted, made by `capture.py` there; the Windows ones are synthetic.
+
 ## More
 - **[docs/CONSTITUTION.md](docs/CONSTITUTION.md)**: the nine articles
   (A1-A9) every change is held to.

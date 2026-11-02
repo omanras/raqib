@@ -1,0 +1,98 @@
+# Agent discovery catalog (ADR-0004 layers 1 and 4; M5.0). Loaded by
+# raqib/discover.py with raqib/rules/yamlite.py.
+#
+# Everything here is a signature and supporting only. The anchor - a process
+# that talks (outbound TCP) and has a child (any child: the act names below
+# only label it), or writes a file outside config space - reads none of
+# this file, so a name missing here hides nothing from it. This file is the
+# one thing an adversary can read and route around (ADR-0004); `evasion:`
+# says how.
+#
+# Kimi / Moonshot endpoints are deliberately not listed: ADR-0004's first field
+# test runs "with no prior knowledge of Kimi". The ~/.kimi footprint is listed
+# because ADR-0004 layer 4 names it. See docs/review/2026-11-02-M5.0-questions.md.
+id: DISCOVER-CATALOG
+kind: signature
+evasion:
+  - "a private, self-hosted or unlisted model endpoint (the tree anchor still holds)"
+  - "an HTTPS proxy, tunnel or VPN: the remote address is the relay, not the model host"
+  - "a local model server on a port not listed here, or a listed server moved to another port"
+  - "no name record: Linux keeps none offline in M5.0; on Windows DNS over HTTPS or a hosts-file entry leaves no DNS cache line"
+  - "a vendor network not listed (most vendors publish no stable API range; only names identify them)"
+  - "a config directory renamed or moved (CLAUDE_CONFIG_DIR, XDG paths) or deleted after install"
+  - "a key read from a file or a keychain instead of a *_API_KEY variable"
+  - "QUIC / HTTP/3 or other UDP transport: only TCP is read as talk"
+  - "a unix-socket relay: the agent talks to a local proxy over a unix socket and the proxy talks out"
+  - "reparenting: a child started with setsid, nohup or a double fork leaves the talker's tree"
+  - "sibling split: the process that talks and the one that has children are siblings, not ancestor and child"
+# Model API host names (lower case; fnmatch globs). Matched against names the
+# host recorded: Windows DNS client cache, Sysmon 22 QueryName, Sysmon 3
+# DestinationHostname.
+hosts:
+  - {match: api.anthropic.com, vendor: anthropic}
+  - {match: api.openai.com, vendor: openai}
+  - {match: "*.openai.azure.com", vendor: azure-openai}
+  - {match: generativelanguage.googleapis.com, vendor: google}
+  - {match: "*aiplatform.googleapis.com", vendor: google-vertex}
+  - {match: "bedrock-runtime.*.amazonaws.com", vendor: aws-bedrock}
+  - {match: api.mistral.ai, vendor: mistral}
+  - {match: api.deepseek.com, vendor: deepseek}
+  - {match: api.groq.com, vendor: groq}
+  - {match: api.together.xyz, vendor: together}
+  - {match: openrouter.ai, vendor: openrouter}
+  - {match: api.x.ai, vendor: xai}
+  - {match: api.cohere.com, vendor: cohere}
+  - {match: api.fireworks.ai, vendor: fireworks}
+  - {match: "*.githubcopilot.com", vendor: github-copilot}
+  - {match: "*.cursor.sh", vendor: cursor}
+# Model API networks, matched by IP (the only endpoint match Linux has
+# offline in M5.0).
+networks:
+  - {cidr: 160.79.104.0/23, vendor: anthropic, note: "api.anthropic.com; 160.79.104.10 seen in tests/fixtures/discover/linux/ss.txt; range from Anthropic's published IP list, not re-checked offline"}
+# Local model servers: matched only when the remote address is loopback.
+ports:
+  - {port: 11434, name: ollama}
+  - {port: 1234, name: lm-studio}
+  - {port: 1337, name: jan}
+  - {port: 8000, name: vllm, note: "generic; supporting only"}
+  - {port: 8080, name: llama.cpp-server, note: "generic; supporting only"}
+# Act names (B-6): a signature that only LABELS a child. The anchor is "talks
+# and has a child"; a child whose name is not here still counts.
+acts:
+  names: [sh, bash, dash, zsh, ksh, fish, cmd, powershell, pwsh, "python*", node, git]
+  evasion:
+    - "rename-by-copy: a shell or interpreter copied under another name is not labelled"
+    - "a custom shell or a tool the agent ships itself"
+    - "interpreters not listed (perl, ruby, deno, bun, ...) and build tools (make, cargo, npx)"
+# Hand-off to a capture source (ADR-0003; D-5). Signatures too: they pick
+# the source, never whether a tree is a candidate.
+handoff:
+  # hook: a root image named claude (claude.exe), unless its path matches a
+  # Claude Desktop pattern (case-insensitive substring of the image path).
+  hook:
+    images: [claude]
+    not_paths: [AnthropicClaude, Claude.app, claude-desktop]
+    evasion:
+      - "the Claude Code CLI under another image name (npm: node .../claude-code/cli.js) gets os, not hook"
+      - "Claude Desktop installed at a path not listed gets hook, which it does not offer; os would still watch the tree"
+      - "any other program named claude gets hook"
+  # proxy: a root that goes by a name whose CLI documents a base-URL setting.
+  proxy:
+    proxy_capable: [codex, aider]
+    evasion:
+      - "a CLI with a base-URL setting not listed here gets os"
+      - "a listed CLI with a fixed endpoint or a pinned certificate ignores a proxy"
+# Footprints: paths relative to a home ('/'-separated; a glob in the last part
+# only) and the program name an agent runs as, to link a footprint to a tree.
+footprints:
+  - {match: .claude, agent: claude}
+  - {match: .claude.json, agent: claude}
+  - {match: AppData/Roaming/Claude/claude_desktop_config.json, agent: claude}
+  - {match: .codex, agent: codex}
+  - {match: .gemini, agent: gemini}
+  - {match: .cursor, agent: cursor}
+  - {match: ".aider*", agent: aider}
+  - {match: .kimi, agent: kimi}
+# Variable NAMES in a process environment (never values; E4).
+env:
+  - "*_API_KEY"

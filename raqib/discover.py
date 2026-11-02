@@ -1,0 +1,1740 @@
+"""Agent discovery (M5.0, ADR-0004 with Amendment B): find the AI agents on
+a host by what they do, with no prior knowledge of their names.
+
+    An agent is a process tree that talks to a model and acts on the machine.
+
+Layers (ADR-0004; kinds as in ADR-0002):
+1. endpoints (signature, supporting): an outbound connection to a model
+   host, network or local model port in raqib/discover/endpoints.yaml. Names
+   come only from records the host holds: the Windows DNS client cache and
+   Sysmon events 22 and 3. Linux keeps no such record offline, so there the
+   catalog matches by IP network and loopback port only (a recorded hole).
+2. tree (anchor, primary; B-6): a process with outbound TCP (a "talker")
+   that has a child. Every process goes to its nearest talking ancestor;
+   a file the talker's tree writes outside config space (Sysmon 11) is an
+   act too. The catalog's `acts:` names only label a child (a listed shell,
+   interpreter or git); they decide nothing, so a renamed shell is still a
+   child.
+4. footprint (signature, supporting): agent config paths in the homes, and
+   *_API_KEY variable NAMES in a process environment. AGENT-DARK: a path
+   footprint on disk that no candidate tree in the window links to.
+Layer 3 (rhythm) is M5.4.
+
+Every reader is a parser over text, so fixtures are text and the tests need
+no live host. A record is a dict with "src" (the source kind), "line" (its
+line in that source's text) and "text" (that line, bounded); every claim of
+the inventory cites the record lines it rests on (A5). Source texts, and
+their names under --from DIR:
+  proc.txt         Linux /proc snapshot as JSON lines, written by
+                   snapshot_proc(): pid, ppid (status PPid), name (status
+                   Name), argv (cmdline), cwd, env_keys (environ NAMES only:
+                   values are dropped on reading and never stored), sockets
+                   (socket inodes from /proc/PID/fd). A {"snapshot": TIME,
+                   "self": PID, ...counts} line opens each snapshot.
+  proc-net.txt     /proc/net/tcp and /proc/net/tcp6 as the kernel prints
+                   them; "# at TIME (FILE)" opens each block. Owners come
+                   from the sockets in proc.txt (B-1).
+  ss.txt           `ss -tnp` or `ss -tanp` output (the fallback when
+                   /proc/net/tcp cannot be read); "# at TIME" may open a block.
+  win-process.csv  Get-CimInstance Win32_Process | ConvertTo-Csv
+  win-tcp.csv      Get-NetTCPConnection | ConvertTo-Csv
+  win-dns.csv      Get-DnsClientCache | ConvertTo-Csv
+  sysmon.xml       Sysmon events as XML (wevtutil qe ... /f:xml): 1 process
+                   create, 3 network connect, 11 file create, 22 DNS query
+  footprints.txt   one path per line: what exists in the homes ("#" lines
+                   are comments)
+A line "!hole TEXT" in proc-net.txt or footprints.txt is a read failure the
+reader met; it becomes a hole of the inventory, with its line cited (B-3).
+
+Offline and read-only (E6, A4): no socket is opened; no process is
+signalled, attached to or written to. A live run on Linux reads /proc,
+/proc/net/tcp and /proc/net/tcp6; only when /proc/net/tcp cannot be read
+does it run ss, by absolute path from SS_PATHS with a minimal environment,
+never through PATH (B-1). Elsewhere it lists the homes only and says so.
+"""
+from __future__ import annotations
+
+import csv
+import datetime
+import fnmatch
+import io
+import ipaddress
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import xml.etree.ElementTree as ET
+
+from raqib.rules import yamlite
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CATALOG = os.path.join(ROOT, "raqib", "discover", "endpoints.yaml")
+SOURCES = ("proc", "proc-net", "ss", "win-process", "win-tcp", "win-dns", "sysmon", "footprints")
+FILE_NAMES = {"proc": "proc.txt", "proc-net": "proc-net.txt", "ss": "ss.txt",
+              "win-process": "win-process.csv", "win-tcp": "win-tcp.csv", "win-dns": "win-dns.csv",
+              "sysmon": "sysmon.xml", "footprints": "footprints.txt"}
+PROCESS_SOURCES = ("proc", "win-process", "sysmon")
+CONNECTION_SOURCES = ("proc-net", "ss", "win-tcp", "sysmon")
+# The record each source must hold for the run to be complete (B-2).
+EXPECTED = {"proc": "proc", "win-process": "proc", "proc-net": "conn", "ss": "conn", "win-tcp": "conn"}
+# ss is a fallback only, and only from here: never found through PATH (B-1).
+SS_PATHS = ("/usr/sbin/ss", "/usr/bin/ss", "/sbin/ss", "/bin/ss")
+SS_ARGS = ("-tanp",)
+# What the anchor cannot see, said on every run (B-4, D8).
+ALWAYS_HOLES = (
+    "liveness: a child is seen only if it is alive at a snapshot (or has a Sysmon 1 event); one that"
+    " ran and exited between snapshots is not seen",
+    "sibling talkers: the talker must be an ancestor of the child; a talker beside it (an Electron"
+    " network process, a local daemon or proxy that relays the model) is not joined to it",
+    "reparented acts: a child started with setsid, nohup or a double fork, or whose parent exited"
+    " (reparented to init; on Windows a dead parent's pid can be reused), is not attributed",
+    "TCP only: UDP and QUIC (HTTP/3) and unix-socket relays to a local proxy are not read as talk",
+    "one view: sockets of other network namespaces (containers) and processes hidden by hidepid or"
+    " by another user's /proc permissions are not seen",
+)
+TALK_STATES = ("ESTABLISHED", "SYN-SENT", "CLOSE-WAIT", "FIN-WAIT-1", "FIN-WAIT-2", "LAST-ACK",
+               "CLOSING", "CONNECT")
+STATES = {"ESTAB": "ESTABLISHED", "ESTABLISHED": "ESTABLISHED", "SYNSENT": "SYN-SENT",
+          "SYNRECV": "SYN-RECEIVED", "SYNRECEIVED": "SYN-RECEIVED", "FINWAIT1": "FIN-WAIT-1",
+          "FINWAIT2": "FIN-WAIT-2", "CLOSEWAIT": "CLOSE-WAIT", "CLOSING": "CLOSING",
+          "LASTACK": "LAST-ACK", "TIMEWAIT": "TIME-WAIT", "LISTEN": "LISTEN", "CLOSED": "CLOSED",
+          "CLOSE": "CLOSED", "UNCONN": "CLOSED", "BOUND": "BOUND", "DELETETCB": "DELETE-TCB",
+          # MSFT_NetTCPConnection.State as a number
+          "1": "CLOSED", "2": "LISTEN", "3": "SYN-SENT", "4": "SYN-RECEIVED", "5": "ESTABLISHED",
+          "6": "FIN-WAIT-1", "7": "FIN-WAIT-2", "8": "CLOSE-WAIT", "9": "CLOSING", "10": "LAST-ACK",
+          "11": "TIME-WAIT", "12": "DELETE-TCB", "100": "BOUND"}
+# The `st` column of /proc/net/tcp (include/net/tcp_states.h).
+PROC_NET_STATES = {"01": "ESTABLISHED", "02": "SYN-SENT", "03": "SYN-RECEIVED", "04": "FIN-WAIT-1",
+                   "05": "FIN-WAIT-2", "06": "TIME-WAIT", "07": "CLOSED", "08": "CLOSE-WAIT",
+                   "09": "LAST-ACK", "0A": "LISTEN", "0B": "CLOSING", "0C": "SYN-RECEIVED"}
+# Path segments of config, cache and temp space; a write there is not an act.
+CONFIG_SEGMENTS = ("appdata", "programdata", "temp", "tmp", "$recycle.bin")
+SYSMON_PROVIDER = "Microsoft-Windows-Sysmon"
+LINE_TEXT_MAX = 240
+CITES_PER_CLAIM = 3
+ACTS_SHOWN = 12
+ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+EXIT = {"none-seen": 0, "alarm": 1, "incomplete": 3}
+
+
+class CatalogError(ValueError):
+    pass
+
+
+# --- text helpers -------------------------------------------------------------
+
+def decode(data):
+    """Text of a source file: UTF-8, or UTF-16 with a BOM (PowerShell 5's `>`)."""
+    if data.startswith(b"\xef\xbb\xbf"):
+        return data[3:].decode("utf-8", "replace")
+    if data.startswith(b"\xff\xfe"):
+        return data[2:].decode("utf-16-le", "replace")
+    if data.startswith(b"\xfe\xff"):
+        return data[2:].decode("utf-16-be", "replace")
+    return data.decode("utf-8", "replace")
+
+
+def _safe(text):
+    return "".join(c if c.isprintable() else "?" for c in str(text))
+
+
+def bounded(text, limit=LINE_TEXT_MAX):
+    """One printable line; a long one keeps its start and end."""
+    text = _safe(text)
+    if len(text) > limit:
+        keep = limit - 3
+        text = text[:keep // 2] + "..." + text[-(keep - keep // 2):]
+    return text
+
+
+def _numbered(text):
+    for number, raw in enumerate(text.split("\n"), start=1):
+        yield number, raw[:-1] if raw.endswith("\r") else raw
+
+
+def _rec(kind, src, line, text, **fields):
+    rec = {"kind": kind, "src": src, "line": line, "text": bounded(text)}
+    rec.update(fields)
+    return rec
+
+
+def _problem(src, line, reason):
+    return {"src": src, "line": line, "reason": reason}
+
+
+def _int(value):
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        return None
+
+
+def _ts(value):
+    """An observation time as an aware UTC datetime, or None."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return dt.replace(tzinfo=datetime.timezone.utc) if dt.tzinfo is None else dt.astimezone(datetime.timezone.utc)
+
+
+def iso(dt):
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z" if dt else None
+
+
+def image_name(path):
+    """Program name of a path: basename, lower case, no .exe/.com/.bat/.cmd,
+    no leading "-" of a login shell."""
+    if not path:
+        return None
+    base = re.split(r"[\\/]", path.strip().strip('"'))[-1].lower().lstrip("-")
+    for ext in (".exe", ".com", ".bat", ".cmd"):
+        if base.endswith(ext):
+            base = base[:-len(ext)]
+    return base or None
+
+
+def win_argv(cmdline):
+    """argv of a Windows command line: whitespace splits outside double quotes."""
+    out, word, quoted, started = [], [], False, False
+    for c in cmdline or "":
+        if c == '"':
+            quoted, started = not quoted, True
+        elif c in " \t" and not quoted:
+            if started:
+                out.append("".join(word))
+            word, started = [], False
+        else:
+            word.append(c)
+            started = True
+    if started:
+        out.append("".join(word))
+    return out
+
+
+def _ip(text):
+    """Normalised IP text (an IPv4-mapped IPv6 address becomes IPv4), "*" for
+    a wildcard, or None."""
+    text = (text or "").strip()
+    if text in ("*", ""):
+        return "*" if text == "*" else None
+    text = text.split("%")[0]
+    try:
+        ip = ipaddress.ip_address(text)
+    except ValueError:
+        return None
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return str(ip)
+
+
+def _hostport(text):
+    """(ip, port) of an ss address like 1.2.3.4:443, [::1]:80, *:22."""
+    if text.startswith("["):
+        host, sep, port = text[1:].partition("]:")
+        if not sep:
+            return None
+    else:
+        host, sep, port = text.rpartition(":")
+        if not sep:
+            return None
+    ip = _ip(host)
+    if ip is None:
+        return None
+    if port == "*":
+        return ip, None
+    port = _int(port)
+    return (ip, port) if port is not None and 0 <= port <= 65535 else None
+
+
+def _wildcard(ip):
+    return ip in (None, "*") or ipaddress.ip_address(ip).is_unspecified
+
+
+def _state(text):
+    return STATES.get(re.sub(r"[^A-Z0-9]", "", str(text).upper()))
+
+
+# --- the catalog (endpoints.yaml) ---------------------------------------------------
+
+def load_catalog(path=CATALOG):
+    """The signature catalog. kind must be signature and evasion a non-empty
+    list (ADR-0002); anything malformed is a CatalogError, never a silent
+    misread."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = yamlite.loads(f.read())
+    except (OSError, UnicodeDecodeError, yamlite.YamlError) as exc:
+        raise CatalogError("%s: %s" % (path, exc))
+
+    def bad(field, msg):
+        raise CatalogError("%s: %s: %s" % (path, field, msg))
+
+    keys = ("id", "kind", "evasion", "hosts", "networks", "ports", "footprints", "env", "acts", "handoff")
+    if not isinstance(doc, dict):
+        raise CatalogError("%s: the catalog must hold a mapping" % path)
+    for key in keys:
+        if key not in doc:
+            bad(key, "missing")
+    for key in doc:
+        if key not in keys:
+            bad(key, "unknown field")
+    if doc["kind"] != "signature":
+        bad("kind", "must be signature (the anchor reads no catalog)")
+    if not (isinstance(doc["evasion"], list) and doc["evasion"]
+            and all(isinstance(e, str) and e.strip() for e in doc["evasion"])):
+        bad("evasion", "a signature must list its known evasions (ADR-0002)")
+
+    def items(field, required, optional=("note",)):
+        value = doc[field]
+        if not isinstance(value, list):
+            bad(field, "must be a list")
+        for i, item in enumerate(value):
+            if not (isinstance(item, dict) and set(required) <= set(item)
+                    and set(item) <= set(required) | set(optional)):
+                bad("%s[%d]" % (field, i), "must have %s (and optionally %s)"
+                    % (", ".join(required), ", ".join(optional)))
+        return value
+
+    hosts = items("hosts", ("match", "vendor"))
+    for i, h in enumerate(hosts):
+        if not (isinstance(h["match"], str) and h["match"] and h["match"] == h["match"].lower()):
+            bad("hosts[%d].match" % i, "must be a lower-case host name or glob")
+    networks = []
+    for i, n in enumerate(items("networks", ("cidr", "vendor"))):
+        try:
+            networks.append(dict(n, net=ipaddress.ip_network(str(n["cidr"]))))
+        except ValueError as exc:
+            bad("networks[%d].cidr" % i, str(exc))
+    ports = items("ports", ("port", "name"))
+    for i, p in enumerate(ports):
+        if not (isinstance(p["port"], int) and not isinstance(p["port"], bool) and 0 < p["port"] < 65536):
+            bad("ports[%d].port" % i, "must be a port number")
+    footprints = items("footprints", ("match", "agent"))
+    for i, fp in enumerate(footprints):
+        m = fp["match"]
+        if not (isinstance(m, str) and m and not m.startswith("/") and "\\" not in m
+                and ".." not in m.split("/") and not any(c in "*?[" for c in m.rpartition("/")[0])):
+            bad("footprints[%d].match" % i, "must be a path relative to a home, '/'-separated,"
+                " with a glob in its last part only")
+        if not (isinstance(fp["agent"], str) and fp["agent"] == fp["agent"].lower() and fp["agent"]):
+            bad("footprints[%d].agent" % i, "must be a lower-case program name")
+    if not (isinstance(doc["env"], list) and all(isinstance(e, str) and e for e in doc["env"])):
+        bad("env", "must be a list of variable-name globs")
+    acts = doc["acts"]
+    if not (isinstance(acts, dict) and set(acts) <= {"names", "evasion", "note"} and "names" in acts):
+        bad("acts", "must be a mapping with names and evasion")
+    if not (isinstance(acts.get("evasion"), list) and acts["evasion"]
+            and all(isinstance(e, str) and e.strip() for e in acts["evasion"])):
+        bad("acts.evasion", "the act names are a signature: list their known evasions (ADR-0002, B-6)")
+    if not (isinstance(acts["names"], list) and acts["names"]
+            and all(isinstance(n, str) and n and n == n.lower() for n in acts["names"])):
+        bad("acts.names", "must be a non-empty list of lower-case program names or globs")
+    handoff = doc["handoff"]
+    if not (isinstance(handoff, dict) and set(handoff) == {"hook", "proxy"}):
+        bad("handoff", "must hold hook and proxy")
+    for name, fields in (("hook", {"images", "not_paths"}), ("proxy", {"proxy_capable"})):
+        part = handoff[name]
+        if not (isinstance(part, dict) and set(part) == fields | {"evasion"}):
+            bad("handoff.%s" % name, "must hold %s and evasion" % ", ".join(sorted(fields)))
+        if not (isinstance(part["evasion"], list) and part["evasion"]
+                and all(isinstance(e, str) and e.strip() for e in part["evasion"])):
+            bad("handoff.%s.evasion" % name, "a hand-off criterion is a signature: list its evasions (D-5)")
+        for field in fields:
+            if not (isinstance(part[field], list) and all(isinstance(n, str) and n for n in part[field])):
+                bad("handoff.%s.%s" % (name, field), "must be a list of names")
+    images = handoff["hook"]["images"] + handoff["proxy"]["proxy_capable"]
+    if any(n != n.lower() for n in images):
+        bad("handoff", "images and proxy_capable must be lower-case program names")
+    proxy = handoff["proxy"]["proxy_capable"]
+    return {"id": doc["id"], "kind": doc["kind"], "evasion": doc["evasion"], "hosts": hosts,
+            "networks": networks, "ports": ports, "footprints": footprints, "env": doc["env"],
+            "acts": acts["names"], "acts_evasion": acts["evasion"], "proxy_capable": proxy,
+            "hook_images": handoff["hook"]["images"], "hook_not_paths": handoff["hook"]["not_paths"],
+            "hook_evasion": handoff["hook"]["evasion"], "proxy_evasion": handoff["proxy"]["evasion"],
+            "path": str(path)}
+
+
+# --- parsers: text in, records out (E1) ---------------------------------------------
+
+def cmdline_args(raw):
+    """argv from the bytes of /proc/PID/cmdline (NUL-separated)."""
+    parts = raw.split(b"\0")
+    if parts and parts[-1] == b"":
+        parts.pop()
+    return [p.decode("utf-8", "replace") for p in parts]
+
+
+def status_fields(text):
+    """The `Key:<tab>value` fields of /proc/PID/status."""
+    out = {}
+    for line in text.splitlines():
+        key, sep, value = line.partition(":")
+        if sep:
+            out[key.strip()] = value.strip()
+    return out
+
+
+def environ_keys(raw):
+    """The variable NAMES of /proc/PID/environ. Values are dropped here and
+    never reach a record (E4)."""
+    names = set()
+    for item in raw.split(b"\0"):
+        name = item.split(b"=", 1)[0].decode("ascii", "replace")
+        if ENV_NAME.match(name):
+            names.add(name)
+    return sorted(names)
+
+
+def _linux_image(argv, name):
+    """argv[0]'s program name; status Name when argv[0] was rewritten (has a
+    space, e.g. "sshd: user") or is empty."""
+    first = argv[0] if argv else ""
+    if first and " " not in first:
+        return image_name(first)
+    return image_name(name) if name else None
+
+
+def parse_proc(text, src="proc"):
+    """Records of a proc.txt snapshot (JSON lines from snapshot_proc)."""
+    records, problems = [], []
+    at = None
+    for number, raw in _numbered(text):
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        try:
+            obj = json.loads(raw)
+        except ValueError:
+            problems.append(_problem(src, number, "not a JSON line"))
+            continue
+        if not isinstance(obj, dict):
+            problems.append(_problem(src, number, "not a JSON object"))
+            continue
+        if "snapshot" in obj:
+            at = _ts(obj["snapshot"])
+            counts = {k: obj[k] for k in ("gone_while_read", "unreadable", "kernel_threads")
+                      if isinstance(obj.get(k), int) and not isinstance(obj.get(k), bool)}
+            self_pid = obj.get("self") if isinstance(obj.get("self"), int) else None
+            records.append(_rec("snapshot", src, number, raw, ts=at, self=self_pid, counts=counts,
+                                kernel_parent=obj.get("kernel_parent")))
+            continue
+        pid, ppid, argv, env = obj.get("pid"), obj.get("ppid"), obj.get("argv"), obj.get("env_keys")
+        sockets = obj.get("sockets")
+        if not (isinstance(pid, int) and (ppid is None or isinstance(ppid, int))
+                and (argv is None or (isinstance(argv, list) and all(isinstance(a, str) for a in argv)))
+                and (env is None or (isinstance(env, list) and all(isinstance(e, str) for e in env)))
+                and (sockets is None or (isinstance(sockets, list) and all(isinstance(i, int) for i in sockets)))):
+            problems.append(_problem(src, number, "a process line needs int pid and ppid, argv and"
+                                                  " env_keys as lists of strings, sockets as ints"))
+            continue
+        cwd = obj.get("cwd") if isinstance(obj.get("cwd"), str) else None
+        unread = obj.get("unread") if isinstance(obj.get("unread"), list) else []
+        records.append(_rec("proc", src, number, raw, pid=pid, ppid=ppid, argv=argv or [],
+                            image=_linux_image(argv, obj.get("name")), exe=(argv or [None])[0],
+                            cwd=cwd, env_keys=env, sockets=sockets, ts=_ts(obj.get("at")) or at,
+                            unread=[str(u) for u in unread]))
+    return records, problems
+
+
+def _proc_net_addr(text):
+    """(ip, port) of a /proc/net/tcp address: hex words in host byte order
+    (little-endian, as on x86 and arm64) and a hex port."""
+    addr, sep, port = text.partition(":")
+    if not sep or len(addr) not in (8, 32):
+        return None
+    try:
+        raw = bytes.fromhex(addr)
+        port = int(port, 16)
+    except ValueError:
+        return None
+    packed = b"".join(raw[i:i + 4][::-1] for i in range(0, len(raw), 4))
+    ip = ipaddress.ip_address(packed)
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return str(ip), port
+
+
+def parse_proc_net(text, src="proc-net"):
+    """Records of /proc/net/tcp and /proc/net/tcp6 text. The owner is left
+    open (pid None): build() joins each socket inode to the processes whose
+    /proc/PID/fd hold it (B-1). Inode 0 has no owner (TIME-WAIT)."""
+    records, problems = [], []
+    at = None
+    for number, raw in _numbered(text):
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("!hole "):
+            records.append(_rec("hole", src, number, raw, note=line[len("!hole "):]))
+            continue
+        if line.startswith("#"):
+            m = re.match(r"#\s*at\s+(\S+)", line)
+            if m:
+                at = _ts(m.group(1))
+            continue
+        fields = line.split()
+        if fields[0] == "sl":
+            continue
+        if len(fields) < 10 or not fields[0].endswith(":"):
+            problems.append(_problem(src, number, "not a /proc/net/tcp row"))
+            continue
+        local, peer = _proc_net_addr(fields[1]), _proc_net_addr(fields[2])
+        state, inode = PROC_NET_STATES.get(fields[3].upper()), _int(fields[9])
+        if local is None or peer is None or state is None or inode is None:
+            problems.append(_problem(src, number, "cannot read addresses, state or inode"))
+            continue
+        records.append(_rec("conn", src, number, raw, pid=None, comm=None, state=state, laddr=local[0],
+                            lport=local[1], raddr=peer[0], rport=peer[1], inode=inode, ts=at))
+    _set_direction(records)
+    return records, problems
+
+
+USERS = re.compile(r'\("((?:[^"\\]|\\.)*)",pid=([0-9]+),fd=[0-9]+\)')
+
+
+def parse_ss(text, src="ss"):
+    """Records of `ss -tnp` / `ss -tanp` output."""
+    records, problems = [], []
+    at = None
+    netid = False
+    for number, raw in _numbered(text):
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            m = re.match(r"#\s*at\s+(\S+)", line)
+            if m:
+                at = _ts(m.group(1))
+            continue
+        fields = line.split()
+        if fields[0] in ("State", "Netid"):
+            netid = fields[0] == "Netid"
+            continue
+        if netid:
+            if fields[0] != "tcp":
+                continue
+            fields = fields[1:]
+        if len(fields) < 5:
+            problems.append(_problem(src, number, "fewer than 5 columns"))
+            continue
+        state, local, peer = _state(fields[0]), _hostport(fields[3]), _hostport(fields[4])
+        if state is None or local is None or peer is None:
+            problems.append(_problem(src, number, "cannot read state or addresses (run ss with -n)"))
+            continue
+        base = dict(state=state, laddr=local[0], lport=local[1], raddr=peer[0], rport=peer[1], ts=at)
+        users = USERS.findall(" ".join(fields[5:]))
+        for comm, pid in users or [(None, None)]:
+            records.append(_rec("conn", src, number, raw, pid=_int(pid) if pid else None, comm=comm, **base))
+    _set_direction(records)
+    return records, problems
+
+
+def _set_direction(conns):
+    """Outbound or inbound, for a snapshot of sockets. With listening sockets
+    in the same text: inbound when the local port is listened on. Without:
+    outbound when the local port is above the remote one (an ephemeral port
+    calling a service port). The basis is recorded on each connection."""
+    conns = [r for r in conns if r["kind"] == "conn"]
+    listening = {r["lport"] for r in conns if r["state"] == "LISTEN"}
+    for r in conns:
+        if r["state"] not in TALK_STATES or r["lport"] is None or r["rport"] is None:
+            r["direction"], r["basis"] = None, None
+        elif listening:
+            r["direction"], r["basis"] = ("in" if r["lport"] in listening else "out"), "listen"
+        else:
+            r["direction"], r["basis"] = ("out" if r["lport"] > r["rport"] else "in"), "ports"
+
+
+def _csv_rows(text, src, what, required, problems):
+    """(line, raw line, row dict) per data row of a PowerShell CSV. A first
+    `#TYPE` line and `#` comment lines before the header are skipped."""
+    lines = text.split("\n")
+    reader = csv.reader(io.StringIO(text, newline=""))
+    header, prev = None, 0
+    try:
+        for row in reader:
+            start, prev = prev + 1, reader.line_num
+            if not row or not "".join(row).strip():
+                continue
+            if header is None:
+                if row[0].lstrip().startswith("#"):
+                    continue
+                header = [h.strip() for h in row]
+                missing = [k for k in required if not any(k == h or (isinstance(k, tuple) and h in k)
+                                                          for h in header)]
+                if missing:
+                    problems.append(_problem(src, start, "not a %s CSV: no column %s" % (
+                        what, ", ".join("|".join(k) if isinstance(k, tuple) else k for k in missing))))
+                    return
+                continue
+            if len(row) != len(header):
+                problems.append(_problem(src, start, "%d fields, the header has %d" % (len(row), len(header))))
+                continue
+            yield start, lines[start - 1].rstrip("\r"), dict(zip(header, row))
+    except csv.Error as exc:
+        problems.append(_problem(src, prev + 1, "CSV: %s" % exc))
+    if header is None:
+        problems.append(_problem(src, 1, "no CSV header: not a %s CSV" % what))
+
+
+def _col(row, *names):
+    for n in names:
+        if row.get(n, "").strip():
+            return row[n].strip()
+    return None
+
+
+def parse_win_process(text, src="win-process"):
+    """Records of `Get-CimInstance Win32_Process | ConvertTo-Csv`."""
+    records, problems = [], []
+    for number, raw, row in _csv_rows(text, src, "Win32_Process",
+                                      ("ProcessId", "ParentProcessId", "Name"), problems):
+        pid, ppid = _int(row["ProcessId"]), _int(row["ParentProcessId"])
+        if pid is None or ppid is None:
+            problems.append(_problem(src, number, "ProcessId and ParentProcessId must be numbers"))
+            continue
+        exe, cmdline = _col(row, "ExecutablePath"), _col(row, "CommandLine")
+        records.append(_rec("proc", src, number, raw, pid=pid, ppid=ppid, image=image_name(row["Name"]),
+                            exe=exe, argv=win_argv(cmdline), cwd=None, env_keys=None, ts=None,
+                            started=_col(row, "CreationDate")))
+    return records, problems
+
+
+def parse_win_tcp(text, src="win-tcp"):
+    """Records of `Get-NetTCPConnection | ConvertTo-Csv`."""
+    records, problems = [], []
+    for number, raw, row in _csv_rows(text, src, "Get-NetTCPConnection",
+                                      ("LocalAddress", "LocalPort", "RemoteAddress", "RemotePort",
+                                       "State", "OwningProcess"), problems):
+        state, pid = _state(row["State"]), _int(row["OwningProcess"])
+        laddr, raddr = _ip(row["LocalAddress"]), _ip(row["RemoteAddress"])
+        lport, rport = _int(row["LocalPort"]), _int(row["RemotePort"])
+        if None in (state, pid, laddr, raddr, lport, rport):
+            problems.append(_problem(src, number, "cannot read state, addresses, ports or OwningProcess"))
+            continue
+        records.append(_rec("conn", src, number, raw, pid=pid, comm=None, state=state, laddr=laddr,
+                            lport=lport, raddr=raddr, rport=rport, ts=None, started=_col(row, "CreationTime")))
+    _set_direction(records)
+    return records, problems
+
+
+def parse_win_dns(text, src="win-dns"):
+    """Name records (A and AAAA) of `Get-DnsClientCache | ConvertTo-Csv`."""
+    records, problems = [], []
+    for number, raw, row in _csv_rows(text, src, "Get-DnsClientCache",
+                                      ("Entry", "Data", ("Type", "RecordType")), problems):
+        rtype = (_col(row, "Type", "RecordType") or "").upper()
+        if rtype not in ("A", "AAAA", "1", "28"):
+            continue
+        ip = _ip(row["Data"])
+        if ip in (None, "*"):
+            problems.append(_problem(src, number, "an A/AAAA record whose Data is not an IP"))
+            continue
+        names = sorted({n.lower().rstrip(".") for n in (_col(row, "Entry"), _col(row, "Name", "RecordName")) if n})
+        records.append(_rec("dns", src, number, raw, pid=None, names=names, ips=[ip], ts=None))
+    return records, problems
+
+
+def _sysmon_ips(results):
+    """IPs in a Sysmon 22 QueryResults value ("type:  5 x.net;::ffff:1.2.3.4;")."""
+    ips = []
+    for part in (results or "").split(";"):
+        ip = _ip(part)
+        if ip not in (None, "*"):
+            ips.append(ip)
+    return ips
+
+
+EVENT_START = re.compile(r"<Event(?=[\s>])")
+
+
+def parse_sysmon(text, src="sysmon"):
+    """Records of Sysmon events 1, 3, 11 and 22 in XML. Events may stand one
+    per line (wevtutil /f:xml) or span lines; each is cited at its first line.
+    Other providers and event ids are counted, not read."""
+    records, problems = [], []
+    starts = [m.start() for m in EVENT_START.finditer(text)]
+    line, pos = 1, 0
+    for i, start in enumerate(starts):
+        line += text.count("\n", pos, start)
+        pos = start
+        chunk = text[start:starts[i + 1] if i + 1 < len(starts) else len(text)]
+        end = chunk.rfind("</Event>")
+        if end < 0:
+            problems.append(_problem(src, line, "an <Event> without </Event>"))
+            continue
+        chunk = chunk[:end + len("</Event>")]
+        if "<!DOCTYPE" in chunk or "<!ENTITY" in chunk:
+            problems.append(_problem(src, line, "DOCTYPE or ENTITY in an event: not read"))
+            continue
+        try:
+            event = ET.fromstring(chunk)
+        except ET.ParseError as exc:
+            problems.append(_problem(src, line, "XML: %s" % exc))
+            continue
+        provider = event_id = None
+        data = {}
+        for el in event.iter():
+            tag = el.tag.rsplit("}", 1)[-1]
+            if tag == "Provider":
+                provider = el.get("Name")
+            elif tag == "EventID":
+                event_id = _int(el.text or "")
+            elif tag == "Data" and el.get("Name"):
+                data[el.get("Name")] = (el.text or "").strip()
+        if provider != SYSMON_PROVIDER or event_id not in (1, 3, 11, 22):
+            continue
+        records += [dict(r, event=event_id) for r in _sysmon_records(src, line, event_id, data, problems)]
+    return records, problems
+
+
+def _sysmon_records(src, line, event_id, d, problems):
+    """The records of one Sysmon event, all with one rendering of its line:
+    the event itself, and a process record derived from its Image (and, for
+    event 1, from its Parent fields) so a talker has a name."""
+    pid, ts = _int(d.get("ProcessId", "")), _ts(d.get("UtcTime"))
+    image = d.get("Image") or None
+    if pid is None:
+        problems.append(_problem(src, line, "Sysmon event %d without a ProcessId" % event_id))
+        return []
+    head = "Sysmon %d %s pid %d %s" % (event_id, d.get("UtcTime", "-"), pid, image or "-")
+    if event_id == 1:
+        ppid, parent = _int(d.get("ParentProcessId", "")), d.get("ParentImage") or None
+        text = "%s parent %s %s: %s" % (head, d.get("ParentProcessId", "-"), parent or "-", d.get("CommandLine", ""))
+        out = [_rec("proc", src, line, text, pid=pid, ppid=ppid, image=image_name(image), exe=image,
+                    argv=win_argv(d.get("CommandLine")), cwd=d.get("CurrentDirectory") or None,
+                    env_keys=None, ts=ts)]
+        if ppid is not None:
+            out.append(_rec("proc", src, line, text, pid=ppid, ppid=None, image=image_name(parent),
+                            exe=parent, argv=win_argv(d.get("ParentCommandLine")), cwd=None,
+                            env_keys=None, ts=ts, derived=True))
+        return out
+    event = None
+    if event_id == 3 and (d.get("Protocol") or "tcp").lower() == "tcp":
+        # Source is the side that initiated: for an inbound connection the
+        # local end is the destination.
+        out = d.get("Initiated", "").lower() == "true"
+        local, remote = ("Source", "Destination") if out else ("Destination", "Source")
+        laddr, raddr = _ip(d.get(local + "Ip")), _ip(d.get(remote + "Ip"))
+        lport, rport = _int(d.get(local + "Port", "")), _int(d.get(remote + "Port", ""))
+        if None in (raddr, laddr, rport, lport):
+            problems.append(_problem(src, line, "Sysmon 3 without addresses and ports"))
+            text = head
+        else:
+            host = (d.get("DestinationHostname") or "").lower().rstrip(".") if out else ""
+            host = "" if host == "-" else host
+            text = "%s %s:%s %s %s:%s host=%s" % (head, laddr, lport, "->" if out else "<-", raddr, rport,
+                                                  host or "-")
+            event = _rec("conn", src, line, text, pid=pid, comm=None, state="CONNECT", laddr=laddr,
+                         lport=lport, raddr=raddr, rport=rport, ts=ts, host=host or None,
+                         direction="out" if out else "in", basis="initiated")
+    elif event_id == 3:
+        text = "%s %s" % (head, d.get("Protocol"))
+    elif event_id == 22:
+        name = (d.get("QueryName") or "").lower().rstrip(".")
+        text = "%s query %s -> %s" % (head, name, d.get("QueryResults", ""))
+        event = _rec("dns", src, line, text, pid=pid, names=[name] if name else [],
+                     ips=_sysmon_ips(d.get("QueryResults")), ts=ts)
+    else:
+        path = d.get("TargetFilename") or None
+        text = "%s wrote %s" % (head, path)
+        event = _rec("file", src, line, text, pid=pid, path=path, ts=ts) if path else None
+    own = _rec("proc", src, line, text, pid=pid, ppid=None, image=image_name(image), exe=image,
+               argv=[], cwd=None, env_keys=None, ts=ts, derived=True)
+    return [own] + ([event] if event else [])
+
+
+def parse_footprints(text, src="footprints"):
+    """One path per line; "#" lines are comments; "!hole TEXT" lines are
+    read failures of the scan (B-3)."""
+    records = []
+    for number, raw in _numbered(text):
+        path = raw.strip()
+        if path.startswith("!hole "):
+            records.append(_rec("hole", src, number, raw, note=path[len("!hole "):]))
+        elif path and not path.startswith("#"):
+            records.append(_rec("path", src, number, raw, path=path))
+    return records, []
+
+
+PARSERS = {"proc": parse_proc, "proc-net": parse_proc_net, "ss": parse_ss,
+           "win-process": parse_win_process, "win-tcp": parse_win_tcp, "win-dns": parse_win_dns,
+           "sysmon": parse_sysmon, "footprints": parse_footprints}
+
+
+# --- live readers (read-only; Linux /proc and /proc/net; homes anywhere) ---------------------
+
+def _read_bytes(path):
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def _try(fn):
+    try:
+        return fn()
+    except (OSError, ValueError):
+        return None
+
+
+def _sockets(fd_dir, own=False):
+    """Socket inodes among a process's open files (/proc/PID/fd links). Any
+    failure - the fd directory or one link - makes the set unknown (an
+    OSError), never a partial list (D-3). The one exception is the reader's
+    own fd directory (own=True): the descriptor its listing used is closed
+    before it is read back, so that ENOENT is expected and skipped."""
+    inodes = set()
+    for fd in os.listdir(fd_dir):
+        try:
+            target = os.readlink(os.path.join(fd_dir, fd))
+        except FileNotFoundError:
+            if own:
+                continue
+            raise
+        m = re.match(r"socket:\[([0-9]+)\]\Z", target)
+        if m:
+            inodes.add(int(m.group(1)))
+    return sorted(inodes)
+
+
+def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
+    """A proc.txt snapshot of every process: JSON lines, ASCII. Reads status,
+    cmdline, environ (names kept, values dropped at once), the cwd link and
+    the socket inodes among the fd links; writes nothing to /proc and
+    touches no process (A4). Kernel threads are left out only when pid 2's
+    status Name is kthreadd (B-3); a process that ended while read and one
+    whose status could not be read are counted apart."""
+    at = at or iso(datetime.datetime.now(datetime.timezone.utc))
+    try:
+        names = [n for n in os.listdir(proc_root) if n.isdigit()]
+    except OSError as exc:
+        raise OSError("cannot list %s: %s" % (proc_root, exc.strerror or exc))
+    status = {}
+    gone = unreadable = 0
+    for name in names:
+        try:
+            status[int(name)] = status_fields(_read_bytes(os.path.join(proc_root, name, "status"))
+                                              .decode("utf-8", "replace"))
+        except FileNotFoundError:
+            gone += 1
+        except (OSError, ValueError):
+            unreadable += 1
+    kernel_parent = 2 if status.get(2, {}).get("Name") == "kthreadd" else None
+    procs, kernel = [], 0
+    for pid in sorted(status):
+        fields = status[pid]
+        ppid = _int(fields.get("PPid", ""))
+        if ppid is None:
+            unreadable += 1
+            continue
+        if kernel_parent is not None and kernel_parent in (pid, ppid):
+            kernel += 1
+            continue
+        base = os.path.join(proc_root, str(pid))
+        unread = []
+
+        def get(field, fn):
+            try:
+                return fn()
+            except (OSError, ValueError):
+                unread.append(field)
+                return None
+        procs.append({"pid": pid, "ppid": ppid, "name": fields.get("Name"),
+                      "argv": get("cmdline", lambda: cmdline_args(_read_bytes(os.path.join(base, "cmdline")))),
+                      "cwd": get("cwd", lambda: os.readlink(os.path.join(base, "cwd"))),
+                      "env_keys": get("environ", lambda: environ_keys(_read_bytes(os.path.join(base, "environ")))),
+                      "sockets": get("fd", lambda: _sockets(os.path.join(base, "fd"), own=pid == self_pid)),
+                      "unread": unread, "at": at})
+    meta = {"snapshot": at, "self": self_pid, "processes": len(procs), "kernel_threads": kernel,
+            "kernel_parent": kernel_parent, "gone_while_read": gone, "unreadable": unreadable}
+    if note:
+        meta["note"] = note
+    return "".join(json.dumps(x, sort_keys=True, ensure_ascii=True) + "\n" for x in [meta] + procs)
+
+
+def read_proc_net(proc_root="/proc", at=None):
+    """(proc-net.txt text or None, error or None): /proc/net/tcp and
+    /proc/net/tcp6 as the kernel prints them, each opened by "# at TIME
+    (FILE)". Only a missing tcp6 file (ENOENT) is a "!hole" line (no IPv6
+    table); any other failure on tcp or tcp6 is an error of the source
+    (D-2). Text None: tcp could not be read (then ss is the fallback)."""
+    out, errors, tcp_ok = [], [], False
+    for name in ("tcp", "tcp6"):
+        path = os.path.join(proc_root, "net", name)
+        try:
+            text = _read_bytes(path).decode("ascii", "replace")
+        except FileNotFoundError as exc:
+            if name == "tcp6":
+                out.append("!hole %s not present (%s): no IPv6 table\n" % (path, exc.strerror or exc))
+            else:
+                errors.append("cannot read %s: %s" % (path, exc.strerror or exc))
+            continue
+        except OSError as exc:
+            errors.append("cannot read %s: %s" % (path, exc.strerror or exc))
+            continue
+        tcp_ok = tcp_ok or name == "tcp"
+        out.append("# at %s (%s)\n%s" % (at, path, text if text.endswith("\n") or not text else text + "\n"))
+    return ("".join(out) if tcp_ok else None), ("; ".join(errors) or None)
+
+
+def run_ss(path, args=SS_ARGS, at=None):
+    """(text, error) of one ss run, opened by a "# at" line. The program is
+    given by absolute path and runs with a minimal environment: no PATH
+    lookup, nothing an agent's shell exported (B-1)."""
+    if not os.path.isabs(path):
+        return None, "%s is not an absolute path: ss is never looked up through PATH" % path
+    env = {"LC_ALL": "C"}
+    if os.name == "nt" and os.environ.get("SYSTEMROOT"):
+        env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
+    try:
+        proc = subprocess.run([path] + list(args), capture_output=True, text=True, timeout=30,
+                              stdin=subprocess.DEVNULL, env=env)
+    except FileNotFoundError:
+        return None, "%s not found" % path
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, "%s failed: %s" % (path, exc)
+    if proc.returncode != 0:
+        return None, "%s exited %d: %s" % (path, proc.returncode, bounded(proc.stderr.strip(), 160))
+    return "# at %s (%s)\n%s" % (at, " ".join([path] + list(args)), proc.stdout), None
+
+
+def find_ss(paths=SS_PATHS):
+    """The first of a fixed list of absolute paths that is a file, or None."""
+    return next((p for p in paths if os.path.isabs(p) and os.path.isfile(p)), None)
+
+
+def default_homes(platform=None):
+    platform = platform or sys.platform
+    if platform == "win32":
+        base = os.path.join(os.environ.get("SystemDrive", "C:") + os.sep, "Users")
+        found = [os.environ.get("USERPROFILE", "")]
+    else:
+        base = "/home"
+        found = [os.path.expanduser("~"), "/root"]
+    try:
+        found += [os.path.join(base, n) for n in sorted(os.listdir(base))]
+    except OSError:
+        pass
+    homes = []
+    for h in found:
+        if h and os.path.isdir(h) and os.path.abspath(h) not in homes:
+            homes.append(os.path.abspath(h))
+    return homes
+
+
+def scan_footprints(homes, catalog):
+    """footprints.txt for some homes: the paths that match a catalog footprint.
+    Only names are listed; no file is opened. A home that cannot be listed,
+    and a matching path with a control character (it could forge a line),
+    are "!hole" lines (B-3)."""
+    lines = ["# raqib discover: footprint listing (paths only; nothing opened)"]
+    for home in homes:
+        try:
+            names = sorted(os.listdir(home))
+        except OSError as exc:
+            lines.append("!hole home %s not readable: %s" % (_safe(home), exc.strerror or exc))
+            continue
+        lines.append("# home %s: %d entries" % (_safe(home), len(names)))
+        found = []
+        for fp in catalog["footprints"]:
+            parts = fp["match"].split("/")
+            if len(parts) == 1:
+                found += [os.path.join(home, n) for n in names if fnmatch.fnmatchcase(n.lower(), parts[0].lower())]
+            elif os.path.lexists(os.path.join(home, *parts)):
+                found.append(os.path.join(home, *parts))
+        odd = [p for p in found if any(not c.isprintable() for c in p)]
+        lines += sorted(set(found) - set(odd))
+        if odd:
+            lines.append("!hole home %s: %d matching names with control characters not listed"
+                         % (_safe(home), len(set(odd))))
+    return "\n".join(lines) + "\n"
+
+
+def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/proc", ss_paths=SS_PATHS,
+                 ss_args=SS_ARGS, interval=1.0, clock=time.time, sleep=time.sleep):
+    """{kind: (label, text or None, error or None)} read from this host, and
+    the holes of the live run. On Linux: a /proc snapshot and /proc/net/tcp
+    (+tcp6) every `interval` seconds for `window` seconds (0: one snapshot);
+    ss from `ss_paths` only for a sample whose /proc/net/tcp could not be
+    read. A source that failed in any sample keeps its text and an error,
+    so the run is incomplete, not clean (B-2, D-2) - also when ss stood in.
+    Elsewhere: the homes only. Read-only (A4)."""
+    platform = platform or sys.platform
+    texts, holes = {}, []
+    if platform.startswith("linux"):
+        samples = fallbacks = 0
+        parts = {"proc": [], "proc-net": [], "ss": []}
+        errors = {"proc": [], "proc-net": [], "ss": []}
+        ss_path = None
+        start = clock()
+        while True:
+            samples += 1
+            at = iso(datetime.datetime.fromtimestamp(clock(), datetime.timezone.utc))
+            try:
+                parts["proc"].append(snapshot_proc(proc_root, at, os.getpid()))
+            except OSError as exc:
+                errors["proc"].append(str(exc))
+            text, error = read_proc_net(proc_root, at)
+            if error:
+                errors["proc-net"].append(error)
+            if text is not None:
+                parts["proc-net"].append(text)
+            else:
+                fallbacks += 1
+                ss_path = ss_path or find_ss(ss_paths)
+                text, error = run_ss(ss_path, ss_args, at) if ss_path else (
+                    None, "no ss at %s" % ", ".join(ss_paths))
+                if text is None:
+                    errors["ss"].append(error)
+                else:
+                    parts["ss"].append(text)
+            if clock() - start >= window:
+                break
+            sleep(interval)
+        labels = {"proc": "live %s" % proc_root,
+                  "proc-net": "live %s" % ", ".join(os.path.join(proc_root, "net", n) for n in ("tcp", "tcp6")),
+                  "ss": "live fallback: %s" % " ".join([ss_path or "ss (none found)"] + list(ss_args))}
+
+        def entry(kind, out_of):
+            failed = sorted(set(errors[kind]))
+            error = ("%d of %d sample(s) failed: %s" % (len(errors[kind]), out_of, "; ".join(failed))
+                     if failed else None)
+            return labels[kind], "".join(parts[kind]) if parts[kind] else None, error
+
+        texts["proc"] = entry("proc", samples)
+        texts["proc-net"] = entry("proc-net", samples)
+        if fallbacks:
+            holes.append("ss fallback used for %d of %d sample(s): %s" % (fallbacks, samples, ss_path or "none found"))
+            texts["ss"] = entry("ss", fallbacks)
+    else:
+        holes.append("no live process or connection reader on %s in M5.0: export the Win32_Process,"
+                     " Get-NetTCPConnection and Get-DnsClientCache CSVs or Sysmon XML and give them with"
+                     " --read or --from (README)" % platform)
+    homes = default_homes(platform) if homes is None else list(homes)
+    texts["footprints"] = ("live: homes %s" % (", ".join(homes) or "(none)"), scan_footprints(homes, catalog), None)
+    return texts, holes
+
+
+def read_inputs(paths):
+    """{kind: (path, text or None, error or None)} for {kind: path}."""
+    texts = {}
+    for kind, path in paths.items():
+        try:
+            texts[kind] = (path, decode(_read_bytes(path)), None)
+        except OSError as exc:
+            texts[kind] = (path, None, "cannot read: %s" % (exc.strerror or exc))
+    return texts
+
+
+def inputs_in(directory):
+    """{kind: path} for the known source files present in a directory."""
+    return {kind: os.path.join(directory, FILE_NAMES[kind]) for kind in SOURCES
+            if os.path.isfile(os.path.join(directory, FILE_NAMES[kind]))}
+
+
+RUN_FILE = "run.json"
+
+
+def save(texts, directory, holes=()):
+    """Write the texts of a live run and a run.json - each source's label
+    and error, the connections it was read from, and the live holes - so
+    the run can be repeated with --from (A5) and a replay of an incomplete
+    run is incomplete too (D-4)."""
+    os.makedirs(directory, exist_ok=True)
+    written, sources = [], {}
+    for kind, (label, text, error) in texts.items():
+        sources[kind] = {"label": label, "file": FILE_NAMES[kind] if text is not None else None, "error": error}
+        if text is not None:
+            path = os.path.join(directory, FILE_NAMES[kind])
+            with open(path, "w", encoding="utf-8", newline="\n") as f:
+                f.write(text)
+            written.append(path)
+    run = {"raqib": "discover-run", "version": 1, "sources": sources, "holes": list(holes),
+           "connections_from": [texts[k][0] for k in CONNECTION_SOURCES if k in texts and texts[k][1] is not None]}
+    path = os.path.join(directory, RUN_FILE)
+    with open(path, "w", encoding="ascii", newline="\n") as f:
+        f.write(json.dumps(run, indent=2, sort_keys=True, ensure_ascii=True) + "\n")
+    return written + [path]
+
+
+def read_dir(directory):
+    """(texts, holes) of a directory of source texts. With a run.json from
+    --save, every source keeps its recorded label and error and the live
+    holes come back, so a replay of an incomplete run is incomplete and the
+    ss path survives (D-4); a ValueError if run.json cannot be read. Without
+    one, proc-net.txt is read and an ss.txt beside it is ignored (B-1,
+    D-8)."""
+    run_path = os.path.join(directory, RUN_FILE)
+    if not os.path.isfile(run_path):
+        paths = inputs_in(directory)
+        holes = []
+        if "proc-net" in paths and "ss" in paths:
+            holes.append("%s ignored: %s is read first and ss is only its fallback (B-1)"
+                         % (paths.pop("ss"), paths["proc-net"]))
+        return read_inputs(paths), holes
+    try:
+        run = json.loads(decode(_read_bytes(run_path)))
+        sources, saved_holes = run["sources"], run["holes"]
+        if not (isinstance(sources, dict) and set(sources) <= set(SOURCES) and isinstance(saved_holes, list)
+                and all(isinstance(v, dict) and isinstance(v.get("label"), str) for v in sources.values())):
+            raise ValueError("unknown source or field")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError("%s cannot be read: %s" % (run_path, exc))
+    texts = {}
+    for kind, src in sources.items():
+        path = os.path.join(directory, FILE_NAMES[kind])
+        error = src.get("error") if isinstance(src.get("error"), str) else None
+        text = None
+        if src.get("file"):
+            try:
+                text = decode(_read_bytes(path))
+            except OSError as exc:
+                error = "; ".join(x for x in (error, "saved text %s missing: %s" % (path, exc.strerror or exc)) if x)
+        texts[kind] = ("%s (saved from %s)" % (path, src["label"]), text, error)
+    return texts, ["saved run: %s" % h for h in saved_holes if isinstance(h, str)]
+
+
+# --- the inventory ---------------------------------------------------------------------
+
+def cite(rec):
+    return {"src": rec["src"], "line": rec["line"], "text": rec["text"]}
+
+
+def _cites(recs, limit=CITES_PER_CLAIM, skip=()):
+    """Up to `limit` distinct cited lines of some records, none of `skip`."""
+    seen, out = {(c["src"], c["line"]) for c in skip}, []
+    for r in recs:
+        key = (r["src"], r["line"])
+        if key not in seen:
+            seen.add(key)
+            out.append(cite(r))
+    return out[:limit]
+
+
+def _merge_procs(records):
+    """pid -> process. Records read from a process list or Sysmon 1 come
+    first; records derived from another event's Image field only fill gaps.
+    The first value of a field wins; every image the pid had is kept (an
+    exec keeps the pid)."""
+    procs = {}
+    own = [r for r in records if r["kind"] == "proc" and not r.get("derived")]
+    derived = [r for r in records if r["kind"] == "proc" and r.get("derived")]
+    for r in own + derived:
+        p = procs.setdefault(r["pid"], {"pid": r["pid"], "ppid": None, "image": None, "images": [],
+                                        "exe": None, "argv": [], "cwd": None, "env_keys": None,
+                                        "sockets": None, "recs": [], "derived": True})
+        p["recs"].append(r)
+        if not r.get("derived"):
+            p["derived"] = False
+        for key in ("ppid", "exe", "cwd", "env_keys"):
+            if p[key] is None and r.get(key) is not None:
+                p[key] = r[key]
+        if r.get("sockets") is not None:
+            p["sockets"] = sorted(set(p["sockets"] or []) | set(r["sockets"]))
+        if not p["argv"] and r.get("argv"):
+            p["argv"] = r["argv"]
+        if r.get("image") and r["image"] not in p["images"]:
+            p["images"].append(r["image"])
+        p["image"] = p["images"][0] if p["images"] else None
+    return procs
+
+
+def ancestors(procs, pid):
+    """Parent pids from the nearest up; stops at a missing parent or a loop."""
+    seen = {pid}
+    p = procs.get(pid)
+    while p is not None and p["ppid"] is not None and p["ppid"] not in seen:
+        seen.add(p["ppid"])
+        yield p["ppid"]
+        p = procs.get(p["ppid"])
+
+
+def _descendants(procs, pid):
+    children = {}
+    for q in procs.values():
+        if q["ppid"] is not None:
+            children.setdefault(q["ppid"], []).append(q["pid"])
+    out, todo = set(), [pid]
+    while todo:
+        for c in children.get(todo.pop(), []):
+            if c not in out and c != pid:
+                out.add(c)
+                todo.append(c)
+    return out
+
+
+def talks(conn):
+    return (conn["direction"] == "out" and conn["state"] in TALK_STATES and conn["pid"] is not None
+            and not _wildcard(conn["raddr"]))
+
+
+def _config_write(path, exe):
+    """A write into config, cache or temp space: a dot-directory, AppData,
+    ProgramData, a temp directory, or the writer's own program directory."""
+    norm = path.replace("\\", "/").lower()
+    segments = [s for s in norm.split("/")[:-1] if s]
+    if any(s.startswith(".") and s not in (".", "..") or s in CONFIG_SEGMENTS for s in segments):
+        return True
+    if exe:
+        own = exe.replace("\\", "/").lower().rpartition("/")[0]
+        if own and norm.startswith(own + "/"):
+            return True
+    return False
+
+
+def names_of(p):
+    """Names a process goes by, lower case: its images; the last part of its
+    executable path, argv[0] and argv[1] (a script run by an interpreter),
+    with and without extension; and an npm package name in those paths (the
+    part after node_modules/ or node_modules/@scope/). Directory names are
+    not names: /home/claude/x.py does not run as claude."""
+    out = set(p["images"])
+    for text in [p["exe"]] + p["argv"][:2]:
+        parts = [x for x in re.split(r"[\\/]", text or "") if x]
+        picks = parts[-1:]
+        for i, part in enumerate(parts[:-1]):
+            if part == "node_modules":
+                nxt = parts[i + 1]
+                picks.append(parts[i + 2] if nxt.startswith("@") and i + 2 < len(parts) - 1 else nxt)
+        for part in picks:
+            name = image_name(part)
+            if name:
+                out.add(name)
+                out.add(name.rsplit(".", 1)[0])
+    return out
+
+
+def _named(p, agent):
+    return any(n == agent or n.startswith(agent + "-") for n in names_of(p))
+
+
+def _endpoint(conn, names, catalog):
+    """Catalog matches (signature) of one outbound connection."""
+    matches = []
+    ip = ipaddress.ip_address(conn["raddr"])
+    for n in catalog["networks"]:
+        if ip.version == n["net"].version and ip in n["net"]:
+            matches.append({"layer": "network", "match": n["cidr"], "vendor": n["vendor"]})
+    if ip.is_loopback:
+        for p in catalog["ports"]:
+            if conn["rport"] == p["port"]:
+                matches.append({"layer": "local-port", "match": p["port"], "vendor": p["name"]})
+    for name in sorted(names):
+        for h in catalog["hosts"]:
+            if fnmatch.fnmatchcase(name, h["match"]):
+                matches.append({"layer": "host", "match": h["match"], "name": name, "vendor": h["vendor"]})
+    return matches
+
+
+def _join_sockets(records, procs):
+    """Connection records from /proc/net/tcp get their owners: one record
+    per process whose fd links hold the socket inode (B-1). A socket no
+    process is seen to hold keeps pid None."""
+    owners = {}
+    for p in procs.values():
+        for inode in p["sockets"] or []:
+            owners.setdefault(inode, []).append(p["pid"])
+    out = []
+    for r in records:
+        if r["kind"] == "conn" and r.get("inode") and r["pid"] is None and r["inode"] in owners:
+            out += [dict(r, pid=pid) for pid in sorted(owners[r["inode"]])]
+        else:
+            out.append(r)
+    return out
+
+
+def _listed(image, catalog):
+    return bool(image) and any(fnmatch.fnmatchcase(image, g) for g in catalog["acts"])
+
+
+def build(parsed, catalog, window=None, holes=(), live=False):
+    """The inventory (E5) of parsed sources:
+    [{"name", "path", "error", "records", "problems", "lines"}]."""
+    holes = list(ALWAYS_HOLES) + list(holes)
+    problems = [p for s in parsed for p in s["problems"]]
+    records = [r for s in parsed for r in s["records"]]
+    dropped = 0
+    if window and not live:
+        times = [r["ts"] for r in records if r.get("ts")]
+        if times:
+            cutoff = max(times) - datetime.timedelta(seconds=window)
+            kept = [r for r in records if not r.get("ts") or r["ts"] >= cutoff]
+            dropped, records = len(records) - len(kept), kept
+    snapshots = [r for r in records if r["kind"] == "snapshot"]
+    self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
+    procs = _merge_procs(records)
+    records = _join_sockets(records, procs)
+    conns = [r for r in records if r["kind"] == "conn"]
+    talkers = {}
+    for c in conns:
+        if talks(c):
+            talkers.setdefault(c["pid"], []).append(c)
+    unowned = [c for c in conns if c["pid"] is None and c["direction"] == "out"
+               and c["state"] in TALK_STATES and not _wildcard(c["raddr"])]
+    orphans = sorted({c["pid"] for c in conns if talks(c) and c["pid"] not in procs})
+    self_tree = set()
+    for s in self_pids:
+        self_tree |= {s} | _descendants(procs, s)
+    self_line = set()
+    for s in self_pids:
+        self_line |= set(ancestors(procs, s))
+
+    # DNS names per IP (any process) and per (pid, IP), with the lines behind them.
+    by_ip, by_pid_ip = {}, {}
+    for r in records:
+        if r["kind"] == "dns":
+            for ip in r["ips"]:
+                for n in r["names"]:
+                    by_ip.setdefault(ip, {}).setdefault(n, []).append(r)
+                    if r["pid"] is not None:
+                        by_pid_ip.setdefault((r["pid"], ip), {}).setdefault(n, []).append(r)
+
+    def names_for(c):
+        found = {}
+        for table in (by_pid_ip.get((c["pid"], c["raddr"]), {}), by_ip.get(c["raddr"], {})):
+            for n, recs in table.items():
+                found.setdefault(n, []).extend(recs)
+        if c.get("host"):
+            found.setdefault(c["host"], []).append(c)
+        return found
+
+    # The anchor (B-6): every process goes to its nearest talking ancestor, so
+    # a talker with a child is a candidate; a file write outside config space
+    # goes to the nearest talking ancestor-or-self. The catalog's act names
+    # only label the child.
+    acts = {}
+    for pid in sorted(procs):
+        p = procs[pid]
+        if pid in self_tree:
+            continue
+        chain = []
+        for anc in ancestors(procs, pid):
+            if anc in talkers:
+                label = next((i for i in p["images"] if _listed(i, catalog)), None)
+                acts.setdefault(anc, []).append({
+                    "how": "process", "pid": pid, "image": label or p["image"], "listed": label is not None,
+                    "path": None, "via": list(reversed(chain)), "reader_ancestor": pid in self_line,
+                    "cites": _cites(p["recs"])})
+                break
+            chain.append(anc)
+    for f in (r for r in records if r["kind"] == "file"):
+        writer = procs.get(f["pid"])
+        if f["pid"] in self_tree or _config_write(f["path"], writer["exe"] if writer else None):
+            continue
+        owner = f["pid"] if f["pid"] in talkers else next(
+            (a for a in ancestors(procs, f["pid"]) if a in talkers), None)
+        if owner is not None:
+            acts.setdefault(owner, []).append({
+                "how": "file-write", "pid": f["pid"], "image": writer["image"] if writer else None,
+                "listed": False, "path": f["path"], "via": [], "reader_ancestor": False, "cites": [cite(f)]})
+
+    candidates = []
+    ids = {}
+    for pid in sorted(acts):
+        ids[pid] = "C%d" % (len(ids) + 1)
+    endpoint_talkers = []
+    for pid in sorted(talkers):
+        p = procs.get(pid)
+        groups = {}
+        for c in talkers[pid]:
+            groups.setdefault((c["raddr"], c["rport"]), []).append(c)
+        talk = []
+        for (raddr, rport), cs in sorted(groups.items(), key=lambda kv: (kv[1][0]["src"], kv[1][0]["line"])):
+            names = {}
+            for c in cs:
+                for n, recs in names_for(c).items():
+                    names.setdefault(n, []).extend(recs)
+            matches = _endpoint(cs[0], names, catalog)
+            name_recs = [r for m in matches if m["layer"] == "host" for r in names[m["name"]]]
+            conn_cites = _cites(cs)
+            talk.append({"remote": "%s:%s" % (raddr, rport),
+                         "state": "/".join(sorted({c["state"] for c in cs})),
+                         "basis": cs[0]["basis"], "lines": len(cs), "names": sorted(names),
+                         "endpoint": matches, "cites": conn_cites + _cites(name_recs, 2, skip=conn_cites)})
+        entry = {"pid": pid, "image": p["image"] if p else None, "exe": p["exe"] if p else None,
+                 "talks": talk, "cites": _cites(p["recs"]) if p else []}
+        if pid not in acts:
+            if any(t["endpoint"] for t in talk):
+                above = [ids[a] for a in _descendant_candidates(procs, pid, acts)]
+                endpoint_talkers.append(dict(entry, above=above))
+            continue
+        tree = [pid] + [a["pid"] for a in acts[pid] if a["how"] == "process"]
+        talking_up = [{"pid": a, "image": procs[a]["image"] if a in procs else None,
+                       "cites": _cites(talkers[a], 1)} for a in ancestors(procs, pid) if a in talkers]
+        inside = next((ids[a] for a in ancestors(procs, pid) if a in ids), None)
+        env = sorted({k for k in ((p or {}).get("env_keys") or [])
+                      if any(fnmatch.fnmatchcase(k, g) for g in catalog["env"])})
+        times = [r["ts"] for r in ((p["recs"] if p else []) + talkers[pid]) if r.get("ts")]
+        for a in acts[pid]:
+            q = procs.get(a["pid"])
+            times += [r["ts"] for r in (q["recs"] if q else []) if r.get("ts")]
+        candidates.append(dict(
+            entry, id=ids[pid], cwd=p["cwd"] if p else None, acts=acts[pid], inside=inside,
+            listed_acts=sum(1 for a in acts[pid] if a["listed"]),
+            talking_ancestors=talking_up, tree=tree,
+            env_footprints=[{"name": k, "cites": _cites(p["recs"], 1)} for k in env],
+            seen={"first": iso(min(times)) if times else None, "last": iso(max(times)) if times else None,
+                  "basis": "observed times in the cited records" if times
+                  else "no observation time in the records (a snapshot without time)"},
+            source=_handoff(pid, p, catalog)))
+
+    read = {s["name"] for s in parsed if s["text_read"]}
+
+    def holds(s, role):
+        """Whether a read source holds the records it must hold for a role
+        (D-1: Sysmon is a process source only with an event 1, a connection
+        source only with an event 3)."""
+        if s["name"] == "sysmon":
+            return any(r.get("event") == (1 if role == "proc" else 3) for r in s["records"])
+        return any(r["kind"] == role for r in s["records"])
+    proc_held = {s["name"] for s in parsed if s["text_read"] and s["name"] in PROCESS_SOURCES and holds(s, "proc")}
+    conn_held = {s["name"] for s in parsed if s["text_read"] and s["name"] in CONNECTION_SOURCES and holds(s, "conn")}
+    trees_read = bool(proc_held) and bool(conn_held)
+    footprints, dark = _footprints(records, procs, candidates, talkers, catalog, judged=trees_read)
+    env_fp = []
+    owner_of = {}
+    for c in candidates:
+        for q in c["tree"]:
+            owner_of.setdefault(q, c["id"])
+    for pid in sorted(procs):
+        p = procs[pid]
+        keys = sorted({k for k in (p["env_keys"] or []) if any(fnmatch.fnmatchcase(k, g) for g in catalog["env"])})
+        if keys:
+            env_fp.append({"pid": pid, "image": p["image"], "names": keys, "candidate": owner_of.get(pid),
+                           "cites": _cites(p["recs"], 1)})
+
+    # Every read failure is a hole (B-3), and every gap in a process or
+    # connection source makes the run incomplete (B-2).
+    incomplete = []
+    holes += _holes(records, procs, conns, read)
+    for r in records:
+        if r["kind"] == "hole":
+            holes.append("%s:%d %s" % (r["src"], r["line"], r["note"]))
+    for snap in snapshots:
+        counts = snap.get("counts") or {}
+        where = "%s:%d snapshot %s" % (snap["src"], snap["line"], iso(snap["ts"]) or "-")
+        if counts.get("gone_while_read"):
+            holes.append("%s: %d process(es) ended while read" % (where, counts["gone_while_read"]))
+        if counts.get("kernel_threads"):
+            holes.append("%s: %d kernel thread(s) under kthreadd (pid %s) not listed"
+                         % (where, counts["kernel_threads"], snap.get("kernel_parent")))
+        if counts.get("unreadable"):
+            holes.append("%s: %d process(es) whose status could not be read" % (where, counts["unreadable"]))
+            incomplete.append("%s: %d process(es) could not be read" % (where, counts["unreadable"]))
+    for s in parsed:
+        if not s["text_read"]:
+            continue
+        if s["name"] == "sysmon":
+            if not holds(s, "proc"):
+                holes.append("source sysmon holds no event 1 (process create): it is not a complete process source")
+                incomplete.append("source sysmon holds no event 1")
+            if not holds(s, "conn"):
+                holes.append("source sysmon holds no event 3 (network connect): it is not a complete connection"
+                             " source; Sysmon without -n logs no event 3")
+                incomplete.append("source sysmon holds no event 3")
+        elif s["name"] in EXPECTED and not holds(s, EXPECTED[s["name"]]):
+            holes.append("source %s was read and holds no %s record" % (s["name"], EXPECTED[s["name"]]))
+            incomplete.append("source %s holds no %s record" % (s["name"], EXPECTED[s["name"]]))
+        elif not s["records"]:
+            holes.append("source %s was read and holds no record" % s["name"])
+    # Per-process read failures (D-3): one hole per field, citing each pid's line.
+    for field, what in (("fd", "open sockets (/proc/PID/fd links) unknown, recorded as null"),
+                        ("cwd", "working directory (cwd link) not read"),
+                        ("cmdline", "command line not read")):
+        failed = [p for p in sorted(procs.values(), key=lambda q: q["pid"])
+                  if any(field in (r.get("unread") or []) for r in p["recs"])]
+        if failed:
+            shown = ", ".join("pid %d (%s)" % (p["pid"], _cite_text(_cites(p["recs"], 1))) for p in failed[:20])
+            holes.append("%d process(es) with %s: %s%s" % (len(failed), what, shown,
+                                                            " and %d more" % (len(failed) - 20) if len(failed) > 20 else ""))
+    if unowned:
+        zero = sorted({c["state"] for c in unowned if c.get("inode") == 0})
+        holes.append("%d talking connection line(s) without an owning process (%s). Reasons: not root or another"
+                     " user's /proc/PID/fd; the owner ended; the socket was opened between the fd snapshot and the"
+                     " tcp read%s" % (len(unowned), _cite_text(_cites(unowned, 5)),
+                                      "; %d with inode 0, which the kernel keeps after the owner closed it (%s)"
+                                      % (sum(1 for c in unowned if c.get("inode") == 0), ", ".join(zero)) if zero else ""))
+        incomplete.append("%d talking line(s) without an owner" % len(unowned))
+    if orphans:
+        incomplete.append("%d talking pid(s) with no process record" % len(orphans))
+    if dropped:
+        holes.append("--window %g: %d timed records older than the window were left out" % (window, dropped))
+    alarms = []
+    if not records:
+        alarms.append("nothing read: no record from any source (A3)")
+    if candidates:
+        alarms.append("%d candidate tree(s) that talk and have a child or write" % len(candidates))
+    if dark:
+        alarms.append("%d AGENT-DARK footprint(s)" % len(dark))
+    if problems:
+        alarms.append("%d line(s) could not be read (A3)" % len(problems))
+    if not read & set(PROCESS_SOURCES):
+        incomplete.append("no process source read (%s): no tree can be built" % ", ".join(PROCESS_SOURCES))
+    if not read & set(CONNECTION_SOURCES):
+        incomplete.append("no connection source read (%s): no process can be seen to talk"
+                          % ", ".join(CONNECTION_SOURCES))
+    for s in parsed:
+        if s["error"]:
+            incomplete.append("source %s %s: %s" % (s["name"], "partly read" if s["text_read"] else "not read",
+                                                    s["error"]))
+    result = "alarm" if alarms else "incomplete" if incomplete else "none-seen"
+    times = sorted(r["ts"] for r in records if r.get("ts"))
+    connections_from = [s["path"] for s in parsed if s["name"] in CONNECTION_SOURCES and s["text_read"]]
+    return {
+        "tool": "raqib discover (ADR-0004)",
+        "live": live,
+        "catalog": catalog["path"],
+        "window": {"start": iso(times[0]) if times else None, "end": iso(times[-1]) if times else None,
+                   "seconds": round((times[-1] - times[0]).total_seconds(), 3) if times else None,
+                   "snapshots": len(snapshots), "filter_seconds": window if window and not live else None,
+                   "basis": "observed times in %d of %d records" % (len(times), len(records)) if times
+                   else "no observation time in the records read"},
+        "sources": [{"name": s["name"], "path": s["path"], "lines": s["lines"], "records": len(s["records"]),
+                     "problems": len(s["problems"]), "error": s["error"], "text_read": s["text_read"]}
+                    for s in parsed],
+        "connections_from": connections_from,
+        "records": len(records),
+        "self": sorted(self_pids),
+        "holes": holes,
+        "problems": problems,
+        "candidates": candidates,
+        "endpoint_talkers": endpoint_talkers,
+        "footprints": footprints,
+        "env_footprints": env_fp,
+        "agent_dark": dark,
+        "alarms": alarms,
+        "incomplete": incomplete,
+        "complete": not incomplete,
+        "result": result,
+        "exit": EXIT[result],
+    }
+
+
+def _descendant_candidates(procs, pid, acts):
+    """Candidates below a talker that is not one itself."""
+    return [q for q in sorted(_descendants(procs, pid)) if q in acts]
+
+
+def _handoff(pid, p, catalog):
+    """Suggested capture source (ADR-0003; D-5, criteria in the catalog's
+    handoff:): hook for a root image named claude unless its path matches a
+    Claude Desktop pattern; proxy for a root marked proxy_capable; else os.
+    A hook suggested for an image that offers none is a signature miss, and
+    os still watches the tree: the error is on the safe side."""
+    cites = _cites(p["recs"], 1) if p else []
+    desktop = []
+    if p is not None and p["image"] in catalog["hook_images"]:
+        paths = [x.replace("\\", "/").lower() for x in [p["exe"]] + p["argv"][:2] if x]
+        desktop = [d for d in catalog["hook_not_paths"] if any(d.lower() in x for x in paths)]
+        if not desktop:
+            return {"suggested": "hook", "root": pid, "cites": cites,
+                    "why": "the root image is %s (Claude Code), which offers hooks" % p["image"]}
+    marked = sorted(n for n in catalog["proxy_capable"] if p is not None and _named(p, n))
+    if marked:
+        return {"suggested": "proxy", "root": pid, "cites": cites,
+                "why": "the catalog marks %s proxy_capable (a documented base-URL setting)" % ", ".join(marked)}
+    return {"suggested": "os", "root": pid, "cites": cites,
+            "why": "%s: an os source rooted at pid %d (M5.3)" % (
+                "the path matches Claude Desktop (%s), which offers no hooks" % ", ".join(desktop) if desktop
+                else "neither a hook image nor marked proxy_capable", pid)}
+
+
+def _footprints(records, procs, candidates, talkers, catalog, judged):
+    """Path footprints with the candidate each links to, and AGENT-DARK:
+    a footprint no candidate tree links to, by name or by its path in argv
+    or cwd. Unjudged when no tree could be built (no process or connection
+    records): then silence would be a false clearance."""
+    footprints, dark = [], []
+    for r in records:
+        if r["kind"] != "path":
+            continue
+        norm = r["path"].replace("\\", "/").rstrip("/")
+        last = norm.rpartition("/")[2].lower()
+        fp = next((f for f in catalog["footprints"]
+                   if (fnmatch.fnmatchcase(last, f["match"].lower()) if "/" not in f["match"]
+                       else norm.lower().endswith("/" + f["match"].lower()))), None)
+        if fp is None:
+            continue
+        agent = fp["agent"]
+        link = None
+        # A candidate whose root goes by the agent's name first, then any process of a tree.
+        for tree_of in (lambda c: [c["pid"]], lambda c: c["tree"] + [a["pid"] for a in c["talking_ancestors"]]):
+            for c in candidates:
+                for pid in tree_of(c):
+                    q = procs.get(pid)
+                    texts = ([q["cwd"] or ""] + q["argv"]) if q else []
+                    if q and (_named(q, agent) or any(norm.lower() in t.replace("\\", "/").lower() for t in texts)):
+                        link = (c["id"], q)
+                        break
+                if link:
+                    break
+            if link:
+                break
+        entry = {"path": r["path"], "match": fp["match"], "agent": agent,
+                 "candidate": link[0] if link else None,
+                 "cites": [cite(r)] + (_cites(link[1]["recs"], 1) if link else [])}
+        footprints.append(entry)
+        if link:
+            continue
+        if not judged:
+            entry["unjudged"] = "no process or connection records: AGENT-DARK cannot be judged"
+            continue
+        quiet = [{"pid": q["pid"], "image": q["image"], "talks": q["pid"] in talkers,
+                  "cites": _cites(q["recs"], 1)} for q in procs.values() if _named(q, agent)]
+        dark.append({"rule": "AGENT-DARK", "path": r["path"], "agent": agent, "quiet": quiet,
+                     "cites": [cite(r)] + [c for q in quiet for c in q["cites"]],
+                     "summary": "%s footprint %s on disk; no tree in the window talks and acts as %s%s" % (
+                         agent, r["path"], agent,
+                         " (%d %s process(es) seen, none acting)" % (len(quiet), agent) if quiet else "")})
+    return footprints, dark
+
+
+def _holes(records, procs, conns, kinds):
+    """What this run could not see (A3), one line each. kinds: the sources read."""
+    holes = []
+    if kinds & {"proc", "proc-net", "ss"}:
+        holes.append("Linux: no offline name record in M5.0, so endpoints match by IP network and"
+                     " loopback port only (ADR-0004)")
+        holes.append("Linux: argv[0] and status Name are written by the process itself, and a copied"
+                     " shell takes any name; /proc/PID/exe is not read in M5.0")
+    if kinds & {"win-process", "win-tcp", "win-dns", "sysmon"} and "proc" not in kinds:
+        holes.append("Windows: no process environment is read, so *_API_KEY names are not seen")
+    if not any(r["kind"] == "file" for r in records):
+        holes.append("no file-write record (Sysmon 11): a talker that acts only by writing files,"
+                     " with no child, is not seen")
+    else:
+        holes.append("config space: writes into a dot-directory (also .ssh, .git/hooks, .github/workflows),"
+                     " AppData (also the Startup folder), ProgramData, a temp directory or the writer's own"
+                     " program directory are not counted as acts")
+    if "footprints" not in kinds:
+        holes.append("no footprint listing read: AGENT-DARK cannot be judged")
+    orphans = sorted({c["pid"] for c in conns if talks(c) and c["pid"] not in procs})
+    if orphans:
+        holes.append("%d talking pid(s) with no process record (started after the snapshot, or"
+                     " gone): %s" % (len(orphans), ", ".join(str(p) for p in orphans[:10])))
+    if any(c.get("basis") == "ports" for c in conns):
+        holes.append("no listening sockets in the connection text: direction guessed from port order"
+                     " (ephemeral local port above the remote one = outbound)")
+    proc_read = [p for p in procs.values() if not p["derived"] and any(r["src"] == "proc" for r in p["recs"])]
+    hidden = sum(1 for p in proc_read if p["env_keys"] is None)
+    if hidden:
+        holes.append("%d process(es) whose environment could not be read (not root?)" % hidden)
+    return holes
+
+
+def run(texts, catalog, window=None, holes=(), live=False):
+    """Parse {kind: (path, text, error)} and build the inventory. A text with
+    an error was partly read: it is parsed, and the run is incomplete."""
+    parsed = []
+    for kind in SOURCES:
+        if kind not in texts:
+            continue
+        path, text, error = texts[kind]
+        records, problems = PARSERS[kind](text, kind) if text is not None else ([], [])
+        parsed.append({"name": kind, "path": path, "error": error, "records": records,
+                       "problems": problems, "text_read": text is not None,
+                       "lines": text.count("\n") + (not text.endswith("\n")) if text else 0})
+    return build(parsed, catalog, window, holes, live)
+
+
+# --- text output ------------------------------------------------------------------------
+
+def _cite_text(cites):
+    return " ".join("%s:%d" % (c["src"], c["line"]) for c in cites)
+
+
+def render_text(inv):
+    w = inv["window"]
+    out = ["Raqib discover (ADR-0004): an agent is a tree that talks to a model and acts",
+           "window: %s .. %s (%s; %d snapshot(s)%s)" % (
+               w["start"] or "-", w["end"] or "-", w["basis"], w["snapshots"],
+               "; filter: last %g s" % w["filter_seconds"] if w["filter_seconds"] else ""),
+           "records read: %d from %d source(s)%s" % (
+               inv["records"], len(inv["sources"]),
+               "; raqib discover itself: pid %s" % ", ".join(str(s) for s in inv["self"]) if inv["self"] else "")]
+    for s in inv["sources"]:
+        out.append("  %-12s %5d lines %5d records %3d problems  %s%s" % (
+            s["name"], s["lines"], s["records"], s["problems"], s["path"],
+            "  %s: %s" % ("PARTLY READ" if s["text_read"] else "NOT READ", s["error"]) if s["error"] else ""))
+    out.append("connections read from: %s" % ("; ".join(inv["connections_from"]) or "nothing"))
+    out.append("catalog (signature, supporting only): %s" % inv["catalog"])
+    out += ["", "HOLES (A3): %d" % len(inv["holes"])] + ["  - %s" % h for h in inv["holes"]]
+    out += ["", "PROBLEMS (unread lines): %d" % len(inv["problems"])]
+    out += ["  - %s:%d %s" % (p["src"], p["line"], p["reason"]) for p in inv["problems"]]
+    out += ["", "CANDIDATES (anchor: talks + has a child or writes): %d" % len(inv["candidates"])]
+    cited = []
+    for c in inv["candidates"]:
+        out.append("  [%s] pid %d %s  %s%s" % (c["id"], c["pid"], c["image"] or "?", c["exe"] or "-",
+                                             "  (inside %s)" % c["inside"] if c["inside"] else ""))
+        out.append("      cwd %s; seen %s .. %s (%s)  %s" % (c["cwd"] or "-", c["seen"]["first"] or "-",
+                                                            c["seen"]["last"] or "-", c["seen"]["basis"],
+                                                            _cite_text(c["cites"])))
+        out.append("      suggested source: %s - %s  %s" % (c["source"]["suggested"], c["source"]["why"],
+                                                           _cite_text(c["source"]["cites"])))
+        out.append("      talks: %d remote(s)" % len(c["talks"]))
+        for t in c["talks"]:
+            ep = "; ".join("%s %s%s" % (m["vendor"], m["match"], " (%s)" % m["name"] if m.get("name") else "")
+                           for m in t["endpoint"]) or "no catalog match"
+            out.append("        %s %s x%d [%s]%s  %s" % (t["remote"], t["state"], t["lines"], ep,
+                                                      " names %s" % ",".join(t["names"]) if t["names"] else "",
+                                                      _cite_text(t["cites"])))
+        out.append("      acts: %d (%d with a listed act name)" % (len(c["acts"]), c["listed_acts"]))
+        for a in c["acts"][:ACTS_SHOWN]:
+            what = "wrote %s" % a["path"] if a["how"] == "file-write" else "%s%s%s" % (
+                a["image"] or "?", " via pid %s" % ",".join(str(v) for v in a["via"]) if a["via"] else " (child)",
+                " [listed]" if a["listed"] else " [unlisted]")
+            out.append("        pid %d %s%s  %s" % (a["pid"], what, "  [an ancestor of the reader itself]"
+                                                    if a["reader_ancestor"] else "", _cite_text(a["cites"])))
+        if len(c["acts"]) > ACTS_SHOWN:
+            out.append("        ... %d more (all in --json)" % (len(c["acts"]) - ACTS_SHOWN))
+        for t in c["talking_ancestors"]:
+            out.append("      talking ancestor: pid %d %s  %s" % (t["pid"], t["image"] or "?", _cite_text(t["cites"])))
+        for e in c["env_footprints"]:
+            out.append("      env footprint: %s  %s" % (e["name"], _cite_text(e["cites"])))
+        cited.append(c)
+    if not inv["candidates"]:
+        out.append("  NO AGENT SEEN in window %s .. %s; %d records read (%s); the read was %s. Not a clearance."
+                   % (w["start"] or "-", w["end"] or "-", inv["records"],
+                      ", ".join("%s %d" % (s["name"], s["records"]) for s in inv["sources"]) or "no source",
+                      "complete" if inv["complete"] else "INCOMPLETE (see below)"))
+    out += ["", "MODEL ENDPOINT TALKERS WITHOUT AN ACT (signature only): %d" % len(inv["endpoint_talkers"])]
+    for t in inv["endpoint_talkers"]:
+        eps = sorted({"%s %s" % (m["vendor"], m["match"]) for x in t["talks"] for m in x["endpoint"]})
+        out.append("  pid %d %s -> %s%s  %s" % (t["pid"], t["image"] or "?", "; ".join(eps),
+                                              " (above %s)" % ",".join(t["above"]) if t["above"] else "",
+                                              _cite_text([c for x in t["talks"] for c in x["cites"]][:3])))
+    out += ["", "FOOTPRINTS (signature, supporting): %d on disk, %d env" % (
+        len(inv["footprints"]), len(inv["env_footprints"]))]
+    for f in inv["footprints"]:
+        out.append("  %s (%s) -> %s  %s" % (f["path"], f["agent"], f["candidate"] or f.get("unjudged")
+                                            or "no candidate", _cite_text(f["cites"])))
+    for e in inv["env_footprints"]:
+        out.append("  env %s in pid %d %s -> %s  %s" % (",".join(e["names"]), e["pid"], e["image"] or "?",
+                                                       e["candidate"] or "no candidate", _cite_text(e["cites"])))
+    out += ["", "AGENT-DARK (footprint, no active tree; A3): %d" % len(inv["agent_dark"])]
+    for d in inv["agent_dark"]:
+        out.append("  %s  %s" % (d["summary"], _cite_text(d["cites"])))
+    lines = {}
+    for c in cited:
+        for group in [c["cites"], c["source"]["cites"]] + [t["cites"] for t in c["talks"]] + \
+                [a["cites"] for a in c["acts"][:ACTS_SHOWN]] + [t["cites"] for t in c["talking_ancestors"]]:
+            for x in group:
+                lines[(x["src"], x["line"])] = x["text"]
+    for d in inv["agent_dark"]:
+        for x in d["cites"]:
+            lines[(x["src"], x["line"])] = x["text"]
+    if lines:
+        out += ["", "CITED LINES (A5): %d" % len(lines)]
+        out += ["  %s:%d  %s" % (src, n, text) for (src, n), text in sorted(lines.items())]
+    out += ["", "ALARMS: %s" % ("; ".join(inv["alarms"]) or "none"),
+            "INCOMPLETE: %s" % ("; ".join(inv["incomplete"]) or "none - every process and connection source"
+                                                                 " was read, held records, and every talking line"
+                                                                 " had an owner"),
+            "RESULT: %s (exit %d)" % (inv["result"].upper(), inv["exit"])]
+    # Every value can come from a file or process the agent controls: no
+    # control character reaches the terminal.
+    return "\n".join(_safe(line) for line in out) + "\n"
