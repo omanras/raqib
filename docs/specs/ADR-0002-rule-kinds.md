@@ -105,3 +105,17 @@ more signatures.
   are copied into the two rules' descriptions as known holes.
 - B-6 Every change carries a test (D-8 of ADR-0005 applies to all Raqib
   REDOs from here on).
+
+## Amendment C (the Table, 2026-11-03) - judgement on the M4.1 REDO (bcce5bc + cf798cb)
+- B-1..B-5 MET as cited; the Table read kinds_child (gate.py:193-212):
+  PREIMPORT before sys.path.append(root), BaseException caught, one line
+  on stdout, exit code read by the parent. R1 (forged line + os._exit(0))
+  accepted as the same exposure the pytest step carries; R2-R5 recorded.
+- CI run 41540864444 success on six jobs (read by the Table from
+  api.github.com); gate 1099 passed, 6 skipped; scope clean (widened by
+  B-1); three commits on the branch (rebase allowed this time).
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Ledger, Table: the original Scope omitted report.py/ui.py for an exit
+  criterion that named `raqib report` (the same error as M5.1's first
+  Scope); rule: before setting HANDOFF.md, the Table greps each exit
+  criterion's named commands/files against the Scope list.
