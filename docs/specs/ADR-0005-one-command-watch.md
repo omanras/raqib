@@ -73,3 +73,38 @@ shown.
 - M6.3 packaging (`pyproject.toml`, `raqib` entry point, `raqib doctor`,
   README rewritten around `watch`).
 Order: M6.1, M6.3, M6.2. The Phase 5 items M5.0b/M5.1b/M5.2 resume after.
+
+## Amendment B (the Table, 2026-11-02) - rulings on review 2026-11-02-M6.1.md
+- B-1 (W1) A pending finding (SILENCE-HALF, SILENCE-OPEN) is settled - and
+  knocks if high - when its session shows a later stop or session_end, or
+  when the live silence window for the trace opens. "Pending for good" is
+  silence (A3). Test on the blocked-calls fixture: both halves notified.
+- B-2 (W2) The finding key is (rule id, session, cited seqs, summary). Two
+  findings never share a key; a test with the two SILENCE-ORDER shapes.
+- B-3 (W3) On start, lines already in the trace are history: parsed,
+  judged, shown in the page and the final report, counted in one line
+  ("N prior findings in the trace, not knocked"), never notified. Knocks
+  start at the first line appended after start. Recorded in README.
+- B-4 (W5, W6) Live parse problems knock as TRACE-HOLE (one per minute).
+  watch.json carries a heartbeat timestamp on every poll; the loop is
+  wrapped so any exception ends with finish(status="crashed", error) and
+  the final report; "watching" without a fresh heartbeat reads as
+  crashed on the page (A3 for the watcher itself).
+- B-5 (W8) Script files (toast.ps1, notify.applescript, the notify-send
+  wrapper) are verified by sha256 against the in-code constant before
+  every use and rewritten if they differ, with a hole recorded. Temp
+  files live under ~/.raqib/tmp, never the cwd. SystemRoot is taken from
+  the environment but must be an existing directory whose basename is
+  Windows, else notifications are off with a hole.
+- B-6 (W13) `raqib watch` reads `<project>/HANDOFF.md` when present and
+  passes its Scope as context, exactly as `report --handoff` does; a
+  watch of a Raqib-style project can then end CLEAN. Still no --scope
+  flag (not in HANDOFF).
+- B-7 (W11) If the requested port is busy, watch prints a WARNING line
+  naming the other port and writes it to watch.json; never silent.
+- B-8 (W17) README: "high findings knock" -> "high findings knock once
+  settled"; the trace path line says "by default".
+- B-9 (W7, W9, W10, W12, W14, W15, W16, W18, W19) recorded; W14 is
+  M6.3's; W18's three local choices are ratified as recorded (pending
+  highs now knock on settle by B-1; TRACE-HOLE knocking accepted;
+  whole-list re-run accepted until cost shows in the field).
