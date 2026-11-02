@@ -1,20 +1,18 @@
 # HANDOFF — M5.1  (phase 5: Windows plumbing - installer, lock, CI)
 
-Task: make capture and the installer work on Windows and prove the gate there,
-with no change to the trace schema and no change to any rule
-(ADR-0003; ruling docs/review/2026-11-02-M5.1-ruling.md).
+Task: capture + installer on Windows, gate proven there; no schema change, no
+rule change (ADR-0003; ruling docs/review/2026-11-02-M5.1-ruling.md).
 
 Scope:
   raqib/hooks/capture.py, tools/, tests/, .github/workflows/,
   README.md (platform lines only), docs/review/
 
 Exit criteria:
-- E1 `tools/install_hooks.py` replaces install-hooks.sh (the .sh stays as a
-     one-line wrapper). Same merge semantics and idempotence. On POSIX the
-     installed command is unchanged. On Windows it is interpreter + script
-     path, quoted, no shell syntax (ruling Q-7); modes/umask/symlink/fsync
-     steps get a Windows branch. Tests: fresh, merge, second run unchanged,
-     Windows command form.
+- E1 `tools/install_hooks.py` replaces install-hooks.sh (.sh = one-line
+     wrapper). Same merge semantics and idempotence; POSIX command unchanged;
+     Windows command = interpreter + script path, quoted, no shell syntax
+     (Q-7); modes/umask/symlink/fsync get a Windows branch. Tests: fresh,
+     merge, second run unchanged, Windows command form.
 - E2 `capture.lock()` uses `msvcrt.locking` on one byte far beyond EOF when
      `fcntl` is absent; no platform falls through to "no lock". Test: two
      processes appending concurrently never produce a duplicate seq.
