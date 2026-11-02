@@ -5,7 +5,7 @@ rule change (ADR-0003; ruling docs/review/2026-11-02-M5.1-ruling.md).
 
 Scope:
   raqib/hooks/capture.py, tools/, tests/, .github/workflows/,
-  README.md (platform lines only), docs/review/
+  README.md, docs/THREAT_MODEL.md (platform lines only), docs/review/
 
 Exit criteria:
 - E1 `tools/install_hooks.py` replaces install-hooks.sh (.sh = one-line
