@@ -1,6 +1,6 @@
 # ADR-0004 - Agent discovery: find the watched before you know its name
 
-Status: proposed by the Table, 2026-11-02. Becomes accepted when M5.0 lands.
+Status: accepted (M5.0, 2026-11-02; Amendment E). Proposed 2026-11-02.
 Amendments appended, never edited in place.
 
 ## Problem
@@ -157,3 +157,24 @@ of from the commander.
   hole and the "opened between snapshots" reason added. R10: --from with
   both proc-net.txt and ss.txt uses proc-net only and notes ss.txt was
   ignored. R11: README and yaml wording fixed. R9, R16: recorded.
+
+## Amendment E (the Table, 2026-11-02) - judgement on d688ff2 (REDO 2)
+The Table read the D-1, D-2 and D-5 code paths and the yaml `handoff:` block
+itself and takes the builder's cited lines for D-3, D-4, D-6, D-8 after two
+independent reviews of the same tree.
+- D-1..D-6, D-8 MET as cited; D-7 recorded. Q-R6 (ENOENT skipped only for
+  the reader's own /proc/self/fd race) is agreed and recorded here.
+- CI for d688ff2, read by the Table from api.github.com: run 41474296355
+  success; ubuntu 3.11/3.12 and windows 3.11/3.12 all success. Local gate
+  900 passed, 4 skipped. Scope: no file outside HANDOFF M5.0.
+- Status of this ADR: **accepted (M5.0, 2026-11-02)**. Lines 1-80 are the
+  decision; amendments A-E are the record of how it was built and ruled.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's standing
+  word of 2026-11-02 ("افعل وطبّق").
+- Field test next: the commander's Windows machine with Kimi installed,
+  `raqib discover --catalog <copy without the .kimi footprint>` (B-10),
+  Windows exports per README, exit code and inventory recorded in
+  docs/review as the first measurement for an fp_budget (B-8).
+- Table ledger for M5.0: ADR-0004 line 20 overclaimed (D-7); the handoff
+  criteria were left to code in B-7 and had to move to the catalog in D-5;
+  two REDO rounds, both from reviewers, none from the Table's own reading.
