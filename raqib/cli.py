@@ -1,4 +1,7 @@
-"""Command line (M1.3): python -m raqib <command>.
+"""Command line (M1.3): raqib <command>, or python -m raqib <command>.
+
+`raqib` is the console script of an installed raqib (pyproject.toml, M6.3:
+raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
 
   rules TRACE [-o FILE] [--scope P]... [--handoff FILE] [--gap-seconds N]
       Run the silence rules and the rule catalog on a trace. Findings go to
@@ -8,9 +11,12 @@
       Show the findings with the trace lines they cite (A5), the alarms, the
       rules that did not run (A3) and every rule's fp_budget (A6). Without
       --findings the rules are run on TRACE first.
-  check-rules [--json]
+  check-rules [--json] [--fixtures-root DIR]
       Run every catalog rule on its fixtures and the benign corpus; print the
-      measured fp_rate against the declared fp_budget (A6).
+      measured fp_rate against the declared fp_budget (A6). The fixtures are
+      those of a checkout (DIR/tests/fixtures; default: the checkout this
+      raqib runs from). An installed raqib carries the catalog but no
+      fixtures: without --fixtures-root it says so and exits 2.
   suspect TRACE [--findings FILE] [--backend ollama|anthropic|fake] [--allow-fallback] [-o FILE]
       Ask a model to raise suspicion over windows of the trace (ADR-0001
       section 5). It can only raise (A2): answers below --threshold are
@@ -57,6 +63,13 @@
       it once. Lines already in the trace at the start are history: shown,
       never notified. Notifications are off under CI or with --no-notify.
       Ctrl-C, or a crash, prints the final report; exit as for report.
+  doctor [PROJECT]
+      Say in one screen what `watch` needs and is missing (M6.3,
+      raqib/doctor.py): Python, `claude` on PATH and its version, the hook
+      settings of PROJECT (installed / foreign / missing), the notifier, Sysmon
+      (Windows) and whether the trace can be written. One line per check, OK
+      or MISSING; exit 1 if any is MISSING, else 0. Read-only; the only
+      program it runs is `claude --version`, by absolute path.
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -71,6 +84,7 @@ import os
 import sys
 
 from raqib import discover
+from raqib import doctor
 from raqib import eval as evaluation
 from raqib import report
 from raqib import ui
@@ -116,6 +130,9 @@ def _parser():
     c = sub.add_parser("check-rules", help="measure every rule against its fixtures (A6)")
     c.add_argument("--catalog", default=CATALOG, metavar="DIR")
     c.add_argument("--json", action="store_true")
+    c.add_argument("--fixtures-root", default=None, metavar="DIR",
+                   help="a Raqib checkout: the catalog's fixture paths (tests/fixtures/...) are relative to it"
+                        " (default: the checkout this raqib runs from; an installed raqib has no fixtures)")
     s = sub.add_parser("suspect", help="ask a model to raise suspicion (A2: never acquit)")
     rule_options(s)
     s.add_argument("--findings", metavar="FILE", help="findings file (default: run the rules)")
@@ -173,6 +190,8 @@ def _parser():
     w.add_argument("--no-notify", action="store_true", help="no OS notifications (also off when CI is set)")
     w.add_argument("--port", type=int, default=None, metavar="N",
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
+    dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
+    dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
 
 
@@ -348,17 +367,22 @@ def cmd_report(args, out):
     return rep["exit"]
 
 
-def benign_default():
-    corpus = fixtures.benign_corpus(os.path.join(ROOT, "tests", "fixtures", "rules", "benign"))
-    real = sorted(os.path.join(ROOT, "tests", "fixtures", n)
-                  for n in os.listdir(os.path.join(ROOT, "tests", "fixtures")) if n.endswith(".log"))
+def benign_default(root=ROOT):
+    corpus = fixtures.benign_corpus(os.path.join(root, "tests", "fixtures", "rules", "benign"))
+    real = sorted(os.path.join(root, "tests", "fixtures", n)
+                  for n in os.listdir(os.path.join(root, "tests", "fixtures")) if n.endswith(".log"))
     return corpus + real
 
 
 def cmd_check_rules(args, out):
     rules = _catalog(args.catalog)
+    root = os.path.abspath(args.fixtures_root) if args.fixtures_root else ROOT
+    if not os.path.isdir(os.path.join(root, "tests", "fixtures")):
+        raise UsageError("no rule fixtures in %s: check-rules measures each rule on the fixtures of a Raqib"
+                         " checkout, which an installed raqib does not carry; pass --fixtures-root CHECKOUT"
+                         % os.path.join(root, "tests", "fixtures"))
     try:
-        reports = fixtures.check_catalog(rules, ROOT, benign_default())
+        reports = fixtures.check_catalog(rules, root, benign_default(root))
     except (fixtures.FixtureError, OSError) as exc:
         raise UsageError(str(exc))
     if args.json:
@@ -587,8 +611,17 @@ def cmd_watch(args, out):
         raise UsageError(str(exc))
 
 
+def cmd_doctor(args, out):
+    return doctor.run(args.project, out)
+
+
 def main(argv=None, out=None):
-    out = out or sys.stdout
+    """The `raqib` console script and python -m raqib (out None: stdout,
+    where a path the console cannot encode is escaped, not a crash)."""
+    if out is None:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(errors="backslashreplace")
+        out = sys.stdout
     try:
         args = _parser().parse_args(argv)
     except SystemExit as exc:
@@ -596,7 +629,7 @@ def main(argv=None, out=None):
     try:
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
-                   "discover": cmd_discover, "watch": cmd_watch}[args.command]
+                   "discover": cmd_discover, "watch": cmd_watch, "doctor": cmd_doctor}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)

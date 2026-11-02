@@ -2,7 +2,9 @@
 # pull request: ubuntu and windows, Python 3.11 and 3.12. On ubuntu it runs
 # through tools/gate.sh, which calls tools/gate.py; on Windows gate.py runs
 # directly. No secret is needed: apart from installing pytest the gate is
-# offline and reads only the tree.
+# offline and reads only the tree. The install job (M6.3) builds and installs
+# the package in a clean venv on both systems and runs it from outside the
+# checkout.
 name: gate
 
 on:
@@ -49,3 +51,67 @@ jobs:
       - name: tools/gate.py
         if: runner.os == 'Windows'
         run: python -I tools/gate.py
+
+  # M6.3 E1: `pip install .` in a clean venv puts `raqib` on PATH. Run from
+  # outside the checkout, the installed raqib reads its catalog and
+  # endpoints.yaml from the venv, never from the checkout; the checkout is
+  # used only for the fixtures it is pointed at. pip fetches the build
+  # backend (setuptools); raqib itself has no dependency.
+  install:
+    name: install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: check out without line-ending conversion
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: clean venv, pip install . (Linux)
+        if: runner.os != 'Windows'
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --disable-pip-version-check .
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+      - name: clean venv, pip install . (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m venv "$env:RUNNER_TEMP\venv"
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m pip install --disable-pip-version-check .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$env:RUNNER_TEMP\venv\Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: raqib from the venv, outside the checkout
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          command -v raqib
+          # The raqib imported is the venv's, not the checkout's.
+          python -c "import os, sys, raqib; p = os.path.normcase(os.path.realpath(raqib.__file__)); w = os.path.normcase(os.path.realpath(os.environ['GITHUB_WORKSPACE'])); print(p); sys.exit(p.startswith(w + os.sep))"
+          raqib --help
+          raqib watch --help
+          raqib doctor --help
+          # The installed catalog, measured on the checkout's fixtures.
+          raqib check-rules --fixtures-root "$GITHUB_WORKSPACE"
+          # Without fixtures an installed raqib says so (exit 2).
+          set +e; raqib check-rules 2> nofixtures.txt; code=$?; set -e
+          cat nofixtures.txt; test "$code" -eq 2; grep -F "no rule fixtures in" nofixtures.txt
+          # The installed endpoints.yaml: the inventory names the catalog it read (exit 1: a candidate).
+          set +e; raqib discover --from "$GITHUB_WORKSPACE/tests/fixtures/discover/linux" > discover.txt; code=$?; set -e
+          cat discover.txt; test "$code" -eq 1
+          grep -F "$(python -c 'from raqib import discover; print(discover.CATALOG)')" discover.txt
+          # Doctor runs from the venv: one line per check and a summary (exit 1 here:
+          # notifications are off under CI and the project has no hooks).
+          mkdir -p project
+          set +e; raqib doctor project > doctor.txt 2>&1; code=$?; set -e
+          cat doctor.txt; test "$code" -eq 1
+          tail -n 1 doctor.txt | grep -E "^raqib doctor: [0-9]+ MISSING$"
+          if grep -F Traceback doctor.txt; then exit 1; fi

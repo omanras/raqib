@@ -4,6 +4,37 @@ An external watcher for AI coding agents. Raqib records what an agent does,
 judges it with deterministic rules first, and lets a model raise suspicion,
 never acquit.
 
+## Install and watch
+```bash
+git clone https://github.com/omanras/raqib ~/raqib
+pipx install ~/raqib          # or, in a venv: pip install ~/raqib; puts `raqib` on PATH
+raqib doctor ~/my-project     # one line per check, OK or MISSING; exit 1 if anything is missing
+raqib watch ~/my-project      # then use Claude Code in ~/my-project as usual; Ctrl-C ends the watch
+```
+You need Python 3.11 or newer and Claude Code. Raqib itself is stdlib only and
+is not on PyPI. On Windows: `pipx install C:\path\to\raqib` (or
+`py -m pip install C:\path\to\raqib`), then `raqib watch C:\path\to\project`.
+Install on the side that runs the agent (Windows or WSL), not both.
+
+## Watch a project
+`raqib watch /path/to/project` installs the hooks, keeps the trace outside the project (by default under `~/.raqib/traces/`), takes the rules' scope from the project's `HANDOFF.md` when there is one, serves the read-only page on 127.0.0.1 and opens it once.
+High findings knock once settled, as do silence (no trace line for `RAQIB_GAP_SECONDS`, default 60 s), capture failures and trace holes: OS notifications, one per rule per minute; lines already in the trace when watch starts are history, shown but never knocked; `--no-notify` or a set `CI` turns the knocks off.
+Ctrl-C, or a crash, prints the final report; `<trace>.watch.json` keeps the findings, the silence windows, the holes and a heartbeat ([ADR-0005](docs/specs/ADR-0005-one-command-watch.md)).
+
+## Doctor
+`raqib doctor [PROJECT]` says in one screen what `raqib watch` needs and is
+missing: one line per check, OK or MISSING, and exit 1 if any line is
+MISSING. It checks Python (and on Linux and macOS `python3` on PATH, which
+the hooks run), `claude` on PATH and its version, the project's hook
+settings (installed; foreign: a Raqib entry of another checkout or install;
+or missing), the notifier, Sysmon on Windows, and whether the trace can be
+written. It is read-only; the only program it runs is `claude --version`,
+by absolute path. If the installed package moves (another Python, another
+venv), the hooks name a `capture.py` that is gone: capture prints
+`RAQIB-SILENCE:`, doctor shows the hooks as foreign, and `raqib watch`
+replaces them.
+
+## How it works
 - **Deterministic first.** Rules decide; a model can only add suspicion (A1, A2).
 - **Silence is an alarm.** A gap, a call that never finished or a session
   that never closed is a finding, not "nothing happened" (A3).
@@ -11,7 +42,6 @@ never acquit.
   blocks nothing (A4). Capture and rules work offline; they store hashes,
   not content.
 
-## How it works
 1. **Capture.** Six Claude Code hooks append JSON lines to
    `raqib.log.jsonl`: two per tool call (pre and post) and one per session
    event. Inputs and outputs are stored as
@@ -28,22 +58,17 @@ never acquit.
    anything.
 4. **Report.** Text, JSON, or a read-only HTML page.
 
-## Watch a project
-`python3 -m raqib watch /path/to/project` (from the Raqib checkout) installs the hooks, keeps the trace outside the project (by default under `~/.raqib/traces/`), takes the rules' scope from the project's `HANDOFF.md` when there is one, serves the read-only page on 127.0.0.1 and opens it once.
-High findings knock once settled, as do silence (no trace line for `RAQIB_GAP_SECONDS`, default 60 s), capture failures and trace holes: OS notifications, one per rule per minute; lines already in the trace when watch starts are history, shown but never knocked; `--no-notify` or a set `CI` turns the knocks off.
-Ctrl-C, or a crash, prints the final report; `<trace>.watch.json` keeps the findings, the silence windows, the holes and a heartbeat ([ADR-0005](docs/specs/ADR-0005-one-command-watch.md)).
-
-## Quickstart
+## Manual steps
+The steps before `raqib watch` existed, from a checkout, one command at a time.
 Linux, macOS; Windows: capture and installer (path rules in M5.1b). You need
 `python3` (Raqib itself is stdlib only) and Claude Code. On Windows run
 `python -I tools\install_hooks.py C:\path\to\project` and `python -I tools\gate.py`.
 Install from the side that runs the agent (Windows or WSL), not both.
 On Windows a missing `python.exe` is a hook error shown by Claude Code: no `RAQIB-SILENCE:` line, and not a block.
 The gate runs the tests with pytest; if pytest is
-missing, `gate.sh` installs it with pip, which needs the network. The code is
-on branch `claude/v0.1` until it is merged.
+missing, `gate.sh` installs it with pip, which needs the network.
 ```bash
-git clone --branch claude/v0.1 https://github.com/omanras/raqib ~/raqib
+git clone https://github.com/omanras/raqib ~/raqib
 ~/raqib/tools/gate.sh                             # ends with [gate] GREEN
 ~/raqib/tools/install-hooks.sh /path/to/project   # adds six hooks to its .claude/settings.json
 cd /path/to/project
@@ -90,16 +115,19 @@ evaluated yet. See
 source.
 
 ## Commands
-All commands run from the Raqib checkout. TRACE is a `raqib.log.jsonl`.
+Once installed, `raqib COMMAND`; from a checkout without installing,
+`python3 -m raqib COMMAND`. TRACE is a `raqib.log.jsonl`.
 | Command | Does |
 |---|---|
-| `python3 -m raqib report TRACE [--scope P \| --handoff HANDOFF.md] [--json]` | findings with their cited lines, rules that did not run, every rule's budget; exit 0 clean, 1 alarm, 3 incomplete, 2 usage |
-| `python3 -m raqib rules TRACE -o findings.jsonl` | findings only, one JSON line each |
-| `python3 -m raqib ui TRACE -o trace.html` (or `--serve`) | the report as one static page: timeline, findings, silence bands; no script; `--serve` binds 127.0.0.1 |
-| `python3 -m raqib check-rules` | each rule's measured false-positive rate against its budget |
-| `python3 -m raqib suspect TRACE --backend ollama -o suspicion.jsonl` | model suspicion (`--backend anthropic` needs `pip install anthropic` and ANTHROPIC_API_KEY, and sends trace metadata off the machine); then `report TRACE --suspicion suspicion.jsonl` |
-| `python3 -m raqib suspect TRACE --backend anthropic --allow-fallback` | lets another model answer a window the requested model refuses; off by default, and such answers are labelled (`answered_by`) and counted |
-| `python3 -m raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events |
+| `raqib watch [PROJECT]` | install the hooks, tail the trace, knock, serve the page (above) |
+| `raqib doctor [PROJECT]` | what `watch` needs and is missing, one line each (above) |
+| `raqib report TRACE [--scope P \| --handoff HANDOFF.md] [--json]` | findings with their cited lines, rules that did not run, every rule's budget; exit 0 clean, 1 alarm, 3 incomplete, 2 usage |
+| `raqib rules TRACE -o findings.jsonl` | findings only, one JSON line each |
+| `raqib ui TRACE -o trace.html` (or `--serve`) | the report as one static page: timeline, findings, silence bands; no script; `--serve` binds 127.0.0.1 |
+| `raqib check-rules [--fixtures-root CHECKOUT]` | each rule's measured false-positive rate against its budget, on the fixtures of a checkout (an installed raqib has none: pass `--fixtures-root`) |
+| `raqib suspect TRACE --backend ollama -o suspicion.jsonl` | model suspicion (`--backend anthropic` needs `pip install anthropic` and ANTHROPIC_API_KEY, and sends trace metadata off the machine); then `report TRACE --suspicion suspicion.jsonl` |
+| `raqib suspect TRACE --backend anthropic --allow-fallback` | lets another model answer a window the requested model refuses; off by default, and such answers are labelled (`answered_by`) and counted |
+| `raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events (a checkout's, or `--events FILE`) |
 
 ## Find the agents on a host (discover)
 `raqib discover` looks for AI agents it has never heard of
@@ -120,9 +148,9 @@ candidate comes with its cited lines and a suggested capture source
 in the window. Discover is offline and read-only, and it never signals or
 attaches to a process.
 ```bash
-python3 -m raqib discover                      # Linux: /proc and /proc/net/tcp (one snapshot)
-python3 -m raqib discover --window 30 --save run1   # sample 30 s; keep the texts read
-python3 -m raqib discover --from run1 --json   # the same inventory again, from the saved texts and run.json
+raqib discover                      # Linux: /proc and /proc/net/tcp (one snapshot)
+raqib discover --window 30 --save run1   # sample 30 s; keep the texts read
+raqib discover --from run1 --json   # the same inventory again, from the saved texts and run.json
 ```
 On Linux, connections come from `/proc/net/tcp` and `/proc/net/tcp6`,
 with owners from `/proc/PID/fd`. These are kernel files that no PATH can
@@ -139,7 +167,7 @@ Get-DnsClientCache | ConvertTo-Csv -NoTypeInformation | Out-File -Encoding utf8 
 Get-ChildItem -Force C:\Users\*\, C:\Users\*\AppData\Roaming\Claude\ | ForEach-Object FullName | Out-File -Encoding utf8 footprints.txt
 wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml /rd:true /c:5000 > sysmon.xml   # newest 5000; if Sysmon is installed
 ```
-Then, from the Raqib checkout: `python -m raqib discover --from C:\path\to\that\folder`.
+Then `raqib discover --from C:\path\to\that\folder`.
 
 **What a candidate is not.** It is a tree that talks and has a child, not
 proof of an agent. IDE terminals, package managers running install
@@ -193,7 +221,7 @@ redacted, made by `capture.py` there; the Windows ones are synthetic.
   read-only reviewer, and a gate (`tools/gate.sh`) that every commit must
   pass.
 
-Status: v0.1 candidate on `claude/v0.1`: capture, rules, report, suspicion
+Status: v0.1 candidate: capture, rules, report, suspicion
 layer, evaluation, web view and docs. The last exit criterion of the plan
 (M3.3) is still open: one person outside the project runs this quickstart
 and files one issue.

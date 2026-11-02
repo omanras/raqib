@@ -764,7 +764,7 @@ def test_redo_deadline_ends_capture_with_silence(tmp_path, monkeypatch, capsys):
 
 
 def test_redo_deadline_is_below_the_installed_timeout():
-    install = (ROOT / "tools" / "install_hooks.py").read_text(encoding="utf-8")
+    install = (ROOT / "raqib" / "install.py").read_text(encoding="utf-8")  # M6.3: the installer's home
     timeout = int(re.search(r"^TIMEOUT = (\d+)", install, re.M).group(1))
     capture = load_capture()
     assert capture.LOCK_WAIT_SECONDS < capture.DEADLINE_SECONDS < timeout
