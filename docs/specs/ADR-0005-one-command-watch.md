@@ -330,3 +330,20 @@ every REDO 2 change carries a test for the behaviour it adds (D-8).
 - G-8 Two commits on the branch (builder cannot force-push) are accepted
   for this milestone and merged as they are; the rule "one commit" is
   read as "one landed task" when the builder's settings forbid rewriting.
+
+## Amendment H (the Table, 2026-11-03) - on the M6.3 REDO (94479be + aac6054)
+- G-1..G-7 MET as cited; CI run 41530961557 success on six jobs (read by
+  the Table from api.github.com); gate 1033 passed, 6 skipped; scope
+  clean; four commits on the branch (G-8 extended to them: the builder's
+  settings forbid rewriting).
+- H-1 (G-5 reading) A line that cannot be checked is a third class,
+  `UNSURE`, printed as such and counted separately: "raqib doctor: N
+  MISSING, M UNSURE"; exit 1 only on MISSING. A doctor that is always red
+  on Windows tells the commander nothing. The HANDOFF's "OK / MISSING" is
+  amended by this ruling. Test: Windows trace line is UNSURE, exit 0 when
+  nothing else is MISSING.
+- H-2 (G-4 addition) A `claude` found inside the project is MISSING and
+  never run: ratified.
+- H-3 Verdict after H-1 lands: NEXT; merge --no-ff under the commander's
+  standing word. The Table reads the H-1 delta itself (one class, one
+  exit rule, one test) rather than a third review.
