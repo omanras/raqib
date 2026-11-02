@@ -46,8 +46,12 @@ MATRIX = [
     ("order-seq-positive.json", [("SILENCE-ORDER", S1, [2, 1])]),
     ("order-ts-positive.json", [("SILENCE-ORDER", S1, [1, 2])]),
     ("order-negative.json", []),
+    ("empty-positive.json", [("SILENCE-EMPTY", S1, [1, 2])]),
+    ("empty-end-without-start-positive.json", [("SILENCE-EMPTY", S1, [1])]),
+    ("empty-start-alone-at-end-negative.json", [("SILENCE-OPEN", S1, [1])]),   # D-6: OPEN only
+    ("empty-negative.json", []),
 ]
-RULES = ("gap", "open", "half", "order")
+RULES = ("gap", "open", "half", "order", "empty")
 
 
 @pytest.mark.parametrize("name, expected", MATRIX)
@@ -324,7 +328,8 @@ def test_half_and_order_fall_back_to_the_last_valid_ts():
 
 def test_m41_e3_each_silence_rule_declares_kind_demand():
     assert silence.RULE_KINDS == {"SILENCE-GAP": "demand", "SILENCE-OPEN": "demand",
-                                  "SILENCE-HALF": "demand", "SILENCE-ORDER": "demand"}
+                                  "SILENCE-HALF": "demand", "SILENCE-ORDER": "demand",
+                                  "SILENCE-EMPTY": "demand"}   # M4.2 E5
     from raqib import report
     assert [rule_id for rule_id, _ in report.SILENCE_RULES] == list(silence.RULE_KINDS)
 
@@ -335,7 +340,7 @@ def test_m41_e3_every_silence_finding_carries_kind_demand():
         for f in silence.findings(load(name)):
             assert f["kind"] == silence.RULE_KINDS[f["rule_id"]] == "demand", (name, f)
             seen.add(f["rule_id"])
-    assert seen == set(silence.RULE_KINDS)      # each of the four rules was seen firing
+    assert seen == set(silence.RULE_KINDS)      # each of the five rules was seen firing
 
 
 def test_m41_e3_a_silence_rule_without_a_kind_cannot_emit(monkeypatch):
@@ -343,3 +348,100 @@ def test_m41_e3_a_silence_rule_without_a_kind_cannot_emit(monkeypatch):
     with pytest.raises(KeyError):
         silence.findings(load("gap-positive.json"))
     assert silence.findings(load("gap-negative.json")) == []
+
+
+# --- M4.2 E5: SILENCE-EMPTY (ADR-0002 Amendment D, rulings D-5, D-6, D-7) -------
+
+LOGS = Path(__file__).resolve().parent / "fixtures"
+
+
+def event(seq, phase, sec=None, session=S1):
+    return {"ts": "2026-10-16T12:00:%02d.000Z" % (seq if sec is None else sec), "seq": seq,
+            "session_id": session, "phase": phase, "tool": "-", "cwd": "/work/example"}
+
+
+def test_m42_e5_empty_is_high_a_demand_and_cites_start_and_end():
+    lines = load("empty-positive.json")
+    (f,) = silence.findings(lines)
+    assert f == {"ts": lines[1]["ts"], "rule_id": "SILENCE-EMPTY", "kind": "demand", "severity": "high",
+                 "session_id": S1, "cited_seq": [1, 2], "summary": f["summary"]}
+    assert f["summary"] == ("session started at seq 1 and ended at session_end seq 2 with no tool call and"
+                            " no stop: a failed start, or work that was not captured")
+    assert silence.SEVERITY == "high"                      # D-5: A3 stands, one severity for silence
+
+
+def test_m42_e5_an_end_without_a_start_cites_the_end_and_says_no_start():
+    (f,) = silence.findings(load("empty-end-without-start-positive.json"))
+    assert (f["rule_id"], f["cited_seq"]) == ("SILENCE-EMPTY", [1])
+    assert f["summary"] == "session_end seq 1 with no session_start in the trace (no start), no tool call and no stop"
+
+
+@pytest.mark.parametrize("phases, expected", [
+    (["session_start", "session_end"], [("SILENCE-EMPTY", [1, 2])]),
+    (["session_end"], [("SILENCE-EMPTY", [1])]),
+    (["session_start"], [("SILENCE-OPEN", [1])]),                          # one fact, one finding
+    (["session_start", "session_start"], [("SILENCE-OPEN", [2])]),
+    (["session_start", "stop", "session_end"], []),                        # a turn: not empty
+    (["session_start", "stop"], []),
+    (["stop"], []),
+    (["session_end", "session_end"], [("SILENCE-EMPTY", [1, 2])]),
+    (["session_start", "session_end", "session_start", "session_end"], [("SILENCE-EMPTY", [1, 2, 3, 4])]),
+], ids=["closed", "end-only", "start-only", "two-starts", "turn", "start-stop", "stop-only", "two-ends",
+        "two-closed-segments"])
+def test_m42_e5_the_d6_shape(phases, expected):
+    lines = [event(i, p) for i, p in enumerate(phases, start=1)]
+    assert [(f["rule_id"], f["cited_seq"]) for f in silence.findings(lines)] == expected
+
+
+@pytest.mark.parametrize("phase", ["pre", "post"])
+def test_m42_e5_any_tool_line_makes_a_session_not_empty(phase):
+    tool = dict(event(2, phase), tool="Bash", input_meta={}, input_sha256="0" * 64)
+    found = silence.findings([event(1, "session_start"), tool, event(3, "session_end")])
+    assert "SILENCE-EMPTY" not in {f["rule_id"] for f in found}
+
+
+def test_m42_e5_a_resumed_session_is_judged_as_one_session():
+    """D-6 is per session: a session_start after a session_end, with tool
+    lines, makes the session not empty; with none, it is empty and, when the
+    trace ends on the start, also open (the question is recorded in
+    docs/review/2026-11-03-M4.2-redo.md, not settled here)."""
+    tool = dict(event(4, "pre"), tool="Bash", input_meta={}, input_sha256="0" * 64)
+    closed = [event(1, "session_start"), event(2, "session_end"), event(3, "session_start")]
+    assert silence.findings(closed + [tool, dict(tool, phase="post"), event(5, "stop")]) == []
+    assert [(f["rule_id"], f["cited_seq"]) for f in silence.findings(closed)] == [
+        ("SILENCE-EMPTY", [1, 2, 3]), ("SILENCE-OPEN", [3])]
+
+
+def test_m42_e5_empty_is_per_session_and_ts_falls_back():
+    lines = load("empty-positive.json") + other_session(load("open-negative.json"))
+    assert rules_and_seqs(silence.findings(lines)) == [("SILENCE-EMPTY", S1, [1, 2])]
+    lines = load("empty-positive.json")
+    lines[1]["ts"] = None
+    (f,) = silence.findings(lines)
+    assert f["ts"] == lines[0]["ts"]
+
+
+def test_m42_e5_the_quickstart_traces_are_not_empty():
+    for name in ("quickstart-d7841d1-claude-code-2.1.301.log", "quickstart-claude-code-2.1.301.log"):
+        records, problems = trace.read(LOGS / name)
+        assert problems == [] and records
+        assert "SILENCE-EMPTY" not in {f["rule_id"] for f in silence.findings(records)}, name
+
+
+def test_m42_e5_the_field_trace_of_2026_11_02():
+    """tests/fixtures/field-2026-11-02.log: the commander's first adversarial
+    run, recreated with no real paths (ruling D-4; field notes of 2026-11-02).
+    Expected: SILENCE-EMPTY on s1 and s2 (failed starts), SILENCE-GAP on s3
+    (an interactive login), and from the catalog SCOPE-PATH on s5 and
+    NET-TOOL on s6 (test_report). s7, `python3 -c 'import urllib.request'`,
+    is the recorded NET-TOOL miss: the code after -c is an argument, which
+    capture never records (D-4)."""
+    records, problems = trace.read(LOGS / "field-2026-11-02.log")
+    assert problems == [] and len(records) == 26
+    assert len({r["session_id"] for r in records}) == 7
+    assert rules_and_seqs(silence.findings(records)) == [
+        ("SILENCE-EMPTY", "field-2026-11-02-s1", [1, 2]),
+        ("SILENCE-EMPTY", "field-2026-11-02-s2", [1, 2]),
+        ("SILENCE-GAP", "field-2026-11-02-s3", [1, 2])]
+    text = (LOGS / "field-2026-11-02.log").read_text(encoding="ascii")
+    assert {r["cwd"] for r in records} == {"/home/user/raqib-demo"} and "/home/user/.bashrc" in text

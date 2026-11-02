@@ -14,7 +14,7 @@ from raqib.rules import engine  # noqa: E402
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 THREAT = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
 CATALOG = ROOT / "raqib" / "rules" / "catalog"
-WORDS = {4: "4", 6: "Six", 7: "7", 11: "Eleven"}
+WORDS = {4: "4", 6: "Six", 7: "7", 11: "Eleven", 12: "Twelve"}
 
 
 def test_readme_counts_the_rules():
@@ -23,10 +23,18 @@ def test_readme_counts_the_rules():
     silence = [r for r in table if r["class"] == "SILENCE" and r["fp_budget"] is None]
     assert "%s rules turn the trace into findings" % WORDS[len(table)] in README
     assert "%d silence rules and\n   %d YAML rules" % (len(silence), len(rules)) in README
-    named = {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SCOPE-PATH",
+    named = {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY", "SCOPE-PATH",
              "SCOPE-CWD-ROOT", "SCOPE-CWD-MOVED", "NET-TOOL", "DESTRUCT-CMD", "SECRET-OUTPUT",
              "DRIFT-FILES"}
     assert {r["id"] for r in table} == named, "update the README rule table"
+    # Every rule has a row of the README's rule table, alone or in a row of its family (M4.2).
+    rows = [line.split("|")[1].strip() for line in section("What it catches").splitlines()
+            if line.startswith("| ") and not line.startswith("| Rule ")]
+    for rule_id in named:
+        family, last = rule_id.split("-")[0], rule_id.rsplit("-", 1)[1]
+        assert any(rule_id == row or (re.split(r"[ /-]+", row)[0] == family and last in re.split(r"[ /-]+", row))
+                   for row in rows), rule_id
+    assert "| SILENCE-EMPTY |" in README
 
 
 def test_readme_counts_the_hooks():

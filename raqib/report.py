@@ -24,6 +24,7 @@ SILENCE_RULES = (
     ("SILENCE-OPEN", "a started session whose last line is not a stop or session_end"),
     ("SILENCE-HALF", "a seq with more pre than post lines, or the reverse"),
     ("SILENCE-ORDER", "seq or ts going back: trace truncated, rotated or merged"),
+    ("SILENCE-EMPTY", "a session that ended with no tool call and no stop (or ended with no start)"),
 )
 EXIT = {"clean": 0, "alarm": 1, "incomplete": 3}
 LINE_TEXT_MAX = 240

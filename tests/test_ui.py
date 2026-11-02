@@ -66,7 +66,7 @@ def test_e1_page_of_the_real_blocked_calls_trace():
     assert '<a href="#L2">line 2</a>' in page and '<a href="#L3">line 3</a>' in page
     assert all('<tr id="L%d"' % n in page for n in range(1, 8))
     assert "DRIFT-FILES</code> not-evaluated" in page and "SECRET-OUTPUT</code> partial" in page
-    assert page.count("<tr><td>") == len(rep["rules"]) == 11
+    assert page.count("<tr><td>") == len(rep["rules"]) == 12      # M4.2: SILENCE-EMPTY
 
 
 def test_e1_suspicion_lines_and_their_citations():

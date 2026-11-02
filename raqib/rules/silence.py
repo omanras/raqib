@@ -15,12 +15,21 @@ pure function: it reads only its arguments and returns new dicts.
                  seq no higher than one already seen, or a ts earlier than the
                  line before it: the trace was truncated, rotated, merged or
                  its clock moved. Cites [earlier seq, this seq].
+- SILENCE-EMPTY  a session that has a session_end and no pre, post or stop
+                 line (M4.2, ruling D-6): it started and ended with nothing
+                 seen in between (a failed start, or work that was not
+                 captured), or it ended with no session_start in the trace
+                 at all ("no start"). Cites its session_start and session_end
+                 lines. A session_start with nothing after it is not empty:
+                 that is SILENCE-OPEN's finding (one fact, one finding); a
+                 stop is a turn, so start + stop + end is not empty either.
 
 Each rule declares its kind in code (ADR-0002), in RULE_KINDS, and every
-finding carries it. All four are demands: each requires evidence of an act
+finding carries it. All five are demands: each requires evidence of an act
 (a line within the gap, a close, the other half of a call, a seq and ts that
-go forward), and the absence of that evidence is the finding. An agent that
-knows them is helped only by complying.
+go forward, a tool call or a turn in a session that ended), and the absence
+of that evidence is the finding. An agent that knows them is helped only by
+complying.
 
 Lines are trace records in file (capture) order. Records without a
 session_id and an int seq cannot be cited (A5) and are skipped here;
@@ -43,7 +52,9 @@ RULE_KINDS = {  # ADR-0002: rule id -> kind; a rule not listed here cannot emit
     "SILENCE-OPEN": "demand",
     "SILENCE-HALF": "demand",
     "SILENCE-ORDER": "demand",
+    "SILENCE-EMPTY": "demand",
 }
+WORK = ("pre", "post", "stop")  # SILENCE-EMPTY: lines that show a session did something
 
 
 def gap_seconds_from(environ):
@@ -81,6 +92,7 @@ def findings(lines, gap_seconds=DEFAULT_GAP_SECONDS):
         found += _open(session_id, recs)
         found += _halves(session_id, recs)
         found += _order(session_id, recs)
+        found += _empty(session_id, recs)
         found.sort(key=lambda f: (f["cited_seq"][0], f["rule_id"]))
         out += found
     return out
@@ -132,6 +144,23 @@ def _open(session_id, recs):
     return [_finding(
         "SILENCE-OPEN", session_id, [last["seq"]], _ts_at(recs, len(recs) - 1),
         "session started but its trace ends at %s without session_end or stop" % _label(last))]
+
+
+def _empty(session_id, recs):
+    """SILENCE-EMPTY (D-6): a session_end, and no pre, post or stop line."""
+    ends = [i for i, r in enumerate(recs) if r.get("phase") == "session_end"]
+    if not ends or any(r.get("phase") in WORK for r in recs):
+        return []
+    starts = [r["seq"] for r in recs if r.get("phase") == "session_start"]
+    cited = sorted(set(starts + [recs[i]["seq"] for i in ends]))
+    last = recs[ends[-1]]
+    if starts:
+        summary = ("session started at seq %d and ended at %s with no tool call and no stop:"
+                   " a failed start, or work that was not captured" % (starts[0], _label(last)))
+    else:
+        summary = ("%s with no session_start in the trace (no start), no tool call and no stop"
+                   % _label(last))
+    return [_finding("SILENCE-EMPTY", session_id, cited, _ts_at(recs, ends[-1]), summary)]
 
 
 def _halves(session_id, recs):

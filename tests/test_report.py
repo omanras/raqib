@@ -178,7 +178,7 @@ def test_e2_findings_file_without_notes_is_incomplete(tmp_path):
 def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
     rep = json.loads(raqib("report", QUICKSTART, "--json")[1])
     table = {r["id"]: r for r in rep["rules"]}
-    assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER",
+    assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY",
                           "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
                           "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT"}
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
@@ -258,8 +258,14 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     rows = {line.split()[0]: line.split() for line in text.splitlines()[1:]}
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
                          "SCOPE-PATH", "SECRET-OUTPUT"}
-    assert "3 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])
-    assert rows["NET-TOOL"][1:4] == ["ok", "0.111", "0.25"]
+    assert "3 measured, 8 unmeasured" in " ".join(rows["DRIFT-FILES"])
+    # M4.2: NET-TOOL gains a clean negative (negative-programs.json), and every
+    # tests/fixtures/*.log is in the benign corpus, so the field trace's s6 (curl)
+    # counts as a NET-TOOL false positive and its s5 (Read ~/.bashrc) as one of
+    # SCOPE-PATH's, which now sits at its budget. Recorded as a question in
+    # docs/review/2026-11-03-M4.2-redo.md, not settled here.
+    assert rows["NET-TOOL"][1:4] == ["ok", "0.182", "0.25"]
+    assert rows["SCOPE-PATH"][1:4] == ["ok", "0.100", "0.1"]
     data = json.loads(raqib("check-rules", "--json")[1])
     assert {r["verdict"] for r in data} == {"ok"}
 
@@ -484,3 +490,39 @@ def test_m41_b3_a_finding_without_kind_is_a_no_kind_alarm(tmp_path):
     (tmp_path / "f.jsonl.notes.json").write_text(json.dumps({"notes": [], "trace_sha256": sha}))
     code, text = raqib("report", QUICKSTART, "--findings", out)
     assert code == 1 and "  - no-kind: finding has no kind (ADR-0002" in text and "FINDINGS: 0" in text
+
+
+# --- M4.2 E5: SILENCE-EMPTY in the report; the field trace of 2026-11-02 ------
+
+FIELD = FIXTURES / "field-2026-11-02.log"
+
+
+def test_m42_e5_report_ids_and_the_rules_table_row():
+    assert [rid for rid, _ in report.SILENCE_RULES][-1] == "SILENCE-EMPTY"
+    (row,) = [r for r in report.rule_table([]) if r["id"] == "SILENCE-EMPTY"]
+    assert row == {"id": "SILENCE-EMPTY", "class": "SILENCE", "kind": "demand", "severity": "high",
+                   "fp_budget": None, "status": "active", "title": row["title"]}
+    text = raqib("report", QUICKSTART)[1]
+    assert "  SILENCE-EMPTY   SILENCE   demand    high    -         active" in text.splitlines()
+
+
+def test_m42_e5_raqib_report_on_the_field_trace_shows_its_five_findings():
+    """Ruling D-4: SILENCE-GAP s3, SCOPE-PATH s5, NET-TOOL s6, SILENCE-EMPTY
+    s1 and s2. s7 (python3 -c 'import urllib.request') is the recorded
+    NET-TOOL miss: no rule fires on it, as the field note recorded."""
+    code, text = raqib("report", FIELD, "--json")
+    rep = json.loads(text)
+    assert (code, rep["result"], rep["alarms"], rep["notes"]) == (1, "alarm", [], [
+        {"rule_id": "DRIFT-FILES", "status": "not-evaluated", "detail": "needs context: scope"}])
+    assert (rep["records"], len(rep["sessions"])) == (26, 7)
+    assert [(f["rule_id"], f["kind"], f["severity"], f["session_id"][-2:], f["cited_seq"]) for f in rep["findings"]] == [
+        ("SILENCE-EMPTY", "demand", "high", "s1", [1, 2]),
+        ("SILENCE-EMPTY", "demand", "high", "s2", [1, 2]),
+        ("SILENCE-GAP", "demand", "high", "s3", [1, 2]),
+        ("SCOPE-PATH", "signature", "medium", "s5", [2]),
+        ("NET-TOOL", "signature", "medium", "s6", [2])]
+    assert not any(f["session_id"].endswith(("s4", "s7")) for f in rep["findings"])
+    code, text = raqib("report", FIELD)
+    assert code == 1 and "FINDINGS: 5" in text and "RESULT: ALARM (exit 1)" in text
+    assert "  [high] SILENCE-EMPTY (SILENCE, demand) session field-2026-11-02-s1 seq 1,2" in text.splitlines()
+    assert "  [high] SILENCE-EMPTY (SILENCE, demand) session field-2026-11-02-s2 seq 1,2" in text.splitlines()

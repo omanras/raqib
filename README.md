@@ -51,10 +51,10 @@ A check that cannot be made on this host is UNSURE, counted apart and never a fa
    `raqib.log.jsonl`: two per tool call (pre and post) and one per session
    event. Inputs and outputs are stored as
    sha256 only, plus a small extract: the path, the URL host, the program
-   name of a Bash command, and the names of secret patterns seen in the
-   output.
-2. **Rules.** Eleven rules turn the trace into findings, and every finding
-   cites the trace lines behind it (A5). The rules are 4 silence rules and
+   names of a Bash command (never its arguments), and the names of secret
+   patterns seen in the output.
+2. **Rules.** Twelve rules turn the trace into findings, and every finding
+   cites the trace lines behind it (A5). The rules are 5 silence rules and
    7 YAML rules in `raqib/rules/catalog`. Each YAML rule declares its
    false-positive budget and is measured against fixtures (A6); the silence
    rules have no budget yet.
@@ -98,16 +98,18 @@ design, a quiet minute is reported, not assumed harmless.
 | Rule | Fires on |
 |---|---|
 | SILENCE-GAP / OPEN / HALF / ORDER | no capture for 60 s; a session with no end; a call with no result (or a result with no call); seq or time going back |
+| SILENCE-EMPTY | a session that started and ended with no tool call and no turn, or ended with no start |
 | SCOPE-PATH | a file tool touching a path outside the session's directory |
 | SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
-| NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like |
-| DESTRUCT-CMD | rm, dd, shred, mkfs and the like |
+| NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command |
+| DESTRUCT-CMD | rm, dd, shred, mkfs and the like anywhere in a Bash command |
 | SECRET-OUTPUT | a key, token or private key in a tool's output (by pattern name; the text is never stored) |
 | DRIFT-FILES | edits to more than two files outside the task's declared scope |
 
 ## What it cannot see
 Content, by design. So the rules miss these:
-- a program hidden behind `sudo`, `bash -c` or `&&`;
+- a program hidden behind `sudo`, `eval`, `python -c` or a second `bash -c`
+  (pipes, `&&`, `;`, `$(...)` and one `bash -c` are read);
 - file access made through Bash;
 - a symlink out of the project;
 - a secret the agent writes rather than reads;

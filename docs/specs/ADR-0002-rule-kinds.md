@@ -54,6 +54,22 @@ Ratio today: 4 : 4 : 3. All four signatures share one bypass: Bash.
 Phase 4 therefore adds demands and anchors around Bash and the tree, not
 more signatures.
 
+Note (2026-11-03, M4.2, ruling D-8; the table above stays as written). M4.2
+adds one row, in the table's shape:
+
+| rule             | kind      | known evasion (for `evasion:`)                       |
+|------------------|-----------|------------------------------------------------------|
+| SILENCE-EMPTY    | demand    | -                                                    |
+
+E2 (`input_meta.command_programs`, read under the D-3 guard) drops these
+evasion items, each quoted as it stood in the rule's `evasion:` list:
+- dropped DESTRUCT-CMD: "bash -c 'rm ...': the first program is bash" (the table's "bash -c")
+- dropped DESTRUCT-CMD: "rm after &&, ; or a pipe: only the first program is read"
+- dropped NET-TOOL: "bash -c 'curl ...' or a wrapper in front (sudo, env, xargs): only the first program is read" (its wrapper half stays, in a line of its own)
+- dropped NET-TOOL: "curl after &&, ; or a pipe: only the first program is read"
+
+Ratio after M4.2: 4 : 5 : 3.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind

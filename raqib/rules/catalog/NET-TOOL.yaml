@@ -9,15 +9,15 @@ evasion:
   - "pip/npm install: package managers are not on the list"
   - "git fetch: git is not on the list (nor git clone or git push)"
   - "node fetch: the program is node"
-  - "bash -c 'curl ...' or a wrapper in front (sudo, env, xargs): only the first program is read"
-  - "curl after &&, ; or a pipe: only the first program is read"
+  - "a wrapper in front (sudo, env, xargs, timeout, nohup, exec, eval, source, find -exec), a shell other than bash or sh (zsh -c, dash -c), or a bash -c inside a bash -c: the program it runs is an argument, and capture never records arguments"
   - "a network program not on the list (dig, nslookup, gh, docker pull)"
   - "a tool whose URL is in a field not named url: url_host is read from url only"
+  - "a command capture cannot read in full is matched by command_head only (no command_programs: an expansion such as $X as a program or in a bash -c string, a backtick, for, case, [[ ]], a function, more than 64 programs, or a trace written before M4.2)"
 severity: medium
 # Doc lookups and package fetches are routine, so some benign sessions fire.
 fp_budget: 0.25
-description: "A web tool, a URL in the tool input, or a Bash command whose program talks to the network. Network access can carry data out or bring code in."
-summary: "{tool} may reach the network at seq {seq} (host {input_meta.url_host}, program {input_meta.command_head})"
+description: "A web tool, a URL in the tool input, or a Bash command one of whose programs talks to the network: the first program (command_head) or, when capture could read the whole command, any program in it (command_programs, M4.2). Network access can carry data out or bring code in."
+summary: "{tool} may reach the network at seq {seq} (host {input_meta.url_host}, program {input_meta.command_head}, programs {input_meta.command_programs})"
 match:
   all:
     - {field: phase, eq: pre}
@@ -26,11 +26,20 @@ match:
         - {field: input_meta.url_host, exists: true}
         - all:
             - {field: tool, eq: Bash}
-            - field: input_meta.command_head
-              in: [curl, wget, nc, ncat, netcat, socat, telnet, ssh, scp, sftp, rsync, ftp, aria2c, http, https, xh, lynx, links, w3m]
+            - any:
+                - field: input_meta.command_head
+                  in: [curl, wget, nc, ncat, netcat, socat, telnet, ssh, scp, sftp, rsync, ftp, aria2c, http, https, xh, lynx, links, w3m]
+                # M4.2 (ruling D-3): every program of the command, guarded so a
+                # line without command_programs is judged by command_head alone.
+                - all:
+                    - {field: input_meta.command_programs, exists: true}
+                    - field: input_meta.command_programs
+                      has_any: [curl, wget, nc, ncat, netcat, socat, telnet, ssh, scp, sftp, rsync, ftp, aria2c, http, https, xh, lynx, links, w3m]
 fixtures:
   positive:
     - tests/fixtures/rules/NET-TOOL/positive-curl.json
     - tests/fixtures/rules/NET-TOOL/positive-webfetch.json
+    - tests/fixtures/rules/NET-TOOL/positive-programs.json
   negative:
     - tests/fixtures/rules/NET-TOOL/negative-local.json
+    - tests/fixtures/rules/NET-TOOL/negative-programs.json

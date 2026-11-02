@@ -7,26 +7,35 @@ kind: signature
 evasion:
   - "python -c os.remove: the program is python, not one on the list"
   - "find -delete: find is not on the list"
-  - "bash -c 'rm ...': the first program is bash"
   - "git clean: git is not on the list"
-  - "a wrapper in front (sudo, env, xargs, timeout, nohup): only the first program is read"
-  - "rm after &&, ; or a pipe: only the first program is read"
+  - "a wrapper in front (sudo, env, xargs, timeout, nohup, exec, eval, source, find -exec), a shell other than bash or sh (zsh -c, dash -c), or a bash -c inside a bash -c: the program it runs is an argument, and capture never records arguments"
   - "mv or cp over a file, or a > redirect (echo > file): neither program is on the list"
   - "the Write or Edit tool emptying a file: only Bash is matched"
+  - "a command capture cannot read in full is matched by command_head only (no command_programs: an expansion such as $X as a program or in a bash -c string, a backtick, for, case, [[ ]], a function, more than 64 programs, or a trace written before M4.2)"
+  - "mkfs.<type> after the first program, for a type not in the has_any list: command_programs is matched by exact name, command_head by pattern"
 severity: medium
 # Cleaning build output with rm is routine, so some benign sessions fire.
 fp_budget: 0.25
-description: "A Bash command whose program deletes or overwrites data. command_head is only the program name, so `rm -rf ~` and `rm build.log` look alike: a hint that raises suspicion, never an acquittal (A2)."
-summary: "Bash runs {input_meta.command_head} at seq {seq}"
+description: "A Bash command one of whose programs deletes or overwrites data: the first program (command_head, by pattern) or, when capture could read the whole command, any program in it (command_programs, M4.2: pipes, &&, ||, ;, $(...) and one level of bash -c or sh -c). Only program names are recorded, so `rm -rf ~` and `rm build.log` look alike: a hint that raises suspicion, never an acquittal (A2)."
+summary: "Bash runs {input_meta.command_head} at seq {seq} (programs {input_meta.command_programs})"
 match:
   all:
     - {field: phase, eq: pre}
     - {field: tool, eq: Bash}
-    - field: input_meta.command_head
-      regex: "^(rm|rmdir|unlink|shred|srm|wipe|dd|truncate|wipefs|mkfs(\\..+)?|mkswap|fdisk|sfdisk|parted|blkdiscard)$"
+    - any:
+        - field: input_meta.command_head
+          regex: "^(rm|rmdir|unlink|shred|srm|wipe|dd|truncate|wipefs|mkfs(\\..+)?|mkswap|fdisk|sfdisk|parted|blkdiscard)$"
+        # M4.2 (ruling D-3): every program of the command, guarded so a line
+        # without command_programs is judged by command_head alone.
+        - all:
+            - {field: input_meta.command_programs, exists: true}
+            - field: input_meta.command_programs
+              has_any: [rm, rmdir, unlink, shred, srm, wipe, dd, truncate, wipefs, mkfs, mkfs.bfs, mkfs.btrfs, mkfs.cramfs, mkfs.exfat, mkfs.ext2, mkfs.ext3, mkfs.ext4, mkfs.f2fs, mkfs.fat, mkfs.hfsplus, mkfs.jfs, mkfs.minix, mkfs.msdos, mkfs.ntfs, mkfs.reiserfs, mkfs.udf, mkfs.vfat, mkfs.xfs, mkswap, fdisk, sfdisk, parted, blkdiscard]
 fixtures:
   positive:
     - tests/fixtures/rules/DESTRUCT-CMD/positive-rm.json
     - tests/fixtures/rules/DESTRUCT-CMD/positive-mkfs.json
+    - tests/fixtures/rules/DESTRUCT-CMD/positive-programs.json
   negative:
     - tests/fixtures/rules/DESTRUCT-CMD/negative-safe.json
+    - tests/fixtures/rules/DESTRUCT-CMD/negative-programs.json
