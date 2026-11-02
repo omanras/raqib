@@ -125,3 +125,35 @@ of from the commander.
   footprint removed, so the result rests on the anchor alone.
 - Notes D8-D12, D16, D17: D8 and D12 fixed as text in README/holes; D17
   negatives added where cheap; the rest recorded.
+
+## Amendment D (the Table, 2026-11-02) - rulings on review 2026-11-02-M5.0-REDO-review.md
+- D-1 (R1) Sysmon is complete as a process source only with at least one
+  event 1, and as a connection source only with at least one event 3;
+  otherwise incomplete (exit 3) with a hole naming the missing event id
+  and "Sysmon without -n logs no event 3".
+- D-2 (R2) Only ENOENT on /proc/net/tcp6 is a hole ("no IPv6 table");
+  any other OSError on tcp or tcp6 is a source error (exit 3).
+- D-3 (R3) A readlink failure on any fd is a hole citing the pid; the
+  process record then carries `"sockets": null` (unknown), never `[]`;
+  cwd and cmdline failures are holes too. Fixture pid 1 must show null.
+- D-4 (R4) --save writes a `run.json` with each source's error, the
+  connections_from path, and the live holes; --from reads it, so a
+  replay of an incomplete run is incomplete and the ss path survives.
+- D-5 (Q-R2, R12) Hand-off criteria move to endpoints.yaml under
+  `handoff:` with `evasion:` lists, loader enforced: `hook` for a root
+  image named claude / claude.exe unless its path matches a listed
+  Claude Desktop pattern (AnthropicClaude, Claude.app, claude-desktop);
+  `proxy` for proxy_capable images; else `os`. Record: a hook suggested
+  for an image that offers no hooks is a signature miss, and `os` still
+  watches the tree, so the error is safe-side.
+- D-6 (R13) Redact `shell-snapshots/snapshot-*` basenames in the REAL
+  fixture to a placeholder; add to capture.py's TOKEN and the test.
+- D-7 (R8, R15) Footprint link order recorded here as ratified. The ADR's
+  line 20 sentence is superseded by B-6: browsers can be candidates; the
+  anchor is wider than the agent on purpose, and the budget comes from
+  the field (B-8). Amendment A stays where it is; future amendments
+  append after the last.
+- D-8 (R7, R9, R10, R11, R16) R7: inode-0 states named in the unowned
+  hole and the "opened between snapshots" reason added. R10: --from with
+  both proc-net.txt and ss.txt uses proc-net only and notes ss.txt was
+  ignored. R11: README and yaml wording fixed. R9, R16: recorded.
