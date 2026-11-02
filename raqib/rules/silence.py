@@ -16,6 +16,12 @@ pure function: it reads only its arguments and returns new dicts.
                  line before it: the trace was truncated, rotated, merged or
                  its clock moved. Cites [earlier seq, this seq].
 
+Each rule declares its kind in code (ADR-0002), in RULE_KINDS, and every
+finding carries it. All four are demands: each requires evidence of an act
+(a line within the gap, a close, the other half of a call, a seq and ts that
+go forward), and the absence of that evidence is the finding. An agent that
+knows them is helped only by complying.
+
 Lines are trace records in file (capture) order. Records without a
 session_id and an int seq cannot be cited (A5) and are skipped here;
 trace.parse() reports them, and bad timestamps, as problems.
@@ -32,6 +38,12 @@ GAP_ENV = "RAQIB_GAP_SECONDS"
 SEVERITY = "high"  # A3: silence is a finding of the highest class
 CLOSING = ("session_end", "stop")
 NEW_SEQ = ("pre", "session_start", "session_end", "stop")  # capture gives these max+1
+RULE_KINDS = {  # ADR-0002: rule id -> kind; a rule not listed here cannot emit
+    "SILENCE-GAP": "demand",
+    "SILENCE-OPEN": "demand",
+    "SILENCE-HALF": "demand",
+    "SILENCE-ORDER": "demand",
+}
 
 
 def gap_seconds_from(environ):
@@ -78,6 +90,7 @@ def _finding(rule_id, session_id, cited_seq, ts, summary):
     return {
         "ts": ts,
         "rule_id": rule_id,
+        "kind": RULE_KINDS[rule_id],
         "severity": SEVERITY,
         "session_id": session_id,
         "cited_seq": list(cited_seq),

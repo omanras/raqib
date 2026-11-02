@@ -8,11 +8,16 @@ same order, on the files git tracks:
 2. HANDOFF.md has at most 30 lines;
 3. private-tree leak check: a reference to a private tree in a text file;
 4. ADR-0001 B-3: only raqib/suspect/backends.py imports the anthropic SDK;
-5. the tests in tests/, with pytest; if pytest is missing it is installed
+5. ADR-0002 rule kinds: the catalog loads with this checkout's own loader
+   (which rejects a rule without a kind, or a signature without evasion),
+   every catalog and silence rule has a kind, and one line gives the ratio
+   `rule kinds: signature=N demand=N anchor=N` (a health number, not a
+   budget: it never fails the gate by itself);
+6. the tests in tests/, with pytest; if pytest is missing it is installed
    with pip, which needs the network (ADR-0001 A-7).
 A check that read nothing has not passed (A3): the gate is RED when git
-cannot list the tracked files, when it lists none, and when tests/ is
-missing or holds no test_*.py.
+cannot list the tracked files, when it lists none, when tests/ is missing or
+holds no test_*.py, and when the rules cannot be read from this checkout.
 """
 from __future__ import annotations
 
@@ -35,6 +40,10 @@ SDK_ALLOWED = "raqib/suspect/backends.py"
 # count and `import os, anthropic` or importlib does; a file that cannot be
 # parsed cannot be cleared. Shell files are searched line by line.
 SH_IMPORT = re.compile(r"\b(?:import\s+(?:[\w.]+\s*,\s*)*anthropic\b|from\s+anthropic\b)")
+# ADR-0002. The gate's own copy, so a loader that came to accept a fourth
+# kind would still be caught here.
+KINDS = ("signature", "demand", "anchor")
+CATALOG = os.path.join("raqib", "rules", "catalog")
 
 
 class Red(Exception):
@@ -137,6 +146,35 @@ def sdk_imports(files):
         raise Red("anthropic imported outside raqib/suspect/backends.py")
 
 
+def rule_kinds():
+    """ADR-0002: every rule has a kind; print the ratio. The rules are read
+    from this checkout (python -I leaves it off sys.path), never from an
+    installed raqib."""
+    if ROOT not in sys.path:
+        sys.path.insert(0, ROOT)
+    try:
+        from raqib.rules import engine, silence
+    except Exception as exc:
+        raise Red("rule kinds: cannot import raqib.rules from this checkout (%s: %s)" % (type(exc).__name__, exc))
+    here = os.path.normcase(os.path.realpath(os.path.join(ROOT, "raqib", "rules")))
+    for module in (engine, silence):
+        where = os.path.normcase(os.path.realpath(os.path.dirname(os.path.abspath(module.__file__))))
+        if where != here:
+            raise Red("rule kinds: %s was imported from %s, not from this checkout" % (module.__name__, where))
+    try:
+        rules = engine.load_catalog(os.path.join(ROOT, CATALOG))
+    except engine.RuleError as exc:
+        raise Red("rule kinds: the catalog does not load: %s" % exc)
+    declared = getattr(silence, "RULE_KINDS", None)
+    if not (isinstance(declared, dict) and declared):
+        raise Red("rule kinds: raqib/rules/silence.py declares no RULE_KINDS (rule id -> kind)")
+    kinds = [(r.id, getattr(r, "kind", None)) for r in rules] + list(declared.items())
+    missing = [rule_id for rule_id, kind in kinds if not (isinstance(kind, str) and kind in KINDS)]
+    if missing:
+        raise Red("rule kinds: no kind (one of %s) for %s" % ("|".join(KINDS), ", ".join(map(str, missing))))
+    say("rule kinds: " + " ".join("%s=%d" % (k, sum(1 for _, v in kinds if v == k)) for k in KINDS))
+
+
 def tests():
     say("tests")
     python = sys.executable
@@ -158,6 +196,7 @@ def main():
         handoff_length()
         leak_check(files)
         sdk_imports(files)
+        rule_kinds()
         code = tests()
     except Red as exc:
         say("RED: %s" % exc)

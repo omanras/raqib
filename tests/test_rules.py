@@ -153,6 +153,8 @@ def rule_doc(**changes):
         "id": "NET-TEST",
         "title": "Test rule",
         "class": "NET",
+        "kind": "signature",
+        "evasion": ["any program but Bash"],
         "severity": "medium",
         "fp_budget": 0.1,
         "match": {"field": "tool", "eq": "Bash"},
@@ -345,7 +347,7 @@ def test_e3_finding_shape_and_dedupe_per_seq():
     found, notes = engine.evaluate([rule], recs)
     assert notes == []
     assert found == [{
-        "ts": "2026-10-16T13:00:01.000Z", "rule_id": "NET-TEST", "class": "NET",
+        "ts": "2026-10-16T13:00:01.000Z", "rule_id": "NET-TEST", "class": "NET", "kind": "signature",
         "severity": "medium", "session_id": "s1", "cited_seq": [1], "summary": "Bash rm seq 1"}]
 
 
@@ -782,3 +784,152 @@ def test_redo2_scope_cwd_moved_summary_matches_its_citations():
     (f,) = engine.evaluate([catalog_rule("SCOPE-CWD-MOVED")], lines)[0]
     assert f["summary"] == "session ran in 2 working directories; each is cited where it first appears"
     assert f["cited_seq"] == [1, 3]
+
+
+# --- M4.1 (ADR-0002): rule kinds ---------------------------------------------
+
+from raqib.rules import silence  # noqa: E402
+
+ADR = ROOT / "docs" / "specs" / "ADR-0002-rule-kinds.md"
+
+
+def kind_doc(kind, **changes):
+    """A rule of one kind: a signature keeps rule_doc's evasion list, a demand
+    or an anchor has none."""
+    doc = rule_doc(kind=kind, **changes)
+    if kind != "signature" and "evasion" not in changes:
+        del doc["evasion"]
+    return doc
+
+
+@pytest.mark.parametrize("kind", ["signature", "demand", "anchor"])
+def test_m41_e1_the_three_valid_kinds_load_and_reach_their_findings(kind):
+    rule = engine.compile_rule(kind_doc(kind), "src")
+    assert rule.kind == kind
+    assert rule.evasion == (("any program but Bash",) if kind == "signature" else ())
+    (f,) = engine.run_rule(rule, [line()])
+    assert f["kind"] == kind and engine.check_finding(f) is f
+
+
+ONE_OF = "must be one of signature|demand|anchor, not "
+NOT_A_LIST = "must be a non-empty list of one-line strings, not "
+NOT_A_LINE = "must be a non-empty one-line string of printable characters, not "
+
+
+@pytest.mark.parametrize("change, message", [
+    # 1. no kind
+    ({"kind": DELETE}, "kind: missing; every rule declares one of signature|demand|anchor (ADR-0002)"),
+    # 2. a kind that is not one of the three
+    ({"kind": "heuristic"}, "kind: " + ONE_OF + "'heuristic'"),
+    ({"kind": "Signature"}, "kind: " + ONE_OF + "'Signature'"),
+    ({"kind": None}, "kind: " + ONE_OF + "None"),
+    ({"kind": ["signature"]}, "kind: " + ONE_OF + "['signature']"),
+    # 3. a signature without evasion, or with evasion of another shape
+    ({"evasion": DELETE}, "evasion: missing; a signature must list its known evasions, one line each"
+                          " (ADR-0002: a signature with no listed evasion is invalid)"),
+    ({"evasion": []}, "evasion: " + NOT_A_LIST + "[]"),
+    ({"evasion": None}, "evasion: " + NOT_A_LIST + "None"),
+    ({"evasion": "python urllib"}, "evasion: " + NOT_A_LIST + "'python urllib'"),
+    ({"evasion": ["bash -c", ""]}, "evasion[1]: " + NOT_A_LINE + "''"),
+    ({"evasion": ["   "]}, "evasion[0]: " + NOT_A_LINE + "'   '"),
+    ({"evasion": ["two\nlines"]}, "evasion[0]: " + NOT_A_LINE + "'two\\nlines'"),
+    ({"evasion": ["a\tb"]}, "evasion[0]: " + NOT_A_LINE + "'a\\tb'"),
+    ({"evasion": [7]}, "evasion[0]: " + NOT_A_LINE + "7"),
+    ({"evasion": [["nested"]]}, "evasion[0]: " + NOT_A_LINE + "['nested']"),
+    # 4. evasion on a demand or an anchor
+    ({"kind": "demand"}, "evasion: only a signature lists evasions; kind demand must not have one (ADR-0002)"),
+    ({"kind": "anchor", "evasion": []},
+     "evasion: only a signature lists evasions; kind anchor must not have one (ADR-0002)"),
+    ({"kind": "anchor", "evasion": None},
+     "evasion: only a signature lists evasions; kind anchor must not have one (ADR-0002)"),
+], ids=["no-kind", "unknown-kind", "kind-case", "kind-null", "kind-list",
+        "signature-no-evasion", "evasion-empty", "evasion-null", "evasion-string", "evasion-empty-line",
+        "evasion-blank-line", "evasion-two-lines", "evasion-tab", "evasion-not-a-string", "evasion-nested",
+        "demand-with-evasion", "anchor-with-empty-evasion", "anchor-with-null-evasion"])
+def test_m41_e1_any_other_shape_is_an_error_naming_the_rule_and_field(change, message):
+    with pytest.raises(engine.RuleError) as info:
+        engine.compile_rule(rule_doc(**change), "src")
+    assert str(info.value) == "src: rule NET-TEST: " + message
+
+
+def test_m41_e1_a_rule_file_without_kind_names_file_rule_and_field(tmp_path):
+    path = tmp_path / "NET-TOOL.yaml"
+    text = (CATALOG / "NET-TOOL.yaml").read_text()
+    path.write_text("".join(x for x in text.splitlines(True) if not x.startswith("kind:")))
+    with pytest.raises(engine.RuleError) as info:
+        engine.load_rule(path)
+    assert str(info.value).startswith("%s: rule NET-TOOL: kind: missing" % path)
+    (tmp_path / "catalog").mkdir()
+    (tmp_path / "catalog" / "NET-TOOL.yaml").write_text(path.read_text())
+    with pytest.raises(engine.RuleError, match="rule NET-TOOL: kind: missing"):
+        engine.load_catalog(tmp_path / "catalog")
+
+
+def test_m41_e1_a_bad_id_is_reported_before_the_kind():
+    with pytest.raises(engine.RuleError) as info:
+        engine.compile_rule(rule_doc(id="net-test", kind=DELETE), "src")
+    assert str(info.value).startswith("src: id: must look like")
+
+
+def adr_table():
+    """(rows, section) of ADR-0002's classification table: rows maps a rule id
+    to (kind, the items of its evasion column split on ';', [] for '-')."""
+    text = ADR.read_text(encoding="utf-8")
+    section = text.split("\n## Classification", 1)[1].split("\n## ", 1)[0]
+    rows = {}
+    for row in section.splitlines():
+        if not row.startswith("|"):
+            continue
+        cells = [c.strip() for c in row.strip().strip("|").split("|")]
+        if cells[0] == "rule" or set(cells[0]) <= set("-"):
+            continue
+        rule_id, kind, evasion = cells
+        rows[rule_id] = (kind, [] if evasion == "-" else [e.strip() for e in evasion.split(";")])
+    return rows, section
+
+
+def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
+    table, section = adr_table()
+    rules = {r.id: r for r in engine.load_catalog(CATALOG)}
+    assert len(table) == 11 and set(table) == set(rules) | set(silence.RULE_KINDS)
+    for rule_id, (kind, items) in table.items():
+        if rule_id in silence.RULE_KINDS:
+            assert (silence.RULE_KINDS[rule_id], items) == (kind, []), rule_id
+            continue
+        rule = rules[rule_id]
+        assert rule.kind == kind, rule_id
+        (CATALOG / (rule_id + ".yaml")).read_bytes().decode("ascii")   # ASCII-safe
+        if kind == "signature":
+            # The table's evasions are the minimum: each starts one line of the list.
+            assert items and all(any(e.startswith(item) for e in rule.evasion) for item in items), rule_id
+            assert len(set(rule.evasion)) == len(rule.evasion), rule_id
+        else:
+            assert rule.evasion == () and "evasion" not in rule.doc, rule_id
+            for item in items:  # an anchor's hole is written in its description
+                assert item.startswith("hole: ") and "Bash are not seen" in rule.doc["description"], rule_id
+    counts = [sum(1 for k, _ in table.values() if k == kind) for kind in engine.KINDS]
+    assert "Ratio today: %d : %d : %d." % tuple(counts) in section
+    tree = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values())
+    assert counts == [tree.count(kind) for kind in engine.KINDS] == [4, 4, 3]
+
+
+def test_m41_e3_every_catalog_finding_carries_its_rule_kind():
+    for rule in engine.load_catalog(CATALOG):
+        for rel in rule.fixtures["positive"]:
+            lines, ctx, _ = fixtures.load_fixture(ROOT / rel)
+            found = engine.run_rule(rule, lines, ctx)
+            assert found and all(f["kind"] == rule.kind for f in found), (rule.id, rel)
+
+
+def test_m41_e3_check_finding_rejects_an_unknown_kind():
+    good = {"ts": None, "rule_id": "X-Y", "class": "NET", "severity": "low", "session_id": "s",
+            "summary": "x", "cited_seq": [1]}
+    for kind in engine.KINDS:
+        finding = dict(good, kind=kind)
+        assert engine.check_finding(finding) is finding
+    for bad in ("heuristic", "", None, ["signature"], 1):
+        with pytest.raises(engine.FindingError, match="unknown kind"):
+            engine.check_finding(dict(good, kind=bad))
+    # Without a kind the finding is checked as before M4.1 (a findings file
+    # written earlier); docs/review/2026-11-03-M4.1-questions.md, Q2.
+    assert engine.check_finding(good) is good

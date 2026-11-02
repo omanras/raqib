@@ -1,6 +1,6 @@
 # ADR-0002 - Rule kinds: signature, demand, anchor
 
-Status: proposed by the Table, 2026-10-22. Becomes accepted when M4.1 lands.
+Status: accepted (M4.1, 2026-11-03). Proposed by the Table, 2026-10-22.
 Amendments appended, never edited in place.
 
 ## Problem
@@ -78,6 +78,54 @@ more signatures.
 - Later: a per-record `prev_hash` in the trace (an anchor on the trace
   itself, as in Dawr's ledger); SILENCE-ORDER then also reports a broken
   chain.
+
+## Amendment A (2026-11-03) - as built in M4.1 (builder's record, not a ruling)
+What M4.1 built, so the review can hold the tree to it. The decision text
+above is unchanged. Open points are questions in
+`docs/review/2026-11-03-M4.1-questions.md`, not settled here.
+- A-1 Schema (`raqib/rules/engine.py`). `kind` is required on every YAML
+  rule and is one of `engine.KINDS` = signature, demand, anchor (a string,
+  case-sensitive). `evasion` is required when kind is signature: a
+  non-empty list of non-empty, printable, one-line strings. On a demand or
+  an anchor any `evasion` key is an error, even an empty or null one. Both
+  are checked after the id, and every error reads
+  `<file>: rule <ID>: <field>: <reason>`; a bad item is named
+  `evasion[<i>]`. A compiled rule has `kind` and `evasion` (a tuple, empty
+  for a demand or an anchor).
+- A-2 Classification as in the table: 4 signatures, 4 demands, 3 anchors.
+  Each `;` item of the table's evasion column starts one line of the
+  rule's `evasion:` list. Lines added from the match blocks:
+  DESTRUCT-CMD and NET-TOOL, a wrapper or a second program (only the first
+  program is read), programs not on the list, and for DESTRUCT-CMD
+  overwrites by mv, cp, a redirect or the Write and Edit tools; SCOPE-PATH,
+  a file tool not on its list, a symlink (paths are not resolved), a moved
+  cwd; SECRET-OUTPUT, a kind with no capture pattern, a secret past the
+  first 1048576 scanned characters. DRIFT-FILES is an anchor and may not
+  carry `evasion:`; the table's "hole" stays in its description, as before.
+  A test reads the table from this file and holds the catalog to it.
+- A-3 Silence rules (`raqib/rules/silence.py`) declare their kind in code:
+  `RULE_KINDS` maps each of the four ids to demand. A finding takes its
+  kind from that map, so a silence rule missing from it cannot emit.
+- A-4 Findings. Every catalog and silence finding dict carries `kind`.
+  `engine.check_finding` rejects a `kind` that is not one of the three; a
+  finding with no `kind` (a findings file written before M4.1) is checked
+  as before. `raqib rules` and `raqib report --json` show the kind of every
+  finding; the finding entries in `<trace>.watch.json` carry it. The text
+  report and the page do not print it: `raqib/report.py` and `raqib/ui.py`
+  are outside the M4.1 Scope.
+- A-5 Gate (`tools/gate.py`, check 5, after the SDK check and before the
+  tests). It imports `raqib.rules` from the checkout it gates (a module
+  found anywhere else is RED, so an installed raqib is never counted),
+  loads the catalog with the loader, and reads `silence.RULE_KINDS`. It is
+  RED when the catalog does not load (which covers a rule with no kind and
+  a signature with no evasion), when a rule's kind is not one of the
+  gate's own three, when silence.py declares no kinds, and when the rules
+  cannot be imported. Otherwise it prints one line, today
+  `[gate] rule kinds: signature=4 demand=4 anchor=3`. The ratio never
+  fails the gate by itself.
+- A-6 Not built in M4.1, because the HANDOFF puts them out of scope: the
+  suspicion layer is not yet told each finding's kind (Consequences,
+  second bullet), and the THREAT_MODEL does not yet cite the evasion lists.
 
 ## Amendment B (the Table, 2026-11-03) - rulings on review 2026-11-03-M4.1.md
 - B-1 (K1, K2) Scope of M4.1 is widened by this ruling to raqib/report.py

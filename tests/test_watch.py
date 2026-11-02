@@ -1253,3 +1253,19 @@ def test_d7_the_scope_note_goes_through_safe(tmp_path, home, monkeypatch):
     code, out = run_watch(monkeypatch, ["watch", proj, "--no-open", "--no-notify", "--port", "0"])
     line = [l for l in out.splitlines() if l.startswith("raqib watch: scope: ")][0]
     assert "\x1b" not in out and "\x07" not in out and "Scope: ?[2Jsrc/?, tests/" in line
+
+
+# --- M4.1 E3 (ADR-0002): the findings watch keeps carry their kind ----------------
+
+def test_m41_e3_watch_findings_carry_their_rule_kind(tmp_path):
+    from raqib.rules import silence
+    kinds = dict({r.id: r.kind for r in RULES}, **silence.RULE_KINDS)
+    w, path, clock = make_watch(tmp_path)
+    append(path, secret_call(1, 0) + [rec(2, "pre", 2, cwd="/work/other"), rec(2, "post", 3, cwd="/work/other"),
+                                      rec(3, "post", 4)])
+    w.step()
+    entries = state_of(w)["findings"]
+    assert {e["rule_id"] for e in entries} >= {"SECRET-OUTPUT", "SCOPE-CWD-MOVED", "SILENCE-HALF"}
+    assert all(e["kind"] == kinds[e["rule_id"]] for e in entries), entries
+    assert {e["kind"] for e in entries} == {"signature", "demand", "anchor"}
+    assert [e["kind"] for e in w.inventory.values()] == [e["kind"] for e in entries]

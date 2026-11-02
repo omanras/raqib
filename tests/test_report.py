@@ -66,7 +66,7 @@ def test_e1_rules_writes_one_valid_finding_per_line(tmp_path):
         ("SILENCE-HALF", "SILENCE", [2]), ("SILENCE-HALF", "SILENCE", [3])]
     for f in found:
         assert engine.check_finding(f) is f
-        assert set(f) == {"ts", "rule_id", "class", "severity", "session_id", "cited_seq", "summary"}
+        assert set(f) == {"ts", "rule_id", "class", "kind", "severity", "session_id", "cited_seq", "summary"}
     sidecar = json.loads((tmp_path / "findings.jsonl.notes.json").read_text())
     assert [(n["rule_id"], n["status"]) for n in sidecar["notes"]] == [
         ("DRIFT-FILES", "not-evaluated"), ("SECRET-OUTPUT", "partial")]
@@ -379,3 +379,46 @@ def test_redo3_the_run_record_must_account_for_the_file(tmp_path, lines, run, fr
 def test_redo3_a_suspicion_citing_outside_its_window_is_rejected():
     assert "outside its window" in report.suspicion_problem(dict(RAISED, cited_seq=[9]))
     assert report.suspicion_problem(RAISED) is None
+
+
+# --- M4.1 E3 (ADR-0002): every finding carries its rule's kind ----------------
+
+def kind_of(rule_id):
+    from raqib.rules import silence
+    kinds = {r.id: r.kind for r in engine.load_catalog(ROOT / "raqib" / "rules" / "catalog")}
+    return dict(kinds, **silence.RULE_KINDS)[rule_id]
+
+
+def test_m41_e3_raqib_report_and_rules_show_the_kind_of_every_finding(tmp_path):
+    lines = fixture_lines("rules/SCOPE-PATH/positive-etc-and-dotdot.json")[0] + \
+        fixture_lines("rules/SCOPE-CWD-MOVED/positive-cd-out.json")[0]
+    mixed = write_trace(tmp_path / "trace.jsonl", lines)
+    seen = {}
+    for trace in (mixed, BLOCKED):
+        code, text = raqib("report", trace, "--scope", ".", "--json")
+        rep = json.loads(text)
+        assert code == 1 and rep["findings"]
+        for f in rep["findings"]:
+            assert f["kind"] == kind_of(f["rule_id"]), f
+            seen.setdefault(f["kind"], set()).add(f["rule_id"])
+        out = tmp_path / ("%s.jsonl" % trace.name)
+        raqib("rules", trace, "--scope", ".", "-o", out)
+        assert [(f["rule_id"], f["kind"]) for f in findings_of(out)] == [
+            (f["rule_id"], f["kind"]) for f in rep["findings"]]
+        via_file = json.loads(raqib("report", trace, "--findings", out, "--json")[1])
+        assert [f["kind"] for f in via_file["findings"]] == [f["kind"] for f in rep["findings"]]
+    assert set(seen) == set(engine.KINDS)          # each kind was shown at least once
+    assert "SCOPE-PATH" in seen["signature"] and "SCOPE-CWD-MOVED" in seen["anchor"]
+    assert "SILENCE-HALF" in seen["demand"]
+
+
+def test_m41_e3_a_findings_file_with_an_unknown_kind_is_a_rejected_finding(tmp_path):
+    sha = hashlib.sha256(QUICKSTART.read_bytes()).hexdigest()
+    forged = {"ts": "t", "rule_id": "X-Y", "class": "NET", "kind": "acquitted", "severity": "low",
+              "session_id": "s", "cited_seq": [2], "summary": "x"}
+    out = tmp_path / "f.jsonl"
+    out.write_text(json.dumps(forged) + "\n")
+    (tmp_path / "f.jsonl.notes.json").write_text(json.dumps({"notes": [], "trace_sha256": sha}))
+    rep = json.loads(raqib("report", QUICKSTART, "--findings", out, "--json")[1])
+    assert rep["findings"] == [] and [a["kind"] for a in rep["alarms"]] == ["rejected-finding"]
+    assert "unknown kind" in rep["alarms"][0]["detail"]

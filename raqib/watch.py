@@ -433,8 +433,8 @@ class Watch:
                                                "notice": None, "state": "pending", "settled_by": None}
             cited_history = self.epoch == 0 and all(
                 line_of.get((f["session_id"], s), 0) <= self.history_line for s in f["cited_seq"])
-            entry.update({"rule_id": f["rule_id"], "class": f.get("class"), "severity": f["severity"],
-                          "session_id": f["session_id"], "cited_seq": list(f["cited_seq"]),
+            entry.update({"rule_id": f["rule_id"], "class": f.get("class"), "kind": f.get("kind"),
+                          "severity": f["severity"], "session_id": f["session_id"], "cited_seq": list(f["cited_seq"]),
                           "summary": f["summary"], "ts": f["ts"], "present": True, "cited_history": cited_history})
             if entry["state"] == "settled":
                 continue

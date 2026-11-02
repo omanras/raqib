@@ -2,6 +2,17 @@
 id: NET-TOOL
 title: Tool call reaches the network
 class: NET
+# ADR-0002: the shape of a bad act (a tool, a program name), so it lists its evasions.
+kind: signature
+evasion:
+  - "python urllib: the program is python"
+  - "pip/npm install: package managers are not on the list"
+  - "git fetch: git is not on the list (nor git clone or git push)"
+  - "node fetch: the program is node"
+  - "bash -c 'curl ...' or a wrapper in front (sudo, env, xargs): only the first program is read"
+  - "curl after &&, ; or a pipe: only the first program is read"
+  - "a network program not on the list (dig, nslookup, gh, docker pull)"
+  - "a tool whose URL is in a field not named url: url_host is read from url only"
 severity: medium
 # Doc lookups and package fetches are routine, so some benign sessions fire.
 fp_budget: 0.25

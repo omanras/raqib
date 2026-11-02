@@ -2,6 +2,9 @@
 id: DRIFT-FILES
 title: Edits spread outside the declared scope
 class: DRIFT
+# ADR-0002: measured against the Scope: of HANDOFF.md (context scope). Its hole,
+# writes through Bash, is in the description: an anchor has no evasion field.
+kind: anchor
 severity: medium
 fp_budget: 0.1
 description: "In one session, completed edits (Write, Edit, MultiEdit, NotebookEdit with ok) touch more than 2 distinct files outside the paths of context 'scope', e.g. the Scope: list of a HANDOFF, resolved against context 'root' or else each line's cwd. Without a scope the rule is not evaluated, and says so. File changes made through Bash are not seen."
