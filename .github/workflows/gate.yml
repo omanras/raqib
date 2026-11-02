@@ -108,10 +108,47 @@ jobs:
           set +e; raqib discover --from "$GITHUB_WORKSPACE/tests/fixtures/discover/linux" > discover.txt; code=$?; set -e
           cat discover.txt; test "$code" -eq 1
           grep -F "$(python -c 'from raqib import discover; print(discover.CATALOG)')" discover.txt
-          # Doctor runs from the venv: one line per check and a summary (exit 1 here:
-          # notifications are off under CI and the project has no hooks).
+          # G-2: the wheel pip builds from the checkout, listed by python -m zipfile -l.
+          python -m pip wheel --disable-pip-version-check --no-deps -w dist "$GITHUB_WORKSPACE"
+          python -m zipfile -l dist/raqib-*.whl > wheel.txt
+          cat wheel.txt
+          # Doctor from the venv (exit 1 here: see the exact MISSING lines below).
           mkdir -p project
           set +e; raqib doctor project > doctor.txt 2>&1; code=$?; set -e
           cat doctor.txt; test "$code" -eq 1
-          tail -n 1 doctor.txt | grep -E "^raqib doctor: [0-9]+ MISSING$"
-          if grep -F Traceback doctor.txt; then exit 1; fi
+          python - <<'EOF'
+          import glob, os, shutil, subprocess
+          windows = os.name == "nt"
+          # The wheel holds the capture hook, the 7 catalog YAMLs and endpoints.yaml.
+          names = {line.split()[0] for line in open("wheel.txt", encoding="utf-8").read().splitlines()[1:] if line.strip()}
+          catalog = sorted("raqib/rules/catalog/" + os.path.basename(p) for p in glob.glob(
+              os.path.join(os.environ["GITHUB_WORKSPACE"], "raqib", "rules", "catalog", "*.yaml")))
+          assert len(catalog) == 7, catalog
+          want = set(catalog) | {"raqib/hooks/capture.py", "raqib/discover/endpoints.yaml"}
+          assert want <= names, sorted(want - names)
+          assert sorted(n for n in names if n.startswith("raqib/rules/catalog/")) == catalog, names
+          # Doctor: exactly these MISSING lines on a runner (no claude, no hooks, CI set;
+          # Windows: no Sysmon, and the trace cannot be checked there).
+          lines = open("doctor.txt", encoding="utf-8", errors="replace").read().splitlines()
+          assert not any("Traceback" in line for line in lines), lines
+          missing = {line[8:17].strip(): line[17:] for line in lines if line.startswith("MISSING ")}
+          expected = ["claude", "hooks", "notifier"] + (["sysmon", "trace"] if windows else [])
+          assert sorted(missing) == sorted(expected), missing
+          assert missing["claude"] == "not on PATH (install Claude Code; the hooks are Claude Code hooks)", missing
+          assert missing["hooks"].endswith(": missing for all 6 events; `raqib watch` installs this raqib's"), missing
+          assert missing["notifier"] == "off (CI is set: no notification is shown in CI)", missing
+          if windows:
+              assert missing["sysmon"].startswith("no event channel Microsoft-Windows-Sysmon/Operational"), missing
+              assert missing["trace"].endswith("; not checked (os.access cannot tell on Windows)"), missing
+          assert lines[-1] == "raqib doctor: %d MISSING" % len(expected), lines[-1]
+          # The console script with output its console cannot encode (a non-cp1252
+          # character in the project's name): escaped, no crash.
+          name = "proj-" + chr(0x631)
+          os.makedirs(name, exist_ok=True)
+          env = dict(os.environ, PYTHONIOENCODING="cp1252" if windows else "ascii")
+          proc = subprocess.run([shutil.which("raqib"), "doctor", name], capture_output=True, env=env, timeout=120)
+          print(proc.stdout.decode("ascii", "replace"))
+          assert proc.returncode == 1 and b"Traceback" not in proc.stderr, proc
+          assert b"proj-\\u0631" in proc.stdout, proc.stdout
+          print("install checks: OK")
+          EOF

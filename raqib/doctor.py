@@ -5,13 +5,17 @@ per check, OK or MISSING, then a summary line, and exits 1 when any line is
 MISSING, else 0:
 - python    this Python is MIN_PYTHON or newer; on POSIX the hooks run
             `python3` from PATH, so python3 must be found on PATH (this
-            shell's PATH; Claude Code's may differ). On Windows the hooks run
-            this Python by its path.
+            shell's PATH; Claude Code's may differ), and as an absolute path:
+            a relative one may shadow the real one in the agent's working
+            directory (G-3). On Windows the hooks run this Python by its path.
 - claude    `claude` is found on PATH by shutil.which, and only as an
-            absolute path (a relative PATH entry, or on Windows the current
-            directory, is refused, never run). That path is run with
-            --version, a minimal environment (CLAUDE_ENV) and a
-            CLAUDE_TIMEOUT limit; its first line is the version.
+            absolute path outside PROJECT (a relative PATH entry, on Windows
+            the current directory, or a directory inside the project is
+            refused, never run). That path is run with --version, a minimal
+            environment (CLAUDE_ENV) whose PATH keeps only the absolute
+            entries outside the project, a fresh empty temporary directory as
+            its cwd (G-4), and a CLAUDE_TIMEOUT limit; its first line is the
+            version.
 - hooks     PROJECT/.claude/settings.json, per event of the six:
             installed (the entry this raqib writes: its own capture.py, on
             Windows this Python, the right matcher), foreign (a Raqib entry
@@ -29,12 +33,18 @@ MISSING, else 0:
             service is running is not checked.
 - trace     the trace `raqib watch` would choose (watch.choose_trace) can be
             written: the file if it exists, else the nearest existing
-            directory above it, where watch creates the rest.
+            directory above it, where watch creates the rest; choose_trace's
+            notes are printed below the line. On Windows os.access cannot
+            tell (W_OK on a directory always succeeds), and nothing is
+            written to find out, so the line says "not checked" and is
+            MISSING, never OK (G-5).
 
-Read-only: doctor writes no file and creates no directory. The only
-program it starts is `claude --version`, by absolute path; one that does
-not answer within CLAUDE_TIMEOUT is left running and recorded, never
-signalled (A4, as raqib/notify.py does).
+Read-only: doctor writes no file in the project, the home or the trace's
+directory. The only thing it creates is the empty temporary directory
+`claude --version` runs in, removed afterwards. The only program it starts
+is `claude --version`, by absolute path; one that does not answer within
+CLAUDE_TIMEOUT is left running and recorded, never signalled (A4, as
+raqib/notify.py does).
 """
 from __future__ import annotations
 
@@ -43,6 +53,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 
 import raqib
 from raqib import install, notify, watch
@@ -57,6 +68,7 @@ CLAUDE_ENV_WINDOWS = ("PATH", "PATHEXT", "SystemRoot", "ComSpec", "USERPROFILE",
                       "TEMP", "TMP")
 SYSMON_CHANNEL = "Microsoft-Windows-Sysmon/Operational"
 SYSMON_KEY = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WINEVT\\Channels\\" + SYSMON_CHANNEL
+NOT_CHECKED = "not checked (os.access cannot tell on Windows)"
 
 
 def _safe(text):
@@ -69,13 +81,19 @@ def _which(which, name, environ):
     return which(name, path=path) if path else None
 
 
-def run_version(argv, env, timeout=CLAUDE_TIMEOUT):
-    """Run a version query: (exit status or None, stdout text, error or
-    None). argv[0] must be an absolute path. A program still running after
-    timeout seconds is left running, never signalled (A4)."""
+def _in_project(path, project):
+    """True when an absolute path is the project or under it (symlinks resolved)."""
+    return bool(project) and os.path.isabs(path) and watch.inside(path, project)
+
+
+def run_version(argv, env, timeout=CLAUDE_TIMEOUT, cwd=None):
+    """Run a version query in cwd: (exit status or None, stdout text, error
+    or None). argv[0] must be an absolute path. A program still running
+    after timeout seconds is left running, never signalled (A4)."""
     if not argv or not os.path.isabs(argv[0]):
         return None, "", "%r is not an absolute path: nothing is looked up through PATH" % (argv[:1],)
-    options = {"stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "env": dict(env)}
+    options = {"stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "env": dict(env),
+               "cwd": cwd}
     if os.name == "nt":
         options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
@@ -125,7 +143,12 @@ def check_python(version_info, executable, windows, which, environ):
             hook = None
     else:
         found = _which(which, "python3", environ)
-        if found:
+        if found and not os.path.isabs(found):
+            problems.append("python3 is found only as %s, a relative path (the current directory or a relative PATH"
+                            " entry): the hooks run python3 in the agent's working directory, where one may shadow"
+                            " the real one" % found)
+            hook = None
+        elif found:
             hook = "the hooks run python3 from PATH: %s" % found
         else:
             problems.append("the hooks run python3 and there is none on PATH")
@@ -134,17 +157,24 @@ def check_python(version_info, executable, windows, which, environ):
     return not problems, "; ".join([text] + ([hook] if hook else []) + problems)
 
 
-def claude_env(environ, windows):
+def claude_path(environ, project=None):
+    """The PATH `claude --version` gets: the absolute entries of environ's
+    PATH (this host's separator and path rules), none inside the project (G-4)."""
+    entries = (notify.env_value(environ, "PATH") or "").split(os.pathsep)
+    return os.pathsep.join(e for e in entries if e and os.path.isabs(e) and not _in_project(e, project))
+
+
+def claude_env(environ, windows, project=None):
     names = CLAUDE_ENV_WINDOWS if windows else CLAUDE_ENV
     env = {} if windows else {"LC_ALL": "C"}
     for name in names:
-        value = notify.env_value(environ, name)
+        value = claude_path(environ, project) if name == "PATH" else notify.env_value(environ, name)
         if value:
             env[name] = value
     return env
 
 
-def check_claude(environ, windows, which, runner):
+def check_claude(environ, windows, which, runner, project=None):
     found = _which(which, "claude", environ)
     if not found:
         return False, "not on PATH (install Claude Code; the hooks are Claude Code hooks)"
@@ -152,7 +182,12 @@ def check_claude(environ, windows, which, runner):
         return False, ("found only as %s, a relative path (the current directory or a relative PATH"
                        " entry); doctor runs only an absolute path, and a claude there may shadow the real one"
                        % found)
-    code, out, error = runner([found, "--version"], claude_env(environ, windows), CLAUDE_TIMEOUT)
+    if _in_project(found, project):
+        return False, ("found as %s, inside the project, which the agent can write; doctor does not run it,"
+                       " and a claude there may shadow the real one" % found)
+    # A fresh, empty cwd: nothing of the project's is in the query's working directory (G-4).
+    with tempfile.TemporaryDirectory(prefix="raqib-doctor-", ignore_cleanup_errors=True) as cwd:
+        code, out, error = runner([found, "--version"], claude_env(environ, windows, project), CLAUDE_TIMEOUT, cwd)
     if error:
         return False, "%s --version %s" % (found, error)
     if code != 0:
@@ -267,12 +302,15 @@ def check_sysmon(registry):
                   " checked)" % SYSMON_CHANNEL)
 
 
-def writable(path):
+def writable(path, windows=False):
     """(True, how) when the trace can be appended to or created, else
-    (False, why). Reads only: nothing is created to find out."""
+    (False, why). Reads only: nothing is created to find out. On Windows
+    os.access cannot tell, so only what is certain without it is said."""
     if os.path.isdir(path):
         return False, "is a directory"
     if os.path.lexists(path):
+        if windows:
+            return False, "exists; " + NOT_CHECKED
         if os.access(path, os.W_OK):
             return True, "exists and is writable"
         return False, "exists and is not writable"
@@ -284,6 +322,8 @@ def writable(path):
         parent = up
     if not os.path.isdir(parent):
         return False, "cannot be created: %s is not a directory" % parent
+    if windows:
+        return False, "would be created under %s; %s" % (parent, NOT_CHECKED)
     if not os.access(parent, os.W_OK | os.X_OK):
         return False, "cannot be created: %s is not writable" % parent
     if parent == os.path.dirname(path):
@@ -291,13 +331,14 @@ def writable(path):
     return True, "can be created under %s" % parent
 
 
-def check_trace(project, home):
+def check_trace(project, home, windows=False):
+    """(ok, text, notes): notes are choose_trace's, printed below the line (P7)."""
     try:
-        path, source, _ = watch.choose_trace(install, project, None, home)
+        path, source, notes = watch.choose_trace(install, project, None, home)
     except watch.WatchError as exc:
-        return False, "watch cannot choose one: %s" % exc
-    ok, how = writable(path)
-    return ok, "%s (%s) %s" % (path, source, how)
+        return False, "watch cannot choose one: %s" % exc, []
+    ok, how = writable(path, windows)
+    return ok, "%s (%s) %s" % (path, source, how), notes
 
 
 # --- the command ---------------------------------------------------------------------
@@ -317,17 +358,20 @@ def run(project, out, environ=None, platform=None, which=None, runner=None, vers
     project = install.absolute(project or ".", windows)
 
     lines = [("python", check_python(version_info, executable, windows, which, environ)),
-             ("claude", check_claude(environ, windows, which, runner)),
+             ("claude", check_claude(environ, windows, which, runner, project)),
              ("hooks", check_hooks(project, windows)),
              ("notifier", check_notifier(project, environ, platform, isfile, isdir))]
     if windows:
         lines.append(("sysmon", check_sysmon(registry)))
-    lines.append(("trace", check_trace(project, home)))
+    ok, text, notes = check_trace(project, home, windows)
+    lines.append(("trace", (ok, text)))
 
     out.write("raqib doctor: raqib %s (%s); project %s\n" % (
         raqib.__version__, _safe(os.path.join(install.PACKAGE_ROOT, "raqib")), _safe(project)))
     for name, (ok, text) in lines:
         out.write("%-8s%-9s%s\n" % ("OK" if ok else "MISSING", name, _safe(text)))
+    for note in notes:
+        out.write("%17snote: %s\n" % ("", _safe(note)))
     missing = sum(1 for _, (ok, _) in lines if not ok)
     out.write("raqib doctor: %s\n" % ("%d MISSING" % missing if missing else "all OK"))
     return 1 if missing else 0

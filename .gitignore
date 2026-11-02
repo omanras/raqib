@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .env
+# what an in-tree `pip install .` leaves behind (M6.3, Amendment G-6)
+build/
+*.egg-info/

@@ -33,7 +33,9 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       findings, silence windows), or serve it on 127.0.0.1. Exit codes as
       for report; --serve runs until interrupted.
   eval [--events FILE] [--candidate SPEC]... [--json] [-o FILE]
-      Score the rules, and each candidate model, on labelled events (M2.2):
+      Score the rules, and each candidate model, on labelled events (M2.2;
+      a checkout's tests/fixtures/eval/events.json or --events FILE; an
+      installed raqib carries none and exits 2 without --events):
       false negatives, false positives and errors, ranked by FN first. SPEC is
       ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json. Exit 0 when
       every row judged every event, 3 when some row has errors, 2 on bad
@@ -97,6 +99,8 @@ from raqib.suspect import core as suspect_core
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOG = os.path.join(ROOT, "raqib", "rules", "catalog")
 EVENTS = os.path.join(ROOT, "tests", "fixtures", "eval", "events.json")
+# G-6: where eval's labelled events come from, in --help and in the exit-2 message.
+EVENTS_SOURCE = "a checkout's tests/fixtures/eval/events.json or --events FILE"
 
 
 class UsageError(Exception):
@@ -157,7 +161,8 @@ def _parser():
     u.add_argument("--serve", action="store_true", help="serve the page on 127.0.0.1 instead")
     u.add_argument("--port", type=int, default=8765, help="port for --serve (default 8765; 0: any free port)")
     e = sub.add_parser("eval", help="score rules and candidate models on labelled events (M2.2)")
-    e.add_argument("--events", default=EVENTS, metavar="FILE", help="labelled events (default: the shipped 50)")
+    e.add_argument("--events", default=None, metavar="FILE",
+                   help="labelled events (default: %s; an installed raqib has none)" % EVENTS_SOURCE)
     e.add_argument("--candidate", action="append", default=[], metavar="SPEC",
                    help="ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json (repeatable)")
     e.add_argument("--catalog", default=CATALOG, metavar="DIR", help="rule catalog directory")
@@ -506,6 +511,11 @@ def make_candidate(spec, args):
 
 
 def cmd_eval(args, out):
+    if args.events is None:
+        if not os.path.isfile(EVENTS):
+            raise UsageError("no labelled events at %s: eval reads %s; an installed raqib carries none"
+                             % (EVENTS, EVENTS_SOURCE))
+        args.events = EVENTS
     try:
         events = evaluation.load_events(args.events)
         backends = [make_candidate(spec, args) for spec in args.candidate]

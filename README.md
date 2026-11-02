@@ -14,6 +14,7 @@ raqib watch ~/my-project      # then use Claude Code in ~/my-project as usual; C
 You need Python 3.11 or newer and Claude Code. Raqib itself is stdlib only and
 is not on PyPI. On Windows: `pipx install C:\path\to\raqib` (or
 `py -m pip install C:\path\to\raqib`), then `raqib watch C:\path\to\project`.
+On Windows the rules place POSIX paths only until M5.1b: a scope with a drive path is bad-context, so the scope rules do not run there.
 Install on the side that runs the agent (Windows or WSL), not both.
 
 ## Watch a project
@@ -29,10 +30,15 @@ the hooks run), `claude` on PATH and its version, the project's hook
 settings (installed; foreign: a Raqib entry of another checkout or install;
 or missing), the notifier, Sysmon on Windows, and whether the trace can be
 written. It is read-only; the only program it runs is `claude --version`,
-by absolute path. If the installed package moves (another Python, another
-venv), the hooks name a `capture.py` that is gone: capture prints
-`RAQIB-SILENCE:`, doctor shows the hooks as foreign, and `raqib watch`
-replaces them.
+by absolute path (in an empty temporary directory, the only thing it
+creates).
+If the installed package moves on Linux or macOS, the hook command's own
+`|| echo` prints one `RAQIB-SILENCE:` line, because `capture.py` is gone.
+If the venv moves on Windows, the hook names its `python.exe` by path, so
+Claude Code shows a hook error and no `RAQIB-SILENCE:` line is printed.
+Either way doctor shows the hooks as foreign, and `raqib watch` replaces them.
+On Windows the trace line says "not checked" and counts as MISSING: os.access
+cannot tell there, and doctor writes nothing to find out.
 
 ## How it works
 - **Deterministic first.** Rules decide; a model can only add suspicion (A1, A2).
@@ -127,7 +133,7 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib check-rules [--fixtures-root CHECKOUT]` | each rule's measured false-positive rate against its budget, on the fixtures of a checkout (an installed raqib has none: pass `--fixtures-root`) |
 | `raqib suspect TRACE --backend ollama -o suspicion.jsonl` | model suspicion (`--backend anthropic` needs `pip install anthropic` and ANTHROPIC_API_KEY, and sends trace metadata off the machine); then `report TRACE --suspicion suspicion.jsonl` |
 | `raqib suspect TRACE --backend anthropic --allow-fallback` | lets another model answer a window the requested model refuses; off by default, and such answers are labelled (`answered_by`) and counted |
-| `raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events (a checkout's, or `--events FILE`) |
+| `raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events: a checkout's tests/fixtures/eval/events.json or --events FILE (an installed raqib has none and exits 2) |
 
 ## Find the agents on a host (discover)
 `raqib discover` looks for AI agents it has never heard of

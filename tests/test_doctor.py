@@ -29,14 +29,16 @@ class Fakes:
         self.found = {"claude": self.claude, "python3": str(bin_dir / "python3")} if found is None else found
         self.answer = answer
         self.calls = []
+        self.cwds = []
         self.which_paths = []
 
     def which(self, name, path=None):
         self.which_paths.append(path)
         return self.found.get(name)
 
-    def runner(self, argv, env, timeout):
+    def runner(self, argv, env, timeout, cwd):
         self.calls.append((list(argv), dict(env), timeout))
+        self.cwds.append((cwd, os.path.isdir(cwd), os.listdir(cwd)))
         return self.answer
 
 
@@ -72,8 +74,12 @@ def run(tmp_path, proj, home, fakes=None, environ=None, platform="linux", **kw):
                       home=str(home), **kw)
     text = out.getvalue()
     lines = text.splitlines()
-    checks = {line[8:17].strip(): (line[:8].strip(), line[17:]) for line in lines[1:-1]}
+    checks = {line[8:17].strip(): (line[:8].strip(), line[17:]) for line in lines[1:-1] if line[:17].strip()}
     return code, text, checks, fakes
+
+
+def notes_of(text):
+    return [line[17:] for line in text.splitlines()[1:-1] if not line[:17].strip()]
 
 
 def snapshot(root):
@@ -184,11 +190,12 @@ def test_e2_claude_is_run_by_absolute_path_with_a_minimal_environment(tmp_path, 
 
 
 def test_e2_windows_environment_for_claude(tmp_path, home):
-    environ = {"Path": "C:\\bin", "PATHEXT": ".EXE;.CMD", "SystemRoot": "C:\\Windows", "COMSPEC": "C:\\cmd.exe",
+    native = os.path.abspath(os.sep + "bin")    # PATH holds this host's absolute paths
+    environ = {"Path": native, "PATHEXT": ".EXE;.CMD", "SystemRoot": "C:\\Windows", "COMSPEC": "C:\\cmd.exe",
                "USERPROFILE": "C:\\Users\\me", "APPDATA": "a", "LOCALAPPDATA": "l", "TEMP": "t", "TMP": "t2",
                "SECRET": "s", "HOME": "h"}
     assert doctor.claude_env(environ, windows=True) == {
-        "PATH": "C:\\bin", "PATHEXT": ".EXE;.CMD", "SystemRoot": "C:\\Windows", "ComSpec": "C:\\cmd.exe",
+        "PATH": native, "PATHEXT": ".EXE;.CMD", "SystemRoot": "C:\\Windows", "ComSpec": "C:\\cmd.exe",
         "USERPROFILE": "C:\\Users\\me", "APPDATA": "a", "LOCALAPPDATA": "l", "TEMP": "t", "TMP": "t2"}
 
 
@@ -227,6 +234,42 @@ def test_e2_claude_version_is_cleaned_and_bounded(tmp_path, home):
     assert version.endswith("...")
 
 
+def test_g3_a_relative_python3_is_missing_and_may_shadow(tmp_path, home):
+    proj = make_project(tmp_path)
+    fakes = Fakes(tmp_path, found={"claude": str(tmp_path / "bin" / "claude"), "python3": os.path.join(".", "python3")})
+    code, _, checks, _ = run(tmp_path, proj, home, fakes=fakes)
+    assert code == 1 and checks["python"][0] == "MISSING"
+    assert ("python3 is found only as %s, a relative path (the current directory or a relative PATH entry): the hooks"
+            " run python3 in the agent's working directory, where one may shadow the real one"
+            % os.path.join(".", "python3")) in checks["python"][1]
+    assert "the hooks run python3 from PATH" not in checks["python"][1]
+
+
+def test_g4_claude_runs_in_a_fresh_empty_cwd_with_path_outside_the_project(tmp_path, home):
+    proj = make_project(tmp_path)
+    (proj / "bin").mkdir()
+    outside = tmp_path / "bin"
+    path = os.pathsep.join([str(proj / "bin"), "", "relative" + os.sep + "bin", str(outside), str(proj)])
+    _, _, checks, fakes = run(tmp_path, proj, home, environ={"PATH": path, "HOME": str(home)})
+    assert checks["claude"][0] == "OK"
+    (argv, env, _), = fakes.calls
+    assert env["PATH"] == str(outside)                       # only the absolute entry outside the project
+    (cwd, existed, listing), = fakes.cwds
+    assert existed and listing == [] and not os.path.exists(cwd)   # fresh, empty, removed afterwards
+    assert not cwd.startswith(str(proj)) and os.path.basename(cwd).startswith("raqib-doctor-")
+    assert doctor.claude_path({"PATH": path}, str(proj)) == str(outside) and doctor.claude_path({}) == ""
+
+
+def test_g4_a_claude_inside_the_project_is_not_run(tmp_path, home):
+    proj = make_project(tmp_path)
+    planted = str(proj / "node_modules" / ".bin" / "claude")
+    fakes = Fakes(tmp_path, found={"claude": planted, "python3": str(tmp_path / "bin" / "python3")})
+    code, _, checks, _ = run(tmp_path, proj, home, fakes=fakes)
+    assert code == 1 and fakes.calls == []
+    assert checks["claude"] == ("MISSING", "found as %s, inside the project, which the agent can write; doctor does"
+                                           " not run it, and a claude there may shadow the real one" % planted)
+
+
 def test_e2_run_version_refuses_a_relative_program():
     assert doctor.run_version(["claude", "--version"], {}) == (
         None, "", "['claude'] is not an absolute path: nothing is looked up through PATH")
@@ -248,16 +291,18 @@ def test_e2_real_version_query_gets_no_inherited_variables(tmp_path, home):
     """The real runner: shutil.which on PATH, the absolute path run with
     CLAUDE_ENV only, so a variable of the caller does not reach it."""
     bin_dir = tmp_path / "bin"
-    fake_claude(bin_dir, 'echo "9.9.9 (Claude Code) probe=${RAQIB_DOCTOR_PROBE:-none}"',
-                "echo 9.9.9 (Claude Code) probe=%RAQIB_DOCTOR_PROBE%")
-    environ = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ.get("PATH", ""),
-                   RAQIB_DOCTOR_PROBE="leaked")
+    fake_claude(bin_dir, 'echo "9.9.9 (Claude Code) probe=${RAQIB_DOCTOR_PROBE:-none} cwd=$(pwd)"',
+                "echo 9.9.9 (Claude Code) probe=%RAQIB_DOCTOR_PROBE% cwd=%CD%")
     proj = make_project(tmp_path)
+    environ = dict(os.environ, PATH=os.pathsep.join([str(proj), str(bin_dir), os.environ.get("PATH", "")]),
+                   RAQIB_DOCTOR_PROBE="leaked")
     out = io.StringIO()
     doctor.run(str(proj), out, environ=environ, platform=sys.platform, home=str(home), isfile=notify_send)
     line = next(x for x in out.getvalue().splitlines() if x[8:17].strip() == "claude")
     assert line.startswith("OK      claude   9.9.9 (Claude Code) probe=")
     assert "leaked" not in line and str(bin_dir) in line
+    cwd = line.split(" cwd=", 1)[1].split(" at ")[0]
+    assert os.path.basename(cwd).startswith("raqib-doctor-") and not os.path.exists(cwd)   # G-4
 
 
 @pytest.mark.skipif(WINDOWS, reason="a sleeping sh script; the Windows path is the same Popen call")
@@ -337,7 +382,8 @@ def test_e2_project_that_is_not_a_directory(tmp_path, home):
 
 
 def test_e2_windows_form_is_installed_for_a_windows_doctor_and_foreign_for_posix(tmp_path, home):
-    """All OK on a Windows doctor (run on every host), with an existing trace."""
+    """A Windows doctor (run on every host), with an existing trace: all OK
+    but the trace, which os.access cannot check on Windows (G-5)."""
     proj = make_project(tmp_path)
     trace = tmp_path / "t.jsonl"
     trace.write_text("")
@@ -347,11 +393,13 @@ def test_e2_windows_form_is_installed_for_a_windows_doctor_and_foreign_for_posix
     environ = {"PATH": str(tmp_path / "bin"), "SystemRoot": str(windows)}
     code, text, checks, _ = run(tmp_path, proj, home, environ=environ, platform="win32",
                                 isfile=lambda p: True, registry=lambda key: {"Enabled": 1})
-    assert code == 0 and text.splitlines()[-1] == "raqib doctor: all OK", text
+    assert code == 1 and text.splitlines()[-1] == "raqib doctor: 1 MISSING", text
+    assert [name for name, (verdict, _) in checks.items() if verdict == "MISSING"] == ["trace"]
     assert checks["hooks"] == ("OK", "%s: installed for all 6 events (trace %s)" % (
         proj / ".claude" / "settings.json", trace))
     assert checks["notifier"][0] == "OK" and checks["notifier"][1].startswith("windows-toast (")
-    assert checks["trace"] == ("OK", "%s (kept from the existing install) exists and is writable" % trace)
+    assert checks["trace"] == ("MISSING", "%s (kept from the existing install) exists; not checked (os.access"
+                                          " cannot tell on Windows)" % trace)
     assert list(checks) == ["python", "claude", "hooks", "notifier", "sysmon", "trace"]
     _, _, checks, _ = run(tmp_path, proj, home)
     assert checks["hooks"][0] == "MISSING" and "foreign for PreToolUse, PostToolUse" in checks["hooks"][1]
@@ -488,6 +536,41 @@ def test_e2_trace_that_watch_cannot_choose_is_missing(tmp_path, home):
     _, _, checks, _ = run(tmp_path, proj, home)
     assert checks["hooks"][0] == "OK"      # each entry is this raqib's ...
     assert checks["trace"][0] == "MISSING" and "write to different traces" in checks["trace"][1]   # ... but not one trace
+
+
+def test_g5_windows_trace_is_not_checked_never_ok(tmp_path):
+    existing = tmp_path / "t.jsonl"
+    existing.write_text("")
+    assert doctor.writable(str(existing), windows=True) == (False, "exists; " + doctor.NOT_CHECKED)
+    assert doctor.writable(str(tmp_path / "new" / "t.jsonl"), windows=True) == (
+        False, "would be created under %s; not checked (os.access cannot tell on Windows)" % tmp_path)
+    # What is certain without os.access is still said.
+    assert doctor.writable(str(tmp_path), windows=True) == (False, "is a directory")
+    assert doctor.writable(str(existing / "x.jsonl"), windows=True) == (
+        False, "cannot be created: %s is not a directory" % existing)
+    assert doctor.writable(str(existing), windows=False)[0] is True
+
+
+def test_g5_windows_doctor_trace_line_is_missing(tmp_path, home):
+    proj = make_project(tmp_path)
+    code, _, checks, _ = run(tmp_path, proj, home, platform="win32", registry=lambda key: {"Enabled": 1})
+    assert code == 1 and checks["trace"][0] == "MISSING"
+    assert checks["trace"][1].endswith("; not checked (os.access cannot tell on Windows)")
+
+
+def test_p7_doctor_prints_the_notes_of_choose_trace(tmp_path, home):
+    """An old install's trace inside the project: watch would move it, and
+    doctor says so below the trace line, not only the new path."""
+    proj = make_project(tmp_path)
+    installed(proj, proj / "raqib.log.jsonl")
+    code, text, checks, _ = run(tmp_path, proj, home)
+    assert checks["trace"][0] == "OK" and "(watch default, outside the project)" in checks["trace"][1]
+    (note,) = notes_of(text)
+    assert note.startswith("note: the trace an earlier install chose, %s, is inside the project; capture moves to "
+                           % (proj / "raqib.log.jsonl"))
+    lines = text.splitlines()
+    assert lines[lines.index(next(x for x in lines if x.startswith("OK      trace"))) + 1] == " " * 17 + note
+    assert notes_of(run(tmp_path, make_project(tmp_path, "clean"), home)[1]) == []
 
 
 # --- read-only ---------------------------------------------------------------------------

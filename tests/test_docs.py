@@ -76,6 +76,28 @@ def test_m63_e3_first_screen_is_install_and_watch():
         assert step in manual, step
     assert "claude/v0.1" not in README and "--branch" not in README
     assert headings.index("Manual steps") > headings.index("How it works")
+    # G-7: the Windows path-rules caveat is on the first screen.
+    assert ("On Windows the rules place POSIX paths only until M5.1b: a scope with a drive path is bad-context,"
+            " so the scope rules do not run there.") in section("Install and watch").splitlines()
+
+
+def test_g1_readme_says_what_a_moved_package_does_per_platform():
+    """Amendment G-1 (P1): POSIX, the hook wrapper prints RAQIB-SILENCE;
+    Windows, a hook error from Claude Code and no line."""
+    doctor = " ".join(section("Doctor").split())
+    assert ("If the installed package moves on Linux or macOS, the hook command's own `|| echo` prints one"
+            " `RAQIB-SILENCE:` line, because `capture.py` is gone.") in doctor
+    assert ("If the venv moves on Windows, the hook names its `python.exe` by path, so Claude Code shows a hook"
+            " error and no `RAQIB-SILENCE:` line is printed.") in doctor
+    assert "capture prints `RAQIB-SILENCE:`" not in doctor
+    assert 'On Windows the trace line says "not checked" and counts as MISSING' in doctor
+
+
+def test_g6_readme_and_help_say_where_eval_events_come_from():
+    from raqib import cli
+    source = "a checkout's tests/fixtures/eval/events.json or --events FILE"
+    assert cli.EVENTS_SOURCE == source
+    assert source + " (an installed raqib has none and exits 2)" in section("Commands")
 
 
 def test_m63_e3_readme_commands_are_the_installed_ones():

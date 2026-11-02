@@ -292,3 +292,47 @@ def test_main_escapes_what_the_console_cannot_encode(tmp_path):
                           timeout=60, env=env)
     assert proc.returncode == 1, proc.stderr
     assert b"proj-\\u0631\\u0642\\u064a\\u0628" in proc.stdout and b"Traceback" not in proc.stderr
+
+
+def test_g2_console_script_main_escapes_in_process(tmp_path, monkeypatch, capsys):
+    """Amendment G-2 (P2): the console script's own call, cli.main() with no
+    `out`, on a stdout that cannot encode the project's name (cp1252, as a
+    redirected Windows console): escaped, no crash."""
+    import io as _io
+    proj = tmp_path / ("proj-" + chr(0x631))
+    proj.mkdir()
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+    raw = _io.BytesIO()
+    stream = _io.TextIOWrapper(raw, encoding="cp1252", errors="strict")
+    monkeypatch.setattr(sys, "stdout", stream)
+    assert cli.main(["doctor", str(proj)]) == 1
+    stream.flush()
+    assert b"proj-\\u0631" in raw.getvalue() and stream.errors == "backslashreplace"
+
+
+def test_g6_eval_without_events_in_an_installed_raqib_exits_2(installed, tmp_path, monkeypatch, capsys):
+    site, outside = installed
+    proc = run_installed(site, outside, "eval")
+    assert proc.returncode == 2 and proc.stdout == ""
+    assert proc.stderr == ("raqib: no labelled events at %s: eval reads a checkout's tests/fixtures/eval/events.json"
+                           " or --events FILE; an installed raqib carries none\n"
+                           % os.path.join(str(site), "tests", "fixtures", "eval", "events.json"))
+    proc = run_installed(site, outside, "eval", "--events", ROOT / "tests" / "fixtures" / "eval" / "events.json")
+    assert proc.returncode == 0, proc.stderr
+    # In-process, the same rule: the default file missing is exit 2; a checkout's default is read.
+    monkeypatch.setattr(cli, "EVENTS", str(tmp_path / "none.json"))
+    assert cli.main(["eval"], out=io.StringIO()) == 2
+    assert "eval reads a checkout's tests/fixtures/eval/events.json or --events FILE" in capsys.readouterr().err
+    assert "--events FILE" in run_installed(site, outside, "eval", "--help").stdout
+
+
+def test_g6_gitignore_covers_what_pip_install_leaves():
+    lines = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    assert "build/" in lines and "*.egg-info/" in lines
+    git = shutil.which("git")
+    if git and (ROOT / ".git").exists():
+        proc = subprocess.run([git, "check-ignore", "build/lib/raqib/cli.py", "raqib.egg-info/PKG-INFO"],
+                              cwd=str(ROOT), capture_output=True, text=True, timeout=30)
+        assert proc.returncode == 0 and len(proc.stdout.splitlines()) == 2, proc.stderr
