@@ -27,17 +27,20 @@ Per session (J-3, J-4):
   git keys (a trace written before M4.3, the proxy, the os source), or with
   no session_start and no line with git keys at all; and a session whose
   start and close both say git_error "no repo".
-- triggers (J-4): ok posts of Edit, Write, MultiEdit or NotebookEdit after
-  the start line whose input_meta.path places under the start line's cwd
-  (placed as the YAML rules place paths, engine.norm_path: a relative path
-  against its own line's cwd). An edit whose path is elsewhere or cannot be
-  read or placed is not a trigger (a named hole). A pre of those tools with
-  no post later in the trace (SILENCE-HALF's fact) is an unknown trigger.
-- unknown (a partial note naming each trigger seq and its cause, A3): the
-  session has triggers and no session_start line (but git keys elsewhere),
-  no close after the trigger, a start and close cwd that differ (J-4), or a
-  value that is null on either side for any other git_error (J-3: a capture
-  gap). An unknown trigger alone, with the value unchanged, is unknown.
+- triggers (J-4): ok posts of Edit, Write, MultiEdit or NotebookEdit whose
+  input_meta.path places under the start line's cwd (placed as the YAML
+  rules place paths, engine.norm_path: a relative path against its own
+  line's cwd). An edit whose path is elsewhere or cannot be read or placed
+  is not a trigger (a named hole). A pre of those tools with no post later
+  in the trace (SILENCE-HALF's fact) is an unknown trigger.
+- unknown (a partial note naming each trigger seq and its cause, A3): a
+  trigger before the first session_start ("edit before the start record",
+  K-4, never dropped); the session has triggers and no session_start line
+  (but git keys elsewhere), no close after the trigger, a start and close
+  cwd that differ (J-4), or a value that is null on either side for any
+  other git_error (J-3: a capture gap; a git_error outside the closed set
+  is never echoed, K-5). An unknown trigger alone, with the value
+  unchanged, is unknown.
 - finding: at least one trigger before the close, the cwds equal, both
   values read and equal. One finding per session, citing the start, the
   triggers and the close, with the close's ts.
@@ -58,7 +61,7 @@ from __future__ import annotations
 import os
 
 from raqib.rules import engine
-from raqib.rules.trace import HEX40, HEX64, is_record, parse_ts
+from raqib.rules.trace import GIT_ERRORS, HEX40, HEX64, is_record, parse_ts
 
 RULE_HEAD = "HEAD-UNMOVED"
 RULE_INDEX = "INDEX-UNTOUCHED"
@@ -96,16 +99,23 @@ FIXTURES = {
 _SHARED = [
     "only cwd/.git is read: a session started in a subdirectory, a second repository, a nested repository or a"
     " submodule edited from the parent's cwd is judged against the cwd's .git or not at all",
-    "GIT_DIR, GIT_WORK_TREE, git -C or --git-dir in the agent's commands act on another repository than the one"
-    " the hook reads",
-    "a linked worktree: its .git file names an absolute gitdir, which is not followed (J-6), and its commondir is"
-    " not read (J-7), so the session is unknown (partial)",
+    "GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, git -C or --git-dir in the agent's commands act on another"
+    " repository or index than the one the hook reads (K-3)",
+    "a linked worktree, whose .git file names an absolute gitdir or (worktree.useRelativePaths) a relative one"
+    " above the cwd, and a submodule (gitdir: ../.git/modules/<name>) are never followed (J-6, K-2), and a"
+    " worktree's commondir is not read (J-7): the session is unknown (partial)",
+    "a file system mounted under the project directory (a network share) looks like a directory to the hook,"
+    " which reads it as one (K-2)",
+    "a Windows device name written with a space before its extension (CON .txt) is not refused by name; it is"
+    " lstat'ed and never opened, since it is not a regular file (K-3)",
     "edits whose path is not under the start line's cwd are not triggers: edits outside the repository, in a"
     " second repository, or with no readable path (J-4)",
     "edits made through Bash (sed -i, a redirect, cp, mv) are not triggers: only Edit, Write, MultiEdit and"
     " NotebookEdit are",
     "a session with no stop or session_end after an edit leaves that edit unjudged (partial); SILENCE-OPEN has"
     " the session",
+    "an edit before the session's first session_start is unjudged (partial: edit before the start record), never"
+    " dropped (K-4)",
     "the start is the session's first session_start line: a session resumed after the human committed or staged"
     " counts that as a move",
 ]
@@ -115,8 +125,11 @@ HOLES = {
         " switch, a reset, or a hash written into .git/HEAD or a ref all count as moved",
         "an unborn branch (no commit yet) is git_error \"no ref\": a session in a fresh repository is unknown"
         " (partial) (J-7)",
-        "a symlinked .git or a link below it, a gitdir that is absolute, UNC or a device path, a head in a SHA-256"
-        " repository, or a head not read within 50 ms is null: unknown (partial)",
+        "a symlinked .git or a link below it, a gitdir that is absolute, above the cwd, UNC or a device path, a"
+        " head in a SHA-256 repository, or a head not read within 50 ms is null: unknown (partial)",
+        "a reftable repository (HEAD names refs/heads/.invalid; its refs are in reftable/, which is not read) is"
+        " unreadable: unknown (partial) (K-3)",
+        "a packed-refs file over 1 MiB is unreadable: a head that is only there is unknown (partial) (K-3)",
     ] + _SHARED,
     RULE_INDEX: [
         "the index is hashed as raw bytes: git status, git diff or any command that refreshes stat data rewrites"
@@ -125,8 +138,8 @@ HOLES = {
         " git read-tree",
         "a commit rewrites the index: a commit of other files counts as touched",
         "a repository with no index yet (nothing ever staged) is null: unknown (partial) (J-7)",
-        "a symlinked .git or a link below it, a gitdir that is absolute, UNC or a device path, an index over"
-        " 64 MiB, or an index not hashed within 50 ms is null: unknown (partial)",
+        "a symlinked .git or a link below it, a gitdir that is absolute, above the cwd, UNC or a device path, an"
+        " index over 64 MiB, or an index not hashed within 50 ms is null: unknown (partial)",
     ] + _SHARED,
 }
 UNKNOWN_SHOWN = 5
@@ -136,6 +149,7 @@ CAUSE_CWD = "the cwd moved between start and close"
 CAUSE_NO_POST = "no post line"
 CAUSE_OK = "ok cannot be read"
 CAUSE_START_CWD = "the start cwd cannot be placed"
+CAUSE_BEFORE_START = "edit before the start record"   # K-4
 
 
 def _has_git(rec):
@@ -150,7 +164,14 @@ def _sessions(records):
 
 
 def _null_cause(rec, field, where):
-    return "%s null at the %s (git_error %s)" % (field, where, rec.get("git_error") or "-")
+    """Why a value is not compared. git_error is named only when it is one
+    of the closed set (K-5): a hostile trace's text never reaches a note."""
+    error = rec.get("git_error")
+    if error is None or not isinstance(error, str):
+        named = "-" if error is None else "not in the closed set"
+    else:
+        named = error if error in GIT_ERRORS else "not in the closed set"
+    return "%s null at the %s (git_error %s)" % (field, where, named)
 
 
 def _value(rec, field):
@@ -185,9 +206,7 @@ def _judge(records):
             results[rid]["judged"] += 1
         root = engine._place(start.get("cwd"), start.get("cwd")) if start is not None else None
         triggers = []   # (index, rec, None for a true trigger, or the cause it is unknown)
-        for i, rec in lines:
-            if start_i is not None and i < start_i:
-                continue
+        for i, rec in lines:   # every edit line, before the start too (K-4, set aside below)
             if rec.get("tool") not in EDIT_TOOLS or rec.get("phase") not in ("pre", "post"):
                 continue
             if rec["phase"] == "pre" and (sid, rec["seq"]) in later_posts:
@@ -206,12 +225,15 @@ def _judge(records):
                 triggers.append((i, rec, None))
             elif not isinstance(rec.get("ok"), bool):
                 triggers.append((i, rec, CAUSE_OK))
-        if not triggers:
+        # K-4: a trigger before the first session_start is unknown, never dropped.
+        before_start = [(i, r, CAUSE_BEFORE_START) for i, r, _ in triggers if start_i is not None and i < start_i]
+        triggers = [t for t in triggers if start_i is None or t[0] > start_i]
+        if not triggers and not before_start:
             continue
         after = [(i, r, CAUSE_NO_CLOSE) for i, r, _ in triggers if close_i is None or i > close_i]
         before = [(i, r, c) for i, r, c in triggers if close_i is not None and i < close_i]
         for rid in RULES:
-            unknown = [(sid, r["seq"], c) for _, r, c in after]
+            unknown = [(sid, r["seq"], c) for _, r, c in before_start + after]
             res = results[rid]
             if before and start is not None:
                 field = FIELDS[rid]

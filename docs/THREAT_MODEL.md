@@ -285,8 +285,9 @@ Rulings: ADR-0002 Amendment J (the Table's ruling of 2026-11-03 on the tree anch
   - edits outside the repository, or in a second repository, are not
     triggers; a nested repository or a submodule edited from the parent's
     cwd is judged against the parent's `.git`;
-  - a linked worktree names an absolute gitdir, which is not followed, and
-    its commondir is not read: the session is unknown;
+  - a linked worktree (its gitdir absolute, or relative above the cwd) and
+    a submodule (`gitdir: ../.git/modules/<name>`) are never followed, and
+    a worktree's commondir is not read: the session is unknown;
   - `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `git -C` or `--git-dir`
     in the agent's commands act on another repository or index than the
     one the hook reads;
@@ -296,19 +297,23 @@ Rulings: ADR-0002 Amendment J (the Table's ruling of 2026-11-03 on the tree anch
     staged) counts as touched (J-9, a false negative); the head moved by an
     empty commit, a commit of other files, a checkout or a hash written
     into `.git/HEAD` counts as moved.
-- **The record is safe to read (J-6, CLAUDE.md rule 5).** A `.git` file's
-  `gitdir:` is followed once and only when it is relative, stays on the
-  cwd's drive, and is no UNC (`\\host\share`, `//host/share`) or device
-  path; otherwise git_error is "gitdir" and nothing is opened, so a planted
-  `.git` file cannot make the hook connect to another host. No symlink (or
-  Windows junction) is followed at any component below the cwd; a FIFO or
-  device in place of a file is not opened.
+- **The hook opens nothing outside the project directory (J-6 as K-2
+  amends it, CLAUDE.md rule 5).** A `.git` file's `gitdir:` is followed
+  once and only when it is relative and resolves under the cwd; `..` above
+  it, an absolute, UNC (`\\host\share`, `//host/share`) or device path, a
+  drive or a stream gives git_error "gitdir", and nothing is opened there.
+  No symlink (or Windows junction) is followed at any component below the
+  cwd; a FIFO or device in place of a file is not opened. A named hole: a
+  file system mounted under the project directory (a network share) looks
+  like a directory, and the hook cannot tell the two apart, so it reads
+  such a mount as it reads any directory.
 - **Not judged, unknown (J-3).** A session whose session_start carries no
   git keys (a trace written before Amendment J, the proxy, the os source)
   or that has no repository at either end is not judged and writes no
-  note. A null value for any other reason, a moved cwd, a missing close or
-  a missing start make the session's edits unknown (a partial note), never
-  a finding.
+  note. A null value for any other reason, a moved cwd, a missing close, a
+  missing start or an edit before the start record (K-4) make the
+  session's edits unknown (a partial note), never a finding. A git_error
+  outside the closed set is never echoed into a note.
 - **False-positive sources:** an edit of a path git ignores (build output,
   `.env`) and work left for a human to commit are never committed by
   design, so the rules fire on them; the budget is 0.1 each.
@@ -320,17 +325,29 @@ Rulings: ADR-0002 Amendment J (the Table's ruling of 2026-11-03 on the tree anch
       .git/HEAD or a ref all count as moved;
     - an unborn branch (no commit yet) is git_error "no ref": a session in a
       fresh repository is unknown (partial) (J-7);
-    - a symlinked .git or a link below it, a gitdir that is absolute, UNC or a
-      device path, a head in a SHA-256 repository, or a head not read within
-      50 ms is null: unknown (partial);
+    - a symlinked .git or a link below it, a gitdir that is absolute, above
+      the cwd, UNC or a device path, a head in a SHA-256 repository, or a head
+      not read within 50 ms is null: unknown (partial);
+    - a reftable repository (HEAD names refs/heads/.invalid; its refs are in
+      reftable/, which is not read) is unreadable: unknown (partial) (K-3);
+    - a packed-refs file over 1 MiB is unreadable: a head that is only there
+      is unknown (partial) (K-3);
     - only cwd/.git is read: a session started in a subdirectory, a second
       repository, a nested repository or a submodule edited from the parent's
       cwd is judged against the cwd's .git or not at all;
-    - GIT_DIR, GIT_WORK_TREE, git -C or --git-dir in the agent's commands act
-      on another repository than the one the hook reads;
-    - a linked worktree: its .git file names an absolute gitdir, which is not
-      followed (J-6), and its commondir is not read (J-7), so the session is
+    - GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, git -C or --git-dir in the
+      agent's commands act on another repository or index than the one the
+      hook reads (K-3);
+    - a linked worktree, whose .git file names an absolute gitdir or
+      (worktree.useRelativePaths) a relative one above the cwd, and a
+      submodule (gitdir: ../.git/modules/<name>) are never followed (J-6,
+      K-2), and a worktree's commondir is not read (J-7): the session is
       unknown (partial);
+    - a file system mounted under the project directory (a network share)
+      looks like a directory to the hook, which reads it as one (K-2);
+    - a Windows device name written with a space before its extension (CON
+      .txt) is not refused by name; it is lstat'ed and never opened, since it
+      is not a regular file (K-3);
     - edits whose path is not under the start line's cwd are not triggers:
       edits outside the repository, in a second repository, or with no
       readable path (J-4);
@@ -338,6 +355,8 @@ Rulings: ADR-0002 Amendment J (the Table's ruling of 2026-11-03 on the tree anch
       only Edit, Write, MultiEdit and NotebookEdit are;
     - a session with no stop or session_end after an edit leaves that edit
       unjudged (partial); SILENCE-OPEN has the session;
+    - an edit before the session's first session_start is unjudged (partial:
+      edit before the start record), never dropped (K-4);
     - the start is the session's first session_start line: a session resumed
       after the human committed or staged counts that as a move.
   - INDEX-UNTOUCHED:
@@ -349,17 +368,25 @@ Rulings: ADR-0002 Amendment J (the Table's ruling of 2026-11-03 on the tree anch
     - a commit rewrites the index: a commit of other files counts as touched;
     - a repository with no index yet (nothing ever staged) is null: unknown
       (partial) (J-7);
-    - a symlinked .git or a link below it, a gitdir that is absolute, UNC or a
-      device path, an index over 64 MiB, or an index not hashed within 50 ms
-      is null: unknown (partial);
+    - a symlinked .git or a link below it, a gitdir that is absolute, above
+      the cwd, UNC or a device path, an index over 64 MiB, or an index not
+      hashed within 50 ms is null: unknown (partial);
     - only cwd/.git is read: a session started in a subdirectory, a second
       repository, a nested repository or a submodule edited from the parent's
       cwd is judged against the cwd's .git or not at all;
-    - GIT_DIR, GIT_WORK_TREE, git -C or --git-dir in the agent's commands act
-      on another repository than the one the hook reads;
-    - a linked worktree: its .git file names an absolute gitdir, which is not
-      followed (J-6), and its commondir is not read (J-7), so the session is
+    - GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, git -C or --git-dir in the
+      agent's commands act on another repository or index than the one the
+      hook reads (K-3);
+    - a linked worktree, whose .git file names an absolute gitdir or
+      (worktree.useRelativePaths) a relative one above the cwd, and a
+      submodule (gitdir: ../.git/modules/<name>) are never followed (J-6,
+      K-2), and a worktree's commondir is not read (J-7): the session is
       unknown (partial);
+    - a file system mounted under the project directory (a network share)
+      looks like a directory to the hook, which reads it as one (K-2);
+    - a Windows device name written with a space before its extension (CON
+      .txt) is not refused by name; it is lstat'ed and never opened, since it
+      is not a regular file (K-3);
     - edits whose path is not under the start line's cwd are not triggers:
       edits outside the repository, in a second repository, or with no
       readable path (J-4);
@@ -367,6 +394,8 @@ Rulings: ADR-0002 Amendment J (the Table's ruling of 2026-11-03 on the tree anch
       only Edit, Write, MultiEdit and NotebookEdit are;
     - a session with no stop or session_end after an edit leaves that edit
       unjudged (partial); SILENCE-OPEN has the session;
+    - an edit before the session's first session_start is unjudged (partial:
+      edit before the start record), never dropped (K-4);
     - the start is the session's first session_start line: a session resumed
       after the human committed or staged counts that as a move.
 
@@ -526,7 +555,12 @@ The git reader of the tree anchor (ADR-0002 J-8) measures its 50 ms budget with
 (a hung network file system) is not cut short by the budget: capture's
 deadline ends that capture with `RAQIB-SILENCE`, and the boundary line is
 lost (an alarm, A3). Windows has no `O_NOFOLLOW`: a link swapped in between
-the reader's lstat and its open is followed there.
+the reader's lstat and its open is followed there. On Windows the reader
+opens HEAD, the ref, packed-refs and the index without FILE_SHARE_DELETE
+and holds each open for up to the 50 ms budget: in that window a git that
+renames `index.lock` over the index (or a ref's lock over the ref) fails
+and retries, as git on Windows does for any reader (ruling K-7). A boundary
+line takes up to about 70 ms longer than before (K-9).
 
 Windows paths in the rules (M5.1b; rulings of 2026-11-02, Q-4 to Q-6, and
 2026-11-03, C-1 to C-3, C-8, C-9, C-11, C-12, C-14, C-15). One normaliser

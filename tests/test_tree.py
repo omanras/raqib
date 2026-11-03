@@ -130,20 +130,48 @@ def test_e1_no_repo_and_nothing_walks_up_from_cwd(tmp_path):
     assert common.git_state("bad\0cwd")["git_error"] == "unreadable"
 
 
-def test_e1_j6_a_relative_gitdir_file_is_followed_once(tmp_path):
-    """A submodule's .git file: `gitdir: ../.git/modules/sub`."""
-    make_gitdir(tmp_path / "super" / ".git" / "modules" / "sub")
-    sub = tmp_path / "super" / "sub"
-    sub.mkdir()
-    (sub / ".git").write_text("gitdir: ../.git/modules/sub\n")
-    assert state(sub) == {"git_head": HEAD_A, "git_index_sha256": INDEX_SHA, "git_error": None}
-    (sub / ".git").write_bytes(b"gitdir: ../.git/modules/sub \r\n")   # CRLF and a trailing space: git strips them
-    assert state(sub)["git_head"] == HEAD_A
+def test_e1_k2_a_relative_gitdir_under_the_cwd_is_followed_once(tmp_path):
+    """K-2 (amends J-6): followed only when it resolves under the cwd."""
+    make_gitdir(tmp_path / "inner" / "gd")
+    (tmp_path / ".git").write_text("gitdir: inner/gd\n")
+    assert state(tmp_path) == {"git_head": HEAD_A, "git_index_sha256": INDEX_SHA, "git_error": None}
+    (tmp_path / ".git").write_bytes(b"gitdir: inner/../inner/gd \r\n")   # .. inside, CRLF and a trailing space
+    assert state(tmp_path)["git_head"] == HEAD_A
     # Followed once: a gitdir that is itself a .git file is not followed.
-    nested = tmp_path / "nested"
-    nested.mkdir()
-    (nested / ".git").write_text("gitdir: ../super/sub/.git\n")
-    assert state(nested)["git_error"] == "gitdir"
+    (tmp_path / "inner" / "file").write_text("gitdir: gd\n")
+    (tmp_path / ".git").write_text("gitdir: inner/file\n")
+    assert state(tmp_path)["git_error"] == "gitdir"
+
+
+def test_e1_k5_gitdir_dot_is_the_cwd_and_dot_dot_is_refused(tmp_path):
+    proj = tmp_path / "proj"
+    make_gitdir(proj)                           # HEAD, refs, index in the cwd itself
+    (proj / ".git").write_text("gitdir: .\n")
+    assert state(proj) == {"git_head": HEAD_A, "git_index_sha256": INDEX_SHA, "git_error": None}
+    make_gitdir(tmp_path / "up")
+    for text in ("gitdir: ..", "gitdir: ../up", "gitdir: sub/../..", "gitdir: ./../up"):
+        (proj / ".git").write_text(text + "\n")
+        assert state(proj) == {"git_head": None, "git_index_sha256": None, "git_error": "gitdir"}, text
+
+
+def test_e1_k2_a_submodule_and_a_linked_worktree_are_never_followed(tmp_path, monkeypatch):
+    """Their gitdir lies above the cwd: `../.git/modules/sub`, an absolute
+    worktree gitdir, and a relative one (worktree.useRelativePaths). Nothing
+    above the cwd is touched."""
+    make_gitdir(tmp_path / "super" / ".git" / "modules" / "sub")
+    make_gitdir(tmp_path / "main" / ".git" / "worktrees" / "wt")
+    cases = {tmp_path / "super" / "sub": "../.git/modules/sub",
+             tmp_path / "wt-abs": str(tmp_path / "main" / ".git" / "worktrees" / "wt"),
+             tmp_path / "wt-rel": "../main/.git/worktrees/wt"}
+    for cwd, target in cases.items():
+        cwd.mkdir()
+        (cwd / ".git").write_text("gitdir: %s\n" % target)
+        seen = []
+        real = os.lstat
+        monkeypatch.setattr(os, "lstat", lambda path, *a, **k: (seen.append(os.fspath(path)), real(path, *a, **k))[1])
+        assert state(cwd) == {"git_head": None, "git_index_sha256": None, "git_error": "gitdir"}, target
+        monkeypatch.setattr(os, "lstat", real)
+        assert seen == [str(cwd / ".git")], seen
 
 
 @pytest.mark.parametrize("text", [
@@ -223,9 +251,12 @@ def test_e1_j6_no_symlink_is_followed_at_any_component(tmp_path):
     assert state(packed)["git_error"] == "symlink"
     # The gitdir a .git file names: a link in its path is not followed either.
     sub = tmp_path / "sub"
-    sub.mkdir()
-    os.symlink(str(real / ".git"), str(tmp_path / "gitlink"), target_is_directory=True)
-    (sub / ".git").write_text("gitdir: ../gitlink\n")
+    (sub / "links").mkdir(parents=True)
+    os.symlink(str(real / ".git"), str(sub / "links" / "gitlink"), target_is_directory=True)
+    (sub / ".git").write_text("gitdir: links/gitlink\n")
+    assert state(sub)["git_error"] == "symlink"
+    os.symlink(str(real / ".git"), str(sub / "dirlink"), target_is_directory=True)
+    (sub / ".git").write_text("gitdir: dirlink/../dirlink\n")   # lexical: dirlink is lstat'ed, a link
     assert state(sub)["git_error"] == "symlink"
 
 
@@ -288,22 +319,25 @@ def test_e1_j8_the_budget_is_one_monotonic_clock_per_call(tmp_path):
     assert common.GIT_BUDGET_SECONDS == 0.05
     assert inspect.signature(common.git_state).parameters["clock"].default is time.monotonic
     repo = make_repo(tmp_path)
+    real_head, real_index = common._git_head, common._git_index
 
-    def clock(*times):
-        it = iter(times)
-        last = [0.0]
+    def run(late):
+        """git_state with a clock that runs out as the step `late` begins."""
+        over = [False]
 
-        def now():
-            last[0] = next(it, last[0])
-            return last[0]
-        return now
+        def spend(step):
+            def wrapped(*a, **k):
+                over[0] = True
+                return step(*a, **k)
+            return wrapped
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(common, late, spend(real_head if late == "_git_head" else real_index))
+            return state(repo, clock=lambda: 0.06 if over[0] else 0.0)
     # Over the budget before HEAD is read: nothing is read.
-    assert state(repo, clock=clock(0.0, 0.0, 0.06)) == {"git_head": None, "git_index_sha256": None,
-                                                         "git_error": "budget"}
-    # Over the budget while the index is hashed: the head read in time is kept.
-    assert state(repo, clock=clock(0.0, 0.0, 0.01, 0.02, 0.03, 0.06)) == {
-        "git_head": HEAD_A, "git_index_sha256": None, "git_error": "budget"}
-    assert state(repo, clock=clock(0.0)) == {"git_head": HEAD_A, "git_index_sha256": INDEX_SHA, "git_error": None}
+    assert run("_git_head") == {"git_head": None, "git_index_sha256": None, "git_error": "budget"}
+    # Over the budget as the index is hashed: the head read in time is kept.
+    assert run("_git_index") == {"git_head": HEAD_A, "git_index_sha256": None, "git_error": "budget"}
+    assert state(repo, clock=lambda: 0.0) == {"git_head": HEAD_A, "git_index_sha256": INDEX_SHA, "git_error": None}
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs are POSIX")
@@ -337,15 +371,144 @@ def test_e1_j8_each_file_is_opened_once_and_only_the_listed_files(tmp_path, monk
     assert sorted(opened) == sorted(os.path.join(".git", n) for n in ("HEAD", "packed-refs", "index"))
 
 
-def test_e1_it_never_raises(tmp_path, monkeypatch):
+@pytest.mark.parametrize("error", [OSError("x"), PermissionError("x"), ValueError("x"), UnicodeDecodeError(
+    "utf-8", b"\xff", 0, 1, "x"), RecursionError("x"), MemoryError("x")],
+    ids=["OSError", "PermissionError", "ValueError", "UnicodeError", "RecursionError", "MemoryError"])
+def test_e1_k1_only_read_errors_are_unreadable(tmp_path, monkeypatch, error):
     repo = make_repo(tmp_path)
 
     def boom(*a, **k):
-        raise RuntimeError("anything")
+        raise error
     monkeypatch.setattr(common, "_git_index", boom)
     assert state(repo) == {"git_head": HEAD_A, "git_index_sha256": None, "git_error": "unreadable"}
     monkeypatch.setattr(common, "_git_dir", boom)
     assert state(repo) == {"git_head": None, "git_index_sha256": None, "git_error": "unreadable"}
+    assert common.GIT_READ_ERRORS == (OSError, ValueError, UnicodeError, RecursionError, MemoryError)
+
+
+@pytest.mark.parametrize("error", [RuntimeError("anything"), KeyError("x"), capture.Deadline("capture did not"
+                                                                                             " finish within 8s")],
+                         ids=["RuntimeError", "KeyError", "Deadline"])
+def test_e1_k1_any_other_exception_propagates(tmp_path, monkeypatch, error):
+    repo = make_repo(tmp_path)
+
+    def boom(*a, **k):
+        raise error
+    monkeypatch.setattr(common, "_git_read", boom)
+    with pytest.raises(type(error)):
+        common.git_state(str(repo))
+
+
+@pytest.mark.parametrize("error", ["deadline", "unexpected"])
+def test_e1_k1_an_exception_inside_a_read_ends_the_capture_with_one_silence_line(tmp_path, monkeypatch, capsys,
+                                                                                error):
+    """A3 (capture.py's invariant): a Deadline raised from inside git_state's
+    read, or any exception it does not catch, makes the hook write its one
+    RAQIB-SILENCE line, exit 0, and no record."""
+    repo = make_repo(tmp_path / "repo")
+    log = tmp_path / "t.jsonl"
+
+    def boom(*a, **k):
+        raise capture.deadline_error() if error == "deadline" else RuntimeError("an unexpected failure")
+    monkeypatch.setattr(common, "_git_read", boom)
+    stdin = io.TextIOWrapper(io.BytesIO(json.dumps(payload("Stop", repo)).encode()))
+    monkeypatch.setattr(sys, "stdin", stdin)
+    assert capture.main([str(log)]) == 0
+    out, err = capsys.readouterr()
+    assert out == "" and len(err.splitlines()) == 1, err
+    want = "Deadline: capture did not finish within 8s" if error == "deadline" else "RuntimeError: an unexpected failure"
+    assert err.startswith("RAQIB-SILENCE: capture failed event=Stop") and want in err, err
+    assert not log.exists() or log.read_text() == ""
+
+
+def test_e1_k5_eloop_at_open_is_symlink(tmp_path, monkeypatch):
+    import errno
+    repo = make_repo(tmp_path)
+    real = os.open
+
+    def opener(path, *a, **k):
+        if os.path.basename(path) == "HEAD":
+            raise OSError(errno.ELOOP, "Too many levels of symbolic links")
+        return real(path, *a, **k)
+    monkeypatch.setattr(os, "open", opener)
+    assert state(repo) == {"git_head": None, "git_index_sha256": INDEX_SHA, "git_error": "symlink"}
+
+
+def test_e1_k5_a_non_regular_file_at_fstat_is_unreadable(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path)
+    real = os.fstat
+    fifo = os.stat_result((stat.S_IFIFO | 0o644, 0, 0, 1, 0, 0, 0, 0, 0, 0))
+    monkeypatch.setattr(os, "fstat", lambda fd: fifo)
+    assert state(repo) == {"git_head": None, "git_index_sha256": None, "git_error": "unreadable"}
+    monkeypatch.setattr(os, "fstat", real)
+    assert state(repo)["git_error"] is None
+
+
+def test_e1_k5_a_ref_naming_a_directory_and_a_file_in_the_middle_go_to_packed_refs(tmp_path):
+    repo = make_repo(tmp_path / "dir", loose=None, packed="%s refs/heads/main\n" % HEAD_B)
+    (repo / ".git" / "refs" / "heads" / "main").mkdir()   # refs/heads/main/x exists as a loose ref, main does not
+    assert state(repo)["git_head"] == HEAD_B
+    os.remove(str(repo / ".git" / "packed-refs"))
+    assert state(repo)["git_error"] == "no ref"
+    mid = make_repo(tmp_path / "mid", head="ref: refs/heads/feature/x\n", loose=None)
+    (mid / ".git" / "refs" / "heads" / "feature").write_text("a file, not a directory\n")
+    assert state(mid)["git_error"] == "no ref"
+    (mid / ".git" / "packed-refs").write_text("%s refs/heads/feature/x\n" % HEAD_A)
+    assert state(mid)["git_head"] == HEAD_A
+
+
+@pytest.mark.parametrize("where", ["HEAD", "ref", "packed-refs"])
+def test_e1_k5_invalid_utf8_is_unreadable(tmp_path, where):
+    if where == "HEAD":
+        repo = make_repo(tmp_path, head=b"ref: refs/heads/\xff\n")
+    elif where == "ref":
+        repo = make_repo(tmp_path, loose=None)
+        (repo / ".git" / "refs" / "heads" / "main").write_bytes(b"\xfe" * 40 + b"\n")
+    else:
+        repo = make_repo(tmp_path, loose=None)
+        (repo / ".git" / "packed-refs").write_bytes(b"%s refs/heads/main\n\xff\n" % HEAD_A.encode())
+    assert state(repo) == {"git_head": None, "git_index_sha256": INDEX_SHA, "git_error": "unreadable"}
+
+
+def test_e1_k5_k6_a_budget_spent_before_the_first_open_opens_nothing(tmp_path, monkeypatch):
+    repo = make_repo(tmp_path)
+    calls = []
+    for name in ("lstat", "open"):
+        real = getattr(os, name)
+        monkeypatch.setattr(os, name, (lambda real, name: lambda path, *a, **k: (calls.append((name, path)),
+                                                                                   real(path, *a, **k))[1])(real, name))
+    ticks = iter([0.0])
+    out = common.git_state(str(repo), clock=lambda: next(ticks, 0.06))
+    assert out == {"git_head": None, "git_index_sha256": None, "git_error": "budget"} and calls == []
+
+
+def test_e1_k6_the_budget_is_checked_before_each_lstat_of_a_walk(tmp_path, monkeypatch):
+    """The budget runs out after the HEAD file is read: the ref's first
+    component (refs) is never lstat'ed."""
+    repo = make_repo(tmp_path)
+    seen = []
+    over = [False]
+    real_lstat, real_read = os.lstat, os.read
+    monkeypatch.setattr(os, "lstat", lambda path, *a, **k: (seen.append(os.path.basename(path)),
+                                                             real_lstat(path, *a, **k))[1])
+
+    def read(fd, n):
+        over[0] = True   # HEAD is the first file read
+        return real_read(fd, n)
+    monkeypatch.setattr(os, "read", read)
+    out = common.git_state(str(repo), clock=lambda: 0.06 if over[0] else 0.0)
+    assert out == {"git_head": None, "git_index_sha256": None, "git_error": "budget"}
+    assert seen == [".git", "HEAD"], seen
+
+
+@pytest.mark.skipif(not WINDOWS, reason="junctions are Windows'")
+def test_e1_k5_a_junction_below_dot_git_is_a_link(tmp_path):
+    import _winapi
+    real = make_repo(tmp_path / "real")
+    repo = make_repo(tmp_path / "repo")
+    shutil.rmtree(str(repo / ".git" / "refs" / "heads"))
+    _winapi.CreateJunction(str(real / ".git" / "refs" / "heads"), str(repo / ".git" / "refs" / "heads"))
+    assert state(repo) == {"git_head": None, "git_index_sha256": INDEX_SHA, "git_error": "symlink"}
 
 
 @NEEDS_GIT
@@ -685,6 +848,44 @@ def test_j3_no_session_start_but_git_keys_elsewhere_is_unknown():
     assert found == [] and len(notes) == 2 and all("(no session_start line)" in n["detail"] for n in notes)
 
 
+def test_k4_edits_before_the_first_session_start_are_unknown_never_dropped():
+    lines = edit_lines(1, 1) + [line(2, "session_start", 3), line(3, "stop", 4)]
+    found, notes = judged(lines)
+    assert found == [] and [n["detail"] for n in notes] == [
+        "could not judge 1 line(s) (session:seq s:1 (edit before the start record))"] * 2
+    # Beside a judged edit the session still fires, and the early edit is still named.
+    lines = edit_lines(1, 1) + [line(2, "session_start", 3)] + edit_lines(3, 4) + [line(4, "stop", 6)]
+    found, notes = judged(lines)
+    assert found == [("HEAD-UNMOVED", "s", (2, 3, 4)), ("INDEX-UNTOUCHED", "s", (2, 3, 4))]
+    assert all("s:1 (edit before the start record)" in n["detail"] for n in notes) and len(notes) == 2
+    # An edit before the start outside the start cwd is not a trigger at all (J-4).
+    lines = edit_lines(1, 1, path="/tmp/x") + [line(2, "session_start", 3), line(3, "stop", 4)]
+    assert judged(lines) == ([], [])
+
+
+def test_k5_a_git_error_outside_the_closed_set_is_never_echoed(tmp_path):
+    hostile = "x\x1b[2J\nRESULT: CLEAN (exit 0)"
+    start = dict(line(1, "session_start", 1), git_head=None, git_error=hostile)
+    lines = [start] + edit_lines(2, 2) + [line(3, "stop", 4)]
+    _, notes = tree.findings(lines)
+    assert all("git_head null at the start (git_error not in the closed set)" in n["detail"] for n in notes[:1])
+    path = tmp_path / "t.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in lines) + "\n")
+    code, rep = report_json(path, "--scope", ".")
+    details = [n["detail"] for n in rep["notes"] if n["rule_id"] == "HEAD-UNMOVED"]
+    assert details == ["could not judge 1 line(s) (session:seq s:2 (git_head null at the start (git_error not in the"
+                       " closed set)))"]
+    assert "RESULT: CLEAN" not in json.dumps(rep["notes"])
+    out = io.StringIO()
+    code = cli.main(["report", str(path), "--scope", "."], out=out)
+    text = out.getvalue()
+    assert "HEAD-UNMOVED partial: could not judge 1 line(s) (session:seq s:2 (git_head null at the start (git_error"\
+        " not in the closed set)))" in text
+    assert text.count("RESULT: ") == 1 and "\x1b" not in text and "CLEAN" not in text
+    assert code == 1 and [f["rule_id"] for f in rep["findings"]] == ["INDEX-UNTOUCHED"]   # the index still judged
+    assert 'git_head=null  git_index_sha256="%s"  git_error="?"' % INDEX_SHA in text   # K-8, bounded
+
+
 def test_j4_start_is_the_first_session_start_and_close_the_last_stop_or_end():
     # A resume writes a second session_start with the head the human moved; the first one counts.
     lines = [line(1, "session_start", 1)] + edit_lines(2, 2) + [line(3, "stop", 4, git=MOVED),
@@ -841,6 +1042,35 @@ def test_j1_cli_run_rules_carries_the_tree_findings_and_notes():
     assert [n["rule_id"] for n in notes] == ["HEAD-UNMOVED"]
 
 
+def test_k8_report_describe_shows_the_git_keys_of_a_boundary_line():
+    rec = line(1, "stop", 1)
+    assert report.describe(rec) == ('stop - seq 1  2026-11-03T09:00:01.000Z  cwd="/work/proj"  git_head="%s"'
+                                    '  git_index_sha256="%s"  git_error=null' % (HEAD_A, INDEX_SHA))
+    rec = dict(line(1, "session_start", 1), git_head=None, git_index_sha256=None, git_error="no repo")
+    assert report.describe(rec).endswith('git_head=null  git_index_sha256=null  git_error="no repo"')
+    # Not in the hook's shape: "?", bounded; a long cwd is elided, the git keys never are.
+    rec = dict(line(1, "session_end", 1, cwd="/w/" + "d" * 400), git_head="x" * 500, git_error="\x1b[2J" * 50)
+    text = report.describe(rec)
+    assert text.endswith('git_head="?"  git_index_sha256="%s"  git_error="?"' % INDEX_SHA) and "..." in text
+    assert len(text) < report.LINE_TEXT_MAX + 160
+    # A tool line shows no git keys, and a line written before M4.3 is as it was.
+    assert "git_" not in report.describe(line(1, "pre", 1, tool="Edit", input_meta={"path": "/a"}))
+    old = line(1, "stop", 1, git=None)
+    assert report.describe(old) == 'stop - seq 1  2026-11-03T09:00:01.000Z  cwd="/work/proj"'
+
+
+def test_k8_a_tree_finding_s_cited_lines_show_what_was_compared(tmp_path):
+    path = tmp_path / "t.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in fixture_lines("tests/fixtures/tree/staged.json")) + "\n")
+    out = io.StringIO()
+    assert cli.main(["report", str(path), "--scope", "."], out=out) == 1
+    text = out.getvalue()
+    assert "[medium] HEAD-UNMOVED (DRIFT, anchor) session fixture-tree-staged seq 1,2,5" in text
+    import re as _re
+    shown = _re.findall(r"seq (1|5): line \d+  .* git_head=\"([0-9a-f]{40})\"  git_index_sha256=\"([0-9a-f]{64})\"", text)
+    assert [s[0] for s in shown] == ["1", "5"] and shown[0][1] == shown[1][1] and shown[0][2] != shown[1][2]
+
+
 # --- The real hook in a real repository: none, add, commit -----------------------------
 
 @NEEDS_GIT
@@ -887,7 +1117,10 @@ def test_e4_the_threat_model_names_what_the_anchor_sees_and_every_hole():
         "### ", 1)[0]
     for phrase in ("edits outside the repository", "in a second repository", "a linked worktree", "`GIT_DIR`",
                    "an index rewritten by the agent", "runs no `git`", "(`\\\\host\\share`, `//host/share`)",
-                   "Not judged, unknown (J-3)", "False-positive sources:"):
+                   "Not judged, unknown (J-3)", "False-positive sources:",
+                   "The hook opens nothing outside the project directory (J-6 as K-2 amends it",   # K-2
+                   "a file system mounted under the project directory (a network share) looks like a directory",
+                   "an edit before the start record (K-4)", "`GIT_INDEX_FILE`"):
         assert phrase in block, phrase
     for rid in tree.RULES:
         part = block.split("- %s:" % rid, 1)[1]
@@ -897,6 +1130,8 @@ def test_e4_the_threat_model_names_what_the_anchor_sees_and_every_hole():
     assert "`git_head`, the 40-hex commit" in stored and "(`git_index_sha256`)" in stored
     platform = flat.split("## 7. Platform", 1)[1]
     assert "15.6 ms" in platform and "Windows has no `O_NOFOLLOW`" in platform
+    assert "without FILE_SHARE_DELETE" in platform and "(ruling K-7)" in platform   # K-7
+    assert "cannot make the hook connect to another host" not in flat   # K-2: the claim is narrowed
 
 
 def test_e4_the_readme_names_the_tree_anchors_and_their_gaps():

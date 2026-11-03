@@ -1433,7 +1433,11 @@ def test_m42_redo2_the_note_records_nostart_the_rewording_and_the_marker():
     _, _, note = adr_note()
     redo2 = note.split("Note (2026-11-03, M4.2 REDO-2, Amendment E", 1)[1]
     flat = " ".join(redo2.split())
-    assert "open demand SILENCE-NOSTART (M4.3, E-2)" in flat
+    assert "open demand SILENCE-NOSTART (M4.3, E-2)" in flat   # the record stands; K-3 corrects it by a dated note
+    _, _, m43 = adr_note_m43()
+    assert ('Note (2026-11-03, M4.3 REDO, Amendment K, K-3; corrects the "open demand SILENCE-NOSTART (M4.3, E-2)"'
+            ' line of the M4.2 REDO-2 note above): M4.3 did not build SILENCE-NOSTART; it stays open for a later'
+            ' task.') in " ".join(m43.split())
     assert ('reworded DESTRUCT-CMD (E-4): "a wrapper in front (sudo, env, xargs, timeout, nohup): only the first'
             ' program is read" stays as an item') in flat
     assert "hook for a later demand (E-5): capture writes `input_meta.command_unread: true`" in flat

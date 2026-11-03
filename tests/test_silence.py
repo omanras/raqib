@@ -375,13 +375,13 @@ def test_m42_e5_an_end_without_a_start_cites_the_end_and_says_no_start():
     (f,) = silence.findings(load("empty-end-without-start-positive.json"))
     assert (f["rule_id"], f["cited_seq"]) == ("SILENCE-EMPTY", [1])
     assert f["summary"] == ("the session ended at session_end seq 1 with no start and no tool call (and no stop);"
-                            " a session_end with tool lines and no start is not judged yet (SILENCE-NOSTART, M4.3)")
+                            " a session_end with tool lines and no start is not judged yet (SILENCE-NOSTART, a later task)")   # K-3
 
 
 def test_m42_redo2_e2_a_session_end_with_tools_and_no_start_is_the_open_hole():
     """E-2: SILENCE-EMPTY's no-start case fires only with no tool line. A
     session_end after tool lines, with no session_start, is judged by no rule
-    today (SILENCE-NOSTART, M4.3): this pins the hole so it stays visible."""
+    today (SILENCE-NOSTART, a later task, K-3): this pins the hole so it stays visible."""
     tool = dict(event(1, "pre"), tool="Bash", input_meta={}, input_sha256="0" * 64)
     post = dict(tool, phase="post", ok=True, output_sha256="1" * 64)
     lines = [tool, post, event(2, "stop"), event(3, "session_end")]

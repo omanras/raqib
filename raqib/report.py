@@ -70,7 +70,11 @@ def with_silence_class(findings):
 
 def describe(rec):
     """One-line, bounded rendering of a trace record (hashes left out). The
-    middle is elided, so the end of a long path stays visible."""
+    middle is elided, so the end of a long path stays visible. On a
+    session_start, stop or session_end line the three git keys follow, after
+    the elision, so a tree finding's cited lines show what was compared
+    (M4.3, ruling K-8): each value as JSON when it is in the hook's shape
+    (40-hex, 64-hex, one of the closed set, or null), else "?"."""
     parts = ["%s %s seq %s" % (rec.get("phase", "?"), rec.get("tool", "?"), rec.get("seq")),
              str(rec.get("ts", "-"))]
     for key in ("ok", "error_class"):
@@ -86,7 +90,21 @@ def describe(rec):
     if len(text) > LINE_TEXT_MAX:
         keep = LINE_TEXT_MAX - 3
         text = text[:keep // 2] + "..." + text[-(keep - keep // 2):]
+    if rec.get("phase") in trace.GIT_PHASES:
+        shown = ["%s=%s" % (key, _git_value(key, rec[key])) for key in trace.GIT_KEYS if key in rec]
+        if shown:
+            text += "  " + "  ".join(shown)
     return text
+
+
+def _git_value(key, value):
+    """A git key's value as describe shows it: JSON when in the hook's shape, else "?" (bounded, K-8)."""
+    if value is None:
+        return "null"
+    shape = {"git_head": trace.HEX40, "git_index_sha256": trace.HEX64}.get(key)
+    if isinstance(value, str) and (shape.match(value) if shape else value in trace.GIT_ERRORS):
+        return json.dumps(value)
+    return '"?"'
 
 
 def build(trace_path, numbered, problems, findings, notes, rules, findings_source,

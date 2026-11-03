@@ -109,7 +109,7 @@ design, a quiet minute is reported, not assumed harmless.
 | Rule | Fires on |
 |---|---|
 | SILENCE-GAP / OPEN / HALF / ORDER | no capture for 60 s; a session with no end; a call with no result (or a result with no call); seq or time going back |
-| SILENCE-EMPTY | a session that started and ended with no tool call and no turn, or ended with no start and no tool call (one with tool calls and no start is not judged yet: SILENCE-NOSTART, M4.3) |
+| SILENCE-EMPTY | a session that started and ended with no tool call and no turn, or ended with no start and no tool call (one with tool calls and no start is not judged yet: SILENCE-NOSTART, a later task) |
 | SCOPE-PATH | a file tool touching a path outside the session's directory |
 | SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
 | NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command |

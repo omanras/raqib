@@ -58,7 +58,7 @@ __all__ = (
     "command_scripts", "commit_prefix", "SCRIPT_WRAPPERS", "TIMEOUT_VALUE_OPTIONS", "SOURCES",
     # M4.3 (ADR-0002 Amendment J)
     "GIT_KEYS", "GIT_ERRORS", "GIT_BUDGET_SECONDS", "GIT_FILE_MAX", "GIT_INDEX_MAX", "GIT_CHUNK", "GIT_HEX40",
-    "GIT_HEX64", "GIT_DEVICE_NAMES", "git_state",
+    "GIT_HEX64", "GIT_DEVICE_NAMES", "GIT_READ_ERRORS", "git_state",
 )
 
 # A-1: leading shell assignments (NAME=value) are not the command. Words are
@@ -1158,11 +1158,13 @@ GIT_KEYS = ("git_head", "git_index_sha256", "git_error")   # J-5: all three on e
 # - "symlink": a symlink (or, on Windows, a junction) at any component read
 #   below cwd: .git, the gitdir, HEAD, the ref, packed-refs, index (J-6);
 # - "gitdir": a `.git` file that is not one `gitdir: <path>` line, or whose
-#   path is not relative, leaves the cwd's drive, is UNC or a device path,
-#   or does not name a directory (J-6: such a path is never opened);
-# - "unreadable": an OSError; a file that is not a regular file or is over
-#   GIT_FILE_MAX; a HEAD that is neither 40-hex nor `ref: refs/...`; a ref
-#   that is not 40-hex (a symbolic ref, a SHA-256 repository);
+#   path is not relative, resolves above or outside the cwd (K-2), is UNC or
+#   a device path, or does not name a directory (J-6: such a path is never
+#   opened);
+# - "unreadable": one of GIT_READ_ERRORS (K-1); a file that is not a
+#   regular file or is over GIT_FILE_MAX; a HEAD that is neither 40-hex nor
+#   `ref: refs/...` (a reftable repository's refs/heads/.invalid, K-3); a
+#   ref that is not 40-hex (a symbolic ref, a SHA-256 repository);
 # - "no ref": the ref HEAD names is neither a loose file nor in packed-refs
 #   (an unborn branch, J-7);
 # - "no index": there is no index yet (J-7);
@@ -1187,6 +1189,9 @@ GIT_DEVICE_NAMES = re.compile("(?:CON|PRN|AUX|NUL|CONIN\\$|CONOUT\\$|COM[0-9\u00
                               "|LPT[0-9\u00b9\u00b2\u00b3])(?:\\..*)?\\Z", re.I)
 _GIT_REF_PART = re.compile(r"[^\x00-\x20\x7f~^:?*\[\\/]+\Z")   # git's check_refname_format, per component
 _GIT_REF_MAX = 1024
+# K-1: the failures of a read that make a value "unreadable". Nothing else is
+# caught: capture's Deadline (an Exception) must end the capture (A3).
+GIT_READ_ERRORS = (OSError, ValueError, UnicodeError, RecursionError, MemoryError)
 _GIT_NAME_SURROGATE = 0x20000000   # a Windows reparse tag with this bit is a link (a symlink or a junction)
 _GIT_MISSING = "\0missing"         # internal: a component that is not there (never recorded)
 _GIT_OPEN = (os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
@@ -1199,9 +1204,11 @@ class _GitStop(Exception):
 
 def git_state(cwd, clock=time.monotonic):
     """{"git_head", "git_index_sha256", "git_error"} of cwd's .git, read from
-    files within GIT_BUDGET_SECONDS of clock (see GIT_ERRORS). Never raises,
-    never runs anything, never opens a path a `.git` file names unless J-6
-    allows it."""
+    files within GIT_BUDGET_SECONDS of clock (see GIT_ERRORS). Never runs
+    anything, and opens nothing outside cwd (K-2). A read that fails with
+    one of GIT_READ_ERRORS is "unreadable"; every other exception, capture's
+    Deadline above all, propagates (K-1, A3): the capture then ends with its
+    one RAQIB-SILENCE line and writes no record."""
     out = dict.fromkeys(GIT_KEYS)
     start = clock()
 
@@ -1215,7 +1222,7 @@ def git_state(cwd, clock=time.monotonic):
             return step(*args), None
         except _GitStop as stop:
             return None, stop.args[0]
-        except Exception:   # a reader that cannot finish is unreadable, never a lost line
+        except GIT_READ_ERRORS:   # K-1: only these; a Deadline or anything else propagates
             return None, "unreadable"
 
     gitdir, why = attempt(_git_dir, cwd, check)
@@ -1235,6 +1242,7 @@ def _git_dir(cwd, check):
     if "\0" in cwd:
         raise _GitStop("unreadable")
     dot = os.path.join(cwd, ".git")
+    check()   # K-5: a budget spent before the first lstat opens nothing
     st = _git_lstat(dot, "no repo")
     if stat.S_ISDIR(st.st_mode):
         return dot
@@ -1247,14 +1255,18 @@ def _git_dir(cwd, check):
         raise _GitStop("gitdir")
     if not text.startswith("gitdir: ") or "\n" in text or "\r" in text:
         raise _GitStop("gitdir")
-    return _git_follow(cwd, text[len("gitdir: "):])
+    return _git_follow(cwd, text[len("gitdir: "):], check)
 
 
-def _git_follow(cwd, target):
-    """J-6: the gitdir a `.git` file names, followed once and only when it is
-    relative, stays on the cwd's drive and is no UNC or device path. Every
-    check before the first lstat is lexical, so a refused path is never
-    touched (no SMB connection to \\\\host\\share)."""
+def _git_follow(cwd, target, check):
+    """J-6 as K-2 amends it: the gitdir a `.git` file names, followed once
+    and only when it is relative and its lexical resolution stays UNDER the
+    cwd (commonpath == cwd): `..` above the cwd, an absolute, UNC or device
+    path, a drive or a stream is refused ("gitdir"). Every check before the
+    first lstat is lexical, so a refused path is never touched: the hook
+    opens nothing outside the project directory (no SMB connection to
+    \\\\host\\share). A submodule (`gitdir: ../.git/modules/x`) and a linked
+    worktree, absolute or relative, are therefore never followed."""
     if not target or "\0" in target or ":" in target or target[0] in "/\\":
         raise _GitStop("gitdir")   # absolute, UNC (\\ or //), \\?\ or \\.\, a drive (C:x) or a stream (x:y)
     if any(GIT_DEVICE_NAMES.match(part.rstrip(" .")) for part in re.split(r"[\\/]", target)):
@@ -1267,11 +1279,14 @@ def _git_follow(cwd, target):
         common = os.path.commonpath([base, full])
     except ValueError:
         raise _GitStop("gitdir")
-    rel = os.path.relpath(full, common)
-    if rel == os.curdir:   # the gitdir is cwd itself or a directory above it
+    if os.path.normcase(common) != os.path.normcase(base):
+        raise _GitStop("gitdir")   # K-2: above the cwd (`..`), a submodule's or a worktree's gitdir
+    rel = os.path.relpath(full, base)
+    if rel == os.curdir:   # `gitdir: .`: the cwd itself
+        check()
         st = _git_lstat(full, "gitdir")
     else:
-        _, st = _git_walk(common, rel.split(os.sep), "gitdir")
+        _, st = _git_walk(base, rel.split(os.sep), "gitdir", check)
     if not stat.S_ISDIR(st.st_mode):   # followed once: a gitdir that is a file is not followed
         raise _GitStop("gitdir")
     return full
@@ -1280,7 +1295,7 @@ def _git_follow(cwd, target):
 def _git_head(gitdir, check):
     """The 40-hex commit HEAD names: HEAD itself, the loose ref, else packed-refs."""
     check()
-    path, st = _git_walk(gitdir, ["HEAD"], "unreadable")
+    path, st = _git_walk(gitdir, ["HEAD"], "unreadable", check)
     head = _git_text(_git_small(path, st, check, "unreadable")).rstrip(" \t\r\n")
     if GIT_HEX40.match(head):
         return head   # a detached HEAD
@@ -1292,7 +1307,7 @@ def _git_head(gitdir, check):
         raise _GitStop("unreadable")
     check()
     try:
-        path, st = _git_walk(gitdir, parts, _GIT_MISSING)
+        path, st = _git_walk(gitdir, parts, _GIT_MISSING, check)
     except _GitStop as stop:
         if stop.args[0] != _GIT_MISSING:
             raise
@@ -1304,7 +1319,7 @@ def _git_head(gitdir, check):
         raise _GitStop("unreadable")   # a symbolic ref, or not a SHA-1 object name
     check()
     try:
-        path, st = _git_walk(gitdir, ["packed-refs"], _GIT_MISSING)
+        path, st = _git_walk(gitdir, ["packed-refs"], _GIT_MISSING, check)
     except _GitStop as stop:
         raise _GitStop("no ref" if stop.args[0] == _GIT_MISSING else stop.args[0])
     for line in _git_text(_git_small(path, st, check, "unreadable")).splitlines():
@@ -1320,7 +1335,7 @@ def _git_index(gitdir, check):
     """sha256 of the index's raw bytes (J-9), read as at most GIT_INDEX_MAX + 1 bytes (J-8)."""
     check()
     try:
-        path, st = _git_walk(gitdir, ["index"], _GIT_MISSING)
+        path, st = _git_walk(gitdir, ["index"], _GIT_MISSING, check)
     except _GitStop as stop:
         raise _GitStop("no index" if stop.args[0] == _GIT_MISSING else stop.args[0])
     if not stat.S_ISREG(st.st_mode):
@@ -1360,14 +1375,16 @@ def _git_lstat(path, missing):
     return st
 
 
-def _git_walk(base, parts, missing):
+def _git_walk(base, parts, missing, check):
     """(path, lstat) of base/parts..., every component below base lstat'ed
-    in turn, so no symlink is followed at any of them (J-6)."""
+    in turn, so no symlink is followed at any of them (J-6), the budget
+    checked before each lstat (K-6)."""
     path, st = base, None
     for part in parts:
         if st is not None and not stat.S_ISDIR(st.st_mode):
             raise _GitStop(missing)
         path = os.path.join(path, part)
+        check()
         st = _git_lstat(path, missing)
     return path, st
 

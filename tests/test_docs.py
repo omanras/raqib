@@ -187,7 +187,8 @@ def test_m42_redo2_e2_e6_readme_names_the_holes():
     """E-2: the SILENCE-EMPTY row says "no start and no tool call" and names
     the open SILENCE-NOSTART; E-6: code on stdin, here-doc or script."""
     (row,) = [line for line in section("What it catches").splitlines() if line.startswith("| SILENCE-EMPTY |")]
-    assert "or ended with no start and no tool call" in row and "SILENCE-NOSTART, M4.3" in row
+    assert "or ended with no start and no tool call" in row and "SILENCE-NOSTART, a later task" in row   # K-3
+    assert "SILENCE-NOSTART, M4.3" not in README
     cannot = " ".join(section("What it cannot see").split())
     assert ("code given to a shell on stdin, by a here-document or a here-string, or in a script file: only the"
             " shell or the script is recorded") in cannot

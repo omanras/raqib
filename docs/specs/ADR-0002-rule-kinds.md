@@ -171,26 +171,46 @@ draft holes accepted, plus J-4, J-7 and J-9):
 
 - holes HEAD-UNMOVED: "the rule sees that the head moved, not why: an empty commit, a commit of other files, a checkout or switch, a reset, or a hash written into .git/HEAD or a ref all count as moved"
 - holes HEAD-UNMOVED: "an unborn branch (no commit yet) is git_error "no ref": a session in a fresh repository is unknown (partial) (J-7)"
-- holes HEAD-UNMOVED: "a symlinked .git or a link below it, a gitdir that is absolute, UNC or a device path, a head in a SHA-256 repository, or a head not read within 50 ms is null: unknown (partial)"
+- holes HEAD-UNMOVED: "a symlinked .git or a link below it, a gitdir that is absolute, above the cwd, UNC or a device path, a head in a SHA-256 repository, or a head not read within 50 ms is null: unknown (partial)"
+- holes HEAD-UNMOVED: "a reftable repository (HEAD names refs/heads/.invalid; its refs are in reftable/, which is not read) is unreadable: unknown (partial) (K-3)"
+- holes HEAD-UNMOVED: "a packed-refs file over 1 MiB is unreadable: a head that is only there is unknown (partial) (K-3)"
 - holes HEAD-UNMOVED: "only cwd/.git is read: a session started in a subdirectory, a second repository, a nested repository or a submodule edited from the parent's cwd is judged against the cwd's .git or not at all"
-- holes HEAD-UNMOVED: "GIT_DIR, GIT_WORK_TREE, git -C or --git-dir in the agent's commands act on another repository than the one the hook reads"
-- holes HEAD-UNMOVED: "a linked worktree: its .git file names an absolute gitdir, which is not followed (J-6), and its commondir is not read (J-7), so the session is unknown (partial)"
+- holes HEAD-UNMOVED: "GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, git -C or --git-dir in the agent's commands act on another repository or index than the one the hook reads (K-3)"
+- holes HEAD-UNMOVED: "a linked worktree, whose .git file names an absolute gitdir or (worktree.useRelativePaths) a relative one above the cwd, and a submodule (gitdir: ../.git/modules/<name>) are never followed (J-6, K-2), and a worktree's commondir is not read (J-7): the session is unknown (partial)"
+- holes HEAD-UNMOVED: "a file system mounted under the project directory (a network share) looks like a directory to the hook, which reads it as one (K-2)"
+- holes HEAD-UNMOVED: "a Windows device name written with a space before its extension (CON .txt) is not refused by name; it is lstat'ed and never opened, since it is not a regular file (K-3)"
 - holes HEAD-UNMOVED: "edits whose path is not under the start line's cwd are not triggers: edits outside the repository, in a second repository, or with no readable path (J-4)"
 - holes HEAD-UNMOVED: "edits made through Bash (sed -i, a redirect, cp, mv) are not triggers: only Edit, Write, MultiEdit and NotebookEdit are"
 - holes HEAD-UNMOVED: "a session with no stop or session_end after an edit leaves that edit unjudged (partial); SILENCE-OPEN has the session"
+- holes HEAD-UNMOVED: "an edit before the session's first session_start is unjudged (partial: edit before the start record), never dropped (K-4)"
 - holes HEAD-UNMOVED: "the start is the session's first session_start line: a session resumed after the human committed or staged counts that as a move"
 - holes INDEX-UNTOUCHED: "the index is hashed as raw bytes: git status, git diff or any command that refreshes stat data rewrites it with nothing staged, and that counts as touched, a false negative (J-9)"
 - holes INDEX-UNTOUCHED: "staging any file counts, not the edited ones: git add of another file, git add -N, git update-index, git read-tree"
 - holes INDEX-UNTOUCHED: "a commit rewrites the index: a commit of other files counts as touched"
 - holes INDEX-UNTOUCHED: "a repository with no index yet (nothing ever staged) is null: unknown (partial) (J-7)"
-- holes INDEX-UNTOUCHED: "a symlinked .git or a link below it, a gitdir that is absolute, UNC or a device path, an index over 64 MiB, or an index not hashed within 50 ms is null: unknown (partial)"
+- holes INDEX-UNTOUCHED: "a symlinked .git or a link below it, a gitdir that is absolute, above the cwd, UNC or a device path, an index over 64 MiB, or an index not hashed within 50 ms is null: unknown (partial)"
 - holes INDEX-UNTOUCHED: "only cwd/.git is read: a session started in a subdirectory, a second repository, a nested repository or a submodule edited from the parent's cwd is judged against the cwd's .git or not at all"
-- holes INDEX-UNTOUCHED: "GIT_DIR, GIT_WORK_TREE, git -C or --git-dir in the agent's commands act on another repository than the one the hook reads"
-- holes INDEX-UNTOUCHED: "a linked worktree: its .git file names an absolute gitdir, which is not followed (J-6), and its commondir is not read (J-7), so the session is unknown (partial)"
+- holes INDEX-UNTOUCHED: "GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, git -C or --git-dir in the agent's commands act on another repository or index than the one the hook reads (K-3)"
+- holes INDEX-UNTOUCHED: "a linked worktree, whose .git file names an absolute gitdir or (worktree.useRelativePaths) a relative one above the cwd, and a submodule (gitdir: ../.git/modules/<name>) are never followed (J-6, K-2), and a worktree's commondir is not read (J-7): the session is unknown (partial)"
+- holes INDEX-UNTOUCHED: "a file system mounted under the project directory (a network share) looks like a directory to the hook, which reads it as one (K-2)"
+- holes INDEX-UNTOUCHED: "a Windows device name written with a space before its extension (CON .txt) is not refused by name; it is lstat'ed and never opened, since it is not a regular file (K-3)"
 - holes INDEX-UNTOUCHED: "edits whose path is not under the start line's cwd are not triggers: edits outside the repository, in a second repository, or with no readable path (J-4)"
 - holes INDEX-UNTOUCHED: "edits made through Bash (sed -i, a redirect, cp, mv) are not triggers: only Edit, Write, MultiEdit and NotebookEdit are"
 - holes INDEX-UNTOUCHED: "a session with no stop or session_end after an edit leaves that edit unjudged (partial); SILENCE-OPEN has the session"
+- holes INDEX-UNTOUCHED: "an edit before the session's first session_start is unjudged (partial: edit before the start record), never dropped (K-4)"
 - holes INDEX-UNTOUCHED: "the start is the session's first session_start line: a session resumed after the human committed or staged counts that as a move"
+
+REDO (2026-11-03, Amendment K): the holes above are tree.HOLES as K-2,
+K-3 and K-4 leave them. K-2 amends J-6: a relative gitdir is followed only
+when it resolves under the cwd, so a submodule's and a linked worktree's
+gitdir (absolute or relative) are never followed, and a network mount
+under the project is a named hole. K-3 names reftable, packed-refs over
+1 MiB, GIT_INDEX_FILE, relative-path worktrees and the "CON .txt" device
+form. K-4 makes an edit before the first session_start unknown.
+
+Note (2026-11-03, M4.3 REDO, Amendment K, K-3; corrects the "open demand
+SILENCE-NOSTART (M4.3, E-2)" line of the M4.2 REDO-2 note above): M4.3 did
+not build SILENCE-NOSTART; it stays open for a later task.
 
 Ratio after M4.3: 4 : 7 : 6.
 
