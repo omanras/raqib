@@ -1,30 +1,30 @@
-# HANDOFF — M5.2  (phase 5: proxy source, first non-Claude agent)
-Task: add the `proxy` capture source (ADR-0003): watch any HTTP-speaking agent; first Kimi.
+# HANDOFF — M5.3  (phase 5: os source from Sysmon + CROSS-SOURCE anchor)
+Task: add the `os` capture source from Sysmon on Windows (ADR-0003) and the
+first rule that reads the gap between what was asked and what happened.
 Scope:
-  raqib/hooks/ (capture.py, new common.py, new proxy.py), raqib/rules/trace.py, raqib/report.py,
-  raqib/cli.py (proxy subcommand), raqib/ui.py (source column), tests/, tools/, README.md,
-  docs/THREAT_MODEL.md (source lines), docs/specs/ADR-0003-*.md, docs/review/
-
+  raqib/hooks/ (new os_sysmon.py; common.py reuse), raqib/cli.py (os-sysmon subcommand),
+  raqib/rules/trace.py, raqib/rules/catalog/, raqib/rules/engine.py, raqib/report.py (ids),
+  tests/, README.md, docs/THREAT_MODEL.md, docs/specs/ADR-0002-rule-kinds.md (note under
+  the table), docs/specs/ADR-0003-capture-sources.md, docs/review/
 Exit criteria:
-- E1 `raqib/hooks/common.py`: hashing, redaction, input_meta, command_head;
-     capture.py and proxy.py import it. Hook fixtures pass byte-for-byte.
-- E2 `python -m raqib proxy --listen 127.0.0.1:PORT --upstream URL --log PATH`:
-     plain HTTP in, HTTPS out, bytes forwarded unchanged, no header added, no
-     retry, no call the agent did not make (A4). Streaming passes through.
-     Upstream failure -> one silence-class record (A3).
-- E3 OpenAI chat/completions (tool_calls) and Anthropic messages (tool_use /
-     tool_result): a tool call -> `pre`, its result in the next request ->
-     `post`, same seq. Hashes only. Records carry `source: "proxy"`; hook
-     records gain `source: "hook"`; trace.py defaults a missing source to hook.
-- E4 `raqib report` shows source per finding; mixed-source traces work.
-     Fixtures: one OpenAI-style and one Anthropic-style recorded session,
-     each with a positive and a negative finding.
-- E5 README "Watch another agent": any OpenAI-compatible CLI pointed at the
-     proxy via its base-URL setting (Kimi's setting named if known, else
-     "see the agent's docs"); a synthetic recorded session as fixture (the
-     real Kimi run is the commander's field test, recorded in docs/review).
-     ADR-0003 status -> "accepted (M5.2, <date>)". Gate green, ubuntu + windows.
-
-Not in scope: os source (M5.3), CROSS-SOURCE rule, TLS termination, auth.
-Commit: `landed: M5.2 proxy source` or `STOP: M5.2 <reason>`.
+- E1 `python -m raqib os-sysmon --root PID --log PATH [--from FILE.xml]`: reads
+     Sysmon events 1, 11, 3 for the tree under PID (live: the operational
+     channel through `wevtutil qe` by absolute path, read-only; `--from`: an
+     exported XML, offline). Each event -> `pre`+`post`, `source: "os"`, tool
+     `process` | `file` | `net`, hashes of command line / path / destination,
+     input_meta via common.py (program names only). Never the arguments.
+- E2 Fixture: a synthetic Sysmon XML in the shape discover.parse_sysmon already
+     reads (user `user`, host `host`, documentation IPs); parsing tests on it.
+     The real export under the default config is the commander's field test.
+- E3 CROSS-SOURCE (anchor, high): with proxy/hook and os records in one window,
+     a `pre` for a shell tool with no os `process` within W seconds, or an os
+     `process` whose program is in no shell `pre` within W. W declared in the
+     rule (default 10 s); unknown when either source is absent (A3 note, never
+     a finding). Fixtures: asked-not-done, done-not-asked, matched (negative).
+- E4 Gate kinds line anchor=4; README counts 13 rules, row added; the ADR-0002
+     table note gains the row; THREAT_MODEL: os records are the only ones the
+     agent does not write, and what they still miss (in-process actions,
+     memory-only tools, Sysmon config gaps). Gate green ubuntu + windows.
+Not in scope: Linux os source, blocking (A4), UI beyond the source tag.
+Commit: `landed: M5.3 os source + cross-source` or `STOP: M5.3 <reason>`.
 Read HANDOFF.md and do only the task it specifies.

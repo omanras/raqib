@@ -128,3 +128,16 @@ memory, the trace read once at start (A-9); a missing common.py writes its
 RAQIB-SILENCE line into the trace too (A-7); trace.py reports a
 RAQIB-SILENCE line as such (A-13). Lines carry `tool_hashed: true` when a
 tool name or id was replaced by its hash (A-2).
+
+## Amendment B (the Table, 2026-11-03) - judgement on M5.2 (721126a + 2b69c77)
+- A-1..A-13 MET as cited; the Table read `_guard` (catch-all, silence line,
+  bytes relayed) and `_allowed` (Host exact, no Origin, no Upgrade) on the
+  branch; TLS context verified earlier.
+- CI runs 41583717701 and 41589165262 success on six jobs each (read from
+  api.github.com); gate 1792 passed, 7 skipped; scope clean.
+- Builder readings accepted; recorded holes: Anthropic top-level system
+  prompt not in the key; pairing by position on a repeated id; merge
+  gated after commit (ledger, builder).
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Phase 5 exit, first half: an agent other than Claude Code can be watched
+  end to end through the proxy; the field proof (Kimi) is the commander's.
