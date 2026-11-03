@@ -102,6 +102,9 @@ CATALOG = os.path.join(ROOT, "raqib", "rules", "catalog")
 EVENTS = os.path.join(ROOT, "tests", "fixtures", "eval", "events.json")
 # G-6: where eval's labelled events come from, in --help and in the exit-2 message.
 EVENTS_SOURCE = "a checkout's tests/fixtures/eval/events.json or --events FILE"
+# M5.1b C-3: --root is made absolute as this host does (os.path.abspath).
+ROOT_HELP = ("directory the scope paths are relative to (default: each line's cwd); made absolute as this"
+             " host does (os.path.abspath): on Windows /x means \\x on the current drive, e.g. C:\\x")
 
 
 class UsageError(Exception):
@@ -118,8 +121,7 @@ def _parser():
                         help="a path of the task's declared scope (repeatable)")
         sp.add_argument("--handoff", metavar="FILE",
                         help="read the scope from a HANDOFF.md Scope: block (root: the file's directory)")
-        sp.add_argument("--root", metavar="DIR",
-                        help="directory the scope paths are relative to (default: each line's cwd)")
+        sp.add_argument("--root", metavar="DIR", help=ROOT_HELP)
         sp.add_argument("--gap-seconds", type=float, metavar="N",
                         help="SILENCE-GAP limit (default: RAQIB_GAP_SECONDS or 60)")
         sp.add_argument("--catalog", default=CATALOG, metavar="DIR", help="rule catalog directory")

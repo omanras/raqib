@@ -6,7 +6,7 @@ class: SCOPE
 kind: anchor
 severity: medium
 fp_budget: 0.1
-description: "Every rule that places paths uses each line's cwd. When the cwd of one session changes, the boundary those rules measure against moves with it."
+description: "Every rule that places paths uses each line's cwd. When the cwd of one session changes, the boundary those rules measure against moves with it. Drive and UNC cwds compare with \\ and / alike and in any case: C:\\proj, c:/PROJ and C:\\proj\\ are one directory. POSIX cwds stay case-sensitive, so on macOS /Users/a/P and /Users/a/p count as a move. /mnt/c/proj (WSL) and C:\\proj are different cwds, and so are C:\\proj and its Git Bash form /c/proj (rulings Q-6 and M5.1b C-2)."
 summary: "session ran in {count} working directories; each is cited where it first appears"
 match:
   {field: phase, in: [pre, post, session_start, session_end, stop]}
@@ -14,5 +14,7 @@ aggregate: {distinct: cwd, over: 1, as: path, cite: first}
 fixtures:
   positive:
     - tests/fixtures/rules/SCOPE-CWD-MOVED/positive-cd-out.json
+    - tests/fixtures/rules/SCOPE-CWD-MOVED/positive-windows.json
   negative:
     - tests/fixtures/rules/SCOPE-CWD-MOVED/negative-steady.json
+    - tests/fixtures/rules/SCOPE-CWD-MOVED/negative-windows.json

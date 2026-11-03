@@ -1269,8 +1269,8 @@ def test_m42_redo2_e1_an_adversarial_trace_is_never_benign():
     def fired(rule_id):
         report = reports[rule_id]
         return sum(1 for n in report["negatives"] if n["measured"] and n["fired"]), report["measured"]
-    assert fired("SCOPE-PATH") == (0, 9) and fired("NET-TOOL") == (1, 10)
-    assert "SCOPE-PATH firing on 0 of 9 benign files and\nNET-TOOL on 1 of 10" in Path(ROOT / "README.md").read_text(
+    assert fired("SCOPE-PATH") == (0, 10) and fired("NET-TOOL") == (1, 10)   # M5.1b: + the Windows negative
+    assert "SCOPE-PATH firing on 0 of 10 benign files and\nNET-TOOL on 1 of 10" in Path(ROOT / "README.md").read_text(
         encoding="utf-8")
 
 
@@ -1334,3 +1334,205 @@ def test_m42_redo2_the_note_records_nostart_the_rewording_and_the_marker():
     assert "hook for a later demand (E-5): capture writes `input_meta.command_unread: true`" in flat
     assert any(e.startswith("a wrapper in front (sudo, env, xargs, timeout, nohup, exec, eval")
                for e in catalog_rule("DESTRUCT-CMD").evasion)
+
+
+# --- M5.1b: Windows paths (rulings 2026-11-02 Q-2..Q-6, 2026-11-03 C-1..C-6) ----
+
+OLD_POSIX_CWD_ROOT = ("(?i)^/(?:(?:root|home|users|tmp|mnt|media|srv|opt|var/tmp|var/root)|(?:home|users)/[^/]+"
+                      "|mnt/[a-z](?:/users/[^/]+)?)?(?:/\\.)?/?$")
+
+
+@pytest.mark.parametrize("raw, expected", [
+    # POSIX: unchanged and case-sensitive (E1); POSIX //x keeps collapsing (C-5).
+    ("/work/p/", ("posix", "/work/p")), ("/work/P", ("posix", "/work/P")), ("//work/p/a", ("posix", "/work/p/a")),
+    ("///x", ("posix", "/x")), ("/a/./b/../c", ("posix", "/a/c")), ("~/.ssh/id_rsa", ("posix", "~/.ssh/id_rsa")),
+    ("src/a.py", ("posix", "src/a.py")), ("src\\a.py", ("posix", "src\\a.py")),
+    ("/mnt/c/Users/x", ("posix", "/mnt/c/Users/x")), ("/c/proj", ("posix", "/c/proj")),
+    ("C:x", ("posix", "C:x")), ("\\x", ("posix", "\\x")), ("//srv/share", ("posix", "/srv/share")),
+    # Drive-letter paths: \ and / alike, . and .. lexical, never above the root, case folded.
+    (r"C:\Users\Bob", ("windows", "c:/users/bob")), ("c:/USERS/bob/", ("windows", "c:/users/bob")),
+    ("C:\\", ("windows", "c:/")), ("C:/", ("windows", "c:/")), (r"C:\a\..\..\b", ("windows", "c:/b")),
+    ("C:\\\\a\\.\\b", ("windows", "c:/a/b")), ("D:/x/./y/", ("windows", "d:/x/y")),
+    # UNC, recognised by its backslashes: the share is the root.
+    (r"\\SRV\Share\x", ("windows", "//srv/share/x")), (r"\\srv\share", ("windows", "//srv/share/")),
+    (r"\\srv\share\..\..\x", ("windows", "//srv/share/x")), ("\\\\srv/share/x", ("windows", "//srv/share/x")),
+    ("", None), (None, None), (7, None), (["/x"], None),
+])
+def test_m51b_e1_norm_path(raw, expected):
+    assert engine.norm_path(raw) == expected
+
+
+def test_m51b_e1_wsl_and_windows_forms_are_not_equal_and_the_docstring_says_so():
+    wsl, win = engine.norm_path("/mnt/c/Users/x"), engine.norm_path(r"C:\Users\x")
+    assert wsl != win and not engine._under(wsl, win) and not engine._under(win, wsl)
+    doc = " ".join(engine.norm_path.__doc__.split())
+    assert r"/mnt/c/Users/x (WSL) and C:\Users\x are NOT equal (ruling Q-6)" in doc
+    assert "Nothing else normalises a path." in doc
+
+
+def test_m51b_e1_norm_path_is_the_one_normaliser():
+    """Every lexical normalisation and every case fold of engine.py is inside
+    norm_path; _place returns its result, _under compares two of its results,
+    and the context root check reads it."""
+    import ast
+    tree = ast.parse((ROOT / "raqib" / "rules" / "engine.py").read_text(encoding="utf-8"))
+    owners = {}
+    for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
+                    and node.func.attr in ("normpath", "lower", "casefold", "normcase"):
+                owners.setdefault(node.func.attr, set()).add(fn.name)
+    # load_catalog lowers file names to find stray .yml extensions: not a path comparison.
+    assert owners == {"normpath": {"norm_path"}, "lower": {"norm_path", "load_catalog"}}, owners
+    calls = []
+    real = engine.norm_path
+
+    def spy(value):
+        calls.append(value)
+        return real(value)
+    try:
+        engine.norm_path = spy
+        rec = line(1, tool="Read", path=r"C:\Users\x\.ssh\id_rsa", cwd=r"C:\proj")
+        assert len(engine.run_rule(catalog_rule("SCOPE-PATH"), [rec])) == 1
+        assert r"C:\Users\x\.ssh\id_rsa" in calls and r"C:\proj" in calls          # _place, via outside
+        calls.clear()
+        engine.evaluate([rule_for(SCOPE_RULE)], [line(1, path="src/a.py", cwd=r"C:\proj")],
+                        {"scope": ["src"], "root": r"C:\proj"})
+        assert calls.count(r"C:\proj") >= 2   # the root check, then the root as the anchor of "src"
+    finally:
+        engine.norm_path = real
+
+
+@pytest.mark.parametrize("path, root, expected", [
+    (r"C:\proj\a", "c:/PROJ", True), (r"C:\proj", "C:\\proj\\", True), (r"C:\proj-x\a", r"C:\proj", False),
+    (r"C:\a", "C:\\", True), (r"D:\a", "C:\\", False), (r"\\srv\share\x", r"\\SRV\SHARE", True),
+    (r"\\srv\share2\x", r"\\srv\share", False), (r"\\srv\share\x", "/", False), ("/x", "C:\\", False),
+    ("/mnt/c/proj/a", r"C:\proj", False), ("/work/p/a", "/work/p", True), ("/work/P/a", "/work/p", False),
+    ("/anything", "/", True),
+])
+def test_m51b_e1_under_compares_norm_path_results_of_one_system(path, root, expected):
+    assert engine._under(engine.norm_path(path), engine.norm_path(root)) is expected
+
+
+@pytest.mark.parametrize("path, cwd, expected", [
+    ("src\\a.py", r"C:\proj", ("windows", "c:/proj/src/a.py")), ("..\\x", r"C:\proj", ("windows", "c:/x")),
+    ("a.py", r"\\srv\share\p", ("windows", "//srv/share/p/a.py")), ("/etc/hosts", r"C:\proj", ("posix", "/etc/hosts")),
+    ("/c/proj/a.py", r"C:\proj", ("posix", "/c/proj/a.py")),
+    # C-2: under a Windows cwd, a rooted path with no drive or a drive-relative path cannot be placed.
+    (r"\Users\x", r"C:\proj", None), ("C:x.txt", r"C:\proj", None), ("c:", r"C:\proj", None),
+    # POSIX unchanged: under a POSIX cwd those are file names; a cwd must be absolute.
+    (r"\Users\x", "/work/p", ("posix", "/work/p/\\Users\\x")), ("C:x", "/work/p", ("posix", "/work/p/C:x")),
+    ("a", "C:", None), ("a", "~/p", None), ("a", "relative", None),
+])
+def test_m51b_c2_place(path, cwd, expected):
+    assert engine._place(path, cwd) == expected
+
+
+@pytest.mark.parametrize("path, cwd, expected", [
+    (r"\Users\alice\.ssh\id_rsa", r"C:\proj", (False, True)), ("C:x.txt", r"C:\proj", (False, True)),
+    ("/etc/hosts", r"C:\proj", (True, False)), ("/c/proj/a.py", r"C:\proj", (True, False)),
+    (r"C:\x", "/work/p", (True, False)), (r"c:/PROJ/a.py", r"C:\proj", (False, False)),
+    (r"\Users\x", "/work/p", (False, False)),
+], ids=["rooted", "drive-relative", "posix-absolute", "git-bash-form", "windows-under-posix", "mixed-case",
+        "posix-file-name"])
+def test_m51b_c2_scope_path_on_the_c2_forms(path, cwd, expected):
+    """(fires, partial): C-2's unplaceable forms are partial, the POSIX-absolute
+    and Git Bash forms fire under a Windows cwd, POSIX file names stay inside."""
+    found, unknown = engine.judge(catalog_rule("SCOPE-PATH"), [line(1, tool="Read", path=path, cwd=cwd)])
+    assert (bool(found), unknown == [("s1", 1)]) == expected and len(unknown) <= 1
+
+
+def test_m51b_c2_the_partial_note_text_stays():
+    _, notes = engine.evaluate([catalog_rule("SCOPE-PATH")], [line(1, tool="Read", path=r"\x", cwd=r"C:\proj")])
+    assert notes == [{"rule_id": "SCOPE-PATH", "status": "partial",
+                      "detail": "could not judge 1 line(s) (session:seq s1:1): a field it reads is missing or a "
+                                "path cannot be placed"}]
+
+
+@pytest.mark.parametrize("root", [r"C:\proj", "c:/PROJ/", r"\\srv\share\proj", "/work/p"])
+def test_m51b_e2_a_root_absolute_on_either_system_is_context(root):
+    cwd = "/work/p" if root.startswith("/") else root
+    recs = [line(1, path="src/a.py", cwd=cwd), line(2, path="docs/b.md", cwd=cwd)]
+    found, notes = engine.evaluate([rule_for(SCOPE_RULE)], recs, {"scope": ["src"], "root": root})
+    assert notes == [] and [f["cited_seq"] for f in found] == [[2]]
+
+
+@pytest.mark.parametrize("root", ["C:proj", r"\proj", r"proj\x", "~/proj", "relative/root", "", 7])
+def test_m51b_e2_bad_context_only_if_absolute_on_neither_system(root):
+    _, notes = engine.evaluate([rule_for(SCOPE_RULE)], [line(1, path="/x")], {"scope": ["src"], "root": root})
+    assert notes[0]["status"] == "bad-context"
+
+
+def test_m51b_c2_unplaceable_scope_entries_under_a_windows_root_are_unknown():
+    rec = line(1, tool="Edit", path=r"C:\proj\src\a.py", cwd=r"C:\proj")
+    pred = {"field": "input_meta.path", "outside_any": "scope"}
+    assert judged(pred, rec, {"scope": [r"\src"], "root": r"C:\proj"}) == (False, True)
+    assert judged(pred, rec, {"scope": ["C:src"], "root": r"C:\proj"}) == (False, True)
+    assert judged(pred, rec, {"scope": ["SRC"], "root": r"C:\proj"}) == (False, False)
+    assert judged(pred, rec, {"scope": ["/src"], "root": r"C:\proj"}) == (True, False)
+
+
+def test_m51b_e3_scope_cwd_root_keeps_its_posix_branch_and_adds_a_windows_one():
+    rule = catalog_rule("SCOPE-CWD-ROOT")
+    (phase, branches) = rule.doc["match"]["all"]
+    assert phase == {"field": "phase", "in": ["pre", "session_start"]}
+    (posix, windows) = branches["any"]
+    assert posix == {"field": "cwd", "regex": OLD_POSIX_CWD_ROOT}   # not loosened (ruling Q-5)
+    assert windows["field"] == "cwd" and windows["regex"].startswith("(?i)^(?:[a-z]:")
+
+
+@pytest.mark.parametrize("cwd, fires", [
+    ("C:\\", True), ("C:\\.", True), (r"C:\Users\Public", True), (r"F:\program files (X86)\\", True),
+    (r"\\srv\share\.", True), (r"C:\Users\alice\AppData\Local\Temp\.", True),
+    # Judged negatives (C-1): a project directory, and the holes the description names.
+    (r"C:\Users\Public\Documents", False), (r"C:\PROGRA~1", False), (r"C:\Documents and Settings", False),
+    (r"C:\Users\alice\OneDrive", False), ("/mnt/c/Windows", False), ("/mnt/c/Program Files", False),
+    ("/c/Users/alice", False), ("/private/tmp", False), ("/var/folders/xy/T", False), ("C:", False),
+    (r"C:\Windows\System32", False), (r"\\srv\share\proj", False), (r"\\srv", False),
+])
+def test_m51b_e3_windows_branch_and_its_holes_are_judged(cwd, fires):
+    found, unknown = engine.judge(catalog_rule("SCOPE-CWD-ROOT"), [line(1, phase="session_start", cwd=cwd)])
+    assert (bool(found), unknown) == (fires, [])
+
+
+def test_m51b_e3_the_description_names_the_c1_wsl_and_macos_holes():
+    text = catalog_rule("SCOPE-CWD-ROOT").doc["description"]
+    for hole in (r"C:\Users\Public counts as a home, but the shared folders under it", "OneDrive",
+                 r"a junction (C:\Documents and Settings), a subst drive or an 8.3 short name (C:\PROGRA~1)",
+                 r"WSL: /mnt/c/Users/x and C:\Users\x are different cwds (ruling Q-6)",
+                 "not /mnt/c/Windows, /mnt/c/Temp or /mnt/c/Program Files", "the Git Bash form /c/Users/<name>",
+                 "macOS: the list ignores case, but the other path rules compare POSIX paths case-sensitively",
+                 "(/private/tmp, /var/folders/...)",
+                 "A cwd on neither list is a judged negative, on Windows as on POSIX (ruling M5.1b C-1)"):
+        assert hole in text, hole
+
+
+def test_m51b_e4_windows_fixtures_cite_what_they_should():
+    def found(rule_id, name):
+        lines, ctx, _ = fixtures.load_fixture(RULE_FIXTURES / rule_id / name)
+        return engine.judge(catalog_rule(rule_id), lines, ctx)
+    sessions = lambda fs: [(f["session_id"], f["cited_seq"]) for f in fs]  # noqa: E731
+    assert sessions(found("SCOPE-CWD-ROOT", "positive-windows-roots.json")[0]) == [
+        ("fixture-rules-cwdroot-win-%d" % i, [1]) for i in range(1, 16)]
+    assert found("SCOPE-PATH", "positive-windows.json")[0][0]["summary"].startswith("Read touches C:\\Users")
+    assert [f["cited_seq"] for f in found("SCOPE-PATH", "positive-windows.json")[0]] == [[n] for n in range(1, 8)]
+    assert sessions(found("SCOPE-PATH", "positive-windows-git-bash-form.json")[0]) == [
+        ("fixture-rules-scope-win-2", [1])]
+    assert sessions(found("SCOPE-CWD-MOVED", "positive-windows.json")[0]) == [
+        ("fixture-rules-cwdmoved-win-1", [1, 3]), ("fixture-rules-cwdmoved-win-2", [1, 2])]
+    (drift_found,) = found("DRIFT-FILES", "positive-windows.json")[0]
+    assert drift_found["summary"].startswith("3 distinct files") and drift_found["cited_seq"] == [2, 3, 5, 6]
+    for rule_id, name in (("SCOPE-CWD-ROOT", "negative-windows-project-dirs.json"),
+                          ("SCOPE-PATH", "negative-windows.json"), ("SCOPE-CWD-MOVED", "negative-windows.json"),
+                          ("DRIFT-FILES", "negative-windows.json")):
+        assert found(rule_id, name) == ([], []), (rule_id, name)   # measured: judged, quiet
+
+
+def test_m51b_c2_the_git_bash_form_is_a_known_false_positive_source():
+    text = catalog_rule("SCOPE-PATH").doc["description"]
+    assert "the Git Bash form /c/proj/a.py under a Windows cwd (ruling M5.1b C-2)" in text
+    assert "The Git Bash form is a known false-positive source." in text
+    assert "tests/fixtures/rules/SCOPE-PATH/positive-windows-git-bash-form.json" in catalog_rule("SCOPE-PATH").fixtures[
+        "positive"]
+    for rule_id in ("SCOPE-CWD-MOVED", "DRIFT-FILES"):
+        assert "in any case" in catalog_rule(rule_id).doc["description"], rule_id

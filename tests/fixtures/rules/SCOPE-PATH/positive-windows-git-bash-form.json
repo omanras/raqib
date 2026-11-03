@@ -1,0 +1,5 @@
+{"expect_seq": [1],
+ "lines": [
+  {"ts": "2026-10-16T13:00:01.000Z", "seq": 1, "session_id": "fixture-rules-scope-win-2", "phase": "pre", "tool": "Read", "tool_use_id": "toolu_pe-win-2_1", "input_sha256": "f5be7b9244a229383e9b1160cbfb3180a7cc8e0d5f9b57b25f7176de15f92a91", "input_meta": {"path": "/c/proj/src/app.py"}, "cwd": "C:\\proj"},
+  {"ts": "2026-10-16T13:00:03.000Z", "seq": 1, "session_id": "fixture-rules-scope-win-2", "phase": "post", "tool": "Read", "tool_use_id": "toolu_pe-win-2_1", "input_sha256": "f5be7b9244a229383e9b1160cbfb3180a7cc8e0d5f9b57b25f7176de15f92a91", "input_meta": {"path": "/c/proj/src/app.py"}, "output_sha256": "04a6c47d19eb5c1a0296c6949c48b05c4cb5ee5c9dd1a91388a8c706968043ed", "output_meta": {"scan": "full", "secret_kinds": []}, "ok": true, "cwd": "C:\\proj"}
+]}

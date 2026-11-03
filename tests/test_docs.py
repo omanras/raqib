@@ -84,9 +84,25 @@ def test_m63_e3_first_screen_is_install_and_watch():
         assert step in manual, step
     assert "claude/v0.1" not in README and "--branch" not in README
     assert headings.index("Manual steps") > headings.index("How it works")
-    # G-7: the Windows path-rules caveat is on the first screen.
-    assert ("On Windows the rules place POSIX paths only until M5.1b: a scope with a drive path is bad-context,"
-            " so the scope rules do not run there.") in section("Install and watch").splitlines()
+    # G-7: the Windows path-rules line is on the first screen; since M5.1b it
+    # says what the rules do with Windows paths (ruling C-4), not a caveat.
+    assert ("On Windows the path rules judge drive (`C:\\`) and UNC paths in any case, with `\\` or `/`;"
+            " `/mnt/c/...` (WSL) and `C:\\...` are different paths, and `--root /x` means `\\x` on the"
+            " current drive.") in section("Install and watch").splitlines()
+    assert "until M5.1b" not in README and "bad-context" not in README
+
+
+def test_m51b_threat_model_section_7_says_what_the_path_rules_do_on_windows():
+    """M5.1b C-4: section 7 no longer reports the silent SCOPE-CWD-ROOT gap
+    that M5.1b closed; it names the Windows list and the holes."""
+    platform = " ".join(THREAT.split("\n## 7. Platform\n", 1)[1].split("\n## ", 1)[0].split())
+    assert "Known silent gap" not in platform and "do not yet judge Windows paths" not in platform
+    assert "Linux, macOS and Windows: capture, installer and the path rules" in platform
+    for hole in ("`/mnt/c/...` (WSL) and `C:\\...` are different paths", "the Git Bash form `/c/...`",
+                 "a false-positive source", "8.3 short names", "OneDrive-redirected homes",
+                 "macOS paths compare case-sensitively", "cannot be placed; the rules report it as partial",
+                 "on Windows, `/x` means `\\x` on the current drive"):
+        assert hole in platform, hole
 
 
 def test_g1_readme_says_what_a_moved_package_does_per_platform():

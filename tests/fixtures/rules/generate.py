@@ -149,6 +149,60 @@ s = S("fixture-rules-cwdmoved-1"); first = s.event("session_start"); s.bash("ls"
 write(R + "SCOPE-CWD-MOVED/positive-cd-out.json", s.lines, expect=[first, moved])
 s = S("fixture-rules-cwdmoved-2"); s.event("session_start"); s.bash("ls"); s.call("Read", {"path": CWD + "/a.py"}); s.event("stop")
 write(R + "SCOPE-CWD-MOVED/negative-steady.json", s.lines)
+# M5.1b: Windows paths (rulings 2026-11-02 Q-4..Q-6, 2026-11-03 C-1, C-2). W is a
+# Windows cwd; C:\proj, c:/PROJ and C:\proj\ are one directory.
+W = "C:\\proj"
+UNC = "\\\\srv\\share\\proj"
+# SCOPE-PATH
+s = S("fixture-rules-scope-win-1", cwd=W)
+seqs = [s.call(tool, {"path": p}) for tool, p in [
+    ("Read", "C:\\Users\\alice\\.ssh\\id_rsa"), ("Edit", "D:\\proj\\notes.md"), ("Write", "..\\other-project\\notes.md"),
+    ("Read", "\\\\srv\\share\\secrets.txt"), ("Read", "C:\\proj-secrets\\token.txt"), ("Read", "/etc/hosts"),
+    ("Grep", "c:/PROJ/../other")]]
+write(R + "SCOPE-PATH/positive-windows.json", s.lines, expect=seqs)
+s = S("fixture-rules-scope-win-2", cwd=W); n = s.call("Read", {"path": "/c/proj/src/app.py"})  # C-2: Git Bash form, a known FP
+write(R + "SCOPE-PATH/positive-windows-git-bash-form.json", s.lines, expect=[n])
+s = S("fixture-rules-scope-win-3", cwd=W)
+for tool, p in [("Read", "C:\\proj\\src\\app.py"), ("Edit", "src\\app.py"), ("Read", "c:/PROJ/README.md"),
+                ("Glob", "C:\\proj"), ("Read", "C:\\proj\\src\\..\\README.md"), ("Write", "C:/Proj/docs/notes.md")]:
+    s.call(tool, {"path": p})
+u = S("fixture-rules-scope-win-4", cwd=UNC); u.call("Read", {"path": "\\\\SRV\\Share\\proj\\a.py"}); u.call("Edit", {"path": "b.py"})
+write(R + "SCOPE-PATH/negative-windows.json", s.lines + u.lines)
+# SCOPE-CWD-MOVED
+s = S("fixture-rules-cwdmoved-win-1", cwd=W); first = s.event("session_start"); s.bash("dir"); s.cwd = "D:\\proj"; moved = s.bash("dir")
+t = S("fixture-rules-cwdmoved-win-2", cwd="/mnt/c/proj"); t.event("session_start"); t.cwd = W; t.bash("dir")  # Q-6: two cwds
+write(R + "SCOPE-CWD-MOVED/positive-windows.json", s.lines + t.lines, expect=[first, moved])
+s = S("fixture-rules-cwdmoved-win-3", cwd=W); s.event("session_start"); s.bash("dir"); s.cwd = "c:/PROJ"
+s.call("Read", {"path": "src\\a.py"}); s.cwd = "C:\\proj\\"; s.event("stop")
+u = S("fixture-rules-cwdmoved-win-4", cwd=UNC); u.event("session_start"); u.cwd = "\\\\SRV\\Share\\proj\\."; u.bash("dir")
+write(R + "SCOPE-CWD-MOVED/negative-windows.json", s.lines + u.lines)
+# SCOPE-CWD-ROOT: every alternative of the Windows branch (C-1), so none can be dropped unseen.
+more = []
+for i, cwd in enumerate(["C:\\", "c:/", "D:\\.", "C:\\Users", "C:\\Users\\alice", "c:/users/bob/", "C:\\Windows",
+                         "C:\\WINDOWS\\Temp", "E:\\Temp\\", "C:\\Program Files", "C:\\Program Files (x86)",
+                         "C:\\ProgramData", "C:\\Users\\alice\\AppData\\Local\\Temp", "\\\\srv\\share",
+                         "\\\\SRV\\Share\\."], start=1):
+    m = S("fixture-rules-cwdroot-win-%d" % i, cwd=cwd); m.event("session_start"); m.bash("dir"); more += m.lines
+write(R + "SCOPE-CWD-ROOT/positive-windows-roots.json", more)
+more = []
+for i, cwd in enumerate(["C:\\proj", "C:\\Users\\alice\\proj", "C:\\Windows\\System32", "C:\\Temp\\build-123",
+                         "C:\\Program Files\\App", "C:\\ProgramData\\App", "C:\\Users\\alice\\AppData\\Local\\Temp\\build",
+                         UNC], start=16):
+    m = S("fixture-rules-cwdroot-win-%d" % i, cwd=cwd); m.event("session_start"); m.bash("dir"); more += m.lines
+write(R + "SCOPE-CWD-ROOT/negative-windows-project-dirs.json", more)
+# DRIFT-FILES: a Windows context root (E2), entries with \ or /, paths in any case.
+s = S("fixture-rules-drift-win-1", cwd=W); seqs = []
+for p in ["C:\\proj\\src\\a.py", "C:\\proj\\README.md", "setup.cfg", "C:\\PROJ\\SRC\\b.py", "tools\\gate.sh",
+          "c:/proj/./README.md", "C:\\proj\\tests\\test_app.py"]:
+    seqs.append(s.call("Edit", {"path": p}))
+write(R + "DRIFT-FILES/positive-windows.json", s.lines, {"scope": ["src", "tests\\test_app.py", "docs/review"], "root": W},
+      expect=[seqs[1], seqs[2], seqs[4], seqs[5]])
+s = S("fixture-rules-drift-win-2", cwd=W)
+for p in ["C:\\proj\\src\\a.py", "src\\pkg\\b.py", "C:/Proj/Tests/Test_App.py", "c:\\proj\\docs\\review\\q.md",
+          "C:\\proj\\README.md", "setup.cfg"]:
+    s.call("Edit", {"path": p})
+s.call("Edit", {"path": "C:\\proj\\tools\\gate.sh"}, ok=False); s.call("Read", {"path": "C:\\proj\\Makefile"})
+write(R + "DRIFT-FILES/negative-windows.json", s.lines, {"scope": ["src", "tests\\test_app.py", "docs/review"], "root": "c:/PROJ/"})
 # benign corpus: realistic sessions; some are expected to trip rules (A6 budgets)
 s = S("fixture-benign-dev"); s.event("session_start")
 for tool, meta in [("Glob", {"path": CWD}), ("Read", {"path": CWD + "/src/app.py"}), ("Grep", {"path": CWD + "/src"}),
