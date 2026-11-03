@@ -3,7 +3,7 @@ Task: the four path rules judge Windows paths via one normaliser in the
 engine; POSIX outcomes unchanged (rulings 2026-11-02-M5.1 Q-2..Q-6 and
 2026-11-03-M5.1b C-1..C-6, binding).
 Scope:
-  raqib/rules/engine.py, raqib/rules/context.py, raqib/cli.py, tests/, docs/review/, README.md (line 17),
+  raqib/rules/engine.py, raqib/rules/context.py, raqib/cli.py, tests/, docs/review/, README.md,
   docs/THREAT_MODEL.md (section 7), docs/specs/ADR-0001-architecture.md (builder note only),
   raqib/rules/catalog/{SCOPE-CWD-ROOT,SCOPE-CWD-MOVED,SCOPE-PATH,DRIFT-FILES}.yaml, .gitattributes
 

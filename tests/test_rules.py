@@ -1478,7 +1478,7 @@ def test_m51b_e3_scope_cwd_root_keeps_its_posix_branch_and_adds_a_windows_one():
     assert phase == {"field": "phase", "in": ["pre", "session_start"]}
     (posix, windows) = branches["any"]
     assert posix == {"field": "cwd", "regex": OLD_POSIX_CWD_ROOT}   # not loosened (ruling Q-5)
-    assert windows["field"] == "cwd" and windows["regex"].startswith("(?i)^(?:[a-z]:")
+    assert windows["field"] == "cwd" and windows["regex"].startswith("(?i)^(?:(?:\\\\\\\\[?.]\\\\)?[a-z]:")  # C-9
 
 
 @pytest.mark.parametrize("cwd, fires", [
@@ -1513,9 +1513,9 @@ def test_m51b_e4_windows_fixtures_cite_what_they_should():
         return engine.judge(catalog_rule(rule_id), lines, ctx)
     sessions = lambda fs: [(f["session_id"], f["cited_seq"]) for f in fs]  # noqa: E731
     assert sessions(found("SCOPE-CWD-ROOT", "positive-windows-roots.json")[0]) == [
-        ("fixture-rules-cwdroot-win-%d" % i, [1]) for i in range(1, 16)]
+        ("fixture-rules-cwdroot-win-%d" % i, [1]) for i in range(1, 18)]   # 16, 17: C-9 prefixes
     assert found("SCOPE-PATH", "positive-windows.json")[0][0]["summary"].startswith("Read touches C:\\Users")
-    assert [f["cited_seq"] for f in found("SCOPE-PATH", "positive-windows.json")[0]] == [[n] for n in range(1, 8)]
+    assert [f["cited_seq"] for f in found("SCOPE-PATH", "positive-windows.json")[0]] == [[n] for n in range(1, 9)]
     assert sessions(found("SCOPE-PATH", "positive-windows-git-bash-form.json")[0]) == [
         ("fixture-rules-scope-win-2", [1])]
     assert sessions(found("SCOPE-CWD-MOVED", "positive-windows.json")[0]) == [
@@ -1536,3 +1536,64 @@ def test_m51b_c2_the_git_bash_form_is_a_known_false_positive_source():
         "positive"]
     for rule_id in ("SCOPE-CWD-MOVED", "DRIFT-FILES"):
         assert "in any case" in catalog_rule(rule_id).doc["description"], rule_id
+
+
+# --- M5.1b C-7..C-9 (the Table, 2026-11-03, on the second STOP dad6065) -----------
+
+@pytest.mark.parametrize("raw, expected", [
+    # C-9: \\?\ and \\.\ are stripped before a drive path or UNC\server\share.
+    (r"\\?\C:\Users\Bob", ("windows", "c:/users/bob")), (r"\\.\C:\x", ("windows", "c:/x")),
+    (r"\\?\c:/x/", ("windows", "c:/x")), (r"\\?\UNC\SRV\Share\x", ("windows", "//srv/share/x")),
+    (r"\\.\unc\srv\share", ("windows", "//srv/share/")),
+    # Any other path under a prefix keeps the UNC reading (server ? or .), never a relative path.
+    (r"\\.\pipe\x", ("windows", "//./pipe/x")), (r"\\?\Volume{AB}\a", ("windows", "//?/volume{ab}/a")),
+    (r"\\?\C:", ("windows", "//?/c:/")), ("\\\\?\\UNC\\", ("windows", "//?/unc/")),
+    # Backslashes only (C-5): a slash form stays POSIX.
+    ("//?/C:/x", ("posix", "/?/C:/x")),
+])
+def test_m51b_c9_norm_path_strips_the_namespace_prefixes(raw, expected):
+    assert engine.norm_path(raw) == expected
+
+
+def test_m51b_c9_the_docstring_names_the_prefixes():
+    doc = " ".join(engine.norm_path.__doc__.split())
+    assert r"A \\?\ or \\.\ prefix is stripped first (C-9) when a drive path or UNC\server\share follows" in doc
+
+
+@pytest.mark.parametrize("path, cwd, fires", [
+    (r"\\?\C:\proj\a.py", r"C:\proj", False),                 # the ruling's case: inside C:\proj
+    (r"C:\proj\a.py", r"\\?\C:\proj", False), ("src\\a.py", r"\\.\C:\proj", False),
+    (r"\\?\UNC\srv\share\p\a", r"\\srv\share\p", False), (r"\\?\C:\other\a.py", r"C:\proj", True),
+    (r"\\.\pipe\x", r"C:\proj", True), (r"\\?\Volume{AB}\proj\a", r"C:\proj", True),
+])
+def test_m51b_c9_scope_path_through_the_prefixes(path, cwd, fires):
+    found, unknown = engine.judge(catalog_rule("SCOPE-PATH"), [line(1, tool="Read", path=path, cwd=cwd)])
+    assert (bool(found), unknown) == (fires, [])
+
+
+@pytest.mark.parametrize("cwd, fires", [
+    (r"\\?\C:\Users\alice", True),                                # the ruling's case
+    ("\\\\?\\C:\\", True), (r"\\.\D:\Windows\Temp", True), (r"\\?\UNC\srv\share", True),
+    (r"\\.\UNC\SRV\Share\.", True),
+    (r"\\?\C:\proj", False), (r"\\?\C:\Users\alice\proj", False), (r"\\?\UNC\srv\share\proj", False),
+    (r"unc\srv\share", False),                                       # UNC\ only behind a prefix
+])
+def test_m51b_c9_scope_cwd_root_through_the_prefixes(cwd, fires):
+    found, unknown = engine.judge(catalog_rule("SCOPE-CWD-ROOT"), [line(1, phase="session_start", cwd=cwd)])
+    assert (bool(found), unknown) == (fires, [])
+
+
+def test_m51b_c9_a_prefixed_cwd_is_the_same_cwd_and_the_descriptions_say_so():
+    recs = [line(1, phase="session_start", cwd=r"C:\proj"), line(2, phase="stop", cwd=r"\\?\C:\proj")]
+    assert engine.judge(catalog_rule("SCOPE-CWD-MOVED"), recs) == ([], [])
+    assert r"also behind a \\?\ or \\.\ prefix (\\?\C:\Users\<name>, \\?\UNC\server\share; ruling M5.1b C-9)" in \
+        catalog_rule("SCOPE-CWD-ROOT").doc["description"]
+    assert r"and so is \\?\C:\proj\a.py (a \\?\ or \\.\ prefix before a drive or UNC\ is stripped, ruling M5.1b C-9;" \
+        in catalog_rule("SCOPE-PATH").doc["description"]
+
+
+def test_m51b_c8_the_git_bash_fixture_stays_a_positive():
+    rule = catalog_rule("SCOPE-PATH")
+    name = "tests/fixtures/rules/SCOPE-PATH/positive-windows-git-bash-form.json"
+    assert name in rule.fixtures["positive"] and name not in rule.fixtures["negative"]
+    assert fixtures.fires(rule, ROOT / name)

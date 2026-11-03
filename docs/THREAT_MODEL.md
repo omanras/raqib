@@ -221,9 +221,10 @@ line; it is not a block. Install from the side that runs the agent
 (Windows or WSL), not both.
 
 Windows paths in the rules (M5.1b; rulings of 2026-11-02, Q-4 to Q-6, and
-2026-11-03, C-1 to C-3). One normaliser in the engine places every path:
-drive (`C:\`, `C:/`) and UNC (`\\server\share`) paths are compared with `\`
-and `/` alike and case folded; POSIX paths are unchanged and case-sensitive.
+2026-11-03, C-1 to C-3, C-8, C-9). One normaliser in the engine places every
+path: drive (`C:\`, `C:/`) and UNC (`\\server\share`) paths are compared
+with `\` and `/` alike and case folded, after a `\\?\` or `\\.\` prefix is
+stripped; POSIX paths are unchanged and case-sensitive.
 SCOPE-CWD-ROOT has a Windows list of its own (drive roots, `Users` and the
 homes under it, `Windows`, `Windows\Temp`, `Temp`, `Program Files`,
 `Program Files (x86)`, `ProgramData`, a home's `AppData\Local\Temp`, UNC
@@ -232,7 +233,10 @@ cwd on neither list is a judged negative. Known holes, written in the rule
 descriptions:
 - `/mnt/c/...` (WSL) and `C:\...` are different paths, and so are `C:\...`
   and the Git Bash form `/c/...`; under a Windows cwd the Git Bash form
-  makes SCOPE-PATH fire (a false-positive source);
+  makes SCOPE-PATH fire (a false-positive source). This is a known
+  false-positive source on Windows: an agent run from Git Bash that names
+  its own project as `/c/...` gets SCOPE-PATH findings. A positive fixture
+  records the firing (ruling C-8);
 - junctions, subst drives, 8.3 short names (`C:\PROGRA~1`) and
   OneDrive-redirected homes are compared as written, not resolved;
 - macOS paths compare case-sensitively.

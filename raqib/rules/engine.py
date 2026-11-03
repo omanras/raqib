@@ -440,6 +440,11 @@ WINDOWS_PATH = re.compile(r"[A-Za-z]:[\\/]|\\\\[^\\/]")
 # drive (\x, on the current drive) or a drive-relative one (C:x, against that
 # drive's own current directory, which the trace does not record).
 WINDOWS_UNPLACEABLE = re.compile(r"\\|[A-Za-z]:")
+# The Win32 file and device namespace prefixes \\?\ and \\.\ (C-9), in front of
+# a drive path or of UNC\server\share. Only those two are stripped: any other
+# path under a prefix (\\.\pipe\x, \\?\Volume{...}\x) keeps the UNC reading,
+# with ? or . as its server, so it is never placed inside a project.
+WINDOWS_PREFIX = re.compile(r"\\\\[?.]\\(?:(?=[A-Za-z]:[\\/])|[Uu][Nn][Cc](?=\\[^\\/]))")
 
 
 def norm_path(path):
@@ -452,7 +457,9 @@ def norm_path(path):
       Windows path: every \ becomes /, . and .. are resolved lexically and
       never climb above the drive root or the share, and the case is folded
       (str.lower, as ntpath.normcase): C:\Users\Bob and c:/users/bob/ are
-      one path, "c:/users/bob".
+      one path, "c:/users/bob". A \\?\ or \\.\ prefix is stripped first
+      (C-9) when a drive path or UNC\server\share follows: \\?\C:\x is
+      C:\x, and \\?\UNC\srv\share\x is \\srv\share\x.
     - Any other string is a POSIX path, normalised as before M5.1b
       (posixpath.normpath, a leading // collapsed to /) and case-sensitive:
       /work/P and /work/p are two paths. A \ in it is a file name character.
@@ -469,6 +476,11 @@ def norm_path(path):
         if placed.startswith("//"):
             placed = "/" + placed.lstrip("/")
         return ("posix", placed)
+    prefix = WINDOWS_PREFIX.match(path)
+    if prefix:   # C-9: \\?\C:\x -> C:\x; \\?\UNC\srv\share\x -> \srv\share\x -> \\srv\share\x
+        path = path[prefix.end():]
+        if path.startswith("\\"):
+            path = "\\" + path
     text = path.replace("\\", "/")
     if text[1] == ":":
         head, rest = text[:2], text[2:]

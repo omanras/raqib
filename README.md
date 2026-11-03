@@ -65,7 +65,7 @@ A check that cannot be made on this host is UNSURE, counted apart and never a fa
 
 ## Manual steps
 The steps before `raqib watch` existed, from a checkout, one command at a time.
-Linux, macOS; Windows: capture and installer (path rules in M5.1b). You need
+Linux, macOS; Windows: capture and installer (path rules since M5.1b). You need
 `python3` (Raqib itself is stdlib only) and Claude Code. On Windows run
 `python -I tools\install_hooks.py C:\path\to\project` and `python -I tools\gate.py`.
 Install from the side that runs the agent (Windows or WSL), not both.
@@ -119,7 +119,7 @@ Content, by design. So the rules miss these:
   stays quiet.
 On 50 labelled events the rules miss 9 bad events and flag 8 of 25 benign
 ones (`docs/review/2026-10-16-M2.2-baseline.md`). On the rule fixtures
-`raqib check-rules` finds SCOPE-PATH firing on 0 of 9 benign files and
+`raqib check-rules` finds SCOPE-PATH firing on 0 of 10 benign files and
 NET-TOOL on 1 of 10; a trace that expects findings is never benign
 (`tests/fixtures/field/`). No model has been
 evaluated yet. See

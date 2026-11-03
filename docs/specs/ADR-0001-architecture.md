@@ -104,6 +104,11 @@ section 4's rule paths are placed by one function, `norm_path()` in
 `raqib/rules/engine.py`. Drive-letter and UNC paths are compared with `\`
 and `/` alike and case folded; POSIX paths are unchanged and case-sensitive;
 a path of one system is never under a directory of the other, so
-`/mnt/c/...` and `C:\...` differ (ruling 2026-11-02 Q-6). Context `root` is
-accepted when absolute on either system. A-6 is not touched by this note.
+`/mnt/c/...` and `C:\...` differ (ruling 2026-11-02 Q-6). The `\\?\` and
+`\\.\` prefixes are stripped first (C-9). Context `root` is accepted when
+absolute on either system. A-6 is not touched by this note.
 Record: docs/review/2026-11-03-M5.1b.md.
+
+- C-7..C-9 (dated note, 2026-11-03, second STOP dad6065): README.md lines
+  17/68/122 in Scope ("0 of 10"); the Git Bash fixture is a positive; the
+  `\\?\` and `\\.\` prefixes are stripped by norm_path.

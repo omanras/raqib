@@ -103,6 +103,20 @@ def test_m51b_threat_model_section_7_says_what_the_path_rules_do_on_windows():
                  "macOS paths compare case-sensitively", "cannot be placed; the rules report it as partial",
                  "on Windows, `/x` means `\\x` on the current drive"):
         assert hole in platform, hole
+    # C-8: the Git Bash form is a known false-positive source on Windows, its fixture a positive.
+    assert ("This is a known false-positive source on Windows: an agent run from Git Bash that names its own"
+            " project as `/c/...` gets SCOPE-PATH findings. A positive fixture records the firing (ruling C-8)"
+            in platform)
+    # C-9: the namespace prefixes are stripped before the drive/UNC reading.
+    assert "case folded, after a `\\\\?\\` or `\\\\.\\` prefix is stripped" in platform
+
+
+def test_m51b_c7_readme_platform_line_says_since_m51b():
+    """C-7: README.md:68 no longer reads as if the Windows path rules were to
+    come; line 122's count is held by tests/test_rules.py (M4.2 REDO-2 E-1)."""
+    manual = section("Manual steps")
+    assert "Linux, macOS; Windows: capture and installer (path rules since M5.1b). You need" in manual
+    assert "path rules in M5.1b" not in README
 
 
 def test_g1_readme_says_what_a_moved_package_does_per_platform():
