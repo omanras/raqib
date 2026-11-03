@@ -212,7 +212,8 @@ change it. Recorded points are in `docs/review/2026-11-02-M6.1-questions.md`.
   `_context()` as `report --handoff`, read once at the start. The scope is
   printed and kept in watch.json. A clean watch of such a project ends
   CLEAN (exit 0, POSIX). On Windows the HANDOFF's root is a drive path,
-  which the engine reports as bad-context until M5.1b.
+  which the engine reports as bad-context until M5.1b. (Note 2026-11-03:
+  closed by M5.1b, ADR-0001 Amendment D; b6 runs on Windows.)
 - C-7 (B-7) A requested port (--port N, or 8765) that cannot be bound gives
   a free port, a `WARNING:` line, a band item, `port.warning` in watch.json
   and a line in the final report.

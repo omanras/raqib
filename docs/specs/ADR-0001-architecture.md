@@ -114,3 +114,21 @@ Record: docs/review/2026-11-03-M5.1b.md.
 - C-7..C-9 (dated note, 2026-11-03, second STOP dad6065): README.md lines
   17/68/122 in Scope ("0 of 10"); the Git Bash fixture is a positive; the
   `\\?\` and `\\.\` prefixes are stripped by norm_path.
+
+## Amendment D (the Table, 2026-11-03) — judgement on M5.1b (88737da + ce55d3b)
+- C-1..C-18 MET as cited; the Table read norm_path (ASCII_FOLD translate,
+  WINDOWS_PREFIX strip, one leading / before normpath) on the branch.
+- CI runs 41560874229 and 41564399473 success on six jobs each (read from
+  api.github.com); gate 1469 passed, 6 skipped; Windows xfailed 2 -> 0;
+  scope clean (widened by C-4, C-7).
+- A-6 is superseded by this note: Windows is supported from M5.1 (locking
+  with msvcrt, M5.1) and the path rules judge Windows paths from M5.1b.
+- ADR-0005 C-6's "bad-context until M5.1b" clause is closed: a drive-path
+  root is accepted (dated note added there).
+- C-17's CI autocrlf item stays open (gate.yml sets autocrlf false, so the
+  CRLF-default clone is not exercised by CI); listed for the morning paper.
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Ledger, Table: three STOPs on one task, each on a count or a word the
+  Scope pinned (README:122, ADR-0002:86) or the Table misnamed (C-11).
+  Rule: a task that touches a rule's evasion list or fixtures lists
+  ADR-0002 and README.md in Scope by default.
