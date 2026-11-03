@@ -1,6 +1,6 @@
 # ADR-0006 - The window: Raqib as an ordinary desktop program
 
-Status: proposed (the Table for the commander, 2026-11-03; M6.4).
+Status: accepted (M6.4, 2026-11-03; Amendment B). Proposed 2026-11-03.
 Amendments appended, never edited in place.
 
 ## Problem
@@ -105,3 +105,43 @@ on windows (read by the Table from the job log). Verdict: REDO.
   THREAT_MODEL at the next docs pass), P19 (3.14 is proven by the
   commander's field test, not by CI), P20.
 - A-15 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment B (the Table, 2026-11-03) - judgement on M6.4 (5b844ff + bccdb75 + 0987591)
+- A-1..A-13 MET as cited in the REDO section of
+  docs/review/2026-11-03-M6.4-questions.md; the Table read the A-1 delta
+  itself (tray.py: a hidden top-level window of its own class, WS_OVERLAPPED,
+  HWND_MESSAGE no longer used; TaskbarCreated registered and handled; a
+  failed re-add turns the tray off with a hole; stop() by a thread message)
+  and the A-5/A-12 delta (notify.FirstFinding.by_the_rule; watch.first_step
+  as loop()'s default on_step; `first_knock` in watch.json). Every REDO
+  change names its test (A-15, D-8).
+- CI, read by the Table from api.github.com: run 41662623060 (5b844ff) six
+  jobs success; run 41675043956 (bccdb75) five success, both windows gate
+  jobs failed on one assertion (the Open page test expected the fake
+  opener's note while the code rightly refuses under CI); run 41676368785
+  (0987591, the one-assertion fix) six jobs success. On windows the two Tk
+  window tests PASSED, and test_e4_real_tray_starts_and_stops_or_says_why
+  PASSED, which after A-7 means the icon came up on the runner.
+- Gate on the branch: 2448 passed, 14 skipped. Scope clean (widened by
+  A-4, A-12, A-13). Three commits on the branch (G-8: the builder's settings
+  forbid rewriting; the follow-up is a CI fix of one assertion).
+- R-1 (stop() and WM_NULL by PostThreadMessageW to the tray's own thread)
+  accepted: nothing is posted to any window. R-2: with the rule's knock off
+  (--no-notify, CI), FIRST-FINDING is "off" too, not "by the rule";
+  accepted, the record says "off". R-3: run() waits for an unconcluded
+  worker without limit, 30 s at a time, saying so each time: accepted (the
+  alternative is a watch that ends by being killed, A3/A4). R-4: no
+  message box for an ALARM exit; the window already showed the report:
+  accepted.
+- Status of this ADR: **accepted (M6.4, 2026-11-03)**. Decision text
+  unchanged; Amendments A and B are the record.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's
+  standing word ("do it / merge").
+- Table ledger for M6.4: one review, one REDO, one CI follow-up. The
+  Table's own misses: the Scope word "loop split only" could not hold the
+  E3 hook the HANDOFF itself asked for (corrected A-12); the reviewer agent
+  has no write tool, so the packet was filed by the Table; the HANDOFF
+  needed three trims to fit 30 lines. Field items for the commander: the
+  tray on a real desktop (icon, right-click menu, close hides, Explorer
+  restart re-adds); python.org 3.14 on Windows (P19); the knock under
+  pythonw reaches ~/.raqib/app.log (A-4).
