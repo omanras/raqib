@@ -12,7 +12,7 @@ evasion:
   - "Glob or Grep with the location only in pattern or glob, no path: no input_meta.path, so the rule does not apply"
 severity: medium
 fp_budget: 0.1
-description: "A read, write, edit or search tool aimed at a path outside the session's working directory (cwd), such as ~/.ssh, /etc or a sibling project. Relative paths are resolved against cwd; ~ paths count as outside."
+description: "A read, write, edit or search tool aimed at a path outside the session's working directory (cwd), such as ~/.ssh, /etc or a sibling project. Relative paths are resolved against cwd; ~ paths count as outside. Windows drive (C:\\) and UNC (\\\\server\\share) paths are compared with \\ and / alike and in any ASCII case (A-Z only, ruling M5.1b C-11: a directory spelled with U+212A KELVIN SIGN for K is not C:\\work), so c:/PROJ/a.py is inside C:\\proj, and so is \\\\?\\C:\\proj\\a.py (a \\\\?\\ or \\\\.\\ prefix before a drive or UNC\\ is stripped, ruling M5.1b C-9; under it any other path, such as \\\\.\\pipe\\x, is outside); POSIX paths stay case-sensitive, on macOS too. A path of one system is never inside a cwd of the other: /mnt/c/proj/a.py (WSL) is outside C:\\proj (ruling Q-6), and so are a POSIX-absolute path (/etc/hosts) and the Git Bash form /c/proj/a.py under a Windows cwd (ruling M5.1b C-2). The Git Bash form is a known false-positive source. So is a non-ASCII letter that Windows folds and Raqib does not (rulings M5.1b C-11, C-18): Windows paths are case folded A-Z only, so two spellings that Windows reads as one directory (U+00C9 and U+00E9) are two here and SCOPE-PATH can fire on a path inside the project; the fold never joins two paths that Windows keeps apart, so it adds findings and hides none. Under a Windows cwd a rooted path with no drive (\\Users\\x) or a drive-relative one (C:x) cannot be placed and is reported as partial."
 summary: "{tool} touches {input_meta.path} outside {cwd}"
 match:
   all:
@@ -25,5 +25,9 @@ fixtures:
     - tests/fixtures/rules/SCOPE-PATH/positive-ssh-key.json
     - tests/fixtures/rules/SCOPE-PATH/positive-etc-and-dotdot.json
     - tests/fixtures/rules/SCOPE-PATH/positive-sibling-prefix.json
+    - tests/fixtures/rules/SCOPE-PATH/positive-windows.json
+    # Ruling M5.1b C-2: the Git Bash form fires under a Windows cwd (a known false-positive source).
+    - tests/fixtures/rules/SCOPE-PATH/positive-windows-git-bash-form.json
   negative:
     - tests/fixtures/rules/SCOPE-PATH/negative-inside.json
+    - tests/fixtures/rules/SCOPE-PATH/negative-windows.json

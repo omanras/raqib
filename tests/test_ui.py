@@ -1,7 +1,6 @@
 """M3.1 read-only web view: exit criteria E1-E4 (HANDOFF.md)."""
 import io
 import json
-import os
 import re
 import sys
 import threading
@@ -233,15 +232,10 @@ def test_e3_serve_refuses_other_paths_and_foreign_hosts(server):
 
 # --- E4: the CLI -----------------------------------------------------------
 
-class WindowsRootGap(AssertionError):
-    """Raised only by the one assertion seen failing on Windows (CI runs
-    41399793492, 41400665599): `ui --scope . --root /` exits 3 there, not 0.
-    M5.1b E6 removes the marker below (ruling Amendment 3, F4/F5)."""
-
-
-@pytest.mark.xfail(os.name == "nt", strict=True, raises=WindowsRootGap,
-                   reason="path rules on Windows paths are M5.1b (ruling Amendment 3, F4/F5)")
 def test_e4_cli_writes_the_page_and_exits_like_report(tmp_path):
+    # M5.1b E6: no Windows marker. On Windows --root / is the current drive's
+    # root (ruling C-3), now a valid context root (E2): one file edited outside
+    # it is under DRIFT-FILES's limit, so the page is clean there as here.
     out = tmp_path / "view.html"
     code, text = raqib("ui", BLOCKED, "-o", out)
     assert code == 1 and "(alarm)" in text
@@ -250,8 +244,6 @@ def test_e4_cli_writes_the_page_and_exits_like_report(tmp_path):
     code, text = raqib("ui", FILE_TOOLS)
     assert code == 3 and text.startswith("<!doctype html>")
     code, _ = raqib("ui", FILE_TOOLS, "--scope", ".", "--root", "/")
-    if code == 3:  # exactly what Windows showed; any other code fails below
-        raise WindowsRootGap("ui --scope . --root / exited 3 (incomplete), not 0")
     assert code == 0
 
 

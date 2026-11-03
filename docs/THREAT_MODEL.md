@@ -210,8 +210,8 @@ or file contents. Everything below follows from that, or from the hooks.
 
 ## 7. Platform
 
-Linux, macOS; Windows: capture and installer (path rules in M5.1b, so the
-SCOPE and DRIFT rules do not yet judge Windows paths). Capture locks with
+Linux, macOS and Windows: capture, installer and the path rules (the SCOPE
+and DRIFT rules judge Windows paths since M5.1b). Capture locks with
 `fcntl` on POSIX and `msvcrt` on Windows; its deadline is `SIGALRM` on POSIX
 and a timer thread on Windows. The installer writes a POSIX shell command
 on POSIX and, on Windows, a command with no shell syntax that runs a short
@@ -220,11 +220,50 @@ Python launcher (Windows ruling of 2026-11-02, Amendment 2). On Windows a missin
 line; it is not a block. Install from the side that runs the agent
 (Windows or WSL), not both.
 
-Known silent gap until M5.1b: SCOPE-CWD-ROOT on a Windows cwd such as
-`C:\` or `C:\Users\<name>` gives no finding and no note, so a session run
-from a drive root or a home directory reads clean, against A3. This is the
-defect M5.1b fixes (ruling of 2026-11-02, Q-5; evidence table in the
-questions file added by STOP commit 37883c0, in docs/review).
+Windows paths in the rules (M5.1b; rulings of 2026-11-02, Q-4 to Q-6, and
+2026-11-03, C-1 to C-3, C-8, C-9, C-11, C-12, C-14, C-15). One normaliser
+in the engine places every path. A drive path (`C:\`, `C:/`) or a UNC path
+(`\\server\share`, recognised by its two leading backslashes only) is a
+Windows path: `\` and `/` compare alike, and ASCII case is folded (A-Z
+only). A `\\?\` or `\\.\` prefix is stripped only where a drive path or
+`UNC\` follows it; any other prefixed path (`\\.\pipe\x`) keeps the UNC
+reading and is outside every project. POSIX paths are unchanged and
+case-sensitive.
+SCOPE-CWD-ROOT has a Windows list of its own (drive roots, `Users` and the
+homes under it, `Windows`, `Windows\Temp`, `Temp`, `Program Files`,
+`Program Files (x86)`, `ProgramData`, a home's `AppData\Local\Temp`, UNC
+share roots), so a session from `C:\`, `C:\Users\<name>` or
+`C:\Users\Public` is a finding; a cwd on neither list is a judged negative.
+Known holes, written in the rule descriptions:
+- `/mnt/c/...` (WSL) and `C:\...` are different paths, and so are `C:\...`
+  and the Git Bash form `/c/...`. Under a Windows cwd the Git Bash form
+  makes SCOPE-PATH fire. This is a known false-positive source on Windows:
+  an agent run from Git Bash that names its own project as `/c/...` gets
+  SCOPE-PATH findings. A positive fixture records the firing (ruling C-8);
+- from WSL, SCOPE-CWD-ROOT lists only `/mnt/<drive>` and
+  `/mnt/<drive>/Users/<name>`, and no Git Bash form (`/c/Users/<name>`);
+- the forward-slash UNC form `//server/share` is read as a POSIX path
+  (C-12);
+- a non-ASCII letter that Windows folds is not folded here (C-11, C-18):
+  two spellings that Windows reads as one directory are two, so SCOPE-PATH
+  can fire on a path inside the project. This is a known false-positive
+  source, named in SCOPE-PATH's description; it adds findings and hides
+  none;
+- the subfolders of `C:\Users\Public` (`Public\Documents`,
+  `Public\Desktop`) are not listed; `C:\Users\Public` itself fires as a
+  home (C-14);
+- junctions, subst drives, 8.3 short names (`C:\PROGRA~1`) and
+  OneDrive-redirected homes are compared as written, not resolved;
+- SCOPE-CWD-ROOT matches the cwd as written, so a cwd with `.` or `..`
+  inside it (`C:\.\Users`, `/tmp/../home`) is a judged negative on both
+  branches (C-15);
+- macOS paths compare case-sensitively, and the macOS temporary
+  directories (`/private/tmp`, `/var/folders/...`) are not listed.
+
+Under a Windows cwd, a rooted path with no drive (`\x`) or a drive-relative
+one (`C:x`) cannot be placed; the rules report it as partial. `--root` is
+made absolute as the host does: on Windows, `/x` means `\x` on the current
+drive.
 
 ## 8. What would change this model
 

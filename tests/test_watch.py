@@ -1043,8 +1043,9 @@ def test_b5_systemroot_must_be_an_existing_directory_named_windows():
     assert ok.backend == "windows-toast" and ok.holes == []
 
 
-@pytest.mark.skipif(WINDOWS, reason="the engine places POSIX paths only (M5.1b): a Windows root is bad-context")
 def test_b6_the_project_handoff_scope_is_the_context_and_a_clean_watch_ends_clean(tmp_path, home, monkeypatch):
+    # M5.1b C-1: runs on Windows too; a project cwd there is a judged negative
+    # for SCOPE-CWD-ROOT and its HANDOFF root a valid context root (E2).
     proj = tmp_path / "proj"
     proj.mkdir()
     handoff = proj / "HANDOFF.md"

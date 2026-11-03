@@ -98,6 +98,19 @@ Blocking or steering the agent (A4); multi-host; auth; cloud storage.
 - C-3 `--root` keeps the host's abspath semantics.
 - C-4 Scope widened to README.md:17, THREAT_MODEL section 7, test_docs.
 Full text: docs/review/2026-11-03-M5.1b-ruling.md.
+
+Builder note (2026-11-03, M5.1b; Amendment C stays as written). As built:
+section 4's rule paths are placed by one function, `norm_path()` in
+`raqib/rules/engine.py`. Drive-letter and UNC paths (UNC by backslashes
+only, C-12) are compared with `\` and `/` alike and ASCII case folded (A-Z
+only, C-11); POSIX paths are unchanged and case-sensitive;
+a path of one system is never under a directory of the other, so
+`/mnt/c/...` and `C:\...` differ (ruling 2026-11-02 Q-6). The `\\?\` and
+`\\.\` prefixes are stripped first, before a drive path or `UNC\` only
+(C-9). Context `root` is accepted when
+absolute on either system. A-6 is not touched by this note.
+Record: docs/review/2026-11-03-M5.1b.md.
+
 - C-7..C-9 (dated note, 2026-11-03, second STOP dad6065): README.md lines
   17/68/122 in Scope ("0 of 10"); the Git Bash fixture is a positive; the
   `\\?\` and `\\.\` prefixes are stripped by norm_path.

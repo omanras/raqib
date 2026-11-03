@@ -84,9 +84,61 @@ def test_m63_e3_first_screen_is_install_and_watch():
         assert step in manual, step
     assert "claude/v0.1" not in README and "--branch" not in README
     assert headings.index("Manual steps") > headings.index("How it works")
-    # G-7: the Windows path-rules caveat is on the first screen.
-    assert ("On Windows the rules place POSIX paths only until M5.1b: a scope with a drive path is bad-context,"
-            " so the scope rules do not run there.") in section("Install and watch").splitlines()
+    # G-7: the Windows path-rules line is on the first screen; since M5.1b it
+    # says what the rules do with Windows paths (ruling C-4), not a caveat;
+    # UNC by backslashes only, the forward-slash form a hole (C-12); ASCII case (C-11).
+    assert ("On Windows the path rules judge drive (`C:\\`) and UNC paths (`\\\\server\\share`, recognised by"
+            " its two leading backslashes only) in any ASCII case, with `\\` or `/`; the forward-slash form"
+            " `//server/share` is read as a POSIX path (a hole), `/mnt/c/...` (WSL) and `C:\\...` are different"
+            " paths, and `--root /x` means `\\x` on the current drive.") in section("Install and watch").splitlines()
+    assert "until M5.1b" not in README and "bad-context" not in README
+
+
+def test_m51b_threat_model_section_7_says_what_the_path_rules_do_on_windows():
+    """M5.1b C-4: section 7 no longer reports the silent SCOPE-CWD-ROOT gap
+    that M5.1b closed; it names the Windows list and the holes."""
+    platform = " ".join(THREAT.split("\n## 7. Platform\n", 1)[1].split("\n## ", 1)[0].split())
+    assert "Known silent gap" not in platform and "do not yet judge Windows paths" not in platform
+    assert "Linux, macOS and Windows: capture, installer and the path rules" in platform
+    for hole in ("`/mnt/c/...` (WSL) and `C:\\...` are different paths", "the Git Bash form `/c/...`",
+                 "8.3 short names", "OneDrive-redirected homes",
+                 "macOS paths compare case-sensitively", "cannot be placed; the rules report it as partial",
+                 "on Windows, `/x` means `\\x` on the current drive",
+                 # C-16: the list is complete against the rule descriptions.
+                 "from WSL, SCOPE-CWD-ROOT lists only `/mnt/<drive>` and `/mnt/<drive>/Users/<name>`",
+                 "no Git Bash form (`/c/Users/<name>`)",
+                 "the forward-slash UNC form `//server/share` is read as a POSIX path (C-12)",
+                 # C-18: an fp source, not an evasion.
+                 "a non-ASCII letter that Windows folds is not folded here (C-11, C-18): two spellings that Windows"
+                 " reads as one directory are two, so SCOPE-PATH can fire on a path inside the project. This is a"
+                 " known false-positive source, named in SCOPE-PATH's description; it adds findings and hides none;",
+                 "the subfolders of `C:\\Users\\Public` (`Public\\Documents`, `Public\\Desktop`) are not listed;"
+                 " `C:\\Users\\Public` itself fires as a home (C-14)",
+                 "a cwd with `.` or `..` inside it (`C:\\.\\Users`, `/tmp/../home`) is a judged negative on both"
+                 " branches (C-15)",
+                 "the macOS temporary directories (`/private/tmp`, `/var/folders/...`) are not listed"):
+        assert hole in platform, hole
+    # C-16: the phrase is no longer doubled in the Git Bash item; C-18 adds the one for non-ASCII case.
+    assert "(a false-positive source)" not in platform
+    assert platform.count("false-positive source") == 2, platform
+    assert "evasion listed" not in platform
+    # C-8: the Git Bash form is a known false-positive source on Windows, its fixture a positive.
+    assert ("This is a known false-positive source on Windows: an agent run from Git Bash that names its own"
+            " project as `/c/...` gets SCOPE-PATH findings. A positive fixture records the firing (ruling C-8)"
+            in platform)
+    # C-9, C-16: the strip condition is stated; C-11: ASCII case only; C-12: UNC by backslashes.
+    assert ("A `\\\\?\\` or `\\\\.\\` prefix is stripped only where a drive path or `UNC\\` follows it; any other"
+            " prefixed path (`\\\\.\\pipe\\x`) keeps the UNC reading and is outside every project.") in platform
+    assert "ASCII case is folded (A-Z only)" in platform
+    assert "a UNC path (`\\\\server\\share`, recognised by its two leading backslashes only)" in platform
+
+
+def test_m51b_c7_readme_platform_line_says_since_m51b():
+    """C-7: README.md:68 no longer reads as if the Windows path rules were to
+    come; line 122's count is held by tests/test_rules.py (M4.2 REDO-2 E-1)."""
+    manual = section("Manual steps")
+    assert "Linux, macOS; Windows: capture and installer (path rules since M5.1b). You need" in manual
+    assert "path rules in M5.1b" not in README
 
 
 def test_g1_readme_says_what_a_moved_package_does_per_platform():

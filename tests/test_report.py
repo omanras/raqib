@@ -84,31 +84,42 @@ def drift_trace(tmp_path):
     return write_trace(tmp_path / "trace.jsonl", lines), ctx["scope"]
 
 
-class WindowsRootGap(AssertionError):
-    """Raised only by the one assertion seen failing on Windows (CI runs
-    41399793492, 41400665599): without --root, the trace's POSIX paths are not
-    resolved under a Windows tmp_path, so DRIFT-FILES counts 3 files, not 5.
-    M5.1b E6 removes the marker below (ruling Amendment 3, F4/F5)."""
-
-
-@pytest.mark.xfail(os.name == "nt", strict=True, raises=WindowsRootGap,
-                   reason="path rules on Windows paths are M5.1b (ruling Amendment 3, F4/F5)")
 def test_e1_scope_from_option_and_from_handoff(tmp_path):
+    # M5.1b E6: no Windows marker. The engine accepts a Windows root (E2), and
+    # --root is made absolute as the host does (ruling C-3).
     trace, scope = drift_trace(tmp_path)
     args = [a for s in scope for a in ("--scope", s)]
     code, text = raqib("rules", trace, *args)
     assert code == 1 and [f["rule_id"] for f in map(json.loads, text.splitlines())] == ["DRIFT-FILES"]
+    assert json.loads(text)["summary"].startswith("3 distinct files")   # scope anchored on each line's cwd
     handoff = tmp_path / "HANDOFF.md"
     handoff.write_text("# HANDOFF\n\nScope:\n  %s\n  %s\n\nExit criteria:\n- x\n" % (scope[0], ", ".join(scope[1:])))
-    assert raqib("rules", trace, "--handoff", handoff, "--root", "/work/example")[1] == text
-    assert raqib("rules", trace, *args, "--root", "/work/example")[1] == text
+    rooted = raqib("rules", trace, "--handoff", handoff, "--root", "/work/example")[1]
+    assert raqib("rules", trace, *args, "--root", "/work/example")[1] == rooted
+    if os.name == "nt":
+        # C-3: on Windows /work/example is <drive>:\work\example, a Windows root that
+        # holds none of the trace's POSIX paths, so all five files are outside it.
+        assert json.loads(rooted)["summary"].startswith("5 distinct files")
+    else:
+        assert rooted == text
     anchored = [json.loads(x) for x in raqib("rules", trace, "--handoff", handoff)[1].splitlines()]
-    summary = anchored[0]["summary"]
-    if summary.startswith("3 distinct files"):  # exactly what Windows showed; anything else fails below
-        raise WindowsRootGap(summary)
-    assert summary.startswith("5 distinct files")  # paths resolved under tmp_path
+    assert anchored[0]["summary"].startswith("5 distinct files")  # paths resolved under tmp_path (Windows too)
     code, text = raqib("rules", trace)
     assert (code, text) == (3, "")
+
+
+@pytest.mark.parametrize("root", ["/work/example", "rel/dir", r"C:\proj", "/"])
+def test_m51b_c3_root_is_made_absolute_as_the_host_does_and_help_says_so(root, capsys):
+    """Ruling C-3: --root keeps os.path.abspath's meaning on the host (on
+    Windows /x is \\x on the current drive); the help text records it."""
+    import argparse
+    ctx = cli._context(argparse.Namespace(scope=["src"], root=root, handoff=None))
+    assert ctx == {"scope": ["src"], "root": os.path.abspath(root)}
+    assert cli.ROOT_HELP == ("directory the scope paths are relative to (default: each line's cwd); made absolute"
+                             " as this host does (os.path.abspath): on Windows /x means \\x on the current drive,"
+                             " e.g. C:\\x")
+    assert cli.main(["rules", "--help"], out=io.StringIO()) == 0
+    assert "made absolute as this host does (os.path.abspath)" in " ".join(capsys.readouterr().out.split())
 
 
 def gap_trace(tmp_path):
@@ -258,12 +269,12 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     rows = {line.split()[0]: line.split() for line in text.splitlines()[1:]}
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
                          "SCOPE-PATH", "SECRET-OUTPUT"}
-    assert "3 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])
+    assert "4 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])   # M5.1b: + the Windows negative
     # M4.2 REDO-2 E-1: the field trace is not benign (tests/fixtures/field/), so
     # NET-TOOL is 1 of 10 (docs-lookup; negative-programs.json is the 10th) and
-    # SCOPE-PATH 0 of 9.
+    # SCOPE-PATH 0 of 10 (M5.1b: + the Windows negative).
     assert rows["NET-TOOL"][1:4] == ["ok", "0.100", "0.25"] and "10 measured" in " ".join(rows["NET-TOOL"])
-    assert rows["SCOPE-PATH"][1:4] == ["ok", "0.000", "0.1"] and "9 measured" in " ".join(rows["SCOPE-PATH"])
+    assert rows["SCOPE-PATH"][1:4] == ["ok", "0.000", "0.1"] and "10 measured" in " ".join(rows["SCOPE-PATH"])
     data = json.loads(raqib("check-rules", "--json")[1])
     assert {r["verdict"] for r in data} == {"ok"}
 

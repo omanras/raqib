@@ -50,9 +50,13 @@ not write. kind and evasion errors name the rule id and the field. Every
 finding carries its rule's kind; check_finding rejects one without it
 (NoKindError, B-3).
 
-Paths are POSIX and normalised lexically (symlinks are not resolved): a
+Paths are normalised lexically by norm_path() (symlinks are not resolved): a
 relative path is joined to the line's cwd (for outside_any: to context
-"root" when given), and `~` paths count as absolute.
+"root" when given), and `~` paths count as absolute. A drive-letter or UNC
+path is a Windows path, compared with / and backslash alike, ASCII case
+folded (A-Z only); any other path is POSIX and case-sensitive; a path of
+one system is never under a directory of the other (M5.1b). Context "root"
+must be absolute on one of the two systems.
 
 aggregate: {distinct: <field>, over: N, as: path?, cite: all|first?} gives
 one finding per session when more than N distinct values of <field> occur on
@@ -429,24 +433,108 @@ def _same(a, b):
     return type(a) is type(b) and a == b
 
 
-def _place(path, cwd):
-    """Absolute normalised POSIX path, or None if it cannot be placed."""
+# A Windows path (M5.1b): a drive letter with a separator, or a UNC path,
+# recognised by its backslashes only (C-5), so POSIX //x stays POSIX.
+WINDOWS_PATH = re.compile(r"[A-Za-z]:[\\/]|\\\\[^\\/]")
+# Under a Windows anchor these cannot be placed (C-2): a rooted path with no
+# drive (\x, on the current drive) or a drive-relative one (C:x, against that
+# drive's own current directory, which the trace does not record).
+WINDOWS_UNPLACEABLE = re.compile(r"\\|[A-Za-z]:")
+# The Win32 file and device namespace prefixes \\?\ and \\.\ (C-9), in front of
+# a drive path or of UNC\server\share. Only those two are stripped: any other
+# path under a prefix (\\.\pipe\x, \\?\Volume{...}\x) keeps the UNC reading,
+# with ? or . as its server, so it is never placed inside a project.
+WINDOWS_PREFIX = re.compile(r"\\\\[?.]\\(?:(?=[A-Za-z]:[\\/])|[Uu][Nn][Cc](?=\\[^\\/]))")
+# Case folding of Windows paths is ASCII A-Z only (C-11), as NTFS's upcase table
+# does for ASCII. str.lower would also fold non-ASCII letters, some to ASCII
+# (KELVIN SIGN U+212A to k), and so join directories that Windows keeps apart.
+ASCII_FOLD = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+
+
+def norm_path(path):
+    r"""The one path normaliser of the rules (M5.1b E1): ("posix" or
+    "windows", normalised path), or None for a value that is not a non-empty
+    string. _place returns its result, _under compares two of them, and the
+    context root check reads it. Nothing else normalises a path.
+
+    - A drive-letter path (X:\ or X:/) or a UNC path (\\server\share) is a
+      Windows path: every \ becomes /, . and .. are resolved lexically and
+      never climb above the drive root or the share, and ASCII case is
+      folded, A-Z to a-z only (C-11): C:\Users\Bob and c:/users/bob/ are
+      one path, "c:/users/bob". A non-ASCII letter is kept as written: a
+      directory spelled C:\WOR + U+212A KELVIN SIGN is not C:\work (str.lower
+      would make it so), and a non-ASCII case difference that Windows folds
+      (U+00C9 and U+00E9) makes two paths here. A \\?\ or \\.\ prefix is
+      stripped first (C-9) when a drive path or UNC\server\share follows:
+      \\?\C:\x is C:\x, and \\?\UNC\srv\share\x is \\srv\share\x.
+    - Any other string is a POSIX path, normalised as before M5.1b
+      (posixpath.normpath, a leading // collapsed to /) and case-sensitive:
+      /work/P and /work/p are two paths. A \ in it is a file name character.
+
+    /mnt/c/Users/x (WSL) and C:\Users\x are NOT equal (ruling Q-6): one is a
+    POSIX path, the other a Windows path, and a path of one system is never
+    under a directory of the other. Symlinks, junctions, subst drives and
+    8.3 short names are not resolved: this is lexical only.
+    """
     if not isinstance(path, str) or not path:
         return None
-    if not (path.startswith("/") or path.startswith("~")):
-        if not (isinstance(cwd, str) and cwd.startswith("/")):
+    if not WINDOWS_PATH.match(path):
+        placed = posixpath.normpath(path)
+        if placed.startswith("//"):
+            placed = "/" + placed.lstrip("/")
+        return ("posix", placed)
+    prefix = WINDOWS_PREFIX.match(path)
+    if prefix:   # C-9: \\?\C:\x -> C:\x; \\?\UNC\srv\share\x -> \srv\share\x -> \\srv\share\x
+        path = path[prefix.end():]
+        if path.startswith("\\"):
+            path = "\\" + path
+    text = path.replace("\\", "/")
+    if text[1] == ":":
+        head, rest = text[:2], text[2:]
+    else:  # //server/share/rest: the share is the root
+        parts = [p for p in text[2:].split("/") if p]
+        head, rest = "//" + "/".join(parts[:2]), "/".join(parts[2:])
+    rest = posixpath.normpath("/" + rest.lstrip("/"))   # one leading /: .. stops at the root
+    return ("windows", (head + rest).translate(ASCII_FOLD))   # C-11: A-Z only
+
+
+def _absolute(value):
+    """norm_path(value) when value is absolute on either system (POSIX /...,
+    or a Windows drive or UNC path), else None. A ~ path is not absolute
+    here: it can be a path, never an anchor."""
+    placed = norm_path(value)
+    if placed is None or (placed[0] == "posix" and not placed[1].startswith("/")):
+        return None
+    return placed
+
+
+def _place(path, cwd):
+    """norm_path's result for path made absolute, or None if it cannot be
+    placed. A relative path is joined to cwd, which must be absolute on
+    either system; under a Windows cwd \\x and C:x cannot be placed (C-2).
+    A ~ path counts as absolute (POSIX)."""
+    if not isinstance(path, str) or not path:
+        return None
+    if not (path.startswith("/") or path.startswith("~") or WINDOWS_PATH.match(path)):
+        anchor = _absolute(cwd)
+        if anchor is None:
+            return None
+        if anchor[0] == "windows" and WINDOWS_UNPLACEABLE.match(path):
             return None
         path = cwd.rstrip("/") + "/" + path
-    placed = posixpath.normpath(path)
-    if placed.startswith("//"):
-        placed = "/" + placed.lstrip("/")
-    if not (placed.startswith("/") or placed.startswith("~")):
+    placed = norm_path(path)
+    if placed[0] == "posix" and not (placed[1].startswith("/") or placed[1].startswith("~")):
         return None
     return placed
 
 
 def _under(path, root):
-    root = root.rstrip("/") or "/"
+    """True if path is root or inside it. Both are norm_path() results (as
+    _place returns them); a path of one system is never under a directory of
+    the other, so /mnt/c/x is not under C:\\ nor \\\\srv\\share\\x under /."""
+    if path[0] != root[0]:
+        return False
+    path, root = path[1], root[1].rstrip("/") or "/"
     return path == root or path.startswith(root if root == "/" else root + "/")
 
 
@@ -467,7 +555,7 @@ def evaluate(rules, lines, context=None):
     if skipped:
         notes.append({"rule_id": "*", "status": "skipped-lines",
                       "detail": "%d line(s) without session_id or int seq were not evaluated" % skipped})
-    if "root" in context and not (isinstance(context["root"], str) and context["root"].startswith("/")):
+    if "root" in context and _absolute(context["root"]) is None:   # absolute on neither system (E2)
         notes.append({"rule_id": "*", "status": "bad-context",
                       "detail": "context root must be an absolute path; scope paths fall back to each line's cwd"})
         context = {k: v for k, v in context.items() if k != "root"}

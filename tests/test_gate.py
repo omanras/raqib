@@ -377,3 +377,17 @@ def test_m41_e4_rules_imported_from_elsewhere_are_red(tmp_path):
     assert code == 1, out
     assert re.search(r"\[gate\] RED: rule kinds: raqib\.rules\.engine was imported from .*, not from this checkout",
                      out), out
+
+
+def test_m51b_e5_gitattributes_keeps_every_tracked_file_lf():
+    """M5.1b E5: `.gitattributes` is the one line `* text eol=lf`, so a clone
+    made with core.autocrlf=true checks out LF as well; every tracked file
+    carries that attribute and none holds a CRLF, in the index or on disk."""
+    assert (ROOT / ".gitattributes").read_bytes() == b"* text eol=lf\n"
+    proc = subprocess.run(["git", "-C", str(ROOT), "ls-files", "--eol"], capture_output=True, text=True, check=True)
+    rows = [line.split("\t", 1) for line in proc.stdout.splitlines()]
+    assert len(rows) > 100, rows[:3]
+    for info, path in rows:
+        index, worktree, attr = info.split(None, 2)
+        assert index in ("i/lf", "i/none") and worktree in ("w/lf", "w/none"), (path, info)
+        assert attr.strip() == "attr/text eol=lf", (path, info)
