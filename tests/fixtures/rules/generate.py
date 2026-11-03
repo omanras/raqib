@@ -11,7 +11,7 @@ T0 = datetime.datetime(2026, 10, 16, 13, 0, 0, tzinfo=datetime.timezone.utc)
 CWD = "/work/example"
 R = "tests/fixtures/rules/"
 KEYS = ["ts", "seq", "session_id", "phase", "tool", "tool_use_id", "input_sha256", "input_meta",
-        "output_sha256", "output_meta", "ok", "error_class", "cwd"]
+        "output_sha256", "output_meta", "ok", "error_class", "cwd", "source"]
 
 def ts(sec):
     return (T0 + datetime.timedelta(seconds=sec)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -47,6 +47,15 @@ class S:
     def command(self, command, **kw):
         """A Bash call as M4.2 capture records it: command_head and command_programs."""
         return self.call("Bash", CAPTURE.input_meta("Bash", {"command": command}), **kw)
+    def os_line(self, phase, tool, meta):
+        """M5.3 ruling D-11: one line of the os source, in os-sysmon's shape, so the
+        `source != os` guard of NET-TOOL and SECRET-OUTPUT is measured."""
+        self.t += 1
+        rec = {"ts": ts(self.t), "seq": 1, "session_id": "os-4100", "phase": phase, "tool": tool,
+               "input_sha256": h("os", tool, meta), "input_meta": meta, "cwd": self.cwd, "source": "os"}
+        if phase == "post":
+            rec.update(output_meta={}, ok=True)
+        self.lines.append(rec)
 
 def dump(lines):
     return ",\n".join("  " + json.dumps({k: r[k] for k in KEYS if k in r}, separators=(", ", ": ")) for r in lines)
@@ -70,6 +79,7 @@ s = S("fixture-rules-net-1"); s.bash("ls"); n = s.bash("curl"); write(R + "NET-T
 s = S("fixture-rules-net-2"); n = s.call("WebFetch", {"url_host": "paste.example.net"}); write(R + "NET-TOOL/positive-webfetch.json", s.lines, expect=[n])
 # M4.2 REDO-2 (E-7): benign Bash lines are written by capture, so they carry command_programs.
 s = S("fixture-rules-net-3"); s.command("git log --oneline -3"); s.call("Read", {"path": CWD + "/curl.txt"}); s.command("curlie-not-a-net-tool --help"); s.call("Edit", {"path": CWD + "/net.py"})
+s.os_line("pre", "net", {"dest_port": 443, "dest_private": False})
 write(R + "NET-TOOL/negative-local.json", s.lines)
 # M4.2 E2: a network program anywhere in the command (command_programs).
 s = S("fixture-rules-net-4"); s.command("ls -la"); seqs = [s.command(c) for c in (
@@ -111,6 +121,7 @@ s = S("fixture-rules-secret-1"); n = s.bash("cat", kinds=["aws_access_key_id"]);
 s = S("fixture-rules-secret-2"); n = s.bash("curl", ok=False, kinds=["github_token", "jwt"], error_class="failure")
 write(R + "SECRET-OUTPUT/positive-failure-message.json", s.lines, expect=[n])
 s = S("fixture-rules-secret-3"); s.bash("cat"); s.call("Read", {"path": CWD + "/.env.example"})
+s.os_line("post", "process", {"command_head": "cat.exe", "command_programs": ["cat.exe"], "depth": 2})
 write(R + "SECRET-OUTPUT/negative-clean-output.json", s.lines)
 # DRIFT-FILES
 scope = {"scope": ["src", "tests/test_app.py", "docs/review"]}

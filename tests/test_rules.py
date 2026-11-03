@@ -882,6 +882,7 @@ def test_m41_e1_a_bad_id_is_reported_before_the_kind():
 
 
 M42_NOTE = "Note (2026-11-03, M4.2, ruling D-8"
+M53_NOTE = "Note (2026-11-03, M5.3, ruling C-9"
 
 
 def table_rows(text):
@@ -913,7 +914,7 @@ def adr_note():
     """The M4.2 note under the table (ruling D-8): (rows it adds, {rule id:
     [evasion lines it drops, quoted as they stood]}, its text)."""
     _, section = adr_table()
-    note = section.split(M42_NOTE, 1)[1]
+    note = section.split(M42_NOTE, 1)[1].split(M53_NOTE, 1)[0]
     dropped = {}
     for rule_id, item in re.findall(r'^- dropped ([A-Z]+-[A-Z]+): "(.+?)"(?: \(.*\))?$', note, re.M):
         dropped.setdefault(rule_id, []).append(item)
@@ -932,15 +933,37 @@ def adr_table_after_m42():
     return out
 
 
+def adr_note_m53():
+    """The M5.3 note (ruling C-9): (rows it adds, its text)."""
+    _, section = adr_table()
+    assert section.count(M53_NOTE) == 1
+    note = section.split(M53_NOTE, 1)[1]
+    return table_rows(note), note
+
+
+def adr_table_after_m53():
+    out = adr_table_after_m42()
+    rows, _ = adr_note_m53()
+    assert not set(rows) & set(out)
+    out.update(rows)
+    return out
+
+
 def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
-    """M4.2 (D-8): the table plus the dated note under it is held to the tree."""
-    table = adr_table_after_m42()
+    """M4.2 (D-8): the table plus the dated notes under it is held to the tree
+    (M5.3, C-9: the CROSS-SOURCE row, a code rule with its kind in cross.py)."""
+    from raqib.rules import cross
+    table = adr_table_after_m53()
     before, section = adr_table()
     rules = {r.id: r for r in engine.load_catalog(CATALOG)}
-    assert len(before) == 11 and len(table) == 12 and set(table) == set(rules) | set(silence.RULE_KINDS)
+    assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(table) == 13
+    assert set(table) == set(rules) | set(silence.RULE_KINDS) | set(cross.RULE_KINDS)
     for rule_id, (kind, items) in table.items():
         if rule_id in silence.RULE_KINDS:
             assert (silence.RULE_KINDS[rule_id], items) == (kind, []), rule_id
+            continue
+        if rule_id in cross.RULE_KINDS:
+            assert (cross.RULE_KINDS[rule_id], items) == (kind, []), rule_id
             continue
         rule = rules[rule_id]
         assert rule.kind == kind, rule_id
@@ -955,10 +978,12 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
                 assert item.startswith("hole: ") and "Bash are not seen" in rule.doc["description"], rule_id
     today = [sum(1 for k, _ in before.values() if k == kind) for kind in engine.KINDS]
     assert "Ratio today: %d : %d : %d." % tuple(today) in section and today == [4, 4, 3]
+    m42 = [sum(1 for k, _ in adr_table_after_m42().values() if k == kind) for kind in engine.KINDS]
+    assert "Ratio after M4.2: %d : %d : %d." % tuple(m42) in section and m42 == [4, 5, 3]
     counts = [sum(1 for k, _ in table.values() if k == kind) for kind in engine.KINDS]
-    assert "Ratio after M4.2: %d : %d : %d." % tuple(counts) in section
-    tree = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values())
-    assert counts == [tree.count(kind) for kind in engine.KINDS] == [4, 5, 3]
+    assert "Ratio after M5.3: %d : %d : %d." % tuple(counts) in section
+    tree = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values()) + list(cross.RULE_KINDS.values())
+    assert counts == [tree.count(kind) for kind in engine.KINDS] == [4, 5, 4]
 
 
 def test_m41_e3_every_catalog_finding_carries_its_rule_kind():
@@ -1256,6 +1281,20 @@ def test_m42_e2_the_note_under_the_adr_table_names_what_e2_closed():
 
 
 # --- M4.2 REDO-2 (ADR-0002 Amendment E) ---------------------------------------
+
+def test_m53_c9_the_note_under_the_adr_table_adds_cross_source():
+    """C-9: the M5.3 note follows the M4.2 notes, adds the CROSS-SOURCE row
+    in the table's shape, names its hole and the two guards, and ends with
+    the ratio line."""
+    from raqib.rules import cross
+    rows, note = adr_note_m53()
+    _, section = adr_table()
+    assert section.index("Ratio after M4.2:") < section.index(M53_NOTE) < section.index("Ratio after M5.3: 4 : 5 : 4.")
+    assert rows == {"CROSS-SOURCE": ("anchor", [])} and cross.RULE_KINDS == {"CROSS-SOURCE": "anchor"}
+    flat = " ".join(note.split())
+    assert "raqib/rules/cross.py" in flat and "class CROSS" in flat and "its own direct children" in flat
+    assert "SECRET-OUTPUT and NET-TOOL" in flat
+
 
 def test_m42_redo2_e1_an_adversarial_trace_is_never_benign():
     """E-1: the field trace lives in tests/fixtures/field/, outside the

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 
-from raqib.rules import engine, silence, trace
+from raqib.rules import cross, engine, silence, trace
 
 SILENCE_RULES = (
     ("SILENCE-GAP", "consecutive lines of a session more than RAQIB_GAP_SECONDS apart"),
@@ -32,6 +32,11 @@ SILENCE_RULES = (
     ("SILENCE-ORDER", "seq or ts going back: trace truncated, rotated or merged"),
     ("SILENCE-EMPTY", "a session that ended with no tool call and no stop, or ended with no start and no tool call"),
 )
+# M5.3 (ruling C-1): the code rule of raqib/rules/cross.py, listed beside the
+# silence rules; its kind is cross.RULE_KINDS, its class CROSS.
+CROSS_RULES = (
+    (cross.RULE_ID, cross.TITLE),
+)
 EXIT = {"clean": 0, "alarm": 1, "incomplete": 3}
 LINE_TEXT_MAX = 240
 
@@ -39,9 +44,12 @@ LINE_TEXT_MAX = 240
 def rule_table(rules):
     """[{id, class, kind, severity, fp_budget, status, title}] for the silence
     rules (Python, no declared budget yet; kind from silence.RULE_KINDS, None
-    if it declares none) and the catalog rules."""
+    if it declares none), the cross-source rule (Python, class CROSS, its
+    budget and kind from raqib/rules/cross.py) and the catalog rules."""
     table = [{"id": rid, "class": "SILENCE", "kind": silence.RULE_KINDS.get(rid), "severity": "high",
               "fp_budget": None, "status": "active", "title": title} for rid, title in SILENCE_RULES]
+    table += [{"id": rid, "class": cross.CLASS, "kind": cross.RULE_KINDS.get(rid), "severity": cross.SEVERITY,
+               "fp_budget": cross.FP_BUDGET, "status": cross.STATUS, "title": title} for rid, title in CROSS_RULES]
     table += [{"id": r.id, "class": r.cls, "kind": r.kind, "severity": r.severity, "fp_budget": r.fp_budget,
                "status": r.status, "title": r.title} for r in rules]
     return table

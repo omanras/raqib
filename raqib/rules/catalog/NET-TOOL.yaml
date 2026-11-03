@@ -17,11 +17,16 @@ evasion:
 severity: medium
 # Doc lookups and package fetches are routine, so some benign sessions fire.
 fp_budget: 0.25
-description: "A web tool, a URL in the tool input, or a Bash command one of whose programs talks to the network: the first program (command_head) or, when capture could read the whole command, any program in it (command_programs, M4.2). Network access can carry data out or bring code in. Known hole: command_head reads a leading redirection as the program (`2>/dev/null rm x` has the head null); command_programs reads it right, so the hole stays on lines without command_programs (fix: M4.2b)."
+description: "A web tool, a URL in the tool input, or a Bash command one of whose programs talks to the network: the first program (command_head) or, when capture could read the whole command, any program in it (command_programs, M4.2). Network access can carry data out or bring code in. Known hole: command_head reads a leading redirection as the program (`2>/dev/null rm x` has the head null); command_programs reads it right, so the hole stays on lines without command_programs (fix: M4.2b). Note (2026-11-03, M5.3, ADR-0003 Amendment C, C-5): a line of the os source (source: os) is not judged; the os source's network lines (tool net) are for a later rule."
 summary: "{tool} may reach the network at seq {seq} (host {input_meta.url_host}, program {input_meta.command_head}, programs {input_meta.command_programs})"
 match:
   all:
     - {field: phase, eq: pre}
+    # M5.3 (ADR-0003 Amendment C, C-5): os lines are not judged here; a line
+    # with no source (written before M5.2) is a hook line and is judged.
+    - any:
+        - {field: source, exists: false}
+        - {field: source, ne: os}
     - any:
         - {field: tool, in: [WebFetch, WebSearch]}
         - {field: input_meta.url_host, exists: true}

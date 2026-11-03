@@ -748,8 +748,32 @@ EVENT_START = re.compile(r"<Event(?=[\s>])")
 def parse_sysmon(text, src="sysmon"):
     """Records of Sysmon events 1, 3, 11 and 22 in XML. Events may stand one
     per line (wevtutil /f:xml) or span lines; each is cited at its first line.
-    Other providers and event ids are counted, not read."""
+    Other providers and event ids are counted, not read. The XML is read by
+    sysmon_events(), the one Sysmon reader (M5.3, ruling C-6)."""
     records, problems = [], []
+    for ev in sysmon_events(text, src, problems, SYSMON_READ):
+        records += [dict(r, event=ev["event"]) for r in _sysmon_records(src, ev["line"], ev["event"], ev["data"],
+                                                                         problems)]
+    return records, problems
+
+
+SYSMON_READ = (1, 3, 11, 22)   # the event ids parse_sysmon reads
+
+
+def sysmon_events(text, src="sysmon", problems=None, ids=None):
+    """The one reader of Sysmon XML (M5.3, ruling C-6), shared by
+    parse_sysmon and the os capture source (raqib/hooks/os_sysmon.py).
+
+    Yields one dict per event of provider Microsoft-Windows-Sysmon whose
+    EventID is in ids (every id when ids is None), in the order of the text:
+    line (the line of its <Event>), event (the EventID), record_id (the
+    EventRecordID, or None) and data (every named Data field as text,
+    stripped: the whole CommandLine, ProcessGuid and ParentProcessGuid, and
+    Protocol, so a UDP event 3 is there too). Events of other providers are
+    skipped. An event that cannot be read (no </Event>, a DOCTYPE or ENTITY,
+    malformed XML) is appended to problems as it is met, so a caller that
+    adds problems of its own keeps them in text order."""
+    problems = [] if problems is None else problems
     starts = [m.start() for m in EVENT_START.finditer(text)]
     line, pos = 1, 0
     for i, start in enumerate(starts):
@@ -769,7 +793,7 @@ def parse_sysmon(text, src="sysmon"):
         except ET.ParseError as exc:
             problems.append(_problem(src, line, "XML: %s" % exc))
             continue
-        provider = event_id = None
+        provider = event_id = record_id = None
         data = {}
         for el in event.iter():
             tag = el.tag.rsplit("}", 1)[-1]
@@ -777,12 +801,13 @@ def parse_sysmon(text, src="sysmon"):
                 provider = el.get("Name")
             elif tag == "EventID":
                 event_id = _int(el.text or "")
+            elif tag == "EventRecordID":
+                record_id = _int(el.text or "")
             elif tag == "Data" and el.get("Name"):
                 data[el.get("Name")] = (el.text or "").strip()
-        if provider != SYSMON_PROVIDER or event_id not in (1, 3, 11, 22):
+        if provider != SYSMON_PROVIDER or (ids is not None and event_id not in ids):
             continue
-        records += [dict(r, event=event_id) for r in _sysmon_records(src, line, event_id, data, problems)]
-    return records, problems
+        yield {"line": line, "event": event_id, "record_id": record_id, "data": data}
 
 
 def _sysmon_records(src, line, event_id, d, problems):

@@ -12,8 +12,9 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       rules that did not run (A3) and every rule's fp_budget (A6). Without
       --findings the rules are run on TRACE first.
   check-rules [--json] [--fixtures-root DIR]
-      Run every catalog rule on its fixtures and the benign corpus; print the
-      measured fp_rate against the declared fp_budget (A6). The fixtures are
+      Run every catalog rule, and CROSS-SOURCE (raqib/rules/cross.py), on its
+      fixtures and the benign corpus; print the measured fp_rate against the
+      declared fp_budget (A6). The fixtures are
       those of a checkout (DIR/tests/fixtures; default: the checkout this
       raqib runs from). An installed raqib carries the catalog but no
       fixtures: without --fixtures-root it says so and exits 2.
@@ -93,6 +94,18 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       lets URL be http:// to a loopback address (127.0.0.0/8, ::1; tests).
       Runs until interrupted, then ends the open sessions; exit 2 on a bad
       option or a trace it cannot write.
+  os-sysmon --root PID[:GUID] --log PATH [--from FILE.xml] [--cwd DIR]
+      Record what the operating system saw the process tree under PID do
+      (M5.3, ADR-0003 Amendment C, raqib/hooks/os_sysmon.py): Sysmon events
+      1 (process create), 11 (file create) and 3 (network connect) become
+      `pre`+`post` lines of the trace PATH with source "os", session
+      os-PID; hashes and program names only, never an argument. Live on
+      Windows it runs C:\\Windows\\System32\\wevtutil.exe (read-only); with
+      --from it reads an export (wevtutil qe Microsoft-Windows-Sysmon/
+      Operational /f:xml), on any system. Exit 1 when it wrote a
+      RAQIB-SILENCE line (channel unreadable, root not found, earlier
+      holders of its pid, no event 1 or 11, an unreadable event), 2 on a bad
+      option, without --from off Windows, or a trace it cannot write; else 0.
   doctor [PROJECT]
       Say in one screen what `watch` needs and is missing (M6.3,
       raqib/doctor.py): Python, `claude` on PATH and its version, the hook
@@ -120,9 +133,9 @@ from raqib import eval as evaluation
 from raqib import report
 from raqib import ui
 from raqib import watch
-from raqib.hooks import proxy
+from raqib.hooks import os_sysmon, proxy
 from raqib.rules import context as rule_context
-from raqib.rules import engine, fixtures, silence, trace
+from raqib.rules import cross, engine, fixtures, silence, trace
 from raqib.suspect import backends as suspect_backends
 from raqib.suspect import core as suspect_core
 
@@ -251,6 +264,16 @@ def _parser():
     px.add_argument("--allow-plain-upstream", action="store_true",
                     help="let --upstream be http:// to a loopback address, 127.0.0.0/8 or ::1 (for tests;"
                          " never a remote host)")
+    osx = sub.add_parser("os-sysmon", help="record the Sysmon events of an agent's process tree (M5.3, ADR-0003)")
+    osx.add_argument("--root", required=True, metavar="PID[:GUID]",
+                     help="the agent's process id, the root of the tree (Claude Code on Windows: claude.exe's pid);"
+                          " without a Sysmon ProcessGuid the latest process that held PID in the export")
+    osx.add_argument("--log", required=True, metavar="PATH", help="the trace os-sysmon appends to")
+    osx.add_argument("--from", dest="from_path", metavar="FILE.xml",
+                     help="read an export (wevtutil qe %s /f:xml) instead of the live channel (any system)"
+                          % os_sysmon.CHANNEL)
+    osx.add_argument("--cwd", metavar="DIR", help="the cwd written on the lines, an absolute directory (default: the"
+                                                 " root's CurrentDirectory in its event 1, else no cwd)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -308,10 +331,12 @@ def _catalog(directory):
 
 
 def run_rules(records, rules, ctx, gap_seconds):
-    """All findings (silence + catalog) and the notes of rules that did not run."""
+    """All findings (silence + catalog + cross-source) and the notes of rules
+    that did not run or could not judge every line."""
     found = report.with_silence_class(silence.findings(records, gap_seconds))
     catalog_found, notes = engine.evaluate(rules, records, ctx)
-    return found + catalog_found, notes
+    cross_found, cross_notes = cross.findings(records)   # M5.3: nothing, no note, without os lines (C-2)
+    return found + catalog_found + cross_found, notes + cross_notes
 
 
 def cmd_rules(args, out):
@@ -452,6 +477,8 @@ def cmd_check_rules(args, out):
                          % os.path.join(root, "tests", "fixtures"))
     try:
         reports = fixtures.check_catalog(rules, root, benign_default(root))
+        # M5.3 ruling D-11: the cross-source code rule is measured on its fixtures too.
+        reports.append(cross.check(fixtures.load_fixture, root, benign_default(root)))
     except (fixtures.FixtureError, OSError) as exc:
         raise UsageError(str(exc))
     if args.json:
@@ -731,6 +758,13 @@ def cmd_proxy(args, out):
         raise UsageError(str(exc))
 
 
+def cmd_os_sysmon(args, out):
+    try:
+        return os_sysmon.run(args.root, args.log, from_path=args.from_path, cwd=args.cwd, out=out)
+    except os_sysmon.UsageError as exc:
+        raise UsageError(str(exc))
+
+
 def main(argv=None, out=None):
     """The `raqib` console script and python -m raqib (out None: stdout,
     where a path the console cannot encode is escaped, not a crash)."""
@@ -746,7 +780,7 @@ def main(argv=None, out=None):
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
                    "discover": cmd_discover, "watch": cmd_watch, "doctor": cmd_doctor,
-                   "proxy": cmd_proxy}[args.command]
+                   "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)

@@ -156,6 +156,51 @@ tool name or id was replaced by its hash (A-2).
   failure; "no event 3" is INCOMPLETE not alarm. C-8 budget 0.1.
 - C-9 Counts and docs. Full text: docs/review/2026-11-03-M5.3-ruling.md.
 
+## Builder note (2026-11-03, M5.3 REDO; Amendment C stays as written)
+As built for C-1..C-9. Record: docs/review/2026-11-03-M5.3.md, section
+"REDO".
+- `raqib/hooks/os_sysmon.py`, `raqib os-sysmon --root PID --log PATH
+  [--from FILE.xml] [--cwd DIR]`. Live on Windows only:
+  `C:\Windows\System32\wevtutil.exe qe Microsoft-Windows-Sysmon/Operational
+  /f:xml`, environment SystemRoot only, one read. On POSIX without --from:
+  exit 2 (C-7). Events 1, 11, 3 of the tree under PID; the tree follows
+  ParentProcessId, with ParentProcessGuid choosing the parent among the
+  processes that held that pid. The root is every process that held PID in
+  the export. Order: UtcTime, then EventRecordID.
+- Lines (C-5): session `os-<PID>`; seq continues from the trace. Per event
+  a pre and a post at the act's UtcTime, tool process/file/net. The post
+  carries `ok: true` and `output_meta: {}`. input_sha256 is over
+  {"command_line"}, {"path"} or {"destination": {hostname, ip, port,
+  protocol}}. input_meta for a process is {command_head, command_programs:
+  [the Image basename], depth}, or command_unread; for a file, {path,
+  redacted}; for a connection, {dest_port, dest_private}. A documentation
+  address is not private. cwd is --cwd, else the root's event 1
+  CurrentDirectory, else os-sysmon's own working directory. Amendment C's
+  "the proxy rule's 'unknown'" is read as the proxy's fallback, its own
+  working directory (Amendment A builder note).
+- C-7: a RAQIB-SILENCE line each for a failed wevtutil, an unreadable event,
+  an event without ProcessId or UtcTime, no event 1, no event 11, and a
+  root in no event; exit 1. No event 3 is `missing_events` on the
+  session_start, which CROSS-SOURCE turns into a `source-incomplete` note
+  (exit 3).
+- C-6: `discover.sysmon_events` is the one Sysmon reader, keeping the whole
+  Data map (CommandLine, ProcessGuid), EventRecordID and every event id.
+  parse_sysmon uses it, and its output is pinned unchanged by tests.
+- C-1..C-4, C-8: `raqib/rules/cross.py`, RULE_KINDS {CROSS-SOURCE: anchor},
+  class CROSS, which engine.CLASSES now holds. Severity is high, W 10 s,
+  fp_budget 0.1. report.CROSS_RULES lists it, the gate reads its
+  RULE_KINDS, and cli.run_rules runs it.
+  - Shell images for asked-not-done: bash, sh, zsh, dash, ksh, fish, cmd,
+    powershell, pwsh.
+  - A pre with unknown programs is a finding only when no os process at all
+    starts in W.
+  - The root and its direct children (depth 0 and 1) are not judged on the
+    done side.
+- C-5: SILENCE-GAP and SILENCE-ORDER skip sessions of os lines only.
+  SECRET-OUTPUT and NET-TOOL guard `source` exists false or `source` ne os,
+  so a line written before M5.2 is still judged; a dated note is in each
+  description.
+
 ## Amendment D (the Table, 2026-11-03) - rulings on the M5.3 review (fd7452c)
 - D-1 engine.CLASSES and cli.run_rules changes ratified (ledger: Table).
 - D-2 Handoff Scope header is exactly `Scope:`.
@@ -168,3 +213,32 @@ tool name or id was replaced by its hash (A-2).
   named; "cmd" matches "command". D-11 guards measured; check-rules lists
   CROSS-SOURCE; gate requires CROSS_RULES; YAML may not claim CROSS.
 - D-12, D-13 as in docs/review/2026-11-03-M5.3-redo-ruling.md.
+
+## Builder note (2026-11-03, M5.3 REDO-2; Amendment D stays as written)
+As built for D-1..D-14. Record: docs/review/2026-11-03-M5.3.md, section
+"REDO-2". Where the M5.3 REDO builder note above says otherwise, Amendment
+D and this note hold:
+- cwd: --cwd DIR, else the root's event 1 CurrentDirectory, else no cwd key
+  at all; os-sysmon's own directory is never written (D-4). --cwd must be
+  absolute, on Windows or POSIX (D-12).
+- The root is the process `--root PID:GUID` names, else the latest holder
+  of PID in the export. Earlier holders are one RAQIB-SILENCE line and their
+  trees are not read (D-5). Silence lines go to stderr before the append
+  (D-6).
+- os process lines carry input_meta.parent_seq, the seq of the parent's
+  process line (D-9).
+- CROSS-SOURCE:
+  - os spans are per session, and the agent side is the union of its
+    sessions. A shell pre outside every os session is not judged and gets
+    no note; an os process outside every agent session is partial (D-8).
+  - A process is asked when its program is named, when it is a shell image
+    with a shell pre in W, or when its parent below the shell is asked
+    (D-9).
+  - "nothing to judge" is noted for an os-only trace with no process below
+    depth 1 (D-7).
+  - An unread pre in the window is named in the partial note, and
+    "command" is a shell word (D-10).
+  - cross.STATUS is active or disabled, and check-rules measures the rule
+    (cross.check).
+- The gate requires report.CROSS_RULES, and a YAML rule may not declare
+  class CROSS (D-11).

@@ -85,6 +85,23 @@ counts of A-2):
   DESTRUCT-CMD +5, NET-TOOL +4.
 Lines beyond the table now: DESTRUCT-CMD +6, NET-TOOL +5, SCOPE-PATH +4, SECRET-OUTPUT +3.
 
+Note (2026-11-03, M5.3, ruling C-9 of ADR-0003 Amendment C; the table above
+stays as written). M5.3 adds one row, in the table's shape. CROSS-SOURCE is
+a code rule (raqib/rules/cross.py), class CROSS, that declares its kind in
+its own RULE_KINDS, which the gate reads as it reads silence.py's (C-1):
+
+| rule             | kind      | known evasion (for `evasion:`)                       |
+|------------------|-----------|------------------------------------------------------|
+| CROSS-SOURCE     | anchor    | -                                                    |
+
+An anchor lists no evasion. Its known hole, named in cross.py, the README
+and the THREAT_MODEL, is an agent that runs its acts as its own direct
+children rather than through a shell (C-4). The same ruling (C-5) adds a
+guard to two signatures, SECRET-OUTPUT and NET-TOOL: lines of the os source
+are not judged by them; their evasion lists do not change.
+
+Ratio after M5.3: 4 : 5 : 4.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind

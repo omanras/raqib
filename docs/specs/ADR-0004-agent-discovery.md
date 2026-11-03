@@ -61,6 +61,13 @@ hook; one whose CLI documents a base-URL setting -> proxy; any other ->
 os source rooted at its PID. M5.3 takes `--root` from `discover` instead
 of from the commander.
 
+Note (2026-11-03, M5.3, ruling D-13 of ADR-0003 Amendment D; the sentence
+above stays as written): as built in M5.3, the root comes from the
+commander. `raqib os-sysmon --root PID[:GUID]` is given the pid by hand;
+`discover` only helps find it. The README says where to look: `raqib
+discover` or Task Manager, and for Claude Code on Windows, `claude.exe`'s
+pid. Taking the root from `discover` is not built.
+
 ## Consequences
 - New module `raqib/discover.py` and CLI `raqib discover [--window S]
   [--json]`. No network. Reads: `/proc` and `ss -tnp` on Linux;

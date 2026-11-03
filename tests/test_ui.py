@@ -65,8 +65,9 @@ def test_e1_page_of_the_real_blocked_calls_trace():
     assert '<a href="#L2">line 2</a>' in page and '<a href="#L3">line 3</a>' in page
     assert all('<tr id="L%d"' % n in page for n in range(1, 8))
     assert "DRIFT-FILES</code> not-evaluated" in page and "SECRET-OUTPUT</code> partial" in page
-    # E-10: derived from the tree, never a literal: the silence rules plus the catalog.
-    assert page.count("<tr><td>") == len(rep["rules"]) == len(report.SILENCE_RULES) + len(
+    # E-10: derived from the tree, never a literal: the silence rules, the cross-source rule (M5.3)
+    # and the catalog.
+    assert page.count("<tr><td>") == len(rep["rules"]) == len(report.SILENCE_RULES) + len(report.CROSS_RULES) + len(
         engine.load_catalog(ROOT / "raqib" / "rules" / "catalog"))
 
 
@@ -425,7 +426,7 @@ def test_m41_b1_the_page_shows_the_kind_in_findings_and_the_rule_table(tmp_path)
         assert "%s (%s, %s) " % (f["rule_id"], f["class"], f["kind"]) in page
     assert "SILENCE-HALF (SILENCE, demand)" in page
     assert "<th>id</th><th>class</th><th>kind</th><th>severity</th>" in page
-    kinds = {r.id: r.kind for r in engine.load_catalog(CATALOG)}
+    kinds = dict({r.id: r.kind for r in engine.load_catalog(CATALOG)}, **{"CROSS-SOURCE": "anchor"})   # M5.3
     for r in rep["rules"]:
         assert r["kind"] == kinds.get(r["id"], "demand")
         assert "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td>" % (r["id"], r["class"], r["kind"], r["severity"]) in page

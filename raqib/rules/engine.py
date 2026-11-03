@@ -6,6 +6,7 @@ A rule file holds one mapping:
     id: NET-TOOL                      # [A-Z][A-Z0-9]*(-[A-Z0-9]+)+, = file name
     title: Tool call reaches the network   # no { or }
     class: NET                        # SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT
+                                      # (CROSS is cross.py's, never a YAML rule's)
     kind: signature                   # signature|demand|anchor (ADR-0002)
     evasion: [python urllib, ...]     # signature only, and then required: the
                                       # known ways round it, one line each
@@ -75,7 +76,8 @@ import re
 from raqib.rules import yamlite
 from raqib.rules.trace import is_record, is_seq, parse_ts
 
-CLASSES = ("SCOPE", "NET", "DESTRUCT", "SECRET", "SILENCE", "DRIFT")
+CLASSES = ("SCOPE", "NET", "DESTRUCT", "SECRET", "SILENCE", "DRIFT", "CROSS")  # CROSS: M5.3 C-1
+CODE_CLASS = "CROSS"   # findings of raqib/rules/cross.py only: no YAML rule declares it (M5.3 D-11)
 SEVERITIES = ("low", "medium", "high")
 STATUSES = ("active", "disabled")
 KINDS = ("signature", "demand", "anchor")  # ADR-0002
@@ -201,6 +203,8 @@ def compile_rule(doc, source="<rule>"):
         bad("title", "must not contain { or } (put placeholders in summary)")
     if doc["class"] not in CLASSES:
         bad("class", "must be one of %s" % "|".join(CLASSES))
+    if doc["class"] == CODE_CLASS:   # M5.3 ruling D-11
+        bad("class", "CROSS is the class of the code rule raqib/rules/cross.py; a YAML rule may not declare it")
     if doc["severity"] not in SEVERITIES:
         bad("severity", "must be one of %s" % "|".join(SEVERITIES))
     if doc["class"] == "SILENCE" and doc["severity"] != "high":
