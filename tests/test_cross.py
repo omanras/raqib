@@ -4,6 +4,7 @@ SILENCE-GAP/ORDER exemption for os sessions, the SECRET-OUTPUT and NET-TOOL
 guards, and the rule in report, cli, README and THREAT_MODEL."""
 import io
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -555,7 +556,8 @@ def test_d11_check_rules_lists_cross_source_with_its_rate_and_status():
     (entry,) = [r for r in data if r["rule_id"] == "CROSS-SOURCE"]
     assert entry["status"] == cross.STATUS == "active" and entry["verdict"] == "ok"
     assert [p["fired"] for p in entry["positives"]] == [True, True]
-    measured = [n["path"] for n in entry["negatives"] if n["measured"]]
+    # OS-native relative paths, as fixtures.check_rule writes them for the catalog rules
+    measured = [n["path"].replace(os.sep, "/") for n in entry["negatives"] if n["measured"]]
     assert measured == ["tests/fixtures/cross/matched.log", "tests/fixtures/cross/rg-helper.log"]
 
 
