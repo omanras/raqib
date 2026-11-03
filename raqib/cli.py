@@ -42,13 +42,17 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json. Exit 0 when
       every row judged every event, 3 when some row has errors, 2 on bad
       input.
-  discover [--from DIR] [--read KIND=FILE]... [--window S] [--home DIR]... [--save DIR] [--json] [-o FILE]
+  discover [--from DIR] [--read KIND=FILE]... [--window S] [--samples N] [--every T] [--home DIR]... [--save DIR]
+           [--json] [-o FILE]
       Find AI agents on a host by what they do (M5.0, ADR-0004 Amendment B):
       trees that talk (outbound TCP) and have a child, or write a file
       outside config space, each claim with its cited lines. Without
       --from/--read it reads this host (Linux: /proc and /proc/net/tcp, ss
-      by absolute path only as fallback; elsewhere the homes only), offline
-      and read-only. Exit 1 when a candidate, an act-root, an AGENT-DARK
+      by absolute path only as fallback, --window S; Windows, M7.1: the OS
+      API in-process - Toolhelp32, GetExtendedTcpTable, the DNS resolver
+      cache - --samples N (default 6) samples --every T seconds apart
+      (default 10), and a failed process snapshot exits 2; elsewhere the
+      homes only), offline and read-only. Exit 1 when a candidate, an act-root, an AGENT-DARK
       footprint or an unread line is found, or nothing was read; 3 when a
       process or connection source failed (even in one sample), held no
       record, or left a talking line without an owner; 0 only when those
@@ -247,8 +251,12 @@ def _parser():
     d.add_argument("--read", action="append", default=[], metavar="KIND=FILE",
                    help="read one source text; KIND is one of %s (repeatable)" % ", ".join(discover.SOURCES))
     d.add_argument("--window", type=float, default=0.0, metavar="S",
-                   help="live: sample for S seconds, 1 s apart (default 0: one snapshot);"
+                   help="live on Linux: sample for S seconds, 1 s apart (default 0: one snapshot);"
                         " files: keep timed records of the last S seconds")
+    d.add_argument("--samples", type=int, default=None, metavar="N",
+                   help="live on Windows: N samples (default %d, 1..%d)" % (discover.WIN_SAMPLES, discover.SAMPLES_MAX))
+    d.add_argument("--every", type=float, default=None, metavar="T",
+                   help="live on Windows: T seconds between samples (default %g)" % discover.WIN_EVERY)
     d.add_argument("--home", action="append", metavar="DIR",
                    help="live: a home to list footprints in (default: ~, /root and /home/*; Windows: C:\\Users\\*)")
     d.add_argument("--catalog", default=discover.CATALOG, metavar="FILE", help="endpoint and footprint catalog")
@@ -697,15 +705,35 @@ def cmd_discover(args, out):
             raise UsageError("--read %s: source %s given twice" % (spec, kind))
         paths[kind] = path
     texts.update(discover.read_inputs(paths))
+    windows = sys.platform == "win32"
     if texts:
-        if args.save or args.home:
-            raise UsageError("--save and --home apply to a live run (no --from, no --read)")
+        if args.save or args.home or args.samples is not None or args.every is not None:
+            raise UsageError("--save, --home, --samples and --every apply to a live run (no --from, no --read)")
         inv = discover.run(texts, catalog, window=args.window, holes=holes)
     else:
-        texts, holes, samples = discover.collect_live(catalog, window=args.window, homes=args.home)
+        if (args.samples is not None or args.every is not None) and not windows:
+            raise UsageError("--samples and --every apply to a live run on Windows; on %s use --window S"
+                             % sys.platform)
+        if windows and args.window:
+            raise UsageError("--window S applies to files and to a live run on Linux; on Windows use --samples N"
+                             " --every T")
+        n = discover.WIN_SAMPLES if args.samples is None else args.samples
+        every = discover.WIN_EVERY if args.every is None else args.every
+        if not 1 <= n <= discover.SAMPLES_MAX:
+            raise UsageError("--samples must be a whole number from 1 to %d" % discover.SAMPLES_MAX)
+        if not (0 <= every <= 86400):
+            raise UsageError("--every must be a number of seconds from 0 to 86400")
+        info = {}
+        try:
+            texts, holes, samples = discover.collect_live(catalog, window=args.window, homes=args.home,
+                                                          win_samples=n, win_every=every, run_info=info)
+        except discover.LiveRefused as exc:
+            sys.stderr.write("raqib: discover refused: %s\n" % exc)
+            return 2
         if args.save:
+            extra = dict(info, export="windows-live") if info else None
             try:
-                written = discover.save(texts, args.save, holes, samples)
+                written = discover.save(texts, args.save, holes, samples, extra)
             except OSError as exc:
                 raise UsageError("cannot write %s: %s" % (args.save, exc))
             sys.stderr.write("raqib: texts read -> %s (repeat with --from %s)\n" % (", ".join(written), args.save))

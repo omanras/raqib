@@ -74,7 +74,12 @@ Offline and read-only (E6, A4): no socket is opened; no process is
 signalled, attached to or written to. A live run on Linux reads /proc,
 /proc/net/tcp and /proc/net/tcp6; only when /proc/net/tcp cannot be read
 does it run ss, by absolute path from SS_PATHS with a minimal environment,
-never through PATH (B-1). Elsewhere it lists the homes only and says so.
+never through PATH (B-1). A live run on Windows (M7.1, ADR-0007) reads the
+OS API in-process through raqib/hostwin.py, N samples T seconds apart, and
+each sample is the three texts above (win-process-<k>, win-tcp-<k>,
+win-dns-<k>) in the cmdlets' columns, parsed by the same parsers; a
+"# raqib-snapshot ... self=PID" line in win-process names the reader, so
+its tree is never evidence. Elsewhere it lists the homes only and says so.
 """
 from __future__ import annotations
 
@@ -153,6 +158,11 @@ EXIT = {"none-seen": 0, "alarm": 1, "incomplete": 3}
 
 class CatalogError(ValueError):
     pass
+
+
+class LiveRefused(Exception):
+    """A live run that cannot start (M7.1 E3: the Windows process snapshot
+    failed): the CLI says so in one line and exits 2."""
 
 
 # --- text helpers -------------------------------------------------------------
@@ -681,9 +691,28 @@ def _col(row, *names):
     return None
 
 
+# M7.1: the first line of a win-process text the live reader wrote names the
+# reader's own pid, as proc.txt's snapshot line does, so its tree is never
+# evidence (E3); --save keeps it, so a replay knows it too.
+WIN_SNAPSHOT_LINE = "# raqib-snapshot at=%s self=%s sample=%d"
+# ADR-0007 A-7: self= is the reader's pid, then its launchers (raqib*.exe,
+# python*.exe) nearest first, comma-separated: all of them are the reader.
+WIN_SNAPSHOT = re.compile(r"# raqib-snapshot at=(\S+) self=([0-9]+(?:,[0-9]+)*) sample=([0-9]+)\Z")
+
+
 def parse_win_process(text, src="win-process"):
-    """Records of `Get-CimInstance Win32_Process | ConvertTo-Csv`."""
+    """Records of `Get-CimInstance Win32_Process | ConvertTo-Csv`, or of the
+    same columns written by the live reader (raqib/hostwin.py), whose
+    "# raqib-snapshot" line before the header becomes a snapshot record."""
     records, problems = [], []
+    for number, raw in _numbered(text):
+        if not raw.lstrip().startswith("#"):
+            break
+        m = WIN_SNAPSHOT.match(raw.strip())
+        if m:
+            pids = [int(x) for x in m.group(2).split(",")]
+            records.append(_rec("snapshot", src, number, raw, ts=_ts(m.group(1)), self=pids[0], counts={},
+                                kernel_parent=None, launchers=pids[1:]))
     for number, raw, row in _csv_rows(text, src, "Win32_Process",
                                       ("ProcessId", "ParentProcessId", "Name"), problems):
         pid, ppid = _int(row["ProcessId"]), _int(row["ParentProcessId"])
@@ -1073,8 +1102,12 @@ def scan_footprints(homes, catalog):
     return "\n".join(lines) + "\n"
 
 
+WIN_SAMPLES, WIN_EVERY = 6, 10.0   # M7.1: the README loop's defaults, live
+
+
 def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/proc", ss_paths=SS_PATHS,
-                 ss_args=SS_ARGS, interval=1.0, clock=time.time, sleep=time.sleep):
+                 ss_args=SS_ARGS, interval=1.0, clock=time.time, sleep=time.sleep, win_samples=WIN_SAMPLES,
+                 win_every=WIN_EVERY, api=None, run_info=None):
     """({kind: (label, text or None, error or None)} read from this host, the
     holes of the live run, the number of samples taken). On Linux: a /proc
     snapshot and /proc/net/tcp
@@ -1082,6 +1115,11 @@ def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/pro
     ss from `ss_paths` only for a sample whose /proc/net/tcp could not be
     read. A source that failed in any sample keeps its text and an error,
     so the run is incomplete, not clean (B-2, D-2) - also when ss stood in.
+    On Windows (M7.1): `win_samples` samples `win_every` seconds apart read
+    by raqib/hostwin.py through `api` (default: the real Win32 API) as
+    win-process-<k>, win-tcp-<k> and win-dns-<k>, the shapes of the README
+    loop; run_info (a dict) receives the APIs read and the sample times for
+    run.json; a failed process snapshot raises LiveRefused.
     Elsewhere: the homes only. Read-only (A4)."""
     platform = platform or sys.platform
     texts, holes = {}, []
@@ -1131,8 +1169,26 @@ def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/pro
         if fallbacks:
             holes.append("ss fallback used for %d of %d sample(s): %s" % (fallbacks, samples, ss_path or "none found"))
             texts["ss"] = entry("ss", fallbacks)
+    elif platform == "win32":
+        # M7.1 (ADR-0007): the host's own records through the OS API, in-process.
+        from raqib import hostwin
+        try:     # ADR-0007 A-6: only the API load is "cannot be loaded"
+            api = hostwin.Api() if api is None else api
+        except (OSError, AttributeError) as exc:     # a DLL or symbol of kernel32/iphlpapi missing
+            raise LiveRefused("Windows live discovery: the API cannot be loaded: %s" % exc)
+        try:
+            got, more, info = hostwin.collect(api, win_samples, win_every, os.getpid(), sleep)
+        except hostwin.HostError as exc:
+            raise LiveRefused("Windows live discovery: %s" % exc)
+        except hostwin.ReaderFailed as exc:
+            raise LiveRefused(str(exc))
+        texts.update(got)
+        holes += more
+        samples = win_samples
+        if run_info is not None:
+            run_info.update(info)
     else:
-        holes.append("no live process or connection reader on %s in M5.0: export the Win32_Process,"
+        holes.append("no live process or connection reader on %s: export the Win32_Process,"
                      " Get-NetTCPConnection and Get-DnsClientCache CSVs (the README loop) or Sysmon XML and"
                      " give them with --read or --from (README)" % platform)
     homes = default_homes(platform) if homes is None else list(homes)
@@ -1234,11 +1290,13 @@ def _samples_field(run):
     return samples
 
 
-def save(texts, directory, holes=(), samples=None):
+def save(texts, directory, holes=(), samples=None, extra=None):
     """Write the texts of a live run and a run.json - each source's label
     and error, the connections it was read from, the live holes and the
     number of samples taken (E1) - so the run can be repeated with --from
-    (A5) and a replay of an incomplete run is incomplete too (D-4)."""
+    (A5) and a replay of an incomplete run is incomplete too (D-4). extra:
+    more run.json fields (M7.1: the Windows live run's export, APIs read,
+    sample times and seconds apart); it never replaces a field above."""
     os.makedirs(directory, exist_ok=True)
     written, sources = [], {}
     for kind, (label, text, error) in texts.items():
@@ -1248,8 +1306,10 @@ def save(texts, directory, holes=(), samples=None):
             with open(path, "w", encoding="utf-8", newline="\n") as f:
                 f.write(text)
             written.append(path)
-    run = {"raqib": "discover-run", "version": 1, "sources": sources, "holes": list(holes),
-           "connections_from": [texts[k][0] for k in CONNECTION_SOURCES if k in texts and texts[k][1] is not None]}
+    run = dict(extra or {})
+    run.update({"raqib": "discover-run", "version": 1, "sources": sources, "holes": list(holes),
+                "connections_from": [texts[k][0] for k in sorted(texts, key=_order)
+                                     if split_name(k)[0] in CONNECTION_SOURCES and texts[k][1] is not None]})
     if samples:
         run["samples"] = samples
     path = os.path.join(directory, RUN_FILE)
@@ -1564,6 +1624,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     records, reuse_holes = _instances(records)
     snapshots = [r for r in records if r["kind"] == "snapshot"]
     self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
+    self_pids |= {p for r in snapshots for p in r.get("launchers") or ()}     # ADR-0007 A-7
     procs = _merge_procs(records)
     records = _join_sockets(records, procs)
     conns = [r for r in records if r["kind"] == "conn"]

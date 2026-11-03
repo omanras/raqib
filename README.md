@@ -28,7 +28,10 @@ missing: one line per check, OK, MISSING or UNSURE, and exit 1 if any line
 is MISSING. It checks Python (and on Linux and macOS `python3` on PATH, which
 the hooks run), `claude` on PATH and its version, the project's hook
 settings (installed; foreign: a Raqib entry of another checkout or install;
-or missing), the notifier, tkinter (for `raqib app`), Sysmon on Windows, and whether the trace can be
+or missing), the notifier, tkinter (for `raqib app`), Sysmon on Windows, the host
+(whether `raqib discover` can read this host live: on Windows the three
+APIs it reads resolve, "names: no" when only the DNS cache's is missing),
+and whether the trace can be
 written. It is read-only; the only program it runs is `claude --version`,
 by absolute path (in an empty temporary directory, the only thing it
 creates).
@@ -363,8 +366,9 @@ name it:
   act-root by itself. With no candidate and no act-root the talker is not
   seen, so the run is incomplete (exit 3).
 ```bash
-raqib discover                      # Linux: /proc and /proc/net/tcp (one snapshot)
-raqib discover --window 30 --save run1   # sample 30 s; keep the texts read and a run.json with the sample count
+raqib discover                      # this host, live: Linux /proc (one snapshot); Windows the OS API (6 samples, 10 s apart)
+raqib discover --window 30 --save run1   # Linux: sample 30 s; keep the texts read and a run.json with the sample count
+raqib discover --samples 3 --every 5 --save run1   # Windows: 3 samples 5 s apart, kept as win-*-<k>.csv
 raqib discover --from run1 --json   # the same inventory again, from the saved texts and run.json
 raqib discover --check              # candidates and act-roots on the fixtures, against act-root's fp_budget
 ```
@@ -374,8 +378,32 @@ replace. Only when `/proc/net/tcp` cannot be read does discover run `ss`,
 by absolute path (`/usr/sbin/ss`, `/usr/bin/ss`, `/sbin/ss`, `/bin/ss`)
 with a minimal environment. The output names the path it read.
 
-On Windows, discover reads exported text, not the live host. In
-PowerShell, in an empty folder, a loop of `$N` samples `$T` seconds apart
+On Windows, `raqib discover` reads the live host in-process (M7.1,
+[ADR-0007](docs/specs/ADR-0007-the-host-not-the-name.md)), with no
+PowerShell: `--samples N` samples (default 6) `--every T` seconds apart
+(default 10), start to start, merged as below. Each sample reads the processes and their
+parents (Toolhelp32), each image path (QueryFullProcessImageNameW, under
+the least process right there is, PROCESS_QUERY_LIMITED_INFORMATION), the
+TCP connections with their owning process (GetExtendedTcpTable, IPv4 and
+IPv6) and the names in the DNS resolver cache (DnsGetCacheDataTable, and
+the cached addresses only: nothing is asked on the network). It reads no
+command line, working directory or environment (that would read another
+process's memory), and says so in a hole: without argv, Claude Code run as
+`node` is named "node" live. An image path it may not read is
+`?` and counted in a hole; a cache it cannot read is the hole "no names";
+every cap, skipped entry and truncated name is a hole with its count. The
+reader and its launchers (`raqib.exe`, a venv's `python.exe`) are never
+evidence. A
+failed process snapshot refuses the run in one line (exit 2); any other
+failure inside the reader says where it failed (exit 2). `--save DIR`
+keeps each sample as `win-process-<k>.csv`, `win-tcp-<k>.csv` and
+`win-dns-<k>.csv`, the shapes of the loop below, with a `run.json` naming the
+APIs read and the sample times, so `--from DIR` repeats the run. Run it
+elevated when you can: an elevated run reads more image paths.
+
+**Repeat from an export.** The PowerShell loop is kept as the fallback that
+an export can be repeated from. In PowerShell, in an empty folder, a loop of
+`$N` samples `$T` seconds apart
 (default 6 and 10; `$N = 1` is one sample). Run it from an elevated
 PowerShell when you can: without it, other users' and system processes
 have no image path, and each is counted in a hole.
@@ -437,7 +465,7 @@ others are printed when they apply to the sources read:
   acts.
 - **no names on Linux:** Linux keeps no DNS name record offline.
 - **no environment on Windows:** Windows exports carry no process
-  environment.
+  environment, and the live reader reads no command line either.
 - **window merge:** samples are merged by pid, and on Windows by pid and
   CreationDate; a Linux pid reused between snapshots, or a Windows process
   without CreationDate, joins two processes.
