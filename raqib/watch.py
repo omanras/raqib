@@ -57,6 +57,26 @@ Silence is an alarm (A3):
 - the watcher itself (B-4): watch.json carries a heartbeat written on every
   poll; the page reads a heartbeat older than STALE_SECONDS, or a state the
   page cannot get within PAGE_LOCK_SECONDS, as crashed or stuck.
+After a session_end, while it is the newest record, no live window opens
+until the next line: the agent is gone, and the band says AGENT GONE (I-2).
+Capture fails while the newest line is a RAQIB-SILENCE marker, or from the
+start when the hook check (raqib doctor's, read-only) finds the hooks
+missing or foreign; the next good record clears it, "recovered at seq N"
+(I-3).
+
+The page (M6.2, ADR-0005 Amendment I) is ui.render of the state this
+watch holds in memory (I-4), reloaded every --refresh seconds, with
+GET /discover for <trace dir>/discover.json. Each watch adds one row
+(pid, project, port, trace, state, started) to ~/.raqib/watches.json once
+its page is bound, and marks it finished at the end; the row is never
+removed (A3, I-5). The registry is written under an O_EXCL lock file, which
+is broken when it is older than LOCK_STALE_SECONDS, with a note in the row.
+A registry that is not one is left as it is and becomes a hole, and one
+that would lie inside the project (watching a home) is not written (J-4).
+The heartbeat and "updated" are wall time (time.time(), J-5); intervals
+(silence, a stale heartbeat, step_seconds) are measured on the monotonic
+clock. A start-time capture failure is cleared only by a live good record
+(J-2); AGENT GONE also needs every started session closed (J-3).
 Settled findings of severity high are notified (ADR-0005); the others are
 shown. Notifications are rate-limited by raqib/notify.py. Every finding
 entry carries its rule's kind; one without a kind is printed once as a
@@ -65,6 +85,7 @@ entry carries its rule's kind; one without a kind is printed once as a
 """
 from __future__ import annotations
 
+import copy
 import datetime
 import hashlib
 import json
@@ -93,6 +114,14 @@ GROWS = ("SILENCE-OPEN",)  # its citation moves with the trace, like an aggregat
 HISTORY_NOTICE = "history: not knocked"
 PARSE_LIMIT = "TRACE-HOLE (line)"  # parse problems' own rate-limit id; tail holes use TRACE-HOLE (D-6)
 SOURCE = "raqib watch: the rules re-run on the trace as it grows"
+REGISTRY_NAME = "watches.json"   # under ~/.raqib (I-5)
+LOCK_STALE_SECONDS = 10          # an older registry lock is broken, with a note in the row (I-5)
+LOCK_WAIT_SECONDS = LOCK_STALE_SECONDS + 1
+LOCK_POLL_SECONDS = 0.05
+REPLACE_TRIES = 20               # Windows: os.replace fails while a reader has the file open
+HEARTBEATS_FRESH = 3             # I-6: ALIVE needs a heartbeat younger than 3 heartbeat intervals
+STATE_RETRIES = 3                # J-13: watch.json's os.replace is retried 3 times, 50 ms apart
+STATE_RETRY_SECONDS = 0.05
 OPENERS = ("/usr/bin/xdg-open", "/bin/xdg-open")
 MAC_OPENER = "/usr/bin/open"
 # xdg-open is a shell script that finds the browser through PATH: it gets
@@ -102,6 +131,7 @@ OPENER_ENV = ("HOME", "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_D
               "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "XDG_DATA_DIRS", "XDG_CONFIG_DIRS", "DESKTOP_SESSION")
 
 _sleep = time.sleep  # the poll wait; tests replace it
+_retry_sleep = time.sleep  # the wait between os.replace attempts; tests replace it
 
 
 class WatchError(Exception):
@@ -203,7 +233,7 @@ class Watch:
     what is left and returns the final report. clock() is monotonic."""
 
     def __init__(self, project, trace_path, evaluate, rules, gap_seconds, notifier, out=None,
-                 err=None, clock=None, started=None, state_path=None):
+                 err=None, clock=None, started=None, state_path=None, wall=None):
         self.project = project
         self.name = notify.project_name(project)
         self.trace_path = trace_path
@@ -240,7 +270,10 @@ class Watch:
         self.holes = []
         self.last_line = None
         self.last_at = self.t0
-        self.beat = self.t0       # the last completed poll (B-4)
+        self.beat = self.t0       # the last completed poll (B-4), monotonic: for intervals
+        self.wall_clock = wall or time.time   # J-5: the heartbeat and "now" are wall time
+        self.beat_wall = self.wall_clock()
+        self.step_seconds = 0.0   # J-5: how long the last step took
         self.url = None
         self.port = None          # {"requested", "used", "warning"} (B-7)
         self.scope = None         # where the rules' scope came from (B-6)
@@ -249,6 +282,12 @@ class Watch:
         self.finished = None
         self.state_error = None
         self.final_text, self.final_exit = None, None
+        self.refresh = ui.REFRESH_DEFAULT   # I-1: the page's reload, --refresh
+        # I-3, J-2: "start" (hooks at start) clears only on a live good record; "marker" on any good record.
+        self.capture = {"failed": None, "line": None, "since": None, "recovered": None, "hooks": None,
+                        "start": None, "marker": None}
+        self.registry = None      # the Registry this watch is a row of (I-5)
+        self.registry_state = None
 
     # --- time and output -----------------------------------------------------
 
@@ -287,12 +326,15 @@ class Watch:
     def step(self, now=None):
         """Poll once; watch.json is written on every poll (the heartbeat)."""
         with self.lock:
-            now = self.clock() if now is None else now
+            begin = self.clock()
+            now = begin if now is None else now
             self._poll(now)
             self._silence(now)
             for event, count, status in self.notifier.tick(now):
                 self._say(now, "%s: %d more, folded into one notification (%s)" % (event, count, status))
             self.beat = now
+            self.beat_wall = self.wall_clock()
+            self.step_seconds = round(max(0.0, self.clock() - begin), 3)
             self._write_state(now)
 
     def capture_off(self, detail, now=None):
@@ -302,6 +344,48 @@ class Watch:
             hole = self._hole(now, "capture-failed", detail)
             status = self._knock(now, MARKER, "hooks disabled", (hole, "notice"))
             self._say(now, "%s: %s (%s)" % (MARKER, detail, status))
+            self._capture_failed(now, detail, start=True)
+
+    def hooks_at_start(self, ok, detail, kinds=(), now=None):
+        """I-3: the hook check of raqib doctor (read-only) after the install.
+        kinds (J-9): which of "disabled", "missing", "foreign" (or
+        "unchecked") it found. A failure here is a start-time failure: only
+        a live good record clears it (J-2)."""
+        with self.lock:
+            now = self.clock() if now is None else now
+            which = "/".join(kinds) or "missing or foreign"
+            self.capture["hooks"] = {"ok": bool(ok), "detail": detail, "kinds": list(kinds)}
+            if ok:
+                return
+            if not any(h["kind"] == "capture-failed" and not h["history"] for h in self.holes):
+                hole = self._hole(now, "capture-failed", "hooks %s at start: %s" % (which, detail))
+                status = self._knock(now, MARKER, "hooks at start", (hole, "notice"))
+                self._say(now, "%s: hooks %s at start: %s (%s)" % (MARKER, which, detail, status))
+            self._capture_failed(now, "hooks %s at start: %s" % (which, detail), start=True)
+
+    def _capture_failed(self, now, why, line=None, start=False):
+        self.capture["start" if start else "marker"] = {"why": why, "line": line, "since": self.at(now)}
+        self.capture["recovered"] = None
+        self._capture_view()
+
+    def _capture_good(self, now, line, seq, live):
+        """I-3: a good record clears a marker's failure; J-2: a start-time
+        failure is cleared only by a live one, never by history."""
+        cleared = False
+        if self.capture["marker"]:
+            self.capture["marker"], cleared = None, True
+        if self.capture["start"] and live:
+            self.capture["start"], cleared = None, True
+        if cleared and not (self.capture["marker"] or self.capture["start"]):
+            self.capture["recovered"] = {"seq": seq, "line": line, "at": self.at(now)}
+        self._capture_view()
+
+    def _capture_view(self):
+        """failed, line and since as the band reads them: the start-time failure first."""
+        parts = [p for p in (self.capture["start"], self.capture["marker"]) if p]
+        self.capture.update(failed="; ".join(p["why"] for p in parts) or None,
+                            line=self.capture["marker"]["line"] if self.capture["marker"] else None,
+                            since=parts[0]["since"] if parts else None)
 
     def _poll(self, now):
         lines, holes = self.tail.poll()
@@ -364,8 +448,9 @@ class Watch:
                                                                 window["notice_closed"]))
         if content:
             self.last_at = now
+            ts_of = {n: rec.get("ts") for n, rec in numbered}
             self.last_line = {"line": content[-1], "seq": seqs.get(content[-1]), "at": self.at(now),
-                              "epoch": self.epoch}
+                              "ts": ts_of.get(content[-1]), "epoch": self.epoch}
         markers = set()
         for i, (text, _) in enumerate(pairs, start=1):
             n = base + i
@@ -379,6 +464,12 @@ class Watch:
                     status = self._knock(now, MARKER, "line %d" % n, (hole, "notice"))
                     self.problem_notices[n] = status
                     self._say(now, "%s at line %d: capture failed (%s)" % (MARKER, n, status))
+        for n in content:  # I-3: a marker fails capture; the next good record clears it
+            if n in markers:
+                self._capture_failed(now, "line %d of the trace is a %s marker: an event was not captured" % (
+                    n, MARKER), n)
+            elif n in seqs:
+                self._capture_good(now, n, seqs[n], live=n > self.history_line)
         reasons = {}
         for p in problems:  # B-4: a live line that is not a sound record knocks, once per line
             if p["line"] > self.history_line and p["line"] not in markers:
@@ -490,8 +581,32 @@ class Watch:
                 entry["severity"], entry["rule_id"], entry["session_id"], seq_text(entry["cited_seq"]),
                 entry["summary"], notice, "" if by == "its lines" else "; settled by " + by))
 
+    def open_sessions(self):
+        """Sessions of this trace content that started and whose last record
+        is not a stop or session_end (J-3)."""
+        started, last = set(), {}
+        for _, rec in self.numbered:
+            if rec.get("phase") == "session_start":
+                started.add(rec["session_id"])
+            last[rec["session_id"]] = rec.get("phase")
+        return sorted(sid for sid in started if last.get(sid) not in silence.CLOSING)
+
+    def agent_gone(self):
+        """I-2, J-3: the newest line of this trace content is a session_end
+        record and no session is open: {line, seq, session_id, at, ts}, else
+        None. With a session still open, silence is judged as before."""
+        last = self.last_line
+        if last is None or last["epoch"] != self.epoch or not self.numbered:
+            return None
+        number, rec = self.numbered[-1]
+        if number != last["line"] or rec.get("phase") != "session_end" or self.open_sessions():
+            return None
+        return {"line": number, "seq": rec["seq"], "session_id": rec["session_id"], "at": last["at"],
+                "ts": rec.get("ts")}
+
     def _silence(self, now):
-        if self.window() is not None or now - self.last_at <= self.gap:
+        # I-2: after a session_end no window opens until the next line.
+        if self.window() is not None or now - self.last_at <= self.gap or self.agent_gone() is not None:
             return
         last = self.last_line
         if last is None:
@@ -532,6 +647,7 @@ class Watch:
             self.status, self.error = status, error
             self.finished = self.at(now)
             self.beat = now
+            self.beat_wall = self.wall_clock()
             try:
                 self._write_state(now)
             except Exception as exc:
@@ -583,27 +699,15 @@ class Watch:
             out.append({"kind": "state-unwritable", "detail": self.state_error})
         return out
 
+    def status_word(self, now=None):
+        """(word, level, detail) of the band (I-3), from the state in memory."""
+        with self.lock:
+            return ui.status(self.state(self.clock() if now is None else now))
+
     def band(self, now=None):
-        now = self.clock() if now is None else now
-        window = self.window()
-        if self.status == "crashed":
-            items = [("alarm", "CRASHED: %s" % self.error)]
-        elif self.finished:
-            items = [("incomplete", "finished at %s" % self.finished)]
-        elif now - self.beat > STALE_SECONDS:
-            items = [("alarm", "CRASHED or stuck: no heartbeat for %d s (last at %s)" % (now - self.beat,
-                                                                                      self.at(self.beat)))]
-        elif window is not None:
-            items = [("alarm", "SILENT for %d s (no line since %s)" % (now - self.last_at, window["since"]))]
-        else:
-            items = [("clean", "watching %s: %d lines" % (self.name, self.lines))]
-        items.append(self.notifier.band())
-        holes = len(self.holes) + len(self.notifier.holes)
-        if holes:
-            items.append(("alarm", "%d holes (see the alarms)" % holes))
-        if self.port and self.port.get("warning"):
-            items.append(("incomplete", self.port["warning"]))
-        return items
+        """The band's badges: the state word, the notifier, the holes."""
+        with self.lock:
+            return ui.band_items(self.state(self.clock() if now is None else now))
 
     def _snapshot(self):
         return (list(self.numbered), list(self.problems), list(self.found), list(self.notes), self.alarms())
@@ -618,21 +722,102 @@ class Watch:
             numbered, problems, found, notes, extra = self._snapshot()
         return self._build(numbered, problems, found, notes, extra), numbered, problems
 
+    def wall(self):
+        """Now, by the wall clock (J-5), as an aware datetime."""
+        return datetime.datetime.fromtimestamp(self.wall_clock(), datetime.timezone.utc)
+
+    def own(self):
+        """This watch's registry row key: (pid, trace, started)."""
+        return os.getpid(), self.trace_path, self.at(self.t0)
+
     def page(self):
-        """The page ui.make_server serves: the report so far and the band.
-        A watch loop that holds the state too long is reported, not waited
-        for (B-4): the server answers with its error page."""
+        """The page ui.make_server serves: the report so far, the band and
+        the watches, built from the state in memory (I-4); the other watches
+        from the registry on disk. A watch loop that holds the state too
+        long is reported, not waited for (B-4): the server answers with its
+        error page."""
         if not self.lock.acquire(timeout=PAGE_LOCK_SECONDS):
             raise RuntimeError("raqib watch is not responding: its watch loop has held the state for more than"
                                " %gs (last heartbeat %s); it may be stuck or crashed (A3)"
                                % (PAGE_LOCK_SECONDS, self.at(self.beat)))
         try:
             numbered, problems, found, notes, extra = self._snapshot()
-            band = self.band()
+            now = self.clock()
+            state = copy.deepcopy(self.state(now))
+            registry = self.registry.path if self.registry else None
+            own = dict(self.registry_state or {})
         finally:
             self.lock.release()
         rep = self._build(numbered, problems, found, notes, extra)
-        return ui.render(rep, numbered, problems, self.gap, band=band)
+        watches = None
+        if registry:
+            watches = ui.read_watches(registry, self.wall(), HEARTBEATS_FRESH * POLL_SECONDS, own=self.own())
+        return ui.render(rep, numbered, problems, self.gap, refresh=self.refresh,
+                         live={"state": state, "watches": watches, "own": own}, discover=ui.DISCOVER_ROUTE)
+
+    def discover_page(self):
+        """GET /discover (I-8): <trace dir>/discover.json, with its age."""
+        return ui.discover_page(ui.discover_path(self.trace_path), self.refresh, self.wall())
+
+    # --- the registry (I-5) --------------------------------------------------------
+
+    def register(self, registry, now=None):
+        """This watch's row, once the page is bound (serve wiring); never
+        raises: a registry that cannot be written is a hole."""
+        row = {"pid": os.getpid(), "project": self.project, "port": (self.port or {}).get("used"),
+               "trace": self.trace_path, "state": self.state_path, "url": self.url, "started": self.at(self.t0),
+               "finished": None, "status": "watching", "notes": []}
+
+        def edit(rows, note):
+            rows.append(dict(row, notes=[note] if note else []))
+        self.registry = registry
+        return self._registry_change(edit, "registered", now)
+
+    def unregister(self, now=None):
+        """At the end: this watch's row is marked finished, never removed (A3)."""
+        if self.registry is None:
+            return None
+        own = self.own()
+
+        def edit(rows, note):
+            mine = [r for r in rows if isinstance(r, dict) and (r.get("pid"), r.get("trace"), r.get("started")) == own]
+            for r in mine:
+                r.update(finished=self.finished, status=self.status)
+                if note:
+                    r["notes"] = (r["notes"] if isinstance(r.get("notes"), list) else []) + [note]
+            if not mine:
+                rows.append({"pid": own[0], "project": self.project, "port": (self.port or {}).get("used"),
+                             "trace": self.trace_path, "state": self.state_path, "url": self.url,
+                             "started": own[2], "finished": self.finished, "status": self.status,
+                             "notes": ["this row was not in the registry at the end: added again"] +
+                                      ([note] if note else [])})
+        return self._registry_change(edit, "marked %s" % self.status, now)
+
+    def registry_off(self, path, why, now=None):
+        """J-4: the registry is not written; the hole is in the band and the alarms."""
+        with self.lock:
+            now = self.clock() if now is None else now
+            self.registry = None
+            self.registry_state = {"path": path, "row": "not written", "note": None, "hole": why}
+            h = self._hole(now, "registry", why)
+            h["notice"] = "not knocked: the registry is not capture"
+            self._write_state(now)
+        return why
+
+    def _registry_change(self, edit, what, now=None):
+        try:
+            note, hole = self.registry.change(edit)
+        except Exception as exc:  # never the end of the watch: a hole
+            note, hole = None, "the registry %s was not written (%s): %s" % (
+                self.registry.path, what, getattr(exc, "strerror", None) or exc)
+        with self.lock:
+            now = self.clock() if now is None else now
+            self.registry_state = {"path": self.registry.path, "row": what, "note": note, "hole": hole}
+            if hole:
+                h = self._hole(now, "registry", hole)
+                h["notice"] = "not knocked: the registry is not capture"
+            self._write_state(now)
+        return hole
 
     def state(self, now):
         window = self.window()
@@ -640,10 +825,13 @@ class Watch:
             status = self.status
         else:
             status = "silent" if window else "watching"
-        return {
+        state = {
             "raqib_watch": 1, "project": self.project, "trace": self.trace_path, "state": self.state_path,
             "pid": os.getpid(), "url": self.url, "port": self.port, "scope": self.scope,
-            "started": self.at(self.t0), "updated": self.at(now), "heartbeat": self.at(self.beat),
+            "started": self.at(self.t0), "updated": ui._iso(self.wall()),
+            "heartbeat": ui._iso(datetime.datetime.fromtimestamp(self.beat_wall, datetime.timezone.utc)),
+            "heartbeat_age_seconds": round(now - self.beat, 3), "quiet_seconds": round(now - self.last_at, 3),
+            "step_seconds": self.step_seconds,
             "heartbeat_every_seconds": POLL_SECONDS, "stale_after_seconds": STALE_SECONDS,
             "finished": self.finished, "error": self.error, "gap_seconds": self.gap, "poll_seconds": POLL_SECONDS,
             "status": status, "epoch": self.epoch, "lines": self.lines, "records": len(self.numbered),
@@ -653,7 +841,11 @@ class Watch:
             "trace_problems": [self._problem(p) for p in self.problems],
             "last_line": self.last_line, "findings": list(self.inventory.values()), "silence": self.windows,
             "holes": self.holes + self.notifier.holes, "notifications": self.notifier.state(),
+            "capture": self.capture, "agent_gone": self.agent_gone(), "open_sessions": self.open_sessions(),
+            "state_error": self.state_error, "refresh_seconds": self.refresh, "registry": self.registry_state,
         }
+        state["band"] = ui.status(state)[0]   # J-6: the owner's state word, for the pages of other watches
+        return state
 
     def _problem(self, p):
         """A parse problem as watch.json holds it: live or history, and how it knocked (D-6)."""
@@ -669,7 +861,14 @@ class Watch:
                                        dir=os.path.dirname(os.path.abspath(self.state_path)))
             with os.fdopen(fd, "w", encoding="ascii", newline="\n") as f:
                 f.write(text)
-            os.replace(tmp, self.state_path)
+            for attempt in range(STATE_RETRIES + 1):   # J-13: Windows refuses while a page reads the file
+                try:
+                    os.replace(tmp, self.state_path)
+                    break
+                except PermissionError:
+                    if attempt == STATE_RETRIES:
+                        raise
+                    _retry_sleep(STATE_RETRY_SECONDS)
             tmp = None
             self.state_error = None
         except OSError as exc:
@@ -718,7 +917,127 @@ class Watch:
         return "\n".join(_safe(line) for line in out) + "\n\n"
 
 
+# --- the registry of watches (I-5) --------------------------------------------------
+
+class RegistryError(Exception):
+    """The registry lock could not be taken."""
+
+
+def registry_path(home=None):
+    return os.path.join(home or os.path.expanduser("~"), ".raqib", REGISTRY_NAME)
+
+
+class Registry:
+    """~/.raqib/watches.json: {"raqib_watches": 1, "watches": [row, ...]}.
+    Rows are added and marked under an O_EXCL lock file (path + ".lock"); a
+    lock older than LOCK_STALE_SECONDS is broken, and the change notes it in
+    the row. No row is ever removed (A3): the person deletes the file. A
+    file that is not a registry is left as it is (I-5)."""
+
+    def __init__(self, path, wall=None, sleep=None):
+        self.path = path
+        self.lock_path = path + ".lock"
+        self.wall = wall or time.time
+        self.sleep = sleep or time.sleep
+
+    def _acquire(self):
+        """None, or the note that a stale lock was broken."""
+        deadline = self.wall() + LOCK_WAIT_SECONDS
+        note = None
+        while True:
+            try:
+                fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            except FileExistsError:
+                try:
+                    age = self.wall() - os.stat(self.lock_path).st_mtime
+                except FileNotFoundError:
+                    continue
+                if age > LOCK_STALE_SECONDS:
+                    try:
+                        os.remove(self.lock_path)
+                    except FileNotFoundError:
+                        pass
+                    note = ("the registry lock %s was %.1f s old, more than %d s: broken by pid %d"
+                            % (self.lock_path, age, LOCK_STALE_SECONDS, os.getpid()))
+                    continue
+                if self.wall() >= deadline:
+                    raise RegistryError("the registry lock %s is held (%.1f s old) and was not let go within %d s"
+                                        % (self.lock_path, age, LOCK_WAIT_SECONDS))
+                self.sleep(LOCK_POLL_SECONDS)
+                continue
+            with os.fdopen(fd, "w", encoding="ascii") as f:
+                f.write("pid %d\n" % os.getpid())
+            return note
+
+    def _release(self):
+        try:
+            os.remove(self.lock_path)
+        except OSError:
+            pass  # left behind, it is broken by the next writer after LOCK_STALE_SECONDS
+
+    def read(self):
+        """(registry, None), or (None, why it is left as it is). Read as the
+        page reads it (ui.read_json): a FIFO is never opened, the size is
+        bounded, so a planted file cannot hold the watch."""
+        data, error, st = ui.read_json(self.path)
+        if error:
+            return None, error
+        if st is None:
+            return {"raqib_watches": 1, "watches": []}, None
+        if not isinstance(data, dict) or not isinstance(data.get("watches"), list):
+            return None, "is not a Raqib registry (no list of watches)"
+        return data, None
+
+    def _write(self, data):
+        text = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=True) + "\n"
+        fd, tmp = tempfile.mkstemp(prefix=".raqib-watches-", suffix=".tmp", dir=os.path.dirname(self.path))
+        try:
+            with os.fdopen(fd, "w", encoding="ascii", newline="\n") as f:
+                f.write(text)
+            for attempt in range(REPLACE_TRIES):
+                try:
+                    os.replace(tmp, self.path)
+                    tmp = None
+                    return
+                except PermissionError:   # Windows: a page is reading it
+                    if attempt == REPLACE_TRIES - 1:
+                        raise
+                    self.sleep(LOCK_POLL_SECONDS)
+        finally:
+            if tmp is not None and os.path.exists(tmp):
+                os.remove(tmp)
+
+    def change(self, edit):
+        """edit(rows, note) under the lock, then write; (note, hole)."""
+        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        note = self._acquire()
+        try:
+            data, why = self.read()
+            if data is None:
+                return note, "the registry %s %s: it is left as it is, and this watch is not in it (I-5)" % (
+                    self.path, why)
+            edit(data["watches"], note)
+            self._write(data)
+            return note, None
+        finally:
+            self._release()
+
+
 # --- the command ------------------------------------------------------------------
+
+def hook_kinds(doctor, installer, project):
+    """J-9: which of disabled, missing, foreign the hook check found."""
+    kinds = []
+    if installer.hooks_disabled(os.path.join(project, ".claude")):
+        kinds.append("disabled")
+    states, _, problem = doctor.hook_states(project, installer.WINDOWS)
+    if states is None:
+        return kinds + ["unreadable"]
+    for kind in ("missing", "foreign"):
+        if any(state == kind for _, state, _ in states):
+            kinds.append(kind)
+    return kinds
+
 
 def load_installer():
     """The installer's API: raqib/install.py, imported with the package, never
@@ -798,17 +1117,18 @@ def open_page(url, environ=None, platform=None, isfile=None, runner=None, isdir=
     return runner([program, url], env, None, wait=False)[1]
 
 
-def _serve(page, port):
+def _serve(page, port, routes=None, refresh=None):
     """(server, port record). A requested port (--port N, else DEFAULT_PORT)
     that cannot be bound gives another port and a warning, never silence
-    (B-7); OverflowError (no such port) is the caller's usage error."""
+    (B-7); OverflowError (no such port) is the caller's usage error.
+    routes: the pages beside / (GET /discover, I-8)."""
     requested = DEFAULT_PORT if port is None else port
     try:
-        server = ui.make_server(page, requested)
+        server = ui.make_server(page, requested, routes=routes, refresh=refresh)
         return server, {"requested": requested, "used": server.server_address[1], "warning": None}
     except OSError as exc:
         why = exc.strerror or str(exc)
-    server = ui.make_server(page, 0)
+    server = ui.make_server(page, 0, routes=routes, refresh=refresh)
     used = server.server_address[1]
     return server, {"requested": requested, "used": used,
                     "warning": "port %d on 127.0.0.1 is not available (%s); the page is on port %d instead"
@@ -816,10 +1136,12 @@ def _serve(page, port):
 
 
 def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=None,
-            err=None, home=None):
+            err=None, home=None, refresh=None):
     """raqib watch; returns the exit code of the final report.
     evaluator(project) -> (evaluate, scope note): evaluate(records) gives
-    (findings, notes) with the project's context (B-6)."""
+    (findings, notes) with the project's context (B-6). refresh: the page's
+    reload in seconds (I-1, default ui.REFRESH_DEFAULT)."""
+    refresh = ui.REFRESH_DEFAULT if refresh is None else ui.check_refresh(refresh)
     environ = os.environ if environ is None else environ
     err = err or sys.stderr
     project = project or "."
@@ -844,6 +1166,7 @@ def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_s
                                environ=environ, stderr=err)
     watcher = Watch(project, trace_path, evaluate, rules, gap_seconds, notifier, out=out, err=err)
     watcher.scope = scope
+    watcher.refresh = refresh
     out.write("raqib watch: trace %s (%s)\nraqib watch: state %s\n" % (_safe(trace_path), source,
                                                                       _safe(watcher.state_path)))
     out.write("raqib watch: scope: %s\n" % _safe(scope))  # D-7: the agent can write HANDOFF.md
@@ -851,12 +1174,28 @@ def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_s
     out.write("raqib watch: %s\n" % notifier.band()[1])
     if installed["code"] == 3:
         watcher.capture_off("the installer reports disableAllHooks: the hooks will not run")
+    try:  # I-3: the hooks as doctor reads them (read-only), after the install
+        from raqib import doctor  # doctor imports this module: imported here, not at the top
+        ok, detail = doctor.check_hooks(project, installer.WINDOWS)
+        kinds = hook_kinds(doctor, installer, project) if not ok else []
+    except Exception as exc:
+        ok, detail, kinds = False, "the hook check failed: %s: %s" % (type(exc).__name__, exc), ["unchecked"]
+    watcher.hooks_at_start(ok, detail, kinds)
     try:
-        server, watcher.port = _serve(watcher.page, port)
+        server, watcher.port = _serve(watcher.page, port, routes={ui.DISCOVER_ROUTE: watcher.discover_page},
+                                      refresh=refresh)
     except (OSError, OverflowError) as exc:
         notifier.close()
         raise WatchError("cannot serve on 127.0.0.1:%s: %s" % (port, exc))
     watcher.url = "http://127.0.0.1:%d/" % server.server_address[1]
+    registry = Registry(registry_path(home))
+    if inside(os.path.dirname(registry.path), project):   # J-4 (A4): watching a home; nothing into the project
+        hole = watcher.registry_off(registry.path, "the registry %s is inside the project %s: it is not written"
+                                    " (A4: watch writes nothing into the project)" % (registry.path, project))
+    else:
+        hole = watcher.register(registry)   # I-5, under ~/.raqib
+    if hole:
+        out.write("raqib watch: %s\n" % _safe(hole))
     thread = threading.Thread(target=server.serve_forever, name="raqib-watch-page", daemon=True)
     thread.start()
     crash = None
@@ -864,8 +1203,11 @@ def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_s
         try:
             if watcher.port["warning"]:
                 out.write("raqib watch: WARNING: %s\n" % watcher.port["warning"])
-            out.write("raqib watch: page %s (read-only; Ctrl-C stops the watch and prints the final report)\n"
-                      % watcher.url)
+            out.write("raqib watch: page %s (read-only, reloads every %d s; Ctrl-C stops the watch and prints the"
+                      " final report)\n" % (watcher.url, refresh))
+            if watcher.registry is not None:
+                out.write("raqib watch: registry %s (this watch is a row; rows are never removed)\n"
+                          % _safe(watcher.registry.path))
             if no_open or environ.get("CI"):
                 out.write("raqib watch: page not opened (%s)\n" % ("--no-open" if no_open else "CI is set"))
             else:
@@ -888,6 +1230,12 @@ def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_s
             text, code = watcher.final_text, watcher.final_exit
         except Exception as exc:  # D-7: a final report, or one line saying why there is none
             text, code = "raqib watch: no final report: %s: %s\n" % (type(exc).__name__, _safe(exc)), 1
+        try:  # I-5: the row stays, marked finished
+            hole = watcher.unregister()
+        except Exception as exc:
+            hole = "the registry was not marked: %s: %s" % (type(exc).__name__, exc)
+        if hole:
+            out.write("raqib watch: %s\n" % _safe(hole))
     finally:
         server.shutdown()
         server.server_close()

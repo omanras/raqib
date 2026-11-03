@@ -160,8 +160,8 @@ def test_e3_no_script_and_nothing_loaded(tmp_path):
     page, _ = hostile_page(tmp_path)
     assert '<meta http-equiv="Content-Security-Policy" content="default-src \'none\';' in page
     tags = re.findall(r"<[a-zA-Z][^>]*>", page)  # values are escaped, so these are the page's own
-    assert {t.split()[0].strip("<>").lower() for t in tags} <= {
-        "html", "head", "meta", "title", "style", "body", "main", "h1", "h2", "p", "span", "div",
+    assert {t.split()[0].strip("<>").lower() for t in tags} <= {   # h3: the severity groups (M6.2 I-9)
+        "html", "head", "meta", "title", "style", "body", "main", "h1", "h2", "h3", "p", "span", "div",
         "ul", "li", "a", "code", "table", "thead", "tbody", "tr", "th", "td"}
     assert not [t for t in tags if re.search(r"\s(?:src|action|srcset|on[a-z]+)\s*=", t)]
     assert {h[0] for h in re.findall(r'href="(.)', page)} <= {"#"}
@@ -260,8 +260,8 @@ def test_e4_cli_serve(monkeypatch):
         def server_close(self):
             served["closed"] = True
 
-    def make(page, port):
-        served["make"], served["port"] = page, port
+    def make(page, port, **kw):   # M6.2 I-1: the error page's refresh passes through
+        served["make"], served["port"], served["kw"] = page, port, kw
         return FakeServer()
     monkeypatch.setattr(ui, "make_server", make)
     code, text = raqib("ui", BLOCKED, "--serve", "--port", "0")

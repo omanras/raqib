@@ -18,7 +18,7 @@ On Windows the path rules judge drive (`C:\`) and UNC paths (`\\server\share`, r
 Install on the side that runs the agent (Windows or WSL), not both.
 
 ## Watch a project
-`raqib watch /path/to/project` installs the hooks, keeps the trace outside the project (by default under `~/.raqib/traces/`), takes the rules' scope from the project's `HANDOFF.md` when there is one, serves the read-only page on 127.0.0.1 and opens it once.
+`raqib watch /path/to/project` installs the hooks, keeps the trace outside the project (by default under `~/.raqib/traces/`), takes the rules' scope from the project's `HANDOFF.md` when there is one, serves the read-only page on 127.0.0.1 and opens it once. The page reloads itself every `--refresh` N seconds (default 5) and runs no script: a band (WATCHING, SILENT for N s, AGENT GONE or CAPTURE FAILED, with notifications on or off, the trace and the last line's time), the alarms, the findings by severity, the live silence windows in the timeline, the other watches listed in `~/.raqib/watches.json` (a GONE row is kept; any process of yours can write that file), and a discover tab when `<trace dir>/discover.json` (`raqib discover --json`) is there.
 High findings knock once settled, as do silence (no trace line for `RAQIB_GAP_SECONDS`, default 60 s), capture failures and trace holes: OS notifications, one per rule per minute; lines already in the trace when watch starts are history, shown but never knocked; `--no-notify` or a set `CI` turns the knocks off.
 Ctrl-C, or a crash, prints the final report; `<trace>.watch.json` keeps the findings, the silence windows, the holes and a heartbeat ([ADR-0005](docs/specs/ADR-0005-one-command-watch.md)).
 

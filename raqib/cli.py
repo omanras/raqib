@@ -28,10 +28,11 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       Exit 1 if anything was raised (or the trace is empty or corrupt), 3 if
       no suspicion was raised but some window could not be judged, 0 if
       nothing was raised (not a clearance, A2).
-  ui TRACE [--findings FILE] [--suspicion FILE] [-o FILE | --serve [--port N]]
+  ui TRACE [--findings FILE] [--suspicion FILE] [-o FILE | --serve [--port N] [--refresh N]]
       Write the report as one static, read-only HTML page (timeline,
-      findings, silence windows), or serve it on 127.0.0.1. Exit codes as
-      for report; --serve runs until interrupted.
+      findings, silence windows), or serve it on 127.0.0.1, reloading every
+      --refresh N seconds (1..3600, default 5). Exit codes as for report;
+      --serve runs until interrupted.
   eval [--events FILE] [--candidate SPEC]... [--json] [-o FILE]
       Score the rules, and each candidate model, on labelled events (M2.2;
       a checkout's tests/fixtures/eval/events.json or --events FILE; an
@@ -53,7 +54,7 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       complete and nothing was seen (not a clearance); 2 on bad input.
       --save DIR writes the texts and a run.json (each source's error, the
       live holes); --from DIR replays them, incomplete if the run was.
-  watch [PROJECT] [--log PATH] [--no-open] [--no-notify] [--port N]
+  watch [PROJECT] [--log PATH] [--no-open] [--no-notify] [--port N] [--refresh N]
       Watch a project (M6.1, ADR-0005; default: the current directory):
       install the hooks (idempotent; the installer's lines are printed),
       tail the trace (by default outside the project, under ~/.raqib/traces),
@@ -61,9 +62,10 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       one, notify the OS of settled high findings, live silence
       (RAQIB_GAP_SECONDS), capture failures and trace holes, keep it all in
       TRACE.watch.json with a heartbeat, serve the page on 127.0.0.1 (--port
-      N, default 8765; a busy port gives another one and a WARNING) and open
-      it once. Lines already in the trace at the start are history: shown,
-      never notified. Notifications are off under CI or with --no-notify.
+      N, default 8765; a busy port gives another one and a WARNING; it reloads
+      every --refresh N seconds, 1..3600, default 5) and open it once. Lines
+      already in the trace at the start are history: shown, never notified.
+      Notifications are off under CI or with --no-notify.
       Ctrl-C, or a crash, prints the final report; exit as for report.
   doctor [PROJECT]
       Say in one screen what `watch` needs and is missing (M6.3,
@@ -163,6 +165,9 @@ def _parser():
     u.add_argument("-o", "--out", metavar="FILE", help="HTML file to write (default: stdout)")
     u.add_argument("--serve", action="store_true", help="serve the page on 127.0.0.1 instead")
     u.add_argument("--port", type=int, default=8765, help="port for --serve (default 8765; 0: any free port)")
+    u.add_argument("--refresh", type=_refresh, default=None, metavar="N",
+                   help="--serve: the page reloads every N seconds, 1..%d (default %d); a static file never does"
+                        % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
     e = sub.add_parser("eval", help="score rules and candidate models on labelled events (M2.2)")
     e.add_argument("--events", default=None, metavar="FILE",
                    help="labelled events (default: %s; an installed raqib has none)" % EVENTS_SOURCE)
@@ -198,9 +203,19 @@ def _parser():
     w.add_argument("--no-notify", action="store_true", help="no OS notifications (also off when CI is set)")
     w.add_argument("--port", type=int, default=None, metavar="N",
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
+    w.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
+                   help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
+
+
+def _refresh(text):
+    """I-1: --refresh N, a whole number of seconds from 1 to ui.REFRESH_MAX (else exit 2)."""
+    try:
+        return ui.check_refresh(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc))
 
 
 def _context(args):
@@ -455,16 +470,19 @@ def cmd_suspect(args, out):
 
 def cmd_ui(args, out):
     gap = _gap_seconds(args)
+    if args.refresh is not None and not args.serve:
+        raise UsageError("--refresh applies to --serve: a static page never reloads itself")
     if args.serve:
         if args.out:
             raise UsageError("use either -o or --serve")
         _report(args)  # fail early on unreadable input
+        refresh = ui.REFRESH_DEFAULT if args.refresh is None else args.refresh
 
         def page():
             rep, numbered, problems = _report(args)
-            return ui.render(rep, numbered, problems, gap)
+            return ui.render(rep, numbered, problems, gap, refresh=refresh)
         try:
-            server = ui.make_server(page, args.port)
+            server = ui.make_server(page, args.port, refresh=refresh)
         except (OSError, OverflowError) as exc:
             raise UsageError("cannot serve on 127.0.0.1:%s: %s" % (args.port, exc))
         out.write("raqib: serving %s at http://127.0.0.1:%d/ (read-only; Ctrl-C to stop)\n"
@@ -619,7 +637,7 @@ def cmd_watch(args, out):
         return (lambda records: run_rules(records, rules, ctx, gap)), note
     try:
         return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
-                             evaluator, rules, gap)
+                             evaluator, rules, gap, refresh=args.refresh)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 
