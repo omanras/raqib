@@ -334,3 +334,17 @@ with file:line, is in `docs/review/2026-11-03-M5.0b.md`.
   export has its own README paragraph; the merged-beside hole is decided
   in build(), so --read files count; the Moonshot hosts carry a comment,
   no note fields.
+
+## Amendment I (the Table, 2026-11-03) - judgement on M5.0b (02958eb + 92d0413)
+- G-1..G-14 MET as cited; the Table read `_act_roots` (parent in
+  launchers, no `--type=` helper, command outside the root's tree) on the
+  branch; --check: act-root 3 of 3 positives found, 0 of 2 realistic
+  negatives fired; candidate anchor 2 of 2 benign desktops (no budget, B-8).
+- CI runs 41576116481 and 41579737381 success on six jobs each (read from
+  api.github.com); gate 1701 passed, 7 skipped; scope clean (widened by
+  G-9); fixture leak grep clean (no real IP, user or host).
+- RR-1..RR-8 accepted; RR-8 (co-author line) is the serving model's.
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Open for the field: a second blind run on the Kimi host with the sample
+  loop and a catalog copy without the Moonshot hosts and the `.kimi`
+  footprint (B-10), to see whether act-root names kimi by shape alone.
