@@ -98,3 +98,6 @@ Blocking or steering the agent (A4); multi-host; auth; cloud storage.
 - C-3 `--root` keeps the host's abspath semantics.
 - C-4 Scope widened to README.md:17, THREAT_MODEL section 7, test_docs.
 Full text: docs/review/2026-11-03-M5.1b-ruling.md.
+- C-7..C-9 (dated note, 2026-11-03, second STOP dad6065): README.md lines
+  17/68/122 in Scope ("0 of 10"); the Git Bash fixture is a positive; the
+  `\\?\` and `\\.\` prefixes are stripped by norm_path.
