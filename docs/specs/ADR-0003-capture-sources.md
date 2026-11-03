@@ -141,3 +141,17 @@ tool name or id was replaced by its hash (A-2).
 - Verdict: NEXT; merge --no-ff under the commander's standing word.
 - Phase 5 exit, first half: an agent other than Claude Code can be watched
   end to end through the proxy; the field proof (Kimi) is the commander's.
+
+## Amendment C (the Table, 2026-11-03) - rulings on the M5.3 STOP (4660b2a)
+- C-1 CROSS-SOURCE is a code rule (raqib/rules/cross.py, anchor, high,
+  class CROSS); the gate reads its RULE_KINDS.
+- C-2 Judged only when the trace holds os lines; otherwise silent (the
+  `sources:` line shows the absence).
+- C-3 Window reading B; asked-not-done / done-not-asked as defined.
+- C-4 Shell tool names and program folding fixed; done-not-asked excludes
+  the agent's direct children (its helpers), named as a hole.
+- C-5 os record shape; SECRET-OUTPUT / NET-TOOL guard `source != os`;
+  os session `os-<root pid>`; GAP/ORDER skip all-os sessions; no dedup.
+- C-6 One shared Sysmon helper in discover.py. C-7 Silence lines per
+  failure; "no event 3" is INCOMPLETE not alarm. C-8 budget 0.1.
+- C-9 Counts and docs. Full text: docs/review/2026-11-03-M5.3-ruling.md.
