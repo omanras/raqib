@@ -65,3 +65,9 @@ point. Phase 6 runs before the rest of Phase 5.
 - M6.2 dashboard v2: live band, severity order, several projects, discover tab
        Phase exit: a fresh machine goes from install to a toast on a real
        finding in under five minutes, by the README alone.
+
+## Phase 7 — The host, not the name (ADR-0007; the commander's order, 2026-11-03)
+- M7.1 Windows live discovery in-process (ctypes): `raqib discover` live on Windows; `--save` keeps the samples
+- M7.2 `raqib watch --host`: continuous discovery, NEW-AGENT, AGENT-DARK live, source attachment, the host record as a source
+- M7.3 the window starts from the host: agents found, each with its band, one Start
+- M7.4 rhythm (ADR-0004 layer 3) and suspicion on unknown trees
