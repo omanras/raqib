@@ -169,7 +169,8 @@ def test_e1_hashes_of_command_line_path_and_destination_never_the_text():
     bash = rows[("process", "2026-11-03T09:00:05.200Z")]
     command = '"C:\\Program Files\\Git\\usr\\bin\\bash.exe" -c -l "ls -la | grep src"'
     assert bash["input_sha256"] == common.canonical_sha256({"command_line": command})
-    assert bash["input_meta"] == {"command_head": "bash.exe", "command_programs": ["bash.exe"], "depth": 1}
+    assert bash["input_meta"] == {"command_head": "bash.exe", "command_programs": ["bash.exe"], "depth": 1,
+                                  "parent_seq": 2}   # D-9: the root's own line
     note = rows[("file", "2026-11-03T09:00:12.500Z")]
     assert note["input_sha256"] == common.canonical_sha256({"path": "C:\\work\\proj\\notes.txt"})
     assert note["input_meta"] == {"path": "C:\\work\\proj\\notes.txt"}
@@ -208,7 +209,7 @@ def test_e1_program_names_only_through_common(image, meta):
                              "<Data Name='Image'>%s</Data>" % image, 1)
     lines, _ = built(text, cwd=CWD)
     ls = [r for r in pres(lines) if r["ts"] == "2026-11-03T09:00:05.300Z"][0]
-    assert ls["input_meta"] == dict(meta, depth=2)
+    assert ls["input_meta"] == dict(meta, depth=2, parent_seq=5)
 
 
 @pytest.mark.parametrize("ip, private", [
@@ -221,15 +222,18 @@ def test_c5_dest_private(ip, private):
     assert os_sysmon.dest_private(ip) is private
 
 
-def test_c5_cwd_is_the_option_else_the_roots_directory_else_os_sysmons():
+def without_root_start():
+    return "\n".join(line for line in e2_text().splitlines() if "<Data Name='ProcessId'>4100</Data>"
+                     not in line or "<EventID>1<" not in line)
+
+
+def test_d4_cwd_is_the_option_else_the_roots_directory_else_no_cwd_at_all():
     assert {r["cwd"] for r in records(built(cwd="D:\\elsewhere")[0])} == {"D:\\elsewhere"}
     assert {r["cwd"] for r in records(built()[0])} == {"C:\\work\\proj\\"}   # the root's CurrentDirectory
-    without = "\n".join(line for line in e2_text().splitlines() if "<Data Name='ProcessId'>4100</Data>"
-                        not in line or "<EventID>1<" not in line)
-    lines, _ = built(without, own_cwd="C:\\from\\here")
-    assert {r["cwd"] for r in records(lines)} == {"C:\\from\\here"}
-    lines, _ = os_sysmon.build(without, 4100)
-    assert {r["cwd"] for r in records(lines)} == {os.getcwd()}
+    lines, _ = os_sysmon.build(without_root_start(), 4100)
+    assert lines and not any("cwd" in r for r in records(lines))
+    assert os.getcwd() not in "\n".join(lines) and "os.getcwd" not in (ROOT / "raqib" / "hooks" / "os_sysmon.py"
+                                                                         ).read_text(encoding="utf-8")
 
 
 def test_e1_order_is_utctime_then_record_id_whatever_the_export_order():
@@ -445,6 +449,176 @@ def test_e1_the_module_runs_nothing_but_wevtutil_and_opens_no_socket():
     tree = ast.parse((ROOT / "raqib" / "hooks" / "os_sysmon.py").read_text(encoding="utf-8"))
     names = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     names |= {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-    assert names == {"__future__", "ipaddress", "json", "os", "subprocess", "sys", "raqib", "raqib.hooks"}
+    assert names == {"__future__", "ipaddress", "json", "os", "re", "subprocess", "sys", "raqib", "raqib.hooks",
+                     "raqib.rules"}
     assert (ROOT / "raqib" / "hooks" / "os_sysmon.py").read_bytes().isascii()
     assert (ROOT / "raqib" / "rules" / "cross.py").read_bytes().isascii()
+
+
+# --- REDO-2 (ADR-0003 Amendment D, rulings D-4, D-5, D-6, D-12, D-13) ------------------
+
+def test_d4_an_export_read_elsewhere_with_no_cwd_makes_the_scope_cwd_rules_partial(tmp_path):
+    src = tmp_path / "no-root-start.xml"
+    src.write_text(without_root_start(), encoding="utf-8")
+    log = tmp_path / "t.jsonl"
+    assert cli.main(["os-sysmon", "--root", "4100", "--log", str(log), "--from", str(src)], out=io.StringIO()) == 0
+    recs, problems = trace.read(log)
+    assert problems == [] and recs and not any("cwd" in r for r in recs)
+    out = io.StringIO()
+    assert cli.main(["report", str(log), "--scope", "."], out=out) == 3
+    text = out.getvalue()
+    assert "FINDINGS: 0" in text and "ALARMS (A3, A5): 0" in text
+    assert "SCOPE-CWD-MOVED partial" in text and "SCOPE-CWD-ROOT partial" in text
+
+
+@pytest.mark.parametrize("cwd, ok", [
+    ("C:\\work\\proj", True), ("\\\\srv\\share\\proj", True), ("/work/proj", True),
+    ("work", False), ("C:work", False), ("~/proj", False), ("", False),
+])
+def test_d12_cwd_is_validated_as_the_proxy_does(tmp_path, cwd, ok):
+    log = tmp_path / "t.jsonl"
+    code = cli.main(["os-sysmon", "--root", "4100", "--log", str(log), "--from", str(E2), "--cwd", cwd],
+                    out=io.StringIO())
+    assert code == (0 if ok else 2) and log.exists() is ok
+    if not ok:
+        with pytest.raises(os_sysmon.UsageError, match="--cwd must be an absolute directory"):
+            os_sysmon.check_cwd(cwd)
+
+
+def two_holders():
+    """pid 4100 held first by an agent that ran curl and ended, then by the current one."""
+    x = synthetic()
+    export = x.Export()
+    export.proc("00.100", 4100, x.AGENT, '"%s"' % x.AGENT, 900, x.EXPLORER, "explorer.exe", guid=x.pguid_of(4100, 0))
+    export.proc("01.000", 4150, x.CURL, "curl -s https://198.51.100.20/x", 4100, x.AGENT, x.AGENT,
+                pguid=x.pguid_of(4100, 0))
+    export.end("02.000", 4100, x.AGENT)
+    export.proc("10.000", 4100, x.AGENT, '"%s"' % x.AGENT, 900, x.EXPLORER, "explorer.exe", guid=x.pguid_of(4100, 1),
+                cwd="C:\\work\\later\\")
+    export.proc("11.000", 4160, x.BASH, '"%s" -c -l "ls"' % x.BASH, 4100, x.AGENT, x.AGENT, pguid=x.pguid_of(4100, 1))
+    export.net("12.000", 4100, x.AGENT, "203.0.113.7", 443, guid=x.pguid_of(4100, 1))
+    export.file("13.000", 4100, x.AGENT, "C:\\work\\later\\a.txt", guid=x.pguid_of(4100, 1))
+    return x, export.text()
+
+
+def heads(lines):
+    return [r["input_meta"].get("command_head") for r in pres(lines) if r["tool"] == "process"]
+
+
+def test_d5_the_latest_holder_is_the_root_and_earlier_holders_are_one_silence_line(tmp_path):
+    x, text = two_holders()
+    lines, silences = os_sysmon.build(text, 4100)
+    assert heads(lines) == ["agent.exe", "bash.exe"] and "curl" not in "\n".join(lines)
+    assert silences == ["pid 4100 had 1 earlier holder(s) in the export; the latest is the root (ProcessGuid %s);"
+                        " give --root 4100:GUID for another" % x.pguid_of(4100, 1)]
+    assert {r["cwd"] for r in records(lines)} == {"C:\\work\\later\\"}   # the latest holder's directory
+    src = tmp_path / "two.xml"
+    src.write_text(text, encoding="utf-8")
+    err = io.StringIO()
+    code = os_sysmon.run("4100", str(tmp_path / "t.jsonl"), from_path=str(src), out=io.StringIO(), err=err)
+    assert code == 1 and err.getvalue().startswith("RAQIB-SILENCE: os-sysmon root=4100 pid 4100 had 1 earlier")
+
+
+@pytest.mark.parametrize("spelling", ["{8d1c0a51-0000-6732-0000-000000001004}", "8D1C0A51-0000-6732-0000-000000001004"])
+def test_d5_root_pid_guid_picks_the_holder(tmp_path, spelling):
+    x, text = two_holders()
+    assert x.pguid_of(4100, 0) == "{8d1c0a51-0000-6732-0000-000000001004}"
+    lines, silences = os_sysmon.build(text, 4100, guid=spelling)
+    assert silences == [] and heads(lines) == ["agent.exe", "curl.exe"]
+    assert "bash" not in "\n".join(lines) and not [r for r in pres(lines) if r["tool"] in ("net", "file")]
+    src = tmp_path / "two.xml"
+    src.write_text(text, encoding="utf-8")
+    log = tmp_path / "t.jsonl"
+    assert cli.main(["os-sysmon", "--root", "4100:" + spelling, "--log", str(log), "--from", str(src)],
+                    out=io.StringIO()) == 0
+    assert [json.loads(x)["session_id"] for x in log.read_text().splitlines()][0] == "os-4100"
+
+
+def test_d5_an_unknown_guid_is_root_not_found():
+    _, text = two_holders()
+    lines, silences = os_sysmon.build(text, 4100, guid="{00000000-0000-0000-0000-000000000000}")
+    assert lines == [] and silences == ["root pid 4100 with ProcessGuid {00000000-0000-0000-0000-000000000000} is in no"
+                                        " event 1, 3 or 11 of the export: nothing of its tree is recorded"]
+
+
+@pytest.mark.parametrize("value", ["x", "4100:", "4100:not-a-guid", "-1", "4100:{8d1c0a51-0000-6732-0000-0000}",
+                                   "4100:{8d1c0a51-0000-6732-0000-000000001004}x", " 4100"])
+def test_d5_a_bad_root_is_a_usage_error(tmp_path, value):
+    with pytest.raises(os_sysmon.UsageError, match="--root must be"):
+        os_sysmon.parse_root(value)
+    assert cli.main(["os-sysmon", "--root", value, "--log", str(tmp_path / "t"), "--from", str(E2)],
+                    out=io.StringIO()) == 2
+
+
+def test_d5_readme_says_the_latest_holder_is_the_root():
+    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert "The root is the LATEST process that held the pid in the export" in readme
+    assert "`--root PID:GUID` (its Sysmon ProcessGuid) picks another" in readme
+    assert "the ProcessGuid keeps a reused pid out" in readme
+
+
+def test_d6_silence_goes_to_stderr_before_the_append(tmp_path):
+    err = io.StringIO()
+    with pytest.raises(os_sysmon.UsageError, match="cannot write the trace"):
+        os_sysmon.run(9999, str(tmp_path / "missing-dir" / "t.jsonl"), from_path=str(E2), out=io.StringIO(), err=err)
+    assert err.getvalue().startswith("RAQIB-SILENCE: os-sysmon root=9999 root pid 9999 is in no event 1, 3 or 11")
+
+
+def test_d12_a_torn_last_line_gets_its_newline_before_the_append(tmp_path):
+    log = tmp_path / "t.jsonl"
+    log.write_bytes(b'{"torn":')
+    assert os_sysmon.run(4100, str(log), from_path=str(E2), cwd=CWD, out=io.StringIO(), err=io.StringIO()) == 0
+    assert log.read_text() == '{"torn":\n' + "".join(line + "\n" for line in built(cwd=CWD)[0])
+
+
+def test_d12_a_root_named_only_as_a_parent_is_found():
+    x = synthetic()
+    export = x.Export()
+    x.shell(export, "05.200", 4200, "ls")
+    x.child(export, "05.300", 4210, x.LS, "ls", 4200, "ls")
+    export.net("06.000", 4200, x.BASH, "203.0.113.7", 443)
+    export.file("07.000", 4200, x.BASH, "C:\\work\\proj\\a.txt")
+    lines, silences = os_sysmon.build(export.text(), 4100)
+    assert silences == []
+    procs = [r for r in pres(lines) if r["tool"] == "process"]
+    assert [(r["input_meta"]["command_head"], r["input_meta"]["depth"], r["input_meta"].get("parent_seq"))
+            for r in procs] == [("bash.exe", 1, None), ("ls.exe", 2, procs[0]["seq"])]
+    assert not any("cwd" in r for r in records(lines))   # no event 1 of the root: no cwd (D-4)
+
+
+def test_d12_an_event_with_a_pid_and_no_utctime_is_a_silence_line():
+    text = e2_text().replace("<Data Name='UtcTime'>2026-11-03 09:00:12.500</Data>", "", 1)
+    lines, silences = built(text, cwd=CWD)
+    assert silences == ["the event at line 11 (Sysmon 11) has no ProcessId or UtcTime: it is not recorded"]
+    assert not [r for r in pres(lines) if r["tool"] == "file"]
+
+
+def test_d9_process_lines_link_their_parent_line():
+    lines, _ = built(cwd=CWD)
+    procs = {r["seq"]: r for r in pres(lines) if r["tool"] == "process"}
+    for seq, r in procs.items():
+        meta = r["input_meta"]
+        if meta["depth"] == 0:
+            assert "parent_seq" not in meta
+        else:
+            parent = procs[meta["parent_seq"]]
+            assert parent["input_meta"]["depth"] == meta["depth"] - 1 and parent["seq"] < seq
+
+
+def test_d13_no_claim_about_a_default_configuration():
+    text = (FIXTURES / "os" / "synthetic.py").read_text(encoding="utf-8")
+    assert "default configuration" not in text and "Raqib names the event ids an export does not hold" in " ".join(
+        text.split())
+    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    assert "Raqib names the event ids your configuration does not log" in readme
+    assert ("For Claude Code on Windows the root is `claude.exe`'s pid, from `raqib discover` or Task Manager"
+            in readme)
+
+
+def test_d13_adr_0004_says_the_root_comes_from_the_commander():
+    adr = (ROOT / "docs" / "specs" / "ADR-0004-agent-discovery.md").read_text(encoding="utf-8")
+    old = "os source rooted at its PID. M5.3 takes `--root` from `discover` instead\nof from the commander.\n"
+    assert old in adr   # the sentence stays as written; the note under it corrects it
+    note = adr.split(old, 1)[1].split("\n\n", 1)[0].strip()
+    assert note.startswith("Note (2026-11-03, M5.3, ruling D-13 of ADR-0003 Amendment D;")
+    assert "the root comes from the commander" in " ".join(note.split())

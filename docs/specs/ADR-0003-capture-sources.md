@@ -213,3 +213,32 @@ As built for C-1..C-9. Record: docs/review/2026-11-03-M5.3.md, section
   named; "cmd" matches "command". D-11 guards measured; check-rules lists
   CROSS-SOURCE; gate requires CROSS_RULES; YAML may not claim CROSS.
 - D-12, D-13 as in docs/review/2026-11-03-M5.3-redo-ruling.md.
+
+## Builder note (2026-11-03, M5.3 REDO-2; Amendment D stays as written)
+As built for D-1..D-14. Record: docs/review/2026-11-03-M5.3.md, section
+"REDO-2". Where the M5.3 REDO builder note above says otherwise, Amendment
+D and this note hold:
+- cwd: --cwd DIR, else the root's event 1 CurrentDirectory, else no cwd key
+  at all; os-sysmon's own directory is never written (D-4). --cwd must be
+  absolute, on Windows or POSIX (D-12).
+- The root is the process `--root PID:GUID` names, else the latest holder
+  of PID in the export. Earlier holders are one RAQIB-SILENCE line and their
+  trees are not read (D-5). Silence lines go to stderr before the append
+  (D-6).
+- os process lines carry input_meta.parent_seq, the seq of the parent's
+  process line (D-9).
+- CROSS-SOURCE:
+  - os spans are per session, and the agent side is the union of its
+    sessions. A shell pre outside every os session is not judged and gets
+    no note; an os process outside every agent session is partial (D-8).
+  - A process is asked when its program is named, when it is a shell image
+    with a shell pre in W, or when its parent below the shell is asked
+    (D-9).
+  - "nothing to judge" is noted for an os-only trace with no process below
+    depth 1 (D-7).
+  - An unread pre in the window is named in the partial note, and
+    "command" is a shell word (D-10).
+  - cross.STATUS is active or disabled, and check-rules measures the rule
+    (cross.check).
+- The gate requires report.CROSS_RULES, and a YAML rule may not declare
+  class CROSS (D-11).

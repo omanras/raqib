@@ -241,7 +241,13 @@ def count_kinds(root, catalog):
     crossing = getattr(cross, "RULE_KINDS", None)
     if not (isinstance(crossing, dict) and crossing):
         raise ChildRed("raqib/rules/cross.py declares no RULE_KINDS (rule id -> kind)")
-    uncovered = [rule_id for rule_id, _ in getattr(report, "CROSS_RULES", ()) if rule_id not in crossing]
+    try:
+        listed = report.CROSS_RULES   # required (M5.3 ruling D-11): no default
+    except AttributeError:
+        listed = None
+    if not (isinstance(listed, tuple) and listed):
+        raise ChildRed("raqib/report.py declares no CROSS_RULES (the cross-source rules the report lists)")
+    uncovered = [rule_id for rule_id, _ in listed if rule_id not in crossing]
     if uncovered:
         raise ChildRed("report.CROSS_RULES names %s, with no kind in cross.RULE_KINDS" % ", ".join(uncovered))
     kinds = [(r.id, getattr(r, "kind", None)) for r in rules] + list(declared.items()) + list(crossing.items())

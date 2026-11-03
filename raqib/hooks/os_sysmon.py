@@ -1,7 +1,8 @@
 """Raqib os capture source on Windows: Sysmon (M5.3, ADR-0003 and its
-Amendment C, rulings C-5 to C-7 of docs/review/2026-11-03-M5.3-ruling.md).
+Amendments C and D, rulings C-5 to C-7 of docs/review/2026-11-03-M5.3-ruling.md
+and D-3 to D-6, D-12 of docs/review/2026-11-03-M5.3-redo-ruling.md).
 
-`python -m raqib os-sysmon --root PID --log PATH [--from FILE.xml] [--cwd DIR]`
+`python -m raqib os-sysmon --root PID[:GUID] --log PATH [--from FILE.xml] [--cwd DIR]`
 reads Sysmon events 1 (process create), 11 (file create) and 3 (network
 connect) of the process tree under PID and appends them to the trace PATH.
 The os record is the only one the watched agent does not write: Sysmon
@@ -17,12 +18,15 @@ Reading, read-only and offline:
 The XML is read by discover.sysmon_events, the one Sysmon reader (C-6).
 One run reads once and exits; it does not follow the channel.
 
-The tree: the root is every process that held pid PID in the export (its
-ProcessGuid); a process joins the tree when its event 1 names a tree
-process as its parent (ParentProcessId, with ParentProcessGuid deciding
-which process holding that pid is meant, so a reused pid does not join an
-unrelated process). Events 3 and 11 are kept when their ProcessGuid (or,
-with none, their pid) is in the tree. Events are taken in UtcTime order,
+The tree (D-5): the root is the process --root PID:GUID names, or, with no
+GUID, the LATEST process that held pid PID in the export (the one whose
+event 1 is latest; a holder with no event 1 started before the export).
+Earlier holders are named in one silence line, and their trees are not
+read. A process joins the tree when its event 1 names a tree process as its
+parent (ParentProcessId, with ParentProcessGuid deciding which process
+holding that pid is meant, so a reused pid does not join an unrelated
+process). Events 3 and 11 are kept when their ProcessGuid (or, with none,
+their pid) is in the tree. Events are taken in UtcTime order,
 EventRecordID breaking ties, so a newest-first export (/rd:true) reads the
 same as an oldest-first one.
 
@@ -38,31 +42,40 @@ What is written (C-5), one session per run, `os-<PID>`:
   the destination ({"destination": {hostname, ip, port, protocol}}); the
   text itself is never written;
 - input_meta: for a process {"command_head": NAME, "command_programs":
-  [NAME], "depth": D}, NAME the basename of Image as Sysmon logged it if
-  common's name rules accept it (HEAD_NAME, not key-like; else
-  `command_unread: true`), D 0 for the root, 1 for its direct children, 2
-  and more below; never an argument. For a file {"path": the path,
+  [NAME], "depth": D, "parent_seq": S}, NAME the basename of Image as
+  Sysmon logged it if common's name rules accept it (HEAD_NAME, not
+  key-like; else `command_unread: true`), D 0 for the root, 1 for its direct
+  children, 2 and more below, S the seq of the parent's process line in
+  this run (absent for the root, and for a direct child when the root's
+  own event 1 is not in the export); never an argument. For a file
+  {"path": the path, as a hook Write or Edit line keeps it (D-3),
   redacted by common.redact}. For a connection {"dest_port": N,
   "dest_private": true|false} (null when unreadable), private meaning
   10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, 100.64/10, ::1, fc00::/7
   or fe80::/10; a documentation address is not private. UDP connections
   are written like TCP ones (the protocol is in the hash only);
 - session_end at the last kept event's time;
-- cwd on every line: --cwd DIR, else the CurrentDirectory of the root's
-  own event 1 in the export, else os-sysmon's own working directory (the
-  proxy's rule, ADR-0003 Amendment A).
+- cwd on every line: --cwd DIR (an absolute directory, Windows or POSIX:
+  the export may be read on another host), else the CurrentDirectory of
+  the root's own event 1 in the export, else NO cwd key at all (D-4):
+  nothing was observed, and os-sysmon's own directory is never written, so
+  the SCOPE-CWD rules give their partial note.
 The seq goes on from the highest seq of `os-<PID>` already in the trace,
 which is read once at the start. A second run over the same events appends
 them again: reruns are not deduplicated (C-5), the duplicates are visible.
 
 Silence is an alarm (A3, C-7). Each of these writes one line starting with
-RAQIB-SILENCE: to the trace and to stderr, and the run exits 1:
+RAQIB-SILENCE: to stderr and then to the trace (D-6: stderr first, so a
+trace that cannot be written does not lose them), and the run exits 1:
 - wevtutil could not be run, did not finish, or exited non-zero (no
   Sysmon, no channel, no rights);
 - an event the reader cannot read, or one with no ProcessId or UtcTime;
 - the export holds no event 1, or no event 11, at all;
 - the root is in no event 1, 3 or 11 of the export, as ProcessId or as
-  ParentProcessId (then nothing else is written).
+  ParentProcessId, or no event carries the GUID given (then nothing else is
+  written);
+- the root pid had earlier holders in the export (D-5): one line names how
+  many, and the root's ProcessGuid.
 An export with no event 3 is not an alarm: the session's `missing_events`
 holds 3, and the rules report the source as incomplete (exit 3; Sysmon
 logs network connections only with -n).
@@ -72,11 +85,13 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
 import subprocess
 import sys
 
 from raqib import discover
 from raqib.hooks import capture, common
+from raqib.rules import engine
 
 SOURCE = "os"
 MARKER = capture.SILENCE
@@ -96,6 +111,8 @@ PRIVATE_NETS = tuple(ipaddress.ip_network(n) for n in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "169.254.0.0/16", "100.64.0.0/10",
     "::1/128", "fc00::/7", "fe80::/10"))
 TEXT_MAX = 300
+# --root PID[:GUID] (ruling D-5): a Sysmon ProcessGuid, braces optional.
+ROOT_SPEC = re.compile(r"([0-9]+)(?::(\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}?))?\Z")
 
 
 class UsageError(Exception):
@@ -151,9 +168,38 @@ def _guid(value):
     return value or None
 
 
-def build(text, root, cwd=None, start_seq=0, own_cwd=None):
-    """(trace lines, silence details) for an export's text. Pure but for
-    os.getcwd() when neither cwd nor the root's event 1 gives one."""
+def parse_root(value):
+    """(pid, ProcessGuid or None) of --root PID[:GUID] (ruling D-5)."""
+    if isinstance(value, int) and not isinstance(value, bool):
+        pid, guid = value, None
+    else:
+        m = ROOT_SPEC.match(str(value))
+        if not m:
+            raise UsageError("--root must be PID or PID:GUID (a process id, and optionally its Sysmon ProcessGuid,"
+                             " {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}), not %r" % (value,))
+        pid, guid = int(m.group(1)), m.group(2)
+    if pid < 0:
+        raise UsageError("--root must be a process id (a whole number >= 0), not %r" % (value,))
+    return pid, guid
+
+
+def check_cwd(cwd):
+    """--cwd as the proxy checks it (ruling D-12): an absolute directory. The
+    trace may describe another host than the one reading the export, so a
+    path absolute on either system (a Windows drive or UNC path, or a POSIX
+    path) is accepted, as the rules place it (engine.norm_path)."""
+    placed = engine.norm_path(cwd)
+    if placed is None or not (placed[0] == "windows" or placed[1].startswith("/")):
+        raise UsageError("--cwd must be an absolute directory, not %r" % (cwd,))
+    return cwd
+
+
+def _same_guid(a, b):
+    return a is not None and b is not None and a.strip("{}").lower() == b.strip("{}").lower()
+
+
+def build(text, root, guid=None, cwd=None, start_seq=0):
+    """(trace lines, silence details) for an export's text. Pure."""
     silences = []
     problems = []
     events = []
@@ -173,41 +219,81 @@ def build(text, root, cwd=None, start_seq=0, own_cwd=None):
     missing = sorted(set(READ) - present)
     silences += [SILENT_IF_MISSING[i] for i in sorted(SILENT_IF_MISSING) if i in missing]
     events.sort(key=lambda e: (e["ts"], e["record_id"] if e["record_id"] is not None else float("inf"), e["line"]))
-    named = [e for e in events if e["pid"] == root
-             or (e["event"] == 1 and _int(e["data"].get("ParentProcessId")) == root)]
-    if not named:
-        silences.append("root pid %d is in no event 1, 3 or 11 of the export (as ProcessId or ParentProcessId):"
-                        " nothing of its tree is recorded" % root)
+    found, root_guid, said = _root(events, root, guid)
+    silences += said
+    if not found:
         return [], silences
-    kept = _tree(events, root)
-    if cwd is None:
-        starts = [e["data"].get("CurrentDirectory") for e, depth in kept if e["event"] == 1 and depth == 0]
-        cwd = next((c for c in starts if c), None) or own_cwd or os.getcwd()
+    kept = _tree(events, root, root_guid)
+    if cwd is None:   # D-4: else no cwd at all, never os-sysmon's own
+        starts = [e["data"].get("CurrentDirectory") for e, depth, _ in kept if e["event"] == 1 and depth == 0]
+        cwd = next((c for c in starts if c), None)
     return _lines(kept, root, cwd, start_seq, missing), silences
 
 
-def _tree(events, root):
-    """[(event, depth)] of the events of the tree under root, in order."""
-    root_guids = {e["guid"] for e in events if e["pid"] == root and e["guid"]}
-    root_guids |= {_guid(e["data"].get("ParentProcessGuid")) for e in events
-                   if e["event"] == 1 and _int(e["data"].get("ParentProcessId")) == root} - {None}
-    by_guid = {g: 0 for g in root_guids}
+def _root(events, root, guid):
+    """(found, the root's ProcessGuid or None, silence details) (ruling D-5).
+    The holders of the root pid are the ProcessGuids of its events and of
+    the parents named by its children's event 1. Without a GUID the root is
+    the latest of them: the one whose event 1 is latest, else (no event 1:
+    it started before the export) the last first seen; the earlier ones are
+    named in one silence line."""
+    first, start = {}, {}
+    for e in events:
+        d = e["data"]
+        if e["pid"] == root and e["guid"]:
+            first.setdefault(e["guid"], e["ts"])
+            if e["event"] == 1:
+                start[e["guid"]] = (e["ts"], e["record_id"] if e["record_id"] is not None else -1)
+        pguid = _guid(d.get("ParentProcessGuid"))
+        if e["event"] == 1 and _int(d.get("ParentProcessId")) == root and pguid:
+            first.setdefault(pguid, e["ts"])
+    named = any(e["pid"] == root or (e["event"] == 1 and _int(e["data"].get("ParentProcessId")) == root)
+                for e in events)
+    if guid is not None:
+        match = [g for g in first if _same_guid(g, guid)]
+        if not match:
+            return False, None, ["root pid %d with ProcessGuid %s is in no event 1, 3 or 11 of the export: nothing"
+                                 " of its tree is recorded" % (root, guid)]
+        return True, match[0], []
+    if not named:
+        return False, None, ["root pid %d is in no event 1, 3 or 11 of the export (as ProcessId or"
+                             " ParentProcessId): nothing of its tree is recorded" % root]
+    if not first:
+        return True, None, []   # no ProcessGuid in the export: the pid alone decides
+    rank = {g: ((1,) + start[g]) if g in start else (0, first[g], -1) for g in first}
+    latest = max(first, key=lambda g: rank[g])
+    earlier = len(first) - 1
+    said = ["pid %d had %d earlier holder(s) in the export; the latest is the root (ProcessGuid %s); give --root"
+            " %d:GUID for another" % (root, earlier, latest, root)] if earlier else []
+    return True, latest, said
+
+
+def _tree(events, root, root_guid):
+    """[(event, depth, parent)] of the events of the tree under root, in
+    order; parent is the identity (ProcessGuid, else ("pid", pid)) of an
+    event 1's parent, None otherwise."""
+    by_guid = {root_guid: 0} if root_guid else {}
     by_pid = {root: 0}   # for events that carry no ProcessGuid
     kept = []
     for e in events:
         d = e["data"]
+        parent = None
         if e["event"] == 1:
             pguid, ppid = _guid(d.get("ParentProcessGuid")), _int(d.get("ParentProcessId"))
-            if e["pid"] == root and (e["guid"] is None or e["guid"] in root_guids):
+            if e["pid"] == root and (e["guid"] is None or e["guid"] == root_guid):
                 depth = 0
             elif pguid is not None:
                 depth = by_guid[pguid] + 1 if pguid in by_guid else None
+                parent = pguid
             else:
                 depth = by_pid[ppid] + 1 if ppid in by_pid else None
+                parent = ("pid", ppid)
             if depth is None:
                 if e["pid"] in by_pid and e["pid"] != root:
                     del by_pid[e["pid"]]   # the pid now names a process outside the tree
                 continue
+            if depth == 0:
+                parent = None
             if e["guid"] is not None:
                 by_guid[e["guid"]] = depth
             by_pid[e["pid"]] = depth
@@ -215,7 +301,7 @@ def _tree(events, root):
             depth = by_guid.get(e["guid"]) if e["guid"] is not None else by_pid.get(e["pid"])
             if depth is None:
                 continue
-        kept.append((e, depth))
+        kept.append((e, depth, parent))
     return kept
 
 
@@ -239,9 +325,12 @@ def _lines(kept, root, cwd, start_seq, missing):
     sid = session_id(root)
     seq = start_seq
     out = []
+    line_of = {}   # a process's identity -> the seq of its line (D-9: parent_seq)
 
     def emit(rec):
-        rec.update(cwd=cwd, source=SOURCE)
+        if cwd is not None:
+            rec["cwd"] = cwd
+        rec["source"] = SOURCE
         out.append(json.dumps(rec, separators=(",", ":"), ensure_ascii=True))
 
     seq += 1
@@ -250,9 +339,13 @@ def _lines(kept, root, cwd, start_seq, missing):
     if missing:
         start["missing_events"] = missing
     emit(start)
-    for e, depth in kept:
+    for e, depth, parent in kept:
         seq += 1
         digest, meta = _event_fields(e, depth)
+        if e["event"] == 1:
+            if parent is not None and parent in line_of:
+                meta["parent_seq"] = line_of[parent]
+            line_of[e["guid"] if e["guid"] is not None else ("pid", e["pid"])] = seq
         base = {"ts": discover.iso(e["ts"]), "seq": seq, "session_id": sid}
         tool = TOOLS[e["event"]]
         emit(dict(base, phase="pre", tool=tool, input_sha256=digest, input_meta=dict(meta)))
@@ -330,16 +423,18 @@ def append(log, lines):
 
 def run(root, log, from_path=None, cwd=None, out=None, err=None, live=None, nt=None):
     """The os-sysmon command: 0 written with no silence, 1 a RAQIB-SILENCE
-    line was written, UsageError (exit 2) otherwise."""
+    line was written, UsageError (exit 2) otherwise. root is PID, or the
+    text PID[:GUID] (ruling D-5)."""
     out = sys.stdout if out is None else out
     err = sys.stderr if err is None else err
     nt = (os.name == "nt") if nt is None else nt
-    if not isinstance(root, int) or isinstance(root, bool) or root < 0:
-        raise UsageError("--root must be a process id (a whole number >= 0), not %r" % (root,))
+    pid, guid = parse_root(root)
+    if cwd is not None:
+        check_cwd(cwd)
     if from_path is None and not nt:
         raise UsageError("os-sysmon reads the live Sysmon channel on Windows only; here, give an export with"
                          " --from FILE.xml (wevtutil qe %s /f:xml > FILE.xml)" % CHANNEL)
-    start = last_seq(log, session_id(root))
+    start = last_seq(log, session_id(pid))
     if from_path is not None:
         try:
             with open(from_path, "rb") as f:
@@ -351,13 +446,14 @@ def run(root, log, from_path=None, cwd=None, out=None, err=None, live=None, nt=N
     if failed is not None:
         lines, silences = [], [failed]
     else:
-        lines, silences = build(text, root, cwd=cwd, start_seq=start)
-    marked = [silence_line(root, s) for s in silences]
-    append(log, marked + lines)
-    for line in marked:
+        lines, silences = build(text, pid, guid=guid, cwd=cwd, start_seq=start)
+    marked = [silence_line(pid, s) for s in silences]
+    for line in marked:   # D-6: on stderr first, so a failed append cannot lose them
         err.write(line + "\n")
+    err.flush()
+    append(log, marked + lines)
     events = max(0, (len(lines) - 2) // 2)
     where = "from %s" % from_path if from_path is not None else "from the live channel"
     out.write("raqib os-sysmon: %d events of the tree under pid %d %s -> %s (session %s); %d RAQIB-SILENCE"
-              " line(s)\n" % (events, root, where, log, session_id(root) if lines else "none", len(marked)))
+              " line(s)\n" % (events, pid, where, log, session_id(pid) if lines else "none", len(marked)))
     return 1 if marked else 0

@@ -55,14 +55,16 @@ def hook(seq, phase, at, tool="Bash", programs=None, head=None, source="hook", s
     return rec
 
 
-def osl(seq, at, program=None, depth=2, tool="process", phase="pre", meta=None):
-    rec = {"ts": ts(at), "seq": seq, "session_id": "os-4100", "phase": phase, "tool": tool, "cwd": "C:\\w",
+def osl(seq, at, program=None, depth=2, tool="process", phase="pre", meta=None, parent=None, session="os-4100"):
+    rec = {"ts": ts(at), "seq": seq, "session_id": session, "phase": phase, "tool": tool, "cwd": "C:\\w",
            "source": "os"}
     if phase in ("pre", "post"):
         if meta is None:
             meta = {"command_head": program, "command_programs": [program]} if program else {"command_unread": True}
             if depth is not None:
                 meta["depth"] = depth
+            if parent is not None:
+                meta["parent_seq"] = parent
         rec.update(input_sha256="0" * 64, input_meta=meta)
     return rec
 
@@ -162,7 +164,7 @@ def test_c3_done_not_asked_and_its_window():
     assert ("os-4100", [2]) not in cited(cross.findings(base + [hook(2, "pre", 15, head="curl")])[0])
 
 
-def test_c3_outside_the_other_sources_span_a_line_is_unknown():
+def test_d8_a_pre_outside_the_os_sessions_is_history_an_os_process_outside_the_agent_is_partial():
     recs = [osl(1, 10, phase="session_start", tool="-"), osl(2, 12, "ls.exe", depth=2),
             osl(9, 20, phase="session_end", tool="-"),
             hook(1, "session_start", 13, tool="-"), hook(2, "pre", 30, programs=["ls"], head="ls"),
@@ -171,7 +173,7 @@ def test_c3_outside_the_other_sources_span_a_line_is_unknown():
     assert found == []
     (note,) = notes
     assert note["rule_id"] == "CROSS-SOURCE" and note["status"] == "partial"
-    assert "could not judge 2 line(s) (session:seq s-hook:2, os-4100:2)" in note["detail"]
+    assert "could not judge 1 line(s) (session:seq os-4100:2)" in note["detail"]   # s-hook:2 is history
 
 
 def test_c3_an_os_only_trace_is_partial_on_every_process_below_the_agents_children():
@@ -200,7 +202,8 @@ def test_c3_unknown_programs_or_depth():
 @pytest.mark.parametrize("tool, shell", [
     ("Bash", True), ("bash", True), ("shell", True), ("local_shell", True), ("RunShellCommand", True),
     ("execute_command", True), ("run_command", True), ("cmd", True), ("Cmd.Run", True),
-    ("Read", False), ("Grep", False), ("WebFetch", False), ("command", False), ("sha256:0123456789abcdef", False),
+    ("command", True), ("run_terminal_command", True), ("CommandPalette", True),   # D-10: "cmd" and "command"
+    ("Read", False), ("Grep", False), ("WebFetch", False), ("Task", False), ("sha256:0123456789abcdef", False),
     (None, False),
 ])
 def test_c4_shell_tool_names(tool, shell):
@@ -221,10 +224,11 @@ def test_c4_folding_matches_both_sides():
     assert cross.findings(recs) == ([], [])
 
 
-@pytest.mark.parametrize("depth, judged", [(0, False), (1, False), (2, True), (5, True)])
-def test_c4_the_root_and_its_direct_children_are_not_judged(depth, judged):
+@pytest.mark.parametrize("depth, verdict", [(0, "none"), (1, "none"), (2, "finding"), (5, "partial")])
+def test_c4_the_root_and_its_direct_children_are_not_judged(depth, verdict):
+    # depth 5 with no parent line: its ancestors below the shell cannot be judged (D-9)
     found, notes = cross.findings(span(0, 60) + [osl(2, 30, "curl.exe", depth=depth)])
-    assert bool(found) is judged and notes == []
+    assert ("finding" if found else "partial" if notes else "none") == verdict
 
 
 def test_c4_proxy_pres_ask_too_and_a_line_without_source_is_the_hook():
@@ -356,12 +360,12 @@ def test_c9_readme_names_the_rule_the_shell_tools_the_window_and_sysmon_n():
     flat = " ".join(README.split())
     for phrase in ("Thirteen rules turn the trace into findings",
                    "| CROSS-SOURCE | only in a trace with `os` lines:",
-                   "`raqib os-sysmon --root PID --log TRACE [--from FILE.xml] [--cwd DIR]`",
+                   "`raqib os-sysmon --root PID[:GUID] --log TRACE [--from FILE.xml] [--cwd DIR]`",
                    "a `pre` of `Bash` or of any tool whose name, in lower case, holds `bash`, `shell`,"
-                   " `execute_command`, `run_command` or `cmd`",
+                   " `execute_command`, `run_command`, `cmd` or `command`",
                    "in lower case without `.exe`, `.cmd` or `.bat`",
                    "(bash, sh, zsh, dash, ksh, fish, cmd, powershell, pwsh)",
-                   "in the 10 s after it", "in the 10 s before it",
+                   "in the 10 s after it", "named its program in the 10 s before it",
                    "Sysmon logs network connections only when installed with `-n`",
                    "an export with no event 3 makes the report INCOMPLETE (exit 3), not an alarm",
                    "A trace with no os line is not judged and gets no note",
@@ -382,3 +386,224 @@ def test_c9_threat_model_says_what_os_records_still_miss():
         assert phrase in flat, phrase
     assert THREAT.index("## 5. What Raqib cannot see") < THREAT.index("### The os source") < THREAT.index(
         "## 6. Attacks on the watcher itself")
+
+
+# --- REDO-2 (ADR-0003 Amendment D, rulings D-7 to D-11, D-13) ----------------------------
+
+def synthetic():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("os_synthetic", FIXTURES / "os" / "synthetic.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_d7_an_os_only_trace_of_the_agents_own_processes_has_nothing_to_judge(tmp_path):
+    x = synthetic()
+    export = x.Export()
+    x.agent_start(export)
+    export.proc("09.000", 4300, x.RG, "rg --files", 4100, x.AGENT, x.AGENT)
+    export.net("10.000", 4100, x.AGENT, "203.0.113.7", 443)
+    export.file("11.000", 4100, x.AGENT, "C:\\work\\proj\\a.txt")
+    lines, _ = os_sysmon.build(export.text(), 4100, cwd="C:\\w")
+    recs = [json.loads(line) for line in lines]
+    found, notes = cross.findings(recs)
+    assert found == [] and notes == [{"rule_id": "CROSS-SOURCE", "status": "nothing-to-judge",
+                                      "detail": "nothing to judge (every os process is the agent's own): the trace"
+                                                " holds no hook or proxy line and no os process below the agent's"
+                                                " direct children"}]
+    path = tmp_path / "t.log"
+    path.write_text("".join(line + "\n" for line in lines))
+    out = io.StringIO()
+    assert cli.main(["report", str(path), "--scope", "."], out=out) == 3
+    assert "CROSS-SOURCE nothing-to-judge: nothing to judge (every os process is the agent's own)" in out.getvalue()
+    # with a hook session beside it there is no such note
+    assert cross.findings(recs + [hook(1, "session_start", 1, tool="-"), hook(2, "session_end", 2, tool="-")]) == ([], [])
+
+
+def test_d7_both_directions_of_c2_are_in_readme_and_threat_model():
+    flat = " ".join(README.split())
+    assert "A trace with no os line is not judged and gets no note; a trace with os lines and no hook or proxy line" \
+           " is INCOMPLETE, by a partial note or, when every os process is the agent's own, \"nothing to judge\"" in flat
+    threat = " ".join(THREAT.split())
+    assert "C-2, both directions: a trace with no os line (Linux, macOS, or os-sysmon not run) gets no finding and" \
+           " no note" in threat
+    assert "a trace with os lines and no hook or proxy line is INCOMPLETE, by a partial note or, when every os" \
+           " process is the agent's own, \"nothing to judge\"" in threat
+
+
+def test_d8_the_os_span_is_per_session_and_history_outside_gets_no_note():
+    recs = [osl(1, 0, phase="session_start", tool="-"), osl(9, 20, phase="session_end", tool="-"),
+            osl(1, 100, phase="session_start", tool="-", session="os-4200"),
+            osl(9, 120, phase="session_end", tool="-", session="os-4200"),
+            hook(1, "session_start", 0, tool="-"), hook(9, "session_end", 130, tool="-"),
+            hook(2, "pre", 50, programs=["ls"], head="ls"),     # between the two os sessions: history
+            hook(3, "pre", 125, programs=["ls"], head="ls"),    # after both: history
+            hook(4, "pre", 105, programs=["ls"], head="ls")]    # inside os-4200, nothing done: a finding
+    found, notes = cross.findings(recs)
+    assert cited(found) == [("s-hook", [4])] and notes == []
+
+
+def test_d8_an_os_process_inside_the_union_of_agent_sessions_is_judged():
+    recs = [osl(1, 0, phase="session_start", tool="-"), osl(9, 100, phase="session_end", tool="-"),
+            hook(1, "session_start", 0, tool="-", session="s-a"), hook(2, "session_end", 30, tool="-", session="s-a"),
+            hook(1, "session_start", 60, tool="-", session="s-b"), hook(2, "session_end", 90, tool="-", session="s-b"),
+            osl(2, 20, "curl.exe"), osl(3, 45, "curl.exe"), osl(4, 70, "curl.exe")]
+    found, notes = cross.findings(recs)
+    assert cited(found) == [("os-4100", [2]), ("os-4100", [4])]
+    assert notes[0]["status"] == "partial" and "could not judge 1 line(s) (session:seq os-4100:3)" in notes[0]["detail"]
+
+
+def test_d8_a_long_lived_project_trace_stays_clean_after_one_os_sysmon_run(tmp_path):
+    """Hook sessions over three hours; one os-sysmon export in the middle,
+    matched by its shell call: CLEAN, not INCOMPLETE."""
+    rows = []
+    for name, base in (("s-morning", 0), ("s-noon", 3600), ("s-evening", 3 * 3600)):
+        rows += [hook(1, "session_start", base, tool="-", session=name),
+                 hook(2, "pre", base + 5, programs=["ls"], head="ls", session=name),
+                 hook(2, "post", base + 5.5, programs=["ls"], head="ls", session=name),
+                 hook(3, "stop", base + 6, tool="-", session=name), hook(4, "session_end", base + 30, tool="-",
+                                                                         session=name)]
+    rows += [osl(1, 3600, phase="session_start", tool="-"),
+             osl(2, 3605.2, "bash.exe", depth=1), osl(2, 3605.2, "bash.exe", depth=1, phase="post"),
+             osl(3, 3605.3, "ls.exe", depth=2, parent=2), osl(3, 3605.3, "ls.exe", depth=2, parent=2, phase="post"),
+             osl(4, 3610, phase="session_end", tool="-")]
+    for r in rows:
+        if r["phase"] == "post" and r.get("source") == "os":
+            r.update(ok=True, output_meta={})
+    assert cross.findings(rows) == ([], [])
+    path = tmp_path / "long.log"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    out = io.StringIO()
+    assert cli.main(["report", str(path), "--scope", "."], out=out) == 0, out.getvalue()
+    assert "RESULT: CLEAN (exit 0)" in out.getvalue() and "sources: hook 15, os 6" in out.getvalue()
+
+
+def chain(*procs):
+    """os process lines (seq, at, program, depth, parent seq) under a shell at seq 2."""
+    return [osl(seq, at, program, depth=depth, parent=parent) for seq, at, program, depth, parent in procs]
+
+
+def test_d9_the_descendants_of_an_asked_process_are_asked():
+    base = span(0, 100) + [hook(2, "pre", 5, programs=["npm"], head="npm"),
+                           hook(3, "pre", 50, programs=["git"], head="git")]
+    recs = base + chain((2, 5.2, "bash.exe", 1, None), (3, 5.3, "npm.cmd", 2, 2), (4, 35, "node.exe", 3, 3),
+                        (5, 36, "esbuild.exe", 4, 4),
+                        (6, 50.2, "bash.exe", 1, None), (7, 50.3, "git.exe", 2, 6), (8, 80, "sh.exe", 3, 7))
+    assert cross.findings(recs) == ([], [])
+    # a parent that was not asked asks for nothing: both it and its child are findings
+    recs = span(0, 100) + [hook(2, "pre", 5, programs=["npm"], head="npm")] + chain(
+        (2, 5.2, "bash.exe", 1, None), (3, 5.3, "python.exe", 2, 2), (4, 6, "curl.exe", 3, 3))
+    assert cited(cross.findings(recs)[0]) == [("os-4100", [3]), ("os-4100", [4])]
+
+
+def test_d9_a_forked_bash_below_the_shell_is_asked_and_so_is_what_it_runs():
+    base = span(0, 100) + [hook(2, "pre", 5, programs=["ls", "grep"], head="ls")]
+    recs = base + chain((2, 5.2, "bash.exe", 1, None), (3, 5.25, "bash.exe", 2, 2), (4, 5.3, "ls.exe", 3, 3),
+                        (5, 5.26, "bash.exe", 2, 2), (6, 5.31, "grep.exe", 3, 5))
+    assert cross.findings(recs) == ([], [])
+    # the same fork with no shell call in the 10 s before it is not asked (the MSYS hole has a window)
+    late = base + chain((2, 5.2, "bash.exe", 1, None), (3, 40, "bash.exe", 2, 2), (4, 40.1, "curl.exe", 3, 3))
+    assert cited(cross.findings(late)[0]) == [("os-4100", [3]), ("os-4100", [4])]
+
+
+def test_d9_a_parent_that_cannot_be_judged_leaves_its_child_partial():
+    recs = span(0, 100) + [hook(2, "pre", 5, programs=["npm"], head="npm")] + chain(
+        (2, 5.2, "bash.exe", 1, None), (3, 30, "node.exe", 3, 77))   # parent seq 77 is not in the trace
+    found, notes = cross.findings(recs)
+    assert found == [] and "os-4100:3 (its parent could not be judged)" in notes[0]["detail"]
+
+
+def test_d9_the_matched_fixture_holds_a_forked_bash_pipeline():
+    recs = read("matched")
+    procs = [r for r in recs if r.get("source") == "os" and r["phase"] == "pre" and r["tool"] == "process"]
+    shape = [(r["input_meta"]["command_head"], r["input_meta"]["depth"]) for r in procs]
+    assert shape == [("agent.exe", 0), ("bash.exe", 1), ("bash.exe", 2), ("bash.exe", 2), ("ls.exe", 3),
+                     ("grep.exe", 3)]
+    assert cross.findings(recs) == ([], [])
+
+
+def test_d10_an_unread_pre_in_the_window_makes_the_process_partial_and_is_named():
+    found, notes = cross.findings(span(0, 60) + [osl(2, 9, "ls.exe"), hook(2, "pre", 5, unread=True)])
+    assert ("os-4100", [2]) not in cited(found)
+    assert "os-4100:2 (unread pre s-hook:2)" in notes[0]["detail"]
+    # a pre with unknown programs and no process at all stays a finding
+    assert cited(cross.findings(span(0, 60) + [hook(2, "pre", 5, unread=True)])[0]) == [("s-hook", [2])]
+
+
+def test_d10_the_holes_are_named():
+    flat = " ".join(README.split())
+    assert "Matching is by name only, so a renamed program passes as the name it carries" in flat
+    assert "a tool that only has a shell word in its name and starts no process is a false-positive source" in flat
+    threat = " ".join(THREAT.split())
+    for phrase in ("a renamed binary (curl copied to `ls.exe`) passes as the program it is named for",
+                   "Programs that start children of their own include npm, npx, yarn, pip, python, node, git",
+                   "the real shape of an MSYS fork under Sysmon is checked only by the field test",
+                   "leaves the processes in its window partial, and the note names that call",
+                   "a tool that only has a shell word (bash, shell, cmd, command) in its name and starts no process"
+                   " gives \"asked, not done\""):
+        assert phrase in threat, phrase
+    assert "command" in cross.SHELL_TOOL_WORDS and cross.is_shell_tool("RunCommand")
+
+
+def test_d11_check_rules_lists_cross_source_with_its_rate_and_status():
+    out = io.StringIO()
+    assert cli.main(["check-rules"], out=out) == 0
+    (row,) = [line for line in out.getvalue().splitlines() if line.startswith("CROSS-SOURCE ")]
+    assert row.split()[1:4] == ["ok", "0.000", "0.1"] and "2 positive;" in row and "2 measured," in row
+    data = json.loads(cli_json("check-rules", "--json"))
+    (entry,) = [r for r in data if r["rule_id"] == "CROSS-SOURCE"]
+    assert entry["status"] == cross.STATUS == "active" and entry["verdict"] == "ok"
+    assert [p["fired"] for p in entry["positives"]] == [True, True]
+    measured = [n["path"] for n in entry["negatives"] if n["measured"]]
+    assert measured == ["tests/fixtures/cross/matched.log", "tests/fixtures/cross/rg-helper.log"]
+
+
+def cli_json(*argv):
+    out = io.StringIO()
+    cli.main(list(argv), out=out)
+    return out.getvalue()
+
+
+def test_d11_a_disabled_cross_rule_writes_only_a_disabled_note(monkeypatch):
+    from raqib.rules import fixtures
+    monkeypatch.setattr(cross, "STATUS", "disabled")
+    assert cross.findings(read("done-not-asked")) == ([], [
+        {"rule_id": "CROSS-SOURCE", "status": "disabled", "detail": "STATUS = disabled in raqib/rules/cross.py (A6)"}])
+    assert cross.findings(trace.read(FIXTURES / "quickstart-d7841d1-claude-code-2.1.301.log")[0]) == ([], [])
+    report_ = cross.check(fixtures.load_fixture, ROOT)
+    assert report_["verdict"] == "positive-missed"   # a disabled rule fires on nothing
+    table = {r["id"]: r for r in report.rule_table(engine.load_catalog(CATALOG))}
+    assert table["CROSS-SOURCE"]["status"] == "disabled"
+
+
+def test_d11_the_guards_are_measured_on_one_os_line():
+    from raqib.rules import fixtures
+    rules = {r.id: r for r in engine.load_catalog(CATALOG)}
+    for rule_id, rel in (("NET-TOOL", "tests/fixtures/rules/NET-TOOL/negative-local.json"),
+                         ("SECRET-OUTPUT", "tests/fixtures/rules/SECRET-OUTPUT/negative-clean-output.json")):
+        lines = fixtures.load_fixture(ROOT / rel)[0]
+        assert sum(1 for r in lines if r.get("source") == "os") == 1, rel
+        assert fixtures.outcome(rules[rule_id], ROOT / rel) == (False, set(), True), rel   # measured, clean
+    # Without the guard, SECRET-OUTPUT could not judge the os post: its negative would be unmeasured.
+    doc = json.loads(json.dumps(rules["SECRET-OUTPUT"].doc))
+    doc["match"]["all"] = [n for n in doc["match"]["all"] if "any" not in n]
+    bare = engine.compile_rule(doc)
+    lines = fixtures.load_fixture(ROOT / "tests/fixtures/rules/SECRET-OUTPUT/negative-clean-output.json")[0]
+    assert engine.judge(bare, lines)[1] == [("os-4100", 1)]
+
+
+def test_d11_a_yaml_rule_may_not_declare_class_cross():
+    doc = dict(engine.load_rule(CATALOG / "DRIFT-FILES.yaml").doc, **{"class": "CROSS"})
+    with pytest.raises(engine.RuleError, match="class: CROSS is the class of the code rule raqib/rules/cross.py"):
+        engine.compile_rule(doc)
+
+
+def test_d13_threat_model_names_the_agent_writable_trace_a_stopped_sysmon_and_events_4_16():
+    threat = " ".join(THREAT.split())
+    for phrase in ("once appended, os lines sit in the same trace as the hook's, a file the agent's user can write",
+                   "an agent with administrator rights can stop Sysmon, unload its driver or clear its log before"
+                   " os-sysmon reads it",
+                   "Sysmon's own state and configuration events (4 and 16) are not read",
+                   "it names the event ids an export does not hold (per export)"):
+        assert phrase in threat, phrase

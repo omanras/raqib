@@ -12,8 +12,9 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       rules that did not run (A3) and every rule's fp_budget (A6). Without
       --findings the rules are run on TRACE first.
   check-rules [--json] [--fixtures-root DIR]
-      Run every catalog rule on its fixtures and the benign corpus; print the
-      measured fp_rate against the declared fp_budget (A6). The fixtures are
+      Run every catalog rule, and CROSS-SOURCE (raqib/rules/cross.py), on its
+      fixtures and the benign corpus; print the measured fp_rate against the
+      declared fp_budget (A6). The fixtures are
       those of a checkout (DIR/tests/fixtures; default: the checkout this
       raqib runs from). An installed raqib carries the catalog but no
       fixtures: without --fixtures-root it says so and exits 2.
@@ -93,7 +94,7 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       lets URL be http:// to a loopback address (127.0.0.0/8, ::1; tests).
       Runs until interrupted, then ends the open sessions; exit 2 on a bad
       option or a trace it cannot write.
-  os-sysmon --root PID --log PATH [--from FILE.xml] [--cwd DIR]
+  os-sysmon --root PID[:GUID] --log PATH [--from FILE.xml] [--cwd DIR]
       Record what the operating system saw the process tree under PID do
       (M5.3, ADR-0003 Amendment C, raqib/hooks/os_sysmon.py): Sysmon events
       1 (process create), 11 (file create) and 3 (network connect) become
@@ -102,9 +103,9 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       Windows it runs C:\\Windows\\System32\\wevtutil.exe (read-only); with
       --from it reads an export (wevtutil qe Microsoft-Windows-Sysmon/
       Operational /f:xml), on any system. Exit 1 when it wrote a
-      RAQIB-SILENCE line (channel unreadable, root not found, no event 1 or
-      11, an unreadable event), 2 on a bad option, without --from off
-      Windows, or a trace it cannot write; else 0.
+      RAQIB-SILENCE line (channel unreadable, root not found, earlier
+      holders of its pid, no event 1 or 11, an unreadable event), 2 on a bad
+      option, without --from off Windows, or a trace it cannot write; else 0.
   doctor [PROJECT]
       Say in one screen what `watch` needs and is missing (M6.3,
       raqib/doctor.py): Python, `claude` on PATH and its version, the hook
@@ -264,13 +265,15 @@ def _parser():
                     help="let --upstream be http:// to a loopback address, 127.0.0.0/8 or ::1 (for tests;"
                          " never a remote host)")
     osx = sub.add_parser("os-sysmon", help="record the Sysmon events of an agent's process tree (M5.3, ADR-0003)")
-    osx.add_argument("--root", required=True, type=int, metavar="PID", help="the agent's process id: the root of the tree")
+    osx.add_argument("--root", required=True, metavar="PID[:GUID]",
+                     help="the agent's process id, the root of the tree (Claude Code on Windows: claude.exe's pid);"
+                          " without a Sysmon ProcessGuid the latest process that held PID in the export")
     osx.add_argument("--log", required=True, metavar="PATH", help="the trace os-sysmon appends to")
     osx.add_argument("--from", dest="from_path", metavar="FILE.xml",
                      help="read an export (wevtutil qe %s /f:xml) instead of the live channel (any system)"
                           % os_sysmon.CHANNEL)
-    osx.add_argument("--cwd", metavar="DIR", help="the cwd written on the lines (default: the root's CurrentDirectory"
-                                                 " in its event 1, else os-sysmon's own)")
+    osx.add_argument("--cwd", metavar="DIR", help="the cwd written on the lines, an absolute directory (default: the"
+                                                 " root's CurrentDirectory in its event 1, else no cwd)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -474,6 +477,8 @@ def cmd_check_rules(args, out):
                          % os.path.join(root, "tests", "fixtures"))
     try:
         reports = fixtures.check_catalog(rules, root, benign_default(root))
+        # M5.3 ruling D-11: the cross-source code rule is measured on its fixtures too.
+        reports.append(cross.check(fixtures.load_fixture, root, benign_default(root)))
     except (fixtures.FixtureError, OSError) as exc:
         raise UsageError(str(exc))
     if args.json:

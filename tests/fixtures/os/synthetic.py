@@ -4,11 +4,13 @@ those fixtures.
 
 Shape: what `wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml` writes,
 one event per line (LF here: .gitattributes keeps every file LF; the
-readers take CRLF too, tested in memory), in the field layout of the default configuration
-(Sysmon 15: SHA1 image hashes, events 1, 3, 5, 11 and 22 as Sysmon renders
-them). Host `host`, user `user`; every IP is a documentation address
-(192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24). The real export under the
-commander's configuration is the field test, not this file.
+readers take CRLF too, tested in memory), with the Data fields Sysmon 15
+renders for events 1, 3, 5, 11 and 22 (SHA1 image hashes). No claim is made
+about any configuration's defaults (ruling D-13): Raqib names the event ids
+an export does not hold. Host `host`, user `user`; every IP is a
+documentation address (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24). The
+real export under the commander's configuration is the field test, not
+this file.
 
 `python tests/fixtures/os/synthetic.py` (from the checkout) rewrites:
 - tests/fixtures/os/sysmon-synthetic.xml: one agent tree (root pid 4100)
@@ -192,13 +194,16 @@ def cross_fixtures():
     out["done-not-asked"] = (x.text(), [hook_line(1, "session_start", "01.000")]
                              + call(2, "05.000", "05.600", "Bash", "ls")
                              + [hook_line(3, "stop", "50.000"), hook_line(4, "session_end", "58.000")])
-    # matched (negative): `ls -la | grep src` asked; bash, ls and grep done.
+    # matched (negative): `ls -la | grep src` asked; bash, ls and grep done,
+    # each side of the pipeline under a bash the shell forked (MSYS, D-9).
     x = Export()
     agent_start(x)
     x.net("01.000", ROOT_PID, AGENT, "203.0.113.7", 443, "api.example.com")
     shell(x, "05.200", 4200, "ls -la | grep src")
-    child(x, "05.300", 4210, LS, "ls -la", 4200, "ls -la | grep src")
-    child(x, "05.310", 4211, GREP, "grep src", 4200, "ls -la | grep src")
+    child(x, "05.250", 4205, BASH, '"%s" -c -l "ls -la | grep src"' % BASH, 4200, "ls -la | grep src")
+    child(x, "05.260", 4206, BASH, '"%s" -c -l "ls -la | grep src"' % BASH, 4200, "ls -la | grep src")
+    x.proc("05.300", 4210, LS, "ls -la", 4205, BASH, '"%s" -c -l "ls -la | grep src"' % BASH)
+    x.proc("05.310", 4211, GREP, "grep src", 4206, BASH, '"%s" -c -l "ls -la | grep src"' % BASH)
     x.file("12.500", ROOT_PID, AGENT, "C:\\work\\proj\\notes.txt")
     out["matched"] = (x.text(), [hook_line(1, "session_start", "01.000")]
                       + call(2, "05.000", "05.600", "Bash", "ls -la | grep src")

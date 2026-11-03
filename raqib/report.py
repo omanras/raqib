@@ -49,7 +49,7 @@ def rule_table(rules):
     table = [{"id": rid, "class": "SILENCE", "kind": silence.RULE_KINDS.get(rid), "severity": "high",
               "fp_budget": None, "status": "active", "title": title} for rid, title in SILENCE_RULES]
     table += [{"id": rid, "class": cross.CLASS, "kind": cross.RULE_KINDS.get(rid), "severity": cross.SEVERITY,
-               "fp_budget": cross.FP_BUDGET, "status": "active", "title": title} for rid, title in CROSS_RULES]
+               "fp_budget": cross.FP_BUDGET, "status": cross.STATUS, "title": title} for rid, title in CROSS_RULES]
     table += [{"id": r.id, "class": r.cls, "kind": r.kind, "severity": r.severity, "fp_budget": r.fp_budget,
                "status": r.status, "title": r.title} for r in rules]
     return table

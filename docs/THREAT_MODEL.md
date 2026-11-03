@@ -182,14 +182,23 @@ or file contents. Everything below follows from that, or from the hooks.
   and miss 9 of 25 bad ones (`docs/review/2026-10-16-M2.2-baseline.md`).
 
 ### The os source (Sysmon; ADR-0003 Amendment C)
+Rulings: ADR-0003 Amendments C and D.
 - **The only record the agent does not write.** A hook line is written by a
   hook that runs in the agent's own process tree, and a proxy line is read
   from what the agent's model answered; an agent that controls its process
   can shape both. An os line is written from Sysmon's events, which
   Sysmon's driver logs for the whole tree. The agent can read CROSS-SOURCE,
-  but it cannot move that record, which is why the rule is an anchor. This
-  holds for the live read only: an export given with `--from` is trusted as
-  Sysmon's, so whoever can write that file can forge os lines.
+  but it cannot move that record, which is why the rule is an anchor. That
+  holds only up to the read:
+  - an export given with `--from` is trusted as Sysmon's, so whoever can
+    write that file can forge os lines;
+  - once appended, os lines sit in the same trace as the hook's, a file the
+    agent's user can write: an agent that rewrites the trace can rewrite
+    them too (section 6);
+  - an agent with administrator rights can stop Sysmon, unload its driver
+    or clear its log before os-sysmon reads it. Sysmon's own state and
+    configuration events (4 and 16) are not read, so such a stop or change
+    is not seen; what remains is a gap in the os lines, or no export.
 - **What os lines still miss:**
   - in-process actions: what a process of the tree does inside itself (a
     file read, a computation, a request over a connection already open)
@@ -201,22 +210,31 @@ or file contents. Everything below follows from that, or from the hooks.
   - Sysmon configuration gaps: without `-n` there is no event 3 (the report
     is then INCOMPLETE, not CLEAN), and a configuration's exclude rules
     drop events with no trace, so an excluded image reads as if nothing
-    happened. Raqib cannot tell an excluded event from no event. The
-    commander's configuration is a field test;
+    happened. Raqib cannot tell an excluded event from no event; it names
+    the event ids an export does not hold (per export). The commander's
+    configuration is a field test;
   - the log's size: the live read holds what the channel still keeps; events
-    already rolled out are gone, and a hook or proxy line before the first
-    os event is outside the os span (a partial note);
+    already rolled out are gone;
   - the tree: a process started for the agent by something outside the
-    tree (a service, a scheduled task, WMI) is not in it. A root pid that
-    more than one process held during the export is followed for each of
-    them;
+    tree (a service, a scheduled task, WMI) is not in it. The root is the
+    latest process that held the pid in the export (or the one `--root
+    PID:GUID` names); earlier holders are named in one silence line and
+    their trees are not read;
+  - cwd: with no `--cwd` and no event 1 of the root in the export, os lines
+    carry no cwd, and the SCOPE-CWD rules report them as partial;
   - UDP connections are written like TCP ones (the protocol is in the hash
     only);
   - the live output's encoding (read as UTF-8, or UTF-16 with a BOM or NUL
     bytes) is checked on fixtures, not on a real host.
 - **What CROSS-SOURCE does not judge, by ruling:**
-  - a trace with no os line (Linux, macOS, or os-sysmon not run): no
-    finding and no note; the report's `sources:` line shows the absence;
+  - C-2, both directions: a trace with no os line (Linux, macOS, or
+    os-sysmon not run) gets no finding and no note, and the report's
+    `sources:` line shows the absence; a trace with os lines and no hook or
+    proxy line is INCOMPLETE, by a partial note or, when every os process
+    is the agent's own, "nothing to judge";
+  - time outside both sources: a shell call before, after or between os
+    sessions is history (not judged, no note); an os process outside every
+    hook or proxy session is a partial note;
   - the agent's own direct children (helpers such as a search tool's `rg`,
     `git`, MCP servers, and the shell it starts) on the done side. An agent
     that runs its acts as direct children rather than through a shell is
@@ -224,11 +242,25 @@ or file contents. Everything below follows from that, or from the hooks.
   - a session of os lines only, for SILENCE-GAP and SILENCE-ORDER: os lines
     carry the time of the act, so an idle os source is not judged; reruns
     append the same events again, as visible duplicates.
-- **False-positive sources of CROSS-SOURCE:** a shell that starts a copy of
-  itself below the shell call (a subshell, a pipeline under MSYS bash) is a
-  process whose program no pre names, unless the command names that shell;
-  an act started more than 10 s after its call, or a call written more than
-  10 s after its act, is a finding. Its budget is 0.1 until the field test.
+- **Holes of CROSS-SOURCE:**
+  - names only: a program is matched by its file name, so a renamed binary
+    (curl copied to `ls.exe`) passes as the program it is named for;
+  - descendants are asked with their parent: whatever an asked process
+    starts, at any depth and any time later, is asked. Programs that start
+    children of their own include npm, npx, yarn, pip, python, node, git
+    (hooks, aliases: sh), make, cargo, go, mvn, gradle and docker; an act
+    started under one of them passes as part of it;
+  - a shell started below the shell call within 10 s of any shell call is
+    asked (a subshell, an MSYS bash fork for a pipeline), and so is
+    everything it starts; the real shape of an MSYS fork under Sysmon is
+    checked only by the field test;
+  - a shell call whose programs are unknown (command_unread) leaves the
+    processes in its window partial, and the note names that call.
+- **False-positive sources of CROSS-SOURCE:** a tool that only has a shell
+  word (bash, shell, cmd, command) in its name and starts no process gives
+  "asked, not done"; an act started more than 10 s after its call, or a
+  call written more than 10 s after its act, is a finding. Its budget is
+  0.1 until the field test.
 
 ## 6. Attacks on the watcher itself
 

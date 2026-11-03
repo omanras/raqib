@@ -269,6 +269,10 @@ RULES_INIT_REL = "raqib/rules/__init__.py"
      "RED: rule kinds: raqib/rules/cross.py declares no RULE_KINDS"),
     ({REPORT_REL: real_text(REPORT_REL).replace('CROSS_RULES = (\n', 'CROSS_RULES = (\n    ("CROSS-NEW", "x"),\n')},
      "RED: rule kinds: report.CROSS_RULES names CROSS-NEW, with no kind in cross.RULE_KINDS"),
+    # D-11: report.py must declare CROSS_RULES; there is no default.
+    ({REPORT_REL: real_text(REPORT_REL).replace("CROSS_RULES = (", "OTHER_RULES = (").replace(
+        "for rid, title in CROSS_RULES]", "for rid, title in OTHER_RULES]")},
+     "RED: rule kinds: raqib/report.py declares no CROSS_RULES"),
     ({CATALOG_REL + "NET-EXTRA.yml": real_text(CATALOG_REL + "NET-TOOL.yaml")},
      "RED: rule kinds: rule files must end in .yaml: raqib/rules/catalog/NET-EXTRA.yml"),
     ({rel: None for rel in RULE_FILES if rel.startswith(CATALOG_REL)},
@@ -278,7 +282,8 @@ RULES_INIT_REL = "raqib/rules/__init__.py"
 ], ids=["kind-missing", "kind-unknown", "signature-without-evasion", "evasion-on-an-anchor",
         "fourth-kind-in-the-loader", "silence-rule-without-kind", "silence-declares-nothing",
         "report-silence-rule-without-kind", "cross-rule-without-kind", "cross-declares-nothing",
-        "report-cross-rule-without-kind", "tracked-yml", "no-catalog", "no-rules-in-the-checkout"])
+        "report-cross-rule-without-kind", "report-declares-no-cross-rules", "tracked-yml", "no-catalog",
+        "no-rules-in-the-checkout"])
 def test_m41_e4_a_rule_without_a_kind_turns_the_gate_red(tmp_path, files, red):
     code, out = gate(tmp_path, files)
     assert code == 1, out

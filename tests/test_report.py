@@ -270,7 +270,8 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     assert code == 0
     rows = {line.split()[0]: line.split() for line in text.splitlines()[1:]}
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
-                         "SCOPE-PATH", "SECRET-OUTPUT"}
+                         "SCOPE-PATH", "SECRET-OUTPUT", "CROSS-SOURCE"}   # M5.3 D-11: the code rule too
+    assert rows["CROSS-SOURCE"][1:4] == ["ok", "0.000", "0.1"]
     assert "4 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])   # M5.1b: + the Windows negative
     # M4.2 REDO-2 E-1: the field trace is not benign (tests/fixtures/field/), so
     # NET-TOOL is 1 of 10 (docs-lookup; negative-programs.json is the 10th) and
