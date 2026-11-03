@@ -63,3 +63,16 @@ have, and no signature is needed to read it.
 - M5.3 os source on Windows (Sysmon) + CROSS-SOURCE anchor rule.
 - Later: Linux os source (auditd/eBPF); MCP shim as a fourth source only
   if a watched agent exposes nothing else.
+
+## Amendment A (the Table, 2026-11-03) - rulings on the M5.2 review (721126a)
+- A-1 Recording never breaks relaying (catch-all + silence line; 64 MiB cap).
+- A-2 `tool` / `tool_use_id` bounded; hashed with `tool_hashed` otherwise.
+- A-3 Proxy sessions and pairing follow the conversation key (sha256 of
+  model + messages[0]); start on first sight, stop on a no-tool answer,
+  session_end at shutdown; `--cwd DIR`.
+- A-4 Pre-proxy results are one `history` line per key. A-5 A re-sent
+  result with another hash is a trace problem. A-6 Host/Origin refusal,
+  folded silence lines, THREAT_MODEL names suppression, browsers, key in
+  the clear. A-7 Missing common.py writes into the trace. A-8 Relay edge
+  cases documented or refused. A-9 In-memory pre index. A-10 Golden hook
+  line. A-11..A-13 as in docs/review/2026-11-03-M5.2-ruling.md.
