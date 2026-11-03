@@ -1,15 +1,26 @@
 """The Windows tray icon of `raqib app` (M6.4, ADR-0006): Win32 through ctypes.
 
 On Windows, Tray.start() runs one thread that registers a window class,
-creates a hidden message-only window (parent HWND_MESSAGE) whose WndProc is
-a ctypes callback, adds a notification-area icon with Shell_NotifyIconW and
-pumps that thread's messages with GetMessageW. The icon is drawn in code
+creates a hidden top-level window of that class (WS_OVERLAPPED, no parent,
+never shown; not message-only, ADR-0006 A-1: the "TaskbarCreated" broadcast
+reaches top-level windows only, and the popup menu needs a real owner)
+whose WndProc is a ctypes callback, adds a notification-area icon with
+Shell_NotifyIconW and pumps that thread's messages with GetMessageW. The icon is drawn in code
 (icon_masks: an AND and an XOR bitmask, CreateIcon); there is no image
 file. A left click on the icon means Show; a right click opens a popup menu
 Show / Stop / Quit (TrackPopupMenu with TPM_RETURNCMD). Each action is
 handed to on_action(name) - the window puts it on a queue that its after()
 reads, so no Tk call is ever made from the tray thread. When Explorer
-restarts (the "TaskbarCreated" message) the icon is added again.
+restarts (the "TaskbarCreated" message) the icon is added again; when that
+fails the tray is down (running False) with a hole, and the window's close
+stops the watch instead of hiding it (A-1).
+
+stop() never posts to a window: it posts WM_RAQIB_STOP to the tray's own
+thread (PostThreadMessageW); the thread removes its icon and destroys its
+window. A tray thread that ends any other way (a WM_CLOSE or WM_DESTROY it
+did not ask for, a failed message loop) records the hole "tray ended:
+<reason>" (A-6). A tray that comes up after start() stopped waiting for it
+finds the cancelled flag, deletes its icon and ends (A-6).
 
 Nothing here raises into the window (A3): start() returns None or the
 reason the tray is not there, and every later failure (an exception in the
@@ -44,7 +55,10 @@ WM_LBUTTONDBLCLK = 0x0203
 WM_RBUTTONUP = 0x0205
 WM_APP = 0x8000
 WM_TRAY = WM_APP + 1    # the icon's callback message
-HWND_MESSAGE = -3
+WM_RAQIB_STOP = WM_APP + 2   # a thread message: stop() asks the tray thread to end
+HWND_MESSAGE = -3       # never used (A-1): a message-only window gets no broadcast
+WS_OVERLAPPED = 0x00000000
+MB_OK, MB_ICONERROR = 0x0, 0x10
 NIM_ADD, NIM_MODIFY, NIM_DELETE = 0, 1, 2
 NIF_MESSAGE, NIF_ICON, NIF_TIP = 0x1, 0x2, 0x4
 MF_STRING = 0x0
@@ -121,6 +135,32 @@ def dispatch(msg, lparam, on_mouse):
     return True
 
 
+def message_box(text, title=TIP, platform=None, api=None):
+    """A-4: one modal message (MessageBoxW, ctypes) for a `raqib-app` that
+    cannot open its window and has no console. None when it was shown, else
+    why not (the caller then writes the text to stderr)."""
+    if (platform or sys.platform) != "win32":
+        return "no message box on this platform"
+    try:
+        api = api or _BoxApi()
+        api.MessageBoxW(None, str(text), str(title), MB_OK | MB_ICONERROR)
+        return None
+    except Exception as exc:
+        return "%s: %s" % (type(exc).__name__, exc)
+
+
+class _BoxApi:
+    """MessageBoxW alone (A-4), with its ctypes signature."""
+
+    def __init__(self):
+        import ctypes
+        from ctypes import wintypes as w
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        self.MessageBoxW = user32.MessageBoxW
+        self.MessageBoxW.restype = ctypes.c_int
+        self.MessageBoxW.argtypes = [w.HWND, w.LPCWSTR, w.LPCWSTR, w.UINT]
+
+
 class _Api:
     """The Win32 functions the tray uses, with their ctypes signatures.
     Built only on Windows (ctypes.WINFUNCTYPE and windll exist there only)."""
@@ -164,11 +204,13 @@ class _Api:
                                   ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, w.HWND, w.HMENU,
                                   w.HINSTANCE, w.LPVOID)
         self.DestroyWindow = fn(user32, "DestroyWindow", w.BOOL, w.HWND)
+        self.GetCurrentThreadId = fn(kernel32, "GetCurrentThreadId", w.DWORD)
         self.DefWindowProcW = fn(user32, "DefWindowProcW", lresult, w.HWND, w.UINT, w.WPARAM, w.LPARAM)
         self.GetMessageW = fn(user32, "GetMessageW", w.BOOL, ctypes.POINTER(w.MSG), w.HWND, w.UINT, w.UINT)
         self.TranslateMessage = fn(user32, "TranslateMessage", w.BOOL, ctypes.POINTER(w.MSG))
         self.DispatchMessageW = fn(user32, "DispatchMessageW", lresult, ctypes.POINTER(w.MSG))
-        self.PostMessageW = fn(user32, "PostMessageW", w.BOOL, w.HWND, w.UINT, w.WPARAM, w.LPARAM)
+        # A-11: the tray posts only to its own thread, never to a window.
+        self.PostThreadMessageW = fn(user32, "PostThreadMessageW", w.BOOL, w.DWORD, w.UINT, w.WPARAM, w.LPARAM)
         self.PostQuitMessage = fn(user32, "PostQuitMessage", None, ctypes.c_int)
         self.RegisterWindowMessageW = fn(user32, "RegisterWindowMessageW", w.UINT, w.LPCWSTR)
         self.GetSystemMetrics = fn(user32, "GetSystemMetrics", ctypes.c_int, ctypes.c_int)
@@ -190,7 +232,9 @@ class _Api:
 
 class Tray:
     """One notification-area icon. on_action(name) gets "show", "stop" or
-    "quit", called from the tray thread: it must only queue the action."""
+    "quit", called from the tray thread: it must only queue the action.
+    running: the icon is in the notification area and the thread pumps.
+    ended: why the thread ended when stop() did not end it (A-6)."""
 
     def __init__(self, on_action, platform=None, api=None, tip=TIP):
         self.on_action = on_action
@@ -202,11 +246,16 @@ class Tray:
         self.icon = None
         self.thread = None
         self.running = False
+        self.cancelled = False   # A-6: start() stopped waiting, or stop() ran: a late tray removes itself
+        self.ended = None        # A-6: why the thread ended, when stop() did not end it
+        self._stopping = False   # stop() asked the thread to end
+        self._gate = threading.Lock()   # orders "the thread is up" against "start() gave up"
         self._ready = threading.Event()
         self._error = None
         self._proc = None        # the ctypes WndProc: kept, or it is collected while Windows calls it
         self._class = "RaqibTray-%d" % id(self)
         self._hinstance = None
+        self._thread_id = None
         self._taskbar_created = None
         self._added = False      # the icon is in the notification area
         self._destroyed = False  # the hidden window is gone
@@ -221,21 +270,29 @@ class Tray:
         self.thread = threading.Thread(target=self._run, name="raqib-tray", daemon=True)
         self.thread.start()
         if not self._ready.wait(START_SECONDS):
-            return "the tray did not come up within %g s" % START_SECONDS
+            with self._gate:
+                if not self._ready.is_set():
+                    self.cancelled = True   # A-6: if it comes up later, it deletes its icon and ends
+                    return "the tray did not come up within %g s" % START_SECONDS
         if self._error:
             return self._error
-        self.running = True
         return None
 
     def stop(self):
-        """Remove the icon and end the tray thread; never raises."""
+        """Remove the icon and end the tray thread; never raises. It posts
+        only to the tray's own thread (PostThreadMessageW), never to a window."""
         if self.thread is None:
             return
+        self._stopping = True
+        with self._gate:
+            self.cancelled = True
         try:
-            if self.hwnd:
-                self.api.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
+            if self._thread_id is not None and self.thread.is_alive():
+                if not self.api.PostThreadMessageW(self._thread_id, WM_RAQIB_STOP, 0, 0):
+                    self._hole("the tray could not be told to stop (PostThreadMessageW failed, error %s)"
+                               % self.api.last_error())
         except Exception as exc:
-            self._hole("the tray could not be told to close: %s: %s" % (type(exc).__name__, exc))
+            self._hole("the tray could not be told to stop: %s: %s" % (type(exc).__name__, exc))
         self.thread.join(STOP_SECONDS)
         if self.thread.is_alive():
             self._hole("the tray thread did not end within %g s" % STOP_SECONDS)
@@ -247,6 +304,11 @@ class Tray:
         if text not in self.holes:
             self.holes.append(text)
 
+    def _end(self, reason):
+        """The first reason the thread is ending, when stop() did not ask (A-6)."""
+        if not self._stopping and self.ended is None:
+            self.ended = reason
+
     def _run(self):
         try:
             self._up()
@@ -255,18 +317,28 @@ class Tray:
             self._ready.set()
             self._down()
             return
-        self._ready.set()
+        with self._gate:
+            late = self.cancelled
+            if not late:
+                self.running = True
+            self._ready.set()
+        if late:   # A-6: start() gave up on it (or stop() ran): the icon goes, the thread ends
+            self._down()
+            return
         try:
             self._pump()
         except Exception as exc:
-            self._hole("the tray's message loop ended on %s: %s" % (type(exc).__name__, exc))
+            self._end("its message loop failed: %s: %s" % (type(exc).__name__, exc))
         finally:
             self.running = False
             self._down()
+            if self.ended is not None and not self._stopping:
+                self._hole("tray ended: %s" % self.ended)
 
     def _up(self):
         api = self.api = self.api or _Api()
         self._hinstance = api.GetModuleHandleW(None)
+        self._thread_id = api.GetCurrentThreadId()
         self._proc = api.WNDPROC(self._wndproc)
         wc = api.WNDCLASSEXW()
         wc.cbSize = api.ctypes.sizeof(api.WNDCLASSEXW)
@@ -276,8 +348,10 @@ class Tray:
         if not api.RegisterClassExW(api.ctypes.byref(wc)):
             raise OSError("RegisterClassExW failed (error %d)" % api.last_error())
         self._taskbar_created = api.RegisterWindowMessageW("TaskbarCreated")
-        self.hwnd = api.CreateWindowExW(0, self._class, TIP, 0, 0, 0, 0, 0, HWND_MESSAGE, None, self._hinstance,
-                                        None)
+        # A-1: a hidden top-level window (no parent, WS_OVERLAPPED, never shown), not HWND_MESSAGE:
+        # TaskbarCreated is broadcast to top-level windows, and the popup menu needs a real owner.
+        self.hwnd = api.CreateWindowExW(0, self._class, TIP, WS_OVERLAPPED, 0, 0, 0, 0, None, None,
+                                        self._hinstance, None)
         if not self.hwnd:
             raise OSError("CreateWindowExW failed (error %d)" % api.last_error())
         size = icon_size(api.GetSystemMetrics(SM_CXSMICON))
@@ -311,9 +385,12 @@ class Tray:
         while True:
             got = api.GetMessageW(api.ctypes.byref(msg), None, 0, 0)
             if got == 0:        # WM_QUIT
+                self._end("its message loop got WM_QUIT")
                 return
             if got == -1:
                 raise OSError("GetMessageW failed (error %d)" % api.last_error())
+            if not msg.hWnd and msg.message == WM_RAQIB_STOP:   # stop(): a thread message, no window
+                return
             api.TranslateMessage(api.ctypes.byref(msg))
             api.DispatchMessageW(api.ctypes.byref(msg))
 
@@ -322,14 +399,15 @@ class Tray:
             if dispatch(msg, lparam, self._mouse):
                 return 0
             if msg == self._taskbar_created and self._taskbar_created:
-                if not self._notify(NIM_ADD):   # Explorer restarted: the icon is added again
-                    self._hole("the tray icon could not be added again after Explorer restarted")
+                self._readd()
                 return 0
-            if msg == WM_CLOSE:
+            if msg == WM_CLOSE:           # stop() never sends this (A-6): it came from outside
+                self._end("WM_CLOSE from outside stop()")
                 self._remove()            # the icon goes before its window
                 self.api.DestroyWindow(hwnd)
                 return 0
             if msg == WM_DESTROY:
+                self._end("WM_DESTROY not from stop()")
                 self._destroyed = True
                 self.api.PostQuitMessage(0)
                 return 0
@@ -337,6 +415,19 @@ class Tray:
             self._hole("the tray failed on message 0x%04x: %s: %s" % (msg, type(exc).__name__, exc))
             return 0
         return self.api.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+    def _readd(self):
+        """Explorer restarted: the icon is added again (A-1). When that
+        fails the tray is down: running False and a hole, so the window's
+        close stops the watch instead of hiding it."""
+        if self._notify(NIM_ADD):
+            self._added = True
+            self.running = True
+            return
+        self._added = False
+        self.running = False
+        self._hole("the tray icon could not be added again after Explorer restarted (Shell_NotifyIconW NIM_ADD"
+                   " failed): no tray; closing the window stops the watch")
 
     def _mouse(self, action):
         if action == "menu":
@@ -355,10 +446,11 @@ class Tray:
                 api.AppendMenuW(menu, MF_STRING, item, label)
             point = api.POINT()
             api.GetCursorPos(api.ctypes.byref(point))
-            api.SetForegroundWindow(self.hwnd)   # so the menu closes when the person clicks elsewhere
+            api.SetForegroundWindow(self.hwnd)   # the owner is top-level (A-1): the menu closes on an outside click
             chosen = api.TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y,
                                         0, self.hwnd, None)
-            api.PostMessageW(self.hwnd, WM_NULL, 0, 0)
+            # The benign message after TrackPopupMenu (KB135788), to this thread's own queue (A-11).
+            api.PostThreadMessageW(self._thread_id, WM_NULL, 0, 0)
             return chosen
         finally:
             api.DestroyMenu(menu)
@@ -382,8 +474,8 @@ class Tray:
 
     def _destroy_window(self):
         if self.hwnd and not self._destroyed:
-            self.api.DestroyWindow(self.hwnd)
             self._destroyed = True
+            self.api.DestroyWindow(self.hwnd)
         self.hwnd = None
 
     def _destroy_icon(self):

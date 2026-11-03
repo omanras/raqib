@@ -41,8 +41,8 @@ A check that cannot be made on this host is UNSURE, counted apart and never a fa
 
 ## The window
 `raqib app [PROJECT]` (or `raqib-app`, which on Windows opens with no console) is Raqib as an ordinary program window: first what `raqib doctor` says, a project field with Browse, and Start; Start runs the same watch as `raqib watch` and shows its band, findings by severity, holes and the page's address; Stop, or closing the window, ends it like Ctrl-C and shows the final report.
-The first finding of a watch knocks once, whatever its severity. On Windows a tray icon offers Show / Stop / Quit, and closing the window while watching hides it there; on Linux there is no tray, and a tray that fails is shown in the window as a hole.
-It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`; without it, or without a display, `raqib app` exits 2 and says so, and `raqib watch` still works ([ADR-0006](docs/specs/ADR-0006-the-window.md)).
+The first finding of a watch knocks once, whatever its severity (in `raqib watch` too; a high one through its rule's own knock). On Windows a tray icon offers Show / Stop / Quit, and closing the window while watching hides it there; on Linux there is no tray, and a tray that fails is shown in the window as a hole.
+It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`; without it, or without a display, `raqib app` exits 2 and says so (`raqib-app`: in a message box on Windows, its log in `~/.raqib/app.log`), and `raqib watch` still works ([ADR-0006](docs/specs/ADR-0006-the-window.md)).
 
 ## How it works
 - **Deterministic first.** Rules decide; a model can only add suspicion (A1, A2).

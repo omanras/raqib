@@ -184,6 +184,8 @@ def fold_text(count, first, last):
 
 FIRST_EVENT = "FIRST-FINDING"          # M6.4 E3: the knock on the first finding of a watch
 FIRST_LIMIT = "FIRST-FINDING (window)"  # its own rate-limit id, apart from every rule's
+BY_THE_RULE = "by the rule"             # ADR-0006 A-5: a high first finding's knock was its rule's own
+RULE_KNOCKS = ("sent", "terminal", "failed", "folded")   # a rule's notice that says it knocked (or tried to)
 
 
 class FirstFinding:
@@ -213,18 +215,36 @@ class FirstFinding:
         shown = ",".join(seqs[:3]) + (" +%d more" % (len(seqs) - 3) if len(seqs) > 3 else "")
         return clean("%s %s seq %s" % (entry.get("rule_id"), entry.get("severity"), shown or "-"))
 
+    @staticmethod
+    def by_the_rule(entry):
+        """The rule's own knock of this finding, when it had one (ADR-0006
+        A-5): a live settled high finding knocked as its rule when it
+        settled (watch._settle), and its notice is that knock's outcome."""
+        notice = entry.get("notice")
+        if entry.get("severity") != "high" or not isinstance(notice, str):
+            return None
+        if notice in RULE_KNOCKS or notice.startswith("folded: "):
+            return notice
+        return None
+
     def check(self, findings, now):
         """Knock for the first live settled finding, once; the record, or
-        None when nothing knocked now."""
+        None when nothing knocked now. A high first finding has already
+        knocked as its rule: that knock is recorded as the first one, with
+        status "by the rule", and FIRST-FINDING is not sent (A-5: once)."""
         if self.knocked is not None:
             return None
         entry = self.first(findings)
         if entry is None:
             return None
         where = self.where(entry)
-        status = self.notifier.notify(FIRST_EVENT, where, now, limit_id=FIRST_LIMIT)
+        rule_notice = self.by_the_rule(entry)
+        if rule_notice is not None:
+            status = BY_THE_RULE
+        else:
+            status = self.notifier.notify(FIRST_EVENT, where, now, limit_id=FIRST_LIMIT)
         self.knocked = {"rule_id": entry.get("rule_id"), "severity": entry.get("severity"), "where": where,
-                        "status": status, "now": now}
+                        "status": status, "now": now, "rule_notice": rule_notice}
         return self.knocked
 
 

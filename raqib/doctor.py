@@ -29,8 +29,9 @@ and exits 1 when any line is MISSING, else 0:
             terminal bell is left or notifications are off (CI is set, or
             SystemRoot is not trusted).
 - tkinter   `raqib app` (M6.4, ADR-0006) can open its window: tkinter
-            imports in this Python (OK with the Tk version; MISSING, naming
-            python3-tk, when it does not - `raqib watch` works without it),
+            imports in this Python (OK with the Tk version; UNSURE, "the
+            window needs it (python3-tk); watch does not", when it does not:
+            ADR-0006 A-9, a missing tkinter never fails doctor's exit),
             and on Linux and other X11 systems DISPLAY is set (UNSURE when
             it is not: no window can open in this session; nothing is opened
             to find out).
@@ -342,12 +343,15 @@ def writable(path, windows=False):
     return True, "can be created under %s" % parent
 
 
+TK_UNSURE = "the window needs it (python3-tk); watch does not"
+
+
 def check_tkinter(environ, platform, importer=None):
     """M6.4 E5: the window's toolkit. Imports tkinter (opens no window)."""
     from raqib import app   # app imports doctor: imported here, not at the top
     tk, why = app.probe_tk(importer)
-    if tk is None:
-        return False, why
+    if tk is None:   # ADR-0006 A-9: UNSURE, not MISSING - `raqib watch` does not need it
+        return UNSURE, "%s; %s" % (TK_UNSURE, why)
     version = getattr(tk, "TkVersion", "?")
     problem = app.display_problem(environ, platform)
     if problem:

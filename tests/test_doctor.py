@@ -641,12 +641,26 @@ def test_m64_e5_tkinter_line_ok_with_a_display(tmp_path, home):
     assert checks["tkinter"] == ("OK", "Tk 8.6 (tkinter); `raqib app` can open its window")
 
 
-def test_m64_e5_no_tkinter_is_missing_and_names_python3_tk(tmp_path, home):
+def test_m64_a9_no_tkinter_is_unsure_and_names_python3_tk(tmp_path, home):
+    """ADR-0006 A-9: a missing tkinter is UNSURE (watch does not need it),
+    with the sentence; doctor's exit stays 0 when nothing else is MISSING."""
     proj = make_project(tmp_path)
-    _, text, checks, _ = run(tmp_path, proj, home, importer=no_tkinter)
+    code0, _, checks0, _ = run(tmp_path, proj, home)
+    code, text, checks, _ = run(tmp_path, proj, home, importer=no_tkinter)
     verdict, line = checks["tkinter"]
-    assert verdict == "MISSING" and "python3-tk" in line and "`raqib watch` works without it" in line
-    assert line.startswith("tkinter cannot be imported in this Python (No module named 'tkinter')")
+    assert verdict == "UNSURE" and line.startswith("the window needs it (python3-tk); watch does not; ")
+    assert "tkinter cannot be imported in this Python (No module named 'tkinter')" in line
+    assert "`raqib watch` works without it" in line
+    assert code == code0   # never a MISSING: the exit is decided by the other lines only
+    missing0 = sum(1 for v, _ in checks0.values() if v == "MISSING")
+    assert sum(1 for v, _ in checks.values() if v == "MISSING") == missing0
+    assert text.splitlines()[-1].endswith("%d UNSURE" % (sum(1 for v, _ in checks0.values() if v == "UNSURE") + 1))
+
+
+def test_m64_a9_only_missing_fails_doctor(tmp_path, home):
+    """A-9: exit 1 on MISSING only; UNSURE lines alone give 0."""
+    assert doctor.summary([("a", (True, "")), ("tkinter", (doctor.UNSURE, ""))]) == ("0 MISSING, 1 UNSURE", 0)
+    assert doctor.summary([("a", (False, "")), ("tkinter", (doctor.UNSURE, ""))])[1] == 1
 
 
 def test_m64_e5_no_display_on_x11_is_unsure_and_windows_needs_none(tmp_path, home):

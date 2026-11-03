@@ -288,6 +288,7 @@ class Watch:
                         "start": None, "marker": None}
         self.registry = None      # the Registry this watch is a row of (I-5)
         self.registry_state = None
+        self.first_knock = None   # ADR-0006 A-12: the FirstFinding record of this watch, once it knocked
 
     # --- time and output -----------------------------------------------------
 
@@ -843,6 +844,7 @@ class Watch:
             "holes": self.holes + self.notifier.holes, "notifications": self.notifier.state(),
             "capture": self.capture, "agent_gone": self.agent_gone(), "open_sessions": self.open_sessions(),
             "state_error": self.state_error, "refresh_seconds": self.refresh, "registry": self.registry_state,
+            "first_knock": dict(self.first_knock) if self.first_knock else None,   # A-12
         }
         state["band"] = ui.status(state)[0]   # J-6: the owner's state word, for the pages of other watches
         return state
@@ -1156,9 +1158,11 @@ class Stop:
 
 
 class Running:
-    """What start() set up and loop(), conclude() and close() use."""
+    """What start() set up and loop(), conclude() and close() use. knock:
+    the watch's first-finding knock (notify.FirstFinding, ADR-0006 A-12)."""
 
     def __init__(self, watcher, server, notifier, thread, refresh, environ, no_open, out, err):
+        self.knock = notify.FirstFinding(notifier)
         self.watcher = watcher
         self.server = server
         self.notifier = notifier
@@ -1168,6 +1172,25 @@ class Running:
         self.no_open = no_open
         self.out = out
         self.err = err
+
+
+def first_step(running):
+    """The first-finding knock after a poll (ADR-0006 E3, A-12): the
+    FirstFinding record when it knocked now (also kept as watch.json's
+    first_knock, and said through out as "first finding knocked: ..."),
+    else None. The terminal's loop() and the window's worker both call it."""
+    watcher = running.watcher
+    with watcher.lock:
+        now = watcher.clock()
+        done = running.knock.check(list(watcher.inventory.values()), now)
+        if done is None:
+            return None
+        watcher.first_knock = {k: done[k] for k in ("rule_id", "severity", "where", "status")}
+        watcher.first_knock["at"] = watcher.at(now)
+        if done.get("rule_notice") is not None:
+            watcher.first_knock["rule_notice"] = done["rule_notice"]
+        watcher._say(now, "first finding knocked: %s (%s)" % (done["where"], done["status"]))
+        return dict(watcher.first_knock)
 
 
 def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=None,
@@ -1257,8 +1280,19 @@ def loop(running, stop=None, on_step=None):
     """Poll until Ctrl-C (stop None: the terminal) or until stop is set (the
     window's worker thread); None, or the crash text when an exception ended
     it (B-4). The window's Stop is the equivalent of Ctrl-C. on_step(watcher)
-    runs after every poll, in this thread, outside the Watch lock."""
+    runs after every poll, in this thread, outside the Watch lock; without
+    one it is the first-finding knock (first_step, ADR-0006 A-12), so a
+    terminal watch knocks on its first finding as the window does."""
     watcher, out, err, environ = running.watcher, running.out, running.err, running.environ
+    if on_step is None:
+        def on_step(w):
+            try:
+                first_step(running)
+            except Exception as exc:   # A3: a knock that broke is a hole, never the end of the watch
+                with w.lock:
+                    detail = "the first-finding knock failed: %s: %s" % (type(exc).__name__, exc)
+                    if not any(h["kind"] == "first-knock" and h["detail"] == detail for h in w.holes):
+                        w._hole(w.clock(), "first-knock", detail)
     crash = None
     try:
         if watcher.port["warning"]:

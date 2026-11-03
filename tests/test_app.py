@@ -153,7 +153,9 @@ def test_e5_app_and_tray_signal_nothing_and_start_no_program():
     """A4: the window and the tray start no program, open no socket, signal
     no process; tray.py alone uses ctypes (Win32)."""
     banned = ("kill", "killpg", "send_signal", "terminate", "system", "popen", "Popen", "startfile", "run",
-              "urlopen", "create_connection", "open_new", "open_new_tab", "call", "check_call", "check_output")
+              "urlopen", "create_connection", "open_new", "open_new_tab", "call", "check_call", "check_output",
+              # A-11: no message to another window, no process ended
+              "PostMessageW", "SendMessageW", "TerminateProcess")
     for name in ("app.py", "tray.py"):
         tree = ast.parse((ROOT / "raqib" / name).read_text(encoding="utf-8"))
         imported = set()
@@ -168,6 +170,10 @@ def test_e5_app_and_tray_signal_nothing_and_start_no_program():
                 if called == "run" and name == "app.py":
                     continue   # app.run itself, and doctor's checks: no subprocess here (checked below)
                 assert called not in banned, (name, called)
+            elif isinstance(node, (ast.Attribute, ast.Name)):   # A-11: not even named (getattr, a field)
+                named = node.attr if isinstance(node, ast.Attribute) else node.id
+                assert named not in ("PostMessageW", "SendMessageW", "TerminateProcess", "kill", "killpg"), (
+                    name, named)
         assert not imported & {"subprocess", "socket", "ssl", "urllib", "signal", "asyncio", "webbrowser", "http",
                                "anthropic", "shutil"}, (name, imported)
         assert ("ctypes" in imported) == (name == "tray.py"), name
@@ -250,7 +256,7 @@ def test_e2_start_runs_the_same_watch_in_a_worker_and_stop_ends_it_like_ctrl_c(t
     assert snap["final_exit"] == 1
     log = session.log.text()
     assert "raqib watch: stopped (Stop in the window)" in log and "page not opened (--no-open)" in log
-    assert "Stop stops the watch" in log and "first finding of this watch knocked: DESTRUCT-CMD medium" in log
+    assert "Stop stops the watch" in log and "] first finding knocked: DESTRUCT-CMD medium seq 2 (off)" in log
     st = json.loads(Path(str(trace_path) + ".watch.json").read_text(encoding="ascii"))
     assert st["status"] == "finished" and st["finished"]
     rows = json.loads((home / ".raqib" / "watches.json").read_text(encoding="ascii"))["watches"]
@@ -275,7 +281,7 @@ def test_e2_the_page_server_is_down_after_stop(tmp_path):
 def test_e2_a_watch_that_cannot_start_is_shown_and_a_crashed_worker_is_a_hole(tmp_path):
     proj = tmp_path / "proj"
     proj.mkdir()
-    session = app.Session(str(proj), options(log=str(proj / "t.jsonl"))).start()   # --log inside: refused
+    session = app.Session(str(proj), options(log=str(proj / "t.jsonl"), log_project=str(proj))).start()   # inside
     assert until(lambda: session.snapshot()["phase"] == "failed")
     snap = session.snapshot()
     assert "the watch did not start: --log" in snap["error"] and "inside the project" in snap["error"]
@@ -298,8 +304,10 @@ def test_e2_a_state_held_too_long_shows_the_last_one_and_says_so(tmp_path):
         last = session.state()
         lock = session.running.watcher.lock
         with lock:
-            assert session.state() is last
+            held = session.state()
+            assert held["lines"] == last["lines"] and held["heartbeat"] == last["heartbeat"]   # the last one, aged
             assert session.read_note.startswith("the watch held its state for more than")
+            assert "the state shown was read " in session.read_note
         assert session.state() is not last and session.read_note is None
     finally:
         session.stop("test")
@@ -516,15 +524,18 @@ def test_e4_an_exception_in_the_wndproc_is_a_hole_not_a_crash():
 
 @pytest.mark.skipif(not WINDOWS, reason="the real Win32 tray")
 def test_e4_real_tray_starts_and_stops_or_says_why():
+    """A-7: passes only when the icon came up; otherwise it skips with the
+    tray's own reason, which -rsxXp shows in the CI log."""
     t = tray.Tray(lambda a: None)
     why = t.start()
     try:
-        assert why is None or isinstance(why, str)
-        if why is None:
-            assert t.running and t.hwnd
+        if why is not None:
+            pytest.skip("the tray did not come up: %s" % why)
+        assert t.running and t.hwnd and t._added
     finally:
         t.stop()
     assert not t.running and (t.thread is None or not t.thread.is_alive())
+    assert t.holes == [], t.holes
 
 
 # --- E6: the README ------------------------------------------------------------------------------
@@ -561,6 +572,7 @@ class TkSession(FakeSession):
         self.log = app.LogBuffer()
         self.read_note = None
         self.final_text = None
+        self.knock = None
 
     def stop(self, reason):
         self.stopped.append(reason)
@@ -568,7 +580,7 @@ class TkSession(FakeSession):
 
     def snapshot(self):
         return {"phase": self.phase, "error": None, "final_text": self.final_text,
-                "final_exit": 1 if self.final_text else None, "holes": [], "knock": None}
+                "final_exit": 1 if self.final_text else None, "holes": [], "knock": self.knock}
 
     def state(self):
         return {"status": "watching", "lines": 2, "url": "http://127.0.0.1:1/", "capture": {},
@@ -599,6 +611,24 @@ def test_tk_window_first_screen_watching_screen_stop_and_close(tmp_path):
         assert window.screen == "watching" and window.band.cget("text") == "WATCHING"
         assert window.url.get() == "http://127.0.0.1:1/"
         assert "SECRET-OUTPUT settled" in window.body.get("1.0", "end")
+        # A-5: the first-finding line, and the Log pane at any time (bounded)
+        assert window.knock_label.cget("text") == "first finding: none yet (it knocks once, whatever its severity)"
+        c.session.knock = {"rule_id": "SECRET-OUTPUT", "severity": "high", "status": "by the rule"}
+        c.session.log.write("raqib watch: a line of the watch\n")
+        window.toggle_log()
+        window.tick()
+        assert window.knock_label.cget("text") == "first finding: SECRET-OUTPUT high (by the rule)"
+        assert "a line of the watch" in window.log_text.get("1.0", "end")
+        window.toggle_log()
+        # A-13: Open page through the controller's opener
+        c.opener = lambda url, environ=None: "no opener here"
+        window.open_page()
+        window.tick()
+        assert "note: page: the page was not opened (no opener here)" in window.foot.cget("text")
+        # A-4: a callback exception is a hole in the footer
+        root.report_callback_exception(ValueError, ValueError("boom"), None)
+        window.tick()
+        assert "hole: a window callback failed: ValueError: boom" in window.foot.cget("text")
         window.on_close()                    # no tray: the watch stops like Ctrl-C, the report stays
         window.tick()
         assert c.session.stopped == ["window closed"] and window.band.cget("text") == "FINISHED"
@@ -637,6 +667,771 @@ def test_tk_window_hides_to_the_tray_and_shows_on_a_tray_action(tmp_path):
         window.tick()
         assert window.closed and c.session.stopped == ["Quit in the tray menu", "the window was closed"]
         assert t.stopped == 1
+    finally:
+        if window is None or not window.closed:
+            root.destroy()
+
+
+# --- REDO (ADR-0006 Amendment A) ---------------------------------------------------------------
+# A-15 (D-8): every change of the REDO has its test here; the questions file names them.
+
+class _Obj:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+class FakeWin32:
+    """The Win32 calls of tray.Tray, in Python: a message queue per thread
+    (GetMessageW blocks on it), windows that call the WndProc, and a
+    notification area whose NIM_ADD answers can be scripted."""
+
+    WM_QUIT = 0x0012
+
+    def __init__(self, adds=None):
+        import queue as q
+        self.q = q.Queue()
+        self.adds = list(adds or [])      # scripted NIM_ADD answers, then True
+        self.icons = set()                # (hwnd, uID) in the notification area
+        self.calls = []
+        self.windows = {}
+        self.posted = []                  # PostThreadMessageW
+        self.ctypes = _Obj(sizeof=lambda t: 0, byref=lambda o: o)
+        self.WNDCLASSEXW = lambda: _Obj()
+        self.NOTIFYICONDATAW = lambda: _Obj()
+        self.MSG = lambda: _Obj(hWnd=None, message=0, wParam=0, lParam=0)
+        self.POINT = lambda: _Obj(x=0, y=0)
+        self.WNDPROC = lambda f: f
+        self.TID = 4242
+        self.TASKBAR = 0xC123
+
+    def last_error(self):
+        return 5
+
+    def GetModuleHandleW(self, name):
+        return 1
+
+    def GetCurrentThreadId(self):
+        return self.TID
+
+    def RegisterClassExW(self, wc):
+        self.wndproc = wc.lpfnWndProc
+        return 1
+
+    def UnregisterClassW(self, *a):
+        self.calls.append("UnregisterClassW")
+        return 1
+
+    def RegisterWindowMessageW(self, name):
+        assert name == "TaskbarCreated"
+        return self.TASKBAR
+
+    def CreateWindowExW(self, ex, cls, title, style, x, y, w, h, parent, menu, inst, param):
+        self.created = {"style": style, "parent": parent}
+        self.windows[77] = True
+        return 77
+
+    def DestroyWindow(self, hwnd):
+        self.calls.append("DestroyWindow")
+        if self.windows.pop(hwnd, None):
+            self.wndproc(hwnd, tray.WM_DESTROY, 0, 0)
+        return 1
+
+    def DefWindowProcW(self, *a):
+        return 0
+
+    def GetSystemMetrics(self, i):
+        return 16
+
+    def CreateIcon(self, *a):
+        return 55
+
+    def DestroyIcon(self, icon):
+        self.calls.append("DestroyIcon")
+        return 1
+
+    def Shell_NotifyIconW(self, what, data):
+        key = (data.hWnd, data.uID)
+        if what == tray.NIM_ADD:
+            ok = self.adds.pop(0) if self.adds else True
+            if ok:
+                self.icons.add(key)
+            self.calls.append("NIM_ADD %s" % ok)
+            return ok
+        if what == tray.NIM_DELETE:
+            self.calls.append("NIM_DELETE")
+            ok = key in self.icons
+            self.icons.discard(key)
+            return ok
+        return True
+
+    def GetMessageW(self, msg, hwnd, a, b):
+        m = self.q.get(timeout=10)
+        msg.hWnd, msg.message, msg.wParam, msg.lParam = m
+        return 0 if msg.message == self.WM_QUIT else 1
+
+    def TranslateMessage(self, msg):
+        return 0
+
+    def DispatchMessageW(self, msg):
+        return self.wndproc(msg.hWnd, msg.message, msg.wParam, msg.lParam)
+
+    def PostQuitMessage(self, code):
+        self.q.put((None, self.WM_QUIT, 0, 0))
+
+    def PostThreadMessageW(self, tid, msg, w, l):
+        assert tid == self.TID
+        self.posted.append(msg)
+        self.q.put((None, msg, w, l))
+        return 1
+
+    def send(self, msg, w=0, l=0):
+        """A message to the tray's window, as Windows would deliver it."""
+        self.q.put((77, msg, w, l))
+
+
+def up_tray(api, actions=None):
+    t = tray.Tray((actions if actions is not None else []).append, platform="win32", api=api)
+    assert t.start() is None and t.running
+    return t
+
+
+def test_a1_the_tray_window_is_top_level_not_message_only():
+    api = FakeWin32()
+    t = up_tray(api)
+    try:
+        assert api.created["parent"] is None and api.created["parent"] != tray.HWND_MESSAGE
+        assert api.created["style"] == tray.WS_OVERLAPPED
+        assert api.icons == {(77, 1)}
+    finally:
+        t.stop()
+    assert not t.running and not t.thread.is_alive() and t.holes == [] and t.ended is None
+    assert api.icons == set() and api.posted == [tray.WM_RAQIB_STOP]
+    assert api.calls[-4:] == ["NIM_DELETE", "DestroyWindow", "DestroyIcon", "UnregisterClassW"]
+
+
+def test_a1_taskbar_created_re_adds_the_icon():
+    api = FakeWin32()
+    t = up_tray(api)
+    try:
+        api.icons.clear()                   # Explorer restarted: the notification area is empty
+        api.send(api.TASKBAR)
+        assert until(lambda: api.icons == {(77, 1)}, 10)
+        assert t.running and t.holes == [] and api.calls.count("NIM_ADD True") == 2
+    finally:
+        t.stop()
+
+
+def test_a1_a_failed_re_add_is_a_hole_and_close_then_stops_the_watch(tmp_path):
+    api = FakeWin32(adds=[True, False])
+    t = up_tray(api)
+    try:
+        c = controller(t)
+        c.start(str(tmp_path))
+        assert c.close_request() == "hide" and c.session.stopped == []   # the tray is up: hide
+        api.icons.clear()
+        api.send(api.TASKBAR)
+        assert until(lambda: not t.running, 10)
+        assert t.holes == ["the tray icon could not be added again after Explorer restarted (Shell_NotifyIconW"
+                           " NIM_ADD failed): no tray; closing the window stops the watch"]
+        assert not c.tray_up() and c.tray_holes() == ["tray: " + t.holes[0]]
+        assert c.close_request() == "stop" and c.session.stopped == ["window closed"]   # A-1: stop, not hide
+    finally:
+        t.stop()
+
+
+def test_a6_a7_wm_close_from_outside_stop_ends_the_tray_with_a_hole():
+    """A-7's fake-API test of _up / _pump / WM_CLOSE / _down, and A-6's hole."""
+    api = FakeWin32()
+    t = up_tray(api)
+    api.send(tray.WM_CLOSE)               # another same-user process (P6, P18)
+    t.thread.join(10)
+    assert not t.thread.is_alive() and not t.running
+    assert t.ended == "WM_CLOSE from outside stop()" and t.holes == ["tray ended: WM_CLOSE from outside stop()"]
+    assert api.icons == set() and "NIM_DELETE" in api.calls and "UnregisterClassW" in api.calls
+    c = controller(t)
+    assert not c.tray_up() and c.tray_holes() == ["tray: tray ended: WM_CLOSE from outside stop()"]
+    t.stop()                               # after the end: nothing posted, no new hole
+    assert api.posted == [] and t.holes == ["tray ended: WM_CLOSE from outside stop()"]
+
+
+def test_a6_wm_destroy_not_from_stop_and_a_failing_pump_are_holes():
+    api = FakeWin32()
+    t = up_tray(api)
+    api.send(tray.WM_DESTROY)
+    t.thread.join(10)
+    assert t.holes == ["tray ended: WM_DESTROY not from stop()"]
+    api = FakeWin32()
+    t = up_tray(api)
+    api.GetMessageW = lambda *a: -1
+    api.send(0)                            # wakes nothing: the next GetMessageW fails
+    t.thread.join(10)
+    assert t.holes == ["tray ended: its message loop failed: OSError: GetMessageW failed (error 5)"]
+
+
+def test_a6_a_stop_is_not_a_hole_and_menu_actions_reach_the_queue():
+    api = FakeWin32()
+    got = []
+    t = up_tray(api, got)
+    t._menu = lambda: tray.ID_QUIT
+    api.send(tray.WM_TRAY, 0, tray.WM_RBUTTONUP)
+    api.send(tray.WM_TRAY, 0, tray.WM_LBUTTONUP)
+    assert until(lambda: got == ["quit", "show"], 10)
+    t.stop()
+    assert t.holes == [] and t.ended is None
+
+
+def test_a6_a_tray_that_comes_up_after_its_start_timed_out_removes_its_icon_and_ends(monkeypatch):
+    import threading
+    gate = threading.Event()
+    api = FakeWin32()
+    real = api.GetModuleHandleW
+
+    def slow(name):
+        gate.wait(10)
+        return real(name)
+    api.GetModuleHandleW = slow
+    monkeypatch.setattr(tray, "START_SECONDS", 0.05)
+    t = tray.Tray(lambda a: None, platform="win32", api=api)
+    assert t.start() == "the tray did not come up within 0.05 s" and t.cancelled and not t.running
+    gate.set()
+    t.thread.join(10)
+    assert not t.thread.is_alive() and not t.running
+    assert "NIM_ADD True" in api.calls and "NIM_DELETE" in api.calls and api.icons == set()
+    assert "UnregisterClassW" in api.calls and t.holes == []
+
+
+def test_a6_the_controller_keeps_a_timed_out_tray_so_its_holes_show_and_shutdown_stops_it(monkeypatch):
+    class Late(FakeTray):
+        def start(self):
+            self.cancelled = True
+            return "the tray did not come up within 5 s"
+    t = Late(running=False)
+    c = controller(t)
+    assert c.start_tray() == "the tray did not come up within 5 s"
+    assert c.tray is t and not c.tray_up() and c.holes == ["tray: the tray did not come up within 5 s"]
+    t.holes.append("tray ended: x")
+    assert c.tray_holes() == ["tray: tray ended: x"]
+    c.shutdown()
+    assert t.stopped == 1
+
+
+@pytest.mark.skipif(not WINDOWS, reason="the Win32 structures (win64 sizes)")
+def test_a7_win64_structure_sizes():
+    import ctypes
+    api = tray._Api()
+    if ctypes.sizeof(ctypes.c_void_p) != 8:
+        pytest.skip("32-bit Python: the win64 sizes do not apply")
+    assert ctypes.sizeof(api.WNDCLASSEXW) == 80
+    assert ctypes.sizeof(api.NOTIFYICONDATAW) == 976
+
+
+def test_a7_the_install_job_checks_the_gui_launcher_and_entry_points():
+    gate = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
+    job = gate.split("\n  install:", 1)[1]
+    assert "raqib-app.exe" in job and "bin/raqib-app" in job
+    assert "entry_points.txt" in job and "[gui_scripts]" in job and "raqib-app = raqib.app:gui_main" in job
+
+
+def test_a7_the_real_tray_test_skips_with_the_reason():
+    src = (ROOT / "tests" / "test_app.py").read_text(encoding="utf-8")
+    body = src.split("def test_e4_real_tray_starts_and_stops_or_says_why", 1)[1].split("\ndef ", 1)[0]
+    assert "pytest.skip(" in body and "assert why is None or" not in body
+
+
+def test_a11_the_tray_posts_only_to_its_own_thread():
+    src = (ROOT / "raqib" / "tray.py").read_text(encoding="utf-8")
+    assert "PostMessageW" not in src and "SendMessageW" not in src and "PostThreadMessageW" in src
+
+
+def test_a11_the_docstring_says_what_runs():
+    doc = " ".join(app.__doc__.split())
+    assert "It starts no program" not in doc
+    assert "The programs that run are those of `raqib doctor` - `claude --version`" in doc
+    assert "and nothing else here" in doc
+
+
+# --- A-2: the heartbeat's age at every tick ------------------------------------------------------
+
+def beat_state(age, beat="2026-11-03T12:00:00.000Z"):
+    return {"status": "watching", "lines": 1, "capture": {}, "heartbeat": beat, "heartbeat_age_seconds": age,
+            "stale_after_seconds": 30, "updated": beat, "notifications": {"backend": "off", "counts": {}}}
+
+
+def test_a2_the_age_is_recomputed_from_the_wall_clock_and_a_stale_watch_reads_crashed_or_stuck():
+    beat = START.timestamp()
+    st = beat_state(0.4)
+    assert app.aged(st, beat + 1.0)["heartbeat_age_seconds"] == 1.0
+    assert app.watch_view(app.aged(st, beat + 10))["word"] == "WATCHING"
+    view = app.watch_view(app.aged(st, beat + 31))
+    assert view["word"] == "CRASHED or stuck (31 s)" and view["level"] == "alarm"
+    assert "no heartbeat for 31 s" in view["detail"]
+    assert app.aged(st, beat - 5)["heartbeat_age_seconds"] == 0.4   # never younger than when read
+    assert app.aged(None, beat) is None and app.aged({"x": 1}, beat) == {"x": 1}
+    done = dict(beat_state(99), finished="T")
+    assert app.stale_age(done) == (None, 30)                        # a finished watch is not stuck
+
+
+def test_a2_a_watch_stuck_under_its_lock_turns_crashed_or_stuck_at_a_later_tick(tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    wall = [time.time()]
+    session = app.Session(str(proj), options(), wall=lambda: wall[0]).start()
+    try:
+        assert until(lambda: session.state() is not None)
+        assert app.watch_view(session.state())["word"] == "WATCHING"
+        with session.running.watcher.lock:             # the worker is stuck holding it
+            wall[0] += 45                               # the wall clock moves on; the cached state does not
+            view = app.watch_view(session.state())
+            assert view["word"].startswith("CRASHED or stuck (") and view["level"] == "alarm"
+            assert int(view["word"].split("(")[1].split(" ")[0]) >= 44
+    finally:
+        session.stop("test")
+        session.thread.join(WAIT_SECONDS)
+
+
+# --- A-3: Quit waits, the window comes back, nothing is killed ------------------------------------------
+
+class StuckSession(FakeSession):
+    """A worker that does not end when asked."""
+
+    def __init__(self, project):
+        super().__init__(project)
+        import threading
+        self.release = threading.Event()
+        self.thread = threading.Thread(target=self.release.wait, args=(30,), daemon=True)
+        self.thread.start()
+
+    def stop(self, reason):
+        self.stopped.append(reason)
+        self.phase = "stopping"
+
+    def alive(self):
+        return self.thread.is_alive()
+
+    def snapshot(self):
+        return {"phase": self.phase, "final_exit": None, "holes": [], "knock": None, "final_text": None,
+                "error": None}
+
+
+def test_a3_quit_waits_join_seconds_then_the_window_comes_back_with_a_hole(tmp_path):
+    clock = [100.0]
+    c = app.Controller(None, tray=FakeTray(), make_session=StuckSession, clock=lambda: clock[0])
+    c.start_tray()
+    c.start(str(tmp_path))
+    c.actions.put("quit")
+    c.drain()
+    assert c.quitting and not c.can_exit() and not c.quit_overdue()
+    clock[0] += app.JOIN_SECONDS - 1
+    assert not c.quit_overdue()
+    clock[0] += 2
+    assert c.quit_overdue() and not c.quitting and not c.can_exit()
+    assert c.holes == ["the watch did not end in 30 s after Quit: the window stays; Quit again, or see the log"]
+    assert not c.quit_overdue() and c.session.thread.is_alive()   # once; and nothing was killed
+    c.session.release.set()
+    c.session.thread.join(5)
+    c.quit("again")
+    c.session.phase = "finished"
+    assert c.can_exit()
+
+
+def test_a3_the_process_waits_for_an_unconcluded_watch_and_says_so(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "JOIN_SECONDS", 0.05)
+    c = app.Controller(None, tray=None, make_session=StuckSession)
+    c.start(str(tmp_path))
+    c.session.log = app.LogBuffer()
+    err = io.StringIO()
+    assert c.finish_wait(err=err, rounds=2) is False                   # bounded here; run() has no bound
+    assert err.getvalue().count("still waiting for its final report (nothing is killed)") == 2
+    assert "did not end in 0.05 s" in c.session.log.text()
+    c.session.release.set()
+    assert c.finish_wait(err=err) is True
+
+
+def test_a3_can_exit_needs_the_worker_ended_not_only_the_phase(tmp_path):
+    c = app.Controller(None, tray=None, make_session=StuckSession)
+    c.start(str(tmp_path))
+    c.quit("q")
+    c.session.phase = "finished"         # the report is there, but the worker still runs (close() pending)
+    assert not c.can_exit()
+    c.session.release.set()
+    c.session.thread.join(5)
+    assert c.can_exit()
+
+
+# --- A-4: the gui-script's log, the message box, Tk callback errors ---------------------------------
+
+def test_a4_gui_main_writes_app_log_and_a_failure_before_tk_is_one_message_box(monkeypatch, home):
+    monkeypatch.setitem(sys.modules, "tkinter", None)
+    shown = []
+    (home / ".raqib").mkdir()
+    (home / ".raqib" / "app.log").write_text("an old run\n", encoding="utf-8")
+    code = app.gui_main([str(home)], home=str(home), platform="win32",
+                        box=lambda text, title: shown.append((title, text)))
+    assert code == 2 and len(shown) == 1
+    title, text = shown[0]
+    assert title == "Raqib: the window did not open"
+    assert text.startswith("raqib: tkinter cannot be imported") and "python3-tk" in text
+    assert "~" not in text and str(home / ".raqib" / "app.log") in text
+    log = (home / ".raqib" / "app.log").read_text(encoding="utf-8")
+    assert "an old run" not in log and "raqib: tkinter cannot be imported" in log   # truncated at start
+
+
+def test_a4_elsewhere_the_sentence_goes_to_stderr_and_a_failed_box_falls_back(monkeypatch, home):
+    monkeypatch.setitem(sys.modules, "tkinter", None)
+    err = io.StringIO()
+    assert app.gui_main([str(home)], home=str(home), platform="linux", stream=err) == 2
+    assert err.getvalue().startswith("raqib: tkinter cannot be imported") and err.getvalue().count("python3-tk")
+    err = io.StringIO()
+    app.gui_main([str(home)], home=str(home), platform="win32", box=lambda t, ti: "no user32", stream=err)
+    assert "(the message box could not be shown: no user32)" in err.getvalue()
+    assert tray.message_box("x", platform="linux") == "no message box on this platform"
+
+    class Box:
+        def __init__(self):
+            self.calls = []
+
+        def MessageBoxW(self, *a):
+            self.calls.append(a)
+            return 1
+    box = Box()
+    assert tray.message_box("the text", "Raqib", platform="win32", api=box) is None
+    assert box.calls == [(None, "the text", "Raqib", tray.MB_OK | tray.MB_ICONERROR)]
+
+
+def test_a4_a_startup_exception_is_shown_too(monkeypatch, home):
+    def boom(argv, out=None):
+        raise RuntimeError("Tk exploded")
+    monkeypatch.setattr(cli, "main", boom)
+    shown = []
+    assert app.gui_main([], home=str(home), platform="win32", box=lambda t, ti: shown.append(t)) == 2
+    assert shown and "the window failed before it opened: RuntimeError: Tk exploded" in shown[0]
+    assert "Traceback" in (home / ".raqib" / "app.log").read_text(encoding="utf-8")
+
+
+def test_a4_a_good_run_shows_no_box_and_restores_the_streams(monkeypatch, home):
+    def ok(argv, out=None):
+        out.write("the final report\n")
+        sys.stderr.write("a warning\n")
+        return 1
+    monkeypatch.setattr(cli, "main", ok)
+    before = sys.stdout, sys.stderr
+    shown = []
+    assert app.gui_main([], home=str(home), platform="win32", box=lambda t, ti: shown.append(t)) == 1
+    assert shown == [] and (sys.stdout, sys.stderr) == before
+    assert (home / ".raqib" / "app.log").read_text(encoding="utf-8") == "the final report\na warning\n"
+
+
+def test_a4_app_log_is_bounded_and_never_raises(tmp_path):
+    log = app.AppLog(str(tmp_path / "d" / "app.log"), limit=20)
+    log.write("0123456789")
+    log.write("0123456789")
+    log.write("more and more")
+    log.write("and more")
+    log.close()
+    text = (tmp_path / "d" / "app.log").read_text(encoding="utf-8")
+    assert text.startswith("01234567890123456789\n[raqib app: app.log reached 20 bytes; the rest is not written]")
+    assert "more" not in text
+    bad = app.AppLog(str(tmp_path / "d" / "app.log" / "x"))   # its directory is a file
+    assert bad.error and bad.write("x") == 1
+    tail = app.Tail(limit=5)
+    tail.write("abcdefgh")
+    assert tail.text == "defgh"
+
+
+def test_a4_a_tk_callback_exception_is_a_hole_and_a_log_line(tmp_path):
+    tee = io.StringIO()
+    c = app.Controller(None, tray=None, make_session=FakeSession, tee=tee)
+    try:
+        raise ValueError("a button broke")
+    except ValueError:
+        c.callback_error(*sys.exc_info())
+    assert c.holes == ["a window callback failed: ValueError: a button broke"]
+    assert "raqib app: a window callback failed: ValueError: a button broke" in tee.getvalue()
+    assert "Traceback" in tee.getvalue()
+    c.callback_error(ValueError, ValueError("a button broke"), None)
+    assert len(c.holes) == 1                                   # deduplicated (A-8)
+
+
+def test_a4_the_window_hooks_report_callback_exception():
+    src = (ROOT / "raqib" / "app.py").read_text(encoding="utf-8")
+    assert "root.report_callback_exception = controller.callback_error" in src
+    assert "StringIO" not in src                              # P21: no unbounded buffer
+
+
+# --- A-5 and A-12: the first finding knocks once; the screen and watch.json say how ------------------
+
+def notifier_for(runner):
+    return notify.Notifier("/work/demo", runner=runner, environ={}, platform="linux", isfile=lambda p: True,
+                           stderr=io.StringIO())
+
+
+def test_a5_a_high_first_finding_knocks_once_by_the_rule():
+    runner = FakeRunner()
+    knock = notify.FirstFinding(notifier_for(runner))
+    high = dict(entry("SECRET-OUTPUT", "high", [2]), notice="sent")
+    done = knock.check([high], 5.0)
+    assert done["status"] == notify.BY_THE_RULE == "by the rule" and done["rule_notice"] == "sent"
+    assert runner.calls == []                                   # FIRST-FINDING is not sent after the rule's knock
+    for notice in ("terminal", "failed", "folded", "folded: sent as 2 more"):
+        k = notify.FirstFinding(notifier_for(runner))
+        assert k.check([dict(high, notice=notice)], 5.0)["status"] == "by the rule"
+    for notice in ("off", None, "not notified: severity high"):   # the rule did not knock: FIRST-FINDING does
+        k = notify.FirstFinding(notifier_for(runner))
+        assert k.check([dict(high, notice=notice)], 5.0)["status"] == "sent"
+    assert len(runner.calls) == 3
+
+
+def test_a5_the_watching_screen_line_and_the_bounded_log_view():
+    assert app.first_line(None) == "first finding: none yet (it knocks once, whatever its severity)"
+    assert app.first_line({"rule_id": "DESTRUCT-CMD", "severity": "medium", "status": "sent"}) == \
+        "first finding: DESTRUCT-CMD medium (sent)"
+    assert app.first_line({"rule_id": "SECRET-OUTPUT", "severity": "high", "status": "by the rule"}) == \
+        "first finding: SECRET-OUTPUT high (by the rule)"
+    assert app.log_view("abc", limit=10) == "abc"
+    assert app.log_view("0123456789abc", limit=3) == "[10 earlier characters not shown here]\nabc"
+
+
+def watch_cli(monkeypatch, argv, actions):
+    servers = []
+    real = ui.make_server
+
+    def make(page, port, **kw):
+        server = real(page, port, **kw)
+        servers.append(server)
+        return server
+    monkeypatch.setattr(ui, "make_server", make)
+    queue = list(actions)
+
+    def fake_sleep(seconds):
+        if not queue:
+            raise KeyboardInterrupt
+        queue.pop(0)()
+    monkeypatch.setattr(watch, "_sleep", fake_sleep)
+    out = io.StringIO()
+    return cli.main([str(a) for a in argv], out=out), out.getvalue()
+
+
+def test_a12_a_terminal_watch_knocks_first_finding_once_and_watch_json_carries_it(tmp_path, home, monkeypatch):
+    runner = FakeRunner()
+    real = notify.Notifier
+
+    def fake_notifier(*a, **kw):
+        kw.update(runner=runner, platform="linux", isfile=lambda p: True)
+        kw["environ"] = {}
+        return real(*a, **kw)
+    monkeypatch.setattr(notify, "Notifier", fake_notifier)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    trace_path = Path(watch.default_trace(os.path.normpath(str(proj)), str(home)))
+    work = [lambda: append(trace_path, [rec(1, "session_start", 0, tool="-")] + destruct_call(2, 1)),
+            lambda: append(trace_path, destruct_call(3, 3)), lambda: None]
+    code, out = watch_cli(monkeypatch, ["watch", proj, "--no-open", "--port", "0"], work)
+    assert code == 1
+    titles = [c.split("\n")[0] for c in runner.calls]
+    assert titles == ["Raqib: FIRST-FINDING"]                  # medium: only the first-finding knock, once
+    assert runner.calls[0] == "Raqib: FIRST-FINDING\nproject proj, DESTRUCT-CMD medium seq 2\n"
+    assert out.count("] first finding knocked: DESTRUCT-CMD medium seq 2 (sent)") == 1
+    st = json.loads(Path(str(trace_path) + ".watch.json").read_text(encoding="ascii"))
+    fk = st["first_knock"]
+    assert {k: fk[k] for k in ("rule_id", "severity", "where", "status")} == {
+        "rule_id": "DESTRUCT-CMD", "severity": "medium", "where": "DESTRUCT-CMD medium seq 2", "status": "sent"}
+    assert fk["at"].startswith("20")
+
+
+def test_a12_a_high_first_finding_in_a_terminal_watch_knocks_once_by_the_rule(tmp_path, home, monkeypatch):
+    """The blocked-calls fixture: its first live settled finding is high and
+    its rule knocks; FIRST-FINDING is not sent after it (A-5, A-12)."""
+    runner = FakeRunner()
+    real = notify.Notifier
+
+    def fake_notifier(*a, **kw):
+        kw.update(runner=runner, platform="linux", isfile=lambda p: True)
+        kw["environ"] = {}
+        return real(*a, **kw)
+    monkeypatch.setattr(notify, "Notifier", fake_notifier)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    trace_path = Path(watch.default_trace(os.path.normpath(str(proj)), str(home)))
+    blocked = (ROOT / "tests" / "fixtures" / "blocked-calls-claude-code-2.1.301.log").read_bytes()
+
+    def agent():
+        with open(trace_path, "ab") as f:
+            f.write(blocked)
+    code, out = watch_cli(monkeypatch, ["watch", proj, "--no-open", "--port", "0"], [agent, lambda: None])
+    titles = [c.split("\n")[0] for c in runner.calls]
+    assert "Raqib: FIRST-FINDING" not in titles and titles and titles[0] == "Raqib: SILENCE-HALF"
+    st = json.loads(Path(str(trace_path) + ".watch.json").read_text(encoding="ascii"))
+    assert st["first_knock"]["status"] == "by the rule" and st["first_knock"]["rule_id"] == "SILENCE-HALF"
+    assert st["first_knock"]["rule_notice"] == "sent"
+    assert out.count("] first finding knocked: SILENCE-HALF high seq 2 (by the rule)") == 1
+
+
+def test_a12_watch_json_first_knock_is_null_until_it_knocks(tmp_path, home, monkeypatch):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    trace_path = Path(watch.default_trace(os.path.normpath(str(proj)), str(home)))
+    code, out = watch_cli(monkeypatch, ["watch", proj, "--no-open", "--no-notify", "--port", "0"], [lambda: None])
+    st = json.loads(Path(str(trace_path) + ".watch.json").read_text(encoding="ascii"))
+    assert "first_knock" in st and st["first_knock"] is None and "first finding knocked" not in out
+
+
+def test_a12_a_failing_knock_is_a_hole_not_the_end_of_a_terminal_watch(tmp_path, home, monkeypatch):
+    def broken(running):
+        raise RuntimeError("knock broke")
+    monkeypatch.setattr(watch, "first_step", broken)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    trace_path = Path(watch.default_trace(os.path.normpath(str(proj)), str(home)))
+    code, out = watch_cli(monkeypatch, ["watch", proj, "--no-open", "--no-notify", "--port", "0"],
+                          [lambda: None, lambda: None])
+    assert "CRASHED" not in out
+    st = json.loads(Path(str(trace_path) + ".watch.json").read_text(encoding="ascii"))
+    holes = [h for h in st["holes"] if h["kind"] == "first-knock"]
+    assert [h["detail"] for h in holes] == ["the first-finding knock failed: RuntimeError: knock broke"]
+
+
+# --- A-8: the final report survives close(); holes are kept ----------------------------------------
+
+def test_a8_a_close_that_raises_keeps_the_final_report_and_its_exit(tmp_path, monkeypatch):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+
+    def bad_close(running):
+        running.server.shutdown()
+        running.server.server_close()
+        raise OSError("the notifier's temp files could not be removed")
+    monkeypatch.setattr(watch, "close", bad_close)
+    session = app.Session(str(proj), options()).start()
+    assert until(lambda: session.state() is not None)
+    session.stop("test")
+    session.thread.join(WAIT_SECONDS)
+    snap = session.snapshot()
+    assert snap["phase"] == "finished" and snap["final_text"].startswith("Raqib watch\n")
+    assert snap["final_exit"] in (0, 1) and snap["error"] is None
+    assert snap["holes"] == ["the watch did not close cleanly (page server or notifier): OSError: the notifier's"
+                             " temp files could not be removed"]
+
+
+def test_a8_log_buffer_errors_are_holes_kept_and_deduplicated():
+    class Dead:
+        def write(self, text):
+            raise OSError("closed")
+
+        def flush(self):
+            raise OSError("gone")
+    log = app.LogBuffer(tee=Dead())
+    log.write("a")
+    log.write("b")
+    assert log.holes == ["the log's copy to the terminal or app.log failed, and stopped: OSError: closed"]
+
+    class Flaky:
+        def write(self, text):
+            pass
+
+        def flush(self):
+            raise OSError("gone")
+    log = app.LogBuffer(tee=Flaky())
+    log.flush()
+    log.flush()
+    assert log.holes == ["the log's copy to the terminal or app.log could not be flushed: OSError: gone"]
+    s = app.Session("/nowhere", options(), log=log)
+    assert s.snapshot()["holes"] == log.holes
+
+
+def test_a8_window_holes_are_kept_once_and_never_overwritten():
+    c = controller(None)
+    c.hole("the window failed to update: KeyError: 'x'")
+    c.hole("tray: something")
+    c.hole("the window failed to update: KeyError: 'x'")
+    assert c.holes == ["the window failed to update: KeyError: 'x'", "tray: something"]
+    src = (ROOT / "raqib" / "app.py").read_text(encoding="utf-8")
+    tick = src.split("    def tick(self):", 1)[1].split("\n    def ", 1)[0]
+    assert 'self.c.hole("the window failed to update' in tick
+
+
+# --- A-10: --log is the command line's project only ----------------------------------------------
+
+def test_a10_log_applies_only_to_the_project_on_the_command_line(tmp_path):
+    first, other = tmp_path / "first", tmp_path / "other"
+    o = options(log=str(tmp_path / "t.jsonl"), log_project=str(first))
+    assert o.log_for(str(first)) == str(tmp_path / "t.jsonl")
+    assert o.log_for(str(first) + os.sep) == str(tmp_path / "t.jsonl")
+    assert o.log_for(str(other)) is None
+    assert options().log_for(str(first)) is None
+    seen = []
+
+    def starter(project, log, *a, **kw):
+        seen.append((project, log))
+        raise watch.WatchError("stop here")
+    for proj in (first, other):
+        proj.mkdir()
+        s = app.Session(str(proj), o, starter=starter).start()
+        s.thread.join(10)
+    assert seen == [(str(first), str(tmp_path / "t.jsonl")), (str(other), None)]
+
+
+def test_a10_cli_app_passes_the_command_line_project(monkeypatch, tmp_path):
+    got = {}
+
+    def fake_run(project, options, out=None):
+        got["o"] = options
+        return 0
+    monkeypatch.setattr(app, "run", fake_run)
+    assert cli.main(["app", str(tmp_path), "--log", str(tmp_path / "x.jsonl")], out=io.StringIO()) == 0
+    assert got["o"].log_project == os.path.abspath(str(tmp_path)) and got["o"].log == str(tmp_path / "x.jsonl")
+
+
+# --- A-13: the Open page button ------------------------------------------------------------------
+
+class UrlSession(FakeSession):
+    def state(self):
+        return {"url": "http://127.0.0.1:9/"}
+
+
+def test_a13_open_page_uses_watch_open_page_and_never_under_ci(tmp_path):
+    opened = []
+
+    def opener(url, environ=None):
+        opened.append(url)
+        return None
+    c = app.Controller(app.Options(None, None, 60, environ={}), tray=None, make_session=UrlSession, opener=opener)
+    assert c.open_page() == "no page yet: the watch has not started" and opened == []
+    c.start(str(tmp_path))
+    assert c.open_page() is None and opened == ["http://127.0.0.1:9/"]
+    c = app.Controller(app.Options(None, None, 60, environ={"CI": "true"}), tray=None, make_session=UrlSession,
+                       opener=opener)
+    c.start(str(tmp_path))
+    assert c.open_page() == "CI is set: the page is not opened" and opened == ["http://127.0.0.1:9/"]
+    c = app.Controller(app.Options(None, None, 60, environ={}), tray=None, make_session=UrlSession,
+                       opener=lambda url, environ=None: "no /usr/bin/xdg-open or /bin/xdg-open")
+    c.start(str(tmp_path))
+    assert c.open_page() == ("the page was not opened (no /usr/bin/xdg-open or /bin/xdg-open); open"
+                             " http://127.0.0.1:9/ by hand")
+    assert app.Controller(None).opener is watch.open_page
+
+
+def test_tk_a3_an_overdue_quit_brings_the_window_back(tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    clock = [0.0]
+    try:
+        c = app.Controller(None, tray=FakeTray(), make_session=StuckSession, clock=lambda: clock[0])
+        c.start_tray()
+        doctor = app.DoctorJob(str(tmp_path), checks=lambda p: (p, [], []))
+        window = app.Window(tkinter, root, c, str(tmp_path), doctor_job=lambda p: doctor)
+        window.start()
+        window.on_close()
+        assert root.state() == "withdrawn"
+        c.actions.put("quit")
+        window.tick()
+        assert not window.closed
+        clock[0] += app.JOIN_SECONDS + 1
+        window.tick()
+        pump(root)
+        assert not window.closed and root.state() != "withdrawn"
+        assert "hole: the watch did not end in 30 s after Quit" in window.foot.cget("text")
+        c.session.release.set()
+        c.session.thread.join(5)
     finally:
         if window is None or not window.closed:
             root.destroy()

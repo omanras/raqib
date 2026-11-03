@@ -116,8 +116,12 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       it like Ctrl-C and shows the final report. The first finding of a
       watch knocks once, whatever its severity. On Windows a tray icon has
       Show / Stop / Quit and closing the window while watching hides it
-      there. Exit 2 when no window can open (no tkinter: python3-tk; no
-      DISPLAY); else the exit of the last watch's report, 0 if none ran.
+      there. --log is the trace of PROJECT only; a project chosen with
+      Browse gets its default trace. Exit 2 when no window can open (no
+      tkinter: python3-tk; no DISPLAY); else the exit of the last watch's
+      report, 0 if none ran. Under `raqib-app` the output goes to
+      ~/.raqib/app.log and a window that cannot open is said in a message
+      box (Windows) or on stderr.
   doctor [PROJECT]
       Say in one screen what `watch` needs and is missing (M6.3,
       raqib/doctor.py): Python, `claude` on PATH and its version, the hook
@@ -782,8 +786,9 @@ def cmd_app(args, out):
     rules, gap, evaluator = _watch_setup()
     if args.project is not None and not os.path.isdir(args.project):
         raise UsageError("not a directory: %s" % args.project)
+    # A-10: --log is the trace of the project on the command line only; Browse's projects get their default.
     options = window_app.Options(evaluator, rules, gap, log=args.log, no_notify=args.no_notify, port=args.port,
-                                 refresh=args.refresh)
+                                 refresh=args.refresh, log_project=os.path.abspath(args.project or "."))
     try:
         return window_app.run(args.project, options, out=out)
     except window_app.AppError as exc:
