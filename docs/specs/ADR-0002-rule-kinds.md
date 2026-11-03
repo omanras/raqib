@@ -233,3 +233,22 @@ above is unchanged. Open points are questions in
   `grep -rn "== 7\|Eleven\|7 YAML" --include=*.py --include=*.yml --include=*.md`
   before setting HANDOFF.md.
 Full text: docs/review/2026-11-03-M4.2-ruling.md.
+
+## Amendment E (the Table, 2026-11-03) - rulings on the M4.2 REDO review (04e34c0)
+- E-1 An adversarial fixture never lives under the benign glob
+  (tests/fixtures/*.log); the field trace moves to tests/fixtures/field/.
+- E-2 D-5's "end without start" case is narrowed: it fires only with no
+  tool line; a session_end with tools and no start is an open demand
+  (SILENCE-NOSTART, M4.3).
+- E-3 SILENCE-EMPTY cites the first start and the last end only; a resume
+  with tools makes the batch finding vanish (recorded).
+- E-4 "Shrink" means items; the +4 counts of Amendment A are corrected by
+  a dated note.
+- E-5 `:` and `.` are program names; unread Bash lines carry
+  `input_meta.command_unread: true` (no rule uses it yet); the D-3 evasion
+  line names every unread trigger.
+- E-6 Shell code on stdin, here-doc, here-string or script file records the
+  shell only (evasion line in both rules).
+- E-7..E-14 builder items; E-12 records command_head's leading-redirect
+  hole (fix in M4.2b).
+Full text: docs/review/2026-11-03-M4.2-redo-ruling.md.
