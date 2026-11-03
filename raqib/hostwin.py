@@ -15,8 +15,9 @@ inventory has one path (ADR-0004 Amendment F):
                        (empty, "?" in the hole, when it is denied);
                        CommandLine is always empty: reading it would need
                        another process's memory (A4). A first line
-                       "# raqib-snapshot at=TIME self=PID sample=K" names
-                       the reader's own pid, so its tree is never evidence.
+                       "# raqib-snapshot at=TIME self=PID[,PID...] sample=K"
+                       names the reader's own pid and its launchers (A-7),
+                       so its tree is never evidence.
 - win-tcp-<k>.csv      Get-NetTCPConnection's columns, from
                        GetExtendedTcpTable (AF_INET and AF_INET6,
                        TCP_TABLE_OWNER_PID_ALL): state, local and remote
@@ -46,7 +47,10 @@ import ctypes
 import datetime
 import io
 import ipaddress
+import ntpath
+import re
 import struct
+import time
 
 TH32CS_SNAPPROCESS = 0x00000002
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000   # the only access right ever asked for (A4)
@@ -71,7 +75,11 @@ TCP_STATES = {1: "Closed", 2: "Listen", 3: "SynSent", 4: "SynReceived", 5: "Esta
 PROCESS_COLUMNS = ("ProcessId", "ParentProcessId", "Name", "ExecutablePath", "CommandLine", "CreationDate")
 TCP_COLUMNS = ("LocalAddress", "LocalPort", "RemoteAddress", "RemotePort", "State", "OwningProcess", "CreationTime")
 DNS_COLUMNS = ("Entry", "RecordName", "RecordType", "Status", "Section", "TimeToLive", "DataLength", "Data")
-SNAPSHOT_LINE = "# raqib-snapshot at=%s self=%d sample=%d"   # discover.WIN_SNAPSHOT_LINE (a test keeps them equal)
+SNAPSHOT_LINE = "# raqib-snapshot at=%s self=%s sample=%d"   # discover.WIN_SNAPSHOT_LINE (a test keeps them equal)
+# ADR-0007 A-7: the reader's launchers. The reader's own tree is its pid and
+# the unbroken chain of ancestors whose image is one of these (the console
+# script raqib.exe, the venv redirector python.exe): none is evidence.
+LAUNCHER = re.compile(r"(raqib|python|pythonw)[^\\/]*\.exe\Z", re.IGNORECASE)
 
 API_PROCESSES = ("kernel32 CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS), Process32FirstW/Process32NextW;"
                  " OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION), QueryFullProcessImageNameW, GetProcessTimes,"
@@ -86,8 +94,9 @@ SYMBOLS = {"kernel32": ("CreateToolhelp32Snapshot", "Process32FirstW", "Process3
            "dnsapi": ("DnsGetCacheDataTable", "DnsFree", "DnsQuery_W", "DnsRecordListFree")}
 # What the API does not give that the cmdlets' columns hold: said once per run (A3).
 NOT_READ = ("Windows live (in-process): no command line, working directory or environment is read (that would"
-            " read another process's memory, A4), so CommandLine is empty: argv is empty, an Electron `--type=`"
-            " helper (G-1) and a footprint path in argv are not seen, and a process is named by its image only;"
+            " read another process's memory, A4), so CommandLine is empty: argv-based names and the --type helper"
+            " check (G-1) are not available live, so a Claude Code run as node shows as \"node\" and its"
+            " footprint as AGENT-DARK beside it; the hand-off falls back to the os source;"
             " TCP CreationTime and the DNS cache's status, section and TTL are not read")
 
 u8, u16, u32, i32, u64 = ctypes.c_uint8, ctypes.c_uint16, ctypes.c_uint32, ctypes.c_int32, ctypes.c_uint64
@@ -138,6 +147,12 @@ DNS_RECORDW._fields_ = [("pNext", ctypes.POINTER(DNS_RECORDW)), ("pName", ctypes
 
 class HostError(Exception):
     """The live run cannot start: the process snapshot failed (E3)."""
+
+
+class ReaderFailed(Exception):
+    """An exception inside the live reader (ADR-0007 A-6): its text is
+    "live reader failed at <step>: <type>: <text>"; never "the API cannot be
+    loaded", which is said only when Api() itself fails."""
 
 
 class Api:
@@ -211,18 +226,29 @@ def wchars(array, count=None):
     return struct.pack("<%dH" % len(units), *units).decode("utf-16-le", "replace")
 
 
-def wstring_at(address, limit=NAME_MAX):
+def wstring_at(address, limit=None):
     """Text of a NUL-terminated UTF-16 string at an address (two bytes per
-    unit on every system, unlike ctypes.wstring_at off Windows)."""
+    unit on every system, unlike ctypes.wstring_at off Windows), cut at
+    `limit` units (default NAME_MAX)."""
+    return wstring_cut(address, limit)[0]
+
+
+def wstring_cut(address, limit=None):
+    """(text, truncated): the text of wstring_at, and True when the string
+    goes on past `limit` units (default NAME_MAX) and was cut there (A-1:
+    a truncation is a hole with its count)."""
+    limit = NAME_MAX if limit is None else limit
     if not address:
-        return ""
+        return "", False
     units = []
-    for i in range(limit):
+    for i in range(limit + 1):
         unit = u16.from_address(address + 2 * i).value
         if not unit:
             break
+        if i == limit:
+            return struct.pack("<%dH" % len(units), *units).decode("utf-16-le", "replace"), True
         units.append(unit)
-    return struct.pack("<%dH" % len(units), *units).decode("utf-16-le", "replace")
+    return struct.pack("<%dH" % len(units), *units).decode("utf-16-le", "replace"), False
 
 
 def port(value):
@@ -277,7 +303,7 @@ def read_processes(api):
         while True:
             rows.append((int(entry.th32ProcessID), int(entry.th32ParentProcessID), wchars(entry.szExeFile)))
             if len(rows) >= PROCESSES_MAX:
-                error = "Process32NextW: stopped after %d processes" % PROCESSES_MAX
+                error = "Process32NextW: stopped after %d processes (PROCESSES_MAX)" % PROCESSES_MAX
                 break
             if not api.Process32NextW(snap, api.byref(entry)):
                 code = api.last_error()
@@ -289,10 +315,17 @@ def read_processes(api):
     return rows, error
 
 
-def process_detail(api, pid):
+REUSED = "reused"
+CAPPED = -1        # in process_text's reused list: PROCESSES_MAX was reached in that sample (A-1)
+
+
+def process_detail(api, pid, exe_name=None):
     """(image path or None, creation time text or "") of one process, on a
     handle opened with PROCESS_QUERY_LIMITED_INFORMATION only and closed in
-    a finally. None: the handle or the query was denied (a hole)."""
+    a finally. None: the handle or the query was denied (a hole). When the
+    path's basename is not the snapshot's szExeFile (exe_name), the pid was
+    reused in the gap between the snapshot and OpenProcess (A-8): the path
+    and time belong to another process and are dropped, (REUSED, "")."""
     handle = api.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not handle:
         return None, ""
@@ -304,6 +337,8 @@ def process_detail(api, pid):
         started = filetime(times[0].value) if api.GetProcessTimes(handle, *[api.byref(t) for t in times]) else ""
     finally:
         api.CloseHandle(handle)
+    if path and exe_name is not None and ntpath.basename(path).lower() != exe_name.lower():
+        return REUSED, ""
     return path or None, started
 
 
@@ -341,28 +376,47 @@ def tcp_table(api, family):
     return [], "GetExtendedTcpTable(%s): the table kept growing after %d tries" % (name, TCP_TRIES)
 
 
-def _cache_step(api, address, names):
+def counts():
+    """The counts of what a DNS read skipped, capped or cut (A-1): entries
+    past DNS_NAMES_MAX, entries with a NULL name, names truncated at
+    NAME_MAX. Each non-zero count becomes a hole of the run."""
+    return {"over_cap": 0, "null_names": 0, "truncated": 0}
+
+
+def _cache_step(api, address, names, seen=None):
     """Read one cache entry at an address, free its name and the entry
     (DnsFree, DnsFreeFlat: the documented way to free what dnsapi returns),
     and return the next entry's address, read as an integer before the
-    entry is freed. names None: free only."""
+    entry is freed. names None: free only. seen: the counts (A-1) - a NULL
+    name, a name cut at NAME_MAX, an entry past DNS_NAMES_MAX names."""
     entry = DNS_CACHE_ENTRY.from_address(address)
     nxt = ctypes.cast(entry.pNext, ctypes.c_void_p).value or 0
     name_at = entry.pszName or 0
-    if names is not None and name_at:
-        name = wstring_at(name_at).lower()
-        if name and name not in names and len(names) < DNS_NAMES_MAX:
-            names.append(name)
+    if names is not None:
+        if not name_at:
+            seen["null_names"] += 1
+        elif len(names) >= DNS_NAMES_MAX:
+            seen["over_cap"] += 1      # entries, not distinct names: not read, so not compared
+        else:
+            name, cut = wstring_cut(name_at)
+            name = name.lower()
+            seen["truncated"] += cut
+            if not name:
+                seen["null_names"] += 1
+            elif name not in names:
+                names.append(name)
     if name_at:
         api.DnsFree(name_at, DNS_FREE_FLAT)
     api.DnsFree(address, DNS_FREE_FLAT)
     return nxt
 
 
-def cache_names(api):
+def cache_names(api, seen=None):
     """(names in the resolver cache, or None when it was not read; why not).
     Every entry and its name are freed with DnsFree after they are read,
-    also when reading one fails."""
+    also when reading one fails. seen (counts()) receives what was skipped,
+    capped or cut (A-1)."""
+    seen = counts() if seen is None else seen
     if api.DnsGetCacheDataTable is None:
         return None, api.dns_missing or "dnsapi DnsGetCacheDataTable missing"
     head = ctypes.POINTER(DNS_CACHE_ENTRY)()
@@ -371,30 +425,38 @@ def cache_names(api):
     names, address = [], ctypes.cast(head, ctypes.c_void_p).value or 0
     try:
         while address:
-            address = _cache_step(api, address, names)
+            address = _cache_step(api, address, names, seen)
     finally:
         while address:      # a failure above: free the rest of the list unread
             address = _cache_step(api, address, None)
     return names, None
 
 
-def cached_records(api, name, rtype):
+def cached_records(api, name, rtype, seen=None):
     """[(record name, "A" or "AAAA", ip)] the cache holds for a name, read
     with DNS_QUERY_NO_WIRE_QUERY (the local cache only); [] when it holds
-    none. The list is freed with DnsRecordListFree."""
+    none. A list handed back is freed with DnsRecordListFree whenever its
+    pointer is non-NULL, whatever the status (A-2: a negative answer can
+    come with its SOA); its records are read only when the status is 0. A
+    record name cut at NAME_MAX is counted in seen["truncated"] (A-1)."""
+    seen = counts() if seen is None else seen
     head = ctypes.POINTER(DNS_RECORDW)()
     status = api.DnsQuery_W(name, rtype, DNS_QUERY_NO_WIRE_QUERY, None, api.byref(head), None)
     out = []
-    if status != 0 or not head:
+    if not head:
         return out
     try:
-        rec = head
+        rec = head if status == 0 else None
         while rec:
             r = rec.contents
-            if r.wType == DNS_TYPE_A and r.wDataLength >= 4:
-                out.append((wstring_at(r.pName).lower(), "A", str(ipaddress.IPv4Address(bytes(r.Data.bytes[:4])))))
-            elif r.wType == DNS_TYPE_AAAA and r.wDataLength >= 16:
-                out.append((wstring_at(r.pName).lower(), "AAAA", str(ipaddress.IPv6Address(bytes(r.Data.bytes)))))
+            if r.wType in (DNS_TYPE_A, DNS_TYPE_AAAA):
+                rec_name, cut = wstring_cut(r.pName)
+                if r.wType == DNS_TYPE_A and r.wDataLength >= 4:
+                    out.append((rec_name.lower(), "A", str(ipaddress.IPv4Address(bytes(r.Data.bytes[:4])))))
+                    seen["truncated"] += cut
+                elif r.wType == DNS_TYPE_AAAA and r.wDataLength >= 16:
+                    out.append((rec_name.lower(), "AAAA", str(ipaddress.IPv6Address(bytes(r.Data.bytes)))))
+                    seen["truncated"] += cut
             rec = r.pNext
     finally:
         api.DnsRecordListFree(head, DNS_FREE_RECORD_LIST)
@@ -407,47 +469,83 @@ def _label(api_text, k, at):
     return "live: %s; sample %d at %s" % (api_text, k, at)
 
 
+def self_tree(procs, self_pid, started=None):
+    """The reader's own pids (A-7): its pid, then the unbroken chain of
+    ancestors whose image is raqib*.exe, python*.exe or pythonw*.exe (the
+    console script and the venv redirector), nearest first. procs: [(pid,
+    ppid, image name)]. started {pid: CreationDate text}: a parent created
+    after its child is not its parent (the ppid was reused) and ends the
+    chain."""
+    started = started or {}
+    by_pid = {pid: (ppid, name) for pid, ppid, name in procs}
+    out, pid = [self_pid], self_pid
+    while pid in by_pid:
+        ppid = by_pid[pid][0]
+        if ppid in out or ppid not in by_pid or not LAUNCHER.match(by_pid[ppid][1] or ""):
+            break
+        if started.get(ppid) and started.get(pid) and started[ppid] > started[pid]:
+            break
+        out.append(ppid)
+        pid = ppid
+    return out
+
+
 def process_text(api, k, self_pid, at):
-    """(win-process-<k> entry, pids whose image path was not read). The
-    first line names the reader's own pid (E3). HostError when the
-    snapshot fails."""
+    """(win-process-<k> entry, pids whose image path was not read, pids
+    reused in the gap (A-8), the reader's own pids (A-7)). The first line
+    names the reader's own pids (E3, A-7). HostError when the snapshot
+    fails."""
     procs, error = read_processes(api)
-    rows, denied = [], []
+    rows, denied, reused, started = [], [], [], {}
     for pid, ppid, exe_name in procs:
-        path, started = (None, "") if pid == 0 else process_detail(api, pid)
-        if path is None and pid not in SYSTEM_PIDS:
+        path, when = (None, "") if pid == 0 else process_detail(api, pid, exe_name)
+        if path is REUSED:
+            reused.append(pid)
+            path = None
+        elif path is None and pid not in SYSTEM_PIDS:
             denied.append(pid)
-        rows.append((pid, ppid, exe_name, path or "", "", started))
-    return (_label(API_PROCESSES, k, at), _csv(PROCESS_COLUMNS, rows, SNAPSHOT_LINE % (at, self_pid, k)),
-            error), denied
+        started[pid] = when
+        rows.append((pid, ppid, exe_name, path or "", "", when))
+    if len(procs) >= PROCESSES_MAX:
+        reused.append(CAPPED)      # A-1: the cap is a hole too, beside the source's error
+    mine = self_tree(procs, self_pid, started)
+    first = SNAPSHOT_LINE % (at, ",".join(map(str, mine)), k)
+    return (_label(API_PROCESSES, k, at), _csv(PROCESS_COLUMNS, rows, first), error), denied, reused, mine
 
 
 def tcp_text(api, k, at):
-    """The win-tcp-<k> entry: both address families in one text."""
-    rows, errors = [], []
+    """(the win-tcp-<k> entry: both address families in one text; the
+    AF_INET6 failure or None). An AF_INET failure is the source's error
+    (incomplete); an AF_INET6 failure is a hole only and the IPv4 rows
+    stand (A-10, as Linux's tcp6, ADR-0004 D-2)."""
+    rows, error, v6_error = [], None, None
     for family in (AF_INET, AF_INET6):
-        got, error = tcp_table(api, family)
+        got, why = tcp_table(api, family)
         rows += [(laddr, lport, raddr, rport, state, pid, "") for state, laddr, lport, raddr, rport, pid in got]
-        if error:
-            errors.append(error)
-    return (_label(API_TCP, k, at), _csv(TCP_COLUMNS, rows, "# raqib live sample %d at %s" % (k, at)),
-            "; ".join(errors) or None)
+        if family == AF_INET:
+            error = why
+        else:
+            v6_error = why
+    return (_label(API_TCP, k, at), _csv(TCP_COLUMNS, rows, "# raqib live sample %d at %s" % (k, at)), error), \
+        v6_error
 
 
-def dns_text(api, k, at):
+def dns_text(api, k, at, seen=None):
     """(the win-dns-<k> entry or None, why not or None, names with no cached
-    A or AAAA record)."""
-    names, why = cache_names(api)
+    A or AAAA record). seen (counts()) receives what was capped, skipped or
+    cut (A-1)."""
+    seen = counts() if seen is None else seen
+    names, why = cache_names(api, seen)
     if names is None:
         return None, why, 0
-    rows, seen, unanswered = [], set(), 0
+    rows, pairs, unanswered = [], set(), 0
     for name in names:
-        got = cached_records(api, name, DNS_TYPE_A) + cached_records(api, name, DNS_TYPE_AAAA)
+        got = cached_records(api, name, DNS_TYPE_A, seen) + cached_records(api, name, DNS_TYPE_AAAA, seen)
         if not got:
             unanswered += 1
         for rec_name, rtype, ip in got:
-            if (name, rec_name, ip) not in seen:
-                seen.add((name, rec_name, ip))
+            if (name, rec_name, ip) not in pairs:
+                pairs.add((name, rec_name, ip))
                 rows.append((name, rec_name, rtype, "", "", "", 4 if rtype == "A" else 16, ip))
     return (_label(API_DNS, k, at), _csv(DNS_COLUMNS, rows, "# raqib live sample %d at %s" % (k, at)), None), None, \
         unanswered
@@ -457,29 +555,69 @@ def now_text():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
-def collect(api, samples, every, self_pid, sleep, now=now_text):
-    """A live run: `samples` samples `every` seconds apart, each read as
-    win-process-<k>, win-tcp-<k> and (when the cache was read) win-dns-<k>.
-    Returns (texts, holes, info); info = {"apis", "sample_times",
-    "seconds_apart"} goes into run.json. A snapshot that fails in sample 1
-    refuses the run (HostError, E3); in a later sample that sample's process
-    source is not read (an error: the run is incomplete, A3) and its TCP and
-    DNS kinds are still read."""
+def _where(ks, samples):
+    return "every sample" if len(ks) == samples else "sample(s) %s" % ", ".join(map(str, ks))
+
+
+def _pids(pids):
+    shown = sorted(pids)
+    return "pid %s%s" % (", ".join(map(str, shown[:20])), " and %d more" % (len(shown) - 20) if len(shown) > 20 else "")
+
+
+def _step(name, call, *args):
+    """Run one step of a sample; an exception other than HostError ends the
+    run as ReaderFailed (A-6): "live reader failed at <step>: <type>: <text>",
+    the step named with its sample ("tcp in sample 2")."""
+    try:
+        return call(*args)
+    except HostError:
+        raise
+    except Exception as exc:
+        text = " ".join(str(exc).split())
+        raise ReaderFailed("live reader failed at %s: %s: %s" % (name, type(exc).__name__, text))
+
+
+def collect(api, samples, every, self_pid, sleep, now=now_text, clock=time.monotonic):
+    """A live run: `samples` samples `every` seconds apart start to start
+    (A-11: the sleep is `every` minus the sample's own duration, never
+    negative), each read as win-process-<k>, win-tcp-<k> and (when the
+    cache was read) win-dns-<k>. Returns (texts, holes, info); info =
+    {"apis", "sample_times", "seconds_apart", "self"} goes into run.json.
+    A snapshot that fails in sample 1 refuses the run (HostError, E3); in a
+    later sample that sample's process source is not read (an error: the
+    run is incomplete, A3) and its TCP and DNS kinds are still read. Any
+    other exception inside the reader is ReaderFailed (A-6). Every cap,
+    skip and truncation is a hole with its count (A-1)."""
     texts, holes, times = {}, [NOT_READ], []
-    denied, dns_why, unanswered, dns_read = {}, {}, 0, 0
+    denied, reused, dns_why, v6_why, unanswered, dns_read = {}, {}, {}, {}, 0, 0
+    mine, seen, capped = [], {}, []
     for k in range(1, samples + 1):
+        began = clock()
         at = now()
         times.append(at)
         try:
-            texts["win-process-%d" % k], gone = process_text(api, k, self_pid, at)
+            texts["win-process-%d" % k], gone, again, own = _step("processes in sample %d" % k,
+                                                                         process_text, api, k, self_pid, at)
         except HostError as exc:
             if k == 1:
                 raise
-            texts["win-process-%d" % k], gone = (_label(API_PROCESSES, k, at), None, str(exc)), []
+            texts["win-process-%d" % k], gone, again, own = (_label(API_PROCESSES, k, at), None, str(exc)), [], [], []
+        mine += [pid for pid in own if pid not in mine]
         for pid in gone:
             denied.setdefault(pid, []).append(k)
-        texts["win-tcp-%d" % k] = tcp_text(api, k, at)
-        entry, why, missing = dns_text(api, k, at)
+        for pid in again:
+            if pid == CAPPED:
+                capped.append(k)
+            else:
+                reused.setdefault(pid, []).append(k)
+        texts["win-tcp-%d" % k], v6 = _step("tcp in sample %d" % k, tcp_text, api, k, at)
+        if v6:
+            v6_why.setdefault(v6, []).append(k)
+        got = counts()
+        entry, why, missing = _step("dns in sample %d" % k, dns_text, api, k, at, got)
+        for key, n in got.items():
+            if n:
+                seen.setdefault(key, []).append((k, n))
         if entry is None:
             dns_why.setdefault(why, []).append(k)
         else:
@@ -487,20 +625,41 @@ def collect(api, samples, every, self_pid, sleep, now=now_text):
             dns_read += 1
         unanswered += missing
         if k < samples:
-            sleep(every)
+            sleep(max(0.0, every - (clock() - began)))
     if denied:
-        shown = sorted(denied)
         holes.append("%d process(es) whose image path was not read (ExecutablePath \"?\": OpenProcess with"
                      " PROCESS_QUERY_LIMITED_INFORMATION or QueryFullProcessImageNameW was denied; an elevated"
-                     " run reads more): pid %s%s" % (len(shown), ", ".join(map(str, shown[:20])),
-                                                     " and %d more" % (len(shown) - 20) if len(shown) > 20 else ""))
+                     " run reads more): %s" % (len(denied), _pids(denied)))
+    if capped:
+        holes.append("PROCESSES_MAX (%d) reached in %s: more processes were not read (not counted: the enumeration"
+                     " stops at the cap)" % (PROCESSES_MAX, _where(capped, samples)))
+    if reused:
+        holes.append("%d process(es) whose pid was reused in the gap between the snapshot and OpenProcess (the"
+                     " image path's name is not the snapshot's): path and creation time dropped: %s"
+                     % (len(reused), _pids(reused)))
+    for why, ks in sorted(v6_why.items()):
+        holes.append("IPv6 connections not read in %s (%s): the IPv4 rows stand" % (_where(ks, samples), why))
     for why, ks in sorted(dns_why.items()):
         holes.append("no names: the resolver cache was not read (%s) in %s: there, connections match the catalog"
-                     " by network and loopback port only" % (
-                         why, "every sample" if len(ks) == samples else "sample(s) %s" % ", ".join(map(str, ks))))
+                     " by network and loopback port only" % (why, _where(ks, samples)))
+
+    def per(key):
+        found = seen.get(key, [])
+        return sum(n for _, n in found), _where([k for k, _ in found], samples)
+    if "over_cap" in seen:
+        n, where = per("over_cap")
+        holes.append("DNS_NAMES_MAX (%d) reached: %d more cache entr(ies) not read in %s: their names are not"
+                     " joined to an address" % (DNS_NAMES_MAX, n, where))
+    if "null_names" in seen:
+        n, where = per("null_names")
+        holes.append("%d cache entr(ies) with a NULL or empty name skipped in %s" % (n, where))
+    if "truncated" in seen:
+        n, where = per("truncated")
+        holes.append("%d name(s) truncated at NAME_MAX (%d UTF-16 units) in %s: such a name is read by its first"
+                     " %d units only" % (n, NAME_MAX, where, NAME_MAX))
     if unanswered:
         holes.append("%d cached name lookup(s) gave no A or AAAA record from the cache (expired, negative or another"
                      " type): those names are not joined to an address" % unanswered)
     info = {"apis": [API_PROCESSES, API_TCP] + ([API_DNS] if dns_read else []),
-            "sample_times": times, "seconds_apart": every}
+            "sample_times": times, "seconds_apart": every, "self": mine or [self_pid]}
     return texts, holes, info

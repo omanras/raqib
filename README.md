@@ -381,16 +381,21 @@ with a minimal environment. The output names the path it read.
 On Windows, `raqib discover` reads the live host in-process (M7.1,
 [ADR-0007](docs/specs/ADR-0007-the-host-not-the-name.md)), with no
 PowerShell: `--samples N` samples (default 6) `--every T` seconds apart
-(default 10), merged as below. Each sample reads the processes and their
+(default 10), start to start, merged as below. Each sample reads the processes and their
 parents (Toolhelp32), each image path (QueryFullProcessImageNameW, under
 the least process right there is, PROCESS_QUERY_LIMITED_INFORMATION), the
 TCP connections with their owning process (GetExtendedTcpTable, IPv4 and
 IPv6) and the names in the DNS resolver cache (DnsGetCacheDataTable, and
 the cached addresses only: nothing is asked on the network). It reads no
 command line, working directory or environment (that would read another
-process's memory), and says so in a hole. An image path it may not read is
-`?` and counted in a hole; a cache it cannot read is the hole "no names". A
-failed process snapshot refuses the run in one line (exit 2). `--save DIR`
+process's memory), and says so in a hole: without argv, Claude Code run as
+`node` is named "node" live. An image path it may not read is
+`?` and counted in a hole; a cache it cannot read is the hole "no names";
+every cap, skipped entry and truncated name is a hole with its count. The
+reader and its launchers (`raqib.exe`, a venv's `python.exe`) are never
+evidence. A
+failed process snapshot refuses the run in one line (exit 2); any other
+failure inside the reader says where it failed (exit 2). `--save DIR`
 keeps each sample as `win-process-<k>.csv`, `win-tcp-<k>.csv` and
 `win-dns-<k>.csv`, the shapes of the loop below, with a `run.json` naming the
 APIs read and the sample times, so `--from DIR` repeats the run. Run it

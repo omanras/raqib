@@ -143,22 +143,38 @@ jobs:
           inv = json.load(open("live.json", encoding="ascii"))
           run = json.load(open(os.path.join("live-run", "run.json"), encoding="ascii"))
           print(inv["result"], inv["exit"], "self", inv["self"], "candidates", [(c["pid"], c["image"]) for c in inv["candidates"]])
-          assert inv["live"] is True and inv["records"] > 0 and len(inv["self"]) == 1, inv["self"]
-          me = inv["self"][0]
-          assert not any(c["pid"] == me for c in inv["candidates"]), "the reader is a candidate"
-          assert not any(a["pid"] == me for c in inv["candidates"] for a in c["acts"]), "the reader is an act"
-          assert not any(a["pid"] == me for a in inv["act_roots"]), "the reader is an act-root"
+          assert inv["live"] is True and inv["records"] > 0 and inv["self"], inv["self"]
+          # ADR-0007 A-7: the reader and its launchers (raqib.exe, the venv python.exe): every one
+          # of them is in inv["self"], and none is a candidate, an act or an act-root.
+          mine = set(inv["self"])
+          assert not any(c["pid"] in mine for c in inv["candidates"]), "the reader is a candidate"
+          assert not any(a["pid"] in mine for c in inv["candidates"] for a in c["acts"]), "the reader is an act"
+          assert not any(a["pid"] in mine for a in inv["act_roots"]), "the reader is an act-root"
           if os.name == "nt":
+              assert sorted(run["self"]) == sorted(mine), (run["self"], inv["self"])
+              assert len(mine) >= 2, ("no launcher of the reader found (raqib.exe)", inv["self"])
+              # The parent pids: run.json's self is the reader then its launchers, nearest first; in the
+              # sample each one's ParentProcessId is the next, and each launcher is raqib*/python*.exe.
+              import csv, re
+              rows = {r["ProcessId"]: r for r in csv.DictReader(
+                  line for line in open(os.path.join("live-run", "win-process-1.csv"), encoding="utf-8") if not line.startswith("#"))}
+              chain = [str(p) for p in run["self"]]
+              for child, parent in zip(chain, chain[1:]):
+                  assert rows[child]["ParentProcessId"] == parent, (child, parent, rows[child])
+                  assert re.match(r"(raqib|python|pythonw)[^\\/]*\.exe$", rows[parent]["Name"], re.I), rows[parent]
+              assert "raqib.exe" in [rows[p]["Name"].lower() for p in chain[1:]], [rows[p]["Name"] for p in chain]
               assert inv["window"]["samples_read"] == [1, 2], inv["window"]
               assert run["samples"] == 2 and run["export"] == "windows-live" and len(run["sample_times"]) == 2, run
               assert any("GetExtendedTcpTable" in a for a in run["apis"]), run["apis"]
               names = sorted(os.listdir("live-run"))
               assert {"win-process-1.csv", "win-process-2.csv", "win-tcp-1.csv", "win-tcp-2.csv"} <= set(names), names
-          print("discover live: OK, the reader (pid %d) is no candidate" % me)
+          print("discover live: OK, the reader and its launchers (pid %s) are no candidate" % sorted(mine))
           EOF
           # The saved run replays (A5, A8).
           set +e; raqib discover --from live-run --json -o replay.json; code=$?; set -e
           test "$code" -ne 2
+          # ADR-0007 A-5: the replay is the live run: candidates, act_roots, their count, the holes' count.
+          python -c "import json; a, b = (json.load(open(n, encoding='ascii')) for n in ('live.json', 'replay.json')); assert a['candidates'] == b['candidates'], 'replay: candidates differ'; assert a['act_roots'] == b['act_roots'] and len(a['act_roots']) == len(b['act_roots']), 'replay: act_roots differ'; assert len(a['holes']) == len(b['holes']), ('replay: hole count', len(a['holes']), len(b['holes'])); print('replay == live: %d candidate(s), %d act-root(s), %d hole(s)' % (len(b['candidates']), len(b['act_roots']), len(b['holes'])))"
           # Doctor from the venv (exit 1 here: see the exact MISSING lines below).
           mkdir -p project
           set +e; raqib doctor project > doctor.txt 2>&1; code=$?; set -e

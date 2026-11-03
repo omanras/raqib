@@ -30,7 +30,9 @@ WINDOWS = sys.platform == "win32"
 SELF = 99999      # the reader's own pid in the fake runs: no process of the fixtures
 AT = "2026-11-03T10:00:00.000Z"
 STATE_NUMBERS = {v.upper(): k for k, v in hostwin.TCP_STATES.items()}
+STATE_NUMBERS["BOUND"] = None
 EPOCH = datetime.datetime(1601, 1, 1, tzinfo=datetime.timezone.utc)
+DNS_INFO_NO_RECORDS = 9501       # windns.h (A-13); 9701 is DNS_ERROR_RECORD_DOES_NOT_EXIST
 
 
 def rows_of(path):
@@ -67,6 +69,11 @@ class FakeHost:
     def __init__(self, processes, tcp, dns, denied=(), query_fails=(), snapshot_fails=False, cache_fails=False,
                  grow=0):
         self.processes, self.tcp, self.dns = list(processes), list(tcp), dns
+        self.null_entries = 0          # A-1: cache entries whose pszName is NULL
+        self.negative = set()          # A-2: names answered with a non-zero status AND a record list
+        self.tcp_fails = set()         # A-10: the address families whose GetExtendedTcpTable returns an error
+        self.tcp_raises = None         # A-6: an exception raised inside the TCP step
+        self.reused = {}               # A-8: pid -> the image path another process holds under it
         self.denied, self.query_fails = set(denied), set(query_fails)
         self.snapshot_fails, self.cache_fails, self.grow = snapshot_fails, cache_fails, grow
         self.handles, self.closed, self.access, self.freed, self.lists_freed, self.calls = {}, [], [], [], [], []
@@ -129,7 +136,7 @@ class FakeHost:
         p = self._proc(handle)
         if p[0] in self.query_fails or not p[3]:
             return 0
-        units = utf16(p[3])
+        units = utf16(self.reused.get(p[0], p[3]))
         assert len(units) <= size.value
         for i, u in enumerate(units):
             buf[i] = u
@@ -149,6 +156,10 @@ class FakeHost:
     # iphlpapi -----------------------------------------------------------------------------
     def GetExtendedTcpTable(self, buf, size, order, family, table, reserved):
         assert table == hostwin.TCP_TABLE_OWNER_PID_ALL and reserved == 0
+        if self.tcp_raises is not None:
+            raise self.tcp_raises
+        if family in self.tcp_fails:
+            return 50       # ERROR_NOT_SUPPORTED
         rows = []
         for state, laddr, lport, raddr, rport, pid in self.tcp:
             v6 = ipaddress.ip_address(laddr).version == 6
@@ -181,15 +192,18 @@ class FakeHost:
         if self.cache_fails:
             return 0
         prev = None
-        for name in reversed(list(self.dns)):
+        for name in reversed(list(self.dns) + [None] * self.null_entries):
             entry = hostwin.DNS_CACHE_ENTRY()
-            text = utf16(name)
-            self.keep += [entry, text]
-            entry.pszName = ctypes.addressof(text)
+            self.keep.append(entry)
+            if name is not None:
+                text = utf16(name)
+                self.keep.append(text)
+                entry.pszName = ctypes.addressof(text)
+                self.allocated.append(ctypes.addressof(text))
             entry.wType = hostwin.DNS_TYPE_A
             if prev is not None:
                 entry.pNext = ctypes.pointer(prev)
-            self.allocated += [ctypes.addressof(text), ctypes.addressof(entry)]
+            self.allocated.append(ctypes.addressof(entry))
             prev = entry
         if prev is not None:
             head.contents = prev
@@ -209,8 +223,16 @@ class FakeHost:
         assert options == hostwin.DNS_QUERY_NO_WIRE_QUERY, "the cache only, never the wire"
         want = {hostwin.DNS_TYPE_A: "A", hostwin.DNS_TYPE_AAAA: "AAAA"}[rtype]
         recs = [r for r in self.dns.get(name, []) if r[1] == want]
+        if name in self.negative:      # a negative answer handed back with a list (its SOA, here an A)
+            r = hostwin.DNS_RECORDW()
+            text = utf16(name)
+            self.keep += [r, text]
+            r.pName, r.wType, r.wDataLength = ctypes.addressof(text), hostwin.DNS_TYPE_A, 4
+            r.Data.bytes[:4] = [192, 0, 2, 99]
+            head.contents = r
+            return DNS_INFO_NO_RECORDS
         if not recs:
-            return 9701    # DNS_INFO_NO_RECORDS
+            return DNS_INFO_NO_RECORDS
         prev = None
         for rec_name, kind, ip in reversed(recs):
             r = hostwin.DNS_RECORDW()
@@ -237,7 +259,8 @@ def host_of(directory, k):
     procs = [(int(r["ProcessId"]), int(r["ParentProcessId"]), r["Name"], r["ExecutablePath"] or None,
               filetime_of(r["CreationDate"])) for r in rows_of(directory / ("win-process-%d.csv" % k))]
     tcp = [(STATE_NUMBERS[r["State"].upper()], r["LocalAddress"], int(r["LocalPort"]), r["RemoteAddress"],
-            int(r["RemotePort"]), int(r["OwningProcess"])) for r in rows_of(directory / ("win-tcp-%d.csv" % k))]
+            int(r["RemotePort"]), int(r["OwningProcess"])) for r in rows_of(directory / ("win-tcp-%d.csv" % k))
+           if STATE_NUMBERS[r["State"].upper()] is not None]
     dns = {}
     for r in rows_of(directory / ("win-dns-%d.csv" % k)):
         recs = dns.setdefault(r["Entry"], [])
@@ -293,7 +316,8 @@ def comparable(records):
 
 def live(directory, n, self_pid=SELF, sleeps=None):
     api = Samples(directory, n)
-    texts, holes, info = hostwin.collect(api, n, 10, self_pid, (sleeps or []).append, now=lambda: AT)
+    texts, holes, info = hostwin.collect(api, n, 10, self_pid, (sleeps if sleeps is not None else []).append,
+                                         now=lambda: AT, clock=lambda: 0.0)
     return texts, holes, info, api
 
 
@@ -350,7 +374,7 @@ def test_e2_a_sample_cites_the_api_and_the_reader_in_its_text():
     assert "CreateToolhelp32Snapshot" in texts["win-process-1"][0] and "GetExtendedTcpTable" in texts["win-tcp-1"][0]
     assert "DnsGetCacheDataTable" in texts["win-dns-1"][0]
     assert info == {"apis": [hostwin.API_PROCESSES, hostwin.API_TCP, hostwin.API_DNS], "sample_times": [AT],
-                    "seconds_apart": 10}
+                    "seconds_apart": 10, "self": [SELF]}
 
 
 def test_e2_tcp_ports_are_network_byte_order_and_the_buffer_grows():
@@ -369,7 +393,7 @@ def test_e2_tcp_ports_are_network_byte_order_and_the_buffer_grows():
 def test_e2_samples_are_taken_every_t_seconds_and_merged():
     texts, holes, info, api = live(KIMI2, 2, sleeps=[])
     sleeps = []
-    hostwin.collect(Samples(KIMI2, 2), 2, 10, SELF, sleeps.append, now=lambda: AT)
+    hostwin.collect(Samples(KIMI2, 2), 2, 10, SELF, sleeps.append, now=lambda: AT, clock=lambda: 0.0)
     assert sleeps == [10] and info["sample_times"] == [AT, AT]
     inv = discover.run(texts, CATALOG, holes=holes, live=True)
     assert inv["window"]["samples_read"] == [1, 2]
@@ -589,7 +613,6 @@ def test_e3_doctor_host_line_on_windows(found, verdict, text):
 
 def test_e3_doctor_host_line_elsewhere_and_its_place():
     assert doctor.check_host("linux") == (True, "live discovery reads /proc (raqib discover; Linux)")
-    assert doctor.check_host("darwin")[0] is True
     if not WINDOWS:
         assert doctor.check_host("win32")[0] == doctor.UNSURE      # no Win32 API here to resolve
     assert doctor.check_host("win32", lambda: 1 / 0)[0] is False
@@ -645,9 +668,11 @@ def test_windows_real_api_one_sample_finds_this_python_and_is_no_candidate():
         me[0]["ExecutablePath"].lower().endswith(".exe")
     assert texts["win-tcp-1"][2] is None
     inv = discover.run(texts, CATALOG, holes=holes, live=True)
-    assert inv["self"] == [os.getpid()]
-    assert not any(c["pid"] == os.getpid() for c in inv["candidates"])
-    assert not any(a["pid"] == os.getpid() for c in inv["candidates"] for a in c["acts"])
+    # A-7: this python and, under a venv, its redirector python.exe are the reader's tree
+    assert info["self"][0] == os.getpid() and inv["self"] == sorted(info["self"])
+    mine = set(info["self"])
+    assert not any(c["pid"] in mine for c in inv["candidates"])
+    assert not any(a["pid"] in mine for c in inv["candidates"] for a in c["acts"])
 
 
 # --- E5: README ---------------------------------------------------------------------------------
@@ -668,3 +693,301 @@ def test_e5_readme_windows_discover_starts_live_and_keeps_the_loop_as_an_export(
     block = section.split("```bash\n")[1].split("```")[0]
     assert block.startswith("raqib discover                      # this host, live:")
     assert "--samples 3 --every 5 --save run1" in block
+
+
+# --- REDO, ADR-0007 Amendment A (rulings A-1..A-13; D-8: every change carries its test) ------------
+
+def holes_of(host, samples=1):
+    _, holes, _ = hostwin.collect(host, samples, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    return holes
+
+
+def test_a1_dns_names_max_reached_is_a_hole_with_how_many_more(monkeypatch):
+    monkeypatch.setattr(hostwin, "DNS_NAMES_MAX", 2)
+    host = FakeHost([(4, 0, "System", None, 0)], [], {"a%d.example.com" % i: [] for i in range(5)})
+    texts, holes, _ = hostwin.collect(host, 1, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    assert "DNS_NAMES_MAX (2) reached: 3 more cache entr(ies) not read in every sample: their names are not" \
+        " joined to an address" in holes
+    assert sorted(host.freed) == sorted(host.allocated)          # the entries past the cap are still freed
+    inv = discover.run(texts, CATALOG, holes=holes, live=True)
+    assert any(h.startswith("DNS_NAMES_MAX (2) reached: 3 more") for h in inv["holes"])
+
+
+def test_a1_null_names_are_skipped_and_counted():
+    host = host_of(KIMI1, 1)
+    host.null_entries = 2
+    holes = holes_of(host)
+    assert "2 cache entr(ies) with a NULL or empty name skipped in every sample" in holes
+    assert sorted(host.freed) == sorted(host.allocated)
+    assert not any("NULL" in h for h in holes_of(host_of(KIMI1, 1)))      # none: no hole
+
+
+def test_a1_names_truncated_at_name_max_are_counted(monkeypatch):
+    monkeypatch.setattr(hostwin, "NAME_MAX", 12)
+    host = FakeHost([(4, 0, "System", None, 0)], [],
+                    {"a-very-long-name.example.com": [("a-very-long-name.example.com", "A", "192.0.2.7")],
+                     "short.ex": [("short.ex", "A", "192.0.2.8")]})
+    texts, holes, _ = hostwin.collect(host, 1, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    # the long cache name is cut (one count); its cut form is then looked up and finds no record
+    (hole,) = [h for h in holes if "truncated at NAME_MAX" in h]
+    assert hole.startswith("1 name(s) truncated at NAME_MAX (12 UTF-16 units) in every sample")
+    assert hostwin.wstring_cut(ctypes.addressof(utf16("x" * 12)), 12) == ("x" * 12, False)
+    assert hostwin.wstring_cut(ctypes.addressof(utf16("x" * 13)), 12) == ("x" * 12, True)
+    monkeypatch.undo()
+    assert not any("truncated" in h for h in holes_of(host_of(KIMI1, 1)))
+
+
+def test_a1_processes_max_reached_is_a_hole(monkeypatch):
+    monkeypatch.setattr(hostwin, "PROCESSES_MAX", 3)
+    host = host_of(KIMI1, 1)
+    texts, holes, _ = hostwin.collect(host, 1, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    assert "PROCESSES_MAX (3) reached in every sample: more processes were not read (not counted: the" \
+        " enumeration stops at the cap)" in holes
+    assert texts["win-process-1"][2] == "Process32NextW: stopped after 3 processes (PROCESSES_MAX)"
+    monkeypatch.undo()
+    assert not any("PROCESSES_MAX" in h for h in holes_of(host_of(KIMI1, 1)))
+
+
+def test_a2_a_record_list_with_a_nonzero_status_is_freed():
+    host = FakeHost([], [], {"gone.example.com": []})
+    host.negative = {"gone.example.com"}
+    assert hostwin.cached_records(host, "gone.example.com", hostwin.DNS_TYPE_A) == []    # not read: status != 0
+    assert len(host.lists_freed) == 1                                                    # but freed
+    assert hostwin.cached_records(host, "other.example.com", hostwin.DNS_TYPE_A) == []   # NULL list: nothing to free
+    assert len(host.lists_freed) == 1
+
+
+def test_a3_not_read_says_the_consequence_in_one_sentence():
+    flat = hostwin.NOT_READ
+    assert "argv-based names and the --type helper check (G-1) are not available live" in flat
+    assert "a Claude Code run as node shows as \"node\" and its footprint as AGENT-DARK beside it" in flat
+    assert "the hand-off falls back to the os source" in flat
+    assert flat.isascii() and flat in holes_of(host_of(KIMI1, 1))
+
+
+def test_a3_the_sentence_is_true_claude_code_as_node_is_node_and_its_footprint_dark():
+    """node.exe running ...\\node_modules\\@anthropic-ai\\claude-code\\cli.js: the CSV (with its
+    CommandLine) names it claude; live (no CommandLine) it is "node", and ~\\.claude is AGENT-DARK."""
+    cli_js = r"C:\Users\user\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\cli.js"
+    host = FakeHost([(6600, 1, "explorer.exe", r"C:\Windows\explorer.exe", 1),
+                     (2100, 6600, "node.exe", r"C:\Program Files\nodejs\node.exe", 2),
+                     (2200, 2100, "cmd.exe", r"C:\Windows\System32\cmd.exe", 3)],
+                    [(5, "192.0.2.30", 50001, "203.0.113.40", 443, 2100)], {})
+    texts, holes, _ = hostwin.collect(host, 1, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    footprints = ("footprints", "C:\\Users\\user\\.claude\n", None)
+    got = discover.run(dict(texts, footprints=footprints), CATALOG, holes=holes, live=True)
+    rows = rows_of_text(texts["win-process-1"][1])
+    with_argv = dict(texts)
+    out = io.StringIO()
+    w = csv.writer(out, quoting=csv.QUOTE_ALL, lineterminator="\n")
+    w.writerow(hostwin.PROCESS_COLUMNS)
+    for r in rows:
+        w.writerow([r[c] if c != "CommandLine" or r["ProcessId"] != "2100" else '"node.exe" "%s"' % cli_js
+                    for c in hostwin.PROCESS_COLUMNS])
+    with_argv["win-process-1"] = ("export", out.getvalue(), None)
+    want = discover.run(dict(with_argv, footprints=footprints), CATALOG, holes=holes)
+    assert [d["path"] for d in got["agent_dark"]] == ["C:\\Users\\user\\.claude"]
+    assert want["agent_dark"] == []
+    assert [c["image"] for c in got["candidates"]] == ["node"]
+
+
+def windows_fixtures():
+    """Every discover fixture with win-* CSVs: (id, directory of numbered samples, sample count, the
+    CSV texts as the export gives them)."""
+    out = []
+    for directory in sorted(FIX.rglob("*")):
+        if not directory.is_dir() or not list(directory.glob("win-process*.csv")):
+            continue
+        out.append(pytest.param(directory, id=directory.relative_to(FIX).as_posix()))
+    return out
+
+
+@pytest.mark.parametrize("directory", windows_fixtures())
+def test_a4_every_windows_fixture_live_gives_the_csv_inventory(directory, tmp_path):
+    """A-4: the positives and the benign negatives go through the fake API. The live run gives the
+    inventory of the same CSVs as the API can give them (no CommandLine, A-3) on every key, and the
+    candidates, act-roots, result and exit of the export itself: the act-root budget holds live."""
+    numbered = sorted(directory.glob("win-process-*.csv"))
+    if numbered:
+        source, n = directory, len(numbered)
+    else:      # an unnumbered export (win-process.csv): the same as sample 1
+        source, n = tmp_path, 1
+        for kind in ("win-process", "win-tcp", "win-dns"):
+            (tmp_path / ("%s-1.csv" % kind)).write_bytes((directory / ("%s.csv" % kind)).read_bytes())
+    texts, holes, _, _ = live(source, n)
+    footprints = ("footprints", discover.decode((directory / "footprints.txt").read_bytes()), None)
+    got = discover.run(dict(texts, footprints=footprints), CATALOG, holes=holes, live=True)
+    as_api = {"%s-%d" % (kind, k): ("csv", expected_text(source / ("%s-%d.csv" % (kind, k)), kind), None)
+              for k in range(1, n + 1) for kind in ("win-process", "win-tcp", "win-dns")}
+    want_api = discover.run(dict(as_api, footprints=footprints), CATALOG, holes=holes)
+    export = {"%s-%d" % (kind, k): ("csv", discover.decode((source / ("%s-%d.csv" % (kind, k))).read_bytes()), None)
+              for k in range(1, n + 1) for kind in ("win-process", "win-tcp", "win-dns")}
+    want_export = discover.run(dict(export, footprints=footprints), CATALOG, holes=holes)
+    for key in ("candidates", "act_roots", "recent_talk", "endpoint_talkers", "footprints", "agent_dark",
+                "result", "exit", "alarms"):
+        assert strip_cites(got[key]) == strip_cites(want_api[key]), key
+    for key in ("candidates", "act_roots", "result", "exit"):
+        assert strip_cites(got[key]) == strip_cites(want_export[key]), key
+    if "benign" in directory.parts:
+        assert got["act_roots"] == [] and strip_cites(got["candidates"]) == strip_cites(want_export["candidates"])
+
+
+def test_a4_the_fixtures_cover_positives_and_negatives():
+    ids = [p.id for p in windows_fixtures()]
+    assert ids == ["benign/windows-desktop", "kimi/one-sample", "kimi/two-samples", "windows"]
+
+
+def replay_check():
+    """The A-5 comparison of .github/workflows/gate.yml, as CI runs it."""
+    text = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
+    (line,) = [x.strip() for x in text.splitlines() if x.strip().startswith('python -c "import json; a, b =')]
+    return line[len('python -c "'):-1]
+
+
+def test_a5_ci_replay_equals_live_in_candidates_act_roots_and_holes(tmp_path, monkeypatch):
+    import subprocess
+    api = Samples(KIMI1, 1)      # one act-root (kimi): the comparison is not of empty lists
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(hostwin, "Api", lambda: api)
+    monkeypatch.setattr(discover.time, "sleep", lambda s: None)
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["discover", "--samples", "1", "--every", "0", "--home", str(tmp_path), "--save", "live-run",
+                     "--json", "-o", "live.json"], out=io.StringIO()) == 1
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert cli.main(["discover", "--from", "live-run", "--json", "-o", "replay.json"], out=io.StringIO()) == 1
+    code = replay_check()
+    done = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True)
+    assert done.returncode == 0 and done.stdout.startswith("replay == live: 1 candidate(s), 1 act-root(s)"), done
+    for key, change in (("candidates", lambda v: v[:-1]), ("act_roots", lambda v: []), ("holes", lambda v: v[1:])):
+        bad = json.loads((tmp_path / "live.json").read_text())
+        bad[key] = change(bad[key])
+        (tmp_path / "replay.json").write_text(json.dumps(bad), encoding="ascii")
+        done = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True)
+        assert done.returncode != 0, key
+    workflow = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
+    assert workflow.count("runs-on:") == 2 and workflow.count("os: [ubuntu-latest, windows-latest]") == 2
+
+
+def test_a6_an_exception_inside_the_reader_says_where_and_what(tmp_path, monkeypatch, capsys):
+    host = host_of(KIMI1, 1)
+    host.tcp_raises = OSError("access violation reading 0x0")
+    with pytest.raises(hostwin.ReaderFailed) as got:
+        hostwin.collect(host, 1, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    assert str(got.value) == "live reader failed at tcp in sample 1: OSError: access violation reading 0x0"
+    assert host.handles == {}          # every handle opened before the failure is closed
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(hostwin, "Api", lambda: host)
+    assert cli.main(["discover", "--home", str(tmp_path), "--samples", "1"], out=io.StringIO()) == 2
+    err = capsys.readouterr().err
+    assert err == "raqib: discover refused: live reader failed at tcp in sample 1: OSError: access violation" \
+        " reading 0x0\n" and "cannot be loaded" not in err
+
+    def no_api():
+        raise OSError("no kernel32 (fake)")
+    monkeypatch.setattr(hostwin, "Api", no_api)
+    assert cli.main(["discover", "--home", str(tmp_path), "--samples", "1"], out=io.StringIO()) == 2
+    assert capsys.readouterr().err == "raqib: discover refused: Windows live discovery: the API cannot be loaded:" \
+        " no kernel32 (fake)\n"
+
+
+def launched_host(reader_started=40):
+    """cmd.exe (talks) -> raqib.exe -> python.exe (the venv redirector) -> python.exe (the reader, 503);
+    cmd.exe also runs ping.exe, which is not the reader's."""
+    return FakeHost([(6600, 1, "explorer.exe", r"C:\Windows\explorer.exe", 10),
+                     (500, 6600, "cmd.exe", r"C:\Windows\System32\cmd.exe", 20),
+                     (501, 500, "raqib.exe", r"C:\Users\user\venv\Scripts\raqib.exe", 30),
+                     (502, 501, "python.exe", r"C:\Users\user\venv\Scripts\python.exe", 35),
+                     (503, 502, "python.exe", r"C:\Python312\python.exe", reader_started),
+                     (600, 500, "PING.EXE", r"C:\Windows\System32\PING.EXE", 50)],
+                    [(5, "192.0.2.30", 50001, "203.0.113.40", 443, 500)], {})
+
+
+def test_a7_the_readers_launchers_are_its_tree_never_acts(tmp_path, monkeypatch):
+    host = launched_host()
+    texts, holes, info = hostwin.collect(host, 1, 0, 503, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    assert texts["win-process-1"][1].splitlines()[0] == "# raqib-snapshot at=%s self=503,502,501 sample=1" % AT
+    assert info["self"] == [503, 502, 501]
+    inv = discover.run(texts, CATALOG, holes=holes, live=True)
+    assert inv["self"] == [501, 502, 503]
+    acts = [a["pid"] for c in inv["candidates"] for a in c["acts"]]
+    assert acts == [600] and not {501, 502, 503} & {a["pid"] for a in inv["act_roots"]}
+    # without A-7 (only the reader's pid), raqib.exe would be cmd.exe's act
+    texts["win-process-1"] = (texts["win-process-1"][0],
+                              texts["win-process-1"][1].replace("self=503,502,501", "self=503"), None)
+    old = discover.run(texts, CATALOG, holes=holes, live=True)
+    assert 501 in [a["pid"] for c in old["candidates"] for a in c["acts"]]
+    # run.json carries self (A-9), and the replay keeps the launchers
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(hostwin, "Api", lambda: launched_host())
+    monkeypatch.setattr(discover.os, "getpid", lambda: 503)
+    saved = tmp_path / "run"
+    cli.main(["discover", "--samples", "1", "--home", str(tmp_path), "--save", str(saved)], out=io.StringIO())
+    assert json.loads((saved / "run.json").read_text())["self"] == [503, 502, 501]
+    monkeypatch.setattr(sys, "platform", "linux")
+    out = io.StringIO()
+    cli.main(["discover", "--from", str(saved), "--json"], out=out)
+    assert json.loads(out.getvalue())["self"] == [501, 502, 503]
+
+
+def test_a7_the_chain_is_unbroken_and_only_launchers():
+    procs = [(1, 0, "services.exe"), (10, 1, "python.exe"), (11, 10, "cmd.exe"), (12, 11, "raqib.exe"),
+             (13, 12, "pythonw3.12.exe"), (14, 13, "python.exe")]
+    assert hostwin.self_tree(procs, 14) == [14, 13, 12]               # cmd.exe breaks the chain
+    assert hostwin.self_tree(procs, 99) == [99]                       # not in the snapshot: itself only
+    started = {14: "2026-11-03T10:00:00Z", 13: "2026-11-03T10:00:05Z"}  # a "parent" younger than its child
+    assert hostwin.self_tree(procs, 14, started) == [14]
+    assert [bool(hostwin.LAUNCHER.match(n)) for n in ("RAQIB.EXE", "python3.12.exe", "pythonw.exe", "py.exe",
+                                                      "raqib-app.exe", "node.exe")] == [True, True, True, False,
+                                                                                         True, False]
+    records, problems = discover.parse_win_process(
+        "# raqib-snapshot at=%s self=14,13,12 sample=1\n\"ProcessId\",\"ParentProcessId\",\"Name\"\n" % AT, "w")
+    assert problems == [] and records[0]["self"] == 14 and records[0]["launchers"] == [13, 12]
+
+
+def test_a8_a_pid_reused_in_the_gap_drops_path_and_time_and_is_a_hole():
+    host = host_of(KIMI1, 1)
+    host.reused = {10728: r"C:\Windows\System32\notepad.exe"}
+    texts, holes, _ = hostwin.collect(host, 1, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    row = next(r for r in rows_of_text(texts["win-process-1"][1]) if r["ProcessId"] == "10728")
+    assert (row["Name"], row["ExecutablePath"], row["CreationDate"]) == ("kimi.exe", "", "")
+    assert "1 process(es) whose pid was reused in the gap between the snapshot and OpenProcess (the image path's" \
+        " name is not the snapshot's): path and creation time dropped: pid 10728" in holes
+    assert not any("image path was not read" in h for h in holes)      # reused, not denied
+    assert host.handles == {}
+    assert hostwin.process_detail(host_of(KIMI1, 1), 10728, "KIMI.EXE")[0].endswith("kimi.exe")   # case: same name
+
+
+def test_a10_an_ipv6_table_failure_is_a_hole_and_the_ipv4_rows_stand():
+    host = host_of(KIMI1, 1)
+    host.tcp_fails = {hostwin.AF_INET6}
+    texts, holes, _ = hostwin.collect(host, 1, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    label, text, error = texts["win-tcp-1"]
+    assert error is None and len(rows_of_text(text)) == sum(1 for r in host.tcp if ":" not in r[1])
+    assert "IPv6 connections not read in every sample (GetExtendedTcpTable(AF_INET6) returned 50): the IPv4 rows" \
+        " stand" in holes
+    inv = discover.run(texts, CATALOG, holes=holes, live=True)
+    assert not any("win-tcp-1" in x for x in inv["incomplete"])
+    host = host_of(KIMI1, 1)
+    host.tcp_fails = {hostwin.AF_INET}           # IPv4 is still the source's error: incomplete
+    texts, _, _ = hostwin.collect(host, 1, 0, SELF, lambda s: None, now=lambda: AT, clock=lambda: 0.0)
+    assert texts["win-tcp-1"][2] == "GetExtendedTcpTable(AF_INET) returned 50"
+
+
+def test_a11_samples_are_t_seconds_apart_start_to_start():
+    ticks = iter([100.0, 103.0, 110.0, 122.5, 122.5])      # sample 1 takes 3 s, sample 2 takes 12.5 s
+    sleeps, times = [], iter(["t1", "t2", "t3"])
+    _, _, info = hostwin.collect(host_of(KIMI1, 1), 3, 10, SELF, sleeps.append, now=lambda: next(times),
+                                 clock=lambda: next(ticks))
+    assert sleeps == [7.0, 0.0] and info["sample_times"] == ["t1", "t2", "t3"] and info["seconds_apart"] == 10
+
+
+def test_a12_doctor_host_on_macos_is_unsure_homes_only():
+    assert doctor.check_host("darwin") == (doctor.UNSURE, "homes only; no live reader")
+
+
+def test_a13_the_negative_answer_constant_is_named_right():
+    assert DNS_INFO_NO_RECORDS == 9501
+    host = FakeHost([], [], {"x.example.com": []})
+    head = ctypes.POINTER(hostwin.DNS_RECORDW)()
+    assert host.DnsQuery_W("x.example.com", hostwin.DNS_TYPE_A, hostwin.DNS_QUERY_NO_WIRE_QUERY, None, head,
+                           None) == 9501

@@ -323,9 +323,10 @@ def check_sysmon(registry):
 def check_host(platform, prober=None):
     """M7.1 E3: (ok, text) of live discovery on this host. Read-only: on
     Windows only DLL symbols are resolved (hostwin.probe); nothing is called."""
-    if platform != "win32":
-        return True, "live discovery reads /proc (raqib discover; Linux)" if platform.startswith("linux") else \
-            "live discovery reads /proc on Linux; on %s it lists the homes only" % platform
+    if platform.startswith("linux"):
+        return True, "live discovery reads /proc (raqib discover; Linux)"
+    if platform != "win32":     # ADR-0007 A-12: discover there reads the homes only and ends incomplete
+        return UNSURE, "homes only; no live reader"
     if prober is None:
         if os.name != "nt":
             return UNSURE, "a Windows doctor run on %s: the Win32 API is not here to resolve; not checked" % sys.platform

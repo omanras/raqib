@@ -694,8 +694,10 @@ def _col(row, *names):
 # M7.1: the first line of a win-process text the live reader wrote names the
 # reader's own pid, as proc.txt's snapshot line does, so its tree is never
 # evidence (E3); --save keeps it, so a replay knows it too.
-WIN_SNAPSHOT_LINE = "# raqib-snapshot at=%s self=%d sample=%d"
-WIN_SNAPSHOT = re.compile(r"# raqib-snapshot at=(\S+) self=([0-9]+) sample=([0-9]+)\Z")
+WIN_SNAPSHOT_LINE = "# raqib-snapshot at=%s self=%s sample=%d"
+# ADR-0007 A-7: self= is the reader's pid, then its launchers (raqib*.exe,
+# python*.exe) nearest first, comma-separated: all of them are the reader.
+WIN_SNAPSHOT = re.compile(r"# raqib-snapshot at=(\S+) self=([0-9]+(?:,[0-9]+)*) sample=([0-9]+)\Z")
 
 
 def parse_win_process(text, src="win-process"):
@@ -708,8 +710,9 @@ def parse_win_process(text, src="win-process"):
             break
         m = WIN_SNAPSHOT.match(raw.strip())
         if m:
-            records.append(_rec("snapshot", src, number, raw, ts=_ts(m.group(1)), self=int(m.group(2)), counts={},
-                                kernel_parent=None))
+            pids = [int(x) for x in m.group(2).split(",")]
+            records.append(_rec("snapshot", src, number, raw, ts=_ts(m.group(1)), self=pids[0], counts={},
+                                kernel_parent=None, launchers=pids[1:]))
     for number, raw, row in _csv_rows(text, src, "Win32_Process",
                                       ("ProcessId", "ParentProcessId", "Name"), problems):
         pid, ppid = _int(row["ProcessId"]), _int(row["ParentProcessId"])
@@ -1169,13 +1172,16 @@ def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/pro
     elif platform == "win32":
         # M7.1 (ADR-0007): the host's own records through the OS API, in-process.
         from raqib import hostwin
-        try:
+        try:     # ADR-0007 A-6: only the API load is "cannot be loaded"
             api = hostwin.Api() if api is None else api
+        except (OSError, AttributeError) as exc:     # a DLL or symbol of kernel32/iphlpapi missing
+            raise LiveRefused("Windows live discovery: the API cannot be loaded: %s" % exc)
+        try:
             got, more, info = hostwin.collect(api, win_samples, win_every, os.getpid(), sleep)
         except hostwin.HostError as exc:
             raise LiveRefused("Windows live discovery: %s" % exc)
-        except (OSError, AttributeError) as exc:     # a DLL or symbol of kernel32/iphlpapi missing
-            raise LiveRefused("Windows live discovery: the API cannot be loaded: %s" % exc)
+        except hostwin.ReaderFailed as exc:
+            raise LiveRefused(str(exc))
         texts.update(got)
         holes += more
         samples = win_samples
@@ -1618,6 +1624,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     records, reuse_holes = _instances(records)
     snapshots = [r for r in records if r["kind"] == "snapshot"]
     self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
+    self_pids |= {p for r in snapshots for p in r.get("launchers") or ()}     # ADR-0007 A-7
     procs = _merge_procs(records)
     records = _join_sockets(records, procs)
     conns = [r for r in records if r["kind"] == "conn"]
