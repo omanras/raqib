@@ -1,30 +1,30 @@
-# HANDOFF — M4.2b  (phase 4: `require:` construct; LANDED-NO-GATE, EDIT-NO-TEST) — REDO
-Task: the engine learns demands that need evidence on another line; the two
-demands split out of M4.2. Binding: ADR-0002 Amendments D, G and
-docs/review/2026-11-03-M4.2b-ruling.md (G-1..G-11).
+# HANDOFF — M4.3  (phase 4: the tree as anchor, from files only)
+Task: at session_start, stop and session_end the hook records the local git
+state READ FROM FILES (the hook executes nothing: no `git` process); two
+anchor rules read it (ADR-0002 candidates; ratio after: 4 : 7 : 6).
 Scope:
   raqib/hooks/common.py, raqib/hooks/capture.py, raqib/rules/catalog/, raqib/rules/engine.py,
-  raqib/report.py (ids only), README.md, docs/THREAT_MODEL.md, .github/workflows/gate.yml,
-  tests/, docs/specs/ADR-0002-rule-kinds.md (note under the table), docs/review/
+  raqib/report.py (ids), README.md, docs/THREAT_MODEL.md, .github/workflows/gate.yml, tests/,
+  docs/specs/ADR-0002-rule-kinds.md (note under the table), docs/review/
 Exit criteria:
-- E1 `require: {before: <node>}` and `require: {after: <node>, until: <node>}`
-     on kind demand only, never with aggregate; three-valued (unknown = partial
-     note, never a finding; no deadline = unknown); `under_any: [..]` placed
-     like outside_any; `holes:` key on demand/anchor rules (G-6). Tests both ways.
-- E2 common.py (capture re-exports): `input_meta.commit_prefix` (G-3, G-4),
-     `input_meta.command_scripts` (G-2, G-9), command_head leading-redirect
-     fix (E-12); hook fixtures byte-for-byte except the new keys; tests per form.
-- E3 LANDED-NO-GATE (demand, high): trigger = commit post line ok with
-     commit_prefix `landed:`; evidence = an earlier-or-same ok Bash whose
-     programs/scripts/head hold gate.sh or gate.py (G-7, G-8); holes G-5
-     listed. Fixtures both ways incl. `&&` same line and the stale gate.
-- E4 EDIT-NO-TEST (demand, medium): ok Edit/Write/MultiEdit/NotebookEdit
-     under raqib/ or tests/ and, before every stop or session_end, no later ok
-     Bash with programs/scripts/head in {pytest, python, python3, gate.sh,
-     gate.py} (G-10). b11-refactor flips: README baseline + M2.2 dated note (G-11).
-- E5 README Fifteen rules (5 + 1 + 9), rows; ADR note rows + "Ratio after
-     M4.2b: 4 : 7 : 4."; kinds demand=7; THREAT_MODEL section 4 list and the
-     holes; gate.yml count derived (already). Gate green ubuntu + windows.
-Not in scope: M4.3 anchors, suspicion, UI, watch, proxy, os.
-Commit: `landed: M4.2b require + two demands` or `STOP: M4.2b <reason>`.
+- E1 `git_state(cwd)` in common.py, 50 ms budget, reads only: `.git/HEAD`
+     (a `.git` file pointing to a gitdir is followed once), the ref it names
+     (loose ref, else packed-refs), `.git/index` (sha256 of its bytes). Records
+     `git_head` (40-hex or null), `git_index_sha256` (64-hex or null),
+     `git_error` naming why (no repo, unreadable, budget). Never a subprocess
+     (a test asserts it). Written on session_start, stop, session_end only.
+- E2 HEAD-UNMOVED (anchor, medium, `holes:`): ok Edit/Write/MultiEdit/
+     NotebookEdit in the session and the closing `git_head` equals the
+     starting one (edits never committed); null on either side = unknown;
+     no start record = unknown. Fixtures both ways + unknown.
+- E3 INDEX-UNTOUCHED (anchor, medium, `holes:`): ok edits in the session and
+     `git_index_sha256` unchanged from start to close (edits never staged);
+     same unknown rules. Fixtures both ways + unknown. Reuse `require:` or a
+     code rule; a new engine construct needs a STOP with the question.
+- E4 README Seventeen rules (5 + 1 + 11), rows; ADR note rows + "Ratio after
+     M4.3: 4 : 7 : 6."; kinds anchor=6; THREAT_MODEL paragraph on what the tree
+     anchor sees and cannot (edits outside the repo, a second repo, a worktree,
+     `GIT_DIR` set, an index rewritten by the agent). Gate green ubuntu + windows.
+Not in scope: executing git (STOP-DIRTY-TREE awaits a ruling), hash chain, suspicion, UI.
+Commit: `landed: M4.3 tree anchor` or `STOP: M4.3 <reason>`.
 Read HANDOFF.md and do only the task it specifies.

@@ -373,3 +373,14 @@ Full text: docs/review/2026-11-03-M4.2b-ruling.md.
 - H-7 Class DRIFT accepted. H-8 THREAT_MODEL completeness. H-9 Field
   item: Claude Code's ok on a non-zero Bash exit. H-10 hostile-input tests.
 Full text: docs/review/2026-11-03-M4.2b-redo-ruling.md.
+
+## Amendment I (the Table, 2026-11-03) - judgement on M4.2b (1643e32 + 082bd45 + f50e989)
+- G-1..G-11 and H-1..H-10 MET as cited; the Table read `_judge_require`
+  (true evidence wins over unknown; causes per seq) on the branch.
+- CI runs 41607191240 and 41612799519 success on six jobs each (read from
+  api.github.com); gate 2213 passed, 7 skipped; kinds signature=4
+  demand=7 anchor=4; scope clean; CI-fix commit accepted (G-8).
+- Builder readings accepted (sourced `.sh` only; env literal; CR kept).
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Phase 4 exit met in the tree: demand + anchor (11) > signature (4) and
+  every signature lists its evasions. The field proof is the commander's.

@@ -38,7 +38,7 @@ Out of scope for v0.1: blocking/steering the agent (A4), multi-host, auth.
        gate prints the ratio                           exit: E1–E5 in handoff
 - M4.2 programs in Bash commands; has_any; SILENCE-EMPTY (split 2026-11-03)
 - M4.2b `require:` construct; LANDED-NO-GATE, EDIT-NO-TEST (demands)
-- M4.3 git head/clean at start and stop; STOP-DIRTY-TREE, HEAD-UNMOVED (anchors)
+- M4.3 git head/index at start and stop, read from files (no git process); HEAD-UNMOVED, INDEX-UNTOUCHED (anchors); STOP-DIRTY-TREE waits for a ruling on executing git
        Phase exit: demand + anchor > signature, and every signature's
        evasion list is in the tree.
 

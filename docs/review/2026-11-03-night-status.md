@@ -11,12 +11,12 @@ Written while the last builder of the night runs; updated at the stop.
 | M6.2 | dashboard v2: live band (WATCHING / SILENT / AGENT GONE / CAPTURE FAILED), findings by severity, live silence windows, `~/.raqib/watches.json` registry, `/discover` tab, `--refresh` | 5c6d463 |
 | M5.0b | discover after the Kimi field test: Windows sample loop, "recent talk" from TIME_WAIT + DNS, `act-root` class (names kimi from one sample), first fp numbers (`raqib discover --check`) | 721bb55 |
 | M5.2 | `raqib proxy`: any OpenAI- or Anthropic-speaking agent watched through its base URL; conversation sessions; hashes only; recording never breaks relaying | ed64d86 |
+| M4.2b | `require:` construct; LANDED-NO-GATE (high) and EDIT-NO-TEST (medium): a `landed:` commit with no gate run before it, an edit under raqib/ or tests/ with no test run before stop; this project's own close reads CLEAN | (merge after M5.3) |
 | M5.3 | `raqib os-sysmon`: the os source from Sysmon (events 1/11/3, read-only) + CROSS-SOURCE, the first anchor: asked-not-done / done-not-asked across sources | (this merge) |
 
-Gate on main after M5.3: 1957 passed, 7 skipped; kinds signature=4 demand=5 anchor=4.
+Gate on main after M4.2b: 2213 passed, 7 skipped; kinds signature=4 demand=7 anchor=4 (Phase 4 exit met: demand + anchor > signature).
 
 ## Not done tonight (in the order I would take them)
-- M4.2b: `require:` construct + LANDED-NO-GATE + EDIT-NO-TEST (handoff written, docs/handoffs/M4.2b.md).
 - M4.3: git state anchors (handoff exists).
 - M5.4 (to write): capture.py as a Kimi Code CLI hook (Kimi has PreToolUse/PostToolUse/SessionStart/SessionEnd/Stop, tool `Bash`); SCOPE-PATH tool-name map for other agents; doctor checks common.py; every watch timestamp on the wall clock.
 - Table items: CI does not exercise an autocrlf=true clone; the local scope-guard hook reads only a line that is exactly `Scope:` and treats annotated entries as literal prefixes (handoffs now keep the header plain); LICENSE (yours); third reader.
