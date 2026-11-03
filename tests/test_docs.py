@@ -14,7 +14,7 @@ from raqib.rules import engine  # noqa: E402
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 THREAT = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
 CATALOG = ROOT / "raqib" / "rules" / "catalog"
-WORDS = {4: "4", 6: "Six", 7: "7", 11: "Eleven"}
+WORDS = {4: "4", 6: "Six", 7: "7", 11: "Eleven", 12: "Twelve"}
 
 
 def test_readme_counts_the_rules():
@@ -23,10 +23,18 @@ def test_readme_counts_the_rules():
     silence = [r for r in table if r["class"] == "SILENCE" and r["fp_budget"] is None]
     assert "%s rules turn the trace into findings" % WORDS[len(table)] in README
     assert "%d silence rules and\n   %d YAML rules" % (len(silence), len(rules)) in README
-    named = {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SCOPE-PATH",
+    named = {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY", "SCOPE-PATH",
              "SCOPE-CWD-ROOT", "SCOPE-CWD-MOVED", "NET-TOOL", "DESTRUCT-CMD", "SECRET-OUTPUT",
              "DRIFT-FILES"}
     assert {r["id"] for r in table} == named, "update the README rule table"
+    # Every rule has a row of the README's rule table, alone or in a row of its family (M4.2).
+    rows = [line.split("|")[1].strip() for line in section("What it catches").splitlines()
+            if line.startswith("| ") and not line.startswith("| Rule ")]
+    for rule_id in named:
+        family, last = rule_id.split("-")[0], rule_id.rsplit("-", 1)[1]
+        assert any(rule_id == row or (re.split(r"[ /-]+", row)[0] == family and last in re.split(r"[ /-]+", row))
+                   for row in rows), rule_id
+    assert "| SILENCE-EMPTY |" in README
 
 
 def test_readme_counts_the_hooks():
@@ -112,3 +120,21 @@ def test_m63_e3_readme_commands_are_the_installed_ones():
     for phrase in ("OK, MISSING or UNSURE", "exit 1", "installed; foreign", "or missing", "Sysmon on Windows",
                    "read-only", "`claude --version`", "absolute path"):
         assert phrase in doctor, phrase
+
+
+def test_m42_redo2_e2_e6_readme_names_the_holes():
+    """E-2: the SILENCE-EMPTY row says "no start and no tool call" and names
+    the open SILENCE-NOSTART; E-6: code on stdin, here-doc or script."""
+    (row,) = [line for line in section("What it catches").splitlines() if line.startswith("| SILENCE-EMPTY |")]
+    assert "or ended with no start and no tool call" in row and "SILENCE-NOSTART, M4.3" in row
+    cannot = " ".join(section("What it cannot see").split())
+    assert ("code given to a shell on stdin, by a here-document or a here-string, or in a script file: only the"
+            " shell or the script is recorded") in cannot
+
+
+def test_m42_redo2_e11_threat_model_no_longer_says_only_the_first_program():
+    flat = " ".join(THREAT.split())
+    assert "show only the first program (M1.1 3h-7" not in flat
+    assert ("`cd x && rm -rf y`, pipes, `$(...)` and one level of `bash -c` are read into `command_programs` since"
+            " ADR-0002 Amendment D") in flat
+    assert "`sudo rm`, `env curl`, `xargs rm`, `eval`, `zsh -c` and code given to a shell on stdin show only" in flat

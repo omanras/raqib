@@ -1296,3 +1296,29 @@ def test_m41_b3_a_finding_without_kind_is_a_notice_in_watch_and_an_alarm_in_its_
     rep = w.report()[0]
     assert [a["kind"] for a in rep["alarms"]] == ["no-kind"] and "SECRET-OUTPUT" in rep["alarms"][0]["detail"]
     assert all(f["rule_id"] != "SECRET-OUTPUT" for f in rep["findings"])
+
+
+# --- M4.2 REDO-2 E-3: SILENCE-EMPTY in watch (one knock, on the end line) ------
+
+def test_m42_redo2_e3_silence_empty_knocks_once_on_the_end_line_and_not_on_a_later_start(tmp_path):
+    runner = FakeRunner()
+    w, path, clock = make_watch(tmp_path, runner=runner)
+    append(path, [rec(1, "session_start", 0, tool="-")])
+    w.step()
+    assert runner.calls == [] and {e["rule_id"]: e["state"] for e in w.inventory.values()} == {
+        "SILENCE-OPEN": "pending"}
+    append(path, [rec(2, "session_end", 1, tool="-")])           # the end line: settled at once (D-7)
+    clock.t += 1
+    w.step()
+    assert runner.titles() == ["Raqib: SILENCE-EMPTY"]
+    (empty,) = [e for e in w.inventory.values() if e["rule_id"] == "SILENCE-EMPTY"]
+    assert (empty["cited_seq"], empty["state"], empty["settled_by"], empty["severity"]) == (
+        [1, 2], "settled", "its lines", "high")
+    append(path, [rec(3, "session_start", 2, tool="-")])         # the same session id starts again
+    clock.t += 1
+    w.step()
+    assert runner.titles() == ["Raqib: SILENCE-EMPTY"]            # no second knock (E-3: same cited_seq)
+    assert empty["present"] and empty["cited_seq"] == [1, 2]
+    assert {e["rule_id"]: e["state"] for e in w.inventory.values()} == {
+        "SILENCE-EMPTY": "settled", "SILENCE-OPEN": "pending"}
+    assert w.out.getvalue().count("FINDING [high] SILENCE-EMPTY") == 1

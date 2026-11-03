@@ -222,7 +222,7 @@ def kinds_line(out):
 def test_m41_e4_the_gate_prints_one_kinds_line_and_stays_green(tmp_path):
     code, out = gate(tmp_path, {})
     assert code == 0, out
-    assert kinds_line(out) == "[gate] rule kinds: signature=4 demand=4 anchor=3"
+    assert kinds_line(out) == "[gate] rule kinds: signature=4 demand=5 anchor=3"
     # B-5 (K14): the first gate line after the secret scan.
     order = [line for line in out.splitlines() if line.startswith("[gate] ") and not line.startswith("[gate]  ")]
     assert order[:3] == ["[gate] secret scan", kinds_line(out), "[gate] handoff length"]
@@ -281,7 +281,7 @@ def test_m41_b5_the_catalog_is_the_tracked_rule_files(tmp_path):
     from the working tree is RED."""
     bad = without(CATALOG_REL + "NET-TOOL.yaml", "kind:").replace("id: NET-TOOL", "id: NET-UNTRACKED")
     code, out = gate(tmp_path / "untracked", {}, untracked={CATALOG_REL + "NET-UNTRACKED.yaml": bad})
-    assert code == 0 and kinds_line(out) == "[gate] rule kinds: signature=4 demand=4 anchor=3", out
+    assert code == 0 and kinds_line(out) == "[gate] rule kinds: signature=4 demand=5 anchor=3", out
     # A second repository, not rmtree of the first: git's object files are read-only on Windows.
     repo = scratch(tmp_path / "deleted", {})
     (repo / CATALOG_REL / "NET-TOOL.yaml").unlink()
@@ -319,7 +319,7 @@ def test_m41_b2_planted_standard_library_names_are_not_imported(tmp_path, monkey
     text = io.StringIO()
     with contextlib.redirect_stdout(text):
         module.rule_kinds(files)
-    assert text.getvalue() == "[gate] rule kinds: signature=4 demand=4 anchor=3\n"
+    assert text.getvalue() == "[gate] rule kinds: signature=4 demand=5 anchor=3\n"
     assert sorted(p.name for p in repo.glob("*.imported")) == []
     assert sorted(planted) == sorted("%s.py" % n for n in module.PREIMPORT) and "json.py" in planted
 
@@ -331,7 +331,7 @@ def test_m41_b2_the_child_puts_the_checkout_at_the_end_of_sys_path(tmp_path):
     request = json.dumps({"root": str(repo), "catalog": [CATALOG_REL + "NET-TOOL.yaml"]})
     proc = subprocess.run([sys.executable, "-I", str(GATE_PY), "--rule-kinds-child"], input=request,
                           capture_output=True, text=True, timeout=120)
-    assert (proc.returncode, proc.stdout) == (0, "rule kinds: signature=1 demand=4 anchor=0\n"), proc
+    assert (proc.returncode, proc.stdout) == (0, "rule kinds: signature=1 demand=5 anchor=0\n"), proc
     path = json.loads(record.read_text())
     assert path[-1] == str(repo) and path.count(str(repo)) == 1 and "" not in path
 

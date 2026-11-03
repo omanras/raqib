@@ -23,6 +23,8 @@ predicate {field: <dotted path>, <op>: <arg>} with exactly one op:
 
     eq / ne        scalar        equal / not equal (bool, number, str are distinct)
     in / not_in    [scalars]     one of / none of
+    has_any        [scalars]     a list holding at least one of (M4.2); a
+                                 value that is not a list is unknown
     exists         true|false    the field is present and not null
     nonempty       true          a non-empty string, list or mapping
     regex          str           re.search on a string
@@ -82,7 +84,7 @@ RULE_ID = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\Z")
 FIELD = re.compile(r"[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*\Z")
 CONTEXT_KEY = re.compile(r"[a-z_][a-z0-9_]*\Z")
 PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
-OPS = ("eq", "ne", "in", "not_in", "exists", "nonempty", "regex", "prefix", "glob",
+OPS = ("eq", "ne", "in", "not_in", "has_any", "exists", "nonempty", "regex", "prefix", "glob",
        "outside", "outside_any")
 SUMMARY_VALUE_MAX = 80
 MISSING = object()
@@ -347,6 +349,10 @@ def _predicate(node, where, rule):
         if op == "in":
             return on_value(lambda v: any(_same(v, a) for a in arg))
         return on_value(lambda v: not any(_same(v, a) for a in arg))
+    if op == "has_any":
+        if not (isinstance(arg, list) and arg and all(_scalar(a) for a in arg)):
+            raise _NodeError("%s: must be a non-empty list of scalars" % at)
+        return on_value(lambda v: any(_same(x, a) for x in v for a in arg) if isinstance(v, list) else UNKNOWN)
     if op == "exists":
         if not isinstance(arg, bool):
             raise _NodeError("%s: must be true or false" % at)

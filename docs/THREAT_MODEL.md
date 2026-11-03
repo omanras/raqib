@@ -96,8 +96,7 @@ item F7 of the M1.2 review packet or questions file.
 or file contents. Everything below follows from that, or from the hooks.
 
 - **The program behind a wrapper or a compound command.** `sudo rm`,
-  `env curl`, `bash -c '...'`, `cd x && rm -rf y` and `xargs rm` show only
-  the first program (M1.1 3h-7, M1.2 Q5).
+  `env curl`, `xargs rm`, `eval`, `zsh -c` and code given to a shell on stdin show only the wrapper or the shell; `cd x && rm -rf y`, pipes, `$(...)` and one level of `bash -c` are read into `command_programs` since ADR-0002 Amendment D, and a command that cannot be read in full shows only the first program (M1.1 3h-7, M1.2 Q5).
   - Since M1.2, a head that cannot be read safely is left out. Rules then
     report "unknown" rather than "clean".
 - **File access that is not a file tool.** `cat ~/.ssh/id_rsa` in Bash, MCP

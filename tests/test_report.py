@@ -178,7 +178,7 @@ def test_e2_findings_file_without_notes_is_incomplete(tmp_path):
 def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
     rep = json.loads(raqib("report", QUICKSTART, "--json")[1])
     table = {r["id"]: r for r in rep["rules"]}
-    assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER",
+    assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY",
                           "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
                           "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT"}
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
@@ -259,7 +259,11 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
                          "SCOPE-PATH", "SECRET-OUTPUT"}
     assert "3 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])
-    assert rows["NET-TOOL"][1:4] == ["ok", "0.111", "0.25"]
+    # M4.2 REDO-2 E-1: the field trace is not benign (tests/fixtures/field/), so
+    # NET-TOOL is 1 of 10 (docs-lookup; negative-programs.json is the 10th) and
+    # SCOPE-PATH 0 of 9.
+    assert rows["NET-TOOL"][1:4] == ["ok", "0.100", "0.25"] and "10 measured" in " ".join(rows["NET-TOOL"])
+    assert rows["SCOPE-PATH"][1:4] == ["ok", "0.000", "0.1"] and "9 measured" in " ".join(rows["SCOPE-PATH"])
     data = json.loads(raqib("check-rules", "--json")[1])
     assert {r["verdict"] for r in data} == {"ok"}
 
@@ -268,7 +272,7 @@ def test_e4_check_rules_fails_an_over_budget_rule(tmp_path):
     catalog = tmp_path / "catalog"
     shutil.copytree(ROOT / "raqib" / "rules" / "catalog", catalog)
     path = catalog / "NET-TOOL.yaml"
-    path.write_text(path.read_text().replace("fp_budget: 0.25", "fp_budget: 0.1"))
+    path.write_text(path.read_text().replace("fp_budget: 0.25", "fp_budget: 0.05"))   # measured 0.1
     code, text = raqib("check-rules", "--catalog", catalog)
     assert code == 1
     assert [line.split()[1] for line in text.splitlines() if line.startswith("NET-TOOL ")] == ["over-budget"]
@@ -484,3 +488,39 @@ def test_m41_b3_a_finding_without_kind_is_a_no_kind_alarm(tmp_path):
     (tmp_path / "f.jsonl.notes.json").write_text(json.dumps({"notes": [], "trace_sha256": sha}))
     code, text = raqib("report", QUICKSTART, "--findings", out)
     assert code == 1 and "  - no-kind: finding has no kind (ADR-0002" in text and "FINDINGS: 0" in text
+
+
+# --- M4.2 E5: SILENCE-EMPTY in the report; the field trace of 2026-11-02 ------
+
+FIELD = FIXTURES / "field" / "2026-11-02.log"   # E-1: outside the benign glob
+
+
+def test_m42_e5_report_ids_and_the_rules_table_row():
+    assert [rid for rid, _ in report.SILENCE_RULES][-1] == "SILENCE-EMPTY"
+    (row,) = [r for r in report.rule_table([]) if r["id"] == "SILENCE-EMPTY"]
+    assert row == {"id": "SILENCE-EMPTY", "class": "SILENCE", "kind": "demand", "severity": "high",
+                   "fp_budget": None, "status": "active", "title": row["title"]}
+    text = raqib("report", QUICKSTART)[1]
+    assert "  SILENCE-EMPTY   SILENCE   demand    high    -         active" in text.splitlines()
+
+
+def test_m42_e5_raqib_report_on_the_field_trace_shows_its_five_findings():
+    """Ruling D-4: SILENCE-GAP s3, SCOPE-PATH s5, NET-TOOL s6, SILENCE-EMPTY
+    s1 and s2. s7 (python3 -c 'import urllib.request') is the recorded
+    NET-TOOL miss: no rule fires on it, as the field note recorded."""
+    code, text = raqib("report", FIELD, "--json")
+    rep = json.loads(text)
+    assert (code, rep["result"], rep["alarms"], rep["notes"]) == (1, "alarm", [], [
+        {"rule_id": "DRIFT-FILES", "status": "not-evaluated", "detail": "needs context: scope"}])
+    assert (rep["records"], len(rep["sessions"])) == (26, 7)
+    assert [(f["rule_id"], f["kind"], f["severity"], f["session_id"][-2:], f["cited_seq"]) for f in rep["findings"]] == [
+        ("SILENCE-EMPTY", "demand", "high", "s1", [1, 2]),
+        ("SILENCE-EMPTY", "demand", "high", "s2", [1, 2]),
+        ("SILENCE-GAP", "demand", "high", "s3", [1, 2]),
+        ("SCOPE-PATH", "signature", "medium", "s5", [2]),
+        ("NET-TOOL", "signature", "medium", "s6", [2])]
+    assert not any(f["session_id"].endswith(("s4", "s7")) for f in rep["findings"])
+    code, text = raqib("report", FIELD)
+    assert code == 1 and "FINDINGS: 5" in text and "RESULT: ALARM (exit 1)" in text
+    assert "  [high] SILENCE-EMPTY (SILENCE, demand) session field-2026-11-02-s1 seq 1,2" in text.splitlines()
+    assert "  [high] SILENCE-EMPTY (SILENCE, demand) session field-2026-11-02-s2 seq 1,2" in text.splitlines()
