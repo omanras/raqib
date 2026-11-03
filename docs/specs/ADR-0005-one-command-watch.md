@@ -380,3 +380,18 @@ Full text: docs/review/2026-11-03-M6.2-ruling.md.
   cap 30 s. J-6 watch.json carries `band`. J-7 registry rows open only a
   local non-UNC `.watch.json`; 64 rows max. J-8 every hole kind first.
 - J-9..J-14 as in docs/review/2026-11-03-M6.2-redo-ruling.md.
+
+## Amendment K (the Table, 2026-11-03) - judgement on M6.2 (3621bf2 + c86f977 + 9209d8d)
+- J-1..J-14 MET as cited; the Table read `_capture_good` (start-time
+  failure cleared only when `live`) and the sample pages on the branch.
+- CI runs 41569194824 and 41572021749 success on six jobs each (read from
+  api.github.com); gate 1601 passed, 7 skipped; scope clean (widened by
+  I-1, J-1); CI-fix commit accepted (G-8).
+- Q-21 trace-replaced / trace-rewritten sort after trace-truncated: yes.
+  Q-22 the newest 64 rows: yes. Q-23 enough for v1; network mounts under
+  `/` are a named hole in THREAT_MODEL at the next docs pass. Q-24 every
+  timestamp to the wall clock is a later task (recorded; drift only across
+  suspend). Q-25 yes: an unchecked hook check is a capture failure (A3).
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Phase 6 state: M6.1, M6.3, M6.2 landed; the phase exit (fresh machine to
+  toast in < 5 min by README) awaits the commander's field test.

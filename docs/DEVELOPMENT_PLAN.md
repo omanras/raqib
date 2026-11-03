@@ -47,6 +47,7 @@ Out of scope for v0.1: blocking/steering the agent (A4), multi-host, auth.
        model and acts, with no prior knowledge of the agent (ADR-0004)
 - M5.1 Windows plumbing: Python installer, lock fallback, CI matrix
 - M5.1b Windows paths in the four path rules (norm_path in the engine)
+- M5.0b discover after the Kimi field test: Windows sample loop, recent-talk evidence, act-root class, first fp numbers
 - M5.2 proxy source + `source` field + hooks/common.py; first non-Claude
        agent (Kimi) watched through its model API           exit: E1–E6 in handoff
 - M5.3 os source from Sysmon on Windows; CROSS-SOURCE anchor (asked-not-done,
