@@ -63,6 +63,13 @@ def test_e1_entry_point_is_cli_main():
     assert callable(cli.main)
 
 
+def test_m64_e1_gui_script_is_raqib_app():
+    """The window's gui-script (pythonw on Windows: no console)."""
+    from raqib import app
+    assert PYPROJECT["project"]["gui-scripts"] == {"raqib-app": "raqib.app:gui_main"}
+    assert callable(app.gui_main)
+
+
 def test_e1_version_and_python_floor_have_one_source():
     assert PYPROJECT["project"]["dynamic"] == ["version"]
     assert PYPROJECT["tool"]["setuptools"]["dynamic"]["version"] == {"attr": "raqib.__version__"}
@@ -184,7 +191,7 @@ def installed(tmp_path_factory):
 def test_e1_installed_layout_help_and_watch_help(installed):
     site, outside = installed
     for argv, start in ((["--help"], "usage: raqib "), (["watch", "--help"], "usage: raqib watch "),
-                        (["doctor", "--help"], "usage: raqib doctor ")):
+                        (["doctor", "--help"], "usage: raqib doctor "), (["app", "--help"], "usage: raqib app ")):
         proc = run_installed(site, outside, *argv)
         assert proc.returncode == 0, proc.stderr
         assert proc.stdout.startswith(start)

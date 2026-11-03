@@ -20,6 +20,11 @@ test = ["pytest"]
 [project.scripts]
 raqib = "raqib.cli:main"
 
+# M6.4 (ADR-0006): the window as a gui-script; on Windows pip makes it a
+# launcher that runs pythonw, so no console window opens.
+[project.gui-scripts]
+raqib-app = "raqib.app:gui_main"
+
 [project.urls]
 Source = "https://github.com/omanras/raqib"
 

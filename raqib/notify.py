@@ -182,6 +182,52 @@ def fold_text(count, first, last):
     return "%d more (first %s, last %s)" % (count, first, last)
 
 
+FIRST_EVENT = "FIRST-FINDING"          # M6.4 E3: the knock on the first finding of a watch
+FIRST_LIMIT = "FIRST-FINDING (window)"  # its own rate-limit id, apart from every rule's
+
+
+class FirstFinding:
+    """M6.4 E3 (ADR-0006 "the knock"): the first finding of a watch knocks
+    once, whatever its severity, through the watch's Notifier under its own
+    rate-limit id. A finding counts when it is live (not history, B-3) and
+    settled (a pending one can still be taken back, B-1). The text is the
+    A-4 text: "Raqib: FIRST-FINDING" and "project <name>, <rule id>
+    <severity> seq <n>" - the rule id and severity come from the catalog,
+    the seq is a number; never agent content."""
+
+    def __init__(self, notifier):
+        self.notifier = notifier
+        self.knocked = None   # {"rule_id", "severity", "where", "status", "now"} once it knocked
+
+    @staticmethod
+    def first(findings):
+        """The first live, settled finding entry (watch.json's shape), or None."""
+        for entry in findings:
+            if isinstance(entry, dict) and not entry.get("history") and entry.get("state") == "settled":
+                return entry
+        return None
+
+    @staticmethod
+    def where(entry):
+        seqs = [str(s) for s in entry.get("cited_seq") or []]
+        shown = ",".join(seqs[:3]) + (" +%d more" % (len(seqs) - 3) if len(seqs) > 3 else "")
+        return clean("%s %s seq %s" % (entry.get("rule_id"), entry.get("severity"), shown or "-"))
+
+    def check(self, findings, now):
+        """Knock for the first live settled finding, once; the record, or
+        None when nothing knocked now."""
+        if self.knocked is not None:
+            return None
+        entry = self.first(findings)
+        if entry is None:
+            return None
+        where = self.where(entry)
+        status = self.notifier.notify(FIRST_EVENT, where, now, limit_id=FIRST_LIMIT)
+        self.knocked = {"rule_id": entry.get("rule_id"), "severity": entry.get("severity"), "where": where,
+                        "status": status, "now": now}
+        return self.knocked
+
+
 def _now_iso():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 

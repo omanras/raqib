@@ -19,7 +19,17 @@ sys.path.insert(0, str(ROOT))
 from raqib import cli, doctor, install  # noqa: E402
 
 WINDOWS = os.name == "nt"
-ORDER = ["python", "claude", "hooks", "notifier", "trace"]
+ORDER = ["python", "claude", "hooks", "notifier", "tkinter", "trace"]
+
+
+class FakeTk:
+    """tkinter as doctor's tkinter line sees it (M6.4 E5): importable, Tk 8.6."""
+    TkVersion = 8.6
+
+
+def fake_importer(name):
+    assert name == "tkinter"
+    return FakeTk
 
 
 class Fakes:
@@ -70,7 +80,11 @@ def notify_send(path):
 def run(tmp_path, proj, home, fakes=None, environ=None, platform="linux", **kw):
     fakes = fakes or Fakes(tmp_path)
     environ = {"PATH": str(tmp_path / "bin"), "HOME": str(home)} if environ is None else environ
+    environ = dict(environ)
+    if "DISPLAY" not in environ and not kw.pop("no_display", False):   # M6.4: a desktop session
+        environ["DISPLAY"] = ":0"
     kw.setdefault("isfile", notify_send)
+    kw.setdefault("importer", fake_importer)
     out = io.StringIO()
     code = doctor.run(None if proj is None else str(proj), out, environ=environ, platform=platform, which=fakes.which, runner=fakes.runner,
                       home=str(home), **kw)
@@ -408,7 +422,7 @@ def test_e2_windows_form_is_installed_for_a_windows_doctor_and_foreign_for_posix
                                          " cannot tell on Windows)" % trace)
     assert ("UNSURE  trace    %s (kept from the existing install) exists; not checked (os.access cannot tell on"
             " Windows)" % trace) in text.splitlines()
-    assert list(checks) == ["python", "claude", "hooks", "notifier", "sysmon", "trace"]
+    assert list(checks) == ["python", "claude", "hooks", "notifier", "tkinter", "sysmon", "trace"]
     _, _, checks, _ = run(tmp_path, proj, home)
     assert checks["hooks"][0] == "MISSING" and "foreign for PreToolUse, PostToolUse" in checks["hooks"][1]
 
@@ -613,3 +627,43 @@ def test_e2_doctor_writes_nothing(tmp_path, home):
         for platform in ("linux", "win32"):
             run(tmp_path, target, home, platform=platform, registry=lambda key: None)
     assert snapshot(tmp_path) == before
+
+
+# --- M6.4 E5: the tkinter line ---------------------------------------------------------------
+
+def no_tkinter(name):
+    raise ModuleNotFoundError("No module named 'tkinter'")
+
+
+def test_m64_e5_tkinter_line_ok_with_a_display(tmp_path, home):
+    proj = make_project(tmp_path)
+    _, _, checks, _ = run(tmp_path, proj, home)
+    assert checks["tkinter"] == ("OK", "Tk 8.6 (tkinter); `raqib app` can open its window")
+
+
+def test_m64_e5_no_tkinter_is_missing_and_names_python3_tk(tmp_path, home):
+    proj = make_project(tmp_path)
+    _, text, checks, _ = run(tmp_path, proj, home, importer=no_tkinter)
+    verdict, line = checks["tkinter"]
+    assert verdict == "MISSING" and "python3-tk" in line and "`raqib watch` works without it" in line
+    assert line.startswith("tkinter cannot be imported in this Python (No module named 'tkinter')")
+
+
+def test_m64_e5_no_display_on_x11_is_unsure_and_windows_needs_none(tmp_path, home):
+    proj = make_project(tmp_path)
+    code, text, checks, _ = run(tmp_path, proj, home, no_display=True)
+    assert checks["tkinter"][0] == "UNSURE" and "DISPLAY is not set" in checks["tkinter"][1]
+    assert text.splitlines()[-1].endswith(", 1 UNSURE")
+    _, _, checks, _ = run(tmp_path, proj, home, no_display=True, platform="win32",
+                          registry=lambda key: {"Enabled": 1})
+    assert checks["tkinter"][0] == "OK"
+
+
+def test_m64_e5_tkinter_check_opens_no_window():
+    """The check imports tkinter and reads TkVersion: it never calls Tk()."""
+    class Trap:
+        TkVersion = 8.6
+
+        def Tk(self, *a, **k):
+            raise AssertionError("doctor opened a window")
+    assert doctor.check_tkinter({"DISPLAY": ":0"}, "linux", lambda name: Trap())[0] is True

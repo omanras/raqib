@@ -28,7 +28,7 @@ missing: one line per check, OK, MISSING or UNSURE, and exit 1 if any line
 is MISSING. It checks Python (and on Linux and macOS `python3` on PATH, which
 the hooks run), `claude` on PATH and its version, the project's hook
 settings (installed; foreign: a Raqib entry of another checkout or install;
-or missing), the notifier, Sysmon on Windows, and whether the trace can be
+or missing), the notifier, tkinter (for `raqib app`), Sysmon on Windows, and whether the trace can be
 written. It is read-only; the only program it runs is `claude --version`,
 by absolute path (in an empty temporary directory, the only thing it
 creates).
@@ -38,6 +38,11 @@ If the venv moves on Windows, the hook names its `python.exe` by path, so
 Claude Code shows a hook error and no `RAQIB-SILENCE:` line is printed.
 Either way doctor shows the hooks as foreign, and `raqib watch` replaces them.
 A check that cannot be made on this host is UNSURE, counted apart and never a failure: today the Windows trace line, which says "not checked" because os.access cannot tell there and doctor writes nothing to find out.
+
+## The window
+`raqib app [PROJECT]` (or `raqib-app`, which on Windows opens with no console) is Raqib as an ordinary program window: first what `raqib doctor` says, a project field with Browse, and Start; Start runs the same watch as `raqib watch` and shows its band, findings by severity, holes and the page's address; Stop, or closing the window, ends it like Ctrl-C and shows the final report.
+The first finding of a watch knocks once, whatever its severity. On Windows a tray icon offers Show / Stop / Quit, and closing the window while watching hides it there; on Linux there is no tray, and a tray that fails is shown in the window as a hole.
+It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`; without it, or without a display, `raqib app` exits 2 and says so, and `raqib watch` still works ([ADR-0006](docs/specs/ADR-0006-the-window.md)).
 
 ## How it works
 - **Deterministic first.** Rules decide; a model can only add suspicion (A1, A2).

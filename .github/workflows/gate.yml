@@ -99,6 +99,8 @@ jobs:
           raqib --help
           raqib watch --help
           raqib doctor --help
+          # M6.4 E5: the window's command from the venv (help only: no window opens).
+          raqib app --help
           # The installed catalog, measured on the checkout's fixtures.
           raqib check-rules --fixtures-root "$GITHUB_WORKSPACE"
           # Without fixtures an installed raqib says so (exit 2).
@@ -136,9 +138,17 @@ jobs:
           assert not any("Traceback" in line for line in lines), lines
           missing = {line[8:17].strip(): line[17:] for line in lines if line.startswith("MISSING ")}
           unsure = {line[8:17].strip(): line[17:] for line in lines if line.startswith("UNSURE ")}
-          expected = ["claude", "hooks", "notifier"] + (["sysmon"] if windows else [])
+          # M6.4: the tkinter line. setup-python's Python ships tkinter; the Linux runner
+          # has no DISPLAY (UNSURE), the Windows runner needs none (OK).
+          try:
+              import tkinter
+              has_tk = True
+          except ImportError:
+              has_tk = False
+          expected = ["claude", "hooks", "notifier"] + (["sysmon"] if windows else []) + ([] if has_tk else ["tkinter"])
           assert sorted(missing) == sorted(expected), missing
-          assert sorted(unsure) == (["trace"] if windows else []), unsure
+          want_unsure = ["trace"] if windows else (["tkinter"] if has_tk and not os.environ.get("DISPLAY") else [])
+          assert sorted(unsure) == want_unsure, unsure
           assert missing["claude"] == "not on PATH (install Claude Code; the hooks are Claude Code hooks)", missing
           assert missing["hooks"].endswith(": missing for all 6 events; `raqib watch` installs this raqib's"), missing
           assert missing["notifier"] == "off (CI is set: no notification is shown in CI)", missing
