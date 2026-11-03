@@ -37,6 +37,36 @@ item F7 of the M1.2 review packet or questions file.
      input and output truthfully.
    - Every field the agent influences is treated as hostile data: paths,
      commands, outputs and cwd.
+   - The proxy source (ADR-0003 and its Amendment A) is a second way in:
+     the agent's model API traffic, relayed by `raqib proxy` on 127.0.0.1.
+     A `pre` comes from the model's answer, read over TLS with the
+     certificate verified against the trust store, which
+     `SSL_CERT_FILE` and `SSL_CERT_DIR` in the proxy's environment can
+     replace; `HTTPS_PROXY` is not used. A `post` comes from the agent's
+     next request, so it is the agent's word, as a hook payload is.
+   - Sessions are conversations: the session id is the conversation key, a
+     hash of the model and the first message, so an agent that changes its
+     first message starts a new session, and results it sends there pair
+     with nothing.
+   - Who can send: the proxy refuses a Host other than its own listen
+     address and any request with an Origin header, which keeps browser
+     pages out. Any other local process can still send requests, and a
+     forged `post` sent first suppresses the real one: the real result then
+     reads as re-sent with a different hash (a RAQIB-SILENCE line), and the
+     forged one stays the post.
+   - Key exposure: the API key travels in the clear to whatever process holds the port:
+     when the proxy is not running, another program can take the port and
+     receive the agent's key. The README says to set the base URL back and
+     to prefer a fresh port per run.
+   - The proxy writes no header value except, when an answer cannot be
+     read, its Content-Type and Content-Encoding (bounded, redacted) in a
+     RAQIB-SILENCE line.
+   - An agent that does not use the proxy leaves no line at all, which no
+     rule sees yet (the os source and a CROSS-SOURCE rule are the planned
+     answer, ADR-0003).
+   - Every line names its source (`hook`, `proxy`, `os`); a line without
+     one reads as `hook`. The field is as forgeable as the rest of the
+     line.
 2. **Trace file to rules.** The trace is a plain file that the agent's user
    can write. The rules trust it only as far as its own shape: corrupt lines,
    seqs or timestamps going back, gaps and missing halves become findings or
@@ -269,6 +299,8 @@ drive.
 
 - A keyed or chained trace, for tamper evidence and against the hash oracle.
 - A capture source outside the agent's user account, such as a proxy
-  (ADR-0001 section 2, later phase).
+  (ADR-0001 section 2, later phase). The proxy source of ADR-0003 runs as
+  whoever starts it; started as the agent's user, the agent can stop it,
+  bypass it, or point its base URL elsewhere.
 - Ratified answers to the open questions in `docs/review/`, in particular
   M1.2 Q5-Q9 and M2.2 Q1.

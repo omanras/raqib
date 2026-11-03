@@ -78,6 +78,21 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       already in the trace at the start are history: shown, never notified.
       Notifications are off under CI or with --no-notify.
       Ctrl-C, or a crash, prints the final report; exit as for report.
+  proxy --listen 127.0.0.1:PORT --upstream URL --log PATH [--cwd DIR] [--allow-plain-upstream]
+      Watch an agent that speaks HTTP to its model API (M5.2, ADR-0003 and
+      Amendment A, raqib/hooks/proxy.py): point its base URL at
+      http://127.0.0.1:PORT (that host exactly); every request is relayed to
+      URL (https, certificates verified) with its bytes unchanged, no retry
+      and no request of its own, and streamed answers pass as they arrive.
+      Tool calls of OpenAI chat/completions and Anthropic messages answers
+      become `pre` lines of the trace PATH, their results in a later request
+      `post` lines (source "proxy"; hashes and the input_meta extract only),
+      one session per conversation; cwd on the lines is DIR (default: the
+      proxy's own). An upstream failure, a refused request or anything it
+      cannot record writes one RAQIB-SILENCE line. --allow-plain-upstream
+      lets URL be http:// to a loopback address (127.0.0.0/8, ::1; tests).
+      Runs until interrupted, then ends the open sessions; exit 2 on a bad
+      option or a trace it cannot write.
   doctor [PROJECT]
       Say in one screen what `watch` needs and is missing (M6.3,
       raqib/doctor.py): Python, `claude` on PATH and its version, the hook
@@ -105,6 +120,7 @@ from raqib import eval as evaluation
 from raqib import report
 from raqib import ui
 from raqib import watch
+from raqib.hooks import proxy
 from raqib.rules import context as rule_context
 from raqib.rules import engine, fixtures, silence, trace
 from raqib.suspect import backends as suspect_backends
@@ -224,6 +240,17 @@ def _parser():
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
     w.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
+    px = sub.add_parser("proxy", help="relay an agent's model API calls and record its tool calls (M5.2, ADR-0003)")
+    px.add_argument("--listen", required=True, metavar="127.0.0.1:PORT",
+                    help="where the agent's base URL points; 127.0.0.1 only (PORT 0: any free port)")
+    px.add_argument("--upstream", required=True, metavar="URL",
+                    help="the model API, https://host[:port][/path]; certificates are verified")
+    px.add_argument("--log", required=True, metavar="PATH", help="the trace the proxy appends to")
+    px.add_argument("--cwd", metavar="DIR", help="the cwd written on proxy lines: where the agent works"
+                                                 " (default: the proxy's own working directory)")
+    px.add_argument("--allow-plain-upstream", action="store_true",
+                    help="let --upstream be http:// to a loopback address, 127.0.0.0/8 or ::1 (for tests;"
+                         " never a remote host)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -697,6 +724,13 @@ def cmd_doctor(args, out):
     return doctor.run(args.project, out)
 
 
+def cmd_proxy(args, out):
+    try:
+        return proxy.run(args.listen, args.upstream, args.log, args.allow_plain_upstream, out, cwd=args.cwd)
+    except proxy.UsageError as exc:
+        raise UsageError(str(exc))
+
+
 def main(argv=None, out=None):
     """The `raqib` console script and python -m raqib (out None: stdout,
     where a path the console cannot encode is escaped, not a crash)."""
@@ -711,7 +745,8 @@ def main(argv=None, out=None):
     try:
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
-                   "discover": cmd_discover, "watch": cmd_watch, "doctor": cmd_doctor}[args.command]
+                   "discover": cmd_discover, "watch": cmd_watch, "doctor": cmd_doctor,
+                   "proxy": cmd_proxy}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)
