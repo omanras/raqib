@@ -242,3 +242,20 @@ D and this note hold:
     (cross.check).
 - The gate requires report.CROSS_RULES, and a YAML rule may not declare
   class CROSS (D-11).
+
+## Amendment E (the Table, 2026-11-03) - judgement on M5.3 (fd7452c + 4564aca + 47d9b1b)
+- D-1..D-14 MET as cited; the Table read os_sysmon (no getcwd anywhere;
+  wevtutil by absolute path, qe only) and verified the C-6 pin from
+  6492a57's parser.
+- CI runs 41595245511 and 41600745091 success on six jobs each (read from
+  api.github.com); gate 1957 passed, 7 skipped; kinds signature=4
+  demand=5 anchor=4; scope clean; CI-fix commit accepted (G-8).
+- Builder readings 1-5 accepted: a quiet agent session is judged; a pre
+  between os sessions is history; a shell image below the shell is asked
+  when any shell pre lies within W (named hole); cross.STATUS = engine's
+  values; `--cwd` absolute on either system; the ADR-0004 note was ordered
+  by D-13.
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Phase 5 exit: both halves are in the tree (an agent other than Claude
+  Code watched through the proxy; CROSS-SOURCE is a finding no single
+  source can produce). The field proof is the commander's.

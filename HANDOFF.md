@@ -1,29 +1,30 @@
-# HANDOFF — M5.3  (phase 5: os source from Sysmon + CROSS-SOURCE anchor)
-Task: add the `os` capture source from Sysmon on Windows (ADR-0003) and the
-first rule that reads the gap between what was asked and what happened.
+# HANDOFF — M4.2b  (phase 4: `require:` construct; LANDED-NO-GATE, EDIT-NO-TEST)
+Task: the engine learns demands that need evidence on another line; the two
+demands split out of M4.2 (ADR-0002 Amendment D, D-1, D-10, D-11). Requires
+M4.2 landed. Preliminary Table answers below; return what does not hold.
 Scope:
-  raqib/hooks/ (new os_sysmon.py), raqib/cli.py, raqib/rules/ (cross.py, engine.py CLASSES,
-  trace.py, silence.py GAP/ORDER exemption, catalog/ guards), raqib/report.py (ids),
-  raqib/discover.py (shared Sysmon helper), tools/gate.py (kinds from cross.py), tests/,
-  README.md, docs/THREAT_MODEL.md, docs/specs/ADR-0002 (table note), ADR-0003, docs/review/
+  raqib/hooks/capture.py, raqib/rules/catalog/, raqib/rules/engine.py, raqib/report.py (ids only),
+  README.md, .github/workflows/gate.yml, tests/, docs/specs/ADR-0002-rule-kinds.md, docs/review/
 Exit criteria:
-- E1 `python -m raqib os-sysmon --root PID --log PATH [--from FILE.xml]`: reads
-     Sysmon events 1, 11, 3 for the tree under PID (live: the operational
-     channel through `wevtutil qe` by absolute path, read-only; `--from`: an
-     exported XML, offline). Each event -> `pre`+`post`, `source: "os"`, tool
-     `process` | `file` | `net`, hashes of command line / path / destination,
-     input_meta via common.py (program names only). Never the arguments.
-- E2 Fixture: a synthetic Sysmon XML in the shape discover.parse_sysmon already
-     reads (user `user`, host `host`, documentation IPs); parsing tests on it.
-     The real export under the default config is the commander's field test.
-- E3 CROSS-SOURCE (code rule raqib/rules/cross.py, anchor, high, class CROSS):
-     C-2 (os lines present), C-3 (window reading B; the two directions), C-4
-     (shell tools, folding, the agent's direct children excluded), W = 10 s.
-     Fixtures: asked-not-done, done-not-asked, matched, rg-helper (negative).
-- E4 Gate kinds line anchor=4; README counts 13 rules, row added; the ADR-0002
-     table note gains the row; THREAT_MODEL: os records are the only ones the
-     agent does not write, and what they still miss (in-process actions,
-     memory-only tools, Sysmon config gaps). Gate green ubuntu + windows.
-Not in scope: Linux os source, blocking (A4), UI beyond the source tag.
-Commit: `landed: M5.3 os source + cross-source` or `STOP: M5.3 <reason>`.
+- E1 `require: {before: <node>}` and `require: {after: <node>, until: <node>}`
+     on kind demand only, never with aggregate; three-valued (unknown = partial
+     note, never a finding; a deadline that never comes = unknown);
+     `under_any: [..]` placed like outside_any. Tests both ways.
+- E2 capture: `input_meta.commit_prefix` = first literal word of the first
+     -m/--message of a `git commit` simple command, also inside a quoted-
+     delimiter `$(cat <<'EOF' ... EOF)` read statically; -F/-C/-c/--amend and
+     merge not read (evasions). `input_meta.command_scripts` (Q-A, preliminary
+     YES): basename of the first literal .py/.sh argument after python(3)/bash/sh.
+- E3 LANDED-NO-GATE (demand, high): `landed:` commit with no earlier-or-same
+     line ok Bash whose programs or scripts hold gate.sh/gate.py; stale gate
+     accepted in v1 and listed. Fixtures both ways (incl. `&&` same line).
+- E4 EDIT-NO-TEST (demand, medium): ok Edit/Write under raqib/ or tests/ and,
+     before every stop or session_end, no later ok Bash with programs or scripts
+     in {pytest, python, python3, gate.sh, gate.py}. Benign eval b11-refactor
+     flips: README baseline line and M2.2-baseline.md corrected by dated note.
+- E5 README 14 rules; gate.yml count derived; ADR table note extended; kinds
+     line demand=7. Gate green ubuntu + windows.
+
+Not in scope: M4.3 anchors, suspicion, UI, watch.
+Commit: `landed: M4.2b require + two demands` or `STOP: M4.2b <reason>`.
 Read HANDOFF.md and do only the task it specifies.
