@@ -395,3 +395,17 @@ Full text: docs/review/2026-11-03-M4.2b-redo-ruling.md.
   hole. J-8 50 ms monotonic budget, size caps. J-9 raw index bytes; git
   status refresh named. J-10 both may fire; holes accepted. J-11 counts.
 Full text: docs/review/2026-11-03-M4.3-ruling.md.
+
+## Amendment K (the Table, 2026-11-03) - rulings on the M4.3 review (74fea27)
+- K-1 git_state never swallows the capture Deadline (narrow except tuple).
+- K-2 (amends J-6) a relative gitdir must resolve under the cwd; linked
+  worktrees are never followed; a network mount under the project is a
+  named hole; the THREAT_MODEL claim narrowed to "nothing outside the
+  project directory".
+- K-3 Holes named (reftable, packed-refs > 1 MiB, GIT_INDEX_FILE,
+  relative worktrees, device-name form); the SILENCE-NOSTART pointer moves
+  to "a later task".
+- K-4 Edits before the first start are unknown, not dropped. K-5 tests.
+  K-6 budget before each lstat. K-7 Windows share-mode window named.
+  K-8 report shows the git keys on cited boundary lines. K-9 recorded.
+Full text: docs/review/2026-11-03-M4.3-redo-ruling.md.

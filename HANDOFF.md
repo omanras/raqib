@@ -3,7 +3,7 @@ Task: at session_start, stop and session_end the hook records the local git
 state READ FROM FILES (the hook executes nothing: no `git` process); two
 anchor rules read it (ADR-0002 candidates; ratio after: 4 : 7 : 6).
 Scope:
-  raqib/hooks/common.py, raqib/hooks/capture.py, raqib/rules/ (new tree.py, trace.py), raqib/cli.py,
+  raqib/hooks/common.py, raqib/hooks/capture.py, raqib/rules/ (tree.py, trace.py, silence.py text), raqib/cli.py,
   raqib/eval.py, raqib/report.py, tools/gate.py, README.md, docs/THREAT_MODEL.md, tests/,
   docs/specs/ADR-0002-rule-kinds.md (note under the table), docs/review/  [ruling J-1..J-11 binding]
 Exit criteria:
