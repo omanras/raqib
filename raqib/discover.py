@@ -1732,7 +1732,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
             q = procs.get(a["pid"])
             times += [r["ts"] for r in (q["recs"] if q else []) if r.get("ts")]
         candidates.append(dict(
-            entry, id=ids[pid], cwd=p["cwd"] if p else None, acts=acts[pid], inside=inside,
+            entry, id=ids[pid], cwd=p["cwd"] if p else None, acts=acts[pid], inside=inside, started=started_of(p),
             listed_acts=sum(1 for a in acts[pid] if a["listed"]),
             talking_ancestors=talking_up, tree=tree,
             env_footprints=[{"name": k, "cites": _cites(p["recs"], 1)} for k in env],
@@ -1933,6 +1933,17 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     })
 
 
+def started_of(p):
+    """M7.2 (API for raqib/host.py): the creation time the reader gave for a
+    process, as the record holds it (Windows: CreationDate, an export's text
+    or the live reader's ISO UTC), or None: Linux /proc snapshots carry none.
+    raqib watch --host keys a tree by (pid, image, started)."""
+    for r in (p or {}).get("recs") or ():
+        if r.get("kind") == "proc" and r.get("started"):
+            return r["started"]
+    return None
+
+
 def _descendant_candidates(procs, pid, acts):
     """Candidates below a talker that is not one itself."""
     return [q for q in sorted(_descendants(procs, pid)) if q in acts]
@@ -2085,7 +2096,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         times = [r["ts"] for q in [pid] + [a["pid"] for a in acts] for r in procs[q]["recs"] if r.get("ts")]
         first = heads[0]
         roots.append({
-            "pid": pid, "image": p["image"], "exe": p["exe"], "cwd": p["cwd"], "user_dir": place,
+            "pid": pid, "image": p["image"], "exe": p["exe"], "cwd": p["cwd"], "user_dir": place, "started": started_of(p),
             "chains": heads, "acts": acts, "cites": _cites(p["recs"]),
             "attributed_to": ids.get(owner) if owner is not None else None,
             "talking_ancestor": ({"pid": owner, "image": procs[owner]["image"] if owner in procs else None,

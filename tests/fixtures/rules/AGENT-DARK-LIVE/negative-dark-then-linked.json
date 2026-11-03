@@ -1,0 +1,94 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 5,
+    "candidate_before": false,
+    "cites": [
+     "win-process-1:12",
+     "win-process-1:13",
+     "win-process-1:14",
+     "win-process-1:15"
+    ],
+    "class": "act-root",
+    "endpoints": [],
+    "history": false,
+    "image": "kimi",
+    "named": true,
+    "named_by": "image kimi is the catalog's kimi",
+    "named_word": "named",
+    "pid": 10728,
+    "round": 4,
+    "sample": "window - .. -; Windows sample(s) 1",
+    "started": "11/2/2026 10:21:05 AM",
+    "tree": "10728:kimi:11/2/2026 10:21:05 AM",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 8,
+    "candidate_before": true,
+    "cites": [
+     "win-process-1:9",
+     "win-tcp-1:6",
+     "win-process-1:15",
+     "win-process-1:13",
+     "win-process-1:16"
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "198.51.100.23:443"
+    ],
+    "history": true,
+    "image": "explorer",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 6636,
+    "round": 4,
+    "sample": "window - .. -; Windows sample(s) 1",
+    "started": "11/2/2026 8:02:30 AM",
+    "tree": "6636:explorer:11/2/2026 8:02:30 AM",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "kimi",
+    "cites": [
+     "footprints:2",
+     "win-process-1:12"
+    ],
+    "dark": false,
+    "linked": "A1",
+    "path": "C:\\Users\\user\\.kimi",
+    "round": 4,
+    "sample": "window - .. -; Windows sample(s) 1",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:30.000Z"
+  }
+ ]
+}

@@ -83,6 +83,18 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       already in the trace at the start are history: shown, never notified.
       Notifications are off under CI or with --no-notify.
       Ctrl-C, or a crash, prints the final report; exit as for report.
+  watch --host [--every T] [--window S] [--rounds N] [--no-open] [--no-notify] [--port N]
+      Watch this host, not a project (M7.2, ADR-0007): a round of live
+      discover every T seconds (default 10; Linux /proc, --window S seconds
+      of it; Windows one sample of the OS API), read-only; nothing installed,
+      no project touched. NEW-AGENT (high) knocks once per new tree that
+      talks and acts ("host, <image> pid <n> (named|unknown)"); trees of the
+      first round are history. AGENT-DARK-LIVE (medium) after 3 rounds of a
+      footprint with no tree. Every round prints one line, "NO AGENT SEEN"
+      included; a reader not back in 2 x T is a hole and a knock. Record and
+      latest inventory under ~/.raqib/host/. --rounds N ends after N rounds.
+      Exit 1 alarm, 3 incomplete, 0 nothing seen (not a clearance), 2 usage
+      (also --host with a PROJECT).
   proxy --listen 127.0.0.1:PORT --upstream URL --log PATH [--cwd DIR] [--allow-plain-upstream]
       Watch an agent that speaks HTTP to its model API (M5.2, ADR-0003 and
       Amendment A, raqib/hooks/proxy.py): point its base URL at
@@ -151,6 +163,7 @@ import sys
 from raqib import app as window_app
 from raqib import discover
 from raqib import doctor
+from raqib import host
 from raqib import eval as evaluation
 from raqib import report
 from raqib import ui
@@ -279,6 +292,16 @@ def _parser():
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
     w.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
+    # M7.2 (ADR-0007 decision 2): the host, not a name.
+    w.add_argument("--host", action="store_true",
+                   help="watch this host, not a project: discover in rounds; NEW-AGENT and AGENT-DARK-LIVE knock;"
+                        " installs nothing, touches no project")
+    w.add_argument("--every", type=float, default=None, metavar="T",
+                   help="--host: a round every T seconds (default %g; a reader not back in 2 x T is a hole)"
+                        % host.EVERY_DEFAULT)
+    w.add_argument("--window", type=float, default=None, metavar="S",
+                   help="--host on Linux: each round reads S seconds of /proc snapshots, 1 s apart (default 0: one)")
+    w.add_argument("--rounds", type=int, default=None, metavar="N", help="--host: end after N rounds (tests, CI)")
     px = sub.add_parser("proxy", help="relay an agent's model API calls and record its tool calls (M5.2, ADR-0003)")
     px.add_argument("--listen", required=True, metavar="127.0.0.1:PORT",
                     help="where the agent's base URL points; 127.0.0.1 only (PORT 0: any free port)")
@@ -802,10 +825,42 @@ def _watch_setup():
 
 
 def cmd_watch(args, out):
+    if args.host:
+        return _watch_host(args, out)
+    if args.every is not None or args.window is not None or args.rounds is not None:
+        raise UsageError("--every, --window and --rounds apply to watch --host only")
     rules, gap, evaluator = _watch_setup()
     try:
         return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
                              evaluator, rules, gap, refresh=args.refresh)
+    except watch.WatchError as exc:
+        raise UsageError(str(exc))
+
+
+def _watch_host(args, out):
+    """M7.2: raqib watch --host [--every T] [--window S] [--rounds N]."""
+    if args.project is not None:
+        raise UsageError("--host watches this host, not a project: give no PROJECT (watch --host, or watch PROJECT)")
+    if args.log is not None:
+        raise UsageError("--host keeps its record under ~/.raqib/host/: --log applies to a project watch")
+    every = host.EVERY_DEFAULT if args.every is None else args.every
+    if not (0.1 <= every <= 86400):
+        raise UsageError("--every must be a number of seconds from 0.1 to 86400")
+    window = 0.0 if args.window is None else args.window
+    if not (0 <= window <= 3600):
+        raise UsageError("--window must be a number of seconds from 0 to 3600")
+    if window and not sys.platform.startswith("linux"):
+        raise UsageError("--window S applies to Linux; on %s a round reads one sample" % sys.platform)
+    if args.rounds is not None and not 1 <= args.rounds <= 1000000:
+        raise UsageError("--rounds must be a whole number from 1 to 1000000")
+    try:
+        catalog = discover.load_catalog(discover.CATALOG)
+    except discover.CatalogError as exc:
+        raise UsageError(str(exc))
+    rules = _catalog(CATALOG)
+    try:
+        return host.command(catalog, rules, every=every, window=window, rounds=args.rounds, no_open=args.no_open,
+                            no_notify=args.no_notify, port=args.port, out=out, refresh=args.refresh)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 

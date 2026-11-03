@@ -1,7 +1,10 @@
 """OS notifications for `raqib watch` (M6.1, ADR-0005 decision 3): the knock.
 
 A notification names the event (a rule id, SILENCE-LIVE, RAQIB-SILENCE or
-TRACE-HOLE), the project and the trace seq or line it cites; never a path,
+TRACE-HOLE), the project and the trace seq or line it cites (M7.2, `raqib
+watch --host`: "host, <image name> pid <n> (named|unknown)" for NEW-AGENT,
+the agent's name and the round for AGENT-DARK-LIVE, the round for
+HOST-HOLE); never a path,
 command or output the agent produced, because a toast is a world-readable
 surface. Every character outside [A-Za-z0-9 ._,:+()-] is replaced and the
 text is bounded.
@@ -258,8 +261,10 @@ class Notifier:
     with a hole."""
 
     def __init__(self, project, enabled=True, reason=None, environ=None, platform=None, runner=None,
-                 isfile=None, stderr=None, limit_seconds=LIMIT_SECONDS, stamp=None, isdir=None, tmp_root=None):
+                 isfile=None, stderr=None, limit_seconds=LIMIT_SECONDS, stamp=None, isdir=None, tmp_root=None,
+                 host=False):
         self.project = project_name(project)
+        self.host = host   # M7.2: raqib watch --host; the body names the host, not a project
         self.environ = dict(os.environ if environ is None else environ)
         self.platform = platform or sys.platform
         self.runner = runner or run_program
@@ -393,6 +398,8 @@ class Notifier:
 
     def texts(self, event, where):
         """(title, body) of a notification."""
+        if self.host:   # M7.2 (A-4 alphabet): "host, <image name> pid <n> (named|unknown)"
+            return clean("Raqib: %s" % event), clean("host, %s" % clean(where))
         return (clean("Raqib: %s" % event),
                 clean("project %s, %s" % (self.project, clean(where))))
 

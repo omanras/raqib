@@ -1,0 +1,31 @@
+# An agent footprint with no live tree, round after round (M7.2, ADR-0007 decision 2).
+id: AGENT-DARK-LIVE
+title: An agent footprint has no live tree for three rounds
+# No HOST class exists in engine.CLASSES (outside M7.2's Scope): DRIFT, an
+# installed agent drifting out of sight (questions file, Q-4).
+class: DRIFT
+# ADR-0002: measured against the host's own record: the footprint listing
+# and the process tree of each round (raqib/discover.py, AGENT-DARK).
+kind: anchor
+severity: medium
+fp_budget: 0.1
+holes:
+  - "a footprint left by an agent that was uninstalled, or that runs only now and then, is dark by design (a false-positive source)"
+  - "an agent that runs between rounds and never in one is dark"
+  - "a round whose footprint cannot be judged (no process or connection records) neither counts nor clears; a round with no inventory neither"
+  - "the streak counts consecutive rounds with an inventory: a reader that fails in between does not break it"
+description: "A line of raqib watch --host (tool HostFootprint, source os) for a footprint in the homes (raqib/discover/endpoints.yaml footprints) that the round's inventory calls AGENT-DARK - no candidate or act-root links to it - in the third consecutive round with an inventory (the streak). It fires once per streak; a round where the footprint links to a tree clears the streak, with a note in the record, the page and the final report. The line cites the round, the sample and the record lines of the inventory (A5)."
+summary: "{input_meta.agent} footprint {input_meta.path} with no live tree for {input_meta.streak} rounds (round {input_meta.round})"
+match:
+  all:
+    - {field: tool, exists: true}
+    - {field: tool, eq: HostFootprint}
+    - {field: source, eq: os}
+    - {field: input_meta.dark, eq: true}
+    - {field: input_meta.streak, eq: 3}
+fixtures:
+  positive:
+    - tests/fixtures/rules/AGENT-DARK-LIVE/positive-dark-three-rounds.json
+  negative:
+    - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-two-rounds.json
+    - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-then-linked.json

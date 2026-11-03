@@ -1,0 +1,148 @@
+{
+ "expect_seq": [
+  4,
+  5
+ ],
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 1,
+    "candidate_before": false,
+    "cites": [
+     "proc:7",
+     "proc-net:7",
+     "proc-net:8",
+     "proc-net:9",
+     "proc:8"
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "160.79.104.10:443 [anthropic 160.79.104.0/23]"
+    ],
+    "history": false,
+    "image": "environment-manager",
+    "named": true,
+    "named_by": "talks to the catalog's anthropic endpoint 160.79.104.0/23",
+    "named_word": "named",
+    "pid": 87,
+    "round": 2,
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "started": null,
+    "tree": "87:environment-manager:-",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 3,
+    "candidate_before": false,
+    "cites": [
+     "proc:8",
+     "proc-net:13",
+     "proc-net:14",
+     "proc-net:15",
+     "proc:9",
+     "proc:10"
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "160.79.104.10:443 [anthropic 160.79.104.0/23]"
+    ],
+    "history": false,
+    "image": "claude",
+    "named": true,
+    "named_by": "image claude is the catalog's claude",
+    "named_word": "named",
+    "pid": 95,
+    "round": 2,
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "started": null,
+    "tree": "95:claude:-",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     "footprints:7",
+     "proc:8"
+    ],
+    "dark": false,
+    "linked": "C2",
+    "path": "/home/claude/.claude",
+    "round": 2,
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     "footprints:4",
+     "proc:8"
+    ],
+    "dark": false,
+    "linked": "C2",
+    "path": "/root/.claude",
+    "round": 2,
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     "footprints:5",
+     "proc:8"
+    ],
+    "dark": false,
+    "linked": "C2",
+    "path": "/root/.claude.json",
+    "round": 2,
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:10.000Z"
+  }
+ ]
+}

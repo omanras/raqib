@@ -359,7 +359,7 @@ def test_c5_an_os_trace_reports_no_partial_from_the_guarded_signatures():
 
 def test_c9_readme_names_the_rule_the_shell_tools_the_window_and_sysmon_n():
     flat = " ".join(README.split())
-    for phrase in ("Seventeen rules turn the trace into findings",   # M4.2b: was Thirteen; M4.3: Seventeen
+    for phrase in ("Nineteen rules turn the trace into findings",   # M4.2b: was Thirteen; M4.3: Seventeen; M7.2: Nineteen
                    "| CROSS-SOURCE | only in a trace with `os` lines:",
                    "`raqib os-sysmon --root PID[:GUID] --log TRACE [--from FILE.xml] [--cwd DIR]`",
                    "a `pre` of `Bash` or of any tool whose name, in lower case, holds `bash`, `shell`,"

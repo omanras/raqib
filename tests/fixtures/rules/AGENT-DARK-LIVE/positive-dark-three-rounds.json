@@ -1,0 +1,242 @@
+{
+ "expect_seq": [
+  23,
+  24
+ ],
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 2,
+    "candidate_before": true,
+    "cites": [
+     "win-process:8",
+     "win-tcp:8",
+     "win-dns:3",
+     "win-process:9",
+     "win-process:10"
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "160.79.104.10:443 [anthropic 160.79.104.0/23; anthropic api.anthropic.com]"
+    ],
+    "history": true,
+    "image": "claude",
+    "named": true,
+    "named_by": "image claude is the catalog's claude",
+    "named_word": "named",
+    "pid": 2100,
+    "round": 3,
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "started": "11/1/2026 9:01:15 AM",
+    "tree": "2100:claude:11/1/2026 9:01:15 AM",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 17,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 3,
+    "candidate_before": true,
+    "cites": [
+     "win-process:11",
+     "sysmon:2",
+     "sysmon:3",
+     "win-tcp:7",
+     "sysmon:5",
+     "win-tcp:9"
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "127.0.0.1:11434 [ollama 11434]",
+     "104.18.33.45:443 [openai api.openai.com]"
+    ],
+    "history": true,
+    "image": "nimbus",
+    "named": true,
+    "named_by": "talks to the catalog's ollama endpoint 11434",
+    "named_word": "named",
+    "pid": 3300,
+    "round": 3,
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "started": "11/1/2026 9:14:00 AM",
+    "tree": "3300:nimbus:11/1/2026 9:14:00 AM",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 18,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 1,
+    "candidate_before": true,
+    "cites": [
+     "win-process:13",
+     "sysmon:15",
+     "sysmon:16",
+     "win-tcp:10",
+     "win-process:14",
+     "sysmon:17"
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "13.107.21.200:443"
+    ],
+    "history": true,
+    "image": "msedge",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 4100,
+    "round": 3,
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "started": "11/1/2026 8:30:02 AM",
+    "tree": "4100:msedge:11/1/2026 8:30:02 AM",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 19,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 1,
+    "candidate_before": true,
+    "cites": [
+     "win-process:19",
+     "sysmon:12",
+     "sysmon:13",
+     "win-tcp:11",
+     "sysmon:14"
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "203.0.113.50:8443"
+    ],
+    "history": true,
+    "image": "scribe",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 7000,
+    "round": 3,
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "started": "11/1/2026 9:10:00 AM",
+    "tree": "7000:scribe:11/1/2026 9:10:00 AM",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 20,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     "footprints:2",
+     "win-process:8"
+    ],
+    "dark": false,
+    "linked": "C1",
+    "path": "C:\\Users\\field\\.claude",
+    "round": 3,
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 21,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     "footprints:3",
+     "win-process:8"
+    ],
+    "dark": false,
+    "linked": "C1",
+    "path": "C:\\Users\\field\\.claude.json",
+    "round": 3,
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 22,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "codex",
+    "cites": [
+     "footprints:4"
+    ],
+    "dark": true,
+    "linked": null,
+    "path": "C:\\Users\\field\\.codex",
+    "round": 3,
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "state": "dark",
+    "streak": 3
+   },
+   "phase": "pre",
+   "seq": 23,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "gemini",
+    "cites": [
+     "footprints:5",
+     "win-process:18"
+    ],
+    "dark": true,
+    "linked": null,
+    "path": "C:\\Users\\field\\.gemini",
+    "round": 3,
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "state": "dark",
+    "streak": 3
+   },
+   "phase": "pre",
+   "seq": 24,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:20.000Z"
+  }
+ ]
+}

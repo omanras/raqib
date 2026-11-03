@@ -1,0 +1,35 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 2,
+    "candidate_before": false,
+    "cites": [
+     "proc:9",
+     "proc:10",
+     "proc:11"
+    ],
+    "class": "act-root",
+    "endpoints": [],
+    "history": false,
+    "image": "agent",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 1600,
+    "round": 2,
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)",
+    "started": null,
+    "tree": "1600:agent:-",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  }
+ ]
+}

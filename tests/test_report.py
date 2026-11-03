@@ -192,7 +192,8 @@ def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
     assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY",
                           "CROSS-SOURCE", "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
                           "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT", "LANDED-NO-GATE", "EDIT-NO-TEST",
-                          "HEAD-UNMOVED", "INDEX-UNTOUCHED"}   # M4.3 J-1: the two tree anchors
+                          "HEAD-UNMOVED", "INDEX-UNTOUCHED",   # M4.3 J-1: the two tree anchors
+                          "NEW-AGENT", "AGENT-DARK-LIVE"}      # M7.2: the host anchors (judge host lines only)
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
     assert table["CROSS-SOURCE"]["fp_budget"] == 0.1 and table["CROSS-SOURCE"]["class"] == "CROSS"   # M5.3 C-8
     for rid in ("HEAD-UNMOVED", "INDEX-UNTOUCHED"):
@@ -279,7 +280,8 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
                          "SCOPE-PATH", "SECRET-OUTPUT", "CROSS-SOURCE",   # M5.3 D-11: the code rule too
                          "LANDED-NO-GATE", "EDIT-NO-TEST",                # M4.2b: the two demands
-                         "HEAD-UNMOVED", "INDEX-UNTOUCHED"}               # M4.3 J-1: the two tree anchors
+                         "HEAD-UNMOVED", "INDEX-UNTOUCHED",               # M4.3 J-1: the two tree anchors
+                         "NEW-AGENT", "AGENT-DARK-LIVE"}                  # M7.2: the host anchors
     assert rows["CROSS-SOURCE"][1:4] == ["ok", "0.000", "0.1"]
     # M4.3: the tree anchors are measured on their own negatives only; no benign
     # file carries git keys, so none is judged (J-3).

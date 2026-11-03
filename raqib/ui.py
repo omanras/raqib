@@ -43,6 +43,13 @@ watch's server it is GET /discover; in `raqib ui` it is a section of the
 page, present only when the file exists. A file that cannot be read or is
 not an inventory is an alarm on the tab (A3).
 
+Host (M7.2, ADR-0007): `raqib watch --host` serves host_page, built from
+the host watch's memory: the band (trees now, new this session, dark, last
+round at), its holes, the HOST section (each tree with image, pid, named or
+unknown, first seen, acts, endpoints and its cited lines; the host findings;
+the footprints; the rounds) and the watches. GET /discover there is the
+latest round's inventory. Same head, same CSP, no script.
+
 Safe by construction: every value from the trace, the state, the
 registry or the inventory is escaped, and each non-printable character is
 replaced by "?" (I-11), because the watched agent controls them. The only
@@ -503,6 +510,17 @@ def status(state):
                                             " silence window opens until the next line"
                                             % (gone.get("session_id"), gone.get("line"), gone.get("seq"),
                                                gone.get("at")))
+    if state.get("mode") == "host":   # M7.2: raqib watch --host
+        host = _dict(state.get("host"))
+        reader = _dict(host.get("reader"))
+        if reader.get("late"):
+            return "READER LATE", "alarm", "round %s: the reader is not back after %s s (deadline %s s); no other" \
+                " reader starts until it is" % (reader.get("round"), reader.get("seconds"), state.get("deadline_seconds"))
+        last = _dict(host.get("last_round"))
+        if not last:
+            return "WATCHING", "incomplete", "the host: no round has given an inventory yet"
+        return "WATCHING", "clean", "the host: round %s at %s, %s records read, %s tree(s) now" % (
+            last.get("round"), last.get("at"), last.get("records"), host.get("now"))
     detail = "%s lines in this trace content" % state.get("lines")
     recovered = _dict(capture.get("recovered"))
     if recovered:
@@ -1035,6 +1053,111 @@ def _discover_body(info, heading):
                            _text(c.get("src")), _text(c.get("line")), _text(c.get("text")))
                        for _, c in sorted(lines.items())))
     return out
+
+
+def host_band(state):
+    """M7.2 E5: the band items of a host watch: trees now, new this
+    session, dark, last round at (with the notifier and the holes)."""
+    host = _dict(state.get("host"))
+    last = _dict(host.get("last_round"))
+    new, dark = _int(host.get("new")) or 0, len(_list(host.get("dark")))
+    items = [("alarm" if host.get("now") else "clean", "trees now: %s" % host.get("now")),
+             ("alarm" if new else "clean", "new this session: %d" % new),
+             ("alarm" if dark else "clean", "dark: %d" % dark),
+             ("clean" if last and not last.get("error") else "incomplete",
+              "last round: %s at %s" % (last.get("round"), last.get("at")) if last else "last round: none yet")]
+    return items + band_items(state)[1:]
+
+
+def host_section(state):
+    """M7.2 E5: the HOST section, from the host watch's memory: the trees
+    with their evidence, the findings, the footprints and the rounds."""
+    host = _dict(state.get("host"))
+    out = ['<h2 id="host">Host (%d trees seen, %s now)</h2>' % (len(_list(host.get("trees"))), _text(host.get("now"))),
+           '<p class="meta">Rounds of <code>raqib discover</code> on this host every %s s; a tree that talks and acts'
+           " (a candidate) or acts with no talk seen (an act-root). Trees of the first round are history: listed, never"
+           " knocked. Every claim cites the record lines of the round&#39;s inventory (A5).</p>" % _text(
+               state.get("every_seconds"))]
+    trees = [_dict(t) for t in _list(host.get("trees"))]
+    if not trees:
+        out.append('<p class="empty">No agent seen in any round; not a clearance.</p>')
+    else:
+        out.append('<div class="scroll"><table><thead><tr><th>image</th><th>pid</th><th>class</th><th>named</th>'
+                   "<th>first seen</th><th>now</th><th>acts</th><th>endpoints</th><th>cites</th></tr></thead><tbody>")
+        for t in trees:
+            out.append('<tr%s><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td class="nowrap">%s (round %s)%s</td>'
+                       '<td>%s</td><td>%s</td><td class="wrap">%s</td><td class="wrap">%s</td></tr>' % (
+                           ' class="flag"' if t.get("knocked") else "", _text(t.get("image") or "?"),
+                           _text(t.get("pid")), _text(t.get("class")),
+                           _text("named: %s" % t.get("named_by") if t.get("named") else "unknown"),
+                           _text(t.get("first_seen")), _text(t.get("first_round")),
+                           ' <span class="tag">history</span>' if t.get("history") else "",
+                           "yes" if t.get("present") else '<span class="tag">gone</span>', _text(t.get("acts")),
+                           _text(", ".join(str(e) for e in _list(t.get("endpoints"))) or "-"),
+                           _cites_text(t.get("cites"))))
+        out.append("</tbody></table></div>")
+    findings = [_dict(f) for f in _list(host.get("findings"))]
+    out.append("<h3>Host findings (%d)</h3>" % len(findings))
+    for f in findings:
+        out.append('<div class="card"><span class="tag">%s</span> <span class="tag">%s</span> round %s: %s'
+                   ' <span class="meta">%s; %s; cites %s</span></div>' % (
+                       _text(f.get("rule_id")), _text(f.get("severity")), _text(f.get("round")), _text(f.get("summary")),
+                       _text(f.get("sample")), _text(f.get("notice")), _cites_text(f.get("cites"))))
+    if not findings:
+        out.append('<p class="empty">None.</p>')
+    fps = [_dict(f) for f in _list(host.get("footprints"))]
+    out.append("<h3>Footprints (%d)</h3>" % len(fps))
+    out.append("<ul>%s</ul>" % "".join("<li>%s (%s): %s%s %s</li>" % (
+        _text(f.get("path")), _text(f.get("agent")), _text(f.get("state")),
+        _text(", dark %s round(s) in a row" % f.get("streak")) if f.get("streak") else "", _cites_text(f.get("cites")))
+        for f in fps) if fps else '<p class="empty">None listed.</p>')
+    notes = _list(host.get("notes"))
+    if notes:
+        out.append("<h3>Notes (%d)</h3><ul>%s</ul>" % (len(notes), "".join("<li>%s</li>" % _text(n) for n in notes)))
+    rounds = [_dict(r) for r in _list(host.get("rounds_tail"))]
+    out.append("<h3>Rounds (last %d)</h3>" % len(rounds))
+    out.append("<ul>%s</ul>" % "".join("<li>round %s at %s: %s</li>" % (
+        _text(r.get("round")), _text(r.get("at")),
+        _text("reader FAILED: %s" % r.get("error")) if r.get("error") else _text(
+            "%s records, %s holes, %s; trees %s%s%s" % (
+                r.get("records"), r.get("holes"), r.get("result"), len(_list(r.get("trees"))),
+                "; new %s" % ", ".join(_list(r.get("new"))) if r.get("new") else "",
+                "; late" if r.get("late") else ""))) for r in reversed(rounds)) if rounds else
+               '<p class="empty">No round yet.</p>')
+    return out
+
+
+def host_page(state, refresh=None, watches=None, own=None):
+    """M7.2 E5: the page of `raqib watch --host`, built from its memory: the
+    band, the holes, the HOST section, the watches. Same head and CSP: no
+    script runs."""
+    word, level, detail = status(state)
+    out = _head("Raqib host watch", refresh)
+    out.append('<h1 id="top">Raqib host watch</h1>')
+    out.append('<p class="nav"><a href="/">host</a><a href="%s">inventory</a><a href="#host">trees</a>'
+               '<a href="#watches">watches</a></p>' % DISCOVER_ROUTE)
+    out += ['<div class="band">',
+            '<p><span class="badge state %s">%s</span> %s</p>' % (
+                level if level in BAND_LEVELS else "incomplete", _text(word), _badges(host_band(state))),
+            '<p class="detail">%s</p>' % _text(detail),
+            '<p class="meta">record <code>%s</code> &middot; latest inventory <code>%s</code>%s</p>' % (
+                _text(state.get("trace")), _text(state.get("inventory")),
+                " &middot; this page reloads every %d s" % refresh if refresh is not None else ""),
+            "</div>"]
+    holes = [_dict(h) for h in _list(state.get("holes"))]
+    out.append("<h2>Holes (%d)</h2>" % len(holes))
+    for h in holes:
+        out.append('<div class="card"><span class="tag">%s</span> %s <span class="meta">at %s%s</span></div>' % (
+            _text(h.get("kind")), _text(h.get("detail")), _text(h.get("at")),
+            "; %s" % _text(h.get("notice")) if h.get("notice") else ""))
+    if not holes:
+        out.append('<p class="empty">None.</p>')
+    out += host_section(state)
+    out += _watches_section(state, own, watches)
+    out.append('<p class="meta">Raqib: deterministic rules first; a model may raise suspicion, never acquit. '
+               "This page is read-only and runs no script.</p>")
+    out.append("</main></body></html>")
+    return "\n".join(out) + "\n"
 
 
 def discover_page(path, refresh=None, now=None):

@@ -456,8 +456,9 @@ def test_a1_rules_never_reach_a_model_or_the_network():
 def test_m12_e1_rule_set_v1_ships():
     rules = engine.load_catalog(CATALOG)
     assert [(r.id, r.cls) for r in rules] == [
+        ("AGENT-DARK-LIVE", "DRIFT"),   # M7.2 (raqib watch --host)
         ("DESTRUCT-CMD", "DESTRUCT"), ("DRIFT-FILES", "DRIFT"), ("EDIT-NO-TEST", "DRIFT"),
-        ("LANDED-NO-GATE", "DRIFT"), ("NET-TOOL", "NET"),
+        ("LANDED-NO-GATE", "DRIFT"), ("NET-TOOL", "NET"), ("NEW-AGENT", "SCOPE"),
         ("SCOPE-CWD-MOVED", "SCOPE"), ("SCOPE-CWD-ROOT", "SCOPE"),
         ("SCOPE-PATH", "SCOPE"), ("SECRET-OUTPUT", "SECRET")]
 
@@ -1001,6 +1002,12 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     table = adr_table_after_m43()
     before, section = adr_table()
     rules = {r.id: r for r in engine.load_catalog(CATALOG)}
+    # M7.2: NEW-AGENT and AGENT-DARK-LIVE (anchors, YAML) are not in ADR-0002's table yet: the ADRs are the
+    # Table's to write (CLAUDE.md rule 8), so the builder asks for the dated note in
+    # docs/review/2026-11-04-M7.2-questions.md (Q-5); they are held to their kind here until it is written.
+    host_rules = {rule_id: rules.pop(rule_id) for rule_id in ("NEW-AGENT", "AGENT-DARK-LIVE")}
+    assert {r.kind for r in host_rules.values()} == {"anchor"} and all(r.holes for r in host_rules.values())
+    assert "ADR-0002" in (ROOT / "docs" / "review" / "2026-11-04-M7.2-questions.md").read_text(encoding="utf-8")
     assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(adr_table_after_m53()) == 13
     assert len(adr_table_after_m42b()) == 15 and len(table) == 17
     assert set(table) == set(rules) | set(silence.RULE_KINDS) | set(cross.RULE_KINDS) | set(tree.RULE_KINDS)
@@ -1040,6 +1047,8 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     kinds = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values()) + list(
         cross.RULE_KINDS.values()) + list(tree.RULE_KINDS.values())
     assert counts == [kinds.count(kind) for kind in engine.KINDS] == [4, 7, 6]
+    assert [counts[i] + sum(1 for r in host_rules.values() if r.kind == k) for i, k in enumerate(engine.KINDS)] == [
+        4, 7, 8]   # M7.2: the gate's line (tests/test_gate.py)
     assert section.index("Ratio after M4.2b:") < section.index(M43_NOTE) < section.index("Ratio after M4.3: 4 : 7 : 6.")
 
 

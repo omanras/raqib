@@ -322,8 +322,11 @@ def live(directory, n, self_pid=SELF, sleeps=None):
 
 
 def strip_cites(node):
+    """Without where a claim was read, and (M7.2) without `started`: the
+    reader's own creation-time text, ISO UTC live (GetProcessTimes, ADR-0007
+    A-14 Q-4) and the exporter's local CreationDate in a CSV."""
     if isinstance(node, dict):
-        return {k: strip_cites(v) for k, v in node.items() if k not in ("cites", "summary", "talk")}
+        return {k: strip_cites(v) for k, v in node.items() if k not in ("cites", "summary", "talk", "started")}
     if isinstance(node, list):
         return [strip_cites(v) for v in node]
     return node
