@@ -99,6 +99,8 @@ settled here.
   `ss -tanp`. `-a` is there so listening sockets give the direction. `--save DIR`
   keeps the texts, so every cited line can be checked again (A5). Windows
   is read from exported files only in M5.0.
+  (Note 2026-11-04, ADR-0007 M7.1: superseded. Windows is read live,
+  in-process, through the OS API; exports remain the way to repeat a run.)
 - A-2 Talks: a connected TCP socket that is outbound. That is Sysmon 3
   `Initiated`; otherwise the local port is not a listening port in the same
   text; with no listening sockets, the local port is above the remote one
