@@ -54,7 +54,8 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       sources were complete and nothing was seen (not a clearance); 2 on bad
       input. An act-root (M5.0b) is a program in a user directory running a
       shell that runs a command, with no talk of its own seen; recent talk
-      (a TIME-WAIT or DNS cache row, owner unknown) is shown, never judged.
+      (a TIME-WAIT or DNS cache row, owner unknown) is shown; with no
+      candidate and no act-root it makes the run incomplete (3).
       --save DIR writes the texts and a run.json (each source's error, the
       live holes, the sample count); --from DIR replays them, incomplete if
       the run was, or reads the README's Windows loop (win-*-<k>.csv for

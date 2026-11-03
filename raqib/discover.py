@@ -30,7 +30,7 @@ two requests owns no connection, so its acts go to a talking ancestor.
 - recent talk, owner unknown: a TIME-WAIT row with no owner (Windows
   OwningProcess 0, Linux inode 0) or a DNS cache row (a name, no pid) for a
   catalog endpoint. Evidence with cites; never a candidate or an act-root
-  by itself, and it changes no exit code.
+  by itself; with neither in the run it is incomplete (exit 3, G-3).
 - the Windows window: the README export is a loop of N samples; each sample
   is one file per kind, win-process-<k>.csv, win-tcp-<k>.csv and
   win-dns-<k>.csv, merged as the Linux window merges its snapshots. The
@@ -48,7 +48,8 @@ their names under --from DIR:
                    snapshot_proc(): pid, ppid (status PPid), name (status
                    Name), argv (cmdline), cwd, env_keys (environ NAMES only:
                    values are dropped on reading and never stored), sockets
-                   (socket inodes from /proc/PID/fd). A {"snapshot": TIME,
+                   (socket inodes from /proc/PID/fd), exe (the
+                   /proc/PID/exe link; M5.0b G-2). A {"snapshot": TIME,
                    "self": PID, ...counts} line opens each snapshot.
   proc-net.txt     /proc/net/tcp and /proc/net/tcp6 as the kernel prints
                    them; "# at TIME (FILE)" opens each block. Owners come
@@ -392,7 +393,10 @@ def load_catalog(path=CATALOG):
             "act_root": _act_root_spec(doc["act_root"], bad), "path": str(path)}
 
 
-ACT_ROOT_KEYS = ("kind", "fp_budget", "user_dirs", "shells", "not_images", "evasion", "fixtures")
+ACT_ROOT_KEYS = ("kind", "status", "fp_budget", "user_dirs", "shells", "launchers", "not_images", "evasion",
+                 "fixtures")
+ACT_ROOT_STATUSES = ("ok", "disabled")   # G-8: disabling is the Table's act
+CITE = re.compile(r"([a-z-]+(?:-[1-9][0-9]*)?):([1-9][0-9]*)\Z")
 
 
 def _act_root_spec(spec, bad):
@@ -403,13 +407,15 @@ def _act_root_spec(spec, bad):
         bad("act_root", "must hold %s" % ", ".join(ACT_ROOT_KEYS))
     if spec["kind"] != "signature":
         bad("act_root.kind", "must be signature (the image path is the process's own record)")
+    if spec["status"] not in ACT_ROOT_STATUSES:
+        bad("act_root.status", "must be one of %s (G-8)" % "|".join(ACT_ROOT_STATUSES))
     if not (isinstance(spec["evasion"], list) and spec["evasion"]
             and all(isinstance(e, str) and e.strip() for e in spec["evasion"])):
         bad("act_root.evasion", "a signature must list its known evasions (ADR-0002)")
     budget = spec["fp_budget"]
     if not (isinstance(budget, (int, float)) and not isinstance(budget, bool) and 0 <= budget < 1):
         bad("act_root.fp_budget", "must be a number with 0 <= fp_budget < 1")
-    for field in ("user_dirs", "shells", "not_images"):
+    for field in ("user_dirs", "shells", "launchers", "not_images"):
         value = spec[field]
         if not (isinstance(value, list) and value
                 and all(isinstance(n, str) and n and n == n.lower() and "\\" not in n for n in value)):
@@ -426,18 +432,21 @@ def _act_root_spec(spec, bad):
     for i, item in enumerate(fixtures["positive"]):
         expect = next((k for k in ("act_root", "promoted") if isinstance(item, dict) and k in item), None)
         name = item.get(expect) if expect else None
-        if not (expect and set(item) == {"dir", expect} and relative(item["dir"])
-                and isinstance(name, str) and name and name == name.lower()):
-            bad("act_root.fixtures.positive[%d]" % i, "must be {dir: PATH, act_root: NAME} or {dir: PATH, promoted:"
-                " NAME}, PATH relative to a checkout, NAME a lower-case program name")
-        positive.append({"dir": item["dir"], "expect": expect, "name": name})
+        line = item.get("cite") if expect else None
+        if not (expect and set(item) == {"dir", expect, "cite"} and relative(item["dir"])
+                and isinstance(name, str) and name and name == name.lower()
+                and isinstance(line, str) and CITE.match(line) and split_name(CITE.match(line).group(1))):
+            bad("act_root.fixtures.positive[%d]" % i, "must be {dir: PATH, act_root: NAME, cite: SRC:LINE} or {dir:"
+                " PATH, promoted: NAME, cite: SRC:LINE}, PATH relative to a checkout, NAME a lower-case program"
+                " name, SRC:LINE a line the entry must cite (G-8)")
+        positive.append({"dir": item["dir"], "expect": expect, "name": name, "cite": line})
     for i, p in enumerate(fixtures["negative"]):
         if not relative(p):
             bad("act_root.fixtures.negative[%d]" % i, "must be a directory relative to a checkout")
     if not positive or not fixtures["negative"]:
         bad("act_root.fixtures", "a budget is measured: at least one positive and one negative")
-    return {"kind": spec["kind"], "fp_budget": budget, "user_dirs": list(spec["user_dirs"]),
-            "shells": list(spec["shells"]), "not_images": list(spec["not_images"]),
+    return {"kind": spec["kind"], "status": spec["status"], "fp_budget": budget, "user_dirs": list(spec["user_dirs"]),
+            "shells": list(spec["shells"]), "launchers": list(spec["launchers"]), "not_images": list(spec["not_images"]),
             "evasion": list(spec["evasion"]), "positive": positive, "negative": list(fixtures["negative"])}
 
 
@@ -515,8 +524,10 @@ def parse_proc(text, src="proc"):
             continue
         cwd = obj.get("cwd") if isinstance(obj.get("cwd"), str) else None
         unread = obj.get("unread") if isinstance(obj.get("unread"), list) else []
+        # G-2: the exe link places a process; argv[0], its own text, is the fallback.
+        exe = obj.get("exe") if isinstance(obj.get("exe"), str) and obj.get("exe") else (argv or [None])[0]
         records.append(_rec("proc", src, number, raw, pid=pid, ppid=ppid, argv=argv or [],
-                            image=_linux_image(argv, obj.get("name")), exe=(argv or [None])[0],
+                            image=_linux_image(argv, obj.get("name")), exe=exe,
                             cwd=cwd, env_keys=env, sockets=sockets, ts=_ts(obj.get("at")) or at,
                             unread=[str(u) for u in unread]))
     return records, problems
@@ -884,8 +895,9 @@ def _sockets(fd_dir, own=False):
 
 def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
     """A proc.txt snapshot of every process: JSON lines, ASCII. Reads status,
-    cmdline, environ (names kept, values dropped at once), the cwd link and
-    the socket inodes among the fd links; writes nothing to /proc and
+    cmdline, environ (names kept, values dropped at once), the cwd link, the
+    socket inodes among the fd links and the exe link (G-2: `exe`, null and
+    listed in `unread` when it cannot be read); writes nothing to /proc and
     touches no process (A4). Kernel threads are left out only when pid 2's
     status Name is kthreadd (B-3); a process that ended while read and one
     whose status could not be read are counted apart."""
@@ -929,6 +941,7 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
                       "cwd": get("cwd", lambda: os.readlink(os.path.join(base, "cwd"))),
                       "env_keys": get("environ", lambda: environ_keys(_read_bytes(os.path.join(base, "environ")))),
                       "sockets": get("fd", lambda: _sockets(os.path.join(base, "fd"), own=pid == self_pid)),
+                      "exe": get("exe", lambda: os.readlink(os.path.join(base, "exe"))),
                       "unread": unread, "at": at})
     meta = {"snapshot": at, "self": self_pid, "processes": len(procs), "kernel_threads": kernel,
             "kernel_parent": kernel_parent, "gone_while_read": gone, "unreadable": unreadable}
@@ -1182,10 +1195,6 @@ def window_gaps(texts, directory, declared=None):
     if declared is None:
         holes.append("no run.json beside the numbered samples: the sample count is taken as the highest found"
                       " (%d); a loop that stopped after it is not seen (the README loop writes run.json first)" % top)
-    mixed = [kind for kind in SAMPLED if kind in texts and have.get(kind)]
-    if mixed:
-        holes.append("%s read beside numbered samples of the same kind: merged as one more sample"
-                     % ", ".join(FILE_NAMES[k] for k in mixed))
     return holes
 
 
@@ -1427,6 +1436,93 @@ def _listed(image, catalog):
     return bool(image) and any(fnmatch.fnmatchcase(image, g) for g in catalog["acts"])
 
 
+# G-6: a pid whose CreationDate differs between Windows samples is two
+# processes. The later instance gets an internal key pid + REUSE * n (n >= 1)
+# while the tree is built; the inventory shows the OS pid again (_os_pids),
+# and the cites tell the instances apart.
+REUSE = 10 ** 10
+PID_FIELDS = ("pid", "root")
+PID_LISTS = ("via", "tree", "self")
+
+
+def _process_sample(src):
+    """The win-process source name of the sample a Windows record is from."""
+    kind, sample = split_name(src) or (None, None)
+    return ("win-process" if sample is None else "win-process-%d" % sample) if kind in SAMPLED else None
+
+
+def _instances(records):
+    """(records, holes): Windows records keyed by pid and CreationDate (G-6).
+    A process record without CreationDate is a hole: reuse cannot be told for
+    it, and it is merged by pid as before."""
+    dates, seen, missing = {}, {}, set()
+    for r in records:
+        if r["kind"] == "proc" and split_name(r["src"]) and split_name(r["src"])[0] == "win-process":
+            if r.get("started"):
+                if r["started"] not in dates.setdefault(r["pid"], []):
+                    dates[r["pid"]].append(r["started"])
+                seen[(r["src"], r["pid"])] = r["started"]
+            else:
+                missing.add(r["pid"])
+    holes = []
+    if missing:
+        shown = sorted(missing)
+        holes.append("%d process(es) without CreationDate: a pid reused between samples cannot be told for them,"
+                     " so they are merged by pid (G-6): pid %s%s" % (len(shown), ", ".join(map(str, shown[:20])),
+                                                                      " and %d more" % (len(shown) - 20)
+                                                                      if len(shown) > 20 else ""))
+    reused = {pid: ds for pid, ds in dates.items() if len(ds) > 1}
+    if not reused:
+        return records, holes
+    order = sorted({src for src, _ in seen}, key=_order)
+
+    def key(pid, src):
+        if pid not in reused or src is None:
+            return pid
+        started = seen.get((src, pid))
+        if started is None:      # no record of the pid in this sample: the nearest earlier sample's instance
+            earlier = [s for s in order if _order(s) <= _order(src) and (s, pid) in seen]
+            started = seen[(earlier[-1], pid)] if earlier else reused[pid][0]
+        n = reused[pid].index(started)
+        return pid + REUSE * n if n else pid
+    out = []
+    for r in records:
+        sample = _process_sample(r["src"])
+        if sample is None or r.get("pid") is None:
+            out.append(r)
+            continue
+        changed = {"pid": key(r["pid"], sample)}
+        if r["kind"] == "proc" and r.get("ppid") is not None:
+            changed["ppid"] = key(r["ppid"], sample)
+        out.append(dict(r, **changed))
+    for pid in sorted(reused):
+        where = {}
+        for (src, p), started in seen.items():
+            if p == pid:
+                where.setdefault(started, []).append(src)
+        holes.append("pid %d was reused within the window: %s; keyed by pid and CreationDate, %d processes (G-6)" % (
+            pid, "; ".join("CreationDate %s in %s" % (d, ", ".join(sorted(where[d], key=_order))) for d in reused[pid]),
+            len(reused[pid])))
+    return out, holes
+
+
+def _os_pids(node):
+    """The inventory with every internal key shown as its OS pid (G-6)."""
+    if isinstance(node, dict):
+        out = {}
+        for k, v in node.items():
+            if k in PID_FIELDS and isinstance(v, int) and not isinstance(v, bool):
+                out[k] = v % REUSE
+            elif k in PID_LISTS and isinstance(v, list):
+                out[k] = [x % REUSE if isinstance(x, int) and not isinstance(x, bool) else x for x in v]
+            else:
+                out[k] = _os_pids(v)
+        return out
+    if isinstance(node, list):
+        return [_os_pids(v) for v in node]
+    return node
+
+
 def build(parsed, catalog, window=None, holes=(), live=False):
     """The inventory (E5) of parsed sources:
     [{"name", "path", "error", "records", "problems", "lines"}]."""
@@ -1440,6 +1536,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
             cutoff = max(times) - datetime.timedelta(seconds=window)
             kept = [r for r in records if not r.get("ts") or r["ts"] >= cutoff]
             dropped, records = len(records) - len(kept), kept
+    records, reuse_holes = _instances(records)
     snapshots = [r for r in records if r["kind"] == "snapshot"]
     self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
     procs = _merge_procs(records)
@@ -1573,9 +1670,11 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     recent = _recent_talk(conns, records, talkers, names_for, catalog)
     # "Talk not seen" is an observation only where talk could be seen: with
     # no connection record read, it is a gap (A3), and act-roots are unjudged.
+    # A disabled act_root (G-8, the Table's act) judges nothing here.
+    judge = trees_read and catalog["act_root"]["status"] == "ok"
     act_roots = _act_roots(procs, talkers, self_tree, ids, catalog,
                            [s["name"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]
-                            and holds(s, "conn")]) if trees_read else []
+                            and holds(s, "conn")]) if judge else []
     footprints, dark = _footprints(records, procs, candidates, talkers, catalog, judged=trees_read,
                                    act_roots=act_roots)
     env_fp = []
@@ -1594,9 +1693,36 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     # connection source makes the run incomplete (B-2).
     incomplete = []
     holes += _holes(records, procs, conns, read)
-    if not trees_read:
+    holes += reuse_holes
+    if catalog["act_root"]["status"] != "ok":
+        holes.append("act-root not judged: act_root has status %s in %s (G-8, A6)"
+                     % (catalog["act_root"]["status"], catalog["path"]))
+    elif not trees_read:
         holes.append("act-root not judged: no process source and connection source both hold records, so a"
                      " tree's talk cannot be told from a gap")
+    # G-4: an image path the export left blank places nothing.
+    blank = sorted({p["pid"] % REUSE for p in procs.values() if p["pid"] % REUSE not in (0, 4) and not p["exe"]
+                    and any(split_name(r["src"])[0] == "win-process" for r in p["recs"] if split_name(r["src"]))})
+    if blank:
+        holes.append("%d process(es) without image path (export not elevated?): act-root cannot place them: pid %s%s"
+                     % (len(blank), ", ".join(map(str, blank[:20])), " and %d more" % (len(blank) - 20)
+                        if len(blank) > 20 else ""))
+    # G-2: an exe link that could not be read places by argv[0] only.
+    unplaced = [p for p in sorted(procs.values(), key=lambda q: q["pid"])
+                if any("exe" in (r.get("unread") or []) for r in p["recs"])]
+    if unplaced:
+        holes.append("act-root could not place %d process(es) (exe unreadable): their argv[0], which a process writes"
+                     " itself, is used instead: %s%s" % (
+                         len(unplaced), ", ".join("pid %d (%s)" % (p["pid"] % REUSE, _cite_text(_cites(p["recs"], 1)))
+                                                  for p in unplaced[:20]),
+                         " and %d more" % (len(unplaced) - 20) if len(unplaced) > 20 else ""))
+    # G-10: an unnumbered file beside numbered samples of its kind, from --from or --read.
+    mixed = [k for k in SAMPLED if any(s["kind"] == k and s["sample"] is None for s in parsed)
+             and any(s["kind"] == k and s["sample"] is not None for s in parsed)]
+    if mixed:
+        holes.append("%s read beside numbered samples of the same kind: merged as one more sample"
+                     % ", ".join(file_name(next(s["name"] for s in parsed if s["kind"] == k and s["sample"] is None))
+                                 for k in mixed))
     for r in records:
         if r["kind"] == "hole":
             holes.append("%s:%d %s" % (r["src"], r["line"], r["note"]))
@@ -1614,8 +1740,9 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     for s in parsed:
         if not s["text_read"]:
             if s["sample"] is not None:
-                holes.append("sample %d: source %s not read (%s): what it would hold in that sample is not seen"
-                             % (s["sample"], s["name"], s["error"] or "no text"))
+                holes.append("sample %d: source %s not read (%s): what it would hold in that sample is not seen;"
+                             " the run is incomplete (exit 3 unless an alarm)" % (s["sample"], s["name"],
+                                                                                 s["error"] or "no text"))
             continue
         if s["kind"] == "sysmon":
             if not holds(s, "proc"):
@@ -1637,7 +1764,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
         failed = [p for p in sorted(procs.values(), key=lambda q: q["pid"])
                   if any(field in (r.get("unread") or []) for r in p["recs"])]
         if failed:
-            shown = ", ".join("pid %d (%s)" % (p["pid"], _cite_text(_cites(p["recs"], 1))) for p in failed[:20])
+            shown = ", ".join("pid %d (%s)" % (p["pid"] % REUSE, _cite_text(_cites(p["recs"], 1))) for p in failed[:20])
             holes.append("%d process(es) with %s: %s%s" % (len(failed), what, shown,
                                                             " and %d more" % (len(failed) - 20) if len(failed) > 20 else ""))
     if unowned:
@@ -1671,6 +1798,10 @@ def build(parsed, catalog, window=None, holes=(), live=False):
         alarms.append("%d AGENT-DARK footprint(s)" % len(dark))
     if problems:
         alarms.append("%d line(s) could not be read (A3)" % len(problems))
+    if recent and not candidates and not act_roots:
+        # G-3 (B-2): talk to a model endpoint whose talker is not seen is a gap, never none-seen.
+        incomplete.append("%d recent-talk line(s) to a model endpoint, owner unknown, and no candidate or act-root:"
+                          " the talker is not seen" % len(recent))
     if not read & set(PROCESS_SOURCES):
         incomplete.append("no process source read (%s): no tree can be built" % ", ".join(PROCESS_SOURCES))
     if not read & set(CONNECTION_SOURCES):
@@ -1683,7 +1814,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     result = "alarm" if alarms else "incomplete" if incomplete else "none-seen"
     times = sorted(r["ts"] for r in records if r.get("ts"))
     connections_from = [s["path"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]]
-    return {
+    return _os_pids({
         "tool": "raqib discover (ADR-0004)",
         "live": live,
         "catalog": catalog["path"],
@@ -1713,7 +1844,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
         "complete": not incomplete,
         "result": result,
         "exit": EXIT[result],
-    }
+    })
 
 
 def _descendant_candidates(procs, pid, acts):
@@ -1728,7 +1859,8 @@ def _recent_talk(conns, records, talkers, names_for, catalog):
     DNS record gives that IP - and a DNS cache row (no pid) for a catalog host
     whose IPs no process is seen to talk to. One line per remote, or per host
     name for a DNS row alone; cited (A5); never a candidate or an act-root by
-    itself, and no alarm."""
+    itself, and no alarm (with neither in the run, build() makes it incomplete,
+    G-3)."""
     live = {c["raddr"] for cs in talkers.values() for c in cs}
     groups = {}
     for c in conns:
@@ -1784,26 +1916,40 @@ def _user_dir(path, globs):
     return next((g for g in globs if fnmatch.fnmatchcase(norm, g)), None)
 
 
+def _helper(p):
+    """An Electron/Chromium helper: `--type=` in its argv (G-1b)."""
+    return any(a.startswith("--type=") for a in p["argv"])
+
+
+def _norm_path(path):
+    return re.sub(r"\A/(?:/\?|\?\?)/", "", (path or "").strip().strip('"').replace("\\", "/").lower())
+
+
 def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
-    """E3, the act-root class (signature; the catalog's act_root block): a
-    process P whose image path is under a user directory, whose images are
-    no listed shell or system image, that has a listed shell S as a child
-    with a command (a process that is no listed shell) below S, and that owns
-    no talking connection in any sample read. The reader's own tree is never
-    evidence. Talk in a later sample makes P a talker, so it is a candidate
-    instead (the window merge); recent talk never promotes it."""
+    """E3, the act-root class (signature; the catalog's act_root block), as
+    narrowed by G-1: a process P whose image path is under a user directory,
+    none of whose names is a listed shell or system image, whose own parent
+    is a listed shell or launcher (a terminal host or multiplexer), that
+    carries no `--type=`, whose child S is a listed shell with a command
+    below it - a process that is no listed shell, reached through no
+    `--type=` hop, whose image is not under P's own directory - and that
+    owns no talking connection in any sample read. The reader's own tree is
+    never evidence. Talk in a later sample makes P a talker, so it is a
+    candidate instead (the window merge); recent talk never promotes it."""
     spec = catalog["act_root"]
     shells, never = set(spec["shells"]), set(spec["not_images"])
+    parents = shells | set(spec["launchers"])
     children = {}
     for q in procs.values():
         if q["ppid"] is not None and q["ppid"] != q["pid"]:
             children.setdefault(q["ppid"], []).append(q["pid"])
 
     def below(pid):
+        """Descendants reached through no --type= helper, not the reader's tree."""
         out, todo, seen = [], [pid], {pid}
         while todo:
             for c in sorted(children.get(todo.pop(0), [])):
-                if c not in seen and c not in self_tree:
+                if c not in seen and c not in self_tree and not _helper(procs[c]):
                     seen.add(c)
                     out.append(c)
                     todo.append(c)
@@ -1811,26 +1957,32 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
 
     def shell(p):
         return any(i in shells for i in p["images"])
+
+    def outside(d, root):
+        own = _norm_path(root["exe"]).rpartition("/")[0]
+        return not (own and _norm_path(procs[d]["exe"]).startswith(own + "/"))
     chains = {}
     for pid in sorted(procs):
         s = procs[pid]
-        if pid in self_tree or not shell(s) or s["ppid"] not in procs or s["ppid"] == pid:
+        if pid in self_tree or not shell(s) or _helper(s) or s["ppid"] not in procs or s["ppid"] == pid:
             continue
         parent = procs[s["ppid"]]
         if parent["pid"] in self_tree or shell(parent):
             continue
         under = below(pid)
-        if any(not shell(procs[d]) for d in under):
+        if any(not shell(procs[d]) and outside(d, parent) for d in under):
             chains.setdefault(parent["pid"], []).append((pid, under))
     roots = []
     for pid in sorted(chains):
         p = procs[pid]
         place = _user_dir(p["exe"], spec["user_dirs"])
-        if pid in talkers or any(i in never for i in p["images"]) or place is None:
+        up = procs.get(p["ppid"]) if p["ppid"] is not None else None
+        if pid in talkers or any(i in never for i in p["images"]) or place is None or _helper(p) \
+                or up is None or not any(i in parents for i in up["images"]):
             continue
         acts, heads = [], []
         for s, under in chains[pid]:
-            commands = sorted({procs[d]["image"] or "?" for d in under if not shell(procs[d])})
+            commands = sorted({procs[d]["image"] or "?" for d in under if not shell(procs[d]) and outside(d, p)})
             heads.append({"pid": s, "image": procs[s]["image"], "below": len(under), "commands": commands,
                           "cites": _cites(procs[s]["recs"], 1)})
             for q in [s] + under:
@@ -1852,12 +2004,14 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
             "attributed_to": ids.get(owner) if owner is not None else None,
             "talking_ancestor": ({"pid": owner, "image": procs[owner]["image"] if owner in procs else None,
                                   "cites": _cites(talkers[owner], 1)} if owner is not None else None),
-            "talk": "not seen: pid %d owns no talking connection in %s" % (pid, ", ".join(conn_names) or "no source"),
+            "launched_by": {"pid": up["pid"], "image": up["image"], "cites": _cites(up["recs"], 1)},
+            "talk": "not seen: pid %d owns no talking connection in %s" % (pid % REUSE, ", ".join(conn_names)
+                                                                           or "no source"),
             "seen": {"first": iso(min(times)) if times else None, "last": iso(max(times)) if times else None,
                      "basis": "observed times in the cited records" if times
                      else "no observation time in the records (a snapshot without time)"},
             "summary": "act-root, talk not seen: pid %d %s (%s) runs %s -> ... -> %s" % (
-                pid, p["image"] or "?", p["exe"] or "-", first["image"] or "?", ", ".join(first["commands"]))})
+                pid % REUSE, p["image"] or "?", p["exe"] or "-", first["image"] or "?", ", ".join(first["commands"]))})
     index = {r["pid"]: "A%d" % i for i, r in enumerate(roots, start=1)}
     for r in roots:
         r["id"] = index[r["pid"]]
@@ -1886,7 +2040,7 @@ def _handoff(pid, p, catalog):
     return {"suggested": "os", "root": pid, "cites": cites,
             "why": "%s: an os source rooted at pid %d (M5.3)" % (
                 "the path matches Claude Desktop (%s), which offers no hooks" % ", ".join(desktop) if desktop
-                else "neither a hook image nor marked proxy_capable", pid)}
+                else "neither a hook image nor marked proxy_capable", pid % REUSE)}
 
 
 def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=()):
@@ -1955,7 +2109,8 @@ def _holes(records, procs, conns, kinds):
         holes.append("Linux: no offline name record in M5.0, so endpoints match by IP network and"
                      " loopback port only (ADR-0004)")
         holes.append("Linux: argv[0] and status Name are written by the process itself, and a copied"
-                     " shell takes any name; /proc/PID/exe is not read in M5.0")
+                     " shell takes any name; the /proc/PID/exe link places a process for act-root (G-2), the"
+                     " names still come from argv[0]")
     if kinds & {"win-process", "win-tcp", "win-dns", "sysmon"} and "proc" not in kinds:
         holes.append("Windows: no process environment is read, so *_API_KEY names are not seen")
     if not any(r["kind"] == "file" for r in records):
@@ -1970,7 +2125,7 @@ def _holes(records, procs, conns, kinds):
     orphans = sorted({c["pid"] for c in conns if talks(c) and c["pid"] not in procs})
     if orphans:
         holes.append("%d talking pid(s) with no process record (started after the snapshot, or"
-                     " gone): %s" % (len(orphans), ", ".join(str(p) for p in orphans[:10])))
+                     " gone): %s" % (len(orphans), ", ".join(str(p % REUSE) for p in orphans[:10])))
     if any(c.get("basis") == "ports" for c in conns):
         holes.append("no listening sockets in the connection text: direction guessed from port order"
                      " (ephemeral local port above the remote one = outbound)")
@@ -2012,7 +2167,8 @@ def check(catalog, root):
     class fired on it; otherwise it is unmeasured, never clean (A3). A
     ValueError for a fixture that cannot be read."""
     spec = catalog["act_root"]
-    negatives = [{"dir": d, "expect": None, "name": None} for d in spec["negative"]]
+    measuring = dict(catalog, act_root=dict(spec, status="ok"))    # measured whatever its status (G-8, as rules)
+    negatives = [{"dir": d, "expect": None, "name": None, "cite": None} for d in spec["negative"]]
     rows = []
     for role, items in (("positive", spec["positive"]), ("negative", negatives)):
         for item in items:
@@ -2022,22 +2178,24 @@ def check(catalog, root):
             texts, holes = read_dir(path)
             if not texts:
                 raise ValueError("act_root fixture %s holds no source text" % item["dir"])
-            inv = run(texts, catalog, holes=holes)
+            inv = run(texts, measuring, holes=holes)
             w = inv["window"]
-            row = {"dir": item["dir"], "role": role, "expect": item["expect"], "name": item["name"],
+            row = {"dir": item["dir"], "role": role, "expect": item["expect"], "name": item["name"], "cite": item["cite"],
                    "samples": len(w["samples_read"]) or w["snapshots"] or None, "result": inv["result"],
                    "exit": inv["exit"], "complete": inv["complete"],
                    "candidates": [{"id": c["id"], "pid": c["pid"], "image": c["image"]} for c in inv["candidates"]],
                    "act_roots": [{"id": r["id"], "pid": r["pid"], "image": r["image"]} for r in inv["act_roots"]]}
-            images = {"candidates": {c["image"] for c in row["candidates"]},
-                      "act_roots": {r["image"] for r in row["act_roots"]}}
             if item["expect"] == "act_root":
-                row["found"] = item["name"] in images["act_roots"]
-                row["verdict"] = "%s: an act-root %s" % ("found" if row["found"] else "MISSED", item["name"])
+                entries = [r for r in inv["act_roots"] if r["image"] == item["name"]]
+                row["found"] = any(item["cite"] in _cite_keys(r) for r in entries)
+                row["verdict"] = "%s: an act-root %s citing %s" % ("found" if row["found"] else "MISSED", item["name"],
+                                                                  item["cite"])
             elif item["expect"] == "promoted":
-                row["found"] = item["name"] in images["candidates"] and item["name"] not in images["act_roots"]
-                row["verdict"] = "%s: %s a candidate, not an act-root" % ("found" if row["found"] else "MISSED",
-                                                                          item["name"])
+                entries = [c for c in inv["candidates"] if c["image"] == item["name"]]
+                row["found"] = (any(item["cite"] in _cite_keys(c) for c in entries)
+                                and not any(r["image"] == item["name"] for r in inv["act_roots"]))
+                row["verdict"] = "%s: %s a candidate citing %s, not an act-root" % (
+                    "found" if row["found"] else "MISSED", item["name"], item["cite"])
             else:
                 row["measured"] = {k: inv["complete"] or bool(row[k]) for k in ("candidates", "act_roots")}
                 row["verdict"] = "%s%s" % ("measured" if inv["complete"] else "UNMEASURED (incomplete)",
@@ -2055,18 +2213,35 @@ def check(catalog, root):
         verdict = "positive-missed"
     elif not measured:
         verdict = "unmeasured"
+    elif spec["status"] == "disabled":
+        verdict = "disabled"
     elif fp > spec["fp_budget"]:
         verdict = "over-budget"
     else:
         verdict = "ok"
-    act = {"class": "act-root", "kind": "signature", "fp_budget": spec["fp_budget"], "fp_rate": fp,
+    act = {"class": "act-root", "kind": "signature", "status": spec["status"], "fp_budget": spec["fp_budget"], "fp_rate": fp,
            "fired": fired, "measured": measured, "unmeasured": unmeasured,
            "positives": len(positives), "found": sum(1 for r in positives if r["found"]), "verdict": verdict}
     fp, measured, unmeasured, fired = rate("candidates")
-    anchor = {"class": "candidate", "kind": "anchor", "fp_budget": None, "fp_rate": fp, "fired": fired,
+    anchor = {"class": "candidate", "kind": "anchor", "status": None, "fp_budget": None, "fp_rate": fp, "fired": fired,
               "measured": measured, "unmeasured": unmeasured, "verdict": "no-budget"}
     return {"tool": "raqib discover --check", "catalog": catalog["path"], "root": root, "fixtures": rows,
-            "classes": [act, anchor], "exit": 0 if verdict == "ok" else 1}
+            "classes": [act, anchor], "exit": 0 if verdict in ("ok", "disabled") else 1}
+
+
+def _cite_keys(node):
+    """Every SRC:LINE an inventory entry cites, at any depth."""
+    out = set()
+    if isinstance(node, dict):
+        for c in node.get("cites") or []:
+            out.add("%s:%s" % (c["src"], c["line"]))
+        for v in node.values():
+            if isinstance(v, (dict, list)):
+                out |= _cite_keys(v)
+    elif isinstance(node, list):
+        for v in node:
+            out |= _cite_keys(v)
+    return out
 
 
 def render_check(report):
@@ -2074,14 +2249,14 @@ def render_check(report):
         return "%d%s" % (len(items), " (%s)" % ",".join(sorted({i["image"] or "?" for i in items})) if items else "")
     width = max([len(r["dir"]) for r in report["fixtures"]] + [len("fixture")])
     out = ["raqib discover --check (A6): candidates and act-roots per fixture; catalog %s" % report["catalog"],
-           "%-*s  %-8s  %-7s  %-10s  %-26s  %-14s  %s" % (width, "fixture", "role", "samples", "result",
+           "%-*s  %-8s  %-7s  %-10s  %-36s  %-14s  %s" % (width, "fixture", "role", "samples", "result",
                                                          "candidates", "act-roots", "verdict")]
     for r in report["fixtures"]:
-        out.append("%-*s  %-8s  %-7s  %-10s  %-26s  %-14s  %s" % (
+        out.append("%-*s  %-8s  %-7s  %-10s  %-36s  %-14s  %s" % (
             width, r["dir"], r["role"], r["samples"] or "-", "%s(%d)" % (r["result"], r["exit"]),
             names(r["candidates"]), names(r["act_roots"]), r["verdict"]))
-    out += ["", "%-10s  %-9s  %-15s  %-7s  %-9s  %s" % ("class", "kind", "verdict", "fp_rate", "fp_budget",
-                                                         "fixtures")]
+    out += ["", "%-10s  %-9s  %-8s  %-15s  %-7s  %-9s  %s" % ("class", "kind", "status", "verdict", "fp_rate",
+                                                                "fp_budget", "fixtures")]
     for c in report["classes"]:
         rate = "-" if c["fp_rate"] is None else "%.3f" % c["fp_rate"]
         budget = "none" if c["fp_budget"] is None else "%g" % c["fp_budget"]
@@ -2090,9 +2265,10 @@ def render_check(report):
             tail = "positives: %d of %d found; %s" % (c["found"], c["positives"], tail)
         else:
             tail += "; the anchor declares no budget (ADR-0004 B-8)"
-        out.append("%-10s  %-9s  %-15s  %-7s  %-9s  %s" % (c["class"], c["kind"], c["verdict"], rate, budget, tail))
-    out.append("RESULT: %s (exit %d)" % ("OK" if report["exit"] == 0 else report["classes"][0]["verdict"].upper(),
-                                        report["exit"]))
+        out.append("%-10s  %-9s  %-8s  %-15s  %-7s  %-9s  %s" % (c["class"], c["kind"], c["status"] or "-",
+                                                                 c["verdict"], rate, budget, tail))
+    verdict = report["classes"][0]["verdict"]
+    out.append("RESULT: %s (exit %d)" % ("OK" if verdict == "ok" else verdict.upper(), report["exit"]))
     return "\n".join(_safe(line) for line in out) + "\n"
 
 
@@ -2172,6 +2348,8 @@ def render_text(inv):
         out.append("      cwd %s; seen %s .. %s (%s)  %s" % (r["cwd"] or "-", r["seen"]["first"] or "-",
                                                             r["seen"]["last"] or "-", r["seen"]["basis"],
                                                             _cite_text(r["cites"])))
+        out.append("      launched by pid %d %s (a listed shell or launcher)  %s" % (
+            r["launched_by"]["pid"], r["launched_by"]["image"] or "?", _cite_text(r["launched_by"]["cites"])))
         out.append("      talk %s" % r["talk"])
         t = r["talking_ancestor"]
         if t:
@@ -2213,7 +2391,8 @@ def render_text(inv):
             for x in group:
                 lines[(x["src"], x["line"])] = x["text"]
     for r in act_roots:
-        groups = [r["cites"]] + [h["cites"] for h in r["chains"]] + [a["cites"] for a in r["acts"][:ACTS_SHOWN]]
+        groups = [r["cites"], r["launched_by"]["cites"]] + [h["cites"] for h in r["chains"]] + \
+            [a["cites"] for a in r["acts"][:ACTS_SHOWN]]
         groups += [r["talking_ancestor"]["cites"]] if r["talking_ancestor"] else []
         for x in (x for g in groups for x in g):
             lines[(x["src"], x["line"])] = x["text"]

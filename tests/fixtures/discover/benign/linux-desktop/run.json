@@ -3,7 +3,7 @@
     "live /proc/net/tcp, /proc/net/tcp6"
   ],
   "holes": [],
-  "note": "M5.0b fixture SYNTHETIC (not captured from a machine) - a benign Linux desktop: GNOME, a terminal, VS Code from its package with a terminal running make, Firefox; host `host`; in the shape of the run.json that --save writes. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only",
+  "note": "M5.0b fixture SYNTHETIC (not captured from a machine) - a benign Linux desktop: GNOME, a terminal, VS Code from its package and a JetBrains IDE under ~/.local, each with a terminal running make -> cc, Firefox; host `host`; in the shape of the run.json that --save writes. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only",
   "raqib": "discover-run",
   "samples": 2,
   "sources": {

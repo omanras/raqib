@@ -160,22 +160,27 @@ candidate comes with its cited lines and a suggested capture source
 in the window. Discover is offline and read-only, and it never signals or
 attaches to a process.
 
-**Act-roots and recent talk (M5.0b, ADR-0004 Amendment F).** An agent
+**Act-roots and recent talk (M5.0b, ADR-0004 Amendments F, G).** An agent
 between two requests owns no connection, so its acts go to whatever
 ancestor talks (the Kimi field test: the desktop shell). Two more lines
 name it:
 - **act-root, talk not seen:** a program whose image is under a user
-  directory (`Users\<name>`, AppData, `~`, `/home`), that is not a listed
-  shell or system image, with a shell as a child that runs a command, and
-  no connection of its own in any sample. It is weaker than a candidate,
-  and a signature (the catalog's `act_root` block, with its evasions:
-  an install under Program Files, a shell-looking name, talking through a
-  child). Exit 1 all the same. A later sample in which it talks makes it a
-  candidate (the samples are merged).
+  directory (`Users\<name>`, AppData, `/home`, `/root`), that is not a
+  listed shell or system image, started from a shell or a terminal host
+  (not from explorer, a desktop session or an IDE), that is no
+  Electron/Chromium helper (`--type=`), with a shell as a child that runs a
+  command from outside the program's own directory, and no connection of
+  its own in any sample. On Linux the image path is the `/proc/PID/exe`
+  link, else argv[0]. It is weaker than a candidate, and a signature (the
+  catalog's `act_root` block, with its `status` and evasions: an install
+  under Program Files, a shell-looking name, a GUI launcher, a `--type=`
+  argument, talking through a child, ...). Exit 1 all the same. A later
+  sample in which it talks makes it a candidate (the samples are merged).
 - **recent talk, owner unknown:** a TIME-WAIT row with no owner (Windows
   OwningProcess 0, Linux inode 0) or a DNS cache row (a name, no pid) for
   a catalog endpoint. Shown with its cited lines; never a candidate or an
-  act-root by itself, and it changes no exit code.
+  act-root by itself. With no candidate and no act-root the talker is not
+  seen, so the run is incomplete (exit 3).
 ```bash
 raqib discover                      # Linux: /proc and /proc/net/tcp (one snapshot)
 raqib discover --window 30 --save run1   # sample 30 s; keep the texts read and a run.json with the sample count
@@ -190,7 +195,9 @@ with a minimal environment. The output names the path it read.
 
 On Windows, discover reads exported text, not the live host. In
 PowerShell, in an empty folder, a loop of `$N` samples `$T` seconds apart
-(default 6 and 10; `$N = 1` is one sample):
+(default 6 and 10; `$N = 1` is one sample). Run it from an elevated
+PowerShell when you can: without it, other users' and system processes
+have no image path, and each is counted in a hole.
 ```powershell
 $N = 6; $T = 10
 [ordered]@{raqib = 'discover-run'; version = 1; export = 'windows'; samples = $N; seconds_apart = $T} | ConvertTo-Json | Out-File -Encoding ascii run.json
@@ -201,27 +208,35 @@ foreach ($k in 1..$N) {
     if ($k -lt $N) { Start-Sleep -Seconds $T }
 }
 Get-ChildItem -Force C:\Users\*\, C:\Users\*\AppData\Roaming\Claude\ | ForEach-Object FullName | Out-File -Encoding utf8 footprints.txt
-wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml /rd:true /c:5000 > sysmon.xml   # newest 5000; if Sysmon is installed
+```
+If Sysmon is installed, export its newest 5000 events into the same folder:
+```powershell
+wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml /rd:true /c:5000 > sysmon.xml
 ```
 Then `raqib discover --from C:\path\to\that\folder`. Every sample is read
-and merged by pid, as the Linux window merges its snapshots. `run.json`
-says how many samples there should be: a sample without its
-`win-process-<k>.csv` or `win-tcp-<k>.csv` is a hole and makes the run
-incomplete. The single files of M5.0 (`win-process.csv`, `win-tcp.csv`,
-`win-dns.csv`) are still read.
+and merged, as the Linux window merges its snapshots: a process is its pid
+and its CreationDate, so a pid reused between samples is two processes.
+`run.json` says how many samples there should be: a sample without its
+`win-process-<k>.csv` or `win-tcp-<k>.csv` is a hole, and the run is
+incomplete (exit 3 unless an alarm). The single files of M5.0
+(`win-process.csv`, `win-tcp.csv`, `win-dns.csv`) are still read.
 
 **What a candidate is not.** It is a tree that talks and has a child, not
 proof of an agent. IDE terminals, package managers running install
 scripts, CI runners, browsers with helper processes and updaters can all
 be candidates. Talk over loopback counts too: an agent's local model is
 on loopback. First fp numbers (M5.0b), measured by `raqib discover
---check` on two synthetic benign exports (a Linux desktop with an IDE
-terminal; a Windows desktop with an editor under
-`AppData\Local\Programs` and a browser): candidates fire on 2 of 2, and
-the anchor still declares no budget; act-root declares fp_budget 0.25
-and fires on 0 of 2. `--check` fails when act-root is over its budget
-or misses a positive (the synthetic Kimi export). The candidate budget
-is set from field runs, not guessed.
+--check` on two synthetic benign exports. The Linux desktop: a GNOME
+terminal running vim; VS Code from its package and a JetBrains IDE under
+`~/.local`, each with a terminal running make -> cc; JetBrains Toolbox;
+Firefox. The Windows desktop: explorer, OneDrive, VS Code under
+`AppData\Local\Programs` with its extension host running git and its
+terminal running a command (powershell -> node), and Edge. On these,
+candidates fire on 2 of 2, and the anchor still declares no budget;
+act-root declares fp_budget 0.25 and fires on 0 of 2. `--check` fails
+when act-root is over its budget or misses a positive (the synthetic Kimi
+exports and a Linux agent under `~/.local/bin`), and reports its status.
+The candidate budget is set from field runs, not guessed.
 
 **What it cannot see.** Every run prints the first five as holes; the
 others are printed when they apply to the sources read:
@@ -242,8 +257,9 @@ others are printed when they apply to the sources read:
 - **no names on Linux:** Linux keeps no DNS name record offline.
 - **no environment on Windows:** Windows exports carry no process
   environment.
-- **window merge:** samples are merged by pid; a pid reused between two
-  samples joins two processes.
+- **window merge:** samples are merged by pid, and on Windows by pid and
+  CreationDate; a Linux pid reused between snapshots, or a Windows process
+  without CreationDate, joins two processes.
 
 **Exit codes.** An empty result still prints the window, the records read
 per source, and every hole.
@@ -252,16 +268,17 @@ per source, and every hole.
 - **3 (incomplete):** a process or connection source failed (even in one
   sample, and also when ss stood in for /proc/net/tcp), held no record
   (Sysmon: no event 1, or no event 3), or left a talking line without an
-  owner, or a Windows sample is missing. A missing footprint listing is
-  only a hole. `--save` writes a `run.json` beside the texts, so `--from`
+  owner, or a Windows sample is missing, or there is recent talk with no
+  candidate and no act-root: incomplete (exit 3 unless an alarm). A
+  missing footprint listing is only a hole. `--save` writes a `run.json` beside the texts, so `--from`
   replays an incomplete run as incomplete.
 - **0:** every process and connection source was read and complete, and
   nothing was seen. That is not a clearance.
 
 Fixtures are in `tests/fixtures/discover/`. The Linux ones are real and
 redacted, made by `capture.py` there; the Windows ones are synthetic; the
-M5.0b ones (`kimi/`, `benign/`) are synthetic, made by `synthetic.py`
-there.
+M5.0b ones (`kimi/`, `benign/`, `linux-agent/`) are synthetic, made by
+`synthetic.py` there.
 
 ## More
 - **[docs/CONSTITUTION.md](docs/CONSTITUTION.md)**: the nine articles

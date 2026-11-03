@@ -1,0 +1,8 @@
+# M5.0b fixture SYNTHETIC (not captured from a machine) - a Python agent shipped as one executable at ~/.local/bin/agent, started from bash, running bash -> curl; host `host`; /proc/net/tcp and /proc/net/tcp6 as the kernel prints them; the TIME-WAIT row is the agent's closed request to the catalog's Anthropic network. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+# at 2026-11-03T09:20:00.000Z (/proc/net/tcp)
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 3500007F:0035 00000000:0000 0A 00000000:00000000 00:00000000 00000000   991        0 30001 1 0000000000000000 20 4 30 10 -1
+   1: 140200C0:C79C 786433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 51001 1 0000000000000000 20 4 30 10 -1
+   2: 140200C0:C792 0A684FA0:01BB 06 00000000:00000000 00:00000000 00000000     0        0 0 1 0000000000000000 20 4 30 10 -1
+# at 2026-11-03T09:20:00.000Z (/proc/net/tcp6)
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode

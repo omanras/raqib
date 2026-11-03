@@ -51,9 +51,12 @@ def inv_of(catalog=CATALOG, errors=None, **texts):
     return discover.run({k.replace("_", "-"): ("<%s>" % k, v, errors.get(k)) for k, v in texts.items()}, catalog)
 
 
-def proc(pid, ppid, argv, env=None, cwd="/w", at=AT, sockets=None):
-    return json.dumps({"pid": pid, "ppid": ppid, "name": argv[0].rsplit("/", 1)[-1][:15], "argv": argv,
-                       "cwd": cwd, "env_keys": env, "sockets": sockets, "at": at})
+def proc(pid, ppid, argv, env=None, cwd="/w", at=AT, sockets=None, exe=None, unread=None):
+    obj = {"pid": pid, "ppid": ppid, "name": argv[0].rsplit("/", 1)[-1][:15], "argv": argv,
+           "cwd": cwd, "env_keys": env, "sockets": sockets, "at": at}
+    if exe is not None or unread is not None:
+        obj.update(exe=exe, unread=unread or [])
+    return json.dumps(obj)
 
 
 def procs(*lines, self_pid=None, **counts):
@@ -1084,13 +1087,15 @@ def test_readme_states_the_rulings():
     assert ".git/hooks" in flat                                              # D8
 
 
-# --- M5.0b (HANDOFF E1-E5; ADR-0004 Amendment F) ----------------------------------------
+# --- M5.0b (HANDOFF E1-E5; ADR-0004 Amendments F, G) -------------------------------------
 
 KIMI1, KIMI2 = FIX / "kimi" / "one-sample", FIX / "kimi" / "two-samples"
 BENIGN_LINUX, BENIGN_WINDOWS = FIX / "benign" / "linux-desktop", FIX / "benign" / "windows-desktop"
-M50B = (KIMI1, KIMI2, BENIGN_LINUX, BENIGN_WINDOWS)
+AGENT = FIX / "linux-agent"
+M50B = (KIMI1, KIMI2, BENIGN_LINUX, BENIGN_WINDOWS, AGENT)
 DOC_NETS = [discover.ipaddress.ip_network(n) for n in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24",
                                                          "127.0.0.0/8", "0.0.0.0/32", "::/128")]
+DOC_NETS += [n["net"] for n in CATALOG["networks"]]      # the catalog's own endpoint networks
 
 
 def copy_fixture(src, tmp_path, name="fx"):
@@ -1099,12 +1104,22 @@ def copy_fixture(src, tmp_path, name="fx"):
     return dst
 
 
+DATE = "11/3/2026 9:00:00 AM"
+
+
+def win_row(row):
+    """A Win32_Process CSV row of (pid, ppid, name, path[, command line[, CreationDate]]); "" leaves a field blank."""
+    pid, ppid, name, path = row[:4]
+    cmdline, date = (list(row[4:]) + ["", DATE])[:2] if len(row) > 4 else ("", DATE)
+    return ",".join('"%s"' % str(v).replace('"', '""') if v else "" for v in (pid, ppid, name, path, cmdline, date)) + "\n"
+
+
 def win_texts(*samples, dns=None):
     """{name: (path, text, None)} for Windows samples given as (k, process rows, tcp rows)."""
     texts = {}
     for k, procs_rows, tcp_rows in samples:
         texts["win-process-%d" % k] = ("<p%d>" % k, '"ProcessId","ParentProcessId","Name","ExecutablePath",'
-                                       '"CommandLine"\n' + "".join('"%s","%s","%s","%s",""\n' % r for r in procs_rows),
+                                       '"CommandLine","CreationDate"\n' + "".join(win_row(r) for r in procs_rows),
                                        None)
         texts["win-tcp-%d" % k] = ("<t%d>" % k, '"LocalAddress","LocalPort","RemoteAddress","RemotePort","State",'
                                    '"OwningProcess"\n' + "".join('"%s","%s","%s","%s","%s","%s"\n' % r for r in tcp_rows),
@@ -1255,14 +1270,17 @@ def test_m50b_e1_cli_save_writes_the_sample_count(tmp_path, monkeypatch):
 
 def test_m50b_e1_readme_windows_export_is_the_loop():
     section = README.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
-    block = section.split("```powershell\n", 1)[1].split("```", 1)[0]
-    assert block.startswith("$N = 6; $T = 10\n")
+    block, sysmon = [b.split("```", 1)[0] for b in section.split("```powershell\n")[1:3]]
+    assert block.startswith("$N = 6; $T = 10\n") and "wevtutil" not in block                  # G-10
+    assert sysmon.startswith("wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml /rd:true /c:5000 > sysmon.xml")
+    assert "If Sysmon is installed, export its newest 5000 events" in section
+    assert "Run it from an elevated\nPowerShell when you can" in section                        # G-4
     assert "samples = $N" in block and "Out-File -Encoding ascii run.json" in block
     assert "foreach ($k in 1..$N) {" in block and "if ($k -lt $N) { Start-Sleep -Seconds $T }" in block
     for kind in ("win-process", "win-tcp", "win-dns"):
         assert '"%s-$k.csv"' % kind in block
         assert discover.split_name("%s-6" % kind) == (kind, 6)
-    assert "`$N = 1` is one sample" in section and "/rd:true" in block
+    assert "`$N = 1` is one sample" in section
 
 
 def test_m50b_e1_source_names():
@@ -1289,7 +1307,7 @@ def test_m50b_e2_time_wait_owner_0_to_a_catalog_endpoint_is_recent_talk_never_a_
     assert "RECENT TALK (owner unknown; never a candidate by itself): 1" in text and "win-tcp-1:7" in text
 
 
-def test_m50b_e2_a_dns_row_alone_is_recent_talk_unless_a_known_owner_talks_to_it():
+def test_g3_a_dns_row_alone_is_recent_talk_unless_a_known_owner_talks_to_it_and_ends_incomplete():
     procs_rows = [SYS, ("50", "4", "tool.exe", "C:\\Tools\\tool.exe")]
     talk = ("192.0.2.5", "50000", "198.51.100.7", "443", "Established", "50")
     dns = [("api.openai.com", "api.openai.com", "203.0.113.9"), ("api.mistral.ai", "api.mistral.ai", "198.51.100.7"),
@@ -1299,9 +1317,13 @@ def test_m50b_e2_a_dns_row_alone_is_recent_talk_unless_a_known_owner_talks_to_it
                                                                                ["203.0.113.9"])]
     assert inv["recent_talk"][0]["cites"] == [{"src": "win-dns", "line": 2, "text": '"api.openai.com","api.openai.com",'
                                                                                     '"1","203.0.113.9"'}]
-    # a recent-talk line alone changes no exit code (E2: evidence, never a candidate)
-    assert (inv["candidates"], inv["act_roots"], inv["result"], inv["exit"]) == ([], [], "none-seen", 0)
+    # G-3 (B-2): recent talk with no candidate and no act-root: the talker is not seen, so incomplete
+    assert (inv["candidates"], inv["act_roots"], inv["result"], inv["exit"]) == ([], [], "incomplete", 3)
+    assert ("1 recent-talk line(s) to a model endpoint, owner unknown, and no candidate or act-root: the talker is"
+            " not seen") in inv["incomplete"]
     assert "1 recent-talk line(s), owner unknown (below). Not a clearance." in discover.render_text(inv)
+    # with an act-root (or a candidate) the run is an alarm, and recent talk adds no incompleteness
+    assert from_dir(KIMI1)["incomplete"] == [] and from_dir(AGENT)["incomplete"] == []
 
 
 def test_m50b_e2_linux_inode_0_time_wait_matches_by_network_and_owned_rows_do_not():
@@ -1364,48 +1386,101 @@ def test_m50b_e3_footprints_link_to_an_act_root_not_dark():
     assert "C:\\Users\\user\\.kimi (kimi) -> A1" in discover.render_text(one)
 
 
-ROOT_ROW = ("10", "4", "agent.exe", "C:\\Users\\user\\AppData\\Local\\agent\\agent.exe")
+TERM = ("9", "4", "cmd.exe", "C:\\Windows\\System32\\cmd.exe")
+ROOT_ROW = ("10", "9", "agent.exe", "C:\\Users\\user\\AppData\\Local\\agent\\agent.exe")
 SHELL_ROW = ("11", "10", "cmd.exe", "C:\\Windows\\System32\\cmd.exe")
 CMD_ROW = ("12", "11", "git.exe", "C:\\Program Files\\Git\\cmd\\git.exe")
+HELPER = ("10", "9", "agent.exe", "C:\\Users\\user\\AppData\\Local\\agent\\agent.exe", "agent.exe --type=utility")
 
 
 @pytest.mark.parametrize("rows, tcp, roots", [
-    ([ROOT_ROW, SHELL_ROW, CMD_ROW], [], [10]),
-    ([("10", "4", "agent.exe", "C:\\Program Files\\agent\\agent.exe"), SHELL_ROW, CMD_ROW], [], []),
-    ([("10", "4", "bash.exe", "C:\\Users\\user\\bin\\bash.exe"), SHELL_ROW, CMD_ROW], [], []),
-    ([("10", "4", "mintty.exe", "C:\\Users\\user\\AppData\\Local\\Programs\\Git\\usr\\bin\\mintty.exe"), SHELL_ROW,
-      CMD_ROW], [], []),
-    ([ROOT_ROW, SHELL_ROW], [], []),
-    ([ROOT_ROW, SHELL_ROW, ("12", "11", "powershell.exe", "C:\\Windows\\powershell.exe")], [], []),
-    ([ROOT_ROW, ("11", "10", "git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"), ("12", "11", "x.exe", "C:\\x.exe")],
-     [], []),
-    ([ROOT_ROW, SHELL_ROW, CMD_ROW], [("192.0.2.5", "50000", "203.0.113.9", "443", "Established", "10")], []),
-    ([ROOT_ROW, ("13", "10", "helper.exe", "C:\\h.exe"), SHELL_ROW, CMD_ROW],
+    ([TERM, ROOT_ROW, SHELL_ROW, CMD_ROW], [], [10]),
+    ([TERM, ("10", "9", "agent.exe", "C:\\Program Files\\agent\\agent.exe"), SHELL_ROW, CMD_ROW], [], []),
+    ([TERM, ("10", "9", "bash.exe", "C:\\Users\\user\\bin\\bash.exe"), SHELL_ROW, CMD_ROW], [], []),
+    ([TERM, ("10", "9", "mintty.exe", "C:\\Users\\user\\AppData\\Local\\Programs\\Git\\usr\\bin\\mintty.exe"),
+      SHELL_ROW, CMD_ROW], [], []),
+    ([TERM, ROOT_ROW, SHELL_ROW], [], []),
+    ([TERM, ROOT_ROW, SHELL_ROW, ("12", "11", "powershell.exe", "C:\\Windows\\powershell.exe")], [], []),
+    ([TERM, ROOT_ROW, ("11", "10", "git.exe", "C:\\Program Files\\Git\\cmd\\git.exe"),
+      ("12", "11", "x.exe", "C:\\x.exe")], [], []),
+    ([TERM, ROOT_ROW, SHELL_ROW, CMD_ROW], [("192.0.2.5", "50000", "203.0.113.9", "443", "Established", "10")], []),
+    ([TERM, ROOT_ROW, ("13", "10", "helper.exe", "C:\\h.exe"), SHELL_ROW, CMD_ROW],
      [("192.0.2.5", "50000", "203.0.113.9", "443", "Established", "13")], [10]),
-    ([("10", "4", "agent.exe", "D:\\Profiles\\user\\AppData\\Roaming\\a\\agent.exe"), SHELL_ROW, CMD_ROW], [], [10]),
+    ([TERM, ("10", "9", "agent.exe", "D:\\Profiles\\user\\AppData\\Roaming\\a\\agent.exe"), SHELL_ROW, CMD_ROW],
+     [], [10]),
+    # G-1a: the root's own parent is a listed shell or launcher
+    ([("9", "4", "explorer.exe", "C:\\Windows\\explorer.exe"), ROOT_ROW, SHELL_ROW, CMD_ROW], [], []),
+    ([("9", "4", "mintty.exe", "C:\\Program Files\\Git\\usr\\bin\\mintty.exe"), ROOT_ROW, SHELL_ROW, CMD_ROW],
+     [], [10]),
+    ([ROOT_ROW, SHELL_ROW, CMD_ROW], [], []),                                       # parent not in the records
+    # G-1b: --type= is neither a root nor a hop
+    ([TERM, HELPER, SHELL_ROW, CMD_ROW], [], []),
+    ([TERM, ROOT_ROW, SHELL_ROW, ("12", "11", "x.exe", "C:\\x.exe", "x.exe --type=renderer"),
+      ("13", "12", "git.exe", "C:\\Program Files\\Git\\cmd\\git.exe")], [], []),
+    # G-1c: the first hop is a shell, and the command is not under the root's own directory
+    ([TERM, ROOT_ROW, SHELL_ROW, ("12", "11", "tool.exe", "C:\\Users\\user\\AppData\\Local\\agent\\bin\\tool.exe")],
+     [], []),
+    ([TERM, ROOT_ROW, SHELL_ROW, ("12", "11", "tool.exe", "C:\\Users\\user\\AppData\\Local\\agent\\bin\\tool.exe"),
+      ("13", "11", "git.exe", "C:\\Program Files\\Git\\cmd\\git.exe")], [], [10]),
+    ([TERM, ROOT_ROW, ("11", "10", "helper.exe", "C:\\Users\\user\\AppData\\Local\\agent\\helper.exe"),
+      ("12", "11", "cmd.exe", "C:\\Windows\\System32\\cmd.exe"), ("13", "12", "git.exe", "C:\\git.exe")], [], []),
 ], ids=["positive", "program-files", "shell-looking-name", "terminal-host", "idle-shell", "shell-under-shell-only",
-        "no-shell-in-chain", "root-talks", "talks-through-a-child", "appdata-elsewhere"])
+        "no-shell-in-chain", "root-talks", "talks-through-a-child", "appdata-elsewhere", "g1a-gui-parent",
+        "g1a-launcher-parent", "g1a-no-parent", "g1b-helper-root", "g1b-helper-hop", "g1c-own-tool-only",
+        "g1c-own-tool-and-a-command", "g1c-non-shell-hop"])
 def test_m50b_e3_each_act_root_criterion(rows, tcp, roots):
     inv = discover.run(win_texts((1, [SYS] + rows, [LISTEN_ROW] + tcp)), CATALOG)
     assert [a["pid"] for a in inv["act_roots"]] == roots
     if tcp and not roots:
         assert [c["pid"] for c in inv["candidates"]] == [10]   # a root that talks is a candidate instead
+    for a in inv["act_roots"]:
+        assert a["launched_by"]["pid"] == 9 and a["launched_by"]["cites"]
 
 
-def test_m50b_e3_linux_needs_an_absolute_argv0_in_a_home_and_skips_the_reader():
-    def run(argv0, self_pid=None, extra=()):
-        return inv_of(proc=procs(proc(10, 1, [argv0]), proc(11, 10, ["/bin/bash", "-c", "ls"]), proc(12, 11, ["ls"]),
-                                 *extra, self_pid=self_pid),
+def test_g2_linux_places_by_the_exe_link_with_argv0_as_the_fallback():
+    def run(argv0, exe=None, unread=None, self_pid=None):
+        return inv_of(proc=procs(proc(9, 1, ["/bin/bash"]), proc(10, 9, [argv0], exe=exe, unread=unread),
+                                 proc(11, 10, ["/bin/bash", "-c", "ls"]), proc(12, 11, ["ls"]), self_pid=self_pid),
                       ss=ss(listen=(("0.0.0.0:22", "sshd", 1),)))
-    assert [a["image"] for a in run("/home/u/.local/bin/agent")["act_roots"]] == ["agent"]
+    assert [a["image"] for a in run("/home/u/.local/bin/agent")["act_roots"]] == ["agent"]     # argv[0] fallback
     assert [a["image"] for a in run("/root/.local/bin/agent")["act_roots"]] == ["agent"]
-    assert run("agent")["act_roots"] == []                  # through PATH: not placed (an evasion line)
+    assert run("agent")["act_roots"] == []                  # through PATH, no exe link: not placed (an evasion line)
+    assert [a["exe"] for a in run("agent", exe="/home/u/.local/bin/agent")["act_roots"]] == ["/home/u/.local/bin/agent"]
+    assert run("/home/u/.local/bin/agent", exe="/usr/bin/python3.12")["act_roots"] == []      # the link decides
     assert run("/usr/local/bin/agent")["act_roots"] == []
+    inv = run("agent", unread=["exe"])
+    assert inv["act_roots"] == [] and ("act-root could not place 1 process(es) (exe unreadable): their argv[0], which"
+                                       " a process writes itself, is used instead: pid 10 (proc:3)") in inv["holes"]
     # the reader's own tree is never evidence: a shell whose only command is the reader makes no chain
-    inv = inv_of(proc=procs(proc(10, 1, ["/home/u/bin/term"]), proc(11, 10, ["/bin/bash"]),
+    inv = inv_of(proc=procs(proc(9, 1, ["/bin/bash"]), proc(10, 9, ["/home/u/bin/term"]), proc(11, 10, ["/bin/bash"]),
                             proc(12, 11, ["python3", "-m", "raqib", "discover"]), self_pid=12),
                  ss=ss(listen=(("0.0.0.0:22", "sshd", 1),)))
     assert inv["act_roots"] == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the live reader is Linux-only; readlink differs on Windows")
+def test_g2_snapshot_proc_writes_the_exe_link_or_null_and_unread(tmp_path):
+    if not can_symlink(tmp_path):
+        pytest.skip("the exe link needs symlinks")
+    root = tmp_path / "proc"
+    fake_proc(root, [(50, 1, "agent", b"agent\0"), (51, 50, "bash", b"/bin/bash\0")])
+    os.symlink(str(tmp_path / "home" / "agent"), str(root / "50" / "exe"))
+    by = {o["pid"]: o for o in map(json.loads, discover.snapshot_proc(str(root), AT, None).splitlines()[1:])}
+    assert (by[50]["exe"], "exe" in by[50]["unread"]) == (str(tmp_path / "home" / "agent"), False)
+    assert (by[51]["exe"], "exe" in by[51]["unread"]) == (None, True)
+    (rec,) = [r for r in discover.parse_proc(discover.snapshot_proc(str(root), AT, None))[0] if r.get("pid") == 51]
+    assert rec["exe"] == "/bin/bash"                         # argv[0] when the link could not be read
+
+
+def test_g2_the_linux_agent_positive_is_placed_by_its_exe():
+    inv = from_dir(AGENT)
+    (a,) = inv["act_roots"]
+    assert (a["image"], a["exe"], a["user_dir"], a["launched_by"]["image"]) == (
+        "agent", "/home/user/.local/bin/agent", "/home/*/*", "bash")
+    assert [h["commands"] for h in a["chains"]] == [["curl"]] and a["cites"][0]["line"] == 9
+    assert json.loads(lines_of(AGENT / "proc.txt")[8])["argv"][0] == "agent"   # run through PATH
+    assert [r["endpoint"][0]["vendor"] for r in inv["recent_talk"]] == ["anthropic"]
+    assert inv["candidates"] == [] and inv["exit"] == 1 and inv["complete"]
 
 
 def test_m50b_e3_act_roots_are_not_judged_without_a_connection_record():
@@ -1416,28 +1491,60 @@ def test_m50b_e3_act_roots_are_not_judged_without_a_connection_record():
     assert from_dir(KIMI1)["act_roots"] and not any(h.startswith("act-root not judged") for h in from_dir(KIMI1)["holes"])
 
 
-def test_m50b_e3_known_false_positive_a_command_in_an_editor_terminal(tmp_path):
-    """Q-1 of docs/review/2026-11-03-M5.0b.md: the benign Windows fixture's integrated terminal is idle. A
-    command running in it makes VS Code's pty host (a user install, under AppData\\Local\\Programs) an
-    act-root. Not in the measured set; added as a third negative it would read 1 of 3 = 0.333 > 0.25."""
+def test_g1_the_benign_set_holds_ide_terminals_running_commands_and_measures_0():
+    win, lin = from_dir(BENIGN_WINDOWS), from_dir(BENIGN_LINUX)
+    assert win["act_roots"] == [] and lin["act_roots"] == []
+    texts = {s["name"]: lines_of(s["path"]) for s in win["sources"]}
+    rows = {r.split('","')[0].strip('"'): r for r in texts["win-process-1"][2:] if r}
+    assert "--type=utility" in rows["6060"] and "ptyHost" in rows["6060"]       # Code.exe ptyHost
+    assert rows["6070"].startswith('"6070","6060","powershell.exe"') and rows["6075"].startswith('"6075","6070","node.exe"')
+    idea = [json.loads(x) for x in lines_of(BENIGN_LINUX / "proc.txt") if '"pid": 18' in x]
+    assert {(o["pid"], o["ppid"], o["name"]) for o in idea} >= {(1800, 1700, "idea"), (1820, 1800, "bash"),
+                                                                (1825, 1820, "make"), (1830, 1825, "cc")}
+    assert all(o["exe"].startswith(("/home/user/.local/", "/usr/bin/")) for o in idea)
+
+
+def test_g1_each_narrowing_is_what_keeps_an_ide_terminal_out(tmp_path):
+    """Without --type= the VS Code pty host still has a GUI parent (Code.exe), so it is not an act-root; with
+    both gone it is one: (a) and (b) each hold the line. The JetBrains IDE is kept out by (a) alone."""
     d = copy_fixture(BENIGN_WINDOWS, tmp_path)
-    with open(str(d / "win-process-2.csv"), "a", encoding="ascii", newline="\n") as f:
-        f.write('"6075","6070","git.exe","C:\\Program Files\\Git\\cmd\\git.exe","git log --oneline -5",'
-                '"11/3/2026 9:11:02 AM"\n')
-    inv = from_dir(d)
-    assert [(a["pid"], a["image"], a["attributed_to"]) for a in inv["act_roots"]] == [(6060, "code", "C1")]
-    assert "--vscode-utility-kind=ptyHost" in inv["act_roots"][0]["cites"][0]["text"]
+
+    def edit(old, new):
+        for k in (1, 2):
+            path = d / ("win-process-%d.csv" % k)
+            text = path.read_text(encoding="ascii")
+            assert old in text
+            path.write_text(text.replace(old, new), encoding="ascii", newline="\n")
+    edit("--type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service-sandbox-type=none"
+         " --vscode-utility-kind=ptyHost", "--vscode-utility-kind=ptyHost")
+    assert from_dir(d)["act_roots"] == []
+    edit('"6060","6000","Code.exe"', '"6060","5400","Code.exe"')               # its parent now a ... systray
+    assert from_dir(d)["act_roots"] == []
+    edit('"5400","5100","SecurityHealthSystray.exe"', '"5400","5100","cmd.exe"')   # ... now a shell
+    assert [(a["pid"], a["image"]) for a in from_dir(d)["act_roots"]] == [(6060, "code")]
+    lin = copy_fixture(BENIGN_LINUX, tmp_path, "lin")
+    text = (lin / "proc.txt").read_text(encoding="ascii").replace('"pid": 1800, "ppid": 1700', '"pid": 1800, "ppid": 1530')
+    (lin / "proc.txt").write_text(text, encoding="ascii", newline="\n")
+    assert [(a["pid"], a["image"]) for a in from_dir(lin)["act_roots"]] == [(1800, "idea")]
 
 
 def test_m50b_e3_act_root_is_a_signature_with_its_evasions_and_budget():
     spec = CATALOG["act_root"]
-    assert (spec["kind"], spec["fp_budget"]) == ("signature", 0.25)
+    assert (spec["kind"], spec["status"], spec["fp_budget"]) == ("signature", "ok", 0.25)
     evasion = " ".join(spec["evasion"])
-    for phrase in ("Program Files", "a shell-looking name", "talking through a child", "argv[0]"):
+    for phrase in ("Program Files", "a shell-looking name", "talking through a child", "argv[0]",
+                   "launch from a GUI launcher", "a --type= argument",                       # G-1a, G-1b
+                   "a blank image path", "a non-shell hop", "acts inside the shell", "builtins, cmdlets and"
+                   " redirections", "wsl, a VM or a container", "trade a masquerade for fewer false positives"):  # G-7
         assert phrase in evasion, phrase
     assert set(spec["shells"]) <= set(CATALOG["acts"]) and "explorer" in spec["not_images"]
-    assert [p["dir"] for p in spec["positive"]] == ["tests/fixtures/discover/kimi/one-sample",
-                                                    "tests/fixtures/discover/kimi/two-samples"]
+    assert set(spec["launchers"]) == {"conhost", "mintty", "kitty", "wezterm", "wezterm-gui", "alacritty",
+                                      "gnome-terminal-server", "tmux", "screen"}             # G-1a, the ruling's list
+    assert "~/*" not in spec["user_dirs"] and "/root/*" in spec["user_dirs"]                  # G-10
+    assert [(p["dir"], p["expect"], p["name"], p["cite"]) for p in spec["positive"]] == [
+        ("tests/fixtures/discover/kimi/one-sample", "act_root", "kimi", "win-process-1:12"),
+        ("tests/fixtures/discover/kimi/two-samples", "promoted", "kimi", "win-tcp-2:7"),
+        ("tests/fixtures/discover/linux-agent", "act_root", "agent", "proc:9")]
     assert spec["negative"] == ["tests/fixtures/discover/benign/linux-desktop",
                                 "tests/fixtures/discover/benign/windows-desktop"]
 
@@ -1450,13 +1557,18 @@ def test_m50b_e3_act_root_is_a_signature_with_its_evasions_and_budget():
     ((r"  shells: \[.*\]", "  shells: []"), "act_root.shells"),
     ((None, None), "act_root.evasion: a signature must list"),
     ((r"    negative:\n(      - .*\n)+", "    negative: []\n"), "act_root.fixtures: a budget is measured"),
-    ((r"\{dir: tests/fixtures/discover/kimi/one-sample, act_root: kimi\}",
-      "{dir: /abs/one-sample, act_root: kimi}"), "act_root.fixtures.positive[0]"),
-    ((r"act_root: kimi\}", "act_root: Kimi}"), "act_root.fixtures.positive[0]"),
+    ((r"dir: tests/fixtures/discover/kimi/one-sample,", "dir: /abs/one-sample,"), "act_root.fixtures.positive[0]"),
+    ((r"act_root: kimi, cite", "act_root: Kimi, cite"), "act_root.fixtures.positive[0]"),
+    ((r', cite: "win-process-1:12"\}', "}"), "act_root.fixtures.positive[0]"),
+    ((r'cite: "win-process-1:12"', 'cite: "win-process-1"'), "act_root.fixtures.positive[0]"),
+    ((r'cite: "win-process-1:12"', 'cite: "bogus:12"'), "act_root.fixtures.positive[0]"),
+    ((r"  status: ok", "  status: active"), "act_root.status: must be one of ok|disabled"),
+    ((r"  launchers: \[.*\]", "  launchers: [Tmux]"), "act_root.launchers"),
     ((r"      - tests/fixtures/discover/benign/linux-desktop", "      - ../outside"), "act_root.fixtures.negative[0]"),
     ((r"\nact_root:\n", "\nact_roots:\n"), "act_root: missing"),
 ], ids=["kind", "budget-range", "budget-bool", "glob-case", "no-shells", "no-evasion", "no-negative",
-        "absolute-dir", "name-case", "dotdot", "missing"])
+        "absolute-dir", "name-case", "no-cite", "cite-no-line", "cite-no-source", "status", "launchers-case",
+        "dotdot", "missing"])
 def test_m50b_e3_catalog_rejects_a_bad_act_root(tmp_path, change, error):
     text = Path(discover.CATALOG).read_text(encoding="utf-8")
     if change[1] is None:   # act_root's own evasion list, emptied, then dropped
@@ -1482,29 +1594,33 @@ def test_m50b_e4_check_measures_candidates_and_act_roots_per_fixture():
     code, text = raqib("discover", "--check")
     assert code == 0, text
     report = discover.check(CATALOG, str(ROOT))
-    rows = {r["dir"].rsplit("/", 2)[-2] + "/" + r["dir"].rsplit("/", 1)[-1]: r for r in report["fixtures"]}
+    rows = {r["dir"].replace("tests/fixtures/discover/", ""): r for r in report["fixtures"]}
     assert {k: ([c["image"] for c in r["candidates"]], [a["image"] for a in r["act_roots"]], r["verdict"])
             for k, r in rows.items()} == {
-        "kimi/one-sample": (["explorer"], ["kimi"], "found: an act-root kimi"),
-        "kimi/two-samples": (["explorer", "kimi"], [], "found: kimi a candidate, not an act-root"),
-        "benign/linux-desktop": (["code", "firefox"], [], "measured"),
+        "kimi/one-sample": (["explorer"], ["kimi"], "found: an act-root kimi citing win-process-1:12"),
+        "kimi/two-samples": (["explorer", "kimi"], [], "found: kimi a candidate citing win-tcp-2:7, not an act-root"),
+        "linux-agent": ([], ["agent"], "found: an act-root agent citing proc:9"),
+        "benign/linux-desktop": (["jetbrains-toolbox", "code", "firefox"], [], "measured"),
         "benign/windows-desktop": (["explorer", "code"], [], "measured")}
     act, anchor = report["classes"]
-    assert (act["verdict"], act["fp_rate"], act["fp_budget"], act["measured"], act["found"]) == ("ok", 0.0, 0.25, 2, 2)
+    assert (act["status"], act["verdict"], act["fp_rate"], act["fp_budget"], act["measured"], act["found"]) == (
+        "ok", "ok", 0.0, 0.25, 2, 3)
     assert (anchor["verdict"], anchor["fp_rate"], anchor["fp_budget"], anchor["fired"]) == ("no-budget", 1.0, None, 2)
-    assert "act-root    signature  ok               0.000    0.25" in text
-    assert "candidate   anchor     no-budget        1.000    none" in text and text.endswith("RESULT: OK (exit 0)\n")
+    assert "act-root    signature  ok        ok               0.000    0.25" in text
+    assert "candidate   anchor     -         no-budget        1.000    none" in text
+    assert text.endswith("RESULT: OK (exit 0)\n")
     code, out = raqib("discover", "--check", "--json")
     assert code == 0 and json.loads(out)["classes"][0]["verdict"] == "ok"
 
 
-def _check_root(tmp_path, negatives, positives=None):
+def _check_root(tmp_path, negatives, positives=None, status="ok"):
     """A checkout-shaped root with its own catalog copy naming these fixtures."""
     root = tmp_path / "checkout"
     (root / "tests" / "fixtures").mkdir(parents=True)
-    text = Path(discover.CATALOG).read_text(encoding="utf-8")
+    text = Path(discover.CATALOG).read_text(encoding="utf-8").replace("  status: ok\n", "  status: %s\n" % status)
     fixtures = "  fixtures:\n    positive:\n%s    negative:\n%s" % (
-        "".join("      - {dir: %s, %s: %s}\n" % p for p in (positives or [("p", "act_root", "kimi")])),
+        "".join('      - {dir: %s, %s: %s, cite: "%s"}\n' % p
+                for p in (positives or [("p", "act_root", "kimi", "win-process-1:12")])),
         "".join("      - %s\n" % n for n in negatives))
     text = text.split("  fixtures:\n    positive:\n", 1)[0] + fixtures
     catalog = tmp_path / "endpoints.yaml"
@@ -1515,25 +1631,50 @@ def _check_root(tmp_path, negatives, positives=None):
 
 def test_m50b_e4_check_fails_over_budget(tmp_path):
     root, catalog = _check_root(tmp_path, ["a", "b", "c"])
-    for name, src in (("a", BENIGN_LINUX), ("b", BENIGN_WINDOWS), ("c", BENIGN_WINDOWS)):
+    for name, src in (("a", BENIGN_LINUX), ("b", BENIGN_WINDOWS), ("c", KIMI1)):   # c: an act-root on a "negative"
         shutil.copytree(str(src), str(root / name))
-    with open(str(root / "c" / "win-process-2.csv"), "a", encoding="ascii", newline="\n") as f:
-        f.write('"6075","6070","git.exe","C:\\Program Files\\Git\\cmd\\git.exe","git log","11/3/2026 9:11:02 AM"\n')
     code, text = raqib("discover", "--check", "--fixtures-root", root, "--catalog", catalog)
-    assert code == 1 and "act-root    signature  over-budget      0.333    0.25" in text
+    assert code == 1 and "act-root    signature  ok        over-budget      0.333    0.25" in text
     assert "measured; act-root FALSE POSITIVE" in text and text.endswith("RESULT: OVER-BUDGET (exit 1)\n")
 
 
 def test_m50b_e4_check_fails_on_a_missed_positive_and_on_unmeasured_negatives(tmp_path):
-    root, catalog = _check_root(tmp_path, ["n"], positives=[("p", "promoted", "kimi")])
+    root, catalog = _check_root(tmp_path, ["n"], positives=[("p", "promoted", "kimi", "win-process-1:12")])
     shutil.copytree(str(BENIGN_WINDOWS), str(root / "n"))
     code, text = raqib("discover", "--check", "--fixtures-root", root, "--catalog", catalog)
-    assert code == 1 and "MISSED: kimi a candidate, not an act-root" in text and "positive-missed" in text
+    assert code == 1 and "MISSED: kimi a candidate citing win-process-1:12, not an act-root" in text
+    assert "positive-missed" in text
     root2, catalog2 = _check_root(tmp_path / "2", ["n"])
     shutil.copytree(str(BENIGN_WINDOWS), str(root2 / "n"))
     (root2 / "n" / "win-tcp-2.csv").unlink()
     code, text = raqib("discover", "--check", "--fixtures-root", root2, "--catalog", catalog2)
-    assert code == 1 and "UNMEASURED (incomplete)" in text and "act-root    signature  unmeasured" in text
+    assert code == 1 and "UNMEASURED (incomplete)" in text and "act-root    signature  ok        unmeasured" in text
+
+
+def test_g8_a_positive_needs_the_name_and_the_cited_line(tmp_path):
+    root, catalog = _check_root(tmp_path, ["n"], positives=[("p", "act_root", "kimi", "win-process-1:13")])
+    shutil.copytree(str(BENIGN_WINDOWS), str(root / "n"))
+    code, text = raqib("discover", "--check", "--fixtures-root", root, "--catalog", catalog)
+    assert code == 0 and "found: an act-root kimi citing win-process-1:13" in text   # bash 7768, cited in its chain
+    root2, catalog2 = _check_root(tmp_path / "2", ["n"], positives=[("p", "act_root", "kimi", "win-process-1:3")])
+    shutil.copytree(str(BENIGN_WINDOWS), str(root2 / "n"))
+    code, text = raqib("discover", "--check", "--fixtures-root", root2, "--catalog", catalog2)
+    assert code == 1 and "MISSED: an act-root kimi citing win-process-1:3" in text   # a line it does not cite
+    root3, catalog3 = _check_root(tmp_path / "3", ["n"], positives=[("p", "act_root", "explorer", "win-process-1:9")])
+    shutil.copytree(str(BENIGN_WINDOWS), str(root3 / "n"))
+    assert raqib("discover", "--check", "--fixtures-root", root3, "--catalog", catalog3)[0] == 1   # cited, wrong name
+
+
+def test_g8_status_disabled_judges_nothing_and_check_still_measures(tmp_path):
+    root, catalog = _check_root(tmp_path, ["n"], status="disabled")
+    shutil.copytree(str(BENIGN_WINDOWS), str(root / "n"))
+    disabled = discover.load_catalog(str(catalog))
+    inv = from_dir(KIMI1, catalog=disabled)
+    assert inv["act_roots"] == [] and any(h.startswith("act-root not judged: act_root has status disabled")
+                                          for h in inv["holes"])
+    code, text = raqib("discover", "--check", "--fixtures-root", root, "--catalog", catalog)
+    assert code == 0 and "found: an act-root kimi citing win-process-1:12" in text     # measured whatever its status
+    assert "act-root    signature  disabled  disabled" in text and text.endswith("RESULT: DISABLED (exit 0)\n")
 
 
 @pytest.mark.parametrize("argv", [
@@ -1560,7 +1701,7 @@ def test_m50b_e5_committed_fixtures_are_what_synthetic_py_writes(tmp_path, monke
     runpy.run_path(str(FIX / "synthetic.py"), run_name="__main__")
     made = sorted(p.relative_to(tmp_path) for p in (tmp_path / "tests").rglob("*") if p.is_file())
     committed = sorted(p.relative_to(ROOT) for d in M50B for p in d.iterdir())
-    assert made == committed and len(made) == 25
+    assert made == committed and len(made) == 29
     for rel in made:
         assert (tmp_path / rel).read_bytes() == (ROOT / rel).read_bytes(), rel
 
@@ -1595,3 +1736,119 @@ def test_m50b_e5_every_claim_cites_lines_that_exist(directory):
         for c in group:
             assert c["text"] == discover.bounded(files[c["src"]][c["line"] - 1]), c
     assert inv["complete"] and inv["problems"] == []
+
+
+# --- M5.0b REDO: ADR-0004 Amendment G (docs/review/2026-11-03-M5.0b-ruling.md), each with a test -------------
+
+def test_g4_a_blank_image_path_is_a_hole_and_places_nothing():
+    rows = [SYS, ("0", "0", "System Idle Process", ""), TERM, ("10", "9", "agent.exe", ""), SHELL_ROW, CMD_ROW,
+            ("20", "4", "svchost.exe", "")]
+    inv = discover.run(win_texts((1, rows, [LISTEN_ROW])), CATALOG)
+    assert inv["act_roots"] == []
+    assert ("2 process(es) without image path (export not elevated?): act-root cannot place them: pid 10, 20"
+            in inv["holes"])                                       # pids 0 and 4 never have one
+    assert not any("without image path" in h for h in from_dir(KIMI1)["holes"])
+    section = README.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
+    assert "elevated" in section and "counted in a hole" in " ".join(section.split())
+
+
+def test_g5_a_missing_sample_with_no_candidate_is_exit_3_unless_an_alarm(tmp_path):
+    texts = win_texts((1, [SYS, ("50", "4", "svc.exe", "C:\\svc.exe")], [LISTEN_ROW]))
+    holes = discover.window_gaps(texts, str(tmp_path), declared=2)
+    inv = discover.run(texts, CATALOG, holes=holes)
+    assert (inv["candidates"], inv["act_roots"], inv["alarms"], inv["result"], inv["exit"]) == ([], [], [], "incomplete", 3)
+    assert any(h.startswith("sample 2: source win-process-2 not read") and h.endswith(
+        "the run is incomplete (exit 3 unless an alarm)") for h in inv["holes"])
+    flat = " ".join(README.split())
+    assert "incomplete (exit 3 unless an alarm)" in flat
+    adr = " ".join((ROOT / "docs" / "specs" / "ADR-0004-agent-discovery.md").read_text(encoding="utf-8").split())
+    assert "Note (2026-11-03, M5.0b REDO, G-5; corrects this item): a missing sample makes the run incomplete (exit 3" \
+           " unless an alarm)" in adr
+
+
+REUSED = '"ProcessId","ParentProcessId","Name","ExecutablePath","CommandLine","CreationDate"\n'
+
+
+def test_g6_pid_reuse_would_have_created_a_chain(tmp_path):
+    """Sample 1: pid 500 is an updater that talks. Sample 2: pid 500 is kimi, started again from cmd, running
+    bash -> ping. Merged by pid alone, the updater's talk and kimi's chain would make one candidate."""
+    p1 = REUSED + ('"9","4","cmd.exe","C:\\Windows\\System32\\cmd.exe","cmd","11/3/2026 8:00:00 AM"\n'
+                   '"500","4","updater.exe","C:\\Users\\user\\AppData\\Local\\u\\updater.exe","u","11/3/2026 9:00:00 AM"\n')
+    p2 = REUSED + ('"9","4","cmd.exe","C:\\Windows\\System32\\cmd.exe","cmd","11/3/2026 8:00:00 AM"\n'
+                   '"500","9","kimi.exe","C:\\Users\\user\\.kimi-code\\bin\\kimi.exe","kimi","11/3/2026 9:00:20 AM"\n'
+                   '"501","500","bash.exe","C:\\Program Files\\Git\\usr\\bin\\bash.exe","bash","11/3/2026 9:00:21 AM"\n'
+                   '"502","501","PING.EXE","C:\\Windows\\System32\\PING.EXE","ping","11/3/2026 9:00:21 AM"\n')
+    tcp = '"LocalAddress","LocalPort","RemoteAddress","RemotePort","State","OwningProcess"\n"0.0.0.0","135","0.0.0.0","0","Listen","9"\n'
+    texts = {"win-process-1": ("<p1>", p1, None), "win-process-2": ("<p2>", p2, None),
+             "win-tcp-1": ("<t1>", tcp + '"192.0.2.5","50000","198.51.100.7","443","Established","500"\n', None),
+             "win-tcp-2": ("<t2>", tcp, None)}
+    inv = discover.run(texts, CATALOG)
+    assert inv["candidates"] == []                                  # the updater talks but has no child
+    assert [(a["pid"], a["image"], [x["src"] for x in a["cites"]]) for a in inv["act_roots"]] == [
+        (500, "kimi", ["win-process-2"])]                           # the OS pid shown, the instance cited
+    assert ("pid 500 was reused within the window: CreationDate 11/3/2026 9:00:00 AM in win-process-1; CreationDate"
+            " 11/3/2026 9:00:20 AM in win-process-2; keyed by pid and CreationDate, 2 processes (G-6)") in inv["holes"]
+    def pids(node):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k in discover.PID_FIELDS and isinstance(v, int):
+                    yield v
+                elif k in discover.PID_LISTS and isinstance(v, list):
+                    yield from (x for x in v if isinstance(x, int))
+                else:
+                    yield from pids(v)
+        elif isinstance(node, list):
+            for v in node:
+                yield from pids(v)
+    shown = list(pids(inv))
+    assert shown and all(p < discover.REUSE for p in shown)        # no internal key leaks into the inventory
+    assert "pid 500 " in discover.render_text(inv) and str(500 + discover.REUSE) not in discover.render_text(inv)
+
+
+def test_g6_pid_reuse_breaks_a_chain_to_a_parent_that_is_gone():
+    """Sample 1: pid 9 is cmd. Sample 2: cmd is gone and pid 9 is a service; kimi, seen only in sample 2, names
+    parent 9. Merged by pid alone, kimi's parent would be the cmd of sample 1, and kimi an act-root."""
+    p1 = REUSED + '"9","4","cmd.exe","C:\\Windows\\System32\\cmd.exe","cmd","11/3/2026 8:00:00 AM"\n'
+    p2 = REUSED + ('"9","4","svc.exe","C:\\Windows\\svc.exe","svc","11/3/2026 9:00:10 AM"\n'
+                   '"500","9","kimi.exe","C:\\Users\\user\\.kimi-code\\bin\\kimi.exe","kimi","11/3/2026 8:30:00 AM"\n'
+                   '"501","500","bash.exe","C:\\Program Files\\Git\\usr\\bin\\bash.exe","bash","11/3/2026 9:00:21 AM"\n'
+                   '"502","501","PING.EXE","C:\\Windows\\System32\\PING.EXE","ping","11/3/2026 9:00:21 AM"\n')
+    tcp = '"LocalAddress","LocalPort","RemoteAddress","RemotePort","State","OwningProcess"\n"0.0.0.0","135","0.0.0.0","0","Listen","4"\n'
+    texts = {"win-process-1": ("<p1>", p1, None), "win-process-2": ("<p2>", p2, None),
+             "win-tcp-1": ("<t1>", tcp, None), "win-tcp-2": ("<t2>", tcp, None)}
+    assert discover.run(texts, CATALOG)["act_roots"] == []
+    merged = {"win-process": ("<p>", p1 + p2.split("\n", 1)[1].split("\n", 1)[1], None), "win-tcp": ("<t>", tcp, None)}
+    # the stale view: pid 9 known only as sample 1's cmd makes kimi an act-root
+    assert [a["image"] for a in discover.run(merged, CATALOG)["act_roots"]] == ["kimi"]
+
+
+def test_g6_a_missing_creation_date_is_a_hole():
+    inv = discover.run(win_texts((1, [SYS, ("50", "4", "svc.exe", "C:\\svc.exe", "svc", "")], [LISTEN_ROW])), CATALOG)
+    assert ("1 process(es) without CreationDate: a pid reused between samples cannot be told for them, so they are"
+            " merged by pid (G-6): pid 50") in inv["holes"]
+    assert not any("without CreationDate" in h for h in from_dir(KIMI2)["holes"])
+
+
+def test_g10_read_files_are_counted_before_the_merged_beside_hole():
+    code, text = raqib("discover", "--from", KIMI1, "--read", "win-process=%s" % (WINDOWS / "win-process.csv"), "--json")
+    inv = json.loads(text)
+    assert "win-process.csv read beside numbered samples of the same kind: merged as one more sample" in inv["holes"]
+    assert "win-process" in [s["name"] for s in inv["sources"]]
+    assert not any("read beside numbered samples" in h for h in from_dir(KIMI1)["holes"])
+
+
+def test_g11_moonshot_hosts_are_names_only_from_vendor_docs():
+    text = Path(discover.CATALOG).read_text(encoding="utf-8")
+    block = text.split("# Moonshot (Kimi, Kimi Code)")[1].split("# Model API networks")[0]
+    assert "host names only, no network; from vendor docs" in block and "note:" not in block
+    assert not any(n["vendor"] == "moonshot" for n in CATALOG["networks"])
+
+
+def test_g14_readme_names_the_benign_set_and_records_2_of_2():
+    flat = " ".join(README.split("## Find the agents on a host (discover)")[1].split("\n## ")[0].split())
+    for phrase in ("a JetBrains IDE under `~/.local`, each with a terminal running make -> cc",
+                   "its terminal running a command (powershell -> node)", "candidates fire on 2 of 2",
+                   "the anchor still declares no budget", "act-root declares fp_budget 0.25 and fires on 0 of 2",
+                   "a Linux agent under `~/.local/bin`", "and reports its status", "`/proc/PID/exe`",
+                   "started from a shell or a terminal host", "Electron/Chromium helper (`--type=`)"):
+        assert phrase in flat, phrase

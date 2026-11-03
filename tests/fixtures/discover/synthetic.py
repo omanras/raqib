@@ -17,12 +17,17 @@ the documentation ranges of RFC 5737 (192.0.2.0/24, 198.51.100.0/24,
   catalog's api.moonshot.ai; in sample 2 kimi.exe holds an ESTABLISHED one.
   The README loop with N = 1 and with N = 2: sample 1 is the same file in both.
 - benign/windows-desktop: explorer, OneDrive, VS Code (user install under
-  AppData\\Local\\Programs, with its extension host running git and an idle
-  integrated terminal) and Edge; two samples of the README loop.
+  AppData\\Local\\Programs, with its extension host running git, and its
+  integrated terminal running a command: Code.exe --type=... ptyHost ->
+  powershell -> node, G-1) and Edge; two samples of the README loop.
 - benign/linux-desktop: GNOME, a terminal running vim, VS Code from its
-  package (/usr/share/code) with a terminal running make -> cc, Firefox,
-  JetBrains Toolbox under ~/.local; two snapshots of `raqib discover
-  --window 1 --save` as a user who is not root.
+  package (/usr/share/code) with a terminal running make -> cc, a JetBrains
+  IDE under ~/.local started by JetBrains Toolbox whose terminal runs make ->
+  cc (G-1), Firefox; two snapshots of `raqib discover --window 1 --save` as
+  a user who is not root, with the exe links of G-2 (root's unreadable).
+- linux-agent: a Python agent shipped as one executable at ~/.local/bin/agent,
+  started from bash through PATH (argv[0] "agent", placed by its exe link,
+  G-2), running bash -> curl, with no connection of its own; one snapshot.
 """
 import ipaddress
 import json
@@ -190,6 +195,9 @@ DESK_PROCS = [
      '"C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\resources\\app\\node_modules\\node-pty\\build'
      '\\Release\\conpty\\OpenConsole.exe" --headless --inheritcursor --width 120 --height 30', "11/3/2026 8:05:30 AM"),
     ("6070", "6060", "powershell.exe", PS, '"%s" ' % PS, "11/3/2026 8:05:30 AM"),
+    ("6075", "6070", "node.exe", "C:\\Program Files\\nodejs\\node.exe",
+     '"C:\\Program Files\\nodejs\\node.exe" "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js" run dev',
+     "11/3/2026 8:31:12 AM"),
     ("7000", "5100", "msedge.exe", EDGE, edge("--profile-directory=Default"), "11/3/2026 7:55:02 AM"),
     ("7010", "7000", "msedge.exe", EDGE, edge("--type=crashpad-handler --database=C:\\Users\\user\\AppData\\Local\\"
                                               "Microsoft\\Edge\\User Data\\Crashpad"), "11/3/2026 7:55:02 AM"),
@@ -245,18 +253,20 @@ def windows_desktop(directory):
 
 # --- Linux: a benign desktop (E4) -----------------------------------------------------
 
-LINUX = "a benign Linux desktop: GNOME, a terminal, VS Code from its package with a terminal running make, Firefox"
+LINUX = ("a benign Linux desktop: GNOME, a terminal, VS Code from its package and a JetBrains IDE under ~/.local,"
+         " each with a terminal running make -> cc, Firefox")
 T1, T2 = "2026-11-03T09:00:00.000Z", "2026-11-03T09:00:01.000Z"
 ENV = ["DBUS_SESSION_BUS_ADDRESS", "DISPLAY", "HOME", "LANG", "PATH", "SHELL", "USER", "XDG_RUNTIME_DIR"]
 CODE_BIN = "/usr/share/code/code"
 FIREFOX = "/usr/lib/firefox/firefox"
 TOOLBOX = "/home/user/.local/share/JetBrains/Toolbox/bin/jetbrains-toolbox"
-NOT_OURS = {"cwd": None, "env_keys": None, "sockets": None, "unread": ["cwd", "environ", "fd"]}
+NOT_OURS = {"cwd": None, "env_keys": None, "sockets": None, "exe": None, "unread": ["cwd", "environ", "fd", "exe"]}
+IDEA = "/home/user/.local/share/JetBrains/Toolbox/apps/intellij-idea-community-edition"
 
 
-def proc(pid, ppid, name, argv, cwd="/home/user", sockets=(), env=ENV, hidden=False):
+def proc(pid, ppid, name, argv, cwd="/home/user", sockets=(), env=ENV, hidden=False, exe=None):
     rec = {"pid": pid, "ppid": ppid, "name": name, "argv": argv, "cwd": cwd, "env_keys": sorted(env),
-           "sockets": sorted(sockets), "unread": []}
+           "sockets": sorted(sockets), "exe": exe or argv[0], "unread": []}
     if hidden:
         rec.update(NOT_OURS)
     return rec
@@ -268,12 +278,20 @@ LINUX_PROCS = [
     proc(980, 1, "systemd", ["/usr/lib/systemd/systemd", "--user"]),
     proc(1210, 980, "gnome-shell", ["/usr/bin/gnome-shell"]),
     proc(1500, 980, "gnome-terminal-", ["/usr/libexec/gnome-terminal-server"]),
-    proc(1510, 1500, "bash", ["bash"], cwd="/home/user/notes"),
-    proc(1520, 1510, "vim", ["vim", "todo.md"], cwd="/home/user/notes"),
-    proc(1530, 1500, "bash", ["bash"], cwd="/home/user/src/raqib"),
+    proc(1510, 1500, "bash", ["bash"], cwd="/home/user/notes", exe="/usr/bin/bash"),
+    proc(1520, 1510, "vim", ["vim", "todo.md"], cwd="/home/user/notes", exe="/usr/bin/vim.basic"),
+    proc(1530, 1500, "bash", ["bash"], cwd="/home/user/src/raqib", exe="/usr/bin/bash"),
     proc(1540, 1530, "python3", ["python3", "-m", "raqib", "discover", "--window", "1", "--save",
-                                 "/home/user/runs/desktop"], cwd="/home/user/src/raqib"),
+                                 "/home/user/runs/desktop"], cwd="/home/user/src/raqib",
+         exe="/usr/bin/python3.12"),
     proc(1700, 980, "jetbrains-toolb", [TOOLBOX, "--minimize"], sockets=[43001]),
+    proc(1800, 1700, "idea", [IDEA + "/bin/idea"], cwd="/home/user/src/tool"),
+    proc(1810, 1800, "fsnotifier", [IDEA + "/bin/fsnotifier"], cwd="/home/user/src/tool"),
+    proc(1820, 1800, "bash", ["/usr/bin/bash", "--rcfile", IDEA + "/plugins/terminal/shell-integrations/bash/"
+                              "bash-integration.bash", "-i"], cwd="/home/user/src/tool"),
+    proc(1825, 1820, "make", ["make", "-j4"], cwd="/home/user/src/tool", exe="/usr/bin/make"),
+    proc(1830, 1825, "cc", ["cc", "-c", "-o", "out/parser.o", "src/parser.c"], cwd="/home/user/src/tool",
+         exe="/usr/bin/x86_64-linux-gnu-gcc-13"),
     proc(2000, 1210, "code", [CODE_BIN, "--unity-launch"]),
     proc(2010, 2000, "code", [CODE_BIN, "--type=zygote", "--no-zygote-sandbox"]),
     proc(2020, 2000, "code", [CODE_BIN, "--type=utility", "--utility-sub-type=network.mojom.NetworkService",
@@ -285,8 +303,9 @@ LINUX_PROCS = [
     proc(2050, 2000, "code", [CODE_BIN, "--type=utility", "--utility-sub-type=node.mojom.NodeService",
                               "--lang=en-US", "--service-sandbox-type=none"]),
     proc(2060, 2050, "bash", ["/usr/bin/bash"], cwd="/home/user/src/app"),
-    proc(2070, 2060, "make", ["make", "test"], cwd="/home/user/src/app"),
-    proc(2080, 2070, "cc", ["cc", "-c", "-o", "build/util.o", "src/util.c"], cwd="/home/user/src/app"),
+    proc(2070, 2060, "make", ["make", "test"], cwd="/home/user/src/app", exe="/usr/bin/make"),
+    proc(2080, 2070, "cc", ["cc", "-c", "-o", "build/util.o", "src/util.c"], cwd="/home/user/src/app",
+         exe="/usr/bin/x86_64-linux-gnu-gcc-13"),
     proc(3000, 1210, "firefox", [FIREFOX], sockets=[42001, 42002]),
     proc(3010, 3000, "Isolated Web Co", [FIREFOX, "-contentproc", "-childID", "1", "-isForBrowser", "tab"]),
     proc(3020, 3000, "Web Content", [FIREFOX, "-contentproc", "-childID", "2", "-isForBrowser", "tab"]),
@@ -297,8 +316,12 @@ LINUX_PROCS = [
 def linux_procs_2():
     out = []
     for p in LINUX_PROCS:
-        if p["pid"] == 2080:   # cc ended; the next one compiles another file
-            out.append(proc(2081, 2070, "cc", ["cc", "-c", "-o", "build/main.o", "src/main.c"], cwd="/home/user/src/app"))
+        if p["pid"] == 2080:   # cc ended; the next one compiles another file (both terminals)
+            out.append(proc(2081, 2070, "cc", ["cc", "-c", "-o", "build/main.o", "src/main.c"], cwd="/home/user/src/app",
+                            exe="/usr/bin/x86_64-linux-gnu-gcc-13"))
+        elif p["pid"] == 1830:
+            out.append(proc(1831, 1820, "cc", ["cc", "-c", "-o", "out/lexer.o", "src/lexer.c"], cwd="/home/user/src/tool",
+                            exe="/usr/bin/x86_64-linux-gnu-gcc-13"))
         elif p["pid"] == 3000:
             out.append(dict(p, sockets=[42001]))
         else:
@@ -361,10 +384,62 @@ def linux_desktop(directory):
     return directory, files
 
 
+# --- Linux: a Python agent between requests (G-2 positive) -----------------------------
+
+AGENT = "a Python agent shipped as one executable at ~/.local/bin/agent, started from bash, running bash -> curl"
+AT = "2026-11-03T09:20:00.000Z"
+AGENT_PROCS = [
+    proc(1, 0, "systemd", ["/sbin/init", "splash"], hidden=True),
+    proc(610, 1, "systemd-resolve", ["/usr/lib/systemd/systemd-resolved"], hidden=True),
+    proc(980, 1, "systemd", ["/usr/lib/systemd/systemd", "--user"]),
+    proc(1500, 980, "gnome-terminal-", ["/usr/libexec/gnome-terminal-server"]),
+    proc(1510, 1500, "bash", ["bash"], cwd="/home/user/work", exe="/usr/bin/bash"),
+    proc(1600, 1510, "agent", ["agent", "--task", "summarise the release notes"], cwd="/home/user/work",
+         env=ENV + ["ANTHROPIC_API_KEY"], exe="/home/user/.local/bin/agent"),
+    proc(1610, 1600, "bash", ["/usr/bin/bash", "-c", "curl -sS -o notes.html https://www.example.org/notes"],
+         cwd="/home/user/work"),
+    proc(1620, 1610, "curl", ["curl", "-sS", "-o", "notes.html", "https://www.example.org/notes"],
+         cwd="/home/user/work", sockets=[51001], exe="/usr/bin/curl"),
+    proc(1530, 1500, "bash", ["bash"], cwd="/home/user/src/raqib", exe="/usr/bin/bash"),
+    proc(1540, 1530, "python3", ["python3", "-m", "raqib", "discover", "--save", "/home/user/runs/agent"],
+         cwd="/home/user/src/raqib", exe="/usr/bin/python3.12"),
+]
+AGENT_NET = [(("127.0.0.53", 53), ("0.0.0.0", 0), "0A", 991, 30001),
+             ((LAN, 51100), ("198.51.100.120", 443), "01", 1000, 51001),
+             ((LAN, 51090), ("160.79.104.10", 443), "06", 0, 0)]
+
+
+def linux_agent(directory):
+    head = "# M5.0b fixture SYNTHETIC (not captured from a machine) - %s; host `host`; %s. %s"
+    meta = {"snapshot": AT, "self": 1540, "processes": len(AGENT_PROCS), "kernel_threads": 140, "kernel_parent": 2,
+            "gone_while_read": 0, "unreadable": 0}
+    proc_lines = [head % (AGENT, "in the shape of snapshot_proc() as `raqib discover --save` writes it, as user `user`"
+                          " (not root)", REDACTION),
+                  "# environ: variable NAMES only; values are never read into this text.",
+                  json.dumps(meta, sort_keys=True)] + [json.dumps(dict(p, at=AT), sort_keys=True) for p in AGENT_PROCS]
+    net_lines = [head % (AGENT, "/proc/net/tcp and /proc/net/tcp6 as the kernel prints them; the TIME-WAIT row is the"
+                         " agent's closed request to the catalog's Anthropic network", REDACTION),
+                 "# at %s (/proc/net/tcp)" % AT] + net_rows(AGENT_NET) + ["# at %s (/proc/net/tcp6)" % AT, NET_HEAD]
+    sources = {"proc": {"error": None, "file": "proc.txt", "label": "live /proc"},
+               "proc-net": {"error": None, "file": "proc-net.txt", "label": "live /proc/net/tcp, /proc/net/tcp6"},
+               "footprints": {"error": None, "file": "footprints.txt", "label": "live: homes /home/user"}}
+    run = {"note": "M5.0b fixture SYNTHETIC (not captured from a machine) - %s; host `host`; in the shape of the run.json"
+                   " that --save writes. %s" % (AGENT, REDACTION),
+           "raqib": "discover-run", "version": 1, "sources": sources, "holes": [], "samples": 1,
+           "connections_from": ["live /proc/net/tcp, /proc/net/tcp6"]}
+    files = {"proc.txt": "\n".join(proc_lines) + "\n", "proc-net.txt": "\n".join(net_lines) + "\n",
+             "footprints.txt": "\n".join([head % (AGENT, "the footprint listing scan_footprints() writes", REDACTION),
+                                          "# raqib discover: footprint listing (paths only; nothing opened)",
+                                          "# home /home/user: 27 entries"]) + "\n",
+             "run.json": json.dumps(run, indent=2, sort_keys=True) + "\n"}
+    return directory, files
+
+
 def main():
     made = [kimi(os.path.join(OUT, "kimi", "one-sample"), 1), kimi(os.path.join(OUT, "kimi", "two-samples"), 2),
             windows_desktop(os.path.join(OUT, "benign", "windows-desktop")),
-            linux_desktop(os.path.join(OUT, "benign", "linux-desktop"))]
+            linux_desktop(os.path.join(OUT, "benign", "linux-desktop")),
+            linux_agent(os.path.join(OUT, "linux-agent"))]
     for directory, files in made:
         for name, text in sorted(files.items()):
             write(os.path.join(directory, name), text)

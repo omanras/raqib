@@ -258,6 +258,9 @@ settled here.
   found, and a hole says a loop cut short is then not seen. `--save`'s
   run.json records the sample count too. The M5.0 single files are read as
   before.
+  Note (2026-11-03, M5.0b REDO, G-5; corrects this item): a missing sample
+  makes the run incomplete (exit 3 unless an alarm); alarm > incomplete
+  stays the precedence of M5.0.
 - F-2 Recent talk, owner unknown (E2). A TIME-WAIT row with no owner
   (OwningProcess 0; inode 0, so no pid) to a catalog endpoint - by network,
   loopback port, or a name the host's own DNS record gives that IP - and a
@@ -305,3 +308,29 @@ settled here.
   CreationDate keys a process. G-7 evasions listed. G-8 `status` carrier
   for act_root. G-9 ui.py discover tab in Scope. G-10..G-14 as in
   docs/review/2026-11-03-M5.0b-ruling.md.
+
+## Amendment H (2026-11-03) - the M5.0b REDO as built (builder's record, not a ruling)
+Where Amendment G changed Amendment F, G holds. The record of each G-n,
+with file:line, is in `docs/review/2026-11-03-M5.0b.md`.
+- H-1 (G-1) act_root gains `launchers` and three conditions: the root's
+  own parent is a listed shell or launcher; no process with `--type=` in
+  its argv is a root or a hop below the root's shell; the command's image
+  is not under the root's own directory. The benign set now holds VS
+  Code's terminal running powershell -> node (Windows) and a JetBrains IDE
+  under ~/.local whose terminal runs make -> cc (Linux); both measure 0.
+- H-2 (G-2) snapshot_proc writes `exe` (the /proc/PID/exe link, null and
+  in `unread` when it cannot be read); parse_proc places a process by it,
+  argv[0] the fallback; a hole counts the unplaced. Positive:
+  tests/fixtures/discover/linux-agent.
+- H-3 (G-3, G-4, G-6) recent talk with no candidate and no act-root is
+  incomplete; a blank Windows image path (pids 0 and 4 aside) is a hole;
+  a Windows process is keyed by pid and CreationDate while the tree is
+  built, a reused pid is named in a hole, and the inventory shows OS pids.
+- H-4 (G-8) act_root `status: ok | disabled`; disabled judges nothing in
+  an inventory (a hole says so) and is still measured by --check, whose
+  positives need the image name and a cited SRC:LINE.
+- H-5 (G-9, G-10, G-11) the dashboard's discover tab renders act-roots
+  and recent talk with their cites; `~/*` left user_dirs; the Sysmon
+  export has its own README paragraph; the merged-beside hole is decided
+  in build(), so --read files count; the Moonshot hosts carry a comment,
+  no note fields.

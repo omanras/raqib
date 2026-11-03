@@ -1,4 +1,4 @@
-# M5.0b fixture SYNTHETIC (not captured from a machine) - a benign Linux desktop: GNOME, a terminal, VS Code from its package with a terminal running make, Firefox; host `host`; /proc/net/tcp and /proc/net/tcp6 as the kernel prints them, as read_proc_net() writes them. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+# M5.0b fixture SYNTHETIC (not captured from a machine) - a benign Linux desktop: GNOME, a terminal, VS Code from its package and a JetBrains IDE under ~/.local, each with a terminal running make -> cc, Firefox; host `host`; /proc/net/tcp and /proc/net/tcp6 as the kernel prints them, as read_proc_net() writes them. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
 # at 2026-11-03T09:00:00.000Z (/proc/net/tcp)
   sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 3500007F:0035 00000000:0000 0A 00000000:00000000 00:00000000 00000000   991        0 30001 1 0000000000000000 20 4 30 10 -1
