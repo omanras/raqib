@@ -61,7 +61,9 @@ A check that cannot be made on this host is UNSURE, counted apart and never a fa
 3. **Suspicion (optional).** A local or API model reads windows of the
    trace metadata. It can raise suspicion with citations; it cannot clear
    anything.
-4. **Report.** Text, JSON, or a read-only HTML page.
+4. **Report.** Text, JSON, or a read-only HTML page. Every line names its
+   capture source (`hook`; `proxy` for another agent, below), and the report
+   names it on every finding.
 
 ## Manual steps
 The steps before `raqib watch` existed, from a checkout, one command at a time.
@@ -140,6 +142,50 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib suspect TRACE --backend ollama -o suspicion.jsonl` | model suspicion (`--backend anthropic` needs `pip install anthropic` and ANTHROPIC_API_KEY, and sends trace metadata off the machine); then `report TRACE --suspicion suspicion.jsonl` |
 | `raqib suspect TRACE --backend anthropic --allow-fallback` | lets another model answer a window the requested model refuses; off by default, and such answers are labelled (`answered_by`) and counted |
 | `raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events: a checkout's tests/fixtures/eval/events.json or --events FILE (an installed raqib has none and exits 2) |
+| `raqib proxy --listen 127.0.0.1:PORT --upstream URL --log TRACE` | relay another agent's model API calls and record its tool calls (below) |
+
+## Watch another agent
+An agent without Claude Code hooks can be watched through the proxy source
+([ADR-0003](docs/specs/ADR-0003-capture-sources.md)): any CLI that talks to
+an OpenAI-compatible chat/completions API or to the Anthropic messages API.
+Start the proxy, then point the agent's base-URL setting at it:
+```bash
+raqib proxy --listen 127.0.0.1:8787 --upstream https://api.moonshot.ai --log ~/.raqib/traces/kimi.jsonl
+raqib report ~/.raqib/traces/kimi.jsonl
+```
+- **Kimi Code CLI:** in `~/.kimi-code/config.toml`, set the provider's
+  `base_url` (`[providers.kimi]`, type `kimi`, by default
+  `https://api.moonshot.ai/v1`) to `http://127.0.0.1:8787/v1`. This is read
+  from the Kimi Code CLI documentation and was not run here; the first real
+  run is a field test. For any other agent, see the agent's docs for its
+  base-URL setting (for example `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`).
+- **It relays and never steers.** It listens on 127.0.0.1 only and speaks
+  HTTPS to the upstream, with certificates verified. Bodies pass byte for
+  byte, streamed answers piece by piece as they arrive; headers pass except
+  Host and the hop-by-hop ones. No header is added, no request is retried
+  and none is made that the agent did not make. It logs no request line and
+  no header value.
+- **What it records.** A tool call in an answer is a `pre`; its result in
+  the agent's next request is the `post` with the same seq. Hashes and the
+  same small extract as the hook (`raqib/hooks/common.py`), and
+  `source: "proxy"`; one session per proxy run; `cwd` is the proxy's own
+  working directory, so start it where the agent works. A result whose call
+  the proxy never saw is a post with a new seq, so SILENCE-HALF reports it.
+- **Silence.** An upstream that cannot be reached (the agent gets 502, or
+  504 on a timeout), a TLS failure, an answer cut short, a 5xx answer
+  (relayed unchanged), or a request or answer it cannot read appends one
+  `RAQIB-SILENCE:` line to the trace and to stderr; `raqib watch` reads it
+  as a capture failure, `raqib report` as an alarm.
+- **What it cannot see.** An agent that does not use the proxy leaves no
+  line at all. Other API shapes (the OpenAI Responses API, Gemini) are
+  relayed but not read: one `RAQIB-SILENCE:` line per path. The Bash rules
+  read a shell command only from a tool named `Bash`. A `post` is what the
+  agent sent; a `pre` is what the model's answer asked for. Any local
+  process can send requests to the port.
+`raqib report` and the page name the source of every finding (a line with
+no `source` is `hook`), and one trace may hold both. The synthetic recorded
+sessions, an OpenAI-style and an Anthropic-style one, are in
+`tests/fixtures/proxy/`.
 
 ## Find the agents on a host (discover)
 `raqib discover` looks for AI agents it has never heard of

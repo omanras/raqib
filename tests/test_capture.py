@@ -382,7 +382,8 @@ def test_m01b_e2_command_head_on_bash_post_and_only_for_bash(tmp_path):
 
 # --- M0.3 E4: session events (A-3) and PostToolUseFailure error_class (A-4) -
 
-SESSION_FIELDS = {"ts", "seq", "session_id", "phase", "tool", "cwd"}
+# M5.2 E3 (ADR-0003): every hook line, session events too, ends with source "hook".
+SESSION_FIELDS = {"ts", "seq", "session_id", "phase", "tool", "cwd", "source"}
 
 
 @pytest.mark.parametrize("name, phase", [
@@ -1292,7 +1293,8 @@ def test_m42_e1_a_pure_function_that_runs_nothing(monkeypatch):
     first = [capture.command_programs(c) for _, c, _ in PROGRAMS]
     assert first == [e for _, _, e in PROGRAMS]
     assert first == [capture.command_programs(c) for _, c, _ in PROGRAMS]   # same input, same output
-    source = CAPTURE.read_text(encoding="utf-8")
+    # M5.2 E1: command_programs moved, unchanged, to common.py, shared with the proxy.
+    source = (ROOT / "raqib" / "hooks" / "common.py").read_text(encoding="utf-8")
     body = source.split("def command_programs(", 1)[1].split("\ndef input_meta(", 1)[0]
     for banned in ("subprocess", "os.system", "os.popen", "exec(", "eval(", "shlex.split", "open("):
         assert banned not in body, banned

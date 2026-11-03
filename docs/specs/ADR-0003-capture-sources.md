@@ -1,6 +1,6 @@
 # ADR-0003 - Capture sources: hook, proxy, os
 
-Status: proposed by the Table, 2026-11-02. Becomes accepted when M5.2 lands.
+Status: accepted (M5.2, 2026-11-03). Proposed by the Table, 2026-11-02.
 Amendments appended, never edited in place.
 
 ## Problem
@@ -63,3 +63,43 @@ have, and no signature is needed to read it.
 - M5.3 os source on Windows (Sysmon) + CROSS-SOURCE anchor rule.
 - Later: Linux os source (auditd/eBPF); MCP shim as a fourth source only
   if a watched agent exposes nothing else.
+
+## Builder note (2026-11-03, M5.2; the decision above stays as written)
+As built. Record: docs/review/2026-11-03-M5.2.md.
+- `source`: every hook line ends with `"source": "hook"` (last, so a line
+  written before M5.2 is a byte prefix of today's line for the same
+  event); proxy lines with `"proxy"`. `raqib/rules/trace.py` returns
+  records as read, `source_of()` reads a missing field as `hook`, and an
+  unknown value is a trace problem (an alarm). `raqib report` names the
+  source on every finding and counts the records per source; the page has
+  a source column. No rule reads the field.
+- `raqib/hooks/common.py`: hashing, redaction, input_meta (command_head,
+  command_programs), the output scan, error_class and ts, moved unchanged
+  from capture.py, which keeps every name. Run as the hook (`python -I`),
+  capture.py loads common.py next to it by path; if it cannot, one
+  RAQIB-SILENCE line and exit 0.
+- `raqib/hooks/proxy.py`, `raqib proxy --listen 127.0.0.1:PORT --upstream
+  URL --log PATH`: a plain-HTTP listener on 127.0.0.1, HTTPS to the
+  upstream with verification on (http only with --allow-plain-upstream and
+  only to a loopback address); bytes unchanged, headers unchanged but for
+  Host and hop-by-hop, no header added, no retry; streamed pieces pass as
+  they arrive. Paths ending in /chat/completions (OpenAI) and /messages
+  (Anthropic) are read: a tool call in an answer is a `pre`, written before
+  the bytes that complete it pass; its result in a later request the `post`
+  of the open proxy pre with that id anywhere in the trace; a result posted
+  before is not posted again; a result with no call seen is a post with a
+  new seq (SILENCE-HALF). One session per proxy run; cwd is the proxy's
+  own. Hashes and common's extract only.
+- Silence (A3): an upstream failure (no connection, TLS, timeout, an answer
+  cut short, a 5xx answer) and a request or answer the proxy cannot read
+  each append one RAQIB-SILENCE line to the trace and to stderr; a model
+  request on any other path does so once per path. The agent gets the
+  upstream's own status when there is one, else 502 (504 on a timeout).
+- Kimi (checked, not assumed): Kimi CLI (Python) is archived and replaced
+  by Kimi Code CLI. Its documentation (read 2026-11-03, not run) names a
+  provider `base_url` in `~/.kimi-code/config.toml` (type `kimi`:
+  OpenAI-compatible, `https://api.moonshot.ai/v1`), and lifecycle hooks
+  with PreToolUse, PostToolUse, PostToolUseFailure, SessionStart,
+  SessionEnd and Stop events, a JSON payload on stdin, and a shell tool
+  named Bash. Whether capture.py runs as a Kimi hook is a question for the
+  Table, not built here.

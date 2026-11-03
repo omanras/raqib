@@ -1,0 +1,199 @@
+{
+ "about": "Synthetic Anthropic-style (messages, tool_use / tool_result) recorded session, made by hand for M5.2. No real key, host or model: the upstream is api.example.com. tests/test_proxy.py replays it through the proxy against a local fake upstream and holds anthropic-session.trace.log to what the proxy writes. Positive: DESTRUCT-CMD fires on toolu_fx_1 (rm -rf build). Negative: it does not fire on toolu_fx_2 (ls -la build).",
+ "api": "anthropic",
+ "upstream": "https://api.example.com",
+ "exchanges": [
+  {
+   "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": [
+     [
+      "Content-Type",
+      "application/json"
+     ],
+     [
+      "x-api-key",
+      "fixture-not-a-key-anthropic"
+     ],
+     [
+      "anthropic-version",
+      "2023-06-01"
+     ],
+     [
+      "User-Agent",
+      "fixture-agent/1.0"
+     ]
+    ],
+    "json": {
+     "model": "fixture-model",
+     "max_tokens": 1024,
+     "stream": true,
+     "tools": [
+      {
+       "name": "Bash",
+       "description": "Run a shell command",
+       "input_schema": {
+        "type": "object",
+        "properties": {
+         "command": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "command"
+        ]
+       }
+      }
+     ],
+     "messages": [
+      {
+       "role": "user",
+       "content": "Clean the build directory, then show it."
+      }
+     ]
+    }
+   },
+   "response": {
+    "status": 200,
+    "headers": [
+     [
+      "Content-Type",
+      "text/event-stream; charset=utf-8"
+     ]
+    ],
+    "chunked": true,
+    "chunks": [
+     "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_fx_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"fixture-model\",\"content\":[],\"stop_reason\":null}}\n\n",
+     "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+     "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Cleaning up.\"}}\n\n",
+     "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+     "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_fx_1\",\"name\":\"Bash\",\"input\":{}}}\n\n",
+     "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"command\\\": \\\"rm -rf\"}}\n\n",
+     "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" build\\\"}\"}}\n\n",
+     "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n",
+     "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_fx_2\",\"name\":\"Bash\",\"input\":{}}}\n\n",
+     "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"command\\\": \\\"ls -la build\\\"}\"}}\n\n",
+     "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":2}\n\n",
+     "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"},\"usage\":{\"output_tokens\":40}}\n\n",
+     "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+    ]
+   }
+  },
+  {
+   "request": {
+    "method": "POST",
+    "path": "/v1/messages",
+    "headers": [
+     [
+      "Content-Type",
+      "application/json"
+     ],
+     [
+      "x-api-key",
+      "fixture-not-a-key-anthropic"
+     ],
+     [
+      "anthropic-version",
+      "2023-06-01"
+     ],
+     [
+      "User-Agent",
+      "fixture-agent/1.0"
+     ]
+    ],
+    "json": {
+     "model": "fixture-model",
+     "max_tokens": 1024,
+     "stream": false,
+     "tools": [
+      {
+       "name": "Bash",
+       "description": "Run a shell command",
+       "input_schema": {
+        "type": "object",
+        "properties": {
+         "command": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "command"
+        ]
+       }
+      }
+     ],
+     "messages": [
+      {
+       "role": "user",
+       "content": "Clean the build directory, then show it."
+      },
+      {
+       "role": "assistant",
+       "content": [
+        {
+         "type": "text",
+         "text": "Cleaning up."
+        },
+        {
+         "type": "tool_use",
+         "id": "toolu_fx_1",
+         "name": "Bash",
+         "input": {
+          "command": "rm -rf build"
+         }
+        },
+        {
+         "type": "tool_use",
+         "id": "toolu_fx_2",
+         "name": "Bash",
+         "input": {
+          "command": "ls -la build"
+         }
+        }
+       ]
+      },
+      {
+       "role": "user",
+       "content": [
+        {
+         "type": "tool_result",
+         "tool_use_id": "toolu_fx_1",
+         "content": ""
+        },
+        {
+         "type": "tool_result",
+         "tool_use_id": "toolu_fx_2",
+         "is_error": true,
+         "content": "ls: cannot access 'build': No such file or directory"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "response": {
+    "status": 200,
+    "headers": [
+     [
+      "Content-Type",
+      "application/json"
+     ]
+    ],
+    "json": {
+     "id": "msg_fx_2",
+     "type": "message",
+     "role": "assistant",
+     "model": "fixture-model",
+     "content": [
+      {
+       "type": "text",
+       "text": "The build directory is gone."
+      }
+     ],
+     "stop_reason": "end_turn"
+    }
+   }
+  }
+ ]
+}

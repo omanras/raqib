@@ -37,6 +37,17 @@ item F7 of the M1.2 review packet or questions file.
      input and output truthfully.
    - Every field the agent influences is treated as hostile data: paths,
      commands, outputs and cwd.
+   - The proxy source (ADR-0003) is a second way in: the agent's model API
+     traffic, relayed by `raqib proxy` on 127.0.0.1. A `pre` comes from the
+     model's answer, read over TLS with the certificate verified; a `post`
+     comes from the agent's next request, so it is the agent's word, as a
+     hook payload is. Any local process can send requests to the port and
+     so write `post` lines. An agent that does not use the proxy leaves no
+     line at all, which no rule sees yet (the os source and a CROSS-SOURCE
+     rule are the planned answer, ADR-0003).
+   - Every line names its source (`hook`, `proxy`, `os`); a line without
+     one reads as `hook`. The field is as forgeable as the rest of the
+     line.
 2. **Trace file to rules.** The trace is a plain file that the agent's user
    can write. The rules trust it only as far as its own shape: corrupt lines,
    seqs or timestamps going back, gaps and missing halves become findings or
@@ -269,6 +280,8 @@ drive.
 
 - A keyed or chained trace, for tamper evidence and against the hash oracle.
 - A capture source outside the agent's user account, such as a proxy
-  (ADR-0001 section 2, later phase).
+  (ADR-0001 section 2, later phase). The proxy source of ADR-0003 runs as
+  whoever starts it; started as the agent's user, the agent can stop it,
+  bypass it, or point its base URL elsewhere.
 - Ratified answers to the open questions in `docs/review/`, in particular
   M1.2 Q5-Q9 and M2.2 Q1.

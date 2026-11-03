@@ -12,12 +12,18 @@ Result:
 
 Every finding line and every row of the RULES table names the rule's kind
 (signature, demand or anchor; ADR-0002 B-1).
+
+Every finding names the capture source of the lines it cites (ADR-0003,
+M5.2 E4): "hook", "proxy" or "os" (a line without the field is "hook"),
+several joined by "+" when its lines come from more than one, "-" when none
+of its lines is in the trace. A trace may mix sources; the header counts the
+records of each.
 """
 from __future__ import annotations
 
 import json
 
-from raqib.rules import engine, silence
+from raqib.rules import engine, silence, trace
 
 SILENCE_RULES = (
     ("SILENCE-GAP", "consecutive lines of a session more than RAQIB_GAP_SECONDS apart"),
@@ -97,7 +103,8 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
         except engine.FindingError as exc:
             alarms.append({"kind": "rejected-finding", "detail": str(exc)})
             continue
-        items.append(dict(f, cites=_cites(index, f["session_id"], f["cited_seq"], f["rule_id"], alarms)))
+        cites = _cites(index, f["session_id"], f["cited_seq"], f["rule_id"], alarms)
+        items.append(dict(f, cites=cites, source=_source(index, f["session_id"], f["cited_seq"])))
     raised = []
     for s in suspicion or []:
         problem = suspicion_problem(s)
@@ -124,9 +131,14 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
         result = "incomplete"
     else:
         result = "clean"
+    sources = {}
+    for _, rec in numbered:
+        name = trace.source_of(rec)
+        sources[name] = sources.get(name, 0) + 1
     return {
         "trace": str(trace_path),
         "records": len(numbered),
+        "sources": sources,
         "sessions": sessions,
         "findings_source": findings_source,
         "findings": items,
@@ -139,6 +151,13 @@ def build(trace_path, numbered, problems, findings, notes, rules, findings_sourc
         "result": result,
         "exit": EXIT[result],
     }
+
+
+def _source(index, session_id, seqs):
+    """The capture source(s) of the lines a finding cites (ADR-0003): one
+    name, several joined by "+", or "-" when no cited line is in the trace."""
+    names = sorted({trace.source_of(rec) for seq in seqs for _, rec in index.get((session_id, seq), [])})
+    return "+".join(names) or "-"
 
 
 def _cites(index, session_id, seqs, label, alarms):
@@ -208,8 +227,11 @@ def _safe(text):
 def render_text(report):
     out = ["Raqib report",
            "trace: %s (%d records, %d sessions)" % (report["trace"], report["records"],
-                                                   len(report["sessions"])),
-           "findings: %s" % report["findings_source"], ""]
+                                                   len(report["sessions"]))]
+    sources = report.get("sources") or {}
+    if sources:
+        out.append("sources: %s" % ", ".join("%s %d" % (name, sources[name]) for name in sorted(sources)))
+    out += ["findings: %s" % report["findings_source"], ""]
     out.append("ALARMS (A3, A5): %d" % len(report["alarms"]))
     for a in report["alarms"]:
         where = "line %d: " % a["line"] if "line" in a else ""
@@ -220,6 +242,7 @@ def render_text(report):
         out.append("  [%s] %s (%s, %s) session %s seq %s" % (
             f["severity"], f["rule_id"], f.get("class", "?"), f["kind"], f["session_id"],
             ",".join(str(s) for s in f["cited_seq"])))
+        out.append("      source: %s" % f.get("source", "-"))
         out.append("      %s" % f["summary"])
         for c in f["cites"]:
             if not c["lines"]:

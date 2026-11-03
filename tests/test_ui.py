@@ -102,7 +102,8 @@ def test_e2_gap_half_open_and_corrupt_lines_are_bands(tmp_path):
         line(2, "stop", "2026-10-16T10:00:03.000Z", session="s-two"),
     ])
     page, rep = page_for(path)
-    bands = re.findall(r'<tr class="band"[^>]*><td colspan="10">(.*?)</td></tr>', page)
+    # M5.2 E4: the timeline gained a source column, so a band spans 11 cells.
+    bands = re.findall(r'<tr class="band"[^>]*><td colspan="11">(.*?)</td></tr>', page)
     assert bands == ["line 4 is corrupt: not JSON",
                      "session s-ui: no capture for 298.0s (limit 60s)",
                      "session s-ui: the trace ends at seq 4 without stop or session_end"]

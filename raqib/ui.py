@@ -7,7 +7,8 @@ One page builder for `raqib ui` and `raqib watch` (I-9). In this order:
 - the findings, grouped high > medium > low. Empty groups are left out,
   and a severity outside those three goes in "other", last, with a note.
   Each finding cites its trace lines (A5);
-- the timeline of every trace line in file order, with the silence drawn
+- the timeline of every trace line in file order, each with its capture
+  source (hook, proxy or os; a line without one is hook, ADR-0003), with the silence drawn
   into it (A3): a band where a session went quiet for longer than the gap
   limit, a "no post" mark on a pre that never completed (and the
   reverse), a band where a started session ends without stop or
@@ -15,7 +16,8 @@ One page builder for `raqib ui` and `raqib watch` (I-9). In this order:
   windows, the closed ones lighter and the open one marked (I-10);
 - then the other watches (watch only), the suspicion lines, the rules that
   did not run and the rule table (A6). Each finding and each rule row
-  names its kind (ADR-0002 B-1).
+  names its kind (ADR-0002 B-1); each finding names the source of the
+  lines it cites (M5.2 E4).
 
 Live (I-1): a served page reloads itself by <meta http-equiv="refresh">
 every N seconds (--refresh, 1..3600, default 5). A static file never
@@ -65,6 +67,8 @@ from raqib.rules import silence, trace
 CSP = ("default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; "
        "form-action 'none'; frame-ancestors 'none'")
 CELL_MAX = 400
+COLUMNS = 11   # of the timeline: line, ts, session, source (M5.2 E4), seq, phase, tool, input_meta,
+               # output_meta, ok, marks; a band spans them all
 RESULT_TEXT = {"alarm": "ALARM", "incomplete": "INCOMPLETE", "clean": "CLEAN"}
 REFRESH_DEFAULT = 5       # I-1: seconds between reloads of a served page
 REFRESH_MAX = 3600
@@ -657,11 +661,11 @@ def _cited(item):
 
 def _finding_card(f):
     return ('<div class="card"><div class="head"><span class="tag">%s</span> %s (%s, %s) '
-            '<span class="meta">session %s, seq %s</span></div><div>%s</div>%s</div>'
+            '<span class="meta">session %s, seq %s, source %s</span></div><div>%s</div>%s</div>'
             % (_text(f["severity"]), _text(f["rule_id"]), _text(f.get("class", "-")),
                _text(f.get("kind") or "-"),
                _text(f["session_id"]), _text(", ".join(map(str, f["cited_seq"]))),
-               _text(f["summary"]), _cited(f)))
+               _text(f.get("source") or "-"), _text(f["summary"]), _cited(f)))
 
 
 def severity_groups(findings):
@@ -760,16 +764,16 @@ def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS, 
                'never closed, or a corrupt line. Highlighted rows are cited by a finding.%s</p>' % (
                    gap_seconds, " Live silence windows of raqib watch are drawn too: the closed ones lighter,"
                                 " the open one marked OPEN." if state is not None else ""))
-    out.append('<div class="scroll"><table><thead><tr><th>line</th><th>ts</th><th>session</th><th>seq</th>'
-               "<th>phase</th><th>tool</th><th>input_meta</th><th>output_meta</th><th>ok</th>"
+    out.append('<div class="scroll"><table><thead><tr><th>line</th><th>ts</th><th>session</th><th>source</th>'
+               "<th>seq</th><th>phase</th><th>tool</th><th>input_meta</th><th>output_meta</th><th>ok</th>"
                "<th>marks</th></tr></thead><tbody>")
     record_lines = {number for number, _ in numbered}
     used = set()
     for row in _timeline(numbered, problems, report, gap_seconds, windows,
                          _number(state.get("quiet_seconds")) if state is not None else None):
         if row[0] == "live":
-            out.append('<tr class="band live%s"><td colspan="10">%s%s</td></tr>' % (
-                " open" if row[1] else "", '<span class="tag">OPEN</span> ' if row[1] else "", _text(row[2])))
+            out.append('<tr class="band live%s"><td colspan="%d">%s%s</td></tr>' % (
+                " open" if row[1] else "", COLUMNS, '<span class="tag">OPEN</span> ' if row[1] else "", _text(row[2])))
             continue
         if row[0] == "band":
             # A line that is both a record and a problem keeps its anchor on
@@ -778,15 +782,16 @@ def render(report, numbered, problems, gap_seconds=silence.DEFAULT_GAP_SECONDS, 
             anchor = ' id="%s"' % _anchor(row[1]) if free else ""
             if free:
                 used.add(row[1])
-            out.append('<tr class="band"%s><td colspan="10">%s</td></tr>' % (anchor, _text(row[2])))
+            out.append('<tr class="band"%s><td colspan="%d">%s</td></tr>' % (anchor, COLUMNS, _text(row[2])))
             continue
         _, number, rec, tags = row
         ok = rec.get("ok")
         ok_text = "" if ok is None else ("true" if ok else "false " + str(rec.get("error_class", "")))
         out.append('<tr id="%s"%s><td>%d</td><td class="nowrap">%s</td><td class="wrap">%s</td><td>%s</td><td>%s</td>'
-                   '<td>%s</td><td class="wrap">%s</td><td class="wrap">%s</td><td>%s</td><td>%s</td></tr>'
+                   '<td>%s</td><td>%s</td><td class="wrap">%s</td><td class="wrap">%s</td><td>%s</td><td>%s</td></tr>'
                    % (_anchor(number), ' class="flag"' if tags else "", number, _text(rec.get("ts", "-")),
-                      _text(rec["session_id"]), _text(rec["seq"]), _text(rec.get("phase", "?")),
+                      _text(rec["session_id"]), _text(trace.source_of(rec)), _text(rec["seq"]),
+                      _text(rec.get("phase", "?")),
                       _text(rec.get("tool", "?")), _text(rec["input_meta"]) if rec.get("input_meta") else "",
                       _text(rec["output_meta"]) if rec.get("output_meta") else "", _text(ok_text),
                       "".join('<span class="tag">%s</span>' % _text(t) for t in tags)))
