@@ -97,8 +97,10 @@ def make_watch(tmp_path, gap=60, runner=None, clock=None, notifier=None, counter
     path.parent.mkdir(parents=True, exist_ok=True)
     clock = clock or Clock()
     notifier = notifier or make_notifier(runner)
+    # J-5: the heartbeat is wall time; here the wall clock follows the fake monotonic one.
     return watch.Watch(PROJECT, str(path), evaluator(gap, counter), RULES, gap, notifier, out=io.StringIO(),
-                       err=io.StringIO(), clock=clock, started=START), path, clock
+                       err=io.StringIO(), clock=clock, started=START,
+                       wall=lambda: START.timestamp() + clock.t - 1000.0), path, clock
 
 
 def ts(seconds):
@@ -300,8 +302,8 @@ def test_e2_no_line_for_the_gap_opens_a_window_and_the_next_line_closes_it(tmp_p
     assert st["silence"][0]["since"] == "2026-11-02T12:00:00.000Z" and st["silence"][0]["closed"] is None
     # M6.2 I-3: one state word and a detail line.
     assert w.band()[0] == ("alarm", "SILENT for 5 s")
-    assert w.status_word() == ("SILENT for 5 s", "alarm", "no line since 2026-11-02T12:00:00.000Z (after line 2,"
-                                                          " seq 2; limit 5 s)")
+    assert w.status_word() == ("SILENT for 5 s", "alarm", "no line read since 2026-11-02T12:00:00.000Z (read time;"
+                                                          " after line 2, seq 2; limit 5 s)")
     clock.t = 1009.0
     w.step()
     assert len(w.windows) == 1 and runner.titles().count("Raqib: SILENCE-LIVE open") == 1

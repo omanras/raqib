@@ -88,7 +88,8 @@ def make_watch(tmp_path, gap=5, runner=None, notifier=None, state_path=None, nam
     clock = Clock()
     notifier = notifier or make_notifier(runner)
     w = watch.Watch(PROJECT, str(path), lambda records: cli.run_rules(records, RULES, {}, gap), RULES, gap, notifier,
-                    out=io.StringIO(), err=io.StringIO(), clock=clock, started=START, state_path=state_path)
+                    out=io.StringIO(), err=io.StringIO(), clock=clock, started=START, state_path=state_path,
+                    wall=lambda: START.timestamp() + clock.t - 1000.0)   # J-5: wall time follows the fake clock
     return w, path, clock
 
 
@@ -328,7 +329,7 @@ def test_i3_the_state_words_in_their_order(tmp_path):
         (dict(state, agent_gone=gone), "AGENT GONE"),
         (dict(state, agent_gone=gone, silence=[window]), "SILENT for 0 s"),          # SILENT > AGENT GONE
         (dict(state, silence=[window], capture={"failed": "line 2 is a marker"}), "CAPTURE FAILED"),
-        (dict(state, heartbeat="2026-11-02T11:00:00.000Z"), "CAPTURE FAILED"),       # stale: C-4 in the detail
+        (dict(state, heartbeat_age_seconds=3600), "CAPTURE FAILED"),                  # stale: C-4 in the detail
         (dict(state, finished="2026-11-02T12:00:09.000Z", capture={"failed": "x"}), "FINISHED"),
         (dict(state, finished="t", status="crashed", error="RuntimeError: x"), "FINISHED"),
         (dict(state, silence=[dict(window, epoch=7)]), "WATCHING"),                   # a window of gone content
@@ -445,19 +446,21 @@ def test_i3_watch_runs_doctors_hook_check_after_the_install(tmp_path, monkeypatc
     assert st["capture"]["hooks"]["ok"] is False and "disableAllHooks is true" in st["capture"]["hooks"]["detail"]
     assert [h["kind"] for h in st["holes"]] == ["capture-failed"]
     assert '<span class="badge state alarm">CAPTURE FAILED</span>' in pages[0]
-    assert "hooks missing or foreign at start" in pages[0] and "disableAllHooks is true" in pages[0]
+    assert "hooks disabled" in pages[0] and "disableAllHooks is true" in pages[0]          # J-9
 
 
 def test_e2_the_band_says_notifications_on_or_off_the_trace_and_the_last_line_time(tmp_path):
     w, path, clock = make_watch(tmp_path, notifier=make_notifier(isfile=lambda p: p in ("/bin/notify-send", "/bin/sh")))
     page = w.page()
-    assert "notifications: on (notify-send)" in page and "no line yet (watching since 2026-11-02T12:00:00.000Z)" in page
+    assert "notifications: on (notify-send)" in page and "no line read yet (watching since 2026-11-02T12:00:00.000Z)" \
+        in page
     assert "trace <code>%s</code>" % ui._text(str(path)) in page
     append(path, [rec(1, "session_start", 0, tool="-"), rec(2, "pre", 1)])
     clock.t += 2
     w.step()
     page = w.page()
-    assert "last line 2 (seq 2) at 2026-11-02T12:00:02.000Z" in page
+    # J-12: the record's ts and the read time, each labelled
+    assert "last line 2 (seq 2): record ts 2026-11-02T12:00:01.000Z, read at 2026-11-02T12:00:02.000Z" in page
     band = page[page.index('<div class="band">'):page.index("</div>", page.index('<div class="band">'))]
     assert band.index("WATCHING") < band.index("notifications: on") < band.index("trace <code>")
     off, _, _ = make_watch(tmp_path, notifier=make_notifier(enabled=False, reason="--no-notify"), name="b.jsonl")
@@ -545,7 +548,7 @@ def test_i10_closed_windows_lighter_before_their_line_the_open_one_marked(tmp_pa
     rows = re.findall(r"<tr (?:class|id)=\"([^\"]+)\"", page)
     closed = rows.index("band live")
     assert rows[closed + 1] == "L4" and rows[-1] == "band live open"
-    assert '<span class="tag">OPEN</span> live silence (raqib watch), open: no line since 2026-11-02T12:00:07.000Z' \
+    assert '<span class="tag">OPEN</span> live silence (raqib watch), open: no line read since 2026-11-02T12:00:07.000Z' \
         in page and "8.0 s so far" in page
     assert "live silence (raqib watch), closed: no line from 2026-11-02T12:00:00.000Z to 2026-11-02T12:00:07.000Z" \
            " (7.0 s; limit 5 s) after line 3, seq 2; closed by line 4" in page
@@ -665,9 +668,9 @@ def test_i5_a_fifo_or_a_directory_as_registry_never_holds_the_watch(tmp_path, _h
     assert "is not a regular file" in w.register(watch.Registry(str(path)))
 
 
-def write_state(path, heartbeat, status="watching", pid=4242, started=None):
-    Path(path).write_text(json.dumps({"status": status, "heartbeat": heartbeat, "pid": pid, "started": started}),
-                          encoding="ascii")
+def write_state(path, heartbeat, status="watching", pid=4242, started=None, **extra):
+    Path(path).write_text(json.dumps(dict({"status": status, "heartbeat": heartbeat, "pid": pid, "started": started},
+                                          **extra)), encoding="ascii")
 
 
 def test_i5_gone_rows_are_never_pruned_and_are_shown_gone(tmp_path, _home):
@@ -816,16 +819,23 @@ def test_i7_links_are_127_0_0_1_port_only_and_the_registry_is_said_to_be_forgeab
     assert ui.port_url(1) == "http://127.0.0.1:1/" and ui.port_url(65535) == "http://127.0.0.1:65535/"
     path = _home / ".raqib" / "watches.json"
     registry = watch.Registry(str(path))
+    w, _, _ = make_watch(tmp_path)
+    alive = tmp_path / "alive.jsonl"
+    write_state(str(alive) + ".watch.json", ui._iso(w.wall()), pid=os.getpid(), started="s1")
     registry.change(lambda rows, note: rows.extend([
+        {"pid": os.getpid(), "project": "/alive", "port": 8765, "trace": str(alive), "started": "s1",
+         "url": "http://evil.example/"},
         {"pid": 2 ** 31 - 1, "project": "/ok", "port": 8766, "trace": "/t1", "url": "http://evil.example/"},
         {"pid": 2 ** 31 - 2, "project": "/bad", "port": "javascript:alert(1)", "trace": "/t2",
          "url": "javascript:alert(1)"},
         {"pid": 2 ** 31 - 3, "project": "/host", "port": 8767, "trace": "/t3", "url": "http://10.0.0.1:8767/"}]))
-    w, _, _ = make_watch(tmp_path)
     w.register(registry)
     page = w.page()
     hrefs = HREF.findall(page)
-    assert "http://127.0.0.1:8766/" in hrefs and "http://127.0.0.1:8767/" in hrefs
+    assert "http://127.0.0.1:8765/" in hrefs                                     # the ALIVE row is linked
+    # J-10: a GONE row's port is text, never a link.
+    assert "http://127.0.0.1:8766/" not in hrefs and "http://127.0.0.1:8767/" not in hrefs
+    assert "port 8766 (not linked: GONE)" in page and "port 8767 (not linked: GONE)" in page
     assert not [h for h in hrefs if "evil" in h or "javascript" in h or "10.0.0.1" in h]
     assert "port javascript:alert(1) is not a whole number from 1 to 65535" in page
     assert ui._text(ui.FORGEABLE) in page and ui.PID_REUSE in page
@@ -960,3 +970,330 @@ def test_e6_hostile_discover_cites_never_become_links(tmp_path):
     tab = ui.discover_page(str(path), 5)
     assert_inert(tab) is None and "javascript:alert" in tab                     # shown as text only
     assert all(SAFE_HREF.fullmatch(h) for h in HREF.findall(tab))
+
+
+# --- REDO 2: ADR-0005 Amendment J (docs/review/2026-11-03-M6.2-redo-ruling.md), each with a test -------------
+
+def test_j2_a_start_time_failure_is_not_cleared_by_history_only_by_a_live_record(tmp_path):
+    w, path, clock = make_watch(tmp_path)
+    path.write_text("\n".join([rec(1, "session_start", 0, tool="-"), rec(2, "pre", 1), rec(2, "post", 2)]) + "\n",
+                    encoding="utf-8")
+    w = watch.Watch(PROJECT, str(path), w.evaluate, RULES, 5, make_notifier(), out=io.StringIO(), err=io.StringIO(),
+                    clock=clock, started=START, wall=lambda: START.timestamp() + clock.t - 1000.0)
+    w.hooks_at_start(False, "settings.json: disableAllHooks is true", ["disabled"])
+    w.step()                                                                     # three good records, all history
+    assert w.history_line == 3 and w.status_word()[0] == "CAPTURE FAILED"
+    assert "hooks disabled at start" in w.status_word()[2]
+    append(path, [rec(3, "pre", 5)])                                             # a live good record
+    clock.t += 1
+    w.step()
+    assert w.status_word()[0] == "WATCHING" and "capture recovered at seq 3 (line 4" in w.status_word()[2]
+
+
+def test_j2_watch_of_an_existing_trace_with_disabled_hooks_stays_capture_failed(tmp_path, monkeypatch):
+    proj = tmp_path / "proj"
+    (proj / ".claude").mkdir(parents=True)
+    (proj / ".claude" / "settings.json").write_text('{"disableAllHooks": true}\n', encoding="utf-8")
+    trace_path = Path(watch.default_trace(os.path.normpath(str(proj))))
+    trace_path.parent.mkdir(parents=True)
+    trace_path.write_text("\n".join([rec(1, "session_start", 0, tool="-"), rec(2, "pre", 1), rec(2, "post", 2)])
+                          + "\n", encoding="utf-8")
+    pages = []
+
+    def look(server):
+        pages.append(fetch("http://127.0.0.1:%d/" % server.server_address[1])[2])
+    run_watch(monkeypatch, ["watch", proj, "--no-open", "--no-notify", "--port", "0"],
+              [look, lambda server: append(trace_path, [rec(3, "pre", 9)]), look])
+    assert '<span class="badge state alarm">CAPTURE FAILED</span>' in pages[0]   # history did not clear it
+    assert '<span class="badge state clean">WATCHING</span>' in pages[1] and "capture recovered at seq 3" in pages[1]
+
+
+def test_j3_agent_gone_needs_no_open_session(tmp_path):
+    runner = FakeRunner()
+    w, path, clock = make_watch(tmp_path, gap=5, runner=runner)
+    append(path, [rec(1, "session_start", 0, session="a", tool="-"), rec(1, "session_start", 0, session="b", tool="-"),
+                  rec(2, "session_end", 1, session="a", tool="-")])
+    w.step()
+    assert w.agent_gone() is None and w.open_sessions() == ["b"]              # b is still open
+    clock.t += 6
+    w.step()
+    assert w.status_word()[0] == "SILENT for 6 s"                               # silence is judged for b
+    append(path, [rec(2, "session_end", 7, session="b", tool="-")])
+    clock.t += 1
+    w.step()
+    assert w.windows[0]["closed_by_line"] == 4 and w.status_word()[0] == "AGENT GONE"
+    assert "no session is open" in w.status_word()[2] and w.state(clock())["open_sessions"] == []
+
+
+def test_j4_the_registry_is_not_written_when_it_is_inside_the_project(tmp_path, monkeypatch, _home):
+    pages = []
+
+    def look(server):
+        pages.append(fetch("http://127.0.0.1:%d/" % server.server_address[1])[2])
+    log = tmp_path / "elsewhere" / "t.jsonl"
+    code, out = run_watch(monkeypatch, ["watch", _home, "--log", log, "--no-open", "--no-notify", "--port", "0"],
+                          [look])
+    registry = _home / ".raqib" / "watches.json"
+    assert not registry.exists() and not Path(str(registry) + ".lock").exists()
+    why = "the registry %s is inside the project %s: it is not written (A4" % (registry, os.path.normpath(str(_home)))
+    assert why in out and ui._text("registry: " + why) in pages[0]               # a hole in the band
+    st = json.loads(Path(str(log) + ".watch.json").read_text(encoding="ascii"))
+    assert st["registry"]["row"] == "not written" and [h["kind"] for h in st["holes"]] == ["registry"]
+
+
+def test_j5_heartbeats_are_wall_time_and_step_seconds_is_the_last_steps_length(tmp_path):
+    clock = Clock()
+    path = tmp_path / "traces" / "raqib.log.jsonl"
+    path.parent.mkdir(parents=True)
+
+    def slow(records):                                  # the rules take 2 s
+        clock.t += 2.0
+        return cli.run_rules(records, RULES, {}, 5)
+    w = watch.Watch(PROJECT, str(path), slow, RULES, 5, make_notifier(), out=io.StringIO(), err=io.StringIO(),
+                    clock=clock, started=START, wall=lambda: 1800000000.0)
+    append(path, [rec(1, "session_start", 0, tool="-")])
+    w.step()
+    st = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    assert st["step_seconds"] == 2.0 and st["heartbeat"] == "2027-01-15T08:00:00.000Z"   # time.time(), not START
+    assert st["updated"] == "2027-01-15T08:00:00.000Z" and st["started"] == "2026-11-02T12:00:00.000Z"
+
+
+@pytest.mark.parametrize("step, age, alive", [(None, 1.4, True), (None, 1.6, False), (2.0, 5.9, True),
+                                              (2.0, 6.1, False), (20.0, 29.0, True), (20.0, 31.0, False),
+                                              (float("inf"), 29.0, True), (True, 1.6, False), ("9", 1.6, False)])
+def test_j5_alive_threshold_is_max_1_5_and_3_steps_capped_at_30(tmp_path, step, age, alive):
+    state = tmp_path / "t.watch.json"
+    extra = {} if step is None else {"step_seconds": step}
+    write_state(state, ui._iso(START - datetime.timedelta(seconds=age)), pid=1, started="s", **extra)
+    row = ui.judge_row({"pid": 1, "trace": str(tmp_path / "t"), "started": "s", "port": 8800}, START, 1.5,
+                       alive=lambda pid: True)
+    assert row["alive"] is alive, row
+
+
+def test_j6_watch_json_carries_band_and_other_pages_show_it(tmp_path):
+    w, path, clock = make_watch(tmp_path, gap=5)
+    append(path, [rec(1, "session_start", 0, tool="-")])
+    w.step()
+    clock.t += 6
+    w.step()
+    assert json.loads(Path(w.state_path).read_text(encoding="ascii"))["band"] == "SILENT for 6 s"
+    other = tmp_path / "o.jsonl"
+    write_state(str(other) + ".watch.json", ui._iso(START), pid=1, started="s", band="AGENT GONE")
+    row = ui.judge_row({"pid": 1, "trace": str(other), "started": "s"}, START, 1.5, alive=lambda pid: True)
+    assert row["word"] == "AGENT GONE"
+    write_state(str(other) + ".watch.json", ui._iso(START), pid=1, started="s")           # no band: the status
+    assert ui.judge_row({"pid": 1, "trace": str(other), "started": "s"}, START, 1.5,
+                        alive=lambda pid: True)["word"] == "watching"
+
+
+@pytest.mark.parametrize("trace", ["\\\\server\\share\\t", "//server/share/t", "\\/server/t", "relative/t", "",
+                                   "/tmp/a\x00b", 7, None] + ([] if WINDOWS else ["C:\\x\\t"]))
+def test_j7_only_a_local_absolute_non_unc_watch_json_is_opened(tmp_path, monkeypatch, trace):
+    opened = []
+    monkeypatch.setattr(ui, "read_json", lambda path, limit=None: opened.append(path) or (None, None, None))
+    row = ui.judge_row({"pid": 1, "trace": trace, "started": "s"}, START, 1.5, alive=lambda pid: True)
+    assert opened == [] and not row["alive"] and "is not opened" in row["why"] and "no network, J-7" in row["why"]
+
+
+def test_j7_a_local_trace_opens_only_its_own_watch_json(tmp_path, monkeypatch):
+    opened = []
+    real = ui.read_json
+    monkeypatch.setattr(ui, "read_json", lambda path, limit=None: opened.append(path) or real(path, limit))
+    ui.judge_row({"pid": 1, "trace": str(tmp_path / "t"), "state": "\\\\evil\\share\\x", "started": "s"}, START,
+                 1.5, alive=lambda pid: True)
+    assert opened == [str(tmp_path / "t") + ".watch.json"]                      # never the row's "state" field
+
+
+def test_j7_at_most_64_rows_the_newest_the_rest_counted(tmp_path):
+    path = tmp_path / "watches.json"
+    rows = [{"pid": 2 ** 31 - 1, "project": "/p%d" % n, "trace": "/t%d" % n, "started": "s"} for n in range(70)]
+    path.write_text(json.dumps({"raqib_watches": 1, "watches": rows}), encoding="ascii")
+    info = ui.read_watches(str(path), START, 1.5, alive=lambda pid: False)
+    assert len(info["rows"]) == 64 and info["more"] == 6 and info["rows"][0]["project"] == "/p6"
+    page = "\n".join(ui._watches_section(None, None, info))
+    assert "6 older rows of the registry are not shown (at most 64 are, J-7)" in page
+
+
+def test_j8_every_hole_kind_first_in_its_order():
+    kinds = ["no-kind", "watch-crashed", "silence-window", "trace-truncated", "state-unwritable", "trace-problem",
+             "trace-unreadable", "capture-failed", "trace-missing", "registry"]
+    assert [a["kind"] for a in ui.alarm_order([{"kind": k} for k in kinds])] == [
+        "capture-failed", "trace-missing", "trace-unreadable", "trace-truncated", "state-unwritable", "watch-crashed",
+        "no-kind", "silence-window", "trace-problem", "registry"]
+
+
+def test_j9_the_hook_detail_names_disabled_missing_or_foreign(tmp_path):
+    from raqib import doctor, install
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert watch.hook_kinds(doctor, install, str(empty)) == ["missing"]
+    off = tmp_path / "off"
+    (off / ".claude").mkdir(parents=True)
+    (off / ".claude" / "settings.json").write_text('{"disableAllHooks": true}\n', encoding="utf-8")
+    assert watch.hook_kinds(doctor, install, str(off))[0] == "disabled"
+    other = tmp_path / "foreign"
+    other.mkdir()
+    install.install_project(str(other), log=str(tmp_path / "t.jsonl"), out=io.StringIO())
+    settings = other / ".claude" / "settings.json"
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    capture = install.capture_path()
+    for groups in data["hooks"].values():
+        for group in groups:
+            for hook in group["hooks"]:
+                hook["command"] = hook["command"].replace(capture, capture.replace("hooks", "hooks-of-another"))
+    settings.write_text(json.dumps(data), encoding="utf-8")
+    assert watch.hook_kinds(doctor, install, str(other)) == ["foreign"]
+    w, _, _ = make_watch(tmp_path)
+    w.hooks_at_start(False, "x", ["disabled", "missing"])
+    assert w.status_word()[2].startswith("hooks disabled/missing at start: x")
+
+
+def test_j11_a_dangling_discover_json_link_is_an_alarm_on_the_tab(tmp_path):
+    w, path, clock = make_watch(tmp_path)
+    try:
+        os.symlink(str(tmp_path / "nowhere.json"), str(path.parent / "discover.json"))
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not permitted here")
+    tab = w.discover_page()
+    assert '<span class="badge alarm">ALARM</span>' in tab and "it is a link to nothing" in tab
+    assert 'href="/discover"' in w.page()
+
+
+def test_j12_last_line_of_a_line_that_is_not_a_record(tmp_path):
+    w, path, clock = make_watch(tmp_path)
+    append(path, [rec(1, "session_start", 0, tool="-"), "{torn"])
+    w.step()
+    assert "last line 2 (seq None): record ts - (not a record), read at 2026-11-02T12:00:00.000Z" in w.page()
+
+
+def test_j13_crashed_is_a_word_for_other_rows_and_rules_that_did_not_run_are_alarms(tmp_path):
+    other = tmp_path / "o.jsonl"
+    for status, age, word in (("crashed", 0, "CRASHED"), ("watching", 60, "CRASHED"), ("finished", 60, "FINISHED")):
+        write_state(str(other) + ".watch.json", ui._iso(START - datetime.timedelta(seconds=age)), status=status,
+                    pid=1, started="s", band="WATCHING")
+        row = ui.judge_row({"pid": 1, "trace": str(other), "started": "s"}, START, 1.5, alive=lambda pid: True)
+        assert row["word"] == word, (status, row)
+    w, path, clock = make_watch(tmp_path)
+    w.step()
+    clock.t += watch.STALE_SECONDS + 1
+    assert w.status_word()[0] == "CAPTURE FAILED"                               # never CRASHED in its own band
+    rep, numbered, problems = blocked_report()
+    page = ui.render(rep, numbered, problems)
+    assert page.index("<h2>Alarms") < page.index("<h3>Rules that did not run") < page.index("<h2>Findings")
+
+
+def test_j13_write_state_retries_three_times_50_ms_apart(tmp_path, monkeypatch):
+    w, path, clock = make_watch(tmp_path)
+    real, calls, waits = os.replace, [], []
+
+    def flaky(src, dst, fail=2):
+        calls.append(dst)
+        if len(calls) <= flaky.fail:
+            raise PermissionError(13, "in use by a reader")
+        return real(src, dst)
+    flaky.fail = 2
+    monkeypatch.setattr(os, "replace", flaky)
+    monkeypatch.setattr(watch, "_retry_sleep", waits.append)
+    w.step()
+    assert w.state_error is None and len(calls) == 3 and waits == [0.05, 0.05] and Path(w.state_path).exists()
+    calls.clear(), waits.clear()
+    flaky.fail = 99
+    w.step()
+    assert len(calls) == 4 and waits == [0.05] * 3 and "in use by a reader" in w.state_error
+    assert not list(Path(w.state_path).parent.glob(".raqib-watch-*"))           # no temp file left behind
+
+
+# --- J-14: the tests the review asked for ---------------------------------------------------------------------
+
+def test_j14_unregister_restores_a_row_that_was_removed(tmp_path, _home):
+    path = _home / ".raqib" / "watches.json"
+    w, _, _ = make_watch(tmp_path)
+    w.register(watch.Registry(str(path)))
+    path.write_text('{"raqib_watches": 1, "watches": []}', encoding="ascii")    # someone removed the row
+    w.finish()
+    assert w.unregister() is None
+    (row,) = registry_rows(_home)
+    assert row["status"] == "finished" and row["notes"] == ["this row was not in the registry at the end: added again"]
+
+
+def test_j14_the_registry_write_retries_while_a_reader_holds_it(tmp_path, monkeypatch, _home):
+    path = _home / ".raqib" / "watches.json"
+    real, calls = os.replace, []
+
+    def flaky(src, dst):
+        calls.append(dst)
+        if len(calls) == 1:
+            raise PermissionError(13, "in use")
+        return real(src, dst)
+    waits = []
+    registry = watch.Registry(str(path), sleep=waits.append)
+    monkeypatch.setattr(os, "replace", flaky)
+    assert registry.change(lambda rows, note: rows.append({"pid": 1})) == (None, None)
+    assert len(calls) == 2 and waits == [watch.LOCK_POLL_SECONDS] and registry.read()[0]["watches"] == [{"pid": 1}]
+
+
+def test_j14_a_hook_check_that_throws_is_capture_failed(tmp_path, monkeypatch):
+    from raqib import doctor
+    proj = tmp_path / "proj"
+    proj.mkdir()
+
+    def boom(*a, **k):
+        raise RuntimeError("settings exploded")
+    monkeypatch.setattr(doctor, "check_hooks", boom)
+    code, out = run_watch(monkeypatch, ["watch", proj, "--no-open", "--no-notify", "--port", "0"])
+    st = json.loads(Path(watch.default_trace(os.path.normpath(str(proj))) + ".watch.json").read_text(encoding="ascii"))
+    assert st["capture"]["hooks"] == {"ok": False, "detail": "the hook check failed: RuntimeError: settings exploded",
+                                      "kinds": ["unchecked"]}
+    assert "RAQIB-SILENCE: hooks unchecked at start: the hook check failed: RuntimeError" in out
+    assert st["band"] == "FINISHED" and st["capture"]["start"]["why"].startswith("hooks unchecked at start")
+
+
+def test_j14_a_closed_window_whose_line_is_not_in_this_view(tmp_path):
+    w, path, clock = make_watch(tmp_path)
+    append(path, [rec(1, "session_start", 0, tool="-")])
+    w.step()
+    state = dict(w.state(clock()), silence=[{"epoch": 0, "since": "a", "closed": "b", "seconds": 3.0, "after": "x",
+                                              "closed_by_line": 99}])
+    rep, numbered, problems = w.report()
+    page = ui.render(rep, numbered, problems, 5, refresh=5, live={"state": state, "watches": None, "own": None})
+    assert "closed by line 99 (that line is not in this view)" in page
+
+
+def test_j14_ui_serve_shows_discover_as_a_section(tmp_path, monkeypatch):
+    local = tmp_path / "t" / "trace.jsonl"
+    local.parent.mkdir()
+    local.write_bytes(BLOCKED.read_bytes())
+    write_discover(local.parent)
+    served = []
+
+    class FakeServer:
+        server_address = ("127.0.0.1", 4321)
+
+        def __init__(self, page):
+            self.page = page
+
+        def serve_forever(self):
+            served.append(self.page())
+            raise KeyboardInterrupt
+
+        def server_close(self):
+            pass
+    monkeypatch.setattr(ui, "make_server", lambda page, port, **kw: FakeServer(page))
+    assert cli.main(["ui", str(local), "--serve", "--port", "0"], out=io.StringIO()) == 0
+    assert '<h2 id="discover">Discover</h2>' in served[0] and '<a href="#discover">discover</a>' in served[0]
+    assert '<meta http-equiv="refresh" content="5">' in served[0]
+
+
+def test_j14_nested_objects_in_registry_fields_are_text(tmp_path, _home):
+    path = _home / ".raqib" / "watches.json"
+    nested = {"a": [1, {"b": "<script>x</script>" + chr(0x202E)}], "c": None}
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"raqib_watches": 1, "watches": [
+        {"pid": [1], "project": nested, "port": {"p": 8765}, "trace": nested, "started": nested, "status": nested,
+         "notes": [nested, "ok note"]}]}), encoding="ascii")
+    w, _, _ = make_watch(tmp_path)
+    w.registry = watch.Registry(str(path))
+    page = w.page()
+    assert_inert(page)
+    assert "&lt;script&gt;x&lt;/script&gt;?" in page and "note: ok note" in page and "pid [1] is not a process number" \
+        in page

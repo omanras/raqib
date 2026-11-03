@@ -4,7 +4,7 @@ findings by severity, live silence, several projects, a discover tab.
 Binding: ADR-0005 Amendment I / docs/review/2026-11-03-M6.2-ruling.md (I-1..I-12).
 
 Scope:
-  raqib/ui.py, raqib/watch.py (serve wiring + registry), raqib/cli.py (--refresh only),
+  raqib/ui.py, raqib/watch.py, raqib/cli.py (--refresh only),
   tests/, README.md (one paragraph), docs/review/, docs/specs/ADR-0005-*.md (A-6 note only)
 
 Exit criteria:
