@@ -456,7 +456,8 @@ def test_a1_rules_never_reach_a_model_or_the_network():
 def test_m12_e1_rule_set_v1_ships():
     rules = engine.load_catalog(CATALOG)
     assert [(r.id, r.cls) for r in rules] == [
-        ("DESTRUCT-CMD", "DESTRUCT"), ("DRIFT-FILES", "DRIFT"), ("NET-TOOL", "NET"),
+        ("DESTRUCT-CMD", "DESTRUCT"), ("DRIFT-FILES", "DRIFT"), ("EDIT-NO-TEST", "DRIFT"),
+        ("LANDED-NO-GATE", "DRIFT"), ("NET-TOOL", "NET"),
         ("SCOPE-CWD-MOVED", "SCOPE"), ("SCOPE-CWD-ROOT", "SCOPE"),
         ("SCOPE-PATH", "SCOPE"), ("SECRET-OUTPUT", "SECRET")]
 
@@ -883,6 +884,7 @@ def test_m41_e1_a_bad_id_is_reported_before_the_kind():
 
 M42_NOTE = "Note (2026-11-03, M4.2, ruling D-8"
 M53_NOTE = "Note (2026-11-03, M5.3, ruling C-9"
+M42B_NOTE = "Note (2026-11-03, M4.2b, ADR-0002 Amendment G"
 
 
 def table_rows(text):
@@ -937,8 +939,20 @@ def adr_note_m53():
     """The M5.3 note (ruling C-9): (rows it adds, its text)."""
     _, section = adr_table()
     assert section.count(M53_NOTE) == 1
-    note = section.split(M53_NOTE, 1)[1]
+    note = section.split(M53_NOTE, 1)[1].split(M42B_NOTE, 1)[0]
     return table_rows(note), note
+
+
+def adr_note_m42b():
+    """The M4.2b note (Amendment G): (rows it adds, {rule id: [holes it
+    quotes]}, its text)."""
+    _, section = adr_table()
+    assert section.count(M42B_NOTE) == 1
+    note = section.split(M42B_NOTE, 1)[1]
+    holes = {}
+    for rule_id, item in re.findall(r'^- holes ([A-Z]+-[A-Z]+-[A-Z]+): "(.+)"$', note, re.M):
+        holes.setdefault(rule_id, []).append(item)
+    return table_rows(note), holes, note
 
 
 def adr_table_after_m53():
@@ -949,14 +963,24 @@ def adr_table_after_m53():
     return out
 
 
+def adr_table_after_m42b():
+    out = adr_table_after_m53()
+    rows, _, _ = adr_note_m42b()
+    assert not set(rows) & set(out)
+    out.update(rows)
+    return out
+
+
 def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     """M4.2 (D-8): the table plus the dated notes under it is held to the tree
-    (M5.3, C-9: the CROSS-SOURCE row, a code rule with its kind in cross.py)."""
+    (M5.3, C-9: the CROSS-SOURCE row, a code rule with its kind in cross.py;
+    M4.2b, Amendment G: the two demand rows and their holes)."""
     from raqib.rules import cross
-    table = adr_table_after_m53()
+    table = adr_table_after_m42b()
     before, section = adr_table()
     rules = {r.id: r for r in engine.load_catalog(CATALOG)}
-    assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(table) == 13
+    assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(adr_table_after_m53()) == 13
+    assert len(table) == 15
     assert set(table) == set(rules) | set(silence.RULE_KINDS) | set(cross.RULE_KINDS)
     for rule_id, (kind, items) in table.items():
         if rule_id in silence.RULE_KINDS:
@@ -974,16 +998,19 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
             assert len(set(rule.evasion)) == len(rule.evasion), rule_id
         else:
             assert rule.evasion == () and "evasion" not in rule.doc, rule_id
+            assert rule.holes == tuple(adr_note_m42b()[1].get(rule_id, ())), rule_id   # G-6
             for item in items:  # an anchor's hole is written in its description
                 assert item.startswith("hole: ") and "Bash are not seen" in rule.doc["description"], rule_id
     today = [sum(1 for k, _ in before.values() if k == kind) for kind in engine.KINDS]
     assert "Ratio today: %d : %d : %d." % tuple(today) in section and today == [4, 4, 3]
     m42 = [sum(1 for k, _ in adr_table_after_m42().values() if k == kind) for kind in engine.KINDS]
     assert "Ratio after M4.2: %d : %d : %d." % tuple(m42) in section and m42 == [4, 5, 3]
+    m53 = [sum(1 for k, _ in adr_table_after_m53().values() if k == kind) for kind in engine.KINDS]
+    assert "Ratio after M5.3: %d : %d : %d." % tuple(m53) in section and m53 == [4, 5, 4]
     counts = [sum(1 for k, _ in table.values() if k == kind) for kind in engine.KINDS]
-    assert "Ratio after M5.3: %d : %d : %d." % tuple(counts) in section
+    assert "Ratio after M4.2b: %d : %d : %d." % tuple(counts) in section
     tree = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values()) + list(cross.RULE_KINDS.values())
-    assert counts == [tree.count(kind) for kind in engine.KINDS] == [4, 5, 4]
+    assert counts == [tree.count(kind) for kind in engine.KINDS] == [4, 7, 4]
 
 
 def test_m41_e3_every_catalog_finding_carries_its_rule_kind():
@@ -1326,7 +1353,8 @@ def test_m42_redo2_e6_code_on_stdin_a_heredoc_or_a_script_records_the_shell_only
     start = "code given to a shell on stdin, by a here-document or a here-string, or in a script file"
     for rule_id in ("DESTRUCT-CMD", "NET-TOOL"):
         (text,) = [e for e in catalog_rule(rule_id).evasion if e.startswith(start)]
-        assert "records the shell or the script only" in text and "M4.2b Q-A" in text
+        assert "records the shell or the script only" in text and "M4.2b Q-A" not in text
+        assert "since M4.2b the script's basename is input_meta.command_scripts, ruling G-2" in text   # G-2
     assert "- code given to a shell on stdin, by a here-document or a here-string, or in\n  a script file" in (
         ROOT / "README.md").read_text(encoding="utf-8")
     rules = [catalog_rule("DESTRUCT-CMD"), catalog_rule("NET-TOOL")]
@@ -1351,15 +1379,23 @@ def test_m42_redo2_e7_benign_negatives_carry_command_programs():
     assert capture.input_meta("Bash", {"command": "rm -rf build"}) == {"command_head": "rm", "command_programs": ["rm"]}
 
 
-def test_m42_redo2_e12_the_leading_redirect_hole_is_in_both_descriptions():
+def test_m42b_e12_command_head_skips_a_leading_redirection_and_both_descriptions_say_so():
+    """E-12, fixed in M4.2b: the head of `2>/dev/null rm x` is rm, so a line
+    with the head only fires; the hole that stays is on old lines."""
     capture = load_capture()
-    assert capture.command_head("2>/dev/null rm x") == "null"        # the hole, as built (fix: M4.2b)
+    assert capture.command_head("2>/dev/null rm x") == "rm"
     assert capture.command_programs("2>/dev/null rm x") == ["rm"]
     for rule_id in ("DESTRUCT-CMD", "NET-TOOL"):
-        description = catalog_rule(rule_id).doc["description"]
-        assert ("Known hole: command_head reads a leading redirection as the program (`2>/dev/null rm x` has the"
-                " head null)") in description, rule_id
-    old = dict(line(1), input_meta={"command_head": "null"})          # a line without command_programs
+        description = " ".join(catalog_rule(rule_id).doc["description"].split())
+        assert ("Since M4.2b (ruling E-12) command_head skips leading redirections and their targets"
+                " (`2>/dev/null rm x` has the head rm)") in description, rule_id
+        assert "a line written before M4.2b kept the old head (null there)" in description, rule_id
+        assert "fix: M4.2b" not in description, rule_id
+    new = dict(line(1), input_meta={"command_head": capture.command_head("2>/dev/null rm x")})
+    assert [f["cited_seq"] for f in engine.run_rule(catalog_rule("DESTRUCT-CMD"), [new])] == [[1]]
+    net = dict(line(1), input_meta={"command_head": capture.command_head("2>&1 >/dev/null curl -s x")})
+    assert [f["cited_seq"] for f in engine.run_rule(catalog_rule("NET-TOOL"), [net])] == [[1]]
+    old = dict(line(1), input_meta={"command_head": "null"})          # a line written before M4.2b
     assert engine.run_rule(catalog_rule("DESTRUCT-CMD"), [old]) == []
 
 

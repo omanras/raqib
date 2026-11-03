@@ -9,7 +9,9 @@ capture.py unchanged (M5.2); capture.py keeps every name it had.
 - canonical_sha256: sha256 of canonical JSON, the only form in which a tool
   input or output reaches the trace (ADR-0001 section 3).
 - input_meta: the small extract of a tool input (path, url_host, and for a
-  tool named Bash command_head and command_programs or command_unread).
+  tool named Bash command_head and command_programs or command_unread; since
+  M4.2b also command_scripts and commit_prefix when there is one, ADR-0002
+  Amendment G).
 - redact: a secret inside a path becomes [redacted:<kind>].
 - output_meta / scan_output: the names of the secret patterns an output
   matched, never the text (M1.2).
@@ -40,6 +42,11 @@ __all__ = (
     "COMMAND_SCAN_MAX", "canonical_sha256", "tool_use_id", "command_head", "looks_like_key",
     "command_programs", "redact", "input_meta", "error_class", "strings_in", "scan_output", "secret_part",
     "is_placeholder", "is_sample_jwt", "output_meta", "now_ts",
+    # M4.2b (ADR-0002 Amendment G)
+    "PYTHONS", "PYTHON_VALUE_OPTIONS", "PYTHON_VALUE_LONG", "PYTHON_NO_SCRIPT", "SHELL_NO_SCRIPT",
+    "SCRIPTS_MAX", "COMMIT_PREFIX", "COMMIT_PREFIX_MAX", "GIT_VALUE_OPTIONS", "COMMIT_FLAGS",
+    "COMMIT_VALUE_LONG", "COMMIT_NOT_READ", "HEREDOC_MESSAGE", "HEAD_TARGET_STOP", "read_command",
+    "command_scripts", "commit_prefix", "SCRIPT_WRAPPERS", "TIMEOUT_VALUE_OPTIONS", "SOURCES",
 )
 
 # A-1: leading shell assignments (NAME=value) are not the command. Words are
@@ -70,6 +77,38 @@ REDIRECTS = ("&>>", "<<<", "<<-", "&>", ">>", ">|", ">&", "<&", "<>", "<<", ">",
 OPERATORS = ("&&", "||", "|&", "|", ";", "&")
 BLANKS = " \t"
 WORD_END = " \t\n;&|<>()"
+
+# M4.2b (ADR-0002 Amendment G), read by the same reader as command_programs.
+# command_scripts (G-2, G-9): the basename of the script OPERAND of a python
+# or python3 call (ending .py) and of a bash or sh call (ending .sh); never
+# another argument. -c and -m (python), -c and -s (bash, sh) mean no script.
+PYTHONS = ("python", "python3", "python.exe", "py", "py.exe")   # H-1: the Windows names too
+PYTHON_VALUE_OPTIONS = "WX"                  # -W arg, -X opt: the value is glued or the next word
+PYTHON_VALUE_LONG = ("--check-hash-based-pycs",)
+PYTHON_NO_SCRIPT = "cm"                      # -c CODE, -m MODULE
+SHELL_NO_SCRIPT = "cs"                       # -c STRING, -s (commands on stdin)
+SCRIPTS_MAX = 64                             # distinct names; more: the command is not read (as D-9)
+# H-1: for command_scripts only, these wrappers pass through to the command
+# they run, one level: `timeout [opts] N cmd`, `nohup cmd`, `env cmd` (env
+# with no option and no NAME=value). `.` and `source` record their script.
+SCRIPT_WRAPPERS = ("timeout", "nohup", "env")
+TIMEOUT_VALUE_OPTIONS = ("-s", "-k", "--signal", "--kill-after")
+SOURCES = (".", "source")
+# commit_prefix (G-3, G-4): the first word of the first -m message of the
+# first `git ... commit` simple command, written only when it is a lower-case
+# word ending in ":" of at most COMMIT_PREFIX_MAX characters.
+COMMIT_PREFIX = re.compile(r"[a-z]+:\Z")
+COMMIT_PREFIX_MAX = 16
+GIT_VALUE_OPTIONS = ("-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env",
+                     "--attr-source")        # git's options before the subcommand that take the next word
+COMMIT_FLAGS = "apsneiovqz"                  # git commit's short options without a value
+COMMIT_VALUE_LONG = ("--author", "--date", "--cleanup", "--trailer", "--fixup", "--squash", "--template",
+                     "--pathspec-from-file")  # long options of git commit that take the next word
+COMMIT_NOT_READ = ("--amend", "--file", "--reuse-message", "--reedit-message")   # and -F, -C, -c (G-4)
+# A message given as "$(cat <<'EOF' ... EOF)": a quoted delimiter, so the body
+# is literal text (G-4). Group 1 is "-" for <<-, groups 2-4 the delimiter.
+HEREDOC_MESSAGE = re.compile(
+    r"\"\$\([ \t]*cat[ \t]+<<(-?)[ \t]*(?:'([^'\n]+)'|\"([^\"\n$`\\]+)\"|\\([A-Za-z0-9_]+))[ \t]*\n")
 
 # A-4: a whole class name ending in Error or Exception, such as the leading
 # "TimeoutError" of "TimeoutError: ..." or a structured error's type; anything
@@ -138,11 +177,14 @@ def tool_use_id(value):
 
 def command_head(command):
     """A-1: basename of the first word of a Bash command, skipping leading
-    NAME=value assignments. Words follow shell quoting (`"rm"` and `\\rm` are
-    rm). None, so that rules see "unknown" rather than a wrong or secret head,
-    when the head cannot be read safely: unbalanced quotes, a word glued to an
-    operator or substitution (`ls;rm`, `$(x)`), a name that is not made of
-    [A-Za-z0-9_.+[-] or is over 64 chars, or one that looks like a key (it
+    NAME=value assignments and, since M4.2b (ruling E-12), leading
+    redirections with their targets (`2>/dev/null rm x` has the head rm).
+    Words follow shell quoting (`"rm"` and `\\rm` are rm). None, so that
+    rules see "unknown" rather than a wrong or secret head, when the head
+    cannot be read safely: unbalanced quotes, a word glued to an operator or
+    substitution (`ls;rm`, `$(x)`), a leading redirection with no target or
+    one whose target holds ; & | ( ) < > or a backtick, a name that is not made
+    of [A-Za-z0-9_.+[-] or is over 64 chars, or one that looks like a key (it
     matches a secret pattern, or is 16+ chars mixing digits and both cases)."""
     if not isinstance(command, str):
         return None
@@ -156,6 +198,16 @@ def command_head(command):
             return None  # the word may go on past the part that was read
         raw, pos = match.group(1), match.end()
         if ASSIGNMENT.match(raw):
+            continue
+        target = _leading_redirect(raw)
+        if target is not None:   # E-12: [n]op target, glued or as the next word
+            if target == "":
+                match = SHELL_WORD.match(text, pos)
+                if match is None or (match.end() == len(text) and len(text) < len(command)):
+                    return None
+                target, pos = match.group(1), match.end()
+            if any(c in target for c in HEAD_TARGET_STOP):
+                return None
             continue
         if len(raw) > 4 * COMMAND_HEAD_MAX:
             return None
@@ -172,6 +224,18 @@ def command_head(command):
         if looks_like_key(name):
             return None
         return name
+
+
+HEAD_TARGET_STOP = ";&|()<>`"   # in a leading redirection's target: the head is not read (E-12)
+
+
+def _leading_redirect(raw):
+    """The target text of a word that is a redirection ([n]op target, "" when
+    the target is the next word), or None when the word is not one."""
+    fd = FD_REDIRECT.match(raw)
+    at = fd.end() if fd else 0
+    op = next((r for r in REDIRECTS if raw.startswith(r, at)), None)
+    return None if op is None else raw[at + len(op):]
 
 
 def looks_like_key(text):
@@ -207,19 +271,101 @@ def command_programs(command):
     definition, an array assignment, a process substitution <(...) or
     >(...), a backtick anywhere, a quote or $ inside ${...}; an unquoted
     here-document whose body holds $( or a backtick, or one with no end line;
-    unbalanced quotes or parentheses; more than PROGRAMS_MAX names."""
+    unbalanced quotes or parentheses; more than PROGRAMS_MAX names; since
+    M4.2b, more than SCRIPTS_MAX distinct script names (command_scripts)."""
+    read = read_command(command)
+    return None if read is None else read[0]
+
+
+def read_command(command):
+    """M4.2b (ADR-0002 Amendment G): (programs, scripts, prefix) of a Bash
+    command in one reading, or None when it cannot be read in full (the
+    cases of command_programs). programs is command_programs; scripts is
+    command_scripts' list ([] when none); prefix is commit_prefix's word or
+    None. Pure, like command_programs: nothing is run."""
     if not isinstance(command, str) or len(command) > COMMAND_SCAN_MAX:
         return None
-    names = []
+    found = _Found()
     try:
-        _ProgramReader(command, 0, names, 0, False).run(closing=False)
+        _ProgramReader(command, 0, found, 0, False).run(closing=False)
     except _Unread:
         return None
-    return names
+    return found.names, found.scripts, found.prefix
+
+
+def command_scripts(command):
+    """G-2: the basename of the script operand of every python call (PYTHONS:
+    python, python3, python.exe, py, py.exe; a word ending .py) and every
+    bash or sh call (a word ending .sh) that the reader of command_programs
+    reads (top level, $(...), a bash -c string), each once, in first-seen
+    order. The operand is the first word after the options and their values:
+    python's -W and -X (glued or the next word) and --check-hash-based-pycs
+    take a value, -- ends the options, and -c, -m or - mean there is no
+    script; bash's and sh's -o, -O, +o, +O, --rcfile and --init-file take a
+    value, -- and - end the options, and -c or -s mean there is no script. A
+    word that is not literal where the operand could be ends the search:
+    nothing is recorded for that call.
+
+    H-1 (ADR-0002 Amendment H): the basename is split on / and on a backslash, and a
+    backslash outside quotes is kept for it (`python -I tools\\gate.py`, as a
+    Windows shell passes it, records gate.py; the shell's own reading drops
+    that backslash). For scripts only, SCRIPT_WRAPPERS pass through one level
+    to the command they run (timeout's options and its duration are skipped;
+    env only with no option and no NAME=value): a python or shell call there
+    is read as above, and a command word ending .py or .sh is recorded
+    itself (`timeout 900 tools/gate.sh` records gate.sh). `.` and `source`
+    record their script when it ends .sh. Basename only, under the name rules
+    of a program (HEAD_NAME, no leading -, nothing that looks like a key). []
+    when there is none; None when the command cannot be read (G-9:
+    input_meta writes the key only when the list is not empty)."""
+    read = read_command(command)
+    return None if read is None else read[1]
+
+
+def commit_prefix(command):
+    """G-3, G-4: the first word of the message of the first `git ... commit`
+    simple command, when it matches COMMIT_PREFIX (a lower-case word ending
+    in ":") and has at most COMMIT_PREFIX_MAX characters; else None.
+
+    git's options before the subcommand are skipped, those of
+    GIT_VALUE_OPTIONS with the next word. The message is the value of the
+    first non-empty (H-4: git drops an empty one) of -m MSG, -mMSG,
+    --message=MSG, --message MSG, or a cluster of COMMIT_FLAGS ending in m
+    (-am MSG; -amMSG likewise), read with shell quoting; a value that is not
+    literal counts as not empty. --no-message, which makes git forget the
+    messages before it, is not read (a listed hole). Its first word counts only when it lies in literal text (before
+    any $), or when the whole value is "$(cat <<'EOF' ... EOF)" with a quoted
+    delimiter ('EOF', "EOF" or \\EOF; <<- strips tabs), whose body is read as
+    text (HEREDOC_MESSAGE). Leading blank lines do not count, as git strips
+    them. Only the first commit of the command is read (a later one is not).
+    None (not read) for that first commit when it has --amend, -F/--file,
+    -C/--reuse-message or -c/--reedit-message (COMMIT_NOT_READ), a word
+    that is not literal among its options (before --), a value-taking
+    option with no value, or a message that is not read as above (an
+    unquoted delimiter, an expansion before the first word ends); and when
+    the command cannot be read in full."""
+    read = read_command(command)
+    return None if read is None else read[2]
 
 
 class _Unread(Exception):
     """The command cannot be read in full: command_programs is absent."""
+
+
+class _Found:
+    """What one reading of a command found: program names, script names and
+    the commit prefix (claimed by the first git commit simple command)."""
+
+    def __init__(self):
+        self.names, self.scripts = [], []
+        self.commit_claimed = False
+        self.prefix = None
+
+    def add_script(self, name):
+        if name not in self.scripts:
+            if len(self.scripts) >= SCRIPTS_MAX:
+                raise _Unread()
+            self.scripts.append(name)
 
 
 def _program_name(word):
@@ -233,19 +379,311 @@ def _program_name(word):
     return name
 
 
+def _script_name(path):
+    """The basename of a script word, split on / and on \\ (H-1), under the
+    name rules of a program, or None (not recorded; the command stays
+    readable)."""
+    name = re.split(r"[/\\]", path.rstrip("/\\"))[-1]
+    if not name or name.startswith("-") or not HEAD_NAME.match(name) or looks_like_key(name):
+        return None
+    return name
+
+
+def _base(path):
+    """The last part of a word split on / and on \\ (H-1)."""
+    return re.split(r"[/\\]", path.rstrip("/\\"))[-1]
+
+
+class _Wrapped:
+    """H-1: the words of one timeout/nohup/env (SCRIPT_WRAPPERS) or ./source
+    (SOURCES) simple command, for command_scripts only. Once the wrapped
+    command word is found it hands over to an _Operand (a python or shell
+    call) or records the word itself (a script); one level, never a second
+    wrapper."""
+
+    def __init__(self, program):
+        self.program, self.skip, self.duration, self.done, self.operand = program, 0, False, False, None
+
+    def feed(self, word, path, raw, found):
+        if self.operand is not None:
+            self.operand.feed(word, path, found)
+            return
+        if self.done:
+            return
+        if word is None:
+            self.done = True
+            return
+        if self.skip:
+            self.skip -= 1
+            return
+        if self.program in SOURCES:
+            if word == "--":
+                return
+            self.record(path, ".sh", found)
+            return
+        if self.program == "timeout":
+            if not self.duration:
+                if word in TIMEOUT_VALUE_OPTIONS:
+                    self.skip = 1
+                elif word.startswith("-") and len(word) > 1:
+                    pass              # --preserve-status, --foreground, -v, --signal=SIG
+                else:
+                    self.duration = True
+                return
+        elif self.program == "nohup":
+            if word == "--":
+                return
+        elif word.startswith("-") or NAME_WORD.match(raw):
+            self.done = True          # env with an option or an assignment is not read (H-1)
+            return
+        self.done = True
+        name = _base(path)
+        if name in PYTHONS or name in C_SHELLS:
+            self.operand = _Operand(".py" if name in PYTHONS else ".sh")
+        elif name.endswith((".py", ".sh")):
+            self.record(path, name[-3:], found)
+
+    def record(self, path, suffix, found):
+        self.done = True
+        if path.endswith(suffix):
+            name = _script_name(path)
+            if name is not None:
+                found.add_script(name)
+
+
+class _Operand:
+    """G-2: the script operand of one python/python3 (suffix .py) or bash/sh
+    (suffix .sh) simple command, fed one argument word at a time."""
+
+    def __init__(self, suffix):
+        self.suffix, self.skip, self.ended, self.done = suffix, 0, False, False
+
+    def feed(self, word, path, found):
+        if self.done:
+            return
+        if word is None:
+            self.done = True   # not literal: an option or the operand, it cannot be told
+            return
+        if self.skip:
+            self.skip -= 1
+            return
+        if not self.ended and self.option(word):
+            return
+        self.done = True
+        if path.endswith(self.suffix):
+            name = _script_name(path)   # H-1: split on / and \, unquoted backslashes kept
+            if name is not None:
+                found.add_script(name)
+
+    def option(self, word):
+        """True when word is an option (or ends the options); may end the search."""
+        if self.suffix == ".py":
+            if word == "--":
+                self.ended = True
+                return True
+            if word == "-":
+                self.done = True   # the program is read from stdin
+                return True
+            if word.startswith("--"):
+                if word in PYTHON_VALUE_LONG:
+                    self.skip = 1
+                return True
+            if len(word) > 1 and word[0] == "-":
+                for i, ch in enumerate(word[1:], 1):
+                    if ch in PYTHON_NO_SCRIPT:
+                        self.done = True
+                        return True
+                    if ch in PYTHON_VALUE_OPTIONS:
+                        if i + 1 == len(word):
+                            self.skip = 1
+                        return True
+                return True
+            return False
+        if word in ("--", "-"):
+            self.ended = True
+            return True
+        if word.startswith("--"):
+            if word in ("--rcfile", "--init-file"):
+                self.skip = 1
+            return True
+        if len(word) > 1 and word[0] in "-+":
+            for ch in word[1:]:
+                if word[0] == "-" and ch in SHELL_NO_SCRIPT:
+                    self.done = True
+                    return True
+                if ch in "oO":
+                    self.skip += 1
+            return True
+        return False
+
+
+class _Commit:
+    """G-4: the arguments of one git simple command, fed one word at a time;
+    finish() writes the commit prefix when this is the first commit."""
+
+    def __init__(self):
+        self.stage = "global"   # global: git's own options; args: commit's; done
+        self.skip = 0
+        self.claimed = False
+        self.bad = False        # not read (COMMIT_NOT_READ, a non-literal option word, ...)
+        self.ended = False      # after --: pathspecs
+        self.want = False       # the next word is the message
+        self.first = None       # the message's first word, once read
+        self.message_seen = False
+
+    def feed(self, word, raw, last, found):
+        if self.stage == "global":
+            if word is None:
+                self.stage = "done"   # the subcommand cannot be told
+            elif self.skip:
+                self.skip -= 1
+            elif word in GIT_VALUE_OPTIONS:
+                self.skip = 1
+            elif word.startswith("-"):
+                pass                  # a flag, or --option=value
+            elif word == "commit" and not found.commit_claimed:
+                found.commit_claimed = self.claimed = True
+                self.stage = "args"
+            else:
+                self.stage = "done"
+            return
+        if self.stage != "args" or self.ended:
+            return
+        if self.want:
+            self.want = False
+            self.message(word, raw, last, 0)
+            return
+        if self.skip:
+            self.skip -= 1
+            return
+        if word is None:
+            # -m"$(cat <<'EOF' ...)" or --message="$X": an -m form whose value is not literal.
+            text, prefix_end, globbed = last
+            lit = text[:prefix_end] if prefix_end is not None and not globbed else ""
+            form = re.match(r"--message=|-[%s]*m" % COMMIT_FLAGS, lit)
+            if form is not None and raw.startswith(form.group(0)):
+                self.message(None, raw, last, form.end())
+            else:
+                self.bad = True       # it could be --amend or -F
+            return
+        if word == "--":
+            self.ended = True
+            return
+        if word.startswith("--"):
+            name, eq, _ = word.partition("=")
+            if name == "--message":
+                if eq:
+                    self.message(word, raw, last, len("--message="))
+                else:
+                    self.want = True
+            elif name in COMMIT_NOT_READ:
+                self.bad = True
+            elif name in COMMIT_VALUE_LONG and not eq:
+                self.skip = 1
+            return
+        if len(word) > 1 and word[0] == "-":
+            for i, ch in enumerate(word[1:], 1):
+                if ch == "m":
+                    if i + 1 < len(word):
+                        self.message(word, raw, last, i + 1)
+                    else:
+                        self.want = True
+                    return
+                if ch in "FCc":
+                    self.bad = True
+                    return
+                if ch == "t":         # -t FILE (template): the value is glued or the next word
+                    if i + 1 == len(word):
+                        self.skip = 1
+                    return
+                if ch not in COMMIT_FLAGS:
+                    return            # -S[keyid], -u[mode]: the rest is their value
+            return
+
+    def message(self, word, raw, last, offset):
+        """The value of an -m form: the word from offset on. The first -m
+        that is not empty is the first paragraph: git drops an empty one
+        (H-4), so `-m '' -m 'landed: x'` is read as landed:."""
+        if self.message_seen:
+            return
+        text, prefix_end, globbed = last
+        if word is not None:
+            value = word[offset:]
+            if value.split():
+                self.message_seen = True
+                self.first = _first_word(value, True)
+            return
+        self.message_seen = True      # not literal: whether it is empty cannot be told
+        if globbed:
+            return
+        if prefix_end is not None and prefix_end >= offset:
+            self.first = _first_word(text[offset:prefix_end], False)
+        if self.first is None and raw[:offset] == text[:offset]:
+            body = _heredoc_message(raw[offset:])
+            if body is not None and not body.split():
+                self.message_seen = False   # an empty here-document is an empty -m (H-4)
+            elif body is not None:
+                self.first = _first_word(body, True)
+
+    def finish(self, found):
+        if not self.claimed or self.stage != "args":
+            return
+        if self.bad or self.want or self.skip or self.first is None:
+            return
+        if COMMIT_PREFIX.match(self.first) and len(self.first) <= COMMIT_PREFIX_MAX:
+            found.prefix = self.first
+
+
+def _first_word(text, whole):
+    """The first word of a message's literal text; when the text is only a
+    prefix (whole False), the word must end before the text does."""
+    match = re.match(r"\s*(\S+)(\s|\Z)", text)
+    if match is None or (not whole and match.group(2) == ""):
+        return None
+    return match.group(1)
+
+
+def _heredoc_message(raw):
+    """The body of a value written "$(cat <<'EOF' ... EOF)" with a quoted
+    delimiter (HEREDOC_MESSAGE), else None. Read as text: nothing is run."""
+    match = HEREDOC_MESSAGE.match(raw)
+    if match is None:
+        return None
+    strip = match.group(1) == "-"
+    delimiter = next(g for g in match.groups()[1:] if g is not None)
+    body = []
+    rest = raw[match.end():]
+    while True:
+        end = rest.find("\n")
+        if end < 0:
+            return None               # no end line
+        line, rest = rest[:end], rest[end + 1:]
+        if strip:
+            line = line.lstrip("\t")
+        if line == delimiter:
+            break
+        body.append(line)
+    if not re.match(r"[ \t\n]*\)\"\Z", rest):
+        return None
+    return "\n".join(body)
+
+
 class _ProgramReader:
     """One command list of command_programs(): the whole text, a $(...) in
     it, or a bash -c string (in_c: its own bash -c strings are not read)."""
 
-    def __init__(self, text, pos, names, depth, in_c):
-        self.text, self.pos, self.names, self.depth, self.in_c = text, pos, names, depth, in_c
+    def __init__(self, text, pos, found, depth, in_c):
+        self.text, self.pos, self.found, self.depth, self.in_c = text, pos, found, depth, in_c
         self.heredocs = []  # (delimiter, strip tabs, quoted) waiting for the next newline
+        self.last = ("", None, False)  # of the last word read: (text, end of its literal prefix, globbed)
+        self.last_path = ""            # the same text with its unquoted backslashes kept (H-1)
 
     def add(self, name):
-        if name not in self.names:
-            if len(self.names) >= PROGRAMS_MAX:
+        names = self.found.names
+        if name not in names:
+            if len(names) >= PROGRAMS_MAX:
                 raise _Unread()
-            self.names.append(name)
+            names.append(name)
 
     def skip_blanks(self):
         text, pos = self.text, self.pos
@@ -259,23 +697,32 @@ class _ProgramReader:
         self.pos = pos
         return pos
 
+    def new_command(self, cmd, closed=False):
+        """End the simple command cmd (M4.2b: its commit, if any) and start
+        the next one."""
+        if cmd is not None and cmd["git"] is not None:
+            cmd["git"].finish(self.found)
+        return {"started": False, "program": None, "shell": None, "closed": closed, "operand": None,
+                "git": None}
+
     def run(self, closing):
         """Read up to the end of the text or, when closing, the ) of this
         $(...); return the position after it."""
         text, n = self.text, len(self.text)
         subshells = 0
-        cmd = {"started": False, "program": None, "shell": None, "closed": False}
+        cmd = self.new_command(None)
         while True:
             pos = self.skip_blanks()
             if pos >= n:
                 if closing or subshells or self.heredocs:
                     raise _Unread()
+                self.new_command(cmd)
                 return pos
             ch = text[pos]
             if ch == "\n":
                 self.pos = pos + 1
                 self.read_heredocs()
-                cmd = {"started": False, "program": None, "shell": None, "closed": False}
+                cmd = self.new_command(cmd)
                 continue
             if ch == "#":
                 end = text.find("\n", pos)
@@ -285,9 +732,10 @@ class _ProgramReader:
                 self.pos = pos + 1
                 if subshells:
                     subshells -= 1
-                    cmd = {"started": False, "program": None, "shell": None, "closed": True}
+                    cmd = self.new_command(cmd, closed=True)
                     continue
                 if closing and not self.heredocs:
+                    self.new_command(cmd)
                     return self.pos
                 raise _Unread()
             if ch == "(":
@@ -310,7 +758,7 @@ class _ProgramReader:
             operator = next((o for o in OPERATORS if text.startswith(o, pos)), None)
             if operator is not None:
                 self.pos = pos + len(operator)
-                cmd = {"started": False, "program": None, "shell": None, "closed": False}
+                cmd = self.new_command(cmd)
                 continue
             word, quoted, raw = self.read_word()
             if cmd["closed"]:
@@ -331,8 +779,21 @@ class _ProgramReader:
                 cmd["program"] = name
                 if name in C_SHELLS and not self.in_c:
                     cmd["shell"] = {"c": False, "skip": 0, "ended": False, "done": False}
-            elif cmd["shell"] is not None and not cmd["shell"]["done"]:
+                if name in PYTHONS or name in C_SHELLS:   # M4.2b G-2
+                    cmd["operand"] = _Operand(".py" if name in PYTHONS else ".sh")
+                elif name in SCRIPT_WRAPPERS or name in SOURCES:   # H-1
+                    cmd["operand"] = _Wrapped(name)
+                elif name == "git" and not self.found.commit_claimed:   # M4.2b G-4
+                    cmd["git"] = _Commit()
+                continue
+            if cmd["shell"] is not None and not cmd["shell"]["done"]:
                 self.shell_argument(cmd["shell"], word)
+            if isinstance(cmd["operand"], _Wrapped):
+                cmd["operand"].feed(word, self.last_path, raw, self.found)
+            elif cmd["operand"] is not None:
+                cmd["operand"].feed(word, self.last_path, self.found)
+            if cmd["git"] is not None:
+                cmd["git"].feed(word, raw, self.last, self.found)
 
     def redirect(self, op, at):
         self.pos = at + len(op)
@@ -387,15 +848,19 @@ class _ProgramReader:
         if shell["c"]:
             if "$" in word or "`" in word:
                 raise _Unread()  # D-9: a -c string holding an expansion
-            _ProgramReader(word, 0, self.names, self.depth, True).run(closing=False)
+            _ProgramReader(word, 0, self.found, self.depth, True).run(closing=False)
 
     def read_word(self):
         """(literal text or None, quoted, raw) of the word at self.pos. The
-        commands of every $(...) in it are read on the way."""
+        commands of every $(...) in it are read on the way. self.last keeps
+        the word's text, where its literal prefix ends (the first $, or None)
+        and whether it holds an unquoted glob or brace (M4.2b, commit_prefix)."""
         text, n = self.text, len(self.text)
         start = pos = self.pos
         out = []
+        kept = []   # H-1: out, but an unquoted backslash stays in front of its character
         literal, quoted, glob, brace, bracket = True, False, False, False, False
+        prefix_end = None
         while pos < n:
             ch = text[pos]
             if ch in WORD_END:
@@ -403,11 +868,13 @@ class _ProgramReader:
             if ch == "\\":
                 if pos + 1 >= n:
                     out.append(ch)
+                    kept.append(ch)
                     pos += 1
                 elif text[pos + 1] == "\n":
                     pos += 2
                 else:
                     out.append(text[pos + 1])
+                    kept.append(text[pos:pos + 2])
                     quoted = True
                     pos += 2
             elif ch == "'":
@@ -415,6 +882,7 @@ class _ProgramReader:
                 if end < 0:
                     raise _Unread()
                 out.append(text[pos + 1:end])
+                kept.append(text[pos + 1:end])
                 quoted = True
                 pos = end + 1
             elif ch == '"':
@@ -430,17 +898,23 @@ class _ProgramReader:
                     if c == "\\" and pos + 1 < n and text[pos + 1] in '$`"\\\n':
                         if text[pos + 1] != "\n":
                             out.append(text[pos + 1])
+                            kept.append(text[pos + 1])
                         pos += 2
                     elif c == "$":
                         literal = False
+                        if prefix_end is None:
+                            prefix_end = sum(len(x) for x in out)
                         pos = self.read_dollar(pos, True)
                     elif c == "`":
                         raise _Unread()
                     else:
                         out.append(c)
+                        kept.append(c)
                         pos += 1
             elif ch == "$":
                 literal = False
+                if prefix_end is None:
+                    prefix_end = sum(len(x) for x in out)
                 pos = self.read_dollar(pos, False)
             elif ch == "`":
                 raise _Unread()
@@ -449,11 +923,15 @@ class _ProgramReader:
                 bracket = bracket or ch == "["
                 brace = brace or ch in "{}"
                 out.append(ch)
+                kept.append(ch)
                 pos += 1
         self.pos = pos
         word = "".join(out)
-        if glob or (bracket and word != "[") or (brace and word not in ("{", "}")):
+        globbed = glob or (bracket and word != "[") or (brace and word not in ("{", "}"))
+        if globbed:
             literal = False
+        self.last = (word, prefix_end, globbed)
+        self.last_path = "".join(kept)
         return (word if literal else None), quoted, text[start:pos]
 
     def read_dollar(self, pos, in_double):
@@ -464,7 +942,7 @@ class _ProgramReader:
         if nxt == "(":
             if text.startswith("((", pos + 1) or self.depth >= PROGRAMS_DEPTH_MAX:
                 raise _Unread()  # $(( )), or nested too deep
-            return _ProgramReader(text, pos + 2, self.names, self.depth + 1, self.in_c).run(closing=True)
+            return _ProgramReader(text, pos + 2, self.found, self.depth + 1, self.in_c).run(closing=True)
         if nxt == "{":
             p = pos + 2
             while p < n:
@@ -496,9 +974,13 @@ def redact(text):
 
 def input_meta(tool, tool_input):
     """Small rule-relevant extract of tool_input: {path?, command_head?,
-    command_programs? | command_unread?, url_host?}. A Bash line carries
-    command_programs, or command_unread: true when its programs could not be
-    read (ruling E-5), so it never looks like a line written before M4.2."""
+    command_programs? | command_unread?, command_scripts?, commit_prefix?,
+    url_host?}. A Bash line carries command_programs, or command_unread: true
+    when its programs could not be read (ruling E-5), so it never looks like
+    a line written before M4.2. M4.2b (ADR-0002 Amendment G): a read Bash
+    line also carries command_scripts when the list is not empty (G-9) and
+    commit_prefix when there is one (G-3); neither is written otherwise, so a
+    line of a command with neither is byte for byte what M4.2 wrote."""
     meta = {}
     if not isinstance(tool_input, dict):
         return {"command_unread": True} if tool == "Bash" else meta
@@ -506,9 +988,14 @@ def input_meta(tool, tool_input):
         head = command_head(tool_input.get("command"))
         if head is not None:
             meta["command_head"] = head
-        programs = command_programs(tool_input.get("command"))
-        if programs is not None:
+        read = read_command(tool_input.get("command"))
+        if read is not None:
+            programs, scripts, prefix = read
             meta["command_programs"] = programs
+            if scripts:
+                meta["command_scripts"] = scripts
+            if prefix is not None:
+                meta["commit_prefix"] = prefix
         else:
             meta["command_unread"] = True
     for key in ("file_path", "notebook_path", "path"):

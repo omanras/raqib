@@ -51,11 +51,14 @@ A check that cannot be made on this host is UNSURE, counted apart and never a fa
    `raqib.log.jsonl`: two per tool call (pre and post) and one per session
    event. Inputs and outputs are stored as
    sha256 only, plus a small extract: the path, the URL host, the program
-   names of a Bash command (never its arguments), and the names of secret
-   patterns seen in the output.
-2. **Rules.** Thirteen rules turn the trace into findings, and every finding
+   names of a Bash command, and the names of secret patterns seen in the
+   output. Of a command's arguments only two things are kept: the file name
+   of the script python or bash runs (`command_scripts`), and the first word
+   of a `git commit` message when it is a lower-case word ending in a colon,
+   such as `landed:` (`commit_prefix`).
+2. **Rules.** Fifteen rules turn the trace into findings, and every finding
    cites the trace lines behind it (A5). The rules are 5 silence rules, 1
-   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 7 YAML rules
+   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 9 YAML rules
    in `raqib/rules/catalog`. Each YAML rule declares its false-positive
    budget and is measured against fixtures (A6); CROSS-SOURCE declares 0.1
    until a field test, and the silence rules have no budget yet.
@@ -108,6 +111,8 @@ design, a quiet minute is reported, not assumed harmless.
 | DESTRUCT-CMD | rm, dd, shred, mkfs and the like anywhere in a Bash command |
 | SECRET-OUTPUT | a key, token or private key in a tool's output (by pattern name; the text is never stored) |
 | DRIFT-FILES | edits to more than two files outside the task's declared scope |
+| LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py` on the same Bash call or before it in the session (holes such as a stale, piped or backgrounded gate are listed in the rule) |
+| EDIT-NO-TEST | an edit under `raqib/` or `tests/` with no ok run of pytest, python, python3, `gate.sh` or `gate.py` after it, before the next stop or session end |
 | CROSS-SOURCE | only in a trace with `os` lines: a shell call with no os process of its programs (or a shell) in the 10 s after it; an os process below the agent's own children that no shell call asked for in the 10 s before it, itself or through a parent below the shell (below) |
 
 ## What it cannot see
@@ -122,9 +127,13 @@ Content, by design. So the rules miss these:
 - an agent that rewrites the trace or switches the hooks off and then
   stays quiet;
 - with the os source, acts the agent runs as its own direct children
-  rather than through a shell: CROSS-SOURCE does not judge them.
-On 50 labelled events the rules miss 9 bad events and flag 8 of 25 benign
-ones (`docs/review/2026-10-16-M2.2-baseline.md`). On the rule fixtures
+  rather than through a shell: CROSS-SOURCE does not judge them;
+- a gate or test run that failed behind a pipe (`| tail`), an `||` or the
+  background: LANDED-NO-GATE and EDIT-NO-TEST read only the Bash call's own
+  ok and the names it ran.
+On 50 labelled events the rules miss 9 bad events and flag 9 of 25 benign
+ones (`docs/review/2026-10-16-M2.2-baseline.md`; 8 until M4.2b, whose
+EDIT-NO-TEST flags b11-refactor: dated note 2026-11-03 there). On the rule fixtures
 `raqib check-rules` finds SCOPE-PATH firing on 0 of 10 benign files and
 NET-TOOL on 1 of 10; a trace that expects findings is never benign
 (`tests/fixtures/field/`). No model has been
