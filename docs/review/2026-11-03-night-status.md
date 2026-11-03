@@ -14,15 +14,17 @@ Written while the last builder of the night runs; updated at the stop.
 | M4.2b | `require:` construct; LANDED-NO-GATE (high) and EDIT-NO-TEST (medium): a `landed:` commit with no gate run before it, an edit under raqib/ or tests/ with no test run before stop; this project's own close reads CLEAN | (merge after M5.3) |
 | M4.3 | the tree as anchor, read from files only (no git process): `git_head` and the index hash on session_start/stop/session_end; HEAD-UNMOVED and INDEX-UNTOUCHED (edits never committed / never staged); a planted `.git` file cannot make the hook open anything outside the project | (last merge) |
 | M5.3 | `raqib os-sysmon`: the os source from Sysmon (events 1/11/3, read-only) + CROSS-SOURCE, the first anchor: asked-not-done / done-not-asked across sources | (this merge) |
+| M6.4 | `raqib app` / `raqib-app`: an ordinary program window (tkinter, stdlib): doctor on the first screen, Start/Stop, a Windows tray icon (ctypes, came up on the CI runner), a knock on the first finding of a watch (also from `raqib watch`), `~/.raqib/app.log` under pythonw; ADR-0006 accepted | 0e76816 |
 
-Gate on main at the stop: 2376 passed, 9 skipped; 17 rules; kinds signature=4 demand=7 anchor=6 (Phase 4 exit met: demand + anchor > signature). Every handoff in docs/handoffs/ is landed; the list you gave me is finished.
+Gate on main at the stop: 2376 passed, 9 skipped (after M6.4, evening session: 2448 passed, 14 skipped); 17 rules; kinds signature=4 demand=7 anchor=6 (Phase 4 exit met: demand + anchor > signature). Every handoff in docs/handoffs/ is landed; the list you gave me is finished.
 
 ## Not done tonight (in the order I would take them)
 - M5.4 (to write): capture.py as a Kimi Code CLI hook (Kimi has PreToolUse/PostToolUse/SessionStart/SessionEnd/Stop, tool `Bash`); SCOPE-PATH tool-name map for other agents; doctor checks common.py; every watch timestamp on the wall clock.
 - Table items: CI does not exercise an autocrlf=true clone; the local scope-guard hook reads only a line that is exactly `Scope:` and treats annotated entries as literal prefixes (handoffs now keep the header plain); LICENSE (yours); third reader.
 
 ## Tomorrow's field tests (your part), in order
-1. Ubuntu VM: `git pull`, `pip install .`, `raqib doctor`, then `raqib watch <project>` and one Claude Code session; expect the band, one toast, the page at 127.0.0.1:8765.
+1. Ubuntu VM: `git pull`, `pip install .`, `raqib doctor`, then `raqib watch <project>` and one Claude Code session; expect the band, one toast, the page at 127.0.0.1:8765. Then `raqib app <project>` (needs python3-tk): doctor on the first screen, Start, the first-finding knock.
+0. Windows (python.org 3.14): `pip install .`, `raqib-app`: the tray icon, right-click Show/Stop/Quit, close hides to the tray, restart Explorer and the icon comes back; the knock; `~/.raqib/app.log` (M6.4 field items, ADR-0006 Amendment B).
 2. Windows + Kimi, blind: README's PowerShell sample loop (6 samples, 10 s), then `raqib discover --from <folder>` with a catalog copy WITHOUT the Moonshot hosts and the `.kimi` footprint (B-10). The question: does `act-root` name kimi by shape alone?
 3. Windows + Kimi through the proxy: `raqib proxy --listen 127.0.0.1:<port> --upstream https://api.moonshot.ai --log <trace> --cwd <project>`, set `base_url` in `~/.kimi-code/config.toml` to `http://127.0.0.1:<port>/v1`, run one Kimi task, then `raqib report <trace>`. First thing to check: the shape of Kimi's tool_call ids (numbered or random). Set base_url back afterwards (the key travels in the clear to whatever binds that port).
 4. If Sysmon is installed there: `raqib os-sysmon --root <kimi pid> --log <trace>` alongside the proxy, then `raqib report` for the first CROSS-SOURCE finding.
