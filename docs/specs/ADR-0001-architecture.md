@@ -87,3 +87,14 @@ Blocking or steering the agent (A4); multi-host; auth; cloud storage.
 - B-5 Anthropic server-side fallback is OFF by default (`--allow-fallback`
   opts in). When on, fallback answers are labelled with the serving model and
   counted separately. A watcher must know which model judged (A5, R-27).
+
+## Amendment C (the Table, 2026-11-03) — rulings on the M5.1b STOP (4531e1f)
+- C-1 A Windows cwd outside SCOPE-CWD-ROOT's list is a judged negative;
+  the list gains the Windows roots named in the ruling, including UNC share
+  roots; no new engine construct.
+- C-2 Unplaceable Windows forms (`\x`, `C:x`) are partial; POSIX-absolute
+  and MSYS `/c/...` paths under a Windows cwd fire SCOPE-PATH (MSYS form
+  recorded as a known false-positive source).
+- C-3 `--root` keeps the host's abspath semantics.
+- C-4 Scope widened to README.md:17, THREAT_MODEL section 7, test_docs.
+Full text: docs/review/2026-11-03-M5.1b-ruling.md.

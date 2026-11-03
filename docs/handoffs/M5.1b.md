@@ -1,10 +1,10 @@
 # HANDOFF — M5.1b  (phase 5: Windows paths in the rules)
-
 Task: the four path rules judge Windows paths via one normaliser in the
-engine; POSIX outcomes unchanged (ruling 2026-11-02-M5.1-ruling.md, Q-2..Q-6).
-
+engine; POSIX outcomes unchanged (rulings 2026-11-02-M5.1 Q-2..Q-6 and
+2026-11-03-M5.1b C-1..C-6, binding).
 Scope:
-  raqib/rules/engine.py, raqib/rules/context.py, raqib/cli.py, tests/, docs/review/,
+  raqib/rules/engine.py, raqib/rules/context.py, raqib/cli.py, tests/, docs/review/, README.md (line 17),
+  docs/THREAT_MODEL.md (section 7), docs/specs/ADR-0001-architecture.md (builder note only),
   raqib/rules/catalog/{SCOPE-CWD-ROOT,SCOPE-CWD-MOVED,SCOPE-PATH,DRIFT-FILES}.yaml, .gitattributes
 
 Exit criteria:
@@ -14,10 +14,10 @@ Exit criteria:
      `/mnt/c/...` and `C:\...` are NOT equal (Q-6); say so in a docstring.
 - E2 Context `root` accepts a Windows absolute path; `bad-context` only if
      absolute on neither system.
-- E3 SCOPE-CWD-ROOT: second regex branch for `X:\`, `X:\Users`,
-     `X:\Users\<name>`, `X:\Windows\Temp`, `X:\Users\<name>\AppData\Local\Temp`,
-     `X:\Temp` (Q-5). A Windows cwd matching no branch yields `partial`,
-     never silence (A3). Description names the WSL and macOS holes.
+- E3 SCOPE-CWD-ROOT: second regex branch for the Windows roots of ruling
+     C-1 (drive roots, Users, Windows, Temp, Program Files, ProgramData, UNC
+     share root). A Windows cwd matching no branch is a judged NEGATIVE
+     (C-1); description names the WSL, macOS and C-1 holes; C-2 forms.
 - E4 Fixtures, listed in each YAML, for all four rules: a `C:\` positive and
      negative each, plus a mixed-case `c:/PROJ` case for SCOPE-PATH and
      SCOPE-CWD-MOVED. POSIX fixture outcomes unchanged (`check-rules` identical).
