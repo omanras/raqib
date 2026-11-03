@@ -158,8 +158,11 @@ s = S("fixture-rules-scope-win-1", cwd=W)
 seqs = [s.call(tool, {"path": p}) for tool, p in [
     ("Read", "C:\\Users\\alice\\.ssh\\id_rsa"), ("Edit", "D:\\proj\\notes.md"), ("Write", "..\\other-project\\notes.md"),
     ("Read", "\\\\srv\\share\\secrets.txt"), ("Read", "C:\\proj-secrets\\token.txt"), ("Read", "/etc/hosts"),
-    ("Grep", "c:/PROJ/../other"), ("Read", "\\\\.\\pipe\\secrets")]]  # C-9: \\.\pipe keeps its prefix
-write(R + "SCOPE-PATH/positive-windows.json", s.lines, expect=seqs)
+    ("Grep", "c:/PROJ/../other"), ("Read", "\\\\.\\pipe\\secrets"),  # C-9: \\.\pipe keeps its prefix
+    ("Read", "~\\.ssh\\id_rsa")]]  # C-13: a ~ path is POSIX, outside a Windows cwd
+k = S("fixture-rules-scope-win-5", cwd="C:\\work")  # C-11: KELVIN SIGN is not folded to k
+k.call("Read", {"path": "C:\\WOR\u212a\\secrets.txt"})  # its seq 1 is cited per session in tests/test_rules.py
+write(R + "SCOPE-PATH/positive-windows.json", s.lines + k.lines, expect=seqs)
 s = S("fixture-rules-scope-win-2", cwd=W); n = s.call("Read", {"path": "/c/proj/src/app.py"})  # C-2: Git Bash form, a known FP
 write(R + "SCOPE-PATH/positive-windows-git-bash-form.json", s.lines, expect=[n])
 s = S("fixture-rules-scope-win-3", cwd=W)

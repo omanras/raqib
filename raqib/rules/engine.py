@@ -53,10 +53,10 @@ finding carries its rule's kind; check_finding rejects one without it
 Paths are normalised lexically by norm_path() (symlinks are not resolved): a
 relative path is joined to the line's cwd (for outside_any: to context
 "root" when given), and `~` paths count as absolute. A drive-letter or UNC
-path is a Windows path, compared with / and backslash alike, case folded; any
-other path is POSIX and case-sensitive; a path of one system is never under
-a directory of the other (M5.1b). Context "root" must be absolute on one of
-the two systems.
+path is a Windows path, compared with / and backslash alike, ASCII case
+folded (A-Z only); any other path is POSIX and case-sensitive; a path of
+one system is never under a directory of the other (M5.1b). Context "root"
+must be absolute on one of the two systems.
 
 aggregate: {distinct: <field>, over: N, as: path?, cite: all|first?} gives
 one finding per session when more than N distinct values of <field> occur on
@@ -445,6 +445,10 @@ WINDOWS_UNPLACEABLE = re.compile(r"\\|[A-Za-z]:")
 # path under a prefix (\\.\pipe\x, \\?\Volume{...}\x) keeps the UNC reading,
 # with ? or . as its server, so it is never placed inside a project.
 WINDOWS_PREFIX = re.compile(r"\\\\[?.]\\(?:(?=[A-Za-z]:[\\/])|[Uu][Nn][Cc](?=\\[^\\/]))")
+# Case folding of Windows paths is ASCII A-Z only (C-11), as NTFS's upcase table
+# does for ASCII. str.lower would also fold non-ASCII letters, some to ASCII
+# (KELVIN SIGN U+212A to k), and so join directories that Windows keeps apart.
+ASCII_FOLD = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
 def norm_path(path):
@@ -455,11 +459,14 @@ def norm_path(path):
 
     - A drive-letter path (X:\ or X:/) or a UNC path (\\server\share) is a
       Windows path: every \ becomes /, . and .. are resolved lexically and
-      never climb above the drive root or the share, and the case is folded
-      (str.lower, as ntpath.normcase): C:\Users\Bob and c:/users/bob/ are
-      one path, "c:/users/bob". A \\?\ or \\.\ prefix is stripped first
-      (C-9) when a drive path or UNC\server\share follows: \\?\C:\x is
-      C:\x, and \\?\UNC\srv\share\x is \\srv\share\x.
+      never climb above the drive root or the share, and ASCII case is
+      folded, A-Z to a-z only (C-11): C:\Users\Bob and c:/users/bob/ are
+      one path, "c:/users/bob". A non-ASCII letter is kept as written: a
+      directory spelled C:\WOR + U+212A KELVIN SIGN is not C:\work (str.lower
+      would make it so), and a non-ASCII case difference that Windows folds
+      (U+00C9 and U+00E9) makes two paths here. A \\?\ or \\.\ prefix is
+      stripped first (C-9) when a drive path or UNC\server\share follows:
+      \\?\C:\x is C:\x, and \\?\UNC\srv\share\x is \\srv\share\x.
     - Any other string is a POSIX path, normalised as before M5.1b
       (posixpath.normpath, a leading // collapsed to /) and case-sensitive:
       /work/P and /work/p are two paths. A \ in it is a file name character.
@@ -488,7 +495,7 @@ def norm_path(path):
         parts = [p for p in text[2:].split("/") if p]
         head, rest = "//" + "/".join(parts[:2]), "/".join(parts[2:])
     rest = posixpath.normpath("/" + rest.lstrip("/"))   # one leading /: .. stops at the root
-    return ("windows", (head + rest).lower())
+    return ("windows", (head + rest).translate(ASCII_FOLD))   # C-11: A-Z only
 
 
 def _absolute(value):

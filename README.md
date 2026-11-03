@@ -14,7 +14,7 @@ raqib watch ~/my-project      # then use Claude Code in ~/my-project as usual; C
 You need Python 3.11 or newer and Claude Code. Raqib itself is stdlib only and
 is not on PyPI. On Windows: `pipx install C:\path\to\raqib` (or
 `py -m pip install C:\path\to\raqib`), then `raqib watch C:\path\to\project`.
-On Windows the path rules judge drive (`C:\`) and UNC paths in any case, with `\` or `/`; `/mnt/c/...` (WSL) and `C:\...` are different paths, and `--root /x` means `\x` on the current drive.
+On Windows the path rules judge drive (`C:\`) and UNC paths (`\\server\share`, recognised by its two leading backslashes only) in any ASCII case, with `\` or `/`; the forward-slash form `//server/share` is read as a POSIX path (a hole), `/mnt/c/...` (WSL) and `C:\...` are different paths, and `--root /x` means `\x` on the current drive.
 Install on the side that runs the agent (Windows or WSL), not both.
 
 ## Watch a project

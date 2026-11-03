@@ -101,11 +101,13 @@ Full text: docs/review/2026-11-03-M5.1b-ruling.md.
 
 Builder note (2026-11-03, M5.1b; Amendment C stays as written). As built:
 section 4's rule paths are placed by one function, `norm_path()` in
-`raqib/rules/engine.py`. Drive-letter and UNC paths are compared with `\`
-and `/` alike and case folded; POSIX paths are unchanged and case-sensitive;
+`raqib/rules/engine.py`. Drive-letter and UNC paths (UNC by backslashes
+only, C-12) are compared with `\` and `/` alike and ASCII case folded (A-Z
+only, C-11); POSIX paths are unchanged and case-sensitive;
 a path of one system is never under a directory of the other, so
 `/mnt/c/...` and `C:\...` differ (ruling 2026-11-02 Q-6). The `\\?\` and
-`\\.\` prefixes are stripped first (C-9). Context `root` is accepted when
+`\\.\` prefixes are stripped first, before a drive path or `UNC\` only
+(C-9). Context `root` is accepted when
 absolute on either system. A-6 is not touched by this note.
 Record: docs/review/2026-11-03-M5.1b.md.
 

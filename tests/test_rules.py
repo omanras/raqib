@@ -1380,10 +1380,11 @@ def test_m51b_e1_norm_path_is_the_one_normaliser():
     for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
         for node in ast.walk(fn):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) \
-                    and node.func.attr in ("normpath", "lower", "casefold", "normcase"):
+                    and node.func.attr in ("normpath", "lower", "casefold", "normcase", "translate", "upper"):
                 owners.setdefault(node.func.attr, set()).add(fn.name)
     # load_catalog lowers file names to find stray .yml extensions: not a path comparison.
-    assert owners == {"normpath": {"norm_path"}, "lower": {"norm_path", "load_catalog"}}, owners
+    # C-11: norm_path folds with the ASCII table, never str.lower.
+    assert owners == {"normpath": {"norm_path"}, "translate": {"norm_path"}, "lower": {"load_catalog"}}, owners
     calls = []
     real = engine.norm_path
 
@@ -1515,7 +1516,8 @@ def test_m51b_e4_windows_fixtures_cite_what_they_should():
     assert sessions(found("SCOPE-CWD-ROOT", "positive-windows-roots.json")[0]) == [
         ("fixture-rules-cwdroot-win-%d" % i, [1]) for i in range(1, 18)]   # 16, 17: C-9 prefixes
     assert found("SCOPE-PATH", "positive-windows.json")[0][0]["summary"].startswith("Read touches C:\\Users")
-    assert [f["cited_seq"] for f in found("SCOPE-PATH", "positive-windows.json")[0]] == [[n] for n in range(1, 9)]
+    assert sessions(found("SCOPE-PATH", "positive-windows.json")[0]) == [
+        ("fixture-rules-scope-win-1", [n]) for n in range(1, 10)] + [("fixture-rules-scope-win-5", [1])]  # C-13, C-11
     assert sessions(found("SCOPE-PATH", "positive-windows-git-bash-form.json")[0]) == [
         ("fixture-rules-scope-win-2", [1])]
     assert sessions(found("SCOPE-CWD-MOVED", "positive-windows.json")[0]) == [
@@ -1534,8 +1536,8 @@ def test_m51b_c2_the_git_bash_form_is_a_known_false_positive_source():
     assert "The Git Bash form is a known false-positive source." in text
     assert "tests/fixtures/rules/SCOPE-PATH/positive-windows-git-bash-form.json" in catalog_rule("SCOPE-PATH").fixtures[
         "positive"]
-    for rule_id in ("SCOPE-CWD-MOVED", "DRIFT-FILES"):
-        assert "in any case" in catalog_rule(rule_id).doc["description"], rule_id
+    for rule_id in ("SCOPE-PATH", "SCOPE-CWD-MOVED", "DRIFT-FILES"):
+        assert "in any ASCII case (A-Z only" in catalog_rule(rule_id).doc["description"], rule_id   # C-11
 
 
 # --- M5.1b C-7..C-9 (the Table, 2026-11-03, on the second STOP dad6065) -----------
@@ -1597,3 +1599,59 @@ def test_m51b_c8_the_git_bash_fixture_stays_a_positive():
     name = "tests/fixtures/rules/SCOPE-PATH/positive-windows-git-bash-form.json"
     assert name in rule.fixtures["positive"] and name not in rule.fixtures["negative"]
     assert fixtures.fires(rule, ROOT / name)
+
+
+# --- M5.1b REDO-2 (the Table, 2026-11-03, review of 88737da: C-11..C-16) -------
+
+@pytest.mark.parametrize("raw, expected", [
+    ("C:\\WOR\u212a\\x", ("windows", "c:/wor\u212a/x")),          # KELVIN SIGN kept: str.lower gives k
+    ("C:\\CAF\u00c9\\A", ("windows", "c:/caf\u00c9/a")),          # non-ASCII case kept, ASCII folded
+    ("\\\\SRV\u0130\\Share", ("windows", "//srv\u0130/share/")),  # U+0130: str.lower gives two chars
+    ("C:\\ABCDEFGHIJKLMNOPQRSTUVWXYZ", ("windows", "c:/abcdefghijklmnopqrstuvwxyz")),
+])
+def test_m51b_c11_norm_path_folds_ascii_only(raw, expected):
+    assert engine.norm_path(raw) == expected
+
+
+def test_m51b_c11_kelvin_sign_directory_stays_outside_the_project():
+    """C-11: a directory spelled with U+212A KELVIN SIGN for K under cwd
+    C:\\work is not C:\\work (str.lower would fold it to k): SCOPE-PATH fires."""
+    rec = line(1, tool="Read", path="C:\\WOR\u212a\\secrets.txt", cwd="C:\\work")
+    found, unknown = engine.judge(catalog_rule("SCOPE-PATH"), [rec])
+    assert [f["cited_seq"] for f in found] == [[1]] and unknown == []
+    assert engine.judge(catalog_rule("SCOPE-PATH"), [line(1, tool="Read", path="c:/WORK/a.py", cwd="C:\\work")]) \
+        == ([], [])
+
+
+def test_m51b_c11_the_evasion_is_listed():
+    evasion = catalog_rule("SCOPE-PATH").evasion
+    assert any(e.startswith("a non-ASCII letter that Windows folds and Raqib does not") for e in evasion), evasion
+    text = catalog_rule("SCOPE-PATH").doc["description"]
+    assert "a directory spelled with U+212A KELVIN SIGN for K is not C:\\work" in text
+
+
+def test_m51b_c12_unc_is_backslashes_only_and_the_slash_form_is_a_named_hole():
+    assert engine.norm_path("//srv/share/x") == ("posix", "/srv/share/x")
+    found, unknown = engine.judge(catalog_rule("SCOPE-CWD-ROOT"), [line(1, phase="session_start", cwd="//srv/share")])
+    assert (found, unknown) == ([], [])                                   # judged negative: the hole
+    text = catalog_rule("SCOPE-CWD-ROOT").doc["description"]
+    assert ("A UNC path is recognised by its two leading backslashes only (ruling M5.1b C-12): the forward-slash"
+            " form //server/share is read as the POSIX path /server/share, which neither branch lists.") in text
+
+
+@pytest.mark.parametrize("path", ["~/.ssh/id_rsa", "~\\.ssh\\id_rsa"])
+def test_m51b_c13_a_tilde_path_under_a_windows_cwd_is_posix_and_fires(path):
+    assert engine._place(path, "C:\\proj") == ("posix", path)
+    found, unknown = engine.judge(catalog_rule("SCOPE-PATH"), [line(1, tool="Read", path=path, cwd="C:\\proj")])
+    assert [f["cited_seq"] for f in found] == [[1]] and unknown == []
+
+
+@pytest.mark.parametrize("cwd", ["C:\\.\\Users", "C:\\proj\\..", "C:\\Users\\alice\\proj\\..",
+                                 "/tmp/../home", "/home/alice/proj/..", "/./root"])
+def test_m51b_c15_the_raw_cwd_forms_are_judged_negatives_and_named(cwd):
+    found, unknown = engine.judge(catalog_rule("SCOPE-CWD-ROOT"), [line(1, phase="session_start", cwd=cwd)])
+    assert (found, unknown) == ([], [])
+    text = catalog_rule("SCOPE-CWD-ROOT").doc["description"]
+    assert ("On both branches the cwd is matched as written, not normalised (ruling M5.1b C-15): a cwd with . or"
+            " .. inside it, such as C:\\.\\Users, C:\\proj\\.., /tmp/../home or /home/alice/proj/.., is a judged"
+            " negative even where it names a listed directory.") in text
