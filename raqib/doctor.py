@@ -28,6 +28,13 @@ and exits 1 when any line is MISSING, else 0:
             Windows toast, osascript or notify-send; MISSING when only the
             terminal bell is left or notifications are off (CI is set, or
             SystemRoot is not trusted).
+- tkinter   `raqib app` (M6.4, ADR-0006) can open its window: tkinter
+            imports in this Python (OK with the Tk version; UNSURE, "the
+            window needs it (python3-tk); watch does not", when it does not:
+            ADR-0006 A-9, a missing tkinter never fails doctor's exit),
+            and on Linux and other X11 systems DISPLAY is set (UNSURE when
+            it is not: no window can open in this session; nothing is opened
+            to find out).
 - sysmon    Windows only: the event channel Microsoft-Windows-Sysmon/Operational
             is registered and enabled (HKLM, read with winreg). That is the
             Sysmon source `raqib discover` reads (ADR-0004); whether the
@@ -336,6 +343,22 @@ def writable(path, windows=False):
     return True, "can be created under %s" % parent
 
 
+TK_UNSURE = "the window needs it (python3-tk); watch does not"
+
+
+def check_tkinter(environ, platform, importer=None):
+    """M6.4 E5: the window's toolkit. Imports tkinter (opens no window)."""
+    from raqib import app   # app imports doctor: imported here, not at the top
+    tk, why = app.probe_tk(importer)
+    if tk is None:   # ADR-0006 A-9: UNSURE, not MISSING - `raqib watch` does not need it
+        return UNSURE, "%s; %s" % (TK_UNSURE, why)
+    version = getattr(tk, "TkVersion", "?")
+    problem = app.display_problem(environ, platform)
+    if problem:
+        return UNSURE, "Tk %s (tkinter imports); %s" % (version, problem)
+    return True, "Tk %s (tkinter); `raqib app` can open its window" % version
+
+
 def check_trace(project, home, windows=False):
     """(ok, text, notes): notes are choose_trace's, printed below the line (P7)."""
     try:
@@ -348,10 +371,10 @@ def check_trace(project, home, windows=False):
 
 # --- the command ---------------------------------------------------------------------
 
-def run(project, out, environ=None, platform=None, which=None, runner=None, version_info=None,
-        executable=None, home=None, registry=None, isfile=None, isdir=None):
-    """Print the checks for `project` (default: the current directory) to
-    out; 1 when any line is MISSING, else 0 (an UNSURE line does not fail it)."""
+def checks(project, environ=None, platform=None, which=None, runner=None, version_info=None,
+           executable=None, home=None, registry=None, isfile=None, isdir=None, importer=None):
+    """(project made absolute, [(name, (verdict, text))], notes): the checks
+    run() prints and the window's first screen shows (M6.4)."""
     environ = os.environ if environ is None else environ
     platform = platform or sys.platform
     windows = platform == "win32"
@@ -365,19 +388,34 @@ def run(project, out, environ=None, platform=None, which=None, runner=None, vers
     lines = [("python", check_python(version_info, executable, windows, which, environ)),
              ("claude", check_claude(environ, windows, which, runner, project)),
              ("hooks", check_hooks(project, windows)),
-             ("notifier", check_notifier(project, environ, platform, isfile, isdir))]
+             ("notifier", check_notifier(project, environ, platform, isfile, isdir)),
+             ("tkinter", check_tkinter(environ, platform, importer))]
     if windows:
         lines.append(("sysmon", check_sysmon(registry)))
     ok, text, notes = check_trace(project, home, windows)
     lines.append(("trace", (ok, text)))
+    return project, lines, notes
 
+
+def summary(lines):
+    """The last line's text: "all OK", or "N MISSING, M UNSURE"; and the exit."""
+    missing = sum(1 for _, (ok, _) in lines if ok is False)
+    unsure = sum(1 for _, (ok, _) in lines if ok == UNSURE)
+    return ("%d MISSING, %d UNSURE" % (missing, unsure) if missing or unsure else "all OK"), (1 if missing else 0)
+
+
+def run(project, out, environ=None, platform=None, which=None, runner=None, version_info=None,
+        executable=None, home=None, registry=None, isfile=None, isdir=None, importer=None):
+    """Print the checks for `project` (default: the current directory) to
+    out; 1 when any line is MISSING, else 0 (an UNSURE line does not fail it)."""
+    project, lines, notes = checks(project, environ, platform, which, runner, version_info, executable, home,
+                                   registry, isfile, isdir, importer)
     out.write("raqib doctor: raqib %s (%s); project %s\n" % (
         raqib.__version__, _safe(os.path.join(install.PACKAGE_ROOT, "raqib")), _safe(project)))
     for name, (ok, text) in lines:
         out.write("%-8s%-9s%s\n" % (VERDICTS[ok], name, _safe(text)))
     for note in notes:
         out.write("%17snote: %s\n" % ("", _safe(note)))
-    missing = sum(1 for _, (ok, _) in lines if ok is False)
-    unsure = sum(1 for _, (ok, _) in lines if ok == UNSURE)
-    out.write("raqib doctor: %s\n" % ("%d MISSING, %d UNSURE" % (missing, unsure) if missing or unsure else "all OK"))
-    return 1 if missing else 0
+    text, code = summary(lines)
+    out.write("raqib doctor: %s\n" % text)
+    return code

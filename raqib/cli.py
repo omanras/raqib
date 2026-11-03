@@ -106,11 +106,28 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       RAQIB-SILENCE line (channel unreadable, root not found, earlier
       holders of its pid, no event 1 or 11, an unreadable event), 2 on a bad
       option, without --from off Windows, or a trace it cannot write; else 0.
+  app [PROJECT] [--log PATH] [--no-notify] [--port N] [--refresh N]
+      Open Raqib as a desktop window (M6.4, ADR-0006; tkinter, standard
+      library; also the `raqib-app` gui-script, with no console on
+      Windows): first what `doctor` says for PROJECT (default: the current
+      directory), a project field with Browse, and Start; Start runs the
+      same watch as `watch` in a worker thread (the page on 127.0.0.1 is
+      served, not opened; its URL is shown), Stop or closing the window ends
+      it like Ctrl-C and shows the final report. The first finding of a
+      watch knocks once, whatever its severity. On Windows a tray icon has
+      Show / Stop / Quit and closing the window while watching hides it
+      there. --log is the trace of PROJECT only; a project chosen with
+      Browse gets its default trace. Exit 2 when no window can open (no
+      tkinter: python3-tk; no DISPLAY); else the exit of the last watch's
+      report, 0 if none ran. Under `raqib-app` the output goes to
+      ~/.raqib/app.log and a window that cannot open is said in a message
+      box (Windows) or on stderr.
   doctor [PROJECT]
       Say in one screen what `watch` needs and is missing (M6.3,
       raqib/doctor.py): Python, `claude` on PATH and its version, the hook
-      settings of PROJECT (installed / foreign / missing), the notifier, Sysmon
-      (Windows) and whether the trace can be written. One line per check, OK,
+      settings of PROJECT (installed / foreign / missing), the notifier, the
+      window's tkinter (`app`), Sysmon (Windows) and whether the trace can
+      be written. One line per check, OK,
       MISSING or UNSURE (cannot be checked here); exit 1 if any is MISSING,
       else 0. Read-only; the only
       program it runs is `claude --version`, by absolute path.
@@ -127,6 +144,7 @@ import json
 import os
 import sys
 
+from raqib import app as window_app
 from raqib import discover
 from raqib import doctor
 from raqib import eval as evaluation
@@ -274,6 +292,14 @@ def _parser():
                           % os_sysmon.CHANNEL)
     osx.add_argument("--cwd", metavar="DIR", help="the cwd written on the lines, an absolute directory (default: the"
                                                  " root's CurrentDirectory in its event 1, else no cwd)")
+    a = sub.add_parser("app", help="open Raqib as a desktop window: doctor, Start/Stop, the watch (M6.4)")
+    a.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
+    a.add_argument("--log", metavar="PATH", help="the trace (default: one outside the project)")
+    a.add_argument("--no-notify", action="store_true", help="no OS notifications (also off when CI is set)")
+    a.add_argument("--port", type=int, default=None, metavar="N",
+                   help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
+    a.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
+                   help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -726,7 +752,8 @@ def _discover_check(args, catalog, out):
     return report["exit"]
 
 
-def cmd_watch(args, out):
+def _watch_setup():
+    """(rules, gap, evaluator) of `watch`, and of every watch `app` starts."""
     rules = _catalog(CATALOG)
     try:
         gap = silence.gap_seconds_from(os.environ)
@@ -743,10 +770,28 @@ def cmd_watch(args, out):
         else:
             ctx, note = {}, "no HANDOFF.md in the project: no scope; rules that need one do not run"
         return (lambda records: run_rules(records, rules, ctx, gap)), note
+    return rules, gap, evaluator
+
+
+def cmd_watch(args, out):
+    rules, gap, evaluator = _watch_setup()
     try:
         return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
                              evaluator, rules, gap, refresh=args.refresh)
     except watch.WatchError as exc:
+        raise UsageError(str(exc))
+
+
+def cmd_app(args, out):
+    rules, gap, evaluator = _watch_setup()
+    if args.project is not None and not os.path.isdir(args.project):
+        raise UsageError("not a directory: %s" % args.project)
+    # A-10: --log is the trace of the project on the command line only; Browse's projects get their default.
+    options = window_app.Options(evaluator, rules, gap, log=args.log, no_notify=args.no_notify, port=args.port,
+                                 refresh=args.refresh, log_project=os.path.abspath(args.project or "."))
+    try:
+        return window_app.run(args.project, options, out=out)
+    except window_app.AppError as exc:
         raise UsageError(str(exc))
 
 
@@ -782,7 +827,7 @@ def main(argv=None, out=None):
     try:
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
-                   "discover": cmd_discover, "watch": cmd_watch, "doctor": cmd_doctor,
+                   "discover": cmd_discover, "watch": cmd_watch, "app": cmd_app, "doctor": cmd_doctor,
                    "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon}[args.command]
         return command(args, out)
     except UsageError as exc:

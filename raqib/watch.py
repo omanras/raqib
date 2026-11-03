@@ -288,6 +288,7 @@ class Watch:
                         "start": None, "marker": None}
         self.registry = None      # the Registry this watch is a row of (I-5)
         self.registry_state = None
+        self.first_knock = None   # ADR-0006 A-12: the FirstFinding record of this watch, once it knocked
 
     # --- time and output -----------------------------------------------------
 
@@ -843,6 +844,7 @@ class Watch:
             "holes": self.holes + self.notifier.holes, "notifications": self.notifier.state(),
             "capture": self.capture, "agent_gone": self.agent_gone(), "open_sessions": self.open_sessions(),
             "state_error": self.state_error, "refresh_seconds": self.refresh, "registry": self.registry_state,
+            "first_knock": dict(self.first_knock) if self.first_knock else None,   # A-12
         }
         state["band"] = ui.status(state)[0]   # J-6: the owner's state word, for the pages of other watches
         return state
@@ -1135,12 +1137,85 @@ def _serve(page, port, routes=None, refresh=None):
                                % (requested, why, used)}
 
 
+class Stop:
+    """What ends loop() when it runs in a worker thread (the window, M6.4):
+    the equivalent of Ctrl-C. set(reason) is the first reason that counts."""
+
+    def __init__(self):
+        self.event = threading.Event()
+        self.reason = None
+
+    def set(self, reason):
+        if not self.event.is_set():
+            self.reason = reason
+            self.event.set()
+
+    def is_set(self):
+        return self.event.is_set()
+
+    def wait(self, seconds):
+        return self.event.wait(seconds)
+
+
+class Running:
+    """What start() set up and loop(), conclude() and close() use. knock:
+    the watch's first-finding knock (notify.FirstFinding, ADR-0006 A-12)."""
+
+    def __init__(self, watcher, server, notifier, thread, refresh, environ, no_open, out, err):
+        self.knock = notify.FirstFinding(notifier)
+        self.watcher = watcher
+        self.server = server
+        self.notifier = notifier
+        self.thread = thread
+        self.refresh = refresh
+        self.environ = environ
+        self.no_open = no_open
+        self.out = out
+        self.err = err
+
+
+def first_step(running):
+    """The first-finding knock after a poll (ADR-0006 E3, A-12): the
+    FirstFinding record when it knocked now (also kept as watch.json's
+    first_knock, and said through out as "first finding knocked: ..."),
+    else None. The terminal's loop() and the window's worker both call it."""
+    watcher = running.watcher
+    with watcher.lock:
+        now = watcher.clock()
+        done = running.knock.check(list(watcher.inventory.values()), now)
+        if done is None:
+            return None
+        watcher.first_knock = {k: done[k] for k in ("rule_id", "severity", "where", "status")}
+        watcher.first_knock["at"] = watcher.at(now)
+        if done.get("rule_notice") is not None:
+            watcher.first_knock["rule_notice"] = done["rule_notice"]
+        watcher._say(now, "first finding knocked: %s (%s)" % (done["where"], done["status"]))
+        return dict(watcher.first_knock)
+
+
 def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=None,
             err=None, home=None, refresh=None):
     """raqib watch; returns the exit code of the final report.
     evaluator(project) -> (evaluate, scope note): evaluate(records) gives
     (findings, notes) with the project's context (B-6). refresh: the page's
-    reload in seconds (I-1, default ui.REFRESH_DEFAULT)."""
+    reload in seconds (I-1, default ui.REFRESH_DEFAULT). The loop is split
+    (M6.4) into start(), loop(), conclude() and close(), so the window runs
+    the same watch in a worker thread and ends it with a Stop."""
+    running = start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=environ,
+                    err=err, home=home, refresh=refresh)
+    try:
+        crash = loop(running)
+        text, code = conclude(running, crash)
+    finally:
+        close(running)
+    out.write("\n" + text)
+    return code
+
+
+def start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=None,
+          err=None, home=None, refresh=None):
+    """Everything before the poll loop: the hooks, the trace, the notifier,
+    the Watch, the page server and the registry row; a Running."""
     refresh = ui.REFRESH_DEFAULT if refresh is None else ui.check_refresh(refresh)
     environ = os.environ if environ is None else environ
     err = err or sys.stderr
@@ -1198,47 +1273,84 @@ def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_s
         out.write("raqib watch: %s\n" % _safe(hole))
     thread = threading.Thread(target=server.serve_forever, name="raqib-watch-page", daemon=True)
     thread.start()
+    return Running(watcher, server, notifier, thread, refresh, environ, no_open, out, err)
+
+
+def loop(running, stop=None, on_step=None):
+    """Poll until Ctrl-C (stop None: the terminal) or until stop is set (the
+    window's worker thread); None, or the crash text when an exception ended
+    it (B-4). The window's Stop is the equivalent of Ctrl-C. on_step(watcher)
+    runs after every poll, in this thread, outside the Watch lock; without
+    one it is the first-finding knock (first_step, ADR-0006 A-12), so a
+    terminal watch knocks on its first finding as the window does."""
+    watcher, out, err, environ = running.watcher, running.out, running.err, running.environ
+    if on_step is None:
+        def on_step(w):
+            try:
+                first_step(running)
+            except Exception as exc:   # A3: a knock that broke is a hole, never the end of the watch
+                with w.lock:
+                    detail = "the first-finding knock failed: %s: %s" % (type(exc).__name__, exc)
+                    if not any(h["kind"] == "first-knock" and h["detail"] == detail for h in w.holes):
+                        w._hole(w.clock(), "first-knock", detail)
     crash = None
     try:
-        try:
-            if watcher.port["warning"]:
-                out.write("raqib watch: WARNING: %s\n" % watcher.port["warning"])
-            out.write("raqib watch: page %s (read-only, reloads every %d s; Ctrl-C stops the watch and prints the"
-                      " final report)\n" % (watcher.url, refresh))
-            if watcher.registry is not None:
-                out.write("raqib watch: registry %s (this watch is a row; rows are never removed)\n"
-                          % _safe(watcher.registry.path))
-            if no_open or environ.get("CI"):
-                out.write("raqib watch: page not opened (%s)\n" % ("--no-open" if no_open else "CI is set"))
-            else:
-                why = open_page(watcher.url, environ)
-                if why:
-                    out.write("raqib watch: page not opened (%s); open it by hand\n" % why)
-            out.flush()
-            watcher.step()
-            while True:
+        if watcher.port["warning"]:
+            out.write("raqib watch: WARNING: %s\n" % watcher.port["warning"])
+        out.write("raqib watch: page %s (read-only, reloads every %d s; %s stops the watch and prints the"
+                  " final report)\n" % (watcher.url, running.refresh, "Ctrl-C" if stop is None else "Stop"))
+        if watcher.registry is not None:
+            out.write("raqib watch: registry %s (this watch is a row; rows are never removed)\n"
+                      % _safe(watcher.registry.path))
+        if running.no_open or environ.get("CI"):
+            out.write("raqib watch: page not opened (%s)\n" % ("--no-open" if running.no_open else "CI is set"))
+        else:
+            why = open_page(watcher.url, environ)
+            if why:
+                out.write("raqib watch: page not opened (%s); open it by hand\n" % why)
+        out.flush()
+        watcher.step()
+        if on_step is not None:
+            on_step(watcher)
+        while True:
+            if stop is None:
                 _sleep(POLL_SECONDS)
-                watcher.step()
-        except KeyboardInterrupt:
-            out.write("\nraqib watch: stopped (Ctrl-C)\n")
-        except Exception as exc:  # B-4: the watcher's own failure ends in the final report
-            crash = "%s: %s" % (type(exc).__name__, exc)
-            out.write("\nraqib watch: CRASHED: %s\n" % _safe(crash))
-            traceback.print_exc(file=err)
-        try:
-            watcher.finish(status="crashed" if crash else "finished", error=crash)
-            text, code = watcher.final_text, watcher.final_exit
-        except Exception as exc:  # D-7: a final report, or one line saying why there is none
-            text, code = "raqib watch: no final report: %s: %s\n" % (type(exc).__name__, _safe(exc)), 1
-        try:  # I-5: the row stays, marked finished
-            hole = watcher.unregister()
-        except Exception as exc:
-            hole = "the registry was not marked: %s: %s" % (type(exc).__name__, exc)
-        if hole:
-            out.write("raqib watch: %s\n" % _safe(hole))
+            elif stop.wait(POLL_SECONDS):
+                out.write("\nraqib watch: stopped (%s)\n" % _safe(stop.reason))
+                break
+            watcher.step()
+            if on_step is not None:
+                on_step(watcher)
+    except KeyboardInterrupt:
+        out.write("\nraqib watch: stopped (Ctrl-C)\n")
+    except Exception as exc:  # B-4: the watcher's own failure ends in the final report
+        crash = "%s: %s" % (type(exc).__name__, exc)
+        out.write("\nraqib watch: CRASHED: %s\n" % _safe(crash))
+        traceback.print_exc(file=err)
+    return crash
+
+
+def conclude(running, crash):
+    """finish() and the registry row marked: (final text, exit code)."""
+    watcher, out = running.watcher, running.out
+    try:
+        watcher.finish(status="crashed" if crash else "finished", error=crash)
+        text, code = watcher.final_text, watcher.final_exit
+    except Exception as exc:  # D-7: a final report, or one line saying why there is none
+        text, code = "raqib watch: no final report: %s: %s\n" % (type(exc).__name__, _safe(exc)), 1
+    try:  # I-5: the row stays, marked finished
+        hole = watcher.unregister()
+    except Exception as exc:
+        hole = "the registry was not marked: %s: %s" % (type(exc).__name__, exc)
+    if hole:
+        out.write("raqib watch: %s\n" % _safe(hole))
+    return text, code
+
+
+def close(running):
+    """The page server down, the notifier's temp files removed."""
+    try:
+        running.server.shutdown()
+        running.server.server_close()
     finally:
-        server.shutdown()
-        server.server_close()
-        notifier.close()
-    out.write("\n" + text)
-    return code
+        running.notifier.close()
