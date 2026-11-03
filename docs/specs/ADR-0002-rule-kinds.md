@@ -470,3 +470,15 @@ Full text: docs/review/2026-11-03-M4.3-ruling.md.
   K-6 budget before each lstat. K-7 Windows share-mode window named.
   K-8 report shows the git keys on cited boundary lines. K-9 recorded.
 Full text: docs/review/2026-11-03-M4.3-redo-ruling.md.
+
+## Amendment L (the Table, 2026-11-03) - judgement on M4.3 (74fea27 + 6f20c1a)
+- J-1..J-11 and K-1..K-9 MET as cited; the Table read GIT_READ_ERRORS
+  (narrow except; the Deadline propagates) and `_git_follow` (commonpath
+  must equal the cwd) on the branch.
+- CI runs 41620828224 and 41625450784 success on six jobs each (read from
+  api.github.com); gate 2376 passed, 9 skipped; kinds signature=4
+  demand=7 anchor=6; scope clean.
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Open for a ruling by the commander: executing `git status` from the
+  hook for STOP-DIRTY-TREE (the hook executes nothing today); parsing
+  index entries instead of raw bytes (J-9).
