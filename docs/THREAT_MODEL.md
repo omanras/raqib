@@ -106,13 +106,15 @@ item F7 of the M1.2 review packet or questions file.
 - **Stored in clear:**
   - file paths, URL hosts, the program names of a Bash command
     (`command_head`, `command_programs`), and the working directory;
-  - of a Bash command's arguments, two things only (ADR-0002 Amendment G):
-    the file name of the script a python, python3, bash or sh call runs
-    (`command_scripts`, the basename of its script operand), and the first
-    word of the first `git commit` message when it is a lower-case word
-    ending in a colon, at most 16 characters, such as `landed:`
-    (`commit_prefix`). A script's file name can say what the script is for;
-    nothing else of a command line is kept;
+  - of a Bash command's arguments, two things only (ADR-0002 Amendments G
+    and H): the file name of the script a python (python, python3,
+    python.exe, py, py.exe), bash or sh call runs, also behind timeout,
+    nohup or env, or that `.` or `source` reads (`command_scripts`, the
+    basename of its script operand, split on / and on a backslash), and the
+    first word of the first non-empty `git commit` message when it is a
+    lower-case word ending in a colon, at most 16 characters, such as
+    `landed:` (`commit_prefix`). A script's file name can say what the
+    script is for; nothing else of a command line is kept;
   - tool names, timestamps, session ids and tool_use ids;
   - ok and error_class;
   - the names, never the text, of secret patterns seen in output.
@@ -189,26 +191,76 @@ or file contents. Everything below follows from that, or from the hooks.
   and miss 9 of 25 bad ones (`docs/review/2026-10-16-M2.2-baseline.md` and
   its dated note of 2026-11-03: EDIT-NO-TEST adds b11-refactor).
 - **The two demands of a landing read names and ok only (ADR-0002
-  Amendment G).** LANDED-NO-GATE asks for an ok run of `gate.sh` or
+  Amendments G and H).** LANDED-NO-GATE asks for an ok run of `gate.sh` or
   `gate.py` on or before a `landed:` commit; EDIT-NO-TEST asks for an ok
   run of pytest, python, python3, `gate.sh` or `gate.py` after an edit under
   `raqib/` or `tests/` and before the next stop or session end. Both are
   demands: an agent that knows them passes by complying, except through
-  their listed holes (each rule's `holes:`, quoted in the ADR-0002 note):
-  - the Bash call's own ok is the evidence, so a RED gate or test run piped
-    into another program (`| tail`), followed by `||`, or started in the
-    background counts as passed; operators are not recorded;
-  - a stale gate (one run before later edits) counts for LANDED-NO-GATE;
-  - names are basenames: any program or script called `gate.sh`, `gate.py`
-    or `pytest`, and any python call, counts;
-  - a commit with no `commit_prefix` is not judged: `--amend`, `-F`, `-C`,
-    `-c`, a here-document with an unquoted delimiter, a message whose first
-    word is not literal or not a lower-case word ending in a colon, a
-    second commit in one command, `git merge`, an alias, a wrapper;
-  - edits made through Bash are not EDIT-NO-TEST triggers, and a session
-    that never stops leaves its edits unjudged (partial);
-  - a call whose post line never came is unknown, not a finding (SILENCE-HALF
-    has it).
+  their listed holes. Every hole of each rule's `holes:` list, as the rule
+  states it (ruling H-8; also quoted in the ADR-0002 note):
+  - LANDED-NO-GATE:
+    - a stale gate: any earlier ok gate run in the session counts, even one
+      before later edits;
+    - operators are not recorded: tools/gate.sh || git commit ... and
+      tools/gate.sh; git commit ... look like tools/gate.sh && git commit ...,
+      whatever the gate's status;
+    - a RED gate piped into another program (tools/gate.sh 2>&1 | tail -5) is
+      an ok line: a pipeline's status is its last program's;
+    - a gate started in the background (the Bash tool's run_in_background) is
+      ok when it starts; its verdict comes later through another tool;
+    - names are basenames: any program or script called gate.sh or gate.py
+      counts as the gate;
+    - a commit with no commit_prefix is not judged: --amend, -F, -C, -c, a
+      here-document with an unquoted delimiter or with CRLF line ends, a
+      message whose first word is not literal, a commit after the first one in
+      a command, an abbreviated option, a git option before the subcommand
+      that is not literal (git $OPT commit), git merge, git commit-tree, an
+      alias, git.exe, a wrapper in front (sudo, env, xargs), a command capture
+      cannot read in full, and a first word that is not a lower-case word
+      ending in a colon (STOP:, Landed:);
+    - --no-message, which makes git forget the messages before it, is not
+      read: the prefix is that of the first non-empty -m, so git commit -m wip
+      --no-message -m 'landed: x' is not judged;
+    - a commit whose post line never came is not judged: unknown (partial),
+      SILENCE-HALF has the call;
+    - a gate run after the commit on the same line counts (git commit -m
+      'landed: x' && tools/gate.sh): the line is the evidence;
+    - the trigger is the line's ok, not the commit's: a failing command after
+      the commit on the same line (git commit -m 'landed: x' && false) makes
+      the line not ok, so the landing is not judged;
+    - a call that names the gate without running it counts as a gate run: bash
+      -n tools/gate.sh (a syntax check), python -V tools/gate.py, python -I
+      tools/gate.py --rule-kinds-child (the kinds check only);
+    - a Bash line capture cannot read at all (no command_programs and no
+      command_head) and no gate run in the session make the landing unknown
+      (partial), not a finding (H-2: a true gate line wins over such a line);
+  - EDIT-NO-TEST:
+    - a test or gate run piped into another program (pytest | tail) is an ok
+      line: a pipeline's status is its last program's;
+    - operators are not recorded: pytest || true is an ok line whatever the
+      tests did;
+    - a run started in the background (the Bash tool's run_in_background) is
+      ok when it starts;
+    - any python or python3 call counts as a test run (python3 -c 'print(1)',
+      python3 --version), and any program or script called pytest, gate.sh or
+      gate.py;
+    - edits made through Bash (sed -i, a redirect, cp, mv) are not triggers:
+      only Edit, Write, MultiEdit and NotebookEdit are;
+    - an edit whose path cannot be read (no input_meta.path) is not a trigger;
+    - a session that never reaches a stop or a session_end leaves its edits
+      unjudged (partial); SILENCE-OPEN has the session;
+    - an edit whose post line never came is not judged: unknown (partial),
+      SILENCE-HALF has the call;
+    - with no context root, raqib/ and tests/ are placed against each line's
+      cwd: an edit made while the cwd is elsewhere is not under them
+      (SCOPE-CWD-MOVED has the move);
+    - a call that names the gate without running it counts as a test run: bash
+      -n tools/gate.sh (a syntax check), python -I tools/gate.py
+      --rule-kinds-child (the kinds check only);
+    - a Bash line capture cannot read at all (no command_programs and no
+      command_head) after an edit, with no test run after it, makes the edit
+      unknown (partial), not a finding (H-2: a true test line wins over such a
+      line).
 
 ### The os source (Sysmon; ADR-0003 Amendment C)
 Rulings: ADR-0003 Amendments C and D.

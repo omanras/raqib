@@ -46,7 +46,7 @@ __all__ = (
     "PYTHONS", "PYTHON_VALUE_OPTIONS", "PYTHON_VALUE_LONG", "PYTHON_NO_SCRIPT", "SHELL_NO_SCRIPT",
     "SCRIPTS_MAX", "COMMIT_PREFIX", "COMMIT_PREFIX_MAX", "GIT_VALUE_OPTIONS", "COMMIT_FLAGS",
     "COMMIT_VALUE_LONG", "COMMIT_NOT_READ", "HEREDOC_MESSAGE", "HEAD_TARGET_STOP", "read_command",
-    "command_scripts", "commit_prefix",
+    "command_scripts", "commit_prefix", "SCRIPT_WRAPPERS", "TIMEOUT_VALUE_OPTIONS", "SOURCES",
 )
 
 # A-1: leading shell assignments (NAME=value) are not the command. Words are
@@ -82,12 +82,18 @@ WORD_END = " \t\n;&|<>()"
 # command_scripts (G-2, G-9): the basename of the script OPERAND of a python
 # or python3 call (ending .py) and of a bash or sh call (ending .sh); never
 # another argument. -c and -m (python), -c and -s (bash, sh) mean no script.
-PYTHONS = ("python", "python3")
+PYTHONS = ("python", "python3", "python.exe", "py", "py.exe")   # H-1: the Windows names too
 PYTHON_VALUE_OPTIONS = "WX"                  # -W arg, -X opt: the value is glued or the next word
 PYTHON_VALUE_LONG = ("--check-hash-based-pycs",)
 PYTHON_NO_SCRIPT = "cm"                      # -c CODE, -m MODULE
 SHELL_NO_SCRIPT = "cs"                       # -c STRING, -s (commands on stdin)
 SCRIPTS_MAX = 64                             # distinct names; more: the command is not read (as D-9)
+# H-1: for command_scripts only, these wrappers pass through to the command
+# they run, one level: `timeout [opts] N cmd`, `nohup cmd`, `env cmd` (env
+# with no option and no NAME=value). `.` and `source` record their script.
+SCRIPT_WRAPPERS = ("timeout", "nohup", "env")
+TIMEOUT_VALUE_OPTIONS = ("-s", "-k", "--signal", "--kill-after")
+SOURCES = (".", "source")
 # commit_prefix (G-3, G-4): the first word of the first -m message of the
 # first `git ... commit` simple command, written only when it is a lower-case
 # word ending in ":" of at most COMMIT_PREFIX_MAX characters.
@@ -288,20 +294,30 @@ def read_command(command):
 
 
 def command_scripts(command):
-    """G-2: the basename of the script operand of every python or python3
-    call (a word ending .py) and every bash or sh call (a word ending .sh)
-    that the reader of command_programs reads (top level, $(...), a bash -c
-    string), each once, in first-seen order. The operand is the first word
-    after the options and their values: python's -W and -X (glued or the
-    next word) and --check-hash-based-pycs take a value, -- ends the options,
-    and -c, -m or - mean there is no script; bash's and sh's -o, -O, +o, +O,
-    --rcfile and --init-file take a value, -- and - end the options, and -c
-    or -s mean there is no script. A word that is not literal where the
-    operand could be ends the search: nothing is recorded for that call.
-    Basename only, under the name rules of a program (HEAD_NAME, no leading
-    -, nothing that looks like a key). [] when there is none; None when the
-    command cannot be read (G-9: input_meta writes the key only when the list
-    is not empty)."""
+    """G-2: the basename of the script operand of every python call (PYTHONS:
+    python, python3, python.exe, py, py.exe; a word ending .py) and every
+    bash or sh call (a word ending .sh) that the reader of command_programs
+    reads (top level, $(...), a bash -c string), each once, in first-seen
+    order. The operand is the first word after the options and their values:
+    python's -W and -X (glued or the next word) and --check-hash-based-pycs
+    take a value, -- ends the options, and -c, -m or - mean there is no
+    script; bash's and sh's -o, -O, +o, +O, --rcfile and --init-file take a
+    value, -- and - end the options, and -c or -s mean there is no script. A
+    word that is not literal where the operand could be ends the search:
+    nothing is recorded for that call.
+
+    H-1 (ADR-0002 Amendment H): the basename is split on / and on a backslash, and a
+    backslash outside quotes is kept for it (`python -I tools\\gate.py`, as a
+    Windows shell passes it, records gate.py; the shell's own reading drops
+    that backslash). For scripts only, SCRIPT_WRAPPERS pass through one level
+    to the command they run (timeout's options and its duration are skipped;
+    env only with no option and no NAME=value): a python or shell call there
+    is read as above, and a command word ending .py or .sh is recorded
+    itself (`timeout 900 tools/gate.sh` records gate.sh). `.` and `source`
+    record their script when it ends .sh. Basename only, under the name rules
+    of a program (HEAD_NAME, no leading -, nothing that looks like a key). []
+    when there is none; None when the command cannot be read (G-9:
+    input_meta writes the key only when the list is not empty)."""
     read = read_command(command)
     return None if read is None else read[1]
 
@@ -313,9 +329,11 @@ def commit_prefix(command):
 
     git's options before the subcommand are skipped, those of
     GIT_VALUE_OPTIONS with the next word. The message is the value of the
-    first of -m MSG, -mMSG, --message=MSG, --message MSG, or a cluster of
-    COMMIT_FLAGS ending in m (-am MSG; -amMSG likewise), read with shell
-    quoting. Its first word counts only when it lies in literal text (before
+    first non-empty (H-4: git drops an empty one) of -m MSG, -mMSG,
+    --message=MSG, --message MSG, or a cluster of COMMIT_FLAGS ending in m
+    (-am MSG; -amMSG likewise), read with shell quoting; a value that is not
+    literal counts as not empty. --no-message, which makes git forget the
+    messages before it, is not read (a listed hole). Its first word counts only when it lies in literal text (before
     any $), or when the whole value is "$(cat <<'EOF' ... EOF)" with a quoted
     delimiter ('EOF', "EOF" or \\EOF; <<- strips tabs), whose body is read as
     text (HEREDOC_MESSAGE). Leading blank lines do not count, as git strips
@@ -361,13 +379,76 @@ def _program_name(word):
     return name
 
 
-def _script_name(word):
-    """The basename of a script operand under the name rules of a program,
-    or None (not recorded; the command stays readable)."""
-    name = word.rstrip("/").rsplit("/", 1)[-1]
+def _script_name(path):
+    """The basename of a script word, split on / and on \\ (H-1), under the
+    name rules of a program, or None (not recorded; the command stays
+    readable)."""
+    name = re.split(r"[/\\]", path.rstrip("/\\"))[-1]
     if not name or name.startswith("-") or not HEAD_NAME.match(name) or looks_like_key(name):
         return None
     return name
+
+
+def _base(path):
+    """The last part of a word split on / and on \\ (H-1)."""
+    return re.split(r"[/\\]", path.rstrip("/\\"))[-1]
+
+
+class _Wrapped:
+    """H-1: the words of one timeout/nohup/env (SCRIPT_WRAPPERS) or ./source
+    (SOURCES) simple command, for command_scripts only. Once the wrapped
+    command word is found it hands over to an _Operand (a python or shell
+    call) or records the word itself (a script); one level, never a second
+    wrapper."""
+
+    def __init__(self, program):
+        self.program, self.skip, self.duration, self.done, self.operand = program, 0, False, False, None
+
+    def feed(self, word, path, raw, found):
+        if self.operand is not None:
+            self.operand.feed(word, path, found)
+            return
+        if self.done:
+            return
+        if word is None:
+            self.done = True
+            return
+        if self.skip:
+            self.skip -= 1
+            return
+        if self.program in SOURCES:
+            if word == "--":
+                return
+            self.record(path, ".sh", found)
+            return
+        if self.program == "timeout":
+            if not self.duration:
+                if word in TIMEOUT_VALUE_OPTIONS:
+                    self.skip = 1
+                elif word.startswith("-") and len(word) > 1:
+                    pass              # --preserve-status, --foreground, -v, --signal=SIG
+                else:
+                    self.duration = True
+                return
+        elif self.program == "nohup":
+            if word == "--":
+                return
+        elif word.startswith("-") or NAME_WORD.match(raw):
+            self.done = True          # env with an option or an assignment is not read (H-1)
+            return
+        self.done = True
+        name = _base(path)
+        if name in PYTHONS or name in C_SHELLS:
+            self.operand = _Operand(".py" if name in PYTHONS else ".sh")
+        elif name.endswith((".py", ".sh")):
+            self.record(path, name[-3:], found)
+
+    def record(self, path, suffix, found):
+        self.done = True
+        if path.endswith(suffix):
+            name = _script_name(path)
+            if name is not None:
+                found.add_script(name)
 
 
 class _Operand:
@@ -377,7 +458,7 @@ class _Operand:
     def __init__(self, suffix):
         self.suffix, self.skip, self.ended, self.done = suffix, 0, False, False
 
-    def feed(self, word, found):
+    def feed(self, word, path, found):
         if self.done:
             return
         if word is None:
@@ -389,8 +470,8 @@ class _Operand:
         if not self.ended and self.option(word):
             return
         self.done = True
-        if word.endswith(self.suffix):
-            name = _script_name(word)
+        if path.endswith(self.suffix):
+            name = _script_name(path)   # H-1: split on / and \, unquoted backslashes kept
             if name is not None:
                 found.add_script(name)
 
@@ -520,20 +601,29 @@ class _Commit:
             return
 
     def message(self, word, raw, last, offset):
-        """The value of an -m form: the word from offset on."""
+        """The value of an -m form: the word from offset on. The first -m
+        that is not empty is the first paragraph: git drops an empty one
+        (H-4), so `-m '' -m 'landed: x'` is read as landed:."""
         if self.message_seen:
-            return                    # the first -m is the first paragraph
-        self.message_seen = True
+            return
         text, prefix_end, globbed = last
         if word is not None:
-            self.first = _first_word(word[offset:], True)
+            value = word[offset:]
+            if value.split():
+                self.message_seen = True
+                self.first = _first_word(value, True)
             return
+        self.message_seen = True      # not literal: whether it is empty cannot be told
         if globbed:
             return
         if prefix_end is not None and prefix_end >= offset:
             self.first = _first_word(text[offset:prefix_end], False)
         if self.first is None and raw[:offset] == text[:offset]:
-            self.first = _heredoc_first_word(raw[offset:])
+            body = _heredoc_message(raw[offset:])
+            if body is not None and not body.split():
+                self.message_seen = False   # an empty here-document is an empty -m (H-4)
+            elif body is not None:
+                self.first = _first_word(body, True)
 
     def finish(self, found):
         if not self.claimed or self.stage != "args":
@@ -553,9 +643,9 @@ def _first_word(text, whole):
     return match.group(1)
 
 
-def _heredoc_first_word(raw):
-    """The first word of a value written "$(cat <<'EOF' ... EOF)" with a
-    quoted delimiter (HEREDOC_MESSAGE), else None. Read as text: nothing is run."""
+def _heredoc_message(raw):
+    """The body of a value written "$(cat <<'EOF' ... EOF)" with a quoted
+    delimiter (HEREDOC_MESSAGE), else None. Read as text: nothing is run."""
     match = HEREDOC_MESSAGE.match(raw)
     if match is None:
         return None
@@ -575,7 +665,7 @@ def _heredoc_first_word(raw):
         body.append(line)
     if not re.match(r"[ \t\n]*\)\"\Z", rest):
         return None
-    return _first_word("\n".join(body), True)
+    return "\n".join(body)
 
 
 class _ProgramReader:
@@ -586,6 +676,7 @@ class _ProgramReader:
         self.text, self.pos, self.found, self.depth, self.in_c = text, pos, found, depth, in_c
         self.heredocs = []  # (delimiter, strip tabs, quoted) waiting for the next newline
         self.last = ("", None, False)  # of the last word read: (text, end of its literal prefix, globbed)
+        self.last_path = ""            # the same text with its unquoted backslashes kept (H-1)
 
     def add(self, name):
         names = self.found.names
@@ -690,13 +781,17 @@ class _ProgramReader:
                     cmd["shell"] = {"c": False, "skip": 0, "ended": False, "done": False}
                 if name in PYTHONS or name in C_SHELLS:   # M4.2b G-2
                     cmd["operand"] = _Operand(".py" if name in PYTHONS else ".sh")
+                elif name in SCRIPT_WRAPPERS or name in SOURCES:   # H-1
+                    cmd["operand"] = _Wrapped(name)
                 elif name == "git" and not self.found.commit_claimed:   # M4.2b G-4
                     cmd["git"] = _Commit()
                 continue
             if cmd["shell"] is not None and not cmd["shell"]["done"]:
                 self.shell_argument(cmd["shell"], word)
-            if cmd["operand"] is not None:
-                cmd["operand"].feed(word, self.found)
+            if isinstance(cmd["operand"], _Wrapped):
+                cmd["operand"].feed(word, self.last_path, raw, self.found)
+            elif cmd["operand"] is not None:
+                cmd["operand"].feed(word, self.last_path, self.found)
             if cmd["git"] is not None:
                 cmd["git"].feed(word, raw, self.last, self.found)
 
@@ -763,6 +858,7 @@ class _ProgramReader:
         text, n = self.text, len(self.text)
         start = pos = self.pos
         out = []
+        kept = []   # H-1: out, but an unquoted backslash stays in front of its character
         literal, quoted, glob, brace, bracket = True, False, False, False, False
         prefix_end = None
         while pos < n:
@@ -772,11 +868,13 @@ class _ProgramReader:
             if ch == "\\":
                 if pos + 1 >= n:
                     out.append(ch)
+                    kept.append(ch)
                     pos += 1
                 elif text[pos + 1] == "\n":
                     pos += 2
                 else:
                     out.append(text[pos + 1])
+                    kept.append(text[pos:pos + 2])
                     quoted = True
                     pos += 2
             elif ch == "'":
@@ -784,6 +882,7 @@ class _ProgramReader:
                 if end < 0:
                     raise _Unread()
                 out.append(text[pos + 1:end])
+                kept.append(text[pos + 1:end])
                 quoted = True
                 pos = end + 1
             elif ch == '"':
@@ -799,6 +898,7 @@ class _ProgramReader:
                     if c == "\\" and pos + 1 < n and text[pos + 1] in '$`"\\\n':
                         if text[pos + 1] != "\n":
                             out.append(text[pos + 1])
+                            kept.append(text[pos + 1])
                         pos += 2
                     elif c == "$":
                         literal = False
@@ -809,6 +909,7 @@ class _ProgramReader:
                         raise _Unread()
                     else:
                         out.append(c)
+                        kept.append(c)
                         pos += 1
             elif ch == "$":
                 literal = False
@@ -822,6 +923,7 @@ class _ProgramReader:
                 bracket = bracket or ch == "["
                 brace = brace or ch in "{}"
                 out.append(ch)
+                kept.append(ch)
                 pos += 1
         self.pos = pos
         word = "".join(out)
@@ -829,6 +931,7 @@ class _ProgramReader:
         if globbed:
             literal = False
         self.last = (word, prefix_end, globbed)
+        self.last_path = "".join(kept)
         return (word if literal else None), quoted, text[start:pos]
 
     def read_dollar(self, pos, in_double):

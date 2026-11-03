@@ -212,7 +212,7 @@ def test_e1_before_unknown_evidence_makes_the_trigger_unknown_never_a_finding():
     assert cited(BEFORE, lines) == ([], [("s1", 2)])
     found, notes = engine.evaluate([BEFORE], lines)
     assert found == [] and [n["status"] for n in notes] == ["partial"]
-    assert notes[0]["detail"] == ("could not judge 1 line(s) (session:seq s1:2): " + engine.REQUIRE_UNKNOWN)
+    assert notes[0]["detail"] == "could not judge 1 line(s) (session:seq s1:2 (evidence unknown))"   # H-3
     # Evidence that is true anywhere before wins over evidence that is unknown.
     assert cited(BEFORE, call(1, evidence=True) + [rec(2, "pre", evidence=True), rec(2, "post", ok=None, evidence=True)]
                  + call(3, mark="T")) == ([], [])
@@ -325,7 +325,6 @@ SCRIPTS = [
     ("python3 $S x.py", []),
     ("python3 \"$S\".py", []),
     # Only python, python3, bash and sh; wrappers and other names are not read.
-    ("env python3 x.py", []),
     ("python3.12 x.py", []),
     ("zsh x.sh", []),
     ("./tools/gate.sh", []),
@@ -335,6 +334,35 @@ SCRIPTS = [
     ("echo $(bash tools/v.sh)", ["v.sh"]),
     ("bash a.sh; python3 b.py; bash a.sh", ["a.sh", "b.py"]),
     ("time python3 x.py", ["x.py"]),
+    # H-1: split on / and \ (an unquoted backslash is kept for the name), the Windows names,
+    # timeout/nohup/env one level, . and source.
+    ("python -I tools\\gate.py", ["gate.py"]),
+    ("python3 'tools\\gate.py'", ["gate.py"]),
+    ("python3 \"tools\\gate.py\"", ["gate.py"]),
+    ("bash C:\\proj\\tools\\gate.sh", ["gate.sh"]),
+    ("py -I tools\\gate.py", ["gate.py"]),
+    ("py -3.12 tools/gate.py", ["gate.py"]),
+    ("py.exe -3 tools\\gate.py", ["gate.py"]),
+    ("python.exe tools/gate.py", ["gate.py"]),
+    ("timeout 900 tools/gate.sh", ["gate.sh"]),
+    ("timeout 900 ./tools\\gate.sh", ["gate.sh"]),
+    ("timeout -k 5 -s KILL 900 python3 tools/gate.py", ["gate.py"]),
+    ("timeout --preserve-status --signal=TERM 9 bash x.sh", ["x.sh"]),
+    ("timeout 9 x.txt", []),
+    ("timeout $T x.sh", []),
+    ("nohup tools/gate.sh", ["gate.sh"]),
+    ("nohup -- bash x.sh", ["x.sh"]),
+    ("env python3 x.py", ["x.py"]),
+    ("env x.py", ["x.py"]),
+    ("env A=1 python3 x.py", []),                 # env with an assignment: not read (H-1)
+    ("env -i python3 x.py", []),                  # env with an option: not read
+    ("timeout 5 nohup x.sh", []),                 # one level only
+    ("timeout 9 env python3 x.py", []),
+    (". ./env.sh", ["env.sh"]),
+    (". -- tools/a.sh", ["a.sh"]),
+    ("source tools/x.sh && pytest", ["x.sh"]),
+    ("source venv/bin/activate", []),              # a sourced file is a script when it ends .sh
+    ("sudo python3 x.py", []),                     # other wrappers stay unread (D-9)
     # Basename only, under the name rules of a program.
     ("python3 /opt/deep/path/x.py", ["x.py"]),
     ("python3 ./-x.py", []),
@@ -378,6 +406,15 @@ COMMITS = [
     ("/usr/bin/git commit -m 'landed: x'", "landed:"),
     ("git commit -t tmpl --author 'A <a@b>' --no-edit -m 'landed: x'", "landed:"),
     ("git commit -m 'landed: x' -m 'body'", "landed:"),
+    # H-4: the first NON-EMPTY -m; --no-message is not read (a listed hole).
+    ("git commit -m '' -m 'landed: x'", "landed:"),
+    ("git commit -m '   ' --message='landed: x'", "landed:"),
+    ("git commit -m \"$(cat <<'EOF'\n\nEOF\n)\" -m 'landed: x'", "landed:"),
+    ("git commit -m 'wip' -m 'landed: x'", None),
+    ("git commit -m \"$X\" -m 'landed: x'", None),
+    ("git commit -m ''", None),
+    ("git commit -m wip --no-message -m 'landed: x'", None),
+    ("git commit -m 'landed: x' --no-message -m wip", "landed:"),
     ("git commit -m '  landed: x'", "landed:"),
     ("git commit -m 'landed: x' -- $FILES", "landed:"),
     ("git commit -m \"landed: $(date)\"", "landed:"),
@@ -439,7 +476,8 @@ def test_e2_commit_prefix_forms(command, expected):
 
 def test_e2_commit_prefix_constants_are_the_rulings():
     assert common.COMMIT_PREFIX.pattern == r"[a-z]+:\Z" and common.COMMIT_PREFIX_MAX == 16   # G-3
-    assert common.PYTHONS == ("python", "python3") and common.C_SHELLS == ("bash", "sh")        # G-2
+    assert common.PYTHONS == ("python", "python3", "python.exe", "py", "py.exe")               # G-2, H-1
+    assert common.C_SHELLS == ("bash", "sh") and common.SCRIPT_WRAPPERS == ("timeout", "nohup", "env")
     assert set(common.COMMIT_NOT_READ) == {"--amend", "--file", "--reuse-message", "--reedit-message"}
 
 
@@ -495,7 +533,8 @@ def test_e2_capture_re_exports_the_new_names_and_the_proxy_shares_them():
 def test_e2_the_reader_stays_pure_and_the_new_code_is_inside_the_checked_body():
     source = (ROOT / "raqib" / "hooks" / "common.py").read_text(encoding="utf-8")
     body = source.split("def command_programs(", 1)[1].split("\ndef input_meta(", 1)[0]
-    for name in ("def read_command(", "class _Operand:", "class _Commit:", "def _heredoc_first_word("):
+    for name in ("def read_command(", "class _Operand:", "class _Wrapped:", "class _Commit:",
+                 "def _heredoc_message("):
         assert name in body, name
     for banned in ("subprocess", "os.system", "os.popen", "exec(", "eval(", "shlex.split", "open("):
         assert banned not in body, banned
@@ -540,7 +579,7 @@ def test_e3_e4_the_rules_declare_kind_severity_holes_and_require():
     assert (landed.kind, landed.severity, landed.cls) == ("demand", "high", "DRIFT")
     assert (edit.kind, edit.severity, edit.cls) == ("demand", "medium", "DRIFT")
     assert set(landed.require) == {"before"} and set(edit.require) == {"after", "until"}
-    assert landed.evasion == () == edit.evasion and len(landed.holes) == 7 and len(edit.holes) == 8
+    assert landed.evasion == () == edit.evasion and len(landed.holes) == 12 and len(edit.holes) == 11
     flat = " ".join(landed.holes)
     for hole in ("a stale gate", "||", "| tail -5", "run_in_background", "basenames", "--amend", "post line never"):
         assert hole in flat, hole   # G-5
@@ -568,9 +607,16 @@ def test_e3_landed_no_gate_fixtures_both_ways():
     assert found == [("fixture-rules-landed-1", [3]), ("fixture-rules-landed-2", [3]),
                      ("fixture-rules-landed-3", [3]), ("fixture-rules-landed-5", [2])] and unknown == []
     assert expect == [2, 3]
-    # negatives: the && same line, a stale gate, the Windows form, a piped gate (a hole), a line
-    # before M4.2 (G-8), and commits that are no landing (wip:, failed, STOP:, --amend, merge).
+    # negatives: the && same line, a stale gate, python -I tools/gate.py, a piped gate (a hole), a
+    # line before M4.2 (G-8), and commits that are no landing (wip:, failed, STOP:, --amend, merge);
+    # the Windows forms (H-1, H-8): python -I tools\gate.py, timeout 900 tools/gate.sh,
+    # py -I tools\gate.py and python.exe ... && git commit on one line, under cwd C:\proj.
     assert fixture_findings("LANDED-NO-GATE", "negative-gated.json")[:2] == ([], [])
+    assert fixture_findings("LANDED-NO-GATE", "negative-windows.json")[:2] == ([], [])
+    lines, _, _ = fixtures.load_fixture(ROOT / "tests" / "fixtures" / "rules" / "LANDED-NO-GATE" / "negative-windows.json")
+    assert all(r["cwd"] == "C:\\proj" for r in lines)
+    assert [r["input_meta"].get("command_scripts") for r in lines if r["phase"] == "pre"] == [
+        ["gate.py"], None, ["gate.sh"], None, ["gate.py"], None, ["gate.py"]]
 
 
 def test_e3_landed_no_gate_cases():
@@ -710,9 +756,11 @@ def test_e5_threat_model_lists_the_new_extract_and_the_holes():
     assert "`command_scripts`, the basename of its script operand" in stored and "(`commit_prefix`)" in stored
     assert "nothing else of a command line is kept" in stored
     demands = flat.split("**The two demands of a landing read names and ok only", 1)[1].split("### ", 1)[0]
-    for hole in ("piped into another program (`| tail`)", "a stale gate", "names are basenames", "`--amend`",
-                 "edits made through Bash", "SILENCE-HALF"):
-        assert hole in demands, hole
+    # H-8: section 5 names every listed hole, as the rule states it.
+    for rule_id in ("LANDED-NO-GATE", "EDIT-NO-TEST"):
+        block = demands.split("- %s:" % rule_id, 1)[1]
+        for hole in catalog_rule(rule_id).holes:
+            assert " ".join(hole.split()) in block, (rule_id, hole)
     assert "the rules flag 9 of 25 benign events" in flat and "flag 6 of 25" not in flat
 
 
@@ -728,3 +776,184 @@ def test_e5_gate_yml_derives_the_catalog_count():
     gate = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
     assert "never a literal" in gate and not re.search(r"len\(catalog\) == \d", gate)
     assert len(list(CATALOG.glob("*.yaml"))) == 9
+
+
+# --- M4.2b REDO (ADR-0002 Amendment H) ------------------------------------------------------------
+
+def test_h1_the_windows_landing_is_clean_and_measured():
+    """H-1: the README's Windows gate (python -I tools\\gate.py), py, python.exe
+    and timeout 900 tools/gate.sh before a landing: no finding, nothing
+    unknown, and the file counts as a measured negative."""
+    rule = catalog_rule("LANDED-NO-GATE")
+    assert "tests/fixtures/rules/LANDED-NO-GATE/negative-windows.json" in rule.fixtures["negative"]
+    report = fixtures.check_rule(rule, ROOT, ())
+    windows = [n for n in report["negatives"] if n["path"].endswith("negative-windows.json")]
+    assert windows == [{"path": "tests/fixtures/rules/LANDED-NO-GATE/negative-windows.json", "fired": False,
+                        "measured": True}]
+    assert "python -I tools\\gate.py" in README   # the form the fixture holds
+    meta = common.input_meta("Bash", {"command": "python -I tools\\gate.py"})
+    assert meta == {"command_head": "python", "command_programs": ["python"], "command_scripts": ["gate.py"]}
+
+
+def test_h1_wrappers_pass_through_for_scripts_only():
+    for command in ("timeout 900 tools/gate.sh", "nohup tools/gate.sh", "env tools/gate.sh"):
+        read = common.read_command(command)
+        assert read[0] == [command.split()[0]] and read[1] == ["gate.sh"], command   # programs: the wrapper only
+    assert common.SOURCES == (".", "source") and common.TIMEOUT_VALUE_OPTIONS == ("-s", "-k", "--signal",
+                                                                                   "--kill-after")
+
+
+def test_h2_true_evidence_wins_over_unknown_evidence():
+    unknown_line = [rec(9, "pre", evidence=True), rec(9, "post", ok=None, evidence=True)]
+    unk = lambda seq: [dict(r, seq=seq) for r in unknown_line]   # noqa: E731
+    # before: unknown, then true, then the trigger; true, then unknown, then the trigger.
+    assert cited(BEFORE, unk(1) + call(2, evidence=True) + call(3, mark="T")) == ([], [])
+    assert cited(BEFORE, call(1, evidence=True) + unk(2) + call(3, mark="T")) == ([], [])
+    # unknown only when no evidence line is true and one is unknown
+    assert cited(BEFORE, unk(1) + call(2) + call(3, mark="T")) == ([], [("s1", 3)])
+    assert cited(BEFORE, call(1) + call(2, mark="T")) == ([("s1", [2])], [])
+    # after/until: the same between the trigger and its deadline.
+    assert cited(AFTER, call(1, "Edit") + unk(2) + call(3, evidence=True) + [event(4, "stop")]) == ([], [])
+    assert cited(AFTER, call(1, "Edit") + call(2, evidence=True) + unk(3) + [event(4, "stop")]) == ([], [])
+    assert cited(AFTER, call(1, "Edit") + unk(2) + [event(3, "stop")]) == ([], [("s1", 1)])
+
+
+def test_h2_one_unread_bash_line_does_not_downgrade_a_gated_session():
+    rule = catalog_rule("LANDED-NO-GATE")
+    meta = lambda c: common.input_meta("Bash", {"command": c})   # noqa: E731
+    unread = meta("$X --run")
+    assert unread == {"command_unread": True}
+    commit = meta("git commit -m 'landed: x'")
+    lines = call(1, **unread) + call(2, **meta("tools/gate.sh")) + call(3, **unread) + call(4, **commit)
+    assert cited(rule, lines) == ([], [])
+    assert cited(rule, call(1, **unread) + call(2, **commit)) == ([], [("s1", 2)])
+    assert any("cannot read at all" in h and "H-2" in h for h in rule.holes)
+    assert any("cannot read at all" in h and "H-2" in h for h in catalog_rule("EDIT-NO-TEST").holes)
+
+
+def test_h3_an_unknown_trigger_with_true_evidence_is_not_partial():
+    unknown_trigger = [rec(2, "pre", mark="T"), rec(2, "post", ok=None, mark="T")]
+    assert cited(BEFORE, call(1, evidence=True) + unknown_trigger) == ([], [])
+    assert cited(BEFORE, call(1, evidence=True) + call(2, mark="T", post=False)) == ([], [])
+    assert cited(BEFORE, unknown_trigger) == ([], [("s1", 2)])
+    # after/until: an unknown trigger discharged by later true evidence is not partial either.
+    unknown_edit = [rec(1, "pre", "Edit"), rec(1, "post", "Edit", ok=None)]
+    assert cited(AFTER, unknown_edit + call(2, evidence=True) + [event(3, "stop")]) == ([], [])
+    assert cited(AFTER, unknown_edit + [event(2, "stop")]) == ([], [("s1", 1)])
+
+
+@pytest.mark.parametrize("rule, lines, cause", [
+    (BEFORE, [rec(1, "pre", mark="T"), rec(1, "post", ok=None, mark="T")], "the trigger cannot be judged"),
+    (BEFORE, call(1, mark="T", post=False), "no post line"),
+    (BEFORE, [rec(1, "pre", evidence=True), rec(1, "post", ok=None, evidence=True)] + call(2, mark="T"),
+     "evidence unknown"),
+    (AFTER, call(1, "Edit"), "no deadline came"),
+    (AFTER, call(1, "Edit", post=False) + [event(2, "stop")], "no post line"),
+    (AFTER, call(1, "Edit") + [rec(2, "pre", evidence=True), rec(2, "post", ok=None, evidence=True),
+                               event(3, "stop")], "evidence unknown"),
+], ids=["trigger", "no-post-before", "evidence", "no-deadline", "no-post-after", "evidence-after"])
+def test_h3_the_partial_note_names_the_cause_per_seq(rule, lines, cause):
+    (_, unknown) = engine.judge(rule, lines)
+    (u,) = unknown
+    assert u.cause == cause and tuple(u) == ("s1", u[1])
+    found, notes = engine.evaluate([rule], lines)
+    assert found == [] and notes == [{"rule_id": "DRIFT-TEST", "status": "partial",
+                                      "detail": "could not judge 1 line(s) (session:seq s1:%d (%s))" % (u[1], cause)}]
+
+
+def test_h3_a_deadline_that_cannot_be_judged_and_more_than_five_causes():
+    rule = engine.compile_rule(doc(match=AFTER.doc["match"], require={
+        "after": AFTER.doc["require"]["after"], "until": {"field": "input_meta.close", "eq": True}}), "u")
+    assert [u.cause for u in engine.judge(rule, call(1, "Edit") + [event(2, "stop")])[1]] == ["deadline unknown"]
+    lines = [r for i in range(1, 8) for r in call(i, "Edit")]
+    (note,) = engine.evaluate([AFTER], lines)[1]
+    assert note["detail"].startswith("could not judge 7 line(s) (session:seq s1:1 (no deadline came), ")
+    assert note["detail"].endswith("s1:5 (no deadline came) ...)")
+    plain = engine.compile_rule(doc(kind="anchor", match={"field": "input_meta.path", "prefix": "/"}), "p")
+    (note,) = engine.evaluate([plain], [rec(1, "pre", "Edit")])[1]
+    assert note["detail"] == ("could not judge 1 line(s) (session:seq s1:1): a field it reads is missing or a path"
+                              " cannot be placed")   # other rules: unchanged
+
+
+def test_h4_the_first_non_empty_message_and_the_no_message_hole():
+    assert common.commit_prefix("git commit -m '' -m 'landed: x'") == "landed:"
+    assert common.commit_prefix("git commit -m wip --no-message -m 'landed: x'") is None
+    hole = [h for h in catalog_rule("LANDED-NO-GATE").holes if h.startswith("--no-message")]
+    assert hole and "first non-empty -m" in hole[0]
+
+
+def test_h5_the_listed_holes_and_the_line_ok_wording():
+    landed, edit = catalog_rule("LANDED-NO-GATE"), catalog_rule("EDIT-NO-TEST")
+    flat = " ".join(landed.holes)
+    for phrase in ("a gate run after the commit on the same line counts", "the trigger is the line's ok, not the"
+                   " commit's", "git $OPT commit", "CRLF line ends", "git.exe", "bash -n tools/gate.sh",
+                   "python -V tools/gate.py", "--rule-kinds-child"):
+        assert phrase in flat, phrase
+    assert "with no context root, raqib/ and tests/ are placed against each line's cwd" in " ".join(edit.holes)
+    assert "bash -n tools/gate.sh" in " ".join(edit.holes)
+    description = " ".join(landed.doc["description"].split())
+    assert "with that line's ok" in description and "the commit's post line" not in description
+    # each listed behaviour, as built
+    meta = lambda c: common.input_meta("Bash", {"command": c})   # noqa: E731
+    assert cited(landed, call(1, **meta("git commit -m 'landed: x' && tools/gate.sh"))) == ([], [])
+    assert cited(landed, call(1, **meta("git commit -m 'landed: x' && false"), ok=False)) == ([], [])
+    for command in ("git $OPT commit -m 'landed: x'", "git.exe commit -m 'landed: x'",
+                    "git commit -m \"$(cat <<'EOF'\r\nlanded: x\r\nEOF\r\n)\""):
+        assert "commit_prefix" not in meta(command), command
+    for command in ("bash -n tools/gate.sh", "python -V tools/gate.py", "python -I tools/gate.py --rule-kinds-child"):
+        assert cited(landed, call(1, **meta(command)) + call(2, **meta("git commit -m 'landed: x'"))) == ([], [])
+    assert cited(edit, call(1, "Edit", path="/work/p/raqib/a.py", cwd="/tmp") + [event(2, "stop")]) == ([], [])
+
+
+def test_h6_require_null_is_an_error_and_holes_are_unique():
+    with pytest.raises(engine.RuleError, match="require: must be {before: <node>} or {after: <node>, until: <node>}"):
+        engine.compile_rule(dict(doc(), require=None), "src")
+    for rule in engine.load_catalog(CATALOG):
+        assert len(set(rule.holes)) == len(rule.holes), rule.id
+
+
+def test_h7_both_demands_are_class_drift():
+    assert {catalog_rule(r).cls for r in ("LANDED-NO-GATE", "EDIT-NO-TEST")} == {"DRIFT"}
+
+
+def test_h8_the_record_counts_its_tables():
+    record = " ".join((ROOT / "docs" / "review" / "2026-11-03-M4.2b.md").read_text(encoding="utf-8").split())
+    assert "SCRIPTS (%d rows)" % len(SCRIPTS) in record and "COMMITS (%d rows)" % len(COMMITS) in record
+
+
+def test_h9_the_field_item_is_recorded_in_the_night_status():
+    status = (ROOT / "docs" / "review" / "2026-11-03-night-status.md").read_text(encoding="utf-8")
+    assert "ruling H-9" in status and "PostToolUseFailure" in status
+
+
+def nested(levels, inner):
+    return "echo " + "$(echo " * (levels - 1) + "$(" + inner + ")" + ")" * (levels - 1)
+
+
+@pytest.mark.parametrize("command, expected", [
+    # $'...' (ANSI-C quoting) is not literal: nothing is read from it.
+    ("git commit -m $'landed: x'", (["git"], [], None)),
+    ("python3 $'tools/gate.py'", (["python3"], [], None)),
+    ("git commit -m $'' -m 'landed: x'", (["git"], [], None)),
+    # CRLF: a CR stays in the word (bash reads it so), so x.sh\r is no .sh operand and the
+    # here-document's end line does not match; a word before a CR is still read.
+    ("bash x.sh\r\n", (["bash"], [], None)),
+    ("git commit -m 'landed: x'\r\n", (["git"], [], "landed:")),
+    ("git commit -m \"$(cat <<'EOF'\r\nlanded: x\r\nEOF\r\n)\"", (["git", "cat"], [], None)),
+    # 8-deep $(...) is read, 9-deep is not (PROGRAMS_DEPTH_MAX).
+    (nested(8, "git commit -m 'landed: x'"), (["echo", "git"], [], "landed:")),
+    (nested(8, "bash tools/gate.sh"), (["echo", "bash"], ["gate.sh"], None)),
+    (nested(9, "git commit -m 'landed: x'"), None),
+], ids=["ansi-c-message", "ansi-c-operand", "ansi-c-empty-first", "crlf-operand", "crlf-after-message",
+        "crlf-heredoc", "8-deep-commit", "8-deep-script", "9-deep"])
+def test_h10_hostile_inputs(command, expected):
+    assert common.read_command(command) == expected
+
+
+def test_h10_a_64_kib_command_is_read_and_one_more_character_is_not():
+    head = "bash tools/gate.sh && git commit -m 'landed: x' && echo "
+    edge = head + "x" * (common.COMMAND_SCAN_MAX - len(head))
+    assert len(edge) == common.COMMAND_SCAN_MAX == 65536
+    assert common.read_command(edge) == (["bash", "git", "echo"], ["gate.sh"], "landed:")
+    assert common.read_command(edge + "x") is None
+    assert common.input_meta("Bash", {"command": edge + "x"}) == {"command_head": "bash", "command_unread": True}

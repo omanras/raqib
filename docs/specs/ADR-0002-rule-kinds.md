@@ -120,8 +120,13 @@ accepted and listed):
 - holes LANDED-NO-GATE: "a RED gate piped into another program (tools/gate.sh 2>&1 | tail -5) is an ok line: a pipeline's status is its last program's"
 - holes LANDED-NO-GATE: "a gate started in the background (the Bash tool's run_in_background) is ok when it starts; its verdict comes later through another tool"
 - holes LANDED-NO-GATE: "names are basenames: any program or script called gate.sh or gate.py counts as the gate"
-- holes LANDED-NO-GATE: "a commit with no commit_prefix is not judged: --amend, -F, -C, -c, a here-document with an unquoted delimiter, a message whose first word is not literal, a commit after the first one in a command, an abbreviated option, git merge, git commit-tree, an alias, a wrapper in front (sudo, env, xargs), a command capture cannot read in full, and a first word that is not a lower-case word ending in a colon (STOP:, Landed:)"
+- holes LANDED-NO-GATE: "a commit with no commit_prefix is not judged: --amend, -F, -C, -c, a here-document with an unquoted delimiter or with CRLF line ends, a message whose first word is not literal, a commit after the first one in a command, an abbreviated option, a git option before the subcommand that is not literal (git $OPT commit), git merge, git commit-tree, an alias, git.exe, a wrapper in front (sudo, env, xargs), a command capture cannot read in full, and a first word that is not a lower-case word ending in a colon (STOP:, Landed:)"
+- holes LANDED-NO-GATE: "--no-message, which makes git forget the messages before it, is not read: the prefix is that of the first non-empty -m, so git commit -m wip --no-message -m 'landed: x' is not judged"
 - holes LANDED-NO-GATE: "a commit whose post line never came is not judged: unknown (partial), SILENCE-HALF has the call"
+- holes LANDED-NO-GATE: "a gate run after the commit on the same line counts (git commit -m 'landed: x' && tools/gate.sh): the line is the evidence"
+- holes LANDED-NO-GATE: "the trigger is the line's ok, not the commit's: a failing command after the commit on the same line (git commit -m 'landed: x' && false) makes the line not ok, so the landing is not judged"
+- holes LANDED-NO-GATE: "a call that names the gate without running it counts as a gate run: bash -n tools/gate.sh (a syntax check), python -V tools/gate.py, python -I tools/gate.py --rule-kinds-child (the kinds check only)"
+- holes LANDED-NO-GATE: "a Bash line capture cannot read at all (no command_programs and no command_head) and no gate run in the session make the landing unknown (partial), not a finding (H-2: a true gate line wins over such a line)"
 - holes EDIT-NO-TEST: "a test or gate run piped into another program (pytest | tail) is an ok line: a pipeline's status is its last program's"
 - holes EDIT-NO-TEST: "operators are not recorded: pytest || true is an ok line whatever the tests did"
 - holes EDIT-NO-TEST: "a run started in the background (the Bash tool's run_in_background) is ok when it starts"
@@ -130,11 +135,21 @@ accepted and listed):
 - holes EDIT-NO-TEST: "an edit whose path cannot be read (no input_meta.path) is not a trigger"
 - holes EDIT-NO-TEST: "a session that never reaches a stop or a session_end leaves its edits unjudged (partial); SILENCE-OPEN has the session"
 - holes EDIT-NO-TEST: "an edit whose post line never came is not judged: unknown (partial), SILENCE-HALF has the call"
+- holes EDIT-NO-TEST: "with no context root, raqib/ and tests/ are placed against each line's cwd: an edit made while the cwd is elsewhere is not under them (SCOPE-CWD-MOVED has the move)"
+- holes EDIT-NO-TEST: "a call that names the gate without running it counts as a test run: bash -n tools/gate.sh (a syntax check), python -I tools/gate.py --rule-kinds-child (the kinds check only)"
+- holes EDIT-NO-TEST: "a Bash line capture cannot read at all (no command_programs and no command_head) after an edit, with no test run after it, makes the edit unknown (partial), not a finding (H-2: a true test line wins over such a line)"
 
 Also in M4.2b: command_head skips leading redirections and their targets
 (E-12), so the "Known hole" sentence of DESTRUCT-CMD and NET-TOOL now names
 the old lines only; their evasion items and counts do not change (the
 script item's parenthesis names command_scripts, G-2).
+
+REDO (2026-11-03, Amendment H): the holes above include those H-2 (an
+unreadable Bash line and no true evidence), H-4 (--no-message) and H-5
+(a gate after the commit on the same line, the line's ok, the commit forms
+not read, calls that name the gate without running it, placement without a
+context root) list. H-1 adds the Windows names and the wrapper pass-through
+to command_scripts; H-7 accepts class DRIFT for both demands.
 
 Ratio after M4.2b: 4 : 7 : 4.
 

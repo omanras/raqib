@@ -82,11 +82,15 @@ aggregate. match picks the trigger lines.
 Three-valued: when no evidence line is true but some evidence line is
 unknown, the trigger is unknown; a trigger whose deadline never comes is
 unknown (a deadline line that is unknown makes the triggers before it
-unknown). A pre line with no post line of its seq later in the trace (a call
-whose result never came, SILENCE-HALF's fact) stands for itself and for that
-missing post: judged as the post with no ok, a line that could match there
-is unknown, never true (G-7). Unknown triggers are counted in the partial note,
-never a finding.
+unknown). A true evidence line wins over unknown ones (H-2), and a trigger
+that cannot be judged is not unknown when its evidence is true, since it
+cannot fire (H-3). A pre line with no post line of its seq later in the
+trace (a call whose result never came, SILENCE-HALF's fact) stands for itself
+and for that missing post: judged as the post with no ok, a line that could
+match there is unknown, never true (G-7). Unknown triggers are counted in the
+partial note, each seq with its cause (H-3: the trigger cannot be judged, no
+post line, evidence unknown, deadline unknown, no deadline came), never a
+finding.
 
 holes (G-6): a demand or an anchor may list its known holes, in the shape of
 a signature's evasion list; a signature may not (it lists evasion).
@@ -121,8 +125,12 @@ OPS = ("eq", "ne", "in", "not_in", "has_any", "exists", "nonempty", "regex", "pr
        "outside", "outside_any", "under_any")
 REQUIRE_SHAPES = ({"before"}, {"after", "until"})   # M4.2b
 SUMMARY_VALUE_MAX = 80
-REQUIRE_UNKNOWN = ("a field it reads is missing, a path cannot be placed, the evidence it needs is unknown, the call"
-                   " has no post line, or no deadline came")
+# H-3: why a require rule could not judge a line, named per seq in its partial note.
+CAUSE_TRIGGER = "the trigger cannot be judged"
+CAUSE_NO_POST = "no post line"
+CAUSE_EVIDENCE = "evidence unknown"
+CAUSE_DEADLINE = "deadline unknown"
+CAUSE_NO_DEADLINE = "no deadline came"
 MISSING = object()
 UNKNOWN = None
 
@@ -274,7 +282,7 @@ def compile_rule(doc, source="<rule>"):
         if agg.get("cite", "all") not in ("all", "first"):
             bad("aggregate.cite", "must be all or first")
     req = doc.get("require")
-    if req is not None:
+    if "require" in doc:   # H-6: require: null is an error, as holes: null is
         if doc["kind"] != "demand":
             bad("require", "only a demand requires evidence on another line (ADR-0002 Amendment D); kind %s"
                            " must not have one" % doc["kind"])
@@ -646,11 +654,16 @@ def evaluate(rules, lines, context=None):
             continue
         rule_found, unknown = judge(rule, records, context)
         found += rule_found
-        if unknown:
-            shown = ", ".join("%s:%d" % u for u in unknown[:5]) + (" ..." if len(unknown) > 5 else "")
-            why = REQUIRE_UNKNOWN if rule.require is not None else "a field it reads is missing or a path cannot be placed"
+        if unknown and rule.require is not None:   # H-3: the cause of each seq
+            shown = ", ".join("%s:%d (%s)" % (u[0], u[1], u.cause) for u in unknown[:5])
             notes.append({"rule_id": rule.id, "status": "partial",
-                          "detail": "could not judge %d line(s) (session:seq %s): %s" % (len(unknown), shown, why)})
+                          "detail": "could not judge %d line(s) (session:seq %s%s)" % (
+                              len(unknown), shown, " ..." if len(unknown) > 5 else "")})
+        elif unknown:
+            shown = ", ".join("%s:%d" % u for u in unknown[:5]) + (" ..." if len(unknown) > 5 else "")
+            notes.append({"rule_id": rule.id, "status": "partial",
+                          "detail": "could not judge %d line(s) (session:seq %s): a field it reads is "
+                                    "missing or a path cannot be placed" % (len(unknown), shown)})
     order = {}
     for rec in records:
         order.setdefault(rec["session_id"], len(order))
@@ -740,14 +753,37 @@ def _ghosts(records):
 def _value(node, rec, ghost, ctx):
     """node on a line; a pre with no post (ghost) is also its missing post,
     which can make the line unknown, never true."""
+    return _value_why(node, rec, ghost, ctx)[0]
+
+
+def _value_why(node, rec, ghost, ctx):
+    """(value, cause): the cause names why a line is unknown (H-3)."""
     value = node(rec, ctx)
-    if ghost is None or value is True:
-        return value
-    return _any([value, UNKNOWN if node(ghost, ctx) is not False else False])
+    if value is True:
+        return value, None
+    if value is UNKNOWN:
+        return value, CAUSE_TRIGGER
+    if ghost is not None and node(ghost, ctx) is not False:
+        return UNKNOWN, CAUSE_NO_POST
+    return value, None
+
+
+class _Why(tuple):
+    """(session_id, seq) of a line a require rule could not judge, with the
+    cause (H-3); compares and formats as the pair."""
+
+    def __new__(cls, key, cause):
+        self = tuple.__new__(cls, key)
+        self.cause = cause
+        return self
 
 
 def _judge_require(rule, records, context):
-    """(findings, unknown) of a require rule (see the module docstring)."""
+    """(findings, unknown) of a require rule (see the module docstring).
+    H-2: a true evidence line wins over unknown ones; evidence is unknown
+    only when no evidence line is true and one is unknown. H-3: a trigger
+    that cannot be judged but whose evidence is true is not unknown (it
+    cannot fire); every unknown entry carries its cause."""
     req = rule.require
     ghosts = _ghosts(records)
     last_ts = {}
@@ -764,47 +800,45 @@ def _judge_require(rule, records, context):
                 evidence[sid] = "true"
             elif e is UNKNOWN and evidence.get(sid) != "true":
                 evidence[sid] = "unknown"
-            t = _value(rule.match, rec, ghost, context)
+            t, cause = _value_why(rule.match, rec, ghost, context)
+            if t is False or key in seen or evidence.get(sid) == "true":
+                continue
+            seen.add(key)
             if t is UNKNOWN:
-                unknown.append(key)
-            elif t and key not in seen:
-                seen.add(key)
-                state = evidence.get(sid)
-                if state == "unknown":
-                    unknown.append(key)
-                elif state is None:
-                    out.append(_emit(rule, sid, [rec["seq"]], ts, _render(rule.summary, rec, rec["seq"], 1)))
+                unknown.append(_Why(key, cause))
+            elif evidence.get(sid) == "unknown":
+                unknown.append(_Why(key, CAUSE_EVIDENCE))
+            else:
+                out.append(_emit(rule, sid, [rec["seq"]], ts, _render(rule.summary, rec, rec["seq"], 1)))
         return out, unknown
-    pending = {}   # session_id -> [[key, state]], state "open" or "unknown"
+    pending = {}   # session_id -> [[key, cause]]; cause None: open, else why it is unknown
     for rec, ghost in zip(records, ghosts):
         ts = _ts(rec, last_ts)
         sid, key = rec["session_id"], (rec["session_id"], rec["seq"])
         waiting = pending.setdefault(sid, [])
         d = _value(req["until"], rec, ghost, context)
         if d is True and waiting:
-            unknown += [k for k, state in waiting if state == "unknown"]
-            fire = sorted({k[1] for k, state in waiting if state == "open"})
+            unknown += [_Why(k, cause) for k, cause in waiting if cause is not None]
+            fire = sorted({k[1] for k, cause in waiting if cause is None})
             if fire:
                 seqs = sorted(set(fire) | {rec["seq"]})
                 out.append(_emit(rule, sid, seqs, ts, _render(rule.summary, rec, rec["seq"], len(fire))))
             del waiting[:]
-        elif d is UNKNOWN:
-            unknown += [k for k, _ in waiting]
+        elif d is UNKNOWN and waiting:
+            unknown += [_Why(k, cause or CAUSE_DEADLINE) for k, cause in waiting]
             del waiting[:]
         elif d is False and waiting:
             e = _value(req["after"], rec, ghost, context)
             if e is True:
-                del waiting[:]
+                del waiting[:]            # H-2, H-3: open and unknown triggers alike
             elif e is UNKNOWN:
                 for item in waiting:
-                    item[1] = "unknown"
-        t = _value(rule.match, rec, ghost, context)
-        if t is UNKNOWN:
-            unknown.append(key)
-        elif t and all(k != key for k, _ in waiting):
-            waiting.append([key, "open"])
-    for waiting in pending.values():   # no deadline came
-        unknown += [k for k, _ in waiting]
+                    item[1] = item[1] or CAUSE_EVIDENCE
+        t, cause = _value_why(rule.match, rec, ghost, context)
+        if t is not False and all(k != key for k, _ in waiting):
+            waiting.append([key, None if t is True else cause])
+    for waiting in pending.values():
+        unknown += [_Why(k, cause or CAUSE_NO_DEADLINE) for k, cause in waiting]
     return out, unknown
 
 

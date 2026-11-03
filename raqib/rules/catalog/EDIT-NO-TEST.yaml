@@ -16,6 +16,9 @@ holes:
   - "an edit whose path cannot be read (no input_meta.path) is not a trigger"
   - "a session that never reaches a stop or a session_end leaves its edits unjudged (partial); SILENCE-OPEN has the session"
   - "an edit whose post line never came is not judged: unknown (partial), SILENCE-HALF has the call"
+  - "with no context root, raqib/ and tests/ are placed against each line's cwd: an edit made while the cwd is elsewhere is not under them (SCOPE-CWD-MOVED has the move)"
+  - "a call that names the gate without running it counts as a test run: bash -n tools/gate.sh (a syntax check), python -I tools/gate.py --rule-kinds-child (the kinds check only)"
+  - "a Bash line capture cannot read at all (no command_programs and no command_head) after an edit, with no test run after it, makes the edit unknown (partial), not a finding (H-2: a true test line wins over such a line)"
 severity: medium
 fp_budget: 0.1
 description: "In one session, an ok Edit, Write, MultiEdit or NotebookEdit of a path under raqib/ or tests/ (placed against context 'root', else the line's cwd, as SCOPE-PATH places scope paths) with no ok Bash call after it and before the next stop or session_end whose programs (command_programs), scripts (command_scripts) or, on a line written before M4.2, command_head (ruling G-8) hold pytest, python, python3, gate.sh or gate.py. Every stop is a deadline (G-10): edits tested only in the next turn fire at the stop that ended theirs. One finding per deadline, citing the untested edits and the stop or session_end. A false-positive source, not a hole: a test runner off the list (make test, tox, uv run pytest, python3.12 -m pytest, npm test) is not evidence, so the rule fires on a project tested that way."

@@ -249,6 +249,15 @@ f.command("git commit -m 'landed: M9.9 failed'", ok=False, error_class="failure"
 f.command("git commit --amend -m 'landed: M9.9 amend'"); f.command("git merge -m 'landed: M9.9 merge' x")
 f.event("stop")
 write(R + "LANDED-NO-GATE/negative-gated.json", a.lines + b.lines + c.lines + d.lines + e.lines + f.lines)
+# LANDED-NO-GATE: the Windows forms (ruling H-1), cwd C:\proj: the README's python -I tools\gate.py,
+# py -I tools\gate.py, timeout 900 tools/gate.sh, all before a landing: clean.
+a = S("fixture-rules-landed-win-1", cwd=W); a.event("session_start"); a.command("python -I tools\\gate.py"); a.command(HEREDOC)
+b = S("fixture-rules-landed-win-2", cwd=W); b.event("session_start"); b.command("timeout 900 tools/gate.sh")
+b.command("git commit -m 'landed: M9.9 timeout'")
+c = S("fixture-rules-landed-win-3", cwd=W); c.event("session_start"); c.command("py -I tools\\gate.py"); c.command(HEREDOC)
+d = S("fixture-rules-landed-win-4", cwd=W); d.event("session_start")
+d.command("python.exe -I tools\\gate.py && git commit -m 'landed: M9.9 same line'"); d.event("stop")
+write(R + "LANDED-NO-GATE/negative-windows.json", a.lines + b.lines + c.lines + d.lines)
 # EDIT-NO-TEST: positives, untested edits under raqib/ or tests/ at every stop or session_end.
 fire = []
 a = S("fixture-rules-edit-1"); a.event("session_start"); fire.append(a.call("Edit", {"path": CWD + "/raqib/rules/engine.py"}))

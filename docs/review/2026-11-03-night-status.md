@@ -34,3 +34,10 @@ Gate on main after M5.3: 1957 passed, 7 skipped; kinds signature=4 demand=5 anch
 
 ## Ledger of the Table tonight (my errors, recorded in the ADRs)
 Scopes that omitted README/gate.yml/cli.py (three STOPs on counts and words); "medium" for a silence rule against A3; "partial never silence" for a judged negative; an fp source named an evasion (C-11); a RED merge undone before push.
+
+## Note (2026-11-03, M4.2b REDO builder, ruling H-9; the paper above stays as written)
+Field item for tomorrow's first trace, before anything else: does Claude Code
+record a Bash call that exits non-zero as PostToolUseFailure (ok false), as
+tests/fixtures/posttoolusefailure-bash.json assumes? LANDED-NO-GATE and
+EDIT-NO-TEST take the line's ok as the gate's or the tests' verdict; until the
+trace says otherwise that fixture stands.
