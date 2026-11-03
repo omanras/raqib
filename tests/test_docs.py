@@ -120,3 +120,21 @@ def test_m63_e3_readme_commands_are_the_installed_ones():
     for phrase in ("OK, MISSING or UNSURE", "exit 1", "installed; foreign", "or missing", "Sysmon on Windows",
                    "read-only", "`claude --version`", "absolute path"):
         assert phrase in doctor, phrase
+
+
+def test_m42_redo2_e2_e6_readme_names_the_holes():
+    """E-2: the SILENCE-EMPTY row says "no start and no tool call" and names
+    the open SILENCE-NOSTART; E-6: code on stdin, here-doc or script."""
+    (row,) = [line for line in section("What it catches").splitlines() if line.startswith("| SILENCE-EMPTY |")]
+    assert "or ended with no start and no tool call" in row and "SILENCE-NOSTART, M4.3" in row
+    cannot = " ".join(section("What it cannot see").split())
+    assert ("code given to a shell on stdin, by a here-document or a here-string, or in a script file: only the"
+            " shell or the script is recorded") in cannot
+
+
+def test_m42_redo2_e11_threat_model_no_longer_says_only_the_first_program():
+    flat = " ".join(THREAT.split())
+    assert "show only the first program (M1.1 3h-7" not in flat
+    assert ("`cd x && rm -rf y`, pipes, `$(...)` and one level of `bash -c` are read into `command_programs` since"
+            " ADR-0002 Amendment D") in flat
+    assert "`sudo rm`, `env curl`, `xargs rm`, `eval`, `zsh -c` and code given to a shell on stdin show only" in flat

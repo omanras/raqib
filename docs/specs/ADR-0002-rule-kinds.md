@@ -70,6 +70,21 @@ evasion items, each quoted as it stood in the rule's `evasion:` list:
 
 Ratio after M4.2: 4 : 5 : 3.
 
+Note (2026-11-03, M4.2 REDO-2, Amendment E; corrects the note above and the
+counts of A-2):
+- open demand SILENCE-NOSTART (M4.3, E-2): a session_end with tool lines
+  and no session_start is judged by no rule; SILENCE-EMPTY's no-start case
+  fires only when the session has no pre, post or stop line.
+- reworded DESTRUCT-CMD (E-4): "a wrapper in front (sudo, env, xargs, timeout, nohup): only the first program is read" stays as an item; its line now names exec, eval, source, find -exec, other shells and a nested bash -c, and says the program they run is an argument.
+- hook for a later demand (E-5): capture writes `input_meta.command_unread:
+  true` on a Bash line whose programs it could not read; no rule reads it
+  in M4.2.
+- E-6 adds one line to both rules (code on stdin, in a here-document or a
+  here-string, or in a script file records the shell or the script only).
+  What shrinks is items (E-4). Lines beyond the table, as built in 04e34c0:
+  DESTRUCT-CMD +5, NET-TOOL +4.
+Lines beyond the table now: DESTRUCT-CMD +6, NET-TOOL +5, SCOPE-PATH +4, SECRET-OUTPUT +3.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind

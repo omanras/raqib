@@ -1198,6 +1198,28 @@ PROGRAMS = [
     ("empty-quoted-word", "'' x", None),
     ("not-a-name", "caf\u00e9 x", None),
     ("windows-backslash-path", "C:\\Python\\python.exe -V", None),
+    # REDO-2 E-5: the builtins : and . are names (no silent drop).
+    ("colon", ": > f; cd x || :", [":", "cd"]),
+    ("dot", ". ./env.sh", ["."]),
+    # REDO-2 E-8.
+    ("elif", "if a; then b; elif c x; then d; else e; fi", ["a", "b", "c", "d", "e"]),
+    ("bash-O-option", "bash -O extglob -c 'rm x'", ["bash", "rm"]),
+    ("bash-plus-O-option", "bash +O extglob -c 'rm x'", ["bash", "rm"]),
+    ("bash-init-file", "bash --init-file rc.sh -c 'rm x'", ["bash", "rm"]),
+    ("bash-dash-ends-options", "bash -c - 'rm x'", ["bash", "rm"]),
+    ("bash-dash-then-script", "bash - x.sh", ["bash"]),
+    ("redirect-append", "cat x >> log; rm y", ["cat", "rm"]),
+    ("redirect-append-both-streams", "&>> log curl x", ["curl"]),
+    ("redirect-clobber", ">| f rm x", ["rm"]),
+    ("redirect-read-write", "<> f cat", ["cat"]),
+    ("redirect-duplicate-input", "<&3 cat", ["cat"]),
+    ("bash-c-inside-substitution", "echo $(bash -c 'curl x')", ["echo", "bash", "curl"]),
+    ("cr-before-newline", "ls\r\nrm x", None),          # bash runs a program named "ls\r": not a plain name
+    # REDO-2 E-6: code on stdin, in a here-document or here-string, or in a script: the shell only.
+    ("stdin-to-a-shell", "echo 'rm x' | sh", ["echo", "sh"]),
+    ("heredoc-to-a-shell", "bash <<'EOF'\nrm -rf x\nEOF", ["bash"]),
+    ("here-string-to-a-shell", "bash <<< 'curl x'", ["bash"]),
+    ("script-file", "./deploy.sh && sh tools/x.sh", ["deploy.sh", "sh"]),
 ]
 
 
@@ -1298,4 +1320,79 @@ def test_m42_e1_capture_records_the_list_on_pre_and_post(tmp_path):
     assert [r["input_meta"].get("command_programs") for r in recs] == [["ls", "wc"], ["ls", "wc"]]
     unreadable = dict(fixture("pretooluse-bash.json"), tool_input={"command": "for f in *; do rm $f; done"})
     (rec,) = run_all([unreadable], tmp_path / "other.jsonl")
-    assert rec["input_meta"] == {"command_head": "for"}         # absent, so rules fall back to the head (D-3)
+    # absent, so rules fall back to the head (D-3), and marked unread (E-5)
+    assert rec["input_meta"] == {"command_head": "for", "command_unread": True}
+
+
+def test_m42_redo2_e5_every_bash_line_has_programs_or_the_unread_marker():
+    """E-5: a post-M4.2 Bash line never looks like a v0.1 line: it carries
+    command_programs, or command_unread: true when the reader gave up."""
+    capture = load_capture()
+    for _, command, expected in PROGRAMS:
+        meta = capture.input_meta("Bash", {"command": command})
+        if expected is None:
+            assert meta.get("command_unread") is True and "command_programs" not in meta, command
+        else:
+            assert meta["command_programs"] == expected and "command_unread" not in meta, command
+    for tool_input in ({}, {"command": None}, {"command": ["ls"]}, "ls", None):
+        assert capture.input_meta("Bash", tool_input) == {"command_unread": True}, tool_input
+    for tool in ("Read", "mcp__shell__run"):
+        meta = capture.input_meta(tool, {"command": "for f in *; do rm $f; done"})
+        assert "command_unread" not in meta and "command_programs" not in meta
+
+
+def test_m42_redo2_e5_the_marker_end_to_end_and_no_rule_reads_it(tmp_path):
+    pre = dict(fixture("pretooluse-bash.json"), tool_input={"command": "echo `rm x`"})
+    log = tmp_path / "trace.jsonl"
+    assert_captured(run(pre, log))
+    (rec,) = lines(log)
+    assert rec["input_meta"] == {"command_head": "echo", "command_unread": True}
+    catalog = (ROOT / "raqib" / "rules" / "catalog").glob("*.yaml")
+    assert not any("command_unread" in p.read_text(encoding="utf-8").split("\nmatch:", 1)[1] for p in catalog)
+
+
+# Each unread row of PROGRAMS (and of the absent-cases test) names its trigger, and
+# both rules' D-3 evasion line names every trigger (ruling E-5).
+UNREAD_TRIGGERS = {
+    "dollar-x-as-program": "$X", "65-names": "more than 64 programs",
+    "substitution-9-deep": "$(...) nested more than 8 deep", "substitution-as-program": "not literal ($X, $(...)",
+    "c-string-with-expansion": "a $ or a backtick in a bash -c string",
+    "c-string-with-literal-dollar": "a $ or a backtick in a bash -c string",
+    "c-string-with-backtick": "a $ or a backtick in a bash -c string",
+    "expansion-before-the-string": "an expansion among the options of bash or sh",
+    "glob": "a glob", "brace-expansion": "a brace expansion", "ansi-c-quoting": "$'...'",
+    "for": "for, case", "case": "for, case", "select": "select", "double-bracket": "[[ ]]",
+    "arithmetic-command": "(( ))", "function-parentheses": "a function definition", "function-word": "function",
+    "coproc": "coproc", "heredoc-unquoted-substitution": "an unquoted here-document holding $( or a backtick",
+    "heredoc-unquoted-backtick": "an unquoted here-document holding $( or a backtick",
+    "heredoc-no-end-line": "no end line", "backtick": "a backtick anywhere",
+    "process-substitution": "<(...) or >(...)", "process-substitution-out": "<(...) or >(...)",
+    "arithmetic-expansion": "$(( ))", "substitution-inside-parameter": "a quote or $ inside ${...}",
+    "array-assignment": "an array assignment", "case-terminator": "a stray ) or ;;",
+    "word-after-subshell": "a word after a subshell", "unbalanced-quote": "unbalanced quotes or parentheses",
+    "unbalanced-substitution": "unbalanced quotes or parentheses", "unbalanced-subshell": "unbalanced quotes or parentheses",
+    "stray-close": "a stray ) or ;;", "redirect-without-target": "a redirection with no target",
+    "leading-dash": "not a plain name", "slash-only": "not a plain name", "empty-quoted-word": "not a plain name",
+    "not-a-name": "not a plain name", "windows-backslash-path": "not a plain name", "cr-before-newline": "not a plain name",
+    # test_m42_e1_absent_when_unreadable_or_key_like
+    "key-first": "looks like a key", "key-in-pipeline": "looks like a key", "key-in-c-string": "looks like a key",
+    "too-long": "over 65536 characters", "none": "not a string", "int": "not a string", "list": "not a string",
+    "dict": "not a string",
+}
+
+
+def test_m42_redo2_e5_the_d3_line_names_every_unread_trigger():
+    sys.path.insert(0, str(ROOT))
+    from raqib.rules import engine
+    capture = load_capture()
+    unread = {i for i, _, e in PROGRAMS if e is None} | {
+        "key-first", "key-in-pipeline", "key-in-c-string", "too-long", "none", "int", "list", "dict"}
+    assert set(UNREAD_TRIGGERS) == unread
+    assert capture.COMMAND_SCAN_MAX == 65536 and capture.PROGRAMS_MAX == 64 and capture.PROGRAMS_DEPTH_MAX == 8
+    rules = {r.id: r for r in engine.load_catalog(ROOT / "raqib" / "rules" / "catalog")}
+    for rule_id in ("DESTRUCT-CMD", "NET-TOOL"):
+        (d3,) = [e for e in rules[rule_id].evasion
+                 if e.startswith("a command capture cannot read in full is matched by command_head only")]
+        assert "command_unread: true" in d3 and "a trace written before M4.2 has neither field" in d3
+        for row, phrase in sorted(UNREAD_TRIGGERS.items()):
+            assert phrase in d3, (rule_id, row, phrase)

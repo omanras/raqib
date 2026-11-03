@@ -258,14 +258,12 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     rows = {line.split()[0]: line.split() for line in text.splitlines()[1:]}
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
                          "SCOPE-PATH", "SECRET-OUTPUT"}
-    assert "3 measured, 8 unmeasured" in " ".join(rows["DRIFT-FILES"])
-    # M4.2: NET-TOOL gains a clean negative (negative-programs.json), and every
-    # tests/fixtures/*.log is in the benign corpus, so the field trace's s6 (curl)
-    # counts as a NET-TOOL false positive and its s5 (Read ~/.bashrc) as one of
-    # SCOPE-PATH's, which now sits at its budget. Recorded as a question in
-    # docs/review/2026-11-03-M4.2-redo.md, not settled here.
-    assert rows["NET-TOOL"][1:4] == ["ok", "0.182", "0.25"]
-    assert rows["SCOPE-PATH"][1:4] == ["ok", "0.100", "0.1"]
+    assert "3 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])
+    # M4.2 REDO-2 E-1: the field trace is not benign (tests/fixtures/field/), so
+    # NET-TOOL is 1 of 10 (docs-lookup; negative-programs.json is the 10th) and
+    # SCOPE-PATH 0 of 9.
+    assert rows["NET-TOOL"][1:4] == ["ok", "0.100", "0.25"] and "10 measured" in " ".join(rows["NET-TOOL"])
+    assert rows["SCOPE-PATH"][1:4] == ["ok", "0.000", "0.1"] and "9 measured" in " ".join(rows["SCOPE-PATH"])
     data = json.loads(raqib("check-rules", "--json")[1])
     assert {r["verdict"] for r in data} == {"ok"}
 
@@ -274,7 +272,7 @@ def test_e4_check_rules_fails_an_over_budget_rule(tmp_path):
     catalog = tmp_path / "catalog"
     shutil.copytree(ROOT / "raqib" / "rules" / "catalog", catalog)
     path = catalog / "NET-TOOL.yaml"
-    path.write_text(path.read_text().replace("fp_budget: 0.25", "fp_budget: 0.1"))
+    path.write_text(path.read_text().replace("fp_budget: 0.25", "fp_budget: 0.05"))   # measured 0.1
     code, text = raqib("check-rules", "--catalog", catalog)
     assert code == 1
     assert [line.split()[1] for line in text.splitlines() if line.startswith("NET-TOOL ")] == ["over-budget"]
@@ -494,7 +492,7 @@ def test_m41_b3_a_finding_without_kind_is_a_no_kind_alarm(tmp_path):
 
 # --- M4.2 E5: SILENCE-EMPTY in the report; the field trace of 2026-11-02 ------
 
-FIELD = FIXTURES / "field-2026-11-02.log"
+FIELD = FIXTURES / "field" / "2026-11-02.log"   # E-1: outside the benign glob
 
 
 def test_m42_e5_report_ids_and_the_rules_table_row():

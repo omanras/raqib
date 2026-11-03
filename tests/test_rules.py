@@ -1056,20 +1056,21 @@ def test_m41_b4_scope_path_pattern_only_location_is_not_judged():
 
 
 def test_m41_b4_amendment_a_counts_the_lines_added_beyond_the_table():
-    """Amendment A's counts are M4.1's record. They are held to the tree for
-    the signatures M4.2 left alone; the two whose lists M4.2 changed are the
-    ones the M4.2 note names (D-8), held by test_m42_e2_the_note_* instead."""
-    note = ADR.read_text(encoding="utf-8").split("Note (2026-11-03, M4.1 REDO, B-4", 1)[1].split("\n- A-3", 1)[0]
-    added = dict((rule_id, int(n)) for rule_id, n in re.findall(r"([A-Z]+-[A-Z]+) \+(\d+)", " ".join(note.split())))
-    table, _ = adr_table()
-    _, dropped, _ = adr_note()
+    """Amendment A's counts are M4.1's record (+4, +4, +4, +3); the dated
+    REDO-2 note under the table corrects them (E-4), and its counts are held
+    to the tree for all four signatures, against the table plus its notes."""
+    amendment = ADR.read_text(encoding="utf-8").split("Note (2026-11-03, M4.1 REDO, B-4", 1)[1].split("\n- A-3", 1)[0]
+    m41 = dict((rule_id, int(n)) for rule_id, n in re.findall(r"([A-Z]+-[A-Z]+) \+(\d+)", " ".join(amendment.split())))
+    assert m41 == dict.fromkeys(("DESTRUCT-CMD", "NET-TOOL", "SCOPE-PATH"), 4) | {"SECRET-OUTPUT": 3}
+    _, _, note = adr_note()
+    (line_now,) = [x for x in note.splitlines() if x.startswith("Lines beyond the table now: ")]
+    now = dict((rule_id, int(n)) for rule_id, n in re.findall(r"([A-Z]+-[A-Z]+) \+(\d+)", line_now))
+    table = adr_table_after_m42()
     signatures = {r.id: r for r in engine.load_catalog(CATALOG) if r.kind == "signature"}
-    assert set(added) == set(signatures) and sorted(dropped) == ["DESTRUCT-CMD", "NET-TOOL"]
-    assert added == dict.fromkeys(("DESTRUCT-CMD", "NET-TOOL", "SCOPE-PATH"), 4) | {"SECRET-OUTPUT": 3}
-    untouched = {rule_id: rule for rule_id, rule in signatures.items() if rule_id not in dropped}
-    assert sorted(untouched) == ["SCOPE-PATH", "SECRET-OUTPUT"]
-    assert {r: added[r] for r in untouched} == {r: len(rule.evasion) - len(table[r][1]) for r, rule in untouched.items()}
-    assert '"programs not on the list" is a NET-TOOL line only' in " ".join(note.split())
+    assert set(now) == set(signatures) == set(m41)
+    assert now == {rule_id: len(rule.evasion) - len(table[rule_id][1]) for rule_id, rule in signatures.items()}
+    assert "as built in 04e34c0:\n  DESTRUCT-CMD +5, NET-TOOL +4." in note
+    assert '"programs not on the list" is a NET-TOOL line only' in " ".join(amendment.split())
     assert not any("programs not on the list" in e or e.startswith("a program not on the list")
                    for e in catalog_rule("DESTRUCT-CMD").evasion)
     assert any(e.startswith("a network program not on the list") for e in catalog_rule("NET-TOOL").evasion)
@@ -1218,7 +1219,7 @@ def test_m42_e2_old_traces_are_judged_by_command_head_alone():
     """D-3: traces written before M4.2 carry no command_programs; their Bash
     lines are judged by command_head as in v0.1, so no partial note appears."""
     rules = [catalog_rule("DESTRUCT-CMD"), catalog_rule("NET-TOOL")]
-    for name in ("quickstart-d7841d1-claude-code-2.1.301.log", "field-2026-11-02.log"):
+    for name in ("quickstart-d7841d1-claude-code-2.1.301.log", "field/2026-11-02.log"):
         lines, _, _ = fixtures.load_fixture(ROOT / "tests" / "fixtures" / name)
         bash = [r for r in lines if r.get("tool") == "Bash"]
         assert bash and all("command_programs" not in r["input_meta"] and "command_head" in r["input_meta"]
@@ -1252,3 +1253,84 @@ def test_m42_e2_the_note_under_the_adr_table_names_what_e2_closed():
     assert after["DESTRUCT-CMD"][1] == ["python -c os.remove", "find -delete", "git clean"]
     assert after["NET-TOOL"] == table["NET-TOOL"]                 # D-4: python urllib stays
     assert any(e.startswith("python urllib") for e in catalog_rule("NET-TOOL").evasion)
+
+
+# --- M4.2 REDO-2 (ADR-0002 Amendment E) ---------------------------------------
+
+def test_m42_redo2_e1_an_adversarial_trace_is_never_benign():
+    """E-1: the field trace lives in tests/fixtures/field/, outside the
+    benign corpus (tests/fixtures/*.log, top level only), here and in the CLI."""
+    from raqib import cli
+    field = ROOT / "tests" / "fixtures" / "field" / "2026-11-02.log"
+    assert field.is_file() and not (ROOT / "tests" / "fixtures" / "field-2026-11-02.log").exists()
+    for corpus in (BENIGN, cli.benign_default(str(ROOT))):
+        assert not any("field" in Path(p).parts or Path(p).name.startswith("field") for p in corpus), corpus
+    reports = {r["rule_id"]: r for r in fixtures.check_catalog(engine.load_catalog(CATALOG), ROOT, BENIGN)}
+    def fired(rule_id):
+        report = reports[rule_id]
+        return sum(1 for n in report["negatives"] if n["measured"] and n["fired"]), report["measured"]
+    assert fired("SCOPE-PATH") == (0, 9) and fired("NET-TOOL") == (1, 10)
+    assert "SCOPE-PATH firing on 0 of 9 benign files and\nNET-TOOL on 1 of 10" in Path(ROOT / "README.md").read_text(
+        encoding="utf-8")
+
+
+def test_m42_redo2_e5_a_colon_after_the_chain_does_not_hide_rm():
+    capture = load_capture()
+    rec = dict(line(1), input_meta=capture.input_meta("Bash", {"command": "cd build && rm -rf out || :"}))
+    assert rec["input_meta"] == {"command_head": "cd", "command_programs": ["cd", "rm", ":"]}
+    found, notes = engine.evaluate([catalog_rule("DESTRUCT-CMD"), catalog_rule("NET-TOOL")], [rec])
+    assert [f["rule_id"] for f in found] == ["DESTRUCT-CMD"] and notes == []
+
+
+def test_m42_redo2_e6_code_on_stdin_a_heredoc_or_a_script_records_the_shell_only():
+    capture = load_capture()
+    start = "code given to a shell on stdin, by a here-document or a here-string, or in a script file"
+    for rule_id in ("DESTRUCT-CMD", "NET-TOOL"):
+        (text,) = [e for e in catalog_rule(rule_id).evasion if e.startswith(start)]
+        assert "records the shell or the script only" in text and "M4.2b Q-A" in text
+    assert "- code given to a shell on stdin, by a here-document or a here-string, or in\n  a script file" in (
+        ROOT / "README.md").read_text(encoding="utf-8")
+    rules = [catalog_rule("DESTRUCT-CMD"), catalog_rule("NET-TOOL")]
+    for i, command in enumerate(("echo 'rm -rf x; curl y' | sh", "bash <<'EOF'\nrm -rf x\ncurl y\nEOF",
+                                 "bash <<< 'curl y'", "bash deploy.sh", "./wipe-all.sh"), start=1):
+        rec = dict(line(i), input_meta=capture.input_meta("Bash", {"command": command}))
+        assert engine.evaluate(rules, [rec]) == ([], []), command
+
+
+def test_m42_redo2_e7_benign_negatives_carry_command_programs():
+    """E-7: every Bash line of the two rules' negatives and of the benign
+    corpus is written by capture, so the command_programs branch is measured."""
+    paths = [p for r in ("DESTRUCT-CMD", "NET-TOOL") for p in catalog_rule(r).fixtures["negative"]]
+    paths += [p for p in BENIGN if p.endswith(".json")]
+    capture = load_capture()
+    for path in paths:
+        lines, _, _ = fixtures.load_fixture(ROOT / path)
+        bash = [r for r in lines if r.get("tool") == "Bash"]
+        for rec in bash:
+            assert "command_programs" in rec["input_meta"], (path, rec["seq"])
+            assert rec["input_meta"].get("command_head") == rec["input_meta"]["command_programs"][0], (path, rec)
+    assert capture.input_meta("Bash", {"command": "rm -rf build"}) == {"command_head": "rm", "command_programs": ["rm"]}
+
+
+def test_m42_redo2_e12_the_leading_redirect_hole_is_in_both_descriptions():
+    capture = load_capture()
+    assert capture.command_head("2>/dev/null rm x") == "null"        # the hole, as built (fix: M4.2b)
+    assert capture.command_programs("2>/dev/null rm x") == ["rm"]
+    for rule_id in ("DESTRUCT-CMD", "NET-TOOL"):
+        description = catalog_rule(rule_id).doc["description"]
+        assert ("Known hole: command_head reads a leading redirection as the program (`2>/dev/null rm x` has the"
+                " head null)") in description, rule_id
+    old = dict(line(1), input_meta={"command_head": "null"})          # a line without command_programs
+    assert engine.run_rule(catalog_rule("DESTRUCT-CMD"), [old]) == []
+
+
+def test_m42_redo2_the_note_records_nostart_the_rewording_and_the_marker():
+    _, _, note = adr_note()
+    redo2 = note.split("Note (2026-11-03, M4.2 REDO-2, Amendment E", 1)[1]
+    flat = " ".join(redo2.split())
+    assert "open demand SILENCE-NOSTART (M4.3, E-2)" in flat
+    assert ('reworded DESTRUCT-CMD (E-4): "a wrapper in front (sudo, env, xargs, timeout, nohup): only the first'
+            ' program is read" stays as an item') in flat
+    assert "hook for a later demand (E-5): capture writes `input_meta.command_unread: true`" in flat
+    assert any(e.startswith("a wrapper in front (sudo, env, xargs, timeout, nohup, exec, eval")
+               for e in catalog_rule("DESTRUCT-CMD").evasion)

@@ -19,7 +19,8 @@ Invariants:
 - Offline: stdlib only, no network.
 - Privacy: tool input and output are stored only as sha256 of canonical JSON;
   input_meta keeps a small extract (path, url_host, Bash command_head and,
-  M4.2, command_programs: program basenames, never an argument) and
+  M4.2, command_programs: program basenames, never an argument, or
+  command_unread: true when they could not be read) and
   output_meta the names of secret patterns the output matched, never the text.
   A secret inside a path is replaced by [redacted:<kind>].
 - Bounded work under the lock: hashing and the secret scan (capped at
@@ -107,6 +108,7 @@ COMMAND_HEAD_MAX = 64
 PROGRAMS_MAX = 64          # distinct names; more: the list is absent (D-9)
 PROGRAMS_DEPTH_MAX = 8     # nested $(...) levels; deeper: the list is absent
 C_SHELLS = ("bash", "sh")  # whose -c string is read, one level deep
+BUILTIN_NAMES = (":", ".")  # program names outside HEAD_NAME (ruling E-5)
 # Reserved words skipped in command position (D-9 / Q12) ...
 SKIP_WORDS = frozenset(("if", "then", "else", "elif", "fi", "while", "until", "do", "done",
                         "!", "{", "}", "time"))
@@ -258,8 +260,9 @@ def command_programs(command):
 
     Absent (None, D-9): not a string, or longer than COMMAND_SCAN_MAX; a
     program word that is not literal ($X, "$(which rm)", a glob such as r?, a
-    brace expansion such as {rm,x}) or not a plain name (HEAD_NAME, no leading
-    -, nothing that looks like a key); an expansion among the arguments of
+    brace expansion such as {rm,x}) or not a plain name (HEAD_NAME or one of
+    BUILTIN_NAMES, no leading -, nothing that looks like a key); an
+    expansion among the arguments of
     bash or sh before the -c string is found, or a $ or a backtick in that
     string; a reserved word in UNREAD_WORDS, (( )), $(( )), a function
     definition, an array assignment, a process substitution <(...) or
@@ -281,7 +284,10 @@ class _Unread(Exception):
 
 
 def _program_name(word):
-    """The basename of a literal program word, or _Unread."""
+    """The basename of a literal program word, or _Unread. `:` and `.` are
+    builtins and are names like any other (ruling E-5)."""
+    if word in BUILTIN_NAMES:
+        return word
     name = word.rstrip("/").rsplit("/", 1)[-1]
     if not name or name.startswith("-") or not HEAD_NAME.match(name) or looks_like_key(name):
         raise _Unread()
@@ -551,10 +557,12 @@ def redact(text):
 
 def input_meta(tool, tool_input):
     """Small rule-relevant extract of tool_input: {path?, command_head?,
-    command_programs?, url_host?}."""
+    command_programs? | command_unread?, url_host?}. A Bash line carries
+    command_programs, or command_unread: true when its programs could not be
+    read (ruling E-5), so it never looks like a line written before M4.2."""
     meta = {}
     if not isinstance(tool_input, dict):
-        return meta
+        return {"command_unread": True} if tool == "Bash" else meta
     if tool == "Bash":
         head = command_head(tool_input.get("command"))
         if head is not None:
@@ -562,6 +570,8 @@ def input_meta(tool, tool_input):
         programs = command_programs(tool_input.get("command"))
         if programs is not None:
             meta["command_programs"] = programs
+        else:
+            meta["command_unread"] = True
     for key in ("file_path", "notebook_path", "path"):
         value = tool_input.get(key)
         if isinstance(value, str) and value:

@@ -98,7 +98,7 @@ design, a quiet minute is reported, not assumed harmless.
 | Rule | Fires on |
 |---|---|
 | SILENCE-GAP / OPEN / HALF / ORDER | no capture for 60 s; a session with no end; a call with no result (or a result with no call); seq or time going back |
-| SILENCE-EMPTY | a session that started and ended with no tool call and no turn, or ended with no start |
+| SILENCE-EMPTY | a session that started and ended with no tool call and no turn, or ended with no start and no tool call (one with tool calls and no start is not judged yet: SILENCE-NOSTART, M4.3) |
 | SCOPE-PATH | a file tool touching a path outside the session's directory |
 | SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
 | NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command |
@@ -110,13 +110,18 @@ design, a quiet minute is reported, not assumed harmless.
 Content, by design. So the rules miss these:
 - a program hidden behind `sudo`, `eval`, `python -c` or a second `bash -c`
   (pipes, `&&`, `;`, `$(...)` and one `bash -c` are read);
+- code given to a shell on stdin, by a here-document or a here-string, or in
+  a script file: only the shell or the script is recorded;
 - file access made through Bash;
 - a symlink out of the project;
 - a secret the agent writes rather than reads;
 - an agent that rewrites the trace or switches the hooks off and then
   stays quiet.
 On 50 labelled events the rules miss 9 bad events and flag 8 of 25 benign
-ones (`docs/review/2026-10-16-M2.2-baseline.md`). No model has been
+ones (`docs/review/2026-10-16-M2.2-baseline.md`). On the rule fixtures
+`raqib check-rules` finds SCOPE-PATH firing on 0 of 9 benign files and
+NET-TOOL on 1 of 10; a trace that expects findings is never benign
+(`tests/fixtures/field/`). No model has been
 evaluated yet. See
 **[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)** for every known gap and its
 source.

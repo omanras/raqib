@@ -353,6 +353,7 @@ def test_m41_e3_a_silence_rule_without_a_kind_cannot_emit(monkeypatch):
 # --- M4.2 E5: SILENCE-EMPTY (ADR-0002 Amendment D, rulings D-5, D-6, D-7) -------
 
 LOGS = Path(__file__).resolve().parent / "fixtures"
+FIELD = LOGS / "field" / "2026-11-02.log"    # E-1: outside the benign glob
 
 
 def event(seq, phase, sec=None, session=S1):
@@ -373,7 +374,23 @@ def test_m42_e5_empty_is_high_a_demand_and_cites_start_and_end():
 def test_m42_e5_an_end_without_a_start_cites_the_end_and_says_no_start():
     (f,) = silence.findings(load("empty-end-without-start-positive.json"))
     assert (f["rule_id"], f["cited_seq"]) == ("SILENCE-EMPTY", [1])
-    assert f["summary"] == "session_end seq 1 with no session_start in the trace (no start), no tool call and no stop"
+    assert f["summary"] == ("the session ended at session_end seq 1 with no start and no tool call (and no stop);"
+                            " a session_end with tool lines and no start is not judged yet (SILENCE-NOSTART, M4.3)")
+
+
+def test_m42_redo2_e2_a_session_end_with_tools_and_no_start_is_the_open_hole():
+    """E-2: SILENCE-EMPTY's no-start case fires only with no tool line. A
+    session_end after tool lines, with no session_start, is judged by no rule
+    today (SILENCE-NOSTART, M4.3): this pins the hole so it stays visible."""
+    tool = dict(event(1, "pre"), tool="Bash", input_meta={}, input_sha256="0" * 64)
+    post = dict(tool, phase="post", ok=True, output_sha256="1" * 64)
+    lines = [tool, post, event(2, "stop"), event(3, "session_end")]
+    assert silence.findings(lines) == []
+    assert silence.findings(lines[:2] + lines[3:]) == []
+    assert "SILENCE-NOSTART" not in silence.RULE_KINDS
+    from raqib import report
+    text = dict(report.SILENCE_RULES)["SILENCE-EMPTY"]
+    assert text.endswith("or ended with no start and no tool call")
 
 
 @pytest.mark.parametrize("phases, expected", [
@@ -384,10 +401,11 @@ def test_m42_e5_an_end_without_a_start_cites_the_end_and_says_no_start():
     (["session_start", "stop", "session_end"], []),                        # a turn: not empty
     (["session_start", "stop"], []),
     (["stop"], []),
-    (["session_end", "session_end"], [("SILENCE-EMPTY", [1, 2])]),
-    (["session_start", "session_end", "session_start", "session_end"], [("SILENCE-EMPTY", [1, 2, 3, 4])]),
+    (["session_end", "session_end"], [("SILENCE-EMPTY", [2])]),                      # E-3: the last end
+    (["session_start", "session_end", "session_start", "session_end"], [("SILENCE-EMPTY", [1, 4])]),
+    (["session_start", "session_start", "session_end"], [("SILENCE-EMPTY", [1, 3])]),   # E-3: the first start
 ], ids=["closed", "end-only", "start-only", "two-starts", "turn", "start-stop", "stop-only", "two-ends",
-        "two-closed-segments"])
+        "two-closed-segments", "two-starts-one-end"])
 def test_m42_e5_the_d6_shape(phases, expected):
     lines = [event(i, p) for i, p in enumerate(phases, start=1)]
     assert [(f["rule_id"], f["cited_seq"]) for f in silence.findings(lines)] == expected
@@ -402,14 +420,17 @@ def test_m42_e5_any_tool_line_makes_a_session_not_empty(phase):
 
 def test_m42_e5_a_resumed_session_is_judged_as_one_session():
     """D-6 is per session: a session_start after a session_end, with tool
-    lines, makes the session not empty; with none, it is empty and, when the
-    trace ends on the start, also open (the question is recorded in
-    docs/review/2026-11-03-M4.2-redo.md, not settled here)."""
+    lines, makes the session not empty (the batch finding vanishes; a knock
+    is an event, a report is a state, E-3); with none, it is empty, and when
+    the trace ends on the start also open. E-3: EMPTY cites the first start
+    and the last end only, so no line is cited by both EMPTY and OPEN."""
     tool = dict(event(4, "pre"), tool="Bash", input_meta={}, input_sha256="0" * 64)
     closed = [event(1, "session_start"), event(2, "session_end"), event(3, "session_start")]
     assert silence.findings(closed + [tool, dict(tool, phase="post"), event(5, "stop")]) == []
-    assert [(f["rule_id"], f["cited_seq"]) for f in silence.findings(closed)] == [
-        ("SILENCE-EMPTY", [1, 2, 3]), ("SILENCE-OPEN", [3])]
+    found = [(f["rule_id"], f["cited_seq"]) for f in silence.findings(closed)]
+    assert found == [("SILENCE-EMPTY", [1, 2]), ("SILENCE-OPEN", [3])]
+    assert not set(found[0][1]) & set(found[1][1])
+    assert silence.findings(closed[:2])[0]["cited_seq"] == [1, 2]      # the later start changes nothing
 
 
 def test_m42_e5_empty_is_per_session_and_ts_falls_back():
@@ -436,12 +457,34 @@ def test_m42_e5_the_field_trace_of_2026_11_02():
     NET-TOOL on s6 (test_report). s7, `python3 -c 'import urllib.request'`,
     is the recorded NET-TOOL miss: the code after -c is an argument, which
     capture never records (D-4)."""
-    records, problems = trace.read(LOGS / "field-2026-11-02.log")
+    records, problems = trace.read(FIELD)
     assert problems == [] and len(records) == 26
     assert len({r["session_id"] for r in records}) == 7
     assert rules_and_seqs(silence.findings(records)) == [
         ("SILENCE-EMPTY", "field-2026-11-02-s1", [1, 2]),
         ("SILENCE-EMPTY", "field-2026-11-02-s2", [1, 2]),
         ("SILENCE-GAP", "field-2026-11-02-s3", [1, 2])]
-    text = (LOGS / "field-2026-11-02.log").read_text(encoding="ascii")
+    text = FIELD.read_text(encoding="ascii")
     assert {r["cwd"] for r in records} == {"/home/user/raqib-demo"} and "/home/user/.bashrc" in text
+
+
+def test_m42_redo2_e9_the_field_trace_has_synthetic_hashes_and_tool_use_ids():
+    """E-9: every sha256 is sha256("synthetic-<line>") of a line of the file
+    (a call's input hash is its pre line's, so pre and post agree); every
+    tool line has a tool_use_id; the provenance line says so."""
+    import hashlib
+    records = [json.loads(x) for x in FIELD.read_text(encoding="ascii").splitlines()]
+    synthetic = {hashlib.sha256(("synthetic-%d" % n).encode()).hexdigest(): n for n in range(1, len(records) + 1)}
+    pre_line = {}
+    for n, rec in enumerate(records, start=1):
+        if rec["phase"] not in ("pre", "post"):
+            assert not any(k.endswith("sha256") or k == "tool_use_id" for k in rec)
+            continue
+        key = (rec["session_id"], rec["seq"])
+        pre_line.setdefault(key, n)
+        assert synthetic.get(rec["input_sha256"]) == pre_line[key], n
+        if rec["phase"] == "post":
+            assert synthetic.get(rec["output_sha256"]) == n, n
+        assert rec["tool_use_id"] == "toolu_synthetic_%s_%d" % (rec["session_id"].rsplit("-", 1)[1], rec["seq"])
+    provenance = (FIELD.parent / "README.md").read_text(encoding="ascii")
+    assert "2026-11-02.log" in provenance and "recreated shape, synthetic hashes" in provenance

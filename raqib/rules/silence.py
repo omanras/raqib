@@ -16,13 +16,17 @@ pure function: it reads only its arguments and returns new dicts.
                  line before it: the trace was truncated, rotated, merged or
                  its clock moved. Cites [earlier seq, this seq].
 - SILENCE-EMPTY  a session that has a session_end and no pre, post or stop
-                 line (M4.2, ruling D-6): it started and ended with nothing
-                 seen in between (a failed start, or work that was not
-                 captured), or it ended with no session_start in the trace
-                 at all ("no start"). Cites its session_start and session_end
-                 lines. A session_start with nothing after it is not empty:
-                 that is SILENCE-OPEN's finding (one fact, one finding); a
-                 stop is a turn, so start + stop + end is not empty either.
+                 line (M4.2, rulings D-6, E-2): it started and ended with
+                 nothing seen in between (a failed start, or work that was
+                 not captured), or it ended with no start and no tool call.
+                 Cites its first session_start, if any, and its last
+                 session_end (E-3), so a later start of the same session id
+                 does not change the finding. A session_start with nothing
+                 after it is not empty: that is SILENCE-OPEN's finding (one
+                 fact, one finding); a stop is a turn, so start + stop + end
+                 is not empty either. Known hole (E-2): a session_end with
+                 tool lines and no session_start is not judged by any rule
+                 yet (SILENCE-NOSTART, M4.3).
 
 Each rule declares its kind in code (ADR-0002), in RULE_KINDS, and every
 finding carries it. All five are demands: each requires evidence of an act
@@ -147,19 +151,20 @@ def _open(session_id, recs):
 
 
 def _empty(session_id, recs):
-    """SILENCE-EMPTY (D-6): a session_end, and no pre, post or stop line."""
+    """SILENCE-EMPTY (D-6, E-2, E-3): a session_end, and no pre, post or stop
+    line. Cites the first session_start (if any) and the last session_end."""
     ends = [i for i, r in enumerate(recs) if r.get("phase") == "session_end"]
     if not ends or any(r.get("phase") in WORK for r in recs):
         return []
     starts = [r["seq"] for r in recs if r.get("phase") == "session_start"]
-    cited = sorted(set(starts + [recs[i]["seq"] for i in ends]))
     last = recs[ends[-1]]
+    cited = sorted(set(starts[:1] + [last["seq"]]))
     if starts:
         summary = ("session started at seq %d and ended at %s with no tool call and no stop:"
                    " a failed start, or work that was not captured" % (starts[0], _label(last)))
     else:
-        summary = ("%s with no session_start in the trace (no start), no tool call and no stop"
-                   % _label(last))
+        summary = ("the session ended at %s with no start and no tool call (and no stop); a session_end"
+                   " with tool lines and no start is not judged yet (SILENCE-NOSTART, M4.3)" % _label(last))
     return [_finding("SILENCE-EMPTY", session_id, cited, _ts_at(recs, ends[-1]), summary)]
 
 
