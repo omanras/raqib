@@ -384,3 +384,14 @@ Full text: docs/review/2026-11-03-M4.2b-redo-ruling.md.
 - Verdict: NEXT; merge --no-ff under the commander's standing word.
 - Phase 4 exit met in the tree: demand + anchor (11) > signature (4) and
   every signature lists its evasions. The field proof is the commander's.
+
+## Amendment J (the Table, 2026-11-03) - rulings on the M4.3 STOP (107f241)
+- J-1 Tree anchors are code rules in raqib/rules/tree.py (cross.py pattern).
+- J-2 trace.FIELDS gains the three git keys with shape checks.
+- J-3 Not judged without git keys or "no repo" both ends; other nulls with
+  edits are unknown. J-4 start/close, cwd change unknown, triggers under
+  the start cwd. J-5 closed git_error set. J-6 gitdir only relative, under
+  the cwd root, never UNC/device; no symlink followed. J-7 worktrees v1
+  hole. J-8 50 ms monotonic budget, size caps. J-9 raw index bytes; git
+  status refresh named. J-10 both may fire; holes accepted. J-11 counts.
+Full text: docs/review/2026-11-03-M4.3-ruling.md.
