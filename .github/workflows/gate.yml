@@ -132,6 +132,33 @@ jobs:
           python -m pip wheel --disable-pip-version-check --no-deps -w dist "$GITHUB_WORKSPACE"
           python -m zipfile -l dist/raqib-*.whl > wheel.txt
           cat wheel.txt
+          # M7.1 E4 (ADR-0007): discover live, in-process, from the venv: on Windows 2 samples
+          # 1 s apart through the Win32 API (no PowerShell), on Linux one /proc snapshot. An
+          # inventory JSON is produced, the reader is named as itself and is no candidate.
+          if [ "$RUNNER_OS" = "Windows" ]; then live="--samples 2 --every 1"; else live=""; fi
+          set +e; raqib discover $live --json --save live-run -o live.json; code=$?; set -e
+          echo "discover live: exit $code"; test "$code" -ne 2
+          python - <<'EOF'
+          import json, os
+          inv = json.load(open("live.json", encoding="ascii"))
+          run = json.load(open(os.path.join("live-run", "run.json"), encoding="ascii"))
+          print(inv["result"], inv["exit"], "self", inv["self"], "candidates", [(c["pid"], c["image"]) for c in inv["candidates"]])
+          assert inv["live"] is True and inv["records"] > 0 and len(inv["self"]) == 1, inv["self"]
+          me = inv["self"][0]
+          assert not any(c["pid"] == me for c in inv["candidates"]), "the reader is a candidate"
+          assert not any(a["pid"] == me for c in inv["candidates"] for a in c["acts"]), "the reader is an act"
+          assert not any(a["pid"] == me for a in inv["act_roots"]), "the reader is an act-root"
+          if os.name == "nt":
+              assert inv["window"]["samples_read"] == [1, 2], inv["window"]
+              assert run["samples"] == 2 and run["export"] == "windows-live" and len(run["sample_times"]) == 2, run
+              assert any("GetExtendedTcpTable" in a for a in run["apis"]), run["apis"]
+              names = sorted(os.listdir("live-run"))
+              assert {"win-process-1.csv", "win-process-2.csv", "win-tcp-1.csv", "win-tcp-2.csv"} <= set(names), names
+          print("discover live: OK, the reader (pid %d) is no candidate" % me)
+          EOF
+          # The saved run replays (A5, A8).
+          set +e; raqib discover --from live-run --json -o replay.json; code=$?; set -e
+          test "$code" -ne 2
           # Doctor from the venv (exit 1 here: see the exact MISSING lines below).
           mkdir -p project
           set +e; raqib doctor project > doctor.txt 2>&1; code=$?; set -e

@@ -833,8 +833,9 @@ def test_e6_run_ss_reports_a_missing_program():
 
 def test_e6_live_elsewhere_lists_homes_and_says_what_it_cannot_read(tmp_path):
     (tmp_path / ".codex").mkdir()
-    texts, holes, _ = discover.collect_live(CATALOG, platform="win32", homes=[str(tmp_path)])
-    assert set(texts) == {"footprints"} and "no live process or connection reader on win32" in holes[0]
+    # M7.1: Windows now reads live (tests/test_hostwin.py); "elsewhere" is any other system.
+    texts, holes, _ = discover.collect_live(CATALOG, platform="darwin", homes=[str(tmp_path)])
+    assert set(texts) == {"footprints"} and "no live process or connection reader on darwin" in holes[0]
     inv = discover.run(texts, CATALOG, holes=holes, live=True)
     text = discover.render_text(inv)
     assert inv["result"] == "incomplete" and inv["agent_dark"] == []    # unjudged, not dark
@@ -1258,7 +1259,7 @@ def test_m50b_e1_save_records_the_sample_count_and_replays(tmp_path):
     discover.save(texts, str(tmp_path / "saved"), holes, samples)
     assert json.loads((tmp_path / "saved" / "run.json").read_text())["samples"] == 3
     assert [c["pid"] for c in from_dir(tmp_path / "saved")["candidates"]] == [50]
-    assert discover.collect_live(CATALOG, platform="win32", homes=[])[2] == 0
+    assert discover.collect_live(CATALOG, platform="darwin", homes=[])[2] == 0   # M7.1: win32 is live now
 
 
 def test_m50b_e1_cli_save_writes_the_sample_count(tmp_path, monkeypatch):

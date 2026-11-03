@@ -39,6 +39,13 @@ and exits 1 when any line is MISSING, else 0:
             is registered and enabled (HKLM, read with winreg). That is the
             Sysmon source `raqib discover` reads (ADR-0004); whether the
             service is running is not checked.
+- host      M7.1 (ADR-0007): live discovery can read this host. On Windows
+            the three APIs `raqib discover` reads in-process resolve
+            (kernel32 Toolhelp32 and the process queries, iphlpapi
+            GetExtendedTcpTable, dnsapi DnsGetCacheDataTable): OK; OK with
+            "names: no" when only dnsapi is missing; MISSING per API
+            otherwise. Names are resolved, no function is called and no
+            sample is taken. Elsewhere: OK, "live discovery reads /proc".
 - trace     the trace `raqib watch` would choose (watch.choose_trace) can be
             written: the file if it exists, else the nearest existing
             directory above it, where watch creates the rest; choose_trace's
@@ -313,6 +320,33 @@ def check_sysmon(registry):
                   " checked)" % SYSMON_CHANNEL)
 
 
+def check_host(platform, prober=None):
+    """M7.1 E3: (ok, text) of live discovery on this host. Read-only: on
+    Windows only DLL symbols are resolved (hostwin.probe); nothing is called."""
+    if platform != "win32":
+        return True, "live discovery reads /proc (raqib discover; Linux)" if platform.startswith("linux") else \
+            "live discovery reads /proc on Linux; on %s it lists the homes only" % platform
+    if prober is None:
+        if os.name != "nt":
+            return UNSURE, "a Windows doctor run on %s: the Win32 API is not here to resolve; not checked" % sys.platform
+        from raqib import hostwin
+        prober = hostwin.probe
+    try:
+        found = prober()
+    except Exception as exc:     # a probe that fails is a MISSING line, never a crash of doctor
+        return False, "the Win32 API could not be probed: %s: %s" % (type(exc).__name__, exc)
+    what = (("kernel32", "Toolhelp32 processes"), ("iphlpapi", "GetExtendedTcpTable"),
+            ("dnsapi", "DnsGetCacheDataTable"))
+    parts = ["%s %s %s" % (dll, name, "OK" if not found.get(dll, "not probed") else "MISSING (%s)" % found.get(
+        dll, "not probed")) for dll, name in what]
+    core = not found.get("kernel32", "not probed") and not found.get("iphlpapi", "not probed")
+    if not core:
+        return False, "raqib discover cannot run live: %s" % "; ".join(parts)
+    if found.get("dnsapi", "not probed"):
+        return True, "raqib discover runs live; names: no (%s)" % "; ".join(parts)
+    return True, "raqib discover runs live: %s" % "; ".join(parts)
+
+
 def writable(path, windows=False):
     """(True, how) when the trace can be appended to or created, else
     (False, why). Reads only: nothing is created to find out. On Windows
@@ -372,7 +406,7 @@ def check_trace(project, home, windows=False):
 # --- the command ---------------------------------------------------------------------
 
 def checks(project, environ=None, platform=None, which=None, runner=None, version_info=None,
-           executable=None, home=None, registry=None, isfile=None, isdir=None, importer=None):
+           executable=None, home=None, registry=None, isfile=None, isdir=None, importer=None, prober=None):
     """(project made absolute, [(name, (verdict, text))], notes): the checks
     run() prints and the window's first screen shows (M6.4)."""
     environ = os.environ if environ is None else environ
@@ -392,6 +426,7 @@ def checks(project, environ=None, platform=None, which=None, runner=None, versio
              ("tkinter", check_tkinter(environ, platform, importer))]
     if windows:
         lines.append(("sysmon", check_sysmon(registry)))
+    lines.append(("host", check_host(platform, prober)))
     ok, text, notes = check_trace(project, home, windows)
     lines.append(("trace", (ok, text)))
     return project, lines, notes
@@ -405,11 +440,11 @@ def summary(lines):
 
 
 def run(project, out, environ=None, platform=None, which=None, runner=None, version_info=None,
-        executable=None, home=None, registry=None, isfile=None, isdir=None, importer=None):
+        executable=None, home=None, registry=None, isfile=None, isdir=None, importer=None, prober=None):
     """Print the checks for `project` (default: the current directory) to
     out; 1 when any line is MISSING, else 0 (an UNSURE line does not fail it)."""
     project, lines, notes = checks(project, environ, platform, which, runner, version_info, executable, home,
-                                   registry, isfile, isdir, importer)
+                                   registry, isfile, isdir, importer, prober)
     out.write("raqib doctor: raqib %s (%s); project %s\n" % (
         raqib.__version__, _safe(os.path.join(install.PACKAGE_ROOT, "raqib")), _safe(project)))
     for name, (ok, text) in lines:

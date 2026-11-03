@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 from raqib import cli, doctor, install  # noqa: E402
 
 WINDOWS = os.name == "nt"
-ORDER = ["python", "claude", "hooks", "notifier", "tkinter", "trace"]
+ORDER = ["python", "claude", "hooks", "notifier", "tkinter", "host", "trace"]
 
 
 class FakeTk:
@@ -85,6 +85,7 @@ def run(tmp_path, proj, home, fakes=None, environ=None, platform="linux", **kw):
         environ["DISPLAY"] = ":0"
     kw.setdefault("isfile", notify_send)
     kw.setdefault("importer", fake_importer)
+    kw.setdefault("prober", lambda: {"kernel32": None, "iphlpapi": None, "dnsapi": None})   # M7.1: the host line
     out = io.StringIO()
     code = doctor.run(None if proj is None else str(proj), out, environ=environ, platform=platform, which=fakes.which, runner=fakes.runner,
                       home=str(home), **kw)
@@ -422,7 +423,7 @@ def test_e2_windows_form_is_installed_for_a_windows_doctor_and_foreign_for_posix
                                          " cannot tell on Windows)" % trace)
     assert ("UNSURE  trace    %s (kept from the existing install) exists; not checked (os.access cannot tell on"
             " Windows)" % trace) in text.splitlines()
-    assert list(checks) == ["python", "claude", "hooks", "notifier", "tkinter", "sysmon", "trace"]
+    assert list(checks) == ["python", "claude", "hooks", "notifier", "tkinter", "sysmon", "host", "trace"]
     _, _, checks, _ = run(tmp_path, proj, home)
     assert checks["hooks"][0] == "MISSING" and "foreign for PreToolUse, PostToolUse" in checks["hooks"][1]
 
