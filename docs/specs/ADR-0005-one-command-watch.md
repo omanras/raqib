@@ -136,6 +136,10 @@ settled here.
   page without a band is unchanged byte for byte, and the CSP and the
   no-script rule are unchanged. The band says watching or SILENT for N s,
   the notifier state, and the number of holes. No refresh yet (M6.2).
+  (Note 2026-11-03, M6.2, ruling I-9: the byte-for-byte rule is retired.
+  `raqib ui` and the watch page share one builder, so the page without a
+  band changes too: alarms with capture holes first, findings by
+  severity. The CSP and the no-script rule stand.)
 - A-7 The page is opened once: /usr/bin/xdg-open or /bin/xdg-open (PATH set
   to /usr/local/bin:/usr/bin:/bin), /usr/bin/open, or
   %SystemRoot%\explorer.exe, without waiting; not under CI or --no-open.

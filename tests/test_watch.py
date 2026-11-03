@@ -298,7 +298,10 @@ def test_e2_no_line_for_the_gap_opens_a_window_and_the_next_line_closes_it(tmp_p
     st = state_of(w)
     assert st["status"] == "silent" and st["silence"][0]["opened"] == "2026-11-02T12:00:05.500Z"
     assert st["silence"][0]["since"] == "2026-11-02T12:00:00.000Z" and st["silence"][0]["closed"] is None
-    assert w.band()[0] == ("alarm", "SILENT for 5 s (no line since 2026-11-02T12:00:00.000Z)")
+    # M6.2 I-3: one state word and a detail line.
+    assert w.band()[0] == ("alarm", "SILENT for 5 s")
+    assert w.status_word() == ("SILENT for 5 s", "alarm", "no line since 2026-11-02T12:00:00.000Z (after line 2,"
+                                                          " seq 2; limit 5 s)")
     clock.t = 1009.0
     w.step()
     assert len(w.windows) == 1 and runner.titles().count("Raqib: SILENCE-LIVE open") == 1
@@ -475,8 +478,9 @@ def test_e3_a_delivery_that_fails_is_a_hole_and_falls_back_to_the_bell(tmp_path)
     assert hole["kind"] == "notify-failed" and hole["count"] == 2
     assert hole["detail"] == "notify-send: /bin/sh exited 1: cannot open display"
     page = w.page()
-    assert 'class="band"' in page and "notifications: 2 not delivered by notify-send" in page
-    assert re.search(r'<span class="badge alarm">notifications: 2 not delivered', page)
+    # M6.2 E2: the band says on or off.
+    assert 'class="band"' in page and "notifications: on, 2 not delivered by notify-send" in page
+    assert re.search(r'<span class="badge alarm">notifications: on, 2 not delivered', page)
     assert any(a["kind"] == "notify-failed" and "(2 times, last at" in a["detail"] for a in w.finish()["alarms"])
 
 
@@ -580,8 +584,8 @@ def run_watch(monkeypatch, argv, actions=()):
     servers = []
     real = ui.make_server
 
-    def make(page, port):
-        server = real(page, port)
+    def make(page, port, **kw):   # M6.2: routes (GET /discover) and refresh pass through
+        server = real(page, port, **kw)
         servers.append(server)
         return server
     monkeypatch.setattr(ui, "make_server", make)
@@ -707,11 +711,11 @@ def test_b7_a_busy_port_gives_another_port_and_a_warning(tmp_path, home, monkeyp
     asked = []
     real = ui.make_server
 
-    def busy(page, port):
+    def busy(page, port, **kw):
         asked.append(port)
         if port in (watch.DEFAULT_PORT, 4242):
             raise OSError(98, "Address already in use")
-        return real(page, port)
+        return real(page, port, **kw)
     monkeypatch.setattr(ui, "make_server", busy)
     server, port = watch._serve(lambda: "", None)
     server.server_close()
@@ -805,11 +809,21 @@ def test_installer_api_prints_what_the_command_prints(tmp_path, home):
 
 # --- ui: the band hook -------------------------------------------------------------------
 
-def test_ui_band_is_escaped_and_the_page_is_unchanged_without_one(tmp_path):
+def test_ui_band_is_escaped_and_the_a6_byte_for_byte_rule_is_retired(tmp_path):
+    """M6.2 I-9: A-6's "the page without a band is unchanged byte for byte"
+    is retired by a dated note: one builder, so the band-less page changes
+    too (findings by severity). The band hook itself still adds only the band."""
+    adr = (ROOT / "docs" / "specs" / "ADR-0005-one-command-watch.md").read_text(encoding="utf-8")
+    assert "(Note 2026-11-03, M6.2, ruling I-9: the byte-for-byte rule is retired." in adr
     numbered, problems = trace.read_numbered(str(REAL_TRACES[0]))
     found, notes = cli.run_rules([r for _, r in numbered], RULES, {}, 60)
     rep = report.build("t", numbered, problems, found, notes, report.rule_table(RULES), "rules")
     plain = ui.render(rep, numbered, problems, 60)
+    b_numbered, b_problems = trace.read_numbered(str(BLOCKED))                   # the band-less page changed:
+    b_found, b_notes = cli.run_rules([r for _, r in b_numbered], RULES, {}, 60)
+    blocked = ui.render(report.build("b", b_numbered, b_problems, b_found, b_notes, report.rule_table(RULES), "rules"),
+                        b_numbered, b_problems, 60)
+    assert "<h3>high (" in blocked and 'class="band"' not in blocked
     assert ui.render(rep, numbered, problems, 60, band=None) == plain == ui.render(rep, numbered, problems, 60, [])
     assert 'class="band"' not in plain
     page = ui.render(rep, numbered, problems, 60, band=[("alarm", "<script>x</script>\n"), ("odd", "ok")])
@@ -957,10 +971,12 @@ def test_b4_the_heartbeat_is_written_on_every_poll_and_a_stale_one_reads_as_cras
     assert (first["heartbeat"], second["heartbeat"]) == ("2026-11-02T12:00:00.000Z", "2026-11-02T12:00:00.500Z")
     assert second["stale_after_seconds"] == watch.STALE_SECONDS and w.band()[0][0] == "clean"
     clock.t += watch.STALE_SECONDS + 1
-    assert w.band()[0] == ("alarm", "CRASHED or stuck: no heartbeat for 31 s (last at 2026-11-02T12:00:00.500Z)")
+    # M6.2 I-3: the C-4 texts are the detail line of the state word.
+    assert w.status_word() == ("CAPTURE FAILED", "alarm",
+                               "CRASHED or stuck: no heartbeat for 31 s (last at 2026-11-02T12:00:00.500Z)")
     assert "CRASHED or stuck: no heartbeat for 31 s" in w.page()
     w.finish(status="crashed", error="RuntimeError: x")
-    assert w.band()[0] == ("alarm", "CRASHED: RuntimeError: x") and state_of(w)["status"] == "crashed"
+    assert w.status_word() == ("FINISHED", "alarm", "CRASHED: RuntimeError: x") and state_of(w)["status"] == "crashed"
 
 
 def test_b4_a_page_that_cannot_get_the_state_says_the_watch_is_not_responding(tmp_path, monkeypatch):
@@ -1074,10 +1090,11 @@ def test_d1_after_a_reset_every_line_is_live_the_window_closes_and_raqib_silence
     runner = FakeRunner()
     path = tmp_path / "traces" / "raqib.log.jsonl"
     path.parent.mkdir(parents=True)
-    path.write_bytes(BLOCKED.read_bytes())                        # 7 lines of history
+    # 6 lines of history; not the 7th, a session_end, after which no window opens (M6.2 I-2)
+    path.write_bytes(b"\n".join(blocked_lines()[:6]) + b"\n")
     w, _, clock = make_watch(tmp_path, gap=5, runner=runner)
     w.step()
-    assert w.history_line == 7 and runner.calls == []
+    assert w.history_line == 6 and runner.calls == []
     clock.t += 6
     w.step()                                                      # a live window opens
     assert runner.titles() == ["Raqib: SILENCE-LIVE open"]
