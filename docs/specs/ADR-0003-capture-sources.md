@@ -200,3 +200,16 @@ As built for C-1..C-9. Record: docs/review/2026-11-03-M5.3.md, section
   SECRET-OUTPUT and NET-TOOL guard `source` exists false or `source` ne os,
   so a line written before M5.2 is still judged; a dated note is in each
   description.
+
+## Amendment D (the Table, 2026-11-03) - rulings on the M5.3 review (fd7452c)
+- D-1 engine.CLASSES and cli.run_rules changes ratified (ledger: Table).
+- D-2 Handoff Scope header is exactly `Scope:`.
+- D-3 os file lines carry a redacted path like hook lines.
+- D-4 No cwd key when none is observed (partial, never os-sysmon's own).
+- D-5 `--root PID[:GUID]`; latest holder is the root, earlier ones named.
+- D-7 "nothing to judge" note. D-8 Spans: per os session, intersection
+  with the agent span; history outside is not judged and not noted.
+- D-9 Asked covers descendants (npm -> node, forked bash). D-10 holes
+  named; "cmd" matches "command". D-11 guards measured; check-rules lists
+  CROSS-SOURCE; gate requires CROSS_RULES; YAML may not claim CROSS.
+- D-12, D-13 as in docs/review/2026-11-03-M5.3-redo-ruling.md.

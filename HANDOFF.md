@@ -1,8 +1,8 @@
 # HANDOFF — M5.3  (phase 5: os source from Sysmon + CROSS-SOURCE anchor)
 Task: add the `os` capture source from Sysmon on Windows (ADR-0003) and the
 first rule that reads the gap between what was asked and what happened.
-Scope (ruling 2026-11-03-M5.3-ruling.md C-1..C-9 binding):
-  raqib/hooks/ (new os_sysmon.py), raqib/cli.py (os-sysmon), raqib/rules/ (new cross.py,
+Scope:
+  raqib/hooks/ (new os_sysmon.py), raqib/cli.py, raqib/rules/ (cross.py, engine.py CLASSES,
   trace.py, silence.py GAP/ORDER exemption, catalog/ guards), raqib/report.py (ids),
   raqib/discover.py (shared Sysmon helper), tools/gate.py (kinds from cross.py), tests/,
   README.md, docs/THREAT_MODEL.md, docs/specs/ADR-0002 (table note), ADR-0003, docs/review/
