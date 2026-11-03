@@ -293,3 +293,15 @@ settled here.
   `benign/linux-desktop`, `benign/windows-desktop`. The catalog lists the
   Moonshot hosts (api.moonshot.ai, api.moonshot.cn, api.kimi.com) since the
   blind field test has run; a blind run uses a catalog copy, as B-10 did.
+
+## Amendment G (the Table, 2026-11-03) - rulings on the M5.0b review (02958eb)
+- G-1 The benign set holds the realistic IDE-terminal cases; act-root
+  narrows: parent is a shell or terminal host, no `--type=` helper as root
+  or hop, first hop a shell, command outside the root's tree.
+- G-2 Linux placement by /proc/PID/exe with argv[0] fallback; unreadable
+  exe counted in a hole; a Linux positive added.
+- G-3 Recent talk alone ends INCOMPLETE (B-2). G-4 blank image paths are a
+  hole. G-5 exit precedence stays, docs say "unless an alarm". G-6 pid +
+  CreationDate keys a process. G-7 evasions listed. G-8 `status` carrier
+  for act_root. G-9 ui.py discover tab in Scope. G-10..G-14 as in
+  docs/review/2026-11-03-M5.0b-ruling.md.

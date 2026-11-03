@@ -3,7 +3,7 @@ Task: close the anchor's first measured false negative (field note 2026-11-02
 kimi-discover): an agent between requests owns no connection; its acts go to an ancestor.
 Scope:
   raqib/discover.py, raqib/discover/endpoints.yaml, raqib/cli.py (discover options only),
-  README.md (discover section), docs/specs/ADR-0004-agent-discovery.md, tests/, docs/review/
+  README.md (discover section), docs/specs/ADR-0004-agent-discovery.md, tests/, docs/review/, raqib/ui.py (discover tab)
 Exit criteria:
 - E1 Windows window: the README export becomes a PowerShell loop (N samples,
      default 6, 10 s apart) writing win-process-<k>.csv / win-tcp-<k>.csv in
