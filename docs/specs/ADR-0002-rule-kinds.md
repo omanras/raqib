@@ -298,3 +298,15 @@ Full text: docs/review/2026-11-03-M4.2-redo-ruling.md.
 - Verdict: NEXT; merge --no-ff under the commander's standing word.
 - Ledger, Table: the first M4.2 Scope omitted README.md/gate.yml (rule in
   Amendment D); the HANDOFF's "medium" for a silence rule contradicted A3.
+
+## Amendment G (the Table, 2026-11-03) - rulings on the M4.2b STOP (129c071)
+- G-1 Scope: common.py, capture.py, THREAT_MODEL; 15 rules; ratio 4 : 7 : 4.
+- G-2 `command_scripts` = the script operand only (basename); -c/-m = none.
+- G-3 `commit_prefix` only for `^[a-z]+:$` (<= 16 chars).
+- G-4 Commit forms read / not read fixed. G-5 v1 holes accepted and listed.
+- G-6 `holes:` key allowed on demand and anchor rules.
+- G-7 Trigger = commit post line ok; no post = unknown. G-8 D-3 fallback
+  applies to evidence. G-9 `command_scripts` only when non-empty.
+- G-10 Edit/Write/MultiEdit/NotebookEdit; partial on no deadline.
+- G-11 Baseline corrected by dated note.
+Full text: docs/review/2026-11-03-M4.2b-ruling.md.
