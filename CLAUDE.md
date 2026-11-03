@@ -18,6 +18,11 @@ ever copied here; only the doctrine.
 6. Design questions are returned in `docs/review/<date>-<task>-questions.md`,
    never answered locally.
 7. Keep `HANDOFF.md` ≤ 30 lines. Keep every file ASCII-safe except docs.
+8. Commander's standing rule (2026-11-03): every file in the project is
+   editable by the Table with his permission, and his permission for a
+   session is given at its start; `HANDOFF.md`, the ADRs, `docs/handoffs/`
+   and `docs/review/` are the Table's to write by his decision. The builder
+   stays under rules 1-2: its scope is `Scope:` and nothing else.
 
 ## Layout
 - `raqib/hooks/`   capture scripts (Claude Code hooks, later: proxy)
