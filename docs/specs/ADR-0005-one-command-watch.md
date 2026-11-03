@@ -366,3 +366,13 @@ every REDO 2 change carries a test for the behaviour it adds (D-8).
   A-6 byte-for-byte retired by dated note. I-10 closed windows drawn.
   I-11 "?" for control characters.
 Full text: docs/review/2026-11-03-M6.2-ruling.md.
+
+## Amendment J (the Table, 2026-11-03) - rulings on the M6.2 review (3621bf2)
+- J-1 Scope widened to watch.py for I-2/I-3 (ledger: Table's Scope word).
+- J-2 A start-time capture failure clears only on a live good record.
+- J-3 AGENT GONE needs the newest record = session_end AND no open session.
+- J-4 The registry is not written when ~/.raqib is inside the project.
+- J-5 Wall-clock heartbeats; ALIVE threshold max(1.5 s, 3 x step_seconds),
+  cap 30 s. J-6 watch.json carries `band`. J-7 registry rows open only a
+  local non-UNC `.watch.json`; 64 rows max. J-8 every hole kind first.
+- J-9..J-14 as in docs/review/2026-11-03-M6.2-redo-ruling.md.
