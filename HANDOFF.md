@@ -1,30 +1,30 @@
-# HANDOFF — M4.2  (phase 4: programs in Bash, has_any, SILENCE-EMPTY) — REDO
-Task: capture records every program a Bash command runs; the two command
-rules branch on it; the empty-session demand seen in the field. Binding:
-ADR-0002 Amendment D and docs/review/2026-11-03-M4.2-ruling.md (D-1..D-13).
+# HANDOFF — M5.1b  (phase 5: Windows paths in the rules)
+
+Task: the four path rules judge Windows paths via one normaliser in the
+engine; POSIX outcomes unchanged (ruling 2026-11-02-M5.1-ruling.md, Q-2..Q-6).
 
 Scope:
-  raqib/hooks/capture.py, raqib/rules/catalog/, raqib/rules/engine.py, raqib/rules/silence.py,
-  raqib/report.py (ids only), README.md, .github/workflows/gate.yml, tests/,
-  docs/specs/ADR-0002-rule-kinds.md (note under the table only), docs/review/
+  raqib/rules/engine.py, raqib/rules/context.py, raqib/cli.py, tests/, docs/review/,
+  raqib/rules/catalog/{SCOPE-CWD-ROOT,SCOPE-CWD-MOVED,SCOPE-PATH,DRIFT-FILES}.yaml, .gitattributes
 
 Exit criteria:
-- E1 `input_meta.command_programs`: basenames across `|`, `&&`, `||`, `;`,
-     `$(...)` and the string after `bash -c`/`sh -c` (one level); D-9 parse
-     limits; absent when unreadable; no execution, never arguments;
-     `command_head` unchanged. Table test per clause: pipeline, chain, bash -c,
-     quoted `;`, glued `ls;rm`, `python3 -c 'import urllib'`, `$X`, 65 names.
-- E2 Op `{field: input_meta.command_programs, exists: true, has_any: [..]}`;
-     DESTRUCT-CMD and NET-TOOL gain the branch (D-3 guard + evasion line);
-     evasion lists shrink; dated note under the ADR table (D-8); tests read
-     table plus note; "Ratio after M4.2: 4 : 5 : 3."
-- E5 SILENCE-EMPTY (demand, high, silence.py, RULE_KINDS, report ids), D-6
-     shape; fixtures: tests/fixtures/field-2026-11-02.log (D-4, recreated, no
-     real paths; expects GAP s3, SCOPE-PATH s5, NET-TOOL s6, EMPTY s1 s2),
-     end-without-start (positive), quickstart (negative), start-alone-at-end
-     (OPEN only). README: 12 rules (5 + 7), row added; gate.yml and
-     test_packaging derive the catalog count (D-2). Kinds line demand=5. Gate green.
+- E1 `norm_path()` in engine.py: one function used by `_place`, `_under` and
+     the context root check. Drive-letter (`X:\`, `X:/`) and UNC paths:
+     separators to `/`, case folded. POSIX paths: unchanged, case-sensitive.
+     `/mnt/c/...` and `C:\...` are NOT equal (Q-6); say so in a docstring.
+- E2 Context `root` accepts a Windows absolute path; `bad-context` only if
+     absolute on neither system.
+- E3 SCOPE-CWD-ROOT: second regex branch for `X:\`, `X:\Users`,
+     `X:\Users\<name>`, `X:\Windows\Temp`, `X:\Users\<name>\AppData\Local\Temp`,
+     `X:\Temp` (Q-5). A Windows cwd matching no branch yields `partial`,
+     never silence (A3). Description names the WSL and macOS holes.
+- E4 Fixtures, listed in each YAML, for all four rules: a `C:\` positive and
+     negative each, plus a mixed-case `c:/PROJ` case for SCOPE-PATH and
+     SCOPE-CWD-MOVED. POSIX fixture outcomes unchanged (`check-rules` identical).
+- E5 `.gitattributes`: `* text eol=lf`. Gate green on ubuntu + windows.
+- E6 The two Windows xfail markers from M5.1 (test_report, test_ui) removed
+     and both tests pass on Windows.
 
-Not in scope: LANDED-NO-GATE, EDIT-NO-TEST, `require:` (M4.2b), M4.3, suspicion, UI, watch.
-Commit: `landed: M4.2 bash programs + SILENCE-EMPTY` or `STOP: M4.2 <reason>`.
+Not in scope: capture, installer, new rules, `source` field.
+Commit: `landed: M5.1b windows paths` or `STOP: M5.1b <reason>`.
 Read HANDOFF.md and do only the task it specifies.

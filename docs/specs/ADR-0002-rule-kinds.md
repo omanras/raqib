@@ -267,3 +267,17 @@ Full text: docs/review/2026-11-03-M4.2-ruling.md.
 - E-7..E-14 builder items; E-12 records command_head's leading-redirect
   hole (fix in M4.2b).
 Full text: docs/review/2026-11-03-M4.2-redo-ruling.md.
+
+## Amendment F (the Table, 2026-11-03) - judgement on M4.2 (04e34c0 + 3e0cff9)
+- E-1..E-14 MET as cited; the Table read `_empty` (first start + last end
+  cited) and `input_meta` (command_unread marker) on the branch.
+- CI runs 41548516230 and 41552543683 success on six jobs each (read from
+  api.github.com); gate 1319 passed, 6 skipped; kinds line
+  signature=4 demand=5 anchor=3; scope clean; three commits on the branch
+  (merge of main + follow-up, G-8).
+- Builder readings 1-4 accepted. Observation recorded: a second session_end
+  in one session moves "last end" and knocks once more (one knock per end
+  line is acceptable: each end is a new fact).
+- Verdict: NEXT; merge --no-ff under the commander's standing word.
+- Ledger, Table: the first M4.2 Scope omitted README.md/gate.yml (rule in
+  Amendment D); the HANDOFF's "medium" for a silence rule contradicted A3.
