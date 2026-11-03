@@ -346,3 +346,15 @@ Full text: docs/review/2026-11-03-M4.2-redo-ruling.md.
 - G-10 Edit/Write/MultiEdit/NotebookEdit; partial on no deadline.
 - G-11 Baseline corrected by dated note.
 Full text: docs/review/2026-11-03-M4.2b-ruling.md.
+
+## Amendment H (the Table, 2026-11-03) - rulings on the M4.2b review (1643e32)
+- H-1 Script operands split on `/` and `\`; python.exe/py; timeout/nohup/
+  env pass through; `.`/`source` record; Windows landing fixture CLEAN.
+- H-2 True evidence wins over unknown in `require`. H-3 An unknown trigger
+  with true evidence is not partial. H-4 First non-empty -m.
+- H-5 Holes listed (cwd placement without root, same-line gate after the
+  commit, line-level ok, non-literal global option, CRLF here-doc, git.exe,
+  -n/-V/--rule-kinds-child). H-6 `require: null` is an error.
+- H-7 Class DRIFT accepted. H-8 THREAT_MODEL completeness. H-9 Field
+  item: Claude Code's ok on a non-zero Bash exit. H-10 hostile-input tests.
+Full text: docs/review/2026-11-03-M4.2b-redo-ruling.md.
