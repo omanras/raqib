@@ -214,6 +214,14 @@ not build SILENCE-NOSTART; it stays open for a later task.
 
 Ratio after M4.3: 4 : 7 : 6.
 
+Note (2026-11-04, M7.2, ADR-0007 Amendment C): two anchor rows join the
+table, judged on the host's own record of trees and footprints:
+
+| NEW-AGENT        | anchor    | -                                                    |
+| AGENT-DARK-LIVE  | anchor    | -                                                    |
+
+Ratio after M7.2: 4 : 7 : 8.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind
