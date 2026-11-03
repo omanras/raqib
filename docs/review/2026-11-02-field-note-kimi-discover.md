@@ -9,7 +9,7 @@ Result: ALARM, exit 1, complete; 2 candidates; the Kimi process was NOT a
 candidate root. What the tree looked like (from win-process.csv, read by
 the Table):
 
-    explorer 6636  (talks: 82.178.158.113:443 ESTABLISHED)
+    explorer 6636  (talks: <omantel-range-ip>:443 ESTABLISHED)
       cmd 13236
         kimi.exe 10728  `kimi -r`  C:\Users\user\.kimi-code\bin\kimi.exe   <- NO TCP row
           bash 7768 -> bash 10476 -> bash 5796 -> ping 8496
@@ -40,7 +40,7 @@ Reading (A3, A7):
    22:29 (and `git clone` failed earlier on an expired-certificate error
    consistent with a wrong clock). Timestamps from this host are not
    trustworthy as a window; recorded.
-5. Explorer talking to 82.178.158.113:443 with no catalog match is itself
+5. Explorer talking to <omantel-range-ip>:443 with no catalog match is itself
    a line a watcher should keep: unexplained desktop-shell traffic.
 
 Candidates for the next HANDOFF (M5.0b or M5.4), in order:
