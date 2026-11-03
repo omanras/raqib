@@ -1137,10 +1137,12 @@ def test_j9_the_hook_detail_names_disabled_missing_or_foreign(tmp_path):
     settings = other / ".claude" / "settings.json"
     data = json.loads(settings.read_text(encoding="utf-8"))
     capture = install.capture_path()
+    other_capture = str(tmp_path / "another-checkout" / "raqib" / "hooks" / "capture.py")   # another raqib's
     for groups in data["hooks"].values():
         for group in groups:
-            for hook in group["hooks"]:
-                hook["command"] = hook["command"].replace(capture, capture.replace("hooks", "hooks-of-another"))
+            for hook in group["hooks"]:   # the Windows form writes the path with forward slashes (windows_word)
+                hook["command"] = hook["command"].replace(capture, other_capture).replace(
+                    capture.replace("\\", "/"), other_capture.replace("\\", "/"))
     settings.write_text(json.dumps(data), encoding="utf-8")
     assert watch.hook_kinds(doctor, install, str(other)) == ["foreign"]
     w, _, _ = make_watch(tmp_path)
