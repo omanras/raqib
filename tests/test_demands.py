@@ -787,7 +787,8 @@ def test_h1_the_windows_landing_is_clean_and_measured():
     rule = catalog_rule("LANDED-NO-GATE")
     assert "tests/fixtures/rules/LANDED-NO-GATE/negative-windows.json" in rule.fixtures["negative"]
     report = fixtures.check_rule(rule, ROOT, ())
-    windows = [n for n in report["negatives"] if n["path"].endswith("negative-windows.json")]
+    windows = [dict(n, path=Path(n["path"]).as_posix()) for n in report["negatives"]
+               if n["path"].endswith("negative-windows.json")]   # relpath: \ on Windows
     assert windows == [{"path": "tests/fixtures/rules/LANDED-NO-GATE/negative-windows.json", "fired": False,
                         "measured": True}]
     assert "python -I tools\\gate.py" in README   # the form the fixture holds
