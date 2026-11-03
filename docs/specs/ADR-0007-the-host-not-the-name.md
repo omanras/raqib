@@ -73,3 +73,63 @@ process's own file activity. These are recorded, not hidden.
 - M7.4 Rhythm (layer 3) and suspicion on unknown trees.
 Order: M7.1, M7.2, M7.3, M7.4. M5.4 (Kimi hooks) is no longer needed
 for Kimi to be watched; it stays as a later convenience.
+
+## Amendment A (the Table, 2026-11-04) - rulings on review 2026-11-03-M7.1.md (fff37b6)
+Builder's record: docs/review/2026-11-03-M7.1-questions.md (Q-1..Q-13).
+CI run 41702279079 for fff37b6: six jobs success on the first commit. On the
+windows install job the live reader ran through the real API: 469 records,
+14 named holes, the reader (pid 524) no candidate, and four candidate trees
+nobody named to it - runner.worker, runner.listener, hosted-compute-agent,
+waappagent: GitHub's own Actions agents, which talk to a remote service and
+spawn shells. The ADR-0004 definition found agents it had never heard of.
+Verdict: REDO on P1; the Table's choices A-2..A-13; the rest recorded.
+- A-1 (P1, P13) Every cap, skip and truncation in the reader is a hole with
+  its count: DNS_NAMES_MAX reached (how many more were there), NULL names
+  skipped, names truncated at NAME_MAX. Nothing is dropped in silence (A3).
+- A-2 (P2) A record list returned by DnsQuery_W is freed whenever the
+  pointer is non-NULL, whatever the status. Test with a fake that returns a
+  list with a non-zero status.
+- A-3 (P3, Q-3) The command line is not read live (A4): ratified. The
+  NOT_READ hole says the consequence in one sentence: argv-based names and
+  the --type helper check are not available live, so a Claude Code run as
+  node shows as "node" and its footprint as AGENT-DARK beside it; the
+  hand-off falls back to the os source. M7.2 takes it from there.
+- A-4 (P4) The benign negatives go through the fake API too: the live path
+  gives the same inventory as the CSVs on every discover fixture, positive
+  and negative, so the act-root budget is shown to hold live.
+- A-5 (P5) The CI replay step asserts that replay.json equals live.json in
+  candidates, act_roots, act_root count and hole count.
+- A-6 (P6) LiveRefused covers the API load only. Any exception inside the
+  reader ends the run with "live reader failed at <step>: <type>: <text>",
+  exit 2, never "the API cannot be loaded".
+- A-7 (P7) The reader's own tree is its pid plus its launcher ancestors: the
+  unbroken chain of ancestors whose image is raqib*.exe, python*.exe or
+  pythonw*.exe (the console script and the venv redirector). The self line
+  and run.json carry all of them; none is an act or an act-root. The CI step
+  asserts the parent pids too.
+- A-8 (P10) A pid whose image basename at OpenProcess differs from the
+  snapshot's szExeFile is "pid reused in the gap": the path and time are
+  dropped and a hole counts it. Two holes from two layers for a denied pid
+  (hostwin's and G-4) are accepted: not silence.
+- A-9 (P11, Q-1) parse_win_process honouring "# raqib-snapshot self=" in an
+  export is the same trust as proc.txt's self: accepted and recorded.
+  run.json carries `self` (the pids of A-7) as well, so the CSV line is not
+  the only record. The doctor code change is accepted.
+- A-10 (P12) An AF_INET6 table failure is a hole; the IPv4 rows stand (as
+  Linux, ADR-0004 D-2). Test.
+- A-11 (P14) Samples are T seconds apart start to start; sample_times stay
+  the record.
+- A-12 (P15, Q-9) doctor `host` on macOS is UNSURE: "homes only; no live
+  reader".
+- A-13 (P16) The test's constant is named right (DNS_INFO_NO_RECORDS 9501).
+- A-14 Accepted as built: Q-4 (GetProcessTimes, ISO UTC), Q-5, Q-6 (refuse),
+  Q-7 (a later failed snapshot: hole + incomplete), Q-8 (with A-1), Q-10,
+  Q-11, Q-12. Q-13: ADR-0004 gets a dated note under A-1 that "Windows is
+  read from exported files only" is superseded by ADR-0007 M7.1 (the Table
+  writes it in this commit).
+- A-15 Recorded: P8 (the host's own logs see the reader's handle opens and
+  DNS calls: a watcher that is logged is right; a THREAT_MODEL line at the
+  docs pass), P9 (NO_WIRE_QUERY rests on the API's word; the DnsCache
+  service's behaviour is not observed), P17, P18 (no cwd live on Windows:
+  M7.2's hook attachment on Windows needs another source for the project).
+- A-16 Every REDO change carries a test for the behaviour it adds (D-8).
