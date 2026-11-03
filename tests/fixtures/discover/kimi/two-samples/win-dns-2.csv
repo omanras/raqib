@@ -1,0 +1,6 @@
+# M5.0b fixture SYNTHETIC (not captured from a machine) - the shape of the Kimi field test (docs/review/2026-11-02-field-note-kimi-discover.md), invented lines; host `host`, sample 2 of the README loop (10 s apart); in the shape of: Get-DnsClientCache | ConvertTo-Csv -NoTypeInformation, columns Entry; RecordName; RecordType; Status; Section; TimeToLive; DataLength; Data. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"Entry","RecordName","RecordType","Status","Section","TimeToLive","DataLength","Data"
+"api.moonshot.ai","api.moonshot.ai","A","0","1","552","4","203.0.113.40"
+"update.example.com","update.example.com","CNAME","0","1","1800","8","edge.example.net"
+"update.example.com","edge.example.net","A","0","1","1800","4","198.51.100.23"
+"www.example.org","www.example.org","A","0","1","3000","4","198.51.100.99"

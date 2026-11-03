@@ -238,3 +238,58 @@ independent reviews of the same tree.
 - Table ledger for M5.0: ADR-0004 line 20 overclaimed (D-7); the handoff
   criteria were left to code in B-7 and had to move to the catalog in D-5;
   two REDO rounds, both from reviewers, none from the Table's own reading.
+
+## Amendment F (2026-11-03) - M5.0b as built (builder's record, not a ruling)
+What M5.0b built after the Kimi field test (field note
+2026-11-02-field-note-kimi-discover.md), so the review can hold the tree to
+it. Open points are questions in `docs/review/2026-11-03-M5.0b.md`, not
+settled here.
+- F-1 Windows window (E1). The README export is a PowerShell loop of `$N`
+  samples `$T` seconds apart (6 and 10), one file per kind and sample:
+  `win-process-<k>.csv`, `win-tcp-<k>.csv`, `win-dns-<k>.csv`. It writes a
+  `run.json` first, `{"raqib": "discover-run", "version": 1, "export":
+  "windows", "samples": N, "seconds_apart": T}`. A sample is a source of its
+  own, named like its file (`win-tcp-2`), so every cite names the file it
+  is in (A5). The samples are merged by pid, as the Linux window merges its
+  snapshots, and a "window merge" hole says a reused pid joins two
+  processes. Every sample 1..N needs its process and connection file: a
+  missing one is an unread source, a hole and incomplete (exit 3), never
+  skipped (A3). N comes from run.json; without one, from the highest sample
+  found, and a hole says a loop cut short is then not seen. `--save`'s
+  run.json records the sample count too. The M5.0 single files are read as
+  before.
+- F-2 Recent talk, owner unknown (E2). A TIME-WAIT row with no owner
+  (OwningProcess 0; inode 0, so no pid) to a catalog endpoint - by network,
+  loopback port, or a name the host's own DNS record gives that IP - and a
+  DNS cache row (no pid) for a catalog host whose IPs no known owner talks
+  to. One line per remote, or per host name for a DNS row alone, with cites.
+  Never a candidate or an act-root, and no alarm. The liveness hole, said
+  every run, now names connections and recent talk.
+- F-3 Act-root (E3), a signature in the catalog's `act_root` block (kind,
+  evasion, fp_budget 0.25, user_dirs, shells, not_images, fixtures; the
+  loader enforces them). A process P is an act-root when its image path
+  (Windows ExecutablePath; Linux argv[0]) matches a user_dirs glob, none of
+  its images is a listed shell or system image, it has a listed shell as a
+  child with a command (a process that is no listed shell) below that
+  shell, and P owns no talking connection in any sample read. The reader's
+  own tree is never evidence. Exit 1, with the same cites as a candidate's
+  acts, and the candidate its acts go to. Talk in any sample makes P a
+  talker, so it is a candidate instead (the merge); recent talk never does.
+  Act-roots are judged only when a process and a connection source both
+  hold records; otherwise a hole says they are not judged. A footprint
+  links to an act-root (after a candidate whose root has the name), so an
+  acting agent's footprint is not AGENT-DARK.
+- F-4 `raqib discover --check [--fixtures-root DIR]` (E4) runs every
+  fixture the act_root block names: a positive must show its act-root, or
+  its program promoted to a candidate; a negative is a benign export. A
+  negative is measured when complete or when the class fired on it. Exit 1
+  when act-root is over its budget, a positive is missed, or nothing is
+  measured. Candidates are counted on the same negatives; the anchor
+  declares no budget (B-8). First numbers: act-root 0 of 2, candidates 2 of
+  2.
+- F-5 Fixtures (E4, E5) are synthetic, made by
+  `tests/fixtures/discover/synthetic.py` and held to it by a test, each with
+  the B-9 redaction note: `kimi/one-sample`, `kimi/two-samples`,
+  `benign/linux-desktop`, `benign/windows-desktop`. The catalog lists the
+  Moonshot hosts (api.moonshot.ai, api.moonshot.cn, api.kimi.com) since the
+  blind field test has run; a blind run uses a catalog copy, as B-10 did.

@@ -8,9 +8,14 @@
 # one thing an adversary can read and route around (ADR-0004); `evasion:`
 # says how.
 #
-# Kimi / Moonshot endpoints are deliberately not listed: ADR-0004's first field
-# test runs "with no prior knowledge of Kimi". The ~/.kimi footprint is listed
-# because ADR-0004 layer 4 names it. See docs/review/2026-11-02-M5.0-questions.md.
+# Kimi / Moonshot hosts were left out until ADR-0004's first field test, which
+# ran "with no prior knowledge of Kimi" (B-10; field note
+# docs/review/2026-11-02-field-note-kimi-discover.md). M5.0b lists them, so a
+# DNS cache row or a TIME-WAIT row to them is recent talk (E2). A blind test
+# runs with a --catalog copy without them, as B-10 did.
+#
+# act_root (M5.0b E3) is the one block that judges a tree: a weaker class than
+# a candidate, a signature because the image path is the process's own record.
 id: DISCOVER-CATALOG
 kind: signature
 evasion:
@@ -45,6 +50,9 @@ hosts:
   - {match: api.fireworks.ai, vendor: fireworks}
   - {match: "*.githubcopilot.com", vendor: github-copilot}
   - {match: "*.cursor.sh", vendor: cursor}
+  - {match: api.moonshot.ai, vendor: moonshot, note: "Kimi; from the vendor's documentation, not re-checked offline"}
+  - {match: api.moonshot.cn, vendor: moonshot, note: "Kimi; from the vendor's documentation, not re-checked offline"}
+  - {match: api.kimi.com, vendor: moonshot, note: "Kimi Code; from the vendor's documentation, not re-checked offline"}
 # Model API networks, matched by IP (the only endpoint match Linux has
 # offline in M5.0).
 networks:
@@ -96,3 +104,42 @@ footprints:
 # Variable NAMES in a process environment (never values; E4).
 env:
   - "*_API_KEY"
+# Act-root (M5.0b E3; ADR-0004 Amendment F): "act root, talk not seen". A
+# process whose image path is under a user directory, that is not a listed
+# shell or system image, has a listed shell as a child, and that shell has a
+# command below it; and the process owns no talking connection in any sample.
+# A later sample in which it talks makes it a candidate instead (the window
+# merge); recent talk (a TIME-WAIT row or a DNS cache row, owner unknown)
+# never does. Exit 1, like a candidate. fp_budget is measured by
+# `raqib discover --check` on the fixtures below (A6).
+act_root:
+  kind: signature
+  fp_budget: 0.25
+  # Image paths, lower case, with '\' read as '/'; fnmatch globs ('*' also
+  # matches '/'). Users\<name> on any drive, macOS /Users, /home, root's home,
+  # a literal ~, and AppData anywhere.
+  user_dirs: ["?:/users/*/*", "/users/*/*", "/home/*/*", "/root/*", "~/*", "*/appdata/*"]
+  # The head of a chain. A program named like one is never an act-root.
+  shells: [sh, bash, dash, zsh, ksh, fish, cmd, powershell, pwsh]
+  # System images, and the terminal hosts and multiplexers that run the
+  # user's own shell. A program named like one is never an act-root.
+  not_images: [explorer, conhost, openconsole, windowsterminal, wt, mintty, sshd, tmux, screen, gnome-terminal-server, konsole, xterm, kitty, alacritty, wezterm-gui]
+  evasion:
+    - "install under Program Files, /usr, /opt or any other directory not in user_dirs: the image is not in a user directory"
+    - "a shell-looking name: a program named like a listed shell or a listed system image (bash.exe, cmd.exe, tmux) is never an act-root"
+    - "talking through a child: a root whose connections a child owns is never seen to talk, so it stays an act-root and is not promoted; the chain beside that child is the anchor's sibling-talker hole"
+    - "no listed shell in the chain: a command started directly (git, python, curl) or through an unlisted shell (tcsh, nu, a renamed copy) makes no chain"
+    - "a chain alive only between samples: the shell and its command must be alive at a sample (liveness)"
+    - "an interpreter outside the user directories running a script inside one (node from Program Files, python from /usr): the image is the interpreter"
+    - "Linux: argv[0] is the process's own text; a relative one (a program run through PATH) is not placed, and /proc/PID/exe is not read"
+  # Fixture directories, relative to a checkout (as the rules' fixtures are).
+  # positive: act_root names an act-root that must be found; promoted names a
+  # program that must be a candidate and not an act-root. negative: benign
+  # exports; an act-root on one is a false positive.
+  fixtures:
+    positive:
+      - {dir: tests/fixtures/discover/kimi/one-sample, act_root: kimi}
+      - {dir: tests/fixtures/discover/kimi/two-samples, promoted: kimi}
+    negative:
+      - tests/fixtures/discover/benign/linux-desktop
+      - tests/fixtures/discover/benign/windows-desktop

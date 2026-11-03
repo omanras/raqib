@@ -1,0 +1,8 @@
+{
+    "note":  "M5.0b fixture SYNTHETIC (not captured from a machine) - a benign Windows desktop: explorer, OneDrive, VS Code (user install), Edge; host `host`, the README loop with N = 2. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only",
+    "raqib":  "discover-run",
+    "version":  1,
+    "export":  "windows",
+    "samples":  2,
+    "seconds_apart":  10
+}

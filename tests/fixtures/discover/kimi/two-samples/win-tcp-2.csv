@@ -1,0 +1,8 @@
+# M5.0b fixture SYNTHETIC (not captured from a machine) - the shape of the Kimi field test (docs/review/2026-11-02-field-note-kimi-discover.md), invented lines; host `host`, sample 2 of the README loop (10 s apart); in the shape of: Get-NetTCPConnection | ConvertTo-Csv -NoTypeInformation, columns LocalAddress; LocalPort; RemoteAddress; RemotePort; State; OwningProcess; CreationTime. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"LocalAddress","LocalPort","RemoteAddress","RemotePort","State","OwningProcess","CreationTime"
+"0.0.0.0","135","0.0.0.0","0","Listen","912","11/2/2026 8:01:10 AM"
+"0.0.0.0","445","0.0.0.0","0","Listen","4","11/2/2026 8:01:12 AM"
+"::","135","::","0","Listen","912","11/2/2026 8:01:10 AM"
+"192.0.2.10","49812","198.51.100.23","443","Established","6636","11/2/2026 10:12:40 AM"
+"192.0.2.10","50431","203.0.113.40","443","Established","10728","11/2/2026 10:29:24 AM"
+"192.0.2.10","50420","203.0.113.40","443","TimeWait","0",

@@ -47,13 +47,23 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       outside config space, each claim with its cited lines. Without
       --from/--read it reads this host (Linux: /proc and /proc/net/tcp, ss
       by absolute path only as fallback; elsewhere the homes only), offline
-      and read-only. Exit 1 when a candidate, an AGENT-DARK footprint or an
-      unread line is found, or nothing was read; 3 when a process or
-      connection source failed (even in one sample), held no record, or left
-      a talking line without an owner; 0 only when those sources were
-      complete and nothing was seen (not a clearance); 2 on bad input.
+      and read-only. Exit 1 when a candidate, an act-root, an AGENT-DARK
+      footprint or an unread line is found, or nothing was read; 3 when a
+      process or connection source failed (even in one sample), held no
+      record, or left a talking line without an owner; 0 only when those
+      sources were complete and nothing was seen (not a clearance); 2 on bad
+      input. An act-root (M5.0b) is a program in a user directory running a
+      shell that runs a command, with no talk of its own seen; recent talk
+      (a TIME-WAIT or DNS cache row, owner unknown) is shown, never judged.
       --save DIR writes the texts and a run.json (each source's error, the
-      live holes); --from DIR replays them, incomplete if the run was.
+      live holes, the sample count); --from DIR replays them, incomplete if
+      the run was, or reads the README's Windows loop (win-*-<k>.csv for
+      each sample k, and its run.json) and merges the samples.
+  discover --check [--fixtures-root DIR] [--json] [-o FILE]
+      Measure candidates and act-roots on the fixtures the catalog's act_root
+      block names, against act-root's fp_budget (A6; candidates declare
+      none). Exit 0 when act-root is within it and every positive is found,
+      1 otherwise, 2 when DIR (default: this checkout) holds no fixtures.
   watch [PROJECT] [--log PATH] [--no-open] [--no-notify] [--port N] [--refresh N]
       Watch a project (M6.1, ADR-0005; default: the current directory):
       install the hooks (idempotent; the installer's lines are printed),
@@ -183,7 +193,9 @@ def _parser():
     e.add_argument("-o", "--out", metavar="FILE", help="write the result here (default: stdout)")
     d = sub.add_parser("discover", help="find AI agents on a host by what they do (ADR-0004)")
     d.add_argument("--from", dest="from_dir", metavar="DIR",
-                   help="read the source texts in DIR: %s" % ", ".join(discover.FILE_NAMES[k] for k in discover.SOURCES))
+                   help="read the source texts in DIR: %s, and the samples of the README's Windows loop"
+                        " (win-process-<k>.csv, win-tcp-<k>.csv, win-dns-<k>.csv, run.json)"
+                        % ", ".join(discover.FILE_NAMES[k] for k in discover.SOURCES))
     d.add_argument("--read", action="append", default=[], metavar="KIND=FILE",
                    help="read one source text; KIND is one of %s (repeatable)" % ", ".join(discover.SOURCES))
     d.add_argument("--window", type=float, default=0.0, metavar="S",
@@ -196,6 +208,12 @@ def _parser():
                                                  " --from DIR and check every cited line (A5)")
     d.add_argument("--json", action="store_true", help="print the inventory as JSON")
     d.add_argument("-o", "--out", metavar="FILE", help="write the inventory here (default: stdout)")
+    d.add_argument("--check", action="store_true",
+                   help="measure candidates and act-roots on the catalog's act_root fixtures against act-root's"
+                        " fp_budget (A6); exit 1 when over it or a positive is missed")
+    d.add_argument("--fixtures-root", default=None, metavar="DIR",
+                   help="--check: a Raqib checkout; the fixture paths (tests/fixtures/discover/...) are relative to"
+                        " it (default: the checkout this raqib runs from; an installed raqib has no fixtures)")
     w = sub.add_parser("watch", help="install the hooks, watch the trace live, notify, serve the page (M6.1)")
     w.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     w.add_argument("--log", metavar="PATH", help="the trace (default: one outside the project)")
@@ -571,6 +589,10 @@ def cmd_discover(args, out):
         raise UsageError(str(exc))
     if not (args.window >= 0 and args.window != float("inf")):
         raise UsageError("--window must be a finite number of seconds >= 0")
+    if args.check:
+        return _discover_check(args, catalog, out)
+    if args.fixtures_root:
+        raise UsageError("--fixtures-root applies to --check only")
     texts, holes = {}, []
     if args.from_dir:
         if not os.path.isdir(args.from_dir):
@@ -580,7 +602,7 @@ def cmd_discover(args, out):
         except ValueError as exc:
             raise UsageError(str(exc))
         if not texts:
-            raise UsageError("--from %s: none of %s is there" % (
+            raise UsageError("--from %s: none of %s, nor a numbered sample (win-tcp-1.csv, ...), is there" % (
                 args.from_dir, ", ".join(discover.FILE_NAMES[k] for k in discover.SOURCES)))
     paths = {}
     for spec in args.read:
@@ -596,10 +618,10 @@ def cmd_discover(args, out):
             raise UsageError("--save and --home apply to a live run (no --from, no --read)")
         inv = discover.run(texts, catalog, window=args.window, holes=holes)
     else:
-        texts, holes = discover.collect_live(catalog, window=args.window, homes=args.home)
+        texts, holes, samples = discover.collect_live(catalog, window=args.window, homes=args.home)
         if args.save:
             try:
-                written = discover.save(texts, args.save, holes)
+                written = discover.save(texts, args.save, holes, samples)
             except OSError as exc:
                 raise UsageError("cannot write %s: %s" % (args.save, exc))
             sys.stderr.write("raqib: texts read -> %s (repeat with --from %s)\n" % (", ".join(written), args.save))
@@ -616,6 +638,34 @@ def cmd_discover(args, out):
     else:
         out.write(text)
     return inv["exit"]
+
+
+def _discover_check(args, catalog, out):
+    """M5.0b E4: discover --check, as check-rules measures the rules (A6)."""
+    if args.from_dir or args.read or args.save or args.home or args.window:
+        raise UsageError("--check measures the catalog's fixtures: it takes no --from, --read, --save, --home"
+                         " or --window")
+    root = os.path.abspath(args.fixtures_root) if args.fixtures_root else discover.ROOT
+    if not os.path.isdir(os.path.join(root, "tests", "fixtures")):
+        raise UsageError("no discover fixtures in %s: --check measures on the fixtures of a Raqib checkout, which an"
+                         " installed raqib does not carry; pass --fixtures-root CHECKOUT"
+                         % os.path.join(root, "tests", "fixtures"))
+    try:
+        report = discover.check(catalog, root)
+    except ValueError as exc:
+        raise UsageError(str(exc))
+    text = (json.dumps(report, indent=2, sort_keys=True, ensure_ascii=True) + "\n" if args.json
+            else discover.render_check(report))
+    if args.out:
+        try:
+            with open(args.out, "w", encoding="ascii", errors="backslashreplace") as f:
+                f.write(text)
+        except OSError as exc:
+            raise UsageError("cannot write %s: %s" % (args.out, exc))
+        out.write("raqib: discover check -> %s (exit %d)\n" % (args.out, report["exit"]))
+    else:
+        out.write(text)
+    return report["exit"]
 
 
 def cmd_watch(args, out):
