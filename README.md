@@ -53,17 +53,18 @@ A check that cannot be made on this host is UNSURE, counted apart and never a fa
    sha256 only, plus a small extract: the path, the URL host, the program
    names of a Bash command (never its arguments), and the names of secret
    patterns seen in the output.
-2. **Rules.** Twelve rules turn the trace into findings, and every finding
-   cites the trace lines behind it (A5). The rules are 5 silence rules and
-   7 YAML rules in `raqib/rules/catalog`. Each YAML rule declares its
-   false-positive budget and is measured against fixtures (A6); the silence
-   rules have no budget yet.
+2. **Rules.** Thirteen rules turn the trace into findings, and every finding
+   cites the trace lines behind it (A5). The rules are 5 silence rules, 1
+   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 7 YAML rules
+   in `raqib/rules/catalog`. Each YAML rule declares its false-positive
+   budget and is measured against fixtures (A6); CROSS-SOURCE declares 0.1
+   until a field test, and the silence rules have no budget yet.
 3. **Suspicion (optional).** A local or API model reads windows of the
    trace metadata. It can raise suspicion with citations; it cannot clear
    anything.
 4. **Report.** Text, JSON, or a read-only HTML page. Every line names its
-   capture source (`hook`; `proxy` for another agent, below), and the report
-   names it on every finding.
+   capture source (`hook`; `proxy` for another agent; `os` for what Sysmon
+   saw on Windows; both below), and the report names it on every finding.
 
 ## Manual steps
 The steps before `raqib watch` existed, from a checkout, one command at a time.
@@ -107,6 +108,7 @@ design, a quiet minute is reported, not assumed harmless.
 | DESTRUCT-CMD | rm, dd, shred, mkfs and the like anywhere in a Bash command |
 | SECRET-OUTPUT | a key, token or private key in a tool's output (by pattern name; the text is never stored) |
 | DRIFT-FILES | edits to more than two files outside the task's declared scope |
+| CROSS-SOURCE | only in a trace with `os` lines: a shell call with no os process of its programs (or a shell) in the 10 s after it; an os process below the agent's own children that no shell call named in the 10 s before it (below) |
 
 ## What it cannot see
 Content, by design. So the rules miss these:
@@ -118,7 +120,9 @@ Content, by design. So the rules miss these:
 - a symlink out of the project;
 - a secret the agent writes rather than reads;
 - an agent that rewrites the trace or switches the hooks off and then
-  stays quiet.
+  stays quiet;
+- with the os source, acts the agent runs as its own direct children
+  rather than through a shell: CROSS-SOURCE does not judge them.
 On 50 labelled events the rules miss 9 bad events and flag 8 of 25 benign
 ones (`docs/review/2026-10-16-M2.2-baseline.md`). On the rule fixtures
 `raqib check-rules` finds SCOPE-PATH firing on 0 of 10 benign files and
@@ -143,6 +147,7 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib suspect TRACE --backend anthropic --allow-fallback` | lets another model answer a window the requested model refuses; off by default, and such answers are labelled (`answered_by`) and counted |
 | `raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events: a checkout's tests/fixtures/eval/events.json or --events FILE (an installed raqib has none and exits 2) |
 | `raqib proxy --listen 127.0.0.1:PORT --upstream URL --log TRACE [--cwd DIR]` | relay another agent's model API calls and record its tool calls (below) |
+| `raqib os-sysmon --root PID --log TRACE [--from FILE.xml] [--cwd DIR]` | record what Sysmon saw the agent's process tree do (below); exit 1 when it wrote a `RAQIB-SILENCE:` line, 2 off Windows without `--from` |
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source
@@ -213,6 +218,61 @@ raqib report ~/.raqib/traces/kimi.jsonl           # when the run is over
 written before M5.2 carry no `source` and read as `hook`, and one trace
 may hold both. The synthetic recorded sessions, an OpenAI-style and an
 Anthropic-style one, are in `tests/fixtures/proxy/`.
+
+## Watch what the system saw (os-sysmon)
+The hook and the proxy record what the agent asked for. On Windows, Sysmon
+records what its process tree did, and the agent does not write that record
+([ADR-0003](docs/specs/ADR-0003-capture-sources.md), Amendment C). Give the
+agent's process id (Task Manager, or `Get-Process`) and the trace:
+```powershell
+raqib os-sysmon --root 4100 --log $HOME\.raqib\traces\proj.jsonl --cwd C:\work\proj
+wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml > sysmon.xml   # or export the log, and on any system:
+raqib os-sysmon --root 4100 --log trace.jsonl --from sysmon.xml --cwd C:\work\proj
+raqib report $HOME\.raqib\traces\proj.jsonl
+```
+- **What it reads.** Sysmon events 1 (process create), 11 (file create) and
+  3 (network connect) of the tree under the pid: the root, and every
+  process whose parent is in the tree (the ProcessGuid keeps a reused pid
+  out). Live, it runs `C:\Windows\System32\wevtutil.exe` by that path,
+  read-only, once, and exits; it does not follow the log. On Linux and macOS
+  it reads only `--from` (else exit 2).
+- **What it records.** One session, `os-PID`, with a `pre` and a `post` per
+  event at the time of the act, `source: "os"`, tool `process`, `file` or
+  `net`. Hashes of the command line, the path or the destination, never the
+  text; the program name (`bash.exe`) and its depth below the root; the
+  path, redacted as the hook redacts it; the destination port and whether
+  it is private. `cwd` is `--cwd DIR`, else the root's own directory in its
+  event 1, else os-sysmon's. A second run appends the events again: reruns
+  are not deduplicated, and the duplicates are visible.
+- **Silence.** The log cannot be read (no Sysmon, no channel, no rights), an
+  event cannot be read, the export holds no event 1 or no event 11, or the
+  pid is in no event: one `RAQIB-SILENCE:` line each, in the trace and on
+  stderr, and exit 1. Sysmon logs network connections only when installed
+  with `-n` (for example `sysmon64 -accepteula -i -n`): an export with no
+  event 3 makes the report INCOMPLETE (exit 3), not an alarm.
+- **CROSS-SOURCE.** When one trace holds os lines and hook or proxy lines,
+  a shell call with no os process of one of its programs or of a shell
+  (bash, sh, zsh, dash, ksh, fish, cmd, powershell, pwsh) in the 10 s after
+  it is "asked, not done"; an os process below the agent's own children
+  whose program no shell call named in the 10 s before it is "done, not
+  asked". A shell call is a `pre` of `Bash` or of any tool whose name, in
+  lower case, holds `bash`, `shell`, `execute_command`, `run_command` or
+  `cmd`; program names are compared in lower case without `.exe`, `.cmd` or
+  `.bat`. A line outside the time span of the other source is a partial
+  note. A trace with no os line is not judged and gets no note. The agent's
+  own direct children (its helpers: a search tool's `rg`, `git`, MCP
+  servers, and the shell it starts) are not judged: an agent that runs its
+  acts that way is a known hole. SILENCE-GAP and SILENCE-ORDER do not judge
+  a session of os lines only, and SECRET-OUTPUT and NET-TOOL do not judge
+  os lines.
+- **What it cannot see.** What a process does inside itself, tools that
+  never start a process or touch a file (memory only), and whatever the
+  Sysmon configuration leaves out; see
+  [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+The synthetic export (host `host`, user `user`, documentation addresses) is
+`tests/fixtures/os/sysmon-synthetic.xml`, and the four CROSS-SOURCE fixtures
+are in `tests/fixtures/cross/`; a real export under your configuration is a
+field test.
 
 ## Find the agents on a host (discover)
 `raqib discover` looks for AI agents it has never heard of

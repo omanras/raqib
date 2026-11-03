@@ -28,6 +28,12 @@ pure function: it reads only its arguments and returns new dicts.
                  tool lines and no session_start is not judged by any rule
                  yet (SILENCE-NOSTART, M4.3).
 
+Sessions of the os source only (every record `source: "os"`; M5.3, ruling
+C-5 of ADR-0003 Amendment C) are not judged by SILENCE-GAP or SILENCE-ORDER:
+os-sysmon writes the time of each act, so a pause of the tree is not a
+capture gap, and a rerun appends events with earlier times. Known hole: an
+idle os source is not judged. The other three rules judge os sessions.
+
 Each rule declares its kind in code (ADR-0002), in RULE_KINDS, and every
 finding carries it. All five are demands: each requires evidence of an act
 (a line within the gap, a close, the other half of a call, a seq and ts that
@@ -43,7 +49,7 @@ from __future__ import annotations
 
 import math
 
-from raqib.rules.trace import is_record, parse_ts
+from raqib.rules.trace import is_record, parse_ts, source_of
 
 DEFAULT_GAP_SECONDS = 60
 MAX_GAP_SECONDS = 7 * 24 * 3600  # a larger limit would switch SILENCE-GAP off in practice
@@ -59,6 +65,7 @@ RULE_KINDS = {  # ADR-0002: rule id -> kind; a rule not listed here cannot emit
     "SILENCE-EMPTY": "demand",
 }
 WORK = ("pre", "post", "stop")  # SILENCE-EMPTY: lines that show a session did something
+OS_SOURCE = "os"  # sessions of this source only are not judged by GAP and ORDER (M5.3 C-5)
 
 
 def gap_seconds_from(environ):
@@ -92,10 +99,11 @@ def findings(lines, gap_seconds=DEFAULT_GAP_SECONDS):
             sessions.setdefault(rec["session_id"], []).append(rec)
     out = []
     for session_id, recs in sessions.items():
-        found = _gaps(session_id, recs, gap_seconds)
+        os_only = all(source_of(r) == OS_SOURCE for r in recs)   # C-5: an os session is event-timed
+        found = [] if os_only else _gaps(session_id, recs, gap_seconds)
         found += _open(session_id, recs)
         found += _halves(session_id, recs)
-        found += _order(session_id, recs)
+        found += [] if os_only else _order(session_id, recs)
         found += _empty(session_id, recs)
         found.sort(key=lambda f: (f["cited_seq"][0], f["rule_id"]))
         out += found

@@ -26,10 +26,11 @@ LEAK = "fal" + "ak.git"
 # The scratch repository's own test suite: one test that passes.
 SCRATCH_TESTS = {"tests/test_ok.py": "def test_ok():\n    pass\n"}
 # M4.1 E4: the rule-kinds check loads the catalog with the checkout's own
-# loader and reads report.SILENCE_RULES, so every scratch repository holds a
-# copy of raqib/rules, its catalog and raqib/report.py.
+# loader and reads report.SILENCE_RULES (and, M5.3, report.CROSS_RULES and
+# cross.RULE_KINDS), so every scratch repository holds a copy of
+# raqib/rules, its catalog and raqib/report.py.
 RULE_FILES = ["raqib/__init__.py", "raqib/report.py", "raqib/rules/__init__.py"] + [
-    "raqib/rules/%s.py" % name for name in ("engine", "yamlite", "trace", "silence")] + sorted(
+    "raqib/rules/%s.py" % name for name in ("engine", "yamlite", "trace", "silence", "cross")] + sorted(
     p.relative_to(ROOT).as_posix() for p in (ROOT / "raqib" / "rules" / "catalog").glob("*.yaml"))
 RULES_BASE = {rel: (ROOT / rel).read_bytes() for rel in RULE_FILES}
 SCRATCH_BASE = dict({"raqib/suspect/backends.py": BACKEND}, **RULES_BASE)
@@ -222,7 +223,7 @@ def kinds_line(out):
 def test_m41_e4_the_gate_prints_one_kinds_line_and_stays_green(tmp_path):
     code, out = gate(tmp_path, {})
     assert code == 0, out
-    assert kinds_line(out) == "[gate] rule kinds: signature=4 demand=5 anchor=3"
+    assert kinds_line(out) == "[gate] rule kinds: signature=4 demand=5 anchor=4"
     # B-5 (K14): the first gate line after the secret scan.
     order = [line for line in out.splitlines() if line.startswith("[gate] ") and not line.startswith("[gate]  ")]
     assert order[:3] == ["[gate] secret scan", kinds_line(out), "[gate] handoff length"]
@@ -231,6 +232,7 @@ def test_m41_e4_the_gate_prints_one_kinds_line_and_stays_green(tmp_path):
 
 CATALOG_REL = "raqib/rules/catalog/"
 SILENCE_REL = "raqib/rules/silence.py"
+CROSS_REL = "raqib/rules/cross.py"
 ENGINE_REL = "raqib/rules/engine.py"
 REPORT_REL = "raqib/report.py"
 RULES_INIT_REL = "raqib/rules/__init__.py"
@@ -260,6 +262,13 @@ RULES_INIT_REL = "raqib/rules/__init__.py"
     # B-5 (K11): a silence rule the report lists but silence.py gives no kind.
     ({REPORT_REL: real_text(REPORT_REL).replace('SILENCE_RULES = (\n', 'SILENCE_RULES = (\n    ("SILENCE-NEW", "x"),\n')},
      "RED: rule kinds: report.SILENCE_RULES names SILENCE-NEW, with no kind in silence.RULE_KINDS"),
+    # M5.3 (ruling C-1): the cross-source rule's kind is read from cross.RULE_KINDS.
+    ({CROSS_REL: real_text(CROSS_REL).replace('RULE_KINDS = {RULE_ID: "anchor"}', 'RULE_KINDS = {RULE_ID: "heuristic"}')},
+     "RED: rule kinds: no kind (one of signature|demand|anchor) for CROSS-SOURCE"),
+    ({CROSS_REL: real_text(CROSS_REL).replace("RULE_KINDS = {", "OTHER_NAME = {")},
+     "RED: rule kinds: raqib/rules/cross.py declares no RULE_KINDS"),
+    ({REPORT_REL: real_text(REPORT_REL).replace('CROSS_RULES = (\n', 'CROSS_RULES = (\n    ("CROSS-NEW", "x"),\n')},
+     "RED: rule kinds: report.CROSS_RULES names CROSS-NEW, with no kind in cross.RULE_KINDS"),
     ({CATALOG_REL + "NET-EXTRA.yml": real_text(CATALOG_REL + "NET-TOOL.yaml")},
      "RED: rule kinds: rule files must end in .yaml: raqib/rules/catalog/NET-EXTRA.yml"),
     ({rel: None for rel in RULE_FILES if rel.startswith(CATALOG_REL)},
@@ -268,7 +277,8 @@ RULES_INIT_REL = "raqib/rules/__init__.py"
      "RED: rule kinds: cannot import raqib.rules from this checkout"),
 ], ids=["kind-missing", "kind-unknown", "signature-without-evasion", "evasion-on-an-anchor",
         "fourth-kind-in-the-loader", "silence-rule-without-kind", "silence-declares-nothing",
-        "report-silence-rule-without-kind", "tracked-yml", "no-catalog", "no-rules-in-the-checkout"])
+        "report-silence-rule-without-kind", "cross-rule-without-kind", "cross-declares-nothing",
+        "report-cross-rule-without-kind", "tracked-yml", "no-catalog", "no-rules-in-the-checkout"])
 def test_m41_e4_a_rule_without_a_kind_turns_the_gate_red(tmp_path, files, red):
     code, out = gate(tmp_path, files)
     assert code == 1, out
@@ -281,7 +291,7 @@ def test_m41_b5_the_catalog_is_the_tracked_rule_files(tmp_path):
     from the working tree is RED."""
     bad = without(CATALOG_REL + "NET-TOOL.yaml", "kind:").replace("id: NET-TOOL", "id: NET-UNTRACKED")
     code, out = gate(tmp_path / "untracked", {}, untracked={CATALOG_REL + "NET-UNTRACKED.yaml": bad})
-    assert code == 0 and kinds_line(out) == "[gate] rule kinds: signature=4 demand=5 anchor=3", out
+    assert code == 0 and kinds_line(out) == "[gate] rule kinds: signature=4 demand=5 anchor=4", out
     # A second repository, not rmtree of the first: git's object files are read-only on Windows.
     repo = scratch(tmp_path / "deleted", {})
     (repo / CATALOG_REL / "NET-TOOL.yaml").unlink()
@@ -319,7 +329,7 @@ def test_m41_b2_planted_standard_library_names_are_not_imported(tmp_path, monkey
     text = io.StringIO()
     with contextlib.redirect_stdout(text):
         module.rule_kinds(files)
-    assert text.getvalue() == "[gate] rule kinds: signature=4 demand=5 anchor=3\n"
+    assert text.getvalue() == "[gate] rule kinds: signature=4 demand=5 anchor=4\n"
     assert sorted(p.name for p in repo.glob("*.imported")) == []
     assert sorted(planted) == sorted("%s.py" % n for n in module.PREIMPORT) and "json.py" in planted
 
@@ -331,7 +341,7 @@ def test_m41_b2_the_child_puts_the_checkout_at_the_end_of_sys_path(tmp_path):
     request = json.dumps({"root": str(repo), "catalog": [CATALOG_REL + "NET-TOOL.yaml"]})
     proc = subprocess.run([sys.executable, "-I", str(GATE_PY), "--rule-kinds-child"], input=request,
                           capture_output=True, text=True, timeout=120)
-    assert (proc.returncode, proc.stdout) == (0, "rule kinds: signature=1 demand=5 anchor=0\n"), proc
+    assert (proc.returncode, proc.stdout) == (0, "rule kinds: signature=1 demand=5 anchor=1\n"), proc
     path = json.loads(record.read_text())
     assert path[-1] == str(repo) and path.count(str(repo)) == 1 and "" not in path
 
@@ -352,12 +362,13 @@ def test_m41_b2_preimport_covers_every_standard_module_the_rules_import():
 
 def test_m41_e4_the_gate_counts_the_real_tree(monkeypatch):
     monkeypatch.setattr(sys, "path", [str(ROOT)] + sys.path)
-    from raqib.rules import engine, silence
+    from raqib.rules import cross, engine, silence
     module = gate_module()
     assert module.KINDS == engine.KINDS == ("signature", "demand", "anchor")
     rules = engine.load_catalog(ROOT / "raqib" / "rules" / "catalog")
-    kinds = [r.kind for r in rules] + list(silence.RULE_KINDS.values())
+    kinds = [r.kind for r in rules] + list(silence.RULE_KINDS.values()) + list(cross.RULE_KINDS.values())
     expected = "rule kinds: " + " ".join("%s=%d" % (k, kinds.count(k)) for k in engine.KINDS)
+    assert expected == "rule kinds: signature=4 demand=5 anchor=4"   # M5.3 C-9
     monkeypatch.chdir(ROOT)
     text = io.StringIO()
     with contextlib.redirect_stdout(text):
@@ -370,12 +381,24 @@ def test_m41_e4_rules_imported_from_elsewhere_are_red(tmp_path):
     (an installed raqib): modules that come from elsewhere are RED."""
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
-    for name in ("engine", "yamlite", "trace", "silence"):
+    for name in ("engine", "yamlite", "trace", "silence", "cross"):
         shutil.copy(ROOT / "raqib" / "rules" / ("%s.py" % name), elsewhere)
     redirect = real_text(RULES_INIT_REL) + "__path__.insert(0, %r)\n" % str(elsewhere)
     code, out = gate(tmp_path, {RULES_INIT_REL: redirect})
     assert code == 1, out
     assert re.search(r"\[gate\] RED: rule kinds: raqib\.rules\.engine was imported from .*, not from this checkout",
+                     out), out
+
+
+def test_m53_c1_a_cross_rule_imported_from_elsewhere_is_red(tmp_path):
+    """C-1: cross.RULE_KINDS is counted only from the checkout's own cross.py."""
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    shutil.copy(ROOT / "raqib" / "rules" / "cross.py", elsewhere)
+    redirect = real_text(RULES_INIT_REL) + "__path__.insert(0, %r)\n" % str(elsewhere)
+    code, out = gate(tmp_path, {RULES_INIT_REL: redirect})
+    assert code == 1, out
+    assert re.search(r"\[gate\] RED: rule kinds: raqib\.rules\.cross was imported from .*, not from this checkout",
                      out), out
 
 

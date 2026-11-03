@@ -15,7 +15,9 @@ Capture sources (ADR-0003, M5.2): a record names the source that wrote it,
 "hook", "proxy" or "os". A record without the field was written by the hook
 (every trace before M5.2), so source_of() reads it as "hook". Records are
 returned exactly as they were read: nothing is added to them, so an old
-trace loads as it always did.
+trace loads as it always did. An os session_start may carry
+`missing_events`, the Sysmon event ids its export did not hold (M5.3,
+ADR-0003 Amendment C, C-7).
 """
 from __future__ import annotations
 
@@ -138,7 +140,9 @@ def parse_ts(value):
 FIELDS = ("ts", "seq", "session_id", "phase", "tool", "tool_use_id", "input_sha256", "input_meta",
           "output_sha256", "output_meta", "ok", "error_class", "cwd", "source",
           # proxy lines (ADR-0003 Amendment A): A-2, and the history line of A-4
-          "tool_hashed", "results", "tool_use_ids", "output_sha256s")
+          "tool_hashed", "results", "tool_use_ids", "output_sha256s",
+          # os lines (ADR-0003 Amendment C, C-7): the Sysmon event ids an export did not hold
+          "missing_events")
 
 
 def strict_problem(rec):

@@ -181,6 +181,55 @@ or file contents. Everything below follows from that, or from the hooks.
   The eval set measures this cost: the rules flag 6 of 25 benign events
   and miss 9 of 25 bad ones (`docs/review/2026-10-16-M2.2-baseline.md`).
 
+### The os source (Sysmon; ADR-0003 Amendment C)
+- **The only record the agent does not write.** A hook line is written by a
+  hook that runs in the agent's own process tree, and a proxy line is read
+  from what the agent's model answered; an agent that controls its process
+  can shape both. An os line is written from Sysmon's events, which
+  Sysmon's driver logs for the whole tree. The agent can read CROSS-SOURCE,
+  but it cannot move that record, which is why the rule is an anchor. This
+  holds for the live read only: an export given with `--from` is trusted as
+  Sysmon's, so whoever can write that file can forge os lines.
+- **What os lines still miss:**
+  - in-process actions: what a process of the tree does inside itself (a
+    file read, a computation, a request over a connection already open)
+    starts no process and creates no file, so it is no event 1, 11 or 3.
+    File reads are never logged, and event 11 is file creation only;
+  - memory-only tools: a tool run inside the agent's own interpreter, or by
+    a server that was already running outside the tree (an MCP server
+    started before the agent, a daemon), leaves no os line under the root;
+  - Sysmon configuration gaps: without `-n` there is no event 3 (the report
+    is then INCOMPLETE, not CLEAN), and a configuration's exclude rules
+    drop events with no trace, so an excluded image reads as if nothing
+    happened. Raqib cannot tell an excluded event from no event. The
+    commander's configuration is a field test;
+  - the log's size: the live read holds what the channel still keeps; events
+    already rolled out are gone, and a hook or proxy line before the first
+    os event is outside the os span (a partial note);
+  - the tree: a process started for the agent by something outside the
+    tree (a service, a scheduled task, WMI) is not in it. A root pid that
+    more than one process held during the export is followed for each of
+    them;
+  - UDP connections are written like TCP ones (the protocol is in the hash
+    only);
+  - the live output's encoding (read as UTF-8, or UTF-16 with a BOM or NUL
+    bytes) is checked on fixtures, not on a real host.
+- **What CROSS-SOURCE does not judge, by ruling:**
+  - a trace with no os line (Linux, macOS, or os-sysmon not run): no
+    finding and no note; the report's `sources:` line shows the absence;
+  - the agent's own direct children (helpers such as a search tool's `rg`,
+    `git`, MCP servers, and the shell it starts) on the done side. An agent
+    that runs its acts as direct children rather than through a shell is
+    a known hole;
+  - a session of os lines only, for SILENCE-GAP and SILENCE-ORDER: os lines
+    carry the time of the act, so an idle os source is not judged; reruns
+    append the same events again, as visible duplicates.
+- **False-positive sources of CROSS-SOURCE:** a shell that starts a copy of
+  itself below the shell call (a subshell, a pipeline under MSYS bash) is a
+  process whose program no pre names, unless the command names that shell;
+  an act started more than 10 s after its call, or a call written more than
+  10 s after its act, is a finding. Its budget is 0.1 until the field test.
+
 ## 6. Attacks on the watcher itself
 
 - **Editing or deleting the trace.** The agent can rewrite or truncate the

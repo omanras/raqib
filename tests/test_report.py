@@ -190,11 +190,13 @@ def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
     rep = json.loads(raqib("report", QUICKSTART, "--json")[1])
     table = {r["id"]: r for r in rep["rules"]}
     assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY",
-                          "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
+                          "CROSS-SOURCE", "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
                           "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT"}
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
+    assert table["CROSS-SOURCE"]["fp_budget"] == 0.1 and table["CROSS-SOURCE"]["class"] == "CROSS"   # M5.3 C-8
     text = raqib("report", QUICKSTART)[1]
     assert "  NET-TOOL        NET       signature medium  0.25      active" in text
+    assert "  CROSS-SOURCE    CROSS     anchor    high    0.1       active" in text
 
 
 def test_e3_clean_incomplete_and_alarm(tmp_path):
@@ -470,7 +472,7 @@ def test_m41_b1_the_text_rules_table_has_a_kind_column():
     assert "  id              class     kind      sev     fp_budget status" in text
     assert {r["id"]: r["kind"] for r in rep["rules"]} == dict(
         {r.id: r.kind for r in engine.load_catalog(ROOT / "raqib" / "rules" / "catalog")},
-        **{rid: "demand" for rid, _ in report.SILENCE_RULES})
+        **{rid: "demand" for rid, _ in report.SILENCE_RULES}, **{rid: "anchor" for rid, _ in report.CROSS_RULES})
     for r in rep["rules"]:
         budget = "-" if r["fp_budget"] is None else "%g" % r["fp_budget"]
         row = "  %-15s %-9s %-9s %-7s %-9s %s" % (r["id"], r["class"], r["kind"], r["severity"], budget, r["status"])

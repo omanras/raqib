@@ -5,7 +5,7 @@ A rule file holds one mapping:
 
     id: NET-TOOL                      # [A-Z][A-Z0-9]*(-[A-Z0-9]+)+, = file name
     title: Tool call reaches the network   # no { or }
-    class: NET                        # SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT
+    class: NET                        # SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT|CROSS
     kind: signature                   # signature|demand|anchor (ADR-0002)
     evasion: [python urllib, ...]     # signature only, and then required: the
                                       # known ways round it, one line each
@@ -75,7 +75,7 @@ import re
 from raqib.rules import yamlite
 from raqib.rules.trace import is_record, is_seq, parse_ts
 
-CLASSES = ("SCOPE", "NET", "DESTRUCT", "SECRET", "SILENCE", "DRIFT")
+CLASSES = ("SCOPE", "NET", "DESTRUCT", "SECRET", "SILENCE", "DRIFT", "CROSS")  # CROSS: M5.3 C-1
 SEVERITIES = ("low", "medium", "high")
 STATUSES = ("active", "disabled")
 KINDS = ("signature", "demand", "anchor")  # ADR-0002
