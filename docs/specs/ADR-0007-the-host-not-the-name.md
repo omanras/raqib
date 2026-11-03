@@ -133,3 +133,30 @@ Verdict: REDO on P1; the Table's choices A-2..A-13; the rest recorded.
   service's behaviour is not observed), P17, P18 (no cwd live on Windows:
   M7.2's hook attachment on Windows needs another source for the project).
 - A-16 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment B (the Table, 2026-11-04) - judgement on M7.1 (fff37b6 + 32332d6)
+- A-1..A-13 MET as cited in the REDO section of
+  docs/review/2026-11-03-M7.1-questions.md; the Table read the A-1 delta
+  (every cap a counted hole: over_cap, null_names, truncated, the process
+  cap as "more") and the A-7 delta (the LAUNCHER chain raqib*/python*/
+  pythonw*.exe on the self line and in run.json). Every REDO change names
+  its test (A-16, D-8).
+- CI, read from api.github.com: run 41702279079 (fff37b6) and run
+  41714365523 (32332d6), six jobs success each. On the windows install job
+  of the second run the live reader's self chain held raqib.exe and the
+  reader, none an act, and replay.json equalled live.json (A-5, A-7 on a
+  real host).
+- Gate on the branch: 2496 passed, 16 skipped. Scope clean. Two commits
+  (G-8).
+- R-1 (the launcher chain stops at a "parent" created after its child: a
+  reused pid) accepted. R-2 (agent_dark on the M5.0 windows fixture is
+  compared live with the CSVs as the API gives them) accepted, A-3's
+  consequence. R-3 (the cap counts entries, not distinct names) accepted.
+  R-4 (the step text names the sample) accepted. R-5 (A-12's UNSURE line
+  applies to every platform that is neither Linux nor Windows) accepted.
+- Decision 1 of this ADR is built. Status: proposed until M7.2 lands.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's order
+  ("complete the project").
+- Table ledger for M7.1: one review, one REDO, no CI follow-up. The Table's
+  own misses: the HANDOFF said "one line" for doctor and meant one line of
+  output (P11); the handoff needed three trims and one RED push (16862b5).
