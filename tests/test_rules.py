@@ -1623,11 +1623,22 @@ def test_m51b_c11_kelvin_sign_directory_stays_outside_the_project():
         == ([], [])
 
 
-def test_m51b_c11_the_evasion_is_listed():
-    evasion = catalog_rule("SCOPE-PATH").evasion
-    assert any(e.startswith("a non-ASCII letter that Windows folds and Raqib does not") for e in evasion), evasion
-    text = catalog_rule("SCOPE-PATH").doc["description"]
+def test_m51b_c18_the_non_ascii_case_line_is_a_false_positive_source_not_an_evasion():
+    """C-18 (corrects C-11): a non-ASCII case difference can only add
+    findings, so the line is in SCOPE-PATH's description as a known fp
+    source and not in its evasion list (SCOPE-PATH stays +4, ADR-0002:86)."""
+    rule = catalog_rule("SCOPE-PATH")
+    assert not any("non-ASCII" in e for e in rule.evasion), rule.evasion
+    assert len(rule.evasion) == 5
+    text = rule.doc["description"]
+    assert ("So is a non-ASCII letter that Windows folds and Raqib does not (rulings M5.1b C-11, C-18): Windows"
+            " paths are case folded A-Z only, so two spellings that Windows reads as one directory (U+00C9 and"
+            " U+00E9) are two here and SCOPE-PATH can fire on a path inside the project; the fold never joins two"
+            " paths that Windows keeps apart, so it adds findings and hides none.") in text
     assert "a directory spelled with U+212A KELVIN SIGN for K is not C:\\work" in text
+    # The fp it records: U+00C9 under a cwd spelled with U+00E9 fires.
+    rec = line(1, tool="Read", path="C:\\CAF\u00c9\\a.py", cwd="C:\\caf\u00e9")
+    assert [f["cited_seq"] for f in engine.judge(rule, [rec])[0]] == [[1]]
 
 
 def test_m51b_c12_unc_is_backslashes_only_and_the_slash_form_is_a_named_hole():

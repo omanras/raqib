@@ -244,9 +244,11 @@ Known holes, written in the rule descriptions:
   `/mnt/<drive>/Users/<name>`, and no Git Bash form (`/c/Users/<name>`);
 - the forward-slash UNC form `//server/share` is read as a POSIX path
   (C-12);
-- a non-ASCII letter that Windows folds is not folded here (C-11): two
-  spellings that Windows reads as one directory are two, an evasion listed
-  by SCOPE-PATH;
+- a non-ASCII letter that Windows folds is not folded here (C-11, C-18):
+  two spellings that Windows reads as one directory are two, so SCOPE-PATH
+  can fire on a path inside the project. This is a known false-positive
+  source, named in SCOPE-PATH's description; it adds findings and hides
+  none;
 - the subfolders of `C:\Users\Public` (`Public\Documents`,
   `Public\Desktop`) are not listed; `C:\Users\Public` itself fires as a
   home (C-14);

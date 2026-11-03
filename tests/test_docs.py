@@ -108,15 +108,20 @@ def test_m51b_threat_model_section_7_says_what_the_path_rules_do_on_windows():
                  "from WSL, SCOPE-CWD-ROOT lists only `/mnt/<drive>` and `/mnt/<drive>/Users/<name>`",
                  "no Git Bash form (`/c/Users/<name>`)",
                  "the forward-slash UNC form `//server/share` is read as a POSIX path (C-12)",
-                 "a non-ASCII letter that Windows folds is not folded here (C-11)",
+                 # C-18: an fp source, not an evasion.
+                 "a non-ASCII letter that Windows folds is not folded here (C-11, C-18): two spellings that Windows"
+                 " reads as one directory are two, so SCOPE-PATH can fire on a path inside the project. This is a"
+                 " known false-positive source, named in SCOPE-PATH's description; it adds findings and hides none;",
                  "the subfolders of `C:\\Users\\Public` (`Public\\Documents`, `Public\\Desktop`) are not listed;"
                  " `C:\\Users\\Public` itself fires as a home (C-14)",
                  "a cwd with `.` or `..` inside it (`C:\\.\\Users`, `/tmp/../home`) is a judged negative on both"
                  " branches (C-15)",
                  "the macOS temporary directories (`/private/tmp`, `/var/folders/...`) are not listed"):
         assert hole in platform, hole
-    # C-16: the phrase is no longer doubled.
-    assert platform.count("false-positive source") == 1, platform
+    # C-16: the phrase is no longer doubled in the Git Bash item; C-18 adds the one for non-ASCII case.
+    assert "(a false-positive source)" not in platform
+    assert platform.count("false-positive source") == 2, platform
+    assert "evasion listed" not in platform
     # C-8: the Git Bash form is a known false-positive source on Windows, its fixture a positive.
     assert ("This is a known false-positive source on Windows: an agent run from Git Bash that names its own"
             " project as `/c/...` gets SCOPE-PATH findings. A positive fixture records the firing (ruling C-8)"
