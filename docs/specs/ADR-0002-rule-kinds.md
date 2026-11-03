@@ -102,6 +102,42 @@ are not judged by them; their evasion lists do not change.
 
 Ratio after M5.3: 4 : 5 : 4.
 
+Note (2026-11-03, M4.2b, ADR-0002 Amendment G; the table above stays as
+written). M4.2b adds two rows, in the table's shape. Both are YAML rules of
+kind demand built on the `require:` construct (D-1): LANDED-NO-GATE with
+`require: {before: ...}`, EDIT-NO-TEST with `require: {after: ..., until:
+...}`. A demand lists no evasion; its known holes are its `holes:` list
+(G-6), quoted here one line each as they stand in the rule (G-5: v1 holes
+accepted and listed):
+
+| rule             | kind      | known evasion (for `evasion:`)                       |
+|------------------|-----------|------------------------------------------------------|
+| LANDED-NO-GATE   | demand    | -                                                    |
+| EDIT-NO-TEST     | demand    | -                                                    |
+
+- holes LANDED-NO-GATE: "a stale gate: any earlier ok gate run in the session counts, even one before later edits"
+- holes LANDED-NO-GATE: "operators are not recorded: tools/gate.sh || git commit ... and tools/gate.sh; git commit ... look like tools/gate.sh && git commit ..., whatever the gate's status"
+- holes LANDED-NO-GATE: "a RED gate piped into another program (tools/gate.sh 2>&1 | tail -5) is an ok line: a pipeline's status is its last program's"
+- holes LANDED-NO-GATE: "a gate started in the background (the Bash tool's run_in_background) is ok when it starts; its verdict comes later through another tool"
+- holes LANDED-NO-GATE: "names are basenames: any program or script called gate.sh or gate.py counts as the gate"
+- holes LANDED-NO-GATE: "a commit with no commit_prefix is not judged: --amend, -F, -C, -c, a here-document with an unquoted delimiter, a message whose first word is not literal, a commit after the first one in a command, an abbreviated option, git merge, git commit-tree, an alias, a wrapper in front (sudo, env, xargs), a command capture cannot read in full, and a first word that is not a lower-case word ending in a colon (STOP:, Landed:)"
+- holes LANDED-NO-GATE: "a commit whose post line never came is not judged: unknown (partial), SILENCE-HALF has the call"
+- holes EDIT-NO-TEST: "a test or gate run piped into another program (pytest | tail) is an ok line: a pipeline's status is its last program's"
+- holes EDIT-NO-TEST: "operators are not recorded: pytest || true is an ok line whatever the tests did"
+- holes EDIT-NO-TEST: "a run started in the background (the Bash tool's run_in_background) is ok when it starts"
+- holes EDIT-NO-TEST: "any python or python3 call counts as a test run (python3 -c 'print(1)', python3 --version), and any program or script called pytest, gate.sh or gate.py"
+- holes EDIT-NO-TEST: "edits made through Bash (sed -i, a redirect, cp, mv) are not triggers: only Edit, Write, MultiEdit and NotebookEdit are"
+- holes EDIT-NO-TEST: "an edit whose path cannot be read (no input_meta.path) is not a trigger"
+- holes EDIT-NO-TEST: "a session that never reaches a stop or a session_end leaves its edits unjudged (partial); SILENCE-OPEN has the session"
+- holes EDIT-NO-TEST: "an edit whose post line never came is not judged: unknown (partial), SILENCE-HALF has the call"
+
+Also in M4.2b: command_head skips leading redirections and their targets
+(E-12), so the "Known hole" sentence of DESTRUCT-CMD and NET-TOOL now names
+the old lines only; their evasion items and counts do not change (the
+script item's parenthesis names command_scripts, G-2).
+
+Ratio after M4.2b: 4 : 7 : 4.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind

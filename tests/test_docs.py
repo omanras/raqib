@@ -14,7 +14,7 @@ from raqib.rules import engine  # noqa: E402
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 THREAT = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
 CATALOG = ROOT / "raqib" / "rules" / "catalog"
-WORDS = {4: "4", 6: "Six", 7: "7", 11: "Eleven", 12: "Twelve", 13: "Thirteen"}
+WORDS = {4: "4", 6: "Six", 7: "7", 11: "Eleven", 12: "Twelve", 13: "Thirteen", 14: "Fourteen", 15: "Fifteen"}
 
 
 def test_readme_counts_the_rules():
@@ -23,12 +23,12 @@ def test_readme_counts_the_rules():
     silence = [r for r in table if r["class"] == "SILENCE" and r["fp_budget"] is None]
     crossing = [r for r in table if r["class"] == "CROSS"]   # M5.3 C-1: the code rule of cross.py
     assert "%s rules turn the trace into findings" % WORDS[len(table)] in README
-    assert len(table) == len(silence) + len(crossing) + len(rules) == 13
+    assert len(table) == len(silence) + len(crossing) + len(rules) == 15   # M4.2b G-1: 5 + 1 + 9
     assert ("The rules are %d silence rules, %d cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and %d YAML"
             " rules in `raqib/rules/catalog`." % (len(silence), len(crossing), len(rules))) in " ".join(README.split())
     named = {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY", "SCOPE-PATH",
              "SCOPE-CWD-ROOT", "SCOPE-CWD-MOVED", "NET-TOOL", "DESTRUCT-CMD", "SECRET-OUTPUT",
-             "DRIFT-FILES", "CROSS-SOURCE"}
+             "DRIFT-FILES", "CROSS-SOURCE", "LANDED-NO-GATE", "EDIT-NO-TEST"}
     assert {r["id"] for r in table} == named, "update the README rule table"
     # Every rule has a row of the README's rule table, alone or in a row of its family (M4.2).
     rows = [line.split("|")[1].strip() for line in section("What it catches").splitlines()

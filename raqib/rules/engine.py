@@ -17,6 +17,9 @@ A rule file holds one mapping:
     summary: "{tool} at seq {seq}"    # optional template; default: the title
     match: <node>                     # declarative, over trace fields
     aggregate: {distinct: input_meta.path, over: 3}   # optional, see below
+    require: {before: <node>}         # optional, demand only (M4.2b), see below
+    holes: [a stale gate, ...]        # optional, demand or anchor only (G-6):
+                                      # the known holes, one line each
     fixtures: {positive: [path, ...], negative: [path, ...]}
 
 A match node is {all: [node, ...]}, {any: [node, ...]}, {not: node}, or a
@@ -33,6 +36,8 @@ predicate {field: <dotted path>, <op>: <arg>} with exactly one op:
     glob           str           fnmatch (case-sensitive) on a string
     outside        <field>       path not under the directory in that field
     outside_any    <context key> path not under any path of context[key]
+    under_any      [paths]       path under one of these directories (M4.2b),
+                                 placed as outside_any places context[key]
 
 Logic is three-valued (A3): a predicate that cannot judge a line, because a
 field it reads is missing, a string test (regex, prefix, glob) meets a value
@@ -63,6 +68,28 @@ aggregate: {distinct: <field>, over: N, as: path?, cite: all|first?} gives
 one finding per session when more than N distinct values of <field> occur on
 matching lines. `as: path` compares placed, normalised paths. `cite: first`
 cites the first line of each distinct value instead of every matching line.
+
+require (M4.2b, ADR-0002 Amendments D and G): a demand whose evidence is on
+another line of the session (file order). Only on kind demand, never with
+aggregate. match picks the trigger lines.
+- {before: <node>}: a trigger fires when no line of its session up to and
+  including it matches the node. One finding per trigger line, citing it.
+- {after: <node>, until: <node>}: each trigger is judged at the first later
+  line of its session that matches until (the deadline): it fires when no
+  line between the two matches after. One finding per deadline, citing the
+  triggers that fire there and the deadline, with the deadline's ts; its
+  summary is rendered on the deadline line, {count} the number of triggers.
+Three-valued: when no evidence line is true but some evidence line is
+unknown, the trigger is unknown; a trigger whose deadline never comes is
+unknown (a deadline line that is unknown makes the triggers before it
+unknown). A pre line with no post line of its seq later in the trace (a call
+whose result never came, SILENCE-HALF's fact) stands for itself and for that
+missing post: judged as the post with no ok, a line that could match there
+is unknown, never true (G-7). Unknown triggers are counted in the partial note,
+never a finding.
+
+holes (G-6): a demand or an anchor may list its known holes, in the shape of
+a signature's evasion list; a signature may not (it lists evasion).
 """
 from __future__ import annotations
 
@@ -82,17 +109,20 @@ SEVERITIES = ("low", "medium", "high")
 STATUSES = ("active", "disabled")
 KINDS = ("signature", "demand", "anchor")  # ADR-0002
 REQUIRED = ("id", "title", "class", "severity", "fp_budget", "match", "fixtures")
-OPTIONAL = ("status", "description", "summary", "aggregate")
+OPTIONAL = ("status", "description", "summary", "aggregate", "require")
 # kind is required and evasion required iff kind is signature (ADR-0002);
 # both are checked after the id, so their errors can name the rule.
-KIND_FIELDS = ("kind", "evasion")
+KIND_FIELDS = ("kind", "evasion", "holes")   # holes: M4.2b G-6
 RULE_ID = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\Z")
 FIELD = re.compile(r"[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*\Z")
 CONTEXT_KEY = re.compile(r"[a-z_][a-z0-9_]*\Z")
 PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
 OPS = ("eq", "ne", "in", "not_in", "has_any", "exists", "nonempty", "regex", "prefix", "glob",
-       "outside", "outside_any")
+       "outside", "outside_any", "under_any")
+REQUIRE_SHAPES = ({"before"}, {"after", "until"})   # M4.2b
 SUMMARY_VALUE_MAX = 80
+REQUIRE_UNKNOWN = ("a field it reads is missing, a path cannot be placed, the evidence it needs is unknown, the call"
+                   " has no post line, or no deadline came")
 MISSING = object()
 UNKNOWN = None
 
@@ -121,6 +151,7 @@ class Rule:
         self.cls = doc["class"]
         self.kind = doc["kind"]
         self.evasion = tuple(doc.get("evasion", ()))
+        self.holes = tuple(doc.get("holes", ()))
         self.severity = doc["severity"]
         self.fp_budget = doc["fp_budget"]
         self.status = doc.get("status", "active")
@@ -133,6 +164,10 @@ class Rule:
         if agg is not None:
             self.aggregate = {"get": _getter(agg["distinct"]), "over": agg["over"],
                               "as": agg.get("as"), "cite": agg.get("cite", "all")}
+        req = doc.get("require")
+        self.require = None
+        if req is not None:
+            self.require = {key: _compile(node, "require.%s" % key, self) for key, node in req.items()}
 
     def __repr__(self):
         return "Rule(%s)" % self.id
@@ -238,6 +273,15 @@ def compile_rule(doc, source="<rule>"):
             bad("aggregate.as", "must be path")
         if agg.get("cite", "all") not in ("all", "first"):
             bad("aggregate.cite", "must be all or first")
+    req = doc.get("require")
+    if req is not None:
+        if doc["kind"] != "demand":
+            bad("require", "only a demand requires evidence on another line (ADR-0002 Amendment D); kind %s"
+                           " must not have one" % doc["kind"])
+        if agg is not None:
+            bad("require", "never together with aggregate (ADR-0002 Amendment D)")
+        if not (isinstance(req, dict) and set(req) in REQUIRE_SHAPES):
+            bad("require", "must be {before: <node>} or {after: <node>, until: <node>}")
     summary = doc.get("summary")
     if summary is not None:
         for name in PLACEHOLDER.findall(summary):
@@ -265,16 +309,25 @@ def check_kind(doc, source="<rule>"):
     if kind != "signature":
         if "evasion" in doc:
             bad("evasion", "only a signature lists evasions; kind %s must not have one (ADR-0002)" % kind)
+        if "holes" in doc:
+            _check_lines(doc["holes"], "holes", bad)
         return
+    if "holes" in doc:
+        bad("holes", "only a demand or an anchor lists holes; a signature lists them as evasion"
+                     " (ADR-0002 Amendment G, G-6)")
     if "evasion" not in doc:
         bad("evasion", "missing; a signature must list its known evasions, one line each"
                        " (ADR-0002: a signature with no listed evasion is invalid)")
-    evasion = doc["evasion"]
-    if not (isinstance(evasion, list) and evasion):
-        bad("evasion", "must be a non-empty list of one-line strings, not %r" % (evasion,))
-    for i, item in enumerate(evasion):
+    _check_lines(doc["evasion"], "evasion", bad)
+
+
+def _check_lines(items, field, bad):
+    """evasion and holes: a non-empty list of non-empty one-line strings."""
+    if not (isinstance(items, list) and items):
+        bad(field, "must be a non-empty list of one-line strings, not %r" % (items,))
+    for i, item in enumerate(items):
         if not (isinstance(item, str) and item.strip() and item.isprintable()):
-            bad("evasion[%d]" % i, "must be a non-empty one-line string of printable characters, not %r"
+            bad("%s[%d]" % (field, i), "must be a non-empty one-line string of printable characters, not %r"
                 % (item,))
 
 
@@ -393,6 +446,19 @@ def _predicate(node, where, rule):
                 return UNKNOWN
             return not _under(path, root)
         return outside
+    if op == "under_any":   # M4.2b: a literal list, placed as outside_any places context[key]
+        if not context_ok(arg):
+            raise _NodeError("%s: must be a non-empty list of paths" % at)
+        entries = list(arg)
+
+        def under_any(line, ctx):
+            anchor = ctx.get("root") or line.get("cwd")
+            path = _place(get(line), line.get("cwd"))
+            placed = [_place(e, anchor) for e in entries]
+            if path is None or any(r is None for r in placed):
+                return UNKNOWN
+            return any(_under(path, r) for r in placed)
+        return under_any
     # outside_any
     if not (isinstance(arg, str) and CONTEXT_KEY.match(arg)):
         raise _NodeError("%s: must name a context key, e.g. scope" % at)
@@ -582,9 +648,9 @@ def evaluate(rules, lines, context=None):
         found += rule_found
         if unknown:
             shown = ", ".join("%s:%d" % u for u in unknown[:5]) + (" ..." if len(unknown) > 5 else "")
+            why = REQUIRE_UNKNOWN if rule.require is not None else "a field it reads is missing or a path cannot be placed"
             notes.append({"rule_id": rule.id, "status": "partial",
-                          "detail": "could not judge %d line(s) (session:seq %s): a field it reads is "
-                                    "missing or a path cannot be placed" % (len(unknown), shown)})
+                          "detail": "could not judge %d line(s) (session:seq %s): %s" % (len(unknown), shown, why)})
     order = {}
     for rec in records:
         order.setdefault(rec["session_id"], len(order))
@@ -602,6 +668,8 @@ def judge(rule, lines, context=None):
     (session_id, seq) of lines the rule could not judge."""
     context = context or {}
     records = [r for r in lines if is_record(r)]
+    if rule.require is not None:
+        return _judge_require(rule, records, context)
     last_ts = {}
     unknown = []
     if rule.aggregate is None:
@@ -648,6 +716,95 @@ def judge(rule, lines, context=None):
                 seqs = sorted(set(entry["seqs"]))
             out.append(_emit(rule, session_id, seqs, entry["ts"],
                              _render(rule.summary, entry["last"], entry["last"]["seq"], count)))
+    return out, unknown
+
+
+def _ghosts(records):
+    """For each record, the post line it stands for when it is a pre with no
+    post line of its (session_id, seq) later in the trace (G-7): the pre with
+    phase post and no ok; else None."""
+    later_posts = set()
+    out = [None] * len(records)
+    for i in range(len(records) - 1, -1, -1):
+        rec = records[i]
+        key = (rec["session_id"], rec["seq"])
+        if rec.get("phase") == "post":
+            later_posts.add(key)
+        elif rec.get("phase") == "pre" and key not in later_posts:
+            ghost = {k: v for k, v in rec.items() if k != "ok"}
+            ghost["phase"] = "post"
+            out[i] = ghost
+    return out
+
+
+def _value(node, rec, ghost, ctx):
+    """node on a line; a pre with no post (ghost) is also its missing post,
+    which can make the line unknown, never true."""
+    value = node(rec, ctx)
+    if ghost is None or value is True:
+        return value
+    return _any([value, UNKNOWN if node(ghost, ctx) is not False else False])
+
+
+def _judge_require(rule, records, context):
+    """(findings, unknown) of a require rule (see the module docstring)."""
+    req = rule.require
+    ghosts = _ghosts(records)
+    last_ts = {}
+    unknown = []
+    out = []
+    if "before" in req:
+        evidence = {}   # session_id -> "true" | "unknown"
+        seen = set()
+        for rec, ghost in zip(records, ghosts):
+            ts = _ts(rec, last_ts)
+            sid, key = rec["session_id"], (rec["session_id"], rec["seq"])
+            e = _value(req["before"], rec, ghost, context)
+            if e is True:
+                evidence[sid] = "true"
+            elif e is UNKNOWN and evidence.get(sid) != "true":
+                evidence[sid] = "unknown"
+            t = _value(rule.match, rec, ghost, context)
+            if t is UNKNOWN:
+                unknown.append(key)
+            elif t and key not in seen:
+                seen.add(key)
+                state = evidence.get(sid)
+                if state == "unknown":
+                    unknown.append(key)
+                elif state is None:
+                    out.append(_emit(rule, sid, [rec["seq"]], ts, _render(rule.summary, rec, rec["seq"], 1)))
+        return out, unknown
+    pending = {}   # session_id -> [[key, state]], state "open" or "unknown"
+    for rec, ghost in zip(records, ghosts):
+        ts = _ts(rec, last_ts)
+        sid, key = rec["session_id"], (rec["session_id"], rec["seq"])
+        waiting = pending.setdefault(sid, [])
+        d = _value(req["until"], rec, ghost, context)
+        if d is True and waiting:
+            unknown += [k for k, state in waiting if state == "unknown"]
+            fire = sorted({k[1] for k, state in waiting if state == "open"})
+            if fire:
+                seqs = sorted(set(fire) | {rec["seq"]})
+                out.append(_emit(rule, sid, seqs, ts, _render(rule.summary, rec, rec["seq"], len(fire))))
+            del waiting[:]
+        elif d is UNKNOWN:
+            unknown += [k for k, _ in waiting]
+            del waiting[:]
+        elif d is False and waiting:
+            e = _value(req["after"], rec, ghost, context)
+            if e is True:
+                del waiting[:]
+            elif e is UNKNOWN:
+                for item in waiting:
+                    item[1] = "unknown"
+        t = _value(rule.match, rec, ghost, context)
+        if t is UNKNOWN:
+            unknown.append(key)
+        elif t and all(k != key for k, _ in waiting):
+            waiting.append([key, "open"])
+    for waiting in pending.values():   # no deadline came
+        unknown += [k for k, _ in waiting]
     return out, unknown
 
 

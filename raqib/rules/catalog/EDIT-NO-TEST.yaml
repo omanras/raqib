@@ -1,0 +1,52 @@
+# Edits under raqib/ or tests/ with no test run before the turn ends (ADR-0002
+# Amendments D and G, M4.2b).
+id: EDIT-NO-TEST
+title: Edits under raqib/ or tests/ with no test run before the next stop or session end
+class: DRIFT
+# ADR-0002: a demand. The finding is the absence of evidence (a test run after
+# the edit); knowing the rule helps the agent only by running the tests. A
+# demand lists no evasion; its known holes are listed here (rulings G-5, G-6).
+kind: demand
+holes:
+  - "a test or gate run piped into another program (pytest | tail) is an ok line: a pipeline's status is its last program's"
+  - "operators are not recorded: pytest || true is an ok line whatever the tests did"
+  - "a run started in the background (the Bash tool's run_in_background) is ok when it starts"
+  - "any python or python3 call counts as a test run (python3 -c 'print(1)', python3 --version), and any program or script called pytest, gate.sh or gate.py"
+  - "edits made through Bash (sed -i, a redirect, cp, mv) are not triggers: only Edit, Write, MultiEdit and NotebookEdit are"
+  - "an edit whose path cannot be read (no input_meta.path) is not a trigger"
+  - "a session that never reaches a stop or a session_end leaves its edits unjudged (partial); SILENCE-OPEN has the session"
+  - "an edit whose post line never came is not judged: unknown (partial), SILENCE-HALF has the call"
+severity: medium
+fp_budget: 0.1
+description: "In one session, an ok Edit, Write, MultiEdit or NotebookEdit of a path under raqib/ or tests/ (placed against context 'root', else the line's cwd, as SCOPE-PATH places scope paths) with no ok Bash call after it and before the next stop or session_end whose programs (command_programs), scripts (command_scripts) or, on a line written before M4.2, command_head (ruling G-8) hold pytest, python, python3, gate.sh or gate.py. Every stop is a deadline (G-10): edits tested only in the next turn fire at the stop that ended theirs. One finding per deadline, citing the untested edits and the stop or session_end. A false-positive source, not a hole: a test runner off the list (make test, tox, uv run pytest, python3.12 -m pytest, npm test) is not evidence, so the rule fires on a project tested that way."
+summary: "{count} edit(s) under raqib/ or tests/ with no test run before the {phase} at seq {seq}"
+match:
+  all:
+    - {field: phase, eq: post}
+    - {field: ok, eq: true}
+    - {field: tool, in: [Edit, Write, MultiEdit, NotebookEdit]}
+    - {field: input_meta.path, exists: true}
+    - {field: input_meta.path, under_any: [raqib, tests]}
+require:
+  after:
+    all:
+      - {field: phase, eq: post}
+      - {field: tool, eq: Bash}
+      - {field: ok, eq: true}
+      - any:
+          - all:
+              - {field: input_meta.command_programs, exists: true}
+              - {field: input_meta.command_programs, has_any: [pytest, python, python3, gate.sh, gate.py]}
+          - all:
+              - {field: input_meta.command_scripts, exists: true}
+              - {field: input_meta.command_scripts, has_any: [pytest, python, python3, gate.sh, gate.py]}
+          # G-8 (D-3): a line without command_programs is judged by command_head.
+          - all:
+              - {field: input_meta.command_programs, exists: false}
+              - {field: input_meta.command_head, in: [pytest, python, python3, gate.sh, gate.py]}
+  until: {field: phase, in: [stop, session_end]}
+fixtures:
+  positive:
+    - tests/fixtures/rules/EDIT-NO-TEST/positive-untested.json
+  negative:
+    - tests/fixtures/rules/EDIT-NO-TEST/negative-tested.json

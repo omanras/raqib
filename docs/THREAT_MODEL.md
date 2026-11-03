@@ -104,8 +104,15 @@ item F7 of the M1.2 review packet or questions file.
 ## 4. What the trace holds, and what it leaks
 
 - **Stored in clear:**
-  - file paths, URL hosts, the program name of a Bash command
-    (`command_head`), and the working directory;
+  - file paths, URL hosts, the program names of a Bash command
+    (`command_head`, `command_programs`), and the working directory;
+  - of a Bash command's arguments, two things only (ADR-0002 Amendment G):
+    the file name of the script a python, python3, bash or sh call runs
+    (`command_scripts`, the basename of its script operand), and the first
+    word of the first `git commit` message when it is a lower-case word
+    ending in a colon, at most 16 characters, such as `landed:`
+    (`commit_prefix`). A script's file name can say what the script is for;
+    nothing else of a command line is kept;
   - tool names, timestamps, session ids and tool_use ids;
   - ok and error_class;
   - the names, never the text, of secret patterns seen in output.
@@ -178,8 +185,30 @@ or file contents. Everything below follows from that, or from the hooks.
   metadata whether they are benign or not:
   - `rm` of a build directory and `rm` of the user's files;
   - a docs fetch and an exfiltration fetch.
-  The eval set measures this cost: the rules flag 6 of 25 benign events
-  and miss 9 of 25 bad ones (`docs/review/2026-10-16-M2.2-baseline.md`).
+  The eval set measures this cost: the rules flag 9 of 25 benign events
+  and miss 9 of 25 bad ones (`docs/review/2026-10-16-M2.2-baseline.md` and
+  its dated note of 2026-11-03: EDIT-NO-TEST adds b11-refactor).
+- **The two demands of a landing read names and ok only (ADR-0002
+  Amendment G).** LANDED-NO-GATE asks for an ok run of `gate.sh` or
+  `gate.py` on or before a `landed:` commit; EDIT-NO-TEST asks for an ok
+  run of pytest, python, python3, `gate.sh` or `gate.py` after an edit under
+  `raqib/` or `tests/` and before the next stop or session end. Both are
+  demands: an agent that knows them passes by complying, except through
+  their listed holes (each rule's `holes:`, quoted in the ADR-0002 note):
+  - the Bash call's own ok is the evidence, so a RED gate or test run piped
+    into another program (`| tail`), followed by `||`, or started in the
+    background counts as passed; operators are not recorded;
+  - a stale gate (one run before later edits) counts for LANDED-NO-GATE;
+  - names are basenames: any program or script called `gate.sh`, `gate.py`
+    or `pytest`, and any python call, counts;
+  - a commit with no `commit_prefix` is not judged: `--amend`, `-F`, `-C`,
+    `-c`, a here-document with an unquoted delimiter, a message whose first
+    word is not literal or not a lower-case word ending in a colon, a
+    second commit in one command, `git merge`, an alias, a wrapper;
+  - edits made through Bash are not EDIT-NO-TEST triggers, and a session
+    that never stops leaves its edits unjudged (partial);
+  - a call whose post line never came is unknown, not a finding (SILENCE-HALF
+    has it).
 
 ### The os source (Sysmon; ADR-0003 Amendment C)
 Rulings: ADR-0003 Amendments C and D.

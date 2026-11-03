@@ -16,7 +16,9 @@ byte prefix of the line written now for the same event.
 
 Hashing, input_meta, command_head, command_programs, redaction and the
 output scan live in common.py, shared with the proxy source (M5.2 E1); this
-file keeps every name it had. Run as the hook, it loads common.py from its
+file keeps every name it had, and re-exports every name common.py adds
+(M4.2b: read_command, command_scripts, commit_prefix and their constants).
+Run as the hook, it loads common.py from its
 own directory by path; if it cannot, the one RAQIB-SILENCE line below says so,
 on stderr and in the trace (ADR-0003 Amendment A, A-7).
 
@@ -27,8 +29,11 @@ Invariants:
 - Offline: stdlib only, no network.
 - Privacy: tool input and output are stored only as sha256 of canonical JSON;
   input_meta keeps a small extract (path, url_host, Bash command_head and,
-  M4.2, command_programs: program basenames, never an argument, or
-  command_unread: true when they could not be read) and
+  M4.2, command_programs: program basenames, or command_unread: true when
+  they could not be read; M4.2b, ADR-0002 Amendment G, of the arguments only
+  command_scripts, the basename of a python or bash script operand, and
+  commit_prefix, a lower-case first word ending in ":" of a git commit
+  message, each written only when there is one) and
   output_meta the names of secret patterns the output matched, never the text.
   A secret inside a path is replaced by [redacted:<kind>].
 - Bounded work under the lock: hashing and the secret scan (capped at

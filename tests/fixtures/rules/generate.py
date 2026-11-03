@@ -220,6 +220,63 @@ for p in ["C:\\proj\\src\\a.py", "src\\pkg\\b.py", "C:/Proj/Tests/Test_App.py", 
     s.call("Edit", {"path": p})
 s.call("Edit", {"path": "C:\\proj\\tools\\gate.sh"}, ok=False); s.call("Read", {"path": "C:\\proj\\Makefile"})
 write(R + "DRIFT-FILES/negative-windows.json", s.lines, {"scope": ["src", "tests\\test_app.py", "docs/review"], "root": "c:/PROJ/"})
+# M4.2b (ADR-0002 Amendments D, G): the two demands. Bash lines are written by capture,
+# so they carry command_programs, command_scripts and commit_prefix as capture reads them.
+HEREDOC = "git commit -m \"$(cat <<'EOF'\nlanded: M9.9 fixture\n\nbody line\nEOF\n)\""
+# LANDED-NO-GATE: positives, one landing per session with no ok gate run on it or before it.
+fire = []
+a = S("fixture-rules-landed-1"); a.event("session_start"); a.call("Edit", {"path": CWD + "/raqib/x.py"})
+fire.append(a.command("git add -A && git commit -m 'landed: M9.9 x'"))
+b = S("fixture-rules-landed-2"); b.event("session_start"); b.command("tools/gate.sh", ok=False, error_class="failure")
+fire.append(b.command(HEREDOC))                                              # a RED gate is no evidence
+c = S("fixture-rules-landed-3"); c.event("session_start"); c.command("python3 -c 'pass' gate.py")   # G-2: no script
+fire.append(c.command("git -C /work/example commit -am 'landed: M9.9 y'"))
+d = S("fixture-rules-landed-4"); d.event("session_start"); d.command("tools/gate.sh"); d.event("stop")
+e = S("fixture-rules-landed-5"); e.event("session_start")                     # the gate ran in another session
+fire.append(e.command("git commit -m 'landed: M9.9 z'"))
+write(R + "LANDED-NO-GATE/positive-landings.json", a.lines + b.lines + c.lines + d.lines + e.lines, expect=sorted(set(fire)))
+# LANDED-NO-GATE: negatives, a gated landing in every form, the accepted holes, and commits that are not landings.
+a = S("fixture-rules-landed-6"); a.event("session_start"); a.command("tools/gate.sh && git commit -m 'landed: M9.9 x'")
+b = S("fixture-rules-landed-7"); b.event("session_start"); b.command("tools/gate.sh")
+b.call("Edit", {"path": CWD + "/raqib/y.py"}); b.command(HEREDOC)            # a stale gate: accepted in v1 (G-5)
+c = S("fixture-rules-landed-8"); c.event("session_start"); c.command("python -I tools/gate.py"); c.command(HEREDOC)
+d = S("fixture-rules-landed-9"); d.event("session_start"); d.command("bash tools/gate.sh 2>&1 | tail -5")
+d.command("git commit -m 'landed: M9.9 piped'")                              # a piped gate: the G-5 hole
+e = S("fixture-rules-landed-10"); e.event("session_start"); e.bash("gate.sh")   # a line before M4.2 (G-8)
+e.command("git commit -m 'landed: M9.9 old'")
+f = S("fixture-rules-landed-11"); f.event("session_start"); f.command("git commit -m 'wip: M9.9'")
+f.command("git commit -m 'landed: M9.9 failed'", ok=False, error_class="failure"); f.command("git commit -m 'STOP: M9.9 q'")
+f.command("git commit --amend -m 'landed: M9.9 amend'"); f.command("git merge -m 'landed: M9.9 merge' x")
+f.event("stop")
+write(R + "LANDED-NO-GATE/negative-gated.json", a.lines + b.lines + c.lines + d.lines + e.lines + f.lines)
+# EDIT-NO-TEST: positives, untested edits under raqib/ or tests/ at every stop or session_end.
+fire = []
+a = S("fixture-rules-edit-1"); a.event("session_start"); fire.append(a.call("Edit", {"path": CWD + "/raqib/rules/engine.py"}))
+fire.append(a.call("Write", {"path": CWD + "/tests/test_x.py"})); fire.append(a.event("stop"))
+b = S("fixture-rules-edit-2"); b.event("session_start"); b.call("Edit", {"path": CWD + "/tests/a.py"}); b.command("pytest -q")
+fire.append(b.call("Edit", {"path": CWD + "/raqib/b.py"})); fire.append(b.event("stop"))      # edited again after the run
+c = S("fixture-rules-edit-3"); c.event("session_start"); fire.append(c.call("Edit", {"path": "raqib/a.py"}))
+fire.append(c.event("stop")); c.command("pytest -q"); c.event("stop")       # tested only in the next turn
+d = S("fixture-rules-edit-4"); d.event("session_start"); fire.append(d.call("MultiEdit", {"path": CWD + "/raqib/a.py"}))
+fire.append(d.call("NotebookEdit", {"path": CWD + "/tests/n.ipynb"})); fire.append(d.event("session_end"))
+e = S("fixture-rules-edit-5"); e.event("session_start"); fire.append(e.call("Edit", {"path": CWD + "/tests/a.py"}))
+e.command("pytest -q", ok=False, error_class="failure"); e.command("make test"); fire.append(e.event("stop"))
+write(R + "EDIT-NO-TEST/positive-untested.json", a.lines + b.lines + c.lines + d.lines + e.lines, expect=sorted(set(fire)))
+# EDIT-NO-TEST: negatives, a test run after every edit, and lines that are not triggers.
+a = S("fixture-rules-edit-6"); a.event("session_start"); a.call("Edit", {"path": CWD + "/raqib/a.py"}); a.command("pytest -q")
+a.event("stop")
+b = S("fixture-rules-edit-7"); b.event("session_start"); b.call("Edit", {"path": CWD + "/tests/a.py"})
+b.command("bash tools/gate.sh"); b.event("stop")
+c = S("fixture-rules-edit-8"); c.event("session_start"); c.call("Write", {"path": CWD + "/raqib/x.py"})
+c.command("cd /work/example && python -I tools/gate.py"); c.event("stop"); c.event("session_end")
+d = S("fixture-rules-edit-9"); d.event("session_start"); d.call("Edit", {"path": CWD + "/src/a.py"})
+d.call("Edit", {"path": CWD + "/raqib-notes/a.md"}); d.call("Read", {"path": CWD + "/tests/a.py"})
+d.call("Edit", {"path": CWD + "/tests/b.py"}, ok=False, error_class="failure"); d.event("stop")
+e = S("fixture-rules-edit-10"); e.event("session_start"); e.call("Edit", {"path": CWD + "/tests/a.py"})
+e.bash("pytest"); e.event("stop")                                            # a line before M4.2 (G-8)
+f = S("fixture-rules-edit-11"); f.event("session_start"); f.call("Edit", {"path": CWD + "/raqib/a.py"})
+f.command("tools/gate.sh 2>&1 | tail -3"); f.event("stop")                   # a piped gate: the G-5 hole
+write(R + "EDIT-NO-TEST/negative-tested.json", a.lines + b.lines + c.lines + d.lines + e.lines + f.lines)
 # benign corpus: realistic sessions; some are expected to trip rules (A6 budgets)
 s = S("fixture-benign-dev"); s.event("session_start")
 for tool, meta in [("Glob", {"path": CWD}), ("Read", {"path": CWD + "/src/app.py"}), ("Grep", {"path": CWD + "/src"}),

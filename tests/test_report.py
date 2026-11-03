@@ -191,7 +191,7 @@ def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
     table = {r["id"]: r for r in rep["rules"]}
     assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY",
                           "CROSS-SOURCE", "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
-                          "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT"}
+                          "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT", "LANDED-NO-GATE", "EDIT-NO-TEST"}
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
     assert table["CROSS-SOURCE"]["fp_budget"] == 0.1 and table["CROSS-SOURCE"]["class"] == "CROSS"   # M5.3 C-8
     text = raqib("report", QUICKSTART)[1]
@@ -270,7 +270,8 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     assert code == 0
     rows = {line.split()[0]: line.split() for line in text.splitlines()[1:]}
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
-                         "SCOPE-PATH", "SECRET-OUTPUT", "CROSS-SOURCE"}   # M5.3 D-11: the code rule too
+                         "SCOPE-PATH", "SECRET-OUTPUT", "CROSS-SOURCE",   # M5.3 D-11: the code rule too
+                         "LANDED-NO-GATE", "EDIT-NO-TEST"}                # M4.2b: the two demands
     assert rows["CROSS-SOURCE"][1:4] == ["ok", "0.000", "0.1"]
     assert "4 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])   # M5.1b: + the Windows negative
     # M4.2 REDO-2 E-1: the field trace is not benign (tests/fixtures/field/), so
