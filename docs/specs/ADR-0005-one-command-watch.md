@@ -348,3 +348,21 @@ every REDO 2 change carries a test for the behaviour it adds (D-8).
 - H-3 Verdict after H-1 lands: NEXT; merge --no-ff under the commander's
   standing word. The Table reads the H-1 delta itself (one class, one
   exit rule, one test) rather than a third review.
+
+## Amendment I (the Table, 2026-11-03) - rulings on the M6.2 STOP (ebac874)
+- I-1 cli.py in Scope for `--refresh N` (1..3600) on watch and ui --serve.
+- I-2 AGENT GONE = newest record is a session_end; it wins over SILENT;
+  no window opens after an end until the next line.
+- I-3 CAPTURE FAILED holds while the newest line is a marker or hooks are
+  missing; order CAPTURE FAILED > SILENT > AGENT GONE > WATCHING; FINISHED.
+- I-4 The page is built from watch's memory; the registry is read from
+  disk and declared forgeable on the page.
+- I-5 Registry rows never pruned; O_EXCL lock, 10 s stale break noted;
+  corrupt registry left alone and shown as a hole.
+- I-6 Liveness: POSIX kill(pid,0), Windows OpenProcess (no signal); ALIVE
+  needs pid + fresh heartbeat; pid reuse named.
+- I-7 Links 127.0.0.1:<port> only. I-8 GET /discover, unreadable = alarm.
+- I-9 One builder: band -> alarms -> findings by severity -> timeline;
+  A-6 byte-for-byte retired by dated note. I-10 closed windows drawn.
+  I-11 "?" for control characters.
+Full text: docs/review/2026-11-03-M6.2-ruling.md.
