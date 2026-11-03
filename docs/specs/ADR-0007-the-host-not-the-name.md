@@ -160,3 +160,63 @@ Verdict: REDO on P1; the Table's choices A-2..A-13; the rest recorded.
 - Table ledger for M7.1: one review, one REDO, no CI follow-up. The Table's
   own misses: the HANDOFF said "one line" for doctor and meant one line of
   output (P11); the handoff needed three trims and one RED push (16862b5).
+
+## Amendment C (the Table, 2026-11-04) - rulings on review 2026-11-04-M7.2.md (1aa2eb2)
+Builder's record: docs/review/2026-11-04-M7.2-questions.md (Q-1..Q-12).
+CI run 41731699480 for 1aa2eb2: six jobs success on the first commit. On the
+windows install job the host watch ran two rounds (240 records, 13 named
+holes each) and listed four trees, all unknown to the catalog, as history
+and not knocked. Verdict: REDO on P1 and P2; the Table's choices C-3..C-8;
+the rest ruled or recorded. Scope widened by this amendment to
+raqib/rules/fixtures.py (one rule), raqib/rules/engine.py (CLASSES),
+raqib/discover/endpoints.yaml (one block), docs/specs/ADR-0002 (the Table).
+- C-1 (P1, A6) Budgets are measured, never guessed. (a) fixtures.py: a
+  negative fixture with no line that passes a rule's tool/source gate is
+  unmeasured for that rule, not measured. (b) The negatives of NEW-AGENT and
+  AGENT-DARK-LIVE are host-line fixtures in which the benign desktops' trees
+  arrive after round 1 (the make.rounds_of pattern the reviewer probed).
+  (c) Severity: a named new tree is high; an unknown new tree is medium.
+  (d) endpoints.yaml gains `benign_images` (a signature with its evasion
+  listed: an agent that takes a benign program's name; the match needs the
+  image path under the system or program-files directories, and a denied
+  path never matches): a new tree whose image is benign is listed with
+  `benign`, not knocked; the evasion is in the rule's holes. (e) fp_budget
+  is what (b) measures after (d), declared in the YAML with the fixture it
+  came from.
+- C-2 (P2, A5) Every host watch has a run id (start time and pid) carried
+  on every line of rounds.jsonl, inventory.json and the state; seqs
+  continue from the record's last line, read at the start; a cited seq is
+  (run, seq) and resolves to one line. A second host watch on the same home
+  while the state's heartbeat is fresh is refused with one line (one host
+  watch per home).
+- C-3 (P3) --rounds and Stop end the watch at the outstanding reader's
+  deadline (2 x T) at the latest; a reader still out is a hole in the
+  report; never a wait beyond the deadline.
+- C-4 (P4) A round-1 act-root that becomes a candidate later knocks:
+  ratified. B-3's history is the state at the start, not a transition that
+  happened under the watch.
+- C-5 (P5, Q-3) Each tree knocks under its own rate-limit id ("NEW-AGENT
+  pid N"); on_folds is set and folded_waiting is in the report, as in
+  ADR-0005 D-4.
+- C-6 (P6) Each host line in rounds.jsonl carries the text of the record
+  lines it cites (bounded, _safe): the record stands alone (A5). Only the
+  latest inventory is kept: recorded.
+- C-7 (P7) The band after a failed or late round reads HOST READER FAILED /
+  READER LATE, ordered before WATCHING (as I-3 orders capture states).
+- C-8 (P8) The CI step runs `raqib discover --json` in the same job and
+  asserts that every discover candidate pid appears in the watch report's
+  trees; stderr is captured for the Traceback check.
+- C-9 (P9) `started` on candidates and act-roots in --json: accepted (API).
+- C-10 (P10, Q-7) Exit codes: trees listed and nothing new = 0 (CLEAN with
+  the trees named); a NEW-AGENT or AGENT-DARK-LIVE finding = 1 (ALARM); a
+  round that could not be read = 3 (incomplete). The presence of a known or
+  history tree is not an alarm; a new one is.
+- C-11 (P11, Q-5) ADR-0002's table gains the two anchor rows and "Ratio
+  after M7.2: 4 : 7 : 8" by the Table on the branch, where the rules are
+  (on main the table must match the catalog); the REDO removes the
+  set-aside in test_rules.py.
+- C-12 (P13) A test ties DARK_ROUNDS to the YAML's `eq: 3`; "3 rounds" as
+  the unit stays, recorded (a time-based streak is a later task).
+- C-13 (Q-1) One sample per round on Windows: accepted. (Q-4) engine.py
+  CLASSES gains HOST; both rules move to class HOST. (Q-12) recorded.
+- C-14 Every REDO change carries a test for the behaviour it adds (D-8).
