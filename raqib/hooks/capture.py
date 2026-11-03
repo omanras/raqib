@@ -17,7 +17,8 @@ byte prefix of the line written now for the same event.
 Hashing, input_meta, command_head, command_programs, redaction and the
 output scan live in common.py, shared with the proxy source (M5.2 E1); this
 file keeps every name it had. Run as the hook, it loads common.py from its
-own directory by path; if it cannot, the one RAQIB-SILENCE line below says so.
+own directory by path; if it cannot, the one RAQIB-SILENCE line below says so,
+on stderr and in the trace (ADR-0003 Amendment A, A-7).
 
 Invariants:
 - Never blocks the agent: always exits 0 and never writes to stdout.
@@ -100,19 +101,17 @@ def _load_common():
     return module
 
 
+_COMMON_ERROR = None  # run as the hook with no loadable common.py: main() reports it (A3, ruling A-7)
 try:
     common = _load_common()
 except Exception as _exc:
     if __name__ != "__main__":
         raise
-    # The hook never blocks and never fails silently (A3): one line, exit 0.
-    sys.stderr.write(("%s capture failed event=- log=-: cannot load %s: %s: %s" % (
-        SILENCE, COMMON, type(_exc).__name__, _exc)).replace("\r", " ").replace("\n", " ").encode(
-        "ascii", "backslashreplace").decode("ascii") + "\n")
-    sys.exit(0)
-# Every shared helper under the name capture.py has always given it (E1), so
-# capture.input_meta, capture.SECRET_PATTERNS, ... are common's.
-globals().update((_name, getattr(common, _name)) for _name in common.__all__)
+    common, _COMMON_ERROR = None, _exc
+if common is not None:
+    # Every shared helper under the name capture.py has always given it (E1),
+    # so capture.input_meta, capture.SECRET_PATTERNS, ... are common's.
+    globals().update((_name, getattr(common, _name)) for _name in common.__all__)
 
 # hook_event_name -> trace phase.
 PHASES = {
@@ -400,15 +399,37 @@ def cancel_deadline():
         _timer_deadline.cancel()
 
 
-def silence(event, log_path, exc):
+def silence_text(event, log_path, exc):
     msg = "%s capture failed event=%s log=%s: %s: %s" % (
         SILENCE, event, log_path, type(exc).__name__, exc)
-    msg = msg.replace("\r", " ").replace("\n", " ")
+    return msg.replace("\r", " ").replace("\n", " ").encode("ascii", "backslashreplace").decode("ascii")
+
+
+def silence(event, log_path, exc):
     try:
-        sys.stderr.write(msg.encode("ascii", "backslashreplace").decode("ascii") + "\n")
+        sys.stderr.write(silence_text(event, log_path, exc) + "\n")
         sys.stderr.flush()
     except Exception:
         pass
+
+
+def silence_into_trace(event, log_path, exc):
+    """Ruling A-7: a hook that cannot load common.py writes its RAQIB-SILENCE
+    line into the trace too, under the lock (raqib watch reads such a line
+    as a capture failure), as well as to stderr. Never raises."""
+    silence(event, log_path, exc)
+    try:
+        with open(log_path, "ab+") as f:
+            lock(f)
+            try:
+                end = f.seek(0, os.SEEK_END)
+                torn = end > 0 and f.seek(end - 1) >= 0 and f.read(1) != b"\n"
+                f.write((b"\n" if torn else b"") + silence_text(event, log_path, exc).encode("ascii") + b"\n")
+                f.flush()
+            finally:
+                unlock(f)
+    except Exception:
+        pass  # stderr has the line; the trace could not take it
 
 
 def main(argv=()):
@@ -427,7 +448,17 @@ def main(argv=()):
         _timer_deadline = TimerDeadline(
             DEADLINE_SECONDS, lambda: silence(seen["event"], log_path, deadline_error()))
     try:
-        payload = json.loads(sys.stdin.buffer.read())
+        raw = sys.stdin.buffer.read()
+        if _COMMON_ERROR is not None:
+            cancel_deadline()
+            try:
+                event = json.loads(raw).get("hook_event_name", "-")
+            except Exception:
+                event = "-"
+            silence_into_trace(event if isinstance(event, str) else "-", log_path, CaptureError(
+                "cannot load %s: %s: %s" % (COMMON, type(_COMMON_ERROR).__name__, _COMMON_ERROR)))
+            return 0
+        payload = json.loads(raw)
         if isinstance(payload, dict):
             seen["event"] = payload.get("hook_event_name", "-")
         if len(argv) > 1:

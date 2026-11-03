@@ -1,6 +1,7 @@
-"""M5.2: the proxy capture source (ADR-0003), common.py (E1), the source field
-(E3) and the source per finding (E4). The upstream is a local fake that speaks
-raw HTTP, so the bytes on both sides of the proxy can be compared."""
+"""M5.2 and its REDO (ADR-0003 Amendment A, rulings A-1..A-13): the proxy
+capture source, common.py (E1), the source field (E3) and the source per
+finding (E4). The upstream is a local fake that speaks raw HTTP, so the bytes
+on both sides of the proxy can be compared."""
 import gzip
 import importlib.util
 import io
@@ -23,13 +24,12 @@ sys.path.insert(0, str(ROOT))
 
 from raqib import cli, report, ui  # noqa: E402
 from raqib.hooks import capture, common, proxy  # noqa: E402
-from raqib.rules import engine, silence, trace  # noqa: E402
+from raqib.rules import silence, trace  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures"
 PROXY = FIXTURES / "proxy"
+GOLDEN = FIXTURES / "golden" / "hook-lines-721bb55.log"
 CAPTURE = ROOT / "raqib" / "hooks" / "capture.py"
-CATALOG = ROOT / "raqib" / "rules" / "catalog"
-SESSION = "proxy-fixture"
 CWD = "/work/example"
 SECRETS = ("fixture-not-a-key-openai", "fixture-not-a-key-anthropic")
 
@@ -155,6 +155,17 @@ def send(port, data, timeout=20):
             out += piece
 
 
+def call(px, method, path, headers=(), body=b""):
+    """One request as an agent sends it: Host 127.0.0.1:PORT, then the
+    headers, then Connection: close; the raw answer."""
+    hs = [["Host", "127.0.0.1:%d" % px.port]] + [list(h) for h in headers] + [["Connection", "close"]]
+    return send(px.port, raw_request(method, path, hs, body))
+
+
+def post(px, path, obj, headers=()):
+    return parse_response(call(px, "POST", path, headers, json.dumps(obj).encode()))
+
+
 def parse_response(raw):
     head, body = raw.split(b"\r\n\r\n", 1)
     lines = head.decode("latin-1").split("\r\n")
@@ -177,16 +188,25 @@ class Clock:
 
     def __call__(self):
         self.n += 1
-        return "2026-11-03T10:00:%02d.000Z" % self.n
+        return "2026-11-03T10:%02d:%02d.000Z" % divmod(self.n, 60)
+
+
+class Mono:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
 
 
 class Running:
     """The proxy in this process, on a free port, in front of an upstream."""
 
-    def __init__(self, tmp_path, upstream_url, session=SESSION, log=None, err=None):
+    def __init__(self, tmp_path, upstream_url, log=None, err=None, cwd=CWD):
         self.log = Path(log or tmp_path / "trace.jsonl")
         self.err = err or io.StringIO()
-        self.recorder = proxy.Recorder(str(self.log), session, cwd=CWD, clock=Clock(), err=self.err)
+        self.mono = Mono()
+        self.recorder = proxy.Recorder(str(self.log), cwd=cwd, clock=Clock(), err=self.err, monotonic=self.mono)
         target = proxy.parse_upstream(upstream_url, allow_plain=upstream_url.startswith("http:"))
         self.server = proxy.make_server(("127.0.0.1", 0), target, self.recorder)
         self.port = self.server.server_address[1]
@@ -197,6 +217,9 @@ class Running:
 
     def records(self):
         return [json.loads(x) for x in self.lines() if x.startswith("{")]
+
+    def tools(self):
+        return [r for r in self.records() if r["phase"] in ("pre", "post")]
 
     def markers(self):
         return [x for x in self.lines() if x.startswith("RAQIB-SILENCE:")]
@@ -221,21 +244,23 @@ def running(tmp_path):
         up.close()
 
 
-def request_of(exchange):
+def request_of(exchange, port):
     req = exchange["request"]
     body = json.dumps(req["json"], separators=(",", ":")).encode()
-    return raw_request(req["method"], req["path"], req["headers"] + [["Host", "127.0.0.1"], ["Connection", "close"]],
-                       body), body
+    return raw_request(req["method"], req["path"], [["Host", "127.0.0.1:%d" % port]] + req["headers"]
+                       + [["Connection", "close"]], body), body
 
 
 def replay(tmp_path, name, start):
-    """Replay a recorded session through the proxy; (upstream, proxy, responses)."""
+    """Replay a recorded session through the proxy and stop it (session_end);
+    (session, upstream, proxy, answers)."""
     session = json.loads((PROXY / ("%s-session.json" % name)).read_text(encoding="utf-8"))
     up, px = start([script_of(x["response"]) for x in session["exchanges"]])
     answers = []
     for exchange in session["exchanges"]:
-        data, _ = request_of(exchange)
+        data, _ = request_of(exchange, px.port)
         answers.append(parse_response(send(px.port, data)))
+    px.recorder.shutdown()
     return session, up, px, answers
 
 
@@ -243,6 +268,29 @@ def run_report(path, *extra):
     out = io.StringIO()
     code = cli.main(["report", str(path)] + list(extra), out=out)
     return code, out.getvalue()
+
+
+def key_of(model, first):
+    return common.canonical_sha256([model, first])
+
+
+def anthropic_turn(first, *more, model="m"):
+    return {"model": model, "messages": [first] + list(more)}
+
+
+def tool_use(use_id, name="Bash", tool_input=None):
+    return {"type": "tool_use", "id": use_id, "name": name, "input": tool_input or {"command": "ls"}}
+
+
+def tool_result(use_id, content="ok", **extra):
+    return dict({"type": "tool_result", "tool_use_id": use_id, "content": content}, **extra)
+
+
+def answer_with(*blocks, stop="tool_use"):
+    return json_response({"type": "message", "content": list(blocks), "stop_reason": stop})
+
+
+FIRST = {"role": "user", "content": "do the task"}
 
 
 # --- E1: one module of shared helpers ----------------------------------------------------
@@ -253,7 +301,6 @@ def test_e1_capture_and_proxy_share_common():
         assert getattr(capture, name) is getattr(common, name), name
     for name in ("canonical_sha256", "input_meta", "command_head", "command_programs", "redact", "output_meta"):
         assert name in common.__all__
-    # The proxy names no helper of its own for what common does.
     source = (ROOT / "raqib" / "hooks" / "proxy.py").read_text(encoding="utf-8")
     for name in ("def canonical_sha256", "def input_meta", "def command_head", "def redact", "SECRET_PATTERNS ="):
         assert name not in source
@@ -271,43 +318,57 @@ def test_e1_the_hook_loads_common_next_to_it_under_isolated_mode(tmp_path):
     assert rec["source"] == "hook" and rec["input_meta"] == {"command_head": "ls", "command_programs": ["ls"]}
 
 
-def test_e1_a_hook_without_common_is_one_silence_line_and_exit_0(tmp_path):
+@pytest.mark.parametrize("broken", ["missing", "raises"])
+def test_a7_a_hook_without_common_writes_its_silence_line_into_the_trace_too(tmp_path, broken):
     lone = tmp_path / "hooks"
     lone.mkdir()
     shutil.copy(CAPTURE, lone / "capture.py")
+    if broken == "raises":
+        (lone / "common.py").write_text("raise ImportError('broken on purpose')\n", encoding="utf-8")
     log = tmp_path / "trace.jsonl"
-    proc = subprocess.run([sys.executable, "-I", str(lone / "capture.py"), str(log)], timeout=30,
+    log.write_bytes(b'{"torn line')   # a torn last line does not swallow the silence line
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RAQIB_")}
+    proc = subprocess.run([sys.executable, "-I", str(lone / "capture.py"), str(log)], timeout=30, env=env,
                           input=(FIXTURES / "pretooluse-bash.json").read_bytes(), capture_output=True)
     assert (proc.returncode, proc.stdout) == (0, b"")
     (line,) = proc.stderr.decode().splitlines()
-    assert line.startswith("RAQIB-SILENCE: capture failed event=- log=-: cannot load common.py: ")
-    assert not log.exists()
+    assert line.startswith("RAQIB-SILENCE: capture failed event=PreToolUse log=%s: CaptureError: cannot load"
+                           " common.py: " % log)
+    assert log.read_text().splitlines() == ['{"torn line', line]
+    records, problems = trace.read(log)
+    assert {"line": 2, "reason": trace.SILENCE_REASON} in problems
     # Loaded by path under another name (as the tests load it), the error is raised, not hidden.
     spec = importlib.util.spec_from_file_location("raqib_capture_alone", lone / "capture.py")
-    with pytest.raises(OSError):
+    with pytest.raises((OSError, ImportError)):
         spec.loader.exec_module(importlib.util.module_from_spec(spec))
 
 
-# --- E3: the source field ----------------------------------------------------------------
+# --- E3 / A-10: the source field and the golden hook line ----------------------------------
 
-def test_e3_a_hook_line_is_the_old_line_with_source_hook_last(tmp_path):
+def test_a10_hook_lines_equal_the_golden_lines_of_721bb55_plus_source_last(tmp_path):
+    """tests/fixtures/golden/hook-lines-721bb55.log was written by the
+    capture.py of 721bb55 (before M5.2) for these payloads, in this order.
+    Today's line for the same event is that line, with its own ts, and
+    ,"source":"hook" before the closing brace."""
+    golden = GOLDEN.read_text(encoding="utf-8").splitlines()
     log = tmp_path / "trace.jsonl"
     env = {k: v for k, v in os.environ.items() if not k.startswith("RAQIB_")}
-    for name in ("sessionstart.json", "pretooluse-bash.json", "posttooluse-bash.json", "stop.json"):
-        proc = subprocess.run([sys.executable, str(CAPTURE), str(log)], env=env, timeout=30,
+    names = ("sessionstart.json", "pretooluse-bash.json", "posttooluse-bash.json", "pretooluse-write.json",
+             "pretooluse-webfetch.json", "posttoolusefailure-bash.json", "stop.json", "sessionend.json")
+    for name in names:
+        proc = subprocess.run([sys.executable, "-I", str(CAPTURE), str(log)], env=env, timeout=30,
                               input=(FIXTURES / name).read_bytes(), capture_output=True)
         assert (proc.returncode, proc.stdout, proc.stderr) == (0, b"", b"")
-    for line in log.read_text().splitlines():
-        rec = json.loads(line)
-        assert list(rec)[-1] == "source" and rec["source"] == "hook"
-        old = dict(rec)
-        del old["source"]
-        # The line an older raqib wrote for the same event is a byte prefix of this one.
-        assert line == json.dumps(old, separators=(",", ":"))[:-1] + ',"source":"hook"}'
+    new = log.read_text(encoding="utf-8").splitlines()
+    assert len(new) == len(golden) == len(names)
+    for old, line in zip(golden, new):
+        assert '"source"' not in old
+        old_ts, new_ts = json.loads(old)["ts"], json.loads(line)["ts"]
+        assert line.replace('"ts":"%s"' % new_ts, '"ts":"%s"' % old_ts, 1) == old[:-1] + ',"source":"hook"}'
 
 
 def test_e3_old_traces_load_unchanged_and_read_as_hook():
-    for path in sorted(FIXTURES.glob("*.log")) + [FIXTURES / "field" / "2026-11-02.log"]:
+    for path in sorted(FIXTURES.glob("*.log")) + [FIXTURES / "field" / "2026-11-02.log", GOLDEN]:
         text = path.read_text(encoding="utf-8")
         records, problems = trace.read(path)
         assert '"source"' not in text, path
@@ -328,6 +389,22 @@ def test_e3_unknown_sources_are_reported_and_strict_lines_accept_the_three():
         assert trace.strict_problem(dict(base, source=value)) is None
     assert trace.strict_problem(base) is None
     assert trace.strict_problem(dict(base, source="hooks")) == "unknown source 'hooks'"
+    history = dict(base, phase="history", source="proxy", results=2, tool_use_ids=["a", "b"],
+                   output_sha256s=["0" * 64, "1" * 64], tool_hashed=True)
+    assert trace.strict_problem(history) is None and trace.parse(json.dumps(history))[1] == []
+
+
+def test_a13_trace_names_a_raqib_silence_line_and_the_report_says_so(tmp_path):
+    path = tmp_path / "t.log"
+    path.write_text('{"ts":"2026-11-03T10:00:00.000Z","seq":1,"session_id":"s","phase":"stop","tool":"-","cwd":"/w"}\n'
+                    "RAQIB-SILENCE: proxy upstream failed before an answer: X session=- POST /v1/messages\n"
+                    "  RAQIB-SILENCE: capture failed event=- log=x: E\n{not json\n", encoding="utf-8")
+    assert trace.read(path)[1] == [{"line": 2, "reason": trace.SILENCE_REASON},
+                                   {"line": 3, "reason": trace.SILENCE_REASON}, {"line": 4, "reason": "not JSON"}]
+    assert trace.SILENCE_REASON == "a RAQIB-SILENCE line: something was not captured (A3)"
+    code, text = run_report(path)
+    assert code == 1 and "  - trace-problem: line 2: a RAQIB-SILENCE line: something was not captured (A3)" in text
+    assert "  - trace-problem: line 4: not JSON" in text
 
 
 # --- E2: options ---------------------------------------------------------------------------
@@ -351,21 +428,23 @@ def test_e2_upstream_is_https_and_plain_only_to_loopback_with_the_flag(url, allo
         proxy.parse_upstream(url, allow)
 
 
-def test_e2_upstream_forms_and_tls_verification_on():
+def test_e2_upstream_forms_tls_verification_on_and_127_8():
     up = proxy.parse_upstream("https://api.example.com/v1/")
     assert (up.scheme, up.host, up.port, up.prefix, up.netloc) == ("https", "api.example.com", 443, "/v1",
                                                                     "api.example.com")
     assert up.target("/chat/completions?x=1") == "/v1/chat/completions?x=1"
     assert proxy.parse_upstream("https://api.example.com:8443").netloc == "api.example.com:8443"
-    assert proxy.parse_upstream("http://127.0.0.1:9", True).url == "http://127.0.0.1:9"
-    assert proxy.parse_upstream("http://[::1]:9", True).netloc == "[::1]:9"
+    # A-8: the whole loopback range with the flag, as the docs say: 127.0.0.0/8 and ::1.
+    for url in ("http://127.0.0.1:9", "http://127.0.0.2:9", "http://127.255.255.254:9", "http://[::1]:9"):
+        assert proxy.parse_upstream(url, True).scheme == "http"
     ctx = proxy.tls_context()
     assert ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname is True
     conn = up.connection()
     assert isinstance(conn, proxy.http.client.HTTPSConnection) and conn._context.verify_mode == ssl.CERT_REQUIRED
     source = (ROOT / "raqib" / "hooks" / "proxy.py").read_text(encoding="utf-8")
-    for banned in ("CERT_NONE", "check_hostname = False", "_create_unverified_context", "verify=False"):
-        assert banned not in source
+    for banned in ("CERT_NONE", "check_hostname = False", "_create_unverified_context", "verify=False",
+                   "HTTPS_PROXY", "set_tunnel"):
+        assert banned not in source.split('"""', 2)[2], banned   # the docstring names HTTPS_PROXY as not used
 
 
 def test_e2_cli_refuses_bad_options_with_exit_2(tmp_path, capsys):
@@ -374,31 +453,37 @@ def test_e2_cli_refuses_bad_options_with_exit_2(tmp_path, capsys):
     assert cli.main(["proxy", "--listen", "127.0.0.1:0", "--upstream", "http://127.0.0.1:9", "--log", log]) == 2
     assert cli.main(["proxy", "--listen", "127.0.0.1:0", "--upstream", "https://api.example.com",
                      "--log", str(tmp_path / "no" / "dir" / "t.jsonl")]) == 2
+    assert cli.main(["proxy", "--listen", "127.0.0.1:0", "--upstream", "https://api.example.com", "--log", log,
+                     "--cwd", "relative/dir"]) == 2
     err = capsys.readouterr().err
     assert "127.0.0.1 only" in err and "--allow-plain-upstream" in err and "cannot write the trace" in err
+    assert "--cwd must be an absolute directory" in err
     assert cli.main(["proxy", "--upstream", "https://api.example.com", "--log", log]) == 2   # --listen required
 
 
-# --- E2/E3/E4: the recorded sessions ------------------------------------------------------------
+# --- E3/E4: the recorded sessions, now with conversation sessions (A-3) -------------------------
 
 @pytest.mark.parametrize("name", ["openai", "anthropic"])
 def test_e3_the_recorded_session_gives_the_fixture_trace(tmp_path, running, name):
     session, up, px, answers = replay(tmp_path, name, running)
     assert px.log.read_text(encoding="utf-8") == (PROXY / ("%s-session.trace.log" % name)).read_text(encoding="utf-8")
     recs = px.records()
-    assert [(r["phase"], r["seq"]) for r in recs] == [("pre", 1), ("pre", 2), ("post", 1), ("post", 2)]
-    assert all(r["source"] == "proxy" and r["session_id"] == SESSION and r["cwd"] == CWD for r in recs)
-    assert recs[0]["tool_use_id"] == recs[2]["tool_use_id"] and recs[1]["tool_use_id"] == recs[3]["tool_use_id"]
-    assert recs[0]["input_sha256"] == recs[2]["input_sha256"] and recs[1]["input_sha256"] == recs[3]["input_sha256"]
-    # Hashes and the extract only: no prompt, argument, output or key text.
+    first = session["exchanges"][0]["request"]["json"]
+    key = key_of(first["model"], first["messages"][0])
+    assert all(r["session_id"] == key and r["source"] == "proxy" and r["cwd"] == CWD for r in recs)
+    assert [(r["phase"], r["seq"]) for r in recs] == [("session_start", 1), ("pre", 2), ("pre", 3), ("post", 2),
+                                                       ("post", 3), ("stop", 4), ("session_end", 5)]
+    pres, posts = recs[1:3], recs[3:5]
+    for pre, done in zip(pres, posts):
+        assert (pre["tool_use_id"], pre["input_sha256"]) == (done["tool_use_id"], done["input_sha256"])
+    assert not silence.findings(recs)
     text = px.log.read_text(encoding="utf-8")
     for fragment in ("203.0.113.7", "notes.txt", "Upload the notes", "coding agent", "total 0", "No such file",
                      "build directory", "-rf", "-la") + SECRETS:
         assert fragment not in text, fragment
     assert not px.markers() and px.err.getvalue() == ""
-    # Bytes unchanged both ways.
     for exchange, got, (status, headers, body) in zip(session["exchanges"], up.requests, answers):
-        _, sent = request_of(exchange)
+        _, sent = request_of(exchange, px.port)
         assert got["body"] == sent
         response = exchange["response"]
         want = "".join(response["chunks"]).encode() if response.get("chunked") else \
@@ -418,17 +503,16 @@ def test_e4_each_fixture_has_its_positive_and_its_negative():
         assert code == 1 and (finding["rule_id"], finding["cited_seq"], finding["source"]) == (rule, [seq_of[positive]],
                                                                                               "proxy")
         assert seq_of[negative] not in finding["cited_seq"]
-        assert rep["sources"] == {"proxy": 4} and "sources: proxy 4" in text.splitlines()
-        assert "      source: proxy" in text.splitlines()
-        assert not rep["alarms"]
+        assert rep["sources"] == {"proxy": 7} and "sources: proxy 7" in text.splitlines()
+        assert "      source: proxy" in text.splitlines() and not rep["alarms"]
 
 
-def test_e4_mixed_sources_in_one_trace(tmp_path):
-    """The mixed fixture is a hook trace of v0.1 (no source field) followed by
-    a proxy session; each finding names the source of its own lines."""
+def test_e4_mixed_sources_in_one_trace():
+    """A hook trace of v0.1 (no source field) followed by a proxy session;
+    each finding names the source of its own lines."""
     mixed = PROXY / "mixed-sources.trace.log"
-    parts = (FIXTURES / "blocked-calls-claude-code-2.1.301.log").read_text(encoding="utf-8") + \
-        (PROXY / "anthropic-session.trace.log").read_text(encoding="utf-8")
+    hook_log = FIXTURES / "blocked-calls-claude-code-2.1.301.log"
+    parts = hook_log.read_text(encoding="utf-8") + (PROXY / "anthropic-session.trace.log").read_text(encoding="utf-8")
     assert mixed.read_text(encoding="utf-8") == parts
     code, text = run_report(mixed)
     rep = json.loads(run_report(mixed, "--json")[1])
@@ -436,27 +520,243 @@ def test_e4_mixed_sources_in_one_trace(tmp_path):
     for f in rep["findings"]:
         by_source.setdefault(f["source"], set()).add(f["rule_id"])
     assert code == 1 and by_source == {"hook": {"SILENCE-HALF"}, "proxy": {"DESTRUCT-CMD"}}
-    hook_records = len(trace.read(FIXTURES / "blocked-calls-claude-code-2.1.301.log")[0])
-    assert rep["sources"] == {"hook": hook_records, "proxy": 4}
-    assert "sources: hook %d, proxy 4" % hook_records in text.splitlines()
+    hook_records = len(trace.read(hook_log)[0])
+    assert rep["sources"] == {"hook": hook_records, "proxy": 7}
+    assert "sources: hook %d, proxy 7" % hook_records in text.splitlines()
     lines = text.splitlines()
     for f in rep["findings"]:
         head = "  [%s] %s (%s, %s) session %s seq %s" % (f["severity"], f["rule_id"], f["class"], f["kind"],
                                                          f["session_id"], ",".join(map(str, f["cited_seq"])))
         assert lines[lines.index(head) + 1] == "      source: %s" % f["source"]
-    # The page: a source column on every timeline row, the source on every finding card.
     page = ui.render(rep, trace.read_numbered(mixed)[0], [])
     assert "<th>session</th><th>source</th><th>seq</th>" in page
-    assert page.count("<td>hook</td>") == hook_records and page.count("<td>proxy</td>") == 4
+    assert page.count("<td>hook</td>") == hook_records and page.count("<td>proxy</td>") == 7
     for name in ("hook", "proxy"):
         assert page.count(", source %s</span>" % name) == sum(f["source"] == name for f in rep["findings"]) > 0
 
 
 def test_e4_a_finding_with_no_line_in_the_trace_names_no_source():
-    index = {}
-    assert report._source(index, "s", [1]) == "-"
+    assert report._source({}, "s", [1]) == "-"
     index = {("s", 1): [(1, {"source": "proxy"})], ("s", 2): [(2, {})]}
     assert report._source(index, "s", [1, 2]) == "hook+proxy"
+
+
+# --- A-3: conversations ------------------------------------------------------------------------
+
+def test_a3_the_key_is_model_and_first_message_and_each_conversation_is_a_session(running):
+    one, two = {"role": "user", "content": "task one"}, {"role": "user", "content": "task two"}
+    assert proxy.conversation_key({"model": "m", "messages": [one, FIRST]}) == key_of("m", one)
+    assert proxy.conversation_key({"model": "m"}) == key_of("m", None) != key_of("n", None)
+    # Two conversations through one proxy, both with a call numbered "Bash:0" (ids repeat across conversations).
+    up, px = running([[answer_with(tool_use("Bash:0", tool_input={"command": "rm a"}))],
+                      [answer_with(tool_use("Bash:0", tool_input={"command": "ls b"}))],
+                      [answer_with({"type": "text", "text": "done"}, stop="end_turn")],
+                      [answer_with({"type": "text", "text": "done"}, stop="end_turn")]])
+    post(px, "/v1/messages", anthropic_turn(one))
+    post(px, "/v1/messages", anthropic_turn(two))
+    a_use = {"role": "assistant", "content": [tool_use("Bash:0", tool_input={"command": "rm a"})]}
+    b_use = {"role": "assistant", "content": [tool_use("Bash:0", tool_input={"command": "ls b"})]}
+    post(px, "/v1/messages", anthropic_turn(two, b_use, {"role": "user", "content": [tool_result("Bash:0", "B")]}))
+    post(px, "/v1/messages", anthropic_turn(one, a_use, {"role": "user", "content": [tool_result("Bash:0", "A")]}))
+    px.recorder.shutdown()
+    recs = px.records()
+    ka, kb = key_of("m", one), key_of("m", two)
+    assert [(r["session_id"] == ka, r["phase"], r["seq"]) for r in recs] == [
+        (True, "session_start", 1), (True, "pre", 2), (False, "session_start", 1), (False, "pre", 2),
+        (False, "post", 2), (False, "stop", 3), (True, "post", 2), (True, "stop", 3),
+        (True, "session_end", 4), (False, "session_end", 4)]
+    by = {(r["session_id"], r["phase"]): r for r in recs}
+    assert by[(ka, "post")]["input_meta"]["command_head"] == "rm" and by[(kb, "post")]["input_meta"]["command_head"] == "ls"
+    assert not silence.findings(recs)
+
+
+def test_a3_numbered_ids_repeat_within_one_conversation_and_pair_in_order(running):
+    """Kimi-style ids ("Bash:0" every turn): the i-th result with an id is the
+    i-th time that id was answered, so a re-sent first result never closes the
+    second call."""
+    up, px = running([[answer_with(tool_use("Bash:0", tool_input={"command": "ls"}))],
+                      [answer_with(tool_use("Bash:0", tool_input={"command": "rm x"}))],
+                      [answer_with({"type": "text", "text": "ok"}, stop="end_turn")]])
+    use1 = {"role": "assistant", "content": [tool_use("Bash:0", tool_input={"command": "ls"})]}
+    use2 = {"role": "assistant", "content": [tool_use("Bash:0", tool_input={"command": "rm x"})]}
+    res1 = {"role": "user", "content": [tool_result("Bash:0", "first")]}
+    res2 = {"role": "user", "content": [tool_result("Bash:0", "second")]}
+    post(px, "/v1/messages", anthropic_turn(FIRST))
+    post(px, "/v1/messages", anthropic_turn(FIRST, use1, res1))
+    post(px, "/v1/messages", anthropic_turn(FIRST, use1, res1, use2, res2))
+    tools = px.tools()
+    assert [(r["phase"], r["seq"], r["input_meta"]["command_head"]) for r in tools] == [
+        ("pre", 2, "ls"), ("post", 2, "ls"), ("pre", 3, "rm"), ("post", 3, "rm")]
+    assert tools[1]["output_sha256"] == common.canonical_sha256("first")
+    assert tools[3]["output_sha256"] == common.canonical_sha256("second")
+    assert not px.markers() and not [f for f in silence.findings(px.records()) if f["rule_id"] == "SILENCE-HALF"]
+
+
+def test_a3_a_result_with_no_call_in_its_key_is_a_half_and_never_crosses_keys(running):
+    one, two = {"role": "user", "content": "one"}, {"role": "user", "content": "two"}
+    up, px = running([[answer_with(tool_use("call_1"))], [answer_with()], [answer_with()]])
+    post(px, "/v1/messages", anthropic_turn(one))   # call_1 is open in conversation one
+    post(px, "/v1/messages", anthropic_turn(two))   # conversation two, first sight, no result
+    # Conversation two answers "call_1", which it never asked for: a half in its key; one's pre stays open.
+    post(px, "/v1/messages", anthropic_turn(two, {"role": "user", "content": [tool_result("call_1")]}))
+    recs = px.records()
+    half = [r for r in recs if r["phase"] == "post"]
+    assert [(r["session_id"], r["seq"], r["tool"]) for r in half] == [(key_of("m", two), 2, "?")]
+    halves = {(f["session_id"], tuple(f["cited_seq"])) for f in silence.findings(recs) if f["rule_id"] == "SILENCE-HALF"}
+    assert halves == {(key_of("m", one), (2,)), (key_of("m", two), (2,))}
+
+
+def test_a3_stop_only_on_a_turn_end_with_no_tool_call_and_a_closed_session_reopens(running):
+    up, px = running([[json_response({"choices": [{"index": 0, "finish_reason": "length", "message": {}}]})],
+                      [json_response({"choices": [{"index": 0, "finish_reason": "stop", "message": {}}]})],
+                      [json_response({"choices": [{"index": 0, "finish_reason": "stop", "message": {}}]})]])
+    first = {"role": "system", "content": "s"}
+    post(px, "/v1/chat/completions", {"model": "m", "messages": [first]})
+    post(px, "/v1/chat/completions", {"model": "m", "messages": [first]})
+    px.recorder.shutdown()
+    post(px, "/v1/chat/completions", {"model": "m", "messages": [first]})
+    assert [r["phase"] for r in px.records()] == ["session_start", "stop", "session_end", "session_start", "stop"]
+
+
+def test_a3_cwd_option_and_default(tmp_path, running):
+    up, px = running([[answer_with(tool_use("t1"))]], cwd="/elsewhere/project")
+    post(px, "/v1/messages", anthropic_turn(FIRST))
+    assert {r["cwd"] for r in px.records()} == {"/elsewhere/project"}
+    rec = proxy.Recorder(str(tmp_path / "other.jsonl"))
+    assert rec._cwd() == os.getcwd()
+
+
+# --- A-4, A-5: results that predate the proxy, results re-sent with another hash ----------------
+
+def test_a4_results_in_a_conversations_first_request_are_one_history_line(running, tmp_path):
+    up, px = running([[answer_with({"type": "text", "text": "ok"}, stop="end_turn")],
+                      [answer_with({"type": "text", "text": "ok"}, stop="end_turn")]])
+    old = [{"role": "assistant", "content": [tool_use("toolu_old1"), tool_use("toolu_old2")]},
+           {"role": "user", "content": [tool_result("toolu_old1", "a"), tool_result("toolu_old2", "b")]},
+           {"role": "assistant", "content": [tool_use("example_call")]},
+           {"role": "user", "content": [tool_result("example_call", "few-shot")]}]
+    post(px, "/v1/messages", anthropic_turn(FIRST, *old))
+    post(px, "/v1/messages", anthropic_turn(FIRST, *old))     # the same history again: nothing new
+    recs = px.records()
+    assert [r["phase"] for r in recs] == ["session_start", "history", "stop", "stop"]
+    hist = recs[1]
+    assert (hist["results"], hist["tool_use_ids"], hist["tool"]) == (3, ["toolu_old1", "toolu_old2", "example_call"], "-")
+    assert hist["output_sha256s"] == [common.canonical_sha256(x) for x in ("a", "b", "few-shot")]
+    assert not silence.findings(recs) and not px.markers()
+    # A restarted proxy reads the history line back: the same results are still not new.
+    up2, px2 = running([[answer_with({"type": "text", "text": "ok"}, stop="end_turn")]], log=px.log)
+    post(px2, "/v1/messages", anthropic_turn(FIRST, *old))
+    assert [r["phase"] for r in px2.records()][4:] == ["stop"] and not px2.markers()
+    # Shutdown ends every open key, those read from the trace as well (A-3).
+    other = tmp_path / "other.jsonl"
+    other.write_text(px.log.read_text(encoding="utf-8"), encoding="utf-8")
+    fresh = proxy.Recorder(str(other), cwd=CWD, clock=Clock())
+    fresh.shutdown()
+    assert [json.loads(x)["phase"] for x in other.read_text().splitlines()][-1] == "session_end"
+
+
+def test_a5_a_result_re_sent_with_another_hash_is_one_silence_line(running):
+    up, px = running([[answer_with(tool_use("toolu_x"))], [answer_with()], [answer_with()], [answer_with()]])
+    use = {"role": "assistant", "content": [tool_use("toolu_x")]}
+    post(px, "/v1/messages", anthropic_turn(FIRST))
+    post(px, "/v1/messages", anthropic_turn(FIRST, use, {"role": "user", "content": [tool_result("toolu_x", "real")]}))
+    for _ in range(2):
+        post(px, "/v1/messages", anthropic_turn(FIRST, use, {"role": "user", "content": [tool_result("toolu_x", "forged")]}))
+    (post_line,) = [r for r in px.records() if r["phase"] == "post"]
+    assert post_line["output_sha256"] == common.canonical_sha256("real")   # the first post stays
+    (marker,) = px.markers()
+    assert "result for toolu_x re-sent with a different hash" in marker and "the first post stays" in marker
+    assert "session=%s" % key_of("m", FIRST) in marker
+    assert trace.parse(marker)[1] == [{"line": 1, "reason": trace.SILENCE_REASON}]   # a trace problem: an alarm
+
+
+def test_e3_a_restarted_proxy_closes_the_calls_of_the_run_before(tmp_path, running):
+    first = {"role": "system", "content": "s"}
+    answer = {"choices": [{"index": 0, "finish_reason": "tool_calls", "message": {"tool_calls": [
+        {"id": "call_r", "type": "function", "function": {"name": "Bash", "arguments": "{\"command\":\"ls\"}"}}]}}]}
+    up, one = running([[json_response(answer)]])
+    post(one, "/v1/chat/completions", {"model": "m", "messages": [first]})
+    one.stop()
+    one.recorder.shutdown()
+    up2, two = running([[json_response({"choices": [{"index": 0, "finish_reason": "stop", "message": {}}]})]],
+                       log=one.log)
+    msgs = [first, {"role": "assistant", "tool_calls": answer["choices"][0]["message"]["tool_calls"]},
+            {"role": "tool", "tool_call_id": "call_r", "content": "x"}]
+    post(two, "/v1/chat/completions", {"model": "m", "messages": msgs})
+    assert [(r["phase"], r["seq"]) for r in two.records()] == [
+        ("session_start", 1), ("pre", 2), ("session_end", 3), ("session_start", 4), ("post", 2), ("stop", 5)]
+    assert not [f for f in silence.findings(two.records()) if f["rule_id"] == "SILENCE-HALF"]
+
+
+def test_a9_the_trace_is_read_once_at_start(tmp_path, running, monkeypatch):
+    up, px = running([[answer_with(tool_use("toolu_m"))], [answer_with()]])
+    reads = []
+    real_open = open
+
+    def watching_open(path, mode="r", *a, **k):
+        if str(path) == str(px.log) and "r" in mode and "+" not in mode:
+            reads.append(mode)
+        return real_open(path, mode, *a, **k)
+    monkeypatch.setattr("builtins.open", watching_open)
+    post(px, "/v1/messages", anthropic_turn(FIRST))
+    post(px, "/v1/messages", anthropic_turn(FIRST, {"role": "assistant", "content": [tool_use("toolu_m")]},
+                                            {"role": "user", "content": [tool_result("toolu_m")]}))
+    assert reads == [] and [r["phase"] for r in px.tools()] == ["pre", "post"]
+    # Lines another process appends are not read back: the index is the proxy's own.
+    with real_open(px.log, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"ts": "2026-11-03T11:00:00.000Z", "seq": 99, "session_id": key_of("m", FIRST),
+                            "phase": "pre", "tool": "Bash", "tool_use_id": "toolu_z", "input_sha256": "0" * 64,
+                            "input_meta": {}, "cwd": CWD, "source": "proxy"}) + "\n")
+    assert "toolu_z" not in px.recorder.convs[key_of("m", FIRST)].pres
+
+
+def test_e3_a_hook_pre_with_the_same_id_is_not_the_proxys(running, tmp_path):
+    log = tmp_path / "trace.jsonl"
+    log.write_text(json.dumps({"ts": "2026-11-03T09:00:00.000Z", "seq": 1, "session_id": "claude-1", "phase": "pre",
+                               "tool": "Bash", "tool_use_id": "toolu_h", "input_sha256": "0" * 64, "input_meta": {},
+                               "cwd": CWD}) + "\n", encoding="utf-8")
+    up, px = running([[answer_with()], [answer_with()]], log=log)
+    post(px, "/v1/messages", anthropic_turn(FIRST))
+    post(px, "/v1/messages", anthropic_turn(FIRST, {"role": "user", "content": [tool_result("toolu_h")]}))
+    hook, start, done = px.records()
+    assert "source" not in hook and (done["phase"], done["seq"], done["session_id"]) == ("post", 2, key_of("m", FIRST))
+
+
+def test_e3_tool_results_are_scanned_for_secret_names_only(running):
+    token = "gh" + "p_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
+    up, px = running([[json_response({"choices": []})], [json_response({"choices": []})]])
+    first = {"role": "system", "content": "s"}
+    post(px, "/v1/chat/completions", {"model": "m", "messages": [first]})
+    post(px, "/v1/chat/completions", {"model": "m", "messages": [first, {"role": "tool", "tool_call_id": "call_k",
+                                                                        "content": "token=" + token}]})
+    (done,) = px.tools()
+    assert done["output_meta"] == {"scan": "full", "secret_kinds": ["github_token"]}
+    assert token not in px.log.read_text() and token[-12:] not in px.log.read_text()
+
+
+# --- A-2: bounded tool names and ids -------------------------------------------------------------
+
+def test_a2_tool_and_tool_use_id_are_bounded_or_hashed(running, tmp_path):
+    assert proxy.bounded("Bash", 64) == ("Bash", False) and proxy.bounded(None, 64) == (None, False)
+    assert proxy.bounded("", 64) == (None, False) and proxy.bounded("x" * 64, 64) == ("x" * 64, False)
+    for bad in ("x" * 65, "na\u00efve", "a\nb", "a\x7fb", 7, ["Bash"], {"n": 1}):
+        text, hashed = proxy.bounded(bad, 64)
+        assert hashed and text == "sha256:" + common.canonical_sha256(bad)[:16]
+    long_id, odd_name = "id-" + "9" * 200, "Bash\u202e\n" + "x" * 100
+    up, px = running([[answer_with(tool_use(long_id, name=odd_name)), ], [answer_with()]])
+    post(px, "/v1/messages", anthropic_turn(FIRST))
+    post(px, "/v1/messages", anthropic_turn(FIRST, {"role": "assistant", "content": [tool_use(long_id, name=odd_name)]},
+                                            {"role": "user", "content": [tool_result(long_id)]}))
+    pre, done = px.tools()
+    for rec in (pre, done):
+        assert rec["tool_hashed"] is True and rec["seq"] == 2
+        assert rec["tool"] == "sha256:" + common.canonical_sha256(odd_name)[:16]
+        assert rec["tool_use_id"] == "sha256:" + common.canonical_sha256(long_id)[:16]
+        assert list(rec).index("tool_hashed") == list(rec).index("tool_use_id") + 1
+    assert all(ord(c) < 128 for c in px.log.read_text(encoding="utf-8")) and "9" * 50 not in px.log.read_text()
+    up2, px2 = running([[answer_with(tool_use("toolu_plain"))]], log=tmp_path / "plain.jsonl")
+    post(px2, "/v1/messages", anthropic_turn(FIRST))
+    assert "tool_hashed" not in px2.tools()[0]
 
 
 # --- E2: relaying ------------------------------------------------------------------------------
@@ -467,7 +767,7 @@ def test_e2_headers_are_relayed_except_host_and_hop_by_hop(running):
                                                            ("x-request-id", "r-1")))]])
     headers = [["Host", "127.0.0.1:%d" % px.port], ["Authorization", "Bearer " + SECRETS[0]], ["X-Hop", "1"],
                ["Connection", "close, X-Hop"], ["Keep-Alive", "timeout=5"], ["Proxy-Authorization", "Basic x"],
-               ["TE", "trailers"], ["Upgrade", "h2c"], ["Accept-Encoding", "identity"], ["X-Agent", "a b"],
+               ["TE", "trailers"], ["Accept-Encoding", "identity"], ["X-Agent", "a b"],
                ["Content-Type", "application/json"]]
     body = b'{"model":"m","messages":[]}'
     status, got, answer = parse_response(send(px.port, raw_request("POST", "/v1/chat/completions?x=1", headers, body)))
@@ -477,21 +777,23 @@ def test_e2_headers_are_relayed_except_host_and_hop_by_hop(running):
                               ("Accept-Encoding", "identity"), ("X-Agent", "a b"), ("Content-Type", "application/json"),
                               ("Content-Length", str(len(body)))]
     assert req["body"] == body
-    # The answer: the upstream's headers in order, minus hop-by-hop; nothing added (no Server, no Date).
     assert (status, answer) == (200, b'{"id": "x"}')
     assert got == [("Content-Type", "application/json"), ("X-Up", "1"), ("x-request-id", "r-1"),
                    ("Content-Length", "11")]
-    assert not px.markers() and px.records() == []
+    assert not px.markers()
 
 
-def test_e2_an_upstream_path_prefix_and_other_methods_pass_unrecorded(running, tmp_path):
-    up = FakeUpstream([[json_response({"data": []})], [json_response({"deleted": True})]])
+def test_e2_an_upstream_path_prefix_and_other_methods_pass_unrecorded(tmp_path):
+    up = FakeUpstream([[json_response({"data": []})], [json_response({"deleted": True})],
+                       [json_response({}, status=200)]])
     px = Running(tmp_path, up.url() + "/base")
     try:
-        status, _, body = parse_response(send(px.port, raw_request("GET", "/v1/models", [["Connection", "close"]])))
+        status, _, body = parse_response(call(px, "GET", "/v1/models"))
         assert (status, body) == (200, b'{"data": []}')
-        send(px.port, raw_request("DELETE", "/v1/files/f-1", [["Connection", "close"]]))
-        assert [r["line"] for r in up.requests] == ["GET /base/v1/models HTTP/1.1", "DELETE /base/v1/files/f-1 HTTP/1.1"]
+        call(px, "DELETE", "/v1/files/f-1")
+        call(px, "OPTIONS", "/v1/x")
+        assert [r["line"] for r in up.requests] == ["GET /base/v1/models HTTP/1.1", "DELETE /base/v1/files/f-1 HTTP/1.1",
+                                                    "OPTIONS /base/v1/x HTTP/1.1"]
         assert px.lines() == []
     finally:
         px.stop()
@@ -505,102 +807,244 @@ def test_e2_streaming_passes_each_piece_as_it_arrives_and_the_pre_is_written_fir
               'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n', "data: [DONE]\n\n"]
     up, px = running([[chunked_head([("Content-Type", "text/event-stream")]), chunk(events[0]), first_read,
                        chunk(events[1]), chunk(events[2]), b"0\r\n\r\n"]])
-    body = b'{"model":"m","stream":true,"messages":[]}'
+    body = b'{"model":"m","stream":true,"messages":[{"role":"system","content":"s"}]}'
     with socket.create_connection(("127.0.0.1", px.port), timeout=20) as s:
-        s.sendall(raw_request("POST", "/v1/chat/completions", [["Connection", "close"]], body))
+        s.sendall(raw_request("POST", "/v1/chat/completions", [["Host", "127.0.0.1:%d" % px.port],
+                                                               ["Connection", "close"]], body))
         got = b""
         while events[0].encode() not in got:
             got += s.recv(65536)
-        # The first event is here while the upstream still holds the second: nothing was buffered.
-        assert b"finish_reason\":\"tool_calls" not in got and px.records() == []
+        assert b"finish_reason\":\"tool_calls" not in got and px.tools() == []
         first_read.set()
         while b"[DONE]" not in got:
             piece = s.recv(65536)
-            if b"tool_calls\"}" in piece or b"finish_reason\":\"tool_calls" in piece:
-                # The piece that completes the call is passed on only after its pre is in the trace.
-                assert [r["phase"] for r in px.records()] == ["pre"]
+            if b"finish_reason\":\"tool_calls" in piece:
+                assert [r["phase"] for r in px.tools()] == ["pre"]   # written before the piece passed
             got += piece
         while not got.endswith(b"0\r\n\r\n"):
             got += s.recv(65536)
     status, _, answer = parse_response(got)
     assert (status, answer) == (200, "".join(events).encode())
-    (pre,) = px.records()
+    (pre,) = px.tools()
     assert (pre["tool"], pre["tool_use_id"], pre["input_meta"]) == ("Bash", "call_s", {"command_head": "ls",
                                                                                         "command_programs": ["ls"]})
+    assert not px.markers()
 
 
-def test_e3_a_result_posted_once_and_an_unmatched_result_is_a_half(running):
-    def turn(messages):
-        return raw_request("POST", "/v1/messages", [["Connection", "close"]],
-                           json.dumps({"model": "m", "messages": messages}).encode())
-    answer = {"type": "message", "content": [{"type": "tool_use", "id": "toolu_a", "name": "Read",
-                                              "input": {"file_path": "/work/example/a.txt"}}], "stop_reason": "tool_use"}
-    up, px = running([[json_response(answer)], [json_response({"type": "message", "content": []})],
-                      [json_response({"type": "message", "content": []})]])
-    history = [{"role": "user", "content": "read a"},
-               {"role": "assistant", "content": answer["content"]},
-               {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_a", "content": "A"}]}]
-    send(px.port, turn(history[:1]))
-    send(px.port, turn(history))
-    # The next turn repeats the result (posted already) and holds one whose call the proxy never saw.
-    send(px.port, turn(history + [{"role": "assistant", "content": [{"type": "tool_use", "id": "toolu_b", "name": "Bash",
-                                                                     "input": {"command": "rm x"}}]},
-                                  {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_b",
-                                                                "content": "done"},
-                                                               {"type": "tool_result", "tool_use_id": "toolu_c",
-                                                                "content": "?"}]}]))
-    recs = px.records()
-    assert [(r["phase"], r["seq"], r.get("tool_use_id"), r["tool"]) for r in recs] == [
-        ("pre", 1, "toolu_a", "Read"), ("post", 1, "toolu_a", "Read"), ("post", 2, "toolu_b", "Bash"),
-        ("post", 3, "toolu_c", "?")]
-    assert recs[1]["input_meta"] == {"path": "/work/example/a.txt"} and recs[1]["ok"] is True
-    assert recs[2]["input_meta"] == {"command_head": "rm", "command_programs": ["rm"]}
-    assert recs[3]["input_meta"] == {} and recs[3]["input_sha256"] == common.canonical_sha256(None)
-    halves = [f for f in silence.findings(recs) if f["rule_id"] == "SILENCE-HALF"]
-    assert [f["cited_seq"] for f in halves] == [[2], [3]] and all("a pre is missing" in f["summary"] for f in halves)
+# --- A-6: who may send ----------------------------------------------------------------------------
+
+@pytest.mark.parametrize("hosts, origin", [([], None), (["localhost:{port}"], None), (["127.0.0.1"], None),
+                                           (["127.0.0.1:1"], None), (["127.0.0.1:{port}", "127.0.0.1:{port}"], None),
+                                           (["127.0.0.1:{port}"], "http://evil.example"),
+                                           (["127.0.0.1:{port}"], "null")])
+def test_a6_a_wrong_host_or_any_origin_is_403_and_never_relayed(running, hosts, origin):
+    up, px = running()
+    headers = [["Host", h.format(port=px.port)] for h in hosts] + ([["Origin", origin]] if origin else [])
+    body = json.dumps(anthropic_turn(FIRST, {"role": "user", "content": [tool_result("toolu_f")]})).encode()
+    status, _, text = parse_response(send(px.port, raw_request("POST", "/v1/messages", headers + [["Connection", "close"]],
+                                                               body)))
+    assert status == 403 and up.requests == [] and px.records() == []
+    (marker,) = px.markers()
+    assert marker.startswith("RAQIB-SILENCE: proxy did not relay a request: ")
+    assert ("Origin header" in marker) == bool(origin)
+    assert "evil" not in marker   # the header values are not written
 
 
-def test_e3_a_restarted_proxy_closes_the_calls_of_the_run_before(tmp_path, running):
-    answer = {"choices": [{"index": 0, "message": {"tool_calls": [
-        {"id": "call_r", "type": "function", "function": {"name": "Bash", "arguments": "{\"command\":\"ls\"}"}}]}}]}
-    up, first = running([[json_response(answer)]], session="proxy-run-1")
-    send(first.port, raw_request("POST", "/v1/chat/completions", [["Connection", "close"]], b'{"messages":[]}'))
-    first.stop()
-    up2, second = running([[json_response({"choices": []})]], session="proxy-run-2", log=first.log)
-    msgs = [{"role": "assistant", "tool_calls": answer["choices"][0]["message"]["tool_calls"]},
-            {"role": "tool", "tool_call_id": "call_r", "content": "x"}]
-    send(second.port, raw_request("POST", "/v1/chat/completions", [["Connection", "close"]],
-                                  json.dumps({"messages": msgs}).encode()))
-    recs = second.records()
-    assert [(r["session_id"], r["phase"], r["seq"]) for r in recs] == [("proxy-run-1", "pre", 1),
-                                                                         ("proxy-run-1", "post", 1)]
-    assert not silence.findings(recs)
+def test_a6_refused_lines_fold_to_one_per_60_s_with_a_count(running):
+    up, px = running()
+    bad = raw_request("GET", "/v1/models", [["Host", "localhost"], ["Connection", "close"]])
+    for _ in range(5):
+        assert parse_response(send(px.port, bad))[0] == 403
+    assert len(px.markers()) == 1
+    px.mono.now += proxy.FOLD_SECONDS
+    send(px.port, bad)
+    assert len(px.markers()) == 2 and "; 4 more refused requests in the 60 s before were not written one by one" \
+        in px.markers()[1]
+    send(px.port, bad)
+    send(px.port, bad)
+    px.recorder.shutdown()   # the count not yet written is written at the end
+    assert len(px.markers()) == 3 and "did not relay 2 more refused requests" in px.markers()[2]
 
 
-def test_e3_a_hook_pre_with_the_same_id_is_not_the_proxys(running, tmp_path):
-    log = tmp_path / "trace.jsonl"
-    log.write_text(json.dumps({"ts": "2026-11-03T09:00:00.000Z", "seq": 1, "session_id": "claude-1", "phase": "pre",
-                               "tool": "Bash", "tool_use_id": "toolu_h", "input_sha256": "0" * 64, "input_meta": {},
-                               "cwd": CWD}) + "\n", encoding="utf-8")
-    up, px = running([[json_response({"content": []})]], log=log)
-    msgs = [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_h", "content": "x"}]}]
-    send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]], json.dumps({"messages": msgs}).encode()))
-    hook, post = px.records()
-    assert "source" not in hook and (post["session_id"], post["seq"], post["source"]) == (SESSION, 1, "proxy")
+# --- A-8: refused and odd exchanges ---------------------------------------------------------------
+
+def test_a8_upgrade_trace_connect_and_other_methods_are_refused(running):
+    up, px = running()
+    host = ["Host", "127.0.0.1:%d" % px.port]
+    for data, status, why in (
+            (raw_request("GET", "/ws", [host, ["Upgrade", "websocket"], ["Connection", "Upgrade"]]), 501, "Upgrade"),
+            (raw_request("TRACE", "/", [host, ["Connection", "close"]]), 405, "method TRACE"),
+            (raw_request("FROB", "/x", [host, ["Connection", "close"]]), 405, "method FROB"),
+            (b"CONNECT api.example.com:443 HTTP/1.1\r\nHost: 127.0.0.1:%d\r\n\r\n" % px.port, 405, "method CONNECT"),
+            (raw_request("GET", "http://api.example.com/v1/models", [host, ["Connection", "close"]]), 400, "not a path"),
+            (raw_request("POST", "/v1/messages", [host, ["Transfer-Encoding", "gzip, chunked"]]), 501, "chunked"),
+            (raw_request("POST", "/v1/messages", [host, ["Content-Length", "x"]]), 400, "Content-Length")):
+        px.mono.now += proxy.FOLD_SECONDS   # one line each, not folded
+        assert parse_response(send(px.port, data))[0] == status, why
+        assert why in px.markers()[-1], (why, px.markers()[-1])
+    assert len(px.markers()) == 7 and up.requests == []
 
 
-def test_e3_tool_results_are_scanned_for_secret_names_only(running):
-    token = "gh" + "p_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
-    up, px = running([[json_response({"choices": []})]])
-    msgs = [{"role": "tool", "tool_call_id": "call_k", "content": "token=" + token}]
-    send(px.port, raw_request("POST", "/v1/chat/completions", [["Connection", "close"]],
-                              json.dumps({"messages": msgs}).encode()))
-    (post,) = px.records()
-    assert post["output_meta"] == {"scan": "full", "secret_kinds": ["github_token"]}
-    assert token not in px.log.read_text() and token[-12:] not in px.log.read_text()
+def test_a8_http_1_0_agents_get_no_stale_framing(running):
+    head = (b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 999\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n")
+    up, px = running([[head, chunk('{"a":'), chunk("1}"), b"0\r\n\r\n"], [head, chunk('{"b":2}'), b"0\r\n\r\n"]])
+    old = send(px.port, b"GET /v1/models HTTP/1.0\r\nHost: 127.0.0.1:%d\r\n\r\n" % px.port)
+    head_text, body = old.split(b"\r\n\r\n", 1)
+    assert body == b'{"a":1}' and b"Content-Length" not in head_text and b"Transfer-Encoding" not in head_text
+    assert b"Connection: close" in head_text
+    status, headers, body = parse_response(call(px, "GET", "/v1/models"))
+    assert body == b'{"b":2}' and not any(k.lower() == "content-length" for k, _ in headers)
+    assert ("Transfer-Encoding", "chunked") in headers
 
 
-# --- E2 / A3: failures -------------------------------------------------------------------------
+def test_a8_a_head_answer_keeps_its_headers_and_the_connection(running):
+    up, px = running([[b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n"],
+                      [json_response({"after": 1})]])
+    with socket.create_connection(("127.0.0.1", px.port), timeout=20) as s:
+        s.sendall(raw_request("HEAD", "/v1/x", [["Host", "127.0.0.1:%d" % px.port]]))
+        got = b""
+        while b"\r\n\r\n" not in got:
+            got += s.recv(65536)
+        assert b"Transfer-Encoding: chunked" in got and b"Connection: close" not in got
+        s.sendall(raw_request("GET", "/v1/y", [["Host", "127.0.0.1:%d" % px.port], ["Connection", "close"]]))
+        while True:   # the same connection serves the next request
+            piece = s.recv(65536)
+            if not piece:
+                break
+            got += piece
+    assert got.endswith(b'{"after": 1}') and [r["line"] for r in up.requests] == ["HEAD /v1/x HTTP/1.1",
+                                                                                "GET /v1/y HTTP/1.1"]
+
+
+def test_a8_an_interim_1xx_is_not_relayed_and_is_one_line(running):
+    up, px = running([[b"HTTP/1.1 103 Early Hints\r\nLink: </x>; rel=preload\r\n\r\n",
+                       json_response({"choices": [{"index": 0, "finish_reason": "stop", "message": {}}]})],
+                      [b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"]])
+    status, headers, body = post(px, "/v1/chat/completions", {"model": "m", "messages": [{"role": "system"}]})
+    assert status == 200 and json.loads(body)["choices"][0]["finish_reason"] == "stop"
+    assert not any(k == "Link" for k, _ in headers)
+    (marker,) = px.markers()
+    assert "upstream sent an interim 103 answer; not relayed" in marker
+    assert [r["phase"] for r in px.records()] == ["session_start", "stop"]
+    status, _, _ = parse_response(call(px, "GET", "/v1/models"))
+    assert status == 502 and "interim 101" in px.markers()[1] and "upstream failed before an answer" in px.markers()[2]
+
+
+def test_a8_an_sse_error_event_an_unended_stream_and_an_agent_that_leaves(running):
+    error = ('event: error\ndata: {"type":"error","error":{"type":"overloaded_error"}}\n\n')
+    up, px = running([[chunked_head([("Content-Type", "text/event-stream")]), chunk(error), b"0\r\n\r\n"],
+                      [chunked_head([("Content-Type", "text/event-stream")]),
+                       chunk('data: {"type":"message_start","message":{}}\n\n'), b"0\r\n\r\n"]])
+    post(px, "/v1/messages", anthropic_turn(FIRST))
+    assert "the answer carried an error event" in px.markers()[0]
+    assert "ended without its end event" in px.markers()[1]
+    post(px, "/v1/messages", anthropic_turn(FIRST))
+    assert len(px.markers()) == 3 and "ended without its end event" in px.markers()[2]
+    # An agent that leaves mid-stream.
+    hold = threading.Event()
+    up.scripts.append([chunked_head([("Content-Type", "text/event-stream")]), chunk("data: {}\n\n"), hold]
+                      + [chunk("data: {}\n\n" * 6000)] * 40 + [b"0\r\n\r\n"])
+    s = socket.create_connection(("127.0.0.1", px.port), timeout=20)
+    s.sendall(raw_request("POST", "/v1/messages", [["Host", "127.0.0.1:%d" % px.port]],
+                          json.dumps(anthropic_turn(FIRST)).encode()))
+    s.recv(100)
+    s.close()
+    hold.set()
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and not any("the agent left during the answer" in m for m in px.markers()):
+        time.sleep(0.05)
+    assert any("the agent left during the answer" in m for m in px.markers())
+
+
+def test_a8_a_stream_whose_end_event_came_writes_no_line(running):
+    up, px = running([[chunked_head([("Content-Type", "text/event-stream")]),
+                       chunk('data: {"choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":null}]}\n\n'),
+                       chunk('data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n'), b"0\r\n\r\n"]])
+    post(px, "/v1/chat/completions", {"model": "m", "messages": [{"role": "system"}], "stream": True})
+    assert not px.markers() and [r["phase"] for r in px.records()] == ["session_start", "stop"]
+
+
+# --- A-1: recording never breaks relaying -------------------------------------------------------------
+
+def test_a1_a_request_too_deep_for_json_is_relayed_with_one_record_failed_line(running):
+    up, px = running([[json_response({"ok": True})]])
+    body = b'{"model":"m","messages":' + b"[" * 200000 + b"]" * 200000 + b"}"
+    status, _, answer = parse_response(call(px, "POST", "/v1/messages", (), body))
+    assert (status, answer) == (200, b'{"ok": true}') and up.requests[0]["body"] == body
+    (marker,) = px.markers()
+    assert "record failed: RecursionError (reading the request); the bytes are relayed" in marker
+
+
+def test_a1_an_answer_too_deep_for_json_is_relayed_whole(running):
+    deep = b'{"content":' + b"[" * 200000 + b"]" * 200000 + b"}"
+    up, px = running([[json_response(None, raw_body=deep)]])
+    status, _, answer = post(px, "/v1/messages", anthropic_turn(FIRST))
+    assert (status, answer) == (200, deep)
+    assert any("record failed: RecursionError (reading the answer)" in m for m in px.markers())
+
+
+@pytest.mark.parametrize("api, event", [
+    ("anthropic", 'data: {"type":"content_block_start","index":[1],"content_block":{"type":"tool_use","id":"t",'
+                  '"name":"Bash","input":{}}}\n\n'),
+    ("openai", 'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":[0],"id":"c","function":{"name":"f",'
+               '"arguments":"{}"}}]}}]}\n\n'),
+])
+def test_a1_a_list_valued_index_stops_recording_not_the_stream(running, api, event):
+    rest = "data: [DONE]\n\n" if api == "openai" else 'data: {"type":"message_stop"}\n\n'
+    up, px = running([[chunked_head([("Content-Type", "text/event-stream")]), chunk(event), chunk(rest), b"0\r\n\r\n"]])
+    path = "/v1/chat/completions" if api == "openai" else "/v1/messages"
+    status, _, answer = post(px, path, {"model": "m", "messages": [{"role": "user", "content": "x"}], "stream": True})
+    assert (status, answer) == (200, (event + rest).encode())
+    (marker,) = px.markers()
+    assert "record failed: TypeError (reading the answer)" in marker and px.tools() == []
+
+
+def test_a1_memory_shaped_failures_in_recording_are_lines_and_the_bytes_pass(running, monkeypatch):
+    stream = [chunked_head([("Content-Type", "text/event-stream")]), chunk('data: {"type":"message_stop"}\n\n'),
+              b"0\r\n\r\n"]
+    up, px = running([[json_response({"x": 1})], list(stream)])
+
+    def oom(*a, **k):
+        raise MemoryError()
+    monkeypatch.setattr(proxy.Recorder, "request", oom)
+    status, _, answer = post(px, "/v1/messages", anthropic_turn(FIRST))
+    assert (status, answer) == (200, b'{"x": 1}')
+    assert "record failed: MemoryError (reading the request)" in px.markers()[0]
+    monkeypatch.undo()
+    monkeypatch.setattr(proxy.StreamCalls, "feed", oom)
+    status, _, answer = post(px, "/v1/messages", anthropic_turn(FIRST))
+    assert (status, answer) == (200, b'data: {"type":"message_stop"}\n\n')
+    assert "record failed: MemoryError (reading the answer)" in px.markers()[1] and len(px.markers()) == 2
+
+
+def test_a1_a_request_body_over_the_cap_is_streamed_whole_and_unrecorded(running, monkeypatch):
+    monkeypatch.setattr(proxy, "PARSE_MAX", 1000)
+    up, px = running([[json_response({"a": 1})], [json_response({"b": 2})]])
+    big = json.dumps(anthropic_turn(FIRST, {"role": "user", "content": [tool_result("toolu_big", "x" * 5000)]})).encode()
+    status, _, answer = parse_response(call(px, "POST", "/v1/messages", (), big))
+    assert (status, answer) == (200, b'{"a": 1}') and up.requests[0]["body"] == big
+    chunks = b"".join(chunk(big[i:i + 700]) for i in range(0, len(big), 700)) + b"0\r\n\r\n"
+    status, _, answer = parse_response(call(px, "POST", "/v1/messages", [["Transfer-Encoding", "chunked"]], chunks))
+    assert (status, answer) == (200, b'{"b": 2}') and up.requests[1]["body"] == chunks
+    assert len(px.markers()) == 2 and all("over the 1000 bytes the proxy reads; relayed unrecorded" in m
+                                          for m in px.markers())
+    assert px.records() == []
+
+
+def test_a1_a_chunk_size_line_is_bounded_and_a_big_chunk_is_read_in_pieces(running):
+    up, px = running([[json_response({"ok": 1})]])
+    huge = b"1" + b"0" * 16 + b"\r\nx\r\n0\r\n\r\n"   # 17 hex digits
+    status, _, _ = parse_response(call(px, "POST", "/v1/messages", [["Transfer-Encoding", "chunked"]], huge))
+    assert status == 400 and up.requests == [] and "body cannot be read (bad chunk size line)" in px.markers()[0]
+    body = json.dumps(anthropic_turn(FIRST, {"role": "user", "content": [tool_result("t", "y" * 300000)]})).encode()
+    one_chunk = b"%x\r\n%s\r\n0\r\n\r\n" % (len(body), body)
+    status, _, _ = parse_response(call(px, "POST", "/v1/messages", [["Transfer-Encoding", "chunked"]], one_chunk))
+    assert status == 200 and up.requests[0]["body"] == one_chunk
+    assert [r["phase"] for r in px.records()] == ["session_start", "history"]
+
+
+# --- E2 / A3: failures ----------------------------------------------------------------------------
 
 def test_e2_an_upstream_that_refuses_is_502_and_one_silence_line(tmp_path):
     sock = socket.socket()
@@ -609,14 +1053,13 @@ def test_e2_an_upstream_that_refuses_is_502_and_one_silence_line(tmp_path):
     sock.close()  # nothing listens there
     px = Running(tmp_path, "http://127.0.0.1:%d" % port)
     try:
-        status, headers, body = parse_response(send(px.port, raw_request(
-            "POST", "/v1/chat/completions?api_key=" + SECRETS[0], [["Authorization", "Bearer " + SECRETS[0]]],
-            b'{"messages":[]}')))
+        status, headers, body = parse_response(call(px, "POST", "/v1/chat/completions?api_key=" + SECRETS[0],
+                                                    [["Authorization", "Bearer " + SECRETS[0]]],
+                                                    b'{"model":"m","messages":[]}'))
         assert status == 502 and b"did not answer" in body and ("Connection", "close") in headers
         (marker,) = px.markers()
         assert marker.startswith("RAQIB-SILENCE: proxy upstream failed before an answer: ConnectionRefusedError")
-        assert marker.endswith(" session=%s POST /v1/chat/completions" % SESSION)
-        assert px.err.getvalue() == marker + "\n" and px.records() == []
+        assert marker.endswith(" session=%s POST /v1/chat/completions" % key_of("m", None))
         for secret in SECRETS:
             assert secret not in px.log.read_text() and secret not in px.err.getvalue()
     finally:
@@ -625,33 +1068,28 @@ def test_e2_an_upstream_that_refuses_is_502_and_one_silence_line(tmp_path):
 
 def test_e2_no_retry_an_upstream_that_closes_is_asked_once(running):
     up, px = running([["close"]])
-    status, _, _ = parse_response(send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]],
-                                                            b'{"messages":[]}')))
+    status, _, _ = post(px, "/v1/messages", anthropic_turn(FIRST))
     up.done.wait(5)
     assert status == 502 and up.accepts == 1 and len(up.requests) == 1
-    (marker,) = px.markers()
-    assert "upstream failed before an answer" in marker   # RemoteDisconnected (or a reset, on Windows)
+    assert "upstream failed before an answer" in px.markers()[0]
 
 
-def test_e2_an_upstream_5xx_is_relayed_unchanged_with_one_silence_line(running):
-    up, px = running([[json_response({"error": {"type": "overloaded_error"}}, status=500)]])
-    status, headers, body = parse_response(send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]],
-                                                                     b'{"messages":[]}')))
+def test_a13_an_upstream_5xx_is_silence_and_a_4xx_is_not(running):
+    up, px = running([[json_response({"error": {"type": "overloaded_error"}}, status=500)],
+                      [json_response({"error": "bad key"}, status=401)],
+                      [json_response({"error": "slow down"}, status=429)]])
+    status, _, body = post(px, "/v1/messages", anthropic_turn(FIRST))
     assert (status, body) == (500, b'{"error": {"type": "overloaded_error"}}')
     (marker,) = px.markers()
-    assert "upstream answered 500; relayed unchanged" in marker and px.records() == []
-
-
-def test_e2_an_upstream_4xx_is_relayed_and_is_not_silence(running):
-    up, px = running([[json_response({"error": "bad key"}, status=401)]])
-    status, _, body = parse_response(send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]],
-                                                               b'{"messages":[]}')))
-    assert (status, body) == (401, b'{"error": "bad key"}') and px.lines() == []
+    assert "upstream answered 500; relayed unchanged" in marker
+    assert post(px, "/v1/messages", anthropic_turn(FIRST))[0] == 401
+    assert post(px, "/v1/messages", anthropic_turn(FIRST))[0] == 429
+    assert len(px.markers()) == 1
 
 
 def test_e2_an_upstream_cut_mid_answer_is_one_silence_line(running):
     up, px = running([[chunked_head([("Content-Type", "text/event-stream")]), chunk("data: {}\n\n"), b"5\r\nab", "close"]])
-    raw = send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]], b'{"messages":[]}'))
+    raw = call(px, "POST", "/v1/messages", (), json.dumps(anthropic_turn(FIRST)).encode())
     assert raw.startswith(b"HTTP/1.1 200 ") and not raw.endswith(b"0\r\n\r\n")
     (marker,) = px.markers()
     assert "upstream failed during the answer (status 200 already sent)" in marker
@@ -660,23 +1098,18 @@ def test_e2_an_upstream_cut_mid_answer_is_one_silence_line(running):
 def test_e2_an_upstream_timeout_is_504(running, monkeypatch):
     monkeypatch.setattr(proxy, "UPSTREAM_TIMEOUT", 0.5)
     up, px = running([["hold"]])
-    status, _, _ = parse_response(send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]],
-                                                            b'{"messages":[]}')))
+    status, _, _ = post(px, "/v1/messages", anthropic_turn(FIRST))
     assert status == 504 and "timed out" in px.markers()[0]
 
 
-def test_e2_https_is_never_spoken_as_plain_http(running, tmp_path):
-    """An https upstream that answers in plain HTTP fails the TLS handshake:
-    502 and one line; the upstream saw a TLS ClientHello, never the request."""
+def test_e2_https_is_never_spoken_as_plain_http(tmp_path):
     up = FakeUpstream(raw=True)
     px = Running(tmp_path, "https://127.0.0.1:%d" % up.port)
     try:
-        status, _, _ = parse_response(send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]],
-                                                                b'{"messages":[]}')))
+        status, _, _ = post(px, "/v1/messages", anthropic_turn(FIRST))
         assert status == 502 and up.requests and up.requests[0][:1] == b"\x16"
         assert b"POST" not in up.requests[0] and b"messages" not in up.requests[0]
-        (marker,) = px.markers()
-        assert "upstream failed before an answer" in marker
+        assert "upstream failed before an answer" in px.markers()[0]
     finally:
         px.stop()
         up.close()
@@ -706,38 +1139,26 @@ def test_e2_an_untrusted_certificate_is_refused(tmp_path):
     threading.Thread(target=serve, daemon=True).start()
     px = Running(tmp_path, "https://127.0.0.1:%d" % sock.getsockname()[1])
     try:
-        status, _, _ = parse_response(send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]],
-                                                                b'{"messages":[]}')))
+        status, _, _ = post(px, "/v1/messages", anthropic_turn(FIRST))
         (marker,) = px.markers()
         assert status == 502 and "SSLCertVerificationError: CERTIFICATE_VERIFY_FAILED (self" in marker
-        assert not any(isinstance(x, bytes) and x for x in seen)   # no request bytes ever reached it
+        assert not any(isinstance(x, bytes) and x for x in seen)
     finally:
         px.stop()
         sock.close()
 
 
-def test_e2_requests_that_are_not_relayed_are_silence(running):
-    up, px = running()
-    for data, status in ((b"CONNECT api.example.com:443 HTTP/1.1\r\nHost: api.example.com:443\r\n\r\n", 405),
-                         (raw_request("GET", "http://api.example.com/v1/models", [["Connection", "close"]]), 400),
-                         (raw_request("POST", "/v1/messages", [["Transfer-Encoding", "gzip, chunked"]], b""), 501)):
-        assert parse_response(send(px.port, data))[0] == status
-    assert len(px.markers()) == 3 and all("did not relay a request" in m for m in px.markers())
-    assert up.requests == []
-
-
 # --- reading bodies -----------------------------------------------------------------------------
 
 def test_e2_a_gzip_answer_is_relayed_compressed_and_read(running):
-    answer = {"content": [{"type": "tool_use", "id": "toolu_z", "name": "WebFetch", "input": {"url": "https://example.org/a"}}]}
+    answer = {"content": [{"type": "tool_use", "id": "toolu_z", "name": "WebFetch",
+                           "input": {"url": "https://example.org/a"}}]}
     packed = gzip.compress(json.dumps(answer).encode())
     up, px = running([[json_response(None, headers=(("Content-Type", "application/json"), ("Content-Encoding", "gzip")),
                                      raw_body=packed)]])
-    status, _, body = parse_response(send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"],
-                                                                                        ["Accept-Encoding", "gzip"]],
-                                                               b'{"messages":[]}')))
+    status, _, body = post(px, "/v1/messages", anthropic_turn(FIRST), [["Accept-Encoding", "gzip"]])
     assert (status, body) == (200, packed)
-    (pre,) = px.records()
+    (pre,) = px.tools()
     assert (pre["tool"], pre["input_meta"]) == ("WebFetch", {"url_host": "example.org"})
 
 
@@ -760,15 +1181,15 @@ def test_e2_the_decoder_reads_gzip_and_both_deflates_and_is_bounded():
 
 
 def test_e2_a_chunked_request_is_relayed_as_it_came_and_read(running):
-    up, px = running()
-    body = json.dumps({"messages": [{"role": "tool", "tool_call_id": "call_c", "content": "x"}]}).encode()
+    up, px = running([[json_response({"choices": []})]])
+    first = {"role": "system", "content": "s"}
+    body = json.dumps({"model": "m", "messages": [first, {"role": "tool", "tool_call_id": "call_c", "content": "x"}]})
     chunks = chunk(body[:10]) + chunk(body[10:]) + b"0\r\n\r\n"
-    send(px.port, raw_request("POST", "/v1/chat/completions", [["Transfer-Encoding", "chunked"], ["Connection", "close"]],
-                              chunks))
+    call(px, "POST", "/v1/chat/completions", [["Transfer-Encoding", "chunked"]], chunks)
     (req,) = up.requests
     assert req["body"] == chunks and ("Transfer-Encoding", "chunked") in req["headers"]
-    (post,) = px.records()
-    assert post["tool_use_id"] == "call_c"
+    assert [(r["phase"], r.get("tool_use_ids")) for r in px.records()] == [("session_start", None),
+                                                                         ("history", ["call_c"])]
 
 
 @pytest.mark.parametrize("headers, raw_body, why", [
@@ -778,28 +1199,26 @@ def test_e2_a_chunked_request_is_relayed_as_it_came_and_read(running):
 ])
 def test_e2_an_answer_that_cannot_be_read_is_relayed_and_is_silence(running, headers, raw_body, why):
     up, px = running([[json_response(None, headers=headers, raw_body=raw_body)]])
-    status, _, body = parse_response(send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]],
-                                                               b'{"messages":[]}')))
+    status, _, body = post(px, "/v1/messages", anthropic_turn(FIRST))
     assert (status, body) == (200, raw_body)
     (marker,) = px.markers()
     assert "did not read an answer (%s): its tool calls are not recorded" % why in marker
 
 
 def test_e2_a_request_that_cannot_be_read_is_relayed_and_is_silence(running):
-    up, px = running()
-    send(px.port, raw_request("POST", "/v1/messages", [["Connection", "close"]], b"{not json"))
-    assert up.requests[0]["body"] == b"{not json"
-    (marker,) = px.markers()
-    assert "did not read a request (the body is not JSON): its tool results are not recorded" in marker
+    up, px = running([[json_response({})], [json_response({})]])
+    call(px, "POST", "/v1/messages", (), b"{not json")
+    call(px, "POST", "/v1/messages", (), b"[1, 2]")
+    assert [r["body"] for r in up.requests] == [b"{not json", b"[1, 2]"]
+    assert "did not read a request (the body is not JSON)" in px.markers()[0]
+    assert "did not read a request (not a JSON object)" in px.markers()[1]
 
 
 def test_e2_model_requests_on_paths_it_cannot_read_are_silence_once_per_path(running):
     up, px = running([[json_response({})]] * 4)
     for path in ("/v1/responses", "/v1/responses", "/v1beta/models/m:generateContent"):
-        send(px.port, raw_request("POST", path, [["Connection", "close"]],
-                                  json.dumps({"model": "m", "tools": [], "input": "x"}).encode()))
-    send(px.port, raw_request("POST", "/v1/embeddings", [["Connection", "close"]],
-                              json.dumps({"model": "m", "input": "x"}).encode()))
+        call(px, "POST", path, (), json.dumps({"model": "m", "tools": [], "input": "x"}).encode())
+    call(px, "POST", "/v1/embeddings", (), json.dumps({"model": "m", "input": "x"}).encode())
     markers = px.markers()
     assert len(markers) == 2 and markers[0].endswith("POST /v1/responses")
     assert markers[1].endswith("POST /v1beta/models/m:generateContent")
@@ -807,9 +1226,7 @@ def test_e2_model_requests_on_paths_it_cannot_read_are_silence_once_per_path(run
 
 def test_e2_count_tokens_is_relayed_and_never_recorded(running):
     up, px = running()
-    msgs = [{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "toolu_n", "content": "x"}]}]
-    send(px.port, raw_request("POST", "/v1/messages/count_tokens", [["Connection", "close"]],
-                              json.dumps({"model": "m", "messages": msgs}).encode()))
+    post(px, "/v1/messages/count_tokens", anthropic_turn(FIRST, {"role": "user", "content": [tool_result("t")]}))
     assert len(up.requests) == 1 and px.lines() == []
 
 
@@ -822,22 +1239,21 @@ def test_e3_stream_parsers_finish_cut_streams_and_skip_server_tools():
                    b'"name":"Bash","input":{}}}\n\ndata: {"type":"content_block_delta","index":1,"delta":'
                    b'{"type":"input_json_delta","partial_json":"{\\"command\\":\\"rm a\\"}"}}\n\n')
     assert calls == []
-    (call,) = s.finish()   # the stream ended before content_block_stop
-    assert (call.id, call.name, call.input) == ("t1", "Bash", {"command": "rm a"})
+    (one,) = s.finish()
+    assert (one.id, one.name, one.input, s.complete) == ("t1", "Bash", {"command": "rm a"}, False)
     o = proxy.StreamCalls(proxy.OPENAI)
     o.feed(b'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"f",'
            b'"arguments":"{\\"a\\""}}]}}]}\n\n')
     o.feed(b'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"f",'
            b'"arguments":":1}"}}]}}]}\n\n')   # a provider that repeats the id and the name
-    (call,) = o.feed(b"data: [DONE]\n\n")
-    assert (call.id, call.name, call.input) == ("c1", "f", {"a": 1})
+    (one,) = o.feed(b"data: [DONE]\n\n")
+    assert (one.id, one.name, one.input, o.complete) == ("c1", "f", {"a": 1}, True)
     assert proxy.tool_input_of("not json") == "not json" and proxy.tool_input_of("") == ""
 
 
-def test_e2_never_logs_a_request_line_or_a_header_value():
+def test_e2_never_logs_a_request_line_and_errors_by_class():
     source = (ROOT / "raqib" / "hooks" / "proxy.py").read_text(encoding="utf-8")
     assert "def log_message(self, format, *args):\n        pass" in source
-    # An exception's own message can quote a header value: only its class (and the OS's words) are written.
     assert proxy.describe_error(ValueError("Invalid header value b'Bearer %s'" % SECRETS[0])) == "ValueError"
     assert proxy.describe_error(ConnectionRefusedError(111, "Connection refused")) == \
         "ConnectionRefusedError: [Errno 111] Connection refused"
@@ -846,7 +1262,7 @@ def test_e2_never_logs_a_request_line_or_a_header_value():
 # --- E2: the command ----------------------------------------------------------------------------
 
 def test_e2_the_cli_proxy_end_to_end(tmp_path):
-    answer = {"choices": [{"index": 0, "message": {"tool_calls": [
+    answer = {"choices": [{"index": 0, "finish_reason": "tool_calls", "message": {"tool_calls": [
         {"id": "call_cli", "type": "function", "function": {"name": "Bash", "arguments": "{\"command\":\"curl x\"}"}}]}}]}
     up = FakeUpstream([[json_response(answer)]])
     log = tmp_path / "trace.jsonl"
@@ -855,18 +1271,19 @@ def test_e2_the_cli_proxy_end_to_end(tmp_path):
                             stderr=subprocess.PIPE)
     try:
         banner = proc.stdout.readline().decode()
-        assert banner.startswith("raqib: proxy http://127.0.0.1:") and "-> %s (trace %s, session proxy-" % (
+        assert banner.startswith("raqib: proxy http://127.0.0.1:") and "-> %s (trace %s, one session per conversation" % (
             up.url(), log) in banner
         port = int(banner.split("http://127.0.0.1:", 1)[1].split("/", 1)[0])
-        status, _, body = parse_response(send(port, raw_request("POST", "/v1/chat/completions",
-                                                                [["Connection", "close"],
-                                                                 ["Authorization", "Bearer " + SECRETS[0]]],
-                                                                b'{"messages":[]}')))
+        status, _, body = parse_response(send(port, raw_request(
+            "POST", "/v1/chat/completions", [["Host", "127.0.0.1:%d" % port], ["Connection", "close"],
+                                             ["Authorization", "Bearer " + SECRETS[0]]],
+            b'{"model":"m","messages":[{"role":"system","content":"s"}]}')))
         assert (status, json.loads(body)) == (200, answer)
-        (pre,) = [json.loads(x) for x in log.read_text().splitlines()]
-        assert (pre["source"], pre["tool_use_id"]) == ("proxy", "call_cli")
+        start, pre = [json.loads(x) for x in log.read_text().splitlines()]
+        assert (start["phase"], pre["source"], pre["tool_use_id"]) == ("session_start", "proxy", "call_cli")
+        assert pre["session_id"] == key_of("m", {"role": "system", "content": "s"})
         assert os.path.normcase(pre["cwd"]) == os.path.normcase(os.path.realpath(ROOT))   # the proxy's own cwd
-        assert pre["session_id"].startswith("proxy-") and SECRETS[0] not in log.read_text()
+        assert SECRETS[0] not in log.read_text()
     finally:
         proc.terminate()
         out, err = proc.communicate(timeout=30)
@@ -874,7 +1291,35 @@ def test_e2_the_cli_proxy_end_to_end(tmp_path):
     assert SECRETS[0].encode() not in out + err
 
 
-# --- E5: the docs -------------------------------------------------------------------------------
+def test_a3_run_writes_session_end_for_the_open_conversations_when_it_stops(tmp_path, monkeypatch):
+    up = FakeUpstream([[answer_with(tool_use("t1"))]])
+    log = tmp_path / "trace.jsonl"
+    started = threading.Event()
+    servers = []
+    real = proxy.make_server
+
+    def make(*a):
+        server = real(*a)
+        servers.append(server)
+        started.set()
+        return server
+    monkeypatch.setattr(proxy, "make_server", make)
+    out = io.StringIO()
+    worker = threading.Thread(target=proxy.run, args=("127.0.0.1:0", up.url(), str(log), True, out),
+                              kwargs={"cwd": "/w/p", "err": io.StringIO()}, daemon=True)
+    worker.start()
+    assert started.wait(10)
+    port = servers[0].server_address[1]
+    send(port, raw_request("POST", "/v1/messages", [["Host", "127.0.0.1:%d" % port], ["Connection", "close"]],
+                           json.dumps(anthropic_turn(FIRST)).encode()))
+    servers[0].shutdown()
+    worker.join(10)
+    assert [r["phase"] for r in (json.loads(x) for x in log.read_text().splitlines())] == [
+        "session_start", "pre", "session_end"]
+    up.close()
+
+
+# --- E5 and the Amendment A docs -----------------------------------------------------------------
 
 def test_e5_readme_watch_another_agent_and_adr_0003_accepted():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -884,15 +1329,28 @@ def test_e5_readme_watch_another_agent_and_adr_0003_accepted():
     assert ("**Kimi Code CLI:** in `~/.kimi-code/config.toml`, set the provider's `base_url`" in section
             and "`http://127.0.0.1:8787/v1`" in section and "was not run here" in section)
     assert "see the agent's docs for its base-URL setting" in section
-    assert "tests/fixtures/proxy/" in section and "SILENCE-HALF" in section and "RAQIB-SILENCE:" in section
+    for phrase in ("one session per conversation", "`--cwd DIR`", "`raqib ui TRACE --serve`",
+                   "`--allow-plain-upstream`", "127.0.0.0/8", "set the base URL back when the proxy stops",
+                   "a fresh port for each run", "only `127.0.0.1:PORT`", "Connection: close",
+                   "the Content-Type and Content-Encoding of an answer it cannot read",
+                   "written before M5.2 carry no `source`", "SCOPE-PATH", "`history`"):
+        assert phrase in section, phrase
     for name in ("openai-session.json", "anthropic-session.json", "openai-session.trace.log",
                  "anthropic-session.trace.log", "mixed-sources.trace.log"):
         assert (PROXY / name).is_file(), name
     adr = (ROOT / "docs" / "specs" / "ADR-0003-capture-sources.md").read_text(encoding="utf-8")
     assert adr.splitlines()[2] == "Status: accepted (M5.2, 2026-11-03). Proposed by the Table, 2026-11-02."
-    assert "## Builder note (2026-11-03, M5.2; the decision above stays as written)" in adr
-    # Synthetic only: documentation hosts, no key-like text in the recorded sessions.
+    assert adr.index("## Builder note (2026-11-03, M5.2;") < adr.index("## Amendment A (the Table, 2026-11-03)")
     for name in ("openai-session.json", "anthropic-session.json"):
         text = (PROXY / name).read_text(encoding="utf-8")
         assert '"upstream": "https://api.example.com"' in text and "sk-" not in text
         assert common.scan_output([json.loads(text)])[0] == []
+
+
+def test_a6_a12_threat_model_names_the_proxy_holes():
+    flat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
+    for phrase in ("a forged `post` sent first suppresses the real one", "Origin header",
+                   "the API key travels in the clear to whatever process holds the port",
+                   "`SSL_CERT_FILE` and `SSL_CERT_DIR`", "`HTTPS_PROXY` is not used",
+                   "Content-Type and Content-Encoding", "the conversation key"):
+        assert phrase in flat, phrase

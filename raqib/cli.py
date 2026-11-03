@@ -78,17 +78,20 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       already in the trace at the start are history: shown, never notified.
       Notifications are off under CI or with --no-notify.
       Ctrl-C, or a crash, prints the final report; exit as for report.
-  proxy --listen 127.0.0.1:PORT --upstream URL --log PATH [--allow-plain-upstream]
-      Watch an agent that speaks HTTP to its model API (M5.2, ADR-0003,
-      raqib/hooks/proxy.py): point its base URL at http://127.0.0.1:PORT;
-      every request is relayed to URL (https, certificates verified) with
-      its bytes unchanged, no retry and no request of its own, and streamed
-      answers pass as they arrive. Tool calls of OpenAI chat/completions and
-      Anthropic messages answers become `pre` lines of the trace PATH, their
-      results in the next request `post` lines (source "proxy"; hashes and
-      the input_meta extract only). An upstream failure writes one
-      RAQIB-SILENCE line. --allow-plain-upstream lets URL be http:// to a
-      loopback address (tests). Runs until interrupted; exit 2 on a bad
+  proxy --listen 127.0.0.1:PORT --upstream URL --log PATH [--cwd DIR] [--allow-plain-upstream]
+      Watch an agent that speaks HTTP to its model API (M5.2, ADR-0003 and
+      Amendment A, raqib/hooks/proxy.py): point its base URL at
+      http://127.0.0.1:PORT (that host exactly); every request is relayed to
+      URL (https, certificates verified) with its bytes unchanged, no retry
+      and no request of its own, and streamed answers pass as they arrive.
+      Tool calls of OpenAI chat/completions and Anthropic messages answers
+      become `pre` lines of the trace PATH, their results in a later request
+      `post` lines (source "proxy"; hashes and the input_meta extract only),
+      one session per conversation; cwd on the lines is DIR (default: the
+      proxy's own). An upstream failure, a refused request or anything it
+      cannot record writes one RAQIB-SILENCE line. --allow-plain-upstream
+      lets URL be http:// to a loopback address (127.0.0.0/8, ::1; tests).
+      Runs until interrupted, then ends the open sessions; exit 2 on a bad
       option or a trace it cannot write.
   doctor [PROJECT]
       Say in one screen what `watch` needs and is missing (M6.3,
@@ -243,8 +246,11 @@ def _parser():
     px.add_argument("--upstream", required=True, metavar="URL",
                     help="the model API, https://host[:port][/path]; certificates are verified")
     px.add_argument("--log", required=True, metavar="PATH", help="the trace the proxy appends to")
+    px.add_argument("--cwd", metavar="DIR", help="the cwd written on proxy lines: where the agent works"
+                                                 " (default: the proxy's own working directory)")
     px.add_argument("--allow-plain-upstream", action="store_true",
-                    help="let --upstream be http:// to a loopback address (for tests; never a remote host)")
+                    help="let --upstream be http:// to a loopback address, 127.0.0.0/8 or ::1 (for tests;"
+                         " never a remote host)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -720,7 +726,7 @@ def cmd_doctor(args, out):
 
 def cmd_proxy(args, out):
     try:
-        return proxy.run(args.listen, args.upstream, args.log, args.allow_plain_upstream, out)
+        return proxy.run(args.listen, args.upstream, args.log, args.allow_plain_upstream, out, cwd=args.cwd)
     except proxy.UsageError as exc:
         raise UsageError(str(exc))
 

@@ -116,3 +116,15 @@ As built. Record: docs/review/2026-11-03-M5.2.md.
   the clear. A-7 Missing common.py writes into the trace. A-8 Relay edge
   cases documented or refused. A-9 In-memory pre index. A-10 Golden hook
   line. A-11..A-13 as in docs/review/2026-11-03-M5.2-ruling.md.
+
+## Builder note (2026-11-03, M5.2 REDO; Amendment A stays as written)
+As built for A-1..A-13. Record: docs/review/2026-11-03-M5.2.md, section
+"REDO". Where the first builder note above says otherwise, Amendment A
+and this note hold: proxy sessions are conversation keys, not one per run
+(A-3); the cwd is --cwd DIR, else the proxy's own; a result in a key's
+first request with no pre is in the key's one `history` line (a new trace
+phase, judged by no rule), never a half (A-4); the open pres are kept in
+memory, the trace read once at start (A-9); a missing common.py writes its
+RAQIB-SILENCE line into the trace too (A-7); trace.py reports a
+RAQIB-SILENCE line as such (A-13). Lines carry `tool_hashed: true` when a
+tool name or id was replaced by its hash (A-2).

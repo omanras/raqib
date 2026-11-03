@@ -6,7 +6,8 @@ silently (constitution A3). read() is the only function here that does I/O.
 
 A problem is {"line": n, "reason": str}; n counts "\n"-separated lines from 1.
 - not JSON, not an object, no session_id, or no int seq: the line is dropped
-  from the records (it cannot be cited, A5) and reported;
+  from the records (it cannot be cited, A5) and reported; a line starting
+  with RAQIB-SILENCE is reported as such (ADR-0003 Amendment A, A-13);
 - a bad or missing ts, an unknown phase, an unknown source, or invalid
   UTF-8: the record is kept (it still has a seq) and reported.
 
@@ -21,9 +22,13 @@ from __future__ import annotations
 import datetime
 import json
 
-PHASES = ("pre", "post", "session_start", "session_end", "stop")
+# "history": the proxy's one line per conversation for the tool results that
+# predate it (ADR-0003 Amendment A, A-4); no rule judges it.
+PHASES = ("pre", "post", "session_start", "session_end", "stop", "history")
 SOURCES = ("hook", "proxy", "os")  # ADR-0003
 DEFAULT_SOURCE = "hook"            # a record without "source" (ADR-0003: v0.1 traces stay valid)
+SILENCE_MARKER = "RAQIB-SILENCE"   # a line a capture source wrote when it could not capture (A3)
+SILENCE_REASON = "a RAQIB-SILENCE line: something was not captured (A3)"
 
 
 def parse(text):
@@ -65,6 +70,10 @@ def _parse(lines):
             continue
         if not decoded:
             problems.append({"line": number, "reason": "invalid UTF-8"})
+        if raw.lstrip().startswith(SILENCE_MARKER):
+            # Ruling A-13: named as what it is, a capture failure (A3), not "not JSON".
+            problems.append({"line": number, "reason": SILENCE_REASON})
+            continue
         try:
             rec = json.loads(raw)
         except ValueError:
@@ -127,7 +136,9 @@ def parse_ts(value):
 
 
 FIELDS = ("ts", "seq", "session_id", "phase", "tool", "tool_use_id", "input_sha256", "input_meta",
-          "output_sha256", "output_meta", "ok", "error_class", "cwd", "source")
+          "output_sha256", "output_meta", "ok", "error_class", "cwd", "source",
+          # proxy lines (ADR-0003 Amendment A): A-2, and the history line of A-4
+          "tool_hashed", "results", "tool_use_ids", "output_sha256s")
 
 
 def strict_problem(rec):
