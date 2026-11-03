@@ -68,6 +68,8 @@ point. Phase 6 runs before the rest of Phase 5.
 
 ## Phase 7 — The host, not the name (ADR-0007; the commander's order, 2026-11-03)
 - M7.1 Windows live discovery in-process (ctypes): `raqib discover` live on Windows; `--save` keeps the samples
-- M7.2 `raqib watch --host`: continuous discovery, NEW-AGENT, AGENT-DARK live, source attachment, the host record as a source
+- M7.1 landed 2026-11-04 (merge 4f6b6a5): the live reader found GitHub's own runner agents on the windows job by shape alone
+- M7.2 `raqib watch --host`: continuous discovery, NEW-AGENT, AGENT-DARK live (split 2026-11-04)
+- M7.2b source attachment: hooks / os source / the host record as a source, per tree
 - M7.3 the window starts from the host: agents found, each with its band, one Start
 - M7.4 rhythm (ADR-0004 layer 3) and suspicion on unknown trees
