@@ -620,7 +620,9 @@ def test_tk_window_first_screen_watching_screen_stop_and_close(tmp_path):
         assert window.knock_label.cget("text") == "first finding: SECRET-OUTPUT high (by the rule)"
         assert "a line of the watch" in window.log_text.get("1.0", "end")
         window.toggle_log()
-        # A-13: Open page through the controller's opener
+        # A-13: Open page through the controller's opener. The environ is given without CI, because this
+        # test runs where CI is set (windows-latest); the refusal under CI is test_a13's.
+        c.options = app.Options(None, None, 60, environ={})
         c.opener = lambda url, environ=None: "no opener here"
         window.open_page()
         window.tick()
