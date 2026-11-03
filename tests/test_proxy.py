@@ -349,7 +349,9 @@ def test_a10_hook_lines_equal_the_golden_lines_of_721bb55_plus_source_last(tmp_p
     """tests/fixtures/golden/hook-lines-721bb55.log was written by the
     capture.py of 721bb55 (before M5.2) for these payloads, in this order.
     Today's line for the same event is that line, with its own ts, and
-    ,"source":"hook" before the closing brace."""
+    ,"source":"hook" before the closing brace; on the session_start, stop and
+    session_end lines (M4.3, J-5) the three git keys come before it (their
+    cwd, /work/example, is no repository here)."""
     golden = GOLDEN.read_text(encoding="utf-8").splitlines()
     log = tmp_path / "trace.jsonl"
     env = {k: v for k, v in os.environ.items() if not k.startswith("RAQIB_")}
@@ -364,7 +366,9 @@ def test_a10_hook_lines_equal_the_golden_lines_of_721bb55_plus_source_last(tmp_p
     for old, line in zip(golden, new):
         assert '"source"' not in old
         old_ts, new_ts = json.loads(old)["ts"], json.loads(line)["ts"]
-        assert line.replace('"ts":"%s"' % new_ts, '"ts":"%s"' % old_ts, 1) == old[:-1] + ',"source":"hook"}'
+        git = ',"git_head":null,"git_index_sha256":null,"git_error":"no repo"' if json.loads(old)["tool"] == "-" else ""
+        assert line.replace('"ts":"%s"' % new_ts, '"ts":"%s"' % old_ts, 1) == old[:-1] + git + ',"source":"hook"}'
+    assert sum(',"git_head":' in line for line in new) == 3   # session_start, stop, session_end only
 
 
 def test_e3_old_traces_load_unchanged_and_read_as_hook():

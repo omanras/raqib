@@ -739,7 +739,7 @@ def test_e3_e4_the_close_shape_of_this_project_fires_neither_demand(tmp_path):
 
 def test_e5_readme_rows_capture_bullet_and_cannot_see():
     flat = " ".join(README.split())
-    assert "Fifteen rules turn the trace into findings" in flat and "and 9 YAML rules" in flat
+    assert "Seventeen rules turn the trace into findings" in flat and "and 11 more: 9 YAML rules" in flat   # M4.3
     assert "| LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py`" in README
     assert "| EDIT-NO-TEST | an edit under `raqib/` or `tests/` with no ok run of pytest" in README
     assert "never its arguments" not in README

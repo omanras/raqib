@@ -8,7 +8,8 @@ context is passed to the rules (scope, root).
 
 Rows:
 - rules: the deterministic baseline (A1). An event is flagged when a SILENCE
-  rule or a catalog rule gives any finding.
+  rule, a catalog rule or a tree anchor (raqib/rules/tree.py, M4.3 J-1;
+  an event without git keys is not judged by it, J-3) gives any finding.
 - model <backend>/<model>: the suspicion layer on the event, with the rule
   findings in its windows, as `raqib suspect` runs it. Flagged when any window
   raises suspicion at or above the threshold.
@@ -27,7 +28,7 @@ from __future__ import annotations
 import json
 
 from raqib import report
-from raqib.rules import engine, silence, trace
+from raqib.rules import engine, silence, trace, tree
 from raqib.suspect import core as suspect_core
 
 LABELS = ("benign", "suspicious", "deceptive")
@@ -94,11 +95,13 @@ def label_counts(events):
 
 
 def rule_findings(event, rules, gap_seconds=silence.DEFAULT_GAP_SECONDS):
-    """(findings, notes) of the silence rules and the catalog on one event."""
+    """(findings, notes) of the silence rules, the catalog and the tree
+    anchors on one event."""
     lines = event["lines"]
     found = report.with_silence_class(silence.findings(lines, gap_seconds))
     catalog_found, notes = engine.evaluate(rules, lines, event.get("context", {}))
-    return found + catalog_found, notes
+    tree_found, tree_notes = tree.findings(lines)   # M4.3 J-1: nothing, no note, without git keys (J-3)
+    return found + catalog_found + tree_found, notes + tree_notes
 
 
 def judge_rules(events, rules, gap_seconds=silence.DEFAULT_GAP_SECONDS):

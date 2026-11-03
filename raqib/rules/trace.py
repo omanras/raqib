@@ -17,12 +17,15 @@ Capture sources (ADR-0003, M5.2): a record names the source that wrote it,
 returned exactly as they were read: nothing is added to them, so an old
 trace loads as it always did. An os session_start may carry
 `missing_events`, the Sysmon event ids its export did not hold (M5.3,
-ADR-0003 Amendment C, C-7).
+ADR-0003 Amendment C, C-7). Since M4.3 (ADR-0002 Amendment J, J-2 and J-5)
+the hook's session_start, stop and session_end lines carry GIT_KEYS, the
+local git state read from files: strict_problem holds their shape.
 """
 from __future__ import annotations
 
 import datetime
 import json
+import re
 
 # "history": the proxy's one line per conversation for the tool results that
 # predate it (ADR-0003 Amendment A, A-4); no rule judges it.
@@ -142,7 +145,18 @@ FIELDS = ("ts", "seq", "session_id", "phase", "tool", "tool_use_id", "input_sha2
           # proxy lines (ADR-0003 Amendment A): A-2, and the history line of A-4
           "tool_hashed", "results", "tool_use_ids", "output_sha256s",
           # os lines (ADR-0003 Amendment C, C-7): the Sysmon event ids an export did not hold
-          "missing_events")
+          "missing_events",
+          # hook boundary lines (M4.3, ADR-0002 Amendment J, J-2): the git state read from files
+          "git_head", "git_index_sha256", "git_error")
+# J-2, J-5: the git keys, all three together, on session_start, stop and
+# session_end lines only. git_error is one of GIT_ERRORS (the closed set of
+# raqib/hooks/common.py, which a test holds this copy to) or null, and it is
+# null exactly when both values were read.
+GIT_KEYS = ("git_head", "git_index_sha256", "git_error")
+GIT_ERRORS = ("no repo", "symlink", "gitdir", "unreadable", "no ref", "no index", "index too large", "budget")
+GIT_PHASES = ("session_start", "stop", "session_end")
+HEX40 = re.compile(r"[0-9a-f]{40}\Z")
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def strict_problem(rec):
@@ -172,4 +186,29 @@ def strict_problem(rec):
             return "a post needs ok"
         if "output_meta" in rec and not isinstance(rec["output_meta"], dict):
             return "output_meta must be a mapping"
+    return git_problem(rec)
+
+
+def git_problem(rec):
+    """Why a record's git keys (J-2) are not in the shape the hook writes, or
+    None: all three or none, only on a session_start, stop or session_end
+    line; git_head 40-hex or null, git_index_sha256 64-hex or null, git_error
+    one of GIT_ERRORS or null, and null exactly when both values are read."""
+    present = [k for k in GIT_KEYS if k in rec]
+    if not present:
+        return None
+    if len(present) != len(GIT_KEYS):
+        return "git keys come together: %s without %s" % (", ".join(present),
+                                                          ", ".join(k for k in GIT_KEYS if k not in rec))
+    if rec.get("phase") not in GIT_PHASES:
+        return "git keys only on session_start, stop and session_end lines, not on %r" % (rec.get("phase"),)
+    head, index, error = (rec[k] for k in GIT_KEYS)
+    if not (head is None or (isinstance(head, str) and HEX40.match(head))):
+        return "git_head must be 40 lower-case hex digits or null"
+    if not (index is None or (isinstance(index, str) and HEX64.match(index))):
+        return "git_index_sha256 must be 64 lower-case hex digits or null"
+    if not (error is None or (isinstance(error, str) and error in GIT_ERRORS)):
+        return "git_error must be one of %s, or null" % ", ".join(GIT_ERRORS)
+    if (error is None) != (head is not None and index is not None):
+        return "git_error must be null exactly when git_head and git_index_sha256 are both read"
     return None

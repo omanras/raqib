@@ -10,8 +10,10 @@ same order, on the files git tracks, with the rule kinds second:
    rejects a rule without a kind, or a signature without evasion); every
    catalog, silence and cross-source rule has one of the gate's three
    kinds; every silence rule of report.SILENCE_RULES has one in
-   silence.RULE_KINDS, and every rule of report.CROSS_RULES one in
-   cross.RULE_KINDS (M5.3, ADR-0003 Amendment C, C-1); and one line gives
+   silence.RULE_KINDS, every rule of report.CROSS_RULES one in
+   cross.RULE_KINDS (M5.3, ADR-0003 Amendment C, C-1), and every rule of
+   report.TREE_RULES one in tree.RULE_KINDS (M4.3, ADR-0002 Amendment J,
+   J-1); and one line gives
    the ratio `rule kinds: signature=N demand=N anchor=N` (a health number,
    not a budget: it never fails the gate by itself);
 3. HANDOFF.md has at most 30 lines;
@@ -62,7 +64,7 @@ CHILD_FLAG = "--rule-kinds-child"
 CHILD_TIMEOUT_SECONDS = 120
 KINDS_LINE = re.compile(r"rule kinds: signature=[0-9]+ demand=[0-9]+ anchor=[0-9]+\Z")
 # Every standard library module raqib/__init__.py, raqib/report.py and
-# raqib/rules/{__init__,engine,yamlite,trace,silence,cross}.py import (a test holds
+# raqib/rules/{__init__,engine,yamlite,trace,silence,cross,tree}.py import (a test holds
 # this list to them). The child imports them before the checkout is on sys.path.
 PREIMPORT = ("__future__", "datetime", "fnmatch", "glob", "json", "math", "os", "posixpath", "re")
 
@@ -214,11 +216,11 @@ def kinds_child():
 def count_kinds(root, catalog):
     try:
         from raqib import report
-        from raqib.rules import cross, engine, silence
+        from raqib.rules import cross, engine, silence, tree
     except Exception as exc:
         raise ChildRed("cannot import raqib.rules from this checkout (%s: %s)" % (type(exc).__name__, exc))
     here = os.path.normcase(os.path.realpath(os.path.join(root, "raqib")))
-    for module, sub in ((report, ""), (engine, "rules"), (silence, "rules"), (cross, "rules")):
+    for module, sub in ((report, ""), (engine, "rules"), (silence, "rules"), (cross, "rules"), (tree, "rules")):
         where = os.path.normcase(os.path.realpath(os.path.dirname(os.path.abspath(module.__file__))))
         if where != os.path.join(here, sub).rstrip(os.sep):
             raise ChildRed("%s was imported from %s, not from this checkout" % (module.__name__, where))
@@ -250,7 +252,20 @@ def count_kinds(root, catalog):
     uncovered = [rule_id for rule_id, _ in listed if rule_id not in crossing]
     if uncovered:
         raise ChildRed("report.CROSS_RULES names %s, with no kind in cross.RULE_KINDS" % ", ".join(uncovered))
-    kinds = [(r.id, getattr(r, "kind", None)) for r in rules] + list(declared.items()) + list(crossing.items())
+    anchored = getattr(tree, "RULE_KINDS", None)   # M4.3 (ADR-0002 Amendment J, J-1)
+    if not (isinstance(anchored, dict) and anchored):
+        raise ChildRed("raqib/rules/tree.py declares no RULE_KINDS (rule id -> kind)")
+    try:
+        listed = report.TREE_RULES   # required, as CROSS_RULES is: no default
+    except AttributeError:
+        listed = None
+    if not (isinstance(listed, tuple) and listed):
+        raise ChildRed("raqib/report.py declares no TREE_RULES (the tree anchors the report lists)")
+    uncovered = [rule_id for rule_id, _ in listed if rule_id not in anchored]
+    if uncovered:
+        raise ChildRed("report.TREE_RULES names %s, with no kind in tree.RULE_KINDS" % ", ".join(uncovered))
+    kinds = [(r.id, getattr(r, "kind", None)) for r in rules] + list(declared.items()) + list(crossing.items()) \
+        + list(anchored.items())
     missing = [str(rule_id) for rule_id, kind in kinds if not (isinstance(kind, str) and kind in KINDS)]
     if missing:
         raise ChildRed("no kind (one of %s) for %s" % ("|".join(KINDS), ", ".join(missing)))

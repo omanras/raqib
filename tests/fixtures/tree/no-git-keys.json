@@ -1,0 +1,6 @@
+[
+  {"ts": "2026-11-03T09:00:01.000Z", "seq": 1, "session_id": "fixture-tree-before-m43", "phase": "session_start", "tool": "-", "cwd": "/work/proj", "source": "hook"},
+  {"ts": "2026-11-03T09:00:02.000Z", "seq": 2, "session_id": "fixture-tree-before-m43", "phase": "pre", "tool": "Edit", "tool_use_id": "toolu_fore-m43_2", "input_sha256": "47f6421533f2962e599f7938f8e81b28f3d53568c6878b90578731372e8901e8", "input_meta": {"path": "/work/proj/src/app.py"}, "cwd": "/work/proj", "source": "hook"},
+  {"ts": "2026-11-03T09:00:04.000Z", "seq": 2, "session_id": "fixture-tree-before-m43", "phase": "post", "tool": "Edit", "tool_use_id": "toolu_fore-m43_2", "input_sha256": "47f6421533f2962e599f7938f8e81b28f3d53568c6878b90578731372e8901e8", "input_meta": {"path": "/work/proj/src/app.py"}, "output_sha256": "36d75b99ba14c4a27e5a508e0f39a81cfabd7e079e1c11654385675908ccf91c", "output_meta": {"scan": "full", "secret_kinds": []}, "ok": true, "cwd": "/work/proj", "source": "hook"},
+  {"ts": "2026-11-03T09:00:05.000Z", "seq": 3, "session_id": "fixture-tree-before-m43", "phase": "stop", "tool": "-", "cwd": "/work/proj", "source": "hook"}
+]

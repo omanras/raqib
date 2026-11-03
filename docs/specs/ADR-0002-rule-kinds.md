@@ -153,6 +153,47 @@ to command_scripts; H-7 accepts class DRIFT for both demands.
 
 Ratio after M4.2b: 4 : 7 : 4.
 
+Note (2026-11-03, M4.3, ADR-0002 Amendment J; the table above stays as
+written). M4.3 adds two rows, in the table's shape. Both are code rules
+(raqib/rules/tree.py, J-1), class DRIFT, medium, that declare their kinds in
+its own RULE_KINDS, which the gate reads as it reads cross.py's. Each
+compares a value of the session's closing line (its last stop or
+session_end) with the same value of its session_start line, as the hook
+read them from the files under cwd/.git (git_head, git_index_sha256,
+git_error; nothing is run). An anchor lists no evasion; its known holes are
+tree.HOLES, quoted here one line each as they stand in the code (J-10: the
+draft holes accepted, plus J-4, J-7 and J-9):
+
+| rule             | kind      | known evasion (for `evasion:`)                       |
+|------------------|-----------|------------------------------------------------------|
+| HEAD-UNMOVED     | anchor    | -                                                    |
+| INDEX-UNTOUCHED  | anchor    | -                                                    |
+
+- holes HEAD-UNMOVED: "the rule sees that the head moved, not why: an empty commit, a commit of other files, a checkout or switch, a reset, or a hash written into .git/HEAD or a ref all count as moved"
+- holes HEAD-UNMOVED: "an unborn branch (no commit yet) is git_error "no ref": a session in a fresh repository is unknown (partial) (J-7)"
+- holes HEAD-UNMOVED: "a symlinked .git or a link below it, a gitdir that is absolute, UNC or a device path, a head in a SHA-256 repository, or a head not read within 50 ms is null: unknown (partial)"
+- holes HEAD-UNMOVED: "only cwd/.git is read: a session started in a subdirectory, a second repository, a nested repository or a submodule edited from the parent's cwd is judged against the cwd's .git or not at all"
+- holes HEAD-UNMOVED: "GIT_DIR, GIT_WORK_TREE, git -C or --git-dir in the agent's commands act on another repository than the one the hook reads"
+- holes HEAD-UNMOVED: "a linked worktree: its .git file names an absolute gitdir, which is not followed (J-6), and its commondir is not read (J-7), so the session is unknown (partial)"
+- holes HEAD-UNMOVED: "edits whose path is not under the start line's cwd are not triggers: edits outside the repository, in a second repository, or with no readable path (J-4)"
+- holes HEAD-UNMOVED: "edits made through Bash (sed -i, a redirect, cp, mv) are not triggers: only Edit, Write, MultiEdit and NotebookEdit are"
+- holes HEAD-UNMOVED: "a session with no stop or session_end after an edit leaves that edit unjudged (partial); SILENCE-OPEN has the session"
+- holes HEAD-UNMOVED: "the start is the session's first session_start line: a session resumed after the human committed or staged counts that as a move"
+- holes INDEX-UNTOUCHED: "the index is hashed as raw bytes: git status, git diff or any command that refreshes stat data rewrites it with nothing staged, and that counts as touched, a false negative (J-9)"
+- holes INDEX-UNTOUCHED: "staging any file counts, not the edited ones: git add of another file, git add -N, git update-index, git read-tree"
+- holes INDEX-UNTOUCHED: "a commit rewrites the index: a commit of other files counts as touched"
+- holes INDEX-UNTOUCHED: "a repository with no index yet (nothing ever staged) is null: unknown (partial) (J-7)"
+- holes INDEX-UNTOUCHED: "a symlinked .git or a link below it, a gitdir that is absolute, UNC or a device path, an index over 64 MiB, or an index not hashed within 50 ms is null: unknown (partial)"
+- holes INDEX-UNTOUCHED: "only cwd/.git is read: a session started in a subdirectory, a second repository, a nested repository or a submodule edited from the parent's cwd is judged against the cwd's .git or not at all"
+- holes INDEX-UNTOUCHED: "GIT_DIR, GIT_WORK_TREE, git -C or --git-dir in the agent's commands act on another repository than the one the hook reads"
+- holes INDEX-UNTOUCHED: "a linked worktree: its .git file names an absolute gitdir, which is not followed (J-6), and its commondir is not read (J-7), so the session is unknown (partial)"
+- holes INDEX-UNTOUCHED: "edits whose path is not under the start line's cwd are not triggers: edits outside the repository, in a second repository, or with no readable path (J-4)"
+- holes INDEX-UNTOUCHED: "edits made through Bash (sed -i, a redirect, cp, mv) are not triggers: only Edit, Write, MultiEdit and NotebookEdit are"
+- holes INDEX-UNTOUCHED: "a session with no stop or session_end after an edit leaves that edit unjudged (partial); SILENCE-OPEN has the session"
+- holes INDEX-UNTOUCHED: "the start is the session's first session_start line: a session resumed after the human committed or staged counts that as a move"
+
+Ratio after M4.3: 4 : 7 : 6.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind

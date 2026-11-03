@@ -9,10 +9,16 @@ hook command has no shell to set a variable, M5.1), else $RAQIB_LOG, else
 ./raqib.log.jsonl. More than one argument is a capture failure.
 
 Session events (A-3) become a line with phase session_start, session_end or
-stop, tool "-", and no hashes or input_meta. A PostToolUseFailure (A-4) is a
-post with ok false and an error_class. Every line ends with
-"source": "hook" (ADR-0003, M5.2 E3), so a line written before M5.2 is a
-byte prefix of the line written now for the same event.
+stop, tool "-", and no hashes or input_meta. Since M4.3 (ADR-0002 Amendment
+J) such a line carries the local git state of its cwd, read from files by
+common.git_state (nothing is run): git_head (40-hex or null),
+git_index_sha256 (64-hex or null) and git_error (one of common.GIT_ERRORS, or
+null when both were read), always all three, after cwd and before source.
+They are read before the log lock is taken, within GIT_BUDGET_SECONDS.
+A PostToolUseFailure (A-4) is a post with ok false and an error_class.
+Every line ends with "source": "hook" (ADR-0003, M5.2 E3), so a line
+written before M5.2 is a byte prefix, less its closing brace, of the line
+written now for the same event.
 
 Hashing, input_meta, command_head, command_programs, redaction and the
 output scan live in common.py, shared with the proxy source (M5.2 E1); this
@@ -226,6 +232,7 @@ def prepare(payload):
     parts = {"session_id": payload["session_id"], "phase": phase, "cwd": record_cwd(payload)}
     if phase not in TOOL_PHASES:
         parts["tool"] = SESSION_TOOL
+        parts["git"] = git_state(parts["cwd"])   # M4.3 (J-5): the boundary lines only, before the lock
         return parts
     tool = payload["tool_name"]
     tool_input = payload.get("tool_input")
@@ -264,6 +271,9 @@ def finish(parts, log_text):
             if key in parts:
                 rec[key] = parts[key]
     rec["cwd"] = parts["cwd"]
+    if "git" in parts:   # M4.3 (J-5): all three keys, between cwd and source
+        for key in GIT_KEYS:
+            rec[key] = parts["git"][key]
     # ADR-0003: last, so a line of an older raqib is a byte prefix of this one.
     rec["source"] = SOURCE
     return rec
