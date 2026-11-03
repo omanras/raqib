@@ -55,13 +55,18 @@ A check that cannot be made on this host is UNSURE, counted apart and never a fa
    output. Of a command's arguments only two things are kept: the file name
    of the script python or bash runs (`command_scripts`), and the first word
    of a `git commit` message when it is a lower-case word ending in a colon,
-   such as `landed:` (`commit_prefix`).
-2. **Rules.** Fifteen rules turn the trace into findings, and every finding
+   such as `landed:` (`commit_prefix`). The session start, stop and end
+   lines also carry the local git state, read from the files under `.git`
+   (no `git` is run): the head commit, the sha256 of the index, and why
+   either could not be read.
+2. **Rules.** Seventeen rules turn the trace into findings, and every finding
    cites the trace lines behind it (A5). The rules are 5 silence rules, 1
-   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 9 YAML rules
-   in `raqib/rules/catalog`. Each YAML rule declares its false-positive
-   budget and is measured against fixtures (A6); CROSS-SOURCE declares 0.1
-   until a field test, and the silence rules have no budget yet.
+   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 11 more: 9
+   YAML rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED,
+   INDEX-UNTOUCHED, `raqib/rules/tree.py`). Each YAML rule declares its
+   false-positive budget and is measured against fixtures (A6); CROSS-SOURCE
+   and the tree anchors declare 0.1, and the silence rules have no budget
+   yet.
 3. **Suspicion (optional).** A local or API model reads windows of the
    trace metadata. It can raise suspicion with citations; it cannot clear
    anything.
@@ -104,7 +109,7 @@ design, a quiet minute is reported, not assumed harmless.
 | Rule | Fires on |
 |---|---|
 | SILENCE-GAP / OPEN / HALF / ORDER | no capture for 60 s; a session with no end; a call with no result (or a result with no call); seq or time going back |
-| SILENCE-EMPTY | a session that started and ended with no tool call and no turn, or ended with no start and no tool call (one with tool calls and no start is not judged yet: SILENCE-NOSTART, M4.3) |
+| SILENCE-EMPTY | a session that started and ended with no tool call and no turn, or ended with no start and no tool call (one with tool calls and no start is not judged yet: SILENCE-NOSTART, a later task) |
 | SCOPE-PATH | a file tool touching a path outside the session's directory |
 | SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
 | NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command |
@@ -113,6 +118,8 @@ design, a quiet minute is reported, not assumed harmless.
 | DRIFT-FILES | edits to more than two files outside the task's declared scope |
 | LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py` on the same Bash call or before it in the session (holes such as a stale, piped or backgrounded gate are listed in the rule) |
 | EDIT-NO-TEST | an edit under `raqib/` or `tests/` with no ok run of pytest, python, python3, `gate.sh` or `gate.py` after it, before the next stop or session end |
+| HEAD-UNMOVED | ok edits under the session's directory and the same git head at the session's last stop or end as at its start: never committed (a session without git state, or with no repository at either end, is not judged) |
+| INDEX-UNTOUCHED | ok edits under the session's directory and the same git index bytes at its last stop or end as at its start: never staged (a `git status` that rewrites the index counts as touched) |
 | CROSS-SOURCE | only in a trace with `os` lines: a shell call with no os process of its programs (or a shell) in the 10 s after it; an os process below the agent's own children that no shell call asked for in the 10 s before it, itself or through a parent below the shell (below) |
 
 ## What it cannot see
@@ -130,7 +137,12 @@ Content, by design. So the rules miss these:
   rather than through a shell: CROSS-SOURCE does not judge them;
 - a gate or test run that failed behind a pipe (`| tail`), an `||` or the
   background: LANDED-NO-GATE and EDIT-NO-TEST read only the Bash call's own
-  ok and the names it ran.
+  ok and the names it ran;
+- for the tree anchors, what moved the head or the index (any commit,
+  checkout or `git status` counts), edits outside the session's directory
+  or in a second repository, a worktree, `GIT_DIR` set by the agent, and an
+  index the agent rewrites: the rules in `raqib/rules/tree.py` list every
+  hole.
 On 50 labelled events the rules miss 9 bad events and flag 9 of 25 benign
 ones (`docs/review/2026-10-16-M2.2-baseline.md`; 8 until M4.2b, whose
 EDIT-NO-TEST flags b11-refactor: dated note 2026-11-03 there). On the rule fixtures

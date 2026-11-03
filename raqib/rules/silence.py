@@ -26,7 +26,7 @@ pure function: it reads only its arguments and returns new dicts.
                  fact, one finding); a stop is a turn, so start + stop + end
                  is not empty either. Known hole (E-2): a session_end with
                  tool lines and no session_start is not judged by any rule
-                 yet (SILENCE-NOSTART, M4.3).
+                 yet (SILENCE-NOSTART, a later task).
 
 Sessions of the os source only (every record `source: "os"`; M5.3, ruling
 C-5 of ADR-0003 Amendment C) are not judged by SILENCE-GAP or SILENCE-ORDER:
@@ -172,7 +172,7 @@ def _empty(session_id, recs):
                    " a failed start, or work that was not captured" % (starts[0], _label(last)))
     else:
         summary = ("the session ended at %s with no start and no tool call (and no stop); a session_end"
-                   " with tool lines and no start is not judged yet (SILENCE-NOSTART, M4.3)" % _label(last))
+                   " with tool lines and no start is not judged yet (SILENCE-NOSTART, a later task)" % _label(last))
     return [_finding("SILENCE-EMPTY", session_id, cited, _ts_at(recs, ends[-1]), summary)]
 
 

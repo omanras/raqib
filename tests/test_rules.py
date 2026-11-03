@@ -885,6 +885,7 @@ def test_m41_e1_a_bad_id_is_reported_before_the_kind():
 M42_NOTE = "Note (2026-11-03, M4.2, ruling D-8"
 M53_NOTE = "Note (2026-11-03, M5.3, ruling C-9"
 M42B_NOTE = "Note (2026-11-03, M4.2b, ADR-0002 Amendment G"
+M43_NOTE = "Note (2026-11-03, M4.3, ADR-0002 Amendment J"
 
 
 def table_rows(text):
@@ -948,7 +949,7 @@ def adr_note_m42b():
     quotes]}, its text)."""
     _, section = adr_table()
     assert section.count(M42B_NOTE) == 1
-    note = section.split(M42B_NOTE, 1)[1]
+    note = section.split(M42B_NOTE, 1)[1].split(M43_NOTE, 1)[0]
     holes = {}
     for rule_id, item in re.findall(r'^- holes ([A-Z]+-[A-Z]+-[A-Z]+): "(.+)"$', note, re.M):
         holes.setdefault(rule_id, []).append(item)
@@ -971,23 +972,48 @@ def adr_table_after_m42b():
     return out
 
 
+def adr_note_m43():
+    """The M4.3 note (Amendment J): (rows it adds, {rule id: [holes it
+    quotes]}, its text)."""
+    _, section = adr_table()
+    assert section.count(M43_NOTE) == 1
+    note = section.split(M43_NOTE, 1)[1]
+    holes = {}
+    for rule_id, item in re.findall(r'^- holes ([A-Z]+-[A-Z]+): "(.+)"$', note, re.M):
+        holes.setdefault(rule_id, []).append(item)
+    return table_rows(note), holes, note
+
+
+def adr_table_after_m43():
+    out = adr_table_after_m42b()
+    rows, _, _ = adr_note_m43()
+    assert not set(rows) & set(out)
+    out.update(rows)
+    return out
+
+
 def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     """M4.2 (D-8): the table plus the dated notes under it is held to the tree
     (M5.3, C-9: the CROSS-SOURCE row, a code rule with its kind in cross.py;
-    M4.2b, Amendment G: the two demand rows and their holes)."""
-    from raqib.rules import cross
-    table = adr_table_after_m42b()
+    M4.2b, Amendment G: the two demand rows and their holes; M4.3, Amendment
+    J: the two tree anchors, code rules with their kinds and holes in tree.py)."""
+    from raqib.rules import cross, tree
+    table = adr_table_after_m43()
     before, section = adr_table()
     rules = {r.id: r for r in engine.load_catalog(CATALOG)}
     assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(adr_table_after_m53()) == 13
-    assert len(table) == 15
-    assert set(table) == set(rules) | set(silence.RULE_KINDS) | set(cross.RULE_KINDS)
+    assert len(adr_table_after_m42b()) == 15 and len(table) == 17
+    assert set(table) == set(rules) | set(silence.RULE_KINDS) | set(cross.RULE_KINDS) | set(tree.RULE_KINDS)
     for rule_id, (kind, items) in table.items():
         if rule_id in silence.RULE_KINDS:
             assert (silence.RULE_KINDS[rule_id], items) == (kind, []), rule_id
             continue
         if rule_id in cross.RULE_KINDS:
             assert (cross.RULE_KINDS[rule_id], items) == (kind, []), rule_id
+            continue
+        if rule_id in tree.RULE_KINDS:   # J-10: the note quotes tree.HOLES as they stand
+            assert (tree.RULE_KINDS[rule_id], items) == (kind, []), rule_id
+            assert adr_note_m43()[1][rule_id] == tree.HOLES[rule_id], rule_id
             continue
         rule = rules[rule_id]
         assert rule.kind == kind, rule_id
@@ -1007,10 +1033,14 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     assert "Ratio after M4.2: %d : %d : %d." % tuple(m42) in section and m42 == [4, 5, 3]
     m53 = [sum(1 for k, _ in adr_table_after_m53().values() if k == kind) for kind in engine.KINDS]
     assert "Ratio after M5.3: %d : %d : %d." % tuple(m53) in section and m53 == [4, 5, 4]
+    m42b = [sum(1 for k, _ in adr_table_after_m42b().values() if k == kind) for kind in engine.KINDS]
+    assert "Ratio after M4.2b: %d : %d : %d." % tuple(m42b) in section and m42b == [4, 7, 4]
     counts = [sum(1 for k, _ in table.values() if k == kind) for kind in engine.KINDS]
-    assert "Ratio after M4.2b: %d : %d : %d." % tuple(counts) in section
-    tree = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values()) + list(cross.RULE_KINDS.values())
-    assert counts == [tree.count(kind) for kind in engine.KINDS] == [4, 7, 4]
+    assert "Ratio after M4.3: %d : %d : %d." % tuple(counts) in section   # J-11
+    kinds = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values()) + list(
+        cross.RULE_KINDS.values()) + list(tree.RULE_KINDS.values())
+    assert counts == [kinds.count(kind) for kind in engine.KINDS] == [4, 7, 6]
+    assert section.index("Ratio after M4.2b:") < section.index(M43_NOTE) < section.index("Ratio after M4.3: 4 : 7 : 6.")
 
 
 def test_m41_e3_every_catalog_finding_carries_its_rule_kind():
@@ -1403,7 +1433,11 @@ def test_m42_redo2_the_note_records_nostart_the_rewording_and_the_marker():
     _, _, note = adr_note()
     redo2 = note.split("Note (2026-11-03, M4.2 REDO-2, Amendment E", 1)[1]
     flat = " ".join(redo2.split())
-    assert "open demand SILENCE-NOSTART (M4.3, E-2)" in flat
+    assert "open demand SILENCE-NOSTART (M4.3, E-2)" in flat   # the record stands; K-3 corrects it by a dated note
+    _, _, m43 = adr_note_m43()
+    assert ('Note (2026-11-03, M4.3 REDO, Amendment K, K-3; corrects the "open demand SILENCE-NOSTART (M4.3, E-2)"'
+            ' line of the M4.2 REDO-2 note above): M4.3 did not build SILENCE-NOSTART; it stays open for a later'
+            ' task.') in " ".join(m43.split())
     assert ('reworded DESTRUCT-CMD (E-4): "a wrapper in front (sudo, env, xargs, timeout, nohup): only the first'
             ' program is read" stays as an item') in flat
     assert "hook for a later demand (E-5): capture writes `input_meta.command_unread: true`" in flat

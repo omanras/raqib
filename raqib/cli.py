@@ -12,10 +12,10 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       rules that did not run (A3) and every rule's fp_budget (A6). Without
       --findings the rules are run on TRACE first.
   check-rules [--json] [--fixtures-root DIR]
-      Run every catalog rule, and CROSS-SOURCE (raqib/rules/cross.py), on its
-      fixtures and the benign corpus; print the measured fp_rate against the
-      declared fp_budget (A6). The fixtures are
-      those of a checkout (DIR/tests/fixtures; default: the checkout this
+      Run every catalog rule, CROSS-SOURCE (raqib/rules/cross.py) and the two
+      tree anchors (raqib/rules/tree.py) on its fixtures and the benign
+      corpus; print the measured fp_rate against the declared fp_budget
+      (A6). The fixtures are those of a checkout (DIR/tests/fixtures; default: the checkout this
       raqib runs from). An installed raqib carries the catalog but no
       fixtures: without --fixtures-root it says so and exits 2.
   suspect TRACE [--findings FILE] [--backend ollama|anthropic|fake] [--allow-fallback] [-o FILE]
@@ -135,7 +135,7 @@ from raqib import ui
 from raqib import watch
 from raqib.hooks import os_sysmon, proxy
 from raqib.rules import context as rule_context
-from raqib.rules import cross, engine, fixtures, silence, trace
+from raqib.rules import cross, engine, fixtures, silence, trace, tree
 from raqib.suspect import backends as suspect_backends
 from raqib.suspect import core as suspect_core
 
@@ -331,12 +331,13 @@ def _catalog(directory):
 
 
 def run_rules(records, rules, ctx, gap_seconds):
-    """All findings (silence + catalog + cross-source) and the notes of rules
-    that did not run or could not judge every line."""
+    """All findings (silence + catalog + cross-source + tree anchors) and the
+    notes of rules that did not run or could not judge every line."""
     found = report.with_silence_class(silence.findings(records, gap_seconds))
     catalog_found, notes = engine.evaluate(rules, records, ctx)
     cross_found, cross_notes = cross.findings(records)   # M5.3: nothing, no note, without os lines (C-2)
-    return found + catalog_found + cross_found, notes + cross_notes
+    tree_found, tree_notes = tree.findings(records)      # M4.3: nothing, no note, without git keys (J-3)
+    return found + catalog_found + cross_found + tree_found, notes + cross_notes + tree_notes
 
 
 def cmd_rules(args, out):
@@ -479,6 +480,8 @@ def cmd_check_rules(args, out):
         reports = fixtures.check_catalog(rules, root, benign_default(root))
         # M5.3 ruling D-11: the cross-source code rule is measured on its fixtures too.
         reports.append(cross.check(fixtures.load_fixture, root, benign_default(root)))
+        # M4.3 ruling J-1: the two tree anchors too.
+        reports += tree.check(fixtures.load_fixture, root, benign_default(root))
     except (fixtures.FixtureError, OSError) as exc:
         raise UsageError(str(exc))
     if args.json:

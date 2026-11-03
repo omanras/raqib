@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 
-from raqib.rules import cross, engine, silence, trace
+from raqib.rules import cross, engine, silence, trace, tree
 
 SILENCE_RULES = (
     ("SILENCE-GAP", "consecutive lines of a session more than RAQIB_GAP_SECONDS apart"),
@@ -37,6 +37,9 @@ SILENCE_RULES = (
 CROSS_RULES = (
     (cross.RULE_ID, cross.TITLE),
 )
+# M4.3 (ruling J-1): the two code rules of raqib/rules/tree.py, listed after
+# CROSS-SOURCE; their kinds are tree.RULE_KINDS, their class DRIFT.
+TREE_RULES = tuple((rid, tree.TITLES[rid]) for rid in tree.RULES)
 EXIT = {"clean": 0, "alarm": 1, "incomplete": 3}
 LINE_TEXT_MAX = 240
 
@@ -45,11 +48,16 @@ def rule_table(rules):
     """[{id, class, kind, severity, fp_budget, status, title}] for the silence
     rules (Python, no declared budget yet; kind from silence.RULE_KINDS, None
     if it declares none), the cross-source rule (Python, class CROSS, its
-    budget and kind from raqib/rules/cross.py) and the catalog rules."""
+    budget and kind from raqib/rules/cross.py), the two tree anchors (Python,
+    class DRIFT, their budgets and kinds from raqib/rules/tree.py, M4.3 J-1)
+    and the catalog rules."""
     table = [{"id": rid, "class": "SILENCE", "kind": silence.RULE_KINDS.get(rid), "severity": "high",
               "fp_budget": None, "status": "active", "title": title} for rid, title in SILENCE_RULES]
     table += [{"id": rid, "class": cross.CLASS, "kind": cross.RULE_KINDS.get(rid), "severity": cross.SEVERITY,
                "fp_budget": cross.FP_BUDGET, "status": cross.STATUS, "title": title} for rid, title in CROSS_RULES]
+    table += [{"id": rid, "class": tree.CLASS, "kind": tree.RULE_KINDS.get(rid), "severity": tree.SEVERITY,
+               "fp_budget": tree.FP_BUDGET.get(rid), "status": tree.STATUS.get(rid), "title": title}
+              for rid, title in TREE_RULES]
     table += [{"id": r.id, "class": r.cls, "kind": r.kind, "severity": r.severity, "fp_budget": r.fp_budget,
                "status": r.status, "title": r.title} for r in rules]
     return table
@@ -62,7 +70,11 @@ def with_silence_class(findings):
 
 def describe(rec):
     """One-line, bounded rendering of a trace record (hashes left out). The
-    middle is elided, so the end of a long path stays visible."""
+    middle is elided, so the end of a long path stays visible. On a
+    session_start, stop or session_end line the three git keys follow, after
+    the elision, so a tree finding's cited lines show what was compared
+    (M4.3, ruling K-8): each value as JSON when it is in the hook's shape
+    (40-hex, 64-hex, one of the closed set, or null), else "?"."""
     parts = ["%s %s seq %s" % (rec.get("phase", "?"), rec.get("tool", "?"), rec.get("seq")),
              str(rec.get("ts", "-"))]
     for key in ("ok", "error_class"):
@@ -78,7 +90,21 @@ def describe(rec):
     if len(text) > LINE_TEXT_MAX:
         keep = LINE_TEXT_MAX - 3
         text = text[:keep // 2] + "..." + text[-(keep - keep // 2):]
+    if rec.get("phase") in trace.GIT_PHASES:
+        shown = ["%s=%s" % (key, _git_value(key, rec[key])) for key in trace.GIT_KEYS if key in rec]
+        if shown:
+            text += "  " + "  ".join(shown)
     return text
+
+
+def _git_value(key, value):
+    """A git key's value as describe shows it: JSON when in the hook's shape, else "?" (bounded, K-8)."""
+    if value is None:
+        return "null"
+    shape = {"git_head": trace.HEX40, "git_index_sha256": trace.HEX64}.get(key)
+    if isinstance(value, str) and (shape.match(value) if shape else value in trace.GIT_ERRORS):
+        return json.dumps(value)
+    return '"?"'
 
 
 def build(trace_path, numbered, problems, findings, notes, rules, findings_source,

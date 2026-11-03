@@ -1,0 +1,6 @@
+[
+  {"ts": "2026-11-03T09:00:01.000Z", "seq": 1, "session_id": "fixture-tree-no-repo", "phase": "session_start", "tool": "-", "cwd": "/work/proj", "git_head": null, "git_index_sha256": null, "git_error": "no repo", "source": "hook"},
+  {"ts": "2026-11-03T09:00:02.000Z", "seq": 2, "session_id": "fixture-tree-no-repo", "phase": "pre", "tool": "Edit", "tool_use_id": "toolu_-no-repo_2", "input_sha256": "54ea6514aede960ac215166bc44aa238737378115a13814fe90566c782f4b388", "input_meta": {"path": "/work/proj/a.txt"}, "cwd": "/work/proj", "source": "hook"},
+  {"ts": "2026-11-03T09:00:04.000Z", "seq": 2, "session_id": "fixture-tree-no-repo", "phase": "post", "tool": "Edit", "tool_use_id": "toolu_-no-repo_2", "input_sha256": "54ea6514aede960ac215166bc44aa238737378115a13814fe90566c782f4b388", "input_meta": {"path": "/work/proj/a.txt"}, "output_sha256": "41f9e018f57ac155bf24cf4e4d48fee4ffd085d7707ba3f8aff7a7b5b332be5b", "output_meta": {"scan": "full", "secret_kinds": []}, "ok": true, "cwd": "/work/proj", "source": "hook"},
+  {"ts": "2026-11-03T09:00:05.000Z", "seq": 3, "session_id": "fixture-tree-no-repo", "phase": "stop", "tool": "-", "cwd": "/work/proj", "git_head": null, "git_index_sha256": null, "git_error": "no repo", "source": "hook"}
+]

@@ -383,7 +383,9 @@ def test_m01b_e2_command_head_on_bash_post_and_only_for_bash(tmp_path):
 # --- M0.3 E4: session events (A-3) and PostToolUseFailure error_class (A-4) -
 
 # M5.2 E3 (ADR-0003): every hook line, session events too, ends with source "hook".
-SESSION_FIELDS = {"ts", "seq", "session_id", "phase", "tool", "cwd", "source"}
+# M4.3 (ADR-0002 Amendment J, J-5): session events carry the three git keys too.
+SESSION_FIELDS = {"ts", "seq", "session_id", "phase", "tool", "cwd", "git_head", "git_index_sha256", "git_error",
+                  "source"}
 
 
 @pytest.mark.parametrize("name, phase", [
@@ -398,6 +400,9 @@ def test_m03_session_event_line(tmp_path, name, phase):
     assert set(rec) == SESSION_FIELDS
     assert (rec["phase"], rec["tool"], rec["seq"]) == (phase, "-", 1)
     assert (rec["session_id"], rec["cwd"]) == ("fixture-session-0001", "/work/example")
+    # /work/example does not exist here: no repository, and the keys say so (J-5).
+    assert (rec["git_head"], rec["git_index_sha256"], rec["git_error"]) == (None, None, "no repo")
+    assert list(rec)[-4:] == ["git_head", "git_index_sha256", "git_error", "source"]
 
 
 def test_m03_session_events_take_the_next_seq(tmp_path):

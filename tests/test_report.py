@@ -191,12 +191,19 @@ def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
     table = {r["id"]: r for r in rep["rules"]}
     assert set(table) == {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY",
                           "CROSS-SOURCE", "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
-                          "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT", "LANDED-NO-GATE", "EDIT-NO-TEST"}
+                          "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT", "LANDED-NO-GATE", "EDIT-NO-TEST",
+                          "HEAD-UNMOVED", "INDEX-UNTOUCHED"}   # M4.3 J-1: the two tree anchors
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
     assert table["CROSS-SOURCE"]["fp_budget"] == 0.1 and table["CROSS-SOURCE"]["class"] == "CROSS"   # M5.3 C-8
+    for rid in ("HEAD-UNMOVED", "INDEX-UNTOUCHED"):
+        assert {k: table[rid][k] for k in ("class", "kind", "severity", "fp_budget", "status")} == {
+            "class": "DRIFT", "kind": "anchor", "severity": "medium", "fp_budget": 0.1, "status": "active"}, rid
+    assert [r["id"] for r in rep["rules"]][5:8] == ["CROSS-SOURCE", "HEAD-UNMOVED", "INDEX-UNTOUCHED"]
     text = raqib("report", QUICKSTART)[1]
     assert "  NET-TOOL        NET       signature medium  0.25      active" in text
     assert "  CROSS-SOURCE    CROSS     anchor    high    0.1       active" in text
+    assert "  HEAD-UNMOVED    DRIFT     anchor    medium  0.1       active" in text
+    assert "  INDEX-UNTOUCHED DRIFT     anchor    medium  0.1       active" in text
 
 
 def test_e3_clean_incomplete_and_alarm(tmp_path):
@@ -271,8 +278,15 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     rows = {line.split()[0]: line.split() for line in text.splitlines()[1:]}
     assert set(rows) == {"DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED", "SCOPE-CWD-ROOT",
                          "SCOPE-PATH", "SECRET-OUTPUT", "CROSS-SOURCE",   # M5.3 D-11: the code rule too
-                         "LANDED-NO-GATE", "EDIT-NO-TEST"}                # M4.2b: the two demands
+                         "LANDED-NO-GATE", "EDIT-NO-TEST",                # M4.2b: the two demands
+                         "HEAD-UNMOVED", "INDEX-UNTOUCHED"}               # M4.3 J-1: the two tree anchors
     assert rows["CROSS-SOURCE"][1:4] == ["ok", "0.000", "0.1"]
+    # M4.3: the tree anchors are measured on their own negatives only; no benign
+    # file carries git keys, so none is judged (J-3).
+    assert rows["HEAD-UNMOVED"][1:4] == ["ok", "0.000", "0.1"] and "2 measured, 8 unmeasured" in " ".join(
+        rows["HEAD-UNMOVED"])
+    assert rows["INDEX-UNTOUCHED"][1:4] == ["ok", "0.000", "0.1"] and "3 measured, 8 unmeasured" in " ".join(
+        rows["INDEX-UNTOUCHED"])
     assert "4 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])   # M5.1b: + the Windows negative
     # M4.2 REDO-2 E-1: the field trace is not benign (tests/fixtures/field/), so
     # NET-TOOL is 1 of 10 (docs-lookup; negative-programs.json is the 10th) and
@@ -474,7 +488,8 @@ def test_m41_b1_the_text_rules_table_has_a_kind_column():
     assert "  id              class     kind      sev     fp_budget status" in text
     assert {r["id"]: r["kind"] for r in rep["rules"]} == dict(
         {r.id: r.kind for r in engine.load_catalog(ROOT / "raqib" / "rules" / "catalog")},
-        **{rid: "demand" for rid, _ in report.SILENCE_RULES}, **{rid: "anchor" for rid, _ in report.CROSS_RULES})
+        **{rid: "demand" for rid, _ in report.SILENCE_RULES}, **{rid: "anchor" for rid, _ in report.CROSS_RULES},
+        **{rid: "anchor" for rid, _ in report.TREE_RULES})   # M4.3 J-1
     for r in rep["rules"]:
         budget = "-" if r["fp_budget"] is None else "%g" % r["fp_budget"]
         row = "  %-15s %-9s %-9s %-7s %-9s %s" % (r["id"], r["class"], r["kind"], r["severity"], budget, r["status"])
