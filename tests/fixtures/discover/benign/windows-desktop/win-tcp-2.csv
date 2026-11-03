@@ -1,0 +1,12 @@
+# M5.0b fixture SYNTHETIC (not captured from a machine) - a benign Windows desktop: explorer, OneDrive, VS Code (user install), Edge; host `host`, sample 2 of 2 of the README loop; in the shape of: Get-NetTCPConnection | ConvertTo-Csv -NoTypeInformation, columns LocalAddress; LocalPort; RemoteAddress; RemotePort; State; OwningProcess; CreationTime. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"LocalAddress","LocalPort","RemoteAddress","RemotePort","State","OwningProcess","CreationTime"
+"0.0.0.0","135","0.0.0.0","0","Listen","912","11/2/2026 8:01:10 AM"
+"0.0.0.0","445","0.0.0.0","0","Listen","4","11/2/2026 8:01:12 AM"
+"::","135","::","0","Listen","912","11/2/2026 8:01:10 AM"
+"192.0.2.30","50001","198.51.100.23","443","Established","5100","11/3/2026 7:41:40 AM"
+"192.0.2.30","50010","198.51.100.77","443","Established","5320","11/3/2026 7:41:50 AM"
+"192.0.2.30","50020","198.51.100.50","443","Established","6020","11/3/2026 8:02:20 AM"
+"192.0.2.30","50021","198.51.100.51","443","Established","6050","11/3/2026 8:02:25 AM"
+"192.0.2.30","50030","198.51.100.80","443","Established","7030","11/3/2026 9:01:02 AM"
+"192.0.2.30","49990","198.51.100.80","443","TimeWait","0",
+"192.0.2.30","50031","198.51.100.81","443","TimeWait","0",

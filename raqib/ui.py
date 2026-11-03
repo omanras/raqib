@@ -35,7 +35,8 @@ ctypes, never os.kill, because 0 is CTRL_C_EVENT there. A link is only
 ever http://127.0.0.1:<whole-number port>/ (I-7).
 
 Discover (I-8): <trace dir>/discover.json (`raqib discover --json`) is
-shown with its candidates, holes and cited lines, and with its age. On
+shown with its candidates, act-roots and recent talk (M5.0b G-9), holes
+and cited lines, and with its age. On
 watch's server it is GET /discover; in `raqib ui` it is a section of the
 page, present only when the file exists. A file that cannot be read or is
 not an inventory is an alarm on the tab (A3).
@@ -964,6 +965,50 @@ def _discover_body(info, heading):
             parts.append("<li>env footprint: %s %s</li>" % (_text(e.get("name")), cites(e.get("cites"))))
         parts.append("</ul></div>")
         out.append("".join(parts))
+    # M5.0b G-9: act-roots ("talk not seen") and recent talk (owner unknown), with their cites.
+    act_roots = _list(inv.get("act_roots"))
+    out.append("<h3>Act-roots (%d)</h3>" % len(act_roots))
+    if not act_roots:
+        out.append('<p class="empty">No act-root in this inventory.</p>')
+    for r in act_roots:
+        r = _dict(r)
+        seen, up, anc = _dict(r.get("seen")), _dict(r.get("launched_by")), _dict(r.get("talking_ancestor"))
+        parts = ['<div class="card"><div class="head"><span class="tag">%s</span> pid %s %s <span class="meta">%s'
+                 " (user directory %s)%s</span></div>" % (
+                     _text(r.get("id")), _text(r.get("pid")), _text(r.get("image") or "?"), _text(r.get("exe") or "-"),
+                     _text(r.get("user_dir")), " (inside %s)" % _text(r.get("inside")) if r.get("inside") else ""),
+                 "<div>cwd %s; seen %s .. %s (%s) %s</div>" % (
+                     _text(r.get("cwd") or "-"), _text(seen.get("first") or "-"), _text(seen.get("last") or "-"),
+                     _text(seen.get("basis")), cites(r.get("cites"))),
+                 "<div>launched by pid %s %s %s</div>" % (_text(up.get("pid")), _text(up.get("image") or "?"),
+                                                          cites(up.get("cites"))),
+                 "<div>talk %s</div>" % _text(r.get("talk"))]
+        if anc:
+            parts.append("<div>its acts go to %s, the nearest talking ancestor: pid %s %s %s</div>" % (
+                _text(r.get("attributed_to") or "?"), _text(anc.get("pid")), _text(anc.get("image") or "?"),
+                cites(anc.get("cites"))))
+        parts.append("<ul>")
+        for h in _list(r.get("chains")):
+            h = _dict(h)
+            parts.append("<li>chain: pid %s %s -&gt; %s below (%s) %s</li>" % (
+                _text(h.get("pid")), _text(h.get("image") or "?"), _text(h.get("below")),
+                _text(", ".join(str(x) for x in _list(h.get("commands")))), cites(h.get("cites"))))
+        acts = _list(r.get("acts"))
+        for a in acts[:DISCOVER_ACTS_SHOWN]:
+            a = _dict(a)
+            parts.append("<li>acts: pid %s %s%s%s %s</li>" % (
+                _text(a.get("pid")), _text(a.get("image") or "?"),
+                " via pid %s" % _text(",".join(str(v) for v in _list(a.get("via")))) if a.get("via") else " (child)",
+                " [listed]" if a.get("listed") else " [unlisted]", cites(a.get("cites"))))
+        if len(acts) > DISCOVER_ACTS_SHOWN:
+            parts.append("<li>... %d more acts (all in the JSON)</li>" % (len(acts) - DISCOVER_ACTS_SHOWN))
+        parts.append("</ul></div>")
+        out.append("".join(parts))
+    recent = _list(inv.get("recent_talk"))
+    out.append("<h3>Recent talk, owner unknown (%d)</h3>" % len(recent))
+    out.append("<ul>%s</ul>" % "".join("<li>%s %s %s</li>" % (_text(_dict(t).get("id")), _text(_dict(t).get("summary")),
+                                                              cites(_dict(t).get("cites"))) for t in recent)
+               if recent else '<p class="empty">None.</p>')
     holes = inv["holes"]
     out.append("<h3>Holes (A3) (%d)</h3>" % len(holes))
     out.append("<ul>%s</ul>" % "".join("<li>%s</li>" % _text(h) for h in holes) if holes else

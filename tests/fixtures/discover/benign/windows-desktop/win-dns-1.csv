@@ -1,0 +1,8 @@
+# M5.0b fixture SYNTHETIC (not captured from a machine) - a benign Windows desktop: explorer, OneDrive, VS Code (user install), Edge; host `host`, sample 1 of 2 of the README loop; in the shape of: Get-DnsClientCache | ConvertTo-Csv -NoTypeInformation, columns Entry; RecordName; RecordType; Status; Section; TimeToLive; DataLength; Data. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"Entry","RecordName","RecordType","Status","Section","TimeToLive","DataLength","Data"
+"update.example.com","update.example.com","A","0","1","1700","4","198.51.100.23"
+"sync.example.net","sync.example.net","A","0","1","240","4","198.51.100.77"
+"marketplace.example.com","marketplace.example.com","A","0","1","50","4","198.51.100.50"
+"telemetry.example.com","telemetry.example.com","A","0","1","3200","4","198.51.100.51"
+"www.example.org","www.example.org","A","0","1","280","4","198.51.100.80"
+"cdn.example.org","cdn.example.org","A","0","1","90","4","198.51.100.81"

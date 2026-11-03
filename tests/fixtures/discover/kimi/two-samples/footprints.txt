@@ -1,0 +1,7 @@
+# M5.0b fixture SYNTHETIC (not captured from a machine) - the shape of the Kimi field test (docs/review/2026-11-02-field-note-kimi-discover.md), invented lines; host `host`; in the shape of: Get-ChildItem -Force C:\Users\*\, C:\Users\*\AppData\Roaming\Claude\ | ForEach-Object FullName (every entry of every home; discover keeps the catalog matches). Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+C:\Users\user\.kimi
+C:\Users\user\.kimi-code
+C:\Users\user\AppData
+C:\Users\user\Desktop
+C:\Users\user\Documents
+C:\Users\user\NTUSER.DAT

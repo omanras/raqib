@@ -1299,3 +1299,54 @@ def test_j14_nested_objects_in_registry_fields_are_text(tmp_path, _home):
     assert_inert(page)
     assert "&lt;script&gt;x&lt;/script&gt;?" in page and "note: ok note" in page and "pid [1] is not a process number" \
         in page
+
+
+# --- M5.0b G-9 (ADR-0004 Amendment G): the discover tab shows act-roots and recent talk --------------------------
+
+KIMI_ONE = FIXTURES / "discover" / "kimi" / "one-sample"
+
+
+def kimi_inventory():
+    texts, holes = discover.read_dir(str(KIMI_ONE))
+    return discover.run(texts, discover.load_catalog(discover.CATALOG), holes=holes)
+
+
+def test_g9_discover_tab_renders_act_roots_and_recent_talk_with_their_cites(tmp_path):
+    path = write_discover(tmp_path, kimi_inventory())
+    tab = ui.discover_page(str(path), 5)
+    assert_inert(tab)
+    assert "<h3>Act-roots (1)</h3>" in tab and '<span class="tag">A1</span> pid 10728 kimi' in tab
+    assert "C:\\Users\\user\\.kimi-code\\bin\\kimi.exe (user directory ?:/users/*/*)" in tab
+    assert "launched by pid 13236 cmd win-process-1:10" in tab
+    assert "its acts go to C1, the nearest talking ancestor: pid 6636 explorer win-tcp-1:6" in tab
+    assert "chain: pid 7768 bash -&gt; 4 below (ping, tee) win-process-1:13" in tab
+    assert "<h3>Recent talk, owner unknown (1)</h3>" in tab and "R1 recent talk, owner unknown: TIME-WAIT to" in tab
+    assert "win-tcp-1:7 win-dns-1:3" in tab
+    # the cites reach the cited-lines table (A5)
+    for cell in ("<td>win-process-1</td><td>12</td>", "<td>win-tcp-1</td><td>7</td>", "<td>win-dns-1</td><td>3</td>"):
+        assert cell in tab, cell
+    (tmp_path / "e").mkdir()
+    empty = write_discover(tmp_path / "e", inventory())
+    tab = ui.discover_page(str(empty), 5)
+    assert "<h3>Act-roots (0)</h3>" in tab and "No act-root in this inventory." in tab
+    assert "<h3>Recent talk, owner unknown (0)</h3>" in tab
+
+
+def test_g9_hostile_act_root_and_recent_talk_strings_stay_text(tmp_path):
+    inv = kimi_inventory()
+    a = inv["act_roots"][0]
+    a.update(image=HOSTILE, exe=HOSTILE, user_dir=HOSTILE, talk=HOSTILE, id=HOSTILE, inside=HOSTILE,
+             attributed_to=HOSTILE)
+    a["launched_by"].update(image=HOSTILE)
+    a["chains"][0].update(image=HOSTILE, commands=[HOSTILE])
+    a["acts"][0].update(image=HOSTILE, via=[HOSTILE])
+    a["cites"][0].update(src=HOSTILE, text=HOSTILE)
+    inv["recent_talk"][0].update(summary=HOSTILE, id=HOSTILE)
+    inv["recent_talk"][0]["cites"][0].update(src='x" href="javascript:alert(1)', text=HOSTILE)
+    inv["act_roots"].append("not a mapping")
+    inv["recent_talk"].append(None)
+    path = write_discover(tmp_path, inv)
+    tab = ui.discover_page(str(path), 5)
+    assert_inert(tab)
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;&quot;&gt;&lt;img" in tab and "?[2J?gpj.exe?end" in tab
+    assert all(SAFE_HREF.fullmatch(h) for h in HREF.findall(tab))

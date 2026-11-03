@@ -8,9 +8,14 @@
 # one thing an adversary can read and route around (ADR-0004); `evasion:`
 # says how.
 #
-# Kimi / Moonshot endpoints are deliberately not listed: ADR-0004's first field
-# test runs "with no prior knowledge of Kimi". The ~/.kimi footprint is listed
-# because ADR-0004 layer 4 names it. See docs/review/2026-11-02-M5.0-questions.md.
+# Kimi / Moonshot hosts were left out until ADR-0004's first field test, which
+# ran "with no prior knowledge of Kimi" (B-10; field note
+# docs/review/2026-11-02-field-note-kimi-discover.md). M5.0b lists them, so a
+# DNS cache row or a TIME-WAIT row to them is recent talk (E2). A blind test
+# runs with a --catalog copy without them, as B-10 did.
+#
+# act_root (M5.0b E3) is the one block that judges a tree: a weaker class than
+# a candidate, a signature because the image path is the process's own record.
 id: DISCOVER-CATALOG
 kind: signature
 evasion:
@@ -45,6 +50,12 @@ hosts:
   - {match: api.fireworks.ai, vendor: fireworks}
   - {match: "*.githubcopilot.com", vendor: github-copilot}
   - {match: "*.cursor.sh", vendor: cursor}
+  # Moonshot (Kimi, Kimi Code): host names only, no network; from vendor docs,
+  # not re-checked offline (G-11). Field runs stay blind with a --catalog copy
+  # without them (B-10).
+  - {match: api.moonshot.ai, vendor: moonshot}
+  - {match: api.moonshot.cn, vendor: moonshot}
+  - {match: api.kimi.com, vendor: moonshot}
 # Model API networks, matched by IP (the only endpoint match Linux has
 # offline in M5.0).
 networks:
@@ -96,3 +107,66 @@ footprints:
 # Variable NAMES in a process environment (never values; E4).
 env:
   - "*_API_KEY"
+# Act-root (M5.0b E3; ADR-0004 Amendments F and G): "act root, talk not
+# seen". A process P is an act-root when all of these hold:
+# - its image path is under a user directory (user_dirs);
+# - none of its names is a listed shell or system image (shells, not_images);
+# - its own parent is a listed shell or terminal host (launchers, G-1a): a
+#   program started from a GUI (explorer, a desktop session, an IDE) is not;
+# - neither P nor any hop below it carries `--type=` in its argv (an
+#   Electron/Chromium helper, G-1b);
+# - its child is a listed shell, with a command below that shell whose image
+#   is not under P's own directory (G-1c);
+# - P owns no talking connection in any sample.
+# A later sample in which P talks makes it a candidate instead (the window
+# merge); recent talk (a TIME-WAIT or DNS cache row, owner unknown) never
+# does. Exit 1, like a candidate. fp_budget is measured by
+# `raqib discover --check` on the fixtures below (A6); status disabled is
+# the Table's act (G-8): then no inventory judges act-roots, and --check
+# still measures them.
+act_root:
+  kind: signature
+  status: ok
+  fp_budget: 0.25
+  # Image paths, lower case, with '\' read as '/'; fnmatch globs ('*' also
+  # matches '/'). Users\<name> on any drive, macOS /Users, /home, root's home,
+  # and AppData anywhere. Windows: ExecutablePath; Linux: /proc/PID/exe, else
+  # argv[0] (G-2).
+  user_dirs: ["?:/users/*/*", "/users/*/*", "/home/*/*", "/root/*", "*/appdata/*"]
+  # The head of a chain. A program named like one is never an act-root.
+  shells: [sh, bash, dash, zsh, ksh, fish, cmd, powershell, pwsh]
+  # Besides a shell, the parents an act-root may have (G-1a): terminal hosts
+  # and multiplexers.
+  launchers: [conhost, mintty, kitty, wezterm, wezterm-gui, alacritty, gnome-terminal-server, tmux, screen]
+  # System images, and the terminal hosts and multiplexers that run the
+  # user's own shell. A program named like one is never an act-root.
+  not_images: [explorer, conhost, openconsole, windowsterminal, wt, mintty, sshd, tmux, screen, gnome-terminal-server, konsole, xterm, kitty, alacritty, wezterm, wezterm-gui]
+  evasion:
+    - "install under Program Files, /usr, /opt or any other directory not in user_dirs: the image is not in a user directory"
+    - "a blank image path: a process whose ExecutablePath the export left empty (another user's, or the export not elevated) is not placed (G-4)"
+    - "a shell-looking name: a program named like a listed shell or a listed system image (bash.exe, cmd.exe, tmux) is never an act-root"
+    - "terminal hosts and multiplexers in not_images (mintty, tmux, kitty, wezterm, ...) trade a masquerade for fewer false positives: an agent named like one is never an act-root"
+    - "launch from a GUI launcher: a root whose parent is no listed shell or launcher (explorer, a desktop session, an IDE, a service, a double fork to init) is never an act-root (G-1a)"
+    - "a --type= argument: a process that carries --type= in its argv, as Electron and Chromium helpers do, is neither a root nor a hop (G-1b)"
+    - "talking through a child: a root whose connections a child owns is never seen to talk, so it stays an act-root and is not promoted; the chain beside that child is the anchor's sibling-talker hole"
+    - "a non-shell hop: root -> helper -> shell makes the helper, not the root, the one to judge; a helper outside the user directories or with --type= hides the chain"
+    - "no listed shell in the chain: a command started directly (git, python, curl) or through an unlisted shell (tcsh, nu, a renamed copy) makes no chain"
+    - "acts inside the shell: builtins, cmdlets and redirections start no command process"
+    - "a command under the root's own directory (a tool it ships) is not a command of the chain (G-1c)"
+    - "wsl, a VM or a container: commands run there are not in this host's process table"
+    - "a chain alive only between samples: the shell and its command must be alive at a sample (liveness)"
+    - "an interpreter outside the user directories running a script inside one (node from Program Files, python from /usr): the image is the interpreter"
+    - "Linux: an exe link that cannot be read (another user's process) falls back to argv[0], the process's own text; a relative argv[0] is not placed"
+  # Fixture directories, relative to a checkout (as the rules' fixtures are).
+  # positive: act_root names an act-root, promoted names a program that must
+  # be a candidate and not an act-root; cite is a SRC:LINE the entry must
+  # cite (G-8). negative: benign exports; an act-root on one is a false
+  # positive.
+  fixtures:
+    positive:
+      - {dir: tests/fixtures/discover/kimi/one-sample, act_root: kimi, cite: "win-process-1:12"}
+      - {dir: tests/fixtures/discover/kimi/two-samples, promoted: kimi, cite: "win-tcp-2:7"}
+      - {dir: tests/fixtures/discover/linux-agent, act_root: agent, cite: "proc:9"}
+    negative:
+      - tests/fixtures/discover/benign/linux-desktop
+      - tests/fixtures/discover/benign/windows-desktop
