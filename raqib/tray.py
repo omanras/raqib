@@ -56,6 +56,7 @@ WM_RBUTTONUP = 0x0205
 WM_APP = 0x8000
 WM_TRAY = WM_APP + 1    # the icon's callback message
 WM_RAQIB_STOP = WM_APP + 2   # a thread message: stop() asks the tray thread to end
+WM_RAQIB_TIP = WM_APP + 3    # a thread message: set_tip() asks the tray thread to change the tooltip (M7.3)
 HWND_MESSAGE = -3       # never used (A-1): a message-only window gets no broadcast
 WS_OVERLAPPED = 0x00000000
 MB_OK, MB_ICONERROR = 0x0, 0x10
@@ -65,6 +66,11 @@ MF_STRING = 0x0
 TPM_RIGHTBUTTON, TPM_NONOTIFY, TPM_RETURNCMD = 0x2, 0x80, 0x100
 SM_CXSMICON = 49
 ICON_MIN, ICON_MAX = 16, 64
+
+
+def tip_text(trees, new):
+    """M7.3 E3: the tooltip while the host is watched: "Raqib: N trees, K new"."""
+    return "%s: %d trees, %d new" % (TIP, int(trees or 0), int(new or 0))
 
 
 def unsupported(platform=None):
@@ -298,6 +304,20 @@ class Tray:
             self._hole("the tray thread did not end within %g s" % STOP_SECONDS)
         self.running = False
 
+    def set_tip(self, text):
+        """M7.3: the tooltip becomes text (at most 127 characters). Like
+        stop(), it posts only to the tray's own thread, which modifies its
+        own icon (NIM_MODIFY); a failure is a hole, never raised."""
+        self.tip = str(text)[:127]
+        if self.thread is None or not self.running or self._thread_id is None:
+            return
+        try:
+            if not self.api.PostThreadMessageW(self._thread_id, WM_RAQIB_TIP, 0, 0):
+                self._hole("the tray's tooltip could not be changed (PostThreadMessageW failed, error %s)"
+                           % self.api.last_error())
+        except Exception as exc:
+            self._hole("the tray's tooltip could not be changed: %s: %s" % (type(exc).__name__, exc))
+
     # --- the tray thread ----------------------------------------------------------
 
     def _hole(self, text):
@@ -391,6 +411,11 @@ class Tray:
                 raise OSError("GetMessageW failed (error %d)" % api.last_error())
             if not msg.hWnd and msg.message == WM_RAQIB_STOP:   # stop(): a thread message, no window
                 return
+            if not msg.hWnd and msg.message == WM_RAQIB_TIP:    # set_tip() (M7.3): its own icon's tooltip
+                if self._added and not self._notify(NIM_MODIFY):
+                    self._hole("the tray's tooltip could not be changed (Shell_NotifyIconW NIM_MODIFY failed,"
+                               " error %s)" % api.last_error())
+                continue
             api.TranslateMessage(api.ctypes.byref(msg))
             api.DispatchMessageW(api.ctypes.byref(msg))
 

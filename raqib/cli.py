@@ -127,10 +127,16 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       RAQIB-SILENCE line (channel unreadable, root not found, earlier
       holders of its pid, no event 1 or 11, an unreadable event), 2 on a bad
       option, without --from off Windows, or a trace it cannot write; else 0.
-  app [PROJECT] [--log PATH] [--no-notify] [--port N] [--refresh N]
+  app [PROJECT] [--every T] [--log PATH] [--no-notify] [--port N] [--refresh N]
       Open Raqib as a desktop window (M6.4, ADR-0006; tkinter, standard
       library; also the `raqib-app` gui-script, with no console on
-      Windows): first what `doctor` says for PROJECT (default: the current
+      Windows). It opens on the host (M7.3, ADR-0007 decision 5): one
+      discover round at open, the trees found (image, pid, named/unknown/
+      benign, first seen, acts, endpoints), doctor's lines under "Checks",
+      and "Watch this host", which runs the watch of `watch --host` (a
+      round every T seconds, default 10) with its knocks and its final
+      report. "Watch a project" opens the project screen: what `doctor`
+      says for PROJECT (default: the current
       directory), a project field with Browse, and Start; Start runs the
       same watch as `watch` in a worker thread (the page on 127.0.0.1 is
       served, not opened; its URL is shown), Stop or closing the window ends
@@ -328,8 +334,13 @@ def _parser():
                           % os_sysmon.CHANNEL)
     osx.add_argument("--cwd", metavar="DIR", help="the cwd written on the lines, an absolute directory (default: the"
                                                  " root's CurrentDirectory in its event 1, else no cwd)")
-    a = sub.add_parser("app", help="open Raqib as a desktop window: doctor, Start/Stop, the watch (M6.4)")
-    a.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
+    a = sub.add_parser("app", help="open Raqib as a desktop window: the host first, Watch this host, or a project"
+                                   " (M6.4, M7.3)")
+    a.add_argument("project", nargs="?", default=None,
+                   help="the project preselected for \"Watch a project\" (default: .); the window opens on the host")
+    a.add_argument("--every", type=float, default=None, metavar="T",
+                   help="the host watch: a round every T seconds (default %g; a reader not back in 2 x T is a hole)"
+                        % host.EVERY_DEFAULT)
     a.add_argument("--log", metavar="PATH", help="the trace (default: one outside the project)")
     a.add_argument("--no-notify", action="store_true", help="no OS notifications (also off when CI is set)")
     a.add_argument("--port", type=int, default=None, metavar="N",
@@ -875,9 +886,13 @@ def cmd_app(args, out):
     rules, gap, evaluator = _watch_setup()
     if args.project is not None and not os.path.isdir(args.project):
         raise UsageError("not a directory: %s" % args.project)
+    every = host.EVERY_DEFAULT if args.every is None else args.every
+    if not (0.1 <= every <= 86400):   # M7.3: as watch --host
+        raise UsageError("--every must be a number of seconds from 0.1 to 86400")
     # A-10: --log is the trace of the project on the command line only; Browse's projects get their default.
     options = window_app.Options(evaluator, rules, gap, log=args.log, no_notify=args.no_notify, port=args.port,
-                                 refresh=args.refresh, log_project=os.path.abspath(args.project or "."))
+                                 refresh=args.refresh, log_project=os.path.abspath(args.project or "."),
+                                 every=every)
     try:
         return window_app.run(args.project, options, out=out)
     except window_app.AppError as exc:

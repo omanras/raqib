@@ -286,6 +286,25 @@ def nothing_read(inv):
     return not inv.get("records") or any(str(a).startswith("nothing read") for a in inv.get("alarms") or ())
 
 
+UNREAD_PREFIXES = ("source ", "no process source read", "no connection source read")
+
+
+def unread_sources(inv):
+    """F-9 (M7.3 REDO, A3): the sources of a round's inventory that were not
+    read or only partly read: discover's own reasons ("source X not read: ...",
+    "source X partly read: ...", "no process/connection source read") and any
+    source the inventory lists with an error. A tree seen beside them was seen
+    by a partly blind round."""
+    out = [str(r) for r in inv.get("incomplete") or () if str(r).startswith(UNREAD_PREFIXES)]
+    for src in inv.get("sources") or ():
+        if isinstance(src, dict) and src.get("error"):
+            text = "source %s %s: %s" % (src.get("name"), "partly read" if src.get("text_read") else "not read",
+                                         src.get("error"))
+            if text not in out:
+                out.append(text)
+    return out
+
+
 def tree_word(key):
     pid, image, started = key
     return "%s:%s:%s" % (pid, image, started or "-")
@@ -346,6 +365,7 @@ class HostWatch:
         self.last_round = None
         self.last_inventory = None
         self.results = []            # each round's inventory result
+        self.unread = []             # F-9: (round, [unread or partly read sources]) of the rounds that had some
         self.beat = self.t0
         self.beat_wall = self.wall_clock()
         self.step_seconds = 0.0
@@ -599,6 +619,9 @@ class HostWatch:
                 n, len(problems), "; ".join(cite_text("%s:%s %s" % (p.get("src"), p.get("line"), p.get("reason"))
                                                     if isinstance(p, dict) else str(p)) for p in problems[:3])),
                        round_=n)
+        blind = unread_sources(inv)
+        if blind:   # F-9: a tree seen beside an unread source was seen by a partly blind round
+            self.unread.append((n, blind))
         first = self.history_round is None
         if first:
             self.history_round = n
@@ -823,6 +846,10 @@ class HostWatch:
         if late:
             incomplete.append("%d round(s) whose reader was not back within %g s (round %s): a hole" % (
                 len(late), self.deadline_seconds, ", ".join(map(str, late))))
+        if self.unread:   # F-9: never CLEAN beside an unread or partly read source, whatever discover's word
+            incomplete.append("%d round(s) with a source not read or partly read (round %s): %s" % (
+                len(self.unread), ", ".join(str(n) for n, _ in self.unread),
+                "; ".join(sorted({r for _, rs in self.unread for r in rs}))))
         if "incomplete" in self.results:
             incomplete.append("%d round(s) whose inventory is incomplete" % self.results.count("incomplete"))
         others = [h for h in self.holes if h not in reader and h["kind"] not in ("round-unread", "lines-unread")]
