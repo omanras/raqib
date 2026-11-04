@@ -1,30 +1,30 @@
-# HANDOFF — M7.2b  (phase 7: reading sources attach themselves, ADR-0007 decision 3 as narrowed by H)
+# HANDOFF — M7.4  (phase 7: rhythm and suspicion on unknown trees, ADR-0007 decision 4)
 
-Task: for every tree the host watch finds, Raqib attaches the sources that only read, without
-being told: the os source where Sysmon is, else the host's own record of the tree as a source,
-judged by the rules. Hooks attach only with `--attach-hooks` (H-1). A tree with no source is a finding.
+Task: a tree that talks to an endpoint the catalog does not know is judged by the think-act cycle
+alone - talk to one destination, then a child starts, repeated - from times and counts the host
+records, thresholds not a model (RHYTHM); the suspect layer may raise suspicion on an unknown
+tree's record, never acquit (A2), only when the commander turns it on.
 
 Scope:
-  raqib/host.py, raqib/hooks/os_sysmon.py (API only), raqib/install.py (API only), raqib/rules/trace.py
-  (SOURCES: host), raqib/rules/catalog/ (HOST-UNWATCHED new; NET-TOOL, DESTRUCT-CMD: source host), raqib/rules/
-  silence.py (host exemption), raqib/ui.py, raqib/app.py, raqib/cli.py, .github/workflows/gate.yml, tests/, README.md, docs/review/
+  raqib/host.py, raqib/hostwin.py (API only), raqib/discover.py (API only), raqib/rules/catalog/ (one YAML),
+  raqib/suspect/ (API only), raqib/ui.py, raqib/app.py, raqib/cli.py, .github/workflows/gate.yml, tests/, README.md, docs/review/
 
 Exit criteria:
-- E1 Per tree, recorded on the tree and in rounds.jsonl: (a) the Sysmon channel exists -> os-sysmon
-     rooted at the tree's root pid, in a thread with a Stop, trace under ~/.raqib/host/sources/;
-     (b) else the host source; (c) only with --attach-hooks (CLI) or the window's checkbox (off by
-     default): a Claude Code tree (claude / claude.exe, or node + cli.js where argv is read) with a
-     cwd read outside ~/.raqib gets the `raqib watch` hooks into that project (installer API); no
-     cwd or no flag = "hooks: not attached (<why>)" and (a)/(b). Nothing else is written anywhere (A4).
-- E2 The host source: per round, per tree, lines of source "host" (SOURCES): tool HostChild with
-     command_programs = new children's image names; tool HostConnection with the remote host:port
-     (hashes only); gone ones; cited to round and sample (A5). NET-TOOL and DESTRUCT-CMD accept
-     source host on command_programs (two YAMLs, fixtures); silence rules skip source host; what
-     does not fit is a recorded hole. No host line is labelled Bash.
-- E3 HOST-UNWATCHED (anchor, high, YAML + fixtures): a candidate tree with no source after one round. E4 Every source's findings show on the tree (report, page, window: source column, findings by severity) and knock; Stop ends every source thread.
-- E5 Tests on fakes for (a), (b), (c) with and without the flag, the host lines, the two rules over
-     them, HOST-UNWATCHED +/-, Stop; CI ubuntu + windows: two rounds, every tree has a source or
-     HOST-UNWATCHED; kinds 4 : 7 : 10. README: three lines.
-Not in scope: rhythm (M7.4), proxy attachment, CROSS-SOURCE over host lines, macOS.
-Commit: `landed: M7.2b reading sources attach themselves` or `STOP: M7.2b <reason>`.
+- E1 Per tree, per round, the host source records the two beats as it records connections and
+     children: "talk" = a connection to one remote host:port new or still established (bytes where
+     the host gives them read-only: Linux `ss -ti` by absolute path; Windows none = a named hole);
+     "act" = a child started (started time where read).
+- E2 RHYTHM (anchor, medium, YAML + fixtures, budget measured on the benign desktops): K cycles (talk
+     to the SAME destination, then an act within W s) within the last R rounds, K=3 W=30 R=10 by
+     default, declared in the YAML; once per tree per streak; cites the rounds and records of each
+     beat (A5); evasions named (a relay, acts between rounds, a destination that changes each turn).
+- E3 `raqib watch --host --suspect BACKEND` (window: a "suspect unknown trees" field, empty by
+     default) runs the existing suspect layer over each UNKNOWN tree's source file every R rounds;
+     "benign" = no finding (A2); suspicion listed on the tree, knocks once; the backend call is the
+     only network call, never from a capture or discovery path; its text carries hashes and names only.
+- E4 Report, page and window show RHYTHM and suspicion as other findings; exit codes as C-10. E5 Tests on fake rounds: K cycles fire, K-1 do not, a changing destination does not, acts between
+     rounds a named hole; the bytes reader with a fake `ss`; the suspect call with a fake backend and
+     the never-acquit contract; CI ubuntu + windows: the host step passes. Kinds 4 : 7 : 11; README 3 lines.
+Not in scope: pcap, GetPerTcpConnectionEStats, proxy attachment, CROSS-SOURCE over host, macOS.
+Commit: `landed: M7.4 rhythm and suspicion` or `STOP: M7.4 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
