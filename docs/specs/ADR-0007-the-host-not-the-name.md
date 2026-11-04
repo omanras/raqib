@@ -365,3 +365,36 @@ if the Log pane needs it).
   HANDOFF let the look's level come from discover's result word by not
   saying where the level comes from (F-1); the exit-code colours were not
   in the HANDOFF either (F-7).
+
+## Amendment H (the Table, 2026-11-04) - decision 3 narrowed before M7.2b is built
+The first M7.2b builder stopped before writing code (its response was cut
+by a safety classifier during the read-through; it did not retry, and the
+Table does not ask it to) and raised a design point that stands on its
+own: E1(a) as written would have Raqib write `.claude/settings.json` into
+any project a discovered Claude Code tree works in, though nobody named
+that project. `raqib watch` makes that write only where the commander
+pointed it (ADR-0005 decision 1, A4's one permitted write).
+- H-1 Decision 3 is narrowed: the sources that only READ (the os source
+  where Sysmon is; the host's own record of the tree) attach themselves.
+  A source that WRITES into a project (the hooks) attaches only with the
+  commander's word for that watch: `raqib watch --host --attach-hooks`
+  (and the window's checkbox "attach hooks to Claude Code projects", off
+  by default). Without it, a Claude Code tree is watched by the os or host
+  source like any other, and the report says "hooks: not attached (no
+  --attach-hooks)". The decision text above stays; this amendment is the
+  record of the narrowing.
+- H-2 The host source lines are judged by the existing rules where their
+  fields fit; to make them fit honestly, NET-TOOL.yaml and DESTRUCT-CMD.yaml
+  accept `source: host` lines of tool HostChild on their command_programs
+  (scope widened to those two YAMLs); the silence rules do not run over host
+  lines (silence.py gains one exemption by source; the host's own quiet is
+  the rounds' business, M7.2 E4); CROSS-SOURCE over host lines is a later
+  task (recorded, not built). No host line is ever labelled tool Bash.
+- H-3 HOST-UNWATCHED is the fourth host anchor: kinds 4 : 7 : 10; the
+  Table writes the ADR-0002 row and "Ratio after M7.2b" on the branch; the
+  builder extends test_rules.py's note parser as M7.2 did.
+- H-4 Windows has no cwd live (Amendment A-15): with --attach-hooks a
+  Claude Code tree on Windows is a hole for hooks and falls to the os or
+  host source; recorded.
+- Table ledger: the HANDOFF as first written let a discovered tree cause a
+  write into an unnamed project; corrected here before any code.
