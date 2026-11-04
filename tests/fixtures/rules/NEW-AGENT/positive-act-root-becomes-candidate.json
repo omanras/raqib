@@ -148,9 +148,7 @@
      "r": 10,
      "rounds": [],
      "streak_fired": false,
-     "talks": [
-      "198.51.100.23:443"
-     ],
+     "talks": [],
      "w": 30
     },
     "round": 2,

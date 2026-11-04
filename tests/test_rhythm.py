@@ -62,9 +62,10 @@ def make_host(home, invs, runner=None, platform="test", **kw):
     clock = Clock()
     notifier = make_notifier(runner or FakeRunner())
     notifier.host = True
+    kw.setdefault("sysmon", NO_SYSMON)
     w = host.HostWatch(lambda: next(feed), CATALOG, RULES, notifier, every=10, out=io.StringIO(), err=io.StringIO(),
                        clock=clock, wall=lambda: host_fixtures.WALL0 + clock.t, home=str(home), platform=platform,
-                       sysmon=NO_SYSMON, **kw)
+                       **kw)
     return w, clock
 
 
@@ -207,10 +208,13 @@ def test_e2_the_rule_is_a_catalog_anchor_with_fixtures_from_make_py_and_a_measur
     rep = reports["HOST-RHYTHM"]
     assert rep["verdict"] == "ok" and rep["fp_rate"] == 0.0 and all(p["fired"] for p in rep["positives"])
     measured = [n for n in rep["negatives"] if n["measured"]]
-    assert len(measured) == 6 and not any(n["fired"] for n in measured)
-    arrivals = {Path(n["path"]).as_posix() for n in measured if "negative-arrival-" in str(n["path"])}
-    assert arrivals == {"tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json",
-                        "tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json"}
+    # K-9: the four synthetic cases only; the arrivals (one round each, no cycle possible) are not listed
+    assert len(measured) == 4 and not any(n["fired"] for n in measured)
+    assert sorted(Path(n["path"]).name for n in measured) == [
+        "negative-acts-between-rounds.json", "negative-changing-destination.json", "negative-no-talk.json",
+        "negative-two-cycles.json"]
+    assert RULE.fixtures["negative"] == ["tests/fixtures/rules/" + n for n in host_fixtures.RHYTHM_SCENARIOS
+                                         if "/negative-" in n]
     built = host_fixtures.build()
     for name in host_fixtures.RHYTHM_SCENARIOS:
         assert (ROOT / "tests" / "fixtures" / "rules" / name).read_text(encoding="ascii") == built[name], name
@@ -223,22 +227,25 @@ def test_e2_rhythm_is_a_tree_rule_and_class_host():
 
 # --- E1: the two beats on the host source; bytes; start times -------------------------------------------------
 
-def test_e1_host_connection_lines_are_talk_beats_new_or_still_established(home):
+def test_e1_host_connection_lines_are_talk_beats_new_or_bytes_moved(home):
     w, clock = make_host(home, scenario("cycle", 3))
     rounds(w, clock, 3)
     (key,) = list(w.trees)
     got = [json.loads(x) for x in Path(w._source_path(key)).read_text(encoding="ascii").splitlines()]
     conns = [l for l in got if l["tool"] == "HostConnection"]
-    assert [(l["input_meta"]["round"], l["input_meta"]["new"]) for l in conns] == [(1, True), (2, False), (3, False)]
-    assert all(l["input_meta"]["bytes"] == "not read" for l in conns)
+    assert [(l["input_meta"]["round"], l["input_meta"]["change"]) for l in conns] == [(1, "new"), (2, "bytes"),
+                                                                                       (3, "bytes")]
+    assert conns[-1]["input_meta"]["bytes"] == {"sent": 3000, "received": 15000, "sockets": 1}
     children = [c for l in got if l["tool"] == "HostChild" for c in l["input_meta"]["children"]]
     assert children and all(c["started"] and c["started"].endswith("Z") for c in children)
 
 
-def test_e1_windows_bytes_hole_is_named_once_per_run(home):
+def test_e1_windows_bytes_hole_is_a_blind_spot_named_once_per_run(home):
     w, clock = make_host(home, scenario("cycle", 3), platform="win32")
     rounds(w, clock, 3)
-    assert w.notes.count(host.WIN_BYTES_HOLE) == 1 and "GetExtendedTcpTable" in host.WIN_BYTES_HOLE
+    (b,) = [b for b in w.blind if b["kind"] == "bytes"]
+    assert b["class"] == "blind spot" and b["detail"].startswith(host.WIN_BYTES_HOLE) and b["rounds"] == [1, 2, 3]
+    assert "GetExtendedTcpTable" in host.WIN_BYTES_HOLE and host.WIN_BYTES_HOLE not in w.notes
 
 
 def test_e1_linux_bytes_are_recorded_on_the_connection_line(home):
@@ -254,14 +261,15 @@ def test_e1_linux_bytes_are_recorded_on_the_connection_line(home):
     assert conns[-1]["input_meta"]["bytes"] == {"sent": 1200, "received": 5400, "sockets": 1}
 
 
-def test_e1_a_linux_round_without_child_start_times_uses_the_round_time_with_a_note(home):
+def test_e1_a_linux_round_without_child_start_times_uses_the_round_time_a_blind_spot(home):
     invs = scenario("cycle", 4)
     for i in invs:
         for a in i["candidates"][0]["acts"]:
             a["started"] = None
     w, clock = make_host(home, invs, platform="linux")
     rounds(w, clock, 4)
-    assert host.LINUX_STARTED_HOLE in w.notes and w.notes.count(host.LINUX_STARTED_HOLE) == 1
+    started = [b for b in w.blind if b["kind"] == "started"]
+    assert len(started) == 1 and started[0]["detail"] == host.LINUX_STARTED_HOLE + host.BLIND_TAIL
     assert tree_lines(w)[-1]["input_meta"]["rhythm"]["act_basis"] == ["round"]
     assert [f["round"] for f in rhythm_findings(w)] == [4]   # the round time is within W of the round's talk
 
@@ -381,7 +389,7 @@ def test_e3_named_and_benign_trees_are_never_sent(home):
     w, clock = make_host(home, invs, suspect=Spy({}))
     rounds(w, clock, 10)
     settle(w)
-    assert len(seen) == 1 and '"session_id": "host-4400"' in seen[0] and "5500" not in seen[0]
+    assert len(seen) == 1 and '"session_id": "t1"' in seen[0] and "5500" not in seen[0] and "4400" not in seen[0]
 
 
 def test_e3_what_is_sent_is_hashes_and_names_only(home):
@@ -418,11 +426,16 @@ def test_e3_a_failed_or_late_call_is_a_hole_not_a_clearance(home):
     (home / "b").mkdir()
     w2, clock2 = make_host(home / "b", scenario("between", 10), suspect=Slow({}), suspect_timeout=5)
     rounds(w2, clock2, 10)
-    assert w2.suspect_call is not None
+    call = w2.suspect_call
+    assert call is not None
     clock2.t += 10
     w2.tick(wait=0)
+    # K-3: late is a hole, said once, and the call is NOT let go while its thread runs (never two in flight)
+    assert [h["kind"] for h in w2.holes].count("suspect-late") == 1 and w2.suspect_call is call
     gate.set()
-    assert any(h["kind"] == "suspect-late" for h in w2.holes) and w2.suspect_call is None
+    call.thread.join(5)
+    w2.tick(wait=0)
+    assert w2.suspect_call is None and w2.suspect_runs[-1]["state"] == "back (late)"
     assert w2.finish()[1] == 3   # no finding: the late call is a hole (incomplete), never a clearance
 
 
@@ -581,3 +594,484 @@ def test_ascii():
                  "raqib/suspect/core.py", "raqib/rules/catalog/HOST-RHYTHM.yaml", "tests/test_rhythm.py",
                  "tests/fixtures/host/make.py"):
         (ROOT / name).read_bytes().decode("ascii")
+
+
+# --- M7.4 REDO: ADR-0007 Amendment K (K-1..K-13), each with its test (K-14) ----------------------------------------
+
+class Spy(backends.FakeBackend):
+    """Records every window sent (the rendered user text) and answers below the threshold."""
+
+    def __init__(self, answers=None, delay=0.0):
+        super().__init__(answers or {})
+        self.users = []
+        self.delay = delay
+        self.inflight = 0
+        self.max_inflight = 0
+        self.lock = threading.Lock()
+
+    def judge(self, system, user, schema):
+        with self.lock:
+            self.inflight += 1
+            self.max_inflight = max(self.max_inflight, self.inflight)
+        try:
+            self.users.append(user)
+            if self.delay:
+                time.sleep(self.delay)
+            return {"suspicion": 0.0, "reasons": [], "cited_seq": []}
+        finally:
+            with self.lock:
+                self.inflight -= 1
+
+
+def sent_seqs(spy):
+    out = []
+    for user in spy.users:
+        head = user.split("\n", 1)[0]
+        first, rest = head[len("Window of seq "):].split(" to ", 1)
+        body = user.split("<trace>", 1)[1]
+        out += [json.loads(l)["seq"] for l in re.findall(r"^\{.*\}$", body, re.M)]
+    return out
+
+
+def five_remotes(n):
+    """n rounds of the cycle tree with five remotes, each new every round (six host lines per round)."""
+    invs = []
+    for k in range(1, n + 1):
+        inv = rin("cycle", k, bytes_moved=False)
+        talks = inv["candidates"][0]["talks"]
+        inv["candidates"][0]["talks"] = [dict(talks[0], remote="192.0.2.%d:%d" % (10 + i, 1000 + k))
+                                         for i in range(5)]
+        invs.append(inv)
+    return invs
+
+
+def drive(w, clock, n, spy=None):
+    for _ in range(n):
+        w.tick(wait=30)
+        if w.suspect_call is not None:
+            w.suspect_call.thread.join(5)
+        clock.t += w.every
+    w.rounds_max = w.rounds   # no further round: only the continued calls
+    for _ in range(50):   # the continued calls (K-1) of the last R-th round
+        if w.suspect_call is not None:
+            w.suspect_call.thread.join(5)
+        w.tick(wait=0)
+        if w.suspect_call is None and not w._suspect_pending():
+            break
+
+
+def test_redo_k1_every_host_line_is_sent_exactly_once_in_order_over_calls(home):
+    """K-1 (P1): 120 lines over 20 rounds -> all sent, in order, none twice; at most 40 per call."""
+    spy = Spy()
+    w, clock = make_host(home, five_remotes(20), suspect=spy)
+    drive(w, clock, 20, spy)
+    (key,) = list(w.trees)
+    lines = [json.loads(x) for x in Path(w._source_path(key)).read_text(encoding="ascii").splitlines()]
+    assert len(lines) >= 120
+    seqs = sent_seqs(spy)
+    assert seqs == [l["seq"] for l in lines] and len(seqs) == len(set(seqs))
+    assert all(len(re.findall(r"^\{.*\}$", u.split("<trace>", 1)[1], re.M)) <= host.SUSPECT_BATCH for u in spy.users)
+    assert w.suspect_upto[w._source_path(key)] == lines[-1]["seq"]
+    text, _ = w.finish()
+    assert "lines not judged by the suspect layer" not in "".join(h["detail"] for h in w.holes)
+    assert "%d line(s) sent, 0 line(s) not judged" % len(lines) in text
+
+
+def test_redo_k1_upto_advances_only_to_the_last_seq_sent_and_the_rest_is_a_hole(home):
+    """K-1: lines after the last R-th round's mark are never sent: a hole per tree, on the tree and in the report."""
+    spy = Spy()
+    w, clock = make_host(home, five_remotes(13), suspect=spy)
+    drive(w, clock, 13, spy)
+    (key,) = list(w.trees)
+    path = w._source_path(key)
+    lines = [json.loads(x) for x in Path(path).read_text(encoding="ascii").splitlines()]
+    at10 = [l["seq"] for l in lines if l["input_meta"]["round"] <= 10]
+    assert sent_seqs(spy) == at10 and w.suspect_upto[path] == at10[-1]
+    text, code = w.finish()
+    left = len(lines) - len(at10)
+    (hole,) = [h for h in w.holes if h["kind"] == "suspect-unsent"]
+    assert "%d lines not judged by the suspect layer" % left in hole["detail"]
+    assert w.trees[key]["suspect_unsent"] == left and "%d lines not judged by the suspect layer" % left in text
+    assert code == 3
+
+
+def test_redo_k1_a_watch_shorter_than_r_rounds_with_suspect_says_its_lines_were_not_judged(home):
+    w, clock = make_host(home, scenario("cycle", 5), suspect=Spy())
+    rounds(w, clock, 5)
+    text, code = w.finish()
+    assert any(h["kind"] == "suspect-unsent" for h in w.holes) and code in (1, 3)
+
+
+def os_lines(path, pid, n):
+    lines = [{"ts": "2026-11-04T10:00:%02d.000Z" % i, "seq": i, "session_id": "os-%d" % pid, "phase": "pre",
+              "tool": "process", "source": "os", "cwd": "/home/user/project", "input_sha256": "ab" * 32,
+              "input_meta": {"command_head": "bash", "command_programs": ["bash"], "depth": 1, "parent_seq": 1}}
+             for i in range(1, n + 1)]
+    with open(path, "a", encoding="ascii") as f:
+        f.write("".join(json.dumps(l) + "\n" for l in lines))
+
+
+class OsFollow:
+    def __call__(self, root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None, helpers=None):
+        os_lines(log, root, 3)
+        if on_pass:
+            on_pass(1, None)
+        stop.wait(60)
+        return 1
+
+
+def test_redo_k2_an_os_source_tree_is_sent_its_own_os_lines(home):
+    spy = Spy()
+    invs = scenario("cycle", 10)
+    for i in invs[1:]:
+        i["candidates"][0]["started"] = invs[0]["candidates"][0]["started"]
+    w, clock = make_host(home, invs, suspect=spy, sysmon=lambda: (True, "test"), os_follow=OsFollow())
+    for _ in range(10):
+        w.tick(wait=30)
+        time.sleep(0.05)
+        clock.t += w.every
+    drive(w, clock, 0, spy)
+    (src,) = w.sources.values()
+    assert src.kind == "os" and spy.users
+    body = "".join(spy.users)
+    assert '"tool": "process"' in body and '"command_head": "bash"' in body and "/home/user" not in body
+    assert '"session_id": "t1"' in body and "os-4400" not in body and "ab" * 32 not in body
+    w.finish()
+
+
+def test_redo_k2_a_hooks_source_tree_sends_its_trace_and_its_host_lines(home):
+    """The jobs of a hooks source: every feed (the agent's trace and the host lines beside it)."""
+    w, clock = make_host(home, scenario("cycle", 1), suspect=Spy())
+    rounds(w, clock, 1)
+    (key,) = list(w.trees)
+    trace_path = home / "trace.jsonl"
+    trace_path.write_text("".join(json.dumps(l) + "\n" for l in [
+        {"ts": "2026-11-04T10:00:01.000Z", "seq": 1, "session_id": "s-hook", "phase": "pre", "tool": "Bash",
+         "cwd": "/home/user/p", "input_sha256": "cd" * 32, "input_meta": {"command_head": "curl",
+                                                                         "command_programs": ["curl"]}},
+        {"ts": "2026-11-04T10:00:02.000Z", "seq": 1, "session_id": "s-hook", "phase": "post", "tool": "Bash",
+         "cwd": "/home/user/p", "ok": True, "output_meta": {"scan": "full", "secret_kinds": ["aws"]}}]),
+        encoding="ascii")
+    old = w.sources[key]
+    src = host.TreeSource("hooks", "hooks: test", path=old.path, feeds=[host.Feed(str(trace_path), w.src_rules)]
+                          + old.feeds, also_host=True)
+    w.sources[key] = src
+    w._poll_sources(clock())
+    for _, _, feed in w._suspect_feeds():
+        w._suspect_cursor(feed)["target"] = len(feed.numbered)
+    jobs = w._suspect_jobs(clock(), 1)
+    assert sorted(j["source"] for j in jobs) == ["hook", "host"]
+    hook = next(j for j in jobs if j["source"] == "hook")
+    text = core.render_window(core.windows(hook["records"], hook["findings"], 40)[0], hook["fields"], hook["meta"])
+    assert '"command_programs": ["curl"]' in text and '"secret_kinds": ["aws"]' in text
+    assert "/home/user" not in text and "s-hook" not in text and "cd" * 32 not in text
+    w.finish()
+
+
+def test_redo_k2_a_record_shape_the_builder_cannot_send_is_a_hole_once_per_tree(home):
+    spy = Spy()
+    w, clock = make_host(home, scenario("cycle", 10), suspect=spy)
+    rounds(w, clock, 1)
+    (key,) = list(w.trees)
+    with open(w._source_path(key), "a", encoding="ascii") as f:
+        for i in range(2):
+            f.write(json.dumps({"ts": "2026-11-04T10:00:00.000Z", "seq": 900 + i, "session_id": "px",
+                                "phase": "pre", "tool": "http", "source": "proxy"}) + "\n")
+    w.file_seq[w._source_path(key)] = 901
+    drive(w, clock, 9, spy)
+    holes = [h for h in w.holes if h["kind"] == "suspect-unsendable"]
+    assert len(holes) == 1 and "source proxy not sendable" in holes[0]["detail"]
+    assert w.trees[key]["suspect_unsendable"] == ["proxy"] and "900" not in "".join(spy.users)
+    assert "source proxy not sendable" in w.finish()[0]
+
+
+def test_redo_k3_at_most_one_call_in_flight_with_a_slow_backend(home):
+    spy = Spy(delay=0.3)
+    w, clock = make_host(home, five_remotes(45), suspect=spy, suspect_timeout=0.1)
+    for _ in range(45):
+        w.tick(wait=30)
+        clock.t += w.every
+    assert spy.max_inflight == 1
+    assert any(h["kind"] == "suspect-held" for h in w.holes) or any(h["kind"] == "suspect-late" for h in w.holes)
+    threads = [t for t in threading.enumerate() if t.name == "raqib-host-suspect"]
+    w.finish()
+    assert spy.max_inflight == 1
+    for t in threads:
+        t.join(5)
+    assert not any(t.is_alive() for t in threads)   # no thread left running unrecorded
+
+
+def test_redo_k3_a_call_still_out_at_the_end_is_recorded(home, monkeypatch):
+    gate = threading.Event()
+
+    class Stuck(Spy):
+        def judge(self, system, user, schema):
+            gate.wait(10)
+            return {"suspicion": 0.0, "reasons": [], "cited_seq": []}
+    monkeypatch.setattr(host, "SUSPECT_JOIN_SECONDS", 0.05)
+    w, clock = make_host(home, scenario("cycle", 10), suspect=Stuck())
+    rounds(w, clock, 10)
+    assert w.suspect_call is not None
+    w.finish()
+    gate.set()
+    assert any(h["kind"] == "suspect-out" for h in w.holes) and any(h["kind"] == "suspect-late" for h in w.holes)
+
+
+def test_redo_k3_the_budget_is_passed_to_the_backend_call_as_its_timeout(home, monkeypatch):
+    seen = []
+
+    class Opener:
+        def open(self, request, timeout=None):
+            seen.append(timeout)
+            raise OSError("test: no network")
+    ollama = backends.OllamaBackend()
+    ollama._opener = Opener()
+    assert ollama.timeout == 300
+    w, clock = make_host(home, scenario("cycle", 10), suspect=ollama)
+    rounds(w, clock, 10)
+    settle(w)
+    assert seen and all(0 < t <= host.SUSPECT_TIMEOUT for t in seen) and ollama.timeout == 300
+    sdk_calls = []
+
+    class Messages:
+        def create(self, **kw):
+            sdk_calls.append(kw)
+            raise RuntimeError("test")
+
+    class Client:
+        beta = type("B", (), {"messages": Messages()})()
+    anthropic = backends.AnthropicBackend(client=Client())
+    monkeypatch.setattr(backends.AnthropicBackend, "_sdk", staticmethod(lambda: type("SDK", (), {
+        "AuthenticationError": KeyError, "RateLimitError": KeyError, "APIStatusError": KeyError,
+        "APIConnectionError": KeyError})))
+    call = host.SuspectCall([{"key": (1, "x", None), "records": [
+        {"ts": "2026-11-04T10:00:00.000Z", "seq": 1, "session_id": "t1", "phase": "pre", "tool": "HostChild"}],
+        "findings": [], "fields": ("seq",), "meta": {}}], anthropic, 0.5, budget=7.0)
+    call.thread.join(5)
+    assert sdk_calls and 0 < sdk_calls[0]["timeout"] <= 7.0 and anthropic.timeout is None
+
+
+def test_redo_k4_no_pid_leaves_and_hashes_are_salted_with_the_run(home):
+    spy = Spy()
+    w, clock = make_host(home, scenario("cycle", 10), suspect=spy)
+    rounds(w, clock, 10)
+    settle(w)
+    (user,) = spy.users
+    (key,) = list(w.trees)
+    own = [json.loads(x) for x in Path(w._source_path(key)).read_text(encoding="ascii").splitlines()]
+    assert "4400" not in user and "host-4400" not in user and w.run not in user and '"session_id": "t1"' in user
+    for line in own:
+        if line.get("input_sha256"):
+            assert line["input_sha256"] not in user                    # unsalted: never sent
+            assert host.suspect_salt(w.run, line["input_sha256"]) in user   # salted with the run id
+    assert own[0]["session_id"] == "host-4400"                         # the tree's own file keeps its shape
+    assert host.suspect_salt("run-a", "x") != host.suspect_salt("run-b", "x")
+
+
+def test_redo_k5_a_kept_alive_connection_without_bytes_is_one_talk(home):
+    invs = scenario("cycle", 8, bytes_moved=False)
+    w, clock = make_host(home, invs)
+    rounds(w, clock, 8)
+    rh = [l["input_meta"]["rhythm"] for l in tree_lines(w)]
+    assert [bool(r["talks"]) for r in rh] == [True] + [False] * 7
+    assert max(r["cycles"] for r in rh) <= 1 and rhythm_findings(w) == []
+    assert any("repeated talks on one long connection are unseen without bytes" in h for h in RULE.holes)
+
+
+def test_redo_k5_an_established_connection_whose_bytes_moved_is_a_talk_and_one_that_did_not_is_not(home):
+    invs = scenario("cycle", 6)
+    for i in invs[2:]:   # rounds 3..6: the counts stay as in round 2
+        i["conn_bytes"]["by"]["4400 192.0.2.10:443"].update(bytes_sent=2000, bytes_received=10000)
+    w, clock = make_host(home, invs)
+    rounds(w, clock, 6)
+    rh = [l["input_meta"]["rhythm"] for l in tree_lines(w)]
+    assert [bool(r["talks"]) for r in rh] == [True, True, False, False, False, False]
+    assert rhythm_findings(w) == [] and max(r["cycles"] for r in rh) == 2
+
+
+def test_redo_k5_a_new_connection_each_round_is_a_talk_each_round(home):
+    invs = scenario("cycle", 4, bytes_moved=False)
+    for k, i in enumerate(invs, 1):   # the same destination, a new socket each round: closed then new
+        if k % 2 == 0:
+            i["candidates"][0]["talks"] = []
+    w, clock = make_host(home, invs)
+    rounds(w, clock, 4)
+    assert [bool(l["input_meta"]["rhythm"]["talks"]) for l in tree_lines(w)] == [True, False, True, False]
+
+
+def test_redo_k5_linux_act_time_is_proc_stat_starttime_plus_btime(tmp_path):
+    proc = tmp_path / "proc"
+    (proc / "77").mkdir(parents=True)
+    (proc / "stat").write_text("cpu 1 2 3\nbtime 1793700000\nprocesses 9\n", encoding="ascii")
+    fields = ["S"] + ["0"] * 18 + ["2500"] + ["0"] * 10   # field 3 .. ; starttime (field 22) = 2500 ticks
+    (proc / "77" / "stat").write_text("77 (a (b) c) %s\n" % " ".join(fields), encoding="ascii")
+    by, hole = discover.proc_start_times([77, 78], proc_root=str(proc), clk_tck=100)
+    assert by == {77: discover.iso(discover._ts("2026-11-04T00:00:00Z").fromtimestamp(
+        1793700025, discover.datetime.timezone.utc))} and "1 of 2 child pid(s)" in hole
+    assert discover.parse_stat_starttime("1 (x) S") is None and discover.parse_btime("cpu 1") is None
+    (proc / "stat").write_text("cpu 1\n", encoding="ascii")
+    assert discover.proc_start_times([77], proc_root=str(proc), clk_tck=100)[0] == {}
+
+
+def test_redo_k5_the_watch_places_a_linux_act_at_its_stat_time_so_w_is_real(home):
+    invs = scenario("cycle", 4)
+    for k, i in enumerate(invs, 1):
+        by = {}
+        for a in i["candidates"][0]["acts"]:
+            by[str(a["pid"])] = a["started"]
+            a["started"] = None
+        i["child_started"] = {"from": "test", "hole": None, "by": by}
+    w, clock = make_host(home, invs, platform="linux")
+    rounds(w, clock, 4)
+    line = tree_lines(w)[-1]["input_meta"]["rhythm"]
+    assert line["act_basis"] == ["stat"] and [f["round"] for f in rhythm_findings(w)] == [4]
+    assert not any(b["kind"] == "started" for b in w.blind)
+    late = scenario("cycle", 4)   # the same rounds with every child started 31 s after its round's talk
+    for i in late:
+        by = {}
+        for a in i["candidates"][0]["acts"]:
+            by[str(a["pid"])] = host_fixtures._iso_at(500 + a["pid"])
+            a["started"] = None
+        i["child_started"] = {"from": "test", "hole": None, "by": by}
+    (home / "b").mkdir()
+    w2, clock2 = make_host(home / "b", late, platform="linux")
+    rounds(w2, clock2, 4)
+    assert rhythm_findings(w2) == []   # W excludes them: not the round's own time
+
+
+def test_redo_k5_the_live_reader_reads_child_start_times_on_linux_only(monkeypatch):
+    got = []
+    monkeypatch.setattr(discover, "collect_live", lambda *a, **k: ({}, [], 1))
+    monkeypatch.setattr(discover, "run", lambda *a, **k: {"candidates": [{"acts": [
+        {"how": "process", "pid": 9}, {"how": "file", "pid": 10}]}]})
+    monkeypatch.setattr(discover, "read_conn_bytes", lambda paths: ({}, "ss", None))
+    monkeypatch.setattr(discover, "proc_start_times", lambda pids: got.append(pids) or ({9: "T"}, None))
+    inv = host.live_reader(CATALOG, platform="linux")()
+    assert got == [[9]] and inv["child_started"]["by"] == {"9": "T"}
+    assert "child_started" not in host.live_reader(CATALOG, platform="win32")() and len(got) == 1
+
+
+def test_redo_k6_a_long_lived_connection_writes_no_line_per_round(home):
+    w, clock = make_host(home, scenario("between", 12, bytes_moved=False))
+    rounds(w, clock, 12)
+    (key,) = list(w.trees)
+    conns = [json.loads(x) for x in Path(w._source_path(key)).read_text(encoding="ascii").splitlines()
+             if '"HostConnection"' in x]
+    assert [(c["input_meta"]["round"], c["input_meta"]["change"]) for c in conns] == [(1, "new")]
+    gone = scenario("between", 3, bytes_moved=False)
+    gone[2]["candidates"][0]["talks"] = []
+    (home / "b").mkdir()
+    w2, clock2 = make_host(home / "b", gone)
+    rounds(w2, clock2, 3)
+    (key,) = list(w2.trees)
+    conns = [json.loads(x) for x in Path(w2._source_path(key)).read_text(encoding="ascii").splitlines()
+             if '"HostConnection"' in x]
+    assert [c["input_meta"]["change"] for c in conns] == ["new", "closed"]
+
+
+def test_redo_k7_rhythm_cites_carry_round_and_seq(home):
+    w, clock = make_host(home, scenario("cycle", 4))
+    rounds(w, clock, 4)
+    (f,) = rhythm_findings(w)
+    assert f["cites"] and all(isinstance(c["round"], int) and isinstance(c["seq"], int) for c in f["cites"])
+    text = w.finish()[0]
+    line = next(l for l in text.splitlines() if "] HOST-RHYTHM round" in l)
+    assert re.search(r"cites round 1 seq [0-9]+ win-tcp:2, round 2 seq [0-9]+ win-process:4", line), line
+    state = json.loads(json.dumps(w.state(clock())))
+    assert "round 2 seq" in ui.host_page(state)
+    assert "talk round 1 seq" in app.host_finding_line(f) or "talk round 2 seq" in app.host_finding_line(f)
+
+
+def test_redo_k8_blind_spots_are_said_once_counted_apart_and_never_exit_3_alone(home):
+    invs = scenario("between", 6, bytes_moved=False)
+    for k, i in enumerate(invs, 1):   # a text that changes each round (P8): one blind spot all the same
+        i["conn_bytes"] = {"from": "ss", "hole": "%d socket(s) with no owner shown" % k, "by": None}
+    w, clock = make_host(home, invs, platform="linux")
+    rounds(w, clock, 6)
+    (b,) = [b for b in w.blind if b["kind"] == "bytes"]
+    assert b["rounds"] == [1, 2, 3, 4, 5, 6] and b["detail"].endswith("(does not change the result)")
+    assert not any(h["kind"] == "blind spot" or "socket(s) with no owner" in h["detail"] for h in w.holes)
+    text, code = w.finish()
+    assert code == 0 and "RESULT: CLEAN" in text
+    assert "BLIND SPOTS (K-8, holes of the class blind spot, counted apart; they do not change the result): 1" in text
+    assert "HOLES (A3): 0" in text
+    (home / "b").mkdir()
+    w2, clock2 = make_host(home / "b", scenario("cycle", 3), platform="win32")
+    rounds(w2, clock2, 3)
+    assert w2.finish()[1] == 0 and len(w2.blind) == 1
+
+
+def test_redo_k11_the_network_guard_covers_every_module(monkeypatch):
+    """AST guard: urllib, http.client, socket and ssl are imported only by the modules that own them
+    (suspect/backends.py: the one allowed network caller, reached only from host.SuspectCall's thread;
+    hooks/proxy.py: the proxy source, ADR-0003; ui.py: the local page's http.server/socketserver; hooks/common.py:
+    urllib.parse, no I/O); subprocess never runs curl or wget in any module."""
+    allowed = {"raqib/suspect/backends.py": {"urllib.error", "urllib.parse", "urllib.request"},
+               "raqib/hooks/proxy.py": {"http.client", "http.server", "socket", "socketserver", "ssl",
+                                        "urllib.parse"},
+               "raqib/ui.py": {"http.server", "socketserver"},
+               "raqib/hooks/common.py": {"urllib.parse"}}
+    net = ("urllib", "http.client", "http.server", "socket", "socketserver", "ssl", "requests", "httpx", "aiohttp")
+    for path in sorted((ROOT / "raqib").rglob("*.py")):
+        rel = path.relative_to(ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        mods = set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Import):
+                mods |= {a.name for a in n.names}
+            elif isinstance(n, ast.ImportFrom) and n.module:
+                mods.add(n.module)
+        bad = {m for m in mods if m.split(".")[0] in {x.split(".")[0] for x in net}
+               and (m.startswith(net) or m in ("http", "urllib"))} - allowed.get(rel, set())
+        assert not bad, (rel, bad)
+        for n in ast.walk(tree):   # subprocess with curl or wget, in any spelling
+            if isinstance(n, ast.Call) and "subprocess" in ast.unparse(n.func) or (
+                    isinstance(n, ast.Call) and ast.unparse(n.func).split(".")[-1] in ("Popen", "check_output",
+                                                                                        "call", "check_call")):
+                text = ast.unparse(n).lower()
+                assert "curl" not in text and "wget" not in text, (rel, ast.unparse(n)[:120])
+    # the backends module is imported by host.py only inside suspect_backend, and judge is reached only
+    # through core.run in SuspectCall._run (the suspect thread)
+    tree = ast.parse((ROOT / "raqib" / "host.py").read_text(encoding="utf-8"))
+    for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+        for n in ast.walk(fn):
+            if isinstance(n, ast.ImportFrom) and n.module == "raqib.suspect" and "backends" in [a.name for a in n.names]:
+                assert fn.name == "suspect_backend"
+            if isinstance(n, ast.Call) and ast.unparse(n.func) in ("core.run", "self.backend.judge",
+                                                                     "self.suspect.judge"):
+                assert fn.name == "_run"
+    importers = [p.relative_to(ROOT).as_posix() for p in (ROOT / "raqib").rglob("*.py")
+                 if "suspect" in p.read_text(encoding="utf-8") and "backends" in p.read_text(encoding="utf-8")
+                 and re.search(r"from raqib\.suspect import (backends|core)", p.read_text(encoding="utf-8"))]
+    assert set(importers) <= {"raqib/host.py", "raqib/cli.py", "raqib/eval.py", "raqib/suspect/backends.py"}
+
+
+def test_redo_k13_ci_asserts_check_rules_lists_host_rhythm_with_its_budget():
+    gate = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
+    assert "K-13" in gate and "check-rules.txt" in gate
+    assert r'^HOST-RHYTHM +ok +[0-9.]+ +0 +' in gate
+
+
+def test_redo_questions_file_has_the_redo_section():
+    text = QUESTIONS.read_text(encoding="utf-8")
+    redo = text.split("## REDO (Amendment K)", 1)[1]
+    assert "2698 passed, 19 skipped" in redo and "CI: not run; pushes held" in redo
+    for k in ("K-1", "K-2", "K-3", "K-4", "K-5", "K-6", "K-7", "K-8", "K-9", "K-11", "K-13"):
+        assert k in redo, k
+    assert "S-1" in redo
+
+
+def test_redo_k1_a_failing_backend_is_not_retried_every_tick(home):
+    calls = []
+
+    class Down(Spy):
+        def judge(self, system, user, schema):
+            calls.append(1)
+            raise core.BackendError("down")
+    w, clock = make_host(home, five_remotes(10), suspect=Down())
+    rounds(w, clock, 10)
+    for _ in range(20):
+        if w.suspect_call is not None:
+            w.suspect_call.thread.join(5)
+        w.tick(wait=0)
+    assert len(calls) == 1 and w.suspect_call is None

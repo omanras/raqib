@@ -94,6 +94,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 8,
@@ -193,40 +194,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
-    "cites": [
-     {
-      "line": 7,
-      "src": "win-tcp",
-      "text_sha256": "914da780401fa5dbb6a783795101a7fbec0c9338e996809bd74deb391094b929"
-     },
-     {
-      "line": 5,
-      "src": "sysmon",
-      "text_sha256": "4711295e6ade75d1faa1355ed7c11d3632d432877fdadb6f16e14a3d875863e4"
-     }
-    ],
-    "dest_port": 11434,
-    "dest_private": true,
-    "new": true,
-    "pid": 3300,
-    "remote": "127.0.0.1:11434",
-    "round": 2,
-    "run": "fixture-run",
-    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
-    "tree_seq": 4
-   },
-   "input_sha256": "15f73c6f97135674db08be2149116aaaa733333bc8c0659138f2d92cd97eb1b6",
-   "phase": "pre",
-   "seq": 2,
-   "session_id": "host-3300",
-   "source": "host",
-   "tool": "HostConnection",
-   "ts": "2026-11-03T10:00:10.000Z"
-  },
-  {
-   "cwd": "host",
-   "input_meta": {
-    "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 9,
@@ -250,6 +218,41 @@
     "tree_seq": 4
    },
    "input_sha256": "b9883aec7b26242cde68714edbf33f93a2a975d05ef4917fbeac94f259f5ed21",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-3300",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "bytes": "not read",
+    "change": "new",
+    "cites": [
+     {
+      "line": 7,
+      "src": "win-tcp",
+      "text_sha256": "914da780401fa5dbb6a783795101a7fbec0c9338e996809bd74deb391094b929"
+     },
+     {
+      "line": 5,
+      "src": "sysmon",
+      "text_sha256": "4711295e6ade75d1faa1355ed7c11d3632d432877fdadb6f16e14a3d875863e4"
+     }
+    ],
+    "dest_port": 11434,
+    "dest_private": true,
+    "new": true,
+    "pid": 3300,
+    "remote": "127.0.0.1:11434",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 4
+   },
+   "input_sha256": "15f73c6f97135674db08be2149116aaaa733333bc8c0659138f2d92cd97eb1b6",
    "phase": "pre",
    "seq": 3,
    "session_id": "host-3300",
@@ -315,6 +318,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 10,
@@ -519,6 +523,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 6,
@@ -622,6 +627,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 9,
@@ -671,6 +677,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 11,

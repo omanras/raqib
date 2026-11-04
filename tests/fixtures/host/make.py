@@ -43,6 +43,11 @@ destination every round), "between" (the same one child every round: the
 children that start and end between rounds are never seen) and "notalk"
 (children, no connection: an act-root). The fixture holds the LAST round's
 host lines, as the others.
+M7.4 REDO K-5: a talk beat is a connection new in the round or one whose
+bytes moved; so each round of a scenario with a connection carries the byte
+counts a fake `ss -tinp` would give (conn_bytes, growing each round:
+bytes_moved), and a connection kept up with no bytes read is one talk only
+(bytes_moved False; tests/test_rhythm.py).
 """
 import io
 import json
@@ -114,10 +119,13 @@ def _iso_at(seconds):
         "%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def rhythm_inventory(scenario, k, pid=RHYTHM_PID, image="relay-bot", every=EVERY, remote=None, children=None):
+def rhythm_inventory(scenario, k, pid=RHYTHM_PID, image="relay-bot", every=EVERY, remote=None, children=None,
+                     bytes_moved=True):
     """Round k (1-based) of a fake scenario, in discover's inventory shape
     (SYNTHETIC). Round k is read at t = (k-1) * every; a child new in round
-    k started 5 s before it."""
+    k started 5 s before it. bytes_moved: the connection's byte counts (a
+    fake ss) grow each round (K-5: a talk beat each round); False: no bytes
+    are read (the round carries none)."""
     at = (k - 1) * every
     if children is None:
         if scenario in ("cycle", "change", "notalk"):
@@ -145,6 +153,9 @@ def rhythm_inventory(scenario, k, pid=RHYTHM_PID, image="relay-bot", every=EVERY
         inv["act_roots"].append(dict(tree, talks=[]))
     else:
         inv["candidates"].append(dict(tree, talks=talk))
+        if bytes_moved:
+            inv["conn_bytes"] = {"from": "fake ss -tinp (make.py)", "hole": None, "by": {
+                "%d %s" % (pid, remote): {"bytes_sent": 1000 * k, "bytes_received": 5000 * k, "sockets": 1}}}
     return inv
 RM = ":rm"
 SOURCE_SCENARIOS = {

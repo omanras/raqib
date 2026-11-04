@@ -120,7 +120,10 @@ jobs:
           print("gui launcher: OK (Scripts/raqib-app.exe on Windows, bin/raqib-app elsewhere)")
           EOF
           # The installed catalog, measured on the checkout's fixtures.
-          raqib check-rules --fixtures-root "$GITHUB_WORKSPACE"
+          raqib check-rules --fixtures-root "$GITHUB_WORKSPACE" > check-rules.txt
+          cat check-rules.txt
+          # M7.4 REDO K-13: HOST-RHYTHM is loaded and listed with its budget (0), beside the zero count of the host step.
+          python -c "import re; text = open('check-rules.txt', encoding='utf-8').read(); assert re.search(r'^HOST-RHYTHM +ok +[0-9.]+ +0 +', text, re.M), text; print('check-rules: HOST-RHYTHM listed with budget 0')"
           # Without fixtures an installed raqib says so (exit 2).
           set +e; raqib check-rules 2> nofixtures.txt; code=$?; set -e
           cat nofixtures.txt; test "$code" -eq 2; grep -F "no rule fixtures in" nofixtures.txt

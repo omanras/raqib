@@ -1227,6 +1227,75 @@ def read_conn_bytes(ss_paths=SS_PATHS, at=None):
     return got, label, "; ".join(holes) or None
 
 
+def parse_btime(text):
+    """M7.4 REDO K-5 (API for raqib/host.py): the boot time (seconds since
+    the epoch) of /proc/stat's `btime` line, or None. Pure."""
+    for line in (text or "").splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0] == "btime" and parts[1].isdigit():
+            return int(parts[1])
+    return None
+
+
+def parse_stat_starttime(text):
+    """M7.4 REDO K-5 (API): field 22 of /proc/PID/stat (starttime, in clock
+    ticks since boot), or None. The comm field (2) is in parentheses and may
+    hold spaces and parentheses itself, so the fields are read after the
+    LAST ')'. Pure."""
+    text = text or ""
+    close = text.rfind(")")
+    if close < 0:
+        return None
+    rest = text[close + 1:].split()
+    # rest[0] is field 3 (state); starttime is field 22, so rest[19]
+    if len(rest) < 20 or not rest[19].isdigit():
+        return None
+    return int(rest[19])
+
+
+def proc_start_times(pids, proc_root="/proc", clk_tck=None):
+    """M7.4 REDO K-5 (API for raqib/host.py): ({pid: ISO UTC start time},
+    hole or None) of each pid, from /proc/PID/stat's starttime and
+    /proc/stat's btime: start = btime + starttime / CLK_TCK. Read-only
+    (A4): two files are opened for reading, nothing is written, no process
+    is touched. A pid whose stat cannot be read (it ended, or is another
+    user's and hidden) is left out and counted in the hole text; no btime
+    or no clock tick rate is a hole for every pid. Never a guessed time."""
+    pids = sorted({p for p in pids if isinstance(p, int) and not isinstance(p, bool) and p > 0})
+    if not pids:
+        return {}, None
+    try:
+        btime = parse_btime(_read_bytes(os.path.join(proc_root, "stat")).decode("ascii", "replace"))
+    except OSError as exc:
+        return {}, "cannot read %s: %s: no child start time is read" % (
+            os.path.join(proc_root, "stat"), exc.strerror or exc)
+    if btime is None:
+        return {}, "%s has no btime line: no child start time is read" % os.path.join(proc_root, "stat")
+    if clk_tck is None:
+        try:
+            clk_tck = os.sysconf("SC_CLK_TCK")
+        except (AttributeError, ValueError, OSError):
+            clk_tck = None
+    if not (isinstance(clk_tck, int) and clk_tck > 0):
+        return {}, "no clock tick rate (SC_CLK_TCK): no child start time is read"
+    out, missed = {}, 0
+    for pid in pids:
+        try:
+            ticks = parse_stat_starttime(_read_bytes(os.path.join(proc_root, str(pid), "stat"))
+                                         .decode("utf-8", "replace"))
+        except OSError:
+            ticks = None
+        if ticks is None:
+            missed += 1
+            continue
+        out[pid] = iso(datetime.datetime.fromtimestamp(btime + ticks / float(clk_tck), datetime.timezone.utc))
+    hole = None
+    if missed:
+        hole = ("%d of %d child pid(s) had no readable %s/PID/stat starttime (ended before it was read, or"
+                " hidden): their act time is the round's" % (missed, len(pids), proc_root))
+    return out, hole
+
+
 def find_ss(paths=SS_PATHS):
     """The first of a fixed list of absolute paths that is a file, or None."""
     return next((p for p in paths if os.path.isabs(p) and os.path.isfile(p)), None)

@@ -140,6 +140,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 9,
@@ -228,6 +229,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 6,
@@ -346,6 +348,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 7,
@@ -380,6 +383,7 @@
    "cwd": "host",
    "input_meta": {
     "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 8,

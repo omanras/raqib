@@ -61,9 +61,7 @@
      "r": 10,
      "rounds": [],
      "streak_fired": false,
-     "talks": [
-      "160.79.104.10:443"
-     ],
+     "talks": [],
      "w": 30
     },
     "round": 2,
@@ -144,9 +142,7 @@
      "r": 10,
      "rounds": [],
      "streak_fired": false,
-     "talks": [
-      "160.79.104.10:443"
-     ],
+     "talks": [],
      "w": 30
     },
     "round": 2,

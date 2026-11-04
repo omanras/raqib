@@ -913,7 +913,11 @@ def _watches_section(state, own, info):
 # --- discover (I-8) ---------------------------------------------------------------------
 
 def _cites_text(cites):
-    return " ".join("%s:%s" % (_text(_dict(c).get("src")), _text(_dict(c).get("line"))) for c in _list(cites))
+    """Cites as src:line; M7.4 REDO K-7 (A5): a cite that carries its round
+    and seq (a HOST-RHYTHM beat) says them first ("round 4 seq 12 win-tcp:2")."""
+    return " ".join("%s%s:%s" % ("round %s seq %s " % (_text(_dict(c).get("round")), _text(_dict(c).get("seq")))
+                                 if _dict(c).get("round") is not None else "",
+                                 _text(_dict(c).get("src")), _text(_dict(c).get("line"))) for c in _list(cites))
 
 
 def _discover_body(info, heading):
@@ -1157,6 +1161,10 @@ def host_section(state):
         _text(f.get("path")), _text(f.get("agent")), _text(f.get("state")),
         _text(", dark %s round(s) in a row" % f.get("streak")) if f.get("streak") else "", _cites_text(f.get("cites")))
         for f in fps) if fps else '<p class="empty">None listed.</p>')
+    blind = [_dict(b) for b in _list(host.get("blind"))]
+    if blind:   # M7.4 REDO K-8: counted apart from the holes; they do not change the result
+        out.append("<h3>Blind spots (%d)</h3><ul>%s</ul>" % (len(blind), "".join(
+            "<li>%s: %s</li>" % (_text(b.get("kind")), _text(b.get("detail"))) for b in blind)))
     notes = _list(host.get("notes"))
     if notes:
         out.append("<h3>Notes (%d)</h3><ul>%s</ul>" % (len(notes), "".join("<li>%s</li>" % _text(n) for n in notes)))

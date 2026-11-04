@@ -639,9 +639,12 @@ def host_finding_line(f):
     """F-4 (A5): a host finding cites (run, seq) as finding_line cites seqs."""
     where = f.get("tree") or f.get("path")
     seqs = f.get("cited_seq") or []
-    return _safe("%s [%s] round %s: %s: %s [%s] cites run %s %s" % (
+    beats = "".join("; talk round %s seq %s, act round %s seq %s" % (
+        b.get("talk_round"), b.get("talk_seq"), b.get("round"), b.get("seq"))
+        for b in f.get("beats") or () if isinstance(b, dict))   # K-7: rhythm beats carry round and seq
+    return _safe("%s [%s] round %s: %s: %s [%s] cites run %s %s%s" % (
         f.get("rule_id"), f.get("severity"), f.get("round"), where, f.get("summary"), f.get("notice"),
-        f.get("run"), watch.seq_text(list(seqs))))
+        f.get("run"), watch.seq_text(list(seqs)), beats))
 
 
 def suspicion_line(f):
