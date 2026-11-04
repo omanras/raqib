@@ -1081,21 +1081,9 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     table = adr_table_after_m74()   # M7.2 REDO C-11: the Table's note holds the host anchors
     before, section = adr_table()
     rules = {r.id: r for r in engine.load_catalog(CATALOG)}
-    # M7.2b set-aside (ADR-0007 H-3, as M7.2 did before C-11): HOST-UNWATCHED (anchor, YAML) is not in ADR-0002's
-    # table until the Table writes the M7.2b note (CLAUDE.md rule 8: the ADRs are the Table's); the builder asks
-    # for it, row and ratio line, in docs/review/2026-11-04-M7.2b-questions.md. Until then it is held to its
-    # kind and holes here, and the counts carry it. Once the note is written, nothing is set aside.
+    # The M7.2b and M7.4 notes are written (ADR-0007 K-12): nothing is set aside.
+    assert adr_note_m72b() is not None and adr_note_m74() is not None
     m72b_pending = {}
-    if adr_note_m72b() is None:
-        m72b_pending = {"HOST-UNWATCHED": rules.pop("HOST-UNWATCHED")}
-        assert {r.kind for r in m72b_pending.values()} == {"anchor"} and all(r.holes for r in m72b_pending.values())
-        assert "ADR-0002" in M72B_QUESTIONS.read_text(encoding="utf-8")
-    # M7.4 set-aside (as M7.2b's above): HOST-RHYTHM (anchor, YAML) until the Table writes the M7.4 note; the
-    # builder asks for it, row and ratio line, in docs/review/2026-11-04-M7.4-questions.md.
-    if adr_note_m74() is None:
-        m72b_pending["HOST-RHYTHM"] = rules.pop("HOST-RHYTHM")
-        assert rules_kind_holes(m72b_pending["HOST-RHYTHM"])
-        assert "ADR-0002" in M74_QUESTIONS.read_text(encoding="utf-8")
     assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(adr_table_after_m53()) == 13
     assert len(adr_table_after_m42b()) == 15 and len(adr_table_after_m43()) == 17
     assert len(adr_table_after_m72()) == 20 and len(table) == 22 - len(m72b_pending)
