@@ -195,7 +195,7 @@ def test_e2_the_two_rules_carry_host_fixtures_positive_and_negative_and_the_meas
         assert pos in rule.fixtures["positive"] and neg in rule.fixtures["negative"]
         report = reports[rule_id]
         assert report["verdict"] == "ok" and all(p["fired"] for p in report["positives"])
-        (n,) = [n for n in report["negatives"] if n["path"] == neg]
+        (n,) = [n for n in report["negatives"] if Path(n["path"]).as_posix() == neg]   # relpath: \\ on Windows
         assert n["measured"] and not n["fired"]
         assert {l["source"] for l in fixtures.load_fixture(ROOT / neg)[0]} == {"host"}
         assert round(report["fp_rate"], 3) == 0.091 and report["fp_rate"] <= rule.fp_budget   # 1 of 11
@@ -359,7 +359,8 @@ def test_e1c_with_the_flag_the_hooks_go_into_the_trees_cwd_as_raqib_watch_instal
     src = w.sources[next(k for k in w.sources if k[0] == 95)]
     trace_path = src.feeds[0].path
     assert trace_path.startswith(str(home / ".raqib" / "traces")) and not trace_path.startswith(str(project))
-    assert all(trace_path in c for c in commands)
+    # the installer writes the Windows command's paths with / (install.windows_word): compare in that form
+    assert all(trace_path.replace("\\", "/") in c.replace("\\", "/") for c in commands)
     # the hooks' lines are judged incrementally: a Bash curl knocks on the tree
     hook = {"ts": "2026-11-04T10:00:00.000Z", "seq": 1, "session_id": "s1", "phase": "pre", "tool": "Bash",
             "cwd": str(project), "input_meta": {"command_head": "curl", "command_programs": ["curl"]}}
@@ -494,10 +495,12 @@ def test_a4_without_the_flag_no_path_outside_raqib_is_written_and_with_it_only_t
         w.next_round = 0
     w.finish()
     outside = writes.outside(home / ".raqib")
-    settings = str(project / ".claude" / "settings.json")
-    assert outside and all(p == settings or p == str(project / ".claude") or
-                           os.path.dirname(p) == str(project / ".claude") for p in outside), outside
-    assert sorted(str(p.relative_to(project)) for p in project.rglob("*")) == [".claude", ".claude/settings.json"]
+    norm = lambda p: os.path.normcase(os.path.normpath(str(p)))   # noqa: E731  (\\ and / alike on Windows)
+    claude_dir = norm(project / ".claude")
+    assert outside and all(norm(p) in (norm(project / ".claude" / "settings.json"), claude_dir) or
+                           os.path.dirname(norm(p)) == claude_dir for p in outside), outside
+    assert sorted(os.path.normpath(str(p.relative_to(project))) for p in project.rglob("*")) == [
+        ".claude", os.path.join(".claude", "settings.json")]
 
 
 def test_a4_the_docstrings_say_so():

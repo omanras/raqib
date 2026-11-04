@@ -1369,7 +1369,8 @@ class Window:
         self.checks_button = tk.Button(row, text=checks_state(None)[0], command=self.toggle_checks)
         self.checks_button.pack(side="left")
         # M7.2b (ADR-0007 H-1): off by default; read when "Watch this host" starts a watch
-        self.attach_var = tk.BooleanVar(value=self.c.options.attach_hooks)
+        # options may be None (a Controller without Options, as the M6.4 Tk tests build it): off, as by default
+        self.attach_var = tk.BooleanVar(value=bool(getattr(self.c.options, "attach_hooks", False)))
         self.attach_box = tk.Checkbutton(row, text=ATTACH_TEXT, variable=self.attach_var)
         self.attach_box.pack(side="left", padx=6)
         self.host_url = tk.StringVar(value="-")
@@ -1483,7 +1484,8 @@ class Window:
         if self.c.host_watching():
             self.c.stop_host("Stop in the window")
             return
-        self.c.options.attach_hooks = bool(self.attach_var.get())   # H-1: the box's word for this watch
+        if self.c.options is not None:   # H-1: the box's word for this watch
+            self.c.options.attach_hooks = bool(self.attach_var.get())
         self.c.host_note = self.c.start_host()
         self.show_host()
 
