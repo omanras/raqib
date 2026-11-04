@@ -230,6 +230,13 @@ jobs:
           for t in state["host"]["trees"]:
               assert t.get("source") in ("host", "os", "hooks", "none"), t
           print("watch --host: every tree has a source or HOST-UNWATCHED: %s" % sources)
+          # M7.4 (ADR-0007 decision 4): HOST-RHYTHM is in the catalog (kinds 4 : 7 : 11). Two rounds 1 s apart cannot
+          # hold 3 cycles (a child in each of 3 rounds after a talk), so on the runners its count is 0, asserted;
+          # no --suspect, so the report says the suspect layer is off and no model is asked.
+          rhythm = len(re.findall(r"^  \[medium\] HOST-RHYTHM ", text, re.M))
+          assert rhythm == 0, ("HOST-RHYTHM on a 2-round runner watch", text[-3000:])
+          assert "SUSPICION (A2: a model may raise suspicion, never acquit): off (no --suspect)" in text
+          print("watch --host: HOST-RHYTHM %d (expected 0 in 2 rounds); suspect off" % rhythm)
           print("watch --host: OK, %s tree(s), %s" % (seen.group(1), result.group(0)))
           EOF
           # C-8 / REDO-2 D-7: discover's candidates against the report's trees, over the pids in both; a candidate

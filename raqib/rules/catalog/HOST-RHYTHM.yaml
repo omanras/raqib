@@ -1,0 +1,64 @@
+# The think-act cycle of a tree, from the host's own record (M7.4, ADR-0007 decision 4; ADR-0004 layer 3).
+id: HOST-RHYTHM
+title: A tree talks to one destination and then starts a child, again and again
+# HOST: the rules of raqib watch --host (engine.CLASSES), over rounds.jsonl's HostTree lines.
+class: HOST
+# ADR-0002: measured against the host's own record of each round (the
+# process tree and its children's start times, the TCP table), which the
+# agent does not write. raqib/host.py computes each HostTree line's
+# input_meta.rhythm from the tree's last R rounds (as HOST-UNWATCHED's
+# none_rounds is computed): a talk beat is a connection to one remote
+# host:port in the round, new or still established; an act is a child first
+# seen in the round (at its start time where the reader gives one, else at
+# the round's time); a cycle is an act within W seconds after a talk beat to
+# one destination; K cycle rounds to the SAME destination within the last R
+# rounds fire once per streak (the streak ends when R rounds pass without a
+# cycle). K, W and R are the eq values below: host.py reads them from this
+# file (rhythm_params) and writes them on the line, so the line and the rule
+# cannot disagree.
+kind: anchor
+severity: medium
+# Measured, not guessed (ADR-0007 C-1): the negatives are made by
+# tests/fixtures/host/make.py from fake rounds: HOST-RHYTHM/negative-two-cycles.json
+# (K-1 cycles), negative-changing-destination.json (a new destination each
+# turn), negative-acts-between-rounds.json (children that live between two
+# rounds are never seen), negative-no-talk.json (acts with no talk) and the
+# benign desktops' arrivals of NEW-AGENT (their trees arrive after round 1
+# and are seen for one round: no cycle). 0 of 6 fire. The budget is that
+# measure, 0. The arrivals measure a desktop's first rounds only, not hours
+# of an IDE that talks and builds (a later fixture from a recorded desktop).
+fp_budget: 0.0
+holes:
+  - "a relay or proxy in between: the talk is the relay's (another process tree), so the tree that acts has no talk beat of its own"
+  - "acts between rounds: a child that starts and ends between two rounds is never seen, so its cycle is not counted"
+  - "a destination that changes each turn (a pool of model hosts, a CDN, DNS round robin) makes no K cycles to one destination"
+  - "a child that is reparented away from the tree (a daemonised child, a service that runs the command) is not the tree's act"
+  - "Linux /proc gives no child start time in the snapshot: an act is placed at the round's time, so W is as coarse as the round interval"
+  - "Windows gives no bytes per connection (GetExtendedTcpTable): the talk is the connection, not its size; Linux bytes (ss -tinp) are recorded, not judged"
+  - "an agent that keeps one connection open and acts more slowly than W after each round's look has its acts outside every window"
+  - "a benign program that polls one server and spawns helpers (an IDE, an updater) has the same rhythm: a medium finding, not a verdict"
+  - "a tree the catalog names (by image or endpoint) is not judged by rhythm: an agent that takes a catalog agent's name escapes this rule (and is knocked as NEW-AGENT instead)"
+description: "A line of raqib watch --host (tool HostTree, source os) for a candidate tree whose think-act cycle reached K cycles to one destination within the last R rounds: in K rounds a child of the tree started within W seconds after the tree talked to the same remote host:port (input_meta.rhythm, computed by raqib/host.py from the rounds' records; K, W and R are this rule's own eq values). It fires once per streak (input_meta.rhythm.fires); the streak ends when R rounds pass without a cycle. Only an UNKNOWN tree is judged (ADR-0007 decision 4: input_meta.named false); a benign program is unknown to the catalog and is judged too: the rhythm is the tree's, not its name's. The line cites the rounds and the record lines of each beat (A5)."
+summary: "{input_meta.named_word} tree {input_meta.image} pid {input_meta.pid}: {input_meta.rhythm.cycles} talk-then-act cycles to {input_meta.rhythm.destination} in the last {input_meta.rhythm.r} rounds (round {input_meta.round})"
+match:
+  all:
+    - {field: tool, exists: true}
+    - {field: tool, eq: HostTree}
+    - {field: source, eq: os}
+    - {field: input_meta.class, eq: candidate}
+    # ADR-0007 decision 4: the unknown is judged by rhythm (a tree the catalog names is NEW-AGENT's).
+    - {field: input_meta.named, eq: false}
+    - {field: input_meta.rhythm.fires, eq: true}
+    - {field: input_meta.rhythm.k, eq: 3}
+    - {field: input_meta.rhythm.w, eq: 30}
+    - {field: input_meta.rhythm.r, eq: 10}
+fixtures:
+  positive:
+    - tests/fixtures/rules/HOST-RHYTHM/positive-three-cycles.json
+  negative:
+    - tests/fixtures/rules/HOST-RHYTHM/negative-two-cycles.json
+    - tests/fixtures/rules/HOST-RHYTHM/negative-changing-destination.json
+    - tests/fixtures/rules/HOST-RHYTHM/negative-acts-between-rounds.json
+    - tests/fixtures/rules/HOST-RHYTHM/negative-no-talk.json
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json

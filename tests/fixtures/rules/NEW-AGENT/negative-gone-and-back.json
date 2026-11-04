@@ -46,6 +46,22 @@
     "named_word": "named",
     "none_rounds": 0,
     "pid": 2100,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "160.79.104.10:443"
+     ],
+     "w": 30
+    },
     "round": 4,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
@@ -114,6 +130,23 @@
     "named_word": "named",
     "none_rounds": 0,
     "pid": 3300,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "104.18.33.45:443",
+      "127.0.0.1:11434"
+     ],
+     "w": 30
+    },
     "round": 4,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
@@ -181,6 +214,22 @@
     "named_word": "unknown",
     "none_rounds": 0,
     "pid": 4100,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "13.107.21.200:443"
+     ],
+     "w": 30
+    },
     "round": 4,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
@@ -243,6 +292,22 @@
     "named_word": "unknown",
     "none_rounds": 0,
     "pid": 7000,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "203.0.113.50:8443"
+     ],
+     "w": 30
+    },
     "round": 4,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",

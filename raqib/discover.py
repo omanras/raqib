@@ -116,6 +116,11 @@ EXPECTED = {"proc": "proc", "win-process": "proc", "proc-net": "conn", "ss": "co
 # ss is a fallback only, and only from here: never found through PATH (B-1).
 SS_PATHS = ("/usr/sbin/ss", "/usr/bin/ss", "/sbin/ss", "/bin/ss")
 SS_ARGS = ("-tanp",)
+# M7.4 (ADR-0007 decision 4, E1): the per-socket byte counts, read-only, by the same run_ss (absolute path,
+# minimal environment): -i adds the TCP info line (bytes_sent / bytes_received where the kernel and ss give
+# them), -p the owner, -n numbers. Only raqib watch --host asks for it (read_conn_bytes).
+SS_INFO_ARGS = ("-tinp",)
+SS_BYTES = re.compile(r"\bbytes_(sent|received):([0-9]+)\b")
 # What the anchor cannot see, said on every run (B-4, D8).
 ALWAYS_HOLES = (
     "liveness: a child is seen only if it is alive at a snapshot (or has a Sysmon 1 event), and a"
@@ -1140,6 +1145,88 @@ def run_ss(path, args=SS_ARGS, at=None):
     return "# at %s (%s)\n%s" % (at, " ".join([path] + list(args)), proc.stdout), None
 
 
+def parse_ss_bytes(text, src="ss-info"):
+    """M7.4 E1 (API for raqib/host.py): the byte counts of `ss -tinp`
+    output: ({"PID REMOTE": {"bytes_sent", "bytes_received", "sockets"}},
+    problems, counts). REMOTE is "ip:port" as the inventory's talks name it;
+    the counts of the sockets one pid holds to one remote are summed; a
+    count ss does not print is None (an older ss or kernel). ss prints a
+    socket's TCP info on the indented line after it. A socket with no owner
+    (ss -p shows another user's sockets without one) is counted in
+    counts["no_owner"], never attributed. Pure."""
+    socks, problems = [], []
+    for number, raw in _numbered(text or ""):
+        line = raw.rstrip()
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if raw[:1] in (" ", "\t"):
+            if socks and socks[-1] is not None:
+                socks[-1]["info"] += " " + line.strip()
+            continue
+        fields = line.split()
+        if fields[0] in ("State", "Netid", "Recv-Q"):
+            continue
+        if len(fields) < 5:
+            problems.append(_problem(src, number, "fewer than 5 columns"))
+            socks.append(None)
+            continue
+        state, local, peer = _state(fields[0]), _hostport(fields[3]), _hostport(fields[4])
+        if state is None or local is None or peer is None or peer[1] is None:
+            problems.append(_problem(src, number, "cannot read state or addresses (run ss with -n)"))
+            socks.append(None)
+            continue
+        socks.append({"remote": "%s:%s" % peer, "pids": sorted({int(pid) for _, pid in USERS.findall(
+            " ".join(fields[5:]))}), "info": " ".join(fields[5:])})
+    out = {}
+    counts = {"sockets": 0, "with_bytes": 0, "no_owner": 0}
+    for s in socks:
+        if s is None:
+            continue
+        counts["sockets"] += 1
+        found = dict(SS_BYTES.findall(s["info"]))
+        if found:
+            counts["with_bytes"] += 1
+        if not s["pids"]:
+            counts["no_owner"] += 1
+            continue
+        for pid in s["pids"]:
+            e = out.setdefault("%d %s" % (pid, s["remote"]), {"bytes_sent": None, "bytes_received": None,
+                                                              "sockets": 0})
+            e["sockets"] += 1
+            for name in ("sent", "received"):
+                if name in found:
+                    e["bytes_" + name] = (e["bytes_" + name] or 0) + int(found[name])
+    return out, problems, counts
+
+
+def read_conn_bytes(ss_paths=SS_PATHS, at=None):
+    """M7.4 E1 (API for raqib/host.py): (byte counts or None, label, hole or
+    None) of this host's TCP sockets, from `ss -tinp` run by run_ss (an
+    absolute path of ss_paths, a minimal environment, read-only: ss reads
+    the kernel's socket table and changes nothing). A missing ss, a failed
+    run, or an ss that prints no bytes_sent / bytes_received for any socket
+    is a named hole (A3), never zero bytes."""
+    path = find_ss(ss_paths)
+    if path is None:
+        return None, "ss (none found)", "no ss at %s: the bytes of the connections are not read" % ", ".join(ss_paths)
+    label = " ".join([path] + list(SS_INFO_ARGS))
+    text, error = run_ss(path, SS_INFO_ARGS, at)
+    if text is None:
+        return None, label, "%s: the bytes of the connections are not read" % error
+    got, problems, counts = parse_ss_bytes(text)
+    holes = []
+    if counts["sockets"] and not counts["with_bytes"]:
+        holes.append("%s printed no bytes_sent or bytes_received for any of %d socket(s) (no -i byte counts in this"
+                     " ss or kernel): the bytes of the connections are not read" % (label, counts["sockets"]))
+        got = None
+    if problems:
+        holes.append("%s: %d line(s) could not be read" % (label, len(problems)))
+    if counts["no_owner"]:
+        holes.append("%s: %d socket(s) with no owner shown (another user's): their bytes are not attributed" % (
+            label, counts["no_owner"]))
+    return got, label, "; ".join(holes) or None
+
+
 def find_ss(paths=SS_PATHS):
     """The first of a fixed list of absolute paths that is a file, or None."""
     return next((p for p in paths if os.path.isabs(p) and os.path.isfile(p)), None)
@@ -1769,6 +1856,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
                 acts.setdefault(anc, []).append({
                     "how": "process", "pid": pid, "image": label or p["image"], "listed": label is not None,
                     "path": None, "via": list(reversed(chain)), "reader_ancestor": pid in self_line,
+                    "started": started_of(p),   # M7.4 E1 (API): the child's creation time where the reader gives it
                     "cites": _cites(p["recs"])})
                 break
             chain.append(anc)
@@ -2195,6 +2283,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
                 label = next((i for i in qp["images"] if _listed(i, catalog)), None)
                 acts.append({"how": "process", "pid": q, "image": label or qp["image"], "listed": label is not None,
                              "path": None, "via": list(reversed(via)), "reader_ancestor": False,
+                             "started": started_of(qp),   # M7.4 E1 (API)
                              "cites": _cites(qp["recs"])})
         owner = next((a for a in ancestors(procs, pid) if a in talkers), None)
         times = [r["ts"] for q in [pid] + [a["pid"] for a in acts] for r in procs[q]["recs"] if r.get("ts")]

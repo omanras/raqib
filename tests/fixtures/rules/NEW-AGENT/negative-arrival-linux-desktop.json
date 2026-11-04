@@ -51,6 +51,22 @@
     "named_word": "unknown",
     "none_rounds": 0,
     "pid": 1700,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "198.51.100.60:443"
+     ],
+     "w": 30
+    },
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
@@ -118,6 +134,22 @@
     "named_word": "unknown",
     "none_rounds": 0,
     "pid": 2040,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "198.51.100.51:443"
+     ],
+     "w": 30
+    },
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
@@ -186,6 +218,23 @@
     "named_word": "unknown",
     "none_rounds": 0,
     "pid": 3000,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "198.51.100.90:443",
+      "198.51.100.91:443"
+     ],
+     "w": 30
+    },
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",

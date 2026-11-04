@@ -6,11 +6,13 @@
     "children": [
      {
       "image": "bash",
-      "pid": 1610
+      "pid": 1610,
+      "started": null
      },
      {
       "image": "rm",
-      "pid": 1620
+      "pid": 1620,
+      "started": null
      }
     ],
     "cites": [
@@ -49,11 +51,13 @@
     "children": [
      {
       "image": "bash",
-      "pid": 2240
+      "pid": 2240,
+      "started": "11/1/2026 9:14:30 AM"
      },
      {
       "image": "git",
-      "pid": 2250
+      "pid": 2250,
+      "started": "11/1/2026 9:14:30 AM"
      }
     ],
     "cites": [
@@ -89,6 +93,7 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
     "cites": [
      {
       "line": 8,
@@ -103,6 +108,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 2100,
     "remote": "160.79.104.10:443",
     "round": 2,
@@ -139,11 +145,13 @@
     "children": [
      {
       "image": "cmd",
-      "pid": 3410
+      "pid": 3410,
+      "started": "11/1/2026 9:14:10 AM"
      },
      {
       "image": "python",
-      "pid": 3420
+      "pid": 3420,
+      "started": null
      }
     ],
     "cites": [
@@ -184,6 +192,7 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
     "cites": [
      {
       "line": 7,
@@ -198,6 +207,7 @@
     ],
     "dest_port": 11434,
     "dest_private": true,
+    "new": true,
     "pid": 3300,
     "remote": "127.0.0.1:11434",
     "round": 2,
@@ -216,6 +226,7 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
     "cites": [
      {
       "line": 9,
@@ -230,6 +241,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 3300,
     "remote": "104.18.33.45:443",
     "round": 2,
@@ -266,7 +278,8 @@
     "children": [
      {
       "image": "msedge",
-      "pid": 4120
+      "pid": 4120,
+      "started": "11/1/2026 9:15:31 AM"
      }
     ],
     "cites": [
@@ -301,6 +314,7 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
     "cites": [
      {
       "line": 10,
@@ -315,6 +329,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 4100,
     "remote": "13.107.21.200:443",
     "round": 2,
@@ -351,79 +366,98 @@
     "children": [
      {
       "image": "onedrive",
-      "pid": 5320
+      "pid": 5320,
+      "started": "11/3/2026 7:41:44 AM"
      },
      {
       "image": "securityhealthsystray",
-      "pid": 5400
+      "pid": 5400,
+      "started": "11/3/2026 7:41:45 AM"
      },
      {
       "image": "code",
-      "pid": 6000
+      "pid": 6000,
+      "started": "11/3/2026 8:02:10 AM"
      },
      {
       "image": "code",
-      "pid": 6010
+      "pid": 6010,
+      "started": "11/3/2026 8:02:10 AM"
      },
      {
       "image": "code",
-      "pid": 6020
+      "pid": 6020,
+      "started": "11/3/2026 8:02:10 AM"
      },
      {
       "image": "code",
-      "pid": 6030
+      "pid": 6030,
+      "started": "11/3/2026 8:02:11 AM"
      },
      {
       "image": "code",
-      "pid": 6040
+      "pid": 6040,
+      "started": "11/3/2026 8:02:12 AM"
      },
      {
       "image": "code",
-      "pid": 6050
+      "pid": 6050,
+      "started": "11/3/2026 8:02:13 AM"
      },
      {
       "image": "code",
-      "pid": 6060
+      "pid": 6060,
+      "started": "11/3/2026 8:02:13 AM"
      },
      {
       "image": "openconsole",
-      "pid": 6065
+      "pid": 6065,
+      "started": "11/3/2026 8:05:30 AM"
      },
      {
       "image": "powershell",
-      "pid": 6070
+      "pid": 6070,
+      "started": "11/3/2026 8:05:30 AM"
      },
      {
       "image": "node",
-      "pid": 6075
+      "pid": 6075,
+      "started": "11/3/2026 8:31:12 AM"
      },
      {
       "image": "msedge",
-      "pid": 7000
+      "pid": 7000,
+      "started": "11/3/2026 7:55:02 AM"
      },
      {
       "image": "msedge",
-      "pid": 7010
+      "pid": 7010,
+      "started": "11/3/2026 7:55:02 AM"
      },
      {
       "image": "msedge",
-      "pid": 7020
+      "pid": 7020,
+      "started": "11/3/2026 7:55:03 AM"
      },
      {
       "image": "msedge",
-      "pid": 7030
+      "pid": 7030,
+      "started": "11/3/2026 7:55:03 AM"
      },
      {
       "image": "msedge",
-      "pid": 7040
+      "pid": 7040,
+      "started": "11/3/2026 7:55:04 AM"
      },
      {
       "image": "msedge",
-      "pid": 7050
+      "pid": 7050,
+      "started": "11/3/2026 8:40:15 AM"
      },
      {
       "image": "msedge",
-      "pid": 7060
+      "pid": 7060,
+      "started": "11/3/2026 9:10:50 AM"
      }
     ],
     "cites": [
@@ -484,6 +518,7 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
     "cites": [
      {
       "line": 6,
@@ -498,6 +533,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 5100,
     "remote": "198.51.100.23:443",
     "round": 1,
@@ -534,11 +570,13 @@
     "children": [
      {
       "image": "git",
-      "pid": 6055
+      "pid": 6055,
+      "started": "11/3/2026 9:10:41 AM"
      },
      {
       "image": "git",
-      "pid": 6056
+      "pid": 6056,
+      "started": "11/3/2026 9:10:41 AM"
      }
     ],
     "cites": [
@@ -583,6 +621,7 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
     "cites": [
      {
       "line": 9,
@@ -597,6 +636,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 6050,
     "remote": "198.51.100.51:443",
     "round": 1,
@@ -630,6 +670,7 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
     "cites": [
      {
       "line": 11,
@@ -644,6 +685,7 @@
     ],
     "dest_port": 8443,
     "dest_private": false,
+    "new": true,
     "pid": 7000,
     "remote": "203.0.113.50:8443",
     "round": 2,
