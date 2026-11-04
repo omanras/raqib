@@ -546,3 +546,41 @@ Verdict: REDO on P1, P2, P3; the Table's choices K-4..K-9; the rest ruled.
 - K-13 (P18) The CI host step also asserts that check-rules lists
   HOST-RHYTHM with its budget (the rule loaded), beside the zero count.
 - K-14 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment L (the Table, 2026-11-04) - judgement on M7.4 (46bfbce + fd61db3, local)
+- K-1..K-13 MET as cited in the REDO section of
+  docs/review/2026-11-04-M7.4-questions.md; the Table read the K-1 delta
+  (a cursor per source file; suspect_upto advances past sent lines only;
+  "suspect-unsent" hole), the K-2 delta (host, os and hooks sources each
+  with an allow-list; "suspect-unsendable" once per tree), the K-3 delta
+  (the budget as the backend's own timeout; "suspect-held"; "suspect-out"
+  at Stop) and the K-4 prompt text (opaque tree index; salted hashes;
+  finding summaries not sent). Every REDO change names its test (K-14).
+- Gate on the local branch, run by the Table: 2721 passed, 19 skipped;
+  kinds 4 : 7 : 11. CI NOT RUN: pushes are held by the commander's order
+  (Actions minutes exhausted, 2026-11-04); the windows jobs have not seen
+  M7.4 or this REDO. The merge into main is local; the push and the CI
+  run wait for the commander's decision, and this ADR's record says so.
+- S-1 (continued suspect calls run back to back on a backlog): accepted
+  for v1, recorded; pacing is a later task. S-2 (history lines of a hooks
+  trace are sent too): accepted - the model may raise suspicion on what
+  was there at the start, never acquit it. S-3 (the SDK's own retries
+  inside the budget per request): recorded; the holes name a call that
+  overran. S-4 (Windows: a connection closed and reopened between rounds
+  is unseen): a named hole of the host source, recorded. S-5 (the window's
+  band does not show blind spots): a later docs/window pass.
+- The builder's addition (a failing backend is not retried at every tick;
+  continued calls wait for the next R-th round) accepted: tested.
+- Decision 4 of this ADR is built. All five decisions of ADR-0007 are
+  built: live discovery on Windows (M7.1), the host watch (M7.2), the
+  window from the host (M7.3), reading sources attached (M7.2b, hooks
+  only with --attach-hooks per H), rhythm and suspicion (M7.4). Phase 7
+  exit awaits two things that are the commander's: the CI run of the
+  held commits, and the field test on his machines (Windows + Kimi:
+  `raqib app` on the host, NEW-AGENT when Kimi starts, HOST-RHYTHM over a
+  session, and `--suspect ollama` if he has it).
+- Verdict: **NEXT** (local). Merge --no-ff into local main under the
+  commander's order; push held.
+- Table ledger for M7.4: one review, one REDO, no third review; the
+  Table's miss: the HANDOFF said "every unknown tree's source file" and
+  did not say "every line, once" nor "every source" (K-1, K-2).
