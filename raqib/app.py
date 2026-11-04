@@ -19,8 +19,15 @@ only:
   rate-limit id, ADR-0007 C-5); the band reads WATCHING HOST, READER LATE,
   HOST READER FAILED or NOTHING READ; Stop shows its final report (exit
   0 / 1 / 3, C-10). A second host watch on this home is refused by
-  HostWatch (C-2, D-6): the refusal is a hole line, not a crash. Nothing
-  of the host round or watch writes outside ~/.raqib (A4).
+  HostWatch (C-2, D-6): the refusal is a hole line, not a crash (exit 2,
+  F-8). Nothing of the host round or watch writes outside ~/.raqib (A4).
+  M7.3 REDO (ADR-0007 Amendment F): the look's level follows C-10's codes
+  from its own sources, never discover's word (F-1, F-7); its holes and its
+  AGENT-DARK lines are listed; it is written to ~/.raqib/host/look.json
+  (F-10) and its holes stand in the footer and the log until the watch's
+  first round, whose reader waits for the look's (F-3). A header with
+  "Host" and "Project" reaches both screens while their watches run (F-2);
+  the host screen has its Log pane and Open page (F-6, F-11).
 - "Watch a project" opens the project screen of M6.4, unchanged: what
   `raqib doctor` says for the project (OK / MISSING /
   UNSURE, run in a thread so the window never waits on `claude --version`),
@@ -373,6 +380,8 @@ class Session:
                 self.holes.append(text)
 
     START_FAILED = "the watch did not start: %s"
+    REFUSAL = False   # M6.4: a project watch that did not start is exit 1
+    refused = False
 
     def _open(self):
         """watch.start for this project (raises watch.WatchError)."""
@@ -397,6 +406,7 @@ class Session:
             except watch.WatchError as exc:
                 with self.lock:
                     self.phase, self.error = "failed", self.START_FAILED % exc
+                    self.refused = self.REFUSAL   # F-8: a host watch refused (C-2, D-6) is exit 2
                 return
             with self.lock:
                 self.running = running
@@ -483,9 +493,15 @@ def empty_line(records, holes):
 
 
 def tree_kind(tree):
-    """named / unknown / benign, and what the watch knows of the tree: history
-    (there at the start, not knocked), new (it knocked), gone."""
-    word = "benign" if tree.get("benign") else "named" if tree.get("named") else "unknown"
+    """F-5 (A2): the kind word, in the order named, unknown, benign: a named
+    tree is never shown as benign (an agent that takes a benign program's
+    name is C-1d's evasion), so "named, benign image" says both. Then what the
+    watch knows of the tree: act-root, history (there at the start, not
+    knocked), new (it knocked), gone."""
+    if tree.get("named"):
+        word = "named, benign image" if tree.get("benign") else "named"
+    else:
+        word = "benign" if tree.get("benign") else "unknown"
     flags = []
     if tree.get("class") == "act-root":
         flags.append("act-root")
@@ -525,40 +541,84 @@ def host_table(rows):
     return [fmt([name for name, _ in HOST_COLUMNS])] + [fmt(r) for r in rows]
 
 
-def probe_view(inv, catalog, at, seconds=None, late=False):
-    """E1: the host screen after the discover round at open: the trees of
-    the inventory (as the host watch keys them, hostmod.trees_of), or the
-    empty line; a round that read nothing is NOTHING READ, never "no agent
-    seen" (ADR-0007 D-2). Nothing here is knocked: it is one look."""
-    records, holes = inv.get("records"), len(inv.get("holes") or [])
+CODE_LEVELS = {0: "clean", 1: "alarm", 3: "incomplete"}   # F-7: C-10's exit codes; 0 green, 1 red, 3 amber
+
+
+def code_level(code):
+    return CODE_LEVELS.get(code, "alarm")
+
+
+def dark_line(d):
+    """F-1: an AGENT-DARK footprint of the look, as its own line."""
+    return _safe("AGENT-DARK %s footprint %s: no tree in the round talks and acts as %s (cites %s)" % (
+        d.get("agent"), d.get("path"), d.get("agent"),
+        " ".join("%s:%s" % (c.get("src"), c.get("line")) for c in d.get("cites") or ()) or "-"))
+
+
+def probe_view(inv, catalog, at, seconds=None, late=False, deadline=None):
+    """E1: the host screen after the discover round at open (the look): its
+    trees (as the host watch keys them, hostmod.trees_of), its AGENT-DARK
+    footprints as their own lines, and its holes listed with their count
+    (F-1). The level is never read from discover's result word: it follows
+    C-10's codes (F-7): 3 (amber, incomplete) when a source was not read or
+    partly read, a line could not be parsed, nothing was read, the inventory
+    says it is incomplete or the reader was late - trees or not; else 1 (red)
+    when a tree or an AGENT-DARK footprint is seen; 0 (green) only when it
+    read records with none of these and found no tree, and then it says
+    "Not a clearance.". A round that read
+    nothing is NOTHING READ, never "no agent seen" (D-2). Nothing here is
+    knocked: it is one look."""
+    records, inv_holes = inv.get("records"), [str(h) for h in inv.get("holes") or []]
     trees = list(hostmod.trees_of(inv, catalog).values())
+    dark = [d for d in inv.get("agent_dark") or [] if isinstance(d, dict)]
+    unread = hostmod.unread_sources(inv)
+    problems = inv.get("problems") or []
+    nothing = hostmod.nothing_read(inv)
     took = " (late, %.1f s)" % seconds if late and seconds is not None else ""
-    lines, view_holes = [], []
-    if inv.get("problems"):
-        view_holes.append("round at open: %d line(s) could not be read (A3)" % len(inv.get("problems")))
-    if hostmod.nothing_read(inv):
-        word, level = "NOTHING READ", "alarm"
+    holes = []
+    if late:
+        holes.append("reader-late: the round at open came back after %.1f s, past its deadline %g s (2 x T)" % (
+            seconds or 0, deadline or 0))
+    holes += ["unread source: %s" % r for r in unread]
+    holes += ["incomplete: %s" % r for r in inv.get("incomplete") or [] if str(r) not in unread]
+    if problems:
+        holes.append("%d line(s) could not be read (A3): %s" % (len(problems), "; ".join(
+            hostmod.cite_text("%s:%s %s" % (p.get("src"), p.get("line"), p.get("reason")) if isinstance(p, dict)
+                              else str(p)) for p in problems[:3])))
+    holes += ["inventory: %s" % h for h in inv_holes]
+    blind = bool(unread or problems or nothing or inv.get("incomplete") or late)
+    code = 3 if blind else 1 if trees or dark else 0   # F-1: a partly blind look is incomplete, trees or not
+    lines = [dark_line(d) for d in dark]
+    counts = "%s records read, %d holes" % (records, len(holes))
+    if nothing:
+        word = "NOTHING READ"
         detail = "the round at open%s read no record from any source: an unread round. %s" % (took, NOT_CLEARANCE)
-        lines.append("nothing read (%s records, %s holes): no agent is said seen or unseen. %s" % (
-            records, holes, NOT_CLEARANCE))
+        lines.append("nothing read (%s records, %d holes): no agent is said seen or unseen. %s" % (
+            records, len(holes), NOT_CLEARANCE))
     elif not trees:
-        word, level = "NO AGENT SEEN", "incomplete"
-        detail = "the round at open%s: %s records read, %s holes; one look, not a watch" % (took, records, holes)
-        lines.append(empty_line(records, holes))
+        word = "NO AGENT SEEN" if not blind else "NO AGENT SEEN, PARTLY BLIND"
+        detail = "the round at open%s: %s; one look, not a watch. %s" % (took, counts, NOT_CLEARANCE)
+        lines.insert(0, empty_line(records, len(holes)))
     else:
         word = "HOST: %d TREE(S)" % len(trees)
-        level = "incomplete" if inv.get("result") == "incomplete" or view_holes else "clean"
-        detail = ("the round at open%s: %s records read, %s holes; %d tree(s) that talk and act, listed, not knocked"
-                  " (one look; \"Watch this host\" watches it)" % (took, records, holes, len(trees)))
-    return {"word": word, "level": level, "detail": _safe(detail), "rows": host_rows(trees, first_seen=at),
-            "lines": [_safe(x) for x in lines], "findings": [], "holes": view_holes, "badges": [],
-            "final": None, "trees": len(trees), "new": 0}
+        detail = ("the round at open%s: %s%s; %d tree(s) that talk and act, listed, not knocked"
+                  " (one look; \"Watch this host\" watches it)" % (
+                      took, counts, "; partly blind (see the holes)" if blind else "", len(trees)))
+    if dark:
+        detail += "; %d AGENT-DARK footprint(s)" % len(dark)
+    return {"word": word, "level": code_level(code), "code": code, "detail": _safe(detail),
+            "rows": host_rows(trees, first_seen=at), "lines": [_safe(x) for x in lines], "findings": [],
+            "holes": [_safe(h) for h in holes], "badges": [], "final": None, "trees": len(trees), "new": 0,
+            "dark": len(dark), "records": records, "unread": unread}
 
 
 def host_finding_line(f):
+    """F-4 (A5): a host finding cites (run, seq) as finding_line cites seqs."""
     where = f.get("tree") or f.get("path")
-    return _safe("%s [%s] round %s: %s: %s [%s]" % (f.get("rule_id"), f.get("severity"), f.get("round"), where,
-                                                     f.get("summary"), f.get("notice")))
+    seqs = f.get("cited_seq") or []
+    return _safe("%s [%s] round %s: %s: %s [%s] cites run %s %s" % (
+        f.get("rule_id"), f.get("severity"), f.get("round"), where, f.get("summary"), f.get("notice"),
+        f.get("run"), watch.seq_text(list(seqs))))
 
 
 def host_watch_view(state, extra_holes=()):
@@ -580,6 +640,8 @@ def host_watch_view(state, extra_holes=()):
                 last.get("round"), last.get("at"), NOT_CLEARANCE)
         else:
             word = "WATCHING HOST"
+            if level == "clean":   # F-7: every green state says it
+                detail = "%s. %s" % (detail, NOT_CLEARANCE)
     trees = [t for t in h.get("trees") or [] if isinstance(t, dict)]
     lines = []
     if not trees:
@@ -619,22 +681,32 @@ def checks_state(lines):
     return "Checks: %s" % ("%d UNSURE" % unsure if unsure else "all OK"), False
 
 
-class HostProbe:
-    """E1: one discover round at open, the host watch's reader in a worker
-    thread (hostmod.Worker), with the watch's deadline (2 x T). It writes
-    nothing and knocks nothing: it is the first look. view(now) is the host
-    screen's state of it: reading, late (a hole in the band), failed, or
-    the trees."""
+LOOK_NAME = "look.json"
 
-    def __init__(self, reader, catalog, deadline, clock=None, wall=None):
+
+class HostProbe:
+    """E1: one discover round at open (the look), the host watch's reader in
+    a worker thread (hostmod.Worker), with the watch's deadline (2 x T). It
+    knocks nothing and is not round 1 (history begins at "Watch this host",
+    F-10). view(now) is the host screen's state of it: reading, late (a hole
+    in the band, kept when the reader comes back late, F-3), failed, or the
+    trees. F-10: the look is written to ~/.raqib/host/look.json (the latest
+    only: its word, level, trees, dark footprints, holes and the reader's
+    timing), when it comes back and when it is first seen late."""
+
+    def __init__(self, reader, catalog, deadline, clock=None, wall=None, home=None):
         self.reader = reader
         self.catalog = catalog
         self.deadline = deadline
         self.clock = clock or time.monotonic
         self.wall = wall or time.time
+        self.home = home
         self.worker = None
         self.began = None
         self.at = None
+        self.seen_late = False   # F-3: the look was READER LATE at some view; that hole stays when it comes back
+        self.written = None      # F-10: what look.json holds now ("late", "done"), or None
+        self.write_error = None
 
     def start(self):
         import datetime
@@ -646,13 +718,45 @@ class HostProbe:
     def done(self):
         return self.worker is not None and self.worker.done()
 
+    def path(self):
+        return os.path.join(hostmod.host_dir(self.home), LOOK_NAME)
+
     def view(self, now=None):
         now = self.clock() if now is None else now
+        view = self._view(now)
+        if self.home is not None:
+            stage = "done" if self.done() else "late" if view["word"] == "READER LATE" else None
+            if stage is not None and stage != self.written:
+                self._write(view, now, stage)
+        if self.write_error:
+            view = dict(view, holes=view["holes"] + [self.write_error])
+        return view
+
+    def _write(self, view, now, stage):
+        out = self.worker.outcome if self.worker is not None else None
+        record = {"raqib_look": 1, "at": self.at, "stage": stage, "deadline_seconds": self.deadline,
+                  "reader_seconds": round(out[2], 3) if out else None,
+                  "reader_out_seconds": None if out else round(now - self.began, 3),
+                  "word": view["word"], "level": view["level"], "code": view.get("code"), "detail": view["detail"],
+                  "rows": [list(r) for r in view["rows"]], "lines": view["lines"], "holes": view["holes"],
+                  "records": view.get("records"), "trees": view.get("trees"), "dark": view.get("dark"),
+                  "note": "the first look of raqib app: not a round of the host watch; history begins at"
+                          " \"Watch this host\" (ADR-0007 F-10)"}
+        try:
+            os.makedirs(os.path.dirname(self.path()), exist_ok=True)
+            hostmod.write_json(self.path(), record)
+            self.written, self.write_error = stage, None
+        except OSError as exc:
+            self.write_error = "look.json was not written (%s): %s" % (self.path(), exc.strerror or exc)
+            self.written = stage
+
+    def _view(self, now):
         out = self.worker.outcome if self.worker is not None else None
         late = now - self.began >= self.deadline if self.began is not None else False
         if out is None:
             if late:
-                return dict(_empty_view(), word="READER LATE", level="alarm", detail=(
+                self.seen_late = True
+                return dict(_empty_view(), word="READER LATE", level="incomplete", code=3, detail=(
                     "the reader of the round at open is not back after %d s (deadline %g s): a hole; the host is not"
                     " read yet" % (now - self.began, self.deadline)),
                     holes=["reader-late: the round at open was not back within %g s (2 x T)" % self.deadline])
@@ -660,19 +764,21 @@ class HostProbe:
                         detail="reading the host... (one discover round, read-only; deadline %g s)" % self.deadline)
         inv, error, seconds = out
         if error:
-            return dict(_empty_view(), word="HOST READER FAILED", level="alarm",
+            return dict(_empty_view(), word="HOST READER FAILED", level="incomplete", code=3,
                         detail="the reader of the round at open failed: %s" % _safe(error),
                         holes=["reader-failed: the round at open: %s" % _safe(error)])
         try:
-            return probe_view(inv, self.catalog, self.at, seconds, late=seconds > self.deadline)
+            return probe_view(inv, self.catalog, self.at, seconds, late=seconds > self.deadline or self.seen_late,
+                              deadline=self.deadline)
         except Exception as exc:   # A3: an inventory the window cannot show says so
-            return dict(_empty_view(), word="HOST READER FAILED", level="alarm",
+            return dict(_empty_view(), word="HOST READER FAILED", level="incomplete", code=3,
                         detail="the inventory of the round at open could not be shown: %s: %s" % (
-                            type(exc).__name__, _safe(exc)))
+                            type(exc).__name__, _safe(exc)),
+                        holes=["the inventory of the round at open could not be shown: %s" % type(exc).__name__])
 
 
 def _empty_view():
-    return {"word": "", "level": "incomplete", "detail": "", "rows": [], "lines": [], "findings": [],
+    return {"word": "", "level": "incomplete", "code": None, "detail": "", "rows": [], "lines": [], "findings": [],
             "holes": [], "badges": [], "final": None, "trees": 0, "new": 0}
 
 
@@ -686,16 +792,33 @@ class HostSession(Session):
     hole line, never a crash."""
 
     START_FAILED = "the host watch did not start: %s"
+    REFUSAL = True    # F-8: the start was refused (one host watch per home), exit 2
 
-    def __init__(self, options, log=None, starter=None, clock=None, wall=None):
+    def __init__(self, options, log=None, starter=None, clock=None, wall=None, wait_for=None):
         super().__init__(hostmod.HOST, options, log=log, starter=starter or hostmod.start, clock=clock, wall=wall,
                          steps=lambda running: None)
+        self.wait_for = wait_for   # F-3: the look's reader thread; round 1's reader waits for it
+
+    def reader(self):
+        """The watch's reader. F-3: never two readers at once - the first
+        round's reader waits for the look's reader to be back (HostWatch's
+        own deadline still holds: a look that never returns makes round 1
+        late, a hole)."""
+        real = self.options.reader()
+        look = self.wait_for
+
+        def read():
+            if look is not None and look.is_alive():
+                self.log.write("raqib app: round 1 waits for the reader of the round at open (never two readers)\n")
+                look.join()
+            return real()
+        return read
 
     def _open(self):
         o = self.options
         return self.starter(o.host_catalog(), o.rules, every=o.every, no_open=True, no_notify=o.no_notify,
                             port=o.host_port, out=self.log, err=self.log, environ=o.environ, home=o.home,
-                            refresh=o.refresh, reader=o.reader())
+                            refresh=o.refresh, reader=self.reader())
 
     def _loop(self, running):
         return hostmod.loop(running, self.stop_flag)
@@ -717,7 +840,7 @@ class Controller:
         # each watch has its own LogBuffer; tee is the terminal (or app.log) when there is one
         self.make_session = make_session or (lambda project: Session(project, options, log=LogBuffer(tee=tee)))
         # M7.3: the host watch, a sibling of the project watch; both may run at once
-        self.make_host = make_host or (lambda: HostSession(options, log=LogBuffer(tee=tee)))
+        self.make_host = make_host or (lambda: HostSession(options, log=LogBuffer(tee=tee), wait_for=self.look_thread()))
         self.session = None
         self.host = None
         self.tip = traymod.TIP   # what the tray's tooltip says now (M7.3: "Raqib: N trees, K new")
@@ -732,6 +855,9 @@ class Controller:
         self.probe = None        # M7.3 E1: the discover round at open (HostProbe)
         self.probe_error = None
         self.host_note = None    # why "Watch this host" did not start
+        self.past = []           # F-8: the watches a new Start replaced; their reports and exits are kept
+        self.reported = set()    # F-8: id() of the sessions whose final report was appended to the log
+        self.look_logged = set() # F-3: the look's holes already written to the log
         self.holes = []   # the window's own holes: a tray that failed, a tick that failed (A-8)
 
     # tray
@@ -795,8 +921,52 @@ class Controller:
         self.log_line("".join(traceback.format_exception(kind, value, tb)).rstrip("\n"))
 
     def sessions(self):
-        """The watches started in this window: the project's and the host's."""
+        """The watches running or shown in this window: the project's and the host's."""
         return [x for x in (self.session, self.host) if x is not None]
+
+    def all_sessions(self):
+        """F-8: every watch this window started, those a new Start replaced first."""
+        return self.past + self.sessions()
+
+    def look_thread(self):
+        """F-3: the look's reader thread, when it is still out."""
+        worker = getattr(self.probe, "worker", None)
+        thread = getattr(worker, "thread", None)
+        return thread if thread is not None and thread.is_alive() else None
+
+    def look_holes(self):
+        """F-3: the look's holes stand (footer, log) until the host watch's
+        first round replaces them; each is written to the log once."""
+        if self.probe is None or self.host_first_round():
+            return []
+        holes = ["round at open: %s" % h for h in self.probe.view()["holes"]]
+        for h in holes:
+            if h not in self.look_logged:
+                self.look_logged.add(h)
+                self.log_line(h)
+        return holes
+
+    def host_first_round(self):
+        """True once the host watch has a round of its own (a reader back, or failed)."""
+        session = self.host
+        if session is None or getattr(session, "running", None) is None:
+            return False
+        state = session.state() or {}
+        return bool((state.get("host") or {}).get("last_round"))
+
+    def report_finished(self):
+        """F-8: each finished watch's final report is appended to the log
+        (the terminal or app.log) once, never replaced by a later watch."""
+        for session in self.all_sessions():
+            snap = session.snapshot()
+            if snap.get("final_text") and id(session) not in self.reported:
+                self.reported.add(id(session))
+                if self.tee is not None:
+                    try:
+                        self.tee.write("\n" + snap["final_text"])
+                        self.tee.flush()
+                    except Exception as exc:
+                        self.hole("a final report was not written to the log: %s: %s" % (type(exc).__name__, exc))
 
     def finish_wait(self, err=None, rounds=None):
         """A-3: the process does not exit while a watch has not
@@ -839,20 +1009,36 @@ class Controller:
         return self.project_watching() or self.host_watching()
 
     def start(self, project):
-        """A new watch of project; None, or why not."""
+        """A new watch of project; None, or why not. F-2: a refusal names the
+        running watch."""
         if self.project_watching():
-            return "a watch is running: stop it first"
+            return "a watch is running: the project watch of %s; stop it first" % _safe(self.session.project)
         if not project or not os.path.isdir(project):
             return "not a directory: %s" % (project or "(empty)")
+        if self.session is not None:
+            self.past.append(self.session)    # F-8: its report and exit are kept
         self.session = self.make_session(project).start()
         return None
+
+    def running_text(self):
+        """F-2: the header's line: which watches run now."""
+        names = (["host watch"] if self.host_watching() else []) + (
+            ["project watch of %s" % _safe(self.session.project)] if self.project_watching() else [])
+        return "running: %s" % (", ".join(names) if names else "none")
+
+    def project_screen(self):
+        """F-2: where "Project" leads: the project watch's screen while it
+        runs, else the project field (M6.4's first screen)."""
+        return "watching" if self.project_watching() else "first"
 
     def start_host(self):
         """E2: a new watch of this host (HostSession); None, or why not. A
         second host watch on this home is refused by HostWatch itself (C-2):
         that refusal is the session's error, shown as a hole line."""
         if self.host_watching():
-            return "the host is being watched: stop it first"
+            return "a watch is running: the host watch; stop it first"
+        if self.host is not None:
+            self.past.append(self.host)       # F-8: its report and exit are kept
         self.host = self.make_host().start()
         return None
 
@@ -907,7 +1093,9 @@ class Controller:
                 return None
             else:
                 o = self.options
-                self.probe = HostProbe(o.reader(), o.host_catalog(), hostmod.DEADLINE_FACTOR * o.every)
+                # F-10: the look is written under the window's home (the user's, as every watch's ~/.raqib)
+                self.probe = HostProbe(o.reader(), o.host_catalog(), hostmod.DEADLINE_FACTOR * o.every,
+                                       home=o.home or os.path.expanduser("~"))
             self.probe.start()
         except Exception as exc:
             self.probe = None
@@ -929,6 +1117,7 @@ class Controller:
             if self.host_note:
                 probe = dict(probe, holes=probe["holes"] + [self.host_note])
             return probe
+        look = [] if self.host_first_round() else ["round at open: %s" % h for h in probe["holes"]]   # F-3
         snap = session.snapshot()
         extra = []
         for text in list(snap.get("holes") or []) + ([session.read_note] if getattr(session, "read_note", None) else []):
@@ -939,24 +1128,26 @@ class Controller:
             holes = probe["holes"] + [h for h in [error] + extra if h not in probe["holes"]]
             return dict(probe, word="HOST NOT WATCHED", level="alarm", detail=_safe(error), holes=[_safe(h) for h in holes])
         if snap["phase"] == "finished":
-            code = snap.get("final_exit")
-            return dict(_empty_view(), word="HOST WATCH FINISHED", level={0: "clean", 1: "alarm"}.get(code, "incomplete"),
-                        detail="the host watch ended; its final report is below (exit %s)" % code,
+            code = snap.get("final_exit")   # F-7: C-10's code gives the colour, as at open
+            return dict(_empty_view(), word="HOST WATCH FINISHED", level=code_level(code), code=code,
+                        detail="the host watch ended; its final report is below (exit %s)%s" % (
+                            code, ". " + NOT_CLEARANCE if code == 0 else ""),
                         final=snap.get("final_text") or "", holes=[_safe(h) for h in extra])
         state = session.state()
         if state is None:
             every = getattr(self.options, "every", hostmod.EVERY_DEFAULT)
             return dict(probe, word="STARTING HOST WATCH", level="incomplete",
                         detail="starting the host watch of `raqib watch --host` (a round every %g s)" % every)
-        view = host_watch_view(state, extra)
+        view = host_watch_view(state, look + extra)
         if snap["phase"] == "stopping":
             view["word"] += " (stopping)"
         return view
 
-    def open_page(self):
-        """A-13 (Q-6): the "Open page" button; the same opener as `raqib
-        watch` (watch.open_page), never under CI. None, or why not."""
-        session = self.session
+    def open_page(self, which="project"):
+        """A-13 (Q-6), F-11: the "Open page" button of the project screen or
+        of the host screen; the same opener as `raqib watch` (watch.open_page),
+        never under CI. None, or why not."""
+        session = self.host if which == "host" else self.session
         state = session.state() if session is not None else None
         url = (state or {}).get("url")
         if not url:
@@ -1034,16 +1225,19 @@ class Controller:
                 pass
 
     def exit_code(self):
-        """The exit of the window: the project watch's report as in M6.4,
-        and the host watch's (C-10: 0, 1, 3); with both, an alarm (1) first,
-        then any other non-zero code; 0 when none ran."""
+        """The exit of the window: every watch's report (the project's as in
+        M6.4, the host's C-10: 0, 1, 3; a refused host watch 2, F-8), the
+        replaced ones too; an alarm (1) first, then any other non-zero code;
+        0 when none ran."""
         codes = []
-        for session in self.sessions():
+        for session in self.all_sessions():
             snap = session.snapshot()
             if snap["final_exit"] is not None:
                 codes.append(snap["final_exit"])
+            elif snap["phase"] == "failed":   # F-8: a refused host watch is 2 (a refusal), not a finding
+                codes.append(2 if getattr(session, "refused", False) else 1)
             else:
-                codes.append(1 if snap["phase"] == "failed" else 0)
+                codes.append(0)
         if 1 in codes:
             return 1
         return next((c for c in codes if c), 0)
@@ -1111,8 +1305,10 @@ class Window:
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         root.report_callback_exception = controller.callback_error   # A-4: a hole and a log line
         self.log_open = False
+        self.host_log_open = False
         self.checks_open = False
         self.doctor_band = None
+        self.refusal = None
         self._build(project)
         self.show_host()                  # M7.3: the first screen is the host
         controller.start_probe(probe)     # E1: one discover round at open, in a thread
@@ -1136,26 +1332,38 @@ class Window:
         self.band.pack(fill="x", padx=10, pady=(10, 0))
         self.detail = tk.Label(self.root, text="", anchor="w", justify="left", wraplength=920)
         self.detail.pack(fill="x", padx=10)
+        # F-2: the header: "Host" and "Project" switch between the two screens at any time, watches running
+        head = tk.Frame(self.root)
+        self.host_tab = tk.Button(head, text="Host", command=self.show_host)
+        self.host_tab.pack(side="left")
+        self.project_tab = tk.Button(head, text="Project", command=self.show_project)
+        self.project_tab.pack(side="left", padx=6)
+        self.head_note = tk.Label(head, text="", anchor="w")
+        self.head_note.pack(side="left", fill="x", expand=True)
+        head.pack(fill="x", padx=10, pady=(6, 0))
         # the host screen (M7.3): the first one
         self.hostf = tk.Frame(self.root)
         row = tk.Frame(self.hostf)
         self.host_button = tk.Button(row, text="Watch this host", command=self.host_toggle)
         self.host_button.pack(side="left")
-        tk.Button(row, text="Watch a project", command=self.show_first).pack(side="left", padx=6)
+        tk.Button(row, text="Watch a project", command=self.show_project).pack(side="left", padx=6)
         self.checks_button = tk.Button(row, text=checks_state(None)[0], command=self.toggle_checks)
         self.checks_button.pack(side="left")
         self.host_url = tk.StringVar(value="-")
         tk.Entry(row, textvariable=self.host_url, state="readonly").pack(side="left", fill="x", expand=True, padx=6)
+        tk.Button(row, text="Open page", command=self.open_host_page).pack(side="left", padx=(0, 6))   # F-11
+        self.host_log_button = tk.Button(row, text="Log", command=self.toggle_host_log)                # F-6
+        self.host_log_button.pack(side="left")
         row.pack(fill="x", pady=6)
         self.host_badges = tk.Label(self.hostf, text="", anchor="w", justify="left", wraplength=920)
         self.host_badges.pack(fill="x")
         self.checks_frame, self.checks_text = self._text(self.hostf, 8)   # folded under "Checks"
         frame, self.host_text = self._text(self.hostf, 20)
         frame.pack(fill="both", expand=True)
+        self.host_log_frame, self.host_log_text = self._text(self.hostf, 10)   # F-6: shown by its Log button
         # the project screen (M6.4's first screen)
         self.first = tk.Frame(self.root)
         row = tk.Frame(self.first)
-        tk.Button(row, text="Host", command=self.show_host).pack(side="left", padx=(0, 6))
         tk.Label(row, text="Project").pack(side="left")
         self.project = tk.StringVar(value=project)
         tk.Entry(row, textvariable=self.project).pack(side="left", fill="x", expand=True, padx=6)
@@ -1169,7 +1377,6 @@ class Window:
         # watching screen
         self.watching = tk.Frame(self.root)
         row = tk.Frame(self.watching)
-        tk.Button(row, text="Host", command=self.show_host).pack(side="left", padx=(0, 6))
         tk.Label(row, text="Page (read-only)").pack(side="left")
         self.url = tk.StringVar(value="-")
         tk.Entry(row, textvariable=self.url, state="readonly").pack(side="left", fill="x", expand=True, padx=6)
@@ -1216,6 +1423,29 @@ class Window:
     def show_watching(self):
         self._show("watching")
 
+    def show_project(self):
+        """F-2: "Project" (and "Watch a project"): the running project watch's
+        screen, else the project field."""
+        if self.c.project_screen() == "watching":
+            self.show_watching()
+        else:
+            self.show_first()
+
+    def open_host_page(self):
+        """F-11: the host watch's page, by the person's click (never under CI)."""
+        self.c.page_note = self.c.open_page("host")
+
+    def toggle_host_log(self):
+        """F-6: the host watch's own lines, at any time (bounded), as A-5."""
+        self.host_log_open = not self.host_log_open
+        if self.host_log_open:
+            self.host_log_frame.pack(fill="both", expand=True, pady=(6, 0))
+            self.host_log_button.configure(text="Hide log")
+        else:
+            self.host_log_frame.pack_forget()
+            self.host_log_button.configure(text="Log")
+            self.shown.pop("host_log", None)
+
     def toggle_checks(self):
         """E1: the doctor lines, folded under "Checks"."""
         self.checks_open = not self.checks_open
@@ -1231,6 +1461,7 @@ class Window:
             self.c.stop_host("Stop in the window")
             return
         self.c.host_note = self.c.start_host()
+        self.show_host()
 
     def _set(self, widget, key, content, tags=None):
         """Replace a Text widget's content when it changed (no flicker, the scroll kept)."""
@@ -1268,8 +1499,12 @@ class Window:
     def start(self):
         why = self.c.start(self.project.get())
         if why:
+            if self.c.project_watching():   # F-2: the refusal names the running watch and goes to its screen
+                self.show_watching()
             self._band("NOT STARTED", "alarm", why)
+            self.refusal = why
             return
+        self.refusal = None
         self.show_watching()
 
     def stop(self):
@@ -1332,7 +1567,7 @@ class Window:
         self.after_id = self.root.after(TICK_MS, self.tick)
 
     def _foot(self):
-        holes = self.c.holes + self.c.tray_holes()
+        holes = self.c.holes + self.c.tray_holes() + self.c.look_holes()   # F-3: the look's, until round 1
         notes = list(self.c.notes) + (["page: %s" % self.c.page_note] if self.c.page_note else [])
         foot = ["hole: %s" % h for h in holes] + ["note: %s" % n for n in notes]
         self.foot.configure(text="\n".join(foot), fg=LEVEL_COLORS["alarm" if holes else "incomplete"])
@@ -1344,6 +1579,9 @@ class Window:
                 self.root.deiconify()
                 self.root.lift()
         holes = self._foot()
+        self.c.report_finished()   # F-8: each finished watch's report, appended to the log once
+        self.head_note.configure(text=self.c.running_text() + (
+            "   %s" % self.refusal if self.refusal and self.c.project_watching() else ""))
         fresh = self._tick_doctor()
         view = self.c.host_view()
         self.c.host_tip(view.get("trees"), view.get("new"))   # E3: the tray's tooltip
@@ -1393,6 +1631,10 @@ class Window:
         self.host_badges.configure(text="   ".join(text for _, text in view.get("badges") or []))
         self.host_url.set(view.get("url") or "-")
         self._set(self.host_text, "host", host_body(view))
+        if self.host_log_open:   # F-6
+            log = getattr(self.c.host, "log", None)
+            self._set(self.host_log_text, "host_log", log_view(log.text()) if log is not None else
+                      "the host watch has not started: no log yet\n")
         self.host_button.configure(text="Stop host watch" if self.c.host_watching() else "Watch this host")
 
     def _tick_doctor(self):
@@ -1447,13 +1689,7 @@ def run(project, options, out=None, tk=None, err=None):
     finally:
         controller.shutdown()
         controller.finish_wait(err=err)   # A-3: never exit with a watch that has not concluded
-    for session in controller.sessions():
-        snap = session.snapshot()
-        if out is not None and snap["final_text"]:
-            try:
-                out.write("\n" + snap["final_text"])
-            except Exception:
-                pass
+    controller.report_finished()   # F-8: every watch's report, appended once
     return controller.exit_code()
 
 

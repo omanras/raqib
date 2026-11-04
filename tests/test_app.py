@@ -413,7 +413,8 @@ def test_e4_close_while_watching_hides_to_the_tray_and_without_one_stops(tmp_pat
     assert c.start_tray() is None and c.tray_up()
     assert c.close_request() == "quit"                       # nothing watched: close quits
     assert c.start(str(tmp_path)) is None and c.watching()
-    assert c.start(str(tmp_path)) == "a watch is running: stop it first"
+    # M7.3 F-2: the refusal names the running watch
+    assert c.start(str(tmp_path)) == "a watch is running: the project watch of %s; stop it first" % tmp_path
     assert c.close_request() == "hide" and c.session.stopped == []
     c = controller(None)
     c.tray = None

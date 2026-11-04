@@ -90,14 +90,18 @@ def test_e1_reading_then_trees_never_a_command_line():
     gate.set()
     assert until(p.done, WAIT)
     v = p.view()
-    assert v["word"] == "HOST: 2 TREE(S)" and v["trees"] == 2 and v["holes"] == []
+    # F-1: the inventory's holes are listed with their count; F-7: trees seen = exit 1, red
+    i = inv("linux")
+    assert v["word"] == "HOST: 2 TREE(S)" and v["trees"] == 2 and v["level"] == "alarm" and v["code"] == 1
+    assert v["holes"] == ["inventory: %s" % h for h in i["holes"]] and len(v["holes"]) == len(i["holes"]) == 14
     body = app.host_body(v)
     head = body.splitlines()[0]
     for col in ("image", "pid", "named", "first seen", "acts", "endpoints"):
         assert col in head
     assert "environment-manager" in body and "anthropic 160.79.104.0/23" in body
     # E1: never a command line, a cited record's text or an executable path
-    assert "argv" not in body and "--session" not in body and "/usr/local/bin" not in body
+    table = "\n".join(app.host_table(v["rows"]))
+    assert "argv" not in table and "--session" not in body and "/usr/local/bin" not in body
     assert "named" in body and "2026-" in body
 
 
@@ -116,7 +120,7 @@ def test_e1_a_round_that_read_nothing_is_nothing_read_never_no_agent_seen():
     p, _ = probe(lambda: i)
     assert until(p.done, WAIT)
     v = p.view()
-    assert v["word"] == "NOTHING READ" and v["level"] == "alarm"
+    assert v["word"] == "NOTHING READ" and v["level"] == "incomplete" and v["code"] == 3   # F-7: amber
     assert "no agent seen" not in app.host_body(v) and "Not a clearance." in v["detail"]
 
 
@@ -125,11 +129,12 @@ def test_e1_a_late_reader_is_the_hole_in_the_band_and_a_failed_one_too():
     p, clock = probe(lambda: (gate.wait(WAIT), inv("linux"))[1], deadline=20.0)
     clock.t += 21
     v = p.view()
-    assert v["word"] == "READER LATE" and v["level"] == "alarm" and "deadline 20 s" in v["detail"]
+    assert v["word"] == "READER LATE" and v["level"] == "incomplete" and "deadline 20 s" in v["detail"]
     assert v["holes"] == ["reader-late: the round at open was not back within 20 s (2 x T)"]
     gate.set()
     assert until(p.done, WAIT)
-    assert p.view()["word"] == "HOST: 2 TREE(S)"       # it came: the trees, shown
+    v = p.view()                                      # it came: the trees, shown; F-3: the late hole stays
+    assert v["word"] == "HOST: 2 TREE(S)" and v["holes"][0].startswith("reader-late: the round at open came back")
 
     def boom():
         raise OSError("denied")
@@ -142,7 +147,8 @@ def test_e1_a_late_reader_is_the_hole_in_the_band_and_a_failed_one_too():
 def test_e1_kinds_named_unknown_benign_and_what_the_watch_knows():
     assert app.tree_kind({"named": True}) == "named"
     assert app.tree_kind({"named": False}) == "unknown"
-    assert app.tree_kind({"named": True, "benign": True}) == "benign"
+    assert app.tree_kind({"named": True, "benign": True}) == "named, benign image"    # F-5
+    assert app.tree_kind({"named": False, "benign": True}) == "benign"
     assert app.tree_kind({"named": False, "history": True, "class": "act-root"}) == "unknown (act-root, history)"
     assert app.tree_kind({"named": False, "knocked": "sent", "present": False}) == "unknown (new, gone)"
 
@@ -159,6 +165,7 @@ def test_e1_the_controller_starts_the_round_at_open_and_a_probe_that_cannot_star
     c = app.Controller(options(home, lambda: inv("linux")))
     c.start_probe()
     assert until(c.probe.done, WAIT) and c.host_view()["word"] == "HOST: 2 TREE(S)"
+    assert json.loads((home / ".raqib" / "host" / "look.json").read_text(encoding="ascii"))["stage"] == "done"
     assert c.probe.deadline == host.DEADLINE_FACTOR * 0.2
 
     def broken():
@@ -196,7 +203,7 @@ def test_e2_watch_this_host_runs_the_same_hostwatch_knocks_and_stop_shows_the_re
     o = options(home, fed(["benign/windows-desktop", "windows"]), no_notify=False)
     c = app.Controller(o)
     assert c.start_host() is None and c.host_watching()
-    assert c.start_host() == "the host is being watched: stop it first"
+    assert c.start_host() == "a watch is running: the host watch; stop it first"
     assert until(lambda: c.host.running is not None and (c.host.state() or {}).get("host", {}).get("new", 0) >= 3,
                  WAIT)
     v = c.host_view()
@@ -233,7 +240,7 @@ def test_e2_a_second_host_watch_on_this_home_is_a_hole_line_never_a_crash(home):
     assert v["word"] == "HOST NOT WATCHED" and v["level"] == "alarm"
     assert any("one host watch per home" in h for h in v["holes"])
     assert "one host watch per home" in app.host_body(v)
-    assert not c.host_watching() and c.exit_code() == 1
+    assert not c.host_watching() and c.exit_code() == 2          # F-8: a refusal, not a finding
 
 
 class FakeHostWatch:
@@ -532,3 +539,259 @@ class TkHost(TkSession):
 
     def state(self):
         return FakeHostWatch().state(0)
+
+
+# --- REDO (ADR-0007 Amendment F): one test per behaviour (F-13) ---------------------------------------------
+
+def test_redo_f1_an_incomplete_look_is_amber_trees_or_not_never_discovers_result_word():
+    """The reviewer's probe: the linux fixture with a source not read reads incomplete, not clean."""
+    i = dict(inv("linux"), incomplete=["source proc-net not read: denied"])
+    assert i["result"] == "alarm"                     # discover's word: never what the look's level reads
+    p, _ = probe(lambda: i)
+    assert until(p.done, WAIT)
+    v = p.view()
+    assert v["level"] == "incomplete" and v["code"] == 3 and "partly blind" in v["detail"]
+    assert v["holes"][0] == "unread source: source proc-net not read: denied"
+    body = app.host_body(v)
+    assert "HOLES (A3): %d" % len(v["holes"]) in body and "unread source: source proc-net" in body
+    # a parse problem and a partly read source listed in the inventory's sources make it amber too
+    j = dict(empty_inv(), problems=[{"src": "proc", "line": 3, "reason": "not JSON"}])
+    k = dict(empty_inv(), sources=[dict(empty_inv()["sources"][0], error="cut short", text_read=True)])
+    for x in (j, k):
+        p, _ = probe(lambda x=x: x)
+        assert until(p.done, WAIT)
+        assert p.view()["code"] == 3 and p.view()["word"] == "NO AGENT SEEN, PARTLY BLIND"
+
+
+def test_redo_f1_the_looks_agent_dark_footprints_are_their_own_lines():
+    i = inv("windows")
+    assert len(i["agent_dark"]) == 2
+    p, _ = probe(lambda: i)
+    assert until(p.done, WAIT)
+    v = p.view()
+    dark = [x for x in v["lines"] if x.startswith("AGENT-DARK ")]
+    assert len(dark) == 2 and v["dark"] == 2 and "2 AGENT-DARK footprint(s)" in v["detail"]
+    assert any("codex footprint" in x and "footprints:4" in x for x in dark)
+    assert all(x in app.host_body(v) for x in dark)
+
+
+def test_redo_f2_the_refusal_names_the_running_watch_and_project_leads_to_its_screen(tmp_path):
+    c = app.Controller(None, make_session=FakeSession, make_host=lambda: FakeSession("host"))
+    assert c.project_screen() == "first" and c.running_text() == "running: none"
+    c.start(str(tmp_path))
+    c.start_host()
+    assert c.project_screen() == "watching"
+    assert c.running_text() == "running: host watch, project watch of %s" % tmp_path
+    assert c.start(str(tmp_path)) == "a watch is running: the project watch of %s; stop it first" % tmp_path
+    assert c.start_host() == "a watch is running: the host watch; stop it first"
+
+
+def test_redo_f3_the_looks_holes_stand_in_the_footer_and_the_log_until_round_one(home):
+    gate = threading.Event()
+    out = io.StringIO()
+    c = app.Controller(options(home, lambda: inv("linux")), tee=out)
+    c.start_probe(make=lambda: app.HostProbe(lambda: (gate.wait(WAIT), inv("linux"))[1], CATALOG, 0.0))
+    time.sleep(0.05)
+    holes = c.look_holes()
+    assert holes == ["round at open: reader-late: the round at open was not back within 0 s (2 x T)"]
+    c.look_holes()
+    assert out.getvalue().count("reader-late") == 1          # in the log once
+    gate.set()
+    assert until(c.probe.done, WAIT)
+    assert c.look_holes()[0].startswith("round at open: reader-late: the round at open came back")   # stays
+    c.start_host()
+    assert until(c.host_first_round, WAIT)
+    assert c.look_holes() == []                              # round 1 replaced them
+    c.shutdown()
+
+
+def test_redo_f3_round_one_waits_for_the_looks_reader_never_two_readers(home):
+    gate = threading.Event()
+    out = []
+    lock = threading.Lock()
+    active = [0]
+
+    def reader():
+        with lock:
+            active[0] += 1
+            out.append(active[0])
+        try:
+            if len(out) == 1:
+                gate.wait(WAIT)
+            return inv("linux")
+        finally:
+            with lock:
+                active[0] -= 1
+    c = app.Controller(options(home, reader))
+    c.start_probe()
+    assert c.look_thread() is not None
+    c.start_host()
+    time.sleep(0.5)
+    assert len(out) == 1                                    # round 1's reader has not started
+    assert "round 1 waits for the reader of the round at open" in c.host.log.text()
+    gate.set()
+    assert until(c.host_first_round, WAIT)
+    assert max(out) == 1                                    # never two readers at once
+    c.shutdown()
+
+
+def test_redo_f4_a_host_finding_line_cites_run_and_seq():
+    line = app.host_finding_line({"rule_id": "NEW-AGENT", "severity": "high", "round": 2, "tree": "2100:claude:-",
+                                  "summary": "s", "notice": "sent", "run": "20261104T1200-7", "cited_seq": [12]})
+    assert line.endswith("cites run 20261104T1200-7 seq 12")
+
+
+def test_redo_f6_the_host_watch_has_a_log_pane():
+    src = (ROOT / "raqib" / "app.py").read_text(encoding="ascii")
+    assert "def toggle_host_log" in src and "self.host_log_text" in src
+    assert 'log_view(log.text())' in src.split("def _tick_host", 1)[1].split("\n    def ", 1)[0]
+
+
+def test_redo_f7_colours_follow_c10_codes_and_green_says_not_a_clearance(home):
+    i = empty_inv()
+    p, _ = probe(lambda: i)
+    assert until(p.done, WAIT)
+    v = p.view()
+    assert v["word"] == "NO AGENT SEEN" and v["level"] == "clean" and v["code"] == 0
+    assert "Not a clearance." in v["detail"] and "Not a clearance." in app.host_body(v)
+    assert [app.code_level(x) for x in (0, 1, 3, 2)] == ["clean", "alarm", "incomplete", "alarm"]
+    w = app.host_watch_view(FakeHostWatch().state(0))
+    assert w["level"] == "clean" and w["detail"].endswith("Not a clearance.")
+
+    class Done(FakeSession):
+        def __init__(self, code):
+            super().__init__("host")
+            self.code = code
+
+        def snapshot(self):
+            return {"phase": "finished", "final_exit": self.code, "final_text": "r\n", "holes": []}
+    for code, level in ((0, "clean"), (1, "alarm"), (3, "incomplete")):
+        c = app.Controller(None)
+        c.host = Done(code)
+        v = c.host_view()
+        assert v["level"] == level and ("Not a clearance." in v["detail"]) == (code == 0)
+
+
+def test_redo_f8_every_watchs_final_report_is_appended_once_and_kept_after_a_new_start(tmp_path):
+    out = io.StringIO()
+
+    class Done(FakeSession):
+        n = 0
+
+        def __init__(self, project):
+            super().__init__(project)
+            Done.n += 1
+            self.text = "report %d\n" % Done.n
+            self.phase = "finished"
+
+        def snapshot(self):
+            return {"phase": self.phase, "final_exit": 1 if self.text == "report 1\n" else 0, "final_text": self.text}
+    c = app.Controller(None, tee=out, make_session=Done, make_host=lambda: Done("host"))
+    c.start(str(tmp_path))
+    c.report_finished()
+    c.start(str(tmp_path))                     # the first is replaced: its report and its exit are kept
+    c.start_host()
+    c.report_finished()
+    c.report_finished()
+    assert out.getvalue() == "\nreport 1\n\nreport 2\n\nreport 3\n"
+    assert c.exit_code() == 1 and len(c.all_sessions()) == 3
+
+
+def test_redo_f9_a_tree_beside_a_partly_read_source_is_never_clean(tmp_path):
+    """The reviewer's probe on HostWatch.result."""
+    clock = Clock()
+    feed = iter([dict(inv("linux"), incomplete=["source proc-net partly read: cut short"])])
+    w = host.HostWatch(lambda: next(feed), CATALOG, RULES, notify.Notifier(host.HOST, enabled=False, reason="t",
+                                                                           host=True),
+                       out=io.StringIO(), err=io.StringIO(), clock=clock, wall=lambda: 1793700000.0,
+                       home=str(tmp_path / "h"), platform="test")
+    w.tick(wait=WAIT)
+    text, code = w.finish()
+    assert code == 3 and "RESULT: INCOMPLETE" in text
+    assert "1 round(s) with a source not read or partly read (round 1): source proc-net partly read" in text
+    assert host.unread_sources({"sources": [{"name": "proc", "error": "denied", "text_read": False}]}) == [
+        "source proc not read: denied"]
+    assert host.unread_sources(inv("linux")) == []
+
+
+def test_redo_f10_the_look_is_written_to_look_json_with_its_holes_and_timing(home):
+    gate = threading.Event()
+    clock = Clock()
+    p = app.HostProbe(lambda: (gate.wait(WAIT), inv("linux"))[1], CATALOG, 20.0, clock=clock,
+                      wall=lambda: 1793700000.0, home=str(home)).start()
+    path = home / ".raqib" / "host" / "look.json"
+    p.view()
+    assert not path.exists()                    # reading: nothing to say yet
+    clock.t += 21
+    p.view()
+    late = json.loads(path.read_text(encoding="ascii"))
+    assert late["stage"] == "late" and late["reader_out_seconds"] == 21.0 and late["word"] == "READER LATE"
+    gate.set()
+    assert until(p.done, WAIT)
+    p.view()
+    done = json.loads(path.read_text(encoding="ascii"))
+    assert done["stage"] == "done" and done["word"] == "HOST: 2 TREE(S)" and done["code"] == 3
+    assert isinstance(done["reader_seconds"], float) and done["deadline_seconds"] == 20.0
+    assert done["holes"][0].startswith("reader-late") and len(done["rows"]) == 2
+    assert "not a round of the host watch" in done["note"]
+    assert not (home / ".raqib" / "host" / "rounds.jsonl").exists()   # not round 1
+
+
+def test_redo_f11_open_page_on_the_host_screen_never_under_ci(home):
+    c = app.Controller(app.Options(None, None, 60, environ={}))
+    assert c.open_page("host") == "no page yet: the watch has not started"
+
+    class Up(FakeSession):
+        def state(self):
+            return {"url": "http://127.0.0.1:9/"}
+    c.host = Up("host")
+    opened = []
+    c.opener = lambda url, environ=None: opened.append(url)
+    assert c.open_page("host") is None and opened == ["http://127.0.0.1:9/"]
+    c.options = app.Options(None, None, 60, environ={"CI": "1"})
+    assert c.open_page("host") == "CI is set: the page is not opened" and opened == ["http://127.0.0.1:9/"]
+    src = (ROOT / "raqib" / "app.py").read_text(encoding="ascii")
+    assert 'text="Open page", command=self.open_host_page' in src
+
+
+def test_tk_redo_f2_both_watches_running_switch_back_and_forth_every_control_present(tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        p = app.HostProbe(lambda: inv("linux"), CATALOG, 20.0)
+        c = app.Controller(app.Options(None, None, 60, environ={}), tray=None, make_session=TkSession,
+                           make_host=lambda: TkHost())
+        doctor = app.DoctorJob(str(tmp_path), checks=lambda x: (x, [], []))
+        window = app.Window(tkinter, root, c, str(tmp_path), doctor_job=lambda x: doctor, probe=lambda: p)
+        root.withdraw()
+        window.host_toggle()                       # the host watch runs
+        window.show_project()
+        assert window.screen == "first"
+        window.start()                             # the project watch runs
+        window.tick()
+        assert window.screen == "watching" and c.host_watching() and c.project_watching()
+        for _ in range(2):
+            window.host_tab.invoke()
+            window.tick()
+            assert window.screen == "host" and window.band.cget("text") == "WATCHING HOST"
+            assert window.host_button.cget("text") == "Stop host watch"
+            window.project_tab.invoke()
+            window.tick()
+            assert window.screen == "watching" and window.band.cget("text") == "WATCHING"
+            assert window.stop_button.winfo_manager() == "pack"
+        assert "running: host watch, project watch of" in window.head_note.cget("text")
+        window.show_first()
+        window.start()                             # refused: names the running watch, goes to its screen
+        assert window.screen == "watching" and "the project watch of" in window.detail.cget("text")
+        window.host_tab.invoke()
+        window.toggle_host_log()                   # F-6
+        c.host.log.write("raqib watch --host: round 1\n")
+        window.tick()
+        assert "round 1" in window.host_log_text.get("1.0", "end")
+        c.stop("test")
+        window.tick()
+        window.on_close()
+        assert window.closed
+    finally:
+        if window is None or not window.closed:
+            root.destroy()
