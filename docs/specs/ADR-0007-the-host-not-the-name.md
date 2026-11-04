@@ -289,3 +289,47 @@ C-2, C-4..C-9, C-11..C-13; two must-fixes remain. Verdict: REDO-2.
 - Table ledger for M7.2: two reviews, two REDOs; the Table's own misses:
   the ADR-0002 note broke the starting gate on the branch (D-5); the
   HANDOFF said nothing of exit codes, so Q-7/P10 had to be ruled (C-10).
+
+## Amendment F (the Table, 2026-11-04) - rulings on review 2026-11-04-M7.3.md (38a01e9)
+Builder's record: docs/review/2026-11-04-M7.3-questions.md (Q-1..Q-11).
+CI run 41762820973 for 38a01e9: six jobs success; on windows the Tk
+host-screen test and the three M6.4 Tk tests PASSED and the real tray came
+up. Verdict: REDO on P1 and P2; C-3..C-8 the Table's; the rest ruled or
+recorded. Scope widened to raqib/host.py (F-9) and raqib/ui.py (F-6 only
+if the Log pane needs it).
+- F-1 (P1, A3) The first look's level is not read from discover's result
+  word: it is incomplete whenever any source was unread or partly read or
+  any line could not be parsed, and its holes are listed in the body, with
+  their count; AGENT-DARK footprints are shown as their own lines. Tests
+  with an incomplete inventory and a dark one.
+- F-2 (P2, E3) Both screens are reachable at any time: a header with
+  "Host" and "Project" that switches between them while their watches run;
+  a refused Start names the running watch and switches to its screen.
+  Test: both watches running, switch back and forth, every control present.
+- F-3 (P3) The first look's holes persist (footer and app.log) until the
+  host watch's first round replaces them, and that round waits for the
+  look's reader: never two readers. Test.
+- F-4 (P4, A5) A host finding line cites (run, seq) as the project's
+  finding_line cites seqs.
+- F-5 (P5, A2) The kind word order is named, unknown, benign; a named tree
+  is never shown as benign.
+- F-6 (P6, Q-9) The host watch has a Log pane as the project watch has
+  (ADR-0006 A-5).
+- F-7 (P9) Colours follow the exit codes of C-10: 0 green, 1 red, 3 amber,
+  at open and at Stop alike. The first look is one round: green only when
+  it read records with no unread source and found no tree; "Not a
+  clearance" stays printed in every green state.
+- F-8 (P10) A refused host watch is exit 2 (a refusal, not a finding);
+  every watch's final report is appended to app.log, never replaced.
+- F-9 (P15, host.py) HostWatch.result: any unread or partly read source in
+  any round makes the result incomplete (3) unless a finding makes it 1;
+  a tree beside a partly read source is never CLEAN. Test.
+- F-10 (Q-1) The first look is written to ~/.raqib/host/look.json (latest,
+  with its holes and the reader's timing); it is not round 1, and history
+  begins at "Watch this host": accepted.
+- F-11 (Q-8) An "Open page" button on the host screen, as the project
+  screen has (ADR-0006 A-13).
+- F-12 Recorded: P7 (closed by F-10), P8 (closed by F-11), P11..P14; the
+  `ss` call on Linux stays named in the docstring and enforced by
+  test_discover's guard.
+- F-13 Every REDO change carries a test for the behaviour it adds (D-8).
