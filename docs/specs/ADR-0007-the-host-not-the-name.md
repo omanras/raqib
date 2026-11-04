@@ -1,6 +1,6 @@
 # ADR-0007 - The host, not the name: Raqib watches a machine, not an agent it was told about
 
-Status: proposed (the Table, on the commander's order, 2026-11-03).
+Status: accepted (M7.3, 2026-11-04; Amendment G). Proposed 2026-11-03 on the commander's order.
 Amendments appended, never edited in place.
 
 ## Problem
@@ -333,3 +333,35 @@ if the Log pane needs it).
   `ss` call on Linux stays named in the docstring and enforced by
   test_discover's guard.
 - F-13 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment G (the Table, 2026-11-04) - judgement on M7.3 (38a01e9 + afe7a7b)
+- F-1..F-11 MET as cited in the REDO section of
+  docs/review/2026-11-04-M7.3-questions.md; the Table read the F-1 delta
+  (probe_view: level from the look's own sources - unread, partly read,
+  parse problems, nothing read, late - code 3 when blind; dark lines) and
+  the F-9 delta (host.unread_sources; HostWatch.result incomplete on any
+  unread or partly read source unless a finding). Every REDO change names
+  its test (F-13).
+- CI, read from api.github.com: runs 41762820973 (38a01e9) and 41768524237
+  (afe7a7b), six jobs success each; on windows the two Tk host-screen
+  tests (the look, "Watch this host"; both watches running, switching
+  back and forth with every control present) PASSED, with the three M6.4
+  Tk tests and the real tray.
+- Gate on the branch: 2602 passed, 18 skipped. Scope clean (widened by F
+  to host.py). Two commits (G-8).
+- R-1 (the look turns amber on any discover `incomplete` reason, while
+  HostWatch.result counts unread or partly read sources only): accepted
+  for v1, recorded; the stricter look is the right side to err on. R-2 (a
+  look with trees and an unread source is amber, not red: it knocks
+  nothing) accepted. R-3 (round 1 waits for the look's reader; HostWatch's
+  own deadline still marks it late) accepted. R-4, R-5 accepted.
+- Decisions 1, 2 and 5 of this ADR are built: `raqib discover` live on
+  Windows; `raqib watch --host` with NEW-AGENT, NEW-AGENT-UNKNOWN and
+  AGENT-DARK-LIVE; the window opens on the host. Decisions 3 (M7.2b) and
+  4 (M7.4) remain. Status of this ADR: **accepted (M7.3, 2026-11-04)**;
+  the decision text stands; Amendments A-G are the record.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's order.
+- Table ledger for M7.3: one review, one REDO; the Table's miss: the
+  HANDOFF let the look's level come from discover's result word by not
+  saying where the level comes from (F-1); the exit-code colours were not
+  in the HANDOFF either (F-7).
