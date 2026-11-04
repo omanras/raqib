@@ -491,3 +491,58 @@ must live there.
   code, one review, one CI follow-up, one REDO; the Table's own misses:
   the first HANDOFF's E1(a) (Amendment H); the HANDOFF's "nothing else is
   written anywhere" without naming links and foreign traces (I-1, I-2).
+
+## Amendment K (the Table, 2026-11-04) - rulings on review 2026-11-04-M7.4.md (46bfbce, local)
+Builder's record: docs/review/2026-11-04-M7.4-questions.md (Q-1..Q-10).
+CI: not run - pushes held by the commander's order (Actions minutes
+exhausted, 2026-11-04); the local gate is the gate until he decides.
+Verdict: REDO on P1, P2, P3; the Table's choices K-4..K-9; the rest ruled.
+- K-1 (P1, A3) Every host line of an unknown tree is sent exactly once:
+  a call sends a bounded window (40 lines) and `suspect_upto` advances only
+  to the last seq actually sent; the next call continues from there; lines
+  never sent when the watch ends are a hole "N lines not judged by the
+  suspect layer" on the tree and in the report. Test with 120 lines.
+- K-2 (P2, A3) The suspect job reads the tree's own source file whatever
+  its source (host, os, hooks); a record shape the prompt builder cannot
+  send is a hole "source X not sendable" on the tree, once. Test per source.
+- K-3 (P3) Never two calls in flight: the backend call carries the 120 s
+  budget as its own timeout (urllib timeout; Ollama's 300 s does not
+  apply), a call still out blocks the next R-th round's call with a
+  "suspect-held" hole, and a thread is never left running unrecorded.
+  Test with a slow fake backend: one call in flight at most.
+- K-4 (P4) What leaves the machine carries no pid and no reversible hash:
+  the session id is an opaque per-run index of the tree; every hash sent
+  is salted with the run id (the tree's own file keeps its unsalted
+  hashes for the rules). Test on the prompt text.
+- K-5 (P5, Q-3) A talk beat is a connection NEW in this round, or an
+  established one whose bytes moved since the last round where bytes are
+  read; where no bytes are read, an established connection is at most one
+  talk (when first seen), and the evasion "repeated talks on one long
+  connection are unseen without bytes" is named in the YAML. The act's
+  time on Linux is the child's /proc/PID/stat starttime turned into wall
+  time (btime), so W is real; the round time only when stat is unreadable
+  (a note). Tests for both.
+- K-6 (P6) A HostConnection line is written on change only (new, closed,
+  bytes moved); the ring, not the file, carries the streak. Test: a
+  long-lived connection writes no line per round.
+- K-7 (P7, A5) Rhythm cites carry round and seq ("round 4 win-tcp:2").
+- K-8 (P8, Q-6) The bytes and start-time gaps are holes of a named class,
+  "blind spot", said once per run, counted apart, shown with "(does not
+  change the result)"; never exit 3 on their own.
+- K-9 (P9, Q-5) HOST-RHYTHM's negatives are the four synthetic cases; the
+  arrivals are not listed (they cannot fire). The YAML says the budget is
+  measured on synthetic fixtures only and that the field source - an IDE
+  that polls and builds for hours - is the commander's to measure (as the
+  act-root budget).
+- K-10 (Q-1, Q-4) The name HOST-RHYTHM stands (beside HOST-UNWATCHED). A
+  history tree that cycles under the watch fires: the cycle is live (C-4
+  of ADR-0007 F reasoning). Benign-image trees are judged by rhythm and
+  never sent to the suspect layer in v1: accepted, recorded.
+- K-11 (P16) The AST guard covers urllib, http.client, socket, ssl and
+  subprocess with curl/wget in every module; the suspect thread is the
+  one allowed caller.
+- K-12 (P17) The Table writes the ADR-0002 M7.4 note on the branch and
+  deletes the two dead set-asides in test_rules.py in the same commit.
+- K-13 (P18) The CI host step also asserts that check-rules lists
+  HOST-RHYTHM with its budget (the rule loaded), beside the zero count.
+- K-14 Every REDO change carries a test for the behaviour it adds (D-8).
