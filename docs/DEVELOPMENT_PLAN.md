@@ -71,5 +71,5 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.1 landed 2026-11-04 (merge 4f6b6a5): the live reader found GitHub's own runner agents on the windows job by shape alone
 - M7.2 `raqib watch --host`: continuous discovery, NEW-AGENT / NEW-AGENT-UNKNOWN / AGENT-DARK-LIVE (landed 2026-11-04, merge b3e5ba4; kinds 4 : 7 : 9)
 - M7.2b source attachment: hooks / os source / the host record as a source, per tree
-- M7.3 the window starts from the host: agents found, each with its band, one Start
+- M7.3 the window starts from the host (landed 2026-11-04, merge 843aa72; ADR-0007 accepted)
 - M7.4 rhythm (ADR-0004 layer 3) and suspicion on unknown trees
