@@ -14,21 +14,33 @@ evasion:
   - "a command capture cannot read in full is matched by command_head only (capture marks it command_unread: true; a trace written before M4.2 has neither field). Capture gives up on: a command that is not a string or is over 65536 characters; more than 64 programs; $(...) nested more than 8 deep; a program word that is not literal ($X, $(...), a backtick, a glob, a brace expansion, $'...') or not a plain name (or one that looks like a key); an expansion among the options of bash or sh, or a $ or a backtick in a bash -c string; for, case, select, function, coproc, [[ ]], (( )) and $(( )); a function definition or an array assignment; a process substitution <(...) or >(...); a backtick anywhere; a quote or $ inside ${...}; an unquoted here-document holding $( or a backtick, or one with no end line; a syntax error (unbalanced quotes or parentheses, a stray ) or ;;, a word after a subshell, a redirection with no target)"
   - "code given to a shell on stdin, by a here-document or a here-string, or in a script file (echo '...' | sh, bash <<EOF, bash <<< '...', bash x.sh, ./x.sh) records the shell or the script only: its code is not read (since M4.2b the script's basename is input_meta.command_scripts, ruling G-2)"
   - "mkfs.<type> after the first program, for a type not in the has_any list: command_programs is matched by exact name, command_head by pattern"
+  - "host source (M7.2b, tool HostChild): a child that lives only between two rounds of raqib watch --host is never seen (rm is short-lived: most are missed); a destructive program renamed is matched by its image name only; a deletion by the tree's own process (no child) is not seen"
 severity: medium
 # Cleaning build output with rm is routine, so some benign sessions fire.
 fp_budget: 0.25
-description: "A Bash command one of whose programs deletes or overwrites data: the first program (command_head, by pattern) or, when capture could read the whole command, any program in it (command_programs, M4.2: pipes, &&, ||, ;, $(...) and one level of bash -c or sh -c). Only program names are recorded, so `rm -rf ~` and `rm build.log` look alike: a hint that raises suspicion, never an acquittal (A2). Since M4.2b (ruling E-12) command_head skips leading redirections and their targets (`2>/dev/null rm x` has the head rm). Known hole: a line written before M4.2b kept the old head (null there), and one written before M4.2 has no command_programs to read it right, so such an old line is still missed."
-summary: "Bash runs {input_meta.command_head} at seq {seq} (programs {input_meta.command_programs})"
+description: "A Bash command one of whose programs deletes or overwrites data: the first program (command_head, by pattern) or, when capture could read the whole command, any program in it (command_programs, M4.2: pipes, &&, ||, ;, $(...) and one level of bash -c or sh -c). Only program names are recorded, so `rm -rf ~` and `rm build.log` look alike: a hint that raises suspicion, never an acquittal (A2). Since M4.2b (ruling E-12) command_head skips leading redirections and their targets (`2>/dev/null rm x` has the head rm). Known hole: a line written before M4.2b kept the old head (null there), and one written before M4.2 has no command_programs to read it right, so such an old line is still missed. Note (2026-11-04, M7.2b, ADR-0007 Amendment H-2): a line of the host source (source: host, tool HostChild) is judged by the image names of the tree's new children (input_meta.command_programs); the summary then names no command_head (-)."
+summary: "{tool} runs {input_meta.command_head} at seq {seq} (programs {input_meta.command_programs})"
 match:
   all:
     - {field: phase, eq: pre}
-    - {field: tool, eq: Bash}
     - any:
-        - field: input_meta.command_head
-          regex: "^(rm|rmdir|unlink|shred|srm|wipe|dd|truncate|wipefs|mkfs(\\..+)?|mkswap|fdisk|sfdisk|parted|blkdiscard)$"
-        # M4.2 (ruling D-3): every program of the command, guarded so a line
-        # without command_programs is judged by command_head alone.
         - all:
+            - {field: tool, eq: Bash}
+            - any:
+                - field: input_meta.command_head
+                  regex: "^(rm|rmdir|unlink|shred|srm|wipe|dd|truncate|wipefs|mkfs(\\..+)?|mkswap|fdisk|sfdisk|parted|blkdiscard)$"
+                # M4.2 (ruling D-3): every program of the command, guarded so a line
+                # without command_programs is judged by command_head alone.
+                - all:
+                    - {field: input_meta.command_programs, exists: true}
+                    - field: input_meta.command_programs
+                      has_any: [rm, rmdir, unlink, shred, srm, wipe, dd, truncate, wipefs, mkfs, mkfs.bfs, mkfs.btrfs, mkfs.cramfs, mkfs.exfat, mkfs.ext2, mkfs.ext3, mkfs.ext4, mkfs.f2fs, mkfs.fat, mkfs.hfsplus, mkfs.jfs, mkfs.minix, mkfs.msdos, mkfs.ntfs, mkfs.reiserfs, mkfs.udf, mkfs.vfat, mkfs.xfs, mkswap, fdisk, sfdisk, parted, blkdiscard]
+        # M7.2b (ADR-0007 Amendment H-2): a line of the host source (the host's
+        # own record of a discovered tree), tool HostChild, whose new children
+        # include a destructive program by image name. Never labelled Bash.
+        - all:
+            - {field: source, eq: host}
+            - {field: tool, eq: HostChild}
             - {field: input_meta.command_programs, exists: true}
             - field: input_meta.command_programs
               has_any: [rm, rmdir, unlink, shred, srm, wipe, dd, truncate, wipefs, mkfs, mkfs.bfs, mkfs.btrfs, mkfs.cramfs, mkfs.exfat, mkfs.ext2, mkfs.ext3, mkfs.ext4, mkfs.f2fs, mkfs.fat, mkfs.hfsplus, mkfs.jfs, mkfs.minix, mkfs.msdos, mkfs.ntfs, mkfs.reiserfs, mkfs.udf, mkfs.vfat, mkfs.xfs, mkswap, fdisk, sfdisk, parted, blkdiscard]
@@ -37,6 +49,8 @@ fixtures:
     - tests/fixtures/rules/DESTRUCT-CMD/positive-rm.json
     - tests/fixtures/rules/DESTRUCT-CMD/positive-mkfs.json
     - tests/fixtures/rules/DESTRUCT-CMD/positive-programs.json
+    - tests/fixtures/rules/DESTRUCT-CMD/positive-host-child.json
   negative:
     - tests/fixtures/rules/DESTRUCT-CMD/negative-safe.json
     - tests/fixtures/rules/DESTRUCT-CMD/negative-programs.json
+    - tests/fixtures/rules/DESTRUCT-CMD/negative-host-child.json

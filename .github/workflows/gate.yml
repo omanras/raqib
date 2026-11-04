@@ -219,6 +219,17 @@ jobs:
           state = json.load(open(record.group(1) + ".watch.json", encoding="ascii"))
           assert state["mode"] == "host" and state["finished"] and state["host"]["rounds"] == 2, state["host"]
           assert state["run"] == run, state["run"]
+          # M7.2b (ADR-0007 decision 3, H): every tree has a source or HOST-UNWATCHED. On the runners there is no
+          # Sysmon and no --attach-hooks, so every tree's source is the host's own record (source: host ...).
+          sources = re.findall(r"^      source: (\S+)", text, re.M)
+          assert len(sources) == len(trees), (len(sources), len(trees), text[-3000:])
+          unwatched = len(re.findall(r"^  \[high\] HOST-UNWATCHED ", text, re.M))
+          assert all(s in ("host", "os", "hooks", "none") for s in sources), sources
+          assert sources.count("none") <= unwatched, (sources, unwatched)
+          assert "HOOKS: not attached (no --attach-hooks): nothing is written into any project" in text
+          for t in state["host"]["trees"]:
+              assert t.get("source") in ("host", "os", "hooks", "none"), t
+          print("watch --host: every tree has a source or HOST-UNWATCHED: %s" % sources)
           print("watch --host: OK, %s tree(s), %s" % (seen.group(1), result.group(0)))
           EOF
           # C-8 / REDO-2 D-7: discover's candidates against the report's trees, over the pids in both; a candidate

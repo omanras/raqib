@@ -11,13 +11,14 @@ evasion:
   - "node fetch: the program is node"
   - "a wrapper in front (sudo, env, xargs, timeout, nohup, exec, eval, source, find -exec), a shell other than bash or sh (zsh -c, dash -c), or a bash -c inside a bash -c: the program it runs is an argument, and capture never records arguments"
   - "a network program not on the list (dig, nslookup, gh, docker pull)"
+  - "host source (M7.2b, tool HostChild): a child that lives only between two rounds of raqib watch --host is never seen; a network program renamed (a copy of curl called x) is matched by its image name only; a network call made by the tree's own process (a library, no child) is a HostConnection line, which this rule does not judge"
   - "a tool whose URL is in a field not named url: url_host is read from url only"
   - "a command capture cannot read in full is matched by command_head only (capture marks it command_unread: true; a trace written before M4.2 has neither field). Capture gives up on: a command that is not a string or is over 65536 characters; more than 64 programs; $(...) nested more than 8 deep; a program word that is not literal ($X, $(...), a backtick, a glob, a brace expansion, $'...') or not a plain name (or one that looks like a key); an expansion among the options of bash or sh, or a $ or a backtick in a bash -c string; for, case, select, function, coproc, [[ ]], (( )) and $(( )); a function definition or an array assignment; a process substitution <(...) or >(...); a backtick anywhere; a quote or $ inside ${...}; an unquoted here-document holding $( or a backtick, or one with no end line; a syntax error (unbalanced quotes or parentheses, a stray ) or ;;, a word after a subshell, a redirection with no target)"
   - "code given to a shell on stdin, by a here-document or a here-string, or in a script file (echo '...' | sh, bash <<EOF, bash <<< '...', bash x.sh, ./x.sh) records the shell or the script only: its code is not read (since M4.2b the script's basename is input_meta.command_scripts, ruling G-2)"
 severity: medium
 # Doc lookups and package fetches are routine, so some benign sessions fire.
 fp_budget: 0.25
-description: "A web tool, a URL in the tool input, or a Bash command one of whose programs talks to the network: the first program (command_head) or, when capture could read the whole command, any program in it (command_programs, M4.2). Network access can carry data out or bring code in. Since M4.2b (ruling E-12) command_head skips leading redirections and their targets (`2>/dev/null rm x` has the head rm). Known hole: a line written before M4.2b kept the old head (null there), and one written before M4.2 has no command_programs to read it right, so such an old line is still missed. Note (2026-11-03, M5.3, ADR-0003 Amendment C, C-5): a line of the os source (source: os) is not judged; the os source's network lines (tool net) are for a later rule."
+description: "A web tool, a URL in the tool input, or a Bash command one of whose programs talks to the network: the first program (command_head) or, when capture could read the whole command, any program in it (command_programs, M4.2). Network access can carry data out or bring code in. Since M4.2b (ruling E-12) command_head skips leading redirections and their targets (`2>/dev/null rm x` has the head rm). Known hole: a line written before M4.2b kept the old head (null there), and one written before M4.2 has no command_programs to read it right, so such an old line is still missed. Note (2026-11-03, M5.3, ADR-0003 Amendment C, C-5): a line of the os source (source: os) is not judged; the os source's network lines (tool net) are for a later rule. Note (2026-11-04, M7.2b, ADR-0007 Amendment H-2): a line of the host source (source: host) is judged when its tool is HostChild, by the image names of the tree's new children (input_meta.command_programs); its HostConnection and HostGone lines are not judged here."
 summary: "{tool} may reach the network at seq {seq} (host {input_meta.url_host}, program {input_meta.command_head}, programs {input_meta.command_programs})"
 match:
   all:
@@ -30,6 +31,15 @@ match:
     - any:
         - {field: tool, in: [WebFetch, WebSearch]}
         - {field: input_meta.url_host, exists: true}
+        # M7.2b (ADR-0007 Amendment H-2): a line of the host source (the host's
+        # own record of a discovered tree), tool HostChild, whose new children
+        # include a network program by image name. Never labelled Bash.
+        - all:
+            - {field: source, eq: host}
+            - {field: tool, eq: HostChild}
+            - {field: input_meta.command_programs, exists: true}
+            - field: input_meta.command_programs
+              has_any: [curl, wget, nc, ncat, netcat, socat, telnet, ssh, scp, sftp, rsync, ftp, aria2c, http, https, xh, lynx, links, w3m]
         - all:
             - {field: tool, eq: Bash}
             - any:
@@ -46,6 +56,8 @@ fixtures:
     - tests/fixtures/rules/NET-TOOL/positive-curl.json
     - tests/fixtures/rules/NET-TOOL/positive-webfetch.json
     - tests/fixtures/rules/NET-TOOL/positive-programs.json
+    - tests/fixtures/rules/NET-TOOL/positive-host-child.json
   negative:
     - tests/fixtures/rules/NET-TOOL/negative-local.json
     - tests/fixtures/rules/NET-TOOL/negative-programs.json
+    - tests/fixtures/rules/NET-TOOL/negative-host-child.json

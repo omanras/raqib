@@ -388,7 +388,8 @@ def test_e3_unknown_sources_are_reported_and_strict_lines_accept_the_three():
     assert len(records) == 5
     assert problems == [{"line": 4, "reason": "unknown source 'x'"}, {"line": 5, "reason": "unknown source 5"}]
     assert [trace.source_of(r) for r in records] == ["hook", "proxy", "os", "x", "5"]
-    assert trace.SOURCES == ("hook", "proxy", "os") and trace.DEFAULT_SOURCE == "hook"
+    # M7.2b (ADR-0007 H-2): "host", the host's own record of a discovered tree
+    assert trace.SOURCES == ("hook", "proxy", "os", "host") and trace.DEFAULT_SOURCE == "hook"
     for value in trace.SOURCES:
         assert trace.strict_problem(dict(base, source=value)) is None
     assert trace.strict_problem(base) is None

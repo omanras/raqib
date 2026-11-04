@@ -20,6 +20,16 @@ inventory left out of each process file: the host before those trees
 started. ["benign/X:before", "benign/X"] is a benign desktop whose trees
 arrive after round 1, the negatives C-1b asks for, made for every benign
 discover fixture with process records (BENIGN).
+
+M7.2b (ADR-0007 decision 3, Amendment H): HOST-UNWATCHED's fixtures are
+host lines too, of a watch whose sources directory cannot be written (a
+file stands where ~/.raqib/host/sources should be: NO_SOURCES), so no
+tree has a source. SOURCE_SCENARIOS are the fixtures of NET-TOOL and
+DESTRUCT-CMD over lines of the host source: every line of every per-tree
+file under ~/.raqib/host/sources/ after the rounds, in pid order (the trees'
+HostChild, HostConnection and HostGone lines). "NAME:rm" is NAME with every
+"curl" of its process file written "rm" (SYNTHETIC, made here: no discover
+fixture holds a destructive child).
 """
 import io
 import json
@@ -66,10 +76,31 @@ SCENARIOS = {
     "AGENT-DARK-LIVE/negative-dark-then-linked.json": ["kimi-gone", "kimi-gone", "kimi-gone", "kimi/one-sample"],
 }
 SCENARIOS.update(ARRIVALS)
+NO_SOURCES = {
+    "HOST-UNWATCHED/positive-no-source-two-rounds.json": ["linux", "linux"],
+    "HOST-UNWATCHED/negative-one-round.json": ["linux"],
+}
+SCENARIOS.update(NO_SOURCES)
+SCENARIOS["HOST-UNWATCHED/negative-host-source.json"] = ["linux", "linux"]
+RM = ":rm"
+SOURCE_SCENARIOS = {
+    "NET-TOOL/positive-host-child.json": ["benign/linux-desktop", "linux-agent"],
+    "NET-TOOL/negative-host-child.json": ["benign/windows-desktop", "windows", "linux-agent" + RM],
+    "DESTRUCT-CMD/positive-host-child.json": ["benign/linux-desktop", "linux-agent" + RM],
+    "DESTRUCT-CMD/negative-host-child.json": ["kimi/one-sample", "kimi/two-samples", "kimi-gone", "linux-agent"],
+}
 OUT = os.path.join(ROOT, "tests", "fixtures", "rules")
 
 
 def inventory(name, catalog):
+    if name.endswith(RM):
+        base = name[:-len(RM)]
+        texts, holes = discover.read_dir(os.path.join(DISCOVER, *base.split("/")))
+        for key in sorted(texts):
+            if key.rsplit("-", 1)[0] in PROCESS_KINDS or key in PROCESS_KINDS:
+                label, text, error = texts[key]
+                texts[key] = (label + " (curl written rm: make.py, SYNTHETIC)", text.replace("curl", "rm"), error)
+        return discover.run(texts, catalog, holes=holes, run=host_record(os.path.join(DISCOVER, *base.split("/"))))
     if name.endswith(BEFORE):
         base = name[:-len(BEFORE)]
         full = inventory(base, catalog)
@@ -158,19 +189,38 @@ class Clock:
         return self.t
 
 
-def rounds_of(names, catalog, rules, home):
-    """The round records of a HostWatch fed these inventories in order."""
+def rounds_of(names, catalog, rules, home, sources=True):
+    """The round records of a HostWatch fed these inventories in order.
+    sources False: a file stands where the sources directory would be, so
+    no source can be attached (HOST-UNWATCHED's fixtures). The Sysmon check
+    says no (platform "fixture"): every tree gets the host source."""
     invs = [inventory(n, catalog) for n in names]
+    if not sources:
+        os.makedirs(os.path.join(home, ".raqib", "host"), exist_ok=True)
+        with open(os.path.join(home, ".raqib", "host", host.SOURCES_DIR), "w") as f:
+            f.write("not a directory: make.py (NO_SOURCES)\n")
     feed = iter(invs)
     clock = Clock()
     notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
     watch = host.HostWatch(lambda: next(feed), catalog, rules, notifier, every=10, out=None, err=io.StringIO(),
                            clock=clock, wall=lambda: 1793700000.0 + clock.t, home=home, platform="fixture",
-                           run="fixture-run")   # C-2: a fixed run id, so the fixtures are what make.py makes
+                           run="fixture-run",   # C-2: a fixed run id, so the fixtures are what make.py makes
+                           sysmon=lambda: (False, "fixture: no Sysmon"))
     for _ in names:
         watch.tick(wait=30)
         clock.t += 10
+    watch.finish()
     return watch
+
+
+def source_lines(watch):
+    """Every line of every per-tree source file of a watch, in pid order."""
+    out = []
+    names = sorted(os.listdir(watch.sources_dir), key=lambda n: int(n.rsplit("-", 1)[1].split(".")[0]))
+    for name in names:
+        with open(os.path.join(watch.sources_dir, name), encoding="ascii") as f:
+            out += [json.loads(line) for line in f if line.strip()]
+    return out
 
 
 def build():
@@ -178,14 +228,14 @@ def build():
     rules = engine.load_catalog(os.path.join(ROOT, "raqib", "rules", "catalog"))
     out = {}
     with tempfile.TemporaryDirectory() as home:
-        for name, names in SCENARIOS.items():
-            watch = rounds_of(names, catalog, rules, os.path.join(home, name.replace("/", "-")))
-            last = watch.round_lines[-1]
-            lines = last["lines"]
+        for name, names in list(SCENARIOS.items()) + list(SOURCE_SCENARIOS.items()):
+            watch = rounds_of(names, catalog, rules, os.path.join(home, name.replace("/", "-")),
+                              sources=name not in NO_SOURCES)
+            lines = source_lines(watch) if name in SOURCE_SCENARIOS else watch.round_lines[-1]["lines"]
             rule_id, base = name.split("/")
             doc = {"lines": lines}
             if base.startswith("positive-"):   # what this fixture's own rule must cite
-                found, _ = engine.evaluate([r for r in watch.rules if r.id == rule_id], lines)
+                found, _ = engine.evaluate([r for r in rules if r.id == rule_id], lines)
                 doc["expect_seq"] = sorted({s for f in found for s in f["cited_seq"]})
             out[name] = json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
     return out

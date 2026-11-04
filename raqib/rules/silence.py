@@ -34,6 +34,14 @@ os-sysmon writes the time of each act, so a pause of the tree is not a
 capture gap, and a rerun appends events with earlier times. Known hole: an
 idle os source is not judged. The other three rules judge os sessions.
 
+Lines of the host source (`source: "host"`; M7.2b, ADR-0007 Amendment
+H-2) are not judged by any silence rule: they are written by raqib/host.py
+once per round of the host watch, from the host's own record, so a pause
+between them is the round's interval and they have no pre/post pairs or
+session boundaries. The host's own quiet is the rounds' business (a reader
+not back, a round not read: HOST-HOLE, M7.2 E4). This is the one exemption
+by source; every other line is judged as before.
+
 Each rule declares its kind in code (ADR-0002), in RULE_KINDS, and every
 finding carries it. All five are demands: each requires evidence of an act
 (a line within the gap, a close, the other half of a call, a seq and ts that
@@ -66,6 +74,7 @@ RULE_KINDS = {  # ADR-0002: rule id -> kind; a rule not listed here cannot emit
 }
 WORK = ("pre", "post", "stop")  # SILENCE-EMPTY: lines that show a session did something
 OS_SOURCE = "os"  # sessions of this source only are not judged by GAP and ORDER (M5.3 C-5)
+HOST_SOURCE = "host"  # lines of this source are not judged by any silence rule (M7.2b, ADR-0007 H-2)
 
 
 def gap_seconds_from(environ):
@@ -95,7 +104,7 @@ def findings(lines, gap_seconds=DEFAULT_GAP_SECONDS):
     check_gap_seconds(gap_seconds)
     sessions = {}
     for rec in lines:
-        if is_record(rec):
+        if is_record(rec) and source_of(rec) != HOST_SOURCE:   # H-2: the one exemption by source
             sessions.setdefault(rec["session_id"], []).append(rec)
     out = []
     for session_id, recs in sessions.items():

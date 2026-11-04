@@ -298,8 +298,12 @@ class Options:
 
     def __init__(self, evaluator, rules, gap_seconds, log=None, no_notify=False, port=None, refresh=None,
                  environ=None, home=None, log_project=None, every=None, catalog=None, host_reader=None,
-                 host_port=None):
+                 host_port=None, attach_hooks=False, host_kw=None):
         self.evaluator = evaluator
+        # M7.2b (ADR-0007 H-1): the window's checkbox "attach hooks to Claude Code projects", off by default; only
+        # when it is ticked does a host watch write into a project (the hook settings), as --attach-hooks does.
+        self.attach_hooks = bool(attach_hooks)
+        self.host_kw = dict(host_kw or {})   # tests: the HostWatch's sysmon / installer / os_follow fakes
         self.every = hostmod.EVERY_DEFAULT if every is None else every   # M7.3: --every T, the host rounds
         self.catalog = catalog           # M7.3: discover's catalog (None: loaded when the host is read)
         self.host_reader = host_reader   # M7.3: tests give a fake reader; None is the live one
@@ -483,7 +487,8 @@ class Session:
 
 # --- the host screen (M7.3, ADR-0007 decision 5) -----------------------------------------------
 
-HOST_COLUMNS = (("image", 22), ("pid", 8), ("named", 22), ("first seen", 25), ("acts", 5), ("endpoints", 0))
+HOST_COLUMNS = (("image", 22), ("pid", 8), ("named", 22), ("first seen", 25), ("acts", 5), ("source", 24),
+                ("findings", 20), ("endpoints", 0))   # M7.2b E4: the source column and its findings by severity
 NOT_CLEARANCE = "Not a clearance."
 
 
@@ -524,8 +529,21 @@ def host_rows(trees, first_seen=None):
             continue
         rows.append((_safe(t.get("image") or "?"), _safe(t.get("pid")), tree_kind(t),
                      _safe(t.get("first_seen") or first_seen or "-"), _safe(t.get("acts", 0)),
+                     _safe(source_word(t)), _safe(ui.severity_counts(t.get("source_findings"))),
                      _safe(", ".join(str(e) for e in t.get("endpoints") or ()) or "-")))
     return rows
+
+
+def source_word(tree):
+    """M7.2b E4: the source column: os / host / hooks: project P / none, or
+    "-" where no source is attached yet (the look at open attaches none)."""
+    src = tree.get("source")
+    if src is None:
+        return "-"
+    if src == "hooks":
+        return "hooks: project %s" % os.path.basename(str(tree.get("source_project") or "").rstrip("/\\")) \
+            if tree.get("source_project") else "hooks"
+    return str(src)
 
 
 def host_table(rows):
@@ -541,6 +559,7 @@ def host_table(rows):
     return [fmt([name for name, _ in HOST_COLUMNS])] + [fmt(r) for r in rows]
 
 
+ATTACH_TEXT = "attach hooks to Claude Code projects"   # M7.2b (ADR-0007 H-1): the checkbox, off by default
 CODE_LEVELS = {0: "clean", 1: "alarm", 3: "incomplete"}   # F-7: C-10's exit codes; 0 green, 1 red, 3 amber
 
 
@@ -818,7 +837,7 @@ class HostSession(Session):
         o = self.options
         return self.starter(o.host_catalog(), o.rules, every=o.every, no_open=True, no_notify=o.no_notify,
                             port=o.host_port, out=self.log, err=self.log, environ=o.environ, home=o.home,
-                            refresh=o.refresh, reader=self.reader())
+                            refresh=o.refresh, reader=self.reader(), attach_hooks=o.attach_hooks, **o.host_kw)
 
     def _loop(self, running):
         return hostmod.loop(running, self.stop_flag)
@@ -1349,6 +1368,10 @@ class Window:
         tk.Button(row, text="Watch a project", command=self.show_project).pack(side="left", padx=6)
         self.checks_button = tk.Button(row, text=checks_state(None)[0], command=self.toggle_checks)
         self.checks_button.pack(side="left")
+        # M7.2b (ADR-0007 H-1): off by default; read when "Watch this host" starts a watch
+        self.attach_var = tk.BooleanVar(value=self.c.options.attach_hooks)
+        self.attach_box = tk.Checkbutton(row, text=ATTACH_TEXT, variable=self.attach_var)
+        self.attach_box.pack(side="left", padx=6)
         self.host_url = tk.StringVar(value="-")
         tk.Entry(row, textvariable=self.host_url, state="readonly").pack(side="left", fill="x", expand=True, padx=6)
         tk.Button(row, text="Open page", command=self.open_host_page).pack(side="left", padx=(0, 6))   # F-11
@@ -1460,6 +1483,7 @@ class Window:
         if self.c.host_watching():
             self.c.stop_host("Stop in the window")
             return
+        self.c.options.attach_hooks = bool(self.attach_var.get())   # H-1: the box's word for this watch
         self.c.host_note = self.c.start_host()
         self.show_host()
 

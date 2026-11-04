@@ -1,0 +1,404 @@
+{
+ "expect_seq": [
+  1
+ ],
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "bash",
+      "pid": 1610
+     },
+     {
+      "image": "curl",
+      "pid": 1620
+     }
+    ],
+    "cites": [
+     {
+      "line": 10,
+      "src": "proc",
+      "text_sha256": "06ae2528d7fc14dbca1a6bb1c1b8f0d4e29c9463896c9e5ac39c073f6f695296"
+     },
+     {
+      "line": 11,
+      "src": "proc",
+      "text_sha256": "6fa37fbc54c9184cc6f37b7adf43014ef8497a50645e59671918ecc45e77346c"
+     }
+    ],
+    "command_programs": [
+     "bash",
+     "curl"
+    ],
+    "pid": 1600,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)",
+    "tree_seq": 4
+   },
+   "input_sha256": "0683da8f2468566cebc71ba8b2dd5c5c1e9591c31e89dee1f7803d837d71b64a",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-1600",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "idea",
+      "pid": 1800
+     },
+     {
+      "image": "fsnotifier",
+      "pid": 1810
+     },
+     {
+      "image": "bash",
+      "pid": 1820
+     },
+     {
+      "image": "make",
+      "pid": 1825
+     },
+     {
+      "image": "cc",
+      "pid": 1830
+     },
+     {
+      "image": "cc",
+      "pid": 1831
+     }
+    ],
+    "cites": [
+     {
+      "line": 14,
+      "src": "proc",
+      "text_sha256": "7812026a97ec9d6bac84fc1a8a38a490401c943931559c68e915e445661def53"
+     },
+     {
+      "line": 44,
+      "src": "proc",
+      "text_sha256": "7812026a97ec9d6bac84fc1a8a38a490401c943931559c68e915e445661def53"
+     },
+     {
+      "line": 15,
+      "src": "proc",
+      "text_sha256": "82d9fba4ac1065ca76a7a9a5ebdcea3f58b2572a33c7517049f1b6379d96ed12"
+     },
+     {
+      "line": 45,
+      "src": "proc",
+      "text_sha256": "82d9fba4ac1065ca76a7a9a5ebdcea3f58b2572a33c7517049f1b6379d96ed12"
+     },
+     {
+      "line": 16,
+      "src": "proc",
+      "text_sha256": "f7af999b9c5b1c182e02580ad6382749a3308491267630f683ee299a06004a60"
+     },
+     {
+      "line": 46,
+      "src": "proc",
+      "text_sha256": "f7af999b9c5b1c182e02580ad6382749a3308491267630f683ee299a06004a60"
+     }
+    ],
+    "command_programs": [
+     "idea",
+     "fsnotifier",
+     "bash",
+     "make",
+     "cc"
+    ],
+    "pid": 1700,
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "tree_seq": 1
+   },
+   "input_sha256": "8dc5946cb4e46e1cfea8385cd150b7a244b08d9591e7c76e0f46fecda45ca0aa",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-1700",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 9,
+      "src": "proc-net",
+      "text_sha256": "2f1f75289b64bca44323f78dd6470e79162fe0e5c68fc51d50ce4f478943095d"
+     },
+     {
+      "line": 19,
+      "src": "proc-net",
+      "text_sha256": "2f1f75289b64bca44323f78dd6470e79162fe0e5c68fc51d50ce4f478943095d"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 1700,
+    "remote": "198.51.100.60:443",
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "tree_seq": 1
+   },
+   "input_sha256": "4fbf6f66ecc2856f4ba044726b957a98c41892b7fd3991e424666b079a40e546",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-1700",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 1700,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host-1700",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "git",
+      "pid": 2045
+     }
+    ],
+    "cites": [
+     {
+      "line": 24,
+      "src": "proc",
+      "text_sha256": "82ccceeda66dea0bcfa1bf37594fd10b1a3a67c90b7bcbe1d7782f8b82505329"
+     },
+     {
+      "line": 54,
+      "src": "proc",
+      "text_sha256": "61f9f271d56d73bc23a7e92125a2c3e0964c654801885bf3261595bb7f482d23"
+     }
+    ],
+    "command_programs": [
+     "git"
+    ],
+    "pid": 2040,
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "tree_seq": 2
+   },
+   "input_sha256": "7d5e2e6a9d76940258e3c7a477545f621b12ae76c328bc47e530b416544fcb3c",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-2040",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 6,
+      "src": "proc-net",
+      "text_sha256": "04eab66e457959b8f491598539b5861c35520ac0028e92708b458e5a1dfc5d49"
+     },
+     {
+      "line": 16,
+      "src": "proc-net",
+      "text_sha256": "04eab66e457959b8f491598539b5861c35520ac0028e92708b458e5a1dfc5d49"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 2040,
+    "remote": "198.51.100.51:443",
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "tree_seq": 2
+   },
+   "input_sha256": "1c65ada4772f04a09fbcd827ac8d50f41d6e5698254c7f2cda5fc8f57c21234c",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-2040",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 2040,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host-2040",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "firefox",
+      "pid": 3010
+     },
+     {
+      "image": "firefox",
+      "pid": 3020
+     },
+     {
+      "image": "firefox",
+      "pid": 3030
+     }
+    ],
+    "cites": [
+     {
+      "line": 30,
+      "src": "proc",
+      "text_sha256": "0cbd4dbb25e12ad41d1d449062d4b09d643133b6348799a9077984468c3d02ab"
+     },
+     {
+      "line": 60,
+      "src": "proc",
+      "text_sha256": "0cbd4dbb25e12ad41d1d449062d4b09d643133b6348799a9077984468c3d02ab"
+     },
+     {
+      "line": 31,
+      "src": "proc",
+      "text_sha256": "de3c17dae4043a576d62ac0ff4092e5ef820e2dbc0f0fa315ebdaaa89015e36b"
+     },
+     {
+      "line": 61,
+      "src": "proc",
+      "text_sha256": "de3c17dae4043a576d62ac0ff4092e5ef820e2dbc0f0fa315ebdaaa89015e36b"
+     },
+     {
+      "line": 32,
+      "src": "proc",
+      "text_sha256": "8e1fd5dcf4ac0d5f37ca7bf6afddc9a4cc1026ec1b69dbd562460e3bb2823b7d"
+     },
+     {
+      "line": 62,
+      "src": "proc",
+      "text_sha256": "d35256105c2260f1969888e5ad9e21ad2afaa83d3ff41094b2248adb6dad7a7a"
+     }
+    ],
+    "command_programs": [
+     "firefox"
+    ],
+    "pid": 3000,
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "tree_seq": 3
+   },
+   "input_sha256": "e95364ed086757c349e54d10737dcd56265d1d4617eaed31505e7332a42b953f",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-3000",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 7,
+      "src": "proc-net",
+      "text_sha256": "37a8bffe51c2930193ca7a4d47fda5e6dcd3e2f39efda2d5052a886bf7ed63c4"
+     },
+     {
+      "line": 17,
+      "src": "proc-net",
+      "text_sha256": "37a8bffe51c2930193ca7a4d47fda5e6dcd3e2f39efda2d5052a886bf7ed63c4"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 3000,
+    "remote": "198.51.100.90:443",
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "tree_seq": 3
+   },
+   "input_sha256": "db22812fd2c9ccd7f7d3709e9bfbb52b1403b3c2d4b2625e83d854de35466fb8",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-3000",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 8,
+      "src": "proc-net",
+      "text_sha256": "dab45b1196b4af05d763fa74d1ce20a285c63e6076a02571d4f10a5f20d9a30d"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 3000,
+    "remote": "198.51.100.91:443",
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "tree_seq": 3
+   },
+   "input_sha256": "a0f274b9fd95b7062b0e71bb48321ad36a280acd165f7042fc45c4243ec59c62",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host-3000",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 3000,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "host-3000",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:10.000Z"
+  }
+ ]
+}

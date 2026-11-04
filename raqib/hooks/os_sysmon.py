@@ -18,6 +18,16 @@ Reading, read-only and offline:
 The XML is read by discover.sysmon_events, the one Sysmon reader (C-6).
 One run reads once and exits; it does not follow the channel.
 
+API (M7.2b, ADR-0007 decision 3 as narrowed by Amendment H): follow(root,
+log, stop) is run() again and again, live, every `every` seconds, until
+`stop` (a threading.Event, or anything with wait(seconds) -> bool) is set;
+it is how `raqib watch --host` attaches the os source to a discovered
+tree, in a thread of its own. Each pass appends only the events of the tree
+whose EventRecordID is above the highest one an earlier pass of the same
+follow appended (build's after_record), so a pass does not append the
+channel's history again; each silence detail is written once per follow,
+not once per pass. It reads, and writes nothing but the trace (A4).
+
 The tree (D-5): the root is the process --root PID:GUID names, or, with no
 GUID, the LATEST process that held pid PID in the export (the one whose
 event 1 is latest; a holder with no event 1 started before the export).
@@ -198,8 +208,13 @@ def _same_guid(a, b):
     return a is not None and b is not None and a.strip("{}").lower() == b.strip("{}").lower()
 
 
-def build(text, root, guid=None, cwd=None, start_seq=0):
-    """(trace lines, silence details) for an export's text. Pure."""
+def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=None):
+    """(trace lines, silence details) for an export's text. Pure.
+    API (M7.2b): after_record, when given, keeps only the tree's events
+    whose EventRecordID is above it (an event with none was written by the
+    pass that had after_record None); info, a dict, receives "top_record",
+    the highest EventRecordID of the tree's events in the export (None when
+    none has one). Without them build is what it was."""
     silences = []
     problems = []
     events = []
@@ -224,6 +239,13 @@ def build(text, root, guid=None, cwd=None, start_seq=0):
     if not found:
         return [], silences
     kept = _tree(events, root, root_guid)
+    if info is not None:
+        ids = [e["record_id"] for e, _, _ in kept if e["record_id"] is not None]
+        info["top_record"] = max(ids) if ids else None
+    if after_record is not None:
+        kept = [k for k in kept if k[0]["record_id"] is not None and k[0]["record_id"] > after_record]
+    if not kept:
+        return [], silences
     if cwd is None:   # D-4: else no cwd at all, never os-sysmon's own
         starts = [e["data"].get("CurrentDirectory") for e, depth, _ in kept if e["event"] == 1 and depth == 0]
         cwd = next((c for c in starts if c), None)
@@ -457,3 +479,54 @@ def run(root, log, from_path=None, cwd=None, out=None, err=None, live=None, nt=N
     out.write("raqib os-sysmon: %d events of the tree under pid %d %s -> %s (session %s); %d RAQIB-SILENCE"
               " line(s)\n" % (events, pid, where, log, session_id(pid) if lines else "none", len(marked)))
     return 1 if marked else 0
+
+
+FOLLOW_EVERY = 10.0
+
+
+def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, live=None, nt=None, on_pass=None,
+           after_record=None):
+    """API (M7.2b): the os source followed live until stop is set (see the
+    module docstring). Returns the number of passes. Raises UsageError as
+    run() does (a bad root or cwd, off Windows without a `live` reader, a
+    trace it cannot read or write); the caller's thread turns that into a
+    hole. Every pass that could not read the channel writes its reason once
+    as a RAQIB-SILENCE line (A3). on_pass(n, top), when given, is called
+    after each pass has appended what it read, with the highest
+    EventRecordID appended so far; after_record starts a follow there (a
+    follow of the same tree resumed: the events already appended are not
+    appended again)."""
+    out = sys.stdout if out is None else out
+    err = sys.stderr if err is None else err
+    nt = (os.name == "nt") if nt is None else nt
+    pid, guid = parse_root(root)
+    if cwd is not None:
+        check_cwd(cwd)
+    if live is None and not nt:
+        raise UsageError("os-sysmon follows the live Sysmon channel on Windows only")
+    top, said, passes = after_record, set(), 0
+    while True:
+        passes += 1
+        text, failed = (live or read_live)()
+        if failed is not None:
+            lines, silences = [], [failed]
+        else:
+            info = {}
+            lines, silences = build(text, pid, guid=guid, cwd=cwd, start_seq=last_seq(log, session_id(pid)),
+                                    after_record=top, info=info)
+            if info.get("top_record") is not None:
+                top = info["top_record"] if top is None else max(top, info["top_record"])
+        fresh = [s for s in silences if s not in said]
+        said.update(fresh)
+        marked = [silence_line(pid, s) for s in fresh]
+        for line in marked:
+            err.write(line + "\n")
+        err.flush()
+        if marked or lines:
+            append(log, marked + lines)
+        out.write("raqib os-sysmon: follow pass %d: %d events of the tree under pid %d -> %s; %d RAQIB-SILENCE"
+                  " line(s)\n" % (passes, max(0, (len(lines) - 2) // 2), pid, log, len(marked)))
+        if on_pass is not None:
+            on_pass(passes, top)
+        if stop.wait(every):
+            return passes

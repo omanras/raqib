@@ -1136,6 +1136,6 @@ def test_e4_the_threat_model_names_what_the_anchor_sees_and_every_hole():
 
 def test_e4_the_readme_names_the_tree_anchors_and_their_gaps():
     flat = " ".join(README.split())
-    assert "Twenty rules turn the trace into findings" in flat   # M7.2 REDO C-1c
+    assert "Twenty-one rules turn the trace into findings" in flat   # M7.2 REDO C-1c; M7.2b: HOST-UNWATCHED
     assert "the local git state, read from the files under `.git` (no `git` is run)" in flat
     assert "for the tree anchors, what moved the head or the index" in flat
