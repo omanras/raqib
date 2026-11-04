@@ -7,10 +7,9 @@ rulings recorded as ADR-0007 Amendments A-L. Gate on main: 2721 passed,
 19 skipped; kinds 4 : 7 : 11. HANDOFF.md: none pending.
 
 Pending, in order:
-1. CI for d30f6da: the first run to see M7.4 and its REDO on windows. Read
-   the six jobs from api.github.com (runs?head_sha=d30f6da). If a windows
-   job fails, the pattern so far has been windows-only test shapes (Tk
-   fakes, path separators): a follow-up commit on a branch, then merge.
+1. CI for d30f6da: DONE - run 41824346486, six jobs success (read by the
+   Table from api.github.com at 16:10): M7.4 and its REDO are verified on
+   windows. Phase 7's tree is green on both platforms.
 2. The commander's field test (ADR-0007 Amendment L): Windows + Kimi,
    `raqib-app` on the host, NEW-AGENT / NEW-AGENT-UNKNOWN when Kimi starts,
    HOST-RHYTHM over a session, `--suspect ollama` if present; Ubuntu with
