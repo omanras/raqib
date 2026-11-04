@@ -1,30 +1,30 @@
-# HANDOFF — M7.2  (phase 7: the host watch - NEW-AGENT, AGENT-DARK live, ADR-0007 decision 2)
+# HANDOFF — M7.3  (phase 7: the window starts from the host, ADR-0007 decision 5)
 
-Task: `raqib watch --host` watches the machine: discovery repeats while it runs; a tree that
-starts talking and acting is NEW-AGENT with a knock; a footprint with no live tree is
-AGENT-DARK live; "no agent seen" is said each round, never by silence.
+Task: `raqib app` opens on the machine, not on a project: the agents found on this host (the
+M7.2 rounds), one Start that watches the host, the knocks from the window; a project watch stays.
 
 Scope:
-  raqib/host.py (new), raqib/discover.py (API only), raqib/watch.py (host mode), raqib/notify.py,
-  raqib/ui.py (host section), raqib/cli.py, raqib/rules/catalog/, .github/workflows/gate.yml, tests/, README.md, docs/review/
+  raqib/app.py, raqib/host.py (API only), raqib/tray.py (tooltip only), raqib/cli.py (app options),
+  raqib/ui.py (host page from app), tests/, README.md, docs/review/
 
 Exit criteria:
-- E1 `raqib watch --host [--every T] [--window S] [--rounds N]` (T default 10 s): a round
-     = one live discover (collect_live / hostwin), read-only; inventory kept in
-     `~/.raqib/host/inventory.json`, deltas in `~/.raqib/host/rounds.jsonl` (A5: round,
-     sample, record cited). Ctrl-C/Stop/--rounds end it with a final report.
-- E2 NEW-AGENT (anchor, high): a candidate tree absent from the previous round (root
-     pid + image + first seen), "named" when the catalog matched, else "unknown"; an
-     act-root that becomes a candidate too. Knocks once per tree (A-4 text: rule, image
-     name, pid). Trees present in round 1 are history: listed, not knocked (B-3).
-- E3 AGENT-DARK live (medium): a footprint with no linked tree for 3 rounds knocks once;
-     clears with a note when a tree links. Both rules in the catalog with fixtures.
-- E4 A round with no candidate prints one line (round, records read, holes); a reader not back within 2 x T is a hole and a knock (A3).
-- E5 The page gains a HOST section (band: trees now, new, dark, last round; trees with evidence) from watch's memory; registry row "host"; watch.json extended.
-- E6 Tests: rounds on fake inventories (new, unknown, gone-and-back, dark then linked,
-     reader silent); knocks with the fake runner; the report. CI ubuntu + windows run
-     `raqib watch --host --every 1 --rounds 2 --no-notify` and assert the report lists
-     the runner's trees. Six jobs green. README: three lines.
-Not in scope: source attachment (M7.2b), the window's host screen (M7.3), rhythm (M7.4).
-Commit: `landed: M7.2 the host watch` or `STOP: M7.2 <reason>`.
+- E1 First screen = HOST: the doctor lines folded under a "Checks" toggle (MISSING still
+     shown open); a first discover round at open (the reader in a thread, the band says
+     "reading the host..."; a reader late = the hole in the band); a table of trees: image,
+     pid, named / unknown / benign, first seen, acts, endpoints (no command lines); "no agent
+     seen (N records, M holes). Not a clearance." when empty; one button "Watch this host".
+- E2 Watching the host: the same HostWatch as `raqib watch --host` in a worker (every 10 s;
+     --every from the CLI); the table updates per round; a NEW-AGENT / AGENT-DARK-LIVE line
+     and its knock (the same Notifier path as the project watch; own rate-limit ids); the
+     band: WATCHING HOST / READER LATE / HOST READER FAILED / NOTHING READ; Stop ends the
+     host watch with its final report in the window; close as M6.4; one host watch per home (C-2's refusal = a hole shown).
+- E3 Project mode: a "Watch a project" button opens the M6.4 project screen (unchanged); host and
+     project watches may run together; the tray tooltip says "Raqib: N trees, K new".
+- E4 Nothing in the window signals, attaches to, or writes into any process or project (A4); writes stay under ~/.raqib.
+- E5 Tests: the host screen's state->text with fake rounds (empty, trees, new tree, late
+     reader, refusal); the worker start/stop with a fake HostWatch; Tk tests of the host
+     screen skip without a display and run on windows CI; `raqib app --help` in the install
+     job still passes. README: the window section says it opens on the host (two lines).
+Not in scope: source attachment (M7.2b), rhythm (M7.4), macOS, autostart, page controls.
+Commit: `landed: M7.3 the window starts from the host` or `STOP: M7.3 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
