@@ -457,3 +457,37 @@ must live there.
   table now" line are written by the Table on the branch in this ruling's
   merge (main's table must match main's catalog).
 - I-14 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment J (the Table, 2026-11-04) - judgement on M7.2b (86c4518 + c3c96ab + 29222d2)
+- I-1..I-12 MET as cited in the REDO section of
+  docs/review/2026-11-04-M7.2b-questions.md; the Table read the I-1 delta
+  (link_in_path: lstat of every component, symlink, junction and other
+  reparse points refused; the settings realpath under the project's
+  realpath; the check repeated after the write) and the I-2 delta
+  (choose_trace gone from host.py; the default trace only; a foreign
+  entry replaced, nothing created where it pointed). Every REDO change
+  names its test (I-14).
+- CI, read from api.github.com: runs 41783688289 (86c4518: four success,
+  the windows gate jobs failed six windows-only tests), 41784559628
+  (c3c96ab: six success) and 41795872435 (29222d2: six success). On the
+  windows gate jobs the symlinked-`.claude` and the real NTFS-junction
+  tests PASSED: nothing reached the home settings.
+- Gate on the branch: 2657 passed, 19 skipped; kinds 4 : 7 : 10. Scope as
+  widened by H and I. Three builder commits plus the Table's ADR-0002 note
+  (G-8). The first M7.2b builder stopped before code (Amendment H).
+- S-1 (install.write_atomically still follows a symlink for `raqib
+  install-hooks` and `raqib watch`, where the commander named the project):
+  recorded; the same link check belongs there at the next installer task.
+  S-2 (the old foreign trace file is left in place, unread): accepted.
+  S-3 (pending at exit does not knock at the end): accepted, as `raqib
+  watch`. S-4 (run() keeps the 600 s reader): recorded for the os-source
+  task. S-5 (the first-finding knock is per tree): ratified. S-6 (I-4's
+  "two rounds" counted after the attach round): accepted. P6's remainder
+  (each follow exports the whole channel per pass): recorded.
+- Decision 3 of this ADR is built as narrowed by Amendment H. Decision 4
+  (rhythm) is M7.4, the last of the phase.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's order.
+- Table ledger for M7.2b: one builder lost to a classifier stop before
+  code, one review, one CI follow-up, one REDO; the Table's own misses:
+  the first HANDOFF's E1(a) (Amendment H); the HANDOFF's "nothing else is
+  written anywhere" without naming links and foreign traces (I-1, I-2).
