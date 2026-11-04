@@ -541,9 +541,10 @@ def test_e4_real_tray_starts_and_stops_or_says_why():
 # --- E6: the README ------------------------------------------------------------------------------
 
 def test_e6_readme_the_window_in_three_lines():
+    """M6.4's three lines, after M7.3's two (tests/test_app_host.py)."""
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## The window\n", 1)[1].split("\n## ", 1)[0]
-    lines = [line for line in section.split("\n") if line.strip()]
+    lines = [line for line in section.split("\n") if line.strip()][2:]
     assert len(lines) == 3 and "raqib app" in lines[0] and "python3-tk" in " ".join(lines)
 
 
@@ -603,6 +604,9 @@ def test_tk_window_first_screen_watching_screen_stop_and_close(tmp_path):
         window = app.Window(tkinter, root, c, str(tmp_path), doctor_job=lambda p: doctor)
         root.withdraw()
         assert until(lambda: doctor.result() is not None, 10)
+        window.tick()
+        assert window.screen == "host"           # M7.3: the window opens on the host
+        window.show_first()                      # "Watch a project": M6.4's first screen, unchanged
         window.tick()
         assert window.screen == "first" and window.band.cget("text") == "DOCTOR: all OK"
         assert "OK      python   3.12" in window.doctor_text.get("1.0", "end")
