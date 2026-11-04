@@ -584,3 +584,43 @@ Verdict: REDO on P1, P2, P3; the Table's choices K-4..K-9; the rest ruled.
 - Table ledger for M7.4: one review, one REDO, no third review; the
   Table's miss: the HANDOFF said "every unknown tree's source file" and
   did not say "every line, once" nor "every source" (K-1, K-2).
+
+## Amendment M (the Table, 2026-11-04, 19:10) - the first field run (the commander's Windows machine, Kimi)
+Recorded from the commander's report, verbatim in substance; figures are
+his, not the Table's. Installed from main d30f6da; `raqib-app` opened on
+the host; "Watch this host" with hooks not attached; Kimi started in a
+terminal with a task that runs shell commands.
+- Two toasts arrived and NEW-AGENT fired on the Kimi tree: `kimi pid 9176,
+  named (new, gone), 6 acts, source os, endpoint 104.18.17.93:443, first
+  seen 18:10:30Z`, cited run ...-14608 seq 16, round 10. The catalog named
+  it (the Moonshot endpoint or the image), so it was NEW-AGENT (high), not
+  NEW-AGENT-UNKNOWN. The terminal it ran from was listed as history
+  (`powershell pid 5888, unknown (history), 1 act, source os`), not
+  knocked, as B-3 says.
+- The source attached by itself was `os` (Sysmon is on that machine):
+  decision 3 as narrowed by H, on a real host, with no project named.
+- AGENT-DARK-LIVE fired twice, rounds 3 and 13, on the `~/.kimi` footprint
+  with no live tree for 3 rounds: once before Kimi started (right: an
+  installed, silent agent), once after it ended (right by the rule, yet
+  the same footprint that had just been a named tree - the second knock is
+  the one a person will call noise). Both toasts were the AGENT-DARK-LIVE
+  ones the commander saw; the NEW-AGENT knock is "[sent]" in the report.
+- HOST-RHYTHM did not fire on a Kimi session of a few minutes (the report
+  shows "rhythm / suspicion: -"); the os source carried the acts (6), the
+  rhythm ring reads the host source's beats. Whether rhythm should read
+  the os source's children too is a question for M7.5 (below).
+- Exit: three findings, ALARM. The report's own lines are the citation.
+What the run teaches (for the next handoff, M7.5 "after the first field
+run"): (1) AGENT-DARK-LIVE must not re-fire for a footprint whose tree was
+live in this watch and ended normally (gone-and-dark is the agent's
+normal end): a streak after a live tree is a note, not a knock, unless
+the tree was never seen in the watch; (2) the rhythm ring must take act
+beats from whichever source the tree has (os children as well as host
+children), else rhythm is blind exactly where Sysmon makes the source
+richer; (3) the catalog named Kimi, so NEW-AGENT (high) was right; the
+unknown path remains to be seen on a tree the catalog does not know -
+the commander's act-root/UNKNOWN budgets are still unmeasured; (4) the
+NEW-AGENT knock did not reach the commander as a toast while the two
+AGENT-DARK-LIVE ones did - to verify from app.log and the notifier's
+counts (folded? rate-limited behind the first AGENT-DARK-LIVE within the
+same minute? the per-tree id C-5 should have prevented that).
