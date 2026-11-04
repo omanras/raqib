@@ -83,7 +83,7 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       already in the trace at the start are history: shown, never notified.
       Notifications are off under CI or with --no-notify.
       Ctrl-C, or a crash, prints the final report; exit as for report.
-  watch --host [--every T] [--window S] [--rounds N] [--no-open] [--no-notify] [--port N]
+  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
       of it; Windows one sample of the OS API), read-only; nothing installed,
@@ -99,7 +99,16 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       rounds, at the reader's deadline at the latest. Exit 0 trees listed
       and nothing new (or none seen: not a clearance), 1 a finding, 3 a
       round not read or another hole, 2 usage (also --host with a PROJECT,
-      or another host watch on this home).
+      or another host watch on this home). Every tree gets a source that
+      only reads (M7.2b, ADR-0007 decision 3 and Amendment H): the os source
+      where the Sysmon channel exists, else the host's own record of its
+      children and connections (lines of source "host" under
+      ~/.raqib/host/sources/, judged by NET-TOOL and DESTRUCT-CMD); its
+      findings show on the tree and knock. A candidate with no source for
+      two rounds is HOST-UNWATCHED (high). --attach-hooks: a Claude Code
+      tree whose working directory was read also gets `raqib watch`'s hooks
+      in that project (the trace outside it); the hook settings are the
+      only file ever written into a project, and only with this flag.
   proxy --listen 127.0.0.1:PORT --upstream URL --log PATH [--cwd DIR] [--allow-plain-upstream]
       Watch an agent that speaks HTTP to its model API (M5.2, ADR-0003 and
       Amendment A, raqib/hooks/proxy.py): point its base URL at
@@ -313,6 +322,9 @@ def _parser():
     w.add_argument("--window", type=float, default=None, metavar="S",
                    help="--host on Linux: each round reads S seconds of /proc snapshots, 1 s apart (default 0: one)")
     w.add_argument("--rounds", type=int, default=None, metavar="N", help="--host: end after N rounds (tests, CI)")
+    w.add_argument("--attach-hooks", action="store_true",
+                   help="--host: also install raqib watch's hooks into the project a Claude Code tree works in (the"
+                        " only write into a project; off by default, ADR-0007 H-1)")
     px = sub.add_parser("proxy", help="relay an agent's model API calls and record its tool calls (M5.2, ADR-0003)")
     px.add_argument("--listen", required=True, metavar="127.0.0.1:PORT",
                     help="where the agent's base URL points; 127.0.0.1 only (PORT 0: any free port)")
@@ -844,8 +856,8 @@ def _watch_setup():
 def cmd_watch(args, out):
     if args.host:
         return _watch_host(args, out)
-    if args.every is not None or args.window is not None or args.rounds is not None:
-        raise UsageError("--every, --window and --rounds apply to watch --host only")
+    if args.every is not None or args.window is not None or args.rounds is not None or args.attach_hooks:
+        raise UsageError("--every, --window, --rounds and --attach-hooks apply to watch --host only")
     rules, gap, evaluator = _watch_setup()
     try:
         return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
@@ -877,7 +889,8 @@ def _watch_host(args, out):
     rules = _catalog(CATALOG)
     try:
         return host.command(catalog, rules, every=every, window=window, rounds=args.rounds, no_open=args.no_open,
-                            no_notify=args.no_notify, port=args.port, out=out, refresh=args.refresh)
+                            no_notify=args.no_notify, port=args.port, out=out, refresh=args.refresh,
+                            attach_hooks=args.attach_hooks)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 

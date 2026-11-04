@@ -84,6 +84,8 @@ counts of A-2):
   What shrinks is items (E-4). Lines beyond the table, as built in 04e34c0:
   DESTRUCT-CMD +5, NET-TOOL +4.
 Lines beyond the table now: DESTRUCT-CMD +6, NET-TOOL +5, SCOPE-PATH +4, SECRET-OUTPUT +3.
+(Note 2026-11-04, M7.2b: DESTRUCT-CMD and NET-TOOL each gained one evasion
+line for the host source; the counts read +7 and +6 after M7.2b.)
 
 Note (2026-11-03, M5.3, ruling C-9 of ADR-0003 Amendment C; the table above
 stays as written). M5.3 adds one row, in the table's shape. CROSS-SOURCE is
@@ -227,6 +229,14 @@ medium; NEW-AGENT keeps the named tree, high. One row added, the ratio
 moved from 4 : 7 : 8.)
 
 Ratio after M7.2: 4 : 7 : 9.
+
+Note (2026-11-04, M7.2b, ADR-0007 Amendment H, H-3): one anchor row joins
+the table, judged on the host watch's own record of the source it attached
+to each discovered tree:
+
+| HOST-UNWATCHED   | anchor    | -                                                    |
+
+Ratio after M7.2b: 4 : 7 : 10.
 
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when

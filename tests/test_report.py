@@ -193,7 +193,8 @@ def test_e3_rule_table_lists_every_rule_with_budget(tmp_path):
                           "CROSS-SOURCE", "DESTRUCT-CMD", "DRIFT-FILES", "NET-TOOL", "SCOPE-CWD-MOVED",
                           "SCOPE-CWD-ROOT", "SCOPE-PATH", "SECRET-OUTPUT", "LANDED-NO-GATE", "EDIT-NO-TEST",
                           "HEAD-UNMOVED", "INDEX-UNTOUCHED",   # M4.3 J-1: the two tree anchors
-                          "NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE"}   # M7.2: the host anchors (judge host lines only)
+                          "NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE",   # M7.2: the host anchors
+                         "HOST-UNWATCHED"}                                 # M7.2b (ADR-0007 H-3) (judge host lines only)
     assert table["SECRET-OUTPUT"]["fp_budget"] == 0.05 and table["SILENCE-GAP"]["fp_budget"] is None
     assert table["CROSS-SOURCE"]["fp_budget"] == 0.1 and table["CROSS-SOURCE"]["class"] == "CROSS"   # M5.3 C-8
     for rid in ("HEAD-UNMOVED", "INDEX-UNTOUCHED"):
@@ -281,7 +282,8 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
                          "SCOPE-PATH", "SECRET-OUTPUT", "CROSS-SOURCE",   # M5.3 D-11: the code rule too
                          "LANDED-NO-GATE", "EDIT-NO-TEST",                # M4.2b: the two demands
                          "HEAD-UNMOVED", "INDEX-UNTOUCHED",               # M4.3 J-1: the two tree anchors
-                         "NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE"}   # M7.2: the host anchors
+                         "NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE",   # M7.2: the host anchors
+                         "HOST-UNWATCHED"}                                 # M7.2b (ADR-0007 H-3)
     assert rows["CROSS-SOURCE"][1:4] == ["ok", "0.000", "0.1"]
     # M4.3: the tree anchors are measured on their own negatives only; no benign
     # file carries git keys, so none is judged (J-3).
@@ -291,9 +293,9 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
         rows["INDEX-UNTOUCHED"])
     assert "4 measured, 7 unmeasured" in " ".join(rows["DRIFT-FILES"])   # M5.1b: + the Windows negative
     # M4.2 REDO-2 E-1: the field trace is not benign (tests/fixtures/field/), so
-    # NET-TOOL is 1 of 10 (docs-lookup; negative-programs.json is the 10th) and
-    # SCOPE-PATH 0 of 10 (M5.1b: + the Windows negative).
-    assert rows["NET-TOOL"][1:4] == ["ok", "0.100", "0.25"] and "10 measured" in " ".join(rows["NET-TOOL"])
+    # NET-TOOL is 1 of 11 (docs-lookup; negative-programs.json is the 10th, M7.2b's host-source
+    # negative-host-child.json the 11th) and SCOPE-PATH 0 of 10 (M5.1b: + the Windows negative).
+    assert rows["NET-TOOL"][1:4] == ["ok", "0.091", "0.25"] and "11 measured" in " ".join(rows["NET-TOOL"])
     assert rows["SCOPE-PATH"][1:4] == ["ok", "0.000", "0.1"] and "10 measured" in " ".join(rows["SCOPE-PATH"])
     data = json.loads(raqib("check-rules", "--json")[1])
     assert {r["verdict"] for r in data} == {"ok"}

@@ -1,0 +1,39 @@
+# A tree the host watch found has no source (M7.2b, ADR-0007 decision 3 and Amendment H-3).
+id: HOST-UNWATCHED
+title: A discovered agent tree has no source
+# HOST: the rules of raqib watch --host (engine.CLASSES), over rounds.jsonl's host lines.
+class: HOST
+# ADR-0002: measured against the host watch's own record of which source it
+# attached to each tree (rounds.jsonl, HostTree lines), which the agent does
+# not write.
+kind: anchor
+severity: high
+# Measured, not guessed (ADR-0007 C-1): the negatives are made by
+# tests/fixtures/host/make.py: HOST-UNWATCHED/negative-host-source.json (two
+# rounds, every tree has the host source), negative-one-round.json (no source,
+# one round only) and the benign arrivals of NEW-AGENT (every tree has the
+# host source): 0 of 4 fire. The budget is that measure, 0.
+fp_budget: 0.0
+holes:
+  - "an act-root (acts, no talk seen) with no source is listed with source none, not this rule: the rule judges candidates (E3)"
+  - "a tree that lives one round only is never judged (the rule needs two rounds with no source)"
+  - "a source that is attached and then dies is a source-ended hole and is attached again next round; between the two the tree is watched by nothing, and this rule does not fire for that gap"
+  - "a source that is attached and silent (an os follow whose Sysmon configuration logs nothing of the tree) counts as a source: the silence is the source's own (its RAQIB-SILENCE lines), not this rule's"
+description: "A line of raqib watch --host (tool HostTree, source os) for a candidate tree to which no source could be attached in this round and the round before it (input_meta.source none, input_meta.none_rounds 2): no hooks, no os source, and not even the host's own record of it (the sources directory under ~/.raqib/host/ could not be written). It fires once per tree, in its second round with no source. A tree that is watched by nothing is a finding, never a nothing (A3). The line cites the round, the sample and the record lines of the inventory (A5)."
+summary: "{input_meta.named_word} agent tree {input_meta.image} pid {input_meta.pid} has no source for {input_meta.none_rounds} rounds (round {input_meta.round}: {input_meta.source_word})"
+match:
+  all:
+    - {field: tool, exists: true}
+    - {field: tool, eq: HostTree}
+    - {field: source, eq: os}
+    - {field: input_meta.class, eq: candidate}
+    - {field: input_meta.source, eq: none}
+    - {field: input_meta.none_rounds, eq: 2}
+fixtures:
+  positive:
+    - tests/fixtures/rules/HOST-UNWATCHED/positive-no-source-two-rounds.json
+  negative:
+    - tests/fixtures/rules/HOST-UNWATCHED/negative-host-source.json
+    - tests/fixtures/rules/HOST-UNWATCHED/negative-one-round.json
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json

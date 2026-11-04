@@ -12,7 +12,9 @@ A problem is {"line": n, "reason": str}; n counts "\n"-separated lines from 1.
   UTF-8: the record is kept (it still has a seq) and reported.
 
 Capture sources (ADR-0003, M5.2): a record names the source that wrote it,
-"hook", "proxy" or "os". A record without the field was written by the hook
+"hook", "proxy", "os" or "host" (M7.2b, ADR-0007 decision 3 and Amendment
+H: the host's own record of a discovered tree, written by raqib/host.py,
+tools HostChild, HostConnection and HostGone). A record without the field was written by the hook
 (every trace before M5.2), so source_of() reads it as "hook". Records are
 returned exactly as they were read: nothing is added to them, so an old
 trace loads as it always did. An os session_start may carry
@@ -30,7 +32,7 @@ import re
 # "history": the proxy's one line per conversation for the tool results that
 # predate it (ADR-0003 Amendment A, A-4); no rule judges it.
 PHASES = ("pre", "post", "session_start", "session_end", "stop", "history")
-SOURCES = ("hook", "proxy", "os")  # ADR-0003
+SOURCES = ("hook", "proxy", "os", "host")  # ADR-0003; "host": M7.2b (ADR-0007 H-2)
 DEFAULT_SOURCE = "hook"            # a record without "source" (ADR-0003: v0.1 traces stay valid)
 SILENCE_MARKER = "RAQIB-SILENCE"   # a line a capture source wrote when it could not capture (A3)
 SILENCE_REASON = "a RAQIB-SILENCE line: something was not captured (A3)"

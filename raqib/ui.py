@@ -1089,11 +1089,14 @@ def host_section(state):
         out.append('<p class="empty">No agent seen in any round; not a clearance.</p>')
     else:
         out.append('<div class="scroll"><table><thead><tr><th>image</th><th>pid</th><th>class</th><th>named</th>'
-                   "<th>first seen</th><th>now</th><th>acts</th><th>endpoints</th><th>cites</th></tr></thead><tbody>")
+                   "<th>first seen</th><th>now</th><th>acts</th><th>endpoints</th><th>source</th>"
+                   "<th>source findings</th><th>cites</th></tr></thead><tbody>")
         for t in trees:
             out.append('<tr%s><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td class="nowrap">%s (round %s)%s</td>'
-                       '<td>%s</td><td>%s</td><td class="wrap">%s</td><td class="wrap">%s</td></tr>' % (
-                           ' class="flag"' if t.get("knocked") else "", _text(t.get("image") or "?"),
+                       '<td>%s</td><td>%s</td><td class="wrap">%s</td><td class="wrap">%s</td><td>%s</td>'
+                       '<td class="wrap">%s</td></tr>' % (
+                           ' class="flag"' if t.get("knocked") or t.get("unwatched") else "",
+                           _text(t.get("image") or "?"),
                            _text(t.get("pid")), _text(t.get("class")),
                            _text("named: %s" % t.get("named_by") if t.get("named") else "unknown"),
                            _text(t.get("first_seen")), _text(t.get("first_round")),
@@ -1101,8 +1104,22 @@ def host_section(state):
                            (' <span class="tag">benign</span>' if t.get("benign") else ""),
                            "yes" if t.get("present") else '<span class="tag">gone</span>', _text(t.get("acts")),
                            _text(", ".join(str(e) for e in _list(t.get("endpoints"))) or "-"),
+                           _text(tree_source(t)), _text(severity_counts(t.get("source_findings"))),
                            _cites_text(t.get("cites"))))
         out.append("</tbody></table></div>")
+    out.append('<p class="meta">%s</p>' % _text(
+        "hooks: attached with --attach-hooks (the hook settings are the only write into a project)"
+        if host.get("attach_hooks") else "hooks: not attached (no --attach-hooks): nothing is written into any project"))
+    sources = [_dict(f) for f in _list(host.get("source_findings"))]
+    out.append("<h3>Source findings (%d)</h3>" % len(sources))
+    for f in sources:
+        out.append('<div class="card"><span class="tag">%s</span> <span class="tag">%s</span> %s pid %s via %s: %s'
+                   ' <span class="meta">%s; %s lines %s</span></div>' % (
+                       _text(f.get("rule_id")), _text(f.get("severity")), _text(f.get("image") or "?"),
+                       _text(f.get("pid")), _text(f.get("source")), _text(f.get("summary")), _text(f.get("notice")),
+                       _text(f.get("trace")), _text(",".join(str(x) for x in _list(f.get("lines"))) or "-")))
+    if not sources:
+        out.append('<p class="empty">None.</p>')
     findings = [_dict(f) for f in _list(host.get("findings"))]
     out.append("<h3>Host findings (%d)</h3>" % len(findings))
     for f in findings:
@@ -1132,6 +1149,27 @@ def host_section(state):
                 "; late" if r.get("late") else ""))) for r in reversed(rounds)) if rounds else
                '<p class="empty">No round yet.</p>')
     return out
+
+
+def tree_source(tree):
+    """M7.2b E4: a tree's source in a few words: os (rooted at its pid),
+    host, hooks: project P, or none (with why); a Claude Code tree without
+    hooks says "hooks: not attached (<why>)" first. The files are in the
+    report and the state."""
+    word = str(tree.get("source_word") or tree.get("source") or "none")
+    text = str(tree.get("source_text") or "")
+    if text.startswith("hooks: not attached (") and not word.startswith("hooks"):
+        word = "%s; %s" % (text.split(";", 1)[0], word)
+    return word
+
+
+def severity_counts(counts):
+    """M7.2b E4: a tree's source findings by severity ("high 1, medium 2";
+    history and pending apart), or "none"."""
+    counts = counts if isinstance(counts, dict) else {}
+    words = ("high", "medium", "low", "history", "pending at exit", "pending")
+    parts = ["%s %s" % (k, counts[k]) for k in words if counts.get(k)]
+    return ", ".join(parts) or "none"
 
 
 def host_page(state, refresh=None, watches=None, own=None):

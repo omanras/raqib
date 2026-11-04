@@ -1,0 +1,678 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "bash",
+      "pid": 1610
+     },
+     {
+      "image": "rm",
+      "pid": 1620
+     }
+    ],
+    "cites": [
+     {
+      "line": 10,
+      "src": "proc",
+      "text_sha256": "2ba10562d4dc6d2ae96db82cda42f095db2052464935a2399f9afe8035ea0cfb"
+     },
+     {
+      "line": 11,
+      "src": "proc",
+      "text_sha256": "15e9b6161abde79788305d48fc6b77eb1dd0084338405e1807da5019b81204ad"
+     }
+    ],
+    "command_programs": [
+     "bash",
+     "rm"
+    ],
+    "pid": 1600,
+    "round": 3,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)",
+    "tree_seq": 11
+   },
+   "input_sha256": "2ba64b81ebcfecf23a5379d13f4dcb163a9be1c7b025d969e51945019cc3a5b3",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-1600",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "bash",
+      "pid": 2240
+     },
+     {
+      "image": "git",
+      "pid": 2250
+     }
+    ],
+    "cites": [
+     {
+      "line": 9,
+      "src": "win-process",
+      "text_sha256": "a02a7070b9e3feb0d22a2cc21cad2e8db29786e276565f0ef17d80575522ec1f"
+     },
+     {
+      "line": 10,
+      "src": "win-process",
+      "text_sha256": "a09c2ab1e36502ccfdd8341e99f0f21aab6b975993a472101d3d2ead0bac5281"
+     }
+    ],
+    "command_programs": [
+     "bash",
+     "git"
+    ],
+    "pid": 2100,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 3
+   },
+   "input_sha256": "66c7f61aa033d9ccfae5db0a999ca78ddd83c3af9611eaa405af151126ba1b62",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-2100",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 8,
+      "src": "win-tcp",
+      "text_sha256": "6a9cd71fa6d71f4e254d742257df3b3fd0597b4e9864aa231db170eaf2e47c6c"
+     },
+     {
+      "line": 3,
+      "src": "win-dns",
+      "text_sha256": "82fbc814b12c50d74b1c88310e3271a4739c349b1fe6f1c26291e2b2cc0bda51"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 2100,
+    "remote": "160.79.104.10:443",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 3
+   },
+   "input_sha256": "9fe9601879d6e0fd03f15a39fee1874c8650001bfac9006c33125f0f80d8db18",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-2100",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 2100,
+    "round": 3,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host-2100",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "cmd",
+      "pid": 3410
+     },
+     {
+      "image": "python",
+      "pid": 3420
+     }
+    ],
+    "cites": [
+     {
+      "line": 12,
+      "src": "win-process",
+      "text_sha256": "1d454a9566b5fbe28501aef21112cf50caa6ab44a656cc604defde6866730ce0"
+     },
+     {
+      "line": 7,
+      "src": "sysmon",
+      "text_sha256": "ba1d37cd6be87594b4c641493c133bd9b2839ae4b015ddbebc355ca28c7998b5"
+     },
+     {
+      "line": 8,
+      "src": "sysmon",
+      "text_sha256": "50e91d96060797ffefc2287ab2308dfa74e282026bfe9eab5f8557971961f697"
+     }
+    ],
+    "command_programs": [
+     "cmd",
+     "python"
+    ],
+    "pid": 3300,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 4
+   },
+   "input_sha256": "366676974c1a7cfbb0586d4eec60305bfd2372888338ed626e232b16e2f6cadf",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-3300",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 7,
+      "src": "win-tcp",
+      "text_sha256": "914da780401fa5dbb6a783795101a7fbec0c9338e996809bd74deb391094b929"
+     },
+     {
+      "line": 5,
+      "src": "sysmon",
+      "text_sha256": "4711295e6ade75d1faa1355ed7c11d3632d432877fdadb6f16e14a3d875863e4"
+     }
+    ],
+    "dest_port": 11434,
+    "dest_private": true,
+    "pid": 3300,
+    "remote": "127.0.0.1:11434",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 4
+   },
+   "input_sha256": "15f73c6f97135674db08be2149116aaaa733333bc8c0659138f2d92cd97eb1b6",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-3300",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 9,
+      "src": "win-tcp",
+      "text_sha256": "3828fa8aa8ed4310a82ce4169bdf658dba59c133d24007b06609cbb00140ddf9"
+     },
+     {
+      "line": 4,
+      "src": "sysmon",
+      "text_sha256": "d6c6c1c081f02ec1f42fb92182d3225b85c237975a9c7681c23efff44d8d8951"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 3300,
+    "remote": "104.18.33.45:443",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 4
+   },
+   "input_sha256": "b9883aec7b26242cde68714edbf33f93a2a975d05ef4917fbeac94f259f5ed21",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host-3300",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 3300,
+    "round": 3,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "host-3300",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "msedge",
+      "pid": 4120
+     }
+    ],
+    "cites": [
+     {
+      "line": 14,
+      "src": "win-process",
+      "text_sha256": "506501a3f16e6a2c022258decbe022bf990ea93e41a2b4f5982946cc6d21c36b"
+     },
+     {
+      "line": 17,
+      "src": "sysmon",
+      "text_sha256": "20cf3511615d8a46e311a52a4026527bf416e42199486d9ceba80d807d0c5d1d"
+     }
+    ],
+    "command_programs": [
+     "msedge"
+    ],
+    "pid": 4100,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 5
+   },
+   "input_sha256": "7d5652e45bed4c3bf5db5727bc1b712eb8df53db1d897f30964c3e5e9dbb4089",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-4100",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 10,
+      "src": "win-tcp",
+      "text_sha256": "569ea76731eb7c5d21d5a65efb1294ffe60ce9bb5571268fba72b250d7ca8890"
+     },
+     {
+      "line": 15,
+      "src": "sysmon",
+      "text_sha256": "0fd27e9ae2372add38a3aba4645080ac3c5199d2b2cb46c04ff5bda9f7f739cd"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 4100,
+    "remote": "13.107.21.200:443",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 5
+   },
+   "input_sha256": "8543f7c455a64886c37d6c445660e6fd44966f0e4bd1b148ffad150044f89dbb",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-4100",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 4100,
+    "round": 3,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host-4100",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:20.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "onedrive",
+      "pid": 5320
+     },
+     {
+      "image": "securityhealthsystray",
+      "pid": 5400
+     },
+     {
+      "image": "code",
+      "pid": 6000
+     },
+     {
+      "image": "code",
+      "pid": 6010
+     },
+     {
+      "image": "code",
+      "pid": 6020
+     },
+     {
+      "image": "code",
+      "pid": 6030
+     },
+     {
+      "image": "code",
+      "pid": 6040
+     },
+     {
+      "image": "code",
+      "pid": 6050
+     },
+     {
+      "image": "code",
+      "pid": 6060
+     },
+     {
+      "image": "openconsole",
+      "pid": 6065
+     },
+     {
+      "image": "powershell",
+      "pid": 6070
+     },
+     {
+      "image": "node",
+      "pid": 6075
+     },
+     {
+      "image": "msedge",
+      "pid": 7000
+     },
+     {
+      "image": "msedge",
+      "pid": 7010
+     },
+     {
+      "image": "msedge",
+      "pid": 7020
+     },
+     {
+      "image": "msedge",
+      "pid": 7030
+     },
+     {
+      "image": "msedge",
+      "pid": 7040
+     },
+     {
+      "image": "msedge",
+      "pid": 7050
+     },
+     {
+      "image": "msedge",
+      "pid": 7060
+     }
+    ],
+    "cites": [
+     {
+      "line": 10,
+      "src": "win-process-1",
+      "text_sha256": "f49dfa388b17de0170a29220decba1aca75aa3b6cd43ab9edf95e1ae955d69d2"
+     },
+     {
+      "line": 10,
+      "src": "win-process-2",
+      "text_sha256": "f49dfa388b17de0170a29220decba1aca75aa3b6cd43ab9edf95e1ae955d69d2"
+     },
+     {
+      "line": 11,
+      "src": "win-process-1",
+      "text_sha256": "5cc0aa3211c661e58bfa3269988b64fe14265c13c908a0e63351a6f8eb696237"
+     },
+     {
+      "line": 11,
+      "src": "win-process-2",
+      "text_sha256": "5cc0aa3211c661e58bfa3269988b64fe14265c13c908a0e63351a6f8eb696237"
+     },
+     {
+      "line": 12,
+      "src": "win-process-1",
+      "text_sha256": "e6acf9b0bd46860a4bd81eb7b13dea1463d471609b63d7d1668cdefa85de0099"
+     },
+     {
+      "line": 12,
+      "src": "win-process-2",
+      "text_sha256": "e6acf9b0bd46860a4bd81eb7b13dea1463d471609b63d7d1668cdefa85de0099"
+     }
+    ],
+    "command_programs": [
+     "onedrive",
+     "securityhealthsystray",
+     "code",
+     "openconsole",
+     "powershell",
+     "node",
+     "msedge"
+    ],
+    "pid": 5100,
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1,2",
+    "tree_seq": 1
+   },
+   "input_sha256": "6789611ae5cc9b1ab0b20a24bba9b327bdaf4310aaf36f82c6b3ea0cb7b3faf7",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-5100",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 6,
+      "src": "win-tcp-1",
+      "text_sha256": "105d22a60be14bf92058f79a6de8f6f74abfd18fb0e3110ae056f63f99527121"
+     },
+     {
+      "line": 6,
+      "src": "win-tcp-2",
+      "text_sha256": "105d22a60be14bf92058f79a6de8f6f74abfd18fb0e3110ae056f63f99527121"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 5100,
+    "remote": "198.51.100.23:443",
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1,2",
+    "tree_seq": 1
+   },
+   "input_sha256": "0dd3517efd5a1493f4dea59f7a456e692bf82be9f6ebbfc6e340ba507b705e1f",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-5100",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 5100,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host-5100",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "children": [
+     {
+      "image": "git",
+      "pid": 6055
+     },
+     {
+      "image": "git",
+      "pid": 6056
+     }
+    ],
+    "cites": [
+     {
+      "line": 18,
+      "src": "win-process-1",
+      "text_sha256": "3f7df8352a6641ca34eb46ab9572f8832df1602d21a710b7ff43474aa4cc36d9"
+     },
+     {
+      "line": 18,
+      "src": "win-process-2",
+      "text_sha256": "3f7df8352a6641ca34eb46ab9572f8832df1602d21a710b7ff43474aa4cc36d9"
+     },
+     {
+      "line": 19,
+      "src": "win-process-1",
+      "text_sha256": "a6124cda7b5c115707ccdda6fe6a2b74c3b72a093b16c5a393ce6e4601370b8a"
+     },
+     {
+      "line": 19,
+      "src": "win-process-2",
+      "text_sha256": "a6124cda7b5c115707ccdda6fe6a2b74c3b72a093b16c5a393ce6e4601370b8a"
+     }
+    ],
+    "command_programs": [
+     "git"
+    ],
+    "pid": 6050,
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1,2",
+    "tree_seq": 2
+   },
+   "input_sha256": "7d5e2e6a9d76940258e3c7a477545f621b12ae76c328bc47e530b416544fcb3c",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-6050",
+   "source": "host",
+   "tool": "HostChild",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 9,
+      "src": "win-tcp-1",
+      "text_sha256": "1a506a3f08cbffdc03051d4f54f0eaad9324dd29d6e7d4eef58d3a1a37fc0933"
+     },
+     {
+      "line": 9,
+      "src": "win-tcp-2",
+      "text_sha256": "1a506a3f08cbffdc03051d4f54f0eaad9324dd29d6e7d4eef58d3a1a37fc0933"
+     }
+    ],
+    "dest_port": 443,
+    "dest_private": false,
+    "pid": 6050,
+    "remote": "198.51.100.51:443",
+    "round": 1,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1,2",
+    "tree_seq": 2
+   },
+   "input_sha256": "1c65ada4772f04a09fbcd827ac8d50f41d6e5698254c7f2cda5fc8f57c21234c",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-6050",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:00.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 6050,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host-6050",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "cites": [
+     {
+      "line": 11,
+      "src": "win-tcp",
+      "text_sha256": "fa6867ba12a6a37fe3d704e8b351fad583d0112c967e15c6ef8d0d89dbc48a30"
+     },
+     {
+      "line": 13,
+      "src": "sysmon",
+      "text_sha256": "3bf8680aa3c7396e50d34808d1879fef6d15c03c24310a00ab9a63b47bc595c5"
+     }
+    ],
+    "dest_port": 8443,
+    "dest_private": false,
+    "pid": 7000,
+    "remote": "203.0.113.50:8443",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "tree_seq": 6
+   },
+   "input_sha256": "3550acda78b3af5742e177deee81847fe9eb90545645052084813f05e05b0814",
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host-7000",
+   "source": "host",
+   "tool": "HostConnection",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "pid": 7000,
+    "round": 3,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)"
+   },
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host-7000",
+   "source": "host",
+   "tool": "HostGone",
+   "ts": "2026-11-03T10:00:20.000Z"
+  }
+ ]
+}

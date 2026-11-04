@@ -224,7 +224,7 @@ def kinds_line(out):
 def test_m41_e4_the_gate_prints_one_kinds_line_and_stays_green(tmp_path):
     code, out = gate(tmp_path, {})
     assert code == 0, out
-    assert kinds_line(out) == "[gate] rule kinds: signature=4 demand=7 anchor=9"
+    assert kinds_line(out) == "[gate] rule kinds: signature=4 demand=7 anchor=10"
     # B-5 (K14): the first gate line after the secret scan.
     order = [line for line in out.splitlines() if line.startswith("[gate] ") and not line.startswith("[gate]  ")]
     assert order[:3] == ["[gate] secret scan", kinds_line(out), "[gate] handoff length"]
@@ -310,7 +310,7 @@ def test_m41_b5_the_catalog_is_the_tracked_rule_files(tmp_path):
     from the working tree is RED."""
     bad = without(CATALOG_REL + "NET-TOOL.yaml", "kind:").replace("id: NET-TOOL", "id: NET-UNTRACKED")
     code, out = gate(tmp_path / "untracked", {}, untracked={CATALOG_REL + "NET-UNTRACKED.yaml": bad})
-    assert code == 0 and kinds_line(out) == "[gate] rule kinds: signature=4 demand=7 anchor=9", out
+    assert code == 0 and kinds_line(out) == "[gate] rule kinds: signature=4 demand=7 anchor=10", out
     # A second repository, not rmtree of the first: git's object files are read-only on Windows.
     repo = scratch(tmp_path / "deleted", {})
     (repo / CATALOG_REL / "NET-TOOL.yaml").unlink()
@@ -348,7 +348,7 @@ def test_m41_b2_planted_standard_library_names_are_not_imported(tmp_path, monkey
     text = io.StringIO()
     with contextlib.redirect_stdout(text):
         module.rule_kinds(files)
-    assert text.getvalue() == "[gate] rule kinds: signature=4 demand=7 anchor=9\n"
+    assert text.getvalue() == "[gate] rule kinds: signature=4 demand=7 anchor=10\n"
     assert sorted(p.name for p in repo.glob("*.imported")) == []
     assert sorted(planted) == sorted("%s.py" % n for n in module.PREIMPORT) and "json.py" in planted
 
@@ -388,8 +388,9 @@ def test_m41_e4_the_gate_counts_the_real_tree(monkeypatch):
     kinds = [r.kind for r in rules] + list(silence.RULE_KINDS.values()) + list(cross.RULE_KINDS.values()) + list(
         tree.RULE_KINDS.values())
     expected = "rule kinds: " + " ".join("%s=%d" % (k, kinds.count(k)) for k in engine.KINDS)
-    # M5.3 C-9; M4.2b: two demands; M4.3 J-11: two anchors; M7.2: NEW-AGENT and AGENT-DARK-LIVE, two anchors
-    assert expected == "rule kinds: signature=4 demand=7 anchor=9"
+    # M5.3 C-9; M4.2b: two demands; M4.3 J-11: two anchors; M7.2: NEW-AGENT and AGENT-DARK-LIVE, two anchors;
+    # M7.2b (ADR-0007 H-3): HOST-UNWATCHED, the tenth anchor
+    assert expected == "rule kinds: signature=4 demand=7 anchor=10"
     monkeypatch.chdir(ROOT)
     text = io.StringIO()
     with contextlib.redirect_stdout(text):
