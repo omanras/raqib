@@ -27,6 +27,14 @@ whose EventRecordID is above the highest one an earlier pass of the same
 follow appended (build's after_record), so a pass does not append the
 channel's history again; each silence detail is written once per follow,
 not once per pass. It reads, and writes nothing but the trace (A4).
+ADR-0007 Amendment I-5: a follow's live pass runs wevtutil with a timeout
+of its own, FOLLOW_TIMEOUT (10 s, the notifier's), through
+read_live_bounded; a wevtutil that has not returned by then is Raqib's own
+helper and is terminated (then killed), and its end is recorded on the
+follow's Helpers; the pass writes that reason as a RAQIB-SILENCE line.
+Helpers.end() terminates the helper still running when the watch stops,
+so nothing of Raqib's outlives the watch unrecorded. The agent's processes
+are never signalled: only the wevtutil this module started.
 
 The tree (D-5): the root is the process --root PID:GUID names, or, with no
 GUID, the LATEST process that held pid PID in the export (the one whose
@@ -482,10 +490,81 @@ def run(root, log, from_path=None, cwd=None, out=None, err=None, live=None, nt=N
 
 
 FOLLOW_EVERY = 10.0
+FOLLOW_TIMEOUT = 10.0     # I-5: one live pass of a follow, as the notifier's timeout (notify.TIMEOUT_SECONDS)
+HELPER_GRACE = 2.0        # after terminate(), how long a helper is given before kill()
+
+
+class Helpers:
+    """I-5: the wevtutil children one follow started (Raqib's own, never
+    the agent's). running: pid -> the process still out; record: one text
+    per helper that had to be ended (by its timeout, or by end() at Stop)."""
+
+    def __init__(self):
+        self.running = {}
+        self.record = []
+
+    @staticmethod
+    def _stop(proc):
+        try:
+            proc.terminate()
+            try:
+                proc.wait(HELPER_GRACE)
+                return "terminated"
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(HELPER_GRACE)
+                return "killed"
+        except Exception as exc:   # already gone, or no rights: said, never silent
+            return "not ended (%s)" % (type(exc).__name__,)
+
+    def ended(self, proc, why):
+        how = self._stop(proc)
+        self.running.pop(proc.pid, None)
+        text = "wevtutil pid %s (Raqib's own helper) %s: %s" % (proc.pid, how, why)
+        self.record.append(text)
+        return text
+
+    def end(self, why="the watch stopped"):
+        """Every helper still running is ended and recorded; their texts."""
+        return [self.ended(proc, why) for proc in list(self.running.values())]
+
+
+def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Popen, environ=None):
+    """read_live for a follow's pass (I-5): the same wevtutil, argv and
+    environment, started as a child Raqib owns and waited for at most
+    timeout seconds; one that has not returned is terminated and recorded on
+    helpers; (text, None) or (None, why it was not read)."""
+    environ = os.environ if environ is None else environ
+    helpers = Helpers() if helpers is None else helpers
+    env = {"SystemRoot": environ.get("SystemRoot") or "C:\\Windows"}
+    options = {"stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "env": env}
+    if os.name == "nt":
+        options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    try:
+        proc = popen([WEVTUTIL] + list(LIVE_ARGS), **options)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return None, ("wevtutil could not be run (%s): the Sysmon channel was not read"
+                      % (getattr(exc, "strerror", None) or type(exc).__name__))
+    helpers.running[proc.pid] = proc
+    try:
+        data, said = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        text = helpers.ended(proc, "did not return in %g s" % timeout)
+        return None, "wevtutil did not return in %g s (%s): the Sysmon channel was not read" % (timeout, text)
+    except Exception as exc:   # ended from outside (Stop) while waited for
+        if proc.pid in helpers.running:
+            helpers.ended(proc, "its pass failed: %s" % type(exc).__name__)
+        return None, "wevtutil was ended before it returned: the Sysmon channel was not read"
+    helpers.running.pop(proc.pid, None)
+    if proc.returncode != 0:
+        lines = (said or b"").decode("utf-8", "replace").strip().splitlines()
+        return None, ("wevtutil exited %s (%s): the Sysmon channel was not read (no Sysmon, no channel, or no"
+                      " rights to read it)" % (proc.returncode, lines[0] if lines else "no message"))
+    return decode(data or b""), None
 
 
 def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, live=None, nt=None, on_pass=None,
-           after_record=None):
+           after_record=None, helpers=None, timeout=FOLLOW_TIMEOUT):
     """API (M7.2b): the os source followed live until stop is set (see the
     module docstring). Returns the number of passes. Raises UsageError as
     run() does (a bad root or cwd, off Windows without a `live` reader, a
@@ -495,7 +574,8 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     after each pass has appended what it read, with the highest
     EventRecordID appended so far; after_record starts a follow there (a
     follow of the same tree resumed: the events already appended are not
-    appended again)."""
+    appended again). Without `live`, each pass reads through
+    read_live_bounded(timeout, helpers) (I-5)."""
     out = sys.stdout if out is None else out
     err = sys.stderr if err is None else err
     nt = (os.name == "nt") if nt is None else nt
@@ -507,7 +587,7 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     top, said, passes = after_record, set(), 0
     while True:
         passes += 1
-        text, failed = (live or read_live)()
+        text, failed = live() if live is not None else read_live_bounded(timeout, helpers)
         if failed is not None:
             lines, silences = [], [failed]
         else:

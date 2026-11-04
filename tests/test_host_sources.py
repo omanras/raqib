@@ -81,7 +81,9 @@ def rounds(w, clock, n):
 
 
 def source_file(w, pid):
-    return Path(w.sources_dir) / ("%s-%s.jsonl" % (w.run, pid))
+    """I-8: the per-tree file is keyed (run, pid, started)."""
+    (key,) = [k for k in w.trees if k[0] == pid]
+    return Path(w._source_path(key))
 
 
 def lines_of(path):
@@ -241,8 +243,9 @@ class FakeFollow:
         self.stubborn = stubborn
         self.release = threading.Event()
 
-    def __call__(self, root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None):
-        self.calls.append({"root": root, "log": log, "every": every, "after": after_record})
+    def __call__(self, root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None,
+                 helpers=None):
+        self.calls.append({"root": root, "log": log, "every": every, "after": after_record, "helpers": helpers})
         if self.raise_on is not None and root == self.raise_on:
             raise os_sysmon.UsageError("cannot write the trace %s: test" % log)
         info = {}
@@ -417,83 +420,202 @@ def test_e1c_claude_code_is_claude_not_desktop_or_node_with_cli_js_where_argv_wa
 
 class Writes:
     """A fake filesystem watcher: every path opened for writing, created,
-    replaced or made while it is on (builtins.open, os.open, os.replace,
-    os.rename, os.makedirs, os.mkdir, tempfile.mkstemp)."""
+    replaced, linked, truncated, copied or made while it is on. REDO I-9
+    (P10): builtins.open and io.open, os.open, os.replace, os.rename,
+    os.makedirs, os.mkdir, os.symlink, os.link, os.truncate, os.remove,
+    os.unlink, os.rmdir; pathlib's write_text, write_bytes, open, mkdir,
+    touch, symlink_to, hardlink_to; shutil's copy, copy2, copyfile,
+    copytree, move, rmtree; tempfile's mkstemp, mkdtemp, NamedTemporaryFile,
+    TemporaryFile; and subprocess (Popen, run, call, check_call,
+    check_output) with every file argument and redirect it names. A program
+    run through subprocess is also recorded in `programs` (none may run)."""
 
     def __init__(self, monkeypatch):
+        import shutil
+        import subprocess
         self.paths = []
-        real_open, real_os_open = builtins.open, os.open
-        real_replace, real_rename, real_makedirs, real_mkdir = os.replace, os.rename, os.makedirs, os.mkdir
-        real_mkstemp = tempfile.mkstemp
-        writes = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND
+        self.programs = []
+        writes = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | getattr(os, "O_TRUNC", 0)
+        real = {}
+
+        def note(path):
+            if isinstance(path, (str, bytes, os.PathLike)):
+                self.paths.append(os.path.abspath(os.fsdecode(path)))
+
+        def wrap(target, name, picks):
+            original = getattr(target, name)
+            real[(target, name)] = original
+
+            def fake(*a, **k):
+                for p in picks(*a, **k):
+                    note(p)
+                return original(*a, **k)
+            monkeypatch.setattr(target, name, fake)
+            return original
+
+        real_open = io.open
 
         def fake_open(file, mode="r", *a, **k):
             if isinstance(file, (str, bytes, os.PathLike)) and any(c in mode for c in "wax+"):
-                self.paths.append(os.path.abspath(os.fsdecode(file)))
+                note(file)
             return real_open(file, mode, *a, **k)
+        monkeypatch.setattr(builtins, "open", fake_open)
+        monkeypatch.setattr(io, "open", fake_open)
+        real_os_open = os.open
 
         def fake_os_open(path, flags, *a, **k):
             if flags & writes:
-                self.paths.append(os.path.abspath(os.fsdecode(path)))
+                note(path)
             return real_os_open(path, flags, *a, **k)
+        monkeypatch.setattr(os, "open", fake_os_open)
+        dst = lambda src, dst, *a, **k: [dst]           # noqa: E731
+        first = lambda path, *a, **k: [path]             # noqa: E731
+        both = lambda src, dst, *a, **k: [dst]           # noqa: E731
+        for name in ("replace", "rename", "symlink", "link"):
+            wrap(os, name, dst)
+        for name in ("makedirs", "mkdir", "truncate", "remove", "unlink", "rmdir"):
+            if name == "truncate" and not hasattr(os, "truncate"):
+                continue
+            wrap(os, name, first)
+        for name in ("copy", "copy2", "copyfile", "copytree", "move"):
+            wrap(shutil, name, both)
+        wrap(shutil, "rmtree", first)
+        self_path = lambda self, *a, **k: [self]          # noqa: E731
+        for name in ("write_text", "write_bytes", "mkdir", "touch", "symlink_to", "hardlink_to"):
+            if hasattr(Path, name):
+                wrap(Path, name, self_path)
+        path_open = Path.open
 
-        def fake_replace(src, dst, *a, **k):
-            self.paths.append(os.path.abspath(os.fsdecode(dst)))
-            return real_replace(src, dst, *a, **k)
-
-        def fake_rename(src, dst, *a, **k):
-            self.paths.append(os.path.abspath(os.fsdecode(dst)))
-            return real_rename(src, dst, *a, **k)
-
-        def fake_makedirs(name, *a, **k):
-            self.paths.append(os.path.abspath(os.fsdecode(name)))
-            return real_makedirs(name, *a, **k)
-
-        def fake_mkdir(name, *a, **k):
-            self.paths.append(os.path.abspath(os.fsdecode(name)))
-            return real_mkdir(name, *a, **k)
+        def fake_path_open(self, mode="r", *a, **k):
+            if any(c in mode for c in "wax+"):
+                note(self)
+            return path_open(self, mode, *a, **k)
+        monkeypatch.setattr(Path, "open", fake_path_open)
+        real_mkstemp, real_mkdtemp = tempfile.mkstemp, tempfile.mkdtemp
 
         def fake_mkstemp(*a, **k):
             fd, name = real_mkstemp(*a, **k)
-            self.paths.append(os.path.abspath(name))
+            note(name)
             return fd, name
-        for target, name, fn in ((builtins, "open", fake_open), (os, "open", fake_os_open),
-                                 (os, "replace", fake_replace), (os, "rename", fake_rename),
-                                 (os, "makedirs", fake_makedirs), (os, "mkdir", fake_mkdir),
-                                 (tempfile, "mkstemp", fake_mkstemp)):
-            monkeypatch.setattr(target, name, fn)
+
+        def fake_mkdtemp(*a, **k):
+            name = real_mkdtemp(*a, **k)
+            note(name)
+            return name
+        monkeypatch.setattr(tempfile, "mkstemp", fake_mkstemp)
+        monkeypatch.setattr(tempfile, "mkdtemp", fake_mkdtemp)
+        for name in ("NamedTemporaryFile", "TemporaryFile"):
+            original = getattr(tempfile, name)
+
+            def fake_tmp(*a, _original=original, **k):
+                f = _original(*a, **k)
+                note(getattr(f, "name", None) if isinstance(getattr(f, "name", None), str) else
+                     k.get("dir") or tempfile.gettempdir())
+                return f
+            monkeypatch.setattr(tempfile, name, fake_tmp)
+
+        def files_of(argv, k):
+            argv = [argv] if isinstance(argv, (str, bytes, os.PathLike)) else list(argv or ())
+            out = [a for a in argv[1:] if isinstance(a, (str, os.PathLike)) and os.path.isabs(os.fsdecode(a))]
+            out += [getattr(k.get(r), "name", None) for r in ("stdin", "stdout", "stderr")
+                    if isinstance(getattr(k.get(r), "name", None), str)]
+            if k.get("cwd") is not None:
+                out.append(k["cwd"])
+            return out
+        for name in ("Popen", "run", "call", "check_call", "check_output"):
+            original = getattr(subprocess, name)
+
+            def fake_sub(argv, *a, _original=original, **k):
+                self.programs.append(argv)
+                for p in files_of(argv, k):
+                    note(p)
+                return _original(argv, *a, **k)
+            monkeypatch.setattr(subprocess, name, fake_sub)
+
+    def runner(self, inner):
+        """A notifier runner (I-9: the notifier on): the text file it is
+        handed (its last argument, which the program would read) is noted."""
+        def run(argv, env, timeout, wait=True):
+            self.paths.append(os.path.abspath(argv[-1]))
+            return inner(argv, env, timeout, wait)
+        return run
 
     def outside(self, root):
         root = os.path.realpath(root)
         return sorted({p for p in self.paths if os.path.commonpath([os.path.realpath(p), root]) != root})
 
 
+class FakeChannel:
+    """A fake Sysmon channel (I-9): stands in for subprocess.Popen of
+    wevtutil, by its absolute path and LIVE_ARGS, and returns the synthetic
+    export; no process is started."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, argv, **kw):
+        assert argv[0] == os_sysmon.WEVTUTIL and list(argv[1:]) == list(os_sysmon.LIVE_ARGS)
+        self.calls.append(argv)
+        data = SYSMON_XML.read_bytes()
+
+        class Proc:
+            pid, returncode = 4242, 0
+
+            def communicate(self, timeout=None):
+                return data, b""
+        return Proc()
+
+
+def a4_watch(names, home, writes, attach=False, sysmon=NO_SYSMON, os_follow=None):
+    runner = FakeRunner()
+    notifier = make_notifier(writes.runner(runner))   # I-9: the notifier on, through a fake runner
+    notifier.host = True
+    w = host.HostWatch(iter(names).__next__, CATALOG, RULES, notifier, every=10, out=io.StringIO(),
+                       err=io.StringIO(), home=str(home), platform="test", sysmon=sysmon, attach_hooks=attach,
+                       os_follow=os_follow)
+    for _ in names:
+        w.tick(wait=30)
+        for src in w.sources.values():
+            if src.thread is not None:
+                src.first_pass.wait(10)
+        w.next_round = 0
+    w.finish()
+    return w, runner
+
+
 def test_a4_without_the_flag_no_path_outside_raqib_is_written_and_with_it_only_the_hook_settings(home, tmp_path,
                                                                                                 monkeypatch):
     """A4, the heart of M7.2b: the only write into any project is the hook
-    settings, and only under --attach-hooks; every other source reads."""
+    settings, and only under --attach-hooks; every other source reads. REDO
+    I-9: the watcher sees every write path named in Writes, the notifier
+    is on (a fake runner), an os source follows a fake Sysmon channel, and
+    a symlinked `.claude` (I-1) and a kept foreign trace (I-2) are probed."""
     project = tmp_path / "proj"
     project.mkdir()
-    names = [moved("linux", project), moved("linux-agent", project), moved("linux", project)]
-    notifier = notify.Notifier(host.HOST, enabled=False, reason="test", host=True)
-    writes = Writes(monkeypatch)
-    w = host.HostWatch(iter(names).__next__, CATALOG, RULES, notifier, every=10, out=io.StringIO(),
-                       err=io.StringIO(), home=str(home), platform="test", sysmon=NO_SYSMON)
-    for _ in names:
-        w.tick(wait=30)
-        w.next_round = 0
-    w.finish()
-    assert writes.paths and writes.outside(home / ".raqib") == []
-    assert not (project / ".claude").exists() and sorted(p.name for p in project.iterdir()) == []
+    channel = FakeChannel()
+    real_bounded = os_sysmon.read_live_bounded
+    monkeypatch.setattr(os_sysmon, "read_live_bounded",
+                        lambda timeout, helpers: real_bounded(timeout=timeout, helpers=helpers, popen=channel))
 
+    def follow(root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None, helpers=None):
+        return os_sysmon.follow(root, log, stop, every=every, out=out, err=err, nt=True, on_pass=on_pass,
+                                after_record=after_record, helpers=helpers)
+    writes = Writes(monkeypatch)
+    # 1. no flag, the host source; the notifier knocks (NEW-AGENT, NET-TOOL)
+    w, runner = a4_watch([moved("linux", project), moved("linux-agent", project), moved("linux", project)], home,
+                         writes)
+    assert writes.paths and writes.outside(home / ".raqib") == [] and runner.calls
+    assert not (project / ".claude").exists() and sorted(p.name for p in project.iterdir()) == []
+    # 2. no flag, the os source over the fake Sysmon channel
+    w, runner = a4_watch([moved("windows", project), moved("windows", project)], home, writes, sysmon=SYSMON,
+                         os_follow=follow)
+    assert channel.calls and any(s.kind == "os" for s in w.sources.values())
+    assert lines_of(source_file(w, 4100)) and writes.outside(home / ".raqib") == []
+    assert sorted(p.name for p in project.iterdir()) == [] and writes.programs == []
+
+    # 3. the flag: only <project>/.claude and its settings.json
     writes.paths.clear()
-    names = [moved("linux", project), moved("linux", project)]
-    w = host.HostWatch(iter(names).__next__, CATALOG, RULES, notifier, every=10, out=io.StringIO(),
-                       err=io.StringIO(), home=str(home), platform="test", sysmon=NO_SYSMON, attach_hooks=True)
-    for _ in names:
-        w.tick(wait=30)
-        w.next_round = 0
-    w.finish()
+    a4_watch([moved("linux", project), moved("linux", project)], home, writes, attach=True)
     outside = writes.outside(home / ".raqib")
     norm = lambda p: os.path.normcase(os.path.normpath(str(p)))   # noqa: E731  (\\ and / alike on Windows)
     claude_dir = norm(project / ".claude")
@@ -501,6 +623,22 @@ def test_a4_without_the_flag_no_path_outside_raqib_is_written_and_with_it_only_t
                            os.path.dirname(norm(p)) == claude_dir for p in outside), outside
     assert sorted(os.path.normpath(str(p.relative_to(project))) for p in project.rglob("*")) == [
         ".claude", os.path.join(".claude", "settings.json")]
+
+    # 4. the flag over a project naming a foreign trace (I-2) and one whose .claude is a link (I-1)
+    kept = tmp_path / "proj2"
+    kept.mkdir()
+    install.install_project(str(kept), log=str(tmp_path / "elsewhere" / "x.log"), out=io.StringIO(), err=io.StringIO())
+    writes.paths.clear()
+    a4_watch([moved("linux", kept, pid=95)] * 2, home, writes, attach=True)
+    assert not (tmp_path / "elsewhere").exists()
+    assert all(norm(p).startswith(norm(kept / ".claude")) for p in writes.outside(home / ".raqib"))
+    if can_symlink(tmp_path):
+        (tmp_path / "x").mkdir()
+        linked = linked_project(home, tmp_path / "x")
+        writes.paths.clear()
+        a4_watch([moved("linux", linked, pid=95)] * 2, home, writes, attach=True)
+        assert writes.outside(home / ".raqib") == [] and os.listdir(str(home / ".claude")) == []
+    assert writes.programs == []
 
 
 def test_a4_the_docstrings_say_so():
@@ -639,3 +777,332 @@ def test_ascii():
     for name in ("raqib/host.py", "raqib/hooks/os_sysmon.py", "raqib/ui.py", "raqib/app.py", "raqib/cli.py",
                  "raqib/rules/catalog/HOST-UNWATCHED.yaml", "tests/test_host_sources.py", "tests/fixtures/host/make.py"):
         (ROOT / name).read_bytes().decode("ascii")
+
+
+# --- REDO (ADR-0007 Amendment I): every change carries its test (I-14) ---------------------------------------
+
+def can_symlink(tmp_path):
+    try:
+        os.symlink(str(tmp_path), str(tmp_path / "probe-link"), target_is_directory=True)
+    except (OSError, NotImplementedError, AttributeError):
+        return False
+    os.unlink(str(tmp_path / "probe-link"))
+    return True
+
+
+def linked_project(home, tmp_path):
+    """The reviewer's probe (P1): proj/.claude -> ~/.claude."""
+    (home / ".claude").mkdir(exist_ok=True)
+    project = tmp_path / "proj"
+    project.mkdir()
+    os.symlink(str(home / ".claude"), str(project / ".claude"), target_is_directory=True)
+    return project
+
+
+def test_redo_i1_a_symlinked_claude_writes_nothing_to_the_home_settings(home, tmp_path):
+    if not can_symlink(tmp_path):
+        pytest.skip("no symlinks here (recorded in the questions file: the junction-shaped test covers Windows)")
+    project = linked_project(home, tmp_path)
+    w, clock = make_host(home, [moved("linux", project, pid=95), moved("linux", project, pid=95)], attach_hooks=True)
+    rounds(w, clock, 2)
+    assert not (home / ".claude" / "settings.json").exists() and os.listdir(str(home / ".claude")) == []
+    t = tree_of(w, 95)
+    assert t["source"] == "host" and t["source_text"].startswith(host.HOOKS_LINK)
+    assert host.HOOKS_LINK == "hooks: not attached (.claude is a link / outside the project)"
+    assert any(h["kind"] == "hooks-not-attached" and host.HOOKS_LINK in h["detail"] for h in w.holes)
+    assert any("is a link" in n for n in w.notes)
+    assert w.finish()[1] == 3
+
+
+def test_redo_i1_a_symlinked_settings_file_and_a_settings_outside_the_project_are_refused(home, tmp_path):
+    if not can_symlink(tmp_path):
+        pytest.skip("no symlinks here")
+    project = tmp_path / "proj"
+    (project / ".claude").mkdir(parents=True)
+    other = tmp_path / "other.json"
+    other.write_text("{}\n", encoding="ascii")
+    os.symlink(str(other), str(project / ".claude" / "settings.json"))
+    why = host.link_in_path(str(project), (".claude", "settings.json"))
+    assert why and "is a link" in why
+    w, clock = make_host(home, [moved("linux", project, pid=95)], attach_hooks=True)
+    rounds(w, clock, 1)
+    assert other.read_text(encoding="ascii") == "{}\n" and tree_of(w, 95)["source"] == "host"
+    # a link above the project is not a component between it and the settings: the realpath decides
+    real = tmp_path / "real"
+    (real / "p").mkdir(parents=True)
+    os.symlink(str(real), str(tmp_path / "via"), target_is_directory=True)
+    assert host.link_in_path(str(tmp_path / "via" / "p"), (".claude", "settings.json")) is None
+    w.finish()
+
+
+def test_redo_i1_a_junction_shaped_claude_is_refused(home, tmp_path, monkeypatch):
+    """A junction is not a symlink to os.path.islink on every Python: lstat's
+    reparse-point attribute and os.path.isjunction are read too (shape test,
+    on every platform; a real junction is made on Windows below)."""
+    project = tmp_path / "proj"
+    (project / ".claude").mkdir(parents=True)
+    monkeypatch.setattr(os.path, "isjunction", lambda p: os.path.basename(str(p)) == ".claude", raising=False)
+    assert "is a link" in host.link_in_path(str(project), (".claude", "settings.json"))
+    w, clock = make_host(home, [moved("linux", project, pid=95)], attach_hooks=True)
+    rounds(w, clock, 1)
+    assert not (project / ".claude" / "settings.json").exists() and tree_of(w, 95)["source"] == "host"
+    w.finish()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="a real NTFS junction needs Windows")
+def test_redo_i1_a_real_junction_on_windows_writes_nothing_to_the_home_settings(home, tmp_path):
+    import _winapi
+    (home / ".claude").mkdir()
+    project = tmp_path / "proj"
+    project.mkdir()
+    _winapi.CreateJunction(str(home / ".claude"), str(project / ".claude"))
+    assert "is a link" in host.link_in_path(str(project), (".claude", "settings.json"))
+    w, clock = make_host(home, [moved("linux", project, pid=95)], attach_hooks=True)
+    rounds(w, clock, 1)
+    assert os.listdir(str(home / ".claude")) == [] and tree_of(w, 95)["source"] == "host"
+    w.finish()
+
+
+def test_redo_i2_a_trace_the_project_settings_name_is_foreign_never_used_and_nothing_is_created_there(home,
+                                                                                                    tmp_path):
+    project = tmp_path / "proj"
+    project.mkdir()
+    elsewhere = tmp_path / "elsewhere" / "deep" / "x.log"
+    install.install_project(str(project), log=str(elsewhere), out=io.StringIO(), err=io.StringIO())
+    assert not (tmp_path / "elsewhere").exists()
+    w, clock = make_host(home, [moved("linux", project, pid=95), moved("linux", project, pid=95)], attach_hooks=True)
+    rounds(w, clock, 2)
+    assert not (tmp_path / "elsewhere").exists()   # P2: no directory is made where the project points
+    src = w.sources[next(k for k in w.sources if k[0] == 95)]
+    assert src.kind == "hooks" and src.feeds[0].path.startswith(str(home / ".raqib" / "traces"))
+    norm = lambda p: os.path.normcase(os.path.normpath(str(p)))   # noqa: E731  (\\ and / alike on Windows)
+    assert [norm(p) for p in install.installed_traces(str(project))] == [norm(src.feeds[0].path)]   # replaced
+    (note,) = [n for n in w.notes if "is foreign" in n]
+    assert "elsewhere" in note and "x.log" in note and "nothing was created there" in note
+    w.finish()
+
+
+def hooked(home, tmp_path, names=None):
+    project = tmp_path / "proj"
+    project.mkdir(exist_ok=True)
+    names = names or [moved("linux", project, pid=95)] * 3
+    runner = FakeRunner()
+    w, clock = make_host(home, [copy.deepcopy(n) for n in names], runner=runner, attach_hooks=True)
+    rounds(w, clock, 1)
+    src = w.sources[next(k for k in w.sources if k[0] == 95)]
+    assert src.kind == "hooks"
+    return w, clock, src, project, runner
+
+
+def hook_line(project, seq, phase, tool="-", session="s1", cwd=None, **meta):
+    line = {"ts": "2026-11-04T10:00:%02d.000Z" % seq, "seq": seq, "session_id": session, "phase": phase,
+            "tool": tool, "cwd": str(cwd or project)}
+    if meta:
+        line["input_meta"] = meta
+    return line
+
+
+def write_hooks(src, lines):
+    with open(src.feeds[0].path, "a", encoding="ascii") as f:
+        for line in lines:
+            f.write(json.dumps(line) + "\n")
+
+
+def test_redo_i3_a_source_silence_pending_at_stop_is_an_alarm_of_the_tree_pending_at_exit(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path)
+    write_hooks(src, [hook_line(project, 1, "session_start")])
+    w.tick()
+    assert not w.source_findings   # pending: not judged live (later lines can take it back)
+    text, code = w.finish()
+    (f,) = [f for f in w.source_findings if f["rule_id"] == "SILENCE-OPEN"]
+    assert f["pending"] and f["state"] == host.PENDING_EXIT and f in w.source_alarms()
+    assert code == 1 and "SILENCE-OPEN on pid 95 (pending at exit)" in text
+    assert "1 live, of them 1 pending at exit" in text and "pending for good is silence (ADR-0005 B-1)" in text
+    assert tree_of(w, 95)["source_findings"] == {host.PENDING_EXIT: 1}
+
+
+def test_redo_i3_a_closed_session_leaves_nothing_pending(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path)
+    write_hooks(src, [hook_line(project, 1, "session_start"), hook_line(project, 2, "stop")])
+    w.tick()
+    text, code = w.finish()
+    assert not [f for f in w.source_findings if f["pending"]] and "SILENCE-OPEN" not in text
+
+
+def test_redo_i4_hooks_with_no_line_after_two_rounds_are_a_hole_said_once(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path, [moved("linux", tmp_path / "proj", pid=95)] * 4)
+    rounds(w, clock, 3)
+    (hole,) = [h for h in w.holes if h["kind"] == "hooks-silent"]
+    assert host.HOOKS_SILENT == "hooks attached, no line yet" and host.HOOKS_SILENT in hole["detail"]
+    assert host.HOOKS_SILENT in tree_of(w, 95)["source_text"] or host.HOOKS_SILENT in src.text
+    assert w.finish()[1] == 3
+
+
+def test_redo_i4_hooks_that_write_are_not_silent(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path, [moved("linux", tmp_path / "proj", pid=95)] * 4)
+    write_hooks(src, [hook_line(project, 1, "session_start"), hook_line(project, 2, "stop")])
+    rounds(w, clock, 3)
+    assert not [h for h in w.holes if h["kind"] == "hooks-silent"]
+    w.finish()
+
+
+def without(name, pid):
+    i = copy.deepcopy(inv(name))
+    i["candidates"] = [c for c in i["candidates"] if c["pid"] != pid]
+    i["act_roots"] = [c for c in i.get("act_roots", []) if c["pid"] != pid]
+    return i
+
+
+def test_redo_i4_gone_and_back_under_sysmon_names_the_real_reason_and_keeps_the_os_source(home):
+    follow = FakeFollow()
+    w, clock = make_host(home, ["windows", without("windows", 2100), "windows"], sysmon=SYSMON, os_follow=follow)
+    rounds(w, clock, 3)
+    t = tree_of(w, 2100)
+    assert t["source"] == "os", t["source_text"]
+    assert "None" not in t["source_text"] and "the os source ended: the tree is gone (round 2)" in t["source_text"]
+    assert [c["root"] for c in follow.calls].count(2100) == 2
+    w.finish()
+
+
+class Sleeper:
+    """A stand-in for wevtutil that does not return: a real child (this
+    Python, sleeping), so terminate() is real. Never the agent's."""
+
+    def __init__(self):
+        self.procs = []
+
+    def __call__(self, argv, **kw):
+        import subprocess
+        assert argv[0] == os_sysmon.WEVTUTIL and list(argv[1:]) == list(os_sysmon.LIVE_ARGS)
+        kw["env"] = dict(os.environ)
+        kw.pop("creationflags", None)
+        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], **kw)
+        self.procs.append(proc)
+        return proc
+
+
+def test_redo_i5_a_wevtutil_pass_that_does_not_return_is_ended_and_recorded():
+    assert os_sysmon.FOLLOW_TIMEOUT == 10.0 == notify.TIMEOUT_SECONDS
+    sleeper = Sleeper()
+    helpers = os_sysmon.Helpers()
+    text, why = os_sysmon.read_live_bounded(timeout=0.3, helpers=helpers, popen=sleeper)
+    (proc,) = sleeper.procs
+    assert text is None and why.startswith("wevtutil did not return in 0.3 s") and proc.poll() is not None
+    (rec,) = helpers.record
+    assert "Raqib's own helper" in rec and "terminated" in rec and helpers.running == {}
+
+
+def test_redo_i5_a_hung_pass_is_a_hole_of_the_tree_and_stop_ends_the_helper_still_out(home, monkeypatch):
+    monkeypatch.setattr(host, "SOURCE_JOIN_SECONDS", 0.3)
+    sleeper = Sleeper()
+    real = os_sysmon.read_live_bounded
+    monkeypatch.setattr(os_sysmon, "read_live_bounded",
+                        lambda timeout, helpers: real(timeout=timeout, helpers=helpers, popen=sleeper))
+
+    def follow(root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None, helpers=None):
+        timeout = 0.2 if root == 2100 else 30.0   # 2100: its pass hangs (a hole); 3300: still out at Stop
+        live = None if root in (2100, 3300) else (lambda: (None, "test: no channel"))
+        return os_sysmon.follow(root, log, stop, every=5.0, out=out, err=err, nt=True, on_pass=on_pass,
+                                helpers=helpers, timeout=timeout, live=live)
+    w, clock = make_host(home, ["windows"], sysmon=SYSMON, os_follow=follow)
+    rounds(w, clock, 1)
+    src = next(s for k, s in w.sources.items() if k[0] == 2100)
+    assert src.first_pass.wait(10) and src.helpers.record
+    w.tick()
+    assert any(h["kind"] == "source-helper" and "2100" in h["detail"] and "did not return in 0.2 s" in h["detail"]
+               for h in w.holes)
+    text, code = w.finish()
+    for p in sleeper.procs:   # nothing of Raqib's outlives the watch
+        p.wait(10)
+    assert len(sleeper.procs) == 2 and all(p.poll() is not None for p in sleeper.procs)
+    assert any(h["kind"] == "source-helper" and "3300" in h["detail"] and "the watch stopped" in h["detail"]
+               for h in w.holes)
+    assert code == 3 and "RAQIB-SILENCE" in Path(src.path).read_text(encoding="ascii")
+
+
+def test_redo_i6_an_aggregate_source_finding_that_grows_is_handed_over_not_knocked_again(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path)
+    write_hooks(src, [hook_line(project, 1, "session_start"), hook_line(project, 2, "stop", cwd=tmp_path / "a")])
+    w.tick()
+    (f,) = [f for f in w.source_findings if f["rule_id"] == "SCOPE-CWD-MOVED"]
+    assert f["summary"].startswith("session ran in 2 ") and f["grown"] == 0 and f.get("first")
+    knocks = len(runner.calls)
+    write_hooks(src, [hook_line(project, 3, "stop", cwd=tmp_path / "b")])
+    w.tick()
+    (g,) = [f for f in w.source_findings if f["rule_id"] == "SCOPE-CWD-MOVED"]
+    assert g is f and g["grown"] == 1 and g["summary"].startswith("session ran in 3 ")
+    assert len(runner.calls) == knocks   # C-2/E-2: grown, not knocked again
+    text, code = w.finish()
+    assert "grown 1 (not knocked again)" in text and tree_of(w, 95)["source_findings"] == {"medium": 1}
+
+
+def test_redo_i6_rules_that_cannot_run_on_a_source_are_listed_once_per_source(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path)
+    for seq in (1, 2, 3):
+        write_hooks(src, [hook_line(project, seq, "stop")])
+        w.tick()
+    said = [n for n in w.notes if "rule(s) did not run on it" in n]
+    assert len(said) == 1 and "its hooks source" in said[0]
+    assert "DRIFT-FILES (needs context: scope)" in said[0]
+    assert "rule(s) did not run on it" in w.finish()[0]
+
+
+def test_redo_i6_knocks_are_high_findings_and_the_first_finding_of_each_tree(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path)
+    curl = dict(hook_line(project, 1, "pre", tool="Bash"), input_meta={"command_head": "curl",
+                                                                        "command_programs": ["curl"]})
+    wget = dict(curl, seq=2, ts="2026-11-04T10:00:02.000Z")
+    write_hooks(src, [curl])
+    w.tick()
+    (first,) = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
+    assert first["severity"] == "medium" and first["notice"] == "sent" and first.get("first")
+    assert runner.titles()[-1] == "Raqib: " + notify.FIRST_EVENT
+    calls = len(runner.calls)
+    write_hooks(src, [wget])
+    w.tick()
+    second = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"][1]
+    assert second["notice"] == "not notified: severity medium" and len(runner.calls) == calls
+    # a high one knocks as its rule (A-4): SILENCE-EMPTY, a session with no work
+    write_hooks(src, [hook_line(project, 1, "session_start", session="s2"),
+                      hook_line(project, 2, "session_end", session="s2")])
+    w.tick()
+    (high,) = [f for f in w.source_findings if f["rule_id"] == "SILENCE-EMPTY"]
+    assert high["severity"] == "high" and high["notice"] == "sent" and runner.titles()[-1] == "Raqib: SILENCE-EMPTY"
+    assert tree_of(w, 95)["first_knock"]["rule_id"] == "NET-TOOL"
+    w.finish()
+
+
+def test_redo_i6_a_high_first_finding_knocks_once_by_the_rule(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path)
+    write_hooks(src, [hook_line(project, 1, "session_start"), hook_line(project, 2, "session_end")])
+    w.tick()
+    (f,) = [f for f in w.source_findings if f["rule_id"] == "SILENCE-EMPTY"]
+    assert f["notice"] == "sent" and runner.titles() == ["Raqib: SILENCE-EMPTY"]
+    assert tree_of(w, 95)["first_knock"]["status"] == notify.BY_THE_RULE
+    w.finish()
+
+
+def test_redo_i8_a_pid_reused_within_a_run_gets_its_own_file(home):
+    second = copy.deepcopy(inv("windows"))
+    for c in second["candidates"] + second.get("act_roots", []):
+        if c["pid"] == 3300:
+            c["started"] = "11/1/2026 9:30:00 AM"   # the same pid, a new process
+    w, clock = make_host(home, ["benign/windows-desktop", "windows", second])
+    rounds(w, clock, 3)
+    keys = sorted((k for k in w.trees if k[0] == 3300), key=str)
+    assert len(keys) == 2
+    paths = {w._source_path(k) for k in keys}
+    assert len(paths) == 2 and all(os.path.basename(p).startswith("%s-3300-" % w.run) for p in paths)
+    assert host.started_tag(None) == "nostart" and host.started_tag("x") != host.started_tag("y")
+    assert w.sources[keys[0]].path != w.sources[keys[1]].path
+    w.finish()
+
+
+def test_redo_i10_stop_leaves_the_hooks_in_place_and_the_report_says_so_per_project(home, tmp_path):
+    w, clock, src, project, runner = hooked(home, tmp_path)
+    text, code = w.finish()
+    assert (project / ".claude" / "settings.json").exists()
+    assert ("HOOKS LEFT IN PLACE: %s/.claude/settings.json keeps the Raqib hooks after this watch" % project) in text
+    w2, clock2 = make_host(tmp_path / "h2", ["linux"])
+    rounds(w2, clock2, 1)
+    assert "HOOKS LEFT IN PLACE" not in w2.finish()[0]

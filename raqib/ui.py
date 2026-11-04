@@ -1167,7 +1167,8 @@ def severity_counts(counts):
     """M7.2b E4: a tree's source findings by severity ("high 1, medium 2";
     history and pending apart), or "none"."""
     counts = counts if isinstance(counts, dict) else {}
-    parts = ["%s %s" % (k, counts[k]) for k in ("high", "medium", "low", "history", "pending") if counts.get(k)]
+    words = ("high", "medium", "low", "history", "pending at exit", "pending")
+    parts = ["%s %s" % (k, counts[k]) for k in words if counts.get(k)]
     return ", ".join(parts) or "none"
 
 

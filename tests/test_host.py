@@ -447,9 +447,11 @@ def test_e6_usage_errors_exit_2(argv, message, capsys):
 
 
 def test_e6_host_mode_installs_nothing_and_touches_no_project():
-    """M7.2b (H-1, A4): install_project and choose_trace are called in one
-    method only, _attach_hooks, after its `if not self.attach_hooks: return`;
-    nothing else of host.py may name them, and nothing signals or dials out."""
+    """M7.2b (H-1, A4): install_project is called in one method only,
+    _attach_hooks, after its `if not self.attach_hooks: return`; nothing
+    else of host.py may name it, and nothing signals or dials out. REDO I-2:
+    choose_trace is called nowhere (the trace is always Raqib's own default
+    under ~/.raqib/traces, never one the project's settings name)."""
     import ast
     source = (ROOT / "raqib" / "host.py").read_text(encoding="ascii")
     code = source.split('"""', 2)[2]
@@ -463,7 +465,7 @@ def test_e6_host_mode_installs_nothing_and_touches_no_project():
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in (
                         "install_project", "choose_trace"):
                     callers.setdefault(node.func.attr, set()).add(fn.name)
-    assert callers == {"install_project": {"_attach_hooks"}, "choose_trace": {"_attach_hooks"}}
+    assert callers == {"install_project": {"_attach_hooks"}}
     (method,) = [f for f in ast.walk(tree) if isinstance(f, ast.FunctionDef) and f.name == "_attach_hooks"]
     first = [n for n in method.body if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant))][0]
     assert isinstance(first, ast.If) and ast.unparse(first.test) == "not self.attach_hooks"

@@ -80,14 +80,22 @@ watch attaches ONE source to it, the first of these that applies:
     a filesystem root nor the home directory (whose .claude/settings.json
     is the person's own settings for every project) gets the hooks of
     `raqib watch` installed into that cwd with raqib/install.py's
-    install_project, the trace chosen outside the project exactly as
-    `raqib watch` chooses it (watch.choose_trace). THIS IS THE ONLY WRITE
+    install_project, the trace always Raqib's own default under
+    ~/.raqib/traces (watch.default_trace; Amendment I-2: a trace the
+    project's settings name is "foreign", never used, nothing is created
+    there, and the entry is replaced), and only when no component from the
+    project to .claude/settings.json is a symlink or junction and the
+    settings resolve under the project (I-1). THIS IS THE ONLY WRITE
     INTO ANY PROJECT, and without the flag it never happens: the tree gets
-    "hooks: not attached (<why>)" and falls to (a) or (b);
+    "hooks: not attached (<why>)" and falls to (a) or (b). Hooks with no
+    line two rounds after they were attached are a hole, "hooks attached,
+    no line yet" (I-4); Stop leaves them in place, said per project (I-10);
 (a) os: the Sysmon channel exists (Windows; doctor.check_sysmon, read from
     the registry) -> os_sysmon.follow rooted at the tree's root pid, live,
-    in a thread with a Stop, appending to ~/.raqib/host/sources/<run>-<pid>
-    .jsonl;
+    in a thread with a Stop, appending to ~/.raqib/host/sources/<run>-<pid>-
+    <started>.jsonl (I-8: keyed by run, pid and creation time); each pass's
+    wevtutil, Raqib's own child, has 10 s and is then terminated, a hole
+    (I-5); one still out at Stop is ended and recorded;
 (b) host: the host's own record of the tree as a source: every round, per
     tree, lines of source "host" (raqib/rules/trace.py SOURCES) appended to
     the same per-tree file: tool HostChild (input_meta.command_programs:
@@ -104,9 +112,14 @@ Every source file is judged incrementally (watch.Tail and the batch
 parser, as raqib watch reads its trace): os and hooks lines by the silence
 rules, the catalog (context none) and CROSS-SOURCE; host lines by NET-TOOL
 and DESTRUCT-CMD only (H-2: the silence rules skip source host). A new
-finding of a source is shown on its tree (report, page, window) by severity
-and knocks under "<RULE> pid N"; SILENCE-OPEN and SILENCE-HALF, which later
-lines can take back, are listed at the end, not knocked live; a finding of
+finding of a source is shown on its tree (report, page, window) by severity;
+it knocks (I-6, ADR-0005 A-4) when it is high, under "<RULE> pid N", and
+the first finding of each tree knocks once (FIRST-FINDING, by the rule when
+high); an aggregate finding that grows is handed over, not knocked again
+(C-2/E-2); the rules that cannot run on a source are listed once per
+source. SILENCE-OPEN and SILENCE-HALF, which later lines can take back, are
+judged at the end: still pending there, they are "pending at exit", an
+alarm of the tree (I-3, ADR-0005 B-1: pending for good is silence); a finding of
 a tree that was there at the start, citing only lines of that first round
 (or of the file as it was at attach), is history: listed, not knocked, not
 an alarm. A tree with no source (nothing could be attached: the sources
@@ -162,6 +175,13 @@ NODE_IMAGES = ("node",)
 UNWATCHED_ROUNDS = 2               # HOST-UNWATCHED.yaml fires at none_rounds 2 (a test holds them equal)
 SOURCE_JOIN_SECONDS = 5.0          # Stop: how long the end waits for the os threads together
 NO_FLAG = "no --attach-hooks"
+TRACE_SOURCE = "watch --host default, under ~/.raqib/traces (I-2)"
+HOOKS_SILENT_ROUNDS = 2            # I-4: a hooks source with no line after this many rounds is a hole
+HOOKS_SILENT = "hooks attached, no line yet"
+HOOKS_LINK = "hooks: not attached (.claude is a link / outside the project)"   # I-1
+FOREIGN = "foreign"                # I-2: doctor's word for a Raqib entry unlike the one this raqib writes
+PENDING_EXIT = "pending at exit"   # I-3 (ADR-0005 B-1): pending for good is silence, an alarm of the tree
+GROWS = ("SILENCE-OPEN",)          # I-6 (C-2): with the aggregate rules, a finding that grows is handed over
 EXIT = {"clean": 0, "none-seen": 0, "alarm": 1, "incomplete": 3}   # C-10
 CITE_TEXT_MAX = 240                # the text of a cited record line on a host line (C-6)
 TAIL_BYTES = 1 << 20               # how much of rounds.jsonl is read at the start for its last line (C-2)
@@ -471,13 +491,56 @@ def source_rules(rules, host_lines=False):
 def judge_source(rules, records):
     """(findings, notes) of a source file's records: the silence rules
     (which skip source host, H-2), the catalog with no context (a rule that
-    needs one is not run, and says so in a note that is dropped here: no
-    task scope is known for a discovered tree) and CROSS-SOURCE. Pure."""
+    needs one is not run: no task scope is known for a discovered tree) and
+    CROSS-SOURCE. Pure. Every note is returned; a rule that could not run
+    (not-evaluated, disabled) is listed once per source by the watch (I-6)."""
     found = [dict(f, **{"class": "SILENCE"}) for f in silence.findings(records)]
     catalog_found, notes = engine.evaluate(rules, records, {})
     cross_found, cross_notes = cross.findings(records)
-    notes = [n for n in notes + cross_notes if n.get("status") not in ("not-evaluated", "disabled")]
-    return found + catalog_found + cross_found, notes
+    return found + catalog_found + cross_found, notes + cross_notes
+
+
+NOT_RUN = ("not-evaluated", "disabled")
+
+
+def started_tag(started):
+    """I-8: the per-tree file's third key, from the tree's creation time:
+    the first 10 hex of its sha256, or "nostart" when the reader gives none
+    (Linux /proc). A pid reused within a run gets a file of its own."""
+    if started is None:
+        return "nostart"
+    return common.canonical_sha256({"started": str(started)})[:10]
+
+
+def link_in_path(project, rel):
+    """I-1: None when every component from project down to project/rel is
+    a real directory or file (lstat: no symlink, no junction, no other
+    reparse point) and the target's realpath lies under the project's
+    realpath; else why not. A component that does not exist yet is fine
+    (the installer makes .claude and settings.json as real ones)."""
+    path = project
+    for part in rel:
+        path = os.path.join(path, part)
+        try:
+            st = os.lstat(path)
+        except FileNotFoundError:
+            break
+        except OSError as exc:
+            return "%s cannot be read: %s" % (_safe(path), exc.strerror or exc)
+        attrs = getattr(st, "st_file_attributes", 0) or 0
+        junction = getattr(os.path, "isjunction", None)
+        if (os.path.islink(path) or attrs & 0x400 or (junction is not None and junction(path))):
+            return "%s is a link" % _safe(path)
+    real = os.path.realpath(project)
+    target = os.path.realpath(os.path.join(project, *rel))
+    try:
+        under = os.path.commonpath([os.path.normcase(real), os.path.normcase(target)]) == os.path.normcase(real)
+    except ValueError:   # another drive
+        under = False
+    if not under or target == real:
+        return "%s resolves to %s, outside the project %s" % (_safe(os.path.join(project, *rel)), _safe(target),
+                                                              _safe(real))
+    return None
 
 
 class Feed:
@@ -562,6 +625,12 @@ class TreeSource:
         self.seq = 0
         self.children = set()        # host: the child pids already written
         self.remotes = set()         # host: the remote host:port already written
+        self.rounds_after = 0        # I-4: rounds the tree was seen since this source was attached
+        self.silent_said = False     # I-4: the "hooks attached, no line yet" hole was made
+        self.attach_size = 0         # I-4: the hooks trace's size at attach
+        self.helpers = None          # I-5: os_sysmon.Helpers of an os follow (Raqib's own wevtutil)
+        self.helpers_said = 0        # I-5: how many of its records are holes already
+        self.not_run_said = False    # I-6: the rules that cannot run on it were listed once
 
     def writes_host(self):
         return self.kind == HOST_SOURCE or self.also_host
@@ -699,6 +768,7 @@ class HostWatch:
         self.file_seq = {}           # a host source file -> its last seq (a re-attach continues it)
         self.source_findings = []    # the findings of the sources, each on its tree
         self.source_keys = set()
+        self.source_grows = {r.id for r in self.src_rules if r.aggregate is not None} | set(GROWS)   # I-6
         self.pending_end = []        # SILENCE-OPEN / -HALF of the sources at the end: listed, not knocked
         self.source_problems = {}    # (path, line) seen as a hole once
         try:
@@ -1121,19 +1191,26 @@ class HostWatch:
         source ended with a hole) a new one: (c) hooks only under
         attach_hooks, else (a) os where Sysmon is, else (b) host; none when
         nothing could be attached (HOST-UNWATCHED). Recorded on the tree."""
-        src = self.sources.get(key)
-        if src is not None and src.error is None and not (src.thread is not None and not src.thread.is_alive()):
-            return src
-        again = src is not None
+        prev = self.sources.get(key)
+        if prev is not None and prev.error is None and not (prev.thread is not None and (
+                not prev.thread.is_alive() or prev.stop.is_set())):
+            prev.rounds_after += 1
+            self._hooks_silent(now, n, key, prev)
+            return prev
+        again = prev is not None
         note = None
+        src = None
         if t.get("claude_code"):
             src, note = self._attach_hooks(now, n, key, t, entry)
         if src is None or src.kind != "hooks":
-            failed_os = again and self.sources[key].kind == "os"   # an os source that ended with a hole: host next
+            failed_os = again and prev.kind == "os" and prev.error is not None   # ended with a hole: host next
             src = (self._attach_os(now, n, key, t, entry) if self.sysmon[0] and not failed_os
                    else self._attach_host(now, n, key, t, entry))
             if failed_os:
-                src.text = "%s (the os source ended with a hole: %s)" % (src.text, self.sources[key].error)
+                src.text = "%s (the os source ended with a hole: %s)" % (src.text, prev.error)
+            elif again and prev.kind == "os":   # I-4 (P5): gone and back, the real reason, never "None"
+                src.text = "%s (the os source ended: %s; attached again)" % (
+                    src.text, prev.ended or "its follow returned")
         if note:
             src.text = "%s; %s" % (note, src.text)
             src.hooks_note = note
@@ -1148,8 +1225,25 @@ class HostWatch:
                                                      " (attached again after a hole)" if again else ""))
         return src
 
-    def _source_path(self, pid):
-        return os.path.join(self.sources_dir, "%s-%s.jsonl" % (self.run, pid))
+    def _hooks_silent(self, now, n, key, src):
+        """I-4 (A3, CLAUDE.md rule 4): a hooks source whose trace has had no
+        new line after HOOKS_SILENT_ROUNDS rounds is a hole, said once (the
+        hooks may not run until the session restarts: a hook that did not
+        fire is a finding, never "nothing happened")."""
+        if src.kind != "hooks" or src.silent_said or src.rounds_after < HOOKS_SILENT_ROUNDS:
+            return
+        if self._size(src.feeds[0].path) > (src.attach_size or 0):
+            return
+        src.silent_said = True
+        self._hole(now, "hooks-silent", "round %d: tree %s: %s: %s has no line %d round(s) after the hooks were"
+                   " attached to %s (they may not run until the session restarts)" % (
+                       n, tree_word(key), HOOKS_SILENT, _safe(src.feeds[0].path), src.rounds_after,
+                       _safe(src.project)), round_=n)
+        src.text = "%s; %s" % (src.text, HOOKS_SILENT)
+
+    def _source_path(self, key):
+        """I-8: the per-tree file, keyed by (run, pid, started), never pid alone."""
+        return os.path.join(self.sources_dir, "%s-%s-%s.jsonl" % (self.run, key[0], started_tag(key[2])))
 
     def _sources_ready(self):
         """None, or why the sources directory cannot be had."""
@@ -1177,8 +1271,8 @@ class HostWatch:
     def _attach_hooks(self, now, n, key, t, entry):
         """(c) (TreeSource or None, the "hooks: not attached (<why>)" note).
         The ONLY write into a project, and only under attach_hooks (H-1):
-        install_project into the tree's cwd, the trace chosen outside it as
-        `raqib watch` chooses it (watch.choose_trace, under ~/.raqib)."""
+        install_project into the tree's cwd, the trace Raqib's own default
+        under ~/.raqib/traces (I-2), never through a link (I-1)."""
         if not self.attach_hooks:
             return None, "hooks: not attached (%s)" % NO_FLAG
         cwd = t.get("cwd")
@@ -1207,24 +1301,50 @@ class HostWatch:
         sink = io.StringIO()
         try:
             project = installer.absolute(cwd)
-            trace_path, how, notes = watch.choose_trace(installer, project, None, self.home_dir)
+        except Exception as exc:
+            return None, "hooks: not attached (the cwd %s cannot be made absolute: %s)" % (_safe(cwd), type(exc).__name__)
+        # I-1: no link at any step from the project to .claude/settings.json, and it resolves under the project
+        link = link_in_path(project, (".claude", "settings.json"))
+        if link:
+            self.notes.append("round %d: %s pid %s: %s: %s" % (n, t.get("image"), t.get("pid"), HOOKS_LINK, link))
+            return None, HOOKS_LINK
+        # I-2: the trace is always Raqib's own default under ~/.raqib/traces; one the settings name is foreign
+        raqib_home = os.path.join(self.home_dir, ".raqib")
+        trace_path = watch.default_trace(project, self.home_dir)
+        if not watch.inside(trace_path, raqib_home) or watch.inside(trace_path, project):
+            return None, "hooks: not attached (the default trace %s is not under ~/.raqib or is in the project)" % (
+                _safe(trace_path))
+        try:
+            kept = installer.installed_traces(project)
+            foreign = [k for k in kept if os.path.normcase(os.path.normpath(k)) !=
+                       os.path.normcase(os.path.normpath(trace_path))]
             os.makedirs(os.path.dirname(trace_path), exist_ok=True)
-            installed = installer.install_project(project, log=trace_path, log_source=how, out=sink, err=sink)
+            installed = installer.install_project(project, log=trace_path, log_source=TRACE_SOURCE, out=sink,
+                                                  err=sink)
         except Exception as exc:   # a refused install is a hole (made by _attach); the tree falls to os or host
             text = getattr(exc, "message", None) or "%s: %s" % (type(exc).__name__, exc)
             return None, "hooks: not attached (the install failed: %s)" % _safe(" ".join(str(text).split()))[:200]
-        for note in notes:
-            self.notes.append("round %d: %s" % (n, note))
+        for k in foreign:   # nothing is read from, written to or created at a trace the project names
+            self.notes.append("round %d: %s: a Raqib hook entry writing to %s is %s (not this watch's trace under"
+                              " ~/.raqib/traces): replaced, as raqib watch replaces one; nothing was created there"
+                              % (n, _safe(project), _safe(k), FOREIGN))
+        again = link_in_path(project, (".claude", "settings.json"))
+        if again:   # I-1: the link appeared while the hooks were written (a race): said, never silent
+            self._hole(now, "hooks-link", "round %d: %s after the hooks were written: %s" % (n, HOOKS_LINK, again),
+                       round_=n)
         if installed.get("code") == 3:
             self._hole(now, "hooks-disabled", "round %d: the hooks of %s are installed but disableAllHooks is set:"
                        " they will not run" % (n, _safe(project)), round_=n)
         ready = self._sources_ready()
-        path = self._source_path(t.get("pid")) if ready is None else None
+        path = self._source_path(key) if ready is None else None
         feeds = [Feed(trace_path, self.src_rules, self._size(trace_path))]
+        size_at_attach = feeds[0].history_bytes
         if path:
             feeds.append(Feed(path, self.host_rules, self._size(path)))
         src = TreeSource("hooks", "hooks: project %s (trace %s)" % (_safe(project), _safe(trace_path)), path=path,
                          feeds=feeds, project=project, also_host=path is not None, word="hooks: project %s" % _safe(project))
+        src.attach_size = size_at_attach
+        src.foreign = foreign
         self.notes.append("round %d: hooks attached to %s for %s pid %s (--attach-hooks): %s" % (
             n, _safe(project), t.get("image"), t.get("pid"), "; ".join(
                 " ".join(x.split()) for x in sink.getvalue().splitlines()[:3])))
@@ -1235,7 +1355,7 @@ class HostWatch:
         ready = self._sources_ready()
         if ready:
             return self._none(now, n, t, ready)
-        path = self._source_path(t.get("pid"))
+        path = self._source_path(key)
         feed = Feed(path, self.host_rules, self._size(path))
         old = self.sources.get(key)
         src = TreeSource(HOST_SOURCE, "host: the host's own record of the tree: %s" % path, path=path, feeds=[feed],
@@ -1251,13 +1371,20 @@ class HostWatch:
         if ready:
             return self._none(now, n, t, ready)
         from raqib.hooks import os_sysmon
-        path = self._source_path(t.get("pid"))
+        path = self._source_path(key)
         first = entry.get("first_round") == self.history_round   # there at the start: the channel's past is history
         old = self.sources.get(key)
+        if old is not None and old.thread is not None and old.thread.is_alive():
+            old.stop.set()
+            old.thread.join(0.5)
+            if old.thread.is_alive():
+                self._hole(now, "source-out", "round %d: tree %s: its earlier os follow was still in a pass when it"
+                           " was attached again" % (n, tree_word(key)), round_=n)
         feed = Feed(path, self.src_rules, None if first and old is None else self._size(path))
         src = TreeSource("os", "os: Sysmon, rooted at pid %s: %s" % (t.get("pid"), path), path=path, feeds=[feed],
                          word="os: Sysmon, rooted at pid %s" % t.get("pid"))
         src.stop = threading.Event()
+        src.helpers = os_sysmon.Helpers()   # I-5: the wevtutil it starts are Raqib's own, ended at Stop
         src.top = getattr(old, "top", None)
         follow = self.os_follow or os_sysmon.follow
 
@@ -1271,8 +1398,8 @@ class HostWatch:
         def run():
             try:
                 follow(t.get("pid"), path, src.stop, every=self.source_every, out=io.StringIO(), err=io.StringIO(),
-                       on_pass=on_pass, after_record=src.top)
-                src.ended = "stopped"
+                       on_pass=on_pass, after_record=src.top, helpers=src.helpers)
+                src.ended = src.ended or "stopped"   # I-4: the first reason (the tree is gone) is kept
             except BaseException as exc:   # the source's failure is a hole, never the end of the watch
                 src.error = "%s: %s" % (type(exc).__name__, " ".join(str(exc).split()))
                 if feed.history_bytes is None:
@@ -1358,6 +1485,7 @@ class HostWatch:
         """Every source file read as it grew and judged; a new finding is
         put on its tree and knocks (history and pending ones do not)."""
         fired = []
+        self._helper_holes(now)
         for key, src in list(self.sources.items()):
             if src.kind == "none":
                 continue
@@ -1381,9 +1509,20 @@ class HostWatch:
         return fired
 
     def _judge_feed(self, now, key, src, feed, final):
+        """A source feed judged: each new finding put on its tree. I-6: a
+        finding of an aggregate rule (or SILENCE-OPEN) whose key changed as
+        it grew takes over the entry of the same feed, rule and session whose
+        key is gone (ADR-0005 C-2/E-2: `grown`, not knocked again); the
+        rules that could not run on the source are listed once per source;
+        knocks follow ADR-0005 A-4 (high findings) plus the first finding of
+        each tree (notify.FirstFinding's text, a rate-limit id per tree).
+        I-3: at the end a SILENCE-OPEN / -HALF still pending is "pending at
+        exit": pending for good is silence (B-1), an alarm of the tree."""
         found, notes, lines_of = feed.judge()
         entry_tree = self.trees.get(key) or {}
         fired = []
+        current = {(feed.path, feed.epoch, f["rule_id"], f["session_id"], tuple(f["cited_seq"]), f["summary"])
+                   for f in found}
         for f in found:
             fkey = (feed.path, feed.epoch, f["rule_id"], f["session_id"], tuple(f["cited_seq"]), f["summary"])
             if fkey in self.source_keys:
@@ -1394,35 +1533,77 @@ class HostWatch:
             cited = [ln for s in f["cited_seq"] for ln in lines_of.get((f["session_id"], s), [])]
             history = bool(cited) and all(feed.history(ln) for ln in cited)
             self.source_keys.add(fkey)
+            if f["rule_id"] in self.source_grows:
+                old = next((e for e in self.source_findings if e.get("fkey") is not None
+                            and tuple(e["fkey"][:4]) == fkey[:4] and tuple(e["fkey"]) not in current), None)
+                if old is not None:   # C-2: grown, the same finding: not a new entry, not knocked again
+                    old.update(summary=f["summary"], cited_seq=list(f["cited_seq"]), lines=cited[:6],
+                               fkey=list(fkey), grown=old.get("grown", 0) + 1)
+                    self._say(now, "SOURCE FINDING grown [%s] %s on %s pid %s (%s): %s (grown %d, not knocked"
+                              " again)" % (f["severity"], f["rule_id"], key[1] or "?", key[0], src.kind,
+                                           f["summary"], old["grown"]))
+                    continue
             entry = {"rule_id": f["rule_id"], "kind": f.get("kind"), "class": f.get("class"),
                      "severity": f["severity"], "summary": f["summary"], "cited_seq": list(f["cited_seq"]),
                      "session_id": f["session_id"], "trace": feed.path, "lines": cited[:6],
                      "tree": tree_word(key), "tree_key": list(key), "pid": key[0], "image": key[1],
                      "source": src.kind, "at": self.at(now), "run": self.run, "history": history,
-                     "pending": pending, "notice": None}
-            if pending:
-                entry["notice"] = "pending at the end: not settled, not knocked"
-                self.pending_end.append(entry)
-            elif history:
+                     "pending": pending, "notice": None, "fkey": list(fkey), "grown": 0,
+                     "state": PENDING_EXIT if pending else "settled"}
+            if history:
                 entry["notice"] = "history: not knocked"
+            elif pending:   # as raqib watch at its end: listed and counted, the exit code is the alarm
+                entry["notice"] = "%s: pending for good is silence (ADR-0005 B-1): an alarm of the tree, exit 1" % (
+                    PENDING_EXIT)
             else:
-                entry["notice"] = self.notifier.notify(
-                    f["rule_id"], "%s pid %s via %s" % (str(key[1] or "?")[:IMAGE_MAX], key[0], src.kind), now,
-                    token=(entry, "notice"), limit_id="%s pid %s" % (f["rule_id"], key[0]))
+                entry["notice"] = self._source_knock(now, key, src, entry)
+            if pending:
+                self.pending_end.append(entry)
             self.source_findings.append(entry)
             if entry_tree:
                 counts = entry_tree.setdefault("source_findings", {})
-                word = "pending" if pending else "history" if history else f["severity"]
+                word = "history" if history else PENDING_EXIT if pending else f["severity"]
                 counts[word] = counts.get(word, 0) + 1
             fired.append("%s %s" % (f["rule_id"], tree_word(key)))
             self._say(now, "SOURCE FINDING [%s] %s on %s pid %s (%s): %s (%s)" % (
                 f["severity"], f["rule_id"], key[1] or "?", key[0], src.kind, f["summary"], entry["notice"]))
+        not_run = sorted({"%s (%s)" % (n["rule_id"], n["detail"]) for n in notes if n.get("status") in NOT_RUN})
+        if not_run and not src.not_run_said:   # I-6 (P8): said once per source, never dropped
+            src.not_run_said = True
+            self.notes.append("tree %s, its %s source: %d rule(s) did not run on it: %s" % (
+                tree_word(key), src.kind, len(not_run), "; ".join(not_run)))
         for note in notes:
+            if note.get("status") in NOT_RUN:
+                continue
             text = "tree %s, %s: rule %s %s: %s" % (tree_word(key), feed.path, note["rule_id"], note["status"],
                                                    note["detail"])
-            if not any(h["detail"] == text for h in self.holes):
+            if text not in self.notes:
                 self.notes.append(text)
         return fired
+
+    def _source_knock(self, now, key, src, entry):
+        """I-6 (ADR-0005 A-4, ADR-0006 A-12): a high finding knocks as its
+        rule; the first live finding of each tree knocks once as
+        FIRST-FINDING (by the rule when that was high); the rest are not
+        notified. The notice."""
+        notice = None
+        if entry["severity"] == "high":
+            notice = self.notifier.notify(
+                entry["rule_id"], "%s pid %s via %s" % (str(key[1] or "?")[:IMAGE_MAX], key[0], src.kind), now,
+                token=(entry, "notice"), limit_id="%s pid %s" % (entry["rule_id"], key[0]))
+        tree = self.trees.get(key)
+        if tree is not None and tree.get("first_knock") is None:
+            where = notify.clean("pid %s %s" % (key[0], notify.FirstFinding.where(entry)))
+            if notice is not None:
+                status = notify.BY_THE_RULE
+            else:
+                status = self.notifier.notify(notify.FIRST_EVENT, where, now, token=(entry, "notice"),
+                                              limit_id="%s pid %s" % (notify.FIRST_EVENT, key[0]))
+                notice = status
+            tree["first_knock"] = {"rule_id": entry["rule_id"], "severity": entry["severity"], "where": where,
+                                   "status": status, "at": self.at(now)}
+            entry["first"] = True
+        return notice if notice is not None else "not notified: severity %s" % entry["severity"]
 
     def stop_sources(self, now):
         """Stop ends every source thread (E4): each os follow is told to
@@ -1434,14 +1615,29 @@ class HostWatch:
         deadline = time.monotonic() + SOURCE_JOIN_SECONDS
         for key, src in threads:
             src.thread.join(max(0.0, deadline - time.monotonic()))
+            if src.helpers is not None:   # I-5: Raqib's own wevtutil still out is ended, and recorded
+                src.helpers.end("the watch stopped (Stop)")
             if src.thread.is_alive():
                 self._hole(now, "source-out", "tree %s: its os source was still in a pass at the end (%g s after"
                            " Stop): what it would have appended is not judged" % (tree_word(key), SOURCE_JOIN_SECONDS))
             else:
                 src.ended = src.ended or "stopped"
+        self._helper_holes(now)
+
+    def _helper_holes(self, now):
+        """I-5: every wevtutil helper an os follow had to end is a hole of
+        its tree, once (a pass that did not return is never silent)."""
+        for key, src in self.sources.items():
+            if src.helpers is None:
+                continue
+            for text in src.helpers.record[src.helpers_said:]:
+                self._hole(now, "source-helper", "tree %s: %s" % (tree_word(key), text))
+            src.helpers_said = len(src.helpers.record)
 
     def source_alarms(self):
-        return [f for f in self.source_findings if not f["history"] and not f["pending"]]
+        """The live source findings: settled ones and, I-3 (ADR-0005 B-1),
+        those pending at exit (pending for good is silence). History is not."""
+        return [f for f in self.source_findings if not f["history"]]
 
     def round_text(self, r):
         head = "round %d%s: %s records read, %s holes" % (r["round"], " (late, %.1f s)" % r["seconds"] if r["late"]
@@ -1507,7 +1703,8 @@ class HostWatch:
         live = self.source_alarms()
         if live:   # M7.2b E4: a source's finding on a tree is a finding of the watch
             alarms.append("%d source finding(s): %s" % (len(live), ", ".join(sorted(
-                {"%s on pid %s" % (f["rule_id"], f["pid"]) for f in live}))))
+                {"%s on pid %s%s" % (f["rule_id"], f["pid"], " (%s)" % PENDING_EXIT if f["pending"] else "")
+                 for f in live}))))
         if not self.applied:
             incomplete.append("no round gave an inventory: nothing read (A3)")
         unread_rounds = sorted({h.get("round") for h in self.holes if h["kind"] == "round-unread"}, key=str)
@@ -1590,13 +1787,20 @@ class HostWatch:
             out.append("  [%s] %s round %d (%s): %s; %s; cites %s" % (
                 f["severity"], f["rule_id"], f["round"], f["sample"], f["summary"], f["notice"],
                 " ".join("%s:%s" % (c["src"], c["line"]) for c in f.get("cites") or []) or "-"))
-        out.append("SOURCE FINDINGS: %d (%d knocked or knockable, %d history, %d pending at the end)" % (
+        out.append("SOURCE FINDINGS: %d (%d live, of them %d %s; %d history)" % (
             len(self.source_findings), len(self.source_alarms()),
-            sum(1 for f in self.source_findings if f["history"] and not f["pending"]), len(self.pending_end)))
+            sum(1 for f in self.source_alarms() if f["pending"]), PENDING_EXIT,
+            sum(1 for f in self.source_findings if f["history"])))
         for f in self.source_findings:
-            out.append("  [%s] %s on %s pid %s via %s: %s; %s; cites %s lines %s" % (
+            out.append("  [%s] %s on %s pid %s via %s: %s; %s; cites %s lines %s%s" % (
                 f["severity"], f["rule_id"], f["image"] or "?", f["pid"], f["source"], f["summary"], f["notice"],
-                f["trace"], ",".join(str(x) for x in f["lines"]) or "-"))
+                f["trace"], ",".join(str(x) for x in f["lines"]) or "-",
+                "; grown %d (not knocked again)" % f["grown"] if f.get("grown") else ""))
+        if self.attach_hooks:   # I-10: Stop leaves attached hooks in place, as raqib watch does
+            for project in sorted({s.project for s in self.sources.values() if s.kind == "hooks" and s.project}):
+                out.append("HOOKS LEFT IN PLACE: %s/.claude/settings.json keeps the Raqib hooks after this watch (as"
+                           " raqib watch leaves them; remove them with your editor or a later uninstall)"
+                           % _safe(project))
         out.append("HOOKS: %s" % ("attached only with --attach-hooks: on (the hook settings are the only write into"
                                   " a project)" if self.attach_hooks else
                                   "not attached (%s): nothing is written into any project" % NO_FLAG))

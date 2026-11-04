@@ -216,7 +216,8 @@ def rounds_of(names, catalog, rules, home, sources=True):
 def source_lines(watch):
     """Every line of every per-tree source file of a watch, in pid order."""
     out = []
-    names = sorted(os.listdir(watch.sources_dir), key=lambda n: int(n.rsplit("-", 1)[1].split(".")[0]))
+    # I-8: <run>-<pid>-<started tag>.jsonl; the run "fixture-run" has dashes of its own
+    names = sorted(os.listdir(watch.sources_dir), key=lambda n: int(n[len(watch.run) + 1:].split("-", 1)[0]))
     for name in names:
         with open(os.path.join(watch.sources_dir, name), encoding="ascii") as f:
             out += [json.loads(line) for line in f if line.strip()]
