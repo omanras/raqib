@@ -1,0 +1,194 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 6,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": false,
+    "cites": [
+     {
+      "line": 13,
+      "src": "proc",
+      "text": "{\"argv\": [\"/home/user/.local/share/JetBrains/Toolbox/bin/jetbrains-toolbox\", \"--minimize\"], \"at\": \"2026-11-03T09:00:00.../Toolbox/bin/jetbrains-toolbox\", \"name\": \"jetbrains-toolb\", \"pid\": 1700, \"ppid\": 980, \"sockets\": [43001], \"unread\": []}"
+     },
+     {
+      "line": 43,
+      "src": "proc",
+      "text": "{\"argv\": [\"/home/user/.local/share/JetBrains/Toolbox/bin/jetbrains-toolbox\", \"--minimize\"], \"at\": \"2026-11-03T09:00:01.../Toolbox/bin/jetbrains-toolbox\", \"name\": \"jetbrains-toolb\", \"pid\": 1700, \"ppid\": 980, \"sockets\": [43001], \"unread\": []}"
+     },
+     {
+      "line": 9,
+      "src": "proc-net",
+      "text": "   5: 140200C0:C74C 3C6433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 43001 1 0000000000000000 20 4 30 10 -1"
+     },
+     {
+      "line": 19,
+      "src": "proc-net",
+      "text": "   5: 140200C0:C74C 3C6433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 43001 1 0000000000000000 20 4 30 10 -1"
+     },
+     {
+      "line": 14,
+      "src": "proc",
+      "text": "{\"argv\": [\"/home/user/.local/share/JetBrains/Toolbox/apps/intellij-idea-community-edition/bin/idea\"], \"at\": \"2026-11-0...apps/intellij-idea-community-edition/bin/idea\", \"name\": \"idea\", \"pid\": 1800, \"ppid\": 1700, \"sockets\": [], \"unread\": []}"
+     },
+     {
+      "line": 44,
+      "src": "proc",
+      "text": "{\"argv\": [\"/home/user/.local/share/JetBrains/Toolbox/apps/intellij-idea-community-edition/bin/idea\"], \"at\": \"2026-11-0...apps/intellij-idea-community-edition/bin/idea\", \"name\": \"idea\", \"pid\": 1800, \"ppid\": 1700, \"sockets\": [], \"unread\": []}"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "198.51.100.60:443"
+    ],
+    "history": false,
+    "image": "jetbrains-toolbox",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 1700,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "started": null,
+    "tree": "1700:jetbrains-toolbox:-",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 1,
+    "benign": true,
+    "benign_by": "/usr/*",
+    "candidate_before": false,
+    "cites": [
+     {
+      "line": 23,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/share/code/code\", \"--type=utility\", \"--utility-sub-type=node.mojom.NodeService\", \"--lang=en-US\", \"--se...TIME_DIR\"], \"exe\": \"/usr/share/code/code\", \"name\": \"code\", \"pid\": 2040, \"ppid\": 2000, \"sockets\": [41002], \"unread\": []}"
+     },
+     {
+      "line": 53,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/share/code/code\", \"--type=utility\", \"--utility-sub-type=node.mojom.NodeService\", \"--lang=en-US\", \"--se...TIME_DIR\"], \"exe\": \"/usr/share/code/code\", \"name\": \"code\", \"pid\": 2040, \"ppid\": 2000, \"sockets\": [41002], \"unread\": []}"
+     },
+     {
+      "line": 6,
+      "src": "proc-net",
+      "text": "   2: 140200C0:C73A 336433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 41002 1 0000000000000000 20 4 30 10 -1"
+     },
+     {
+      "line": 16,
+      "src": "proc-net",
+      "text": "   2: 140200C0:C73A 336433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 41002 1 0000000000000000 20 4 30 10 -1"
+     },
+     {
+      "line": 24,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/bin/git\", \"status\", \"-z\", \"-uall\"], \"at\": \"2026-11-03T09:00:00.000Z\", \"cwd\": \"/home/user/src/app\", \"en...SER\", \"XDG_RUNTIME_DIR\"], \"exe\": \"/usr/bin/git\", \"name\": \"git\", \"pid\": 2045, \"ppid\": 2040, \"sockets\": [], \"unread\": []}"
+     },
+     {
+      "line": 54,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/bin/git\", \"status\", \"-z\", \"-uall\"], \"at\": \"2026-11-03T09:00:01.000Z\", \"cwd\": \"/home/user/src/app\", \"en...SER\", \"XDG_RUNTIME_DIR\"], \"exe\": \"/usr/bin/git\", \"name\": \"git\", \"pid\": 2045, \"ppid\": 2040, \"sockets\": [], \"unread\": []}"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "198.51.100.51:443"
+    ],
+    "history": false,
+    "image": "code",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 2040,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "started": null,
+    "tree": "2040:code:-",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 3,
+    "benign": true,
+    "benign_by": "/usr/*",
+    "candidate_before": false,
+    "cites": [
+     {
+      "line": 29,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/lib/firefox/firefox\"], \"at\": \"2026-11-03T09:00:00.000Z\", \"cwd\": \"/home/user\", \"env_keys\": [\"DBUS_SESSI...xe\": \"/usr/lib/firefox/firefox\", \"name\": \"firefox\", \"pid\": 3000, \"ppid\": 1210, \"sockets\": [42001, 42002], \"unread\": []}"
+     },
+     {
+      "line": 59,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/lib/firefox/firefox\"], \"at\": \"2026-11-03T09:00:01.000Z\", \"cwd\": \"/home/user\", \"env_keys\": [\"DBUS_SESSI...R\"], \"exe\": \"/usr/lib/firefox/firefox\", \"name\": \"firefox\", \"pid\": 3000, \"ppid\": 1210, \"sockets\": [42001], \"unread\": []}"
+     },
+     {
+      "line": 7,
+      "src": "proc-net",
+      "text": "   3: 140200C0:C742 5A6433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 42001 1 0000000000000000 20 4 30 10 -1"
+     },
+     {
+      "line": 17,
+      "src": "proc-net",
+      "text": "   3: 140200C0:C742 5A6433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 42001 1 0000000000000000 20 4 30 10 -1"
+     },
+     {
+      "line": 8,
+      "src": "proc-net",
+      "text": "   4: 140200C0:C744 5B6433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 42002 1 0000000000000000 20 4 30 10 -1"
+     },
+     {
+      "line": 30,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/lib/firefox/firefox\", \"-contentproc\", \"-childID\", \"1\", \"-isForBrowser\", \"tab\"], \"at\": \"2026-11-03T09:0..., \"exe\": \"/usr/lib/firefox/firefox\", \"name\": \"Isolated Web Co\", \"pid\": 3010, \"ppid\": 3000, \"sockets\": [], \"unread\": []}"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "198.51.100.90:443",
+     "198.51.100.91:443"
+    ],
+    "history": false,
+    "image": "firefox",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 3000,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
+    "started": null,
+    "tree": "3000:firefox:-",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  }
+ ]
+}

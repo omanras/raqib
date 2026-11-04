@@ -1,0 +1,50 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 2,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": false,
+    "cites": [
+     {
+      "line": 9,
+      "src": "proc",
+      "text": "{\"argv\": [\"agent\", \"--task\", \"summarise the release notes\"], \"at\": \"2026-11-03T09:20:00.000Z\", \"cwd\": \"/home/user/work...E_DIR\"], \"exe\": \"/home/user/.local/bin/agent\", \"name\": \"agent\", \"pid\": 1600, \"ppid\": 1510, \"sockets\": [], \"unread\": []}"
+     },
+     {
+      "line": 10,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/bin/bash\", \"-c\", \"curl -sS -o notes.html https://www.example.org/notes\"], \"at\": \"2026-11-03T09:20:00.0...R\", \"XDG_RUNTIME_DIR\"], \"exe\": \"/usr/bin/bash\", \"name\": \"bash\", \"pid\": 1610, \"ppid\": 1600, \"sockets\": [], \"unread\": []}"
+     },
+     {
+      "line": 11,
+      "src": "proc",
+      "text": "{\"argv\": [\"curl\", \"-sS\", \"-o\", \"notes.html\", \"https://www.example.org/notes\"], \"at\": \"2026-11-03T09:20:00.000Z\", \"cwd\"...XDG_RUNTIME_DIR\"], \"exe\": \"/usr/bin/curl\", \"name\": \"curl\", \"pid\": 1620, \"ppid\": 1610, \"sockets\": [51001], \"unread\": []}"
+     }
+    ],
+    "class": "act-root",
+    "endpoints": [],
+    "history": false,
+    "image": "agent",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 1600,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T09:20:00.000Z .. 2026-11-03T09:20:00.000Z; 1 snapshot(s)",
+    "started": null,
+    "tree": "1600:agent:-",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  }
+ ]
+}

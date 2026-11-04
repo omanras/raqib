@@ -305,3 +305,13 @@ for p in ["src/app.py", "tests/test_app.py", "src/util.py"]:
     s.call("Read", {"path": CWD + "/" + p}); s.call("Edit", {"path": CWD + "/" + p})
 s.command("pytest -q tests"); s.command("git diff --stat"); s.event("stop")
 write(R + "benign/scoped-task-session.json", s.lines, {"scope": ["src", "tests"]})
+
+# M7.2: NEW-AGENT and AGENT-DARK-LIVE judge host lines (raqib watch --host), not hook lines; their
+# fixtures are made from the discover fixtures by tests/fixtures/host/make.py, through raqib/host.py.
+_spec = importlib.util.spec_from_file_location("raqib_host_fixtures", os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "host", "make.py"))
+HOST = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(HOST)
+for _name, _text in HOST.build().items():
+    os.makedirs(os.path.dirname(R + _name), exist_ok=True)
+    open(R + _name, "w", newline="\n").write(_text)
+    print("wrote", R + _name)

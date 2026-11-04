@@ -170,3 +170,37 @@ act_root:
     negative:
       - tests/fixtures/discover/benign/linux-desktop
       - tests/fixtures/discover/benign/windows-desktop
+# Benign images (M7.2 REDO, ADR-0007 Amendment C, C-1d): programs a desktop
+# runs that talk and have a child (a browser, the shell, an IDE). Under
+# `raqib watch --host` a new tree whose root is one of them is listed with
+# `benign` and not knocked (NEW-AGENT, NEW-AGENT-UNKNOWN). A signature: the
+# match needs the image name listed AND the image path under one of `dirs`
+# and under none of `exclude`; a path that was denied, left blank, or read
+# from the process's own argv[0] (Linux, an exe link not read) never
+# matches. REDO-2 (Amendment D, D-3): the Windows globs are rooted at the
+# system drive, the drive of SystemRoot that raqib/hostwin.py records in
+# run.json (`%systemdrive%`, never any drive); a run record without it
+# makes no Windows image benign (a hole). `exclude` names the places under
+# SystemRoot a user can write without elevation.
+# Started from what the benign fixtures show (tests/fixtures/discover/benign,
+# the browser of tests/fixtures/discover/windows). The CI runner's own
+# images (Runner.Worker, Runner.Listener, hosted-compute-agent) are NOT
+# here: they talk and act, they are agents.
+benign_images:
+  kind: signature
+  # Image names (lower case, no .exe), as discover.image_name gives them.
+  names: [explorer, code, msedge, firefox]
+  # fnmatch globs over the image path: Windows paths lower case with '/',
+  # `%systemdrive%` replaced by the recorded system drive (SystemRoot,
+  # Program Files, Program Files (x86) on that drive only); POSIX paths as
+  # they are (case-sensitive).
+  dirs: ["%systemdrive%/windows/*", "%systemdrive%/program files/*", "%systemdrive%/program files (x86)/*", "/usr/*", "/bin/*", "/sbin/*", "/lib/*", "/opt/*"]
+  # D-3: user-writable places under SystemRoot, never benign.
+  exclude: ["%systemdrive%/windows/temp/*", "%systemdrive%/windows/tasks/*", "%systemdrive%/windows/tracing/*", "%systemdrive%/windows/registration/*", "%systemdrive%/windows/system32/tasks/*", "%systemdrive%/windows/system32/spool/*", "%systemdrive%/windows/syswow64/tasks/*"]
+  evasion:
+    - "an agent that takes a benign program's name and is installed under a listed directory (an elevated install, a package, a copy into Program Files or /opt) is listed as benign and never knocked"
+    - "an agent that runs inside a benign program (a browser extension, an IDE extension, a script run by the shell) is the benign program's tree"
+    - "a benign program driven by an agent (remote debugging, automation of a browser or an IDE) is benign"
+    - "Linux: a process may rename itself; the name is checked against the image path's own basename, so a renamed process outside the listed directories is not benign"
+    - "D-3 another drive's windows/: a user can create D:\\Windows or D:\\Program Files on a data drive and put an agent named explorer there; only the system drive (SystemRoot's, recorded in run.json) is benign, and a run record without it makes no Windows image benign; an agent that starts the reader with SystemRoot pointing at another drive's Windows moves the benign directories with it"
+    - "D-3 a user-writable place under SystemRoot: %SystemRoot%\\Temp, Tasks, Tracing, Registration, System32\\Tasks, System32\\spool, SysWOW64\\Tasks are excluded by name; another place under SystemRoot that a user may write (a subdirectory with an ACL of its own) is still taken as benign"

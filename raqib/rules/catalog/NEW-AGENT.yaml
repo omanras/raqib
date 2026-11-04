@@ -1,0 +1,52 @@
+# A tree that talks and acts appears on the host (M7.2, ADR-0007 decision 2).
+id: NEW-AGENT
+title: An agent tree appears on the host
+# M7.2 REDO C-13: class HOST (engine.CLASSES), the rules of raqib watch --host.
+class: HOST
+# ADR-0002: measured against the host's own record (process tree and TCP
+# table, read by raqib/discover.py), which the agent does not write.
+kind: anchor
+# C-1c: a named new tree is high; an unknown one is NEW-AGENT-UNKNOWN
+# (medium), a rule of its own, since the engine's severity is per rule.
+severity: high
+# C-1e: measured, not guessed (ADR-0004 B-8). Declared from the benign
+# desktops' trees arriving after round 1 (C-1b), made by
+# tests/fixtures/host/make.py: NEW-AGENT/negative-arrival-linux-desktop.json
+# and NEW-AGENT/negative-arrival-windows-desktop.json. After benign_images
+# (C-1d) 0 of 2 fire (no tree of either desktop is named); with the three
+# other measured negatives 0 of 5 (check-rules). The budget is that
+# measure: 0, so one benign named tree in a fixture fails the gate.
+fp_budget: 0.0
+holes:
+  - "Linux /proc gives no creation time: a tree is keyed by (pid, image), so a pid reused by a process of the same image between rounds is taken for the same tree"
+  - "a tree that lives only between two rounds (shorter than T seconds) is never seen"
+  - "a tree whose talk and act fall in different rounds is never a candidate in one round (the round reads one sample)"
+  - "a tree that was a candidate earlier in this watch and comes back with the same pid, image and creation time is not new again (once per tree)"
+  - "every hole of raqib discover (liveness, sibling talkers, reparented acts, TCP only, one view) is a hole of this rule"
+  - "benign_images (raqib/discover/endpoints.yaml, C-1d): an agent that takes a benign program's name (explorer, code, msedge, firefox) and is installed under a system or program-files directory is listed as benign and never knocked; an agent inside a benign program's tree (an extension) is that program's tree"
+  - "benign_images D-3, another drive's windows/: only the system drive (SystemRoot's, recorded by raqib/hostwin.py in run.json) is benign, so an agent named explorer in D:\\Windows is knocked; but an agent that starts the reader with SystemRoot pointing at another drive's Windows directory moves the benign directories with it, and a run record without the drive makes no Windows image benign (a hole)"
+  - "benign_images D-3, a user-writable place under SystemRoot: Temp, Tasks, Tracing, Registration, System32\\Tasks, System32\\spool and SysWOW64\\Tasks are excluded by name; another place under SystemRoot a user may write (a subdirectory with an ACL of its own) is still taken as benign"
+  - "named rests on the image name or a catalog endpoint: an agent under another image name that talks to an unlisted endpoint is NEW-AGENT-UNKNOWN (medium), not this rule"
+description: "A line of raqib watch --host (tool HostTree, source os) for a NAMED candidate tree of a round's inventory - a process tree that talks to a remote host and has a child or writes outside config space (ADR-0004) - that was not a candidate in any earlier round of this watch, is not history and is not benign (C-1d: its root's image is a program of the catalog's benign_images block and its image path, from the process's record, is under a listed system or program-files directory). History (ADR-0005 B-3): the trees of the first round with an inventory were there at the start; they are listed, never knocked. An act-root that becomes a candidate is new as a candidate. A tree is keyed by (root pid, image name, creation time where the reader gives one). The line carries named or unknown: named when the catalog (raqib/discover/endpoints.yaml) knows the image or an endpoint it talks to; an unknown new tree is NEW-AGENT-UNKNOWN (medium, C-1c), a finding, never a nothing. The line cites the round, the sample and the record lines of the inventory (A5)."
+summary: "{input_meta.named_word} agent tree {input_meta.image} pid {input_meta.pid} (round {input_meta.round}, was {input_meta.was})"
+match:
+  all:
+    - {field: tool, exists: true}
+    - {field: tool, eq: HostTree}
+    - {field: source, eq: os}
+    - {field: input_meta.class, eq: candidate}
+    - {field: input_meta.history, eq: false}
+    - {field: input_meta.candidate_before, eq: false}
+    - {field: input_meta.benign, eq: false}
+    - {field: input_meta.named, eq: true}
+fixtures:
+  positive:
+    - tests/fixtures/rules/NEW-AGENT/positive-new-named-windows.json
+    - tests/fixtures/rules/NEW-AGENT/positive-new-named.json
+    - tests/fixtures/rules/NEW-AGENT/positive-act-root-becomes-candidate.json
+  negative:
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json
+    - tests/fixtures/rules/NEW-AGENT/negative-history-only.json
+    - tests/fixtures/rules/NEW-AGENT/negative-gone-and-back.json
+    - tests/fixtures/rules/NEW-AGENT/negative-act-root-only.json

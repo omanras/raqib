@@ -1,0 +1,145 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 5,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": false,
+    "cites": [
+     {
+      "line": 12,
+      "src": "win-process-1",
+      "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+     },
+     {
+      "line": 13,
+      "src": "win-process-1",
+      "text": "\"7768\",\"10728\",\"bash.exe\",\"C:\\Program Files\\Git\\bin\\bash.exe\",\"\"\"C:\\Program Files\\Git\\bin\\bash.exe\"\" -c \"\"ping -n 90 127.0.0.1 | tee -a work/ping.log\"\"\",\"11/2/2026 10:29:11 AM\""
+     },
+     {
+      "line": 14,
+      "src": "win-process-1",
+      "text": "\"10476\",\"7768\",\"bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe -c \"\"ping -n 90 127.0.0.1 | tee -a work/ping.log\"\"\",\"11/2/2026 10:29:11 AM\""
+     },
+     {
+      "line": 15,
+      "src": "win-process-1",
+      "text": "\"5796\",\"10476\",\"bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe -c \"\"ping -n 90 127.0.0.1 | tee -a work/ping.log\"\"\",\"11/2/2026 10:29:11 AM\""
+     }
+    ],
+    "class": "act-root",
+    "endpoints": [],
+    "history": false,
+    "image": "kimi",
+    "named": true,
+    "named_by": "image kimi is the catalog's kimi",
+    "named_word": "named",
+    "pid": 10728,
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1",
+    "started": "11/2/2026 10:21:05 AM",
+    "tree": "10728:kimi:11/2/2026 10:21:05 AM",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 8,
+    "benign": true,
+    "benign_by": "c:/windows/*",
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 9,
+      "src": "win-process-1",
+      "text": "\"6636\",\"6600\",\"explorer.exe\",\"C:\\Windows\\explorer.exe\",\"C:\\Windows\\Explorer.EXE\",\"11/2/2026 8:02:30 AM\""
+     },
+     {
+      "line": 6,
+      "src": "win-tcp-1",
+      "text": "\"192.0.2.10\",\"49812\",\"198.51.100.23\",\"443\",\"Established\",\"6636\",\"11/2/2026 10:12:40 AM\""
+     },
+     {
+      "line": 15,
+      "src": "win-process-1",
+      "text": "\"5796\",\"10476\",\"bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe -c \"\"ping -n 90 127.0.0.1 | tee -a work/ping.log\"\"\",\"11/2/2026 10:29:11 AM\""
+     },
+     {
+      "line": 13,
+      "src": "win-process-1",
+      "text": "\"7768\",\"10728\",\"bash.exe\",\"C:\\Program Files\\Git\\bin\\bash.exe\",\"\"\"C:\\Program Files\\Git\\bin\\bash.exe\"\" -c \"\"ping -n 90 127.0.0.1 | tee -a work/ping.log\"\"\",\"11/2/2026 10:29:11 AM\""
+     },
+     {
+      "line": 16,
+      "src": "win-process-1",
+      "text": "\"8496\",\"5796\",\"PING.EXE\",\"C:\\Windows\\System32\\PING.EXE\",\"ping  -n 90 127.0.0.1\",\"11/2/2026 10:29:11 AM\""
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "198.51.100.23:443"
+    ],
+    "history": true,
+    "image": "explorer",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 6636,
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1",
+    "started": "11/2/2026 8:02:30 AM",
+    "tree": "6636:explorer:11/2/2026 8:02:30 AM",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "kimi",
+    "cites": [
+     {
+      "line": 2,
+      "src": "footprints",
+      "text": "C:\\Users\\user\\.kimi"
+     },
+     {
+      "line": 12,
+      "src": "win-process-1",
+      "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+     }
+    ],
+    "dark": false,
+    "linked": "A1",
+    "path": "C:\\Users\\user\\.kimi",
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:30.000Z"
+  }
+ ]
+}

@@ -1,0 +1,370 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 2,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 8,
+      "src": "win-process",
+      "text": "\"2100\",\"1000\",\"claude.exe\",\"C:\\Users\\field\\.local\\bin\\claude.exe\",\"\"\"C:\\Users\\field\\.local\\bin\\claude.exe\"\" \",\"11/1/2026 9:01:15 AM\""
+     },
+     {
+      "line": 8,
+      "src": "win-tcp",
+      "text": "\"192.168.1.20\",\"50112\",\"160.79.104.10\",\"443\",\"Established\",\"2100\",\"11/1/2026 9:01:16 AM\""
+     },
+     {
+      "line": 3,
+      "src": "win-dns",
+      "text": "\"api.anthropic.com\",\"api.anthropic.com\",\"A\",\"0\",\"1\",\"120\",\"4\",\"160.79.104.10\""
+     },
+     {
+      "line": 9,
+      "src": "win-process",
+      "text": "\"2240\",\"2100\",\"bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\",\"\"\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\"\" -c -l \"\"git status --short\"\"\",\"11/1/2026 9:14:30 AM\""
+     },
+     {
+      "line": 10,
+      "src": "win-process",
+      "text": "\"2250\",\"2240\",\"git.exe\",\"C:\\Program Files\\Git\\mingw64\\bin\\git.exe\",\"git status --short\",\"11/1/2026 9:14:30 AM\""
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "160.79.104.10:443 [anthropic 160.79.104.0/23; anthropic api.anthropic.com]"
+    ],
+    "history": false,
+    "image": "claude",
+    "named": true,
+    "named_by": "image claude is the catalog's claude",
+    "named_word": "named",
+    "pid": 2100,
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "started": "11/1/2026 9:01:15 AM",
+    "tree": "2100:claude:11/1/2026 9:01:15 AM",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 13,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 3,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 11,
+      "src": "win-process",
+      "text": "\"3300\",\"1000\",\"nimbus.exe\",\"C:\\Users\\field\\AppData\\Local\\Programs\\nimbus\\nimbus.exe\",\"\"\"C:\\Users\\field\\AppData\\Local\\Programs\\nimbus\\nimbus.exe\"\" --workspace C:\\work\\proj\",\"11/1/2026 9:14:00 AM\""
+     },
+     {
+      "line": 2,
+      "src": "sysmon",
+      "text": "Sysmon 1 2026-11-01 05:14:00.112 pid 3300 C:\\Users\\field\\AppData\\Local\\Programs\\nimbus\\nimbus.exe parent 1000 C:\\Windows\\explorer.exe: \"C:\\Users\\field\\AppData\\Local\\Programs\\nimbus\\nimbus.exe\" --workspace C:\\work\\proj"
+     },
+     {
+      "line": 3,
+      "src": "sysmon",
+      "text": "Sysmon 22 2026-11-01 05:14:00.950 pid 3300 C:\\Users\\field\\AppData\\Local\\Programs\\nimbus\\nimbus.exe query api.openai.com -> type:  5 api.openai.com.cdn.cloudflare.net;::ffff:104.18.33.45;::ffff:172.66.0.243;"
+     },
+     {
+      "line": 7,
+      "src": "win-tcp",
+      "text": "\"127.0.0.1\",\"50150\",\"127.0.0.1\",\"11434\",\"Established\",\"3300\",\"11/1/2026 9:14:02 AM\""
+     },
+     {
+      "line": 5,
+      "src": "sysmon",
+      "text": "Sysmon 3 2026-11-01 05:14:02.300 pid 3300 C:\\Users\\field\\AppData\\Local\\Programs\\nimbus\\nimbus.exe 127.0.0.1:50150 -> 127.0.0.1:11434 host=-"
+     },
+     {
+      "line": 9,
+      "src": "win-tcp",
+      "text": "\"192.168.1.20\",\"50140\",\"104.18.33.45\",\"443\",\"Established\",\"3300\",\"11/1/2026 9:14:01 AM\""
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "127.0.0.1:11434 [ollama 11434]",
+     "104.18.33.45:443 [openai api.openai.com]"
+    ],
+    "history": false,
+    "image": "nimbus",
+    "named": true,
+    "named_by": "talks to the catalog's ollama endpoint 11434",
+    "named_word": "named",
+    "pid": 3300,
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "started": "11/1/2026 9:14:00 AM",
+    "tree": "3300:nimbus:11/1/2026 9:14:00 AM",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 14,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 1,
+    "benign": true,
+    "benign_by": "c:/program files (x86)/*",
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 13,
+      "src": "win-process",
+      "text": "\"4100\",\"1000\",\"msedge.exe\",\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\",\"\"\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\"\" --profile-directory=Default\",\"11/1/2026 8:30:02 AM\""
+     },
+     {
+      "line": 15,
+      "src": "sysmon",
+      "text": "Sysmon 3 2026-11-01 05:15:30.000 pid 4100 C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe 192.168.1.20:50200 -> 13.107.21.200:443 host=a-0001.a-msedge.net"
+     },
+     {
+      "line": 16,
+      "src": "sysmon",
+      "text": "Sysmon 11 2026-11-01 05:15:31.000 pid 4100 C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe wrote C:\\Users\\field\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Cache\\Cache_Data\\f_000a1b"
+     },
+     {
+      "line": 10,
+      "src": "win-tcp",
+      "text": "\"192.168.1.20\",\"50200\",\"13.107.21.200\",\"443\",\"Established\",\"4100\",\"11/1/2026 9:15:30 AM\""
+     },
+     {
+      "line": 14,
+      "src": "win-process",
+      "text": "\"4120\",\"4100\",\"msedge.exe\",\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\",\"\"\"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\"\" --type=renderer --lang=en-US\",\"11/1/2026 9:15:31 AM\""
+     },
+     {
+      "line": 17,
+      "src": "sysmon",
+      "text": "Sysmon 1 2026-11-01 05:15:31.500 pid 4120 C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe parent 4100 C:\\...dge\\Application\\msedge.exe: \"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" --type=renderer --lang=en-US"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "13.107.21.200:443"
+    ],
+    "history": false,
+    "image": "msedge",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 4100,
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "started": "11/1/2026 8:30:02 AM",
+    "tree": "4100:msedge:11/1/2026 8:30:02 AM",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 15,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 1,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 19,
+      "src": "win-process",
+      "text": "\"7000\",\"1000\",\"scribe.exe\",\"C:\\Tools\\scribe\\scribe.exe\",\"C:\\Tools\\scribe\\scribe.exe --watch C:\\work\\notes\",\"11/1/2026 9:10:00 AM\""
+     },
+     {
+      "line": 12,
+      "src": "sysmon",
+      "text": "Sysmon 22 2026-11-01 05:14:54.800 pid 7000 C:\\Tools\\scribe\\scribe.exe query models.internal.example -> ::ffff:203.0.113.50;"
+     },
+     {
+      "line": 13,
+      "src": "sysmon",
+      "text": "Sysmon 3 2026-11-01 05:14:55.010 pid 7000 C:\\Tools\\scribe\\scribe.exe 192.168.1.20:50300 -> 203.0.113.50:8443 host=-"
+     },
+     {
+      "line": 11,
+      "src": "win-tcp",
+      "text": "\"192.168.1.20\",\"50300\",\"203.0.113.50\",\"8443\",\"Established\",\"7000\",\"11/1/2026 9:14:55 AM\""
+     },
+     {
+      "line": 14,
+      "src": "sysmon",
+      "text": "Sysmon 11 2026-11-01 05:15:00.250 pid 7000 C:\\Tools\\scribe\\scribe.exe wrote C:\\work\\notes\\draft.md"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "203.0.113.50:8443"
+    ],
+    "history": false,
+    "image": "scribe",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 7000,
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "started": "11/1/2026 9:10:00 AM",
+    "tree": "7000:scribe:11/1/2026 9:10:00 AM",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 16,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     {
+      "line": 2,
+      "src": "footprints",
+      "text": "C:\\Users\\field\\.claude"
+     },
+     {
+      "line": 8,
+      "src": "win-process",
+      "text": "\"2100\",\"1000\",\"claude.exe\",\"C:\\Users\\field\\.local\\bin\\claude.exe\",\"\"\"C:\\Users\\field\\.local\\bin\\claude.exe\"\" \",\"11/1/2026 9:01:15 AM\""
+     }
+    ],
+    "dark": false,
+    "linked": "C1",
+    "path": "C:\\Users\\field\\.claude",
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 17,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     {
+      "line": 3,
+      "src": "footprints",
+      "text": "C:\\Users\\field\\.claude.json"
+     },
+     {
+      "line": 8,
+      "src": "win-process",
+      "text": "\"2100\",\"1000\",\"claude.exe\",\"C:\\Users\\field\\.local\\bin\\claude.exe\",\"\"\"C:\\Users\\field\\.local\\bin\\claude.exe\"\" \",\"11/1/2026 9:01:15 AM\""
+     }
+    ],
+    "dark": false,
+    "linked": "C1",
+    "path": "C:\\Users\\field\\.claude.json",
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 18,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "codex",
+    "cites": [
+     {
+      "line": 4,
+      "src": "footprints",
+      "text": "C:\\Users\\field\\.codex"
+     }
+    ],
+    "dark": true,
+    "linked": null,
+    "path": "C:\\Users\\field\\.codex",
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "state": "dark",
+    "streak": 1
+   },
+   "phase": "pre",
+   "seq": 19,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:30.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "gemini",
+    "cites": [
+     {
+      "line": 5,
+      "src": "footprints",
+      "text": "C:\\Users\\field\\.gemini"
+     },
+     {
+      "line": 18,
+      "src": "win-process",
+      "text": "\"6020\",\"6010\",\"node.exe\",\"C:\\Program Files\\nodejs\\node.exe\",\"\"\"C:\\Program Files\\nodejs\\node.exe\"\" C:\\Users\\field\\AppData\\Roaming\\npm\\node_modules\\@google\\gemini-cli\\dist\\index.js\",\"11/1/2026 9:11:58 AM\""
+     }
+    ],
+    "dark": true,
+    "linked": null,
+    "path": "C:\\Users\\field\\.gemini",
+    "round": 4,
+    "run": "fixture-run",
+    "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
+    "state": "dark",
+    "streak": 1
+   },
+   "phase": "pre",
+   "seq": 20,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:30.000Z"
+  }
+ ]
+}

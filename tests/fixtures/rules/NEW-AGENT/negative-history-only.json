@@ -1,0 +1,221 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 1,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 7,
+      "src": "proc",
+      "text": "{\"argv\": [\"/usr/local/bin/environment-manager\", \"task-run\", \"--stdin\", \"--session\", \"cse_REDACTED\", \"--session-mode\", ...\"environment-man\", \"pid\": 87, \"ppid\": 80, \"sockets\": [797, 805, 1242, 64097, 64392, 76050, 86889, 87637], \"unread\": []}"
+     },
+     {
+      "line": 7,
+      "src": "proc-net",
+      "text": "   3: 020200C0:EBBC 0A684FA0:01BB 01 00000000:00000000 02:000004D8 00000000     0        0 86889 2 00000000d97eb84f 20 4 28 16 -1                    "
+     },
+     {
+      "line": 8,
+      "src": "proc-net",
+      "text": "   4: 020200C0:82E0 0A684FA0:01BB 01 00000000:00000000 02:00000172 00000000     0        0 87637 2 00000000f815a04e 20 4 28 18 -1                    "
+     },
+     {
+      "line": 9,
+      "src": "proc-net",
+      "text": "   5: 020200C0:8390 0A684FA0:01BB 01 00000000:00000000 02:0000018C 00000000     0        0 797 2 00000000ae1e8353 20 4 30 221 -1                     "
+     },
+     {
+      "line": 8,
+      "src": "proc",
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "160.79.104.10:443 [anthropic 160.79.104.0/23]"
+    ],
+    "history": true,
+    "image": "environment-manager",
+    "named": true,
+    "named_by": "talks to the catalog's anthropic endpoint 160.79.104.0/23",
+    "named_word": "named",
+    "pid": 87,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "started": null,
+    "tree": "87:environment-manager:-",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 3,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 8,
+      "src": "proc",
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+     },
+     {
+      "line": 13,
+      "src": "proc-net",
+      "text": "   9: 020200C0:983A 0A684FA0:01BB 01 00000000:00000000 02:00000994 00000000     0        0 78308 2 000000004c5f558b 20 4 28 241 -1                   "
+     },
+     {
+      "line": 14,
+      "src": "proc-net",
+      "text": "  10: 020200C0:984E 0A684FA0:01BB 01 00000000:00000000 02:00001506 00000000     0        0 78311 2 000000009682c5a2 20 4 28 123 -1                   "
+     },
+     {
+      "line": 15,
+      "src": "proc-net",
+      "text": "  11: 020200C0:AA5C 0A684FA0:01BB 01 00000000:00000000 02:000006C0 00000000     0        0 87504 2 0000000085622983 20 11 30 628 238                 "
+     },
+     {
+      "line": 9,
+      "src": "proc",
+      "text": "{\"argv\": [\"/bin/bash\", \"-c\", \"source /root/.claude/shell-snapshots/snapshot-REDACTED.sh 2>/dev/null || true && \\\\built..._config_https_proxy\", \"npm_config_noproxy\"], \"name\": \"bash\", \"pid\": 7647, \"ppid\": 95, \"sockets\": [87894], \"unread\": []}"
+     },
+     {
+      "line": 10,
+      "src": "proc",
+      "text": "{\"argv\": [\"sleep\", \"15\"], \"at\": \"2026-11-02T15:38:29.201Z\", \"cwd\": \"/home/claude/raqib\", \"env_keys\": [\"AI_AGENT\", \"AKI...nfig_https_proxy\", \"npm_config_noproxy\"], \"name\": \"sleep\", \"pid\": 7649, \"ppid\": 7647, \"sockets\": [87894], \"unread\": []}"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "160.79.104.10:443 [anthropic 160.79.104.0/23]"
+    ],
+    "history": true,
+    "image": "claude",
+    "named": true,
+    "named_by": "image claude is the catalog's claude",
+    "named_word": "named",
+    "pid": 95,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "started": null,
+    "tree": "95:claude:-",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     {
+      "line": 7,
+      "src": "footprints",
+      "text": "/home/claude/.claude"
+     },
+     {
+      "line": 8,
+      "src": "proc",
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+     }
+    ],
+    "dark": false,
+    "linked": "C2",
+    "path": "/home/claude/.claude",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     {
+      "line": 4,
+      "src": "footprints",
+      "text": "/root/.claude"
+     },
+     {
+      "line": 8,
+      "src": "proc",
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+     }
+    ],
+    "dark": false,
+    "linked": "C2",
+    "path": "/root/.claude",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "claude",
+    "cites": [
+     {
+      "line": 5,
+      "src": "footprints",
+      "text": "/root/.claude.json"
+     },
+     {
+      "line": 8,
+      "src": "proc",
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+     }
+    ],
+    "dark": false,
+    "linked": "C2",
+    "path": "/root/.claude.json",
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
+    "state": "linked",
+    "streak": 0
+   },
+   "phase": "pre",
+   "seq": 10,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:10.000Z"
+  }
+ ]
+}

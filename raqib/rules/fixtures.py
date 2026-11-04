@@ -18,6 +18,13 @@ For each rule:
 - a negative fixture, or a file of the shared benign corpus, counts as
   measured only if the rule could judge every line of it with the context it
   needs; unmeasured files are reported, not counted as clean (A3);
+- M7.2 REDO (ADR-0007 Amendment C, C-1a): a negative with no line that
+  passes the rule's gate is unmeasured for that rule, not measured: a file
+  the rule cannot match at all says nothing about its false positives. The
+  gate of a YAML rule is the `eq` conditions on `tool` and `source` among
+  the parts of its top-level `match.all` (gate_of); a code rule declares
+  its gate (outcome's `gate`, {field: value}). A rule with no such
+  condition has no gate, and every line passes it;
 - fp_rate = measured files on which it fired / measured files. An active
   rule above its fp_budget fails ("over-budget"): A6 says such a rule is
   disabled (status: disabled), not tuned live. A rule with no measured
@@ -32,6 +39,7 @@ import os
 from raqib.rules import engine, trace
 
 OBJECT_KEYS = {"lines", "context", "expect_seq"}
+GATE_FIELDS = ("tool", "source")   # C-1a: the fields a rule's gate is read from
 
 
 class FixtureError(ValueError):
@@ -77,15 +85,38 @@ def benign_corpus(directory):
                   glob.glob(os.path.join(directory, "*.log")))
 
 
-def outcome(rule, path):
-    """(fired, cited seqs, measured) of one rule on one fixture file."""
+def gate_of(rule):
+    """C-1a: {field: value} of a YAML rule's gate - the `eq` conditions on
+    tool and source among the parts of its top-level `match.all`; {} when
+    it has none (every line passes)."""
+    match = rule.doc.get("match") if isinstance(getattr(rule, "doc", None), dict) else None
+    parts = match.get("all") if isinstance(match, dict) and isinstance(match.get("all"), list) else [match]
+    gate = {}
+    for part in parts:
+        if isinstance(part, dict) and part.get("field") in GATE_FIELDS and "eq" in part:
+            gate[part["field"]] = part["eq"]
+    return gate
+
+
+def passes_gate(gate, lines):
+    """True when some line of the file passes the gate (every field equal)."""
+    return not gate or any(isinstance(rec, dict) and all(rec.get(k) == v for k, v in gate.items())
+                           for rec in lines)
+
+
+def outcome(rule, path, gate=None):
+    """(fired, cited seqs, measured) of one rule on one fixture file. gate:
+    a code rule's declared gate; a YAML rule's is gate_of(rule)."""
     lines, context, _ = load_fixture(path)
     if any(not engine.context_ok(context.get(k)) for k in rule.context_keys):
         return False, set(), False
     found, unknown = engine.judge(rule, lines, context)
     cited = {s for f in found for s in f["cited_seq"]}
     # A firing is a false positive on a negative whatever else was unknown.
-    return bool(found), cited, bool(found) or not unknown
+    if found:
+        return True, cited, True
+    # C-1a: no line passes the gate: the file cannot tell, unmeasured.
+    return False, cited, not unknown and passes_gate(gate_of(rule) if gate is None else gate, lines)
 
 
 def fires(rule, path):

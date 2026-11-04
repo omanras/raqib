@@ -577,12 +577,23 @@ def _step(name, call, *args):
         raise ReaderFailed("live reader failed at %s: %s: %s" % (name, type(exc).__name__, text))
 
 
-def collect(api, samples, every, self_pid, sleep, now=now_text, clock=time.monotonic):
+def system_drive(system_root):
+    """M7.2 REDO-2 D-3: the drive of SystemRoot, one lower-case letter.
+    system_root is the environment's SystemRoot as notify.windows_root
+    validated it (an existing directory named Windows; discover.collect_live
+    passes it) or None; None when it is None or has no drive letter (a UNC
+    path): then discover takes no Windows image as benign."""
+    drive = ntpath.splitdrive(system_root)[0] if isinstance(system_root, str) else ""
+    return drive[0].lower() if re.match(r"[A-Za-z]:\Z", drive) else None
+
+
+def collect(api, samples, every, self_pid, sleep, now=now_text, clock=time.monotonic, system_root=None):
     """A live run: `samples` samples `every` seconds apart start to start
     (A-11: the sleep is `every` minus the sample's own duration, never
     negative), each read as win-process-<k>, win-tcp-<k> and (when the
     cache was read) win-dns-<k>. Returns (texts, holes, info); info =
-    {"apis", "sample_times", "seconds_apart", "self"} goes into run.json.
+    {"apis", "sample_times", "seconds_apart", "self", "system_drive"} goes
+    into run.json (system_drive: D-3, SystemRoot's drive or None).
     A snapshot that fails in sample 1 refuses the run (HostError, E3); in a
     later sample that sample's process source is not read (an error: the
     run is incomplete, A3) and its TCP and DNS kinds are still read. Any
@@ -661,5 +672,6 @@ def collect(api, samples, every, self_pid, sleep, now=now_text, clock=time.monot
         holes.append("%d cached name lookup(s) gave no A or AAAA record from the cache (expired, negative or another"
                      " type): those names are not joined to an address" % unanswered)
     info = {"apis": [API_PROCESSES, API_TCP] + ([API_DNS] if dns_read else []),
-            "sample_times": times, "seconds_apart": every, "self": mine or [self_pid]}
+            "sample_times": times, "seconds_apart": every, "self": mine or [self_pid],
+            "system_drive": system_drive(system_root)}
     return texts, holes, info

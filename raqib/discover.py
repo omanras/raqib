@@ -318,11 +318,12 @@ def load_catalog(path=CATALOG):
         raise CatalogError("%s: %s: %s" % (path, field, msg))
 
     keys = ("id", "kind", "evasion", "hosts", "networks", "ports", "footprints", "env", "acts", "handoff",
-            "act_root")
+            "act_root", "benign_images")
+    optional = ("benign_images",)   # M7.2 REDO C-1d: read by raqib watch --host only
     if not isinstance(doc, dict):
         raise CatalogError("%s: the catalog must hold a mapping" % path)
     for key in keys:
-        if key not in doc:
+        if key not in doc and key not in optional:
             bad(key, "missing")
     for key in doc:
         if key not in keys:
@@ -400,7 +401,94 @@ def load_catalog(path=CATALOG):
             "acts": acts["names"], "acts_evasion": acts["evasion"], "proxy_capable": proxy,
             "hook_images": handoff["hook"]["images"], "hook_not_paths": handoff["hook"]["not_paths"],
             "hook_evasion": handoff["hook"]["evasion"], "proxy_evasion": handoff["proxy"]["evasion"],
-            "act_root": _act_root_spec(doc["act_root"], bad), "path": str(path)}
+            "act_root": _act_root_spec(doc["act_root"], bad),
+            "benign_images": _benign_spec(doc.get("benign_images"), bad), "path": str(path)}
+
+
+def _benign_spec(spec, bad):
+    """M7.2 REDO (ADR-0007 Amendment C, C-1d): the catalog's benign_images
+    block, a signature (kind signature, evasion listed), or None when the
+    catalog has none (then no tree is benign). REDO-2 D-3: a Windows glob is
+    rooted at the system drive (`%systemdrive%/...`, never `?:`), and
+    `exclude` names the user-writable places under it."""
+    if spec is None:
+        return None
+    if not (isinstance(spec, dict) and set(spec) == {"kind", "names", "dirs", "exclude", "evasion"}):
+        bad("benign_images", "must hold kind, names, dirs, exclude and evasion")
+    if spec["kind"] != "signature":
+        bad("benign_images.kind", "must be signature (a name and a path the process's record gives)")
+    if not (isinstance(spec["evasion"], list) and spec["evasion"]
+            and all(isinstance(e, str) and e.strip() for e in spec["evasion"])):
+        bad("benign_images.evasion", "a signature must list its known evasions (ADR-0002)")
+    if not (isinstance(spec["names"], list) and spec["names"]
+            and all(isinstance(n, str) and n and n == n.lower() for n in spec["names"])):
+        bad("benign_images.names", "must be a non-empty list of lower-case image names")
+    for key in ("dirs", "exclude"):
+        if not (isinstance(spec[key], list) and spec[key]
+                and all(isinstance(d, str) and d.endswith("/*") and "?" not in d
+                        and (d.startswith("/") or d.startswith(SYSTEM_DRIVE + "/"))
+                        and d == (d.lower() if d.startswith(SYSTEM_DRIVE) else d) for d in spec[key])):
+            bad("benign_images.%s" % key, "must be a non-empty list of '/...' or lower-case '%s/...' globs ending"
+                " in /* (D-3: the system drive only, no '?')" % SYSTEM_DRIVE)
+    return {"names": list(spec["names"]), "dirs": list(spec["dirs"]), "exclude": list(spec["exclude"]),
+            "evasion": list(spec["evasion"])}
+
+
+SYSTEM_DRIVE = "%systemdrive%"     # D-3: the root of a Windows benign glob, the drive SystemRoot is on
+NO_DRIVE = ("the run record gives no system drive (hostwin records SystemRoot's drive in run.json): no Windows image"
+            " is benign (D-3)")
+
+
+def benign_check(image, exe, exe_from, catalog, system_drive=None):
+    """M7.2 REDO-2 D-3 (API for raqib/host.py): (glob, None) when the
+    tree's root image is a listed benign program, else (None, why), where
+    why is NO_DRIVE when the image would be judged on a Windows path and
+    the run record gives no system drive, and None otherwise. The image name
+    and the basename of the image path must both be a listed name, the path
+    must come from the process's record (exe_from "record": never argv[0],
+    which the process writes), must not be blank or denied, must hold no
+    '.' or '..' part, must fall under a listed directory and under no
+    excluded one. A Windows path (a drive letter or a backslash) is
+    compared lower case with '/', and its globs are rooted at the system
+    drive (system_drive, one lower-case letter, from run.json): another
+    drive's Windows or Program Files is not benign; a POSIX path is
+    compared as it is."""
+    spec = catalog.get("benign_images")
+    if not spec or not exe or exe_from != "record" or not isinstance(exe, str):
+        return None, None
+    name = image_name(exe)
+    if name not in spec["names"] or (image and image != name):
+        return None, None
+    path = exe.strip().strip('"')
+    windows = "\\" in path or re.match(r"[A-Za-z]:", path) is not None
+    if windows:
+        path = re.sub(r"\A/(?:/\?|\?\?)/", "", path.replace("\\", "/")).lower()
+    if any(part in (".", "..") for part in path.split("/")):
+        return None, None
+    if windows:
+        if not (isinstance(system_drive, str) and re.match(r"[a-z]\Z", system_drive)):
+            return None, NO_DRIVE
+        root = system_drive + ":"
+        dirs = [d.replace(SYSTEM_DRIVE, root, 1) for d in spec["dirs"] if d.startswith(SYSTEM_DRIVE)]
+        exclude = [d.replace(SYSTEM_DRIVE, root, 1) for d in spec["exclude"] if d.startswith(SYSTEM_DRIVE)]
+    else:
+        dirs = [d for d in spec["dirs"] if d.startswith("/")]
+        exclude = [d for d in spec["exclude"] if d.startswith("/")]
+    if any(fnmatch.fnmatchcase(path, d) for d in exclude):
+        return None, None
+    return next((d for d in dirs if fnmatch.fnmatchcase(path, d)), None), None
+
+
+def benign_image(image, exe, exe_from, catalog, system_drive=None):
+    """The glob of benign_check, or None (M7.2 REDO C-1d, REDO-2 D-3)."""
+    return benign_check(image, exe, exe_from, catalog, system_drive)[0]
+
+
+def system_drive_of(run):
+    """D-3: the system drive a run record (run.json, or collect_live's
+    run_info) gives: one lower-case letter, or None."""
+    drive = (run or {}).get("system_drive") if isinstance(run, dict) else None
+    return drive if isinstance(drive, str) and re.match(r"[a-z]\Z", drive) else None
 
 
 ACT_ROOT_KEYS = ("kind", "status", "fp_budget", "user_dirs", "shells", "launchers", "not_images", "evasion",
@@ -535,9 +623,11 @@ def parse_proc(text, src="proc"):
         cwd = obj.get("cwd") if isinstance(obj.get("cwd"), str) else None
         unread = obj.get("unread") if isinstance(obj.get("unread"), list) else []
         # G-2: the exe link places a process; argv[0], its own text, is the fallback.
-        exe = obj.get("exe") if isinstance(obj.get("exe"), str) and obj.get("exe") else (argv or [None])[0]
+        linked = isinstance(obj.get("exe"), str) and bool(obj.get("exe"))
+        exe = obj.get("exe") if linked else (argv or [None])[0]
         records.append(_rec("proc", src, number, raw, pid=pid, ppid=ppid, argv=argv or [],
                             image=_linux_image(argv, obj.get("name")), exe=exe,
+                            exe_from="record" if linked else "argv",   # M7.2 REDO C-1d
                             cwd=cwd, env_keys=env, sockets=sockets, ts=_ts(obj.get("at")) or at,
                             unread=[str(u) for u in unread]))
     return records, problems
@@ -1176,8 +1266,10 @@ def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/pro
             api = hostwin.Api() if api is None else api
         except (OSError, AttributeError) as exc:     # a DLL or symbol of kernel32/iphlpapi missing
             raise LiveRefused("Windows live discovery: the API cannot be loaded: %s" % exc)
+        from raqib import notify
+        system_root, _ = notify.windows_root(os.environ)   # D-3: run.json records its drive
         try:
-            got, more, info = hostwin.collect(api, win_samples, win_every, os.getpid(), sleep)
+            got, more, info = hostwin.collect(api, win_samples, win_every, os.getpid(), sleep, system_root=system_root)
         except hostwin.HostError as exc:
             raise LiveRefused("Windows live discovery: %s" % exc)
         except hostwin.ReaderFailed as exc:
@@ -1732,7 +1824,8 @@ def build(parsed, catalog, window=None, holes=(), live=False):
             q = procs.get(a["pid"])
             times += [r["ts"] for r in (q["recs"] if q else []) if r.get("ts")]
         candidates.append(dict(
-            entry, id=ids[pid], cwd=p["cwd"] if p else None, acts=acts[pid], inside=inside,
+            entry, id=ids[pid], cwd=p["cwd"] if p else None, acts=acts[pid], inside=inside, started=started_of(p),
+            exe_from=exe_from(p),
             listed_acts=sum(1 for a in acts[pid] if a["listed"]),
             talking_ancestors=talking_up, tree=tree,
             env_footprints=[{"name": k, "cites": _cites(p["recs"], 1)} for k in env],
@@ -1933,6 +2026,28 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     })
 
 
+def exe_from(p):
+    """M7.2 REDO C-1d (API for raqib/host.py): where a process's image path
+    came from: "record" (Windows ExecutablePath, a Sysmon image, the Linux
+    exe link), "argv" (Linux argv[0], the process's own text), or None (no
+    path: blank or denied)."""
+    for r in (p or {}).get("recs") or ():
+        if r.get("kind") == "proc" and r.get("exe") and r.get("exe") == p.get("exe"):
+            return r.get("exe_from") or "record"
+    return None
+
+
+def started_of(p):
+    """M7.2 (API for raqib/host.py): the creation time the reader gave for a
+    process, as the record holds it (Windows: CreationDate, an export's text
+    or the live reader's ISO UTC), or None: Linux /proc snapshots carry none.
+    raqib watch --host keys a tree by (pid, image, started)."""
+    for r in (p or {}).get("recs") or ():
+        if r.get("kind") == "proc" and r.get("started"):
+            return r["started"]
+    return None
+
+
 def _descendant_candidates(procs, pid, acts):
     """Candidates below a talker that is not one itself."""
     return [q for q in sorted(_descendants(procs, pid)) if q in acts]
@@ -2085,7 +2200,8 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         times = [r["ts"] for q in [pid] + [a["pid"] for a in acts] for r in procs[q]["recs"] if r.get("ts")]
         first = heads[0]
         roots.append({
-            "pid": pid, "image": p["image"], "exe": p["exe"], "cwd": p["cwd"], "user_dir": place,
+            "pid": pid, "image": p["image"], "exe": p["exe"], "cwd": p["cwd"], "user_dir": place, "started": started_of(p),
+            "exe_from": exe_from(p),
             "chains": heads, "acts": acts, "cites": _cites(p["recs"]),
             "attributed_to": ids.get(owner) if owner is not None else None,
             "talking_ancestor": ({"pid": owner, "image": procs[owner]["image"] if owner in procs else None,
@@ -2222,9 +2338,11 @@ def _holes(records, procs, conns, kinds):
     return holes
 
 
-def run(texts, catalog, window=None, holes=(), live=False):
+def run(texts, catalog, window=None, holes=(), live=False, run=None):
     """Parse {kind: (path, text, error)} and build the inventory. A text with
-    an error was partly read: it is parsed, and the run is incomplete."""
+    an error was partly read: it is parsed, and the run is incomplete. run:
+    the run record (run.json, or collect_live's run_info); its system drive
+    (D-3) is the inventory's `system_drive`, None without one."""
     parsed = []
     unknown = [n for n in texts if not split_name(n)]
     if unknown:
@@ -2236,7 +2354,19 @@ def run(texts, catalog, window=None, holes=(), live=False):
         parsed.append({"name": name, "kind": kind, "sample": sample, "path": path, "error": error,
                        "records": records, "problems": problems, "text_read": text is not None,
                        "lines": text.count("\n") + (not text.endswith("\n")) if text else 0})
-    return build(parsed, catalog, window, holes, live)
+    inv = build(parsed, catalog, window, holes, live)
+    inv["system_drive"] = system_drive_of(run)
+    return inv
+
+
+def run_record(directory):
+    """D-3: the run.json of a directory as a dict, or None when there is
+    none or it cannot be read (read_dir says why)."""
+    try:
+        got = json.loads(decode(_read_bytes(os.path.join(directory, RUN_FILE))))
+    except (OSError, ValueError):
+        return None
+    return got if isinstance(got, dict) else None
 
 
 # --- --check: the first fp numbers (M5.0b E4, A6) -----------------------------------------

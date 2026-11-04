@@ -322,8 +322,11 @@ def live(directory, n, self_pid=SELF, sleeps=None):
 
 
 def strip_cites(node):
+    """Without where a claim was read, and (M7.2) without `started`: the
+    reader's own creation-time text, ISO UTC live (GetProcessTimes, ADR-0007
+    A-14 Q-4) and the exporter's local CreationDate in a CSV."""
     if isinstance(node, dict):
-        return {k: strip_cites(v) for k, v in node.items() if k not in ("cites", "summary", "talk")}
+        return {k: strip_cites(v) for k, v in node.items() if k not in ("cites", "summary", "talk", "started")}
     if isinstance(node, list):
         return [strip_cites(v) for v in node]
     return node
@@ -374,7 +377,7 @@ def test_e2_a_sample_cites_the_api_and_the_reader_in_its_text():
     assert "CreateToolhelp32Snapshot" in texts["win-process-1"][0] and "GetExtendedTcpTable" in texts["win-tcp-1"][0]
     assert "DnsGetCacheDataTable" in texts["win-dns-1"][0]
     assert info == {"apis": [hostwin.API_PROCESSES, hostwin.API_TCP, hostwin.API_DNS], "sample_times": [AT],
-                    "seconds_apart": 10, "self": [SELF]}
+                    "seconds_apart": 10, "self": [SELF], "system_drive": None}
 
 
 def test_e2_tcp_ports_are_network_byte_order_and_the_buffer_grows():

@@ -456,8 +456,9 @@ def test_a1_rules_never_reach_a_model_or_the_network():
 def test_m12_e1_rule_set_v1_ships():
     rules = engine.load_catalog(CATALOG)
     assert [(r.id, r.cls) for r in rules] == [
+        ("AGENT-DARK-LIVE", "HOST"),   # M7.2 (raqib watch --host); REDO C-13: class HOST
         ("DESTRUCT-CMD", "DESTRUCT"), ("DRIFT-FILES", "DRIFT"), ("EDIT-NO-TEST", "DRIFT"),
-        ("LANDED-NO-GATE", "DRIFT"), ("NET-TOOL", "NET"),
+        ("LANDED-NO-GATE", "DRIFT"), ("NET-TOOL", "NET"), ("NEW-AGENT-UNKNOWN", "HOST"), ("NEW-AGENT", "HOST"),
         ("SCOPE-CWD-MOVED", "SCOPE"), ("SCOPE-CWD-ROOT", "SCOPE"),
         ("SCOPE-PATH", "SCOPE"), ("SECRET-OUTPUT", "SECRET")]
 
@@ -473,8 +474,15 @@ def test_e4_catalog_rule_passes_its_fixtures(report):
 
 
 def test_e4_own_negatives_never_fire():
+    """A hand-built negative never fires. M7.2 REDO C-1b/C-1e: the benign
+    desktops' arrivals (negative-arrival-*, made by tests/fixtures/host/make.py)
+    are measurement fixtures, as the benign corpus is: a rule may fire on one
+    only when its fp_budget comment declares that fixture (C-1e)."""
     for rule in engine.load_catalog(CATALOG):
+        text = Path(rule.source).read_text(encoding="ascii")
         for path in rule.fixtures["negative"]:
+            if Path(path).name.startswith("negative-arrival-") and Path(path).name in text.split("fp_budget:")[0]:
+                continue
             assert not fixtures.fires(rule, ROOT / path), (rule.id, path)
 
 
@@ -500,7 +508,8 @@ def test_e4_runner_flags_over_budget_and_missed_positives(tmp_path):
     assert report["verdict"] == "disabled"
     never = dict(fires_on_all, match={"field": "tool", "eq": "Nope"})
     report = fixtures.check_rule(engine.compile_rule(never), tmp_path)
-    assert (report["verdict"], report["fp_rate"]) == ("positive-missed", 0.0)
+    # M7.2 REDO C-1a: no negative holds a line with tool Nope (the rule's gate): none is measured.
+    assert (report["verdict"], report["fp_rate"], report["measured"]) == ("positive-missed", None, 0)
 
 
 def test_e4_fixture_formats(tmp_path):
@@ -886,6 +895,7 @@ M42_NOTE = "Note (2026-11-03, M4.2, ruling D-8"
 M53_NOTE = "Note (2026-11-03, M5.3, ruling C-9"
 M42B_NOTE = "Note (2026-11-03, M4.2b, ADR-0002 Amendment G"
 M43_NOTE = "Note (2026-11-03, M4.3, ADR-0002 Amendment J"
+M72_NOTE = "Note (2026-11-04, M7.2, ADR-0007 Amendment C"
 
 
 def table_rows(text):
@@ -977,7 +987,7 @@ def adr_note_m43():
     quotes]}, its text)."""
     _, section = adr_table()
     assert section.count(M43_NOTE) == 1
-    note = section.split(M43_NOTE, 1)[1]
+    note = section.split(M43_NOTE, 1)[1].split(M72_NOTE, 1)[0]
     holes = {}
     for rule_id, item in re.findall(r'^- holes ([A-Z]+-[A-Z]+): "(.+)"$', note, re.M):
         holes.setdefault(rule_id, []).append(item)
@@ -992,17 +1002,33 @@ def adr_table_after_m43():
     return out
 
 
+def adr_note_m72():
+    """The M7.2 note (ADR-0007 Amendment C, C-11): (rows it adds, its text)."""
+    _, section = adr_table()
+    assert section.count(M72_NOTE) == 1
+    note = section.split(M72_NOTE, 1)[1].split("## ", 1)[0]
+    return table_rows(note), note
+
+
+def adr_table_after_m72():
+    out = adr_table_after_m43()
+    rows, _ = adr_note_m72()
+    assert not set(rows) & set(out)
+    out.update(rows)
+    return out
+
+
 def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     """M4.2 (D-8): the table plus the dated notes under it is held to the tree
     (M5.3, C-9: the CROSS-SOURCE row, a code rule with its kind in cross.py;
     M4.2b, Amendment G: the two demand rows and their holes; M4.3, Amendment
     J: the two tree anchors, code rules with their kinds and holes in tree.py)."""
     from raqib.rules import cross, tree
-    table = adr_table_after_m43()
+    table = adr_table_after_m72()   # M7.2 REDO C-11: the Table's note holds the host anchors; no set-aside
     before, section = adr_table()
     rules = {r.id: r for r in engine.load_catalog(CATALOG)}
     assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(adr_table_after_m53()) == 13
-    assert len(adr_table_after_m42b()) == 15 and len(table) == 17
+    assert len(adr_table_after_m42b()) == 15 and len(adr_table_after_m43()) == 17 and len(table) == 20
     assert set(table) == set(rules) | set(silence.RULE_KINDS) | set(cross.RULE_KINDS) | set(tree.RULE_KINDS)
     for rule_id, (kind, items) in table.items():
         if rule_id in silence.RULE_KINDS:
@@ -1022,6 +1048,8 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
             # The table's evasions are the minimum: each starts one line of the list.
             assert items and all(any(e.startswith(item) for e in rule.evasion) for item in items), rule_id
             assert len(set(rule.evasion)) == len(rule.evasion), rule_id
+        elif rule_id in adr_note_m72()[0]:   # M7.2: the host anchors list their holes in the YAML
+            assert rule.evasion == () and "evasion" not in rule.doc and rule.holes, rule_id
         else:
             assert rule.evasion == () and "evasion" not in rule.doc, rule_id
             assert rule.holes == tuple(adr_note_m42b()[1].get(rule_id, ())), rule_id   # G-6
@@ -1035,11 +1063,15 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     assert "Ratio after M5.3: %d : %d : %d." % tuple(m53) in section and m53 == [4, 5, 4]
     m42b = [sum(1 for k, _ in adr_table_after_m42b().values() if k == kind) for kind in engine.KINDS]
     assert "Ratio after M4.2b: %d : %d : %d." % tuple(m42b) in section and m42b == [4, 7, 4]
+    m43 = [sum(1 for k, _ in adr_table_after_m43().values() if k == kind) for kind in engine.KINDS]
+    assert "Ratio after M4.3: %d : %d : %d." % tuple(m43) in section and m43 == [4, 7, 6]   # J-11
     counts = [sum(1 for k, _ in table.values() if k == kind) for kind in engine.KINDS]
-    assert "Ratio after M4.3: %d : %d : %d." % tuple(counts) in section   # J-11
+    assert "Ratio after M7.2: %d : %d : %d." % tuple(counts) in section   # C-11
     kinds = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values()) + list(
         cross.RULE_KINDS.values()) + list(tree.RULE_KINDS.values())
-    assert counts == [kinds.count(kind) for kind in engine.KINDS] == [4, 7, 6]
+    assert counts == [kinds.count(kind) for kind in engine.KINDS] == [4, 7, 9]   # the gate's line (test_gate.py)
+    assert set(adr_note_m72()[0]) == {"NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE"}
+    assert section.index("Ratio after M4.3:") < section.index(M72_NOTE) < section.index("Ratio after M7.2:")
     assert section.index("Ratio after M4.2b:") < section.index(M43_NOTE) < section.index("Ratio after M4.3: 4 : 7 : 6.")
 
 
