@@ -93,7 +93,8 @@ def test_e1_a_round_is_one_inventory_kept_in_inventory_json_and_rounds_jsonl(tmp
         assert r["records"] == 30 and r["sample"].startswith("window ") and r["lines"]
         for line in r["lines"]:
             assert line["input_meta"]["round"] == r["round"] and line["input_meta"]["sample"] == r["sample"]
-            assert line["input_meta"]["cites"] and all(re.match(r"[a-z-]+(-[0-9]+)?:[0-9]+$", c)
+            assert line["input_meta"]["cites"] and all(re.match(r"[a-z-]+(-[0-9]+)?$", c["src"])
+                                                       and isinstance(c["line"], int)
                                                        for c in line["input_meta"]["cites"])
     st = json.loads(Path(w.state_path).read_text(encoding="ascii"))
     assert st["mode"] == "host" and st["host"]["rounds"] == 2 and st["heartbeat"] and st["band"] == "WATCHING"
@@ -133,12 +134,14 @@ def test_e1_the_final_report_lists_the_trees_and_the_exit(tmp_path):
     w, clock = make_host(tmp_path, ["benign/windows-desktop", "windows"])
     run_rounds(w, clock, 2)
     text, code = w.finish()
-    assert code == 1 and "RESULT: ALARM (exit 1)" in text
+    assert code == 1 and "RESULT: ALARM (exit 1: a finding)" in text
     assert "TREES SEEN: 6 (4 now)" in text
     assert re.search(r"\[candidate\] pid 7000 scribe \(unknown\): now; first round 2; last round 2; 1 act\(s\);.*"
-                     r"NEW-AGENT folded", text), text
+                     r"NEW-AGENT-UNKNOWN sent", text), text
     assert "[candidate] pid 5100 explorer (unknown): gone; first round 1 (history, not knocked)" in text
-    assert "FINDINGS: 4" in text and "cites win-process:" in text
+    assert re.search(r"\[candidate\] pid 4100 msedge \(unknown\): now; first round 2 \(benign: \?:/program files"
+                     r" \(x86\)/\*, not knocked\)", text), text
+    assert "FINDINGS: 3" in text and "cites win-process:" in text
 
 
 # --- E2: NEW-AGENT -------------------------------------------------------------------------------
@@ -157,16 +160,17 @@ def test_e2_a_new_unknown_tree_knocks_once_with_the_a4_text(tmp_path):
     w, clock = make_host(tmp_path, ["benign/windows-desktop", "windows", "windows"], runner=runner)
     run_rounds(w, clock, 3)
     texts = [c["text"] for c in runner.calls]
-    assert texts[0] == "Raqib: NEW-AGENT\nhost, claude pid 2100 (named)\n"
-    # one per rule per minute: the rest are folded, never dropped
-    assert [f["rule_id"] for f in w.findings] == ["NEW-AGENT"] * 4
+    # C-5: each tree knocks under its own rate-limit id; C-1c: named high, unknown medium; C-1d: msedge
+    # from Program Files (x86) is benign, listed and not knocked
+    assert texts == ["Raqib: NEW-AGENT\nhost, claude pid 2100 (named)\n",
+                     "Raqib: NEW-AGENT\nhost, nimbus pid 3300 (named)\n",
+                     "Raqib: NEW-AGENT-UNKNOWN\nhost, scribe pid 7000 (unknown)\n"]
+    assert [(f["rule_id"], f["severity"]) for f in w.findings] == [
+        ("NEW-AGENT", "high"), ("NEW-AGENT", "high"), ("NEW-AGENT-UNKNOWN", "medium")]
     assert {f["image"]: (f["named"], f["round"]) for f in w.findings} == {
-        "claude": ("named", 2), "nimbus": ("named", 2), "msedge": ("unknown", 2), "scribe": ("unknown", 2)}
-    assert [f["notice"] for f in w.findings] == ["sent", "folded", "folded", "folded"]
-    clock.t += 60
-    w.tick()
-    assert runner.calls[-1]["text"] == "Raqib: NEW-AGENT\nhost, 3 more (first nimbus pid 3300 (named), last scribe pid" \
-                                      " 7000 (unknown))\n"
+        "claude": ("named", 2), "nimbus": ("named", 2), "scribe": ("unknown", 2)}
+    assert [f["notice"] for f in w.findings] == ["sent", "sent", "sent"]
+    assert w.round_lines[1]["benign"] == ["4100:msedge:11/1/2026 8:30:02 AM"]
     # round 3: the same trees, no new knock (once per tree)
     assert len([f for f in w.findings if f["round"] == 3]) == 0
 
@@ -208,7 +212,7 @@ def test_e2_gone_and_back_is_not_new_again(tmp_path):
     w, clock = make_host(tmp_path, ["benign/windows-desktop", "windows", "benign/windows-desktop", "windows"],
                          runner=runner)
     run_rounds(w, clock, 4)
-    assert [f["round"] for f in w.findings] == [2, 2, 2, 2]
+    assert [f["round"] for f in w.findings] == [2, 2, 2]
     assert w.round_lines[2]["gone"] and w.round_lines[3]["back"]
     assert "back: 2100:claude:" in said(w)
 
@@ -225,15 +229,17 @@ def test_e2_the_tree_key_is_pid_image_and_creation_time(tmp_path):
 
 
 def test_e2_both_rules_are_catalog_anchors_with_budgets_and_fixtures():
+    """C-1c, C-1e, C-13: three anchors of class HOST; each budget is the rate measured on its negatives."""
     rules = {r.id: r for r in RULES}
-    for rule_id, severity in (("NEW-AGENT", "high"), ("AGENT-DARK-LIVE", "medium")):
+    for rule_id, severity, rate in (("NEW-AGENT", "high", 0.0), ("NEW-AGENT-UNKNOWN", "medium", 0.4),
+                                    ("AGENT-DARK-LIVE", "medium", 0.0)):
         r = rules[rule_id]
-        assert (r.kind, r.severity, r.status) == ("anchor", severity, "active") and 0 < r.fp_budget < 1
+        assert (r.kind, r.cls, r.severity, r.status) == ("anchor", "HOST", severity, "active") and 0 <= r.fp_budget < 1
         assert r.holes and r.fixtures["positive"] and r.fixtures["negative"]
         report = fixtures.check_rule(r, ROOT, ())
-        assert report["verdict"] == "ok" and report["fp_rate"] == 0.0, report
+        assert report["verdict"] == "ok" and report["fp_rate"] == rate == r.fp_budget, report
         assert all(p["fired"] for p in report["positives"])
-    assert set(host.RULES) == {"NEW-AGENT", "AGENT-DARK-LIVE"}
+    assert set(host.RULES) == {"NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE"}
 
 
 def test_e2_the_fixtures_are_what_make_py_makes():
@@ -338,7 +344,8 @@ def test_e4_a_reader_not_back_in_2t_is_a_hole_and_a_knock_and_no_second_reader(t
     w.tick(wait=30)
     assert len(started) == 2 and w.rounds == 2   # the next round starts once it is back
     text, code = w.finish()
-    assert code == 1 and "1 reader hole(s)" in text
+    # C-10: a late round is a hole, exit 3 (incomplete), not an alarm
+    assert code == 3 and "1 round(s) whose reader was not back within 2 s (round 1): a hole" in text
 
 
 def test_e4_a_reader_out_at_the_end_is_a_hole(tmp_path):
@@ -348,7 +355,8 @@ def test_e4_a_reader_out_at_the_end_is_a_hole(tmp_path):
     text, code = w.finish()
     release.set()
     assert "reader-out: round 1: the reader was still out at the end" in text
-    assert "no round gave an inventory: nothing read (A3)" in text and code == 1
+    assert "no round gave an inventory: nothing read (A3)" in text and code == 3   # C-10
+    assert "RESULT: INCOMPLETE (exit 3: a round could not be read or the watch has a hole)" in text
 
 
 # --- E5: the page, the registry, watch.json --------------------------------------------------------
@@ -358,7 +366,7 @@ def test_e5_the_host_page_has_the_band_and_the_trees_and_runs_no_script(tmp_path
     run_rounds(w, clock, 2)
     page = w.page()
     assert 'content="%s"' % ui.CSP in page and "<script" not in page.lower() and "on" + "click" not in page
-    for item in ("trees now: 4", "new this session: 4", "dark: 2", "last round: 2 at "):
+    for item in ("trees now: 4", "new this session: 3", "dark: 2", "last round: 2 at "):
         assert item in page, item
     assert '<h2 id="host">Host (6 trees seen, 4 now)</h2>' in page
     assert "<td>scribe</td><td>7000</td><td>candidate</td><td>unknown</td>" in page
@@ -382,8 +390,8 @@ def test_e5_watch_host_from_the_cli_registers_a_host_row_and_serves(tmp_path, mo
     code = cli.main(["watch", "--host", "--every", "1", "--rounds", "2", "--no-notify", "--no-open", "--port", "0"],
                     out=out)
     text = out.getvalue()
-    assert code == 1 and "raqib watch --host: 2 round(s) done (--rounds)" in text
-    assert "RESULT: ALARM (exit 1)" in text and "TREES SEEN: 2" in text
+    assert code == 0 and "raqib watch --host: 2 round(s) done (--rounds)" in text   # C-10: history only
+    assert "RESULT: CLEAN (exit 0: trees listed, nothing new)" in text and "TREES SEEN: 2" in text
     reg = json.loads((_home / ".raqib" / "watches.json").read_text(encoding="ascii"))
     (row,) = reg["watches"]
     assert (row["project"], row["mode"], row["status"]) == ("host", "host", "finished")
@@ -416,8 +424,9 @@ def test_e1_a_stop_ends_the_host_watch_with_the_final_report(tmp_path, _home):
         text, code = host.conclude(running, crash)
     finally:
         host.close(running)
-    assert crash is None and code == 1 and "stopped (the window's Stop)" in running.out.getvalue()
-    assert text.startswith("Raqib watch --host") and "RESULT: ALARM (exit 1)" in text
+    assert crash is None and "stopped (the window's Stop)" in running.out.getvalue()
+    # the first tick read round 1 (history only), then Stop ended it: C-10 exit 0 with the trees named
+    assert text.startswith("Raqib watch --host") and code == 0 and "RESULT: CLEAN (exit 0" in text
 
 
 # --- E6 / cli: usage ---------------------------------------------------------------------------------
@@ -452,3 +461,336 @@ def test_e6_ci_and_readme_and_questions():
     for q in ("Q-1", "Q-2", "Q-3", "Q-4"):
         assert q in text
     assert "2496 passed, 16 skipped" in text
+
+
+# --- M7.2 REDO: ADR-0007 Amendment C (C-1..C-13), one test per behaviour (C-14, D-8) ----------------
+
+def _rule_doc(match, **kw):
+    doc = {"id": "TEST-GATE", "title": "t", "class": "HOST", "kind": "anchor", "severity": "low", "fp_budget": 0.5,
+           "match": match, "fixtures": {"positive": ["p.json"], "negative": ["n.json"]}}
+    doc.update(kw)
+    return doc
+
+
+def _line(seq, **fields):
+    rec = {"ts": "2026-11-04T10:00:00.000Z", "seq": seq, "session_id": "s", "phase": "pre", "tool": "Bash",
+           "cwd": "/w", "input_meta": {}}
+    rec.update(fields)
+    return rec
+
+
+def test_redo_c1a_a_negative_no_line_of_which_passes_the_gate_is_unmeasured(tmp_path):
+    (tmp_path / "hook.json").write_text(json.dumps([_line(1)]), encoding="ascii")
+    (tmp_path / "host.json").write_text(json.dumps([_line(1, tool="HostTree", source="os",
+                                                          input_meta={"x": 0})]), encoding="ascii")
+    rule = engine.compile_rule(_rule_doc({"all": [{"field": "tool", "eq": "HostTree"}, {"field": "source", "eq": "os"},
+                                                  {"field": "input_meta.x", "eq": 1}]}))
+    assert fixtures.gate_of(rule) == {"tool": "HostTree", "source": "os"}
+    assert fixtures.outcome(rule, tmp_path / "hook.json") == (False, set(), False)    # cannot match: unmeasured
+    assert fixtures.outcome(rule, tmp_path / "host.json") == (False, set(), True)     # passes the gate: measured
+    ungated = engine.compile_rule(_rule_doc({"field": "input_meta.x", "eq": 1}))
+    assert fixtures.gate_of(ungated) == {} and fixtures.outcome(ungated, tmp_path / "hook.json")[2] is False
+    # a code rule declares its gate
+    assert fixtures.outcome(ungated, tmp_path / "host.json", gate={"tool": "Bash"}) == (False, set(), False)
+
+
+def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file():
+    """The measured counts move only where a negative holds no line of the rule's gate (questions file)."""
+    reports = {r["rule_id"]: r for r in fixtures.check_catalog(RULES, ROOT, cli.benign_default(ROOT))}
+    got = {k: (r["measured"], r["unmeasured"]) for k, r in reports.items()}
+    assert got == {"AGENT-DARK-LIVE": (2, 10), "DESTRUCT-CMD": (8, 2), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
+                   "LANDED-NO-GATE": (8, 2), "NET-TOOL": (10, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
+                   "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
+                   "SECRET-OUTPUT": (7, 2)}
+    text = QUESTIONS.read_text(encoding="utf-8")
+    for rule_id, (m, u) in got.items():
+        assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id
+
+
+def test_redo_c1b_the_benign_arrivals_are_made_for_every_benign_discover_fixture():
+    assert host_fixtures.BENIGN == ["benign/linux-desktop", "benign/windows-desktop"]
+    for name in host_fixtures.BENIGN:
+        before = inv(name + host_fixtures.BEFORE)
+        assert before["candidates"] == [] and before["act_roots"] == [] and before["result"] == "none-seen", name
+        assert host_fixtures.SCENARIOS["NEW-AGENT/negative-arrival-%s.json" % name.split("/")[1]] == [
+            name + host_fixtures.BEFORE, name]
+    for rule_id in ("NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE"):
+        neg = next(r for r in RULES if r.id == rule_id).fixtures["negative"]
+        assert {"tests/fixtures/rules/NEW-AGENT/negative-arrival-%s.json" % n.split("/")[1]
+                for n in host_fixtures.BENIGN} <= set(neg), rule_id
+
+
+def test_redo_c1c_named_is_high_and_unknown_is_medium(tmp_path):
+    w, clock = make_host(tmp_path, ["benign/linux-desktop:before", "benign/linux-desktop", "linux"])
+    run_rounds(w, clock, 3)
+    got = {(f["image"], f["rule_id"], f["severity"]) for f in w.findings}
+    assert got == {("jetbrains-toolbox", "NEW-AGENT-UNKNOWN", "medium"), ("claude", "NEW-AGENT", "high"),
+                   ("environment-manager", "NEW-AGENT", "high")}
+
+
+def test_redo_c1d_benign_needs_the_name_and_a_system_directory_from_the_record():
+    cat = CATALOG
+    assert discover.benign_image("msedge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                                 "record", cat) == "?:/program files (x86)/*"
+    assert discover.benign_image("explorer", r"C:\Windows\explorer.exe", "record", cat) == "?:/windows/*"
+    assert discover.benign_image("firefox", "/usr/lib/firefox/firefox", "record", cat) == "/usr/*"
+    # the evasion's limits: a name outside the directories, a denied or blank path, argv[0], a dotted path
+    assert discover.benign_image("code", r"C:\Users\u\AppData\Local\Programs\Microsoft VS Code\Code.exe",
+                                 "record", cat) is None
+    assert discover.benign_image("firefox", "/home/u/.local/firefox", "record", cat) is None
+    assert discover.benign_image("msedge", "", "record", cat) is None
+    assert discover.benign_image("msedge", None, None, cat) is None
+    assert discover.benign_image("firefox", "/usr/lib/firefox/firefox", "argv", cat) is None
+    assert discover.benign_image("firefox", "/usr/../home/u/firefox", "record", cat) is None
+    assert discover.benign_image("agent", "/usr/bin/agent", "record", cat) is None        # not a listed name
+    assert discover.benign_image("claude", "/usr/bin/firefox", "record", cat) is None     # name and path disagree
+    assert discover.benign_image("firefox", "/USR/lib/firefox/firefox", "record", cat) is None   # POSIX is case-exact
+
+
+def test_redo_c1d_benign_images_is_a_signature_with_its_evasion_in_the_rules_holes():
+    spec = CATALOG["benign_images"]
+    assert "explorer" in spec["names"] and "runner.worker" not in spec["names"] and spec["evasion"]
+    assert any("takes a benign program's name" in e for e in spec["evasion"])
+    for rule_id in ("NEW-AGENT", "NEW-AGENT-UNKNOWN"):
+        rule = next(r for r in RULES if r.id == rule_id)
+        assert any("benign_images" in h and "benign program's name" in h for h in rule.holes), rule_id
+        assert {"field": "input_meta.benign", "eq": False} in rule.doc["match"]["all"], rule_id
+    text = Path(discover.CATALOG).read_text(encoding="utf-8")
+    bad = text.replace("benign_images:\n  kind: signature", "benign_images:\n  kind: anchor")
+    path = Path(os.environ["HOME"]) / "endpoints.yaml"
+    path.write_text(bad, encoding="utf-8")
+    with pytest.raises(discover.CatalogError, match="benign_images.kind"):
+        discover.load_catalog(str(path))
+    path.write_text(re.sub(r"(benign_images:\n(?:.*\n)*?)  evasion:\n(    - .*\n)+", r"\1  evasion: []\n", text),
+                    encoding="utf-8")
+    with pytest.raises(discover.CatalogError, match="benign_images.evasion"):
+        discover.load_catalog(str(path))
+
+
+def test_redo_c1d_a_benign_new_tree_is_listed_with_benign_not_knocked(tmp_path):
+    runner = FakeRunner()
+    w, clock = make_host(tmp_path, ["benign/windows-desktop:before", "benign/windows-desktop"], runner=runner)
+    run_rounds(w, clock, 2)
+    explorer = next(t for t in w.trees.values() if t["image"] == "explorer")
+    assert explorer["benign"] and explorer["benign_by"] == "?:/windows/*" and not explorer["knocked"]
+    line = next(x for x in w.round_lines[-1]["lines"] if x["input_meta"].get("image") == "explorer")
+    assert line["input_meta"]["benign"] is True
+    assert [(f["image"], f["rule_id"]) for f in w.findings] == [("code", "NEW-AGENT-UNKNOWN")]   # user install
+    assert "<span class=\"tag\">benign</span>" in w.page()
+
+
+def test_redo_c1e_each_budget_names_the_fixture_it_came_from():
+    for rule_id in ("NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE"):
+        rule = next(r for r in RULES if r.id == rule_id)
+        head = Path(rule.source).read_text(encoding="ascii").split("\nfp_budget:")[0].rsplit("\nseverity:", 1)[1]
+        assert "C-1e" in head and "negative-arrival-linux-desktop.json" in head, rule_id
+        report = fixtures.check_rule(rule, ROOT, cli.benign_default(ROOT))
+        assert report["fp_rate"] == rule.fp_budget, (rule_id, report["fp_rate"])
+
+
+def test_redo_c2_every_line_carries_the_run_and_seqs_continue(tmp_path):
+    w, clock = make_host(tmp_path, ["linux", "linux"])
+    run_rounds(w, clock, 2)
+    w.finish()
+    first, last1 = w.run, w.seq
+    clock2 = Clock(5000.0)
+    w2 = host.HostWatch(lambda: inv("linux"), CATALOG, RULES, make_notifier(FakeRunner()), every=10,
+                        out=io.StringIO(), err=io.StringIO(), clock=clock2, wall=lambda: 1793800000.0 + clock2.t,
+                        home=str(tmp_path / "home"), platform="test")
+    assert w2.run != first and w2.first_seq == last1
+    w2.tick(wait=30)
+    lines = [json.loads(x) for x in Path(w.rounds_path).read_text(encoding="ascii").splitlines()]
+    assert [r["run"] for r in lines] == [first, first, w2.run]
+    assert all(l["input_meta"]["run"] == r["run"] for r in lines for l in r["lines"])
+    seqs = [(r["run"], l["seq"]) for r in lines for l in r["lines"]]
+    assert len(seqs) == len(set(seqs)) and len({q for _, q in seqs}) == len(seqs)   # a seq resolves to one line
+    assert min(l["seq"] for l in lines[2]["lines"]) == last1 + 1
+    assert json.loads(Path(w.inventory_path).read_text(encoding="ascii"))["host_watch"]["run"] == w2.run
+    assert json.loads(Path(w.state_path).read_text(encoding="ascii"))["run"] == w2.run
+
+
+def test_redo_c2_a_corrupt_last_line_is_a_hole_and_seqs_continue_after_the_last_good_one(tmp_path):
+    w, clock = make_host(tmp_path, ["linux"])
+    run_rounds(w, clock, 1)
+    w.finish()
+    last = w.seq
+    with open(w.rounds_path, "a", encoding="ascii") as f:
+        f.write('{"round": 2, "lines": [{"seq": 9')     # a torn write
+    w2, clock2 = make_host(tmp_path, ["linux"])
+    assert w2.first_seq == last and [h["kind"] for h in w2.holes] == ["rounds-corrupt"]
+    run_rounds(w2, clock2, 1)
+    lines = Path(w.rounds_path).read_text(encoding="ascii").splitlines()
+    assert json.loads(lines[-1])["lines"][0]["seq"] == last + 1 and lines[-2].startswith('{"round": 2, "lines"')
+
+
+def test_redo_c2_a_second_host_watch_on_a_fresh_home_is_refused(tmp_path, _home, monkeypatch, capsys):
+    w, clock = make_host(tmp_path, ["linux"])
+    w.tick(wait=30)                                   # running: a fresh heartbeat, not finished
+    with pytest.raises(host.HostError, match="one host watch per home"):
+        make_host(tmp_path, ["linux"])
+    monkeypatch.setattr(host, "live_reader", lambda catalog, window, platform: lambda: inv("linux"))
+    state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    state["heartbeat"] = host.iso(datetime.datetime.now(datetime.timezone.utc))
+    Path(str(_home / ".raqib" / "host" / "rounds.jsonl.watch.json")).parent.mkdir(parents=True, exist_ok=True)
+    Path(str(_home / ".raqib" / "host" / "rounds.jsonl.watch.json")).write_text(json.dumps(state), encoding="ascii")
+    assert cli.main(["watch", "--host", "--rounds", "1", "--no-notify", "--no-open", "--port", "0"],
+                    out=io.StringIO()) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "one host watch per home" in err
+    clock.t += 100                                    # stale (or finished): the next watch may start
+    w.finish()
+    make_host(tmp_path, ["linux"])
+
+
+def test_redo_c3_rounds_end_at_the_outstanding_readers_deadline(tmp_path, monkeypatch):
+    never = threading.Event()
+    w, clock = make_host(tmp_path, reader=lambda: never.wait(3600), rounds=1, every=1)
+    monkeypatch.setattr(host, "_sleep", lambda s: setattr(clock, "t", clock.t + s))
+    running = host.Running(w, None, w.notifier, None, True, {}, io.StringIO(), io.StringIO())
+    w.port, w.url = {"warning": None}, "http://127.0.0.1:1/"
+    assert host.loop(running) is None
+    assert clock.t - w.t0 <= w.deadline_seconds + host.POLL_SECONDS
+    assert "past its deadline (2 s) and is left out: a hole" in running.out.getvalue()
+    text, code = w.finish()
+    assert code == 3 and "reader-out: round 1" in text
+
+
+def test_redo_c3_stop_ends_at_the_outstanding_readers_deadline(tmp_path, monkeypatch):
+    never = threading.Event()
+    w, clock = make_host(tmp_path, reader=lambda: never.wait(3600), every=1)
+
+    class FakeStop:
+        reason = "the window's Stop"
+
+        def is_set(self):
+            return clock.t - w.t0 >= 0.5
+
+        def wait(self, s):
+            clock.t += s
+            return self.is_set()
+    monkeypatch.setattr(host, "_sleep", lambda s: setattr(clock, "t", clock.t + s))
+    running = host.Running(w, None, w.notifier, None, True, {}, io.StringIO(), io.StringIO())
+    w.port, w.url = {"warning": None}, "http://127.0.0.1:1/"
+    assert host.loop(running, FakeStop()) is None
+    assert w.rounds == 1 and clock.t - w.t0 <= w.deadline_seconds + host.POLL_SECONDS
+    assert "stopped (the window's Stop)" in running.out.getvalue()
+
+
+def test_redo_c4_a_round_one_act_root_that_becomes_a_candidate_knocks(tmp_path):
+    w, clock = make_host(tmp_path, ["kimi/one-sample", "kimi/two-samples"])
+    run_rounds(w, clock, 2)
+    assert [(f["image"], f["rule_id"]) for f in w.findings] == [("kimi", "NEW-AGENT")]
+    assert "tests/fixtures/rules/NEW-AGENT/positive-act-root-becomes-candidate.json" in next(
+        r for r in RULES if r.id == "NEW-AGENT").fixtures["positive"]
+
+
+def test_redo_c5_four_new_trees_in_one_round_give_four_toasts_and_folds_are_reported(tmp_path):
+    base = inv("benign/linux-desktop:before")
+    four = json.loads(json.dumps(inv("windows")))
+    four["candidates"] = [c for c in four["candidates"] if c["image"] != "msedge"]
+    extra = json.loads(json.dumps(next(c for c in four["candidates"] if c["image"] == "scribe")))
+    extra.update(pid=7100, id="C9")
+    four["candidates"].append(extra)
+    runner = FakeRunner()
+    w, clock = make_host(tmp_path, [base, four, four], runner=runner)
+    run_rounds(w, clock, 2)
+    assert len(runner.calls) == 4 and [f["notice"] for f in w.findings] == ["sent"] * 4
+    assert sorted(c["text"].split("\n")[1] for c in runner.calls) == [
+        "host, claude pid 2100 (named)", "host, nimbus pid 3300 (named)", "host, scribe pid 7000 (unknown)",
+        "host, scribe pid 7100 (unknown)"]
+    assert w.notifier.on_folds == w._folds
+    # a second knock of one tree within the minute folds and is reported waiting, then delivered
+    w.notifier.notify("NEW-AGENT", "claude pid 2100 (named)", clock.t, token=(w.findings[0], "notice"),
+                      limit_id="NEW-AGENT pid 2100")
+    text, _ = w.finish(now=clock.t)
+    assert "folded 1 (1 still waiting)" in text
+    clock.t += 61
+    w.tick()
+    assert w.findings[0]["notice"] == "folded: sent as 1 more"
+
+
+def test_redo_c6_each_host_line_carries_the_cited_lines_text_bounded_and_safe(tmp_path):
+    bad = json.loads(json.dumps(inv("windows")))
+    bad["candidates"][0]["cites"][0]["text"] = "x\x1b[31m" + "y" * 1000
+    w, clock = make_host(tmp_path, [inv("benign/windows-desktop"), bad])
+    run_rounds(w, clock, 2)
+    lines = [json.loads(x) for x in Path(w.rounds_path).read_text(encoding="ascii").splitlines()]
+    for r in lines:
+        for l in r["lines"]:
+            for c in l["input_meta"]["cites"]:
+                assert set(c) == {"src", "line", "text"} and c["text"] and len(c["text"]) <= host.CITE_TEXT_MAX
+                assert all(ch.isprintable() for ch in c["text"])
+    claude = next(l for l in lines[1]["lines"] if l["input_meta"].get("image") == "claude")
+    assert claude["input_meta"]["cites"][0]["text"].startswith("x?[31myyy") and "..." in claude["input_meta"]["cites"][0]["text"]
+
+
+def test_redo_c7_the_band_says_reader_failed_or_late_before_watching(tmp_path):
+    feed = iter([inv("linux"), None])
+
+    def reader():
+        got = next(feed)
+        if got is None:
+            raise OSError("denied")
+        return got
+    w, clock = make_host(tmp_path, reader=reader)
+    run_rounds(w, clock, 1)
+    assert json.loads(Path(w.state_path).read_text(encoding="ascii"))["band"] == "WATCHING"
+    run_rounds(w, clock, 1)
+    st = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    assert st["band"] == "HOST READER FAILED" and ui.status(st)[1] == "alarm"
+    page = w.page()
+    assert '<span class="badge state alarm">HOST READER FAILED</span>' in page and "OSError: denied" in page
+    late = dict(st, host=dict(st["host"], last_round=dict(st["host"]["last_round"], error=None, late=True,
+                                                            seconds=25.0)))
+    assert ui.status(late)[0] == "READER LATE"
+    assert '<span class="badge state alarm">READER LATE</span>' in ui.host_page(late)
+
+
+def test_redo_c8_the_ci_step_checks_discovers_candidates_and_stderr():
+    gate = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
+    step = gate.split("raqib watch --host --every 1 --rounds 2 --no-notify", 1)[1].split("# Doctor from the venv", 1)[0]
+    assert "raqib discover $one --json -o host-discover.json" in gate and 'one="--samples 1"' in gate
+    assert "host-err.txt" in step and "Traceback" in step and "missing from the watch's trees" in step
+    assert 'expect = 0 if os.name == "nt"' in step
+
+
+def test_redo_c10_exit_codes_clean_finding_incomplete(tmp_path):
+    w, clock = make_host(tmp_path, ["linux", "linux"])
+    run_rounds(w, clock, 2)
+    text, code = w.finish()
+    assert code == 0 and "CLEAN: 2 tree(s) listed, none new" in text and "RESULT: CLEAN (exit 0" in text
+    w, clock = make_host(tmp_path, ["benign/windows-desktop", "windows"])
+    run_rounds(w, clock, 2)
+    assert w.finish()[1] == 1
+    feed = iter([inv("linux"), None])
+
+    def reader():
+        got = next(feed)
+        if got is None:
+            raise OSError("x")
+        return got
+    w, clock = make_host(tmp_path, reader=reader)
+    run_rounds(w, clock, 2)
+    text, code = w.finish()
+    assert code == 3 and "1 round(s) could not be read (round 2)" in text
+    empty = dict(inv("benign/windows-desktop"), candidates=[], act_roots=[], result="none-seen")
+    w, clock = make_host(tmp_path, [empty])
+    run_rounds(w, clock, 1)
+    assert w.finish()[1] == 0 and "RESULT: NONE-SEEN (exit 0" in w.final_text
+
+
+def test_redo_c11_no_set_aside_in_test_rules():
+    text = (ROOT / "tests" / "test_rules.py").read_text(encoding="utf-8")
+    assert "host_rules" not in text and "M72_NOTE" in text
+
+
+def test_redo_c12_dark_rounds_is_the_yamls_eq():
+    rule = next(r for r in RULES if r.id == "AGENT-DARK-LIVE")
+    (streak,) = [p["eq"] for p in rule.doc["match"]["all"] if p.get("field") == "input_meta.streak"]
+    assert streak == host.DARK_ROUNDS == 3
+
+
+def test_redo_c13_engine_classes_has_host_and_the_rules_use_it():
+    assert "HOST" in engine.CLASSES
+    assert {r.id: r.cls for r in RULES if r.id in host.RULES} == {
+        "NEW-AGENT": "HOST", "NEW-AGENT-UNKNOWN": "HOST", "AGENT-DARK-LIVE": "HOST"}

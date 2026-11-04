@@ -218,9 +218,15 @@ Note (2026-11-04, M7.2, ADR-0007 Amendment C): two anchor rows join the
 table, judged on the host's own record of trees and footprints:
 
 | NEW-AGENT        | anchor    | -                                                    |
+| NEW-AGENT-UNKNOWN | anchor   | -                                                    |
 | AGENT-DARK-LIVE  | anchor    | -                                                    |
 
-Ratio after M7.2: 4 : 7 : 8.
+(The REDO builder, on the branch, per Amendment C-1c: the engine's severity
+is per rule, so the unknown new tree is its own anchor, NEW-AGENT-UNKNOWN,
+medium; NEW-AGENT keeps the named tree, high. One row added, the ratio
+moved from 4 : 7 : 8.)
+
+Ratio after M7.2: 4 : 7 : 9.
 
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when

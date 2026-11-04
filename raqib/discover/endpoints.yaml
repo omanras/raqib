@@ -170,3 +170,28 @@ act_root:
     negative:
       - tests/fixtures/discover/benign/linux-desktop
       - tests/fixtures/discover/benign/windows-desktop
+# Benign images (M7.2 REDO, ADR-0007 Amendment C, C-1d): programs a desktop
+# runs that talk and have a child (a browser, the shell, an IDE). Under
+# `raqib watch --host` a new tree whose root is one of them is listed with
+# `benign` and not knocked (NEW-AGENT, NEW-AGENT-UNKNOWN). A signature: the
+# match needs the image name listed AND the image path under one of `dirs`
+# (system and program-files directories, where a user cannot write without
+# elevation); a path that was denied, left blank, or read from the
+# process's own argv[0] (Linux, an exe link not read) never matches.
+# Started from what the benign fixtures show (tests/fixtures/discover/benign,
+# the browser of tests/fixtures/discover/windows). The CI runner's own
+# images (Runner.Worker, Runner.Listener, hosted-compute-agent) are NOT
+# here: they talk and act, they are agents.
+benign_images:
+  kind: signature
+  # Image names (lower case, no .exe), as discover.image_name gives them.
+  names: [explorer, code, msedge, firefox]
+  # fnmatch globs over the image path: Windows paths lower case with '/'
+  # (%SystemRoot% on any drive, Program Files, Program Files (x86)); POSIX
+  # paths as they are (case-sensitive).
+  dirs: ["?:/windows/*", "?:/program files/*", "?:/program files (x86)/*", "/usr/*", "/bin/*", "/sbin/*", "/lib/*", "/opt/*"]
+  evasion:
+    - "an agent that takes a benign program's name and is installed under a listed directory (an elevated install, a package, a copy into Program Files or /opt) is listed as benign and never knocked"
+    - "an agent that runs inside a benign program (a browser extension, an IDE extension, a script run by the shell) is the benign program's tree"
+    - "a benign program driven by an agent (remote debugging, automation of a browser or an IDE) is benign"
+    - "Linux: a process may rename itself; the name is checked against the image path's own basename, so a renamed process outside the listed directories is not benign"

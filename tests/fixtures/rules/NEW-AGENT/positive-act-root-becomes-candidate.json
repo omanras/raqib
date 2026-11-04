@@ -7,14 +7,40 @@
    "cwd": "host",
    "input_meta": {
     "acts": 5,
+    "benign": false,
+    "benign_by": null,
     "candidate_before": false,
     "cites": [
-     "win-process-1:12",
-     "win-process-2:12",
-     "win-tcp-2:7",
-     "win-dns-1:3",
-     "win-dns-2:3",
-     "win-process-1:15"
+     {
+      "line": 12,
+      "src": "win-process-1",
+      "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+     },
+     {
+      "line": 12,
+      "src": "win-process-2",
+      "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+     },
+     {
+      "line": 7,
+      "src": "win-tcp-2",
+      "text": "\"192.0.2.10\",\"50431\",\"203.0.113.40\",\"443\",\"Established\",\"10728\",\"11/2/2026 10:29:24 AM\""
+     },
+     {
+      "line": 3,
+      "src": "win-dns-1",
+      "text": "\"api.moonshot.ai\",\"api.moonshot.ai\",\"A\",\"0\",\"1\",\"562\",\"4\",\"203.0.113.40\""
+     },
+     {
+      "line": 3,
+      "src": "win-dns-2",
+      "text": "\"api.moonshot.ai\",\"api.moonshot.ai\",\"A\",\"0\",\"1\",\"552\",\"4\",\"203.0.113.40\""
+     },
+     {
+      "line": 15,
+      "src": "win-process-1",
+      "text": "\"5796\",\"10476\",\"bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\",\"C:\\Program Files\\Git\\usr\\bin\\bash.exe -c \"\"ping -n 90 127.0.0.1 | tee -a work/ping.log\"\"\",\"11/2/2026 10:29:11 AM\""
+     }
     ],
     "class": "candidate",
     "endpoints": [
@@ -27,6 +53,7 @@
     "named_word": "named",
     "pid": 10728,
     "round": 2,
+    "run": "fixture-run",
     "sample": "window - .. -; Windows sample(s) 1,2",
     "started": "11/2/2026 10:21:05 AM",
     "tree": "10728:kimi:11/2/2026 10:21:05 AM",
@@ -43,14 +70,40 @@
    "cwd": "host",
    "input_meta": {
     "acts": 3,
+    "benign": true,
+    "benign_by": "?:/windows/*",
     "candidate_before": true,
     "cites": [
-     "win-process-1:9",
-     "win-process-2:9",
-     "win-tcp-1:6",
-     "win-tcp-2:6",
-     "win-process-1:12",
-     "win-process-2:12"
+     {
+      "line": 9,
+      "src": "win-process-1",
+      "text": "\"6636\",\"6600\",\"explorer.exe\",\"C:\\Windows\\explorer.exe\",\"C:\\Windows\\Explorer.EXE\",\"11/2/2026 8:02:30 AM\""
+     },
+     {
+      "line": 9,
+      "src": "win-process-2",
+      "text": "\"6636\",\"6600\",\"explorer.exe\",\"C:\\Windows\\explorer.exe\",\"C:\\Windows\\Explorer.EXE\",\"11/2/2026 8:02:30 AM\""
+     },
+     {
+      "line": 6,
+      "src": "win-tcp-1",
+      "text": "\"192.0.2.10\",\"49812\",\"198.51.100.23\",\"443\",\"Established\",\"6636\",\"11/2/2026 10:12:40 AM\""
+     },
+     {
+      "line": 6,
+      "src": "win-tcp-2",
+      "text": "\"192.0.2.10\",\"49812\",\"198.51.100.23\",\"443\",\"Established\",\"6636\",\"11/2/2026 10:12:40 AM\""
+     },
+     {
+      "line": 12,
+      "src": "win-process-1",
+      "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+     },
+     {
+      "line": 12,
+      "src": "win-process-2",
+      "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+     }
     ],
     "class": "candidate",
     "endpoints": [
@@ -63,6 +116,7 @@
     "named_word": "unknown",
     "pid": 6636,
     "round": 2,
+    "run": "fixture-run",
     "sample": "window - .. -; Windows sample(s) 1,2",
     "started": "11/2/2026 8:02:30 AM",
     "tree": "6636:explorer:11/2/2026 8:02:30 AM",
@@ -80,13 +134,22 @@
    "input_meta": {
     "agent": "kimi",
     "cites": [
-     "footprints:2",
-     "win-process-1:12"
+     {
+      "line": 2,
+      "src": "footprints",
+      "text": "C:\\Users\\user\\.kimi"
+     },
+     {
+      "line": 12,
+      "src": "win-process-1",
+      "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+     }
     ],
     "dark": false,
     "linked": "C2",
     "path": "C:\\Users\\user\\.kimi",
     "round": 2,
+    "run": "fixture-run",
     "sample": "window - .. -; Windows sample(s) 1,2",
     "state": "linked",
     "streak": 0

@@ -176,16 +176,25 @@ jobs:
           # ADR-0007 A-5: the replay is the live run: candidates, act_roots, their count, the holes' count.
           python -c "import json; a, b = (json.load(open(n, encoding='ascii')) for n in ('live.json', 'replay.json')); assert a['candidates'] == b['candidates'], 'replay: candidates differ'; assert a['act_roots'] == b['act_roots'] and len(a['act_roots']) == len(b['act_roots']), 'replay: act_roots differ'; assert len(a['holes']) == len(b['holes']), ('replay: hole count', len(a['holes']), len(b['holes'])); print('replay == live: %d candidate(s), %d act-root(s), %d hole(s)' % (len(b['candidates']), len(b['act_roots']), len(b['holes'])))"
           # M7.2 E6 (ADR-0007 decision 2): the host watch from the venv, 2 rounds 1 s apart, read-only.
-          # The report lists the runner's trees (Windows: the Actions agents M7.1 found) or says NO AGENT
-          # SEEN; the exit is the report's own; the record and the latest inventory are under ~/.raqib/host/.
+          # REDO C-8: `raqib discover --json` in the same job first; every candidate pid it names must be
+          # among the watch report's trees; stderr is kept apart and read for a Traceback too.
+          # REDO C-10: the runner's trees are there at the start (history), so on Windows the watch
+          # exits 0 (CLEAN, the trees named); 3 (a round not read) or 1 (a finding) are reported.
+          # One sample on Windows, as a host round reads (Q-1, C-13); Linux: one /proc snapshot.
+          if [ "$RUNNER_OS" = "Windows" ]; then one="--samples 1"; else one=""; fi
+          set +e; raqib discover $one --json -o host-discover.json > /dev/null 2> host-discover-err.txt; dcode=$?; set -e
+          cat host-discover-err.txt; ! grep -q "Traceback" host-discover-err.txt
+          echo "discover before the host watch: exit $dcode"; test "$dcode" -ne 2
           set +e; raqib watch --host --every 1 --rounds 2 --no-notify > host.txt 2> host-err.txt; code=$?; set -e
           cat host.txt; cat host-err.txt; echo "watch --host: exit $code"; test "$code" -ne 2
           HOST_EXIT="$code" python - <<'EOF'
           import json, os, re
           text = open("host.txt", encoding="utf-8", errors="replace").read()
-          assert "Traceback" not in text and "CRASHED" not in text, text[-2000:]
+          err = open("host-err.txt", encoding="utf-8", errors="replace").read()
+          for name, body in (("host.txt", text), ("host-err.txt", err)):
+              assert "Traceback" not in body and "CRASHED" not in body, (name, body[-2000:])
           assert "raqib watch --host: 2 round(s) done (--rounds)" in text, text[-2000:]
-          result = re.search(r"^RESULT: ([A-Z-]+) \(exit ([0-9])\)$", text, re.M)
+          result = re.search(r"^RESULT: ([A-Z-]+) \(exit ([0-9]): [^)]*\)$", text, re.M)
           assert result and int(result.group(2)) == int(os.environ["HOST_EXIT"]), (result, os.environ["HOST_EXIT"])
           rounds = re.findall(r"^\[[0-9:]+Z\] round ([0-9]+)(?: \(late, [0-9.]+ s\))?: ([0-9]+) records read", text, re.M)
           assert [r for r, _ in rounds] == ["1", "2"] and all(int(n) > 0 for _, n in rounds), rounds
@@ -193,16 +202,30 @@ jobs:
           assert seen, text[-2000:]
           trees = re.findall(r"^  \[(candidate|act-root)\] pid ([0-9]+) (\S+) \((named|unknown)", text, re.M)
           print("trees:", trees)
+          assert int(seen.group(1)) == len(trees) and (trees or "NO AGENT SEEN in 2 round(s)" in text), text[-2000:]
+          # C-8: the runner's trees, as discover saw them in this job, are the watch's trees.
+          inv = json.load(open("host-discover.json", encoding="ascii"))
+          want = sorted({c["pid"] for c in inv["candidates"]})
+          got = {int(pid) for _, pid, _, _ in trees}
+          print("discover candidates:", [(c["pid"], c["image"]) for c in inv["candidates"]])
+          assert set(want) <= got, ("discover candidate pid(s) missing from the watch's trees", sorted(set(want) - got))
           if os.name == "nt":
-              assert int(seen.group(1)) >= 1 and trees, "no tree on the Windows runner (M7.1 found the Actions agents)"
-          else:
-              assert int(seen.group(1)) == len(trees) and (trees or "NO AGENT SEEN in 2 round(s)" in text), text[-2000:]
+              assert want, "no candidate on the Windows runner (M7.1 found the Actions agents)"
+          # C-10: history trees only, nothing new, every round read: exit 0 on windows.
+          new = re.search(r"^FINDINGS: ([0-9]+)$", text, re.M)
+          expect = 0 if os.name == "nt" else None
+          if expect is not None and new and new.group(1) == "0" and "reader-" not in text:
+              assert int(os.environ["HOST_EXIT"]) == expect and result.group(1) == "CLEAN", result.group(0)
           record = re.search(r"^record: (.+); latest inventory: (.+)$", text, re.M)
-          lines = open(record.group(1), encoding="ascii").read().splitlines()
-          assert [json.loads(x)["round"] for x in lines] == [1, 2], lines
-          assert json.load(open(record.group(2), encoding="ascii"))["live"] is True
+          lines = [json.loads(x) for x in open(record.group(1), encoding="ascii").read().splitlines()]
+          run = re.search(r"^run: (\S+) ", text, re.M).group(1)
+          mine = [x for x in lines if x.get("run") == run]
+          assert [x["round"] for x in mine] == [1, 2], [(x.get("run"), x["round"]) for x in lines]
+          latest = json.load(open(record.group(2), encoding="ascii"))
+          assert latest["live"] is True and latest["host_watch"]["run"] == run, latest.get("host_watch")
           state = json.load(open(record.group(1) + ".watch.json", encoding="ascii"))
           assert state["mode"] == "host" and state["finished"] and state["host"]["rounds"] == 2, state["host"]
+          assert state["run"] == run, state["run"]
           print("watch --host: OK, %s tree(s), %s" % (seen.group(1), result.group(0)))
           EOF
           # Doctor from the venv (exit 1 here: see the exact MISSING lines below).

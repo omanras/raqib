@@ -1,0 +1,130 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 19,
+    "benign": true,
+    "benign_by": "?:/windows/*",
+    "candidate_before": false,
+    "cites": [
+     {
+      "line": 9,
+      "src": "win-process-1",
+      "text": "\"5100\",\"5060\",\"explorer.exe\",\"C:\\Windows\\explorer.exe\",\"C:\\Windows\\Explorer.EXE\",\"11/3/2026 7:41:30 AM\""
+     },
+     {
+      "line": 9,
+      "src": "win-process-2",
+      "text": "\"5100\",\"5060\",\"explorer.exe\",\"C:\\Windows\\explorer.exe\",\"C:\\Windows\\Explorer.EXE\",\"11/3/2026 7:41:30 AM\""
+     },
+     {
+      "line": 6,
+      "src": "win-tcp-1",
+      "text": "\"192.0.2.30\",\"50001\",\"198.51.100.23\",\"443\",\"Established\",\"5100\",\"11/3/2026 7:41:40 AM\""
+     },
+     {
+      "line": 6,
+      "src": "win-tcp-2",
+      "text": "\"192.0.2.30\",\"50001\",\"198.51.100.23\",\"443\",\"Established\",\"5100\",\"11/3/2026 7:41:40 AM\""
+     },
+     {
+      "line": 10,
+      "src": "win-process-1",
+      "text": "\"5320\",\"5100\",\"OneDrive.exe\",\"C:\\Users\\user\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe\",\"\"\"C:\\Users\\user\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe\"\" /background\",\"11/3/2026 7:41:44 AM\""
+     },
+     {
+      "line": 10,
+      "src": "win-process-2",
+      "text": "\"5320\",\"5100\",\"OneDrive.exe\",\"C:\\Users\\user\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe\",\"\"\"C:\\Users\\user\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe\"\" /background\",\"11/3/2026 7:41:44 AM\""
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "198.51.100.23:443"
+    ],
+    "history": false,
+    "image": "explorer",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 5100,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1,2",
+    "started": "11/3/2026 7:41:30 AM",
+    "tree": "5100:explorer:11/3/2026 7:41:30 AM",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 2,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": false,
+    "cites": [
+     {
+      "line": 17,
+      "src": "win-process-1",
+      "text": "\"6050\",\"6000\",\"Code.exe\",\"C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\",\"\"\"C:\\Users\\user\\AppData\\Lo....mojom.NodeService --lang=en-US --service-sandbox-type=none --vscode-utility-kind=extensionHost\",\"11/3/2026 8:02:13 AM\""
+     },
+     {
+      "line": 17,
+      "src": "win-process-2",
+      "text": "\"6050\",\"6000\",\"Code.exe\",\"C:\\Users\\user\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe\",\"\"\"C:\\Users\\user\\AppData\\Lo....mojom.NodeService --lang=en-US --service-sandbox-type=none --vscode-utility-kind=extensionHost\",\"11/3/2026 8:02:13 AM\""
+     },
+     {
+      "line": 9,
+      "src": "win-tcp-1",
+      "text": "\"192.0.2.30\",\"50021\",\"198.51.100.51\",\"443\",\"Established\",\"6050\",\"11/3/2026 8:02:25 AM\""
+     },
+     {
+      "line": 9,
+      "src": "win-tcp-2",
+      "text": "\"192.0.2.30\",\"50021\",\"198.51.100.51\",\"443\",\"Established\",\"6050\",\"11/3/2026 8:02:25 AM\""
+     },
+     {
+      "line": 18,
+      "src": "win-process-1",
+      "text": "\"6055\",\"6050\",\"git.exe\",\"C:\\Program Files\\Git\\cmd\\git.exe\",\"\"\"C:\\Program Files\\Git\\cmd\\git.exe\"\" status -z -uall\",\"11/3/2026 9:10:41 AM\""
+     },
+     {
+      "line": 18,
+      "src": "win-process-2",
+      "text": "\"6055\",\"6050\",\"git.exe\",\"C:\\Program Files\\Git\\cmd\\git.exe\",\"\"\"C:\\Program Files\\Git\\cmd\\git.exe\"\" status -z -uall\",\"11/3/2026 9:10:41 AM\""
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "198.51.100.51:443"
+    ],
+    "history": false,
+    "image": "code",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "pid": 6050,
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1,2",
+    "started": "11/3/2026 8:02:13 AM",
+    "tree": "6050:code:11/3/2026 8:02:13 AM",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  }
+ ]
+}

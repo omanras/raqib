@@ -318,11 +318,12 @@ def load_catalog(path=CATALOG):
         raise CatalogError("%s: %s: %s" % (path, field, msg))
 
     keys = ("id", "kind", "evasion", "hosts", "networks", "ports", "footprints", "env", "acts", "handoff",
-            "act_root")
+            "act_root", "benign_images")
+    optional = ("benign_images",)   # M7.2 REDO C-1d: read by raqib watch --host only
     if not isinstance(doc, dict):
         raise CatalogError("%s: the catalog must hold a mapping" % path)
     for key in keys:
-        if key not in doc:
+        if key not in doc and key not in optional:
             bad(key, "missing")
     for key in doc:
         if key not in keys:
@@ -400,7 +401,55 @@ def load_catalog(path=CATALOG):
             "acts": acts["names"], "acts_evasion": acts["evasion"], "proxy_capable": proxy,
             "hook_images": handoff["hook"]["images"], "hook_not_paths": handoff["hook"]["not_paths"],
             "hook_evasion": handoff["hook"]["evasion"], "proxy_evasion": handoff["proxy"]["evasion"],
-            "act_root": _act_root_spec(doc["act_root"], bad), "path": str(path)}
+            "act_root": _act_root_spec(doc["act_root"], bad),
+            "benign_images": _benign_spec(doc.get("benign_images"), bad), "path": str(path)}
+
+
+def _benign_spec(spec, bad):
+    """M7.2 REDO (ADR-0007 Amendment C, C-1d): the catalog's benign_images
+    block, a signature (kind signature, evasion listed), or None when the
+    catalog has none (then no tree is benign)."""
+    if spec is None:
+        return None
+    if not (isinstance(spec, dict) and set(spec) == {"kind", "names", "dirs", "evasion"}):
+        bad("benign_images", "must hold kind, names, dirs and evasion")
+    if spec["kind"] != "signature":
+        bad("benign_images.kind", "must be signature (a name and a path the process's record gives)")
+    if not (isinstance(spec["evasion"], list) and spec["evasion"]
+            and all(isinstance(e, str) and e.strip() for e in spec["evasion"])):
+        bad("benign_images.evasion", "a signature must list its known evasions (ADR-0002)")
+    if not (isinstance(spec["names"], list) and spec["names"]
+            and all(isinstance(n, str) and n and n == n.lower() for n in spec["names"])):
+        bad("benign_images.names", "must be a non-empty list of lower-case image names")
+    if not (isinstance(spec["dirs"], list) and spec["dirs"]
+            and all(isinstance(d, str) and d.endswith("/*") and (d.startswith("/") or d.startswith("?:/"))
+                    and d == (d.lower() if d.startswith("?:/") else d) for d in spec["dirs"])):
+        bad("benign_images.dirs", "must be a non-empty list of '/...' or lower-case '?:/...' globs ending in /*")
+    return {"names": list(spec["names"]), "dirs": list(spec["dirs"]), "evasion": list(spec["evasion"])}
+
+
+def benign_image(image, exe, exe_from, catalog):
+    """M7.2 REDO C-1d (API for raqib/host.py): the dirs glob under which a
+    tree's root image is a listed benign program, or None. The image name
+    and the basename of the image path must both be a listed name, the path
+    must come from the process's record (exe_from "record": never argv[0],
+    which the process writes), must not be blank or denied, must hold no
+    '.' or '..' part, and must fall under a listed directory. A Windows
+    path (a drive letter or a backslash) is compared lower case with '/';
+    a POSIX path as it is."""
+    spec = catalog.get("benign_images")
+    if not spec or not exe or exe_from != "record" or not isinstance(exe, str):
+        return None
+    name = image_name(exe)
+    if name not in spec["names"] or (image and image != name):
+        return None
+    path = exe.strip().strip('"')
+    windows = "\\" in path or re.match(r"[A-Za-z]:", path) is not None
+    if windows:
+        path = re.sub(r"\A/(?:/\?|\?\?)/", "", path.replace("\\", "/")).lower()
+    if any(part in (".", "..") for part in path.split("/")):
+        return None
+    return next((d for d in spec["dirs"] if fnmatch.fnmatchcase(path, d)), None)
 
 
 ACT_ROOT_KEYS = ("kind", "status", "fp_budget", "user_dirs", "shells", "launchers", "not_images", "evasion",
@@ -535,9 +584,11 @@ def parse_proc(text, src="proc"):
         cwd = obj.get("cwd") if isinstance(obj.get("cwd"), str) else None
         unread = obj.get("unread") if isinstance(obj.get("unread"), list) else []
         # G-2: the exe link places a process; argv[0], its own text, is the fallback.
-        exe = obj.get("exe") if isinstance(obj.get("exe"), str) and obj.get("exe") else (argv or [None])[0]
+        linked = isinstance(obj.get("exe"), str) and bool(obj.get("exe"))
+        exe = obj.get("exe") if linked else (argv or [None])[0]
         records.append(_rec("proc", src, number, raw, pid=pid, ppid=ppid, argv=argv or [],
                             image=_linux_image(argv, obj.get("name")), exe=exe,
+                            exe_from="record" if linked else "argv",   # M7.2 REDO C-1d
                             cwd=cwd, env_keys=env, sockets=sockets, ts=_ts(obj.get("at")) or at,
                             unread=[str(u) for u in unread]))
     return records, problems
@@ -1733,6 +1784,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
             times += [r["ts"] for r in (q["recs"] if q else []) if r.get("ts")]
         candidates.append(dict(
             entry, id=ids[pid], cwd=p["cwd"] if p else None, acts=acts[pid], inside=inside, started=started_of(p),
+            exe_from=exe_from(p),
             listed_acts=sum(1 for a in acts[pid] if a["listed"]),
             talking_ancestors=talking_up, tree=tree,
             env_footprints=[{"name": k, "cites": _cites(p["recs"], 1)} for k in env],
@@ -1933,6 +1985,17 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     })
 
 
+def exe_from(p):
+    """M7.2 REDO C-1d (API for raqib/host.py): where a process's image path
+    came from: "record" (Windows ExecutablePath, a Sysmon image, the Linux
+    exe link), "argv" (Linux argv[0], the process's own text), or None (no
+    path: blank or denied)."""
+    for r in (p or {}).get("recs") or ():
+        if r.get("kind") == "proc" and r.get("exe") and r.get("exe") == p.get("exe"):
+            return r.get("exe_from") or "record"
+    return None
+
+
 def started_of(p):
     """M7.2 (API for raqib/host.py): the creation time the reader gave for a
     process, as the record holds it (Windows: CreationDate, an export's text
@@ -2097,6 +2160,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         first = heads[0]
         roots.append({
             "pid": pid, "image": p["image"], "exe": p["exe"], "cwd": p["cwd"], "user_dir": place, "started": started_of(p),
+            "exe_from": exe_from(p),
             "chains": heads, "acts": acts, "cites": _cites(p["recs"]),
             "attributed_to": ids.get(owner) if owner is not None else None,
             "talking_ancestor": ({"pid": owner, "image": procs[owner]["image"] if owner in procs else None,

@@ -17,8 +17,14 @@ inventory lists (tool HostFootprint), in the line shape of a trace
 (session "host", source os: the operating system's own record, ADR-0003),
 with a running seq. Two anchors of the rule catalog judge them, through
 the same engine as every YAML rule (raqib/rules/engine.py):
-- NEW-AGENT (high): a candidate tree that is not history and was not a
-  candidate in any earlier round of this watch. A tree is keyed by (root
+- NEW-AGENT (high) and NEW-AGENT-UNKNOWN (medium; M7.2 REDO C-1c, the
+  engine's severity is per rule, so the unknown tree is its own rule): a
+  candidate tree that is not history, not benign and was not a candidate
+  in any earlier round of this watch; NEW-AGENT when the catalog names it,
+  NEW-AGENT-UNKNOWN when it does not. Benign (C-1d): the root's image is a
+  program of the catalog's benign_images block AND its image path, read
+  from the process's record, is under a listed system or program-files
+  directory; such a tree is listed with `benign`, never knocked. A tree is keyed by (root
   pid, image name, creation time where the reader gives it: Windows
   CreationDate; Linux /proc gives none, a recorded hole). History (ADR-0005
   B-3): the candidates of the first round that has an inventory were there
@@ -34,7 +40,20 @@ The engine reads only the host lines; the history, the streak and the
 "candidate before" are facts of the record that this module computes from
 the inventories, deterministically (A1). Every finding cites its host line;
 the host line carries the round, the sample (the inventory's window) and
-the cited record lines of the inventory, with their text (A5).
+the cited record lines of the inventory, with their text (A5, C-6).
+
+Run (M7.2 REDO C-2): every host watch has a run id (its start time and
+pid) carried on every line of rounds.jsonl, in inventory.json and in the
+state; seqs continue from the last line of rounds.jsonl, read at the start
+(a last line that does not parse is a hole, and seqs continue after the
+last good one), so a cited seq is (run, seq) and resolves to one host line.
+A second host watch on the same home while the state's heartbeat is fresh
+is refused (one host watch per home).
+
+Exit (C-10): 0 when trees are listed and nothing is new (CLEAN), or no
+tree is seen (NONE-SEEN); 1 for a finding (ALARM); 3 when a round could not
+be read, or another hole of the watch (INCOMPLETE). --rounds and Stop end
+the watch at the outstanding reader's deadline (2 x T) at the latest (C-3).
 
 Files, all under <home>/.raqib/host/ (A4: nothing else is written but the
 registry row and the notifier's temp files, as for every watch):
@@ -69,8 +88,14 @@ TREE_TOOL = "HostTree"
 FOOTPRINT_TOOL = "HostFootprint"
 CWD = "host"                       # host lines carry no working directory; the line shape needs one
 NEW_AGENT = "NEW-AGENT"
+NEW_UNKNOWN = "NEW-AGENT-UNKNOWN"   # C-1c: the unknown new tree, medium
+NEW_RULES = (NEW_AGENT, NEW_UNKNOWN)
 DARK_LIVE = "AGENT-DARK-LIVE"
-RULES = (NEW_AGENT, DARK_LIVE)
+RULES = (NEW_AGENT, NEW_UNKNOWN, DARK_LIVE)
+EXIT = {"clean": 0, "none-seen": 0, "alarm": 1, "incomplete": 3}   # C-10
+CITE_TEXT_MAX = 240                # the text of a cited record line on a host line (C-6)
+TAIL_BYTES = 1 << 20               # how much of rounds.jsonl is read at the start for its last line (C-2)
+READER_HOLES = ("reader-late", "reader-failed", "reader-out")
 DARK_ROUNDS = 3                    # AGENT-DARK-LIVE.yaml fires at streak 3 (a test holds them equal)
 HOLE_EVENT = "HOST-HOLE"
 EVERY_DEFAULT = 10.0
@@ -216,6 +241,7 @@ def trees_of(inv, catalog):
             if key in out:     # a pid both: the candidate stands
                 continue
             ok, why = named(t, catalog)
+            benign_by = discover.benign_image(t.get("image"), t.get("exe"), t.get("exe_from"), catalog)
             endpoints = []
             for talk in t.get("talks") or ():
                 eps = ["%s %s" % (m.get("vendor"), m.get("match")) for m in talk.get("endpoint") or ()]
@@ -227,9 +253,26 @@ def trees_of(inv, catalog):
                 cites += [c for c in _cite_list(a.get("cites")) if c not in cites]
             out[key] = {"key": list(key), "pid": t.get("pid"), "image": t.get("image"), "exe": t.get("exe"),
                         "started": t.get("started"), "class": cls, "id": t.get("id"), "named": ok,
-                        "named_by": why, "acts": len(t.get("acts") or []), "endpoints": endpoints,
-                        "cites": cites[:CITES_KEPT]}
+                        "named_by": why, "benign": benign_by is not None, "benign_by": benign_by,
+                        "acts": len(t.get("acts") or []), "endpoints": endpoints,
+                        "cites": [dict(c, text=cite_text(c.get("text"))) for c in cites[:CITES_KEPT]]}
     return out
+
+
+def cite_text(text):
+    """C-6: a cited record line's text, printable and bounded."""
+    if text is None:
+        return None
+    text = _safe(text)
+    if len(text) > CITE_TEXT_MAX:
+        keep = CITE_TEXT_MAX - 3
+        text = text[:keep // 2] + "..." + text[-(keep - keep // 2):]
+    return text
+
+
+def run_id(started, pid):
+    """C-2: a host watch's run id, its start time (UTC, ms) and its pid."""
+    return "%s-%d" % (iso(started).replace("-", "").replace(":", ""), pid)
 
 
 def tree_word(key):
@@ -245,7 +288,7 @@ class HostWatch:
     marks a late reader, sends folded knocks and writes the state."""
 
     def __init__(self, reader, catalog, rules, notifier, every=EVERY_DEFAULT, window=0.0, rounds_max=None,
-                 out=None, err=None, clock=None, wall=None, home=None, platform=None, deadline=None):
+                 out=None, err=None, clock=None, wall=None, home=None, platform=None, deadline=None, run=None):
         self.reader = reader
         self.catalog = catalog
         self.rules = [r for r in rules if r.id in RULES]
@@ -262,6 +305,8 @@ class HostWatch:
         self.t0 = self.clock()
         self.started = datetime.datetime.fromtimestamp(self.wall_clock(), datetime.timezone.utc)
         notifier.stamp = self.at
+        notifier.on_folds = self._folds   # C-5 (ADR-0005 D-4): what became of a folded knock is written back
+        self.run = run or run_id(self.started, os.getpid())
         self.lock = threading.Lock()
         self.dir = host_dir(home)
         self.inventory_path = os.path.join(self.dir, INVENTORY_NAME)
@@ -273,6 +318,9 @@ class HostWatch:
         self.worker = None           # the reader out now
         self.worker_round = None
         self.worker_late = False
+        self.worker_began = None
+        self.stopping = False        # C-3: Stop was asked; no new round starts
+        self.newline_owed = False    # C-2: rounds.jsonl ended in a torn line; the next line starts on its own
         self.next_round = self.t0
         self.trees = {}              # key -> tree entry, every tree seen in this watch
         self.present = set()         # keys in the last inventory
@@ -308,10 +356,100 @@ class HostWatch:
                            " trees and footprints are still listed" % (r.id, r.source))
         if self.platform.startswith("linux"):
             self.notes.append(LINUX_HOLE)
+        self._refuse_second()
         try:
             os.makedirs(self.dir, exist_ok=True)
         except OSError as exc:
             raise HostError("cannot create %s: %s" % (self.dir, exc.strerror or exc))
+        self.seq = self.first_seq = self._resume()
+
+    # --- one host watch per home; seqs continue (C-2) ----------------------------
+
+    def _refuse_second(self):
+        """HostError when another host watch holds this home: its state is
+        not finished and its heartbeat is fresh (stale after its own
+        stale_after_seconds, as every watch reads it)."""
+        try:
+            with open(self.state_path, encoding="ascii") as f:
+                other = json.load(f)
+        except (OSError, ValueError):
+            return
+        if not (isinstance(other, dict) and other.get("mode") == HOST and not other.get("finished")):
+            return
+        try:
+            beat = datetime.datetime.strptime(str(other.get("heartbeat")), "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+                tzinfo=datetime.timezone.utc).timestamp()
+        except ValueError:
+            return
+        stale = other.get("stale_after_seconds")
+        stale = stale if isinstance(stale, (int, float)) and not isinstance(stale, bool) else STALE_SECONDS
+        age = self.wall_clock() - beat
+        if age <= stale:
+            raise HostError("another raqib watch --host is watching this home (run %s, pid %s, heartbeat %.0f s"
+                            " ago): one host watch per home; stop it first (%s)" % (
+                                _safe(other.get("run")), _safe(other.get("pid")), max(age, 0), self.state_path))
+
+    def _resume(self):
+        """The last seq of rounds.jsonl, read from its last good line at the
+        start; 0 when there is none. A last line that does not parse is a
+        hole, and seqs continue after the last good line."""
+        try:
+            with open(self.rounds_path, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                f.seek(max(0, size - TAIL_BYTES))
+                data = f.read()
+        except FileNotFoundError:
+            return 0
+        except OSError as exc:
+            self._hole(self.t0, "rounds-unreadable", "cannot read %s at the start: %s; seqs start at 1 (a cited"
+                       " seq is still one line with this run's id)" % (self.rounds_path, exc.strerror or exc))
+            return 0
+        self.newline_owed = bool(data) and not data.endswith(b"\n")
+        parts = [p for p in data.split(b"\n") if p.strip()]
+        if size > TAIL_BYTES and parts:
+            parts = parts[1:]          # the first part of the tail may be cut
+        bad = 0
+        for raw in reversed(parts):
+            last = self._last_seq_of(raw)
+            if last == ():         # a round record with no seq (a failed round of an older run): look further back
+                continue
+            if last is not None:
+                if bad:
+                    self._hole(self.t0, "rounds-corrupt", "the last %d line(s) of %s are not round records (a torn"
+                               " or foreign write): seqs continue after the last good line, seq %d" % (
+                                   bad, self.rounds_path, last))
+                return last
+            bad += 1
+        if bad:
+            self._hole(self.t0, "rounds-corrupt", "no line of the last %d byte(s) of %s is a round record: seqs"
+                       " start at 1 (a cited seq is still one line with this run's id)" % (len(data), self.rounds_path))
+        return 0
+
+    @staticmethod
+    def _last_seq_of(raw):
+        """The last seq a round record carries; () for a round record with
+        none; None for a line that is not a round record."""
+        try:
+            rec = json.loads(raw.decode("ascii"))
+        except (UnicodeDecodeError, ValueError):
+            return None
+        if not (isinstance(rec, dict) and "round" in rec and isinstance(rec.get("lines"), list)):
+            return None
+        last = rec.get("last_seq")
+        if isinstance(last, int) and not isinstance(last, bool) and last >= 0:
+            return last
+        seqs = [l.get("seq") for l in rec["lines"] if isinstance(l, dict)]
+        seqs = [q for q in seqs if isinstance(q, int) and not isinstance(q, bool)]
+        return max(seqs) if seqs else ()
+
+    def _folds(self, tokens, status, count):
+        """C-5: a folded knock, when its fold is delivered, says so where it was recorded."""
+        for container, key in tokens:
+            container[key] = "folded: %s as %d more" % (status, count)
+            tree = self.trees.get(tuple(container.get("tree_key") or ())) if isinstance(container, dict) else None
+            if tree is not None:
+                tree["knocked"] = container[key]
 
     # --- time and output -------------------------------------------------------
 
@@ -323,8 +461,8 @@ class HostWatch:
             self.out.write("[%sZ] %s\n" % (self.at(now)[11:19], _safe(text)))
             self.out.flush()
 
-    def _hole(self, now, kind, detail, knock=None):
-        hole = {"kind": kind, "detail": detail, "at": self.at(now), "notice": None}
+    def _hole(self, now, kind, detail, knock=None, round_=None):
+        hole = {"kind": kind, "detail": detail, "at": self.at(now), "notice": None, "round": round_}
         self.holes.append(hole)
         if knock:
             hole["notice"] = self.notifier.notify(HOLE_EVENT, knock, now, token=(hole, "notice"))
@@ -332,9 +470,16 @@ class HostWatch:
 
     # --- one tick ---------------------------------------------------------------
 
-    def done_rounds(self):
-        """True when --rounds N have run and none is out."""
-        return self.rounds_max is not None and self.rounds >= self.rounds_max and self.worker is None
+    def settled(self, now=None):
+        """C-3: no reader is out, or the one out is past its deadline (2 x T):
+        the watch may end now; a reader still out is a hole in the report."""
+        now = self.clock() if now is None else now
+        return self.worker is None or now - self.worker_began >= self.deadline_seconds
+
+    def done_rounds(self, now=None):
+        """True when --rounds N have run and none is out, or the one out is
+        past its deadline (C-3)."""
+        return self.rounds_max is not None and self.rounds >= self.rounds_max and self.settled(now)
 
     def tick(self, now=None, wait=0.0):
         """One step. wait: real seconds to wait for a reader that is out
@@ -351,7 +496,7 @@ class HostWatch:
             self._write_state(now)
 
     def _step(self, now, wait):
-        if self.worker is None and now >= self.next_round and not (
+        if self.worker is None and now >= self.next_round and not self.stopping and not (
                 self.rounds_max is not None and self.rounds >= self.rounds_max):
             self.rounds += 1
             self.worker_round = self.rounds
@@ -376,16 +521,20 @@ class HostWatch:
             self.worker_late = True
             hole = self._hole(now, "reader-late", "round %d: the reader was not back within %g s (2 x T); no"
                               " other reader is started until it is" % (self.worker_round, self.deadline_seconds),
-                              knock="round %d, reader not back in %g s" % (self.worker_round, self.deadline_seconds))
+                              knock="round %d, reader not back in %g s" % (self.worker_round, self.deadline_seconds),
+                              round_=self.worker_round)
             self._say(now, "%s round %d: the reader is not back within %g s (%s)" % (
                 HOLE_EVENT, self.worker_round, self.deadline_seconds, hole["notice"]))
 
     def _record(self, line):
+        line["run"] = self.run           # C-2: every line names its run
+        line["last_seq"] = self.seq
         self.round_lines.append(line)
         del self.round_lines[:-ROUNDS_KEPT]
         try:
             with open(self.rounds_path, "a", encoding="ascii", newline="\n") as f:
-                f.write(json.dumps(line, sort_keys=True, ensure_ascii=True) + "\n")
+                f.write(("\n" if self.newline_owed else "") + json.dumps(line, sort_keys=True, ensure_ascii=True) + "\n")
+            self.newline_owed = False
         except OSError as exc:
             detail = "cannot append to %s: %s" % (self.rounds_path, exc.strerror or exc)
             if not any(h["detail"] == detail for h in self.holes):
@@ -393,7 +542,7 @@ class HostWatch:
 
     def _failed(self, now, n, error, seconds):
         hole = self._hole(now, "reader-failed", "round %d: the reader failed: %s" % (n, error),
-                          knock="round %d, reader failed" % n)
+                          knock="round %d, reader failed" % n, round_=n)
         line = {"round": n, "at": self.at(now), "seconds": round(seconds, 3), "late": False, "error": error,
                 "records": None, "holes": None, "result": None, "trees": None, "new": [], "gone": [], "back": [],
                 "dark": [], "cleared": [], "findings": [], "lines": []}
@@ -412,7 +561,7 @@ class HostWatch:
         sample = sample_of(inv)
         ts = self.at(now)
         current = trees_of(inv, self.catalog)
-        lines, new, back, gone = [], [], [], []
+        lines, new, back, gone, benign_new = [], [], [], [], []
         for key in sorted(current, key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
             t = current[key]
             entry = self.trees.get(key)
@@ -424,7 +573,8 @@ class HostWatch:
                 back.append(tree_word(key))
             candidate_before = entry["candidate_round"] is not None
             history = (first and t["class"] == "candidate") or entry["history"]
-            entry.update({k: t[k] for k in ("class", "id", "named", "named_by", "acts", "endpoints", "cites", "exe")})
+            entry.update({k: t[k] for k in ("class", "id", "named", "named_by", "benign", "benign_by", "acts",
+                                            "endpoints", "cites", "exe")})
             entry.update(last_round=n, last_seen=ts, present=True, rounds_seen=entry["rounds_seen"] + 1,
                          history=history)
             self.seq += 1
@@ -434,14 +584,15 @@ class HostWatch:
                                    "started": t["started"], "class": t["class"], "was": was,
                                    "history": history, "candidate_before": candidate_before,
                                    "named": t["named"], "named_word": "named" if t["named"] else "unknown",
-                                   "named_by": t["named_by"], "acts": t["acts"], "endpoints": t["endpoints"],
-                                   "sample": sample, "cites": ["%s:%s" % (c["src"], c["line"]) for c in t["cites"]]}}
+                                   "named_by": t["named_by"], "benign": t["benign"], "benign_by": t["benign_by"],
+                                   "acts": t["acts"], "endpoints": t["endpoints"], "run": self.run,
+                                   "sample": sample, "cites": [dict(c) for c in t["cites"]]}}
             lines.append(line)
             entry["line_seq"] = self.seq
             if t["class"] == "candidate" and entry["candidate_round"] is None:
                 entry["candidate_round"] = n
             if not candidate_before and t["class"] == "candidate" and not history:
-                new.append(tree_word(key))
+                (benign_new if t["benign"] else new).append(tree_word(key))
         for key in sorted(self.present - set(current), key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
             self.trees[key]["present"] = False
             gone.append(tree_word(key))
@@ -484,14 +635,14 @@ class HostWatch:
             if state == "gone" and f is None:
                 continue
             d = dark_paths.get(path) or {}
-            cites = _cite_list(d.get("cites") or (f or {}).get("cites"))
+            cites = [dict(c, text=cite_text(c.get("text"))) for c in _cite_list(d.get("cites") or (f or {}).get("cites"))]
             self.seq += 1
             lines.append({"ts": ts, "seq": self.seq, "session_id": SESSION, "phase": "pre", "tool": FOOTPRINT_TOOL,
                           "cwd": CWD, "source": SOURCE,
                           "input_meta": {"round": n, "path": path, "agent": fp["agent"], "state": state,
                                          "dark": state == "dark", "streak": fp["streak"], "linked": link,
-                                         "sample": sample,
-                                         "cites": ["%s:%s" % (c["src"], c["line"]) for c in cites[:CITES_KEPT]]}})
+                                         "sample": sample, "run": self.run,
+                                         "cites": [dict(c) for c in cites[:CITES_KEPT]]}})
             fp["cites"] = cites[:CITES_KEPT]
             fp["line_seq"] = self.seq
 
@@ -503,21 +654,23 @@ class HostWatch:
             meta = line["input_meta"]
             entry = {"rule_id": f["rule_id"], "kind": f["kind"], "class": f.get("class"), "severity": f["severity"],
                      "summary": f["summary"], "cited_seq": f["cited_seq"], "round": n, "sample": sample, "at": ts,
-                     "session_id": f["session_id"], "notice": None}
-            if f["rule_id"] == NEW_AGENT:
+                     "session_id": f["session_id"], "run": self.run, "notice": None}
+            if f["rule_id"] in NEW_RULES:
                 key = next(k for k, v in self.trees.items() if v.get("line_seq") == line["seq"])
                 tree = self.trees[key]
-                entry.update(tree=tree_word(key), image=meta["image"], pid=meta["pid"], named=meta["named_word"],
-                             cites=tree["cites"])
+                entry.update(tree=tree_word(key), tree_key=list(key), image=meta["image"], pid=meta["pid"],
+                             named=meta["named_word"], cites=tree["cites"])
                 where = "%s pid %s (%s)" % (str(meta["image"] or "?")[:IMAGE_MAX], meta["pid"], meta["named_word"])
+                limit = "%s pid %s" % (f["rule_id"], meta["pid"])   # C-5: each tree knocks under its own id
             else:
                 fp = self.footprints[meta["path"]]
                 fp["fired"] = True
                 entry.update(path=meta["path"], agent=meta["agent"], cites=fp["cites"], streak=meta["streak"])
                 where = "%s footprint, %d rounds (round %d)" % (str(meta["agent"] or "?")[:IMAGE_MAX],
                                                                meta["streak"], n)
-            entry["notice"] = self.notifier.notify(f["rule_id"], where, now, token=(entry, "notice"))
-            if f["rule_id"] == NEW_AGENT:
+                limit = "%s %s" % (f["rule_id"], meta["path"])     # each footprint under its own id
+            entry["notice"] = self.notifier.notify(f["rule_id"], where, now, token=(entry, "notice"), limit_id=limit)
+            if f["rule_id"] in NEW_RULES:
                 tree["knocked"] = entry["notice"]
             self.findings.append(entry)
             fired.append("%s %s" % (f["rule_id"], entry.get("tree") or entry.get("path")))
@@ -533,12 +686,12 @@ class HostWatch:
                   "trees": sorted(tree_word(k) for k in current),
                   "candidates": sum(1 for t in current.values() if t["class"] == "candidate"),
                   "act_roots": sum(1 for t in current.values() if t["class"] == "act-root"),
-                  "history": first, "new": new, "gone": gone, "back": back, "dark": dark_now, "cleared": cleared,
-                  "findings": fired, "lines": lines}
+                  "history": first, "new": new, "benign": benign_new, "gone": gone, "back": back, "dark": dark_now,
+                  "cleared": cleared, "findings": fired, "lines": lines}
         self.last_round = record
         self._record(record)
-        try:
-            write_json(self.inventory_path, inv)
+        try:   # C-2: the inventory names the run and the round it is of
+            write_json(self.inventory_path, dict(inv, host_watch={"run": self.run, "round": n, "at": ts}))
         except OSError as exc:
             detail = "cannot write %s: %s" % (self.inventory_path, exc.strerror or exc)
             if not any(h["detail"] == detail for h in self.holes):
@@ -555,8 +708,8 @@ class HostWatch:
         parts = ["%d tree(s) now: %d candidate(s), %d act-root(s)" % (len(r["trees"]), r["candidates"], r["act_roots"])]
         if r["history"]:
             parts.append("history (there at the start, not knocked)")
-        for word in ("new", "back", "gone", "dark"):
-            if r[word]:
+        for word in ("new", "benign", "back", "gone", "dark"):
+            if r.get(word):
                 parts.append("%s: %s" % (word, ", ".join(r[word])))
         return "%s; %s" % (head, "; ".join(parts))
 
@@ -567,8 +720,8 @@ class HostWatch:
             now = self.clock() if now is None else now
             if self.worker is not None:
                 self._hole(now, "reader-out", "round %d: the reader was still out at the end (%.1f s after it"
-                           " started); what it would have read is not seen" % (self.worker_round,
-                                                                               now - self.worker_began))
+                           " started, deadline %g s); what it would have read is not seen" % (
+                               self.worker_round, now - self.worker_began, self.deadline_seconds), round_=self.worker_round)
             self.status, self.error = status, error
             self.finished = self.at(now)
             self.beat = now
@@ -585,21 +738,30 @@ class HostWatch:
         return self.final_text, self.final_exit
 
     def result(self):
-        """(result, reasons): alarm (1), incomplete (3) or none-seen (0)."""
+        """(result, reasons), C-10: alarm (exit 1) for a finding of a host
+        rule or a crash; incomplete (3) when a round could not be read (a
+        reader hole), no round gave an inventory, an inventory was
+        incomplete, or another hole of the watch; else clean (0) with the
+        trees named, or none-seen (0) when no tree was seen. A tree that was
+        there at the start, or is benign, is listed, not an alarm (B-3); a
+        new one is a finding."""
         alarms, incomplete = [], []
         if self.status == "crashed":
             alarms.append("the watch crashed: %s" % self.error)
-        if not self.applied:
-            alarms.append("no round gave an inventory: nothing read (A3)")
-        if self.trees:
-            alarms.append("%d tree(s) seen that talk and act (or act, talk not seen)" % len(self.trees))
         if self.findings:
-            alarms.append("%d finding(s)" % len(self.findings))
-        reader = [h for h in self.holes if h["kind"] in ("reader-late", "reader-failed", "reader-out")]
-        if reader:
-            alarms.append("%d reader hole(s)" % len(reader))
-        if "alarm" in self.results:
-            alarms.append("%d round(s) whose inventory is an alarm" % self.results.count("alarm"))
+            alarms.append("%d finding(s): %s" % (len(self.findings), ", ".join(sorted(
+                {f["rule_id"] for f in self.findings}))))
+        if not self.applied:
+            incomplete.append("no round gave an inventory: nothing read (A3)")
+        reader = [h for h in self.holes if h["kind"] in READER_HOLES]
+        unread = sorted({h.get("round") for h in reader if h["kind"] != "reader-late"}, key=str)
+        late = sorted({h.get("round") for h in reader if h["kind"] == "reader-late"}, key=str)
+        if unread:
+            incomplete.append("%d round(s) could not be read (round %s): %d reader hole(s)" % (
+                len(unread), ", ".join(map(str, unread)), len(reader)))
+        if late:
+            incomplete.append("%d round(s) whose reader was not back within %g s (round %s): a hole" % (
+                len(late), self.deadline_seconds, ", ".join(map(str, late))))
         if "incomplete" in self.results:
             incomplete.append("%d round(s) whose inventory is incomplete" % self.results.count("incomplete"))
         others = [h for h in self.holes if h not in reader]
@@ -608,18 +770,24 @@ class HostWatch:
         if self.state_error:
             incomplete.append(self.state_error)
         if alarms:
-            return "alarm", alarms
-        return ("incomplete", incomplete) if incomplete else ("none-seen", [])
+            return "alarm", alarms + incomplete
+        if incomplete:
+            return "incomplete", incomplete
+        if self.trees:
+            return "clean", ["%d tree(s) listed, none new: %s" % (len(self.trees), ", ".join(
+                "%s pid %s" % (t["image"] or "?", t["pid"]) for t in self.trees.values()))]
+        return "none-seen", []
 
     def summary(self):
         result, reasons = self.result()
-        code = discover.EXIT[result]
+        code = EXIT[result]
         out = ["Raqib watch --host (ADR-0007): the host, not a name",
                "host: %s; a round every %g s; window %g s; rounds %d%s" % (
                    self.platform, self.every, self.window, self.rounds,
                    " of %d" % self.rounds_max if self.rounds_max else ""),
                "state: %s (%s)" % (self.state_path, self.status),
                "record: %s; latest inventory: %s" % (self.rounds_path, self.inventory_path),
+               "run: %s (seqs %d..%d of the record)" % (self.run, self.first_seq + 1, self.seq),
                "watched: %s to %s" % (self.at(self.t0), self.finished or "-"), ""]
         late = sum(1 for r in self.round_lines if r.get("late"))
         failed = sum(1 for r in self.round_lines if r.get("error"))
@@ -629,12 +797,13 @@ class HostWatch:
             r["round"], r["error"])) for r in self.round_lines]
         out.append("TREES SEEN: %d (%d now)" % (len(self.trees), len(self.present)))
         for key, t in self.trees.items():
-            out.append("  %s pid %s %s (%s%s): %s; first round %d%s; last round %d; %d act(s)%s%s" % (
+            out.append("  %s pid %s %s (%s%s): %s; first round %d%s%s; last round %d; %d act(s)%s%s" % (
                 "[%s]" % t["class"], t["pid"], t["image"] or "?", "named" if t["named"] else "unknown",
                 ": " + t["named_by"] if t["named_by"] else "", "now" if t["present"] else "gone",
-                t["first_round"], " (history, not knocked)" if t["history"] else "", t["last_round"], t["acts"],
+                t["first_round"], " (history, not knocked)" if t["history"] else "",
+                " (benign: %s, not knocked)" % t["benign_by"] if t.get("benign") else "", t["last_round"], t["acts"],
                 "; endpoints %s" % ", ".join(t["endpoints"]) if t["endpoints"] else "",
-                "; NEW-AGENT %s" % t["knocked"] if t["knocked"] else ""))
+                "; %s %s" % (NEW_AGENT if t["named"] else NEW_UNKNOWN, t["knocked"]) if t["knocked"] else ""))
         if not self.trees:
             out.append("  NO AGENT SEEN in %d round(s) with an inventory (records read: %s). Not a clearance." % (
                 self.applied, ", ".join(str(r.get("records")) for r in self.round_lines if not r.get("error")) or "none"))
@@ -655,12 +824,15 @@ class HostWatch:
                                         else "") for h in holes]
         n = self.notifier.state()
         counts = n["counts"]
-        out.append("NOTIFICATIONS: %s; sent %d, terminal %d, failed %d, folded %d, off %d" % (
+        out.append("NOTIFICATIONS: %s; sent %d, terminal %d, failed %d, folded %d (%d still waiting), off %d" % (
             self.notifier.band()[1].replace("notifications: ", "", 1), counts["sent"], counts["terminal"],
-            counts["failed"], counts["folded"], counts["off"]))
+            counts["failed"], counts["folded"], sum(n["folded_waiting"].values()), counts["off"]))
+        why = {"clean": "trees listed, nothing new", "none-seen": "no tree seen; not a clearance",
+               "alarm": "a finding", "incomplete": "a round could not be read or the watch has a hole"}[result]
         out += ["", "ALARMS: %s" % ("; ".join(reasons) if result == "alarm" else "none"),
                 "INCOMPLETE: %s" % ("; ".join(reasons) if result == "incomplete" else "none"),
-                "RESULT: %s (exit %d)" % (result.upper(), code)]
+                "CLEAN: %s" % ("; ".join(reasons) if result == "clean" else "none"),
+                "RESULT: %s (exit %d: %s)" % (result.upper(), code, why)]
         return "\n".join(_safe(line) for line in out) + "\n", code
 
     # --- the state and the page -----------------------------------------------------
@@ -674,7 +846,8 @@ class HostWatch:
             reader = {"round": self.worker_round, "since": self.at(self.worker_began),
                       "seconds": round(now - self.worker_began, 3), "late": self.worker_late}
         state = {
-            "raqib_watch": 1, "mode": HOST, "project": HOST, "trace": self.rounds_path, "state": self.state_path,
+            "raqib_watch": 1, "mode": HOST, "project": HOST, "run": self.run, "first_seq": self.first_seq,
+            "last_seq": self.seq, "trace": self.rounds_path, "state": self.state_path,
             "inventory": self.inventory_path, "pid": os.getpid(), "url": self.url, "port": self.port,
             "started": self.at(self.t0), "updated": iso(self.wall()),
             "heartbeat": iso(datetime.datetime.fromtimestamp(self.beat_wall, datetime.timezone.utc)),
@@ -687,7 +860,7 @@ class HostWatch:
                      "last_round": self._public(self.last_round),
                      "history_round": self.history_round,
                      "trees": list(self.trees.values()), "now": len(self.present),
-                     "new": sum(1 for f in self.findings if f["rule_id"] == NEW_AGENT),
+                     "new": sum(1 for f in self.findings if f["rule_id"] in NEW_RULES),
                      "dark": [fp for fp in self.footprints.values() if fp["state"] == "dark"],
                      "footprints": list(self.footprints.values()), "findings": self.findings,
                      "notes": self.notes, "rounds_tail": [self._public(r) for r in self.round_lines]},
@@ -854,16 +1027,25 @@ def loop(running, stop=None):
             if why:
                 out.write("raqib watch --host: page not opened (%s); open it by hand\n" % why)
         out.flush()
+        stopped = None
         while True:
             watcher.tick()
             if watcher.done_rounds():
-                out.write("raqib watch --host: %d round(s) done (--rounds)\n" % watcher.rounds)
+                out.write("raqib watch --host: %d round(s) done (--rounds)%s\n" % (
+                    watcher.rounds, "" if watcher.worker is None else
+                    "; round %d's reader is past its deadline (%g s) and is left out: a hole" % (
+                        watcher.worker_round, watcher.deadline_seconds)))
                 break
-            if stop is None:
+            if stopped is None and stop is not None and stop.is_set():
+                stopped = stop.reason
+                watcher.stopping = True   # C-3: no new round; the one out has until its deadline
+            if stopped is not None and watcher.settled():
+                out.write("\nraqib watch --host: stopped (%s)\n" % _safe(stopped))
+                break
+            if stop is None or stopped is not None:
                 _sleep(POLL_SECONDS)
-            elif stop.wait(POLL_SECONDS):
-                out.write("\nraqib watch --host: stopped (%s)\n" % _safe(stop.reason))
-                break
+            else:
+                stop.wait(POLL_SECONDS)
     except KeyboardInterrupt:
         out.write("\nraqib watch --host: stopped (Ctrl-C)\n")
     except Exception as exc:

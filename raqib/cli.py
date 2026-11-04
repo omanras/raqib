@@ -87,14 +87,19 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
       of it; Windows one sample of the OS API), read-only; nothing installed,
-      no project touched. NEW-AGENT (high) knocks once per new tree that
-      talks and acts ("host, <image> pid <n> (named|unknown)"); trees of the
-      first round are history. AGENT-DARK-LIVE (medium) after 3 rounds of a
-      footprint with no tree. Every round prints one line, "NO AGENT SEEN"
-      included; a reader not back in 2 x T is a hole and a knock. Record and
-      latest inventory under ~/.raqib/host/. --rounds N ends after N rounds.
-      Exit 1 alarm, 3 incomplete, 0 nothing seen (not a clearance), 2 usage
-      (also --host with a PROJECT).
+      no project touched. NEW-AGENT (high; NEW-AGENT-UNKNOWN, medium, when
+      the catalog does not name it) knocks once per new tree that talks and
+      acts ("host, <image> pid <n> (named|unknown)"); trees of the first
+      round are history, a listed benign program under a system directory
+      is benign: listed, not knocked. AGENT-DARK-LIVE (medium) after 3 rounds
+      of a footprint with no tree. Every round prints one line, "NO AGENT
+      SEEN" included; a reader not back in 2 x T is a hole and a knock.
+      Record and latest inventory under ~/.raqib/host/, every line with the
+      run's id; one host watch per home. --rounds N (or Stop) ends after N
+      rounds, at the reader's deadline at the latest. Exit 0 trees listed
+      and nothing new (or none seen: not a clearance), 1 a finding, 3 a
+      round not read or another hole, 2 usage (also --host with a PROJECT,
+      or another host watch on this home).
   proxy --listen 127.0.0.1:PORT --upstream URL --log PATH [--cwd DIR] [--allow-plain-upstream]
       Watch an agent that speaks HTTP to its model API (M5.2, ADR-0003 and
       Amendment A, raqib/hooks/proxy.py): point its base URL at

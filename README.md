@@ -44,7 +44,7 @@ A check that cannot be made on this host is UNSURE, counted apart and never a fa
 
 ## Watch the host
 `raqib watch --host [--every T] [--rounds N]` watches the machine, not a project: every T seconds (default 10) a read-only round of `raqib discover`; nothing is installed and no project is touched.
-A tree that starts to talk and act knocks once as NEW-AGENT ("host, <image> pid <n> (named|unknown)"); trees there at the start are listed, not knocked; a footprint with no tree for 3 rounds is AGENT-DARK-LIVE.
+A tree that starts to talk and act knocks once as NEW-AGENT, or NEW-AGENT-UNKNOWN when the catalog does not name it ("host, <image> pid <n> (named|unknown)"); trees there at the start and listed benign programs are listed, not knocked; a footprint with no tree for 3 rounds is AGENT-DARK-LIVE.
 Each round prints one line, "NO AGENT SEEN" included; a reader not back in 2 x T is a hole and a knock; the record is in `~/.raqib/host/` ([ADR-0007](docs/specs/ADR-0007-the-host-not-the-name.md)).
 
 ## The window
@@ -72,9 +72,9 @@ It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt inst
    lines also carry the local git state, read from the files under `.git`
    (no `git` is run): the head commit, the sha256 of the index, and why
    either could not be read.
-2. **Rules.** Nineteen rules turn the trace into findings, and every finding
+2. **Rules.** Twenty rules turn the trace into findings, and every finding
    cites the trace lines behind it (A5). The rules are 5 silence rules, 1
-   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 13 more: 11
+   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 14 more: 12
    YAML rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED,
    INDEX-UNTOUCHED, `raqib/rules/tree.py`). Each YAML rule declares its
    false-positive budget and is measured against fixtures (A6); CROSS-SOURCE
@@ -133,7 +133,7 @@ design, a quiet minute is reported, not assumed harmless.
 | EDIT-NO-TEST | an edit under `raqib/` or `tests/` with no ok run of pytest, python, python3, `gate.sh` or `gate.py` after it, before the next stop or session end |
 | HEAD-UNMOVED | ok edits under the session's directory and the same git head at the session's last stop or end as at its start: never committed (a session without git state, or with no repository at either end, is not judged) |
 | INDEX-UNTOUCHED | ok edits under the session's directory and the same git index bytes at its last stop or end as at its start: never staged (a `git status` that rewrites the index counts as touched) |
-| NEW-AGENT | only under `raqib watch --host`: a tree that talks and acts and was not there in an earlier round (high; named or unknown) |
+| NEW-AGENT / -UNKNOWN | only under `raqib watch --host`: a tree that talks and acts and was not there in an earlier round, and is no listed benign program under a system directory (NEW-AGENT high when the catalog names it; NEW-AGENT-UNKNOWN medium when not) |
 | AGENT-DARK-LIVE | only under `raqib watch --host`: an agent's footprint with no live tree for 3 rounds in a row |
 | CROSS-SOURCE | only in a trace with `os` lines: a shell call with no os process of its programs (or a shell) in the 10 s after it; an os process below the agent's own children that no shell call asked for in the 10 s before it, itself or through a parent below the shell (below) |
 
@@ -174,7 +174,7 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | Command | Does |
 |---|---|
 | `raqib watch [PROJECT]` | install the hooks, tail the trace, knock, serve the page (above) |
-| `raqib watch --host [--every T] [--window S] [--rounds N]` | watch this host in rounds of discover: NEW-AGENT, AGENT-DARK-LIVE (above) |
+| `raqib watch --host [--every T] [--window S] [--rounds N]` | watch this host in rounds of discover: NEW-AGENT, NEW-AGENT-UNKNOWN, AGENT-DARK-LIVE (above); exit 0 nothing new, 1 a finding, 3 a round not read |
 | `raqib doctor [PROJECT]` | what `watch` needs and is missing, one line each (above) |
 | `raqib report TRACE [--scope P \| --handoff HANDOFF.md] [--json]` | findings with their cited lines, rules that did not run, every rule's budget; exit 0 clean, 1 alarm, 3 incomplete, 2 usage |
 | `raqib rules TRACE -o findings.jsonl` | findings only, one JSON line each |

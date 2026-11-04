@@ -1,14 +1,22 @@
 # An agent footprint with no live tree, round after round (M7.2, ADR-0007 decision 2).
 id: AGENT-DARK-LIVE
 title: An agent footprint has no live tree for three rounds
-# No HOST class exists in engine.CLASSES (outside M7.2's Scope): DRIFT, an
-# installed agent drifting out of sight (questions file, Q-4).
-class: DRIFT
+# M7.2 REDO C-13: class HOST (engine.CLASSES), the rules of raqib watch --host.
+class: HOST
 # ADR-0002: measured against the host's own record: the footprint listing
 # and the process tree of each round (raqib/discover.py, AGENT-DARK).
 kind: anchor
 severity: medium
-fp_budget: 0.1
+# C-1e: measured. The benign desktops' trees arriving after round 1
+# (C-1b: NEW-AGENT/negative-arrival-linux-desktop.json and
+# negative-arrival-windows-desktop.json, tests/fixtures/host/make.py) list
+# no footprint, so they hold no HostFootprint line and are unmeasured for
+# this rule (C-1a). Its measured negatives are its own two,
+# AGENT-DARK-LIVE/negative-dark-two-rounds.json and
+# negative-dark-then-linked.json: 0 of 2 fire. The budget is that measure,
+# 0 (questions file, R-2: a benign footprint left by an uninstalled agent
+# is the source no fixture measures yet).
+fp_budget: 0.0
 holes:
   - "a footprint left by an agent that was uninstalled, or that runs only now and then, is dark by design (a false-positive source)"
   - "an agent that runs between rounds and never in one is dark"
@@ -29,3 +37,5 @@ fixtures:
   negative:
     - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-two-rounds.json
     - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-then-linked.json
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json

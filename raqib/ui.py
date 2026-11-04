@@ -517,6 +517,12 @@ def status(state):
             return "READER LATE", "alarm", "round %s: the reader is not back after %s s (deadline %s s); no other" \
                 " reader starts until it is" % (reader.get("round"), reader.get("seconds"), state.get("deadline_seconds"))
         last = _dict(host.get("last_round"))
+        if last.get("error"):   # C-7: a failed round is said before WATCHING, as I-3 orders capture states
+            return "HOST READER FAILED", "alarm", "round %s at %s: the reader failed: %s; the next round that reads" \
+                " clears it" % (last.get("round"), last.get("at"), last.get("error"))
+        if last.get("late"):
+            return "READER LATE", "alarm", "round %s at %s: the reader came back late (%s s, deadline %s s)" % (
+                last.get("round"), last.get("at"), last.get("seconds"), state.get("deadline_seconds"))
         if not last:
             return "WATCHING", "incomplete", "the host: no round has given an inventory yet"
         return "WATCHING", "clean", "the host: round %s at %s, %s records read, %s tree(s) now" % (
@@ -1091,7 +1097,8 @@ def host_section(state):
                            _text(t.get("pid")), _text(t.get("class")),
                            _text("named: %s" % t.get("named_by") if t.get("named") else "unknown"),
                            _text(t.get("first_seen")), _text(t.get("first_round")),
-                           ' <span class="tag">history</span>' if t.get("history") else "",
+                           (' <span class="tag">history</span>' if t.get("history") else "") +
+                           (' <span class="tag">benign</span>' if t.get("benign") else ""),
                            "yes" if t.get("present") else '<span class="tag">gone</span>', _text(t.get("acts")),
                            _text(", ".join(str(e) for e in _list(t.get("endpoints"))) or "-"),
                            _cites_text(t.get("cites"))))

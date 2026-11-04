@@ -1,0 +1,51 @@
+# An UNKNOWN tree that talks and acts appears on the host (M7.2 REDO, ADR-0007 Amendment C, C-1c).
+id: NEW-AGENT-UNKNOWN
+title: An unknown agent tree appears on the host
+# M7.2 REDO C-13: class HOST (engine.CLASSES), the rules of raqib watch --host.
+class: HOST
+# ADR-0002: measured against the host's own record (process tree and TCP
+# table, read by raqib/discover.py), which the agent does not write.
+kind: anchor
+# C-1c: an unknown new tree is medium (a named one is NEW-AGENT, high).
+severity: medium
+# C-1e: measured, not guessed (ADR-0004 B-8). Declared from the benign
+# desktops' trees arriving after round 1 (C-1b), made by
+# tests/fixtures/host/make.py: NEW-AGENT/negative-arrival-linux-desktop.json
+# and NEW-AGENT/negative-arrival-windows-desktop.json. Before benign_images
+# (C-1d) both fire (jetbrains-toolbox, code, firefox; explorer, code);
+# after it both still fire: jetbrains-toolbox under ~/.local and the VS
+# Code user install under AppData are under no system or program-files
+# directory, so neither is benign. On the arrivals alone: 2 of 2 (1.0, a
+# rate the engine refuses as a budget); with the three other measured
+# negatives 2 of 5 = 0.4 (check-rules). The budget is that measure, 0.4;
+# the 1.0 on the arrivals is the Table's (questions file, R-1).
+fp_budget: 0.4
+holes:
+  - "Linux /proc gives no creation time: a tree is keyed by (pid, image), so a pid reused by a process of the same image between rounds is taken for the same tree"
+  - "a tree that lives only between two rounds (shorter than T seconds) is never seen"
+  - "a tree whose talk and act fall in different rounds is never a candidate in one round (the round reads one sample)"
+  - "a tree that was a candidate earlier in this watch and comes back with the same pid, image and creation time is not new again (once per tree)"
+  - "every hole of raqib discover (liveness, sibling talkers, reparented acts, TCP only, one view) is a hole of this rule"
+  - "benign_images (raqib/discover/endpoints.yaml, C-1d): an agent that takes a benign program's name (explorer, code, msedge, firefox) and is installed under a system or program-files directory is listed as benign and never knocked; an agent inside a benign program's tree (an extension) is that program's tree"
+  - "an unknown tree is medium: an agent the catalog does not name knocks at medium, a named one at high (NEW-AGENT)"
+description: "A line of raqib watch --host (tool HostTree, source os) for an UNKNOWN candidate tree of a round's inventory - a process tree that talks to a remote host and has a child or writes outside config space (ADR-0004) - that was not a candidate in any earlier round of this watch, is not history and is not benign (C-1d: its root's image is a program of the catalog's benign_images block and its image path, from the process's record, is under a listed system or program-files directory). History (ADR-0005 B-3): the trees of the first round with an inventory were there at the start; they are listed, never knocked. An act-root that becomes a candidate is new as a candidate. A tree is keyed by (root pid, image name, creation time where the reader gives one). The line carries named or unknown: named when the catalog (raqib/discover/endpoints.yaml) knows the image or an endpoint it talks to; an unknown agent is a finding, never a nothing; a named one is NEW-AGENT (high). The line cites the round, the sample and the record lines of the inventory (A5)."
+summary: "{input_meta.named_word} agent tree {input_meta.image} pid {input_meta.pid} (round {input_meta.round}, was {input_meta.was})"
+match:
+  all:
+    - {field: tool, exists: true}
+    - {field: tool, eq: HostTree}
+    - {field: source, eq: os}
+    - {field: input_meta.class, eq: candidate}
+    - {field: input_meta.history, eq: false}
+    - {field: input_meta.candidate_before, eq: false}
+    - {field: input_meta.benign, eq: false}
+    - {field: input_meta.named, eq: false}
+fixtures:
+  positive:
+    - tests/fixtures/rules/NEW-AGENT-UNKNOWN/positive-new-unknown.json
+  negative:
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json
+    - tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json
+    - tests/fixtures/rules/NEW-AGENT/negative-history-only.json
+    - tests/fixtures/rules/NEW-AGENT/negative-gone-and-back.json
+    - tests/fixtures/rules/NEW-AGENT/negative-act-root-only.json
