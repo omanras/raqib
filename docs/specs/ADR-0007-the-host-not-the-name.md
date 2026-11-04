@@ -258,3 +258,34 @@ C-2, C-4..C-9, C-11..C-13; two must-fixes remain. Verdict: REDO-2.
   printed as "gone between", not a failure.
 - D-8 Recorded: R5, R6, R10, R11 (exe_from in --json: API).
 - D-9 Every REDO-2 change carries a test (rule D-8 of ADR-0005).
+
+## Amendment E (the Table, 2026-11-04) - judgement on M7.2 (1aa2eb2 + b8e798a + 3324ef1)
+- C-1..C-13 and D-1..D-7 MET as cited in the REDO and REDO-2 sections of
+  docs/review/2026-11-04-M7.2-questions.md; the Table read the D-1 delta
+  (done_rounds: attempted rounds, reader-held holes, never two readers) and
+  the D-2 delta (round-unread / lines-unread holes; NOTHING READ vs NO AGENT
+  SEEN, "Not a clearance" on both). The second review's R1 and R2 are
+  closed by them. Every REDO change names its test (D-8/D-9).
+- CI, read from api.github.com: runs 41731699480 (1aa2eb2), 41750630942
+  (b8e798a) and 41758469242 (3324ef1): six jobs success each. On the
+  windows install job the host watch found the runner's trees by shape,
+  listed them as history, exited 0 (CLEAN with the trees named, C-10), and
+  discover's candidates matched the report's trees over pids alive in both
+  (D-7).
+- Gate on the branch: 2568 passed, 16 skipped; kinds 4 : 7 : 9 (NEW-AGENT,
+  NEW-AGENT-UNKNOWN, AGENT-DARK-LIVE). Scope as widened by C and D. Three
+  landed commits plus the Table's note (G-8). One builder was lost to two
+  container restarts; its draft on disk was verified by the next (A8) and
+  found complete.
+- S-1 (a held round writes no round line; it is a hole in the report and
+  state): accepted for v1, recorded. S-2 (the README loop's exports carry
+  no drive, so `--from` them treats no Windows image as benign): accepted;
+  the README loop gains a drive line at the next docs pass. S-3 (the
+  discover API grows): recorded.
+- Decision 2 of this ADR is built; decision 3 (source attachment) is M7.2b,
+  decision 5 (the window) is M7.3, decision 4 (rhythm) is M7.4. Status of
+  this ADR: proposed until M7.3 lands.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's order.
+- Table ledger for M7.2: two reviews, two REDOs; the Table's own misses:
+  the ADR-0002 note broke the starting gate on the branch (D-5); the
+  HANDOFF said nothing of exit codes, so Q-7/P10 had to be ruled (C-10).
