@@ -31,3 +31,24 @@ Known hazards of the box: container restarts kill long agents (resume
 from the draft on disk, verify it, A8); the stop hook's "unpushed" count
 is a stale tracking ref in the shallow clone; `tools/gate.sh | tail`
 hides the exit code - capture it.
+
+## The commander's plan for the next session (said 2026-11-04, 19:12)
+Recorded in his words' substance; the next Table writes the handoffs from it.
+1. Install several other agents on the Windows machine and run them under
+   Raqib: the unknown path (NEW-AGENT-UNKNOWN, act-root, HOST-RHYTHM) has
+   not been seen on a tree the catalog does not know; each run is a field
+   measurement for ADR-0007 (Amendment M is the first: Kimi, named).
+2. The control panel: add and enable Raqib's rules for watching from the
+   window (which rules run, their thresholds where the YAML declares
+   them, on/off per rule), with improvements to the window's look. Under
+   ADR-0005: control stays in the program the person sits at, never on
+   the web page; a rule switched off is recorded in the report as off
+   (A3: a silenced rule is said, not silent).
+3. Then the rest of the recorded tasks (resume note above; Amendment M's
+   three lessons for M7.5: AGENT-DARK-LIVE after a live tree is a note not
+   a knock; the rhythm ring takes acts from every source of the tree; why
+   the NEW-AGENT toast did not reach the commander beside the two
+   AGENT-DARK-LIVE ones - read app.log first).
+Order the Table suggests: M7.5 (the three lessons) first, since every
+agent test after it would otherwise repeat the same noise; then the rules
+panel; the agent runs interleaved as the commander installs them.
