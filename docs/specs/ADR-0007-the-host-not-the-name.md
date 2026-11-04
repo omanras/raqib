@@ -398,3 +398,62 @@ pointed it (ADR-0005 decision 1, A4's one permitted write).
   host source; recorded.
 - Table ledger: the HANDOFF as first written let a discovered tree cause a
   write into an unnamed project; corrected here before any code.
+
+## Amendment I (the Table, 2026-11-04) - rulings on review 2026-11-04-M7.2b.md (86c4518 + c3c96ab)
+Builder's record: docs/review/2026-11-04-M7.2b-questions.md (Q-1..Q-9).
+CI: run 41783688289 (86c4518) four success, both windows gate jobs failed
+six windows-only tests (Tk tests with options None; path separators in
+asserts); run 41784559628 (c3c96ab, the follow-up) six jobs success.
+Verdict: REDO on P1, P2, P3; the Table's choices I-4..I-11; the rest ruled
+or recorded. The two A4 findings are the kind this amendment series exists
+for: under the flag, a project the agent controls could steer Raqib's
+writes. Scope: as HANDOFF M7.2b, plus raqib/install.py for I-1 if the check
+must live there.
+- I-1 (P1, A4, Q-3) Under --attach-hooks the hooks are written only when
+  every path component from the project to `.claude/settings.json` is a
+  real directory or file (lstat, no symlink or junction at any step) and
+  the settings file's realpath lies under the project's realpath; else
+  "hooks: not attached (.claude is a link / outside the project)", a hole,
+  and the os or host source. Test: the reviewer's symlink probe (`.claude`
+  -> `~/.claude`) writes nothing to the home settings.
+- I-2 (P2, A4) An attached tree's trace is always Raqib's own default
+  under ~/.raqib/traces; a trace the project's existing settings name is
+  never used and no directory is created outside ~/.raqib; such an entry is
+  reported "foreign" (doctor's word) and replaced as `raqib watch` replaces
+  one. Test: a settings.json naming an arbitrary trace path creates nothing
+  there.
+- I-3 (P3, A3, ADR-0005 B-1) A source's SILENCE-OPEN or SILENCE-HALF still
+  pending at Stop is "pending for good": counted as an alarm of that tree
+  in source_alarms and result (exit 1), listed as "pending at exit". Test.
+- I-4 (P4, P5) A hooks source with no line after two rounds is a hole
+  "hooks attached, no line yet" (silence, A3); the gone-and-back text names
+  the real reason, never "None".
+- I-5 (P6) wevtutil runs with a timeout per pass (10 s, as the notifier's);
+  a pass that does not return is a hole and the helper - Raqib's own child,
+  never the agent's - is terminated and recorded; nothing of Raqib's outlives
+  the watch unrecorded.
+- I-6 (P7, P8, P14) Aggregate findings of a source hand over as ADR-0005
+  C-2/E-2 (grown, not knocked again); context rules that cannot run on a
+  source are listed once per source as a note; knocks follow ADR-0005 A-4:
+  high findings, plus the first finding of each tree (FirstFinding).
+- I-7 (P11) The remote host:port of a HostConnection line stays in clear:
+  it is the field the NET rules read and the hook source already keeps the
+  URL host (ADR-0001); the os source hashes because Sysmon gives it
+  differently. Accepted and recorded.
+- I-8 (P12) Per-tree source files are keyed by (run, pid, started), never
+  pid alone. Test: a pid reused within a run gets its own file.
+- I-9 (P10) The fake-filesystem test also traps io.open, pathlib's
+  write_text/write_bytes/open/mkdir/touch, os.symlink/link/truncate,
+  shutil, tempfile and subprocess with file arguments, and runs with the
+  notifier on (fake runner) and a fake Sysmon channel.
+- I-10 (P17) Stop leaves attached hooks in place, as `raqib watch` does;
+  the report says so per project; an uninstall is a later task (recorded).
+- I-11 (P15) Judging under the watch lock: accepted for v1, recorded.
+- I-12 Recorded: P9/P16 (argv is never read live because cite texts are
+  cut, so the node+cli.js branch is dead in practice - the safe side;
+  stated in the questions file), P13 (DESTRUCT-CMD's measured denominator
+  grew by the `any`; no unintended match found), P18, P19.
+- I-13 The ADR-0002 note for HOST-UNWATCHED and the M4.2 "lines beyond the
+  table now" line are written by the Table on the branch in this ruling's
+  merge (main's table must match main's catalog).
+- I-14 Every REDO change carries a test for the behaviour it adds (D-8).
