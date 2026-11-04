@@ -458,6 +458,7 @@ def test_m12_e1_rule_set_v1_ships():
     assert [(r.id, r.cls) for r in rules] == [
         ("AGENT-DARK-LIVE", "HOST"),   # M7.2 (raqib watch --host); REDO C-13: class HOST
         ("DESTRUCT-CMD", "DESTRUCT"), ("DRIFT-FILES", "DRIFT"), ("EDIT-NO-TEST", "DRIFT"),
+        ("HOST-RHYTHM", "HOST"),      # M7.4 (ADR-0007 decision 4): the think-act cycle
         ("HOST-UNWATCHED", "HOST"),   # M7.2b (ADR-0007 H-3): a candidate tree with no source
         ("LANDED-NO-GATE", "DRIFT"), ("NET-TOOL", "NET"), ("NEW-AGENT-UNKNOWN", "HOST"), ("NEW-AGENT", "HOST"),
         ("SCOPE-CWD-MOVED", "SCOPE"), ("SCOPE-CWD-ROOT", "SCOPE"),
@@ -901,7 +902,11 @@ M72_NOTE = "Note (2026-11-04, M7.2, ADR-0007 Amendment C"
 # HOST-UNWATCHED row and "Ratio after M7.2b: 4 : 7 : 10." (asked in docs/review/2026-11-04-M7.2b-questions.md).
 M72B_NOTE = "Note (2026-11-04, M7.2b, ADR-0007 Amendment H"
 M72B_QUESTIONS = ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md"
-M72B_EVASION = "host source (M7.2b"   # the one evasion line each of NET-TOOL and DESTRUCT-CMD gained (H-2)
+M72B_EVASION = "host source (M7.2b"
+# M7.4 (ADR-0007 decision 4): the note the Table writes under "Ratio after M7.2b", with the HOST-RHYTHM row and
+# "Ratio after M7.4: 4 : 7 : 11." (asked in docs/review/2026-11-04-M7.4-questions.md).
+M74_NOTE = "Note (2026-11-04, M7.4, ADR-0007 decision 4"
+M74_QUESTIONS = ROOT / "docs" / "review" / "2026-11-04-M7.4-questions.md"   # the one evasion line each of NET-TOOL and DESTRUCT-CMD gained (H-2)
 
 
 def table_rows(text):
@@ -1024,7 +1029,18 @@ def adr_note_m72b():
     if M72B_NOTE not in section:
         return None
     assert section.count(M72B_NOTE) == 1
-    note = section.split(M72B_NOTE, 1)[1].split("## ", 1)[0]
+    note = section.split(M72B_NOTE, 1)[1].split("## ", 1)[0].split(M74_NOTE, 1)[0]
+    return table_rows(note), note
+
+
+def adr_note_m74():
+    """The M7.4 note (ADR-0007 decision 4): (rows it adds, its text), or None
+    while the Table has not written it."""
+    _, section = adr_table()
+    if M74_NOTE not in section:
+        return None
+    assert section.count(M74_NOTE) == 1
+    note = section.split(M74_NOTE, 1)[1].split("## ", 1)[0]
     return table_rows(note), note
 
 
@@ -1044,27 +1060,33 @@ def adr_table_after_m72b():
     return out
 
 
+def adr_table_after_m74():
+    out = adr_table_after_m72b()
+    rows, _ = adr_note_m74() or ({}, None)
+    assert not set(rows) & set(out)
+    out.update(rows)
+    return out
+
+
+def rules_kind_holes(rule):
+    return rule.kind == "anchor" and bool(rule.holes) and rule.evasion == ()
+
+
 def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     """M4.2 (D-8): the table plus the dated notes under it is held to the tree
     (M5.3, C-9: the CROSS-SOURCE row, a code rule with its kind in cross.py;
     M4.2b, Amendment G: the two demand rows and their holes; M4.3, Amendment
     J: the two tree anchors, code rules with their kinds and holes in tree.py)."""
     from raqib.rules import cross, tree
-    table = adr_table_after_m72b()   # M7.2 REDO C-11: the Table's note holds the host anchors
+    table = adr_table_after_m74()   # M7.2 REDO C-11: the Table's note holds the host anchors
     before, section = adr_table()
     rules = {r.id: r for r in engine.load_catalog(CATALOG)}
-    # M7.2b set-aside (ADR-0007 H-3, as M7.2 did before C-11): HOST-UNWATCHED (anchor, YAML) is not in ADR-0002's
-    # table until the Table writes the M7.2b note (CLAUDE.md rule 8: the ADRs are the Table's); the builder asks
-    # for it, row and ratio line, in docs/review/2026-11-04-M7.2b-questions.md. Until then it is held to its
-    # kind and holes here, and the counts carry it. Once the note is written, nothing is set aside.
+    # The M7.2b and M7.4 notes are written (ADR-0007 K-12): nothing is set aside.
+    assert adr_note_m72b() is not None and adr_note_m74() is not None
     m72b_pending = {}
-    if adr_note_m72b() is None:
-        m72b_pending = {"HOST-UNWATCHED": rules.pop("HOST-UNWATCHED")}
-        assert {r.kind for r in m72b_pending.values()} == {"anchor"} and all(r.holes for r in m72b_pending.values())
-        assert "ADR-0002" in M72B_QUESTIONS.read_text(encoding="utf-8")
     assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(adr_table_after_m53()) == 13
     assert len(adr_table_after_m42b()) == 15 and len(adr_table_after_m43()) == 17
-    assert len(adr_table_after_m72()) == 20 and len(table) == (20 if m72b_pending else 21)
+    assert len(adr_table_after_m72()) == 20 and len(table) == 22 - len(m72b_pending)
     assert set(table) == set(rules) | set(silence.RULE_KINDS) | set(cross.RULE_KINDS) | set(tree.RULE_KINDS)
     for rule_id, (kind, items) in table.items():
         if rule_id in silence.RULE_KINDS:
@@ -1084,7 +1106,8 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
             # The table's evasions are the minimum: each starts one line of the list.
             assert items and all(any(e.startswith(item) for e in rule.evasion) for item in items), rule_id
             assert len(set(rule.evasion)) == len(rule.evasion), rule_id
-        elif rule_id in adr_note_m72()[0] or rule_id in (adr_note_m72b() or ({}, None))[0]:
+        elif (rule_id in adr_note_m72()[0] or rule_id in (adr_note_m72b() or ({}, None))[0]
+              or rule_id in (adr_note_m74() or ({}, None))[0]):
             # M7.2 and M7.2b: the host anchors list their holes in the YAML
             assert rule.evasion == () and "evasion" not in rule.doc and rule.holes, rule_id
         else:
@@ -1105,15 +1128,19 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     m72 = [sum(1 for k, _ in adr_table_after_m72().values() if k == kind) for kind in engine.KINDS]
     assert "Ratio after M7.2: %d : %d : %d." % tuple(m72) in section and m72 == [4, 7, 9]   # C-11
     counts = [sum(1 for k, _ in table.values() if k == kind) for kind in engine.KINDS]
-    if not m72b_pending:   # H-3: the Table's M7.2b note and its ratio line
-        assert "Ratio after M7.2b: %d : %d : %d." % tuple(counts) in section and counts == [4, 7, 10]
+    if adr_note_m72b() is not None:   # H-3: the Table's M7.2b note and its ratio line
+        assert "Ratio after M7.2b: 4 : 7 : 10." in section
         assert set(adr_note_m72b()[0]) == {"HOST-UNWATCHED"}
         assert section.index("Ratio after M7.2:") < section.index(M72B_NOTE) < section.index("Ratio after M7.2b:")
     kinds = [r.kind for r in rules.values()] + list(silence.RULE_KINDS.values()) + list(
         cross.RULE_KINDS.values()) + list(tree.RULE_KINDS.values())
     assert counts == [kinds.count(kind) for kind in engine.KINDS]
     pending = [sum(1 for r in m72b_pending.values() if r.kind == kind) for kind in engine.KINDS]
-    assert [c + p for c, p in zip(counts, pending)] == [4, 7, 10]   # the gate's line (test_gate.py), M7.2b
+    assert [c + p for c, p in zip(counts, pending)] == [4, 7, 11]   # the gate's line (test_gate.py), M7.4
+    if adr_note_m74() is not None:   # M7.4: the Table's note and its ratio line
+        assert "Ratio after M7.4: %d : %d : %d." % tuple(counts) in section and counts == [4, 7, 11]
+        assert set(adr_note_m74()[0]) == {"HOST-RHYTHM"}
+        assert section.index("Ratio after M7.2b:") < section.index(M74_NOTE) < section.index("Ratio after M7.4:")
     assert set(adr_note_m72()[0]) == {"NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE"}
     assert section.index("Ratio after M4.3:") < section.index(M72_NOTE) < section.index("Ratio after M7.2:")
     assert section.index("Ratio after M4.2b:") < section.index(M43_NOTE) < section.index("Ratio after M4.3: 4 : 7 : 6.")

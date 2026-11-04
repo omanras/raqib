@@ -120,7 +120,10 @@ jobs:
           print("gui launcher: OK (Scripts/raqib-app.exe on Windows, bin/raqib-app elsewhere)")
           EOF
           # The installed catalog, measured on the checkout's fixtures.
-          raqib check-rules --fixtures-root "$GITHUB_WORKSPACE"
+          raqib check-rules --fixtures-root "$GITHUB_WORKSPACE" > check-rules.txt
+          cat check-rules.txt
+          # M7.4 REDO K-13: HOST-RHYTHM is loaded and listed with its budget (0), beside the zero count of the host step.
+          python -c "import re; text = open('check-rules.txt', encoding='utf-8').read(); assert re.search(r'^HOST-RHYTHM +ok +[0-9.]+ +0 +', text, re.M), text; print('check-rules: HOST-RHYTHM listed with budget 0')"
           # Without fixtures an installed raqib says so (exit 2).
           set +e; raqib check-rules 2> nofixtures.txt; code=$?; set -e
           cat nofixtures.txt; test "$code" -eq 2; grep -F "no rule fixtures in" nofixtures.txt
@@ -230,6 +233,13 @@ jobs:
           for t in state["host"]["trees"]:
               assert t.get("source") in ("host", "os", "hooks", "none"), t
           print("watch --host: every tree has a source or HOST-UNWATCHED: %s" % sources)
+          # M7.4 (ADR-0007 decision 4): HOST-RHYTHM is in the catalog (kinds 4 : 7 : 11). Two rounds 1 s apart cannot
+          # hold 3 cycles (a child in each of 3 rounds after a talk), so on the runners its count is 0, asserted;
+          # no --suspect, so the report says the suspect layer is off and no model is asked.
+          rhythm = len(re.findall(r"^  \[medium\] HOST-RHYTHM ", text, re.M))
+          assert rhythm == 0, ("HOST-RHYTHM on a 2-round runner watch", text[-3000:])
+          assert "SUSPICION (A2: a model may raise suspicion, never acquit): off (no --suspect)" in text
+          print("watch --host: HOST-RHYTHM %d (expected 0 in 2 rounds); suspect off" % rhythm)
           print("watch --host: OK, %s tree(s), %s" % (seen.group(1), result.group(0)))
           EOF
           # C-8 / REDO-2 D-7: discover's candidates against the report's trees, over the pids in both; a candidate

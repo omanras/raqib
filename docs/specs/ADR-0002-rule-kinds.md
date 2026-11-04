@@ -238,6 +238,14 @@ to each discovered tree:
 
 Ratio after M7.2b: 4 : 7 : 10.
 
+Note (2026-11-04, M7.4, ADR-0007 decision 4): one anchor row joins the
+table, judged on the host watch's own record of each tree's rounds (its
+talks and its children's start times):
+
+| HOST-RHYTHM      | anchor    | -                                                    |
+
+Ratio after M7.4: 4 : 7 : 11.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind

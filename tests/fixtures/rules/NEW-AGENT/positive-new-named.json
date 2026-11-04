@@ -50,6 +50,22 @@
     "named_word": "named",
     "none_rounds": 0,
     "pid": 87,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "160.79.104.10:443"
+     ],
+     "w": 30
+    },
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
@@ -117,6 +133,22 @@
     "named_word": "named",
     "none_rounds": 0,
     "pid": 95,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "160.79.104.10:443"
+     ],
+     "w": 30
+    },
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",

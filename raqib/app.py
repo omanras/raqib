@@ -304,6 +304,7 @@ class Options:
         # when it is ticked does a host watch write into a project (the hook settings), as --attach-hooks does.
         self.attach_hooks = bool(attach_hooks)
         self.host_kw = dict(host_kw or {})   # tests: the HostWatch's sysmon / installer / os_follow fakes
+        self.suspect = ""                    # M7.4 E3: the window's "suspect unknown trees" field, empty = off
         self.every = hostmod.EVERY_DEFAULT if every is None else every   # M7.3: --every T, the host rounds
         self.catalog = catalog           # M7.3: discover's catalog (None: loaded when the host is read)
         self.host_reader = host_reader   # M7.3: tests give a fake reader; None is the live one
@@ -488,7 +489,8 @@ class Session:
 # --- the host screen (M7.3, ADR-0007 decision 5) -----------------------------------------------
 
 HOST_COLUMNS = (("image", 22), ("pid", 8), ("named", 22), ("first seen", 25), ("acts", 5), ("source", 24),
-                ("findings", 20), ("endpoints", 0))   # M7.2b E4: the source column and its findings by severity
+                ("findings", 20), ("rhythm / suspicion", 24),   # M7.4 E4
+                ("endpoints", 0))   # M7.2b E4: the source column and its findings by severity
 NOT_CLEARANCE = "Not a clearance."
 
 
@@ -530,6 +532,7 @@ def host_rows(trees, first_seen=None):
         rows.append((_safe(t.get("image") or "?"), _safe(t.get("pid")), tree_kind(t),
                      _safe(t.get("first_seen") or first_seen or "-"), _safe(t.get("acts", 0)),
                      _safe(source_word(t)), _safe(ui.severity_counts(t.get("source_findings"))),
+                     _safe(ui.tree_rhythm_text(t)),   # M7.4 E4
                      _safe(", ".join(str(e) for e in t.get("endpoints") or ()) or "-")))
     return rows
 
@@ -560,6 +563,7 @@ def host_table(rows):
 
 
 ATTACH_TEXT = "attach hooks to Claude Code projects"   # M7.2b (ADR-0007 H-1): the checkbox, off by default
+SUSPECT_TEXT = "suspect unknown trees"   # M7.4 E3: the field, empty (off) by default: ollama[:M], anthropic[:M]
 CODE_LEVELS = {0: "clean", 1: "alarm", 3: "incomplete"}   # F-7: C-10's exit codes; 0 green, 1 red, 3 amber
 
 
@@ -635,9 +639,34 @@ def host_finding_line(f):
     """F-4 (A5): a host finding cites (run, seq) as finding_line cites seqs."""
     where = f.get("tree") or f.get("path")
     seqs = f.get("cited_seq") or []
-    return _safe("%s [%s] round %s: %s: %s [%s] cites run %s %s" % (
+    beats = "".join("; talk round %s seq %s, act round %s seq %s" % (
+        b.get("talk_round"), b.get("talk_seq"), b.get("round"), b.get("seq"))
+        for b in f.get("beats") or () if isinstance(b, dict))   # K-7: rhythm beats carry round and seq
+    return _safe("%s [%s] round %s: %s: %s [%s] cites run %s %s%s" % (
         f.get("rule_id"), f.get("severity"), f.get("round"), where, f.get("summary"), f.get("notice"),
-        f.get("run"), watch.seq_text(list(seqs))))
+        f.get("run"), watch.seq_text(list(seqs)), beats))
+
+
+def suspicion_line(f):
+    """M7.4 E4 (A2, A5): a raised suspicion on a tree, as a finding line,
+    citing the seqs of the tree's source file."""
+    return _safe("SUSPECT [suspicion %.2f] round %s: %s: %s [%s] by %s/%s cites %s seq %s" % (
+        f.get("suspicion") or 0, f.get("round"), f.get("tree"), "; ".join(f.get("reasons") or []), f.get("notice"),
+        f.get("backend"), f.get("model"), f.get("trace"), ",".join(str(x) for x in f.get("cited_seq") or [])))
+
+
+def suspect_spec(text):
+    """M7.4 E3: the window's "suspect unknown trees" field: empty (the
+    default) is off; else a backend spec as --suspect takes it
+    (ollama[:MODEL], anthropic[:MODEL], fake:FILE). (backend or None,
+    error or None)."""
+    text = (text or "").strip()
+    if not text:
+        return None, None
+    try:
+        return hostmod.suspect_backend(text), None
+    except ValueError as exc:
+        return None, str(exc)
 
 
 def host_watch_view(state, extra_holes=()):
@@ -670,6 +699,7 @@ def host_watch_view(state, extra_holes=()):
             lines.append("no round has given an inventory yet")
     holes = [hole_line(x) for x in state.get("holes") or [] if isinstance(x, dict)] + [_safe(x) for x in extra_holes]
     findings = [host_finding_line(f) for f in h.get("findings") or [] if isinstance(f, dict)]
+    findings += [suspicion_line(f) for f in h.get("suspicions") or [] if isinstance(f, dict)]   # M7.4 E4
     return {"word": word, "level": level, "detail": _safe(detail), "rows": host_rows(trees),
             "lines": lines, "findings": findings, "holes": holes,
             "badges": [(lv, _safe(text)) for lv, text in ui.host_band(state)], "final": None,
@@ -835,9 +865,15 @@ class HostSession(Session):
 
     def _open(self):
         o = self.options
+        kw = dict(o.host_kw)
+        backend, error = suspect_spec(getattr(o, "suspect", ""))   # M7.4 E3: the field's word for this watch
+        if error:
+            raise watch.WatchError("%s: %s" % (SUSPECT_TEXT, error))
+        if backend is not None:
+            kw["suspect"] = backend
         return self.starter(o.host_catalog(), o.rules, every=o.every, no_open=True, no_notify=o.no_notify,
                             port=o.host_port, out=self.log, err=self.log, environ=o.environ, home=o.home,
-                            refresh=o.refresh, reader=self.reader(), attach_hooks=o.attach_hooks, **o.host_kw)
+                            refresh=o.refresh, reader=self.reader(), attach_hooks=o.attach_hooks, **kw)
 
     def _loop(self, running):
         return hostmod.loop(running, self.stop_flag)
@@ -1373,6 +1409,10 @@ class Window:
         self.attach_var = tk.BooleanVar(value=bool(getattr(self.c.options, "attach_hooks", False)))
         self.attach_box = tk.Checkbutton(row, text=ATTACH_TEXT, variable=self.attach_var)
         self.attach_box.pack(side="left", padx=6)
+        # M7.4 E3: "suspect unknown trees", empty (off) by default; read when "Watch this host" starts a watch
+        tk.Label(row, text=SUSPECT_TEXT).pack(side="left")
+        self.suspect_var = tk.StringVar(value=str(getattr(self.c.options, "suspect", "") or ""))
+        tk.Entry(row, textvariable=self.suspect_var, width=16).pack(side="left", padx=(2, 6))
         self.host_url = tk.StringVar(value="-")
         tk.Entry(row, textvariable=self.host_url, state="readonly").pack(side="left", fill="x", expand=True, padx=6)
         tk.Button(row, text="Open page", command=self.open_host_page).pack(side="left", padx=(0, 6))   # F-11
@@ -1486,6 +1526,7 @@ class Window:
             return
         if self.c.options is not None:   # H-1: the box's word for this watch
             self.c.options.attach_hooks = bool(self.attach_var.get())
+            self.c.options.suspect = str(self.suspect_var.get() or "").strip()   # M7.4 E3: empty is off
         self.c.host_note = self.c.start_host()
         self.show_host()
 

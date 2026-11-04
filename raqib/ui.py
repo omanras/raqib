@@ -913,7 +913,11 @@ def _watches_section(state, own, info):
 # --- discover (I-8) ---------------------------------------------------------------------
 
 def _cites_text(cites):
-    return " ".join("%s:%s" % (_text(_dict(c).get("src")), _text(_dict(c).get("line"))) for c in _list(cites))
+    """Cites as src:line; M7.4 REDO K-7 (A5): a cite that carries its round
+    and seq (a HOST-RHYTHM beat) says them first ("round 4 seq 12 win-tcp:2")."""
+    return " ".join("%s%s:%s" % ("round %s seq %s " % (_text(_dict(c).get("round")), _text(_dict(c).get("seq")))
+                                 if _dict(c).get("round") is not None else "",
+                                 _text(_dict(c).get("src")), _text(_dict(c).get("line"))) for c in _list(cites))
 
 
 def _discover_body(info, heading):
@@ -1067,9 +1071,13 @@ def host_band(state):
     host = _dict(state.get("host"))
     last = _dict(host.get("last_round"))
     new, dark = _int(host.get("new")) or 0, len(_list(host.get("dark")))
+    rhythm = sum(1 for f in _list(host.get("findings")) if _dict(f).get("rule_id") == "HOST-RHYTHM")
+    sus = len(_list(host.get("suspicions")))
     items = [("alarm" if host.get("now") else "clean", "trees now: %s" % host.get("now")),
              ("alarm" if new else "clean", "new this session: %d" % new),
              ("alarm" if dark else "clean", "dark: %d" % dark),
+             ("alarm" if rhythm else "clean", "rhythm: %d" % rhythm),
+             ("alarm" if sus else "clean", "suspicion: %s" % (sus if host.get("suspect") else "off")),
              ("clean" if last and not last.get("error") else "incomplete",
               "last round: %s at %s" % (last.get("round"), last.get("at")) if last else "last round: none yet")]
     return items + band_items(state)[1:]
@@ -1090,12 +1098,13 @@ def host_section(state):
     else:
         out.append('<div class="scroll"><table><thead><tr><th>image</th><th>pid</th><th>class</th><th>named</th>'
                    "<th>first seen</th><th>now</th><th>acts</th><th>endpoints</th><th>source</th>"
-                   "<th>source findings</th><th>cites</th></tr></thead><tbody>")
+                   "<th>source findings</th><th>rhythm / suspicion</th><th>cites</th></tr></thead><tbody>")
         for t in trees:
             out.append('<tr%s><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td class="nowrap">%s (round %s)%s</td>'
                        '<td>%s</td><td>%s</td><td class="wrap">%s</td><td class="wrap">%s</td><td>%s</td>'
-                       '<td class="wrap">%s</td></tr>' % (
-                           ' class="flag"' if t.get("knocked") or t.get("unwatched") else "",
+                       '<td class="wrap">%s</td><td class="wrap">%s</td></tr>' % (
+                           ' class="flag"' if t.get("knocked") or t.get("unwatched") or t.get("rhythm")
+                           or t.get("suspicion") else "",
                            _text(t.get("image") or "?"),
                            _text(t.get("pid")), _text(t.get("class")),
                            _text("named: %s" % t.get("named_by") if t.get("named") else "unknown"),
@@ -1105,11 +1114,28 @@ def host_section(state):
                            "yes" if t.get("present") else '<span class="tag">gone</span>', _text(t.get("acts")),
                            _text(", ".join(str(e) for e in _list(t.get("endpoints"))) or "-"),
                            _text(tree_source(t)), _text(severity_counts(t.get("source_findings"))),
-                           _cites_text(t.get("cites"))))
+                           _text(tree_rhythm_text(t)), _cites_text(t.get("cites"))))
         out.append("</tbody></table></div>")
     out.append('<p class="meta">%s</p>' % _text(
         "hooks: attached with --attach-hooks (the hook settings are the only write into a project)"
         if host.get("attach_hooks") else "hooks: not attached (no --attach-hooks): nothing is written into any project"))
+    # M7.4 E4: suspicion, as other findings (A2: a model may raise it, never acquit)
+    sus = _dict(host.get("suspect")) if host.get("suspect") else None
+    found = [_dict(f) for f in _list(host.get("suspicions"))]
+    out.append("<h3>Suspicion (%d)</h3>" % len(found))
+    out.append('<p class="meta">%s</p>' % _text(
+        "off (no --suspect): no model is asked" if sus is None else
+        "%s/%s every %s rounds over the unknown trees, threshold %s; below it is no finding, never a clearance (A2)"
+        % (sus.get("backend"), sus.get("model"), sus.get("every_rounds"), sus.get("threshold"))))
+    for f in found:
+        out.append('<div class="card"><span class="tag">SUSPECT</span> <span class="tag">%s</span> %s pid %s round %s:'
+                   ' %s <span class="meta">%s/%s; %s; cites %s seq %s</span></div>' % (
+                       _text("%.2f" % (f.get("suspicion") or 0)), _text(f.get("image") or "?"), _text(f.get("pid")),
+                       _text(f.get("round")), _text("; ".join(str(r) for r in _list(f.get("reasons")))),
+                       _text(f.get("backend")), _text(f.get("model")), _text(f.get("notice")), _text(f.get("trace")),
+                       _text(",".join(str(x) for x in _list(f.get("cited_seq"))))))
+    if not found:
+        out.append('<p class="empty">None.</p>')
     sources = [_dict(f) for f in _list(host.get("source_findings"))]
     out.append("<h3>Source findings (%d)</h3>" % len(sources))
     for f in sources:
@@ -1135,6 +1161,10 @@ def host_section(state):
         _text(f.get("path")), _text(f.get("agent")), _text(f.get("state")),
         _text(", dark %s round(s) in a row" % f.get("streak")) if f.get("streak") else "", _cites_text(f.get("cites")))
         for f in fps) if fps else '<p class="empty">None listed.</p>')
+    blind = [_dict(b) for b in _list(host.get("blind"))]
+    if blind:   # M7.4 REDO K-8: counted apart from the holes; they do not change the result
+        out.append("<h3>Blind spots (%d)</h3><ul>%s</ul>" % (len(blind), "".join(
+            "<li>%s: %s</li>" % (_text(b.get("kind")), _text(b.get("detail"))) for b in blind)))
     notes = _list(host.get("notes"))
     if notes:
         out.append("<h3>Notes (%d)</h3><ul>%s</ul>" % (len(notes), "".join("<li>%s</li>" % _text(n) for n in notes)))
@@ -1149,6 +1179,19 @@ def host_section(state):
                 "; late" if r.get("late") else ""))) for r in reversed(rounds)) if rounds else
                '<p class="empty">No round yet.</p>')
     return out
+
+
+def tree_rhythm_text(tree):
+    """M7.4 E4: a tree's rhythm and suspicion, as host.tree_m74_text says them, or "-"."""
+    parts = []
+    if tree.get("rhythm"):
+        parts.append("HOST-RHYTHM round(s) %s (%s)" % (", ".join(str(x) for x in _list(tree.get("rhythm_rounds"))),
+                                                       tree.get("rhythm")))
+    if tree.get("suspicion"):
+        parts.append("suspicion %.2f (%s)" % (tree.get("suspicion") or 0, tree.get("suspect_knock")))
+    if tree.get("suspect_below"):
+        parts.append("%s window(s) below the threshold: no finding" % tree.get("suspect_below"))
+    return "; ".join(parts) or "-"
 
 
 def tree_source(tree):

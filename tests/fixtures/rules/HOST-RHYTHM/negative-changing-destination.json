@@ -1,0 +1,116 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 5,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 2,
+      "src": "win-process",
+      "text": "fake process row of pid 4400 (make.py)"
+     },
+     {
+      "line": 2,
+      "src": "win-tcp",
+      "text": "fake connection of pid 4400 to 192.0.2.15:443 (make.py)"
+     },
+     {
+      "line": 3,
+      "src": "win-process",
+      "text": "fake child row 4401 (make.py)"
+     },
+     {
+      "line": 4,
+      "src": "win-process",
+      "text": "fake child row 4402 (make.py)"
+     },
+     {
+      "line": 5,
+      "src": "win-process",
+      "text": "fake child row 4403 (make.py)"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "192.0.2.15:443"
+    ],
+    "history": true,
+    "hooks": null,
+    "image": "relay-bot",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "none_rounds": 0,
+    "pid": 4400,
+    "rhythm": {
+     "act_basis": [
+      "started"
+     ],
+     "acts": 1,
+     "beats": [
+      {
+       "acts": [
+        {
+         "basis": "started",
+         "cites": [
+          {
+           "line": 4,
+           "src": "win-process",
+           "text": "fake child row 4402 (make.py)"
+          }
+         ],
+         "image": "python",
+         "pid": 4402,
+         "started": "2026-11-03T10:00:05.000000Z"
+        }
+       ],
+       "round": 2,
+       "run": "fixture-run",
+       "seq": 2,
+       "talk_cites": [
+        {
+         "line": 2,
+         "src": "win-tcp",
+         "text": "fake connection of pid 4400 to 192.0.2.11:443 (make.py)"
+        }
+       ],
+       "talk_round": 1,
+       "talk_seq": 1
+      }
+     ],
+     "cycles": 1,
+     "destination": "192.0.2.11:443",
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [
+      2
+     ],
+     "streak_fired": false,
+     "talks": [
+      "192.0.2.15:443"
+     ],
+     "w": 30
+    },
+    "round": 5,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T10:00:40.000000Z .. 2026-11-03T10:00:40.000000Z; Windows sample(s) 5",
+    "source": "host",
+    "source_word": "host: the host's own record of the tree",
+    "started": "2026-11-03T09:00:00.000000Z",
+    "tree": "4400:relay-bot:2026-11-03T09:00:00.000000Z",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:40.000Z"
+  }
+ ]
+}

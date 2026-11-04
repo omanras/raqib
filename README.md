@@ -49,6 +49,9 @@ Each round prints one line, "NO AGENT SEEN" included; a reader not back in 2 x T
 Every tree gets a source that only reads, by itself: the os source (Sysmon) where the channel exists, else the host's own record of its children and connections, judged by NET-TOOL and DESTRUCT-CMD; its findings show on the tree and knock.
 `--attach-hooks` (the window: "attach hooks to Claude Code projects", off by default) also installs `raqib watch`'s hooks into the project a Claude Code tree works in: that settings file is the only thing ever written into a project, and only with that word.
 A tree with no source at all for two rounds is HOST-UNWATCHED (high).
+An unknown tree is also judged by its rhythm: HOST-RHYTHM (medium) when it talks to one destination and then starts a child within 30 s, 3 times in the last 10 rounds (the thresholds are in its YAML; on Linux the bytes per connection are recorded from `ss -tinp`, on Windows they are not read, a hole said once).
+`--suspect BACKEND` (ollama[:MODEL], anthropic[:MODEL]; the window: "suspect unknown trees", empty by default) hands each unknown tree's host record to the suspect layer every 10 rounds: it may raise suspicion, which is a finding of the tree, and never acquit (A2): "benign" is no finding.
+What is sent is hashes and program names only, and that call is the only network call of the watch, never made by the reader or any capture.
 
 ## The window
 `raqib app` opens on the host ([ADR-0007](docs/specs/ADR-0007-the-host-not-the-name.md) decision 5): one discover round at open lists the agents found on this machine (image, pid, named / unknown / benign, first seen, acts, endpoints; or "no agent seen (N records, M holes). Not a clearance."), doctor's lines fold under "Checks", and "Watch this host" runs the watch of `raqib watch --host` with its knocks, its band and, at Stop, its final report.
@@ -77,9 +80,9 @@ It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt inst
    lines also carry the local git state, read from the files under `.git`
    (no `git` is run): the head commit, the sha256 of the index, and why
    either could not be read.
-2. **Rules.** Twenty-one rules turn the trace into findings, and every finding
+2. **Rules.** Twenty-two rules turn the trace into findings, and every finding
    cites the trace lines behind it (A5). The rules are 5 silence rules, 1
-   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 15 more: 13
+   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 16 more: 14
    YAML rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED,
    INDEX-UNTOUCHED, `raqib/rules/tree.py`). Each YAML rule declares its
    false-positive budget and is measured against fixtures (A6); CROSS-SOURCE
@@ -141,6 +144,7 @@ design, a quiet minute is reported, not assumed harmless.
 | NEW-AGENT / -UNKNOWN | only under `raqib watch --host`: a tree that talks and acts and was not there in an earlier round, and is no listed benign program under a system directory (NEW-AGENT high when the catalog names it; NEW-AGENT-UNKNOWN medium when not) |
 | AGENT-DARK-LIVE | only under `raqib watch --host`: an agent's footprint with no live tree for 3 rounds in a row |
 | HOST-UNWATCHED | only under `raqib watch --host`: a tree that talks and acts with no source attached in two rounds in a row (not even the host's own record of it) |
+| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child within 30 s, 3 times in the last 10 rounds (the think-act cycle; medium; once per streak) |
 | CROSS-SOURCE | only in a trace with `os` lines: a shell call with no os process of its programs (or a shell) in the 10 s after it; an os process below the agent's own children that no shell call asked for in the 10 s before it, itself or through a parent below the shell (below) |
 
 ## What it cannot see

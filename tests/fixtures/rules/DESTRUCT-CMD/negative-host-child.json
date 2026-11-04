@@ -6,11 +6,13 @@
     "children": [
      {
       "image": "bash",
-      "pid": 1610
+      "pid": 1610,
+      "started": null
      },
      {
       "image": "curl",
-      "pid": 1620
+      "pid": 1620,
+      "started": null
      }
     ],
     "cites": [
@@ -49,35 +51,43 @@
     "children": [
      {
       "image": "bash",
-      "pid": 5796
+      "pid": 5796,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "bash",
-      "pid": 7768
+      "pid": 7768,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "ping",
-      "pid": 8496
+      "pid": 8496,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "tee",
-      "pid": 8500
+      "pid": 8500,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "bash",
-      "pid": 10476
+      "pid": 10476,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "kimi",
-      "pid": 10728
+      "pid": 10728,
+      "started": "11/2/2026 10:21:05 AM"
      },
      {
       "image": "cmd",
-      "pid": 13236
+      "pid": 13236,
+      "started": "11/2/2026 10:20:41 AM"
      },
      {
       "image": "conhost",
-      "pid": 13244
+      "pid": 13244,
+      "started": "11/2/2026 10:20:41 AM"
      }
     ],
     "cites": [
@@ -137,6 +147,8 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 6,
@@ -146,6 +158,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 6636,
     "remote": "198.51.100.23:443",
     "round": 1,
@@ -182,23 +195,28 @@
     "children": [
      {
       "image": "bash",
-      "pid": 7768
+      "pid": 7768,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "bash",
-      "pid": 10476
+      "pid": 10476,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "bash",
-      "pid": 5796
+      "pid": 5796,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "tee",
-      "pid": 8500
+      "pid": 8500,
+      "started": "11/2/2026 10:29:11 AM"
      },
      {
       "image": "ping",
-      "pid": 8496
+      "pid": 8496,
+      "started": "11/2/2026 10:29:11 AM"
      }
     ],
     "cites": [
@@ -250,6 +268,8 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 7,
@@ -264,6 +284,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 10728,
     "remote": "203.0.113.40:443",
     "round": 2,

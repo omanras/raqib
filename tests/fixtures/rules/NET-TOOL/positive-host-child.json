@@ -9,11 +9,13 @@
     "children": [
      {
       "image": "bash",
-      "pid": 1610
+      "pid": 1610,
+      "started": null
      },
      {
       "image": "curl",
-      "pid": 1620
+      "pid": 1620,
+      "started": null
      }
     ],
     "cites": [
@@ -52,27 +54,33 @@
     "children": [
      {
       "image": "idea",
-      "pid": 1800
+      "pid": 1800,
+      "started": null
      },
      {
       "image": "fsnotifier",
-      "pid": 1810
+      "pid": 1810,
+      "started": null
      },
      {
       "image": "bash",
-      "pid": 1820
+      "pid": 1820,
+      "started": null
      },
      {
       "image": "make",
-      "pid": 1825
+      "pid": 1825,
+      "started": null
      },
      {
       "image": "cc",
-      "pid": 1830
+      "pid": 1830,
+      "started": null
      },
      {
       "image": "cc",
-      "pid": 1831
+      "pid": 1831,
+      "started": null
      }
     ],
     "cites": [
@@ -131,6 +139,8 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 9,
@@ -145,6 +155,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 1700,
     "remote": "198.51.100.60:443",
     "round": 1,
@@ -181,7 +192,8 @@
     "children": [
      {
       "image": "git",
-      "pid": 2045
+      "pid": 2045,
+      "started": null
      }
     ],
     "cites": [
@@ -216,6 +228,8 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 6,
@@ -230,6 +244,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 2040,
     "remote": "198.51.100.51:443",
     "round": 1,
@@ -266,15 +281,18 @@
     "children": [
      {
       "image": "firefox",
-      "pid": 3010
+      "pid": 3010,
+      "started": null
      },
      {
       "image": "firefox",
-      "pid": 3020
+      "pid": 3020,
+      "started": null
      },
      {
       "image": "firefox",
-      "pid": 3030
+      "pid": 3030,
+      "started": null
      }
     ],
     "cites": [
@@ -329,6 +347,8 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 7,
@@ -343,6 +363,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 3000,
     "remote": "198.51.100.90:443",
     "round": 1,
@@ -361,6 +382,8 @@
   {
    "cwd": "host",
    "input_meta": {
+    "bytes": "not read",
+    "change": "new",
     "cites": [
      {
       "line": 8,
@@ -370,6 +393,7 @@
     ],
     "dest_port": 443,
     "dest_private": false,
+    "new": true,
     "pid": 3000,
     "remote": "198.51.100.91:443",
     "round": 1,

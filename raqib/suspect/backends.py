@@ -86,6 +86,10 @@ class AnthropicBackend:
         self.allow_fallback = allow_fallback is True
         self._client = client
         self.last_model = None  # the model that answered the last call (response.model)
+        # M7.4 REDO K-3 (API): seconds for one request, passed to the SDK as
+        # its per-request timeout when set (raqib watch --host sets it to
+        # what is left of its 120 s budget); None keeps the SDK's own.
+        self.timeout = None
 
     @staticmethod
     def _sdk():
@@ -105,6 +109,8 @@ class AnthropicBackend:
         # A watcher must know which model judged (B-5): no other model may
         # answer unless the caller opted in.
         fallback = {"betas": [FALLBACK_BETA], "fallbacks": "default"} if self.allow_fallback else {}
+        if self.timeout is not None:   # K-3: the caller's budget is the request's own timeout
+            fallback["timeout"] = float(self.timeout)
         try:
             response = client.beta.messages.create(
                 model=self.model,

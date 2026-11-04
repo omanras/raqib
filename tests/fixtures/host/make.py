@@ -30,6 +30,24 @@ file under ~/.raqib/host/sources/ after the rounds, in pid order (the trees'
 HostChild, HostConnection and HostGone lines). "NAME:rm" is NAME with every
 "curl" of its process file written "rm" (SYNTHETIC, made here: no discover
 fixture holds a destructive child).
+
+M7.4 (ADR-0007 decision 4): RHYTHM's fixtures are host lines of fake rounds
+(SYNTHETIC, made here, "rhythm:" names): rhythm_inventory() builds an
+inventory in discover's shape for round k of a scenario - one unknown tree
+(pid 4400, image "relay-bot" under a user directory, started at a fixed
+ISO UTC time as raqib/hostwin.py records it) that talks to a remote of the
+RFC 5737 documentation ranges and has children, each child started 5 s
+before the round (inside W after the round before). Scenarios: "cycle" (a
+new child every round, one destination), "change" (a new child and a new
+destination every round), "between" (the same one child every round: the
+children that start and end between rounds are never seen) and "notalk"
+(children, no connection: an act-root). The fixture holds the LAST round's
+host lines, as the others.
+M7.4 REDO K-5: a talk beat is a connection new in the round or one whose
+bytes moved; so each round of a scenario with a connection carries the byte
+counts a fake `ss -tinp` would give (conn_bytes, growing each round:
+bytes_moved), and a connection kept up with no bytes read is one talk only
+(bytes_moved False; tests/test_rhythm.py).
 """
 import io
 import json
@@ -82,6 +100,63 @@ NO_SOURCES = {
 }
 SCENARIOS.update(NO_SOURCES)
 SCENARIOS["HOST-UNWATCHED/negative-host-source.json"] = ["linux", "linux"]
+RHYTHM_SCENARIOS = {   # M7.4: fake rounds, "rhythm:<scenario>:<round>"
+    "HOST-RHYTHM/positive-three-cycles.json": ["rhythm:cycle:%d" % k for k in range(1, 5)],
+    "HOST-RHYTHM/negative-two-cycles.json": ["rhythm:cycle:%d" % k for k in range(1, 4)],
+    "HOST-RHYTHM/negative-changing-destination.json": ["rhythm:change:%d" % k for k in range(1, 6)],
+    "HOST-RHYTHM/negative-acts-between-rounds.json": ["rhythm:between:%d" % k for k in range(1, 6)],
+    "HOST-RHYTHM/negative-no-talk.json": ["rhythm:notalk:%d" % k for k in range(1, 6)],
+}
+SCENARIOS.update(RHYTHM_SCENARIOS)
+WALL0 = 1793700000.0      # the wall clock of rounds_of at t = 0
+EVERY = 10                # rounds_of's T
+RHYTHM_PID = 4400
+
+
+def _iso_at(seconds):
+    import datetime
+    return datetime.datetime.fromtimestamp(WALL0 + seconds, datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def rhythm_inventory(scenario, k, pid=RHYTHM_PID, image="relay-bot", every=EVERY, remote=None, children=None,
+                     bytes_moved=True):
+    """Round k (1-based) of a fake scenario, in discover's inventory shape
+    (SYNTHETIC). Round k is read at t = (k-1) * every; a child new in round
+    k started 5 s before it. bytes_moved: the connection's byte counts (a
+    fake ss) grow each round (K-5: a talk beat each round); False: no bytes
+    are read (the round carries none)."""
+    at = (k - 1) * every
+    if children is None:
+        if scenario in ("cycle", "change", "notalk"):
+            children = list(range(1, k + 1))
+        else:   # "between": one child, always the same
+            children = [1]
+    cites = [{"src": "win-process", "line": 2, "text": "fake process row of pid %d (make.py)" % pid}]
+    acts = [{"how": "process", "pid": pid + c, "image": "bash" if c % 2 else "python", "listed": True,
+             "path": None, "via": [], "reader_ancestor": False,
+             "started": _iso_at((c - 1) * every - 5 if c > 1 else -60),
+             "cites": [{"src": "win-process", "line": 2 + c, "text": "fake child row %d (make.py)" % (pid + c)}]}
+            for c in children]
+    if remote is None:
+        remote = "192.0.2.%d:443" % (10 + k) if scenario == "change" else "192.0.2.10:443"
+    tree = {"pid": pid, "image": image, "exe": "C:\\Users\\user\\AppData\\Local\\%s\\%s.exe" % (image, image),
+            "exe_from": "record", "started": _iso_at(-3600), "cwd": None, "cites": cites, "acts": acts,
+            "id": "C1"}
+    talk = [{"remote": remote, "state": "ESTABLISHED", "basis": "ports", "lines": 1, "names": [], "endpoint": [],
+             "cites": [{"src": "win-tcp", "line": 2, "text": "fake connection of pid %d to %s (make.py)" % (pid, remote)}]}]
+    inv = {"records": 20, "holes": [], "incomplete": [], "alarms": [], "problems": [], "result": "alarm",
+           "sources": [], "footprints": [], "agent_dark": [], "system_drive": SYSTEM_DRIVE, "live": False,
+           "candidates": [], "act_roots": [],
+           "window": {"start": _iso_at(at), "end": _iso_at(at), "snapshots": 0, "samples_read": [k]}}
+    if scenario == "notalk":
+        inv["act_roots"].append(dict(tree, talks=[]))
+    else:
+        inv["candidates"].append(dict(tree, talks=talk))
+        if bytes_moved:
+            inv["conn_bytes"] = {"from": "fake ss -tinp (make.py)", "hole": None, "by": {
+                "%d %s" % (pid, remote): {"bytes_sent": 1000 * k, "bytes_received": 5000 * k, "sockets": 1}}}
+    return inv
 RM = ":rm"
 SOURCE_SCENARIOS = {
     "NET-TOOL/positive-host-child.json": ["benign/linux-desktop", "linux-agent"],
@@ -93,6 +168,9 @@ OUT = os.path.join(ROOT, "tests", "fixtures", "rules")
 
 
 def inventory(name, catalog):
+    if name.startswith("rhythm:"):
+        _, scenario, k = name.split(":")
+        return rhythm_inventory(scenario, int(k))
     if name.endswith(RM):
         base = name[:-len(RM)]
         texts, holes = discover.read_dir(os.path.join(DISCOVER, *base.split("/")))

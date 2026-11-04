@@ -106,28 +106,33 @@ def _cut(value):
     return value
 
 
-def window_line(rec, cwd):
-    """What the model sees of one trace line: allow-listed fields only."""
+def window_line(rec, cwd, line_fields=LINE_FIELDS, meta_keys=None):
+    """What the model sees of one trace line: allow-listed fields only.
+    M7.4 (API): line_fields and meta_keys may name another allow-list (the
+    host watch sends its host lines' hashes and program names only); the
+    defaults are the trace's, unchanged."""
+    meta_keys = META_KEYS if meta_keys is None else meta_keys
     out = {}
-    for key in LINE_FIELDS:
+    for key in line_fields:
         if key not in rec:
             continue
         value = rec[key]
-        if key in META_KEYS:
-            value = {k: value[k] for k in META_KEYS[key] if k in value} if isinstance(value, dict) else {}
+        if key in META_KEYS or key in meta_keys:
+            keep = meta_keys.get(key, ())
+            value = {k: value[k] for k in keep if k in value} if isinstance(value, dict) else {}
         out[key] = _cut(value)
     if rec.get("cwd") != cwd:
         out["cwd"] = _cut(rec.get("cwd"))
     return out
 
 
-def render_window(window):
+def render_window(window, line_fields=LINE_FIELDS, meta_keys=None):
     """The user message for one window: metadata only, no hashes. Only the
     first line (seq numbers and a count) is not data from the trace."""
     first, last = window["seqs"][0], window["seqs"][-1]
     findings = [_cut({k: f.get(k) for k in ("rule_id", "class", "severity", "cited_seq", "summary")})
                 for f in window["findings"]]
-    lines = [window_line(rec, window["cwd"]) for rec in window["lines"]]
+    lines = [window_line(rec, window["cwd"], line_fields, meta_keys) for rec in window["lines"]]
     session = {"session_id": _cut(window["session_id"]), "working_directory": _cut(window["cwd"])}
     return "\n".join(
         ["Window of seq %d to %d (%d lines)." % (first, last, len(lines)),
@@ -174,10 +179,14 @@ def _clean(text):
     return text[:REASON_MAX - 3] + "..." if len(text) > REASON_MAX else text
 
 
-def run(records, findings, backend, threshold=DEFAULT_THRESHOLD, size=DEFAULT_WINDOW):
+def run(records, findings, backend, threshold=DEFAULT_THRESHOLD, size=DEFAULT_WINDOW, system=None,
+        line_fields=LINE_FIELDS, meta_keys=None):
     """Judge every window. Returns (lines, summary): suspicion and error lines
     for suspicion.jsonl, and counts for the run record. Windows below the
-    threshold are counted as 'below threshold', never as clean (A2)."""
+    threshold are counted as 'below threshold', never as clean (A2).
+    M7.4 (API, raqib watch --host --suspect): system, line_fields and
+    meta_keys may replace the prompt and the allow-list for another record
+    shape (the host lines); the schema, validate() and A2/A5 are the same."""
     check_threshold(threshold)
     out = []
     counts = {"windows": 0, "raised": 0, "errors": 0, "below_threshold": 0, "answered_by_other_model": 0}
@@ -189,7 +198,7 @@ def run(records, findings, backend, threshold=DEFAULT_THRESHOLD, size=DEFAULT_WI
         if hasattr(backend, "last_model"):
             backend.last_model = None
         try:
-            answer = backend.judge(SYSTEM_PROMPT, render_window(window), SCHEMA)
+            answer = backend.judge(system or SYSTEM_PROMPT, render_window(window, line_fields, meta_keys), SCHEMA)
             kind, fields = validate(answer, set(window["seqs"]), threshold)
         except BackendError as exc:
             kind, fields = "error", str(exc)

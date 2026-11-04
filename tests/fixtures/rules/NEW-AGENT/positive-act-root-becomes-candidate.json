@@ -54,6 +54,22 @@
     "named_word": "named",
     "none_rounds": 0,
     "pid": 10728,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "203.0.113.40:443"
+     ],
+     "w": 30
+    },
     "round": 2,
     "run": "fixture-run",
     "sample": "window - .. -; Windows sample(s) 1,2",
@@ -121,6 +137,20 @@
     "named_word": "unknown",
     "none_rounds": 0,
     "pid": 6636,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [],
+     "w": 30
+    },
     "round": 2,
     "run": "fixture-run",
     "sample": "window - .. -; Windows sample(s) 1,2",

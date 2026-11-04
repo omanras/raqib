@@ -239,7 +239,7 @@ def test_e2_both_rules_are_catalog_anchors_with_budgets_and_fixtures():
         report = fixtures.check_rule(r, ROOT, ())
         assert report["verdict"] == "ok" and report["fp_rate"] == rate == r.fp_budget, report
         assert all(p["fired"] for p in report["positives"])
-    assert set(host.RULES) == {"NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE", "HOST-UNWATCHED"}   # M7.2b
+    assert set(host.RULES) == {"NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE", "HOST-UNWATCHED", "HOST-RHYTHM"}   # M7.2b
 
 
 def test_e2_the_fixtures_are_what_make_py_makes():
@@ -438,8 +438,8 @@ def test_e1_a_stop_ends_the_host_watch_with_the_final_report(tmp_path, _home):
     (["watch", "--host", "--log", "x.jsonl"], "--host keeps its record under ~/.raqib/host/"),
     (["watch", "--host", "--every", "0"], "--every must be a number of seconds from 0.1 to 86400"),
     (["watch", "--host", "--rounds", "0"], "--rounds must be a whole number from 1 to 1000000"),
-    (["watch", "--rounds", "2"], "--every, --window, --rounds and --attach-hooks apply to watch --host only"),
-    (["watch", "--attach-hooks"], "--every, --window, --rounds and --attach-hooks apply to watch --host only"),
+    (["watch", "--rounds", "2"], "--every, --window, --rounds, --attach-hooks and --suspect apply to watch --host only"),
+    (["watch", "--attach-hooks"], "--every, --window, --rounds, --attach-hooks and --suspect apply to watch --host only"),
 ])
 def test_e6_usage_errors_exit_2(argv, message, capsys):
     assert cli.main(argv, out=io.StringIO()) == 2
@@ -523,11 +523,12 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
     # `any` (Bash or source host + HostChild), so it has no top-level gate (C-1a, as NET-TOOL never had) and its two
     # formerly unmeasured benign files count as measured (Q-6 of the M7.2b questions file); HOST-UNWATCHED joins.
     assert got == {"AGENT-DARK-LIVE": (2, 10), "DESTRUCT-CMD": (11, 0), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
-                   "HOST-UNWATCHED": (4, 8),
+                   "HOST-RHYTHM": (4, 8), "HOST-UNWATCHED": (4, 8),
                    "LANDED-NO-GATE": (8, 2), "NET-TOOL": (11, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
                    "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
                    "SECRET-OUTPUT": (7, 2)}
     text = (ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md").read_text(encoding="utf-8")
+    text += (ROOT / "docs" / "review" / "2026-11-04-M7.4-questions.md").read_text(encoding="utf-8")   # M7.4: HOST-RHYTHM
     for rule_id, (m, u) in got.items():
         assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id
 
@@ -818,7 +819,8 @@ def test_redo_c12_dark_rounds_is_the_yamls_eq():
 def test_redo_c13_engine_classes_has_host_and_the_rules_use_it():
     assert "HOST" in engine.CLASSES
     assert {r.id: r.cls for r in RULES if r.id in host.RULES} == {
-        "NEW-AGENT": "HOST", "NEW-AGENT-UNKNOWN": "HOST", "AGENT-DARK-LIVE": "HOST", "HOST-UNWATCHED": "HOST"}
+        "NEW-AGENT": "HOST", "NEW-AGENT-UNKNOWN": "HOST", "AGENT-DARK-LIVE": "HOST", "HOST-UNWATCHED": "HOST",
+        "HOST-RHYTHM": "HOST"}
 
 
 # --- REDO-2 (ADR-0007 Amendment D): D-1, D-2, D-3, D-6, D-7, each with its behaviour (D-9) -------------
