@@ -131,7 +131,7 @@
    "input_meta": {
     "acts": 1,
     "benign": true,
-    "benign_by": "?:/program files (x86)/*",
+    "benign_by": "c:/program files (x86)/*",
     "candidate_before": true,
     "cites": [
      {

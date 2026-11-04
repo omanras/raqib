@@ -71,7 +71,7 @@
    "input_meta": {
     "acts": 3,
     "benign": true,
-    "benign_by": "?:/windows/*",
+    "benign_by": "c:/windows/*",
     "candidate_before": true,
     "cites": [
      {

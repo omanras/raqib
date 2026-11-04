@@ -737,7 +737,8 @@ def cmd_discover(args, out):
     if texts:
         if args.save or args.home or args.samples is not None or args.every is not None:
             raise UsageError("--save, --home, --samples and --every apply to a live run (no --from, no --read)")
-        inv = discover.run(texts, catalog, window=args.window, holes=holes)
+        inv = discover.run(texts, catalog, window=args.window, holes=holes,
+                           run=discover.run_record(args.from_dir) if args.from_dir else None)   # D-3
     else:
         if (args.samples is not None or args.every is not None) and not windows:
             raise UsageError("--samples and --every apply to a live run on Windows; on %s use --window S"
@@ -765,7 +766,7 @@ def cmd_discover(args, out):
             except OSError as exc:
                 raise UsageError("cannot write %s: %s" % (args.save, exc))
             sys.stderr.write("raqib: texts read -> %s (repeat with --from %s)\n" % (", ".join(written), args.save))
-        inv = discover.run(texts, catalog, holes=holes, live=True)
+        inv = discover.run(texts, catalog, holes=holes, live=True, run=info)
     text = (json.dumps(inv, indent=2, sort_keys=True, ensure_ascii=True) + "\n" if args.json
             else discover.render_text(inv))
     if args.out:

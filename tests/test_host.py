@@ -139,7 +139,7 @@ def test_e1_the_final_report_lists_the_trees_and_the_exit(tmp_path):
     assert re.search(r"\[candidate\] pid 7000 scribe \(unknown\): now; first round 2; last round 2; 1 act\(s\);.*"
                      r"NEW-AGENT-UNKNOWN sent", text), text
     assert "[candidate] pid 5100 explorer (unknown): gone; first round 1 (history, not knocked)" in text
-    assert re.search(r"\[candidate\] pid 4100 msedge \(unknown\): now; first round 2 \(benign: \?:/program files"
+    assert re.search(r"\[candidate\] pid 4100 msedge \(unknown\): now; first round 2 \(benign: c:/program files"
                      r" \(x86\)/\*, not knocked\)", text), text
     assert "FINDINGS: 3" in text and "cites win-process:" in text
 
@@ -312,7 +312,7 @@ def test_e4_a_round_with_no_candidate_prints_one_line():
     assert re.search(r"round 2: 92 records read, \d+ holes; NO AGENT SEEN \(window .*\)\. Not a clearance\.$",
                      lines[1]), lines
     text, code = w.finish()
-    assert "NO AGENT SEEN in 2 round(s) with an inventory (records read: 92, 92). Not a clearance." in text
+    assert "NO AGENT SEEN in 2 round(s) that read records (records read: 92, 92). Not a clearance." in text
 
 
 def test_e4_a_reader_not_back_in_2t_is_a_hole_and_a_knock_and_no_second_reader(tmp_path):
@@ -531,8 +531,8 @@ def test_redo_c1c_named_is_high_and_unknown_is_medium(tmp_path):
 def test_redo_c1d_benign_needs_the_name_and_a_system_directory_from_the_record():
     cat = CATALOG
     assert discover.benign_image("msedge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                                 "record", cat) == "?:/program files (x86)/*"
-    assert discover.benign_image("explorer", r"C:\Windows\explorer.exe", "record", cat) == "?:/windows/*"
+                                 "record", cat, "c") == "c:/program files (x86)/*"
+    assert discover.benign_image("explorer", r"C:\Windows\explorer.exe", "record", cat, "c") == "c:/windows/*"
     assert discover.benign_image("firefox", "/usr/lib/firefox/firefox", "record", cat) == "/usr/*"
     # the evasion's limits: a name outside the directories, a denied or blank path, argv[0], a dotted path
     assert discover.benign_image("code", r"C:\Users\u\AppData\Local\Programs\Microsoft VS Code\Code.exe",
@@ -572,7 +572,7 @@ def test_redo_c1d_a_benign_new_tree_is_listed_with_benign_not_knocked(tmp_path):
     w, clock = make_host(tmp_path, ["benign/windows-desktop:before", "benign/windows-desktop"], runner=runner)
     run_rounds(w, clock, 2)
     explorer = next(t for t in w.trees.values() if t["image"] == "explorer")
-    assert explorer["benign"] and explorer["benign_by"] == "?:/windows/*" and not explorer["knocked"]
+    assert explorer["benign"] and explorer["benign_by"] == "c:/windows/*" and not explorer["knocked"]
     line = next(x for x in w.round_lines[-1]["lines"] if x["input_meta"].get("image") == "explorer")
     assert line["input_meta"]["benign"] is True
     assert [(f["image"], f["rule_id"]) for f in w.findings] == [("code", "NEW-AGENT-UNKNOWN")]   # user install
@@ -750,7 +750,7 @@ def test_redo_c8_the_ci_step_checks_discovers_candidates_and_stderr():
     gate = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
     step = gate.split("raqib watch --host --every 1 --rounds 2 --no-notify", 1)[1].split("# Doctor from the venv", 1)[0]
     assert "raqib discover $one --json -o host-discover.json" in gate and 'one="--samples 1"' in gate
-    assert "host-err.txt" in step and "Traceback" in step and "missing from the watch's trees" in step
+    assert "host-err.txt" in step and "Traceback" in step and "gone between" in step   # D-7 replaced the subset
     assert 'expect = 0 if os.name == "nt"' in step
 
 
@@ -794,3 +794,207 @@ def test_redo_c13_engine_classes_has_host_and_the_rules_use_it():
     assert "HOST" in engine.CLASSES
     assert {r.id: r.cls for r in RULES if r.id in host.RULES} == {
         "NEW-AGENT": "HOST", "NEW-AGENT-UNKNOWN": "HOST", "AGENT-DARK-LIVE": "HOST"}
+
+
+# --- REDO-2 (ADR-0007 Amendment D): D-1, D-2, D-3, D-6, D-7, each with its behaviour (D-9) -------------
+
+def test_redo2_d1_rounds_two_with_a_reader_that_never_returns_ends_at_the_second_deadline(tmp_path, monkeypatch):
+    never = threading.Event()
+    started = []
+
+    def reader():
+        started.append(1)
+        never.wait(3600)
+    w, clock = make_host(tmp_path, reader=reader, rounds=2, every=1)
+    monkeypatch.setattr(host, "_sleep", lambda s: setattr(clock, "t", clock.t + s))
+    running = host.Running(w, None, w.notifier, None, True, {}, io.StringIO(), io.StringIO())
+    w.port, w.url = {"warning": None}, "http://127.0.0.1:1/"
+    assert host.loop(running) is None
+    # round 1's reader reaches its deadline at 2 s (round 1 attempted); round 2 is held to its own deadline, 4 s
+    assert 2 * w.deadline_seconds <= clock.t - w.t0 <= 2 * w.deadline_seconds + host.POLL_SECONDS
+    assert w.rounds == 2 and len(started) == 1            # never two readers at once
+    said_ = running.out.getvalue()
+    assert "2 round(s) done (--rounds)" in said_ and "round(s) 2..2 attempted without a reader (D-1)" in said_
+    assert [h["kind"] for h in w.holes] == ["reader-late", "reader-held"] and w.holes[1]["round"] == 2
+    text, code = w.finish()
+    assert code == 3 and "2 round(s) could not be read (round 1, 2)" in text and "reader-out: round 1" in text
+
+
+def test_redo2_d1_rounds_n_counts_attempted_rounds_on_the_tick_too(tmp_path):
+    never = threading.Event()
+    w, clock = make_host(tmp_path, reader=lambda: never.wait(3600), rounds=3, every=1)
+    for _ in range(int(3 * w.deadline_seconds / host.POLL_SECONDS)):
+        w.tick()
+        assert not w.done_rounds() or clock.t - w.t0 >= 3 * w.deadline_seconds
+        clock.t += host.POLL_SECONDS
+    w.tick()
+    assert w.rounds == 3 and w.done_rounds()
+    w.finish()
+    # a reader that came back: --rounds N is N rounds read, as before
+    w, clock = make_host(tmp_path, ["linux"] * 3, rounds=2)
+    run_rounds(w, clock, 2)
+    assert w.rounds == 2 and w.done_rounds() and not w.holes
+
+
+def test_redo2_d2_two_rounds_that_read_nothing_exit_3_never_none_seen(tmp_path):
+    w, clock = make_host(tmp_path, [discover.run({}, CATALOG), discover.run({}, CATALOG)])
+    run_rounds(w, clock, 2)
+    text, code = w.finish()
+    assert code == 3 and "RESULT: INCOMPLETE (exit 3" in text and "NONE-SEEN" not in text
+    assert "2 round(s) read nothing (round 1, 2): unread round(s)" in text
+    assert "NO AGENT SEEN" not in text and "NOTHING READ in 2 round(s)" in text
+    assert "round 1: 0 records read, " in said(w) and "NOTHING READ: an unread round" in said(w)
+
+
+def test_redo2_d2_two_rounds_of_unparseable_proc_lines_exit_3(tmp_path):
+    bad = lambda: discover.run({"proc": ("proc", "not json\n{bad\n", None)}, CATALOG)   # noqa: E731
+    w, clock = make_host(tmp_path, [bad(), bad()])
+    run_rounds(w, clock, 2)
+    text, code = w.finish()
+    assert code == 3 and "NONE-SEEN" not in text and "NO AGENT SEEN" not in text
+    assert "2 round(s) with line(s) that could not be read (round 1, 2)" in text
+    assert "lines-unread: round 1: 2 line(s) could not be read (A3): proc:1 not a JSON line" in text
+
+
+def test_redo2_d2_a_finding_plus_an_unread_line_exits_1(tmp_path):
+    second = json.loads(json.dumps(inv("windows")))
+    second["problems"] = [{"src": "win-process", "line": 99, "reason": "not a row"}]
+    w, clock = make_host(tmp_path, [inv("benign/windows-desktop"), second])
+    run_rounds(w, clock, 2)
+    text, code = w.finish()
+    assert w.findings and code == 1 and "RESULT: ALARM (exit 1" in text
+    assert "1 round(s) with line(s) that could not be read (round 2)" in text
+    assert "round 2: 74 records read, 7 holes, 1 line(s) could not be read" in said(w)
+
+
+def test_redo2_d2_no_agent_seen_is_said_only_of_rounds_that_read_records(tmp_path):
+    empty = dict(inv("benign/windows-desktop"), candidates=[], act_roots=[], result="none-seen")
+    w, clock = make_host(tmp_path, [empty, discover.run({}, CATALOG)])
+    run_rounds(w, clock, 2)
+    text, code = w.finish()
+    assert "NO AGENT SEEN in 1 round(s) that read records (records read: 92)" in text
+    assert "NOTHING READ in 1 round(s)" in text and code == 3
+
+
+def test_redo2_d3_the_benign_globs_are_the_system_drives_minus_its_user_writable_places():
+    cat = CATALOG
+    assert discover.benign_image("explorer", r"C:\Windows\explorer.exe", "record", cat, "c") == "c:/windows/*"
+    # a user-writable place under SystemRoot is not benign
+    for place in (r"Windows\Temp", r"Windows\Tasks", r"Windows\Tracing", r"Windows\Registration",
+                  r"Windows\System32\Tasks", r"Windows\System32\spool\drivers", r"Windows\SysWOW64\Tasks"):
+        assert discover.benign_image("explorer", "C:\\%s\\explorer.exe" % place, "record", cat, "c") is None, place
+    # another drive's windows/ and program files/ is not benign
+    assert discover.benign_image("explorer", r"D:\Windows\explorer.exe", "record", cat, "c") is None
+    assert discover.benign_image("msedge", r"D:\Program Files\Edge\msedge.exe", "record", cat, "c") is None
+    assert discover.benign_image("explorer", r"D:\Windows\explorer.exe", "record", cat, "d") == "d:/windows/*"
+    # no drive in the run record: no Windows image is benign, and the check says why (a hole)
+    assert discover.benign_check("explorer", r"C:\Windows\explorer.exe", "record", cat, None) == (None, discover.NO_DRIVE)
+    assert discover.benign_check("explorer", r"C:\Windows\explorer.exe", "record", cat, "?") == (None, discover.NO_DRIVE)
+    assert discover.benign_check("firefox", "/usr/lib/firefox/firefox", "record", cat, None) == ("/usr/*", None)
+    spec = cat["benign_images"]
+    assert not any("?" in d for d in spec["dirs"] + spec["exclude"])
+    assert sorted(spec["exclude"]) == sorted("%%systemdrive%%/%s/*" % p for p in (
+        "windows/temp", "windows/tasks", "windows/tracing", "windows/registration", "windows/system32/tasks",
+        "windows/system32/spool", "windows/syswow64/tasks"))
+
+
+def test_redo2_d3_both_evasions_are_in_the_catalog_and_both_new_rules_holes():
+    evasion = " ".join(CATALOG["benign_images"]["evasion"])
+    for words in ("another drive's windows/", "a user-writable place under SystemRoot"):
+        assert words in evasion, words
+        for rule_id in host.NEW_RULES:
+            rule = next(r for r in RULES if r.id == rule_id)
+            assert any(words in h for h in rule.holes), (rule_id, words)
+    text = Path(discover.CATALOG).read_text(encoding="utf-8")
+    path = Path(os.environ["HOME"]) / "endpoints.yaml"
+    path.write_text(text.replace('"%systemdrive%/windows/*"', '"?:/windows/*"'), encoding="utf-8")
+    with pytest.raises(discover.CatalogError, match="benign_images.dirs"):
+        discover.load_catalog(str(path))
+
+
+def test_redo2_d3_a_round_without_the_drive_takes_no_windows_image_as_benign_said_as_a_hole(tmp_path):
+    before = dict(inv("benign/windows-desktop:before"), system_drive=None)
+    after = dict(inv("benign/windows-desktop"), system_drive=None)
+    w, clock = make_host(tmp_path, [before, after])
+    run_rounds(w, clock, 2)
+    explorer = next(t for t in w.trees.values() if t["image"] == "explorer")
+    assert not explorer["benign"] and explorer["knocked"]
+    (hole,) = [h for h in w.holes if h["kind"] == "benign-no-drive"]
+    assert hole["round"] == 2 and "explorer pid" in hole["detail"] and discover.NO_DRIVE in hole["detail"]
+    assert inv("benign/windows-desktop")["system_drive"] == "c" and inv("linux")["system_drive"] is None
+
+
+def test_redo2_d3_hostwin_records_systemroots_drive_in_run_json(tmp_path, monkeypatch):
+    import test_hostwin
+    from raqib import hostwin
+    assert hostwin.system_drive("C:\\Windows") == "c" and hostwin.system_drive("E:\\WINDOWS") == "e"
+    assert hostwin.system_drive(None) is None and hostwin.system_drive("\\\\server\\share\\Windows") is None
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(hostwin, "Api", lambda: test_hostwin.Samples(test_hostwin.KIMI1, 1))
+    monkeypatch.setattr(discover.time, "sleep", lambda s: None)
+    monkeypatch.setattr(notify, "windows_root", lambda environ, isdir=None: ("D:\\Windows", None))
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["discover", "--samples", "1", "--every", "0", "--home", str(tmp_path), "--save", "live-run",
+                     "--json", "-o", "live.json"], out=io.StringIO()) == 1
+    assert json.loads((tmp_path / "live-run" / "run.json").read_text(encoding="ascii"))["system_drive"] == "d"
+    assert json.loads((tmp_path / "live.json").read_text(encoding="ascii"))["system_drive"] == "d"
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert cli.main(["discover", "--from", "live-run", "--json", "-o", "replay.json"], out=io.StringIO()) == 1
+    assert json.loads((tmp_path / "replay.json").read_text(encoding="ascii"))["system_drive"] == "d"
+    # the host round's reader carries it too
+    monkeypatch.setattr(sys, "platform", "win32")
+    got = host.live_reader(CATALOG, 0.0, "win32", homes=[])()
+    assert got["system_drive"] == "d"
+    monkeypatch.setattr(notify, "windows_root", lambda environ, isdir=None: (None, "SystemRoot is not set"))
+    assert host.live_reader(CATALOG, 0.0, "win32", homes=[])()["system_drive"] is None
+
+
+def test_redo2_d6_an_unparseable_heartbeat_refuses_the_second_watch_naming_the_state_file(tmp_path, _home, capsys,
+                                                                                          monkeypatch):
+    w, clock = make_host(tmp_path, ["linux"])
+    w.tick(wait=30)
+    state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    for beat in ("not a time", None, 12):
+        Path(w.state_path).write_text(json.dumps(dict(state, heartbeat=beat)), encoding="ascii")
+        with pytest.raises(host.HostError, match="heartbeat that cannot be parsed") as got:
+            make_host(tmp_path, ["linux"])
+        assert w.state_path in str(got.value)
+    monkeypatch.setattr(host, "live_reader", lambda catalog, window, platform: lambda: inv("linux"))
+    path = _home / ".raqib" / "host" / "rounds.jsonl.watch.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(state, heartbeat="garbled")), encoding="ascii")
+    assert cli.main(["watch", "--host", "--rounds", "1", "--no-notify", "--no-open", "--port", "0"],
+                    out=io.StringIO()) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and str(path) in err and "cannot be parsed" in err
+    path.write_text(json.dumps(dict(state, heartbeat="garbled", finished="2026-11-04T00:00:00.000Z")), encoding="ascii")
+    make_host(tmp_path, ["linux"])     # a finished state is no other watch
+
+
+def comparison_line():
+    """The D-7 comparison of .github/workflows/gate.yml, as CI runs it."""
+    text = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
+    (line,) = [x.strip() for x in text.splitlines() if x.strip().startswith('python -c "import json, os, re; inv =')]
+    return line[len('python -c "'):-1]
+
+
+def test_redo2_d7_the_ci_comparison_is_over_pids_in_both_and_gone_between_is_not_a_failure(tmp_path):
+    import subprocess
+    code = comparison_line()
+    report = ("TREES SEEN: 2 (2 now)\n  [candidate] pid 2100 claude (named: x): now\n"
+              "  [act-root] pid 10728 kimi (unknown): now\n")
+
+    def run(candidates, text, nt):
+        (tmp_path / "host-discover.json").write_text(json.dumps({"candidates": candidates}), encoding="ascii")
+        (tmp_path / "host.txt").write_text(text, encoding="utf-8")
+        shim = "import os; os.name = %r; exec(%r)" % ("nt" if nt else "posix", code)
+        return subprocess.run([sys.executable, "-c", shim], cwd=tmp_path, capture_output=True, text=True)
+    both = [{"pid": 2100, "image": "claude"}, {"pid": 4242, "image": "gone"}]
+    for nt in (True, False):
+        done = run(both, report, nt)
+        assert done.returncode == 0, done
+        assert "in both: [2100]" in done.stdout and "gone between: pid 4242" in done.stdout
+    done = run([{"pid": 4242, "image": "gone"}], report, True)      # no candidate pid at all on Windows: fail
+    assert done.returncode != 0 and "no discover candidate pid among the watch trees on Windows" in done.stderr
+    assert run([{"pid": 4242, "image": "gone"}], report, False).returncode == 0
+    assert run([], report, False).returncode == 0 and run([], report, True).returncode != 0

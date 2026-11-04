@@ -202,19 +202,12 @@ jobs:
           assert seen, text[-2000:]
           trees = re.findall(r"^  \[(candidate|act-root)\] pid ([0-9]+) (\S+) \((named|unknown)", text, re.M)
           print("trees:", trees)
-          assert int(seen.group(1)) == len(trees) and (trees or "NO AGENT SEEN in 2 round(s)" in text), text[-2000:]
-          # C-8: the runner's trees, as discover saw them in this job, are the watch's trees.
-          inv = json.load(open("host-discover.json", encoding="ascii"))
-          want = sorted({c["pid"] for c in inv["candidates"]})
-          got = {int(pid) for _, pid, _, _ in trees}
-          print("discover candidates:", [(c["pid"], c["image"]) for c in inv["candidates"]])
-          assert set(want) <= got, ("discover candidate pid(s) missing from the watch's trees", sorted(set(want) - got))
-          if os.name == "nt":
-              assert want, "no candidate on the Windows runner (M7.1 found the Actions agents)"
+          assert int(seen.group(1)) == len(trees) and (trees or "NO AGENT SEEN in 2 round(s) that read records" in text), text[-2000:]
           # C-10: history trees only, nothing new, every round read: exit 0 on windows.
           new = re.search(r"^FINDINGS: ([0-9]+)$", text, re.M)
           expect = 0 if os.name == "nt" else None
-          if expect is not None and new and new.group(1) == "0" and "reader-" not in text:
+          # REDO-2 D-2: an unread round or unread lines are a hole (exit 3), so CLEAN is expected without them.
+          if expect is not None and new and new.group(1) == "0" and not re.search(r"reader-|round-unread|lines-unread", text):
               assert int(os.environ["HOST_EXIT"]) == expect and result.group(1) == "CLEAN", result.group(0)
           record = re.search(r"^record: (.+); latest inventory: (.+)$", text, re.M)
           lines = [json.loads(x) for x in open(record.group(1), encoding="ascii").read().splitlines()]
@@ -228,6 +221,11 @@ jobs:
           assert state["run"] == run, state["run"]
           print("watch --host: OK, %s tree(s), %s" % (seen.group(1), result.group(0)))
           EOF
+          # C-8 / REDO-2 D-7: discover's candidates against the report's trees, over the pids in both; a candidate
+          # pid absent from the report exited between the two snapshots ("gone between", not a failure); on
+          # Windows at least one candidate pid must be in both (M7.1 found the Actions agents). One line, so
+          # tests/test_host.py runs it as CI does.
+          python -c "import json, os, re; inv = json.load(open('host-discover.json', encoding='ascii')); text = open('host.txt', encoding='utf-8', errors='replace').read(); want = sorted({c['pid'] for c in inv['candidates']}); got = {int(p) for p in re.findall(r'^  \[(?:candidate|act-root)\] pid ([0-9]+) ', text, re.M)}; both = [p for p in want if p in got]; gone = [p for p in want if p not in got]; print('discover candidates: %s; in both: %s' % ([(c['pid'], c['image']) for c in inv['candidates']], both)); [print('gone between: pid %d (a discover candidate not in the report: it exited between the two snapshots)' % p) for p in gone]; assert both or os.name != 'nt', ('no discover candidate pid among the watch trees on Windows', want, sorted(got))"
           # Doctor from the venv (exit 1 here: see the exact MISSING lines below).
           mkdir -p project
           set +e; raqib doctor project > doctor.txt 2>&1; code=$?; set -e

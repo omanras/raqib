@@ -97,7 +97,7 @@ def inventory(name, catalog):
                 line for line in text.splitlines(True)
                 if not (kind == "win-tcp" and _owner_of(line) in pids)
                 and not (kind == "proc-net" and _inode_of(line) in inodes)), error)
-        return discover.run(texts, catalog, holes=holes)
+        return discover.run(texts, catalog, holes=holes, run=host_record(os.path.join(DISCOVER, *base.split("/"))))
     if name == "kimi-gone":
         texts, holes = discover.read_dir(os.path.join(DISCOVER, "kimi", "one-sample"))
         label, text, error = texts["win-process-1"]
@@ -106,7 +106,24 @@ def inventory(name, catalog):
         texts["win-process-1"] = (label + " (kimi.exe's tree left out: make.py)", "".join(kept), error)
     else:
         texts, holes = discover.read_dir(os.path.join(DISCOVER, *name.split("/")))
-    return discover.run(texts, catalog, holes=holes)
+    where = os.path.join(DISCOVER, "kimi", "one-sample") if name == "kimi-gone" else os.path.join(DISCOVER, *name.split("/"))
+    return discover.run(texts, catalog, holes=holes, run=host_record(where))
+
+
+SYSTEM_DRIVE = "c"
+
+
+def host_record(directory):
+    """D-3: the run record a host round carries. A Windows round of
+    `raqib watch --host` is read live by raqib/hostwin.py, which records
+    SystemRoot's drive; the Windows discover fixtures are the README loop's
+    exports (with a run.json that holds none, or none at all), so their rounds are given drive
+    "c" (SYSTEM_DRIVE), as hostwin would record it on such a host. A Linux
+    fixture has no run record."""
+    record = discover.run_record(directory)
+    if any(n.startswith("win-process") for n in os.listdir(directory)):
+        record = dict(record or {}, system_drive=SYSTEM_DRIVE)
+    return record
 
 
 def _pid_of(line):

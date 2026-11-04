@@ -95,7 +95,7 @@ RULES = (NEW_AGENT, NEW_UNKNOWN, DARK_LIVE)
 EXIT = {"clean": 0, "none-seen": 0, "alarm": 1, "incomplete": 3}   # C-10
 CITE_TEXT_MAX = 240                # the text of a cited record line on a host line (C-6)
 TAIL_BYTES = 1 << 20               # how much of rounds.jsonl is read at the start for its last line (C-2)
-READER_HOLES = ("reader-late", "reader-failed", "reader-out")
+READER_HOLES = ("reader-late", "reader-failed", "reader-out", "reader-held")
 DARK_ROUNDS = 3                    # AGENT-DARK-LIVE.yaml fires at streak 3 (a test holds them equal)
 HOLE_EVENT = "HOST-HOLE"
 EVERY_DEFAULT = 10.0
@@ -159,9 +159,10 @@ def live_reader(catalog, window=0.0, platform=None, homes=None):
     (--window S on Linux: S seconds of snapshots, 1 s apart), built into an
     inventory as `raqib discover` builds it live. Read-only (A4)."""
     def read():
+        info = {}     # D-3: the run record of this round (hostwin: SystemRoot's drive)
         texts, holes, _ = discover.collect_live(catalog, window=window, homes=homes, platform=platform,
-                                                win_samples=1, win_every=0.0)
-        return discover.run(texts, catalog, holes=holes, live=True)
+                                                win_samples=1, win_every=0.0, run_info=info)
+        return discover.run(texts, catalog, holes=holes, live=True, run=info)
     return read
 
 
@@ -231,17 +232,21 @@ def named(tree, catalog):
     return False, None
 
 
-def trees_of(inv, catalog):
+def trees_of(inv, catalog, no_drive=None):
     """{key: tree} of an inventory: its candidates and its act-roots, keyed
-    by (pid, image, started)."""
+    by (pid, image, started). no_drive (a list): the trees whose benign
+    check needed the system drive the run record did not give (D-3)."""
     out = {}
+    drive = inv.get("system_drive")
     for cls, group in (("candidate", inv.get("candidates") or []), ("act-root", inv.get("act_roots") or [])):
         for t in group:
             key = (t.get("pid"), t.get("image"), t.get("started"))
             if key in out:     # a pid both: the candidate stands
                 continue
             ok, why = named(t, catalog)
-            benign_by = discover.benign_image(t.get("image"), t.get("exe"), t.get("exe_from"), catalog)
+            benign_by, no = discover.benign_check(t.get("image"), t.get("exe"), t.get("exe_from"), catalog, drive)
+            if no and no_drive is not None:
+                no_drive.append("%s pid %s" % (t.get("image"), t.get("pid")))
             endpoints = []
             for talk in t.get("talks") or ():
                 eps = ["%s %s" % (m.get("vendor"), m.get("match")) for m in talk.get("endpoint") or ()]
@@ -273,6 +278,12 @@ def cite_text(text):
 def run_id(started, pid):
     """C-2: a host watch's run id, its start time (UTC, ms) and its pid."""
     return "%s-%d" % (iso(started).replace("-", "").replace(":", ""), pid)
+
+
+def nothing_read(inv):
+    """D-2: True when a round's inventory says nothing was read (no record
+    from any source)."""
+    return not inv.get("records") or any(str(a).startswith("nothing read") for a in inv.get("alarms") or ())
 
 
 def tree_word(key):
@@ -319,6 +330,7 @@ class HostWatch:
         self.worker_round = None
         self.worker_late = False
         self.worker_began = None
+        self.round_began = None      # D-1: when the latest attempted round began (a held one: its deadline)
         self.stopping = False        # C-3: Stop was asked; no new round starts
         self.newline_owed = False    # C-2: rounds.jsonl ended in a torn line; the next line starts on its own
         self.next_round = self.t0
@@ -368,7 +380,9 @@ class HostWatch:
     def _refuse_second(self):
         """HostError when another host watch holds this home: its state is
         not finished and its heartbeat is fresh (stale after its own
-        stale_after_seconds, as every watch reads it)."""
+        stale_after_seconds, as every watch reads it), or (D-6) its
+        heartbeat cannot be parsed. Two watches started in the same instant
+        both find no state: a recorded hole (D-6)."""
         try:
             with open(self.state_path, encoding="ascii") as f:
                 other = json.load(f)
@@ -379,8 +393,11 @@ class HostWatch:
         try:
             beat = datetime.datetime.strptime(str(other.get("heartbeat")), "%Y-%m-%dT%H:%M:%S.%fZ").replace(
                 tzinfo=datetime.timezone.utc).timestamp()
-        except ValueError:
-            return
+        except ValueError:   # D-6: an unknown state is not clearance (A3)
+            raise HostError("the host watch state %s holds a heartbeat that cannot be parsed (%s) and is not"
+                            " finished: another raqib watch --host may be watching this home; one host watch per"
+                            " home; stop it, or remove that file once no host watch runs" % (
+                                self.state_path, _safe(str(other.get("heartbeat"))[:40])))
         stale = other.get("stale_after_seconds")
         stale = stale if isinstance(stale, (int, float)) and not isinstance(stale, bool) else STALE_SECONDS
         age = self.wall_clock() - beat
@@ -477,9 +494,15 @@ class HostWatch:
         return self.worker is None or now - self.worker_began >= self.deadline_seconds
 
     def done_rounds(self, now=None):
-        """True when --rounds N have run and none is out, or the one out is
-        past its deadline (C-3)."""
-        return self.rounds_max is not None and self.rounds >= self.rounds_max and self.settled(now)
+        """D-1 (C-3): True when --rounds N rounds have been attempted. A
+        round is attempted when its reader came back or reached its deadline
+        (2 x T, a reader-late hole); while that reader is still out each
+        further round is held at the deadline (a reader-held hole: never two
+        readers at once) and is attempted too. So the watch ends at the N-th
+        round's deadline at the latest, whatever the reader does."""
+        now = self.clock() if now is None else now
+        return self.rounds_max is not None and self.rounds >= self.rounds_max and (
+            self.worker is None or now - self.round_began >= self.deadline_seconds)
 
     def tick(self, now=None, wait=0.0):
         """One step. wait: real seconds to wait for a reader that is out
@@ -501,7 +524,7 @@ class HostWatch:
             self.rounds += 1
             self.worker_round = self.rounds
             self.worker_late = False
-            self.worker_began = now
+            self.worker_began = self.round_began = now
             self.next_round = max(self.next_round + self.every, now)
             self.worker = Worker(self.reader)
         if self.worker is None:
@@ -525,6 +548,16 @@ class HostWatch:
                               round_=self.worker_round)
             self._say(now, "%s round %d: the reader is not back within %g s (%s)" % (
                 HOLE_EVENT, self.worker_round, self.deadline_seconds, hole["notice"]))
+        # D-1: under --rounds N, a round the late reader holds up is attempted at the deadline, as a hole
+        while (self.worker_late and self.rounds_max is not None and self.rounds < self.rounds_max
+               and not self.stopping and now - self.round_began >= self.deadline_seconds):
+            self.rounds += 1
+            self.round_began += self.deadline_seconds
+            self._hole(now, "reader-held", "round %d: not read: the reader of round %d is still out (%.1f s);"
+                       " never two readers at once, so this round is attempted without one" % (
+                           self.rounds, self.worker_round, now - self.worker_began), round_=self.rounds)
+            self._say(now, "%s round %d: not read: round %d's reader is still out" % (
+                HOLE_EVENT, self.rounds, self.worker_round))
 
     def _record(self, line):
         line["run"] = self.run           # C-2: every line names its run
@@ -555,12 +588,27 @@ class HostWatch:
         self.applied += 1
         self.last_inventory = inv
         self.results.append(inv.get("result"))
+        # D-2: a round whose inventory read nothing is an unread round; lines that could not be read are a hole
+        nothing = nothing_read(inv)
+        problems = inv.get("problems") or []
+        if nothing:
+            self._hole(now, "round-unread", "round %d: nothing read: the inventory holds no record from any"
+                       " source (A3): an unread round, not \"no agent seen\"" % n, round_=n)
+        if problems:
+            self._hole(now, "lines-unread", "round %d: %d line(s) could not be read (A3): %s" % (
+                n, len(problems), "; ".join(cite_text("%s:%s %s" % (p.get("src"), p.get("line"), p.get("reason"))
+                                                    if isinstance(p, dict) else str(p)) for p in problems[:3])),
+                       round_=n)
         first = self.history_round is None
         if first:
             self.history_round = n
         sample = sample_of(inv)
         ts = self.at(now)
-        current = trees_of(inv, self.catalog)
+        no_drive = []
+        current = trees_of(inv, self.catalog, no_drive)
+        if no_drive:   # D-3: said as a hole, once per round
+            self._hole(now, "benign-no-drive", "round %d: %s; judged as not benign: %s" % (
+                n, discover.NO_DRIVE, ", ".join(no_drive)), round_=n)
         lines, new, back, gone, benign_new = [], [], [], [], []
         for key in sorted(current, key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
             t = current[key]
@@ -683,6 +731,7 @@ class HostWatch:
         record = {"round": n, "at": ts, "seconds": round(seconds, 3), "late": late, "error": None,
                   "sample": sample, "records": inv.get("records"), "holes": len(inv.get("holes") or []),
                   "incomplete": list(inv.get("incomplete") or []), "result": inv.get("result"),
+                  "nothing_read": nothing, "unread_lines": len(problems),
                   "trees": sorted(tree_word(k) for k in current),
                   "candidates": sum(1 for t in current.values() if t["class"] == "candidate"),
                   "act_roots": sum(1 for t in current.values() if t["class"] == "act-root"),
@@ -703,6 +752,10 @@ class HostWatch:
     def round_text(self, r):
         head = "round %d%s: %s records read, %s holes" % (r["round"], " (late, %.1f s)" % r["seconds"] if r["late"]
                                                           else "", r["records"], r["holes"])
+        if r.get("unread_lines"):
+            head += ", %d line(s) could not be read" % r["unread_lines"]
+        if r.get("nothing_read"):   # D-2: never "no agent seen" of a round that read nothing
+            return "%s; NOTHING READ: an unread round (%s). Not a clearance." % (head, r["sample"])
         if not r["trees"]:
             return "%s; NO AGENT SEEN (%s; %s). Not a clearance." % (head, r["sample"], r["result"])
         parts = ["%d tree(s) now: %d candidate(s), %d act-root(s)" % (len(r["trees"]), r["candidates"], r["act_roots"])]
@@ -753,6 +806,14 @@ class HostWatch:
                 {f["rule_id"] for f in self.findings}))))
         if not self.applied:
             incomplete.append("no round gave an inventory: nothing read (A3)")
+        unread_rounds = sorted({h.get("round") for h in self.holes if h["kind"] == "round-unread"}, key=str)
+        if unread_rounds:   # D-2: exit 3, never none-seen
+            incomplete.append("%d round(s) read nothing (round %s): unread round(s)" % (
+                len(unread_rounds), ", ".join(map(str, unread_rounds))))
+        lines_unread = [h for h in self.holes if h["kind"] == "lines-unread"]
+        if lines_unread:    # D-2: a hole, exit 3 unless a finding makes it 1
+            incomplete.append("%d round(s) with line(s) that could not be read (round %s)" % (
+                len(lines_unread), ", ".join(str(h.get("round")) for h in lines_unread)))
         reader = [h for h in self.holes if h["kind"] in READER_HOLES]
         unread = sorted({h.get("round") for h in reader if h["kind"] != "reader-late"}, key=str)
         late = sorted({h.get("round") for h in reader if h["kind"] == "reader-late"}, key=str)
@@ -764,7 +825,7 @@ class HostWatch:
                 len(late), self.deadline_seconds, ", ".join(map(str, late))))
         if "incomplete" in self.results:
             incomplete.append("%d round(s) whose inventory is incomplete" % self.results.count("incomplete"))
-        others = [h for h in self.holes if h not in reader]
+        others = [h for h in self.holes if h not in reader and h["kind"] not in ("round-unread", "lines-unread")]
         if others:
             incomplete.append("%d hole(s) of the watch" % len(others))
         if self.state_error:
@@ -804,9 +865,15 @@ class HostWatch:
                 " (benign: %s, not knocked)" % t["benign_by"] if t.get("benign") else "", t["last_round"], t["acts"],
                 "; endpoints %s" % ", ".join(t["endpoints"]) if t["endpoints"] else "",
                 "; %s %s" % (NEW_AGENT if t["named"] else NEW_UNKNOWN, t["knocked"]) if t["knocked"] else ""))
-        if not self.trees:
-            out.append("  NO AGENT SEEN in %d round(s) with an inventory (records read: %s). Not a clearance." % (
-                self.applied, ", ".join(str(r.get("records")) for r in self.round_lines if not r.get("error")) or "none"))
+        if not self.trees:   # D-2: "no agent seen" only of rounds that read records
+            read = [r for r in self.round_lines if not r.get("error") and not r.get("nothing_read")]
+            unread = [r for r in self.round_lines if not r.get("error") and r.get("nothing_read")]
+            if read:
+                out.append("  NO AGENT SEEN in %d round(s) that read records (records read: %s). Not a clearance." % (
+                    len(read), ", ".join(str(r.get("records")) for r in read)))
+            if unread or not read:
+                out.append("  NOTHING READ in %d round(s): no agent is said seen or unseen there (A3)." % (
+                    len(unread) + (self.rounds - self.applied if not read else 0)))
         out.append("FINDINGS: %d" % len(self.findings))
         for f in self.findings:
             out.append("  [%s] %s round %d (%s): %s; %s; cites %s" % (
@@ -827,7 +894,8 @@ class HostWatch:
         out.append("NOTIFICATIONS: %s; sent %d, terminal %d, failed %d, folded %d (%d still waiting), off %d" % (
             self.notifier.band()[1].replace("notifications: ", "", 1), counts["sent"], counts["terminal"],
             counts["failed"], counts["folded"], sum(n["folded_waiting"].values()), counts["off"]))
-        why = {"clean": "trees listed, nothing new", "none-seen": "no tree seen; not a clearance",
+        why = {"clean": "trees listed, nothing new", "none-seen": "no tree seen in rounds that read records; not a"
+               " clearance",
                "alarm": "a finding", "incomplete": "a round could not be read or the watch has a hole"}[result]
         out += ["", "ALARMS: %s" % ("; ".join(reasons) if result == "alarm" else "none"),
                 "INCOMPLETE: %s" % ("; ".join(reasons) if result == "incomplete" else "none"),
@@ -1033,8 +1101,10 @@ def loop(running, stop=None):
             if watcher.done_rounds():
                 out.write("raqib watch --host: %d round(s) done (--rounds)%s\n" % (
                     watcher.rounds, "" if watcher.worker is None else
-                    "; round %d's reader is past its deadline (%g s) and is left out: a hole" % (
-                        watcher.worker_round, watcher.deadline_seconds)))
+                    "; round %d's reader is past its deadline (%g s) and is left out: a hole%s" % (
+                        watcher.worker_round, watcher.deadline_seconds,
+                        "; round(s) %d..%d attempted without a reader (D-1)" % (watcher.worker_round + 1, watcher.rounds)
+                        if watcher.rounds > watcher.worker_round else "")))
                 break
             if stopped is None and stop is not None and stop.is_set():
                 stopped = stop.reason

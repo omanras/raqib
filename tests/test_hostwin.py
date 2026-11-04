@@ -377,7 +377,7 @@ def test_e2_a_sample_cites_the_api_and_the_reader_in_its_text():
     assert "CreateToolhelp32Snapshot" in texts["win-process-1"][0] and "GetExtendedTcpTable" in texts["win-tcp-1"][0]
     assert "DnsGetCacheDataTable" in texts["win-dns-1"][0]
     assert info == {"apis": [hostwin.API_PROCESSES, hostwin.API_TCP, hostwin.API_DNS], "sample_times": [AT],
-                    "seconds_apart": 10, "self": [SELF]}
+                    "seconds_apart": 10, "self": [SELF], "system_drive": None}
 
 
 def test_e2_tcp_ports_are_network_byte_order_and_the_buffer_grows():

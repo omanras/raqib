@@ -5,7 +5,7 @@
    "input_meta": {
     "acts": 19,
     "benign": true,
-    "benign_by": "?:/windows/*",
+    "benign_by": "c:/windows/*",
     "candidate_before": false,
     "cites": [
      {
