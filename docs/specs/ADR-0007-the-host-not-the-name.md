@@ -220,3 +220,41 @@ raqib/discover/endpoints.yaml (one block), docs/specs/ADR-0002 (the Table).
 - C-13 (Q-1) One sample per round on Windows: accepted. (Q-4) engine.py
   CLASSES gains HOST; both rules move to class HOST. (Q-12) recorded.
 - C-14 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment D (the Table, 2026-11-04) - rulings on review 2026-11-04-M7.2-redo.md (b8e798a)
+CI run 41750630942 for b8e798a: six jobs success. The REDO met C-1a/b/c,
+C-2, C-4..C-9, C-11..C-13; two must-fixes remain. Verdict: REDO-2.
+- D-1 (R1, C-3, A3) `--rounds N` counts rounds attempted: a reader that
+  reaches its deadline is one attempted round (a reader-late hole), so the
+  watch ends at N whatever the reader does. Test: rounds=2 with a reader
+  that never returns ends at the second deadline.
+- D-2 (R2, C-10, rule 4) A round whose discover result says nothing was read
+  is an unread round: exit 3. A round with lines that could not be read is
+  a hole: exit 3 unless a finding makes it 1. "No agent seen" is said only
+  of a round that read records. Tests for both.
+- D-3 (R3, C-1d) The benign directories are the system drive's only: the
+  Windows globs are rooted at the SystemRoot drive the reader recorded in
+  run.json (no `?:`), and the user-writable places under it are excluded
+  by name (windows/temp, windows/tasks, windows/tracing,
+  windows/registration, windows/system32/tasks, windows/system32/spool,
+  windows/syswow64/tasks). Both evasions join the catalog's list and the two
+  NEW rules' holes. Test: an image under windows/temp is not benign.
+- D-4 (R4, C-1e, builder's R-1) Accepted as stated: NEW-AGENT-UNKNOWN fires
+  on both benign arrivals (1.0 on the arrivals, 0.4 on the measured set),
+  because per-user IDE installs live where agents live; widening
+  benign_images to user directories would hand agents their evasion. The
+  YAML keeps both numbers. Whether medium is the right weight for an
+  unknown tree on a desktop is the commander's field decision, beside the
+  act-root budget already on his list (night-status 2026-11-03).
+- D-5 (R9) The third rule NEW-AGENT-UNKNOWN, its ADR-0002 row and "Ratio
+  after M7.2: 4 : 7 : 9" are confirmed by the Table. Ledger: the Table's
+  ADR-0002 note on the branch broke the starting gate (the table parser
+  took its rows as M4.3's); the REDO's parser fixed it.
+- D-6 (R7) A heartbeat that cannot be parsed refuses the second watch with a
+  line naming the state file (an unknown state is not clearance, A3). Two
+  watches started in the same instant are a recorded hole.
+- D-7 (R8) The CI step compares discover's candidates with the report's
+  trees over pids alive in both snapshots; a pid gone between the two is
+  printed as "gone between", not a failure.
+- D-8 Recorded: R5, R6, R10, R11 (exe_from in --json: API).
+- D-9 Every REDO-2 change carries a test (rule D-8 of ADR-0005).
