@@ -72,4 +72,4 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.2 `raqib watch --host`: continuous discovery, NEW-AGENT / NEW-AGENT-UNKNOWN / AGENT-DARK-LIVE (landed 2026-11-04, merge b3e5ba4; kinds 4 : 7 : 9)
 - M7.2b reading sources attach themselves: os / host record per tree; hooks only with --attach-hooks (Amendment H; landed 2026-11-04, merge 0e0956d; kinds 4 : 7 : 10)
 - M7.3 the window starts from the host (landed 2026-11-04, merge 843aa72; ADR-0007 accepted)
-- M7.4 rhythm (ADR-0004 layer 3) and suspicion on unknown trees
+- M7.4 rhythm (HOST-RHYTHM) and suspicion on unknown trees (landed 2026-11-04 locally; kinds 4 : 7 : 11; CI held - Actions minutes)
