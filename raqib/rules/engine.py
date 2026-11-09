@@ -202,10 +202,17 @@ def load_rule(path):
     return rule
 
 
-def load_catalog(directory):
+def load_catalog(directory, overlay=None, user_rules=None):
     """Load every *.yaml rule in a directory, sorted by id. A missing or empty
     catalog, or a rule file with another extension, is an error: no rules
-    must never look like no findings (A3)."""
+    must never look like no findings (A3).
+
+    M7.6 (ADR-0008): with overlay (the path of ~/.raqib/rules.yaml) or
+    user_rules (the directory ~/.raqib/rules.d), raqib/overlay.py's build()
+    adds the person's rules the loader and the fixture runner accept and
+    applies the overlay on top; the result is an overlay.Catalog, a list
+    whose .overlay says what was applied, refused or is a hole. Without
+    them the catalog is read exactly as before (the gate, check-rules)."""
     directory = str(directory)
     if not os.path.isdir(directory):
         raise RuleError("%s: rule catalog directory not found" % directory)
@@ -221,7 +228,11 @@ def load_catalog(directory):
         if rule.id in seen:
             raise RuleError("%s: duplicate rule id %s" % (rule.source, rule.id))
         seen.add(rule.id)
-    return rules
+    if overlay is None and user_rules is None:
+        return rules
+    from raqib import overlay as person   # imported here: overlay imports this module
+    return person.build(rules, overlay=None if overlay is None else str(overlay),
+                        user_rules=None if user_rules is None else str(user_rules))
 
 
 def compile_rule(doc, source="<rule>"):
@@ -266,9 +277,12 @@ def compile_rule(doc, source="<rule>"):
         if not (isinstance(paths, list) and paths):
             bad("fixtures.%s" % kind, "must be a non-empty list (every rule has both)")
         for p in paths:
-            if not (isinstance(p, str) and p and not p.startswith("/")
-                    and ".." not in p.split("/")):
-                bad("fixtures.%s" % kind, "%r must be a relative path inside the repo" % (p,))
+            why = fixture_path_problem(p)
+            if why:   # M7.6 REDO A-1: one check on every OS, under both path rules
+                bad("fixtures.%s" % kind, "%r must be a relative path inside the repo (%s)" % (p, why))
+    both = sorted(set(fixtures["positive"]) & set(fixtures["negative"]))
+    if both:   # M7.6 REDO A-4 (ADR-0008): a fixture cannot measure a rule both ways; no budget excuses it
+        bad("fixtures", "%s listed as both positive and negative" % ", ".join(repr(p) for p in both))
     agg = doc.get("aggregate")
     if agg is not None:
         if not isinstance(agg, dict) or not {"distinct", "over"} <= set(agg) \
@@ -300,6 +314,31 @@ def compile_rule(doc, source="<rule>"):
         return Rule(doc, source)
     except _NodeError as exc:
         raise RuleError("%s: %s" % (source, exc))
+
+
+def fixture_path_problem(path):
+    r"""M7.6 REDO A-1 (ADR-0008 Amendment A): why a fixture path is not a
+    relative path that stays inside the directory it is joined to under the
+    POSIX AND the Windows path rules alike, on every OS; None when it is
+    one. Refused: a non-string or empty path; a root (a leading / or \, so
+    also //server and \\?\); a colon anywhere (a drive C: or C:x, an NTFS
+    stream); a .. component, split on / and \ both; a path that names no
+    file (only . components). ntpath's rules are those
+    separators, roots and drives, written out here because the gate's
+    child pre-imports only PREIMPORT (tools/gate.py) before a rule file is
+    imported; raqib/overlay.py joins every path under ntpath too."""
+    if not (isinstance(path, str) and path):
+        return "not a non-empty string"
+    if path[0] in "/\\":
+        return "a root (/ or \\)"
+    if ":" in path:
+        return "a drive or a colon"
+    parts = re.split(r"[\\/]", path)
+    if ".." in parts:
+        return "a .. component"
+    if all(p in ("", ".") for p in parts):
+        return "no file name (it is the directory itself)"
+    return None
 
 
 def check_kind(doc, source="<rule>"):

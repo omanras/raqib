@@ -6,7 +6,19 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
   rules TRACE [-o FILE] [--scope P]... [--handoff FILE] [--gap-seconds N]
       Run the silence rules and the rule catalog on a trace. Findings go to
       FILE (one JSON finding per line; ADR-0001 section 6) or stdout. With -o,
-      FILE.notes.json records which rules did not run and why.
+      FILE.notes.json records which rules did not run and why. The catalog
+      is judged as its YAMLs declare it: the overlay below is the watches'.
+  rules [--set ID on|off | --threshold ID FIELD VALUE | --add FILE | --reset ID] [--json]
+      M7.6 (ADR-0008): with no TRACE, list every rule as the next watch will
+      load it (id, kind, class, severity, budget, status, origin, declared
+      thresholds with their bounds) from the package's catalog, the
+      person's rules in ~/.raqib/rules.d and the overlay ~/.raqib/rules.yaml,
+      with what the overlay applied or refused. --set, --threshold and
+      --reset change the overlay only (written atomically); --add validates a
+      rule file with the loader and the fixture runner and copies it, with
+      its fixtures, into ~/.raqib/rules.d. A change applies to the next
+      watch. Exit 2 when a change is refused (the reason on stderr), 0
+      otherwise.
   report TRACE [--findings FILE] [--scope P]... [--handoff FILE] [--json]
       Show the findings with the trace lines they cite (A5), the alarms, the
       rules that did not run (A3) and every rule's fp_budget (A6). Without
@@ -190,6 +202,7 @@ from raqib import app as window_app
 from raqib import discover
 from raqib import doctor
 from raqib import host
+from raqib import overlay
 from raqib import eval as evaluation
 from raqib import report
 from raqib import ui
@@ -218,8 +231,12 @@ def _parser():
     p = argparse.ArgumentParser(prog="raqib", description="Raqib: an external watcher for AI agents.")
     sub = p.add_subparsers(dest="command", required=True)
 
-    def rule_options(sp):
-        sp.add_argument("trace", help="trace file written by raqib/hooks/capture.py")
+    def rule_options(sp, trace_optional=False):
+        if trace_optional:   # M7.6: `raqib rules` with no TRACE lists and changes the rules (ADR-0008)
+            sp.add_argument("trace", nargs="?", default=None,
+                            help="trace file written by raqib/hooks/capture.py (none: list the rules)")
+        else:
+            sp.add_argument("trace", help="trace file written by raqib/hooks/capture.py")
         sp.add_argument("--scope", action="append", default=[], metavar="PATH",
                         help="a path of the task's declared scope (repeatable)")
         sp.add_argument("--handoff", metavar="FILE",
@@ -229,9 +246,16 @@ def _parser():
                         help="SILENCE-GAP limit (default: RAQIB_GAP_SECONDS or 60)")
         sp.add_argument("--catalog", default=CATALOG, metavar="DIR", help="rule catalog directory")
 
-    r = sub.add_parser("rules", help="write findings for a trace")
-    rule_options(r)
+    r = sub.add_parser("rules", help="write findings for a trace; with no TRACE, list and choose the rules (ADR-0008)")
+    rule_options(r, trace_optional=True)
     r.add_argument("-o", "--out", metavar="FILE", help="findings file (default: stdout)")
+    change = r.add_mutually_exclusive_group()
+    change.add_argument("--set", nargs=2, metavar=("ID", "on|off"), help="no TRACE: turn a rule on or off (the overlay)")
+    change.add_argument("--threshold", nargs=3, metavar=("ID", "FIELD", "VALUE"),
+                        help="no TRACE: set a declared threshold of a rule, within its bounds (the overlay)")
+    change.add_argument("--add", metavar="FILE", help="no TRACE: validate a rule file and copy it into ~/.raqib/rules.d")
+    change.add_argument("--reset", metavar="ID", help="no TRACE: remove a rule's entry from the overlay")
+    r.add_argument("--json", action="store_true", help="no TRACE: print the listing as JSON")
     rep = sub.add_parser("report", help="report findings with their cited trace lines")
     rule_options(rep)
     rep.add_argument("--findings", metavar="FILE", help="use this findings file instead of running the rules")
@@ -438,7 +462,50 @@ def run_rules(records, rules, ctx, gap_seconds):
     return found + catalog_found + cross_found + tree_found, notes + cross_notes + tree_notes
 
 
+def rules_overlay_cmd(args, out):
+    """M7.6 E2: raqib rules [--set | --threshold | --add | --reset] [--json]."""
+    if args.out or args.scope or args.handoff or args.root or args.gap_seconds is not None or args.catalog != CATALOG:
+        raise UsageError("-o, --scope, --handoff, --root, --gap-seconds and --catalog apply to `raqib rules TRACE`")
+    said = None
+    try:
+        if args.set:
+            said = overlay.set_status(args.set[0], args.set[1])
+        elif args.threshold:
+            said = overlay.set_threshold(*args.threshold)
+        elif args.add:
+            said = overlay.add_rule(args.add)
+        elif args.reset:
+            said = overlay.reset(args.reset)
+    except overlay.OverlayError as exc:
+        raise UsageError("refused: %s" % exc)
+    rules = _overlay_catalog()
+    info = overlay.describe(rules)
+    if args.json:
+        out.write(json.dumps({"rules": overlay.listing(rules), "overlay": info, "said": said}, indent=2,
+                             sort_keys=True, ensure_ascii=True) + "\n")
+        return 0
+    if said:
+        out.write("raqib rules: %s\n" % said)
+    out.write(overlay.table_text(overlay.listing(rules)))
+    for line in overlay.start_lines(info):
+        out.write("raqib rules: %s\n" % line)
+    return 0
+
+
+def _overlay_catalog():
+    """M7.6: the catalog as every watch loads it: the package's, ~/.raqib/rules.d and ~/.raqib/rules.yaml."""
+    try:
+        return overlay.load()
+    except engine.RuleError as exc:
+        raise UsageError(str(exc))
+
+
 def cmd_rules(args, out):
+    if args.trace is None:
+        return rules_overlay_cmd(args, out)
+    if args.set or args.threshold or args.add or args.reset or args.json:
+        raise UsageError("--set, --threshold, --add, --reset and --json apply to `raqib rules` with no TRACE")
+    overlay_note()   # M7.6 REDO A-7
     numbered, problems = _read_trace(args.trace)
     rules = _catalog(args.catalog)
     records = [rec for _, rec in numbered]
@@ -551,7 +618,20 @@ def _report(args):
     return rep, numbered, problems
 
 
+def overlay_note(err=None):
+    """M7.6 REDO A-7 (ADR-0008 Amendment A, Q-2): `raqib rules TRACE`, report
+    and ui judge the catalog as declared; when an overlay file exists they
+    say so in one line, on stderr (stdout holds findings, JSON or HTML)."""
+    path = overlay.overlay_path()
+    if os.path.exists(path):
+        (err or sys.stderr).write("raqib: an overlay exists at %s; this command judges the catalog as declared\n"
+                                  % path)
+        return True
+    return False
+
+
 def cmd_report(args, out):
+    overlay_note()
     rep, _, _ = _report(args)
     if args.json:
         out.write(json.dumps(rep, indent=2, sort_keys=True, ensure_ascii=True) + "\n")
@@ -643,6 +723,7 @@ def cmd_suspect(args, out):
 
 
 def cmd_ui(args, out):
+    overlay_note()   # M7.6 REDO A-7
     gap = _gap_seconds(args)
     if args.refresh is not None and not args.serve:
         raise UsageError("--refresh applies to --serve: a static page never reloads itself")
@@ -846,8 +927,9 @@ def _discover_check(args, catalog, out):
 
 
 def _watch_setup():
-    """(rules, gap, evaluator) of `watch`, and of every watch `app` starts."""
-    rules = _catalog(CATALOG)
+    """(rules, gap, evaluator) of `watch`, and of every watch `app` starts.
+    M7.6: the rules are the catalog with ~/.raqib/rules.d and the overlay."""
+    rules = _overlay_catalog()
     try:
         gap = silence.gap_seconds_from(os.environ)
     except ValueError as exc:
@@ -862,7 +944,9 @@ def _watch_setup():
                     if ctx else "%s has no Scope: block: no scope; rules that need one do not run" % handoff)
         else:
             ctx, note = {}, "no HANDOFF.md in the project: no scope; rules that need one do not run"
-        return (lambda records: run_rules(records, rules, ctx, gap)), note
+        evaluate = (lambda records: run_rules(records, rules, ctx, gap))
+        evaluate.context = ctx   # M7.6: what a rule off would have judged is counted with the same context
+        return evaluate, note
     return rules, gap, evaluator
 
 
@@ -900,7 +984,7 @@ def _watch_host(args, out):
         catalog = discover.load_catalog(discover.CATALOG)
     except discover.CatalogError as exc:
         raise UsageError(str(exc))
-    rules = _catalog(CATALOG)
+    rules = _overlay_catalog()   # M7.6 (ADR-0008): the overlay and rules.d, said at the start
     if args.suspect_threshold is not None and args.suspect is None:
         raise UsageError("--suspect-threshold applies with --suspect")
     backend = None
@@ -931,7 +1015,7 @@ def cmd_app(args, out):
     # A-10: --log is the trace of the project on the command line only; Browse's projects get their default.
     options = window_app.Options(evaluator, rules, gap, log=args.log, no_notify=args.no_notify, port=args.port,
                                  refresh=args.refresh, log_project=os.path.abspath(args.project or "."),
-                                 every=every)
+                                 every=every, setup=_watch_setup)
     try:
         return window_app.run(args.project, options, out=out)
     except window_app.AppError as exc:

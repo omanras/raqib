@@ -567,7 +567,43 @@ def band_items(state):
     port = _dict(state.get("port"))
     if port.get("warning"):
         items.append(("incomplete", port["warning"]))
+    off = rules_off_text(state)
+    if off:   # M7.6 (ADR-0008 decision 3): a rule off is said, not silent
+        n = suppressed(state)   # M7.6 REDO A-2: red while an off rule would have fired
+        items.append(("alarm", "%s; %d finding(s) suppressed by the overlay" % (off, n)) if n else ("incomplete", off))
     return items
+
+
+def suppressed(state):
+    """M7.6 REDO A-2: how many findings the rules off would have made (rules_overlay.not_judged)."""
+    total = 0
+    for c in _dict(_dict(state.get("rules_overlay")).get("not_judged")).values():
+        n = _dict(c).get("fired")
+        total += n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+    return total
+
+
+OFF_REASON_MAX = 160
+
+
+def rules_off_text(state):
+    """M7.6: "N rules off: <ids>" from a state's rules_overlay, a person's
+    rule refused at load with "(refused: why)" (REDO A-5), or None."""
+    off = []
+    for o in _list(_dict(state.get("rules_overlay")).get("off")):
+        o = _dict(o)
+        if not o.get("rule_id"):
+            continue
+        why = o.get("refused")
+        if why:
+            why = str(why)
+            why = why if len(why) <= OFF_REASON_MAX else why[:OFF_REASON_MAX - 3] + "..."
+            off.append("%s (refused: %s)" % (o["rule_id"], why))
+        else:
+            off.append(str(o["rule_id"]))
+    if not off:
+        return None
+    return "%d rule%s off: %s" % (len(off), "" if len(off) == 1 else "s", ", ".join(off))
 
 
 BAND_LEVELS = ("alarm", "incomplete", "clean")

@@ -97,7 +97,7 @@ import threading
 import time
 import traceback
 
-from raqib import install, notify, report, ui
+from raqib import install, notify, overlay, report, ui
 from raqib.rules import silence, trace
 
 POLL_SECONDS = 0.5
@@ -289,6 +289,10 @@ class Watch:
         self.registry = None      # the Registry this watch is a row of (I-5)
         self.registry_state = None
         self.first_knock = None   # ADR-0006 A-12: the FirstFinding record of this watch, once it knocked
+        # M7.6 (ADR-0008): the overlay this watch started with, and what each rule off did not judge (A3, A6)
+        self.rules_overlay = overlay.describe(rules)
+        self.off_rules = [r for r in rules if r.status == "disabled"]
+        self.not_judged = {}
 
     # --- time and output -----------------------------------------------------
 
@@ -506,6 +510,9 @@ class Watch:
     def _judge(self, now):
         records = [rec for _, rec in self.numbered]
         self.found, self.notes = self.evaluate(records)
+        if self.off_rules:   # M7.6: run anyway, counted, never a finding (ADR-0008 decision 3)
+            self.not_judged = overlay.count_not_judged(self.off_rules, records,
+                                                       getattr(self.evaluate, "context", None) or {}, {})
         calls, first_pre, last_close, line_of = {}, {}, {}, {}
         for n, rec in self.numbered:
             at = (rec["session_id"], rec["seq"])
@@ -657,6 +664,9 @@ class Watch:
         try:
             rep = self.report()[0]
             body = report.render_text(rep)
+            if rep["result"] == "clean" and overlay.suppressed(self.not_judged):   # M7.6 REDO A-2: not "CLEAN" alone
+                body = body.replace("RESULT: CLEAN (exit", "RESULT: %s (exit" % overlay.clean_word(
+                    "CLEAN", self.not_judged), 1)
         except Exception as exc:
             body = "raqib watch: no final report: it could not be built (%s: %s)\n" % (type(exc).__name__,
                                                                                       _safe(exc))
@@ -845,6 +855,7 @@ class Watch:
             "capture": self.capture, "agent_gone": self.agent_gone(), "open_sessions": self.open_sessions(),
             "state_error": self.state_error, "refresh_seconds": self.refresh, "registry": self.registry_state,
             "first_knock": dict(self.first_knock) if self.first_knock else None,   # A-12
+            "rules_overlay": dict(self.rules_overlay, not_judged=self.not_judged),   # M7.6 (ADR-0008)
         }
         state["band"] = ui.status(state)[0]   # J-6: the owner's state word, for the pages of other watches
         return state
@@ -897,6 +908,10 @@ class Watch:
         if self.port and self.port.get("warning"):
             out.append("WARNING: %s" % self.port["warning"])
         out.append("")
+        rules_off = overlay.report_lines(self.rules_overlay, self.not_judged)   # M7.6 (ADR-0008 decision 3)
+        first = bool(overlay.suppressed(self.not_judged))   # REDO A-2: first when it suppressed anything
+        if first:
+            out += rules_off
         windows = [a for a in alarms if a["kind"] == "silence-window"]
         out.append("LIVE SILENCE WINDOWS (A3, limit %gs): %d" % (self.gap, len(windows)))
         out += ["  - %s" % a["detail"] for a in windows]
@@ -912,6 +927,8 @@ class Watch:
         out += ["  [%s] %s session %s %s: %s%s" % (
             e["severity"], e["rule_id"], e["session_id"], seq_text(e["cited_seq"]), e["notice"],
             "" if e["settled_by"] == "its lines" else " (settled by %s)" % e["settled_by"]) for e in settled]
+        if not first:
+            out += rules_off
         counts = notifier["counts"]
         out.append("NOTIFICATIONS: %s; sent %d, terminal %d, failed %d, folded %d (%d still waiting), off %d"
                    % (band, counts["sent"], counts["terminal"], counts["failed"], counts["folded"],
@@ -1247,6 +1264,8 @@ def start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_sec
     out.write("raqib watch: scope: %s\n" % _safe(scope))  # D-7: the agent can write HANDOFF.md
     out.write("raqib watch: silence limit %gs (RAQIB_GAP_SECONDS); polling every %gs\n" % (gap_seconds, POLL_SECONDS))
     out.write("raqib watch: %s\n" % notifier.band()[1])
+    for line in overlay.start_lines(watcher.rules_overlay):   # M7.6 (ADR-0008 decision 2): said at the start
+        out.write("raqib watch: %s\n" % _safe(line))
     if installed["code"] == 3:
         watcher.capture_off("the installer reports disableAllHooks: the hooks will not run")
     try:  # I-3: the hooks as doctor reads them (read-only), after the install
