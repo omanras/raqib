@@ -1,30 +1,30 @@
-# HANDOFF — M7.5  (phase 7: after the first field run, ADR-0007 Amendment M)
+# HANDOFF — M7.6  (the rules panel: overlay, `raqib rules`, the window's panel, ADR-0008)
 
-Task: the three lessons of the first field run (Windows + Kimi, 2026-11-04): a dark footprint whose
-tree was live in this watch is a note, not a knock; rhythm takes beats from every source; the knock
-that did not reach the commander is found and fixed.
+Task: the person chooses which rules watch and their declared thresholds from the window or the
+terminal; choices live in `~/.raqib/rules.yaml`, never in the package; a rule off is said everywhere.
 
 Scope:
-  raqib/host.py, raqib/notify.py, raqib/rules/catalog/AGENT-DARK-LIVE.yaml, raqib/rules/catalog/HOST-RHYTHM.yaml,
-  raqib/ui.py, raqib/app.py, tests/, README.md, docs/review/
+  raqib/overlay.py (new), raqib/rules/engine.py (load_catalog: overlay + rules.d), raqib/cli.py, raqib/watch.py
+  (start lines, watch.json), raqib/host.py (state, report), raqib/ui.py (band), raqib/app.py (the panel), tests/, README.md, docs/review/
 
 Exit criteria:
-- E1 AGENT-DARK-LIVE: a footprint whose linked tree was a candidate in THIS watch and then left
-     (gone) does not knock at streak 3: the line carries `input_meta.was_live: true`, the match
-     excludes it, report and page list it as "dark after a live tree (note)"; a footprint never
-     linked knocks as today. YAML says so; fixtures +(never live) -(live then gone) -(linked again).
-- E2 HOST-RHYTHM: the act beat comes from every source the tree has - host children, os
-     (Sysmon event 1) children with their UtcTime, and hook lines' Bash calls where hooks are
-     attached - all through one `act_beats(tree, round)`; the talk beat likewise from host
-     connections and os event 3. Fixtures: an os-source tree with 3 cycles fires; the same with
-     2 does not; a tree whose talks are os and acts are host fires. The YAML names the sources.
-- E3 The missing knock: reproduce the field run's order (AGENT-DARK-LIVE round 3, NEW-AGENT
-     round 10, AGENT-DARK-LIVE round 13) with the fake runner and assert three deliveries in
-     three toasts; if NEW-AGENT's knock was folded or held behind the first AGENT-DARK-LIVE
-     (shared limit id, fold token, or the FIRST-FINDING "by the rule" path), fix it so a high
-     NEW-AGENT always knocks on its own id; the final report prints every knock's status.
-- E4 Report, page and window show "note" lines apart from findings; a note is never an alarm. README:
-     two lines. Tests per criterion; fixtures regenerated only where E1/E2 change them (say why). Kinds 4 : 7 : 11.
-Not in scope: the rules control panel (next), new agents' catalog entries, macOS.
-Commit: `landed: M7.5 after the first field run` or `STOP: M7.5 <reason>`.
+- E1 `raqib/overlay.py`: read `~/.raqib/rules.yaml` (yamlite: `rules: {ID: {status: on|off, thresholds:
+     {field: value}}}`), validate against the catalog (unknown id/field, a value outside the YAML's
+     bounds, a non-eq field = refused with the reason; a malformed file = one hole, nothing applied),
+     apply on top (status -> engine disabled; thresholds -> the rule's eq value), write atomically;
+     `origin: user` rules from `~/.raqib/rules.d/*.yaml` join only when the loader and the fixture
+     runner accept them (A6).
+- E2 `raqib rules` lists every rule (id, kind, class, severity, budget, status, origin, thresholds); `--set ID on|off`, `--threshold ID FIELD VALUE`, `--add FILE`, `--reset ID`; exit 2 on refusal.
+- E3 Said, not silent: every watch prints the applied overlay at start, keeps it as `rules_overlay`
+     in watch.json / the host state, shows "N rules off: <ids>" in the band and the window's header,
+     and the final report lists each off rule with "since" and "not judged by <id> (off): M lines";
+     the exit code is unchanged.
+- E4 The panel: a "Rules" screen from the header - E2's table with on/off per rule, an edit per
+     threshold (bounds enforced), Add (file picker -> validation shown), Reset; writes the overlay
+     only; a running watch says "applies to the next watch"; nothing reaches a process or project (A4).
+- E5 Tests: overlay round trip, every refusal, apply (host.py reads the changed K/W/R and streak), a high
+     rule off still listed "not judged (off)" on a fixture with its finding, the CLI, the panel's state->text,
+     a Tk test (skips without a display). CI: `raqib rules` + a `--set`/`--reset` pair. README: 4 lines.
+Not in scope: the look pass (M7.6b), remote config, rules from the page, new rules.
+Commit: `landed: M7.6 the rules panel` or `STOP: M7.6 <reason>`.
 Read HANDOFF.md and do only the task it specifies.

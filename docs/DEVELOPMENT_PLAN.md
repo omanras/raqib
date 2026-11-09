@@ -73,5 +73,7 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.2b reading sources attach themselves: os / host record per tree; hooks only with --attach-hooks (Amendment H; landed 2026-11-04, merge 0e0956d; kinds 4 : 7 : 10)
 - M7.3 the window starts from the host (landed 2026-11-04, merge 843aa72; ADR-0007 accepted)
 - M7.4 rhythm (HOST-RHYTHM) and suspicion on unknown trees (landed 2026-11-04 locally; kinds 4 : 7 : 11; CI held - Actions minutes)
-- M7.5 after the first field run (ADR-0007 Amendment M): dark-after-live is a note; rhythm reads every source; the missing knock
-- M7.6 the rules control panel in the window (which rules run, thresholds, on/off per rule; a rule off is said in the report); the window's look
+- M7.5 after the first field run (landed 2026-11-09, merge 33c102d): dark-after-live a note within a 9-round window; rhythm reads every source; the KNOCKS ledger
+- M7.6 the rules panel (ADR-0008): overlay in ~/.raqib/rules.yaml, `raqib rules`, the window's panel, rules off said everywhere
+- M7.6b the window's look pass (ADR-0008 decision 6)
+- M7.7 os_sysmon writes ProcessId on process lines (ADR-0007 Amendment O); CROSS-SOURCE over host lines
