@@ -93,7 +93,7 @@ import threading
 import time
 import traceback
 
-from raqib import host as hostmod, notify, tray as traymod, ui, watch
+from raqib import host as hostmod, notify, overlay, tray as traymod, ui, watch
 
 TITLE = "Raqib"
 TICK_MS = 500                 # how often the window reads the state (after())
@@ -298,8 +298,12 @@ class Options:
 
     def __init__(self, evaluator, rules, gap_seconds, log=None, no_notify=False, port=None, refresh=None,
                  environ=None, home=None, log_project=None, every=None, catalog=None, host_reader=None,
-                 host_port=None, attach_hooks=False, host_kw=None):
+                 host_port=None, attach_hooks=False, host_kw=None, setup=None):
         self.evaluator = evaluator
+        # M7.6 (ADR-0008): setup() -> (rules, gap, evaluator), cli's _watch_setup: every watch the window starts
+        # loads the catalog with ~/.raqib/rules.d and the overlay afresh, so a change in the Rules panel applies
+        # to the next watch (a running watch keeps the rules it started with). None: the rules given (tests).
+        self.setup = setup
         # M7.2b (ADR-0007 H-1): the window's checkbox "attach hooks to Claude Code projects", off by default; only
         # when it is ticked does a host watch write into a project (the hook settings), as --attach-hooks does.
         self.attach_hooks = bool(attach_hooks)
@@ -328,6 +332,18 @@ class Options:
     def reader(self):
         """The host's reader: the live one of `raqib watch --host` (read-only, A4), or a test's."""
         return self.host_reader or hostmod.live_reader(self.host_catalog(), 0.0)
+
+    def rules_now(self):
+        """M7.6: the rules (and evaluator) of the next watch, from setup()
+        when there is one; a catalog that cannot be loaded is the watch's
+        start failure (watch.WatchError), never a crash."""
+        if self.setup is None:
+            return self.rules
+        try:
+            self.rules, self.gap_seconds, self.evaluator = self.setup()
+        except Exception as exc:
+            raise watch.WatchError("the rules could not be loaded: %s" % _safe(exc))
+        return self.rules
 
     def log_for(self, project):
         """A-10: --log for the project named on the command line; any other
@@ -391,6 +407,7 @@ class Session:
     def _open(self):
         """watch.start for this project (raises watch.WatchError)."""
         o = self.options
+        o.rules_now()   # M7.6: the overlay as it is now
         return self.starter(self.project, o.log_for(self.project), True, o.no_notify, o.port, self.log,
                             o.evaluator, o.rules, o.gap_seconds, environ=o.environ, err=self.log,
                             home=o.home, refresh=o.refresh)
@@ -875,6 +892,7 @@ class HostSession(Session):
             raise watch.WatchError("%s: %s" % (SUSPECT_TEXT, error))
         if backend is not None:
             kw["suspect"] = backend
+        o.rules_now()   # M7.6: the overlay as it is now
         return self.starter(o.host_catalog(), o.rules, every=o.every, no_open=True, no_notify=o.no_notify,
                             port=o.host_port, out=self.log, err=self.log, environ=o.environ, home=o.home,
                             refresh=o.refresh, reader=self.reader(), attach_hooks=o.attach_hooks, **kw)
@@ -887,6 +905,84 @@ class HostSession(Session):
 
     def _close(self, running):
         hostmod.close(running)
+
+
+# --- the Rules panel (M7.6, ADR-0008 decisions 1, 4, 5) ----------------------------------------------------
+
+RULES_INTRO = ("Rules: what the next watch judges with. On / Off and a threshold change ~/.raqib/rules.yaml only;"
+               " Add copies a rule file, checked by the loader and the fixture runner, into ~/.raqib/rules.d."
+               " Nothing here reaches a watched agent or a project (A4).")
+
+
+class RulesPanel:
+    """The Rules screen's logic, without Tk: the listing of every rule as
+    the next watch loads it (overlay.load), and the changes - on / off, a
+    threshold within its bounds, Add (a file, validated), Reset - each
+    through raqib/overlay.py, which writes ~/.raqib/rules.yaml and copies
+    into ~/.raqib/rules.d and nothing else (A4). message: the last change's
+    line, or its refusal with the reason; level: clean or alarm."""
+
+    def __init__(self, home=None, catalog=None):
+        self.home = home
+        self.catalog = catalog
+        self.rows, self.info, self.error = [], None, None
+        self.message, self.level = None, "clean"
+        self.reload()
+
+    def reload(self):
+        try:
+            rules = overlay.load(self.home, self.catalog)
+            self.rows, self.info, self.error = overlay.listing(rules), overlay.describe(rules), None
+        except Exception as exc:   # A3: a catalog that cannot be loaded is said, never a crash
+            self.rows, self.info = [], None
+            self.error = "the rules could not be loaded: %s: %s" % (type(exc).__name__, _safe(exc))
+        return self
+
+    def _do(self, change, *args, running=False):
+        try:
+            said = change(*args, home=self.home, catalog=self.catalog)
+            self.message, self.level = said + (
+                "; a watch is running: it keeps the rules it started with" if running else ""), "clean"
+        except overlay.OverlayError as exc:
+            self.message, self.level = "REFUSED: %s" % exc, "alarm"
+        self.reload()
+        return self.message
+
+    def set(self, rule_id, on, running=False):
+        return self._do(overlay.set_status, str(rule_id or "").strip(), "on" if on else "off", running=running)
+
+    def threshold(self, rule_id, field, value, running=False):
+        return self._do(overlay.set_threshold, str(rule_id or "").strip(), str(field or "").strip(),
+                        str(value or ""), running=running)
+
+    def reset(self, rule_id, running=False):
+        return self._do(overlay.reset, str(rule_id or "").strip(), running=running)
+
+    def add(self, path, running=False):
+        if not path:
+            self.message, self.level = "no file chosen: nothing added", "incomplete"
+            return self.message
+        return self._do(overlay.add_rule, path, running=running)
+
+    def header(self):
+        """The header's word: "N rules off: <ids>" (or "no rule off")."""
+        if self.info is None:
+            return "rules: not loaded"
+        return overlay.off_text(self.info) or "no rule off"
+
+    def text(self):
+        """The screen's text: the intro, the table, what the overlay applied
+        or refused, the last change."""
+        out = [RULES_INTRO, ""]
+        if self.error:
+            out.append("HOLE: %s" % self.error)
+        else:
+            out.append(overlay.table_text(self.rows).rstrip("\n"))
+            out.append("")
+            out += overlay.start_lines(self.info)
+        if self.message:
+            out += ["", self.message]
+        return "\n".join(_safe(line) for line in out) + "\n"
 
 
 class Controller:
@@ -1346,8 +1442,10 @@ def log_view(text, limit=None):
 class Window:
     """The Tk window over a Controller. Only this class calls Tk."""
 
-    def __init__(self, tk, root, controller, project, environ=None, home=None, doctor_job=None, probe=None):
+    def __init__(self, tk, root, controller, project, environ=None, home=None, doctor_job=None, probe=None,
+                 rules_panel=None):
         self.tk = tk
+        self.rules_panel = rules_panel or RulesPanel(home=home)   # M7.6: the Rules screen's logic
         self.root = root
         self.c = controller
         self.environ = environ
@@ -1397,6 +1495,8 @@ class Window:
         self.host_tab.pack(side="left")
         self.project_tab = tk.Button(head, text="Project", command=self.show_project)
         self.project_tab.pack(side="left", padx=6)
+        self.rules_tab = tk.Button(head, text="Rules", command=self.show_rules)   # M7.6 (ADR-0008)
+        self.rules_tab.pack(side="left", padx=(0, 6))
         self.head_note = tk.Label(head, text="", anchor="w")
         self.head_note.pack(side="left", fill="x", expand=True)
         head.pack(fill="x", padx=10, pady=(6, 0))
@@ -1462,6 +1562,25 @@ class Window:
         frame, self.body = self._text(self.watching, 18)
         frame.pack(fill="both", expand=True)
         self.log_frame, self.log_text = self._text(self.watching, 10)   # A-5: shown by the Log button
+        # M7.6 (ADR-0008): the Rules screen - the table, on / off, a threshold, Add, Reset; it writes the overlay only
+        self.rulesf = tk.Frame(self.root)
+        row = tk.Frame(self.rulesf)
+        tk.Label(row, text="Rule").pack(side="left")
+        self.rule_id = tk.StringVar(value="")
+        tk.Entry(row, textvariable=self.rule_id, width=20).pack(side="left", padx=(2, 6))
+        tk.Button(row, text="On", command=lambda: self.rules_set(True)).pack(side="left")
+        tk.Button(row, text="Off", command=lambda: self.rules_set(False)).pack(side="left", padx=(2, 6))
+        tk.Button(row, text="Reset", command=self.rules_reset).pack(side="left", padx=(0, 12))
+        tk.Label(row, text="Threshold").pack(side="left")
+        self.rule_field = tk.StringVar(value="")
+        tk.Entry(row, textvariable=self.rule_field, width=12).pack(side="left", padx=2)
+        self.rule_value = tk.StringVar(value="")
+        tk.Entry(row, textvariable=self.rule_value, width=8).pack(side="left", padx=2)
+        tk.Button(row, text="Set", command=self.rules_threshold).pack(side="left", padx=(2, 12))
+        tk.Button(row, text="Add rule file...", command=self.rules_add).pack(side="left")
+        row.pack(fill="x", pady=6)
+        frame, self.rules_text = self._text(self.rulesf, 22)
+        frame.pack(fill="both", expand=True)
         # the window's own notes and holes, on both screens
         self.foot = tk.Label(self.root, text="", anchor="w", justify="left", wraplength=920)
         self.foot.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
@@ -1470,10 +1589,11 @@ class Window:
     def _show(self, name):
         if self.screen == name:
             return False
-        for key, frame in (("host", self.hostf), ("first", self.first), ("watching", self.watching)):
+        frames = {"host": self.hostf, "first": self.first, "watching": self.watching, "rules": self.rulesf}
+        for key, frame in frames.items():
             if key != name:
                 frame.pack_forget()
-        {"host": self.hostf, "first": self.first, "watching": self.watching}[name].pack(
+        frames[name].pack(
             fill="both", expand=True, padx=10)
         self.screen = name
         return True
@@ -1490,6 +1610,38 @@ class Window:
 
     def show_watching(self):
         self._show("watching")
+
+    def show_rules(self):
+        """M7.6: the Rules screen, from the header at any time (watches running)."""
+        if self._show("rules"):
+            self.rules_panel.reload()
+            self._band("RULES", "incomplete" if self.rules_panel.info and self.rules_panel.info.get("off") else "clean",
+                       "%s; a change applies to the next watch" % self.rules_panel.header())
+
+    def rules_set(self, on):
+        self.rules_panel.set(self.rule_id.get(), on, running=self.c.watching())
+        self._rules_band()
+
+    def rules_reset(self):
+        self.rules_panel.reset(self.rule_id.get(), running=self.c.watching())
+        self._rules_band()
+
+    def rules_threshold(self):
+        self.rules_panel.threshold(self.rule_id.get(), self.rule_field.get(), self.rule_value.get(),
+                                   running=self.c.watching())
+        self._rules_band()
+
+    def rules_add(self):
+        from tkinter import filedialog
+        chosen = filedialog.askopenfilename(parent=self.root, title="A rule file (.yaml) with its fixtures beside it",
+                                            filetypes=[("Raqib rule", "*.yaml")])
+        self.rules_panel.add(chosen or None, running=self.c.watching())
+        self._rules_band()
+
+    def _rules_band(self):
+        p = self.rules_panel
+        self._band("RULES" if p.level == "clean" else "RULES: REFUSED" if p.level == "alarm" else "RULES",
+                   p.level, p.message or p.header())
 
     def show_project(self):
         """F-2: "Project" (and "Watch a project"): the running project watch's
@@ -1651,11 +1803,14 @@ class Window:
                 self.root.lift()
         holes = self._foot()
         self.c.report_finished()   # F-8: each finished watch's report, appended to the log once
-        self.head_note.configure(text=self.c.running_text() + (
-            "   %s" % self.refusal if self.refusal and self.c.project_watching() else ""))
+        self.head_note.configure(text=self.c.running_text() + "   " + self.rules_panel.header() + (
+            "   %s" % self.refusal if self.refusal and self.c.project_watching() else ""))   # M7.6: rules off
         fresh = self._tick_doctor()
         view = self.c.host_view()
         self.c.host_tip(view.get("trees"), view.get("new"))   # E3: the tray's tooltip
+        if self.screen == "rules":
+            self._set(self.rules_text, "rules", self.rules_panel.text())
+            return
         if self.screen == "host":
             self._tick_host(view)
             return

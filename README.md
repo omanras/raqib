@@ -62,6 +62,12 @@ HOST-RHYTHM takes its beats from every source a tree has (the host's children an
 The first finding of a watch knocks once, whatever its severity (in `raqib watch` too; a high one through its rule's own knock). On Windows a tray icon offers Show / Stop / Quit, and closing the window while watching hides it there; on Linux there is no tray, and a tray that fails is shown in the window as a hole.
 It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`; without it, or without a display, `raqib app` exits 2 and says so (`raqib-app`: in a message box on Windows, its log in `~/.raqib/app.log`), and `raqib watch` still works ([ADR-0006](docs/specs/ADR-0006-the-window.md)).
 
+## Choose the rules
+`raqib rules` lists every rule (id, kind, class, severity, budget, on / off, origin, the thresholds its YAML declares with their bounds); `--set ID on|off`, `--threshold ID FIELD VALUE` (for example `--threshold HOST-RHYTHM k 5`) and `--reset ID` change `~/.raqib/rules.yaml` only, never the package, and exit 2 with the reason when refused; the window's "Rules" button does the same.
+`--add FILE` takes a rule you wrote, with its positive and negative fixtures beside it: it joins only when the loader and the fixture runner accept it (A6), copied into `~/.raqib/rules.d/`, and is shown as `origin: user`.
+A change applies to the next watch; every watch prints the overlay it applied at its start, keeps it in its state, and shows "N rules off: <ids>" in the band and the window's header.
+A rule off is said, not silent: the final report lists it with who turned it off and since when, and "not judged by <id> (off): M lines" with what it would have fired; the exit code is not changed by it ([ADR-0008](docs/specs/ADR-0008-the-rules-panel.md)).
+
 ## How it works
 - **Deterministic first.** Rules decide; a model can only add suspicion (A1, A2).
 - **Silence is an alarm.** A gap, a call that never finished or a session

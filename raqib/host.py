@@ -153,7 +153,7 @@ import threading
 import time
 import traceback
 
-from raqib import discover, notify, ui
+from raqib import discover, notify, overlay, ui
 from raqib.hooks import common
 from raqib.rules import cross, engine, silence, trace
 
@@ -256,6 +256,7 @@ CITE_TEXT_MAX = 240                # the text of a cited record line on a host l
 TAIL_BYTES = 1 << 20               # how much of rounds.jsonl is read at the start for its last line (C-2)
 READER_HOLES = ("reader-late", "reader-failed", "reader-out", "reader-held")
 DARK_ROUNDS = 3                    # AGENT-DARK-LIVE.yaml fires at streak 3 (a test holds them equal)
+STREAK_FIELD = "input_meta.streak"  # M7.6: the streak is read from the YAML's eq (the overlay may change it)
 KNOCKS_KEPT = 200                  # M7.5 REDO N-5: knocks kept in the state (the report lists every one)
 DARK_NOTE = "dark after a live tree (note)"   # M7.5 E1: what a footprint dark after its live tree is called
 DARK_WINDOW = 3 * DARK_ROUNDS      # M7.5 REDO N-1: R_dark, the live window (AGENT-DARK-LIVE.yaml declares it)
@@ -720,7 +721,10 @@ class Feed:
 
     def judge(self):
         """(findings, notes, {(session, seq): [line numbers]})."""
-        found, notes = judge_source(self.rules, [rec for _, rec in self.numbered])
+        records = [rec for _, rec in self.numbered]
+        found, notes = judge_source(self.rules, records)
+        # M7.6 (ADR-0008): what a rule off would have judged on this file, counted, never a finding
+        self.not_judged = overlay.count_not_judged(self.rules, records, {}, {})
         lines_of = {}
         for n, rec in self.numbered:
             lines_of.setdefault((rec["session_id"], rec["seq"]), []).append(n)
@@ -1186,8 +1190,13 @@ class HostWatch:
         if self.missing_rules:
             self._hole(self.t0, "host-rule", "rule(s) %s not in the catalog: what they judge is not judged"
                        % ", ".join(self.missing_rules))
+        # M7.6 (ADR-0008): the overlay this watch started with; a rule the overlay turned off is said at the start,
+        # in the state and the final report (RULES OFF), and is not a hole: the exit code is not changed by it
+        self.rules_overlay = overlay.describe(rules)
+        self.not_judged = {}         # rule id -> what it would have judged on the rounds' lines
+        self.source_not_judged = {}  # a source file -> its rules off's counts (each feed judges all its lines)
         for r in self.rules:
-            if r.status == "disabled":
+            if r.status == "disabled" and not getattr(r, "off_by", None):
                 self._hole(self.t0, "host-rule", "%s has status disabled in %s (A6): it judges nothing; the"
                            " trees and footprints are still listed" % (r.id, r.source))
         if self.platform.startswith("linux"):
@@ -1207,6 +1216,8 @@ class HostWatch:
             self._hole(self.t0, "host-rule", "%s does not declare its live window (eq on %s): the window is %d"
                        " rounds and the rule cannot fire" % (DARK_LIVE, LIVE_WINDOW_FIELD, DARK_WINDOW))
         self.dark_window = window or DARK_WINDOW
+        # M7.6: the streak of AGENT-DARK-LIVE, read from its YAML (the eq on input_meta.streak; the overlay may change it)
+        self.dark_rounds = rule_eq(dark_rule, STREAK_FIELD) or DARK_ROUNDS
         self.rings = {}              # tree key -> its last R rounds (rhythm_of's ring)
         self.kids = {}               # tree key -> the (child pid, started) seen in its rounds
         self.act_seen = {}           # M7.5 REDO N-9: tree key -> the acts counted, across sources
@@ -1647,10 +1658,11 @@ class HostWatch:
                                          "cites": [dict(c) for c in cites[:CITES_KEPT]]}})
             fp["cites"] = cites[:CITES_KEPT]
             fp["line_seq"] = self.seq
-            if state == "dark" and fp["was_live"] and fp["streak"] >= DARK_ROUNDS and not fp["noted"]:
+            if state == "dark" and fp["was_live"] and fp["streak"] >= self.dark_rounds and not fp["noted"]:
                 self._dark_note(now, n, fp, sample)
 
         found, notes = engine.evaluate(self.rules, lines)
+        overlay.count_not_judged(self.rules, lines, {}, self.not_judged)   # M7.6: the rules off, counted
         by_seq = {l["seq"]: l for l in lines}
         fired = []
         for f in found:
@@ -2570,6 +2582,8 @@ class HostWatch:
         I-3: at the end a SILENCE-OPEN / -HALF still pending is "pending at
         exit": pending for good is silence (B-1), an alarm of the tree."""
         found, notes, lines_of = feed.judge()
+        if getattr(feed, "not_judged", None):
+            self.source_not_judged[feed.path] = feed.not_judged
         entry_tree = self.trees.get(key) or {}
         fired = []
         current = {(feed.path, feed.epoch, f["rule_id"], f["session_id"], tuple(f["cited_seq"]), f["summary"])
@@ -2896,6 +2910,7 @@ class HostWatch:
         # M7.5 E1/E4: apart from the findings; a note is never an alarm, never a knock
         out.append("DARK AFTER A LIVE TREE (notes, not alarms, not knocked): %d" % len(self.dark_notes))
         out += ["  - %s" % d["text"] for d in self.dark_notes]
+        out += overlay.report_lines(self.rules_overlay, self.all_not_judged())   # M7.6 (ADR-0008 decision 3)
         out.append("NOTES: %d" % len(self.notes))
         out += ["  - %s" % n for n in self.notes]
         holes = self.holes + self.notifier.holes
@@ -2967,9 +2982,21 @@ class HostWatch:
                      "notes": self.notes, "rounds_tail": [self._public(r) for r in self.round_lines]},
             "holes": self.holes + self.notifier.holes, "notifications": self.notifier.state(),
             "state_error": self.state_error, "refresh_seconds": self.refresh, "registry": self.registry_state,
+            "rules_overlay": dict(self.rules_overlay, not_judged=self.all_not_judged()),   # M7.6 (ADR-0008)
         }
         state["band"] = ui.status(state)[0]
         return state
+
+    def all_not_judged(self):
+        """M7.6: what each rule off would have judged: the rounds' lines and every source file's."""
+        total = {k: dict(v) for k, v in self.not_judged.items()}
+        for counts in self.source_not_judged.values():
+            for rid, c in counts.items():
+                t = total.setdefault(rid, {"lines": 0, "fired": 0, "cited": 0, "note": None})
+                for k in ("lines", "fired", "cited"):
+                    t[k] += c[k]
+                t["note"] = t["note"] or c.get("note")
+        return total
 
     @staticmethod
     def _public(r):
@@ -3101,12 +3128,17 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
     out.write("raqib watch --host: record %s\nraqib watch --host: state %s\n" % (
         _safe(watcher.rounds_path), _safe(watcher.state_path)))
     out.write("raqib watch --host: %s\n" % notifier.band()[1])
+    rhythm_by = ", ".join("%s=%s" % (t["name"], t["value"]) for t in watcher.rules_overlay["thresholds"]
+                          if t["rule_id"] == RHYTHM)   # M7.6: the overlay's thresholds, said
+    rhythm_by = ", the overlay: %s" % rhythm_by if rhythm_by else ""
     out.write("raqib watch --host: rhythm: RHYTHM at %d cycles (talk to one destination, a child within %d s) in %d"
-              " rounds (HOST-RHYTHM.yaml)\n" % (watcher.rhythm_k, watcher.rhythm_w, watcher.rhythm_r))
+              " rounds (HOST-RHYTHM.yaml%s)\n" % (watcher.rhythm_k, watcher.rhythm_w, watcher.rhythm_r, rhythm_by))
     out.write("raqib watch --host: suspect: %s\n" % (
         "off (no --suspect): no model is asked, nothing leaves the machine" if suspect is None else
         "%s/%s every %d rounds over the unknown trees, never named or benign ones; %s; A2: it may raise suspicion,"
         " never acquit" % (suspect.name, suspect.model, watcher.rhythm_r, suspect_notice(suspect))))
+    for line in overlay.start_lines(watcher.rules_overlay):   # M7.6 (ADR-0008 decision 2): said at the start
+        out.write("raqib watch --host: %s\n" % _safe(line))
     for note in watcher.notes:
         out.write("raqib watch --host: hole: %s\n" % _safe(note))
     try:

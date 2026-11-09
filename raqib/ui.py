@@ -567,7 +567,19 @@ def band_items(state):
     port = _dict(state.get("port"))
     if port.get("warning"):
         items.append(("incomplete", port["warning"]))
+    off = rules_off_text(state)
+    if off:   # M7.6 (ADR-0008 decision 3): a rule off is said, not silent
+        items.append(("incomplete", off))
     return items
+
+
+def rules_off_text(state):
+    """M7.6: "N rules off: <ids>" from a state's rules_overlay, or None."""
+    off = [_dict(o).get("rule_id") for o in _list(_dict(state.get("rules_overlay")).get("off"))]
+    off = [str(o) for o in off if o]
+    if not off:
+        return None
+    return "%d rule%s off: %s" % (len(off), "" if len(off) == 1 else "s", ", ".join(off))
 
 
 BAND_LEVELS = ("alarm", "incomplete", "clean")

@@ -202,10 +202,17 @@ def load_rule(path):
     return rule
 
 
-def load_catalog(directory):
+def load_catalog(directory, overlay=None, user_rules=None):
     """Load every *.yaml rule in a directory, sorted by id. A missing or empty
     catalog, or a rule file with another extension, is an error: no rules
-    must never look like no findings (A3)."""
+    must never look like no findings (A3).
+
+    M7.6 (ADR-0008): with overlay (the path of ~/.raqib/rules.yaml) or
+    user_rules (the directory ~/.raqib/rules.d), raqib/overlay.py's build()
+    adds the person's rules the loader and the fixture runner accept and
+    applies the overlay on top; the result is an overlay.Catalog, a list
+    whose .overlay says what was applied, refused or is a hole. Without
+    them the catalog is read exactly as before (the gate, check-rules)."""
     directory = str(directory)
     if not os.path.isdir(directory):
         raise RuleError("%s: rule catalog directory not found" % directory)
@@ -221,7 +228,11 @@ def load_catalog(directory):
         if rule.id in seen:
             raise RuleError("%s: duplicate rule id %s" % (rule.source, rule.id))
         seen.add(rule.id)
-    return rules
+    if overlay is None and user_rules is None:
+        return rules
+    from raqib import overlay as person   # imported here: overlay imports this module
+    return person.build(rules, overlay=None if overlay is None else str(overlay),
+                        user_rules=None if user_rules is None else str(user_rules))
 
 
 def compile_rule(doc, source="<rule>"):
