@@ -62,3 +62,30 @@ not a person's, and it predates M7.6c. Task for the Table: redact the
 export to a placeholder home (as the Windows exports use `user`/`field`),
 regenerate the five fixtures, re-measure the M7.1/M7.2 budgets, and then
 make the whole-tree "no absolute home" test (E-1's wider form) pass.
+
+## State at the end of the 2026-11-09 session (the Table)
+main = f9618f9, pushed; CI run 42592946947 six jobs success; gate 2902
+passed, 22 skipped; kinds 4 : 7 : 11;
+HANDOFF.md none pending. Landed today, each after review and rulings:
+M7.5 (ADR-0007 N, O: dark-after-live a note within a 9-round window;
+rhythm reads every source; the KNOCKS ledger; the lost toast was sent by
+Raqib, lost on Windows' side), M7.6 (ADR-0008 A, B: the overlay,
+`raqib rules`, the panel, "N rules off" everywhere, CLEAN with suppressed
+findings said), M7.6b (C, D: the look; Windows Tk 8.6 is the run of
+record), M7.6c (E, F: thresholds editable only where an edge pair makes
+the measurement sensitive - k, w, r, streak, live_window; suspect_every a
+watch option), M7.6d (G: the M7.1 linux export redacted to /home/user).
+The commander's plan of 2026-11-04 is built except the field runs.
+
+Pending, for the commander: the field runs on the Windows machine - more
+agents (the unknown path: NEW-AGENT-UNKNOWN, act-root, HOST-RHYTHM have
+not fired on a tree the catalog does not know); compare the KNOCKS ledger
+with the notification centre toast by toast; try the Rules panel (turn
+AGENT-DARK-LIVE off, set HOST-RHYTHM k to 4, watch the measurement words).
+Recorded later tasks (ADR amendments name them): a real desktop export
+shipped with the commander's consent (ADR-0008 E-4); the AGENT-DARK-LIVE
+hole text rendered from live values (F, P16); os_sysmon writing ProcessId
+(ADR-0007 O); CROSS-SOURCE over host lines; the install-hooks link check
+for `raqib watch`; pacing of suspect calls; the README loop's system
+drive; THREAT_MODEL lines; the capture helper redacting homes by default
+(G, Q-5); docstring example homes (G, Q-4); `--remove` for user rules.
