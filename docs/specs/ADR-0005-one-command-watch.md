@@ -395,3 +395,11 @@ Full text: docs/review/2026-11-03-M6.2-ruling.md.
 - Verdict: NEXT; merge --no-ff under the commander's standing word.
 - Phase 6 state: M6.1, M6.3, M6.2 landed; the phase exit (fresh machine to
   toast in < 5 min by README) awaits the commander's field test.
+
+## Amendment L (the Table, 2026-11-09) - A-4's title gains a subject (ADR-0007 N-7)
+- The notification title is "Raqib: <event>[ <subject>]": the subject is
+  the cleaned image name for the host rules (NEW-AGENT kimi), at most 40
+  characters, the same alphabet [A-Za-z0-9 ._,:+()-], the whole text at
+  most 120 characters as before. Reason: the first field run (ADR-0007
+  Amendment M) delivered toasts with identical titles; a subject tells
+  them apart in the notification centre. Never a path, command or output.
