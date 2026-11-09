@@ -42,6 +42,7 @@ ID_SHOW, ID_STOP, ID_QUIT = 1001, 1002, 1003
 MENU = ((ID_SHOW, "Show"), (ID_STOP, "Stop"), (ID_QUIT, "Quit"))
 ACTIONS = {ID_SHOW: "show", ID_STOP: "stop", ID_QUIT: "quit"}
 TIP = "Raqib"
+IDLE_TIP = "Raqib: idle"   # M7.6b E5: the tooltip when no watch runs
 START_SECONDS = 5.0     # how long start() waits for the tray thread to say it is up
 STOP_SECONDS = 5.0      # how long stop() waits for the tray thread to end
 
@@ -68,9 +69,10 @@ SM_CXSMICON = 49
 ICON_MIN, ICON_MAX = 16, 64
 
 
-def tip_text(trees, new):
-    """M7.3 E3: the tooltip while the host is watched: "Raqib: N trees, K new"."""
-    return "%s: %d trees, %d new" % (TIP, int(trees or 0), int(new or 0))
+def tip_text(trees, new, findings=None):
+    """M7.3 E3, M7.6b E5: the tooltip while watching: "Raqib: N trees, K
+    new, F findings"; IDLE_TIP when no watch runs."""
+    return "%s: %d trees, %d new, %d findings" % (TIP, int(trees or 0), int(new or 0), int(findings or 0))
 
 
 def unsupported(platform=None):
@@ -242,7 +244,7 @@ class Tray:
     running: the icon is in the notification area and the thread pumps.
     ended: why the thread ended when stop() did not end it (A-6)."""
 
-    def __init__(self, on_action, platform=None, api=None, tip=TIP):
+    def __init__(self, on_action, platform=None, api=None, tip=IDLE_TIP):
         self.on_action = on_action
         self.platform = platform or sys.platform
         self.api = api

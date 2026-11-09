@@ -645,7 +645,8 @@ def test_tk_the_rules_screen_from_the_header(home, tmp_path):
         window.rules_tab.invoke()
         window.tick()
         assert window.screen == "rules" and window.band.cget("text") == "RULES"
-        assert "HOST-RHYTHM" in window.rules_text.get("1.0", "end")
+        # M7.6b E3: the rules are rows of the Treeview now, the text under it holds the rest
+        assert "HOST-RHYTHM" in [window.rules_tree.item(i, "values")[0] for i in window.rules_tree.get_children()]
         window.rule_id.set("NET-TOOL")
         window.rules_set(False)
         window.tick()

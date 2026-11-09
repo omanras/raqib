@@ -81,6 +81,15 @@ the window back with a hole, and nothing is killed (A-3). The logic - the views,
 Controller that decides what a close or a tray action does - is plain
 Python, tested with fakes; only Window touches Tk, and tkinter is imported
 only when the window is made.
+
+The look (M7.6b, ADR-0008 decision 6) is presentation only: one THEME table
+(colours by the exit-code scheme, light and dark - dark when Windows says so
+in AppsUseLightTheme, read-only - fonts, paddings, ttk style names), a word
+beside every colour, the tree and rules tables as sortable ttk.Treeviews
+with the selected tree's detail below, one header bar (Host | Project |
+Rules | Log, the running watches, "N rules off", Open page), three
+first-run lines until ~/.raqib/host/look.json exists, the doctrine under
+the band, and every screen within 900x600.
 """
 from __future__ import annotations
 
@@ -104,12 +113,264 @@ APP_LOG = "app.log"           # A-4: under ~/.raqib, the gui-script's output
 APP_LOG_MAX = 4000000         # bytes of app.log; beyond, one line says the rest is not written
 LOG_VIEW_MAX = 200000        # characters of the log the Log pane shows (A-5)
 ERR_MAX = 64000               # characters of stderr kept to show in the message (A-4)
-LEVEL_COLORS = {"alarm": "#b00020", "incomplete": "#9a5000", "clean": "#1b6e35"}
 VERDICT_COLORS = {"OK": "clean", "MISSING": "alarm", "UNSURE": "incomplete"}
 NO_TK = ("tkinter cannot be imported in this Python (%s): install python3-tk (Debian and Ubuntu: sudo apt install"
          " python3-tk) or use a python.org Python, which ships it; `raqib watch` works without it")
 NO_DISPLAY = ("DISPLAY is not set: no window can open in this session (Tk on %s needs an X display; under Wayland"
               " XWayland sets DISPLAY)")
+
+# --- the look (M7.6b, ADR-0008 decision 6) ------------------------------------------------------------
+# THEME is the only place a colour lives in this file (a test reads the AST): the exit-code scheme of
+# ADR-0007 F-7 / C-10 (0 green, 1 red, 3 amber), notes grey, holes amber, the suppressed badge red
+# (ADR-0008 A-2); a band background per level; the font families tried in order (named system fonts,
+# nothing shipped); the paddings; the ttk style names. Every level is shown with a word beside it.
+THEME = {
+    "light": {
+        "bg": "#f6f6f4", "surface": "#ffffff", "fg": "#1f2328", "muted": "#5c6370", "border": "#c9ced6",
+        "select_bg": "#d6e4f5", "select_fg": "#1f2328", "tab_bg": "#e9eaec", "tab_current": "#ffffff",
+        "levels": {"clean": "#1b6e35", "alarm": "#b00020", "incomplete": "#9a5000", "note": "#646970",
+                   "hole": "#9a5000", "suppressed": "#b00020"},
+        "band_bg": {"clean": "#e6f3e9", "alarm": "#fbe8ea", "incomplete": "#fdf1e2", "note": "#eeeff1"},
+    },
+    "dark": {
+        "bg": "#1e1f22", "surface": "#26282c", "fg": "#e4e5e7", "muted": "#a0a5ad", "border": "#41454c",
+        "select_bg": "#2e4a6d", "select_fg": "#ffffff", "tab_bg": "#2b2d31", "tab_current": "#3a3d43",
+        "levels": {"clean": "#63c784", "alarm": "#ff6b7a", "incomplete": "#efa654", "note": "#a0a5ad",
+                   "hole": "#efa654", "suppressed": "#ff6b7a"},
+        "band_bg": {"clean": "#17321f", "alarm": "#3e1a1f", "incomplete": "#3a2a15", "note": "#2c2e32"},
+    },
+    "fonts": {
+        "ui": ("Segoe UI", "Cantarell", "Noto Sans", "DejaVu Sans", "Liberation Sans", "Helvetica", "Arial"),
+        "mono": ("Cascadia Mono", "Consolas", "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono",
+                 "Courier New", "Courier"),
+        "size": 10, "small": 9, "band": 15, "mono_size": 10,
+    },
+    "pad": {"outer": 12, "gap": 6, "row": 4, "band_x": 10, "band_y": 6},
+    "styles": {"tab": "Tab.TButton", "tab_current": "Current.Tab.TButton", "muted": "Muted.TLabel",
+               "level": "%s.Level.TLabel"},
+    "min_size": (900, 600), "size": (960, 660),
+}
+LEVEL_WORDS = {"clean": "clean", "alarm": "alarm", "incomplete": "incomplete", "note": "note",
+               "hole": "hole", "suppressed": "suppressed"}   # E1: a word beside every colour (C-10's result words)
+DOCTRINE = "Rules decide; a model may only raise suspicion."
+FIRST_RUN = (
+    "This window shows what Raqib sees on this machine: the agents found on the host, a project's watch,"
+    " the rules it judges with, and its log.",
+    "Raqib reads (processes, connections, trace files) and never touches an agent: it sends it nothing,"
+    " steers nothing, stops nothing.",
+    "\"No agent seen\" is never a clearance: it says what was read, and what was not read is a hole.")
+PERSONALIZE_KEY = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+
+
+def level_of(code):
+    """A level name for an exit code (C-10: 0 clean, 1 alarm, 3
+    incomplete; any other code alarm, as code_level) or a level name as
+    given (an unknown name reads incomplete, as the band always did)."""
+    if isinstance(code, int) and not isinstance(code, bool):
+        return CODE_LEVELS.get(code, "alarm")
+    return code if code in LEVEL_WORDS else "incomplete"
+
+
+def level_colour(code, mode="light"):
+    """E1: the colour of a level (or of an exit code) in the theme of mode."""
+    return THEME[mode if mode in ("light", "dark") else "light"]["levels"][level_of(code)]
+
+
+def band_colours(code, mode="light"):
+    """(foreground, background) of the band for a level or an exit code."""
+    palette = THEME[mode if mode in ("light", "dark") else "light"]
+    level = level_of(code)
+    return palette["levels"][level], palette["band_bg"].get(level, palette["band_bg"]["note"])
+
+
+def level_word(code):
+    """E1: the word shown beside a level's colour (never colour alone)."""
+    return LEVEL_WORDS[level_of(code)]
+
+
+def os_mode(platform=None, read=None):
+    """E1: "dark" or "light" as the OS says where it can be read: on
+    Windows the registry value AppsUseLightTheme (HKCU, read-only, stdlib
+    winreg; 0 is dark); anything else, or a value that cannot be read, is
+    light. read: tests give the value's reader."""
+    platform = platform or sys.platform
+    if platform != "win32" and read is None:
+        return "light"
+    try:
+        value = (read or _apps_use_light_theme)()
+    except Exception:   # no key, no winreg: light, as everywhere else
+        return "light"
+    return "dark" if value == 0 else "light"
+
+
+def _apps_use_light_theme():
+    import winreg   # Windows only, stdlib; opened for reading, never written
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, PERSONALIZE_KEY, 0, winreg.KEY_READ) as key:
+        return winreg.QueryValueEx(key, "AppsUseLightTheme")[0]
+
+
+def pick_font(candidates, available):
+    """The first family of candidates the system has (case-insensitive), or
+    None (Tk's own default font then stays)."""
+    have = {str(f).lower(): f for f in available}
+    return next((have[c.lower()] for c in candidates if c.lower() in have), None)
+
+
+def look_path(home=None):
+    """~/.raqib/host/look.json: the first look writes it (ADR-0007 F-10)."""
+    return os.path.join(hostmod.host_dir(home), "look.json")
+
+
+def first_run_lines(home=None, exists=None):
+    """E4: the three first-run lines while no look has been written yet
+    (no ~/.raqib/host/look.json), else none: the first look writes it."""
+    return [] if (exists or os.path.exists)(look_path(home)) else list(FIRST_RUN)
+
+
+# The host screen's tree table (E2): (column id, heading, width px, index in a host_rows row, sort kind).
+# Eight columns; "acts" (row index 4) is in the detail pane.
+TREE_COLUMNS = (("image", "image", 120, 0, "text"), ("pid", "pid", 55, 1, "number"),
+                ("kind", "kind", 120, 2, "text"), ("source", "source", 90, 5, "text"),
+                ("findings", "findings", 90, 6, "severity"), ("rhythm", "rhythm / suspicion", 130, 7, "text"),
+                ("first", "first seen", 115, 3, "text"), ("endpoints", "endpoints", 85, 8, "text"))
+# The Rules table (E3): the overlay state per row.
+RULES_COLUMNS = (("id", "rule", 140, 0, "text"), ("kind", "kind", 65, 1, "text"), ("class", "class", 75, 2, "text"),
+                 ("severity", "severity", 65, 3, "severity"), ("budget", "budget", 50, 4, "number"),
+                 ("status", "status", 50, 5, "text"), ("overlay", "overlay", 120, 6, "text"),
+                 ("origin", "origin", 55, 7, "text"), ("thresholds", "thresholds", 160, 8, "text"))
+SEVERITY_RANK = ("high", "medium", "low", "history", "pending at exit", "pending")
+
+
+def sort_key(kind, cell):
+    """E2: the key a column sorts by. number: the integer (a cell that is
+    not one sorts after, by its text); severity: the severity counts of
+    ui.severity_counts, the gravest first ("none" and "-" last); a bare
+    severity word by its rank; text: case-folded, numbers in it compared as
+    numbers ("-" last)."""
+    text = str(cell).strip()
+    if kind == "number":
+        try:
+            return (0, float(text), "")
+        except ValueError:
+            return (1, 0.0, text.casefold())
+    if kind == "severity":
+        if text in SEVERITY_RANK:
+            return (0, SEVERITY_RANK.index(text))
+        counts = dict.fromkeys(SEVERITY_RANK, 0)
+        for part in text.split(","):
+            word, _, n = part.strip().rpartition(" ")
+            if word in counts and n.isdigit():
+                counts[word] = int(n)
+        if not any(counts.values()):
+            return (1, len(SEVERITY_RANK))
+        return (0,) + tuple(-counts[w] for w in SEVERITY_RANK)
+    if text in ("", "-"):
+        return (1, ())
+    parts, digits = [], ""
+    for ch in text.casefold() + "\0":
+        if ch.isdigit():
+            digits += ch
+            continue
+        if digits:
+            parts.append((0, int(digits), ""))
+            digits = ""
+        if ch != "\0":
+            parts.append((1, 0, ch))
+    return (0, tuple(parts))
+
+
+def sort_rows(rows, columns, column, reverse=False):
+    """E2: rows (tuples) sorted by the column id of columns (stable)."""
+    spec = next(c for c in columns if c[0] == column)
+    return sorted(rows, key=lambda r: sort_key(spec[4], r[spec[3]] if spec[3] < len(r) else ""), reverse=reverse)
+
+
+def tree_values(row):
+    """The Treeview's values of one host_rows row, in TREE_COLUMNS order."""
+    return tuple(row[c[3]] if c[3] < len(row) else "" for c in TREE_COLUMNS)
+
+
+def row_level(row):
+    """E1: the level of a tree's row: alarm when it knocked (new) or its
+    source has findings, note when it is gone, else None (the default
+    colour); the kind and findings columns say it in words."""
+    kind = str(row[2]) if len(row) > 2 else ""
+    flags = [f.strip(" )") for f in kind.split("(", 1)[1].split(",")] if "(" in kind else []
+    findings = str(row[6]) if len(row) > 6 else "none"
+    if "new" in flags or any(w in findings for w in ("high", "medium", "low")):
+        return "alarm"
+    if "gone" in flags:
+        return "note"
+    return None
+
+
+def rules_rows(rows):
+    """E3: the Rules table: [(values in RULES_COLUMNS order, level)], with
+    the overlay state of each rule in words: "off by the overlay", "off in
+    its YAML", "thresholds set" (a value the overlay changed), or "-". An
+    off rule is amber (incomplete), as in the band."""
+    out = []
+    for r in rows:
+        changed = [t for t in r.get("thresholds") or () if t.get("value") != t.get("yaml")]
+        if r.get("status") == "off":
+            state = "off in its YAML" if r.get("off_by") == "yaml" else "off by the overlay"
+        else:
+            state = "thresholds set" if changed else "-"
+        values = (r.get("id"), r.get("kind"), r.get("class"), r.get("severity"), "%g" % (r.get("budget") or 0),
+                  r.get("status"), state, r.get("origin"),
+                  ", ".join(overlay.threshold_text(t) for t in r.get("thresholds") or ()) or "-")
+        out.append((tuple(_safe(v) for v in values), "incomplete" if r.get("status") == "off" else None))
+    return out
+
+
+def header_rules(text, states=()):
+    """E3: the header's rules item: (text, level). Red (suppressed) while a
+    running watch's off rules would have fired (ADR-0008 A-2), with the
+    count; amber when a rule is off; muted when none is."""
+    n = sum(ui.suppressed(s) for s in states if isinstance(s, dict))
+    if n:
+        return "%s; %d finding(s) suppressed by the overlay" % (text, n), "suppressed"
+    return text, ("incomplete" if text not in ("no rule off",) else None)
+
+
+def foot_lines(holes, notes, look=()):
+    """E5: the footer's lines: the window's own holes and notes in full,
+    and the first look's holes (F-3) as one line that counts them and says
+    where each is listed in full (the Host screen's HOLES, and the log), so
+    a long look never pushes the screen out of the window."""
+    look = list(look)
+    shown = ["hole: %s" % h for h in holes]
+    if look:
+        shown.append("hole: round at open: the first look has %d hole(s), each listed under HOLES on the Host screen"
+                     " and written to the log" % len(look))
+    return shown + ["note: %s" % n for n in notes]
+
+
+def text_tags(text):
+    """E1: (line, level) for a screen's text: under "FINDINGS: n" (n > 0)
+    alarm, under "HOLES (A3): n" (n > 0) hole, under "NOTES" note; the
+    section lines themselves carry the word. Other lines untagged."""
+    out, level = [], None
+    for line in text.rstrip("\n").split("\n"):
+        head = line.split(":", 1)
+        if not line.startswith(" ") and len(head) == 2:
+            name, rest = head[0], head[1].strip()
+            count = int(rest) if rest.isdigit() else None
+            if name == "FINDINGS":
+                level = "alarm" if count else None
+            elif name == "HOLES (A3)":
+                level = "hole" if count else None
+            elif name.startswith("NOTES"):
+                level = "note"
+            elif name.startswith("hole"):
+                out.append((line, "hole"))
+                continue
+            else:
+                level = None
+        elif not line.startswith(" ") and line:
+            level = None
+        out.append((line, level))
+    return tuple(out)
 
 
 class AppError(Exception):
@@ -554,6 +815,61 @@ def host_rows(trees, first_seen=None):
     return rows
 
 
+def _of_tree(item, tree):
+    """Whether a host finding, suspicion or dark note is of this tree (its
+    tree key, its tree word, or its live tree)."""
+    key = tree.get("key")
+    word = hostmod.tree_word(tuple(key)) if isinstance(key, (list, tuple)) and len(key) == 3 else None
+    if item.get("tree_key") is not None:
+        return list(item.get("tree_key")) == list(key or ())
+    return word is not None and word in (item.get("tree"), item.get("live_tree"))
+
+
+def tree_details(trees, findings=(), suspicions=(), notes=()):
+    """E2: what the detail pane says of each tree, aligned with host_rows:
+    its acts, class, source, cites (where: src:line, never the record's
+    text), its findings and suspicions as the finding lines say them, and
+    its notes. Nothing here is not already in the host state."""
+    out = []
+    for t in trees:
+        if not isinstance(t, dict):
+            continue
+        out.append({
+            "acts": _safe(t.get("acts", 0)), "class": _safe(t.get("class") or "-"),
+            "started": _safe(t.get("started") or "-"),
+            "cites": [_safe("%s:%s" % (c.get("src"), c.get("line")))
+                      for c in t.get("cites") or () if isinstance(c, dict)],
+            "findings": [host_finding_line(f) for f in findings if isinstance(f, dict) and _of_tree(f, t)]
+            + [suspicion_line(f) for f in suspicions if isinstance(f, dict) and _of_tree(f, t)],
+            "notes": [_safe(d.get("text")) for d in notes if isinstance(d, dict) and _of_tree(d, t)]})
+    return out
+
+
+def tree_detail_text(row, detail=None):
+    """E2: the detail pane's text for the selected tree (a host_rows row and
+    its tree_details entry)."""
+    detail = detail or {}
+    get = (lambda i: row[i] if i < len(row) else "-")
+    out = ["%s pid %s: %s" % (get(0), get(1), get(2)),
+           "class %s, started %s, first seen %s, acts %s" % (detail.get("class", "-"), detail.get("started", "-"),
+                                                             get(3), detail.get("acts", get(4))),
+           "source: %s; its findings: %s" % (get(5), get(6)),
+           "rhythm / suspicion: %s" % get(7),
+           "endpoints: %s" % get(8),
+           "cites: %s" % (", ".join(detail.get("cites") or ()) or "-"), "",
+           "FINDINGS: %d" % len(detail.get("findings") or ())]
+    out += ["  - %s" % f for f in detail.get("findings") or ()]
+    out += ["", "NOTES (not alarms): %d" % len(detail.get("notes") or ())]
+    out += ["  - %s" % n for n in detail.get("notes") or ()]
+    return "\n".join(out) + "\n"
+
+
+def host_text_body(view):
+    """The host screen's text under the tree table: host_body without the
+    table (the rows are in the Treeview, E2), or the final report."""
+    return host_body(dict(view, rows=[])).lstrip("\n")
+
+
 def source_word(tree):
     """M7.2b E4: the source column: os / host / hooks: project P / none, or
     "-" where no source is attached yet (the look at open attaches none)."""
@@ -647,7 +963,8 @@ def probe_view(inv, catalog, at, seconds=None, late=False, deadline=None):
     if dark:
         detail += "; %d AGENT-DARK footprint(s)" % len(dark)
     return {"word": word, "level": code_level(code), "code": code, "detail": _safe(detail),
-            "rows": host_rows(trees, first_seen=at), "lines": [_safe(x) for x in lines], "findings": [],
+            "rows": host_rows(trees, first_seen=at), "details": tree_details(trees),
+            "lines": [_safe(x) for x in lines], "findings": [],
             "holes": [_safe(h) for h in holes], "badges": [], "final": None, "trees": len(trees), "new": 0,
             "dark": len(dark), "records": records, "unread": unread}
 
@@ -720,6 +1037,8 @@ def host_watch_view(state, extra_holes=()):
     # M7.5 E1/E4: notes apart from the findings (a note is never an alarm)
     notes = [_safe(d.get("text")) for d in h.get("dark_notes") or [] if isinstance(d, dict)]
     return {"word": word, "level": level, "detail": _safe(detail), "rows": host_rows(trees),
+            "details": tree_details(trees, h.get("findings") or (), h.get("suspicions") or (),
+                                    h.get("dark_notes") or ()),   # M7.6b E2: the detail pane
             "lines": lines, "findings": findings, "notes": notes, "holes": holes,
             "badges": [(lv, _safe(text)) for lv, text in ui.host_band(state)], "final": None,
             "trees": h.get("now") or 0, "new": h.get("new") or 0, "url": state.get("url") or "-"}
@@ -970,15 +1289,21 @@ class RulesPanel:
             return "rules: not loaded"
         return overlay.off_text(self.info) or "no rule off"
 
-    def text(self):
+    def notes_text(self):
+        """M7.6b E3: the screen's text under the Rules table (the rows are
+        in the Treeview): text() without the table."""
+        return self.text(table=False)
+
+    def text(self, table=True):
         """The screen's text: the intro, the table, what the overlay applied
         or refused, the last change."""
         out = [RULES_INTRO, ""]
         if self.error:
             out.append("HOLE: %s" % self.error)
         else:
-            out.append(overlay.table_text(self.rows).rstrip("\n"))
-            out.append("")
+            if table:
+                out.append(overlay.table_text(self.rows).rstrip("\n"))
+                out.append("")
             out += overlay.start_lines(self.info)
         if self.message:
             out += ["", self.message]
@@ -998,7 +1323,7 @@ class Controller:
         self.make_host = make_host or (lambda: HostSession(options, log=LogBuffer(tee=tee), wait_for=self.look_thread()))
         self.session = None
         self.host = None
-        self.tip = traymod.TIP   # what the tray's tooltip says now (M7.3: "Raqib: N trees, K new")
+        self.tip = traymod.IDLE_TIP   # what the tray's tooltip says now (M7.6b E5: "Raqib: N trees, K new, F findings")
         self.actions = queue.Queue()
         self.quitting = False
         self.quit_at = None     # A-3: when Quit was asked (monotonic)
@@ -1210,11 +1535,14 @@ class Controller:
         if self.host is not None:
             self.host.stop(reason)
 
-    def host_tip(self, trees=None, new=None):
-        """The tray's tooltip: "Raqib: N trees, K new" while the host is
-        watched (from the host view), else "Raqib". Changed only when the
-        text changes; a tray that cannot take it keeps a hole of its own."""
-        text = traymod.tip_text(trees, new) if self.host_watching() and trees is not None else traymod.TIP
+    def host_tip(self, trees=None, new=None, findings=None):
+        """The tray's tooltip (M7.6b E5): "Raqib: N trees, K new, F
+        findings" while a watch runs (the host's trees and new ones, 0 when
+        only a project is watched; the findings of the watches running),
+        else "Raqib: idle". Changed only when the text changes; a tray that
+        cannot take it keeps a hole of its own."""
+        text = traymod.tip_text(trees if self.host_watching() else 0, new if self.host_watching() else 0,
+                                findings) if self.watching() else traymod.IDLE_TIP
         if text == self.tip:
             return text
         self.tip = text
@@ -1440,11 +1768,15 @@ def log_view(text, limit=None):
 
 
 class Window:
-    """The Tk window over a Controller. Only this class calls Tk."""
+    """The Tk window over a Controller. Only this class calls Tk. M7.6b:
+    its look comes from THEME (ttk.Style configured once in _style); the
+    tree tables are ttk.Treeviews; nothing it shows is computed here."""
 
     def __init__(self, tk, root, controller, project, environ=None, home=None, doctor_job=None, probe=None,
                  rules_panel=None):
         self.tk = tk
+        from tkinter import ttk   # M7.6b: the themed widgets (stdlib)
+        self.ttk = ttk
         self.rules_panel = rules_panel or RulesPanel(home=home)   # M7.6: the Rules screen's logic
         self.root = root
         self.c = controller
@@ -1456,9 +1788,11 @@ class Window:
         self.shown = {}
         self.after_id = None
         self.closed = False
+        self.mode = os_mode()                  # E1: dark or light as the OS says, else light
+        self.palette = THEME[self.mode]
         root.title(TITLE)
-        root.geometry("960x660")
-        root.minsize(640, 420)
+        root.geometry("%dx%d" % THEME["size"])
+        root.minsize(*THEME["min_size"])       # E5: every screen fits 900x600
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         root.report_callback_exception = controller.callback_error   # A-4: a hole and a log line
         self.log_open = False
@@ -1466,124 +1800,250 @@ class Window:
         self.checks_open = False
         self.doctor_band = None
         self.refusal = None
+        self.sorting = {"host": (None, False), "rules": (None, False)}   # E2: (column, descending) per table
+        self.payload = {"host": {}, "rules": {}}   # iid -> what a selected row shows
+        self.first_run_shown = False
+        self._style()
         self._build(project)
         self.show_host()                  # M7.3: the first screen is the host
         controller.start_probe(probe)     # E1: one discover round at open, in a thread
         self.check()
         self.after_id = root.after(TICK_MS, self.tick)
 
-    def _text(self, parent, height):
-        frame = self.tk.Frame(parent)
-        text = self.tk.Text(frame, height=height, wrap="word", font=("Courier", 10))
-        bar = self.tk.Scrollbar(frame, command=text.yview)
+    # the look
+    def _style(self):
+        """E1: fonts and ttk styles from THEME, once. A named system font
+        that is not installed falls back to the next, then to Tk's own."""
+        from tkinter import font as tkfont
+        fonts, pad, p = THEME["fonts"], THEME["pad"], self.palette
+        families = tkfont.families(self.root)
+        ui, mono = pick_font(fonts["ui"], families), pick_font(fonts["mono"], families)
+        for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont", "TkCaptionFont"):
+            named = tkfont.nametofont(name)
+            named.configure(size=fonts["size"], **({"family": ui} if ui else {}))
+        tkfont.nametofont("TkFixedFont").configure(size=fonts["mono_size"], **({"family": mono} if mono else {}))
+        base = tkfont.nametofont("TkDefaultFont").actual("family")
+        self.band_font = tkfont.Font(root=self.root, family=base, size=fonts["band"], weight="bold")
+        self.small_font = tkfont.Font(root=self.root, family=base, size=fonts["small"])
+        self.bold_font = tkfont.Font(root=self.root, family=base, size=fonts["size"], weight="bold")
+        style = self.ttk.Style(self.root)
+        names = style.theme_names()
+        if self.mode == "light" and sys.platform == "win32" and "vista" in names:
+            style.theme_use("vista")      # the native look; its buttons keep the OS colours
+        elif "clam" in names:
+            style.theme_use("clam")       # takes every colour of the theme (dark mode, Linux)
+        s = THEME["styles"]
+        style.configure(".", background=p["bg"], foreground=p["fg"], fieldbackground=p["surface"],
+                        bordercolor=p["border"], lightcolor=p["bg"], darkcolor=p["border"],
+                        troughcolor=p["tab_bg"], selectbackground=p["select_bg"], selectforeground=p["select_fg"],
+                        insertcolor=p["fg"])
+        style.configure("TFrame", background=p["bg"])
+        style.configure("TLabel", background=p["bg"], foreground=p["fg"])
+        style.configure("TCheckbutton", background=p["bg"], foreground=p["fg"])
+        style.map("TCheckbutton", background=[("active", p["bg"])])
+        style.configure("TButton", padding=(8, 2), width=-6, background=p["tab_bg"], foreground=p["fg"])
+        style.map("TButton", background=[("active", p["tab_current"])])
+        style.configure("TEntry", fieldbackground=p["surface"], foreground=p["fg"])
+        style.configure(s["muted"], foreground=p["muted"])
+        style.configure(s["tab"], padding=(10, 3), width=-5)
+        style.configure(s["tab_current"], padding=(10, 3), width=-5, background=p["tab_current"],
+                        font=self.bold_font)
+        for level, colour in p["levels"].items():
+            style.configure(s["level"] % level, foreground=colour)
+        rows = tkfont.nametofont("TkDefaultFont").metrics("linespace") + pad["row"] + 2
+        style.configure("Treeview", background=p["surface"], fieldbackground=p["surface"], foreground=p["fg"],
+                        rowheight=rows)
+        style.map("Treeview", background=[("selected", p["select_bg"])], foreground=[("selected", p["select_fg"])])
+        style.configure("Treeview.Heading", background=p["tab_bg"], foreground=p["fg"], font=self.bold_font)
+        self.root.configure(background=p["bg"])
+
+    def _wrap(self, label, start=860):
+        """A label that wraps at the width it is given (never wider than the window)."""
+        label.configure(wraplength=start)
+        label.bind("<Configure>", lambda e, w=label: w.configure(wraplength=max(e.width - 4, 120)))
+        return label
+
+    def _text(self, parent, height, mono=False):
+        p = self.palette
+        frame = self.ttk.Frame(parent)
+        text = self.tk.Text(frame, height=height, width=20, wrap="word", font="TkFixedFont" if mono else "TkTextFont",
+                            background=p["surface"], foreground=p["fg"], insertbackground=p["fg"],
+                            selectbackground=p["select_bg"], selectforeground=p["select_fg"],
+                            highlightthickness=1, highlightbackground=p["border"], highlightcolor=p["border"],
+                            relief="flat", borderwidth=0, padx=THEME["pad"]["gap"], pady=THEME["pad"]["row"])
+        bar = self.ttk.Scrollbar(frame, command=text.yview)
         text.configure(yscrollcommand=bar.set, state="disabled")
         bar.pack(side="right", fill="y")
         text.pack(side="left", fill="both", expand=True)
-        for level, color in LEVEL_COLORS.items():
-            text.tag_configure(level, foreground=color)
+        for level, colour in p["levels"].items():
+            text.tag_configure(level, foreground=colour)
         return frame, text
 
+    def _table(self, parent, key, columns, height):
+        """E2/E3: a Treeview with columns that sort when their heading is clicked."""
+        frame = self.ttk.Frame(parent)
+        tree = self.ttk.Treeview(frame, columns=[c[0] for c in columns], show="headings", height=height,
+                                 selectmode="browse")
+        for cid, heading, width, _, _ in columns:
+            tree.heading(cid, text=heading, anchor="w", command=lambda c=cid: self.sort_by(key, c))
+            tree.column(cid, width=width, minwidth=40, stretch=True, anchor="w")
+        for level, colour in self.palette["levels"].items():
+            tree.tag_configure(level, foreground=colour)
+        bar = self.ttk.Scrollbar(frame, command=tree.yview)
+        tree.configure(yscrollcommand=bar.set)
+        bar.pack(side="right", fill="y")
+        tree.pack(side="left", fill="both", expand=True)
+        return frame, tree
+
     def _build(self, project):
-        tk = self.tk
-        self.band = tk.Label(self.root, text="", anchor="w", font=("TkDefaultFont", 14, "bold"))
-        self.band.pack(fill="x", padx=10, pady=(10, 0))
-        self.detail = tk.Label(self.root, text="", anchor="w", justify="left", wraplength=920)
-        self.detail.pack(fill="x", padx=10)
-        # F-2: the header: "Host" and "Project" switch between the two screens at any time, watches running
-        head = tk.Frame(self.root)
-        self.host_tab = tk.Button(head, text="Host", command=self.show_host)
+        tk, ttk, p, pad = self.tk, self.ttk, self.palette, THEME["pad"]
+        s = THEME["styles"]
+        out = pad["outer"]
+        # E3: the header, one bar: Host | Project | Rules | Log, the running watches, "N rules off", Open page.
+        # F-2: "Host" and "Project" switch between the two screens at any time, watches running.
+        head = ttk.Frame(self.root)
+        self.host_tab = ttk.Button(head, text="Host", command=self.show_host, style=s["tab"])
         self.host_tab.pack(side="left")
-        self.project_tab = tk.Button(head, text="Project", command=self.show_project)
-        self.project_tab.pack(side="left", padx=6)
-        self.rules_tab = tk.Button(head, text="Rules", command=self.show_rules)   # M7.6 (ADR-0008)
-        self.rules_tab.pack(side="left", padx=(0, 6))
-        self.head_note = tk.Label(head, text="", anchor="w")
-        self.head_note.pack(side="left", fill="x", expand=True)
-        head.pack(fill="x", padx=10, pady=(6, 0))
+        self.project_tab = ttk.Button(head, text="Project", command=self.show_project, style=s["tab"])
+        self.project_tab.pack(side="left", padx=(2, 0))
+        self.rules_tab = ttk.Button(head, text="Rules", command=self.show_rules, style=s["tab"])   # M7.6
+        self.rules_tab.pack(side="left", padx=(2, 0))
+        self.log_tab = ttk.Button(head, text="Log", command=self.toggle_screen_log, style=s["tab"])   # A-5, F-6
+        self.log_tab.pack(side="left", padx=(2, pad["gap"]))
+        # F-11 and A-13: Open page, the host watch's on the host screen, the project watch's on the project's
+        self.host_page_button = ttk.Button(head, text="Open page", command=self.open_host_page)
+        self.page_button = ttk.Button(head, text="Open page", command=self.open_page)
+        notes = self.head_notes = ttk.Frame(head)
+        self.running_note = self._wrap(ttk.Label(notes, text="", anchor="w", style=s["muted"]), 300)
+        self.running_note.pack(fill="x")
+        self.head_note = self._wrap(ttk.Label(notes, text="", anchor="w"), 300)   # M7.6: "N rules off"
+        self.head_note.pack(fill="x")
+        notes.pack(side="left", fill="x", expand=True)
+        head.pack(fill="x", padx=out, pady=(out, pad["gap"]))
+        # the band: the state word, its level in a word beside the colour (E1), the detail
+        self.bandf = tk.Frame(self.root, background=p["band_bg"]["note"])
+        top = tk.Frame(self.bandf, background=p["band_bg"]["note"])
+        self.band = tk.Label(top, text="", anchor="w", font=self.band_font, background=p["band_bg"]["note"],
+                             foreground=p["fg"])
+        self.band.pack(side="left")
+        self.band_level = tk.Label(top, text="", anchor="w", font=self.small_font, background=p["band_bg"]["note"],
+                                   foreground=p["fg"])
+        self.band_level.pack(side="left", padx=(pad["band_x"], 0))
+        top.pack(fill="x", padx=pad["band_x"], pady=(pad["band_y"], 0))
+        self.detail = self._wrap(tk.Label(self.bandf, text="", anchor="w", justify="left",
+                                          background=p["band_bg"]["note"], foreground=p["fg"]), 860)
+        self.detail.pack(fill="x", padx=pad["band_x"], pady=(0, pad["band_y"]))
+        self.bandf.pack(fill="x", padx=out)
+        # E4: the doctrine, under the band, always
+        self.doctrine = ttk.Label(self.root, text=DOCTRINE, anchor="w", style=s["muted"])
+        self.doctrine.pack(fill="x", padx=out, pady=(2, pad["gap"]))
+        # the window's own notes and holes, on every screen
+        self.foot = self._wrap(tk.Label(self.root, text="", anchor="w", justify="left", background=p["bg"],
+                                        foreground=p["levels"]["note"]), 860)
+        self.foot.pack(side="bottom", fill="x", padx=out, pady=(0, pad["gap"]))
         # the host screen (M7.3): the first one
-        self.hostf = tk.Frame(self.root)
-        row = tk.Frame(self.hostf)
-        self.host_button = tk.Button(row, text="Watch this host", command=self.host_toggle)
+        self.hostf = ttk.Frame(self.root)
+        # E4: the first-run lines, at the top of the first screen until the first look is written
+        self.first_run_label = self._wrap(ttk.Label(self.hostf, text="", anchor="w", justify="left",
+                                                    font=self.small_font), 860)
+        row = ttk.Frame(self.hostf)
+        self.host_button = ttk.Button(row, text="Watch this host", command=self.host_toggle)
         self.host_button.pack(side="left")
-        tk.Button(row, text="Watch a project", command=self.show_project).pack(side="left", padx=6)
-        self.checks_button = tk.Button(row, text=checks_state(None)[0], command=self.toggle_checks)
+        ttk.Button(row, text="Watch a project", command=self.show_project).pack(side="left", padx=pad["gap"])
+        self.checks_button = ttk.Button(row, text=checks_state(None)[0], command=self.toggle_checks)
         self.checks_button.pack(side="left")
+        row.pack(fill="x", pady=(0, pad["row"]))
+        self.host_row = row
+        row = ttk.Frame(self.hostf)
         # M7.2b (ADR-0007 H-1): off by default; read when "Watch this host" starts a watch
         # options may be None (a Controller without Options, as the M6.4 Tk tests build it): off, as by default
         self.attach_var = tk.BooleanVar(value=bool(getattr(self.c.options, "attach_hooks", False)))
-        self.attach_box = tk.Checkbutton(row, text=ATTACH_TEXT, variable=self.attach_var)
-        self.attach_box.pack(side="left", padx=6)
+        self.attach_box = ttk.Checkbutton(row, text=ATTACH_TEXT, variable=self.attach_var)
+        self.attach_box.pack(side="left")
         # M7.4 E3: "suspect unknown trees", empty (off) by default; read when "Watch this host" starts a watch
-        tk.Label(row, text=SUSPECT_TEXT).pack(side="left")
+        ttk.Label(row, text=SUSPECT_TEXT).pack(side="left", padx=(pad["gap"] * 2, 0))
         self.suspect_var = tk.StringVar(value=str(getattr(self.c.options, "suspect", "") or ""))
-        tk.Entry(row, textvariable=self.suspect_var, width=16).pack(side="left", padx=(2, 6))
+        ttk.Entry(row, textvariable=self.suspect_var, width=16).pack(side="left", padx=(pad["row"], pad["gap"] * 2))
+        ttk.Label(row, text="page").pack(side="left")
         self.host_url = tk.StringVar(value="-")
-        tk.Entry(row, textvariable=self.host_url, state="readonly").pack(side="left", fill="x", expand=True, padx=6)
-        tk.Button(row, text="Open page", command=self.open_host_page).pack(side="left", padx=(0, 6))   # F-11
-        self.host_log_button = tk.Button(row, text="Log", command=self.toggle_host_log)                # F-6
-        self.host_log_button.pack(side="left")
-        row.pack(fill="x", pady=6)
-        self.host_badges = tk.Label(self.hostf, text="", anchor="w", justify="left", wraplength=920)
-        self.host_badges.pack(fill="x")
-        self.checks_frame, self.checks_text = self._text(self.hostf, 8)   # folded under "Checks"
-        frame, self.host_text = self._text(self.hostf, 20)
-        frame.pack(fill="both", expand=True)
-        self.host_log_frame, self.host_log_text = self._text(self.hostf, 10)   # F-6: shown by its Log button
+        ttk.Entry(row, textvariable=self.host_url, state="readonly", width=24).pack(side="left", fill="x", expand=True,
+                                                                                  padx=(pad["row"], 0))
+        row.pack(fill="x", pady=(0, pad["row"]))
+        self.host_badges = self._wrap(ttk.Label(self.hostf, text="", anchor="w", justify="left"), 860)
+        self.host_badges.pack(fill="x", pady=(0, pad["row"]))
+        self.checks_frame, self.checks_text = self._text(self.hostf, 3, mono=True)   # folded under "Checks"
+        # E2: the tree table, then the screen's text (findings, notes, holes) beside the selected tree's detail
+        self.host_paned = ttk.PanedWindow(self.hostf, orient="vertical")
+        frame, self.host_tree = self._table(self.host_paned, "host", TREE_COLUMNS, 4)
+        self.host_tree.bind("<<TreeviewSelect>>", lambda e: self._show_tree_detail())
+        self.host_paned.add(frame, weight=3)
+        lower = ttk.PanedWindow(self.host_paned, orient="horizontal")
+        frame, self.host_text = self._text(lower, 4)
+        lower.add(frame, weight=1)
+        self.host_detail_frame, self.host_detail = self._text(lower, 4)
+        lower.add(self.host_detail_frame, weight=1)
+        self.host_lower = lower
+        self.host_paned.add(lower, weight=2)
+        self.host_paned.pack(fill="both", expand=True)
+        self.host_log_frame, self.host_log_text = self._text(lower, 4, mono=True)   # F-6: in the detail's place
+        self._set(self.host_detail, "host_detail", "the selected tree's findings and notes are shown here\n")
         # the project screen (M6.4's first screen)
-        self.first = tk.Frame(self.root)
-        row = tk.Frame(self.first)
-        tk.Label(row, text="Project").pack(side="left")
+        self.first = ttk.Frame(self.root)
+        row = ttk.Frame(self.first)
+        ttk.Label(row, text="Project").pack(side="left")
         self.project = tk.StringVar(value=project)
-        tk.Entry(row, textvariable=self.project).pack(side="left", fill="x", expand=True, padx=6)
-        tk.Button(row, text="Browse...", command=self.browse).pack(side="left")
-        tk.Button(row, text="Check again", command=self.check).pack(side="left", padx=6)
-        self.start_button = tk.Button(row, text="Start", command=self.start)
+        ttk.Entry(row, textvariable=self.project).pack(side="left", fill="x", expand=True, padx=pad["gap"])
+        ttk.Button(row, text="Browse...", command=self.browse).pack(side="left")
+        ttk.Button(row, text="Check again", command=self.check).pack(side="left", padx=pad["gap"])
+        self.start_button = ttk.Button(row, text="Start", command=self.start)
         self.start_button.pack(side="left")
-        row.pack(fill="x", pady=6)
-        frame, self.doctor_text = self._text(self.first, 14)
+        row.pack(fill="x", pady=(0, pad["gap"]))
+        frame, self.doctor_text = self._text(self.first, 10, mono=True)
         frame.pack(fill="both", expand=True)
         # watching screen
-        self.watching = tk.Frame(self.root)
-        row = tk.Frame(self.watching)
-        tk.Label(row, text="Page (read-only)").pack(side="left")
+        self.watching = ttk.Frame(self.root)
+        row = ttk.Frame(self.watching)
+        ttk.Label(row, text="Page (read-only)").pack(side="left")
         self.url = tk.StringVar(value="-")
-        tk.Entry(row, textvariable=self.url, state="readonly").pack(side="left", fill="x", expand=True, padx=6)
-        tk.Button(row, text="Open page", command=self.open_page).pack(side="left", padx=(0, 6))   # A-13
-        self.log_button = tk.Button(row, text="Log", command=self.toggle_log)                    # A-5
-        self.log_button.pack(side="left", padx=(0, 6))
-        self.stop_button = tk.Button(row, text="Stop", command=self.stop)
+        ttk.Entry(row, textvariable=self.url, state="readonly").pack(side="left", fill="x", expand=True,
+                                                                     padx=pad["gap"])
+        self.stop_button = ttk.Button(row, text="Stop", command=self.stop)
         self.stop_button.pack(side="left")
-        self.back_button = tk.Button(row, text="Back", command=self.show_first)
-        row.pack(fill="x", pady=6)
-        self.knock_label = tk.Label(self.watching, text=first_line(None), anchor="w")   # A-5
+        self.back_button = ttk.Button(row, text="Back", command=self.show_first)
+        row.pack(fill="x", pady=(0, pad["row"]))
+        self.knock_label = ttk.Label(self.watching, text=first_line(None), anchor="w")   # A-5
         self.knock_label.pack(fill="x")
-        self.badges = tk.Label(self.watching, text="", anchor="w", justify="left", wraplength=920)
-        self.badges.pack(fill="x")
-        frame, self.body = self._text(self.watching, 18)
+        self.badges = self._wrap(ttk.Label(self.watching, text="", anchor="w", justify="left"), 860)
+        self.badges.pack(fill="x", pady=(0, pad["row"]))
+        frame, self.body = self._text(self.watching, 10)
         frame.pack(fill="both", expand=True)
-        self.log_frame, self.log_text = self._text(self.watching, 10)   # A-5: shown by the Log button
+        self.log_frame, self.log_text = self._text(self.watching, 6, mono=True)   # A-5: the header's Log
         # M7.6 (ADR-0008): the Rules screen - the table, on / off, a threshold, Add, Reset; it writes the overlay only
-        self.rulesf = tk.Frame(self.root)
-        row = tk.Frame(self.rulesf)
-        tk.Label(row, text="Rule").pack(side="left")
+        self.rulesf = ttk.Frame(self.root)
+        row = ttk.Frame(self.rulesf)
+        ttk.Label(row, text="Rule").pack(side="left")
         self.rule_id = tk.StringVar(value="")
-        tk.Entry(row, textvariable=self.rule_id, width=20).pack(side="left", padx=(2, 6))
-        tk.Button(row, text="On", command=lambda: self.rules_set(True)).pack(side="left")
-        tk.Button(row, text="Off", command=lambda: self.rules_set(False)).pack(side="left", padx=(2, 6))
-        tk.Button(row, text="Reset", command=self.rules_reset).pack(side="left", padx=(0, 12))
-        tk.Label(row, text="Threshold").pack(side="left")
+        ttk.Entry(row, textvariable=self.rule_id, width=22).pack(side="left", padx=(pad["row"], pad["gap"]))
+        ttk.Button(row, text="On", command=lambda: self.rules_set(True)).pack(side="left")
+        ttk.Button(row, text="Off", command=lambda: self.rules_set(False)).pack(side="left", padx=(2, pad["gap"]))
+        ttk.Button(row, text="Reset", command=self.rules_reset).pack(side="left", padx=(0, pad["gap"] * 2))
+        ttk.Button(row, text="Add rule file...", command=self.rules_add).pack(side="left")
+        row.pack(fill="x", pady=(0, pad["row"]))
+        row = ttk.Frame(self.rulesf)
+        ttk.Label(row, text="Threshold").pack(side="left")
         self.rule_field = tk.StringVar(value="")
-        tk.Entry(row, textvariable=self.rule_field, width=12).pack(side="left", padx=2)
+        ttk.Entry(row, textvariable=self.rule_field, width=14).pack(side="left", padx=pad["row"])
+        ttk.Label(row, text="=").pack(side="left")
         self.rule_value = tk.StringVar(value="")
-        tk.Entry(row, textvariable=self.rule_value, width=8).pack(side="left", padx=2)
-        tk.Button(row, text="Set", command=self.rules_threshold).pack(side="left", padx=(2, 12))
-        tk.Button(row, text="Add rule file...", command=self.rules_add).pack(side="left")
-        row.pack(fill="x", pady=6)
-        frame, self.rules_text = self._text(self.rulesf, 22)
+        ttk.Entry(row, textvariable=self.rule_value, width=8).pack(side="left", padx=pad["row"])
+        ttk.Button(row, text="Set", command=self.rules_threshold).pack(side="left", padx=(2, 0))
+        row.pack(fill="x", pady=(0, pad["row"]))
+        frame, self.rules_tree = self._table(self.rulesf, "rules", RULES_COLUMNS, 7)
+        self.rules_tree.bind("<<TreeviewSelect>>", lambda e: self._on_rule_pick())
         frame.pack(fill="both", expand=True)
-        # the window's own notes and holes, on both screens
-        self.foot = tk.Label(self.root, text="", anchor="w", justify="left", wraplength=920)
-        self.foot.pack(side="bottom", fill="x", padx=10, pady=(0, 8))
+        frame, self.rules_text = self._text(self.rulesf, 4)
+        frame.pack(fill="x", pady=(pad["gap"], 0))
+        self._first_run()
 
     # screens
     def _show(self, name):
@@ -1594,9 +2054,29 @@ class Window:
             if key != name:
                 frame.pack_forget()
         frames[name].pack(
-            fill="both", expand=True, padx=10)
+            fill="both", expand=True, padx=THEME["pad"]["outer"])
         self.screen = name
+        self._sync_header()
         return True
+
+    def _sync_header(self):
+        """E3: the current screen's tab in its own style, the Log tab's word
+        for the current screen's log, its Open page."""
+        s = THEME["styles"]
+        current = {"host": self.host_tab, "first": self.project_tab, "watching": self.project_tab,
+                   "rules": self.rules_tab}.get(self.screen)
+        for tab in (self.host_tab, self.project_tab, self.rules_tab):
+            tab.configure(style=s["tab_current"] if tab is current else s["tab"])
+        has_log = self.screen in ("host", "watching")
+        shown = self.host_log_open if self.screen == "host" else self.log_open
+        self.log_tab.configure(text="Hide log" if has_log and shown else "Log",
+                               state="normal" if has_log else "disabled")
+        page = {"host": self.host_page_button, "first": self.page_button, "watching": self.page_button}.get(self.screen)
+        for button in (self.host_page_button, self.page_button):
+            if button is not page:
+                button.pack_forget()
+        if page is not None and not page.winfo_manager():
+            page.pack(side="right", padx=(THEME["pad"]["gap"], 0), before=self.head_notes)
 
     def show_host(self):
         self._show("host")
@@ -1643,6 +2123,12 @@ class Window:
         self._band("RULES" if p.level == "clean" else "RULES: REFUSED" if p.level == "alarm" else "RULES",
                    p.level, p.message or p.header())
 
+    def _on_rule_pick(self):
+        """E3: a row picked in the Rules table fills the Rule field (nothing is changed until a button is pressed)."""
+        picked = self.rules_tree.selection()
+        if picked and picked[0] in self.payload["rules"]:
+            self.rule_id.set(self.payload["rules"][picked[0]])
+
     def show_project(self):
         """F-2: "Project" (and "Watch a project"): the running project watch's
         screen, else the project field."""
@@ -1655,22 +2141,30 @@ class Window:
         """F-11: the host watch's page, by the person's click (never under CI)."""
         self.c.page_note = self.c.open_page("host")
 
+    def toggle_screen_log(self):
+        """E3: the header's Log: the current screen's log pane (host or project watch)."""
+        if self.screen == "host":
+            self.toggle_host_log()
+        elif self.screen == "watching":
+            self.toggle_log()
+
     def toggle_host_log(self):
         """F-6: the host watch's own lines, at any time (bounded), as A-5."""
         self.host_log_open = not self.host_log_open
-        if self.host_log_open:
-            self.host_log_frame.pack(fill="both", expand=True, pady=(6, 0))
-            self.host_log_button.configure(text="Hide log")
+        if self.host_log_open:   # M7.6b E5: the log takes the detail pane's place, so the screen keeps its size
+            self.host_lower.forget(self.host_detail_frame)
+            self.host_lower.add(self.host_log_frame, weight=1)
         else:
-            self.host_log_frame.pack_forget()
-            self.host_log_button.configure(text="Log")
+            self.host_lower.forget(self.host_log_frame)
+            self.host_lower.add(self.host_detail_frame, weight=1)
             self.shown.pop("host_log", None)
+        self._sync_header()
 
     def toggle_checks(self):
         """E1: the doctor lines, folded under "Checks"."""
         self.checks_open = not self.checks_open
         if self.checks_open:
-            self.checks_frame.pack(fill="x", pady=(0, 6), before=self.host_text.master)
+            self.checks_frame.pack(fill="x", pady=(0, THEME["pad"]["gap"]), before=self.host_paned)
         else:
             self.checks_frame.pack_forget()
 
@@ -1701,8 +2195,85 @@ class Window:
         widget.configure(state="disabled")
 
     def _band(self, word, level, detail):
-        self.band.configure(text=word, fg=LEVEL_COLORS.get(level, LEVEL_COLORS["incomplete"]))
-        self.detail.configure(text=detail)
+        """E1: the band in its level's colours, the level's word beside the state word."""
+        fg, bg = band_colours(level, self.mode)
+        self.bandf.configure(background=bg)
+        for part in (self.band.master, self.band, self.band_level, self.detail):
+            part.configure(background=bg)
+        self.band.configure(text=word, foreground=fg)
+        self.band_level.configure(text="[%s]" % level_word(level), foreground=fg)
+        self.detail.configure(text=detail, foreground=self.palette["fg"])
+
+    def _fill(self, key, tree, items, columns):
+        """E2/E3: a Treeview's rows [(values, level, payload)], sorted as its
+        heading was last clicked; the selection kept by its row's id."""
+        column, reverse = self.sorting[key]
+        if column is not None:
+            spec = next(c for c in columns if c[0] == column)
+            index = [c[0] for c in columns].index(column)
+            items = sorted(items, key=lambda it: sort_key(spec[4], it[0][index]), reverse=reverse)
+        if self.shown.get("table:" + key) == items:
+            return False
+        self.shown["table:" + key] = items
+        picked = tree.selection()
+        tree.delete(*tree.get_children())
+        self.payload[key] = {}
+        for values, level, payload in items:
+            iid = "%s|%s" % (values[0], values[1])
+            while iid in self.payload[key]:
+                iid += "+"
+            tree.insert("", "end", iid=iid, values=values, tags=(level,) if level else ())
+            self.payload[key][iid] = payload
+        for cid, heading, _, _, _ in columns:
+            mark = (" v" if reverse else " ^") if cid == column else ""
+            tree.heading(cid, text=heading + mark)
+        keep = [i for i in picked if i in self.payload[key]]
+        if keep:
+            tree.selection_set(keep)
+        return True
+
+    def sort_by(self, key, column):
+        """E2: a heading clicked: sort by that column; clicked again, the other way."""
+        current, reverse = self.sorting[key]
+        self.sorting[key] = (column, not reverse if current == column else False)
+        self.shown.pop("table:" + key, None)
+        if key == "host":
+            self._fill_host(self.c.host_view())
+        else:
+            self._fill_rules()
+
+    def _fill_host(self, view):
+        details = view.get("details") or []
+        items = [(tree_values(row), row_level(row), (row, details[i] if i < len(details) else None))
+                 for i, row in enumerate(view.get("rows") or [])]
+        if self._fill("host", self.host_tree, items, TREE_COLUMNS):
+            self._show_tree_detail()
+
+    def _show_tree_detail(self):
+        picked = self.host_tree.selection()
+        payload = self.payload["host"].get(picked[0]) if picked else None
+        if payload is None:
+            text = ("the selected tree's findings and notes are shown here\n" if self.payload["host"]
+                    else "no tree in the table\n")
+            self._set(self.host_detail, "host_detail", text)
+            return
+        self._set(self.host_detail, "host_detail", None, text_tags(tree_detail_text(*payload)))
+
+    def _fill_rules(self):
+        items = [(values, level, values[0]) for values, level in rules_rows(self.rules_panel.rows)]
+        self._fill("rules", self.rules_tree, items, RULES_COLUMNS)
+
+    def _first_run(self):
+        """E4: the three first-run lines while ~/.raqib/host/look.json does not exist."""
+        lines = first_run_lines(self.home)
+        if lines and not self.first_run_shown:
+            self.first_run_label.configure(text="\n".join(lines))
+            self.first_run_label.pack(fill="x", pady=(0, THEME["pad"]["gap"]), before=self.host_row)
+            self.first_run_shown = True
+        elif not lines and self.first_run_shown:
+            self.first_run_label.pack_forget()
+            self.first_run_label.configure(text="")
+            self.first_run_shown = False
 
     # actions
     def browse(self):
@@ -1740,12 +2311,11 @@ class Window:
         """A-5: the watch's own lines, at any time (bounded)."""
         self.log_open = not self.log_open
         if self.log_open:
-            self.log_frame.pack(fill="both", expand=True, pady=(6, 0))
-            self.log_button.configure(text="Hide log")
+            self.log_frame.pack(fill="both", expand=True, pady=(THEME["pad"]["gap"], 0))
         else:
             self.log_frame.pack_forget()
-            self.log_button.configure(text="Log")
             self.shown.pop("log", None)
+        self._sync_header()
 
     def on_close(self):
         action = self.c.close_request()
@@ -1790,11 +2360,25 @@ class Window:
         self.after_id = self.root.after(TICK_MS, self.tick)
 
     def _foot(self):
-        holes = self.c.holes + self.c.tray_holes() + self.c.look_holes()   # F-3: the look's, until round 1
+        own = self.c.holes + self.c.tray_holes()
+        look = self.c.look_holes()   # F-3: the look's, until round 1
+        holes = own + look
         notes = list(self.c.notes) + (["page: %s" % self.c.page_note] if self.c.page_note else [])
-        foot = ["hole: %s" % h for h in holes] + ["note: %s" % n for n in notes]
-        self.foot.configure(text="\n".join(foot), fg=LEVEL_COLORS["alarm" if holes else "incomplete"])
+        # E1: holes amber, notes grey; each line says "hole:" or "note:"; E5: the look's holes counted in one line
+        self.foot.configure(text="\n".join(foot_lines(own, notes, look)),
+                            foreground=level_colour("hole" if holes else "note", self.mode))
         return holes
+
+    def _head(self):
+        """E3: the header's words: the running watches; the rules off (red
+        while a running watch's off rules would have fired, ADR-0008 A-2)."""
+        self.running_note.configure(text=self.c.running_text())
+        states = [getattr(x, "last_state", None) for x in self.c.sessions() if Controller._live(x)]
+        text, level = header_rules(self.rules_panel.header(), states)
+        if self.refusal and self.c.project_watching():
+            text += "   %s" % self.refusal
+        self.head_note.configure(text=text, foreground=level_colour(level, self.mode) if level else
+                                 self.palette["muted"])
 
     def _tick(self):
         for action in self.c.drain():
@@ -1803,13 +2387,17 @@ class Window:
                 self.root.lift()
         holes = self._foot()
         self.c.report_finished()   # F-8: each finished watch's report, appended to the log once
-        self.head_note.configure(text=self.c.running_text() + "   " + self.rules_panel.header() + (
-            "   %s" % self.refusal if self.refusal and self.c.project_watching() else ""))   # M7.6: rules off
+        self._head()               # M7.6: rules off
+        if self.first_run_shown:
+            self._first_run()      # E4: gone once the first look is written
         fresh = self._tick_doctor()
         view = self.c.host_view()
-        self.c.host_tip(view.get("trees"), view.get("new"))   # E3: the tray's tooltip
+        project = getattr(self.c.session, "last_state", None) if self.c.project_watching() else None
+        findings = len(view.get("findings") or []) + len((project or {}).get("findings") or [])
+        self.c.host_tip(view.get("trees"), view.get("new"), findings)   # E5: the tray's tooltip
         if self.screen == "rules":
-            self._set(self.rules_text, "rules", self.rules_panel.text())
+            self._fill_rules()
+            self._set(self.rules_text, "rules", self.rules_panel.notes_text())
             return
         if self.screen == "host":
             self._tick_host(view)
@@ -1834,7 +2422,7 @@ class Window:
         if snap["phase"] == "finished":
             self._band("FINISHED", "alarm" if snap["final_exit"] else "clean",
                        "the watch ended; its final report is below (exit %s)" % snap["final_exit"])
-            self._set(self.body, "body", snap["final_text"] + ("".join("hole: %s\n" % h for h in extra)))
+            self._set(self.body, "body", None, text_tags(snap["final_text"] + "".join("hole: %s\n" % h for h in extra)))
             self.stop_button.pack_forget()
             self.back_button.pack(side="left")
             return
@@ -1849,14 +2437,15 @@ class Window:
         self._band(word, view["level"], view["detail"])
         self.badges.configure(text="   ".join(text for _, text in view["badges"]))
         self.url.set(view["url"])
-        self._set(self.body, "body", body_text(view))
+        self._set(self.body, "body", None, text_tags(body_text(view)))
 
     def _tick_host(self, view):
         """E1/E2: the host screen from the controller's host view."""
         self._band(view["word"], view["level"], view["detail"])
         self.host_badges.configure(text="   ".join(text for _, text in view.get("badges") or []))
         self.host_url.set(view.get("url") or "-")
-        self._set(self.host_text, "host", host_body(view))
+        self._fill_host(view)
+        self._set(self.host_text, "host", None, text_tags(host_text_body(view)))
         if self.host_log_open:   # F-6
             log = getattr(self.c.host, "log", None)
             self._set(self.host_log_text, "host_log", log_view(log.text()) if log is not None else
