@@ -202,3 +202,58 @@ P5; the Table's rulings C-4..C-6; the rest recorded.
 - Table ledger for M7.6b: one review, one REDO, one CI follow-up; the
   Table's miss: the HANDOFF's E5 "900x600 without clipping" did not say
   "measured on windows", so the builder measured under Xvfb.
+
+## Amendment E (the Table, 2026-11-09) - rulings on review 2026-11-09-M7.6c.md (7e36dec)
+Builder's record: docs/review/2026-11-09-M7.6c-questions.md (Q-1..Q-14).
+CI run 42584260231 for 7e36dec: install jobs success; all four gate jobs
+failed one test - the byte-for-byte check of the shipped host data, which
+embeds the builder's absolute checkout path (P1; the follow-up was ordered
+before this ruling). Verdict: REDO on P1 (in flight) and P2; the Table's
+rulings E-3..E-8; the rest recorded.
+- E-1 (P1, A9, E1/E5) Every path in generated or shipped data is relative
+  to the repository root, from one helper; a test greps package data and
+  fixtures for `/home/`, `/Users/`, `C:\Users` and refuses any.
+- E-2 (P2, A6) "Measured" means sensitive: a threshold is editable only
+  when at least one generated fixture changes outcome across the field's
+  bounds (the generator must produce, for each editable field, a positive
+  that stops firing just past the value and a negative that starts firing
+  just short of it - the edge pair); a field with no edge pair is FIXED,
+  shown as such in `raqib rules` and the panel, and refused on set with
+  "not measurable: no fixture is sensitive to <field>". By the review's
+  probes that makes live_window, suspect_every, w and r FIXED until the
+  generator earns them edge pairs: w needs an act at W+1 (Q-3) and an act
+  at W; r needs a cycle that falls out of the window at r-1; live_window
+  needs a dark streak that starts inside vs outside the window;
+  suspect_every is not a rule threshold at all (E-3). k keeps its edges
+  and stays editable. The words "measured at <field>=<v> ... fp rate 0" are
+  printed only for a sensitive field.
+- E-3 (Q-7) suspect_every leaves the rule: it is a watch option
+  (`--suspect-every N`, the window's suspect field), not an eq value of
+  HOST-RHYTHM; the YAML line goes; the overlay does not carry it.
+- E-4 (P3, Q-2, A8) The arrivals are SYNTHETIC (their run.json says so);
+  the HANDOFF's "real exports" was the Table's error, recorded here. "Would
+  fire on a benign desktop" is a measure only when a real desktop's export
+  exists: the commander's Windows machine is the first (Amendment M's
+  machine); until a real export is shipped with his consent the arrivals
+  are named "synthetic desktops" everywhere they are counted.
+- E-5 (P4, K-9) Fixtures that cannot fire a rule are not counted among its
+  measured negatives (HOST-RHYTHM back to 5; AGENT-DARK-LIVE likewise).
+- E-6 (P5, Q-4) The bounds are the fence and the measurement the gate;
+  a refusal names both the fixture and the condition ("r must be >= k+2:
+  an os act is read one round late"); `raqib rules` shows the effective
+  range the measurement accepts beside the declared bounds.
+- E-7 (P6, Q-10, A3) The measurement at load runs only when the overlay
+  changed since the last measure (a hash of the overlay file and the
+  catalog kept in ~/.raqib/rules.measured.json with the result); while it
+  runs the watch prints "measuring the overlay's thresholds..." and the
+  window shows it in the band; the Rules panel measures on set, not on
+  every reload.
+- E-8 (P7, A1, Q-11) raqib/rules/ does not import the model layer:
+  fixturegen takes the round builder as a parameter (host.py passes it;
+  the rules package never imports host, suspect, notify, subprocess or
+  http); the A1 test walks the import graph of raqib.rules after a
+  generate (sys.modules diff), not the file text; `_socket` and
+  `socketserver` join the forbidden names.
+- E-9 (P8) The README assertion is restored as a test, not a comment.
+- E-10 (P17) raqib/rules/hostdata/ is ratified into Scope by this ruling.
+- E-11 Every REDO change carries a test for the behaviour it adds (D-8).
