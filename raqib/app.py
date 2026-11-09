@@ -2036,7 +2036,7 @@ class Window:
         self.head_note = self._wrap(ttk.Label(notes, text="", anchor="w"), 300)   # M7.6: "N rules off"
         self.head_note.pack(fill="x")
         notes.pack(side="left", fill="x", expand=True)
-        head.pack(fill="x", padx=out, pady=(out, pad["gap"]))
+        head.pack(fill="x", padx=out, pady=(pad["gap"], pad["row"]))
         # the band: the state word, its level in a word beside the colour (E1), the detail
         self.bandf = tk.Frame(self.root, background=p["band_bg"]["note"])
         top = tk.Frame(self.bandf, background=p["band_bg"]["note"])
@@ -2053,7 +2053,7 @@ class Window:
         self.bandf.pack(fill="x", padx=out)
         # E4: the doctrine, under the band, always
         self.doctrine = ttk.Label(self.root, text=DOCTRINE, anchor="w", style=s["muted"])
-        self.doctrine.pack(fill="x", padx=out, pady=(2, pad["gap"]))
+        self.doctrine.pack(fill="x", padx=out, pady=(0, pad["row"]))
         # the window's own notes and holes, on every screen
         # REDO C-5: every line (F-3: each of the look's holes until round 1), three shown, the rest scrolled;
         # "(N more)" leads to the Host screen, where the look's holes are listed in full
@@ -2100,14 +2100,14 @@ class Window:
         self.host_tree.bind("<<TreeviewSelect>>", lambda e: self._show_tree_detail())
         self.host_paned.add(frame, weight=3)
         lower = ttk.PanedWindow(self.host_paned, orient="horizontal")
-        frame, self.host_text = self._text(lower, 3)
+        frame, self.host_text = self._text(lower, 2)
         lower.add(frame, weight=1)
-        self.host_detail_frame, self.host_detail = self._text(lower, 3)
+        self.host_detail_frame, self.host_detail = self._text(lower, 2)
         lower.add(self.host_detail_frame, weight=1)
         self.host_lower = lower
         self.host_paned.add(lower, weight=2)
         self.host_paned.pack(fill="both", expand=True)
-        self.host_log_frame, self.host_log_text = self._text(lower, 3, mono=True)   # F-6: in the detail's place
+        self.host_log_frame, self.host_log_text = self._text(lower, 2, mono=True)   # F-6: in the detail's place
         self._set(self.host_detail, "host_detail", "the selected tree's findings and notes are shown here\n")
         # the project screen (M6.4's first screen)
         self.first = ttk.Frame(self.root)
@@ -2120,7 +2120,7 @@ class Window:
         self.start_button = ttk.Button(row, text="Start", command=self.start)
         self.start_button.pack(side="left")
         row.pack(fill="x", pady=(0, pad["gap"]))
-        frame, self.doctor_text = self._text(self.first, 10, mono=True)
+        frame, self.doctor_text = self._text(self.first, 8, mono=True)
         frame.pack(fill="both", expand=True)
         # watching screen
         self.watching = ttk.Frame(self.root)
@@ -2137,9 +2137,13 @@ class Window:
         self.knock_label.pack(fill="x")
         self.badges = ttk.Frame(self.watching)     # REDO C-2: one label per badge
         self.badges.pack(fill="x", pady=(0, pad["row"]))
-        frame, self.body = self._text(self.watching, 10)
-        frame.pack(fill="both", expand=True)
-        self.log_frame, self.log_text = self._text(self.watching, 6, mono=True)   # A-5: the header's Log
+        # M7.6b follow-up: the body and the log share one vertical PanedWindow, as on the host screen, so
+        # they shrink before the window does (900x600 on Windows: Tk 8.6, Segoe UI, Consolas)
+        self.watch_paned = ttk.PanedWindow(self.watching, orient="vertical")
+        frame, self.body = self._text(self.watch_paned, 5)
+        self.watch_paned.add(frame, weight=3)
+        self.watch_paned.pack(fill="both", expand=True)
+        self.log_frame, self.log_text = self._text(self.watch_paned, 3, mono=True)   # A-5: the header's Log
         # M7.6 (ADR-0008): the Rules screen - the table, on / off, a threshold, Add, Reset; it writes the overlay only
         self.rulesf = ttk.Frame(self.root)
         row = ttk.Frame(self.rulesf)
@@ -2160,10 +2164,10 @@ class Window:
         ttk.Entry(row, textvariable=self.rule_value, width=8).pack(side="left", padx=pad["row"])
         ttk.Button(row, text="Set", command=self.rules_threshold).pack(side="left", padx=(2, 0))
         row.pack(fill="x", pady=(0, pad["row"]))
-        frame, self.rules_tree = self._table(self.rulesf, "rules", RULES_COLUMNS, 7)
+        frame, self.rules_tree = self._table(self.rulesf, "rules", RULES_COLUMNS, 5)
         self.rules_tree.bind("<<TreeviewSelect>>", lambda e: self._on_rule_pick())
         frame.pack(fill="both", expand=True)
-        frame, self.rules_text = self._text(self.rulesf, 4)
+        frame, self.rules_text = self._text(self.rulesf, 3)
         frame.pack(fill="x", pady=(pad["gap"], 0))
         self._first_run()
 
@@ -2453,10 +2457,10 @@ class Window:
     def toggle_log(self):
         """A-5: the watch's own lines, at any time (bounded)."""
         self.log_open = not self.log_open
-        if self.log_open:
-            self.log_frame.pack(fill="both", expand=True, pady=(THEME["pad"]["gap"], 0))
+        if self.log_open:   # M7.6b follow-up: a pane under the body, sharing its height
+            self.watch_paned.add(self.log_frame, weight=2)
         else:
-            self.log_frame.pack_forget()
+            self.watch_paned.forget(self.log_frame)
             self.shown.pop("log", None)
         self._sync_header()
 
