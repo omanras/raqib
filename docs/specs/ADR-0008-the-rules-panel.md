@@ -138,3 +138,41 @@ A-2..A-9; the rest recorded.
 - Table ledger for M7.6: one review, one REDO; the Table's miss: A-3 as
   written made the panel's thresholds unchangeable in practice (Q-15) -
   the ruling measured without providing what to measure against.
+
+## Amendment C (the Table, 2026-11-09) - rulings on review 2026-11-09-M7.6b.md (a059505)
+Builder's record: docs/review/2026-11-09-M7.6b-questions.md (Q-1..Q-10).
+CI run 42577138324 for a059505: six jobs success on the first commit (the
+Tk look tests ran on windows under Tk 8.6). Verdict: REDO on P1, P2 and
+P5; the Table's rulings C-4..C-6; the rest recorded.
+- C-1 (P1, F-7) Every band and badge level comes from one function of the
+  exit code (0 clean, 1 alarm, 3 incomplete) and the result word - the
+  project watch's FINISHED band included; "[alarm]" never stands beside
+  an INCOMPLETE report. Test on exit 3.
+- C-2 (P2, A-2) The (level, text) badges keep their level: each badge is
+  its own label in its level's colour with its word; the suppressed badge
+  is red on the project and host screens as in the header. Test.
+- C-3 (P5, A3, Q-1) "Not a clearance." stands in every green state on
+  every screen: the project screen's WATCHING clean and FINISHED exit 0,
+  and FINISHED with suppressed findings reads "[clean] (N findings
+  suppressed by the overlay). Not a clearance." Test per state.
+- C-4 (P3, Q-2) The tip is the host watch's: "Raqib: N trees, K new, F
+  findings" only while the host is watched; with a project watch only,
+  "Raqib: project <name>, F findings"; "Raqib: idle" otherwise; F counts
+  findings, and suspicions are named apart ("+S suspicions") when any.
+  The test's name is true again.
+- C-5 (P4, Q-3, F-3) The footer keeps F-3: the look's holes persist there,
+  each one, until round 1 replaces them - in a scrollable footer bounded
+  to three lines with "(N more)" and the full list one click away on the
+  Host screen; the one counted line is not enough for a hole (A3).
+- C-6 (P6, E6) The colour test matches Tk's full colour-name list (the
+  names Tk documents, including grayN/greyN) and refuses a colour built
+  by string formatting outside THEME (any f-string or % or .format whose
+  result is passed to a colour option). A dark-mode Tk test builds each
+  screen once in dark mode; the selected red row in dark mode gets a
+  contrast of at least 4.5:1 (THEME value adjusted).
+- C-7 (P8) The window's sort goes through the tested sort_rows; "-" sorts
+  last in both directions; the selection survives a refresh (test).
+- C-8 (P7, P9..P14) Recorded: the 900x600 margin measured on windows is
+  this CI run's; the trailing blank lines; the detail pane shows what the
+  table printed before.
+- C-9 Every REDO change carries a test for the behaviour it adds (D-8).
