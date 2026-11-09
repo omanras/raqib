@@ -52,3 +52,13 @@ Recorded in his words' substance; the next Table writes the handoffs from it.
 Order the Table suggests: M7.5 (the three lessons) first, since every
 agent test after it would otherwise repeat the same noise; then the rules
 panel; the agent runs interleaved as the commander installs them.
+
+## Recorded 2026-11-09 (M7.6c follow-up, builder's Q-15): a sandbox path in a real export
+tests/fixtures/discover/linux is an M7.1 live capture of the build sandbox
+and names its home directory in cwd and socket paths; five rule fixtures
+built from it (NEW-AGENT positive-new-named, negative-history-only;
+HOST-UNWATCHED's three) carry the same. It is a build-sandbox user name,
+not a person's, and it predates M7.6c. Task for the Table: redact the
+export to a placeholder home (as the Windows exports use `user`/`field`),
+regenerate the five fixtures, re-measure the M7.1/M7.2 budgets, and then
+make the whole-tree "no absolute home" test (E-1's wider form) pass.
