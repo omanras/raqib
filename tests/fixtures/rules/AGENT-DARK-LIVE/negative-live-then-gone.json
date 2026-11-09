@@ -1,0 +1,140 @@
+{
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 2,
+    "benign": true,
+    "benign_by": "c:/windows/*",
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 9,
+      "src": "win-process-1",
+      "text": "\"6636\",\"6600\",\"explorer.exe\",\"C:\\Windows\\explorer.exe\",\"C:\\Windows\\Explorer.EXE\",\"11/2/2026 8:02:30 AM\""
+     },
+     {
+      "line": 6,
+      "src": "win-tcp-1",
+      "text": "\"192.0.2.10\",\"49812\",\"198.51.100.23\",\"443\",\"Established\",\"6636\",\"11/2/2026 10:12:40 AM\""
+     },
+     {
+      "line": 10,
+      "src": "win-process-1",
+      "text": "\"13236\",\"6636\",\"cmd.exe\",\"C:\\Windows\\System32\\cmd.exe\",\"\"\"C:\\Windows\\system32\\cmd.exe\"\" \",\"11/2/2026 10:20:41 AM\""
+     },
+     {
+      "line": 11,
+      "src": "win-process-1",
+      "text": "\"13244\",\"13236\",\"conhost.exe\",\"C:\\Windows\\System32\\conhost.exe\",\"\\??\\C:\\Windows\\system32\\conhost.exe 0x4\",\"11/2/2026 10:20:41 AM\""
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "198.51.100.23:443"
+    ],
+    "history": true,
+    "hooks": null,
+    "image": "explorer",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "none_rounds": 0,
+    "pid": 6636,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [
+      {
+       "acts": [
+        {
+         "basis": "round",
+         "cites": [
+          {
+           "line": 12,
+           "src": "win-process-1",
+           "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+          },
+          {
+           "line": 12,
+           "src": "win-process-2",
+           "text": "\"10728\",\"13236\",\"kimi.exe\",\"C:\\Users\\user\\.kimi-code\\bin\\kimi.exe\",\"kimi  -r\",\"11/2/2026 10:21:05 AM\""
+          }
+         ],
+         "image": "kimi",
+         "pid": 10728,
+         "started": "11/2/2026 10:21:05 AM"
+        }
+       ],
+       "round": 2,
+       "run": "fixture-run",
+       "seq": 4,
+       "talk_cites": [
+        {
+         "line": 6,
+         "src": "win-tcp-1",
+         "text": "\"192.0.2.10\",\"49812\",\"198.51.100.23\",\"443\",\"Established\",\"6636\",\"11/2/2026 10:12:40 AM\""
+        }
+       ],
+       "talk_round": 1,
+       "talk_seq": 1
+      }
+     ],
+     "cycles": 1,
+     "destination": "198.51.100.23:443",
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [
+      2
+     ],
+     "streak_fired": false,
+     "talks": [],
+     "w": 30
+    },
+    "round": 5,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1",
+    "source": "host",
+    "source_word": "host: the host's own record of the tree",
+    "started": "11/2/2026 8:02:30 AM",
+    "tree": "6636:explorer:11/2/2026 8:02:30 AM",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 10,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:40.000Z"
+  },
+  {
+   "cwd": "host",
+   "input_meta": {
+    "agent": "kimi",
+    "cites": [
+     {
+      "line": 2,
+      "src": "footprints",
+      "text": "C:\\Users\\user\\.kimi"
+     }
+    ],
+    "dark": true,
+    "linked": null,
+    "path": "C:\\Users\\user\\.kimi",
+    "round": 5,
+    "run": "fixture-run",
+    "sample": "window - .. -; Windows sample(s) 1",
+    "state": "dark",
+    "streak": 3,
+    "was_live": true
+   },
+   "phase": "pre",
+   "seq": 11,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostFootprint",
+   "ts": "2026-11-03T10:00:40.000Z"
+  }
+ ]
+}

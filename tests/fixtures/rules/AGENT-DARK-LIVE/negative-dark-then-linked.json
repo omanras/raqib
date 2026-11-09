@@ -241,7 +241,8 @@
     "run": "fixture-run",
     "sample": "window - .. -; Windows sample(s) 1",
     "state": "linked",
-    "streak": 0
+    "streak": 0,
+    "was_live": false
    },
    "phase": "pre",
    "seq": 9,

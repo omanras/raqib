@@ -342,7 +342,8 @@
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
     "state": "linked",
-    "streak": 0
+    "streak": 0,
+    "was_live": true
    },
    "phase": "pre",
    "seq": 21,
@@ -374,7 +375,8 @@
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
     "state": "linked",
-    "streak": 0
+    "streak": 0,
+    "was_live": true
    },
    "phase": "pre",
    "seq": 22,
@@ -401,7 +403,8 @@
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
     "state": "dark",
-    "streak": 3
+    "streak": 3,
+    "was_live": false
    },
    "phase": "pre",
    "seq": 23,
@@ -433,7 +436,8 @@
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
     "state": "dark",
-    "streak": 3
+    "streak": 3,
+    "was_live": false
    },
    "phase": "pre",
    "seq": 24,

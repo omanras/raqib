@@ -700,8 +700,10 @@ def host_watch_view(state, extra_holes=()):
     holes = [hole_line(x) for x in state.get("holes") or [] if isinstance(x, dict)] + [_safe(x) for x in extra_holes]
     findings = [host_finding_line(f) for f in h.get("findings") or [] if isinstance(f, dict)]
     findings += [suspicion_line(f) for f in h.get("suspicions") or [] if isinstance(f, dict)]   # M7.4 E4
+    # M7.5 E1/E4: notes apart from the findings (a note is never an alarm)
+    notes = [_safe(d.get("text")) for d in h.get("dark_notes") or [] if isinstance(d, dict)]
     return {"word": word, "level": level, "detail": _safe(detail), "rows": host_rows(trees),
-            "lines": lines, "findings": findings, "holes": holes,
+            "lines": lines, "findings": findings, "notes": notes, "holes": holes,
             "badges": [(lv, _safe(text)) for lv, text in ui.host_band(state)], "final": None,
             "trees": h.get("now") or 0, "new": h.get("new") or 0, "url": state.get("url") or "-"}
 
@@ -714,6 +716,8 @@ def host_body(view):
     out = host_table(view["rows"]) if view["rows"] else []
     out += view["lines"]
     out += ["", "FINDINGS: %d" % len(view["findings"])] + ["  %s" % f for f in view["findings"]]
+    if view.get("notes"):   # M7.5 E4: apart from the findings; never an alarm
+        out += ["", "NOTES (not alarms): %d" % len(view["notes"])] + ["  - %s" % x for x in view["notes"]]
     out += ["", "HOLES (A3): %d" % len(view["holes"])] + ["  - %s" % x for x in view["holes"]]
     return "\n".join(out) + "\n"
 

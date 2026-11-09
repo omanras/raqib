@@ -214,8 +214,8 @@ def test_e2_watch_this_host_runs_the_same_hostwatch_knocks_and_stop_shows_the_re
     assert c.host_tip(v["trees"], v["new"]) == "Raqib: %d trees, 3 new" % v["trees"]
     # the knocks: HostWatch's own Notifier, each tree under its own rate-limit id (C-5)
     texts = [x["text"] for x in runner.calls]
-    assert "Raqib: NEW-AGENT\nhost, claude pid 2100 (named)\n" in texts
-    assert "Raqib: NEW-AGENT-UNKNOWN\nhost, scribe pid 7000 (unknown)\n" in texts
+    assert "Raqib: NEW-AGENT claude\nhost, claude pid 2100 (named)\n" in texts
+    assert "Raqib: NEW-AGENT-UNKNOWN scribe\nhost, scribe pid 7000 (unknown)\n" in texts
     c.stop_host("Stop in the window")
     assert until(lambda: not c.host.alive(), WAIT)
     v = c.host_view()

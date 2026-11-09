@@ -208,15 +208,16 @@ def test_e2_the_rule_is_a_catalog_anchor_with_fixtures_from_make_py_and_a_measur
     rep = reports["HOST-RHYTHM"]
     assert rep["verdict"] == "ok" and rep["fp_rate"] == 0.0 and all(p["fired"] for p in rep["positives"])
     measured = [n for n in rep["negatives"] if n["measured"]]
-    # K-9: the four synthetic cases only; the arrivals (one round each, no cycle possible) are not listed
-    assert len(measured) == 4 and not any(n["fired"] for n in measured)
+    # K-9: the four synthetic cases only; the arrivals (one round each, no cycle possible) are not listed;
+    # M7.5 E2: and the os source's two cycles
+    assert len(measured) == 5 and not any(n["fired"] for n in measured)
     assert sorted(Path(n["path"]).name for n in measured) == [
         "negative-acts-between-rounds.json", "negative-changing-destination.json", "negative-no-talk.json",
-        "negative-two-cycles.json"]
-    assert RULE.fixtures["negative"] == ["tests/fixtures/rules/" + n for n in host_fixtures.RHYTHM_SCENARIOS
-                                         if "/negative-" in n]
+        "negative-os-two-cycles.json", "negative-two-cycles.json"]
+    assert RULE.fixtures["negative"] == ["tests/fixtures/rules/" + n for n in list(host_fixtures.RHYTHM_SCENARIOS)
+                                         + list(host_fixtures.OS_SCENARIOS) if "/negative-" in n]
     built = host_fixtures.build()
-    for name in host_fixtures.RHYTHM_SCENARIOS:
+    for name in list(host_fixtures.RHYTHM_SCENARIOS) + list(host_fixtures.OS_SCENARIOS):
         assert (ROOT / "tests" / "fixtures" / "rules" / name).read_text(encoding="ascii") == built[name], name
 
 
@@ -574,7 +575,7 @@ def test_e5_readme_three_lines():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
-    assert len(lines) == 9
+    assert len(lines) == 11   # M7.5: + two lines at the end (test_field_run.py)
     assert "HOST-RHYTHM" in lines[6] and "--suspect" in lines[7] and "never acquit" in lines[7]
     assert "only network call" in lines[8]
 
@@ -781,7 +782,10 @@ def test_redo_k2_a_record_shape_the_builder_cannot_send_is_a_hole_once_per_tree(
     drive(w, clock, 9, spy)
     holes = [h for h in w.holes if h["kind"] == "suspect-unsendable"]
     assert len(holes) == 1 and "source proxy not sendable" in holes[0]["detail"]
-    assert w.trees[key]["suspect_unsendable"] == ["proxy"] and "900" not in "".join(spy.users)
+    # M7.5 Q-11: "900" alone also matched a salted hash (one run id in 13): the proxy lines' own seqs are what must not go
+    sent = "".join(spy.users)
+    assert w.trees[key]["suspect_unsendable"] == ["proxy"] and not re.search(r'"seq": ?90[01]\b', sent)
+    assert '"px"' not in sent and '"proxy"' not in sent
     assert "source proxy not sendable" in w.finish()[0]
 
 

@@ -190,7 +190,8 @@
     "run": "fixture-run",
     "sample": "window - .. -; Windows sample(s) 1,2",
     "state": "linked",
-    "streak": 0
+    "streak": 0,
+    "was_live": true
    },
    "phase": "pre",
    "seq": 6,
