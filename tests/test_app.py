@@ -631,16 +631,16 @@ def test_tk_window_first_screen_watching_screen_stop_and_close(tmp_path):
         c.opener = lambda url, environ=None: "no opener here"
         window.open_page()
         window.tick()
-        assert "note: page: the page was not opened (no opener here)" in window.foot.cget("text")
+        assert "note: page: the page was not opened (no opener here)" in window.foot_text()
         # A-4: a callback exception is a hole in the footer
         root.report_callback_exception(ValueError, ValueError("boom"), None)
         window.tick()
-        assert "hole: a window callback failed: ValueError: boom" in window.foot.cget("text")
+        assert "hole: a window callback failed: ValueError: boom" in window.foot_text()
         window.on_close()                    # no tray: the watch stops like Ctrl-C, the report stays
         window.tick()
         assert c.session.stopped == ["window closed"] and window.band.cget("text") == "FINISHED"
         assert window.body.get("1.0", "end").startswith("Raqib watch\nthe final report")
-        assert "note: tray" not in window.foot.cget("text")
+        assert "note: tray" not in window.foot_text()
         window.on_close()                    # closing again quits
         assert window.closed
     finally:
@@ -669,7 +669,7 @@ def test_tk_window_hides_to_the_tray_and_shows_on_a_tray_action(tmp_path):
         assert root.state() != "withdrawn"
         t.holes.append("the tray icon could not be added again after Explorer restarted")
         window.tick()
-        assert "hole: tray: the tray icon could not be added again" in window.foot.cget("text")
+        assert "hole: tray: the tray icon could not be added again" in window.foot_text()
         c.actions.put("quit")
         window.tick()
         assert window.closed and c.session.stopped == ["Quit in the tray menu", "the window was closed"]
@@ -1436,7 +1436,7 @@ def test_tk_a3_an_overdue_quit_brings_the_window_back(tmp_path):
         window.tick()
         pump(root)
         assert not window.closed and root.state() != "withdrawn"
-        assert "hole: the watch did not end in 30 s after Quit" in window.foot.cget("text")
+        assert "hole: the watch did not end in 30 s after Quit" in window.foot_text()
         c.session.release.set()
         c.session.thread.join(5)
     finally:

@@ -211,7 +211,9 @@ def test_e2_watch_this_host_runs_the_same_hostwatch_knocks_and_stop_shows_the_re
     assert any(f.startswith("NEW-AGENT [high]") for f in v["findings"])
     assert any(f.startswith("NEW-AGENT-UNKNOWN [medium]") for f in v["findings"])
     assert any("unknown (new)" in row[2] for row in v["rows"])
-    assert c.host_tip(v["trees"], v["new"]) == "Raqib: %d trees, 3 new" % v["trees"]
+    # M7.6b E5: the tip says the findings too (reworded, docs/review/2026-11-09-M7.6b-questions.md)
+    assert c.host_tip(v["trees"], v["new"], len(v["findings"])) == "Raqib: %d trees, 3 new, %d findings" % (
+        v["trees"], len(v["findings"]))
     # the knocks: HostWatch's own Notifier, each tree under its own rate-limit id (C-5)
     texts = [x["text"] for x in runner.calls]
     assert "Raqib: NEW-AGENT claude\nhost, claude pid 2100 (named)\n" in texts
@@ -221,7 +223,7 @@ def test_e2_watch_this_host_runs_the_same_hostwatch_knocks_and_stop_shows_the_re
     v = c.host_view()
     assert v["word"] == "HOST WATCH FINISHED" and v["level"] == "alarm"
     assert v["final"].startswith("Raqib watch --host") and "RESULT: ALARM (exit 1" in app.host_body(v)
-    assert c.exit_code() == 1 and c.host_tip(1, 1) == "Raqib"     # not watched: the plain tip
+    assert c.exit_code() == 1 and c.host_tip(1, 1) == "Raqib: idle"     # not watched: idle (M7.6b E5)
     assert "raqib watch --host: stopped (Stop in the window)" in c.host.log.text()
 
 
@@ -373,7 +375,8 @@ def test_e3_the_exit_code_is_an_alarm_first_then_any_other_code():
 
 
 def test_e3_the_tooltip_text_and_the_tray_changes_its_own_icon_only():
-    assert tray.tip_text(4, 1) == "Raqib: 4 trees, 1 new" and tray.tip_text(None, None) == "Raqib: 0 trees, 0 new"
+    assert tray.tip_text(4, 1, 2) == "Raqib: 4 trees, 1 new, 2 findings"   # M7.6b E5 (reworded)
+    assert tray.tip_text(None, None) == "Raqib: 0 trees, 0 new, 0 findings" and tray.IDLE_TIP == "Raqib: idle"
     api = FakeWin32()
     tips = []
     real = api.Shell_NotifyIconW
@@ -412,15 +415,19 @@ def test_e3_the_controller_sets_the_tip_only_while_the_host_is_watched_and_once_
             self.tips.append(text)
     t = TipTray()
     c = app.Controller(None, tray=t, make_host=lambda: FakeSession("host"))
-    assert c.host_tip(2, 0) == "Raqib" and t.tips == []
+    assert c.host_tip(2, 0) == "Raqib: idle" and t.tips == []   # M7.6b E5 (reworded)
     c.start_host()
     c.host_tip(2, 0)
     c.host_tip(2, 0)
     c.host_tip(3, 1)
-    assert t.tips == ["Raqib: 2 trees, 0 new", "Raqib: 3 trees, 1 new"]
+    assert t.tips == ["Raqib: 2 trees, 0 new, 0 findings", "Raqib: 3 trees, 1 new, 0 findings"]
     c.host.stop("x")
     c.host_tip(3, 1)
-    assert t.tips[-1] == "Raqib"
+    assert t.tips[-1] == "Raqib: idle"
+    # M7.6b REDO C-4: the trees tip is the host watch's only; a project watch alone names the project
+    p = app.Controller(None, make_session=FakeSession)
+    p.start(str(ROOT))
+    assert p.host_tip(3, 1, 0, 0, 2) == "Raqib: project %s, 2 findings" % ROOT.name
 
 
 def test_e3_raqib_app_every_and_its_usage_error(monkeypatch, capsys, tmp_path):
@@ -504,7 +511,9 @@ def test_tk_host_screen_round_at_open_checks_and_watch_this_host(tmp_path):
         assert until(lambda: doctor.result() is not None and p.done(), 10)
         window.tick()
         assert window.band.cget("text") == "HOST: 2 TREE(S)"
-        assert "environment-manager" in window.host_text.get("1.0", "end")
+        # M7.6b E2: the trees are rows of the Treeview now, not lines of the text
+        assert any("environment-manager" in window.host_tree.item(i, "values")
+                   for i in window.host_tree.get_children())
         assert window.checks_button.cget("text") == "Checks: 1 MISSING" and window.checks_open   # MISSING: open
         window.host_toggle()                       # Watch this host
         window.tick()
@@ -779,7 +788,7 @@ def test_tk_redo_f2_both_watches_running_switch_back_and_forth_every_control_pre
             window.tick()
             assert window.screen == "watching" and window.band.cget("text") == "WATCHING"
             assert window.stop_button.winfo_manager() == "pack"
-        assert "running: host watch, project watch of" in window.head_note.cget("text")
+        assert "running: host watch, project watch of" in window.running_note.cget("text")   # M7.6b E3
         window.show_first()
         window.start()                             # refused: names the running watch, goes to its screen
         assert window.screen == "watching" and "the project watch of" in window.detail.cget("text")
