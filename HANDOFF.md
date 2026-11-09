@@ -1,30 +1,30 @@
-# HANDOFF — M7.6b  (the window's look, ADR-0008 decision 6)
+# HANDOFF — M7.6c  (thresholds that can be measured, ADR-0008 Amendment B)
 
-Task: one pass over the window's look on the real screens (host, project, rules, log): spacing, type,
-colours by the exit-code scheme, the tray tip, a first-run text, the doctrine in one sentence. No behaviour changes.
+Task: a changed threshold can be measured, so it can be allowed: the host rules' fixtures are generated
+at the requested values by a generator inside the package; bounds are declared in each YAML (A6 holds).
 
 Scope:
-  raqib/app.py (presentation only), raqib/tray.py (tip text only), tests/, README.md, docs/review/
+  raqib/rules/fixturegen.py (new; the generators moved from tests/fixtures/host/make.py), raqib/overlay.py, raqib/rules/engine.py
+  (bounds), raqib/rules/catalog/ (the five host YAMLs: bounds blocks), pyproject.toml (package data), raqib/cli.py,
+  raqib/app.py (the panel's threshold edit), tests/, README.md, docs/review/
 
 Exit criteria:
-- E1 One theme table in app.py (colours, fonts, paddings; ttk style names) used by every screen;
-     the exit-code scheme everywhere a level is shown: 0 green, 1 red, 3 amber, notes grey, holes
-     amber (F-7, A-2 of ADR-0008 for the suppressed badge in red); dark and light follow the OS
-     where Tk can read it, else light; no colour alone carries meaning (a word is beside it).
-- E2 Host screen: the tree table in a ttk.Treeview with sortable columns (image, pid, kind, source,
-     findings, rhythm/suspicion, first seen, endpoints), the selected tree's findings and notes in
-     a detail pane below; the empty state and NOTHING READ as before, with "Not a clearance." kept.
-- E3 Project and Rules screens aligned to the same grid; the Rules table a Treeview with the
-     overlay state per row; the Log pane monospace; the header one bar: Host | Project | Rules |
-     Log, the running watches, "N rules off" (red when suppressed > 0), Open page.
-- E4 First run (no ~/.raqib/host/look.json yet): three lines in the first screen's top - what the
-     window shows, that Raqib reads and never touches an agent, that "no agent seen" is never a
-     clearance; and one sentence under the band: "Rules decide; a model may only raise suspicion."
-- E5 Tray tip "Raqib: N trees, K new, F findings" while watching, "Raqib: idle" else; every screen renders at 900x600 without clipping.
-- E6 Tests: the theme table is the only place colours live (AST: no literal colour outside it);
-     level->colour mapping; the Treeview columns and sort; the first-run text appears and then
-     does not; Tk tests skip without a display; the AST guard of M6.4/M7.6 still holds (no new
-     writes, no new programs). CI six green. README: the window section's three lines refreshed.
-Not in scope: thresholds that can be measured (M7.6c), new screens, macOS, the web page's look.
-Commit: `landed: M7.6b the window's look` or `STOP: M7.6b <reason>`.
+- E1 `raqib/rules/fixturegen.py`: the synthetic host-round generators of make.py (cycles, dark
+     streaks, arrivals, the field shape) as package code, parametric in k, w, r, streak,
+     live_window; `generate(rule, thresholds) -> {positive: [...], negative: [...]}` in memory; the
+     shipped fixtures are exactly its output at the declared values (a test regenerates and diffs).
+- E2 `bounds:` in each host rule's YAML: per threshold field, min, max and the relations (k <= r,
+     live_window >= streak); engine.py loads them; overlay.py uses them instead of its built-ins;
+     a YAML without bounds for a declared eq field = that field not editable, said in `raqib rules`.
+- E3 Measuring: on `--threshold` and at load, overlay.py generates the rule's fixtures at the new
+     values and runs the rule on them: the positives must fire and the negatives not, and the
+     budget measured on the generated negatives must stay under the declared one; a value that
+     fails is refused naming the fixture; an installed raqib measures the same (no tests/ needed).
+- E4 The benign desktops' arrivals stay fixed fixtures (real exports); a threshold under which they fire is refused ("would fire on a benign desktop").
+- E5 Tests: generator == shipped fixtures; bounds loaded and enforced; k=5 accepted and measured
+     (positives regenerated at 5 cycles fire); k=100 r=10 refused by bounds; streak=5 accepted;
+     a user rule without bounds not editable; CI install job: `raqib rules --threshold HOST-RHYTHM k 4`
+     then `--reset` from the venv (no checkout). README: two lines. Kinds unchanged.
+Not in scope: thresholds of the trace rules (none declared), `--remove`, new rules, macOS.
+Commit: `landed: M7.6c thresholds that can be measured` or `STOP: M7.6c <reason>`.
 Read HANDOFF.md and do only the task it specifies.
