@@ -103,3 +103,38 @@ A-2..A-9; the rest recorded.
   ratified with A-7. Q-3, Q-5, Q-6, Q-7 ratified. Q-8's `--remove`: a
   later task. Q-9..Q-14 recorded; Q-12 (the panel's plain look) is M7.6b.
 - A-9 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment B (the Table, 2026-11-09) - judgement on M7.6 (5dca13a + 6b9f1c2)
+- A-1..A-7 MET as cited in the REDO section of
+  docs/review/2026-11-09-M7.6-questions.md; the Table read the A-1 delta
+  (fixture_file: both ntpath and posixpath joins, no link at any step,
+  realpath under the rule's own directory; engine.py refusing roots,
+  colons and `..` under either separator) and the A-2 delta ("CLEAN (N
+  findings suppressed by the overlay)"). Every REDO change names its test.
+- CI, read from api.github.com: runs 42571454875 (5dca13a) and 42573710061
+  (6b9f1c2), six jobs success each; the Tk Rules test ran on windows.
+- Gate on the branch: 2826 passed, 20 skipped; kinds 4 : 7 : 11. Scope as
+  widened by A (engine.py's path check; HOST-RHYTHM.yaml's suspect_every).
+  Two commits (G-8).
+- Q-15 (the Table's own consequence): A-3 measures a changed threshold on
+  the rule's fixtures, and the fixtures encode the exact declared values
+  (k=3, w=30, r=10, streak 3, window 9), so every change to them is
+  refused, and an installed raqib has no fixtures at all. As merged, the
+  panel can turn rules off and set suspect_every; it cannot tune the
+  thresholds the commander asked to tune. Ruling: this is honest (A6) and
+  stands for this merge; the way through is M7.6c "thresholds that can be
+  measured": fixtures generated at the new values by make.py's generators
+  (the host fixtures are synthetic and parametric already), shipped with
+  the package as package data so an installed raqib can measure, and the
+  bound of each threshold declared in the YAML (`bounds:`, the Table's
+  block). Until then the panel says "thresholds: measured against the
+  shipped fixtures; a change that the fixtures cannot carry is refused".
+- Q-16 (engine.py writes the Windows path rules out by hand; `\` in a
+  user fixture path refused): accepted. Q-17 (flat-layout rules from
+  5dca13a are refused and counted off): accepted, nothing shipped between.
+- Decisions 1-5 of this ADR are built; decision 6 (the look) is M7.6b.
+  Status: proposed until M7.6b lands.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's order.
+- Table ledger for M7.6: one review, one REDO; the Table's miss: A-3 as
+  written made the panel's thresholds unchangeable in practice (Q-15) -
+  the ruling measured without providing what to measure against.
