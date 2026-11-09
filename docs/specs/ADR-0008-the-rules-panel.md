@@ -1,6 +1,6 @@
 # ADR-0008 - The rules panel: the person chooses what Raqib watches for, and Raqib says what is off
 
-Status: proposed (the Table, on the commander's plan of 2026-11-04, written 2026-11-09).
+Status: accepted (M7.6b, 2026-11-09; Amendment D). Proposed 2026-11-09 on the commander's plan of 2026-11-04.
 Amendments appended, never edited in place.
 
 ## Problem
@@ -176,3 +176,29 @@ P5; the Table's rulings C-4..C-6; the rest recorded.
   this CI run's; the trailing blank lines; the detail pane shows what the
   table printed before.
 - C-9 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment D (the Table, 2026-11-09) - judgement on M7.6b (a059505 + c9486c4 + b5dc8b4)
+- C-1..C-7 MET as cited in the REDO section of
+  docs/review/2026-11-09-M7.6b-questions.md; the Table read the C-1 delta
+  (level_of(code, word): the one function; exit 3 is incomplete, amber)
+  and the C-3 texts. Every REDO change names its test (C-9).
+- CI, read from api.github.com: run 42577138324 (a059505) six success; run
+  42579340870 (c9486c4) four success and both windows gate jobs failed one
+  test - the 900x600 fit: on Windows Tk 8.6 the project watching screen
+  with its log requested 897x628 where Xvfb/Tk 9 had measured 728x511 (the
+  test was right, the screen clipped on the commander's OS); run
+  42580221150 (b5dc8b4, the layout follow-up: shared panes, fewer fixed
+  lines, no change to the minimum size or the test) six success.
+- Gate on the branch: 2854 passed, 22 skipped; kinds 4 : 7 : 11. Scope
+  clean (presentation only; the one logic touch, the tip's condition, was
+  ruled back to the host's by C-4). Three commits (G-8).
+- Lesson for the ledger: Xvfb with Tk 9 is not the run of record for the
+  look; windows-latest with Tk 8.6 is, and every size claim is measured
+  there (the follow-up's table of Windows numbers is the record).
+- Decision 6 is built. Status of this ADR: **accepted (M7.6b, 2026-11-09)**;
+  decisions 1-6 stand; Amendments A-D are the record; M7.6c (thresholds
+  that can be measured, Amendment B) is the open candidate.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's order.
+- Table ledger for M7.6b: one review, one REDO, one CI follow-up; the
+  Table's miss: the HANDOFF's E5 "900x600 without clipping" did not say
+  "measured on windows", so the builder measured under Xvfb.
