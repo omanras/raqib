@@ -445,10 +445,11 @@ def test_e3_engine_skips_uncitable_records_and_says_so():
 
 
 def test_a1_rules_never_reach_a_model_or_the_network():
+    # M7.6c: as words (fixturegen's synthetic byte counts carry a "sockets" key, data of a fake ss row)
     for path in (ROOT / "raqib" / "rules").glob("*.py"):
         text = path.read_text()
         for banned in ("urllib.request", "http.client", "socket", "subprocess", "raqib.suspect"):
-            assert banned not in text, (path.name, banned)
+            assert not re.search(r"(?<![\w.])%s(?![\w])" % re.escape(banned), text), (path.name, banned)
 
 
 # --- E4: fixture runner and the shipped catalog ---------------------------------

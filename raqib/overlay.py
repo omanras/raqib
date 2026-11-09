@@ -13,7 +13,7 @@ module writes it, every string double-quoted):
         status: "off"                  # "on" | "off" (quoted: yamlite refuses plain on/off)
         since: "2026-11-09T10:00:00Z"  # when the entry was last written
         thresholds:
-          k: 5                         # a declared threshold of the rule, within BOUNDS
+          k: 5                         # a declared threshold, within its YAML's bounds
 
 It is an overlay, never a copy of the catalog: the catalog stays the
 package's and is read as before; the overlay is applied on top at load
@@ -22,18 +22,27 @@ of a rule is its status (off: the engine's existing `status: disabled`) and
 the `eq` value of a declared threshold; never its kind, class, severity,
 budget or fixtures (apply() checks that the rule it compiles keeps them).
 
-A declared threshold is an `eq` predicate of the rule's match on a field of
-BOUNDS whose value is a positive int, declared once in the rule: HOST-RHYTHM's
-k, w, r and suspect_every (input_meta.rhythm.*), AGENT-DARK-LIVE's streak and
-live_window. The bounds are built in here, conservative, because the catalog
-YAMLs declare none (a `bounds:` block in the YAMLs is the Table's later task,
-ADR-0008 A-8): k 1..100, w 1..3600 seconds, r 1..1000 rounds, suspect_every
-1..1000 rounds, streak 1..100, live_window 1..1000; live_window never below
-the streak and k never above r (ORDER: else the rule could never fire, A-3).
-M7.6 REDO A-3: a changed threshold is measured - the overlaid rule is run on
-its own fixtures (measure()) when it is set and at every load; a threshold
-under which a positive no longer fires or a negative fires, or that cannot
-be measured (no fixtures here), is refused with the fixture named.
+A declared threshold is an `eq` predicate of the rule's match whose value is
+a whole number > 0, declared once (engine.declared_thresholds), named by its
+field's last part: HOST-RHYTHM's k, w, r and suspect_every, AGENT-DARK-LIVE's
+streak and live_window, HOST-UNWATCHED's none_rounds. M7.6c (ADR-0008
+Amendment B): a person may change it only when the rule's YAML gives it
+bounds (its `bounds:` block, engine.bounds_of: min, max, and relations such
+as "k <= r", "live_window >= streak"); a declared threshold without bounds,
+or any threshold of a rule whose YAML has no bounds block (a person's rule
+included), is fixed: listed as such by `raqib rules` and refused when set.
+There are no built-in bounds here any more.
+A changed threshold is measured before it is allowed, when it is set and at
+every load (measure()): a rule raqib/rules/fixturegen.py generates
+(HOST-RHYTHM, AGENT-DARK-LIVE) has its fixtures made AT the new values, in
+memory, by the package itself (an installed raqib needs no tests/), and is
+run on them: every positive must fire, no negative and no benign arrival
+(the real exports of two desktops whose trees arrive, E4) may fire, and the
+false-positive rate measured over the generated negatives and the arrivals
+must stay within the declared budget; any other rule is run on its own
+fixture files (a person's rule: under rules.d). A value that fails, or that
+cannot be measured, is refused with the fixture named; nothing is allowed
+on faith and nothing is cached on disk.
 
 A malformed overlay (not yamlite, or not the shape above) is ONE hole and
 nothing of it is applied (ADR-0008 decision 2: never half-applied). An entry
@@ -68,7 +77,7 @@ import os
 import posixpath
 import tempfile
 
-from raqib.rules import engine, fixtures, yamlite
+from raqib.rules import engine, fixturegen, fixtures, trace, yamlite
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOG = os.path.join(ROOT, "raqib", "rules", "catalog")
@@ -79,16 +88,6 @@ FORMAT = 1
 TOP_KEYS = ("raqib_overlay", "rules")
 ENTRY_KEYS = ("status", "since", "thresholds")
 WORDS = ("on", "off")
-# The built-in bounds of the declared thresholds (field -> (low, high)); see the module docstring.
-BOUNDS = {"input_meta.rhythm.k": (1, 100), "input_meta.rhythm.w": (1, 3600), "input_meta.rhythm.r": (1, 1000),
-          "input_meta.streak": (1, 100), "input_meta.live_window": (1, 1000),
-          # M7.6 REDO A-3: how often the suspect layer is asked, split from r (HOST-RHYTHM.yaml)
-          "input_meta.rhythm.suspect_every": (1, 1000)}
-# Pairs of thresholds of one rule: (small, big, why): small may never exceed big.
-ORDER = (("input_meta.streak", "input_meta.live_window", "the live window is never shorter than the streak"),
-         # M7.6 REDO A-3 (P4): k cycle rounds must fit in the last r rounds, or the rule can never fire
-         ("input_meta.rhythm.k", "input_meta.rhythm.r", "k cycle rounds cannot fit in r rounds: the rule could never"
-                                                       " fire"))
 HEADER = "# Raqib rules overlay (ADR-0008): written by `raqib rules` and the window's Rules panel; edit with care\n"
 NEXT_WATCH = "applies to the next watch (a running watch keeps the rules it started with)"
 
@@ -137,24 +136,35 @@ def _short(field):
     return field.rsplit(".", 1)[-1]
 
 
+FIXED_NO_BLOCK = "fixed: its YAML has no bounds block"
+FIXED_NO_BOUND = "fixed: its YAML gives it no bounds"
+
+
 def thresholds(rule):
-    """{name: {"field", "value", "low", "high"}} of a rule's declared
-    thresholds, in match order (name: the field's last part, k, w, r,
-    streak, live_window)."""
-    preds = _predicates((rule.doc or {}).get("match"), [])
+    """{name: {"field", "value", "low", "high"}} of a rule's editable
+    thresholds (declared, with bounds in its YAML), in match order."""
+    bounds = getattr(rule, "bounds", None) or {"fields": {}}
     out = {}
-    for p in preds:
-        field = p["field"]
-        if field not in BOUNDS or "eq" not in p:
-            continue
-        value = p["eq"]
-        if sum(1 for q in preds if q["field"] == field and "eq" in q) != 1:
-            continue   # declared more than once: not one threshold
-        if not (isinstance(value, int) and not isinstance(value, bool) and value > 0):
-            continue
-        low, high = BOUNDS[field]
-        out[_short(field)] = {"field": field, "value": value, "low": low, "high": high}
+    for name, t in engine.declared_thresholds(rule.doc).items():
+        b = bounds["fields"].get(name)
+        if b is not None and b["field"] == t["field"]:
+            out[name] = {"field": t["field"], "value": t["value"], "low": b["min"], "high": b["max"]}
     return out
+
+
+def fixed_thresholds(rule):
+    """{name: {"field", "value", "why"}}: the declared thresholds a person
+    may not change (no bounds for them in the rule's YAML), said by
+    `raqib rules` (E2)."""
+    editable = thresholds(rule)
+    why = FIXED_NO_BLOCK if getattr(rule, "bounds", None) is None else FIXED_NO_BOUND
+    return {name: dict(t, why=why) for name, t in engine.declared_thresholds(rule.doc).items()
+            if name not in editable}
+
+
+def relations(rule):
+    """[(small, big, text)]: the YAML's relations between its thresholds (small <= big)."""
+    return list((getattr(rule, "bounds", None) or {}).get("relations") or [])
 
 
 def resolve(rule, name):
@@ -164,6 +174,10 @@ def resolve(rule, name):
     for short, t in table.items():
         if name in (short, t["field"]):
             return short
+    for short, t in fixed_thresholds(rule).items():
+        if name in (short, t["field"]):
+            raise OverlayError("%s %s is not editable (%s; ADR-0008 Amendment B: a threshold changes only within"
+                               " the bounds its YAML declares)" % (rule.id, short, t["why"]))
     preds = _predicates((rule.doc or {}).get("match"), [])
     same = [p for p in preds if name in (p["field"], _short(p["field"]))]
     if not same:
@@ -172,32 +186,33 @@ def resolve(rule, name):
     if not any("eq" in p for p in same):
         raise OverlayError("%r is not an eq value of %s: only a declared eq threshold can change (ADR-0008)"
                            % (name, rule.id))
-    raise OverlayError("%r is an eq of %s but not a declared threshold (no bound in raqib/overlay.py: the gate's"
-                       " fields and words are fixed; declared thresholds: %s)" % (
+    raise OverlayError("%r is an eq of %s but not a declared threshold (not a whole number > 0 declared once: the"
+                       " gate's fields and words are fixed; declared thresholds: %s)" % (
                            name, rule.id, ", ".join(sorted(table)) or "none"))
 
 
 def check_value(rule, name, value, others=None):
     """OverlayError when value is not a whole number within the bounds of
-    the threshold `name` of rule. others: the other thresholds' values in
-    effect ({name: value}), for live_window >= streak."""
+    the threshold `name` of rule, or breaks a relation its YAML declares.
+    others: the other thresholds' values in effect ({name: value})."""
     t = thresholds(rule)[name]
     if not (isinstance(value, int) and not isinstance(value, bool)):
         raise OverlayError("%s %s must be a whole number, not %r" % (rule.id, name, value))
     if not t["low"] <= value <= t["high"]:
-        raise OverlayError("%s %s = %d is outside its bounds %d..%d (raqib/overlay.py BOUNDS)" % (
+        raise OverlayError("%s %s = %d is outside its bounds %d..%d (its YAML's bounds)" % (
             rule.id, name, value, t["low"], t["high"]))
     current = dict((k, v["value"]) for k, v in thresholds(rule).items())
     current.update(others or {})
     current[name] = value
-    for small, big, why in ORDER:
-        a, b = _short(small), _short(big)
-        if t["field"] not in (small, big) or a not in current or b not in current or current[a] <= current[b]:
+    for small, big, text in relations(rule):
+        if name not in (small, big) or small not in current or big not in current or current[small] <= current[big]:
             continue
-        if t["field"] == big:
-            raise OverlayError("%s %s = %d is below its %s (%d): %s" % (rule.id, name, value, a, current[a], why))
+        why = "its YAML's bounds say %s" % text
+        if name == big:
+            raise OverlayError("%s %s = %d is below its %s (%d): %s" % (rule.id, name, value, small, current[small],
+                                                                       why))
         raise OverlayError("%s %s = %d is above its %s (%d): %s; raise %s first" % (
-            rule.id, name, value, b, current[b], why, b))
+            rule.id, name, value, big, current[big], why, big))
 
 
 # --- the file ---------------------------------------------------------------------------------
@@ -538,18 +553,97 @@ def validate_rule(path, root, taken=(), user=False):
     return rule
 
 
+def _judged(rule, lines):
+    """(fired, measured) of a rule on one round's generated lines, as
+    fixtures.outcome judges a file (C-1a: no line through the rule's gate,
+    or a line it cannot judge, is unmeasured)."""
+    for i, rec in enumerate(lines):
+        problem = trace.strict_problem(rec)
+        if problem:
+            raise fixtures.FixtureError("line %d is not a sound trace record (%s)" % (i + 1, problem))
+    found, unknown = engine.judge(rule, lines, {})
+    if found:
+        return True, True
+    return False, not unknown and fixtures.passes_gate(fixtures.gate_of(rule), lines)
+
+
+def _run_judged(rule, rounds):
+    """(fired, measured) over a generated run: fired in any round (a host
+    rule fires once per streak, so a firing before the last round is seen
+    only there); measured when it fired or a round is measured (a line
+    through the gate, every line judged)."""
+    got = [_judged(rule, lines) for lines in rounds]
+    return any(f for f, _ in got), any(f or m for f, m in got)
+
+
+def _name(path):
+    return os.path.splitext(os.path.basename(path))[0]
+
+
+def measure_generated(rule, label):
+    """M7.6c (ADR-0008 Amendment B, A6): ([reasons], summary) of a rule
+    fixturegen makes fixtures for, measured on its fixtures generated at its
+    own (changed) values and on the benign arrivals made at them: a positive
+    must fire in its run, a negative or an arrival in no round of its run
+    (fixturegen.LAST_ROUND_ONLY: in its last round), and the false-positive
+    rate over the measured negatives stays within the budget."""
+    try:
+        made = fixturegen.generate(rule)
+        runs = made["runs"]
+        last = set(made["last_round_only"])
+        positives = [(p, _run_judged(rule, runs[p])[0]) for p, _ in made["positive"]]
+        negatives = [(p,) + (_judged(rule, runs[p][-1]) if p in last else _run_judged(rule, runs[p]))
+                     for p, _ in made["negative"]]
+    except (fixturegen.GenerateError, fixtures.FixtureError, engine.RuleError, OSError, ValueError) as exc:
+        return ["%s: cannot be measured: %s" % (label, exc)], None
+    arrivals = set(made["arrivals"])
+    reasons = ["%s: %s no longer fires" % (label, _name(p)) for p, fired in positives if not fired]
+    reasons += ["%s: %s fires%s" % (label, _name(p), ": would fire on a benign desktop" if p in arrivals else "")
+                for p, fired, _ in negatives if fired]
+    measured = [n for n in negatives if n[2]]
+    rate = sum(1 for n in measured if n[1]) / len(measured) if measured else None
+    if rate is None:
+        reasons.append("%s: cannot be measured: no generated negative passes the rule's gate" % label)
+    elif rate > rule.fp_budget:
+        reasons.append("%s: the false-positive rate measured on %d negatives, %g, is above its budget %g" % (
+            label, len(measured), rate, rule.fp_budget))
+    summary = ("measured at %s on fixtures generated at it: %d of %d positives fire; %d of %d measured negatives"
+               " fire (%d benign arrivals among the %d negatives); fp rate %s, budget %g" % (
+                   label, sum(1 for _, f in positives if f), len(positives), sum(1 for n in measured if n[1]),
+                   len(measured), len(arrivals), len(negatives), "-" if rate is None else "%g" % rate,
+                   rule.fp_budget))
+    return reasons, summary
+
+
+_MEASURED = {}       # (rule id, label, its doc) -> measure_generated's result: memory only, never a file
+MEASURED_KEPT = 16
+
+
 def measure(rule, label):
-    """M7.6 REDO A-3 (A6): [reasons] the overlaid rule fails its own
-    fixtures for: a positive that no longer fires, a negative that fires,
-    a fixture that is not here to measure with (an installed raqib carries
-    none). label names the change ("k=5"). Empty: measured, it holds."""
+    """M7.6 REDO A-3, M7.6c (A6): [reasons] the overlaid rule fails its
+    measurement for: a positive that no longer fires, a negative (or a
+    benign arrival) that fires, a budget broken, or a fixture that is not
+    there to measure with. label names the change ("k=5"). Empty: measured,
+    it holds; the summary is kept on the rule (rule.measured). A rule
+    fixturegen generates is measured on fixtures made at its values (the
+    package's, so an installed raqib measures the same); any other on its
+    own fixture files (a person's rule: under rules.d)."""
+    if rule.id in fixturegen.GENERATED and not getattr(rule, "fixture_root", None):
+        import json
+        key = (rule.id, label, json.dumps(rule.doc, sort_keys=True, default=str))
+        if key not in _MEASURED:   # in this process only: a set_threshold and the load after it measure once
+            while len(_MEASURED) >= MEASURED_KEPT:
+                _MEASURED.pop(next(iter(_MEASURED)))
+            _MEASURED[key] = measure_generated(rule, label)
+        reasons, rule.measured = _MEASURED[key]
+        return list(reasons)
     root = getattr(rule, "fixture_root", None) or ROOT
     reasons = []
     for kind in ("positive", "negative"):
         for p in rule.fixtures[kind]:
             full = fixture_file(root, p) if getattr(rule, "fixture_root", None) else os.path.join(root, p)
             if not os.path.isfile(full):
-                reasons.append("%s: cannot be measured: fixture %s is not here (an installed raqib carries none)"
+                reasons.append("%s: cannot be measured: fixture %s is not here (no generator makes it)"
                                % (label, p))
     if reasons:
         return reasons
@@ -557,9 +651,13 @@ def measure(rule, label):
         result = fixtures.check_rule(rule, root)
     except (fixtures.FixtureError, OSError, ValueError) as exc:
         return ["%s: cannot be measured: %s" % (label, exc)]
-    name = lambda p: os.path.splitext(os.path.basename(p))[0]   # noqa: E731
-    reasons += ["%s: %s no longer fires" % (label, name(x["path"])) for x in result["positives"] if not x["fired"]]
-    reasons += ["%s: %s fires" % (label, name(x["path"])) for x in result["negatives"] if x["fired"]]
+    reasons += ["%s: %s no longer fires" % (label, _name(x["path"])) for x in result["positives"] if not x["fired"]]
+    reasons += ["%s: %s fires" % (label, _name(x["path"])) for x in result["negatives"] if x["fired"]]
+    if not reasons and result["verdict"] not in ("ok", "disabled"):
+        reasons.append("%s: the fixture runner says %s" % (label, result["verdict"]))
+    if not reasons:
+        rule.measured = "measured at %s on its fixture files: %d positives fire; fp rate %s, budget %g" % (
+            label, len(result["positives"]), result["fp_rate"], rule.fp_budget)
     return reasons
 
 
@@ -748,11 +846,15 @@ def listing(rules):
                      "off_by": "overlay" if getattr(r, "off_by", None) else ("yaml" if r.status == "disabled" else None),
                      "origin": getattr(r, "origin", "package"),
                      "thresholds": [{"name": n, "value": t["value"], "low": t["low"], "high": t["high"],
-                                     "yaml": changed.get(n, (t["value"],))[0]} for n, t in thresholds(r).items()]})
+                                     "yaml": changed.get(n, (t["value"],))[0]} for n, t in thresholds(r).items()],
+                     # M7.6c E2: the declared thresholds a person may not change, and why
+                     "fixed": [{"name": n, "value": t["value"], "why": t["why"]} for n, t in fixed_thresholds(r).items()]})
     return rows
 
 
 def threshold_text(t):
+    if "why" in t:   # M7.6c E2: fixed (no bounds in its YAML)
+        return "%s=%d (%s)" % (t["name"], t["value"], t["why"])
     return "%s=%d%s [%d..%d]" % (t["name"], t["value"], "*" if t["value"] != t["yaml"] else "", t["low"], t["high"])
 
 
@@ -761,7 +863,7 @@ def table_text(rows):
     head = ("ID", "KIND", "CLASS", "SEVERITY", "BUDGET", "STATUS", "ORIGIN", "THRESHOLDS")
     body = [(r["id"], r["kind"], r["class"], r["severity"], "%g" % r["budget"],
              r["status"] + (" (yaml)" if r["off_by"] == "yaml" else ""), r["origin"],
-             ", ".join(threshold_text(t) for t in r["thresholds"]) or "-") for r in rows]
+             ", ".join(threshold_text(t) for t in r["thresholds"] + r.get("fixed", [])) or "-") for r in rows]
     widths = [max(len(str(x[i])) for x in [head] + body) for i in range(len(head) - 1)]
     lines = []
     for cells in [head] + body:
@@ -820,14 +922,16 @@ def set_threshold(rid, name, value, home=None, now=None, catalog=None):
     th[short] = value
     entry.update(thresholds=th, since=now_text(now))
     reasons = check_entry(rule, entry)
-    if not reasons:   # M7.6 REDO A-3: measured on the rule's own fixtures before it is written
+    measured = None
+    if not reasons:   # M7.6 REDO A-3, M7.6c: measured (at the new values) before it is written
         trial = apply([rule], {"rules": {rid: entry}}, overlay_path(home))
         reasons = [r.split(": ", 1)[1] for r in trial.overlay["refused"]]
+        measured = getattr(trial[0], "measured", None) if trial else None
     if reasons:
         raise OverlayError("%s: %s" % (rid, "; ".join(reasons)))
     doc["rules"][rid] = entry
     path = write(doc, home)
-    return "%s %s = %d in %s; %s" % (rid, short, value, path, NEXT_WATCH)
+    return "%s %s = %d in %s; %s%s" % (rid, short, value, path, "%s; " % measured if measured else "", NEXT_WATCH)
 
 
 def reset(rid, home=None, catalog=None):

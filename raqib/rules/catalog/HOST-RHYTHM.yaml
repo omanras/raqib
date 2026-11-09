@@ -89,3 +89,14 @@ fixtures:
     - tests/fixtures/rules/HOST-RHYTHM/negative-acts-between-rounds.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-no-talk.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-os-two-cycles.json
+# M7.6c (ADR-0008 Amendment B): the thresholds a person may set (raqib rules --threshold, the Rules panel)
+# and within what. Every value is measured before it is allowed (raqib/overlay.py measure): the fixtures
+# above are generated at it by raqib/rules/fixturegen.py, with the benign desktops' arrivals; a value under
+# which a positive does not fire, a negative or an arrival fires, or the budget is broken is refused.
+bounds:
+  k: {min: 1, max: 100}
+  w: {min: 1, max: 3600}
+  r: {min: 1, max: 1000}
+  suspect_every: {min: 1, max: 1000}
+  relations:
+    - "k <= r"

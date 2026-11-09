@@ -53,3 +53,12 @@ fixtures:
     - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-then-linked.json
     - tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json
     - tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json
+# M7.6c (ADR-0008 Amendment B): the thresholds a person may set and within what; every value is measured
+# before it is allowed (raqib/overlay.py measure, on the fixtures above generated at it by
+# raqib/rules/fixturegen.py, with the benign arrivals). The streak starts at 2: at 1 the negative "dark one
+# round short of the streak" has no round, so the value could not be measured.
+bounds:
+  streak: {min: 2, max: 100}
+  live_window: {min: 2, max: 1000}
+  relations:
+    - "live_window >= streak"

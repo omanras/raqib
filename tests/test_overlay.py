@@ -36,9 +36,9 @@ def home(tmp_path, monkeypatch):
 
 @pytest.fixture
 def unmeasured(monkeypatch):
-    """REDO A-3 measures a changed threshold on the rule's fixtures, which carry the YAML's values: every
-    k / w / r / streak / live_window change is refused there (test_redo_a3_...). The tests of what the
-    overlay does once a change is accepted take the measurement as passed."""
+    """REDO A-3 / M7.6c measure a changed threshold on fixtures generated at it (test_redo_a3_... and
+    tests/test_thresholds.py). The tests of what the overlay does once a change is accepted take the
+    measurement as passed, so they stay about the overlay alone."""
     monkeypatch.setattr(overlay, "measure", lambda rule, label: [])
 
 
@@ -142,7 +142,7 @@ def test_e1_a_malformed_overlay_is_one_hole_and_nothing_is_applied(home, text, w
     ("HOST-RHYTHM:\n    thresholds: {k: 101}", "outside its bounds 1..100"),
     ("HOST-RHYTHM:\n    thresholds: {w: 3601}", "outside its bounds 1..3600"),
     ("HOST-RHYTHM:\n    thresholds: {r: 1001}", "outside its bounds 1..1000"),
-    ("AGENT-DARK-LIVE:\n    thresholds: {streak: 101}", "outside its bounds 1..100"),
+    ("AGENT-DARK-LIVE:\n    thresholds: {streak: 101}", "outside its bounds 2..100"),   # M7.6c: its YAML's
     ("AGENT-DARK-LIVE:\n    thresholds: {live_window: 2}", "below its streak (3)"),
     ("AGENT-DARK-LIVE:\n    thresholds: {streak: 10}", "above its live_window (9)"),
     ("HOST-RHYTHM:\n    thresholds: {tool: 5}", "not a declared threshold"),           # an eq of the gate
@@ -302,8 +302,9 @@ def test_e2_raqib_rules_lists_every_rule_with_its_columns(home):
     assert head == ["ID", "KIND", "CLASS", "SEVERITY", "BUDGET", "STATUS", "ORIGIN", "THRESHOLDS"]
     for r in engine.load_catalog(CATALOG_DIR):
         assert any(l.split()[:2] == [r.id, r.kind] for l in text.splitlines()), r.id
-    assert "k=3 [1..100], w=30 [1..3600], r=10 [1..1000]" in text
-    assert "streak=3 [1..100], live_window=9 [1..1000]" in text
+    assert "k=3 [1..100], w=30 [1..3600], r=10 [1..1000], suspect_every=10 [1..1000]" in text
+    assert "streak=3 [2..100], live_window=9 [2..1000]" in text   # M7.6c: the YAML's bounds
+    assert "none_rounds=2 (fixed: its YAML gives it no bounds)" in text
     assert "raqib rules: rules: no rule off" in text
     code, text = run_cli(["rules", "--json"])
     data = json.loads(text)
@@ -609,7 +610,7 @@ def test_e5_readme_says_the_rules_in_four_lines():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## Choose the rules\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
-    assert len(lines) == 4 and "raqib rules" in lines[0] and "~/.raqib/rules.yaml" in " ".join(lines)
+    assert len(lines) == 6 and "raqib rules" in lines[0]   # M7.6c: two lines more and "~/.raqib/rules.yaml" in " ".join(lines)
     assert "not judged by" in " ".join(lines) and "rules.d" in " ".join(lines)
 
 
@@ -782,46 +783,51 @@ def test_redo_a2_the_host_report_says_suppressed_first(home, tmp_path):
 
 
 def test_redo_a3_a_changed_threshold_is_measured_on_its_fixtures(home, capsys):
-    with pytest.raises(overlay.OverlayError, match="k=5: positive-three-cycles no longer fires"):
-        overlay.set_threshold("HOST-RHYTHM", "k", "5", str(home))
-    code, _ = run_cli(["rules", "--threshold", "AGENT-DARK-LIVE", "streak", "2"])
-    assert code == 2 and "streak=2: positive-dark-three-rounds no longer fires" in capsys.readouterr().err
+    """M7.6c: measured on the fixtures generated AT the value (Amendment B, Q-15): k=1 makes a single cycle
+    to one of many destinations k cycles, so negative-changing-destination fires and k=1 is refused."""
+    with pytest.raises(overlay.OverlayError, match="k=1: negative-changing-destination fires"):
+        overlay.set_threshold("HOST-RHYTHM", "k", "1", str(home))
+    code, _ = run_cli(["rules", "--threshold", "HOST-RHYTHM", "r", "4"])   # an os-act agent's k-th cycle is
+    assert code == 2 and "r=4: positive-host-talks-os-acts no longer fires" in capsys.readouterr().err   # late
     assert not Path(overlay.overlay_path(str(home))).exists()     # nothing written
     # at load, an overlay written by hand is measured the same way, the entry refused whole
-    write_overlay(home, 'rules:\n  HOST-RHYTHM:\n    status: "off"\n    thresholds: {k: 5}\n')
+    write_overlay(home, 'rules:\n  HOST-RHYTHM:\n    status: "off"\n    thresholds: {k: 1}\n')
     rules = overlay.load(str(home))
     info = overlay.describe(rules)
     assert by_id(rules, "HOST-RHYTHM").status == "active" and host.rhythm_params(by_id(rules, "HOST-RHYTHM"))[0] == 3
-    assert any("k=5: positive-three-cycles no longer fires" in r for r in info["refused"])
+    assert any("k=1: negative-changing-destination fires" in r for r in info["refused"])
 
 
 def test_redo_a3_a_threshold_under_which_a_negative_fires_is_refused(home, tmp_path, monkeypatch):
-    """The measurement also names a negative that fires (here a negative made to carry k=4)."""
+    """The measurement names a negative that fires, and an arrival that fires as a benign desktop's (E4);
+    a rule with no generator is measured on its fixture files, which an installed raqib does not carry."""
     rule = by_id(engine.load_catalog(CATALOG_DIR), "HOST-RHYTHM")
-    folder = tmp_path / "root"
-    for kind in ("positive", "negative"):
-        for p in rule.fixtures[kind]:
-            dst = folder / p
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            data = json.loads((ROOT / p).read_text())
-            if kind == "negative" and p.endswith("negative-two-cycles.json"):
-                lines = data["lines"] if isinstance(data, dict) else data
-                pos = fixtures.load_fixture(ROOT / rule.fixtures["positive"][0])[0]
-                lines[:] = pos   # a negative that holds a firing line
-                for rec in lines:
-                    if isinstance(rec.get("input_meta", {}).get("rhythm"), dict):
-                        rec["input_meta"]["rhythm"]["k"] = 4
-            dst.write_text(json.dumps(data))
-    monkeypatch.setattr(overlay, "ROOT", str(folder))
-    with pytest.raises(overlay.OverlayError, match="k=4: negative-two-cycles fires"):
+    from raqib.rules import fixturegen
+    real = fixturegen.generate
+
+    def doctored(r, *a, **k):   # an arrival whose run holds a positive's firing round
+        made = real(r, *a, **k)
+        pos = made["positive"][0][0]
+        for p in made["arrivals"]:
+            made["runs"][p] = made["runs"][p] + [made["runs"][pos][-1]]
+        return made
+    monkeypatch.setattr(fixturegen, "generate", doctored)
+    with pytest.raises(overlay.OverlayError, match="k=4: negative-arrival-linux-desktop fires: would fire on a"
+                                                   " benign desktop"):
         overlay.set_threshold("HOST-RHYTHM", "k", "4", str(home))
-    monkeypatch.setattr(overlay, "ROOT", str(tmp_path / "installed"))   # an installed raqib: no fixtures
+    monkeypatch.setattr(fixturegen, "generate", real)
+    overlay._MEASURED.clear()   # the doctored measure was kept in memory for this process
+    monkeypatch.setattr(overlay, "ROOT", str(tmp_path / "installed"))   # no tests/: generated rules still measure
+    assert "measured at k=4 on fixtures generated at it" in overlay.set_threshold("HOST-RHYTHM", "k", "4", str(home))
+    monkeypatch.setattr(fixturegen, "GENERATED", ())   # a rule with no generator: its fixture files, not here
+    overlay._MEASURED.clear()
     with pytest.raises(overlay.OverlayError, match="cannot be measured: fixture .* is not here"):
-        overlay.set_threshold("HOST-RHYTHM", "k", "4", str(home))
+        overlay.set_threshold("HOST-RHYTHM", "k", "5", str(home))
+    assert rule.fixtures["positive"]
 
 
 def test_redo_a3_a_rule_that_can_never_fire_is_refused_and_suspect_every_is_split(home, tmp_path):
-    with pytest.raises(overlay.OverlayError, match="k = 11 is above its r \\(10\\): k cycle rounds cannot fit"):
+    with pytest.raises(overlay.OverlayError, match="k = 11 is above its r \\(10\\): its YAML's bounds say k <= r"):
         overlay.set_threshold("HOST-RHYTHM", "k", "11", str(home))
     with pytest.raises(overlay.OverlayError, match="r = 2 is below its k \\(3\\)"):
         overlay.set_threshold("HOST-RHYTHM", "r", "2", str(home))

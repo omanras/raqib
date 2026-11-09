@@ -1341,7 +1341,8 @@ class HostSession(Session):
 
 RULES_INTRO = ("Rules: what the next watch judges with. On / Off and a threshold change ~/.raqib/rules.yaml only;"
                " Add copies a rule file, checked by the loader and the fixture runner, into ~/.raqib/rules.d."
-               " Nothing here reaches a watched agent or a project (A4).")
+               " Nothing here reaches a watched agent or a project (A4). A threshold is measured before it is"
+               " allowed: the rule's fixtures are made at the new value and run (ok / refused: why).")
 
 
 class RulesPanel:
@@ -1382,8 +1383,16 @@ class RulesPanel:
         return self._do(overlay.set_status, str(rule_id or "").strip(), "on" if on else "off", running=running)
 
     def threshold(self, rule_id, field, value, running=False):
-        return self._do(overlay.set_threshold, str(rule_id or "").strip(), str(field or "").strip(),
-                        str(value or ""), running=running)
+        """M7.6c (ADR-0008 Amendment B): the change and its measurement's
+        result: "threshold ok (measured): ..." with what was measured, or
+        "REFUSED: threshold refused: <why>" (the fixture named)."""
+        self._do(overlay.set_threshold, str(rule_id or "").strip(), str(field or "").strip(), str(value or ""),
+                 running=running)
+        if self.level == "clean":
+            self.message = "threshold ok (measured): %s" % self.message
+        elif self.level == "alarm" and self.message.startswith("REFUSED: "):
+            self.message = "REFUSED: threshold refused: %s" % self.message[len("REFUSED: "):]
+        return self.message
 
     def reset(self, rule_id, running=False):
         return self._do(overlay.reset, str(rule_id or "").strip(), running=running)
