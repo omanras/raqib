@@ -6,7 +6,7 @@ HostWatch gets a reader of discover-fixture inventories, a Sysmon check
 and an os follow that are fakes, and every project is a directory under
 tmp_path. A tree whose cwd the fixtures give as a real path is moved to a
 tmp project before any --attach-hooks test (the "linux" fixture's cwd is
-/home/claude, which may exist where the tests run).
+/home/user since M7.6d, which may exist where the tests run).
 """
 import builtins
 import copy

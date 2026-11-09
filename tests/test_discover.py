@@ -129,7 +129,7 @@ def test_e1_proc_fixture_real_container_snapshot():
     assert sorted(by_pid) == [1, 66, 67, 87, 95, 7647, 7649, 7650, 7652]
     claude = by_pid[95]
     assert (claude["ppid"], claude["image"], claude["exe"], claude["cwd"], claude["line"]) == (
-        87, "claude", "/opt/claude-code/bin/claude", "/home/claude", 8)
+        87, "claude", "/opt/claude-code/bin/claude", "/home/user", 8)   # M7.6d: the sandbox home redacted
     assert 87504 in claude["sockets"] and by_pid[87]["sockets"][:2] == [797, 805]
     # D-3: pid 1's fd links could not be read: unknown (null), never []
     assert (by_pid[1]["sockets"], by_pid[1]["unread"]) == (None, ["cwd", "environ", "fd"])
@@ -543,7 +543,7 @@ def test_e4_agent_dark_negative_linux():
     claude = [c["id"] for c in inv["candidates"] if c["pid"] == 95][0]
     assert inv["agent_dark"] == []
     assert [(f["path"], f["candidate"]) for f in inv["footprints"]] == [
-        ("/root/.claude", claude), ("/root/.claude.json", claude), ("/home/claude/.claude", claude)]
+        ("/root/.claude", claude), ("/root/.claude.json", claude), ("/home/user/.claude", claude)]
 
 
 def test_e4_footprint_unjudged_without_trees():

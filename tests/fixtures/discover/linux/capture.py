@@ -11,6 +11,13 @@ shell-snapshots/snapshot-* file (D-6). Environment NAMES stay; values are
 read and dropped at once, never stored. A dropped pid (e.g. a process whose
 argv holds a whole script) is named in the snapshot note, with any socket
 it held.
+
+M7.6d (2026-11-09): the build sandbox's home directory, which this capture
+kept, is written as the placeholder home of the other exports (/home/user)
+by redact_home(), run once over the saved texts:
+    python3 tests/fixtures/discover/linux/capture.py --redact-home /home/<name>
+Nothing else of the export changes; proc.txt's note and footprints.txt's
+header say what was redacted and when (REDACTED_NOTE).
 """
 import argparse
 import datetime
@@ -29,6 +36,49 @@ SNAPSHOT = "shell-snapshots/snapshot-REDACTED.sh"
 TOKEN = re.compile(r"\b(?:cse|session)_[A-Za-z0-9]{12,}\b")
 SCRATCH_PATH = re.compile(r"/tmp/claude-[^\s\"']*")
 SHELL_SNAPSHOT = re.compile(r"shell-snapshots/snapshot-[^/\s\"']+")
+HOME_PLACEHOLDER = "/home/user"   # the exports' placeholder home (B-9; Windows: C:\\Users\\user or field)
+REDACTED_NOTE = "redacted 2026-11-09: home -> %s" % HOME_PLACEHOLDER
+REDACTED_FILES = ("proc.txt", "proc-net.txt", "ss.txt", "footprints.txt")
+
+
+def redact_home(text, home):
+    """text with the home directory `home` (/home/<name>) written as
+    HOME_PLACEHOLDER wherever it is a whole path part (/home/<name>,
+    /home/<name>/..., never /home/<name>x). Deterministic; nothing else moves."""
+    home = home.rstrip("/")
+    if not re.fullmatch(r"/home/[A-Za-z0-9._-]+", home):
+        raise ValueError("not a home directory: %r" % home)
+    return re.sub(re.escape(home) + r"(?![A-Za-z0-9._-])", HOME_PLACEHOLDER, text)
+
+
+def noted(name, text):
+    """The saved text `name` with REDACTED_NOTE added where the export says
+    what it is: proc.txt's snapshot note (its first JSON line), every other
+    file's header line. The line count is unchanged (cites keep their lines)."""
+    lines = text.split("\n")
+    if name == "proc.txt":
+        i = next(n for n, x in enumerate(lines) if x.startswith("{"))
+        meta = json.loads(lines[i])
+        meta["note"] = "%s; %s" % (meta["note"], REDACTED_NOTE)
+        lines[i] = json.dumps(meta, sort_keys=True, ensure_ascii=True)
+    else:
+        lines[0] = "%s %s" % (lines[0], REDACTED_NOTE)
+    return "\n".join(lines)
+
+
+def redact_saved(home, directory=HERE):
+    """M7.6d: redact_home() over the saved texts that hold `home`, each noted. The names changed."""
+    changed = []
+    for name in REDACTED_FILES:
+        path = os.path.join(directory, name)
+        with open(path, encoding="ascii", newline="") as f:
+            text = f.read()
+        out = redact_home(text, home)
+        if out != text:
+            with open(path, "w", encoding="ascii", newline="") as f:
+                f.write(noted(name, out))
+            changed.append(name)
+    return changed
 
 
 def redact(argv):
@@ -44,7 +94,11 @@ def redact(argv):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--drop", type=int, action="append", default=[], help="pid to leave out")
+    ap.add_argument("--redact-home", metavar="HOME", help="M7.6d: write HOME as %s in the saved texts" % HOME_PLACEHOLDER)
     args = ap.parse_args()
+    if args.redact_home:
+        print("redacted: %s" % (", ".join(redact_saved(args.redact_home)) or "nothing"))
+        return
     at = discover.iso(datetime.datetime.now(datetime.timezone.utc))
     proc_text = discover.snapshot_proc("/proc", at, os.getpid())
     net_text, net_error = discover.read_proc_net("/proc", at)
