@@ -679,6 +679,7 @@ class Options:
         self.attach_hooks = bool(attach_hooks)
         self.host_kw = dict(host_kw or {})   # tests: the HostWatch's sysmon / installer / os_follow fakes
         self.suspect = ""                    # M7.4 E3: the window's "suspect unknown trees" field, empty = off
+        self.suspect_every = ""              # M7.6c REDO E-3: its "every N rounds" field, empty = the default (10)
         self.every = hostmod.EVERY_DEFAULT if every is None else every   # M7.3: --every T, the host rounds
         self.catalog = catalog           # M7.3: discover's catalog (None: loaded when the host is read)
         self.host_reader = host_reader   # M7.3: tests give a fake reader; None is the live one
@@ -1099,6 +1100,24 @@ def suspicion_line(f):
         f.get("backend"), f.get("model"), f.get("trace"), ",".join(str(x) for x in f.get("cited_seq") or [])))
 
 
+SUSPECT_EVERY_TEXT = "every N rounds"   # M7.6c REDO E-3: the suspect period, a watch option (--suspect-every)
+
+
+def suspect_every_spec(text):
+    """M7.6c REDO E-3: the window's "every N rounds" field: empty is the
+    default (None: host.SUSPECT_EVERY); else a whole number of rounds as
+    --suspect-every takes it. (value or None, error or None)."""
+    text = str(text or "").strip()
+    if not text:
+        return None, None
+    if not (text.isdigit() and text.isascii()):
+        return None, "must be a whole number of rounds, not %r" % text
+    try:
+        return hostmod.check_suspect_every(int(text)), None
+    except ValueError as exc:
+        return None, str(exc)
+
+
 def suspect_spec(text):
     """M7.4 E3: the window's "suspect unknown trees" field: empty (the
     default) is off; else a backend spec as --suspect takes it
@@ -1322,6 +1341,11 @@ class HostSession(Session):
             raise watch.WatchError("%s: %s" % (SUSPECT_TEXT, error))
         if backend is not None:
             kw["suspect"] = backend
+        period, error = suspect_every_spec(getattr(o, "suspect_every", ""))   # M7.6c REDO E-3
+        if error:
+            raise watch.WatchError("suspect %s: %s" % (SUSPECT_EVERY_TEXT, error))
+        if period is not None:
+            kw["suspect_every"] = period
         o.rules_now()   # M7.6: the overlay as it is now
         return self.starter(o.host_catalog(), o.rules, every=o.every, no_open=True, no_notify=o.no_notify,
                             port=o.host_port, out=self.log, err=self.log, environ=o.environ, home=o.home,
@@ -1353,25 +1377,34 @@ class RulesPanel:
     into ~/.raqib/rules.d and nothing else (A4). message: the last change's
     line, or its refusal with the reason; level: clean or alarm."""
 
-    def __init__(self, home=None, catalog=None):
+    def __init__(self, home=None, catalog=None, say=None):
         self.home = home
         self.catalog = catalog
+        # M7.6c REDO E-7: told when a measurement of the overlay's thresholds runs (the window's band says it); a
+        # reload with nothing changed since the last measurement measures nothing (rules.measured.json)
+        self.say = say
+        self.measuring = []   # the lines said (tests read them)
         self.rows, self.info, self.error = [], None, None
         self.message, self.level = None, "clean"
         self.reload()
 
+    def _say(self, line):
+        self.measuring.append(line)
+        if self.say is not None:
+            self.say(line)
+
     def reload(self):
         try:
-            rules = overlay.load(self.home, self.catalog)
+            rules = overlay.load(self.home, self.catalog, say=self._say)
             self.rows, self.info, self.error = overlay.listing(rules), overlay.describe(rules), None
         except Exception as exc:   # A3: a catalog that cannot be loaded is said, never a crash
             self.rows, self.info = [], None
             self.error = "the rules could not be loaded: %s: %s" % (type(exc).__name__, _safe(exc))
         return self
 
-    def _do(self, change, *args, running=False):
+    def _do(self, change, *args, running=False, **kw):
         try:
-            said = change(*args, home=self.home, catalog=self.catalog)
+            said = change(*args, home=self.home, catalog=self.catalog, **kw)
             self.message, self.level = said + (
                 "; a watch is running: it keeps the rules it started with" if running else ""), "clean"
         except overlay.OverlayError as exc:
@@ -1387,7 +1420,7 @@ class RulesPanel:
         result: "threshold ok (measured): ..." with what was measured, or
         "REFUSED: threshold refused: <why>" (the fixture named)."""
         self._do(overlay.set_threshold, str(rule_id or "").strip(), str(field or "").strip(), str(value or ""),
-                 running=running)
+                 running=running, say=self._say)   # E-7: measured on set (the band says it while it runs)
         if self.level == "clean":
             self.message = "threshold ok (measured): %s" % self.message
         elif self.level == "alarm" and self.message.startswith("REFUSED: "):
@@ -2060,6 +2093,7 @@ class Window:
                                           background=p["band_bg"]["note"], foreground=p["fg"]), 860)
         self.detail.pack(fill="x", padx=pad["band_x"], pady=(0, pad["band_y"]))
         self.bandf.pack(fill="x", padx=out)
+        self.rules_panel.say = self._rules_measuring   # M7.6c REDO E-7: the band says a measurement runs
         # E4: the doctrine, under the band, always
         self.doctrine = ttk.Label(self.root, text=DOCTRINE, anchor="w", style=s["muted"])
         self.doctrine.pack(fill="x", padx=out, pady=(0, pad["row"]))
@@ -2094,10 +2128,14 @@ class Window:
         # M7.4 E3: "suspect unknown trees", empty (off) by default; read when "Watch this host" starts a watch
         ttk.Label(row, text=SUSPECT_TEXT).pack(side="left", padx=(pad["gap"] * 2, 0))
         self.suspect_var = tk.StringVar(value=str(getattr(self.c.options, "suspect", "") or ""))
-        ttk.Entry(row, textvariable=self.suspect_var, width=16).pack(side="left", padx=(pad["row"], pad["gap"] * 2))
+        ttk.Entry(row, textvariable=self.suspect_var, width=16).pack(side="left", padx=(pad["row"], pad["gap"]))
+        # M7.6c REDO E-3: the suspect period, a watch option (empty: every 10 rounds)
+        ttk.Label(row, text="every").pack(side="left")   # SUSPECT_EVERY_TEXT, short: the row keeps 900 px
+        self.suspect_every_var = tk.StringVar(value=str(getattr(self.c.options, "suspect_every", "") or ""))
+        ttk.Entry(row, textvariable=self.suspect_every_var, width=4).pack(side="left", padx=(pad["row"], pad["gap"] * 2))
         ttk.Label(row, text="page").pack(side="left")
         self.host_url = tk.StringVar(value="-")
-        ttk.Entry(row, textvariable=self.host_url, state="readonly", width=24).pack(side="left", fill="x", expand=True,
+        ttk.Entry(row, textvariable=self.host_url, state="readonly", width=10).pack(side="left", fill="x", expand=True,
                                                                                   padx=(pad["row"], 0))
         row.pack(fill="x", pady=(0, pad["row"]))
         self.host_badges = ttk.Frame(self.hostf)   # REDO C-2: one label per badge
@@ -2253,6 +2291,14 @@ class Window:
         self.rules_panel.add(chosen or None, running=self.c.watching())
         self._rules_band()
 
+    def _rules_measuring(self, line):
+        """M7.6c REDO E-7: the band says a measurement runs (it may take seconds), drawn before it starts."""
+        try:
+            self._band("RULES: MEASURING", "incomplete", line)
+            self.root.update_idletasks()
+        except Exception:   # a band not built yet (the panel's first load) is not a crash
+            pass
+
     def _rules_band(self):
         p = self.rules_panel
         self._band("RULES" if p.level == "clean" else "RULES: REFUSED" if p.level == "alarm" else "RULES",
@@ -2312,6 +2358,7 @@ class Window:
         if self.c.options is not None:   # H-1: the box's word for this watch
             self.c.options.attach_hooks = bool(self.attach_var.get())
             self.c.options.suspect = str(self.suspect_var.get() or "").strip()   # M7.4 E3: empty is off
+            self.c.options.suspect_every = str(self.suspect_every_var.get() or "").strip()   # M7.6c REDO E-3
         self.c.host_note = self.c.start_host()
         self.show_host()
 

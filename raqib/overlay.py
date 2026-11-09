@@ -29,20 +29,27 @@ streak and live_window, HOST-UNWATCHED's none_rounds. M7.6c (ADR-0008
 Amendment B): a person may change it only when the rule's YAML gives it
 bounds (its `bounds:` block, engine.bounds_of: min, max, and relations such
 as "k <= r", "live_window >= streak"); a declared threshold without bounds,
-or any threshold of a rule whose YAML has no bounds block (a person's rule
-included), is fixed: listed as such by `raqib rules` and refused when set.
-There are no built-in bounds here any more.
+or any threshold of a rule whose YAML has no bounds block, is fixed: listed
+as such by `raqib rules` and refused when set. There are no built-in bounds.
+M7.6c REDO (ADR-0008 Amendment E): "measured" means sensitive (E-2): a
+bounded threshold is editable only where raqib/rules/fixturegen.py makes an
+edge pair for it (a positive that stops firing at the stricter neighbouring
+value, a negative that fires at the looser one): HOST-RHYTHM's k, w, r and
+AGENT-DARK-LIVE's streak, live_window; any other (a person's rule's) is
+FIXED, "not measurable: no fixture is sensitive to <field>".
 A changed threshold is measured before it is allowed, when it is set and at
-every load (measure()): a rule raqib/rules/fixturegen.py generates
-(HOST-RHYTHM, AGENT-DARK-LIVE) has its fixtures made AT the new values, in
-memory, by the package itself (an installed raqib needs no tests/), and is
-run on them: every positive must fire, no negative and no benign arrival
-(the real exports of two desktops whose trees arrive, E4) may fire, and the
-false-positive rate measured over the generated negatives and the arrivals
-must stay within the declared budget; any other rule is run on its own
-fixture files (a person's rule: under rules.d). A value that fails, or that
-cannot be measured, is refused with the fixture named; nothing is allowed
-on faith and nothing is cached on disk.
+a load whose overlay or catalog changed since the last measurement (E-7:
+the result is kept in ~/.raqib/rules.measured.json, keyed by a hash of the
+overlay, every rule file and the packaged inventories; say(MEASURING) while
+it runs): the rule's fixtures are made AT the new values, in memory, by the
+package itself (an installed raqib needs no tests/), and it is run on them:
+every positive must fire, no negative and no synthetic desktop's arrival
+(E-4: SYNTHETIC exports of two desktops whose trees arrive) may fire, the
+false-positive rate over the measured negatives (E-5: never the synthetic
+desktops, which cannot fire it) must stay within the declared budget, and
+each changed field's edge pair must flip at its neighbours. A value that
+fails, or that cannot be measured, is refused naming the fixture and the
+condition (E-6); nothing is allowed on faith.
 
 A malformed overlay (not yamlite, or not the shape above) is ONE hole and
 nothing of it is applied (ADR-0008 decision 2: never half-applied). An entry
@@ -140,9 +147,10 @@ FIXED_NO_BLOCK = "fixed: its YAML has no bounds block"
 FIXED_NO_BOUND = "fixed: its YAML gives it no bounds"
 
 
-def thresholds(rule):
-    """{name: {"field", "value", "low", "high"}} of a rule's editable
-    thresholds (declared, with bounds in its YAML), in match order."""
+NOT_MEASURABLE = "not measurable: no fixture is sensitive to %s"
+
+
+def _bounded(rule):
     bounds = getattr(rule, "bounds", None) or {"fields": {}}
     out = {}
     for name, t in engine.declared_thresholds(rule.doc).items():
@@ -152,14 +160,47 @@ def thresholds(rule):
     return out
 
 
+def _sensitive(rule):
+    """M7.6c REDO E-2: the fields the generator has an edge pair for (a
+    package rule fixturegen makes; a person's rule has none)."""
+    if getattr(rule, "fixture_root", None) or getattr(rule, "origin", "package") == "user":
+        return ()
+    return fixturegen.edge_fields(rule.id)
+
+
+def thresholds(rule):
+    """{name: {"field", "value", "low", "high", "lo", "hi"}} of a rule's
+    editable thresholds, in match order: declared, with bounds in its YAML
+    (the fence) AND an edge pair the generator makes (E-2: measured means
+    sensitive); lo..hi is the range the measurement accepts given the
+    other values (E-6, fixturegen.effective)."""
+    bounded = _bounded(rule)
+    sensitive = _sensitive(rule)
+    values = {n: t["value"] for n, t in engine.declared_thresholds(rule.doc).items()}
+    out = {}
+    for name, t in bounded.items():
+        if name in sensitive:
+            lo, hi = fixturegen.effective(rule.id, name, values, t["low"], t["high"])
+            out[name] = dict(t, lo=lo, hi=hi)
+    return out
+
+
 def fixed_thresholds(rule):
     """{name: {"field", "value", "why"}}: the declared thresholds a person
-    may not change (no bounds for them in the rule's YAML), said by
-    `raqib rules` (E2)."""
+    may not change, said by `raqib rules` and the panel (E2): no bounds
+    block, no bounds for it, or (E-2) bounds but no fixture sensitive to it."""
     editable = thresholds(rule)
-    why = FIXED_NO_BLOCK if getattr(rule, "bounds", None) is None else FIXED_NO_BOUND
-    return {name: dict(t, why=why) for name, t in engine.declared_thresholds(rule.doc).items()
-            if name not in editable}
+    bounded = _bounded(rule)
+    out = {}
+    for name, t in engine.declared_thresholds(rule.doc).items():
+        if name in editable:
+            continue
+        if name in bounded:
+            why = NOT_MEASURABLE % name
+        else:
+            why = FIXED_NO_BLOCK if getattr(rule, "bounds", None) is None else FIXED_NO_BOUND
+        out[name] = dict(t, why=why)
+    return out
 
 
 def relations(rule):
@@ -176,8 +217,9 @@ def resolve(rule, name):
             return short
     for short, t in fixed_thresholds(rule).items():
         if name in (short, t["field"]):
-            raise OverlayError("%s %s is not editable (%s; ADR-0008 Amendment B: a threshold changes only within"
-                               " the bounds its YAML declares)" % (rule.id, short, t["why"]))
+            raise OverlayError("%s %s is not editable (%s; ADR-0008 Amendments B, E: a threshold changes only"
+                               " within the bounds its YAML declares, where a fixture is sensitive to it)"
+                               % (rule.id, short, t["why"]))
     preds = _predicates((rule.doc or {}).get("match"), [])
     same = [p for p in preds if name in (p["field"], _short(p["field"]))]
     if not same:
@@ -374,10 +416,15 @@ def _set_eq(match, field, value):
             p["eq"] = value
 
 
-def apply(rules, doc, path, state="read", hole=None):
+def apply(rules, doc, path, state="read", hole=None, say=None, cache=None):
     """A Catalog of rules with the overlay doc applied (see the module
-    docstring), and its .overlay (describe()'s source)."""
+    docstring), and its .overlay (describe()'s source). M7.6c REDO E-7:
+    cache (build()'s, from ~/.raqib/rules.measured.json) gives the results
+    of a measurement made for the same overlay and catalog (its stamp), so
+    a load with no change measures nothing; say(MEASURING) is called once
+    before the first measurement that runs."""
     by_id = {r.id: r for r in rules}
+    said = []
     entries = (doc or {}).get("rules") or {}
     refused, applied = [], []
     out = Catalog()
@@ -410,7 +457,21 @@ def apply(rules, doc, path, state="read", hole=None):
                 if getattr(new, attr) != getattr(rule, attr):   # never: only status and eq values change
                     raise OverlayError("the overlay changed %s of %s" % (attr, rule.id))
             new.fixture_root = getattr(rule, "fixture_root", None)
-            failed = measure(new, ", ".join("%s=%d" % (n, v[1]) for n, v in sorted(changed.items()))) if changed else []
+            label = ", ".join("%s=%d" % (n, v[1]) for n, v in sorted(changed.items()))
+            new.changed_fields = sorted(changed)
+            failed = []
+            if changed:
+                known = (cache or {}).get("old", {}).get("%s|%s" % (rule.id, label))
+                if known is not None and cache.get("fresh"):   # E-7: measured for this very overlay and catalog
+                    failed, new.measured = list(known.get("reasons") or []), known.get("summary")
+                else:
+                    if say is not None and not said:
+                        said.append(MEASURING)
+                        say(MEASURING)
+                    failed = measure(new, label)
+                if cache is not None:
+                    cache["new"]["%s|%s" % (rule.id, label)] = {"reasons": list(failed),
+                                                                "summary": getattr(new, "measured", None)}
             if failed:   # M7.6 REDO A-3: a changed threshold is measured; one that fails is refused, entry whole
                 refused.append("%s: %s" % (rule.id, "; ".join(failed)))
                 if not hasattr(rule, "origin"):
@@ -434,7 +495,11 @@ def apply(rules, doc, path, state="read", hole=None):
         out.append(new)
     for rid in sorted(set(entries) - set(by_id)):
         refused.append("%s: no such rule in the catalog or rules.d" % rid)
-    out.overlay = {"path": path, "file": state, "hole": hole, "refused": refused, "applied": applied}
+    out.overlay = {"path": path, "file": state, "hole": hole, "refused": refused, "applied": applied,
+                   "measuring": "measured now" if said else ("from %s" % MEASURED_NAME if cache and cache.get("new")
+                                                            else None)}
+    if cache is not None:
+        save_measured(cache)
     return out
 
 
@@ -580,38 +645,94 @@ def _name(path):
     return os.path.splitext(os.path.basename(path))[0]
 
 
-def measure_generated(rule, label):
-    """M7.6c (ADR-0008 Amendment B, A6): ([reasons], summary) of a rule
-    fixturegen makes fixtures for, measured on its fixtures generated at its
-    own (changed) values and on the benign arrivals made at them: a positive
-    must fire in its run, a negative or an arrival in no round of its run
-    (fixturegen.LAST_ROUND_ONLY: in its last round), and the false-positive
-    rate over the measured negatives stays within the budget."""
+def _builder():
+    """The round builder fixturegen is handed (E-8: raqib/rules/ never imports raqib.host; this module does)."""
+    from raqib import host
+    return host.fixture_builder()
+
+
+def _cond(path):
+    why = fixturegen.CONDITIONS.get(path[len(fixturegen.FIXTURE_DIR):]) if path.startswith(
+        fixturegen.FIXTURE_DIR) else None
+    return ": %s" % why if why else ""
+
+
+def _edges(rule, values, fields, label, builder):
+    """E-2: ([reasons], [said]): for each changed field, its edge pair run
+    at the neighbouring values (the fixtures made at the new value): the
+    positive must stop firing at the stricter one, the negative must fire
+    at the looser one. A neighbour outside the bounds or breaking a
+    relation is not run; a field neither neighbour can be run for is not
+    measurable at that value."""
+    reasons, said = [], []
+    for f in fields:
+        pos, neg = (fixturegen.FIXTURE_DIR + p for p in fixturegen.EDGES[rule.id][f])
+        ran = 0
+        for step, path, want in ((fixturegen.STRICTER[f], pos, False), (-fixturegen.STRICTER[f], neg, True)):
+            other_values = dict(values)
+            other_values[f] = values[f] + step
+            try:
+                other = fixturegen.with_values(rule, other_values)
+            except engine.RuleError:
+                continue
+            made = fixturegen.generate(other, builder, shape=values, only={path})
+            got = _run_judged(other, made["runs"][path])[0]
+            ran += 1
+            if got != want:
+                reasons.append("%s: not sensitive at %s=%d: %s %s" % (
+                    label, f, other_values[f], _name(path), "still fires" if got else "does not fire"))
+            else:
+                said.append("%s %s at %s=%d" % (_name(path), "fires" if want else "stops firing", f,
+                                                other_values[f]))
+        if not ran:
+            reasons.append("%s: not measurable at %s=%d: neither neighbouring value can be run" % (label, f,
+                                                                                                values[f]))
+    return reasons, said
+
+
+def measure_generated(rule, label, fields=None):
+    """M7.6c (ADR-0008 Amendments B, E; A6): ([reasons], summary) of a rule
+    fixturegen makes fixtures for, on its fixtures generated at its own
+    (changed) values: every positive fires in its run; no negative fires in
+    any round of its run (fixturegen.LAST_ROUND_ONLY: in its last round);
+    the false-positive rate over the measured negatives stays within the
+    budget (E-5: the synthetic desktops are run and refused if they fire,
+    never counted: they cannot fire the rule); and (E-2) each changed field
+    is sensitive at its new value (its edge pair flips at the neighbours).
+    A refusal names the fixture and the condition (E-6)."""
+    builder = _builder()
     try:
-        made = fixturegen.generate(rule)
+        made = fixturegen.generate(rule, builder)
         runs = made["runs"]
         last = set(made["last_round_only"])
+        arrivals = set(made["arrivals"])
         positives = [(p, _run_judged(rule, runs[p])[0]) for p, _ in made["positive"]]
         negatives = [(p,) + (_judged(rule, runs[p][-1]) if p in last else _run_judged(rule, runs[p]))
                      for p, _ in made["negative"]]
+        values = made["values"]
+        fields = [f for f in (fields if fields is not None else fixturegen.edge_fields(rule.id))
+                  if f in fixturegen.EDGES.get(rule.id, {})]
+        edge_reasons, edge_said = _edges(rule, values, fields, label, builder)
     except (fixturegen.GenerateError, fixtures.FixtureError, engine.RuleError, OSError, ValueError) as exc:
         return ["%s: cannot be measured: %s" % (label, exc)], None
-    arrivals = set(made["arrivals"])
-    reasons = ["%s: %s no longer fires" % (label, _name(p)) for p, fired in positives if not fired]
-    reasons += ["%s: %s fires%s" % (label, _name(p), ": would fire on a benign desktop" if p in arrivals else "")
-                for p, fired, _ in negatives if fired]
-    measured = [n for n in negatives if n[2]]
+    reasons = ["%s: %s no longer fires%s" % (label, _name(p), _cond(p)) for p, fired in positives if not fired]
+    reasons += ["%s: %s fires%s" % (label, _name(p), ": would fire on a synthetic desktop" if p in arrivals
+                                    else _cond(p)) for p, fired, _ in negatives if fired]
+    measured = [n for n in negatives if n[2] and n[0] not in arrivals]   # E-5
+    desktops = [n for n in negatives if n[0] in arrivals]
     rate = sum(1 for n in measured if n[1]) / len(measured) if measured else None
     if rate is None:
         reasons.append("%s: cannot be measured: no generated negative passes the rule's gate" % label)
     elif rate > rule.fp_budget:
         reasons.append("%s: the false-positive rate measured on %d negatives, %g, is above its budget %g" % (
             label, len(measured), rate, rule.fp_budget))
-    summary = ("measured at %s on fixtures generated at it: %d of %d positives fire; %d of %d measured negatives"
-               " fire (%d benign arrivals among the %d negatives); fp rate %s, budget %g" % (
-                   label, sum(1 for _, f in positives if f), len(positives), sum(1 for n in measured if n[1]),
-                   len(measured), len(arrivals), len(negatives), "-" if rate is None else "%g" % rate,
-                   rule.fp_budget))
+    reasons += edge_reasons
+    summary = ("measured at %s on fixtures generated at it (sensitive: %s): %d of %d positives fire; %d of %d"
+               " measured negatives fire; the %d synthetic desktops do not fire (run, not counted: they cannot"
+               " fire it); fp rate %s, budget %g" % (
+                   label, "; ".join(edge_said) or "-", sum(1 for _, f in positives if f), len(positives),
+                   sum(1 for n in measured if n[1]), len(measured), len(desktops),
+                   "-" if rate is None else "%g" % rate, rule.fp_budget))
     return reasons, summary
 
 
@@ -634,7 +755,7 @@ def measure(rule, label):
         if key not in _MEASURED:   # in this process only: a set_threshold and the load after it measure once
             while len(_MEASURED) >= MEASURED_KEPT:
                 _MEASURED.pop(next(iter(_MEASURED)))
-            _MEASURED[key] = measure_generated(rule, label)
+            _MEASURED[key] = measure_generated(rule, label, getattr(rule, "changed_fields", None))
         reasons, rule.measured = _MEASURED[key]
         return list(reasons)
     root = getattr(rule, "fixture_root", None) or ROOT
@@ -661,9 +782,67 @@ def measure(rule, label):
     return reasons
 
 
-def build(rules, overlay=None, user_rules=None):
+MEASURING = "measuring the overlay's thresholds..."
+MEASURED_NAME = "rules.measured.json"
+
+
+def measured_path(home=None):
+    return os.path.join(raqib_dir(home), MEASURED_NAME)
+
+
+def stamp(rules, overlay):
+    """E-7: the hash of what a measurement depends on: raqib's version, every
+    rule file (the catalog's and rules.d's), the overlay file and the
+    packaged inventories. Another stamp: measure again."""
+    import hashlib
+    import raqib
+    h = hashlib.sha256(("raqib %s\n" % getattr(raqib, "__version__", "?")).encode("ascii"))
+    paths = sorted({getattr(r, "base_source", None) or r.source for r in rules}) + [overlay or "", fixturegen.HOSTDATA]
+    for p in paths:
+        h.update(("\n%s\n" % os.path.basename(p)).encode("utf-8", "replace"))
+        try:
+            with open(p, "rb") as f:
+                h.update(f.read())
+        except OSError:
+            h.update(b"(absent)")
+    return h.hexdigest()
+
+
+def load_measured(path, current):
+    """{"path", "stamp", "old", "new", "fresh"}: the cache of the last
+    measurement (E-7); fresh when it was made for this very stamp."""
+    old, fresh = {}, False
+    try:
+        with open(path, encoding="ascii") as f:
+            data = __import__("json").load(f)
+        if isinstance(data, dict) and isinstance(data.get("results"), dict):
+            old, fresh = data["results"], data.get("stamp") == current
+    except (OSError, ValueError):
+        pass
+    return {"path": path, "stamp": current, "old": old, "new": {}, "fresh": fresh}
+
+
+def save_measured(cache):
+    """Write the cache (atomically) when this load measured or the stamp
+    changed; a cache that cannot be written only means measuring again."""
+    if (cache.get("fresh") and cache["new"] == cache["old"]) or not (cache["new"] or cache["old"]):
+        return   # nothing new to keep (and nothing measured where nothing was kept: no file at all)
+    import json
+    text = json.dumps({"about": "M7.6c REDO E-7: the last measurement of ~/.raqib/rules.yaml's thresholds (raqib"
+                                " writes it; delete it to measure again)", "stamp": cache["stamp"],
+                       "results": cache["new"]}, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
+    try:
+        _atomic_write(cache["path"], text.encode("ascii"))
+    except OSError:
+        pass
+
+
+def build(rules, overlay=None, user_rules=None, say=None):
     """engine.load_catalog's overlay step: the catalog rules, the rules of
-    user_rules (rules.d), then the overlay file at `overlay` on top."""
+    user_rules (rules.d), then the overlay file at `overlay` on top.
+    M7.6c REDO E-7: a measurement's result is kept beside the overlay in
+    rules.measured.json and reused while nothing it depends on changed;
+    say(line) is told when a measurement runs."""
     rules = list(rules)
     for r in rules:
         r.origin = getattr(r, "origin", "package")
@@ -673,15 +852,20 @@ def build(rules, overlay=None, user_rules=None):
         doc, state, hole = empty(), "absent", None
     else:
         doc, state, hole = read(overlay)
-    out = apply(combined, doc, overlay, state, hole)
+    cache = None
+    if overlay is not None and state == "read":
+        cache = load_measured(os.path.join(os.path.dirname(overlay), MEASURED_NAME), stamp(combined, overlay))
+    out = apply(combined, doc, overlay, state, hole, say=say, cache=cache)
     out.overlay.update(user_dir=user_rules, user=[{"rule_id": r.id, "source": r.source} for r in users],
                        user_refused=user_refused, user_refused_ids=refused_ids)
     return out
 
 
-def load(home=None, catalog=None):
-    """The catalog as a watch loads it: the package's, rules.d and the overlay."""
-    return engine.load_catalog(catalog or CATALOG, overlay=overlay_path(home), user_rules=user_dir(home))
+def load(home=None, catalog=None, say=None):
+    """The catalog as a watch loads it: the package's, rules.d and the
+    overlay (engine.load_catalog's steps; say: told when a measurement runs, E-7)."""
+    return build(engine.load_catalog(catalog or CATALOG), overlay=overlay_path(home), user_rules=user_dir(home),
+                 say=say)
 
 
 # --- what is said ----------------------------------------------------------------------------------
@@ -846,6 +1030,7 @@ def listing(rules):
                      "off_by": "overlay" if getattr(r, "off_by", None) else ("yaml" if r.status == "disabled" else None),
                      "origin": getattr(r, "origin", "package"),
                      "thresholds": [{"name": n, "value": t["value"], "low": t["low"], "high": t["high"],
+                                     "lo": t["lo"], "hi": t["hi"],
                                      "yaml": changed.get(n, (t["value"],))[0]} for n, t in thresholds(r).items()],
                      # M7.6c E2: the declared thresholds a person may not change, and why
                      "fixed": [{"name": n, "value": t["value"], "why": t["why"]} for n, t in fixed_thresholds(r).items()]})
@@ -853,9 +1038,12 @@ def listing(rules):
 
 
 def threshold_text(t):
-    if "why" in t:   # M7.6c E2: fixed (no bounds in its YAML)
+    if "why" in t:   # M7.6c E2: fixed (no bounds in its YAML; REDO E-2: or no fixture sensitive to it)
         return "%s=%d (%s)" % (t["name"], t["value"], t["why"])
-    return "%s=%d%s [%d..%d]" % (t["name"], t["value"], "*" if t["value"] != t["yaml"] else "", t["low"], t["high"])
+    text = "%s=%d%s [%d..%d" % (t["name"], t["value"], "*" if t["value"] != t["yaml"] else "", t["low"], t["high"])
+    if "lo" in t and (t["lo"], t["hi"]) != (t["low"], t["high"]):   # E-6: the range the measurement accepts
+        text += "; measured %d..%d" % (t["lo"], t["hi"])
+    return text + "]"
 
 
 def table_text(rows):
@@ -906,8 +1094,11 @@ def set_status(rid, word, home=None, now=None, catalog=None):
     return "%s %s in %s; %s" % (rid, word, path, NEXT_WATCH)
 
 
-def set_threshold(rid, name, value, home=None, now=None, catalog=None):
-    """Set a declared threshold of a rule in the overlay; the line said."""
+def set_threshold(rid, name, value, home=None, now=None, catalog=None, say=None):
+    """Set a declared threshold of a rule in the overlay; the line said.
+    M7.6c REDO E-7: measured here (say(MEASURING) first), and the result is
+    kept for the loads after it (rules.measured.json), which then measure
+    nothing."""
     rule = _rule(_base(home, catalog), rid)
     short = resolve(rule, name)
     if isinstance(value, str):
@@ -924,13 +1115,17 @@ def set_threshold(rid, name, value, home=None, now=None, catalog=None):
     reasons = check_entry(rule, entry)
     measured = None
     if not reasons:   # M7.6 REDO A-3, M7.6c: measured (at the new values) before it is written
-        trial = apply([rule], {"rules": {rid: entry}}, overlay_path(home))
+        trial = apply([rule], {"rules": {rid: entry}}, overlay_path(home), say=say)
         reasons = [r.split(": ", 1)[1] for r in trial.overlay["refused"]]
         measured = getattr(trial[0], "measured", None) if trial else None
     if reasons:
         raise OverlayError("%s: %s" % (rid, "; ".join(reasons)))
     doc["rules"][rid] = entry
     path = write(doc, home)
+    try:   # E-7: the load after a set reuses this measurement (this process's memory), and keeps it on disk
+        load(home, catalog)
+    except (engine.RuleError, OverlayError):
+        pass
     return "%s %s = %d in %s; %s%s" % (rid, short, value, path, "%s; " % measured if measured else "", NEXT_WATCH)
 
 

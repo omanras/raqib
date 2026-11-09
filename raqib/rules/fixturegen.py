@@ -15,8 +15,7 @@ on fixtures made AT it. This module makes them, in memory, at any values:
                        "last_round_only": [path]}
 
 where rule is the (overlaid) compiled rule: its own eq values are the values
-generated at (host.rhythm_params / host.rule_eq read them, as the watch
-does). path is the fixture's path as the YAML lists it; doc is what the
+generated at (engine.declared_thresholds: the fields host.py reads). path is the fixture's path as the YAML lists it; doc is what the
 shipped file holds ({"lines", "expect_seq"?}); dumps(doc) is its text. At the
 YAMLs' declared values generate() gives exactly the shipped files (a test
 regenerates and diffs them byte for byte), and make.py, now a thin writer,
@@ -39,35 +38,45 @@ What is SYNTHETIC here (pure functions of the thresholds; nothing read):
 - the scenarios, parametric in k (rounds 1..k+1 for k cycles, 1..k for k-1,
   k+2 for the others and the os ones, the os rounds 2..k+1 or 2..k) and in the
   streak s (s dark rounds, s-1, s then a linked round).
-What is NOT generated: the inventories of real exports (the discover fixtures
-"windows", kimi's, the benign desktops'). The ones the generated rules need
+What is NOT generated here: the inventories of the discover exports (the
+discover fixtures "windows", kimi's, the benign desktops'; M7.6c REDO E-4:
+SYNTHETIC exports, their run.json says so). The ones the generated rules need
 are shipped as package data (HOSTDATA, inventories.json: discover.run's
 inventory of each, the catalog path written relative), so an installed raqib
 (no tests/) measures the same; make.py writes that file from the exports and
-a test holds it to them. The benign arrivals ([benign/X:before, benign/X],
-ADR-0007 C-1b) are real exports: their rounds are fixed, their lines are
-made at the values (they carry k, w, r and the streak as every host line
-does), and a threshold under which one fires is refused ("would fire on a
-benign desktop", overlay.measure).
+a test holds it to them. The synthetic desktops' arrivals ([benign/X:before,
+benign/X], ADR-0007 C-1b): their rounds are fixed, their lines are made at
+the values (they carry k, w, r and the streak as every host line does), and
+a threshold under which one fires is refused ("would fire on a synthetic
+desktop", overlay.measure); they are never counted among a rule's measured
+negatives (E-5: they cannot fire it).
+M7.6c REDO: E-2 the edge pairs (EDGES, STRICTER; w_scenarios, r_scenarios,
+window_scenarios); E-6 the conditions a failure means (CONDITIONS) and the
+range the measurement accepts (effective); E-8 the rounds are made by a
+builder the caller hands generate() (raqib/host.py's fixture_builder): this
+package imports neither raqib.host nor the suspect layer.
 
 Nothing is written outside a temporary home that is removed after each run
-(HostWatch keeps its record under its home); nothing is cached on disk.
+(HostWatch keeps its record under its home). The cache of a measurement's
+result (E-7) is raqib/overlay.py's, not this module's.
 """
 from __future__ import annotations
 
+import copy
 import datetime
-import io
 import json
 import os
 import re
 import tempfile
 
+from raqib.rules import engine
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOSTDATA = os.path.join(HERE, "hostdata", "inventories.json")
 FIXTURE_DIR = "tests/fixtures/rules/"   # the prefix of a fixture path as the YAMLs list it
 
-WALL0 = 1793700000.0      # the wall clock of rounds_of at t = 0
-EVERY = 10                # rounds_of's T
+WALL0 = 1793700000.0      # the wall clock of a fixture run at t = 0 (host.fixture_rounds)
+EVERY = 10                # a fixture run's round period T
 RHYTHM_PID = 4400
 SYSTEM_DRIVE = "c"        # make.py's host_record gives the Windows exports' rounds this drive (D-3)
 OS_DEST = {"hostname": None, "ip": "192.0.2.20", "port": "443", "protocol": "tcp"}   # RFC 5737
@@ -178,6 +187,13 @@ def synthetic_inventory(name, w=None):
     if name.startswith("rhythm:"):
         _, scenario, k = name.split(":")
         return rhythm_inventory(scenario, int(k), act_after=_gap(HOST_GAP, w))
+    if name.startswith("rhythm-gap:"):   # E-2, W's edge: round i of k cycles, each act `gap` s after its talk
+        _, gap, period, i = name.split(":")
+        return rhythm_inventory("cycle", int(i), every=int(period), act_after=int(gap))
+    if name.startswith("rhythm-ring:"):   # E-2, R's edge: round i of n; cycles in round 2 and the last k-1 rounds
+        _, n, k, i = (int(x) if x.isdigit() else x for x in name.split(":"))
+        children = [1] + ([2] if i >= 2 else []) + [j for j in range(max(3, n - k + 2), i + 1)]
+        return rhythm_inventory("cycle", i, children=children, act_after=_gap(HOST_GAP, w))
     return None
 
 
@@ -215,8 +231,8 @@ def os_rounds(k):
 
 
 def dark_scenarios(streak):
-    """M7.2 / M7.5 E1: AGENT-DARK-LIVE's fixtures at the streak S (real
-    exports as rounds: "windows" holds a footprint no tree links to; kimi-gone
+    """M7.2 / M7.5 E1: AGENT-DARK-LIVE's fixtures at the streak S (the
+    synthetic exports as rounds: "windows" holds a footprint no tree links to; kimi-gone
     is kimi with its tree left out; kimi/one-sample links it again)."""
     return {
         "AGENT-DARK-LIVE/positive-dark-three-rounds.json": ["windows"] * streak,
@@ -227,77 +243,12 @@ def dark_scenarios(streak):
 
 
 def arrival_scenarios(benign):
-    """C-1b: a benign desktop whose trees arrive after round 1, for each
+    """C-1b: a synthetic desktop whose trees arrive after round 1, for each
     benign export name ("benign/linux-desktop", ...): fixed rounds."""
     return {ARRIVAL % name.split("/")[1]: [name + BEFORE, name] for name in benign}
 
 
 # --- running the rounds ----------------------------------------------------------------------------------
-
-class Clock:
-    def __init__(self):
-        self.t = 0.0
-
-    def __call__(self):
-        return self.t
-
-
-class Follow:
-    """M7.5 E2: a fake os follow: one pass that writes nothing, then waits
-    for the Stop; the os lines are appended by rounds_of, between rounds."""
-
-    def __call__(self, root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None,
-                 helpers=None):
-        if on_pass:
-            on_pass(1, None)
-        stop.wait(60)
-        return 1
-
-
-def rounds_of(names, catalog, rules, home, sources=True, os_rounds=None, inventory=None, w=None, seen=None):
-    """The HostWatch fed these rounds in order (finished). inventory(name):
-    the inventory of a round name (default: synthetic, else HOSTDATA).
-    sources False: a file stands where the sources directory would be, so
-    no source can be attached (HOST-UNWATCHED's fixtures). The Sysmon check
-    says no (platform "fixture"): every tree gets the host source.
-    os_rounds (M7.5 E2): the Sysmon check says yes, every tree gets a fake
-    os follow, and before each of these rounds os_lines() are appended to
-    the rhythm tree's per-tree file. w: the W the synthetic gaps stay in.
-    seen: a list each round's record is appended to as it is made
-    (HostWatch keeps only its last ROUNDS_KEPT)."""
-    from raqib import host, notify   # here: host imports overlay, which imports this module
-    resolve = inventory or (lambda n: synthetic_inventory(n, w) or packaged_inventory(n))
-    invs = [resolve(n) for n in names]
-    if not sources:
-        os.makedirs(os.path.join(home, ".raqib", "host"), exist_ok=True)
-        with open(os.path.join(home, ".raqib", "host", host.SOURCES_DIR), "w") as f:
-            f.write("not a directory: make.py (NO_SOURCES)\n")
-    feed = iter(invs)
-    clock = Clock()
-    notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
-    os_kw = {} if os_rounds is None else {"os_follow": Follow()}
-    watch = host.HostWatch(lambda: next(feed), catalog, rules, notifier, every=10, out=None, err=io.StringIO(),
-                           clock=clock, wall=lambda: WALL0 + clock.t, home=home, platform="fixture",
-                           run="fixture-run",   # C-2: a fixed run id, so the fixtures are what make.py makes
-                           sysmon=(lambda: (False, "fixture: no Sysmon")) if os_rounds is None
-                           else (lambda: (True, "fixture: a synthetic os source (make.py)")), **os_kw)
-    seq = 0
-    for k, name in enumerate(names, start=1):
-        if os_rounds is not None and k in os_rounds:
-            (key,) = [x for x in watch.trees if x[0] == RHYTHM_PID]
-            src = watch.sources[key]
-            src.first_pass.wait(5)
-            lines, seq = os_lines(k, name.split(":")[1], seq, w=w)
-            with open(src.path, "a", encoding="ascii", newline="\n") as f:
-                f.write("".join(json.dumps(x, separators=(",", ":"), ensure_ascii=True) + "\n" for x in lines))
-        before = watch.round_lines[-1] if watch.round_lines else None
-        watch.tick(wait=30)
-        if seen is not None and watch.round_lines and watch.round_lines[-1] is not before:
-            seen.append(watch.round_lines[-1])
-        clock.t += 10
-    watch.finish()
-    return watch
-
 
 def source_lines(watch):
     """Every line of every per-tree source file of a watch, in pid order."""
@@ -313,7 +264,6 @@ def source_lines(watch):
 def fixture_doc(rule, lines, positive):
     """A fixture's content: its lines and, for a positive, the seqs its own
     rule cites on them (expect_seq), as make.py has always written it."""
-    from raqib.rules import engine
     doc = {"lines": lines}
     if positive:
         found, _ = engine.judge(rule, lines, {})
@@ -326,15 +276,16 @@ def dumps(doc):
     return json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
 
 
-def run_lines(names, catalog, rules, sources=True, os_rounds=None, inventory=None, w=None):
+def run_lines(builder, names, rules, inventory, **opts):
     """The host lines of every round of a run of these rounds (oldest
-    first), in a temporary home that is removed after it."""
+    first), made by builder (raqib/host.py's fixture_builder: a HostWatch
+    with a fake clock; E-8, this package never imports it) in a temporary
+    home that is removed after it."""
     if not names:
         raise GenerateError("a scenario with no round")
     with tempfile.TemporaryDirectory(prefix="raqib-fixturegen-", ignore_cleanup_errors=True) as home:
         seen = []
-        rounds_of(names, catalog, rules, home, sources=sources, os_rounds=os_rounds, inventory=inventory, w=w,
-                  seen=seen)
+        builder(names, rules, home, inventory=inventory, seen=seen, **opts)
         if len(seen) != len(names):
             raise GenerateError("%d rounds fed, %d recorded" % (len(names), len(seen)))
         return [r["lines"] for r in seen]
@@ -388,7 +339,7 @@ def machine_path_problem(text, root=REPO_ROOT):
     return None
 
 
-# --- the packaged inventories (the real exports' rounds) -------------------------------------------------------
+# --- the packaged inventories (the synthetic exports' rounds) ---------------------------------------------------
 
 _PACKAGED = {}
 
@@ -419,77 +370,186 @@ def packaged_inventory(name):
 
 
 def benign_names():
-    """The benign desktops whose arrivals are shipped (C-1b), sorted."""
+    """The synthetic desktops whose arrivals are shipped (C-1b), sorted."""
     return sorted(n for n in packaged() if n.startswith("benign/") and not n.endswith(BEFORE))
 
 
 # --- generate -----------------------------------------------------------------------------------------------
 
+RHYTHM, DARK = "HOST-RHYTHM", "AGENT-DARK-LIVE"
+FIELDS = {RHYTHM: ("k", "w", "r"), DARK: ("streak", "live_window")}
+# M7.6c REDO E-2 (ADR-0008 Amendment E): "measured" means sensitive. For each field a person may set, the edge
+# pair: a positive that stops firing just past the value (at v+1) and a negative that starts firing just short
+# of it (at v-1), both generated at v and run under the neighbouring value. A field without one is FIXED.
+EDGES = {
+    RHYTHM: {"k": ("HOST-RHYTHM/positive-three-cycles.json", "HOST-RHYTHM/negative-two-cycles.json"),
+             "w": ("HOST-RHYTHM/positive-w-edge.json", "HOST-RHYTHM/negative-w-edge.json"),
+             "r": ("HOST-RHYTHM/positive-r-edge.json", "HOST-RHYTHM/negative-r-edge.json")},
+    DARK: {"streak": ("AGENT-DARK-LIVE/positive-dark-three-rounds.json",
+                      "AGENT-DARK-LIVE/negative-dark-two-rounds.json"),
+           "live_window": ("AGENT-DARK-LIVE/positive-window-edge.json",
+                           "AGENT-DARK-LIVE/negative-window-edge.json")},
+}
+# The stricter neighbour of each field: +1 where a larger value asks more of a run (k cycles, a longer streak, a
+# longer live window before a knock), -1 where a smaller one does (a shorter W, fewer rounds R). The edge positive
+# stops firing at v + STRICTER; the edge negative starts firing at v - STRICTER.
+STRICTER = {"k": 1, "w": -1, "r": -1, "streak": 1, "live_window": 1}
+# E-6: what a fixture's failure means, said with its name in a refusal.
+CONDITIONS = {
+    "HOST-RHYTHM/negative-changing-destination.json":
+        "k must be >= 2: at k=1 one talk-then-act to each of many destinations is k cycles",
+    "HOST-RHYTHM/negative-r-edge.json":
+        "k must be >= 2: at k=1 the one cycle that left the last r rounds fired when it was made",
+    "HOST-RHYTHM/positive-host-talks-os-acts.json": "r must be >= k+2: an os act is read one round late",
+    "HOST-RHYTHM/positive-os-three-cycles.json": "r must be >= k+2: an os act is read one round late",
+    "HOST-RHYTHM/positive-os-talks-host-acts.json": "r must be >= k+1: the first talk must stay in the last r rounds",
+    "HOST-RHYTHM/positive-three-cycles.json": "r must be >= k+1: the first talk must stay in the last r rounds",
+}
+
+
+def edge_fields(rule_id):
+    """The fields of a rule the generator has an edge pair for (E-2)."""
+    return tuple(EDGES.get(rule_id, {}))
+
+
+def effective(rule_id, field, values, low, high):
+    """E-6: (lo, hi), the range of field the measurement accepts given the
+    other values (its conditions above), inside the declared bounds."""
+    lo, hi = low, high
+    if rule_id == RHYTHM and field == "k":
+        lo, hi = max(lo, 2), min(hi, values["r"] - 2)
+    elif rule_id == RHYTHM and field == "r":
+        lo = max(lo, values["k"] + 2)
+    elif rule_id == DARK and field == "streak":
+        hi = min(hi, values["live_window"])
+    elif rule_id == DARK and field == "live_window":
+        lo = max(lo, values["streak"])
+    return lo, hi
+
+
 def values_of(rule):
-    """The thresholds a rule generates at: its own eq values, read as host.py reads them."""
-    from raqib import host
-    if rule.id == host.RHYTHM:
-        params = host.rhythm_params(rule)
-        if params is None:
-            raise GenerateError("%s does not declare k, w and r" % rule.id)
-        return dict(zip(("k", "w", "r"), params))
-    if rule.id == host.DARK_LIVE:
-        streak, window = host.rule_eq(rule, host.STREAK_FIELD), host.rule_eq(rule, host.LIVE_WINDOW_FIELD)
-        if streak is None or window is None:
-            raise GenerateError("%s does not declare its streak and live_window" % rule.id)
-        return {"streak": streak, "live_window": window}
-    raise GenerateError("no generator for %s (generated: %s)" % (rule.id, ", ".join(GENERATED)))
+    """The thresholds a rule generates at: its own eq values (pure: the
+    match's declared thresholds, the fields host.py reads)."""
+    if rule.id not in FIELDS:
+        raise GenerateError("no generator for %s (generated: %s)" % (rule.id, ", ".join(GENERATED)))
+    declared = engine.declared_thresholds(rule.doc)
+    missing = [f for f in FIELDS[rule.id] if f not in declared]
+    if missing:
+        raise GenerateError("%s does not declare %s" % (rule.id, ", ".join(missing)))
+    return {f: declared[f]["value"] for f in FIELDS[rule.id]}
 
 
-def plan(rule):
-    """{fixture name (RULE/file.json): (round names, {sources, os_rounds})}
-    of a generated rule at its own values, its arrivals included."""
-    values = values_of(rule)
+def with_values(rule, values):
+    """The rule with these eq values (compiled by the engine: a value out
+    of its YAML's bounds or breaking a relation is a RuleError)."""
+    doc = copy.deepcopy(rule.doc)
+    declared = engine.declared_thresholds(doc)
+    for p in engine.eq_predicates(doc.get("match")):
+        name = p["field"].rsplit(".", 1)[-1]
+        if name in values and name in declared and declared[name]["field"] == p["field"]:
+            p["eq"] = values[name]
+    return engine.compile_rule(doc, rule.source)
+
+
+def window_scenarios(streak, window):
+    """E-2: the live window's edge pair: a footprint whose tree is live in
+    round 2, then dark. Its window closes window rounds after it; the fresh
+    streak that starts then knocks at its streak-th round: after
+    window + streak - 1 dark rounds (the positive's last round), not after
+    one fewer (the negative)."""
+    head = ["kimi-gone", "kimi/two-samples"]
+    return {
+        "AGENT-DARK-LIVE/positive-window-edge.json": head + ["kimi-gone"] * (window + streak - 1),
+        "AGENT-DARK-LIVE/negative-window-edge.json": head + ["kimi-gone"] * (window + streak - 2),
+    }
+
+
+def w_scenarios(k, w):
+    """E-2: W's edge pair: k host cycles whose act starts exactly W s
+    after its talk (the positive) or W+1 s (the negative: no cycle at W,
+    k cycles at W+1). The rounds are W+6 s apart (never under 10), so the
+    act stays inside the round after its talk."""
+    period = max(EVERY, w + 6)
+    return {
+        "HOST-RHYTHM/positive-w-edge.json": (["rhythm-gap:%d:%d:%d" % (w, period, i) for i in range(1, k + 2)],
+                                             {"every": period}),
+        "HOST-RHYTHM/negative-w-edge.json": (["rhythm-gap:%d:%d:%d" % (w + 1, period, i) for i in range(1, k + 2)],
+                                             {"every": period}),
+    }
+
+
+def r_scenarios(k, r):
+    """E-2: R's edge pair: a run of n rounds whose first cycle (talk in
+    round 1, act in round 2) is the oldest of the last R rounds when n = R
+    (the positive: k cycles; at R-1 it falls out) and just out of them
+    when n = R+1 (the negative: k-1 cycles; at R+1 it is in). The other
+    k-1 cycles are the run's last rounds."""
+    return {
+        "HOST-RHYTHM/positive-r-edge.json": ["rhythm-ring:%d:%d:%d" % (r, k, i) for i in range(1, r + 1)],
+        "HOST-RHYTHM/negative-r-edge.json": ["rhythm-ring:%d:%d:%d" % (r + 1, k, i) for i in range(1, r + 2)],
+    }
+
+
+def plan(rule, shape=None):
+    """({fixture name (RULE/file.json): (round names, opts)}, values): the
+    rule's scenarios made at shape (default: its own values), its arrivals
+    included."""
+    values = dict(shape or values_of(rule))
     out = {}
-    if "k" in values:
-        k = values["k"]
+    if rule.id == RHYTHM:
+        k, w, r = values["k"], values["w"], values["r"]
         rounds = os_rounds(k)
         for name, names in rhythm_scenarios(k).items():
             out[name] = (names, {})
         for name, names in os_scenarios(k).items():
             out[name] = (names, {"os_rounds": rounds[name]})
+        out.update(w_scenarios(k, w))
+        if r < k + 1:
+            raise GenerateError("r=%d: the r edge pair needs r >= k+1 (k=%d)" % (r, k))
+        for name, names in r_scenarios(k, r).items():
+            out[name] = (names, {})
     else:
         if values["streak"] < 2:
             raise GenerateError("streak %d: its negative (streak - 1 dark rounds) has no round" % values["streak"])
         for name, names in dark_scenarios(values["streak"]).items():
+            out[name] = (names, {})
+        for name, names in window_scenarios(values["streak"], values["live_window"]).items():
             out[name] = (names, {})
     for name, names in arrival_scenarios(benign_names()).items():
         out[name] = (names, {})
     return out, values
 
 
-def generate(rule, rules=None, catalog=None):
-    """The rule's fixtures made at its own thresholds, in memory (see the
-    module docstring). rules: the catalog the watch is given (default: the
-    package's), with this rule in place of its namesake; catalog: discover's
-    endpoints (default: the package's). GenerateError when a fixture of the
-    rule has no generator or a round cannot be made."""
-    from raqib import discover
-    from raqib.rules import engine
-    scenarios, values = plan(rule)
+def generate(rule, builder, rules=None, shape=None, only=None):
+    """The rule's fixtures made in memory (see the module docstring): the
+    scenarios planned at shape (default: the rule's own values), run with
+    THIS rule (its values are what HostWatch reads). builder: the round
+    builder (raqib/host.py's fixture_builder()); rules: the catalog the watch
+    is given (default: the package's), with this rule in place of its
+    namesake; only: the fixture paths to make (default: all of the rule's,
+    and the synthetic desktops). GenerateError when a fixture of the rule
+    has no generator or a round cannot be made."""
+    scenarios, values = plan(rule, shape)
     if rules is None:
         rules = engine.load_catalog(os.path.join(HERE, "catalog"))
     rules = [rule if r.id == rule.id else r for r in rules]
-    if catalog is None:
-        catalog = discover.load_catalog(discover.CATALOG)
     arrivals = sorted(FIXTURE_DIR + name for name in arrival_scenarios(benign_names()))
-    out = {"positive": [], "negative": [], "arrivals": arrivals, "values": values, "runs": {},
-           "last_round_only": sorted(FIXTURE_DIR + n for n in LAST_ROUND_ONLY if n in scenarios)}
+    out = {"positive": [], "negative": [], "arrivals": arrivals, "values": dict(values_of(rule)), "shape": values,
+           "runs": {}, "last_round_only": sorted(FIXTURE_DIR + n for n in LAST_ROUND_ONLY if n in scenarios)}
+    w = values_of(rule).get("w")
     for kind in ("positive", "negative"):
         paths = list(rule.fixtures[kind])
-        if kind == "negative":   # E4: the benign arrivals are measured for every generated rule
+        if kind == "negative":   # E4: the synthetic desktops are run for every generated rule
             paths += [p for p in arrivals if p not in paths]
         for path in paths:
+            if only is not None and path not in only:
+                continue
             name = path[len(FIXTURE_DIR):] if path.startswith(FIXTURE_DIR) else None
             if name not in scenarios:
                 raise GenerateError("%s: no generator for fixture %s" % (rule.id, path))
             names, opts = scenarios[name]
-            rounds = run_lines(names, catalog, rules, w=values.get("w"), **opts)
+            rounds = run_lines(builder, names, rules, lambda n: synthetic_inventory(n, w) or packaged_inventory(n),
+                               w=w, **opts)
             out["runs"][path] = rounds
             out[kind].append((path, fixture_doc(rule, rounds[-1], kind == "positive")))
     return out

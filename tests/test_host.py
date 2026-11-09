@@ -525,14 +525,16 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
     # M7.5 (A6, re-measured): AGENT-DARK-LIVE gains negative-live-then-gone and negative-linked-again (E1),
     # HOST-RHYTHM negative-os-two-cycles (E2).
     # M7.5 REDO N-2: AGENT-DARK-LIVE's two was_live negatives are not listed (its match cannot see them): 2 again.
-    assert got == {"AGENT-DARK-LIVE": (2, 10), "DESTRUCT-CMD": (11, 0), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
-                   "HOST-RHYTHM": (5, 8), "HOST-UNWATCHED": (4, 8),
+    # M7.6c REDO E-2: AGENT-DARK-LIVE and HOST-RHYTHM gain their edge negatives (M7.6c questions file)
+    assert got == {"AGENT-DARK-LIVE": (3, 10), "DESTRUCT-CMD": (11, 0), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
+                   "HOST-RHYTHM": (7, 8), "HOST-UNWATCHED": (4, 8),
                    "LANDED-NO-GATE": (8, 2), "NET-TOOL": (11, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
                    "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
                    "SECRET-OUTPUT": (7, 2)}
     text = (ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md").read_text(encoding="utf-8")
     text += (ROOT / "docs" / "review" / "2026-11-04-M7.4-questions.md").read_text(encoding="utf-8")   # M7.4: HOST-RHYTHM
     text += (ROOT / "docs" / "review" / "2026-11-09-M7.5-questions.md").read_text(encoding="utf-8")   # M7.5: both again
+    text += (ROOT / "docs" / "review" / "2026-11-09-M7.6c-questions.md").read_text(encoding="utf-8")   # M7.6c REDO: both again
     for rule_id, (m, u) in got.items():
         assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id
 

@@ -85,7 +85,7 @@ from raqib import discover, host  # noqa: E402
 from raqib.rules import engine, fixturegen  # noqa: E402
 from raqib.rules.fixturegen import (BEFORE, EVERY, OS_DEST, RHYTHM_PID, SYSTEM_DRIVE, WALL0,  # noqa: E402,F401
                                     _iso_at, os_lines, rhythm_inventory, source_lines)
-from raqib.rules.fixturegen import Clock, Follow as _Follow  # noqa: E402,F401
+from raqib.host import FixtureClock as Clock, FixtureFollow as _Follow  # noqa: E402,F401
 
 DISCOVER = os.path.join(ROOT, "tests", "fixtures", "discover")
 CATALOG_DIR = os.path.join(ROOT, "raqib", "rules", "catalog")
@@ -147,6 +147,14 @@ NOTE_SCENARIOS = {
 OS_SCENARIOS = fixturegen.os_scenarios(DECLARED["k"])   # M7.5 E2: "rhythm-os:<scenario>:<round>"
 OS_ROUNDS = fixturegen.os_rounds(DECLARED["k"])         # the rounds os lines are appended before
 SCENARIOS.update(OS_SCENARIOS)
+# M7.6c REDO E-2: the edge pairs of w, r and live_window, at the declared values (opts: the rounds' period)
+EDGE_SCENARIOS = {}
+SCENARIO_OPTS = {}
+for _name, _v in fixturegen.w_scenarios(DECLARED["k"], DECLARED["w"]).items():
+    EDGE_SCENARIOS[_name], SCENARIO_OPTS[_name] = _v
+EDGE_SCENARIOS.update(fixturegen.r_scenarios(DECLARED["k"], DECLARED["r"]))
+EDGE_SCENARIOS.update(fixturegen.window_scenarios(DECLARED["streak"], DECLARED["live_window"]))
+SCENARIOS.update(EDGE_SCENARIOS)
 RM = ":rm"
 SOURCE_SCENARIOS = {
     "NET-TOOL/positive-host-child.json": ["benign/linux-desktop", "linux-agent"],
@@ -157,6 +165,7 @@ SOURCE_SCENARIOS = {
 OUT = os.path.join(ROOT, "tests", "fixtures", "rules")
 # M7.6c: the exports' inventories fixturegen needs (AGENT-DARK-LIVE's rounds and the benign arrivals)
 HOSTDATA_NAMES = sorted({n for v in fixturegen.dark_scenarios(DECLARED["streak"]).values() for n in v}
+                        | {n for v in fixturegen.window_scenarios(DECLARED["streak"], 2).values() for n in v}
                         | {n for v in ARRIVALS.values() for n in v})
 
 
@@ -252,10 +261,10 @@ def _inode_of(line):
     return parts[9] if len(parts) > 9 and parts[0].endswith(":") and parts[0][:-1].isdigit() else None
 
 
-def rounds_of(names, catalog, rules, home, sources=True, os_rounds=None):
-    """fixturegen.rounds_of over the discover exports (inventory())."""
-    return fixturegen.rounds_of(names, catalog, rules, home, sources=sources, os_rounds=os_rounds,
-                                inventory=lambda n: inventory(n, catalog))
+def rounds_of(names, catalog, rules, home, sources=True, os_rounds=None, **opts):
+    """host.fixture_rounds (the builder fixturegen is handed) over the discover exports (inventory())."""
+    return host.fixture_rounds(names, catalog, rules, home, lambda n: inventory(n, catalog), sources=sources,
+                               os_rounds=os_rounds, w=DECLARED["w"], **opts)
 
 
 def build():
@@ -265,7 +274,8 @@ def build():
     with tempfile.TemporaryDirectory() as home:
         for name, names in list(SCENARIOS.items()) + list(SOURCE_SCENARIOS.items()):
             watch = rounds_of(names, catalog, rules, os.path.join(home, name.replace("/", "-")),
-                              sources=name not in NO_SOURCES, os_rounds=OS_ROUNDS.get(name))
+                              sources=name not in NO_SOURCES, os_rounds=OS_ROUNDS.get(name),
+                              **SCENARIO_OPTS.get(name, {}))
             lines = source_lines(watch) if name in SOURCE_SCENARIOS else watch.round_lines[-1]["lines"]
             rule_id, base = name.split("/")
             # positive-: what this fixture's own rule must cite

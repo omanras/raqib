@@ -70,33 +70,38 @@ match:
     - {field: input_meta.rhythm.k, eq: 3}
     - {field: input_meta.rhythm.w, eq: 30}
     - {field: input_meta.rhythm.r, eq: 10}
-    # M7.6 REDO A-3 (ADR-0008 Amendment A): suspect_every is how often (in rounds) watch --host asks the suspect
-    # layer, split from r (before, every r rounds), so the person can change one without the other. host.py reads
-    # this eq (default 10) and writes nothing for it on a line: it is a parameter of the watch, not a condition of
-    # this rule, so the `any` holds on every line (the field is never there); the rule fires as before.
-    - any:
-        - {field: input_meta.rhythm.suspect_every, eq: 10}
-        - {field: input_meta.rhythm.suspect_every, exists: false}
+    # M7.6c REDO E-3 (ADR-0008 Amendment E): how often the suspect layer is asked is not a condition of this rule;
+    # it is the watch's option (`raqib watch --host --suspect-every N`, the window's field; default 10 rounds).
 fixtures:
   positive:
     - tests/fixtures/rules/HOST-RHYTHM/positive-three-cycles.json
     - tests/fixtures/rules/HOST-RHYTHM/positive-os-three-cycles.json
     - tests/fixtures/rules/HOST-RHYTHM/positive-os-talks-host-acts.json
     - tests/fixtures/rules/HOST-RHYTHM/positive-host-talks-os-acts.json
+    # M7.6c REDO E-2 (ADR-0008 Amendment E): the edge pairs of W and R (raqib/rules/fixturegen.py): an act exactly
+    # W s after its talk, a first cycle that is the oldest of the last R rounds
+    - tests/fixtures/rules/HOST-RHYTHM/positive-w-edge.json
+    - tests/fixtures/rules/HOST-RHYTHM/positive-r-edge.json
   negative:
     - tests/fixtures/rules/HOST-RHYTHM/negative-two-cycles.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-changing-destination.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-acts-between-rounds.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-no-talk.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-os-two-cycles.json
+    # E-2: an act W+1 s after its talk; a first cycle one round out of the last R rounds
+    - tests/fixtures/rules/HOST-RHYTHM/negative-w-edge.json
+    - tests/fixtures/rules/HOST-RHYTHM/negative-r-edge.json
 # M7.6c (ADR-0008 Amendment B): the thresholds a person may set (raqib rules --threshold, the Rules panel)
 # and within what. Every value is measured before it is allowed (raqib/overlay.py measure): the fixtures
 # above are generated at it by raqib/rules/fixturegen.py, with the benign desktops' arrivals; a value under
 # which a positive does not fire, a negative or an arrival fires, or the budget is broken is refused.
+# M7.6c REDO (ADR-0008 Amendment E): editable only with an edge pair (E-2: k, w and r have one); the measure
+# accepts k 2..r-2 and r >= k+2 (E-6, shown by `raqib rules`); r stops at 200: the measure's cost grows with
+# r squared (r=1000: about a minute per change), so the fence is where a change is measured in seconds. With the
+# edge negatives of W and R the measured negatives are 7, 0 of 7 fire (the synthetic desktops are not counted).
 bounds:
   k: {min: 1, max: 100}
   w: {min: 1, max: 3600}
-  r: {min: 1, max: 1000}
-  suspect_every: {min: 1, max: 1000}
+  r: {min: 1, max: 200}
   relations:
     - "k <= r"

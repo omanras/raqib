@@ -48,17 +48,23 @@ fixtures:
   positive:
     - tests/fixtures/rules/AGENT-DARK-LIVE/positive-dark-three-rounds.json
     - tests/fixtures/rules/AGENT-DARK-LIVE/positive-never-live.json
+    # M7.6c REDO E-2 (ADR-0008 Amendment E): the live window's edge pair (raqib/rules/fixturegen.py): a tree live
+    # in round 2, then dark until the fresh streak after the window knocks (and one round short of it)
+    - tests/fixtures/rules/AGENT-DARK-LIVE/positive-window-edge.json
   negative:
     - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-two-rounds.json
     - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-then-linked.json
+    - tests/fixtures/rules/AGENT-DARK-LIVE/negative-window-edge.json
     - tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json
     - tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json
 # M7.6c (ADR-0008 Amendment B): the thresholds a person may set and within what; every value is measured
 # before it is allowed (raqib/overlay.py measure, on the fixtures above generated at it by
 # raqib/rules/fixturegen.py, with the benign arrivals). The streak starts at 2: at 1 the negative "dark one
 # round short of the streak" has no round, so the value could not be measured.
+# M7.6c REDO (ADR-0008 Amendment E): both have an edge pair (E-2); live_window stops at 300 (the window's edge
+# pair runs window + streak rounds: 300 is about 2 s per change). Measured negatives 3, 0 of 3 fire.
 bounds:
   streak: {min: 2, max: 100}
-  live_window: {min: 2, max: 1000}
+  live_window: {min: 2, max: 300}
   relations:
     - "live_window >= streak"

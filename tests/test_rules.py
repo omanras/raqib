@@ -1,8 +1,11 @@
 """M1.1 rule schema, YAML-subset loader, engine and fixture runner (HANDOFF.md E1-E4)."""
+import ast
 import builtins
 import copy
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -444,12 +447,50 @@ def test_e3_engine_skips_uncitable_records_and_says_so():
                       "detail": "2 line(s) without session_id or int seq were not evaluated"}]
 
 
+A1_FORBIDDEN = ("raqib.host", "raqib.suspect", "raqib.notify", "raqib.watch", "raqib.discover", "subprocess", "http",
+                "http.client", "urllib.request", "socket", "_socket", "socketserver", "ssl")
+
+
 def test_a1_rules_never_reach_a_model_or_the_network():
-    # M7.6c: as words (fixturegen's synthetic byte counts carry a "sockets" key, data of a fake ss row)
-    for path in (ROOT / "raqib" / "rules").glob("*.py"):
-        text = path.read_text()
-        for banned in ("urllib.request", "http.client", "socket", "subprocess", "raqib.suspect"):
-            assert not re.search(r"(?<![\w.])%s(?![\w])" % re.escape(banned), text), (path.name, banned)
+    """M7.6c REDO E-8 (ADR-0008 Amendment E): by the import graph, not the text. In a fresh interpreter every
+    module of raqib/rules/ is imported and fixturegen generates both host rules' fixtures with a stub round builder
+    (the real one is host.py's, handed in by the caller); sys.modules then holds none of the forbidden names, and
+    the generate added no raqib module (the diff)."""
+    code = r"""
+import importlib, json, os, pkgutil, sys
+sys.path.insert(0, sys.argv[1])
+import raqib.rules
+for m in pkgutil.iter_modules(raqib.rules.__path__):
+    importlib.import_module("raqib.rules." + m.name)
+from raqib.rules import engine, fixturegen
+before = set(sys.modules)
+rules = engine.load_catalog(os.path.join(os.path.dirname(fixturegen.__file__), "catalog"))
+def stub(names, rules, home, inventory=None, seen=None, **kw):
+    for n in names:
+        inventory(n)
+        seen.append({"lines": []})
+for r in rules:
+    if r.id in fixturegen.GENERATED:
+        fixturegen.generate(r, stub, rules)
+print(json.dumps({"added": sorted(set(sys.modules) - before), "all": sorted(sys.modules)}))
+"""
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    proc = subprocess.run([sys.executable, "-I", "-c", code, str(ROOT)], cwd=str(ROOT), capture_output=True, text=True,
+                          timeout=120, env=env)
+    assert proc.returncode == 0, proc.stderr
+    got = json.loads(proc.stdout)
+    # the generate added only standard modules (atexit, an encoding): nothing of raqib outside the rules package
+    assert [m for m in got["added"] if m.startswith("raqib")] == [], got["added"]
+    present = [m for m in got["all"] if any(m == f or m.startswith(f + ".") for f in A1_FORBIDDEN)]
+    assert present == []
+    for path in (ROOT / "raqib" / "rules").glob("*.py"):   # and no file names one in an import
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            names = [a.name for a in node.names] if isinstance(node, ast.Import) else \
+                [node.module or ""] if isinstance(node, ast.ImportFrom) else []
+            for name in names:
+                assert not any(name == f or name.startswith(f + ".") for f in A1_FORBIDDEN), (path.name, name)
 
 
 # --- E4: fixture runner and the shipped catalog ---------------------------------

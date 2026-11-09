@@ -141,7 +141,7 @@ def test_e1_a_malformed_overlay_is_one_hole_and_nothing_is_applied(home, text, w
     ("HOST-RHYTHM:\n    thresholds: {k: 0}", "outside its bounds 1..100"),
     ("HOST-RHYTHM:\n    thresholds: {k: 101}", "outside its bounds 1..100"),
     ("HOST-RHYTHM:\n    thresholds: {w: 3601}", "outside its bounds 1..3600"),
-    ("HOST-RHYTHM:\n    thresholds: {r: 1001}", "outside its bounds 1..1000"),
+    ("HOST-RHYTHM:\n    thresholds: {r: 201}", "outside its bounds 1..200"),   # M7.6c REDO: the YAML's fence
     ("AGENT-DARK-LIVE:\n    thresholds: {streak: 101}", "outside its bounds 2..100"),   # M7.6c: its YAML's
     ("AGENT-DARK-LIVE:\n    thresholds: {live_window: 2}", "below its streak (3)"),
     ("AGENT-DARK-LIVE:\n    thresholds: {streak: 10}", "above its live_window (9)"),
@@ -302,8 +302,9 @@ def test_e2_raqib_rules_lists_every_rule_with_its_columns(home):
     assert head == ["ID", "KIND", "CLASS", "SEVERITY", "BUDGET", "STATUS", "ORIGIN", "THRESHOLDS"]
     for r in engine.load_catalog(CATALOG_DIR):
         assert any(l.split()[:2] == [r.id, r.kind] for l in text.splitlines()), r.id
-    assert "k=3 [1..100], w=30 [1..3600], r=10 [1..1000], suspect_every=10 [1..1000]" in text
-    assert "streak=3 [2..100], live_window=9 [2..1000]" in text   # M7.6c: the YAML's bounds
+    # M7.6c REDO E-3, E-6: no suspect_every; the range the measurement accepts beside the YAML's bounds
+    assert "k=3 [1..100; measured 2..8], w=30 [1..3600], r=10 [1..200; measured 5..200]" in text
+    assert "streak=3 [2..100; measured 2..9], live_window=9 [2..300; measured 3..300]" in text
     assert "none_rounds=2 (fixed: its YAML gives it no bounds)" in text
     assert "raqib rules: rules: no rule off" in text
     code, text = run_cli(["rules", "--json"])
@@ -316,7 +317,7 @@ def test_e2_set_threshold_reset_add_and_exit_2_on_refusal(home, tmp_path, capsys
     code, text = run_cli(["rules", "--set", "SECRET-OUTPUT", "off"])
     assert code == 0 and "raqib rules: SECRET-OUTPUT off in" in text and "1 rule off: SECRET-OUTPUT" in text
     code, text = run_cli(["rules", "--threshold", "HOST-RHYTHM", "k", "7"])
-    assert code == 0 and "k=7* [1..100]" in text
+    assert code == 0 and "k=7* [1..100; measured 2..8]" in text
     code, _ = run_cli(["rules", "--threshold", "HOST-RHYTHM", "k", "700"])
     assert code == 2 and "refused: HOST-RHYTHM: HOST-RHYTHM k = 700 is outside its bounds" in capsys.readouterr().err
     for argv, word in ((["rules", "--set", "NOPE-X", "off"], "no rule 'NOPE-X'"),
@@ -530,7 +531,7 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
     window = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "Window")
     panel += [f for f in window.body if isinstance(f, ast.FunctionDef) and f.name.startswith(("rules_", "show_rules",
                                                                                               "_rules"))]
-    assert len(panel) == 7
+    assert len(panel) == 8   # M7.6c REDO E-7: and _rules_measuring (the band says a measurement runs)
     for node in panel:
         for sub in ast.walk(node):
             if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) and sub.value.id == "overlay":
@@ -555,7 +556,7 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
                 modes = [a.value for a in sub.args[1:] if isinstance(a, ast.Constant)]
                 assert all(m in ("rb", "r") for m in modes), (name, modes)   # every open reads
             if called == "_atomic_write":
-                assert name in ("write", "add_rule"), name
+                assert name in ("write", "add_rule", "save_measured"), name   # E-7: rules.measured.json
     assert writers == {"_atomic_write"}
     src = ast.get_source_segment((ROOT / "raqib" / "overlay.py").read_text(encoding="utf-8"), funcs["write"])
     assert "path = overlay_path(home)" in src
@@ -610,7 +611,9 @@ def test_e5_readme_says_the_rules_in_four_lines():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## Choose the rules\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
-    assert len(lines) == 6 and "raqib rules" in lines[0]   # M7.6c: two lines more and "~/.raqib/rules.yaml" in " ".join(lines)
+    # M7.6c: two lines more; REDO E-9: the overlay file's assertion restored as code (it had become a comment)
+    assert len(lines) == 6 and "raqib rules" in lines[0] and "~/.raqib/rules.yaml" in " ".join(lines)
+    assert "synthetic desktop" in " ".join(lines) and "benign desktop" not in " ".join(lines)   # REDO E-4
     assert "not judged by" in " ".join(lines) and "rules.d" in " ".join(lines)
 
 
@@ -807,13 +810,16 @@ def test_redo_a3_a_threshold_under_which_a_negative_fires_is_refused(home, tmp_p
 
     def doctored(r, *a, **k):   # an arrival whose run holds a positive's firing round
         made = real(r, *a, **k)
+        if not made["positive"]:   # M7.6c REDO: an edge run (only its edge fixture) is left as made
+            return made
         pos = made["positive"][0][0]
         for p in made["arrivals"]:
-            made["runs"][p] = made["runs"][p] + [made["runs"][pos][-1]]
+            if p in made["runs"] and pos in made["runs"]:
+                made["runs"][p] = made["runs"][p] + [made["runs"][pos][-1]]
         return made
     monkeypatch.setattr(fixturegen, "generate", doctored)
     with pytest.raises(overlay.OverlayError, match="k=4: negative-arrival-linux-desktop fires: would fire on a"
-                                                   " benign desktop"):
+                                                   " synthetic desktop"):   # M7.6c REDO E-4
         overlay.set_threshold("HOST-RHYTHM", "k", "4", str(home))
     monkeypatch.setattr(fixturegen, "generate", real)
     overlay._MEASURED.clear()   # the doctored measure was kept in memory for this process
@@ -832,17 +838,20 @@ def test_redo_a3_a_rule_that_can_never_fire_is_refused_and_suspect_every_is_spli
     with pytest.raises(overlay.OverlayError, match="r = 2 is below its k \\(3\\)"):
         overlay.set_threshold("HOST-RHYTHM", "r", "2", str(home))
     base = by_id(engine.load_catalog(CATALOG_DIR), "HOST-RHYTHM")
-    assert host.rule_eq(base, host.SUSPECT_EVERY_FIELD) == host.SUSPECT_EVERY == 10
-    assert "suspect_every" in (CATALOG_DIR / "HOST-RHYTHM.yaml").read_text()
-    assert fixtures.check_rule(base, ROOT)["verdict"] == "ok"   # the YAML's new node keeps the rule as measured
-    said = overlay.set_threshold("HOST-RHYTHM", "suspect_every", "5", str(home))   # measured: it holds
-    assert "suspect_every = 5" in said
+    # M7.6c REDO E-3 (ADR-0008 Amendment E): suspect_every left the rule; it is the watch's --suspect-every
+    assert "suspect_every" not in (CATALOG_DIR / "HOST-RHYTHM.yaml").read_text().split("match:", 1)[1]
+    assert fixtures.check_rule(base, ROOT)["verdict"] == "ok"
+    with pytest.raises(overlay.OverlayError, match="HOST-RHYTHM has no field 'suspect_every'"):
+        overlay.set_threshold("HOST-RHYTHM", "suspect_every", "5", str(home))
     from test_watch import FakeRunner, make_notifier
     notifier = make_notifier(FakeRunner())
     notifier.host = True
     w = host.HostWatch(lambda: {}, discover.load_catalog(discover.CATALOG), overlay.load(str(home)), notifier,
-                       out=io.StringIO(), err=io.StringIO(), home=str(home), platform="test")
+                       out=io.StringIO(), err=io.StringIO(), home=str(home), platform="test", suspect_every=5)
     assert (w.suspect_every, w.rhythm_r) == (5, 10)
+    w = host.HostWatch(lambda: {}, discover.load_catalog(discover.CATALOG), overlay.load(str(home)), notifier,
+                       out=io.StringIO(), err=io.StringIO(), home=str(home), platform="test")
+    assert w.suspect_every == host.SUSPECT_EVERY == 10
     src = (ROOT / "raqib" / "host.py").read_text(encoding="utf-8")
     assert "n % self.suspect_every == 0" in src and "n % self.rhythm_r" not in src
 

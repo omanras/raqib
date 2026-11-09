@@ -230,8 +230,9 @@ def test_e1_the_yaml_excludes_was_live_and_lists_the_three_fixtures():
 
 def test_e1_e2_check_rules_counts_are_in_the_questions_file():
     reports = {r["rule_id"]: r for r in fixtures.check_catalog(RULES, ROOT, cli.benign_default(ROOT))}
-    text = QUESTIONS.read_text(encoding="utf-8")
-    for rule_id, (m, u) in (("AGENT-DARK-LIVE", (2, 10)), ("HOST-RHYTHM", (5, 8))):   # N-2: 2, not 4
+    text = QUESTIONS.read_text(encoding="utf-8") + (ROOT / "docs" / "review" / "2026-11-09-M7.6c-questions.md").read_text(encoding="utf-8")
+    # N-2: 2, not 4; M7.6c REDO E-2: each gains its edge negatives (live window: 1; W and R: 2)
+    for rule_id, (m, u) in (("AGENT-DARK-LIVE", (3, 10)), ("HOST-RHYTHM", (7, 8))):
         r = reports[rule_id]
         assert (r["measured"], r["unmeasured"]) == (m, u) and r["verdict"] == "ok" and r["fp_rate"] == 0.0
         assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id

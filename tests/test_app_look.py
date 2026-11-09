@@ -418,12 +418,12 @@ def test_e2_the_empty_state_and_nothing_read_keep_not_a_clearance():
 
 def test_e3_the_rules_table_says_the_overlay_state_per_row(home):
     overlay.set_status("NET-TOOL", "off", str(home))
-    overlay.set_threshold("HOST-RHYTHM", "suspect_every", "20", str(home))
+    overlay.set_threshold("HOST-RHYTHM", "w", "20", str(home))   # M7.6c REDO E-3: suspect_every is no threshold
     rows = dict((v[0], (v, level)) for v, level in app.rules_rows(overlay.listing(overlay.load(str(home)))))
     assert [c[0] for c in app.RULES_COLUMNS] == ["id", "kind", "class", "severity", "budget", "status", "overlay",
                                                  "origin", "thresholds"]
     assert rows["NET-TOOL"][0][5:7] == ("off", "off by the overlay") and rows["NET-TOOL"][1] == "incomplete"
-    assert rows["HOST-RHYTHM"][0][6] == "thresholds set" and "suspect_every=20*" in rows["HOST-RHYTHM"][0][8]
+    assert rows["HOST-RHYTHM"][0][6] == "thresholds set" and "w=20*" in rows["HOST-RHYTHM"][0][8]
     assert rows["SECRET-OUTPUT"][0][5:7] == ("on", "-") and rows["SECRET-OUTPUT"][1] is None
     yaml_off = app.rules_rows([{"id": "X", "status": "off", "off_by": "yaml", "thresholds": []}])
     assert yaml_off[0][0][6] == "off in its YAML" and yaml_off[0][0][8] == "-"
