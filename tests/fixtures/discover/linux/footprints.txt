@@ -1,8 +1,8 @@
-# M5.0 fixture, REAL (not synthetic): tests/fixtures/discover/linux/capture.py in the builder's container (Claude Code on Linux), 2026-11-02T15:38:29.201Z.
+# M5.0 fixture, REAL (not synthetic): tests/fixtures/discover/linux/capture.py in the builder's container (Claude Code on Linux), 2026-11-02T15:38:29.201Z. redacted 2026-11-09: home -> /home/user
 # raqib discover: footprint listing (paths only; nothing opened)
 # home /root: 20 entries
 /root/.claude
 /root/.claude.json
-# home /home/claude: 10 entries
-/home/claude/.claude
+# home /home/user: 10 entries
+/home/user/.claude
 # home /home/ubuntu: 3 entries

@@ -8,6 +8,7 @@ import copy
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -408,24 +409,78 @@ def test_e5_the_questions_file_has_the_gate_numbers_and_the_tests():
 
 # --- follow-up (CI run 42584260231): machine-independent paths in shipped host data -------------------------------
 
-def _root_forms():
-    forms = set()
-    for r in (str(ROOT), os.path.realpath(str(ROOT))):
-        forms |= {r, r.replace("\\", "\\\\"), r.replace("\\", "/")}
-    return forms
+# M7.6d (HANDOFF E3, ADR-0008 E-1): the path test asserts on the pattern of a home directory, never on this
+# checkout's own path, so it is the same test on every machine (a clone under /home/<name> no longer decides it).
+HOME_DIR = re.compile(r"(?:/home/|/Users/|[A-Za-z]:(?:\\\\|\\|/)Users(?:\\\\|\\|/))([A-Za-z0-9._-]+)")
+PLACEHOLDERS = ("user", "field")   # the exports' redaction placeholders (tests/fixtures/discover headers)
+# Illustrative or built-in homes, each allowed only under the paths named (relative to the repository root):
+# the HANDOFF's alice and bob and the other made-up names of the same synthetic fixtures and catalog comments;
+# Public (C:\\Users\\Public, a Windows built-in) and ubuntu (the stock account of the sandbox image, listed by
+# the M5.0 capture; not the sandbox's user) are not persons. Recorded: docs/review/2026-11-09-M7.6d-questions.md.
+ILLUSTRATIVE = {
+    "alice": ("raqib/rules/catalog/SCOPE-CWD-ROOT.yaml", "tests/fixtures/rules/SCOPE-CWD-ROOT/",
+              "tests/fixtures/rules/SCOPE-PATH/", "tests/fixtures/rules/generate.py"),
+    "bob": ("tests/fixtures/rules/SCOPE-CWD-ROOT/", "tests/fixtures/rules/generate.py"),
+    "carol": ("tests/fixtures/rules/SCOPE-CWD-ROOT/", "tests/fixtures/rules/generate.py"),
+    "dan": ("tests/fixtures/rules/SCOPE-CWD-ROOT/", "tests/fixtures/rules/generate.py"),
+    "dev": ("tests/fixtures/eval/", "tests/fixtures/tree/"),
+    "a": ("raqib/rules/catalog/SCOPE-CWD-MOVED.yaml",),
+    "x": ("raqib/rules/catalog/SCOPE-CWD-ROOT.yaml",),
+    "Public": ("raqib/rules/catalog/SCOPE-CWD-ROOT.yaml", "tests/fixtures/discover/windows/footprints.txt"),
+    "ubuntu": ("tests/fixtures/discover/linux/footprints.txt",),
+}
+
+
+def _home_problems(rel, text):
+    """The home directories in text that are neither a placeholder nor allowed at rel."""
+    return [m.group(0) for m in HOME_DIR.finditer(text) if m.group(1) not in PLACEHOLDERS
+            and not any(rel.startswith(w) for w in ILLUSTRATIVE.get(m.group(1), ()))]
+
+
+def _scanned():
+    """(rel, text) of the package data (every file under raqib/ but its code) and of every text file under
+    tests/fixtures (data and the generators beside it)."""
+    files = [p for p in (ROOT / "raqib").rglob("*") if p.is_file() and p.suffix not in (".py", ".pyc")]
+    files += [p for p in (ROOT / "tests" / "fixtures").rglob("*") if p.is_file() and p.suffix != ".pyc"]
+    out = []
+    for p in sorted(files):
+        try:
+            text = p.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        out.append((p.relative_to(ROOT).as_posix(), text))
+    return out
 
 
 def test_followup_no_shipped_or_generated_file_holds_this_checkouts_path():
-    files = [p for p in (ROOT / "raqib").rglob("*") if p.is_file() and p.suffix in (".json", ".yaml")]
-    files += list((ROOT / "tests" / "fixtures" / "rules").rglob("*.json"))
-    files += list((ROOT / "tests" / "fixtures" / "host" / "notes").rglob("*.json"))
-    assert len(files) > 50
-    for p in files:
-        text = p.read_text(encoding="utf-8")
-        assert not any(f in text for f in _root_forms()), p
+    """E3: no home directory but the placeholders (and the illustrative ones, where named) in package data,
+    tests/fixtures or a generated run; the pattern, not this checkout's path, so every machine runs the same
+    test."""
+    scanned = _scanned()
+    assert len(scanned) > 150 and any(r == "raqib/rules/hostdata/inventories.json" for r, _ in scanned)
+    found = {}
+    for rel, text in scanned:
+        assert _home_problems(rel, text) == [], rel
+        for m in HOME_DIR.finditer(text):
+            found.setdefault(m.group(1), set()).add(rel)
+    assert set(ILLUSTRATIVE) <= set(found)   # every allowance is still used (none kept by habit)
     made = gen(at("HOST-RHYTHM", k=4))
-    text = json.dumps(made["runs"])
-    assert not any(f in text for f in _root_forms())
+    assert _home_problems("<generated>", json.dumps(made["runs"])) == []
+
+
+def test_e3_the_home_pattern_refuses_any_other_home_in_every_form():
+    for bad in ("/home/claude/raqib", "/home/runner/work/raqib", "/Users/bob/x", "C:\\Users\\bob\\x",
+                "C:\\\\Users\\\\alice", "C:/Users/dan", "d:\\Users\\Public", "/home/ubuntu"):
+        assert _home_problems("tests/fixtures/x.json", bad), bad
+    for ok in ("/home/user/x", "/home/field", "C:\\Users\\user\\x", "C:\\\\Users\\\\field\\\\x",
+               "/Users/user", "tests/fixtures/discover/linux/proc.txt", "/root/.claude"):
+        assert _home_problems("tests/fixtures/x.json", ok) == [], ok
+    assert _home_problems("tests/fixtures/rules/SCOPE-CWD-ROOT/a.json", "/home/alice/p") == []
+    assert _home_problems("tests/fixtures/discover/linux/footprints.txt", "/home/ubuntu") == []
+    assert _home_problems("raqib/rules/hostdata/inventories.json", "/home/alice/p")   # allowed only where named
+    test = (ROOT / "tests" / "test_thresholds.py").read_text(encoding="ascii")
+    body = test.split("def test_followup_no_shipped_or_generated_file_holds_this_checkouts_path", 1)[1]
+    assert "str(ROOT)" not in body.split("\ndef ", 1)[0]   # never this checkout's path
 
 
 def test_followup_the_package_data_has_no_local_home_path():

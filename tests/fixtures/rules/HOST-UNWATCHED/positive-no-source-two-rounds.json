@@ -35,7 +35,7 @@
      {
       "line": 8,
       "src": "proc",
-      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/user/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:38...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
      }
     ],
     "class": "candidate",
@@ -91,7 +91,7 @@
      {
       "line": 8,
       "src": "proc",
-      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/user/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:38...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
      },
      {
       "line": 13,
@@ -116,7 +116,7 @@
      {
       "line": 10,
       "src": "proc",
-      "text": "{\"argv\": [\"sleep\", \"15\"], \"at\": \"2026-11-02T15:38:29.201Z\", \"cwd\": \"/home/claude/raqib\", \"env_keys\": [\"AI_AGENT\", \"AKI...nfig_https_proxy\", \"npm_config_noproxy\"], \"name\": \"sleep\", \"pid\": 7649, \"ppid\": 7647, \"sockets\": [87894], \"unread\": []}"
+      "text": "{\"argv\": [\"sleep\", \"15\"], \"at\": \"2026-11-02T15:38:29.201Z\", \"cwd\": \"/home/user/raqib\", \"env_keys\": [\"AI_AGENT\", \"AKI_M...nfig_https_proxy\", \"npm_config_noproxy\"], \"name\": \"sleep\", \"pid\": 7649, \"ppid\": 7647, \"sockets\": [87894], \"unread\": []}"
      }
     ],
     "class": "candidate",
@@ -169,18 +169,18 @@
      {
       "line": 7,
       "src": "footprints",
-      "text": "/home/claude/.claude"
+      "text": "/home/user/.claude"
      },
      {
       "line": 8,
       "src": "proc",
-      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/user/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:38...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
      }
     ],
     "dark": false,
     "linked": "C2",
     "live_window": 9,
-    "path": "/home/claude/.claude",
+    "path": "/home/user/.claude",
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-02T15:38:29.201Z .. 2026-11-02T15:38:29.201Z; 1 snapshot(s)",
@@ -208,7 +208,7 @@
      {
       "line": 8,
       "src": "proc",
-      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/user/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:38...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
      }
     ],
     "dark": false,
@@ -242,7 +242,7 @@
      {
       "line": 8,
       "src": "proc",
-      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/claude/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
+      "text": "{\"argv\": [\"/opt/claude-code/bin/claude\", \"--preload\", \"/home/user/.claude/remote/spare.sock\"], \"at\": \"2026-11-02T15:38...\"claude\", \"pid\": 95, \"ppid\": 87, \"sockets\": [868, 1214, 32218, 54835, 76114, 78308, 78311, 87504, 87895], \"unread\": []}"
      }
     ],
     "dark": false,
