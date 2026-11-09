@@ -624,3 +624,48 @@ NEW-AGENT knock did not reach the commander as a toast while the two
 AGENT-DARK-LIVE ones did - to verify from app.log and the notifier's
 counts (folded? rate-limited behind the first AGENT-DARK-LIVE within the
 same minute? the per-tree id C-5 should have prevented that).
+
+## Amendment N (the Table, 2026-11-09) - rulings on review 2026-11-09-M7.5.md (178adc5)
+Builder's record: docs/review/2026-11-09-M7.5-questions.md (Q-1..Q-11).
+CI run 42566014129 for 178adc5: six jobs success on the first commit.
+The review found no must-fix; the Table makes one, because it trades an
+alarm for silence. Verdict: REDO on N-1; N-2..N-5 the Table's; the rest
+ruled or recorded.
+- N-1 (P1, Q-1, Q-2, A3) `was_live` is not sticky and history does not
+  count: a footprint is "live" for AGENT-DARK-LIVE only when a candidate
+  tree linked to it was seen under the watch (live, not history) within
+  the last R_dark rounds (R_dark = 3 x the streak, 9 by default, declared
+  in the YAML); after that window a 3-round dark streak knocks again. A
+  history-only link never makes a footprint live. Tests: the reviewer's
+  case (a history candidate, then an agent that runs only between rounds)
+  ALARMS as on main; Kimi's case (live tree, gone, then dark) is a note
+  within the window and a knock after it. The YAML's hole for "runs once
+  briefly to mark itself live" is replaced by the window's text.
+- N-2 (P2) AGENT-DARK-LIVE's measured negatives exclude lines its match
+  cannot see (`was_live: true`), as K-9 did for HOST-RHYTHM; the YAML
+  states the measured count honestly.
+- N-3 (P3) A fixture of the field run's own shape: host talks plus os
+  acts (Amendment M's Kimi tree, synthetic), positive at 3 cycles.
+- N-4 (P4) Beats of the final poll are placed in a closing round or
+  counted as "beats after the last round: N" in the report; never dropped
+  silently.
+- N-5 (P5) The KNOCKS ledger is bounded (the newest 200; the count of
+  older ones kept) in the state; the report prints all of this watch's.
+- N-6 (P6) The replay test gains the field run's history powershell tree
+  and an os source; the questions file's clock times are corrected to
+  what Amendment M records (18:10:30Z and round numbers only).
+- N-7 (Q-7) ADR-0005 A-4 is amended by this ruling: the title is
+  "Raqib: <event>[ <subject>]", subject = the cleaned image name for the
+  host rules, at most 40 characters, same alphabet, 120 in all.
+- N-8 (Q-10, P10) The field conclusion stands as the record supports it:
+  the NEW-AGENT toast was handed to Windows ("sent") and what happened
+  after is unknown; the AppUserModelID idea is unsourced and is struck
+  from the questions file as a cause (kept as a question). The next field
+  run compares the KNOCKS ledger with the Windows notification centre,
+  toast by toast; a registered app id for toast.ps1 is a later decision
+  of the commander's (it changes A-4).
+- N-9 (P11, Q-6) One child counted as an act by two sources: acts are
+  keyed by (pid, started) across sources so a child counts once; os and
+  host talks to one server stay two destinations (under-counts, safe).
+- N-10 (Q-5) Source beats counted one round late: accepted, recorded.
+- N-11 Every REDO change carries a test for the behaviour it adds (D-8).
