@@ -257,3 +257,39 @@ rulings E-3..E-8; the rest recorded.
 - E-9 (P8) The README assertion is restored as a test, not a comment.
 - E-10 (P17) raqib/rules/hostdata/ is ratified into Scope by this ruling.
 - E-11 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment F (the Table, 2026-11-09) - judgement on M7.6c (7e36dec + 819f5f3 + 42f457f)
+- E-1..E-9 MET as cited in the REDO sections of
+  docs/review/2026-11-09-M7.6c-questions.md; the Table read the E-2 tests
+  (an edge pair per editable field, generated at the low end, the declared
+  value and the high end, and run at both neighbours: k 2/5/8, w 1/30/3600,
+  r 5/10/200, streak 2/5/9, live_window 3/9/300) and HOST-RHYTHM.yaml
+  without suspect_every. The builder earned edge pairs for all five host
+  thresholds, so they are editable on a measurement that is sensitive to
+  them; HOST-UNWATCHED's none_rounds and any user rule's fields are FIXED.
+  Every REDO change names its test (E-11).
+- CI, read from api.github.com: run 42584260231 (7e36dec) four gate jobs
+  failed on the absolute-path test; run 42588931814 (42f457f) six jobs
+  success (the follow-up 819f5f3 had no run of its own read by the Table;
+  its tests are in this run).
+- Gate on the branch: 2897 passed, 22 skipped; kinds 4 : 7 : 11. Scope as
+  widened by E (hostdata, host.py and cli.py for E-3/E-7, app.py). Three
+  commits plus a cherry-pick onto the Table's merge (Q-19: accepted; the
+  ruling reached the branch after the builder had read it from main).
+- Q-16 (r max 200, live_window max 300, for the measuring cost): accepted;
+  the fence can widen when the generator is faster. Q-17 (HOST-RHYTHM's
+  measured negatives are 7: its 5 plus the two edge negatives that can
+  fire it): accepted - E-5 excludes what cannot fire, and these can. Q-18
+  (one neighbour at a bound end): accepted. Q-20 (the page-url entry
+  narrowed to keep the host row in 900 px; measured green on windows):
+  accepted. P16 (AGENT-DARK-LIVE's hole text carries numbers that are
+  wrong under a changed streak or window): the hole text is rendered from
+  the values at load - a later docs/catalog pass; recorded.
+- With this merge the commander's plan of 2026-11-04 is built: (1) the
+  field runs await his machine; (2) the rules panel with on/off, measured
+  thresholds and user rules; (3) M7.5's lessons. Status of this ADR stays
+  accepted; Amendments A-F are the record.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's order.
+- Table ledger for M7.6c: one review, one CI follow-up, one REDO; the
+  Table's misses: "real exports" in the HANDOFF (E-4) and the first
+  measurement rule that was not a measurement (A-3 -> E-2).
