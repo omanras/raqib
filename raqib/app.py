@@ -127,14 +127,14 @@ NO_DISPLAY = ("DISPLAY is not set: no window can open in this session (Tk on %s 
 THEME = {
     "light": {
         "bg": "#f6f6f4", "surface": "#ffffff", "fg": "#1f2328", "muted": "#5c6370", "border": "#c9ced6",
-        "select_bg": "#d6e4f5", "select_fg": "#1f2328", "tab_bg": "#e9eaec", "tab_current": "#ffffff",
-        "levels": {"clean": "#1b6e35", "alarm": "#b00020", "incomplete": "#9a5000", "note": "#646970",
+        "select_bg": "#dbe7f6", "select_fg": "#1f2328", "tab_bg": "#e9eaec", "tab_current": "#ffffff",
+        "levels": {"clean": "#1b6e35", "alarm": "#b00020", "incomplete": "#9a5000", "note": "#5c6066",
                    "hole": "#9a5000", "suppressed": "#b00020"},
         "band_bg": {"clean": "#e6f3e9", "alarm": "#fbe8ea", "incomplete": "#fdf1e2", "note": "#eeeff1"},
     },
     "dark": {
         "bg": "#1e1f22", "surface": "#26282c", "fg": "#e4e5e7", "muted": "#a0a5ad", "border": "#41454c",
-        "select_bg": "#2e4a6d", "select_fg": "#ffffff", "tab_bg": "#2b2d31", "tab_current": "#3a3d43",
+        "select_bg": "#1c2e45", "select_fg": "#ffffff", "tab_bg": "#2b2d31", "tab_current": "#3a3d43",
         "levels": {"clean": "#63c784", "alarm": "#ff6b7a", "incomplete": "#efa654", "note": "#a0a5ad",
                    "hole": "#efa654", "suppressed": "#ff6b7a"},
         "band_bg": {"clean": "#17321f", "alarm": "#3e1a1f", "incomplete": "#3a2a15", "note": "#2c2e32"},
@@ -162,13 +162,96 @@ FIRST_RUN = (
 PERSONALIZE_KEY = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
 
 
-def level_of(code):
-    """A level name for an exit code (C-10: 0 clean, 1 alarm, 3
-    incomplete; any other code alarm, as code_level) or a level name as
-    given (an unknown name reads incomplete, as the band always did)."""
+RESULT_WORDS = (("CLEAN", "clean"), ("ALARM", "alarm"), ("INCOMPLETE", "incomplete"))
+
+
+def level_of(code, word=None):
+    """REDO C-1: THE function every band, badge, row and text level comes
+    from. code: an exit code (C-10: 0 clean, 1 alarm, 3 incomplete; any
+    other code alarm) or a level name as given (an unknown name reads
+    incomplete, as the band always did); word: a result word ("CLEAN (N
+    findings suppressed by the overlay)", "ALARM", "INCOMPLETE"), read when
+    no exit code is given."""
     if isinstance(code, int) and not isinstance(code, bool):
         return CODE_LEVELS.get(code, "alarm")
+    if word is not None:
+        text = str(word).strip().upper()
+        return next((lv for w, lv in RESULT_WORDS if text.startswith(w)), "incomplete")
     return code if code in LEVEL_WORDS else "incomplete"
+
+
+def chip_text(level, suppressed=0, result=False):
+    """E1, REDO C-3: the word beside the band's colour: "[level]"; in a
+    watch's green state (result=True) it says "Not a clearance." and, when
+    the overlay suppressed findings, how many: "[clean] (N findings
+    suppressed by the overlay). Not a clearance." (A3, ADR-0008 A-2)."""
+    word = "[%s]" % level_word(level)
+    if result and level_of(level) == "clean":
+        return "%s%s. %s" % (word, " (%d findings suppressed by the overlay)" % suppressed if suppressed else "",
+                             NOT_CLEARANCE)
+    return word
+
+
+def report_result(text):
+    """REDO C-1, C-3: (result word, suppressed count) of a final report's
+    "RESULT: <WORD> (exit N)" line: ("CLEAN", 2) for "RESULT: CLEAN (2
+    findings suppressed by the overlay) (exit 0)"; (None, 0) without one."""
+    for line in str(text or "").splitlines():
+        if line.startswith("RESULT: "):
+            word = line[len("RESULT: "):]
+            n = word.split(" findings suppressed by the overlay", 1)[0].rsplit("(", 1)
+            count = int(n[1]) if len(n) == 2 and n[1].isdigit() and "suppressed by the overlay" in word else 0
+            return word.split(" ", 1)[0], count
+    return None, 0
+
+
+def report_level(code, text=None):
+    """REDO C-1: a finished watch's level from its exit code, else from its
+    report's result word; both through level_of."""
+    if isinstance(code, int) and not isinstance(code, bool):
+        return level_of(code)
+    word, _ = report_result(text)
+    return level_of(None, word=word) if word else "incomplete"
+
+
+BADGE_LINE = 130   # characters of badges on one line of the badge rows (E5: within 900 px)
+
+
+def badge_items(badges):
+    """REDO C-2: the (level, text) badges of ui.band_items / host_band, each
+    with its own level (through level_of) and its word; the overlay's
+    badge is "suppressed" (red) while it counts suppressed findings."""
+    out = []
+    for level, text in badges:
+        level = level_of(level)
+        if level == "alarm" and "suppressed by the overlay" in str(text):
+            level = "suppressed"
+        out.append(("%s [%s]" % (_safe(text), level_word(level)), level))
+    return out
+
+
+def badge_rows(badges, width=BADGE_LINE):
+    """REDO C-2: the badge items laid in rows of at most `width` characters
+    (a badge longer than that has a row of its own)."""
+    rows, line, used = [], [], 0
+    for text, level in badge_items(badges):
+        if line and used + 3 + len(text) > width:
+            rows.append(line)
+            line, used = [], 0
+        line.append((text, level))
+        used += len(text) + (3 if used else 0)
+    return rows + ([line] if line else [])
+
+
+def contrast_ratio(a, b):
+    """REDO C-6: the WCAG 2 contrast ratio of two #rrggbb colours."""
+    def lum(colour):
+        c = colour.lstrip("#")
+        rgb = [int(c[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
+        lin = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in rgb]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
 
 
 def level_colour(code, mode="light"):
@@ -279,10 +362,33 @@ def sort_key(kind, cell):
     return (0, tuple(parts))
 
 
-def sort_rows(rows, columns, column, reverse=False):
-    """E2: rows (tuples) sorted by the column id of columns (stable)."""
+def sort_rows(rows, columns, column, reverse=False, get=None):
+    """E2, REDO C-7: rows (tuples; get(item) gives the row of an item) sorted
+    by the column id of columns, stable both ways; a cell with no value
+    ("-", "", "none", not a number in a number column) sorts last in both
+    directions, in its first order. The window sorts through this."""
     spec = next(c for c in columns if c[0] == column)
-    return sorted(rows, key=lambda r: sort_key(spec[4], r[spec[3]] if spec[3] < len(r) else ""), reverse=reverse)
+    pick = get or (lambda item: item)
+
+    def key(item):
+        row = pick(item)
+        return sort_key(spec[4], row[spec[3]] if spec[3] < len(row) else "")
+    keyed = [(key(item), item) for item in rows]
+    filled = sorted((x for x in keyed if x[0][0] == 0), key=lambda x: x[0], reverse=reverse)
+    return [item for _, item in filled] + [item for k, item in keyed if k[0] != 0]
+
+
+def table_iids(values_list):
+    """REDO C-7: a Treeview row id per row, from its first two cells (image
+    and pid; a rule's id), numbered in the rows' own order when two rows
+    share them, so an id does not move when the table is sorted or
+    refreshed and the selection survives."""
+    seen, out = {}, []
+    for values in values_list:
+        base = "%s|%s" % (values[0], values[1] if len(values) > 1 else "")
+        seen[base] = seen.get(base, 0) + 1
+        out.append(base if seen[base] == 1 else "%s+%d" % (base, seen[base] - 1))
+    return out
 
 
 def tree_values(row):
@@ -333,17 +439,20 @@ def header_rules(text, states=()):
     return text, ("incomplete" if text not in ("no rule off",) else None)
 
 
+FOOT_LINES = 3   # REDO C-5: the footer shows three lines and scrolls; "(N more)" counts the rest
+
+
 def foot_lines(holes, notes, look=()):
-    """E5: the footer's lines: the window's own holes and notes in full,
-    and the first look's holes (F-3) as one line that counts them and says
-    where each is listed in full (the Host screen's HOLES, and the log), so
-    a long look never pushes the screen out of the window."""
-    look = list(look)
-    shown = ["hole: %s" % h for h in holes]
-    if look:
-        shown.append("hole: round at open: the first look has %d hole(s), each listed under HOLES on the Host screen"
-                     " and written to the log" % len(look))
-    return shown + ["note: %s" % n for n in notes]
+    """E5, REDO C-5 (F-3): the footer's lines, every one: the window's own
+    holes, each of the first look's holes (they stand until the host
+    watch's first round), the notes. The footer shows FOOT_LINES of them
+    and scrolls (foot_more)."""
+    return ["hole: %s" % h for h in list(holes) + list(look)] + ["note: %s" % n for n in notes]
+
+
+def foot_more(lines, cap=FOOT_LINES):
+    """REDO C-5: "(N more)" when the footer holds more lines than it shows, else ""."""
+    return "(%d more)" % (len(lines) - cap) if len(lines) > cap else ""
 
 
 def text_tags(text):
@@ -901,7 +1010,8 @@ CODE_LEVELS = {0: "clean", 1: "alarm", 3: "incomplete"}   # F-7: C-10's exit cod
 
 
 def code_level(code):
-    return CODE_LEVELS.get(code, "alarm")
+    """F-7: C-10's code -> level, through level_of (REDO C-1); not a code: alarm."""
+    return level_of(code if isinstance(code, int) and not isinstance(code, bool) else -1)
 
 
 def dark_line(d):
@@ -1041,7 +1151,8 @@ def host_watch_view(state, extra_holes=()):
                                     h.get("dark_notes") or ()),   # M7.6b E2: the detail pane
             "lines": lines, "findings": findings, "notes": notes, "holes": holes,
             "badges": [(lv, _safe(text)) for lv, text in ui.host_band(state)], "final": None,
-            "trees": h.get("now") or 0, "new": h.get("new") or 0, "url": state.get("url") or "-"}
+            "trees": h.get("now") or 0, "new": h.get("new") or 0, "url": state.get("url") or "-",
+            "suspicions": len([f for f in h.get("suspicions") or [] if isinstance(f, dict)])}   # REDO C-4: apart
 
 
 def host_body(view):
@@ -1535,14 +1646,20 @@ class Controller:
         if self.host is not None:
             self.host.stop(reason)
 
-    def host_tip(self, trees=None, new=None, findings=None):
-        """The tray's tooltip (M7.6b E5): "Raqib: N trees, K new, F
-        findings" while a watch runs (the host's trees and new ones, 0 when
-        only a project is watched; the findings of the watches running),
-        else "Raqib: idle". Changed only when the text changes; a tray that
-        cannot take it keeps a hole of its own."""
-        text = traymod.tip_text(trees if self.host_watching() else 0, new if self.host_watching() else 0,
-                                findings) if self.watching() else traymod.IDLE_TIP
+    def host_tip(self, trees=None, new=None, findings=None, suspicions=None, project_findings=None):
+        """The tray's tooltip (M7.6b E5, REDO C-4), the host watch's: "Raqib:
+        N trees, K new, F findings" (and " +S suspicions" when any) only
+        while the host is watched; with a project watch only, "Raqib:
+        project <name>, F findings" (that watch's findings); else "Raqib:
+        idle". Changed only when the text changes; a tray that cannot take
+        it keeps a hole of its own."""
+        if self.host_watching():
+            text = traymod.tip_text(trees, new, findings, suspicions)
+        elif self.project_watching():
+            name = os.path.basename(str(self.session.project).rstrip("/\\")) or str(self.session.project)
+            text = traymod.project_tip(_safe(name), project_findings)
+        else:
+            text = traymod.IDLE_TIP
         if text == self.tip:
             return text
         self.tip = text
@@ -1938,9 +2055,14 @@ class Window:
         self.doctrine = ttk.Label(self.root, text=DOCTRINE, anchor="w", style=s["muted"])
         self.doctrine.pack(fill="x", padx=out, pady=(2, pad["gap"]))
         # the window's own notes and holes, on every screen
-        self.foot = self._wrap(tk.Label(self.root, text="", anchor="w", justify="left", background=p["bg"],
-                                        foreground=p["levels"]["note"]), 860)
-        self.foot.pack(side="bottom", fill="x", padx=out, pady=(0, pad["gap"]))
+        # REDO C-5: every line (F-3: each of the look's holes until round 1), three shown, the rest scrolled;
+        # "(N more)" leads to the Host screen, where the look's holes are listed in full
+        footf = ttk.Frame(self.root)
+        self.foot_more = ttk.Button(footf, text="", command=self.show_host)
+        self.foot_frame, self.foot = self._text(footf, FOOT_LINES)
+        self.foot.configure(font=self.small_font)
+        self.foot_frame.pack(side="left", fill="x", expand=True)
+        footf.pack(side="bottom", fill="x", padx=out, pady=(0, pad["gap"]))
         # the host screen (M7.3): the first one
         self.hostf = ttk.Frame(self.root)
         # E4: the first-run lines, at the top of the first screen until the first look is written
@@ -1969,23 +2091,23 @@ class Window:
         ttk.Entry(row, textvariable=self.host_url, state="readonly", width=24).pack(side="left", fill="x", expand=True,
                                                                                   padx=(pad["row"], 0))
         row.pack(fill="x", pady=(0, pad["row"]))
-        self.host_badges = self._wrap(ttk.Label(self.hostf, text="", anchor="w", justify="left"), 860)
+        self.host_badges = ttk.Frame(self.hostf)   # REDO C-2: one label per badge
         self.host_badges.pack(fill="x", pady=(0, pad["row"]))
-        self.checks_frame, self.checks_text = self._text(self.hostf, 3, mono=True)   # folded under "Checks"
+        self.checks_frame, self.checks_text = self._text(self.hostf, 2, mono=True)   # folded under "Checks"
         # E2: the tree table, then the screen's text (findings, notes, holes) beside the selected tree's detail
         self.host_paned = ttk.PanedWindow(self.hostf, orient="vertical")
-        frame, self.host_tree = self._table(self.host_paned, "host", TREE_COLUMNS, 4)
+        frame, self.host_tree = self._table(self.host_paned, "host", TREE_COLUMNS, 3)
         self.host_tree.bind("<<TreeviewSelect>>", lambda e: self._show_tree_detail())
         self.host_paned.add(frame, weight=3)
         lower = ttk.PanedWindow(self.host_paned, orient="horizontal")
-        frame, self.host_text = self._text(lower, 4)
+        frame, self.host_text = self._text(lower, 3)
         lower.add(frame, weight=1)
-        self.host_detail_frame, self.host_detail = self._text(lower, 4)
+        self.host_detail_frame, self.host_detail = self._text(lower, 3)
         lower.add(self.host_detail_frame, weight=1)
         self.host_lower = lower
         self.host_paned.add(lower, weight=2)
         self.host_paned.pack(fill="both", expand=True)
-        self.host_log_frame, self.host_log_text = self._text(lower, 4, mono=True)   # F-6: in the detail's place
+        self.host_log_frame, self.host_log_text = self._text(lower, 3, mono=True)   # F-6: in the detail's place
         self._set(self.host_detail, "host_detail", "the selected tree's findings and notes are shown here\n")
         # the project screen (M6.4's first screen)
         self.first = ttk.Frame(self.root)
@@ -2013,7 +2135,7 @@ class Window:
         row.pack(fill="x", pady=(0, pad["row"]))
         self.knock_label = ttk.Label(self.watching, text=first_line(None), anchor="w")   # A-5
         self.knock_label.pack(fill="x")
-        self.badges = self._wrap(ttk.Label(self.watching, text="", anchor="w", justify="left"), 860)
+        self.badges = ttk.Frame(self.watching)     # REDO C-2: one label per badge
         self.badges.pack(fill="x", pady=(0, pad["row"]))
         frame, self.body = self._text(self.watching, 10)
         frame.pack(fill="both", expand=True)
@@ -2194,34 +2316,55 @@ class Window:
                 widget.insert("end", line + "\n", (tag,) if tag else ())
         widget.configure(state="disabled")
 
-    def _band(self, word, level, detail):
-        """E1: the band in its level's colours, the level's word beside the state word."""
+    def _band(self, word, level, detail, result=False, suppressed=0):
+        """E1: the band in its level's colours (level_of, REDO C-1), the
+        level's word beside the state word; a watch's green state (result)
+        says "Not a clearance." and what the overlay suppressed (REDO C-3)."""
+        level = level_of(level)
         fg, bg = band_colours(level, self.mode)
         self.bandf.configure(background=bg)
         for part in (self.band.master, self.band, self.band_level, self.detail):
             part.configure(background=bg)
         self.band.configure(text=word, foreground=fg)
-        self.band_level.configure(text="[%s]" % level_word(level), foreground=fg)
+        self.band_level.configure(text=chip_text(level, suppressed, result), foreground=fg)
         self.detail.configure(text=detail, foreground=self.palette["fg"])
 
+    def _badges(self, frame, key, badges):
+        """REDO C-2: each (level, text) badge its own label, in its level's
+        colour with its word; rows that fit the window."""
+        rows = badge_rows(badges)
+        if self.shown.get(key) == rows:
+            return
+        self.shown[key] = rows
+        for child in frame.winfo_children():
+            child.destroy()
+        for row in rows:
+            line = self.ttk.Frame(frame)
+            for text, level in row:
+                self.ttk.Label(line, text=text, style=THEME["styles"]["level"] % level, font=self.small_font).pack(
+                    side="left", padx=(0, THEME["pad"]["gap"] * 2))
+            line.pack(fill="x")
+
+    def foot_text(self):
+        """The footer's lines, every one (REDO C-5: the widget shows three and scrolls)."""
+        return self.foot.get("1.0", "end").rstrip("\n")
+
     def _fill(self, key, tree, items, columns):
-        """E2/E3: a Treeview's rows [(values, level, payload)], sorted as its
-        heading was last clicked; the selection kept by its row's id."""
+        """E2/E3: a Treeview's rows [(values, level, payload, row)], sorted
+        as its heading was last clicked through sort_rows (REDO C-7: the row
+        is what columns index); each row's id from table_iids, given before
+        the sort, so the selection survives a sort and a refresh."""
         column, reverse = self.sorting[key]
+        items = [(iid,) + tuple(it) for iid, it in zip(table_iids([it[0] for it in items]), items)]
         if column is not None:
-            spec = next(c for c in columns if c[0] == column)
-            index = [c[0] for c in columns].index(column)
-            items = sorted(items, key=lambda it: sort_key(spec[4], it[0][index]), reverse=reverse)
+            items = sort_rows(items, columns, column, reverse, get=lambda it: it[4])
         if self.shown.get("table:" + key) == items:
             return False
         self.shown["table:" + key] = items
         picked = tree.selection()
         tree.delete(*tree.get_children())
         self.payload[key] = {}
-        for values, level, payload in items:
-            iid = "%s|%s" % (values[0], values[1])
-            while iid in self.payload[key]:
-                iid += "+"
+        for iid, values, level, payload, _ in items:
             tree.insert("", "end", iid=iid, values=values, tags=(level,) if level else ())
             self.payload[key][iid] = payload
         for cid, heading, _, _, _ in columns:
@@ -2244,7 +2387,7 @@ class Window:
 
     def _fill_host(self, view):
         details = view.get("details") or []
-        items = [(tree_values(row), row_level(row), (row, details[i] if i < len(details) else None))
+        items = [(tree_values(row), row_level(row), (row, details[i] if i < len(details) else None), row)
                  for i, row in enumerate(view.get("rows") or [])]
         if self._fill("host", self.host_tree, items, TREE_COLUMNS):
             self._show_tree_detail()
@@ -2260,7 +2403,7 @@ class Window:
         self._set(self.host_detail, "host_detail", None, text_tags(tree_detail_text(*payload)))
 
     def _fill_rules(self):
-        items = [(values, level, values[0]) for values, level in rules_rows(self.rules_panel.rows)]
+        items = [(values, level, values[0], values) for values, level in rules_rows(self.rules_panel.rows)]
         self._fill("rules", self.rules_tree, items, RULES_COLUMNS)
 
     def _first_run(self):
@@ -2364,9 +2507,15 @@ class Window:
         look = self.c.look_holes()   # F-3: the look's, until round 1
         holes = own + look
         notes = list(self.c.notes) + (["page: %s" % self.c.page_note] if self.c.page_note else [])
-        # E1: holes amber, notes grey; each line says "hole:" or "note:"; E5: the look's holes counted in one line
-        self.foot.configure(text="\n".join(foot_lines(own, notes, look)),
-                            foreground=level_colour("hole" if holes else "note", self.mode))
+        # E1: holes amber, notes grey, each line says "hole:" or "note:"; REDO C-5: every line, three shown
+        lines = foot_lines(own, notes, look)
+        self._set(self.foot, "foot", None, tuple((x, "hole" if x.startswith("hole:") else "note") for x in lines))
+        more = foot_more(lines)
+        self.foot_more.configure(text=more)
+        if more and not self.foot_more.winfo_manager():
+            self.foot_more.pack(side="right", padx=(THEME["pad"]["gap"], 0), before=self.foot_frame)
+        elif not more and self.foot_more.winfo_manager():
+            self.foot_more.pack_forget()
         return holes
 
     def _head(self):
@@ -2393,8 +2542,9 @@ class Window:
         fresh = self._tick_doctor()
         view = self.c.host_view()
         project = getattr(self.c.session, "last_state", None) if self.c.project_watching() else None
-        findings = len(view.get("findings") or []) + len((project or {}).get("findings") or [])
-        self.c.host_tip(view.get("trees"), view.get("new"), findings)   # E5: the tray's tooltip
+        sus = view.get("suspicions") or 0   # REDO C-4: suspicions apart from the findings (A2)
+        self.c.host_tip(view.get("trees"), view.get("new"), len(view.get("findings") or []) - sus, sus,
+                        len((project or {}).get("findings") or []))   # E5: the tray's tooltip
         if self.screen == "rules":
             self._fill_rules()
             self._set(self.rules_text, "rules", self.rules_panel.notes_text())
@@ -2420,8 +2570,9 @@ class Window:
             self.back_button.pack(side="left")
             return
         if snap["phase"] == "finished":
-            self._band("FINISHED", "alarm" if snap["final_exit"] else "clean",
-                       "the watch ended; its final report is below (exit %s)" % snap["final_exit"])
+            self._band("FINISHED", report_level(snap["final_exit"], snap["final_text"]),   # REDO C-1: exit 3 amber
+                       "the watch ended; its final report is below (exit %s)" % snap["final_exit"], result=True,
+                       suppressed=report_result(snap["final_text"])[1])                   # REDO C-3
             self._set(self.body, "body", None, text_tags(snap["final_text"] + "".join("hole: %s\n" % h for h in extra)))
             self.stop_button.pack_forget()
             self.back_button.pack(side="left")
@@ -2434,15 +2585,17 @@ class Window:
             return
         view = watch_view(state, extra)
         word = view["word"] + (" (stopping)" if snap["phase"] == "stopping" else "")
-        self._band(word, view["level"], view["detail"])
-        self.badges.configure(text="   ".join(text for _, text in view["badges"]))
+        self._band(word, view["level"], view["detail"], result=True, suppressed=ui.suppressed(state))   # REDO C-3
+        self._badges(self.badges, "badges", view["badges"])                                           # REDO C-2
         self.url.set(view["url"])
         self._set(self.body, "body", None, text_tags(body_text(view)))
 
     def _tick_host(self, view):
         """E1/E2: the host screen from the controller's host view."""
-        self._band(view["word"], view["level"], view["detail"])
-        self.host_badges.configure(text="   ".join(text for _, text in view.get("badges") or []))
+        state = getattr(self.c.host, "last_state", None) if self.c.host is not None else None
+        suppressed = report_result(view.get("final"))[1] if view.get("final") else ui.suppressed(state or {})
+        self._band(view["word"], view["level"], view["detail"], result=True, suppressed=suppressed)   # REDO C-3
+        self._badges(self.host_badges, "host_badges", view.get("badges") or [])                       # REDO C-2
         self.host_url.set(view.get("url") or "-")
         self._fill_host(view)
         self._set(self.host_text, "host", None, text_tags(host_text_body(view)))

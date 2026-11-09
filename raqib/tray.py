@@ -69,10 +69,23 @@ SM_CXSMICON = 49
 ICON_MIN, ICON_MAX = 16, 64
 
 
-def tip_text(trees, new, findings=None):
-    """M7.3 E3, M7.6b E5: the tooltip while watching: "Raqib: N trees, K
-    new, F findings"; IDLE_TIP when no watch runs."""
-    return "%s: %d trees, %d new, %d findings" % (TIP, int(trees or 0), int(new or 0), int(findings or 0))
+def tip_text(trees, new, findings=None, suspicions=None):
+    """M7.3 E3, M7.6b E5 (REDO C-4): the tooltip while the host is watched:
+    "Raqib: N trees, K new, F findings", and " +S suspicions" when the
+    suspect layer raised any (named apart: a suspicion is not a finding)."""
+    s = int(suspicions or 0)
+    return "%s: %d trees, %d new, %d findings%s" % (TIP, int(trees or 0), int(new or 0), int(findings or 0),
+                                                   " +%d suspicions" % s if s else "")
+
+
+def project_tip(name, findings=None):
+    """M7.6b REDO C-4: the tooltip while only a project is watched:
+    "Raqib: project <name>, F findings" (the name cut to fit 127 characters)."""
+    tail = ", %d findings" % int(findings or 0)
+    room = 127 - len("%s: project " % TIP) - len(tail)
+    name = str(name)
+    name = name if len(name) <= room else name[:max(room - 2, 0)] + ".."
+    return "%s: project %s%s" % (TIP, name, tail)
 
 
 def unsupported(platform=None):

@@ -424,6 +424,10 @@ def test_e3_the_controller_sets_the_tip_only_while_the_host_is_watched_and_once_
     c.host.stop("x")
     c.host_tip(3, 1)
     assert t.tips[-1] == "Raqib: idle"
+    # M7.6b REDO C-4: the trees tip is the host watch's only; a project watch alone names the project
+    p = app.Controller(None, make_session=FakeSession)
+    p.start(str(ROOT))
+    assert p.host_tip(3, 1, 0, 0, 2) == "Raqib: project %s, 2 findings" % ROOT.name
 
 
 def test_e3_raqib_app_every_and_its_usage_error(monkeypatch, capsys, tmp_path):
