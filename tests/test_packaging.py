@@ -85,7 +85,8 @@ def test_e1_every_code_directory_is_a_listed_package():
 def test_e1_package_data_is_the_catalog_and_endpoints_and_nothing_is_left_out():
     assert SETUPTOOLS["include-package-data"] is False
     data = sorted(f for f in wheel_files() if not f.endswith(".py"))
-    assert data == sorted(CATALOG_FILES + ["raqib/discover/endpoints.yaml"])
+    # M7.6c: and the inventories fixturegen replays (raqib/rules/hostdata/inventories.json)
+    assert data == sorted(CATALOG_FILES + ["raqib/discover/endpoints.yaml", "raqib/rules/hostdata/inventories.json"])
     # The catalog count is derived from the checkout, never a literal (ADR-0002 D-2):
     # the tracked rule files, as the gate counts them, and what the loader loads.
     tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "raqib/rules/catalog"], capture_output=True,

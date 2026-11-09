@@ -42,4 +42,6 @@ version = { attr = "raqib.__version__" }
 # so they work from a checkout and from an installed wheel alike.
 [tool.setuptools.package-data]
 "raqib" = ["discover/endpoints.yaml"]
-"raqib.rules" = ["catalog/*.yaml"]
+# M7.6c (ADR-0008 Amendment B): the exports' inventories raqib/rules/fixturegen.py replays to measure a
+# changed host threshold (written by tests/fixtures/host/make.py), so an installed raqib measures as a checkout.
+"raqib.rules" = ["catalog/*.yaml", "hostdata/inventories.json"]

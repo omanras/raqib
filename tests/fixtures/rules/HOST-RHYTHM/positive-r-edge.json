@@ -1,0 +1,179 @@
+{
+ "expect_seq": [
+  10
+ ],
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 4,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": true,
+    "cites": [
+     {
+      "line": 2,
+      "src": "win-process",
+      "text": "fake process row of pid 4400 (make.py)"
+     },
+     {
+      "line": 2,
+      "src": "win-tcp",
+      "text": "fake connection of pid 4400 to 192.0.2.10:443 (make.py)"
+     },
+     {
+      "line": 3,
+      "src": "win-process",
+      "text": "fake child row 4401 (make.py)"
+     },
+     {
+      "line": 4,
+      "src": "win-process",
+      "text": "fake child row 4402 (make.py)"
+     },
+     {
+      "line": 11,
+      "src": "win-process",
+      "text": "fake child row 4409 (make.py)"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "192.0.2.10:443"
+    ],
+    "history": true,
+    "hooks": null,
+    "image": "relay-bot",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "none_rounds": 0,
+    "pid": 4400,
+    "rhythm": {
+     "act_basis": [
+      "started"
+     ],
+     "acts": 1,
+     "beats": [
+      {
+       "acts": [
+        {
+         "basis": "started",
+         "cites": [
+          {
+           "line": 4,
+           "src": "win-process",
+           "text": "fake child row 4402 (make.py)"
+          }
+         ],
+         "image": "python",
+         "pid": 4402,
+         "started": "2026-11-03T10:00:05.000000Z"
+        }
+       ],
+       "round": 2,
+       "run": "fixture-run",
+       "seq": 2,
+       "talk_cites": [
+        {
+         "line": 2,
+         "src": "win-tcp",
+         "text": "fake connection of pid 4400 to 192.0.2.10:443 (make.py)"
+        }
+       ],
+       "talk_round": 1,
+       "talk_seq": 1
+      },
+      {
+       "acts": [
+        {
+         "basis": "started",
+         "cites": [
+          {
+           "line": 11,
+           "src": "win-process",
+           "text": "fake child row 4409 (make.py)"
+          }
+         ],
+         "image": "bash",
+         "pid": 4409,
+         "started": "2026-11-03T10:01:15.000000Z"
+        }
+       ],
+       "round": 9,
+       "run": "fixture-run",
+       "seq": 9,
+       "talk_cites": [
+        {
+         "line": 2,
+         "src": "win-tcp",
+         "text": "fake connection of pid 4400 to 192.0.2.10:443 (make.py)"
+        }
+       ],
+       "talk_round": 8,
+       "talk_seq": 8
+      },
+      {
+       "acts": [
+        {
+         "basis": "started",
+         "cites": [
+          {
+           "line": 12,
+           "src": "win-process",
+           "text": "fake child row 4410 (make.py)"
+          }
+         ],
+         "image": "python",
+         "pid": 4410,
+         "started": "2026-11-03T10:01:25.000000Z"
+        }
+       ],
+       "round": 10,
+       "run": "fixture-run",
+       "seq": 10,
+       "talk_cites": [
+        {
+         "line": 2,
+         "src": "win-tcp",
+         "text": "fake connection of pid 4400 to 192.0.2.10:443 (make.py)"
+        }
+       ],
+       "talk_round": 9,
+       "talk_seq": 9
+      }
+     ],
+     "cycles": 3,
+     "destination": "192.0.2.10:443",
+     "fires": true,
+     "k": 3,
+     "r": 10,
+     "rounds": [
+      2,
+      9,
+      10
+     ],
+     "streak_fired": true,
+     "talks": [
+      "192.0.2.10:443"
+     ],
+     "w": 30
+    },
+    "round": 10,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T10:01:30.000000Z .. 2026-11-03T10:01:30.000000Z; Windows sample(s) 10",
+    "source": "host",
+    "source_word": "host: the host's own record of the tree",
+    "started": "2026-11-03T09:00:00.000000Z",
+    "tree": "4400:relay-bot:2026-11-03T09:00:00.000000Z",
+    "was": "candidate"
+   },
+   "phase": "pre",
+   "seq": 10,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:01:30.000Z"
+  }
+ ]
+}

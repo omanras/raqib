@@ -114,7 +114,7 @@ SEVERITIES = ("low", "medium", "high")
 STATUSES = ("active", "disabled")
 KINDS = ("signature", "demand", "anchor")  # ADR-0002
 REQUIRED = ("id", "title", "class", "severity", "fp_budget", "match", "fixtures")
-OPTIONAL = ("status", "description", "summary", "aggregate", "require")
+OPTIONAL = ("status", "description", "summary", "aggregate", "require", "bounds")   # bounds: M7.6c
 # kind is required and evasion required iff kind is signature (ADR-0002);
 # both are checked after the id, so their errors can name the rule.
 KIND_FIELDS = ("kind", "evasion", "holes")   # holes: M4.2b G-6
@@ -166,6 +166,9 @@ class Rule:
         self.status = doc.get("status", "active")
         self.summary = doc.get("summary") or doc["title"]
         self.fixtures = doc["fixtures"]
+        # M7.6c (ADR-0008 Amendment B): the bounds of the thresholds the person may set, from the YAML's
+        # bounds: block (None: the YAML has none, so no threshold of the rule is editable); see bounds_of()
+        self.bounds = bounds_of(doc)
         self.context_keys = set()
         self.match = _compile(doc["match"], "match", self)
         agg = doc.get("aggregate")
@@ -305,6 +308,10 @@ def compile_rule(doc, source="<rule>"):
             bad("require", "never together with aggregate (ADR-0002 Amendment D)")
         if not (isinstance(req, dict) and set(req) in REQUIRE_SHAPES):
             bad("require", "must be {before: <node>} or {after: <node>, until: <node>}")
+    if "bounds" in doc:   # M7.6c: the YAML's bounds of its declared thresholds
+        why = bounds_problem(doc)
+        if why:
+            bad("bounds", why)
     summary = doc.get("summary")
     if summary is not None:
         for name in PLACEHOLDER.findall(summary):
@@ -314,6 +321,114 @@ def compile_rule(doc, source="<rule>"):
         return Rule(doc, source)
     except _NodeError as exc:
         raise RuleError("%s: %s" % (source, exc))
+
+
+# --- bounds (M7.6c, ADR-0008 Amendment B) -------------------------------------------------------------
+# A rule may declare which of its thresholds a person may change (raqib rules --threshold, the Rules panel)
+# and within what, beside the match that holds them:
+#     bounds:
+#       k: {min: 1, max: 100}       # a declared threshold: an eq of the match, a whole number > 0, declared once
+#       relations:
+#         - "k <= r"                # between two bounded thresholds: <= or >=
+# A threshold is named by the last part of its field (input_meta.rhythm.k -> k). A rule with no bounds: block
+# has no editable threshold; one with `bounds: {}` says so in words. The YAML's own values must lie within
+# its bounds and satisfy its relations (else the rule is refused by the loader).
+BOUND_KEYS = ("min", "max")
+RELATIONS_KEY = "relations"
+RELATION = re.compile(r"\s*([a-z_][a-z0-9_]*)\s*(<=|>=)\s*([a-z_][a-z0-9_]*)\s*\Z")
+
+
+def eq_predicates(node, out=None):
+    """Every predicate {field, eq, ...} of a match tree, in order."""
+    out = [] if out is None else out
+    if isinstance(node, dict):
+        if isinstance(node.get("field"), str) and "eq" in node:
+            out.append(node)
+        for v in node.values():
+            eq_predicates(v, out)
+    elif isinstance(node, list):
+        for v in node:
+            eq_predicates(v, out)
+    return out
+
+
+def _whole(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def declared_thresholds(doc):
+    """{name: {"field", "value"}}: the eq predicates of the match whose value
+    is a whole number > 0 and whose field carries one eq only (a threshold
+    the YAML declares), named by the field's last part; a name two fields
+    share is not one threshold and is left out."""
+    preds = eq_predicates((doc or {}).get("match"))
+    out, seen = {}, {}
+    for p in preds:
+        field = p["field"]
+        if not (_whole(p["eq"]) and p["eq"] > 0) or sum(1 for q in preds if q["field"] == field) != 1:
+            continue
+        name = field.rsplit(".", 1)[-1]
+        seen[name] = seen.get(name, 0) + 1
+        out[name] = {"field": field, "value": p["eq"]}
+    return {n: t for n, t in out.items() if seen[n] == 1}
+
+
+def bounds_problem(doc):
+    """Why a rule's bounds: block is not sound, or None."""
+    block = doc.get("bounds")
+    if not isinstance(block, dict):
+        return "must be a mapping of threshold -> {min, max}, and relations"
+    declared = declared_thresholds(doc)
+    fields = {}
+    for name, b in block.items():
+        if name == RELATIONS_KEY:
+            continue
+        if name not in declared:
+            return "%r is not a declared threshold of the match (an eq, a whole number > 0, declared once; declared:" \
+                   " %s)" % (name, ", ".join(sorted(declared)) or "none")
+        if not (isinstance(b, dict) and set(b) == set(BOUND_KEYS) and all(_whole(b[k]) for k in BOUND_KEYS)):
+            return "%s: must be {min: N, max: M}, whole numbers" % name
+        if not 1 <= b["min"] <= b["max"]:
+            return "%s: must have 1 <= min <= max (%r..%r)" % (name, b["min"], b["max"])
+        value = declared[name]["value"]
+        if not b["min"] <= value <= b["max"]:
+            return "%s: the match's own value %d is outside %d..%d" % (name, value, b["min"], b["max"])
+        fields[name] = value
+    relations = block.get(RELATIONS_KEY, [])
+    if not isinstance(relations, list):
+        return "relations: must be a list of \"a <= b\" / \"a >= b\""
+    for text in relations:
+        m = RELATION.match(text) if isinstance(text, str) else None
+        if not m:
+            return "relations: %r must read \"a <= b\" or \"a >= b\"" % (text,)
+        a, op, b = m.groups()
+        for name in (a, b):
+            if name not in fields:
+                return "relations: %r names %s, which has no bounds here" % (text, name)
+        if a == b:
+            return "relations: %r relates a threshold to itself" % text
+        if not (fields[a] <= fields[b] if op == "<=" else fields[a] >= fields[b]):
+            return "relations: the match's own values break %r (%s=%d, %s=%d)" % (text, a, fields[a], b, fields[b])
+    return None
+
+
+def bounds_of(doc):
+    """{"fields": {name: {"field", "min", "max"}}, "relations": [(small, big, text)]}
+    of a sound bounds: block (each relation as small <= big), or None when
+    the rule has none."""
+    block = doc.get("bounds")
+    if not isinstance(block, dict):
+        return None
+    declared = declared_thresholds(doc)
+    fields = {n: {"field": declared[n]["field"], "min": b["min"], "max": b["max"]}
+              for n, b in block.items() if n != RELATIONS_KEY and n in declared and isinstance(b, dict)}
+    relations = []
+    for text in block.get(RELATIONS_KEY) or []:
+        m = RELATION.match(text) if isinstance(text, str) else None
+        if m:
+            a, op, b = m.groups()
+            relations.append((a, b, text.strip()) if op == "<=" else (b, a, text.strip()))
+    return {"fields": fields, "relations": relations}
 
 
 def fixture_path_problem(path):

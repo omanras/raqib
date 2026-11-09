@@ -177,9 +177,10 @@ RULES = (NEW_AGENT, NEW_UNKNOWN, DARK_LIVE, UNWATCHED, RHYTHM)
 # the rule is not in the catalog (a host-rule hole), and a test holds them equal to the YAML's.
 RHYTHM_K, RHYTHM_W, RHYTHM_R = 3, 30, 10
 RHYTHM_FIELDS = {"k": "input_meta.rhythm.k", "w": "input_meta.rhythm.w", "r": "input_meta.rhythm.r"}
-# M7.6 REDO A-3 (ADR-0008 Amendment A): the suspect layer's period, HOST-RHYTHM.yaml's own eq (split from r)
-SUSPECT_EVERY_FIELD = "input_meta.rhythm.suspect_every"
+# M7.6c REDO E-3 (ADR-0008 Amendment E): the suspect layer's period in rounds is a watch option (--suspect-every,
+# the window's field), not a rule's eq value; this is its default.
 SUSPECT_EVERY = 10
+SUSPECT_EVERY_MAX = 1000
 BEATS_KEPT = 6                     # beats (cycles) cited on a HostTree line
 # M7.4 E1: what the host does not give, said once per run (A3), never as zero
 WIN_BYTES_HOLE = ("Windows: GetExtendedTcpTable gives each connection's state and owner but no byte counts:"
@@ -849,6 +850,14 @@ def rhythm_params(rule):
     return found["k"], found["w"], found["r"]
 
 
+def check_suspect_every(value):
+    """M7.6c REDO E-3: a whole number of rounds from 1 to SUSPECT_EVERY_MAX, or ValueError."""
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= SUSPECT_EVERY_MAX:
+        raise ValueError("the suspect period must be a whole number of rounds from 1 to %d, not %r"
+                         % (SUSPECT_EVERY_MAX, value))
+    return value
+
+
 def rule_eq(rule, field):
     """M7.5 REDO N-1: the positive int `eq` a rule's match declares on
     field, or None (as rhythm_params reads K, W and R)."""
@@ -1098,7 +1107,7 @@ class HostWatch:
     def __init__(self, reader, catalog, rules, notifier, every=EVERY_DEFAULT, window=0.0, rounds_max=None,
                  out=None, err=None, clock=None, wall=None, home=None, platform=None, deadline=None, run=None,
                  attach_hooks=False, sysmon=None, installer=None, os_follow=None, source_every=None, suspect=None,
-                 suspect_threshold=None, suspect_timeout=SUSPECT_TIMEOUT):
+                 suspect_threshold=None, suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None):
         """M7.2b: attach_hooks is the person's word for this watch
         (--attach-hooks, or the window's checkbox; False by default, H-1):
         without it no file is written into any project. sysmon() -> (ok,
@@ -1212,8 +1221,8 @@ class HostWatch:
                        " defaults K=%d W=%d R=%d and the rule cannot fire" % (
                            RHYTHM, ", ".join(RHYTHM_FIELDS.values()), RHYTHM_K, RHYTHM_W, RHYTHM_R))
         self.rhythm_k, self.rhythm_w, self.rhythm_r = params or (RHYTHM_K, RHYTHM_W, RHYTHM_R)
-        # M7.6 REDO A-3: how often the suspect layer is asked, its own eq in HOST-RHYTHM.yaml (default 10), not r
-        self.suspect_every = rule_eq(rhythm_rule, SUSPECT_EVERY_FIELD) or SUSPECT_EVERY
+        # M7.6c REDO E-3: how often the suspect layer is asked, the watch's option (default 10 rounds), not r
+        self.suspect_every = SUSPECT_EVERY if suspect_every is None else check_suspect_every(suspect_every)
         # M7.5 REDO N-1: the live window of AGENT-DARK-LIVE, read from its YAML (the eq on input_meta.live_window)
         dark_rule = next((r for r in self.rules if r.id == DARK_LIVE), None)
         window = rule_eq(dark_rule, LIVE_WINDOW_FIELD)
@@ -3103,7 +3112,7 @@ class Running:
 def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
           out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
           sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None,
-          suspect_timeout=SUSPECT_TIMEOUT):
+          suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None):
     """Everything before the loop: the notifier, the HostWatch, the page
     server and the registry row (raqib/watch.py's, reused). attach_hooks:
     the person's --attach-hooks (or the window's checkbox), False by
@@ -3122,7 +3131,8 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
         watcher = HostWatch(reader, catalog, rules, notifier, every=every, window=window, rounds_max=rounds,
                             out=out, err=err, home=home, platform=platform, attach_hooks=attach_hooks,
                             sysmon=sysmon, installer=installer, os_follow=os_follow, suspect=suspect,
-                            suspect_threshold=suspect_threshold, suspect_timeout=suspect_timeout)
+                            suspect_threshold=suspect_threshold, suspect_timeout=suspect_timeout,
+                            suspect_every=suspect_every)
     except HostError as exc:
         notifier.close()
         raise watch.WatchError(str(exc))
@@ -3240,14 +3250,96 @@ def close(running):
         running.notifier.close()
 
 
+# --- the fixtures' rounds (M7.6c REDO E-8, ADR-0008 Amendment E) --------------------------------------------
+# raqib/rules/fixturegen.py makes the host rules' fixtures at any thresholds, but the rules package never imports
+# this module (A1: it would bring the suspect layer, the notifier and the readers with it): the caller hands
+# fixturegen this builder, a HostWatch fed fake rounds with a fake clock (as tests/fixtures/host/make.py did).
+
+class FixtureClock:
+    def __init__(self):
+        self.t = 0.0
+
+    def __call__(self):
+        return self.t
+
+
+class FixtureFollow:
+    """M7.5 E2: a fake os follow: one pass that writes nothing, then waits
+    for the Stop; the os lines are appended by fixture_rounds, between rounds."""
+
+    def __call__(self, root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None,
+                 helpers=None):
+        if on_pass:
+            on_pass(1, None)
+        stop.wait(60)
+        return 1
+
+
+def fixture_rounds(names, catalog, rules, home, inventory, sources=True, os_rounds=None, w=None, every=None,
+                   seen=None):
+    """The HostWatch fed these rounds in order (finished). inventory(name):
+    the inventory of a round name. sources False: a file stands where the
+    sources directory would be, so no source can be attached (HOST-UNWATCHED's
+    fixtures). The Sysmon check says no (platform "fixture"): every tree gets
+    the host source. os_rounds (M7.5 E2): the Sysmon check says yes, every
+    tree gets a fake os follow, and before each of these rounds
+    fixturegen.os_lines() are appended to the rhythm tree's per-tree file.
+    w: the W the synthetic gaps stay in; every: the rounds' period (default
+    fixturegen.EVERY); seen: a list each round's record is appended to as it
+    is made (HostWatch keeps only its last ROUNDS_KEPT)."""
+    from raqib.rules import fixturegen
+    every = fixturegen.EVERY if every is None else every
+    invs = [inventory(n) for n in names]
+    if not sources:
+        os.makedirs(os.path.join(home, ".raqib", "host"), exist_ok=True)
+        with open(os.path.join(home, ".raqib", "host", SOURCES_DIR), "w") as f:
+            f.write("not a directory: make.py (NO_SOURCES)\n")
+    feed = iter(invs)
+    clock = FixtureClock()
+    notifier = notify.Notifier(HOST, enabled=False, reason="fixture", host=True)
+    os_kw = {} if os_rounds is None else {"os_follow": FixtureFollow()}
+    watch = HostWatch(lambda: next(feed), catalog, rules, notifier, every=every, out=None, err=io.StringIO(),
+                      clock=clock, wall=lambda: fixturegen.WALL0 + clock.t, home=home, platform="fixture",
+                      run="fixture-run",   # C-2: a fixed run id, so the fixtures are what make.py makes
+                      sysmon=(lambda: (False, "fixture: no Sysmon")) if os_rounds is None
+                      else (lambda: (True, "fixture: a synthetic os source (make.py)")), **os_kw)
+    seq = 0
+    for k, name in enumerate(names, start=1):
+        if os_rounds is not None and k in os_rounds:
+            (key,) = [x for x in watch.trees if x[0] == fixturegen.RHYTHM_PID]
+            src = watch.sources[key]
+            src.first_pass.wait(5)
+            lines, seq = fixturegen.os_lines(k, name.split(":")[1], seq, w=w)
+            with open(src.path, "a", encoding="ascii", newline="\n") as f:
+                f.write("".join(json.dumps(x, separators=(",", ":"), ensure_ascii=True) + "\n" for x in lines))
+        before = watch.round_lines[-1] if watch.round_lines else None
+        watch.tick(wait=30)
+        if seen is not None and watch.round_lines and watch.round_lines[-1] is not before:
+            seen.append(watch.round_lines[-1])
+        clock.t += every
+    watch.finish()
+    return watch
+
+
+def fixture_builder(catalog=None):
+    """The round builder fixturegen.generate takes (E-8): fixture_rounds
+    over discover's catalog (default: the package's endpoints.yaml)."""
+    catalog = discover.load_catalog(discover.CATALOG) if catalog is None else catalog
+
+    def build(names, rules, home, **kw):
+        return fixture_rounds(names, catalog, rules, home, **kw)
+    return build
+
+
 def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
             out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
-            sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None):
-    """raqib watch --host [--attach-hooks] [--suspect BACKEND]; the exit code of the final report."""
+            sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None):
+    """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code."""
     out = out or sys.stdout
     running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, out, err, environ, home,
                     refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon, installer=installer,
-                    os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold)
+                    os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
+                    suspect_every=suspect_every)
     try:
         crash = loop(running)
         text, code = conclude(running, crash)

@@ -51,3 +51,5 @@ fixtures:
     - tests/fixtures/rules/NEW-AGENT/negative-history-only.json
     - tests/fixtures/rules/NEW-AGENT/negative-gone-and-back.json
     - tests/fixtures/rules/NEW-AGENT/negative-act-root-only.json
+# M7.6c (ADR-0008 Amendment B): no threshold of this rule may be set (its match declares none).
+bounds: {}

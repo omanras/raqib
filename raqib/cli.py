@@ -95,7 +95,7 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       already in the trace at the start are history: shown, never notified.
       Notifications are off under CI or with --no-notify.
       Ctrl-C, or a crash, prints the final report; exit as for report.
-  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND] [--no-open] [--no-notify] [--port N]
+  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
       of it; Windows one sample of the OS API), read-only; nothing installed,
@@ -124,7 +124,7 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       RHYTHM (M7.4, anchor, medium): K talk-then-act cycles to one
       destination in R rounds (K=3, W=30 s, R=10 in HOST-RHYTHM.yaml). --suspect
       BACKEND (ollama[:MODEL], anthropic[:MODEL], fake:FILE; off by default):
-      every R rounds each unknown tree's host record (hashes and names) goes
+      every N rounds (--suspect-every N, default 10) each unknown tree's host record (hashes and names) goes
       to the suspect layer, the only network call; it may raise suspicion,
       never acquit (A2); a raised suspicion is a finding of the tree (exit 1).
   proxy --listen 127.0.0.1:PORT --upstream URL --log PATH [--cwd DIR] [--allow-plain-upstream]
@@ -357,11 +357,15 @@ def _parser():
                         " only write into a project; off by default, ADR-0007 H-1)")
     # M7.4 (ADR-0007 decision 4, E3): the suspect layer over unknown trees, off by default.
     w.add_argument("--suspect", metavar="BACKEND", default=None,
-                   help="--host: every R rounds hand each unknown tree's host record (hashes and names) to the suspect"
+                   help="--host: every N rounds (--suspect-every N, default 10) hand each unknown tree's host record (hashes and names) to the suspect"
                         " layer: ollama[:MODEL], anthropic[:MODEL] or fake:ANSWERS.json; it may raise suspicion, never"
                         " acquit (A2); off by default")
     w.add_argument("--suspect-threshold", type=float, default=None, metavar="X",
                    help="--host --suspect: the suspicion threshold in (0, 1] (default %g)" % suspect_core.DEFAULT_THRESHOLD)
+    # M7.6c REDO E-3 (ADR-0008 Amendment E): the suspect layer's period is the watch's option, not a rule's eq
+    w.add_argument("--suspect-every", type=int, default=None, metavar="N",
+                   help="--host --suspect: ask the suspect layer every N rounds, 1..%d (default %d)"
+                        % (host.SUSPECT_EVERY_MAX, host.SUSPECT_EVERY))
     px = sub.add_parser("proxy", help="relay an agent's model API calls and record its tool calls (M5.2, ADR-0003)")
     px.add_argument("--listen", required=True, metavar="127.0.0.1:PORT",
                     help="where the agent's base URL points; 127.0.0.1 only (PORT 0: any free port)")
@@ -471,7 +475,7 @@ def rules_overlay_cmd(args, out):
         if args.set:
             said = overlay.set_status(args.set[0], args.set[1])
         elif args.threshold:
-            said = overlay.set_threshold(*args.threshold)
+            said = overlay.set_threshold(*args.threshold, say=_say_measuring)
         elif args.add:
             said = overlay.add_rule(args.add)
         elif args.reset:
@@ -492,10 +496,17 @@ def rules_overlay_cmd(args, out):
     return 0
 
 
+def _say_measuring(line):
+    """M7.6c REDO E-7: said while a measurement of the overlay's thresholds runs (it may take seconds)."""
+    sys.stderr.write("raqib: %s\n" % line)
+    sys.stderr.flush()
+
+
 def _overlay_catalog():
-    """M7.6: the catalog as every watch loads it: the package's, ~/.raqib/rules.d and ~/.raqib/rules.yaml."""
+    """M7.6: the catalog as every watch loads it: the package's, ~/.raqib/rules.d and ~/.raqib/rules.yaml.
+    M7.6c REDO E-7: measured only when the overlay or the catalog changed since the last measurement."""
     try:
-        return overlay.load()
+        return overlay.load(say=_say_measuring)
     except engine.RuleError as exc:
         raise UsageError(str(exc))
 
@@ -954,7 +965,7 @@ def cmd_watch(args, out):
     if args.host:
         return _watch_host(args, out)
     if (args.every is not None or args.window is not None or args.rounds is not None or args.attach_hooks
-            or args.suspect is not None or args.suspect_threshold is not None):
+            or args.suspect is not None or args.suspect_threshold is not None or args.suspect_every is not None):
         raise UsageError("--every, --window, --rounds, --attach-hooks and --suspect apply to watch --host only")
     rules, gap, evaluator = _watch_setup()
     try:
@@ -987,6 +998,13 @@ def _watch_host(args, out):
     rules = _overlay_catalog()   # M7.6 (ADR-0008): the overlay and rules.d, said at the start
     if args.suspect_threshold is not None and args.suspect is None:
         raise UsageError("--suspect-threshold applies with --suspect")
+    if args.suspect_every is not None:   # M7.6c REDO E-3
+        if args.suspect is None:
+            raise UsageError("--suspect-every applies with --suspect")
+        try:
+            host.check_suspect_every(args.suspect_every)
+        except ValueError as exc:
+            raise UsageError("--suspect-every: %s" % exc)
     backend = None
     if args.suspect is not None:
         try:
@@ -1000,7 +1018,7 @@ def _watch_host(args, out):
         return host.command(catalog, rules, every=every, window=window, rounds=args.rounds, no_open=args.no_open,
                             no_notify=args.no_notify, port=args.port, out=out, refresh=args.refresh,
                             attach_hooks=args.attach_hooks, suspect=backend,
-                            suspect_threshold=args.suspect_threshold)
+                            suspect_threshold=args.suspect_threshold, suspect_every=args.suspect_every)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 
