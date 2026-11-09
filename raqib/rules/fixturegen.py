@@ -59,6 +59,7 @@ import datetime
 import io
 import json
 import os
+import re
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -339,6 +340,54 @@ def run_lines(names, catalog, rules, sources=True, os_rounds=None, inventory=Non
         return [r["lines"] for r in seen]
 
 
+# --- machine-independent paths (M7.6c follow-up) ----------------------------------------------------------------
+# Every path written into shipped or generated data is relative to the repository root, so a regeneration is
+# the same on every machine and no local path (a user name) ships in the package. portable() is how make.py
+# writes HOSTDATA; machine_path_problem() is what the replay refuses (packaged()) and what the tests assert.
+REPO_ROOT = os.path.dirname(os.path.dirname(HERE))   # the checkout (or site-packages) holding raqib/
+# The home names the exports were redacted to (tests/fixtures/discover headers): the only ones data may carry.
+PLACEHOLDER_HOMES = ("user", "field")
+HOME_PATH = re.compile(r"(?:/home/|/Users/|[A-Za-z]:(?:\\\\|\\|/)Users(?:\\\\|\\|/))([A-Za-z0-9._-]+)")
+
+
+def _roots(root):
+    out = []
+    for r in (os.path.abspath(root), os.path.realpath(root)):
+        r = r.rstrip("\\/")
+        if r and r not in out:
+            out.append(r)
+    return out
+
+
+def portable(obj, root=REPO_ROOT):
+    """obj (JSON-like) with every path under the absolute root written
+    relative to it, with / between its parts: "<root>/tests/fixtures/x.txt
+    (note)" -> "tests/fixtures/x.txt (note)". Keys and values alike."""
+    if isinstance(obj, dict):
+        return {portable(k, root): portable(v, root) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [portable(v, root) for v in obj]
+    if not isinstance(obj, str):
+        return obj
+    for r in _roots(root):
+        obj = re.sub(re.escape(r) + r"[\\/]([^\s\"()]*)", lambda m: m.group(1).replace("\\", "/"), obj)
+    return obj
+
+
+def machine_path_problem(text, root=REPO_ROOT):
+    """Why text is not machine-independent (the absolute root of this
+    checkout, or a home directory other than the redaction placeholders),
+    or None."""
+    for r in _roots(root):
+        for form in (r, r.replace("\\", "\\\\"), r.replace("\\", "/")):
+            if form in text:
+                return "the absolute path %s of this machine" % form
+    for m in HOME_PATH.finditer(text):
+        if m.group(1) not in PLACEHOLDER_HOMES:
+            return "a local home path %s" % m.group(0)
+    return None
+
+
 # --- the packaged inventories (the real exports' rounds) -------------------------------------------------------
 
 _PACKAGED = {}
@@ -349,9 +398,13 @@ def packaged():
     if not _PACKAGED:
         try:
             with open(HOSTDATA, encoding="ascii") as f:
-                data = json.load(f)
+                text = f.read()
+            data = json.loads(text)
         except (OSError, ValueError) as exc:
             raise GenerateError("the packaged inventories cannot be read (%s): %s" % (HOSTDATA, exc))
+        why = machine_path_problem(text)
+        if why:   # M7.6c follow-up: data that would not regenerate the same on another machine is not replayed
+            raise GenerateError("%s holds %s (make.py writes every path relative)" % (HOSTDATA, why))
         if not (isinstance(data, dict) and isinstance(data.get("inventories"), dict)):
             raise GenerateError("%s holds no inventories" % HOSTDATA)
         _PACKAGED.update(data["inventories"])

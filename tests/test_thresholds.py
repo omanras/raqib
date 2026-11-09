@@ -393,3 +393,58 @@ def test_e5_the_questions_file_has_the_gate_numbers_and_the_tests():
     for q in ("Q-1", "Q-2", "Q-3", "Q-4", "Q-5", "Q-6"):
         assert q in text
     assert "2854 passed, 22 skipped" in text and "test_thresholds.py" in text
+
+
+# --- follow-up (CI run 42584260231): machine-independent paths in shipped host data -------------------------------
+
+def _root_forms():
+    forms = set()
+    for r in (str(ROOT), os.path.realpath(str(ROOT))):
+        forms |= {r, r.replace("\\", "\\\\"), r.replace("\\", "/")}
+    return forms
+
+
+def test_followup_no_shipped_or_generated_file_holds_this_checkouts_path():
+    files = [p for p in (ROOT / "raqib").rglob("*") if p.is_file() and p.suffix in (".json", ".yaml")]
+    files += list((ROOT / "tests" / "fixtures" / "rules").rglob("*.json"))
+    files += list((ROOT / "tests" / "fixtures" / "host" / "notes").rglob("*.json"))
+    assert len(files) > 50
+    for p in files:
+        text = p.read_text(encoding="utf-8")
+        assert not any(f in text for f in _root_forms()), p
+    made = fixturegen.generate(at("HOST-RHYTHM", k=4))
+    text = json.dumps(made["runs"])
+    assert not any(f in text for f in _root_forms())
+
+
+def test_followup_the_package_data_has_no_local_home_path():
+    """The generated package data (hostdata): only the exports' redaction placeholders (user, field) as homes.
+    The catalog YAMLs' comments name illustrative homes (/home/alice in SCOPE-CWD-ROOT); they are covered by the
+    checkout-path test above, not this one."""
+    files = list((ROOT / "raqib" / "rules" / "hostdata").glob("*.json"))
+    assert files
+    for p in files:
+        assert fixturegen.machine_path_problem(p.read_text(encoding="utf-8")) is None, p
+    for bad in ("/home/claude/x", "/Users/bob/x", "C:\\Users\\bob\\x", "C:\\\\Users\\\\bob", "C:/Users/bob",
+                str(ROOT / "tests" / "x.txt")):
+        assert fixturegen.machine_path_problem(bad), bad
+    for ok in ("/home/user/x", "C:\\\\Users\\\\field\\\\x", "tests/fixtures/discover/linux/proc.txt"):
+        assert fixturegen.machine_path_problem(ok) is None, ok
+
+
+def test_followup_one_helper_writes_paths_relative_and_the_replay_refuses_machine_data(tmp_path, monkeypatch):
+    root = str(tmp_path / "checkout")
+    sep = os.sep
+    got = fixturegen.portable({"catalog": root + sep + "raqib" + sep + "discover" + sep + "endpoints.yaml",
+                               "label": [root + sep + "tests" + sep + "a.txt (saved from live /proc)"], "n": 3}, root)
+    assert got == {"catalog": "raqib/discover/endpoints.yaml", "label": ["tests/a.txt (saved from live /proc)"], "n": 3}
+    text = (ROOT / "tests" / "fixtures" / "host" / "make.py").read_text(encoding="ascii")
+    assert "fixturegen.portable(inventory(name, catalog), ROOT)" in text and "CATALOG_WORD" not in text
+    data = json.loads(Path(fixturegen.HOSTDATA).read_text(encoding="ascii"))
+    data["inventories"]["windows"]["note"] = str(ROOT / "tests" / "fixtures" / "discover" / "windows")
+    doctored = tmp_path / "inventories.json"
+    doctored.write_text(json.dumps(data), encoding="ascii")
+    monkeypatch.setattr(fixturegen, "HOSTDATA", str(doctored))
+    monkeypatch.setattr(fixturegen, "_PACKAGED", {})
+    with pytest.raises(fixturegen.GenerateError, match="the absolute path .* of this machine"):
+        fixturegen.packaged()

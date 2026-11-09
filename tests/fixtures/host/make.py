@@ -291,20 +291,14 @@ def build_notes():
     return out
 
 
-CATALOG_WORD = "raqib/discover/endpoints.yaml"   # the inventory's catalog path, written relative in HOSTDATA
-
-
 def build_hostdata():
     """M7.6c: the text of raqib/rules/hostdata/inventories.json: the
     inventory discover.run gives for each export round of HOSTDATA_NAMES
-    (its catalog path written relative: the file is the same on every
-    machine), compact, sorted keys, ASCII."""
+    with every path written relative to the repository root
+    (fixturegen.portable: the catalog's, each source file's label), so the
+    file is the same on every machine; compact, sorted keys, ASCII."""
     catalog = discover.load_catalog(discover.CATALOG)
-    invs = {}
-    for name in HOSTDATA_NAMES:
-        inv = inventory(name, catalog)
-        inv["catalog"] = CATALOG_WORD
-        invs[name] = inv
+    invs = {name: fixturegen.portable(inventory(name, catalog), ROOT) for name in HOSTDATA_NAMES}
     doc = {"about": "M7.6c (ADR-0008 Amendment B): discover.run's inventory of each discover export round"
                     " raqib/rules/fixturegen.py replays at a changed threshold; written by"
                     " tests/fixtures/host/make.py from tests/fixtures/discover (real, redacted, and SYNTHETIC"
