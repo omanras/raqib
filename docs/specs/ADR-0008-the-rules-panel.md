@@ -61,3 +61,45 @@ off.
 - M7.6 the overlay, `raqib rules`, the panel, "rules off" everywhere.
 - M7.6b the window's look pass (after M7.6, so the look is of the real
   screens).
+
+## Amendment A (the Table, 2026-11-09) - rulings on review 2026-11-09-M7.6.md (5dca13a)
+Builder's record: docs/review/2026-11-09-M7.6-questions.md (Q-1..Q-14).
+CI run 42571454875 for 5dca13a: six jobs success on the first commit (the
+Tk Rules test ran on windows). Verdict: REDO on P1; the Table's rulings
+A-2..A-9; the rest recorded.
+- A-1 (P1, A4, decision 5) `--add` copies nothing whose destination is not
+  under `~/.raqib/rules.d/<rule>/` by realpath after joining: fixture paths
+  in a user YAML must be relative, contain no `..`, no drive, no `\\` or `/`
+  root, no reparse point on the way (the M7.2b I-1 check), on every OS
+  (ntpath rules checked too); a YAML that names any other path is refused
+  whole with the path quoted. Every later load reads fixtures only from
+  under rules.d by the same check. Tests with the reviewer's probes
+  (`..\..\AppData\...\Startup\x.json`, `C:/Users/Public/x.json`) under both
+  path rules; the A4 AST test asserts the realpath guard, not a text match.
+- A-2 (P2, Q-4) A watch where an off rule would have fired is not CLEAN:
+  the result word is "CLEAN (N findings suppressed by the overlay)" with
+  exit 0 kept (the person turned it off), the band item turns red while
+  the suppressed count is non-zero, and the final report's RULES OFF
+  section comes first when it suppressed anything. The exit code stays the
+  person's choice; the words do not.
+- A-3 (P3, P4, A6) A changed threshold is measured: on `--threshold` and
+  at load, the overlaid rule is run on its own fixtures; a threshold under
+  which a positive no longer fires, or a negative fires, is refused with
+  the fixture named ("k=5: positive-3-cycles no longer fires"). A rule
+  that can never fire under its thresholds (k > the rounds r can hold) is
+  refused the same way. r's second role (how often the suspect layer is
+  asked) is split: the suspect period is its own eq field, `suspect_every`.
+- A-4 (P5) A user rule listing one fixture as both positive and negative
+  is refused (the loader's check; budgets do not excuse it).
+- A-5 (P6) A user rule refused at load is counted in "N rules off" with
+  the reason "(refused: <why>)" in the band, header and report.
+- A-6 (P7) A HOST-class user rule is refused at `--add` with "host rules
+  are fixed in v1" until the host watch loads user rules (a later task).
+- A-7 (P8) `raqib rules TRACE`, `report` and `ui` print one line when an
+  overlay file exists: "an overlay exists at <path>; this command judges
+  the catalog as declared" - the line the Table's Q-2 ruling owes.
+- A-8 (Q-1) The built-in bounds stand for v1; the YAML `bounds:` block is
+  the Table's later task; recorded. Q-2 (which commands apply the overlay)
+  ratified with A-7. Q-3, Q-5, Q-6, Q-7 ratified. Q-8's `--remove`: a
+  later task. Q-9..Q-14 recorded; Q-12 (the panel's plain look) is M7.6b.
+- A-9 Every REDO change carries a test for the behaviour it adds (D-8).
