@@ -20,6 +20,16 @@ class: HOST
 # (the streak ends when R rounds pass without a cycle). K, W and R are the
 # eq values below: host.py reads them from this file (rhythm_params) and
 # writes them on the line, so the line and the rule cannot disagree.
+# M7.5 E2 (ADR-0007 Amendment M, lesson 2): the beats come from EVERY source
+# the tree has, through host.py's act_beats and talk_beats: acts are the
+# host's new children (above), the os source's Sysmon event 1 lines below
+# the root (depth >= 1) at their UtcTime, and the hooks source's Bash calls
+# at their ts; talks are the host's connections (above) and the os source's
+# Sysmon event 3 lines at their UtcTime (destination "os:" + the first 12
+# hex of the hash of the destination: the os source keeps none in clear).
+# A source's beat is placed in the round whose interval holds its time;
+# history lines of a source are not beats. The act_basis of a line names
+# where its acts came from (started, stat, round, os, hooks).
 kind: anchor
 severity: medium
 # Measured on SYNTHETIC fixtures only (K-9): the negatives are the four
@@ -27,7 +37,8 @@ severity: medium
 # negative-two-cycles.json (K-1 cycles), negative-changing-destination.json
 # (a new destination each turn), negative-acts-between-rounds.json (children
 # that live between two rounds are never seen) and negative-no-talk.json
-# (acts with no talk). 0 of 4 fire; the budget is that measure, 0. The
+# (acts with no talk), and M7.5 E2 (re-measured, A6) negative-os-two-cycles.json
+# (K-1 cycles of an os source). 0 of 5 fire; the budget is that measure, 0. The
 # benign desktops' arrivals are not listed: a tree seen in one round cannot
 # have a cycle. The field source - an IDE that polls one server and builds
 # for hours - is the commander's to measure (as the act-root budget); until
@@ -43,7 +54,9 @@ holes:
   - "bytes are recorded and compared, not judged by size: a talk is any change of the counts"
   - "a benign program that polls one server and spawns helpers (an IDE, an updater) has the same rhythm: a medium finding, not a verdict"
   - "a tree the catalog names (by image or endpoint) is not judged by rhythm: an agent that takes a catalog agent's name escapes this rule (and is knocked as NEW-AGENT instead)"
-description: "A line of raqib watch --host (tool HostTree, source os) for a candidate tree whose think-act cycle reached K cycles to one destination within the last R rounds: in K rounds a child of the tree started within W seconds after the tree talked to the same remote host:port (a connection new in the round, or one whose bytes moved: input_meta.rhythm, computed by raqib/host.py from the rounds' records; K, W and R are this rule's own eq values). It fires once per streak (input_meta.rhythm.fires); the streak ends when R rounds pass without a cycle. Only an UNKNOWN tree is judged (ADR-0007 decision 4: input_meta.named false); a benign program is unknown to the catalog and is judged too: the rhythm is the tree's, not its name's. A tree there at the start that cycles under the watch fires: the cycle is live (K-10). The line cites the rounds and the record lines of each beat (A5)."
+  - "M7.5 E2: the os source's destination is a hash of (hostname, ip, port, protocol): the same server reached by another name or address is another destination, and an os talk and a host talk to one server are two destinations"
+  - "M7.5 E2: several cycles inside one round's interval count as one (each act round counts once per destination), so an os source that sees a fast agent's every turn still counts at most one cycle per round"
+description: "A line of raqib watch --host (tool HostTree, source os) for a candidate tree whose think-act cycle reached K cycles to one destination within the last R rounds: in K rounds a child of the tree started within W seconds after the tree talked to the same remote host:port (a connection new in the round, or one whose bytes moved: input_meta.rhythm, computed by raqib/host.py from the rounds' records; K, W and R are this rule's own eq values). The sources of the beats (M7.5 E2): acts from the host's children, the os source's Sysmon event 1 (UtcTime) and the hooks source's Bash calls; talks from the host's connections and the os source's Sysmon event 3 (UtcTime). It fires once per streak (input_meta.rhythm.fires); the streak ends when R rounds pass without a cycle. Only an UNKNOWN tree is judged (ADR-0007 decision 4: input_meta.named false); a benign program is unknown to the catalog and is judged too: the rhythm is the tree's, not its name's. A tree there at the start that cycles under the watch fires: the cycle is live (K-10). The line cites the rounds and the record lines of each beat (A5)."
 summary: "{input_meta.named_word} tree {input_meta.image} pid {input_meta.pid}: {input_meta.rhythm.cycles} talk-then-act cycles to {input_meta.rhythm.destination} in the last {input_meta.rhythm.r} rounds (round {input_meta.round})"
 match:
   all:
@@ -60,8 +73,12 @@ match:
 fixtures:
   positive:
     - tests/fixtures/rules/HOST-RHYTHM/positive-three-cycles.json
+    - tests/fixtures/rules/HOST-RHYTHM/positive-os-three-cycles.json
+    - tests/fixtures/rules/HOST-RHYTHM/positive-os-talks-host-acts.json
+    - tests/fixtures/rules/HOST-RHYTHM/positive-host-talks-os-acts.json
   negative:
     - tests/fixtures/rules/HOST-RHYTHM/negative-two-cycles.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-changing-destination.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-acts-between-rounds.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-no-talk.json
+    - tests/fixtures/rules/HOST-RHYTHM/negative-os-two-cycles.json

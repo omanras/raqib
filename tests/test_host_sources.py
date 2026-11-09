@@ -759,7 +759,7 @@ def test_e5_readme_three_lines():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
-    assert len(lines) == 9   # M7.4: + three lines (HOST-RHYTHM, --suspect, the only network call): test_rhythm.py
+    assert len(lines) == 11   # M7.4: + three lines (HOST-RHYTHM, --suspect, the only network call): test_rhythm.py; M7.5: + two
     assert "os source (Sysmon)" in lines[3] and "--attach-hooks" in lines[4] and "HOST-UNWATCHED" in lines[5]
     assert "only thing ever written into a project" in lines[4]
 

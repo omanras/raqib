@@ -36,6 +36,14 @@ the same engine as every YAML rule (raqib/rules/engine.py):
   and knocks once. A round where the footprint links to a tree clears the
   streak, with a note when it had fired. A round where the footprint is
   unjudged, and a round with no inventory, neither counts nor clears.
+  M7.5 E1 (ADR-0007 Amendment M) and REDO N-1: a footprint linked to a
+  live (not history) candidate of this watch within the last DARK_WINDOW
+  rounds (the YAML's input_meta.live_window) carries input_meta.was_live;
+  its streak of three is not the rule's but a note, "dark after a live tree
+  (note)", listed and never knocked; when the window closes during a dark
+  streak a new streak starts, and its third round knocks. M7.5 E2: HOST-RHYTHM's beats come from every source of the tree
+  (act_beats, talk_beats). M7.5 E3: every knock goes through _knock and is
+  listed in the report's KNOCKS ledger with its title, id and status.
 The engine reads only the host lines; the history, the streak and the
 "candidate before" are facts of the record that this module computes from
 the inventories, deterministically (A1). Every finding cites its host line;
@@ -190,6 +198,9 @@ RHYTHM_HOLES_NOTE = ("HOST-RHYTHM (M7.4) sees only what the rounds see: a child 
                      " (the rule's holes)")
 # M7.4 E3: the suspect layer over unknown trees (A2: it raises suspicion, never acquits)
 SUSPECT = "SUSPECT"                # the knock and the finding word of a raised suspicion on a tree
+# M7.5 E3: the field of a tree entry that holds the status of a knock of each rule (_folds writes only there)
+TREE_FIELDS = {NEW_AGENT: "knocked", NEW_UNKNOWN: "knocked", UNWATCHED: "unwatched", RHYTHM: "rhythm",
+               SUSPECT: "suspect_knock"}
 SUSPECT_TIMEOUT = 120.0            # K-3: the budget of one suspect call, and the backend call's own timeout
 SUSPECT_JOIN_SECONDS = 5.0         # Stop: how long the end waits for a suspect call still out
 SUSPECT_BATCH = 40                 # K-1: at most this many lines of one tree per call (core.DEFAULT_WINDOW)
@@ -245,6 +256,10 @@ CITE_TEXT_MAX = 240                # the text of a cited record line on a host l
 TAIL_BYTES = 1 << 20               # how much of rounds.jsonl is read at the start for its last line (C-2)
 READER_HOLES = ("reader-late", "reader-failed", "reader-out", "reader-held")
 DARK_ROUNDS = 3                    # AGENT-DARK-LIVE.yaml fires at streak 3 (a test holds them equal)
+KNOCKS_KEPT = 200                  # M7.5 REDO N-5: knocks kept in the state (the report lists every one)
+DARK_NOTE = "dark after a live tree (note)"   # M7.5 E1: what a footprint dark after its live tree is called
+DARK_WINDOW = 3 * DARK_ROUNDS      # M7.5 REDO N-1: R_dark, the live window (AGENT-DARK-LIVE.yaml declares it)
+LIVE_WINDOW_FIELD = "input_meta.live_window"
 HOLE_EVENT = "HOST-HOLE"
 EVERY_DEFAULT = 10.0
 DEADLINE_FACTOR = 2                # a reader not back within 2 x T is a hole
@@ -672,6 +687,7 @@ class Feed:
         self.ends = {}            # line number -> the byte its line ends at
         self.history_bytes = history_bytes
         self.epoch = 0
+        self.beat_pos = (0, 0)    # M7.5 E2: (epoch, records) the rhythm has taken beats from
 
     def poll(self):
         """(hole texts, changed): what the Tail saw, and whether lines arrived."""
@@ -826,6 +842,26 @@ def rhythm_params(rule):
     return found["k"], found["w"], found["r"]
 
 
+def rule_eq(rule, field):
+    """M7.5 REDO N-1: the positive int `eq` a rule's match declares on
+    field, or None (as rhythm_params reads K, W and R)."""
+    found = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("field") == field and "eq" in node:
+                found.append(node["eq"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk((rule.doc if rule is not None else {}).get("match"))
+    if len(found) != 1 or not isinstance(found[0], int) or isinstance(found[0], bool) or found[0] <= 0:
+        return None
+    return found[0]
+
+
 def utc_time(text):
     """A start time the reader gave, as an aware UTC datetime, or None when
     it is not an ISO time (hostwin's GetProcessTimes text is; an export's
@@ -844,11 +880,15 @@ def rhythm_of(ring, k, w, r, n):
 
     ring: the tree's rounds, oldest first, each {"round", "at" (datetime),
     "talks": {remote: [cites]}, "acts": [{"pid", "image", "at" (datetime),
-    "basis", "cites"}], "seq"}. A talk beat is a remote in a round's talks
-    (a connection to one remote host:port, new or still established). An
-    act is a child first seen in a round (never in the tree's first round),
-    at its start time where the reader gave one ("started"), else at the
-    round's time ("round"). Only rounds n-R+1..n count.
+    "basis", "cites"}], "seq"} and, M7.5 E2, "talk_at": {remote: [times]}
+    for the talks a source gave with their own times (Sysmon event 3);
+    a talk without one is at the round's time. A talk beat is a remote in a
+    round's talks (a connection to one remote host:port, new or still
+    established; or an os destination). An act is a child first seen in a
+    round (never in the tree's first round), at its start time where the
+    reader gave one ("started"), else at the round's time ("round"), or a
+    source's act at its own time ("os": Sysmon event 1's UtcTime; "hooks":
+    a Bash call's ts). Only rounds n-R+1..n count.
     A cycle to D is one talk beat to D followed by one act round: for each
     round e with acts (ascending), the latest round m <= e that talked to D,
     is not yet paired with another act round for D, and has m.at <= a <=
@@ -872,7 +912,9 @@ def rhythm_of(ring, k, w, r, n):
                 continue
             for m in reversed([x for x in ring if x["round"] <= e["round"] and dest in x["talks"]
                                and x["round"] not in used and x["at"] is not None]):
-                acts = [a for a in e["acts"] if a["at"] is not None and m["at"] <= a["at"] <= m["at"] + window]
+                times = (m.get("talk_at") or {}).get(dest) or [m["at"]]   # M7.5 E2: a source talk's own time
+                acts = [a for a in e["acts"] if a["at"] is not None
+                        and any(t <= a["at"] <= t + window for t in times)]
                 if acts:
                     used.add(m["round"])
                     cycles.append({"round": e["round"], "seq": e["seq"], "talk_round": m["round"],
@@ -888,6 +930,30 @@ def rhythm_of(ring, k, w, r, n):
     dest = sorted(per, key=lambda d: (-len(per[d]), d))[0]
     return {"cycles": len(per[dest]), "destination": dest, "rounds": [c["round"] for c in per[dest]],
             "any": any_rounds, "beats": per[dest][-BEATS_KEPT:]}
+
+
+SOURCE_BASES = ("os", "hooks")     # M7.5 E2: the act bases of a source's own record, with their own times
+ACT_SAME_SECONDS = 1.0             # M7.5 REDO N-9: two sources' acts this close (and of one image) are one child
+ACTS_SEEN_KEPT = 400               # the acts of a tree remembered for N-9 (a ring of 10 rounds holds far fewer)
+
+
+def _image_word(image):
+    """N-9: an image name compared across sources: lower case, no .exe."""
+    word = str(image or "").strip().lower()
+    return word[:-4] if word.endswith(".exe") else word
+
+
+def _bin(ring, at):
+    """M7.5 E2: the ring entry a beat belongs to: the latest round whose
+    interval (from, at] began before the beat's time; a beat older than the
+    ring goes to its oldest round; None (a host beat, read in this round)
+    goes to the latest."""
+    if at is None:
+        return ring[-1]
+    for e in reversed(ring):
+        if e.get("from") is None or e["from"] < at:
+            return e
+    return ring[0]
 
 
 # --- suspicion (M7.4 E3; ADR-0001 section 5; A2: raise, never acquit) ---------------------------------
@@ -1075,6 +1141,8 @@ class HostWatch:
         self.history_round = None    # the first round with an inventory
         self.footprints = {}         # path -> {agent, streak, state, fired, ...}
         self.findings = []
+        self.knocks = []             # M7.5 E3: every knock of the watch (the KNOCKS ledger of the report)
+        self.dark_notes = []         # M7.5 E1: "dark after a live tree (note)": listed, never a knock or an alarm
         self.notes = []              # cleared darks and other notes
         self.holes = []
         self.seq = 0
@@ -1132,8 +1200,18 @@ class HostWatch:
                        " defaults K=%d W=%d R=%d and the rule cannot fire" % (
                            RHYTHM, ", ".join(RHYTHM_FIELDS.values()), RHYTHM_K, RHYTHM_W, RHYTHM_R))
         self.rhythm_k, self.rhythm_w, self.rhythm_r = params or (RHYTHM_K, RHYTHM_W, RHYTHM_R)
+        # M7.5 REDO N-1: the live window of AGENT-DARK-LIVE, read from its YAML (the eq on input_meta.live_window)
+        dark_rule = next((r for r in self.rules if r.id == DARK_LIVE), None)
+        window = rule_eq(dark_rule, LIVE_WINDOW_FIELD)
+        if dark_rule is not None and window is None:
+            self._hole(self.t0, "host-rule", "%s does not declare its live window (eq on %s): the window is %d"
+                       " rounds and the rule cannot fire" % (DARK_LIVE, LIVE_WINDOW_FIELD, DARK_WINDOW))
+        self.dark_window = window or DARK_WINDOW
         self.rings = {}              # tree key -> its last R rounds (rhythm_of's ring)
         self.kids = {}               # tree key -> the (child pid, started) seen in its rounds
+        self.act_seen = {}           # M7.5 REDO N-9: tree key -> the acts counted, across sources
+        self.act_twins = 0           # N-9: acts not counted again (a second source's report of one child)
+        self.late_beats = {}         # M7.5 REDO N-4: tree word -> source beats read by the final poll (no round)
         self.rhythm_state = {}       # tree key -> {"fired", "last_cycle"} (once per streak)
         self.notes_said = set()      # M7.4 E1: the per-run notes said once
         self.blind = []              # K-8: the blind spots of the run (bytes, start times): counted apart
@@ -1247,12 +1325,18 @@ class HostWatch:
         return max(seqs) if seqs else ()
 
     def _folds(self, tokens, status, count):
-        """C-5: a folded knock, when its fold is delivered, says so where it was recorded."""
+        """C-5: a folded knock, when its fold is delivered, says so where it
+        was recorded. M7.5: and on its tree only in the field of ITS rule
+        (TREE_FIELDS): a source finding or a suspicion of the tree never
+        writes the NEW-AGENT status the report prints."""
         for container, key in tokens:
             container[key] = "folded: %s as %d more" % (status, count)
-            tree = self.trees.get(tuple(container.get("tree_key") or ())) if isinstance(container, dict) else None
-            if tree is not None:
-                tree["knocked"] = container[key]
+            if not isinstance(container, dict) or container.get("fkey") is not None:
+                continue   # a source finding: its status is its own entry's
+            field = TREE_FIELDS.get(container.get("rule_id"))
+            tree = self.trees.get(tuple(container.get("tree_key") or ()))
+            if tree is not None and field is not None:
+                tree[field] = container[key]
 
     # --- time and output -------------------------------------------------------
 
@@ -1268,8 +1352,54 @@ class HostWatch:
         hole = {"kind": kind, "detail": detail, "at": self.at(now), "notice": None, "round": round_}
         self.holes.append(hole)
         if knock:
-            hole["notice"] = self.notifier.notify(HOLE_EVENT, knock, now, token=(hole, "notice"))
+            hole["notice"] = self._knock(now, HOLE_EVENT, knock, hole, round_=round_)
         return hole
+
+    def _dark_note(self, now, n, fp, sample):
+        """M7.5 E1 (ADR-0007 Amendment M, lesson 1): a footprint dark for
+        DARK_ROUNDS rounds whose tree was a live candidate in THIS watch
+        (input_meta.was_live; AGENT-DARK-LIVE's match leaves it out) is the
+        agent's normal end, not a knock: "dark after a live tree (note)",
+        once per streak, said and listed (A3), citing its HostFootprint line
+        and the inventory's record lines (A5). Never a knock, never an alarm."""
+        fp["noted"] = True
+        note = {"round": n, "at": self.at(now), "path": fp["path"], "agent": fp["agent"], "streak": fp["streak"],
+                "live_round": fp["live_round"], "live_tree": fp.get("live_tree"), "run": self.run,
+                "cited_seq": [fp["line_seq"]], "sample": sample, "cites": list(fp.get("cites") or [])}
+        note["text"] = ("round %d: %s footprint %s: %s: no live tree for %d rounds since its tree %s was live (round"
+                        " %s, within the live window of %d rounds); not a knock, not an alarm (cites run %s seq %d)" % (
+                            n, fp["agent"], fp["path"], DARK_NOTE, fp["streak"], fp.get("live_tree"),
+                            fp["live_round"], self.dark_window, self.run, fp["line_seq"]))
+        fp["dark_notes"].append(note["text"])
+        self.dark_notes.append(note)
+        self.notes.append(note["text"])
+        self._say(now, "NOTE %s" % note["text"])
+        return note
+
+    def _knock(self, now, event, where, container, key="notice", limit_id=None, subject=None, round_=None):
+        """M7.5 E3: every knock of the watch goes through here: the
+        notifier's status, and a row of the KNOCKS ledger (round, event,
+        title, body, rate-limit id), whose status is read back from
+        container[key] when it is shown, so a fold's outcome (C-5, ADR-0005
+        D-4: written there by _folds) is what the ledger says."""
+        status = self.notifier.notify(event, where, now, token=(container, key), limit_id=limit_id, subject=subject)
+        title, body = self.notifier.texts(notify.clean(event, 48) or "RAQIB", where, subject)
+        self.knocks.append({"round": round_ if round_ is not None else self.rounds, "at": self.at(now),
+                            "event": event, "title": title, "body": body, "limit_id": limit_id or event,
+                            "called": status, "ref": (container, key)})
+        return status
+
+    def knock_rows(self, newest=None):
+        """The KNOCKS ledger as shown (report, state): each knock with its
+        status now (a folded one says what became of the fold). newest: only
+        the last N (N-5: the state; the report prints them all)."""
+        rows = []
+        for k in (self.knocks if newest is None else self.knocks[-newest:]):
+            container, key = k["ref"]
+            now = container.get(key) if isinstance(container, dict) else None
+            rows.append(dict({x: v for x, v in k.items() if x != "ref"},
+                             status=now if isinstance(now, str) and now else k["called"]))
+        return rows
 
     # --- one tick ---------------------------------------------------------------
 
@@ -1465,7 +1595,8 @@ class HostWatch:
             f = listed.get(path) or dark_paths.get(path)
             fp = self.footprints.setdefault(path, {"path": path, "agent": (f or {}).get("agent"), "streak": 0,
                                                    "fired": False, "state": None, "first_round": n,
-                                                   "dark_since": None, "cleared": []})
+                                                   "dark_since": None, "cleared": [], "was_live": False,
+                                                   "live_round": None, "noted": False, "dark_notes": []})
             if f is None:
                 state, link = "gone", None
             elif path in dark_paths:
@@ -1474,6 +1605,20 @@ class HostWatch:
                 state, link = "linked", f.get("candidate") or f.get("act_root")
             else:
                 state, link = "unjudged", None
+            if state == "linked" and f.get("candidate"):   # M7.5 E1: a candidate tree of THIS watch linked to it
+                lk = next((k for k, v in current.items() if v.get("id") == f.get("candidate")), None)
+                if lk is not None and not self.trees[lk].get("history"):   # N-1: a history link never makes it live
+                    fp.update(live_round=n, live_tree=tree_word(lk))
+            # N-1: live only within the last DARK_WINDOW rounds of a live (not history) candidate link
+            live = fp["live_round"] is not None and n - fp["live_round"] < self.dark_window
+            if fp["was_live"] and not live and fp["streak"]:
+                # the window closed during a dark streak (an unjudged round neither counts nor clears it): a fresh
+                # streak starts, and its third dark round knocks
+                fp.update(streak=0, noted=False, dark_since=None)
+                self.notes.append("round %d: the %s footprint %s left the live window (%d rounds after its tree was"
+                                  " live in round %s): a new dark streak starts; its third round is AGENT-DARK-LIVE"
+                                  % (n, fp["agent"], path, self.dark_window, fp["live_round"]))
+            fp["was_live"] = live
             if state == "dark":
                 fp["streak"] += 1
                 fp["dark_since"] = fp["dark_since"] or n
@@ -1485,7 +1630,7 @@ class HostWatch:
                     fp["cleared"].append(note)
                     cleared.append(note)
                     self.notes.append(note)
-                fp.update(streak=0, fired=False, dark_since=None)
+                fp.update(streak=0, fired=False, dark_since=None, noted=False)
             fp["state"] = state
             fp["link"] = link
             if state == "gone" and f is None:
@@ -1497,10 +1642,13 @@ class HostWatch:
                           "cwd": CWD, "source": SOURCE,
                           "input_meta": {"round": n, "path": path, "agent": fp["agent"], "state": state,
                                          "dark": state == "dark", "streak": fp["streak"], "linked": link,
+                                         "was_live": fp["was_live"], "live_window": self.dark_window,
                                          "sample": sample, "run": self.run,
                                          "cites": [dict(c) for c in cites[:CITES_KEPT]]}})
             fp["cites"] = cites[:CITES_KEPT]
             fp["line_seq"] = self.seq
+            if state == "dark" and fp["was_live"] and fp["streak"] >= DARK_ROUNDS and not fp["noted"]:
+                self._dark_note(now, n, fp, sample)
 
         found, notes = engine.evaluate(self.rules, lines)
         by_seq = {l["seq"]: l for l in lines}
@@ -1536,7 +1684,8 @@ class HostWatch:
                              ][:CITES_KEPT * 2])
                 where = "%s pid %s, %d cycles to one destination in %d rounds (round %d)" % (
                     str(meta["image"] or "?")[:IMAGE_MAX], meta["pid"], rh["cycles"], rh["r"], n)
-            entry["notice"] = self.notifier.notify(f["rule_id"], where, now, token=(entry, "notice"), limit_id=limit)
+            subject = (str(meta["image"] or "?")[:IMAGE_MAX] if f["rule_id"] in NEW_RULES else None)   # M7.5 E3
+            entry["notice"] = self._knock(now, f["rule_id"], where, entry, limit_id=limit, subject=subject, round_=n)
             if f["rule_id"] in NEW_RULES:
                 tree["knocked"] = entry["notice"]
             elif f["rule_id"] == UNWATCHED:
@@ -1561,6 +1710,7 @@ class HostWatch:
                   "act_roots": sum(1 for t in current.values() if t["class"] == "act-root"),
                   "history": first, "new": new, "benign": benign_new, "gone": gone, "back": back, "dark": dark_now,
                   "cleared": cleared, "findings": fired, "lines": lines,
+                  "dark_notes": [d["path"] for d in self.dark_notes if d["round"] == n],   # M7.5 E1
                   "sources": {tree_word(k): self.sources[k].text for k in sorted(
                       current, key=lambda k: (str(k[0]), str(k[1]), str(k[2]))) if k in self.sources}}
         record["source_findings"] = self._poll_sources(now)
@@ -1769,10 +1919,10 @@ class HostWatch:
                          "reasons": line.get("reasons"), "backend": line.get("backend"), "model": line.get("model"),
                          "answered_by": line.get("answered_by"), "notice": None}
                 if tree is not None and tree.get("suspect_knock") is None:   # knocks once per tree
-                    entry["notice"] = self.notifier.notify(
-                        SUSPECT, "%s pid %s, suspicion %.2f (%s)" % (str(key[1] or "?")[:IMAGE_MAX], key[0],
-                                                                    line.get("suspicion") or 0, line.get("backend")),
-                        now, token=(entry, "notice"), limit_id="%s pid %s" % (SUSPECT, key[0]))
+                    entry["notice"] = self._knock(
+                        now, SUSPECT, "%s pid %s, suspicion %.2f (%s)" % (str(key[1] or "?")[:IMAGE_MAX], key[0],
+                                                                         line.get("suspicion") or 0, line.get("backend")),
+                        entry, limit_id="%s pid %s" % (SUSPECT, key[0]), round_=call.round)
                     tree["suspect_knock"] = entry["notice"]
                 else:
                     entry["notice"] = "not knocked again (once per tree)"
@@ -1893,6 +2043,54 @@ class HostWatch:
         per streak: when K cycles to one destination are first reached; the
         streak ends when R rounds pass without a cycle."""
         k, w, r = self.rhythm_k, self.rhythm_w, self.rhythm_r
+        fresh = self._source_beats(key)   # read once: what the tree's os / hooks sources gained
+        acts = self.act_beats(now, n, key, t, round_at, inv, fresh)
+        talks = self.talk_beats(key, t, fresh)
+        ring = self.rings.setdefault(key, [])
+        ring.append({"round": n, "at": round_at, "from": round_from, "talks": {}, "talk_at": {}, "acts": [],
+                     "seq": seq})
+        del ring[:-r]
+        for a in acts:   # M7.5 E2: a source's beat goes to the round whose interval holds its time
+            _bin(ring, a["at"] if a["basis"] in SOURCE_BASES else None)["acts"].append(a)
+        for beat in talks:
+            e = _bin(ring, beat["at"])
+            e["talks"].setdefault(beat["dest"], []).extend(beat["cites"])
+            if beat["at"] is not None:
+                e["talk_at"].setdefault(beat["dest"], []).append(beat["at"])
+        got = rhythm_of(ring, k, w, r, n)
+        st = self.rhythm_state.setdefault(key, {"fired": False, "last_cycle": None})
+        if got["any"]:   # M7.5 E2: a cycle a late source beat completed in an earlier round counts from there
+            st["last_cycle"] = max(st["last_cycle"] or 0, max(got["any"]))
+        if st["fired"] and (st["last_cycle"] is None or n - st["last_cycle"] >= r):
+            st["fired"] = False
+            self.notes.append("round %d: the RHYTHM streak of tree %s ended (%d rounds without a cycle)" % (
+                n, tree_word(key), r))
+        fires = got["cycles"] >= k and not st["fired"]
+        if fires:
+            st["fired"] = True
+        beats = [{"round": b["round"], "seq": b["seq"], "talk_round": b["talk_round"], "talk_seq": b["talk_seq"],
+                  "run": self.run, "talk_cites": [dict(c, text=cite_text(c.get("text"))) for c in b["talk_cites"]],
+                  "acts": [{"pid": a["pid"], "image": a["image"], "started": a["started"], "basis": a["basis"],
+                            "cites": [dict(c, text=cite_text(c.get("text"))) for c in a["cites"]]}
+                           for a in b["acts"][:4]]} for b in got["beats"]]
+        now_e = ring[-1]
+        return {"k": k, "w": w, "r": r, "cycles": got["cycles"], "destination": got["destination"],
+                "rounds": got["rounds"], "talks": sorted(now_e["talks"]), "acts": len(now_e["acts"]),
+                "act_basis": sorted({a["basis"] for a in now_e["acts"]}), "fires": fires, "streak_fired": st["fired"],
+                "beats": beats}
+
+    def act_beats(self, now, n, key, t, round_at, inv=None, fresh=None):
+        """M7.5 E2 (ADR-0007 Amendment M, lesson 2): the act beats of one
+        tree in round n, from every source it has, through one function:
+        - host: each child of the round's inventory first seen in it (never
+          in the tree's first round), at its start time (K-5) or the round's;
+        - os: each Sysmon event 1 below the root (depth >= 1) the tree's os
+          source file gained since the last round, at its UtcTime;
+        - hooks: each Bash call (phase pre) the tree's hooks trace gained,
+          at its ts.
+        Source lines that are history (feed.history) are not beats. Each act
+        cites its record: the inventory's line, or the source file and line
+        (A5)."""
         seen = self.kids.get(key)
         first = seen is None
         seen = self.kids.setdefault(key, set())
@@ -1907,30 +2105,106 @@ class HostWatch:
             at, basis = self._act_time(now, n, c, inv)
             acts.append({"pid": c.get("pid"), "image": c.get("image"), "started": c.get("started"),
                          "at": at or round_at, "basis": basis, "cites": c.get("cites") or []})
-        talks = self._talks(key, t)
-        ring = self.rings.setdefault(key, [])
-        ring.append({"round": n, "at": round_at, "from": round_from, "talks": talks, "acts": acts, "seq": seq})
-        del ring[:-r]
-        got = rhythm_of(ring, k, w, r, n)
-        st = self.rhythm_state.setdefault(key, {"fired": False, "last_cycle": None})
-        if n in got["any"]:
-            st["last_cycle"] = n
-        if st["fired"] and (st["last_cycle"] is None or n - st["last_cycle"] >= r):
-            st["fired"] = False
-            self.notes.append("round %d: the RHYTHM streak of tree %s ended (%d rounds without a cycle)" % (
-                n, tree_word(key), r))
-        fires = got["cycles"] >= k and not st["fired"]
-        if fires:
-            st["fired"] = True
-        beats = [{"round": b["round"], "seq": b["seq"], "talk_round": b["talk_round"], "talk_seq": b["talk_seq"],
-                  "run": self.run, "talk_cites": [dict(c, text=cite_text(c.get("text"))) for c in b["talk_cites"]],
-                  "acts": [{"pid": a["pid"], "image": a["image"], "started": a["started"], "basis": a["basis"],
-                            "cites": [dict(c, text=cite_text(c.get("text"))) for c in a["cites"]]}
-                           for a in b["acts"][:4]]} for b in got["beats"]]
-        return {"k": k, "w": w, "r": r, "cycles": got["cycles"], "destination": got["destination"],
-                "rounds": got["rounds"], "talks": sorted(talks), "acts": len(acts),
-                "act_basis": sorted({a["basis"] for a in acts}), "fires": fires, "streak_fired": st["fired"],
-                "beats": beats}
+        acts += [beat for kind, beat in (self._source_beats(key) if fresh is None else fresh) if kind == "act"]
+        return self._once(key, acts)
+
+    def _late_beats(self):
+        """M7.5 REDO N-4 (A3): the source beats the final poll read after
+        the last round (Q-5: a source's beats are counted one round late)
+        are in no round, so HOST-RHYTHM never judged them: counted per tree,
+        "beats after the last round: N", in the report; never dropped
+        silently."""
+        for key in list(self.sources):
+            if key not in self.rings:
+                continue
+            fresh = self._source_beats(key)
+            if fresh:
+                word = tree_word(key)
+                self.late_beats[word] = self.late_beats.get(word, 0) + len(fresh)
+
+    def _once(self, key, acts):
+        """M7.5 REDO N-9: one child is one act whichever sources saw it.
+        An act is keyed by (pid, started): a host child by its pid and start
+        time; an os line or a hooks Bash call carries no pid (os_sysmon keeps
+        none), so its key is (image, started): it is the same child as an act
+        of ANOTHER source with that image (a hooks call: any image) whose
+        start time is within ACT_SAME_SECONDS of it. The first source to
+        report a child keeps it; a later twin is not counted again."""
+        seen = self.act_seen.setdefault(key, [])
+        out = []
+        for a in acts:
+            src = a["basis"] if a["basis"] in SOURCE_BASES else HOST_SOURCE
+            img = _image_word(a.get("image"))
+            twin = None
+            for b in seen:
+                if a.get("pid") is not None and b["pid"] is not None:
+                    same = a["pid"] == b["pid"] and a.get("started") == b["started"]
+                else:
+                    same = (b["src"] != src and a["at"] is not None and b["at"] is not None
+                            and abs((a["at"] - b["at"]).total_seconds()) <= ACT_SAME_SECONDS
+                            and (img == b["img"] or "hooks" in (src, b["src"])))
+                if same:
+                    twin = b
+                    break
+            if twin is not None:
+                twin["twins"] += 1
+                self.act_twins += 1
+                continue
+            seen.append({"pid": a.get("pid"), "started": a.get("started"), "img": img, "at": a["at"], "src": src,
+                         "twins": 0})
+            out.append(a)
+        del seen[:-ACTS_SEEN_KEPT]
+        return out
+
+    def talk_beats(self, key, t, fresh=None):
+        """M7.5 E2: the talk beats of one tree in this round, from every
+        source: host (K-5: a connection new in the round, or one whose bytes
+        moved; at the round's time) and os (each Sysmon event 3 the tree's os
+        source gained, at its UtcTime; its destination is "os:" and the first
+        12 hex of the line's input_sha256, the hash of the destination, since
+        the os source keeps no remote in clear: ADR-0007 I-7).
+        [{"dest", "cites", "at" (None: the round's time)}]."""
+        out = [{"dest": remote, "cites": cites, "at": None} for remote, cites in sorted(self._talks(key, t).items())]
+        return out + [beat for kind, beat in (self._source_beats(key) if fresh is None else fresh) if kind == "talk"]
+
+    def _source_beats(self, key):
+        """The beats the tree's os and hooks sources gained since the last
+        round, each read once: [("act" | "talk", beat)]."""
+        src = self.sources.get(key)
+        if src is None or src.kind not in ("os", "hooks"):
+            return []
+        out = []
+        for feed in src.feeds:
+            epoch, pos = feed.beat_pos
+            if epoch != feed.epoch:
+                pos = 0
+            fresh = feed.numbered[pos:]
+            feed.beat_pos = (feed.epoch, len(feed.numbered))
+            for ln, rec in fresh:
+                if not isinstance(rec, dict) or rec.get("phase") != "pre" or feed.history(ln):
+                    continue
+                at = discover._ts(rec.get("ts"))
+                if at is None:
+                    continue
+                meta = rec.get("input_meta") if isinstance(rec.get("input_meta"), dict) else {}
+                where = os.path.basename(feed.path)
+                cite = {"src": where, "line": ln, "text": "%s %s seq %s at %s" % (
+                    rec.get("source") or "hooks", rec.get("tool"), rec.get("seq"), rec.get("ts"))}
+                if rec.get("source") == "os" and rec.get("tool") == "process":
+                    depth = meta.get("depth")
+                    if not isinstance(depth, int) or isinstance(depth, bool) or depth < 1:
+                        continue   # the root itself is not its own act
+                    out.append(("act", {"pid": None, "image": meta.get("command_head") or "?", "started": rec["ts"],
+                                        "at": at, "basis": "os", "cites": [cite]}))
+                elif rec.get("source") == "os" and rec.get("tool") == "net":
+                    digest = rec.get("input_sha256")
+                    if not isinstance(digest, str) or not digest:
+                        continue
+                    out.append(("talk", {"dest": "os:%s" % digest[:12], "at": at, "cites": [cite]}))
+                elif rec.get("source") in (None, "hooks") and rec.get("tool") == "Bash":
+                    out.append(("act", {"pid": None, "image": "Bash", "started": rec["ts"], "at": at,
+                                        "basis": "hooks", "cites": [cite]}))
+        return out
 
     # --- the sources (M7.2b) ---------------------------------------------------------
 
@@ -2365,17 +2639,17 @@ class HostWatch:
         notified. The notice."""
         notice = None
         if entry["severity"] == "high":
-            notice = self.notifier.notify(
-                entry["rule_id"], "%s pid %s via %s" % (str(key[1] or "?")[:IMAGE_MAX], key[0], src.kind), now,
-                token=(entry, "notice"), limit_id="%s pid %s" % (entry["rule_id"], key[0]))
+            notice = self._knock(
+                now, entry["rule_id"], "%s pid %s via %s" % (str(key[1] or "?")[:IMAGE_MAX], key[0], src.kind), entry,
+                limit_id="%s pid %s" % (entry["rule_id"], key[0]))
         tree = self.trees.get(key)
         if tree is not None and tree.get("first_knock") is None:
             where = notify.clean("pid %s %s" % (key[0], notify.FirstFinding.where(entry)))
             if notice is not None:
                 status = notify.BY_THE_RULE
             else:
-                status = self.notifier.notify(notify.FIRST_EVENT, where, now, token=(entry, "notice"),
-                                              limit_id="%s pid %s" % (notify.FIRST_EVENT, key[0]))
+                status = self._knock(now, notify.FIRST_EVENT, where, entry,
+                                     limit_id="%s pid %s" % (notify.FIRST_EVENT, key[0]))
                 notice = status
             tree["first_knock"] = {"rule_id": entry["rule_id"], "severity": entry["severity"], "where": where,
                                    "status": status, "at": self.at(now)}
@@ -2431,6 +2705,8 @@ class HostWatch:
         for word in ("new", "benign", "back", "gone", "dark"):
             if r.get(word):
                 parts.append("%s: %s" % (word, ", ".join(r[word])))
+        if r.get("dark_notes"):   # M7.5 E1: a note, never a finding
+            parts.append("%s: %s" % (DARK_NOTE, ", ".join(r["dark_notes"])))
         return "%s; %s" % (head, "; ".join(parts))
 
     # --- the end --------------------------------------------------------------------
@@ -2451,6 +2727,7 @@ class HostWatch:
             except Exception as exc:   # A3: a source not judged at the end is a hole
                 self._hole(now, "source-final", "the sources were not judged at the end: %s: %s" % (
                     type(exc).__name__, exc))
+            self._late_beats()
             if self.suspect is not None:   # K-1: what was never sent is a hole, per tree
                 self._suspect_unsent(now)
             self.status, self.error = status, error
@@ -2587,6 +2864,11 @@ class HostWatch:
                 f["suspicion"] or 0, SUSPECT, f["image"] or "?", f["pid"], f["round"], f["backend"], f["model"],
                 " (answered by %s)" % f["answered_by"] if f.get("answered_by") else "", "; ".join(f["reasons"] or []),
                 f["notice"], f["trace"], ",".join(str(x) for x in f["cited_seq"] or [])))
+        # M7.5 REDO N-4 / N-9: what the rhythm did not judge, and what it did not count twice
+        out.append("RHYTHM BEATS: beats after the last round: %d (source beats read by the final poll, in no round:"
+                   " not judged by HOST-RHYTHM)%s; %d act(s) seen by a second source, counted once" % (
+                       sum(self.late_beats.values()), "".join("; %s: %d" % (w, c) for w, c in sorted(
+                           self.late_beats.items())), self.act_twins))
         out.append("SOURCE FINDINGS: %d (%d live, of them %d %s; %d history)" % (
             len(self.source_findings), len(self.source_alarms()),
             sum(1 for f in self.source_alarms() if f["pending"]), PENDING_EXIT,
@@ -2607,8 +2889,13 @@ class HostWatch:
         out.append("SYSMON: %s" % self.sysmon[1])
         out.append("FOOTPRINTS: %d" % len(self.footprints))
         for fp in self.footprints.values():
-            out.append("  %s (%s): %s%s" % (fp["path"], fp["agent"], fp["state"],
-                                            ", dark %d round(s) in a row" % fp["streak"] if fp["streak"] else ""))
+            out.append("  %s (%s): %s%s%s" % (
+                fp["path"], fp["agent"], fp["state"], ", dark %d round(s) in a row" % fp["streak"] if fp["streak"] else "",
+                ", %s since its tree was live in round %s" % (DARK_NOTE, fp["live_round"])
+                if fp["state"] == "dark" and fp.get("was_live") else ""))
+        # M7.5 E1/E4: apart from the findings; a note is never an alarm, never a knock
+        out.append("DARK AFTER A LIVE TREE (notes, not alarms, not knocked): %d" % len(self.dark_notes))
+        out += ["  - %s" % d["text"] for d in self.dark_notes]
         out.append("NOTES: %d" % len(self.notes))
         out += ["  - %s" % n for n in self.notes]
         holes = self.holes + self.notifier.holes
@@ -2618,6 +2905,11 @@ class HostWatch:
         out.append("BLIND SPOTS (K-8, holes of the class %s, counted apart; they do not change the result): %d" % (
             BLIND, len(self.blind)))
         out += ["  - %s: %s; %d round(s)" % (b["kind"], b["detail"], len(b["rounds"])) for b in self.blind]
+        rows = self.knock_rows()   # M7.5 E3: every knock, its title, its rate-limit id and what became of it
+        out.append("KNOCKS: %d (each: round, event, title / body, rate-limit id: status)" % len(rows))
+        out += ["  round %s at %s: %s, \"%s\" / \"%s\", id %s: %s%s" % (
+            k["round"], k["at"], k["event"], k["title"], k["body"], k["limit_id"], k["status"],
+            " (at the call: %s)" % k["called"] if k["called"] != k["status"] else "") for k in rows]
         n = self.notifier.state()
         counts = n["counts"]
         out.append("NOTIFICATIONS: %s; sent %d, terminal %d, failed %d, folded %d (%d still waiting), off %d" % (
@@ -2669,6 +2961,9 @@ class HostWatch:
                      "suspicions": self.suspicions,
                      "blind": self.blind,
                      "sysmon": list(self.sysmon),
+                     # M7.5 E1/E3; REDO N-5: the state keeps the newest KNOCKS_KEPT knocks and the count of the rest
+                     "dark_notes": self.dark_notes, "knocks": self.knock_rows(KNOCKS_KEPT),
+                     "knocks_older": max(0, len(self.knocks) - KNOCKS_KEPT),
                      "notes": self.notes, "rounds_tail": [self._public(r) for r in self.round_lines]},
             "holes": self.holes + self.notifier.holes, "notifications": self.notifier.state(),
             "state_error": self.state_error, "refresh_seconds": self.refresh, "registry": self.registry_state,

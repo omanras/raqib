@@ -1155,11 +1155,25 @@ def host_section(state):
                        _text(f.get("sample")), _text(f.get("notice")), _cites_text(f.get("cites"))))
     if not findings:
         out.append('<p class="empty">None.</p>')
+    # M7.5 E1/E4: a footprint dark after its tree was live in this watch: a note, apart from the findings
+    dark_notes = [_dict(d) for d in _list(host.get("dark_notes"))]
+    out.append("<h3>Dark after a live tree (%d notes, not alarms)</h3>" % len(dark_notes))
+    out.append('<p class="meta">A footprint whose tree was a live candidate in this watch, dark for three rounds'
+               " after it left: the agent&#39;s normal end. Listed, never knocked, never an alarm.</p>")
+    for d in dark_notes:
+        out.append('<div class="card"><span class="tag">note</span> round %s: %s <span class="meta">cites run %s seq %s;'
+                   " %s</span></div>" % (_text(d.get("round")), _text(d.get("text")), _text(d.get("run")),
+                                         _text(",".join(str(x) for x in _list(d.get("cited_seq")))),
+                                         _cites_text(d.get("cites"))))
+    if not dark_notes:
+        out.append('<p class="empty">None.</p>')
     fps = [_dict(f) for f in _list(host.get("footprints"))]
     out.append("<h3>Footprints (%d)</h3>" % len(fps))
-    out.append("<ul>%s</ul>" % "".join("<li>%s (%s): %s%s %s</li>" % (
+    out.append("<ul>%s</ul>" % "".join("<li>%s (%s): %s%s%s %s</li>" % (
         _text(f.get("path")), _text(f.get("agent")), _text(f.get("state")),
-        _text(", dark %s round(s) in a row" % f.get("streak")) if f.get("streak") else "", _cites_text(f.get("cites")))
+        _text(", dark %s round(s) in a row" % f.get("streak")) if f.get("streak") else "",
+        _text(", dark after a live tree (note)") if f.get("state") == "dark" and f.get("was_live") else "",
+        _cites_text(f.get("cites")))
         for f in fps) if fps else '<p class="empty">None listed.</p>')
     blind = [_dict(b) for b in _list(host.get("blind"))]
     if blind:   # M7.4 REDO K-8: counted apart from the holes; they do not change the result

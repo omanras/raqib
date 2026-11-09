@@ -162,9 +162,9 @@ def test_e2_a_new_unknown_tree_knocks_once_with_the_a4_text(tmp_path):
     texts = [c["text"] for c in runner.calls]
     # C-5: each tree knocks under its own rate-limit id; C-1c: named high, unknown medium; C-1d: msedge
     # from Program Files (x86) is benign, listed and not knocked
-    assert texts == ["Raqib: NEW-AGENT\nhost, claude pid 2100 (named)\n",
-                     "Raqib: NEW-AGENT\nhost, nimbus pid 3300 (named)\n",
-                     "Raqib: NEW-AGENT-UNKNOWN\nhost, scribe pid 7000 (unknown)\n"]
+    assert texts == ["Raqib: NEW-AGENT claude\nhost, claude pid 2100 (named)\n",
+                     "Raqib: NEW-AGENT nimbus\nhost, nimbus pid 3300 (named)\n",
+                     "Raqib: NEW-AGENT-UNKNOWN scribe\nhost, scribe pid 7000 (unknown)\n"]
     assert [(f["rule_id"], f["severity"]) for f in w.findings] == [
         ("NEW-AGENT", "high"), ("NEW-AGENT", "high"), ("NEW-AGENT-UNKNOWN", "medium")]
     assert {f["image"]: (f["named"], f["round"]) for f in w.findings} == {
@@ -196,7 +196,7 @@ def test_e2_an_act_root_that_becomes_a_candidate_is_new(tmp_path):
     run_rounds(w, clock, 2)
     (f,) = w.findings
     assert (f["rule_id"], f["image"], f["pid"], f["named"]) == ("NEW-AGENT", "kimi", 10728, "named")
-    assert runner.calls[0]["text"] == "Raqib: NEW-AGENT\nhost, kimi pid 10728 (named)\n"
+    assert runner.calls[0]["text"] == "Raqib: NEW-AGENT kimi\nhost, kimi pid 10728 (named)\n"
     line = [x for x in w.round_lines[-1]["lines"] if x["input_meta"].get("image") == "kimi"][0]
     assert line["input_meta"]["was"] == "act-root" and line["input_meta"]["started"] == "11/2/2026 10:21:05 AM"
 
@@ -522,13 +522,17 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
     # M7.2b: DESTRUCT-CMD and NET-TOOL gain their host-source negative; DESTRUCT-CMD's `tool: Bash` moved inside an
     # `any` (Bash or source host + HostChild), so it has no top-level gate (C-1a, as NET-TOOL never had) and its two
     # formerly unmeasured benign files count as measured (Q-6 of the M7.2b questions file); HOST-UNWATCHED joins.
+    # M7.5 (A6, re-measured): AGENT-DARK-LIVE gains negative-live-then-gone and negative-linked-again (E1),
+    # HOST-RHYTHM negative-os-two-cycles (E2).
+    # M7.5 REDO N-2: AGENT-DARK-LIVE's two was_live negatives are not listed (its match cannot see them): 2 again.
     assert got == {"AGENT-DARK-LIVE": (2, 10), "DESTRUCT-CMD": (11, 0), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
-                   "HOST-RHYTHM": (4, 8), "HOST-UNWATCHED": (4, 8),
+                   "HOST-RHYTHM": (5, 8), "HOST-UNWATCHED": (4, 8),
                    "LANDED-NO-GATE": (8, 2), "NET-TOOL": (11, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
                    "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
                    "SECRET-OUTPUT": (7, 2)}
     text = (ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md").read_text(encoding="utf-8")
     text += (ROOT / "docs" / "review" / "2026-11-04-M7.4-questions.md").read_text(encoding="utf-8")   # M7.4: HOST-RHYTHM
+    text += (ROOT / "docs" / "review" / "2026-11-09-M7.5-questions.md").read_text(encoding="utf-8")   # M7.5: both again
     for rule_id, (m, u) in got.items():
         assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id
 

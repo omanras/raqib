@@ -60,6 +60,7 @@ LIMIT_SECONDS = 60
 TIMEOUT_SECONDS = 10
 TEXT_MAX = 120
 PROJECT_MAX = 40
+SUBJECT_MAX = 40   # M7.5 E3: the word a title may carry after the event (an image name)
 UNSAFE = re.compile(r"[^A-Za-z0-9 ._,:+()-]")
 NOTIFY_SEND_PATHS = ("/usr/bin/notify-send", "/bin/notify-send")
 SH = "/bin/sh"
@@ -311,11 +312,13 @@ class Notifier:
 
     # --- what watch calls ------------------------------------------------------
 
-    def notify(self, event, where, now, token=None, limit_id=None):
+    def notify(self, event, where, now, token=None, limit_id=None, subject=None):
         """Knock once for an event. Returns "sent", "terminal" (bell and
         stderr), "failed" (a hole; bell and stderr instead), "folded" (rate
         limit) or "off". limit_id: the rate-limit id (default: the event);
-        token: handed back through on_folds when a fold is delivered."""
+        token: handed back through on_folds when a fold is delivered;
+        subject: a word the title carries after the event (M7.5 E3: "Raqib:
+        NEW-AGENT kimi"), cleaned like the rest."""
         event = clean(event, 48) or "RAQIB"
         key = limit_id or event
         if self.backend == "off":
@@ -324,7 +327,7 @@ class Notifier:
         last = self.last.get(key)
         if last is not None and now - last < self.limit:
             fold = self.folded.setdefault(key, {"event": event, "count": 0, "first": where, "last": where,
-                                                "tokens": []})
+                                                "tokens": [], "subject": subject})
             fold["count"] += 1
             fold["last"] = where
             if token is not None:
@@ -335,7 +338,7 @@ class Notifier:
         fold = self.folded.pop(key, None)
         if fold:
             where = "%s, and %s" % (where, fold_text(fold["count"], fold["first"], fold["last"]))
-        status = self._deliver(event, where, now)
+        status = self._deliver(event, where, now, subject)
         if fold:
             self._folds_done(fold, status)
         return status
@@ -349,7 +352,8 @@ class Notifier:
             if now - self.last[key] >= self.limit:
                 del self.folded[key]
                 self.last[key] = now
-                status = self._deliver(fold["event"], fold_text(fold["count"], fold["first"], fold["last"]), now)
+                status = self._deliver(fold["event"], fold_text(fold["count"], fold["first"], fold["last"]), now,
+                                       fold.get("subject"))
                 self._folds_done(fold, status)
                 out.append((fold["event"], fold["count"], status))
         return out
@@ -396,15 +400,22 @@ class Notifier:
 
     # --- delivery --------------------------------------------------------------
 
-    def texts(self, event, where):
+    @staticmethod
+    def title(event, subject=None):
+        """The title: "Raqib: <event>", and the subject after it when one is
+        given (M7.5 E3), in the A-4 alphabet."""
+        subject = clean(subject, SUBJECT_MAX).strip() if subject else ""
+        return clean("Raqib: %s%s" % (event, " " + subject if subject else ""))
+
+    def texts(self, event, where, subject=None):
         """(title, body) of a notification."""
         if self.host:   # M7.2 (A-4 alphabet): "host, <image name> pid <n> (named|unknown)"
-            return clean("Raqib: %s" % event), clean("host, %s" % clean(where))
-        return (clean("Raqib: %s" % event),
+            return self.title(event, subject), clean("host, %s" % clean(where))
+        return (self.title(event, subject),
                 clean("project %s, %s" % (self.project, clean(where))))
 
-    def _deliver(self, event, where, now):
-        title, body = self.texts(event, where)
+    def _deliver(self, event, where, now, subject=None):
+        title, body = self.texts(event, where, subject)
         if self.backend == "terminal":
             self.counts["terminal"] += 1
             self._bell(title, body)

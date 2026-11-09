@@ -333,12 +333,14 @@
     ],
     "dark": false,
     "linked": "C1",
+    "live_window": 9,
     "path": "C:\\Users\\field\\.claude",
     "round": 4,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
     "state": "linked",
-    "streak": 0
+    "streak": 0,
+    "was_live": true
    },
    "phase": "pre",
    "seq": 17,
@@ -365,12 +367,14 @@
     ],
     "dark": false,
     "linked": "C1",
+    "live_window": 9,
     "path": "C:\\Users\\field\\.claude.json",
     "round": 4,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
     "state": "linked",
-    "streak": 0
+    "streak": 0,
+    "was_live": true
    },
    "phase": "pre",
    "seq": 18,
@@ -392,12 +396,14 @@
     ],
     "dark": true,
     "linked": null,
+    "live_window": 9,
     "path": "C:\\Users\\field\\.codex",
     "round": 4,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
     "state": "dark",
-    "streak": 1
+    "streak": 1,
+    "was_live": false
    },
    "phase": "pre",
    "seq": 19,
@@ -424,12 +430,14 @@
     ],
     "dark": true,
     "linked": null,
+    "live_window": 9,
     "path": "C:\\Users\\field\\.gemini",
     "round": 4,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
     "state": "dark",
-    "streak": 1
+    "streak": 1,
+    "was_live": false
    },
    "phase": "pre",
    "seq": 20,

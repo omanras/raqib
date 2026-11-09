@@ -48,6 +48,30 @@ bytes moved; so each round of a scenario with a connection carries the byte
 counts a fake `ss -tinp` would give (conn_bytes, growing each round:
 bytes_moved), and a connection kept up with no bytes read is one talk only
 (bytes_moved False; tests/test_rhythm.py).
+
+M7.5 (ADR-0007 Amendment M, the first field run):
+E1 - AGENT-DARK-LIVE's fixtures after a live tree (REDO N-2: the two
+negatives are under tests/fixtures/host/notes/, not the rule's): "kimi-gone" then
+"kimi/two-samples" (kimi a candidate: the footprint links to it, so it was
+live in this watch) then "kimi-gone" three times is a negative (dark after a
+live tree: a note, input_meta.was_live true); the same with kimi live again
+and gone again is the second negative; "kimi-gone" three times (never live)
+is the positive. Every HostFootprint line now carries was_live, so every
+fixture that holds one was made again (the field is new on the line).
+E2 - HOST-RHYTHM over an os source ("rhythm-os:" names, SYNTHETIC): the tree
+of rhythm_inventory gets the os source (a fake Sysmon check and a fake
+follow that writes nothing), and before round k (OS_ROUNDS) make.py appends
+to the tree's per-tree file the lines os_sysmon would write for a Sysmon
+event 3 (net, the same destination each time) at 8 s and, in "oscycle",
+an event 1 (process, depth 1) at 5 s before round k's time. The tree's
+inventory keeps one child seen from round 1 on and a connection with no
+bytes read, so the host gives one talk (round 1) and no act: the cycles are
+the os source's. "ostalk" keeps the host's new child each round ("cycle")
+and takes only the talks from os: the talks are os, the acts host.
+M7.5 REDO N-3: "osact" is the field run's shape (Amendment M: kimi's acts
+came from the os source, its talk from the host's TCP table): the host's
+connection talks each round (bytes read and moving, K-5) and the acts are
+os event 1 lines, 5 s before each round from round 2 on.
 """
 import io
 import json
@@ -108,6 +132,32 @@ RHYTHM_SCENARIOS = {   # M7.4: fake rounds, "rhythm:<scenario>:<round>"
     "HOST-RHYTHM/negative-no-talk.json": ["rhythm:notalk:%d" % k for k in range(1, 6)],
 }
 SCENARIOS.update(RHYTHM_SCENARIOS)
+SCENARIOS.update({   # M7.5 E1: a footprint never live in this watch, dark
+    "AGENT-DARK-LIVE/positive-never-live.json": ["kimi-gone"] * 3,
+})
+# M7.5 E1, REDO N-2: a footprint whose tree was live in this watch, then dark: host.py's NOTE, which
+# AGENT-DARK-LIVE's match cannot see (was_live true), so they are not its measured negatives (as K-9): they
+# live under tests/fixtures/host/notes/ (NOTES_OUT), made by build_notes(), held by tests/test_field_run.py.
+NOTE_SCENARIOS = {
+    "negative-live-then-gone.json": ["kimi-gone", "kimi/two-samples"] + ["kimi-gone"] * 3,
+    "negative-linked-again.json": ["kimi-gone", "kimi/two-samples", "kimi-gone", "kimi-gone",
+                                   "kimi/two-samples"] + ["kimi-gone"] * 3,
+}
+OS_SCENARIOS = {   # M7.5 E2: "rhythm-os:<scenario>:<round>"; OS_ROUNDS: the rounds os lines are appended before
+    "HOST-RHYTHM/positive-os-three-cycles.json": ["rhythm-os:oscycle:%d" % k for k in range(1, 6)],
+    "HOST-RHYTHM/negative-os-two-cycles.json": ["rhythm-os:oscycle:%d" % k for k in range(1, 6)],
+    "HOST-RHYTHM/positive-os-talks-host-acts.json": ["rhythm-os:ostalk:%d" % k for k in range(1, 6)],
+    # M7.5 REDO N-3: the field run's own shape (Amendment M's kimi tree, SYNTHETIC): host talks, os acts
+    "HOST-RHYTHM/positive-host-talks-os-acts.json": ["rhythm-os:osact:%d" % k for k in range(1, 6)],
+}
+OS_ROUNDS = {
+    "HOST-RHYTHM/positive-os-three-cycles.json": (2, 3, 4),
+    "HOST-RHYTHM/negative-os-two-cycles.json": (2, 3),
+    "HOST-RHYTHM/positive-os-talks-host-acts.json": (2, 3, 4),
+    "HOST-RHYTHM/positive-host-talks-os-acts.json": (2, 3, 4),
+}
+SCENARIOS.update(OS_SCENARIOS)
+OS_DEST = {"hostname": None, "ip": "192.0.2.20", "port": "443", "protocol": "tcp"}   # RFC 5737
 WALL0 = 1793700000.0      # the wall clock of rounds_of at t = 0
 EVERY = 10                # rounds_of's T
 RHYTHM_PID = 4400
@@ -167,7 +217,37 @@ SOURCE_SCENARIOS = {
 OUT = os.path.join(ROOT, "tests", "fixtures", "rules")
 
 
+def os_lines(k, scenario, seq, sid="os-%d" % RHYTHM_PID):
+    """M7.5 E2 (SYNTHETIC): the lines os_sysmon writes (its _lines shape:
+    a pre and a post per event, tool net / process, source os, the hash of
+    the destination or the command line) for the os events before round k:
+    a connection to OS_DEST 8 s before it and, in "oscycle", a child (depth
+    1) 5 s before it. (lines, last seq)."""
+    from raqib.hooks import common
+    at = (k - 1) * EVERY
+    events = [] if scenario == "osact" else [(at - 8, "net", common.canonical_sha256({"destination": OS_DEST}),
+                                               {"dest_port": 443, "dest_private": False})]
+    if scenario in ("oscycle", "osact"):
+        events.append((at - 5, "process", common.canonical_sha256({"command_line": "fake child %d (make.py)" % k}),
+                       {"command_head": "bash", "command_programs": ["bash"], "depth": 1}))
+    out = []
+    for when, tool, digest, meta in events:
+        seq += 1
+        base = {"ts": _iso_at(when), "seq": seq, "session_id": sid, "tool": tool, "input_sha256": digest,
+                "input_meta": dict(meta), "source": "os"}
+        out.append(dict(base, phase="pre"))
+        out.append(dict(base, phase="post", output_meta={}, ok=True))
+    return out, seq
+
+
 def inventory(name, catalog):
+    if name.startswith("rhythm-os:"):
+        _, scenario, k = name.split(":")
+        if scenario == "ostalk":   # the host's new child each round; the talks are os
+            return rhythm_inventory("cycle", int(k), bytes_moved=False)
+        if scenario == "osact":    # N-3: the host's connection talks each round (its bytes move); the acts are os
+            return rhythm_inventory("between", int(k), bytes_moved=True)
+        return rhythm_inventory("between", int(k), bytes_moved=False)
     if name.startswith("rhythm:"):
         _, scenario, k = name.split(":")
         return rhythm_inventory(scenario, int(k))
@@ -267,11 +347,26 @@ class Clock:
         return self.t
 
 
-def rounds_of(names, catalog, rules, home, sources=True):
+class _Follow:
+    """M7.5 E2: a fake os follow: one pass that writes nothing, then waits
+    for the Stop; make.py appends the os lines itself, between rounds."""
+
+    def __call__(self, root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None,
+                 helpers=None):
+        if on_pass:
+            on_pass(1, None)
+        stop.wait(60)
+        return 1
+
+
+def rounds_of(names, catalog, rules, home, sources=True, os_rounds=None):
     """The round records of a HostWatch fed these inventories in order.
     sources False: a file stands where the sources directory would be, so
     no source can be attached (HOST-UNWATCHED's fixtures). The Sysmon check
-    says no (platform "fixture"): every tree gets the host source."""
+    says no (platform "fixture"): every tree gets the host source.
+    os_rounds (M7.5 E2): the Sysmon check says yes, every tree gets a fake
+    os follow, and before each of these rounds the os lines of os_lines()
+    are appended to the rhythm tree's per-tree file."""
     invs = [inventory(n, catalog) for n in names]
     if not sources:
         os.makedirs(os.path.join(home, ".raqib", "host"), exist_ok=True)
@@ -280,11 +375,21 @@ def rounds_of(names, catalog, rules, home, sources=True):
     feed = iter(invs)
     clock = Clock()
     notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
+    os_kw = {} if os_rounds is None else {"os_follow": _Follow()}
     watch = host.HostWatch(lambda: next(feed), catalog, rules, notifier, every=10, out=None, err=io.StringIO(),
                            clock=clock, wall=lambda: 1793700000.0 + clock.t, home=home, platform="fixture",
                            run="fixture-run",   # C-2: a fixed run id, so the fixtures are what make.py makes
-                           sysmon=lambda: (False, "fixture: no Sysmon"))
-    for _ in names:
+                           sysmon=(lambda: (False, "fixture: no Sysmon")) if os_rounds is None
+                           else (lambda: (True, "fixture: a synthetic os source (make.py)")), **os_kw)
+    seq = 0
+    for k, name in enumerate(names, start=1):
+        if os_rounds is not None and k in os_rounds:
+            (key,) = [x for x in watch.trees if x[0] == RHYTHM_PID]
+            src = watch.sources[key]
+            src.first_pass.wait(5)
+            lines, seq = os_lines(k, name.split(":")[1], seq)
+            with open(src.path, "a", encoding="ascii", newline="\n") as f:
+                f.write("".join(json.dumps(x, separators=(",", ":"), ensure_ascii=True) + "\n" for x in lines))
         watch.tick(wait=30)
         clock.t += 10
     watch.finish()
@@ -309,7 +414,7 @@ def build():
     with tempfile.TemporaryDirectory() as home:
         for name, names in list(SCENARIOS.items()) + list(SOURCE_SCENARIOS.items()):
             watch = rounds_of(names, catalog, rules, os.path.join(home, name.replace("/", "-")),
-                              sources=name not in NO_SOURCES)
+                              sources=name not in NO_SOURCES, os_rounds=OS_ROUNDS.get(name))
             lines = source_lines(watch) if name in SOURCE_SCENARIOS else watch.round_lines[-1]["lines"]
             rule_id, base = name.split("/")
             doc = {"lines": lines}
@@ -320,7 +425,27 @@ def build():
     return out
 
 
+NOTES_OUT = os.path.join(HERE, "notes")
+
+
+def build_notes():
+    """N-2: the last round's lines of each NOTE_SCENARIOS run (host.py's note, not a rule's fixture)."""
+    catalog = discover.load_catalog(discover.CATALOG)
+    rules = engine.load_catalog(os.path.join(ROOT, "raqib", "rules", "catalog"))
+    out = {}
+    with tempfile.TemporaryDirectory() as home:
+        for name, names in NOTE_SCENARIOS.items():
+            watch = rounds_of(names, catalog, rules, os.path.join(home, name))
+            out[name] = json.dumps({"lines": watch.round_lines[-1]["lines"], "dark_notes": [
+                d["round"] for d in watch.dark_notes]}, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
+    return out
+
+
 def main():
+    os.makedirs(NOTES_OUT, exist_ok=True)
+    for name, text in build_notes().items():
+        with open(os.path.join(NOTES_OUT, name), "w", encoding="ascii", newline="\n") as f:
+            f.write(text)
     for name, text in build().items():
         path = os.path.join(OUT, *name.split("/"))
         os.makedirs(os.path.dirname(path), exist_ok=True)
