@@ -24,11 +24,16 @@ budget or fixtures (apply() checks that the rule it compiles keeps them).
 
 A declared threshold is an `eq` predicate of the rule's match on a field of
 BOUNDS whose value is a positive int, declared once in the rule: HOST-RHYTHM's
-k, w and r (input_meta.rhythm.*), AGENT-DARK-LIVE's streak and live_window.
-The bounds are built in here, conservative, because the catalog YAMLs declare
-none (a `bounds:` block in the YAMLs is the Table's later task): k 1..100,
-w 1..3600 seconds, r 1..1000 rounds, streak 1..100, live_window 1..1000 and
-never below the rule's streak.
+k, w, r and suspect_every (input_meta.rhythm.*), AGENT-DARK-LIVE's streak and
+live_window. The bounds are built in here, conservative, because the catalog
+YAMLs declare none (a `bounds:` block in the YAMLs is the Table's later task,
+ADR-0008 A-8): k 1..100, w 1..3600 seconds, r 1..1000 rounds, suspect_every
+1..1000 rounds, streak 1..100, live_window 1..1000; live_window never below
+the streak and k never above r (ORDER: else the rule could never fire, A-3).
+M7.6 REDO A-3: a changed threshold is measured - the overlaid rule is run on
+its own fixtures (measure()) when it is set and at every load; a threshold
+under which a positive no longer fires or a negative fires, or that cannot
+be measured (no fixtures here), is refused with the fixture named.
 
 A malformed overlay (not yamlite, or not the shape above) is ONE hole and
 nothing of it is applied (ADR-0008 decision 2: never half-applied). An entry
@@ -38,21 +43,29 @@ YAML disables (A6: a rule over budget is disabled, not tuned live) is
 refused with the reason, said at the start of every watch, and not applied;
 the other entries apply.
 
-A rule under rules.d joins the catalog only when the engine's loader and
-the fixture runner accept it (A6: fixtures positive and negative, a measured
-false-positive rate within its budget), its fixture paths relative to
-rules.d; its id may not be a catalog rule's. It is marked origin user
-everywhere it is shown. Every refusal is said, never dropped (A3).
+A person's rule lives in rules.d/<ID>/<ID>.yaml with its fixtures beside it
+(M7.6 REDO A-1): it joins the catalog only when the engine's loader and the
+fixture runner accept it (A6: fixtures positive and negative, never one file
+both ways (A-4), a measured false-positive rate within its budget); every
+file of it is read and written only through fixture_file() (relative, no
+.., no drive, no root, no link, under rules.d/<ID>/ by realpath, under the
+POSIX and the Windows path rules alike). Its id may not be a catalog rule's;
+its class may not be HOST (A-6: host rules are fixed in v1). It is marked
+origin user everywhere it is shown; one refused at load is counted in "N
+rules off (refused: why)" (A-5). Every refusal is said, never dropped (A3).
 
 Writes (A4): only overlay_path() (atomically: a temp file in ~/.raqib, then
-os.replace) and files under user_dir() (add_rule's copies). Nothing here
+os.replace) and files under user_dir()/<ID>/ (add_rule's copies, each
+destination through fixture_file). Nothing here
 reaches a watched process or a project.
 """
 from __future__ import annotations
 
 import copy
 import datetime
+import ntpath
 import os
+import posixpath
 import tempfile
 
 from raqib.rules import engine, fixtures, yamlite
@@ -68,9 +81,14 @@ ENTRY_KEYS = ("status", "since", "thresholds")
 WORDS = ("on", "off")
 # The built-in bounds of the declared thresholds (field -> (low, high)); see the module docstring.
 BOUNDS = {"input_meta.rhythm.k": (1, 100), "input_meta.rhythm.w": (1, 3600), "input_meta.rhythm.r": (1, 1000),
-          "input_meta.streak": (1, 100), "input_meta.live_window": (1, 1000)}
-# A threshold that may not be below another of the same rule: live_window >= streak.
-AT_LEAST = {"input_meta.live_window": "input_meta.streak"}
+          "input_meta.streak": (1, 100), "input_meta.live_window": (1, 1000),
+          # M7.6 REDO A-3: how often the suspect layer is asked, split from r (HOST-RHYTHM.yaml)
+          "input_meta.rhythm.suspect_every": (1, 1000)}
+# Pairs of thresholds of one rule: (small, big, why): small may never exceed big.
+ORDER = (("input_meta.streak", "input_meta.live_window", "the live window is never shorter than the streak"),
+         # M7.6 REDO A-3 (P4): k cycle rounds must fit in the last r rounds, or the rule can never fire
+         ("input_meta.rhythm.k", "input_meta.rhythm.r", "k cycle rounds cannot fit in r rounds: the rule could never"
+                                                       " fire"))
 HEADER = "# Raqib rules overlay (ADR-0008): written by `raqib rules` and the window's Rules panel; edit with care\n"
 NEXT_WATCH = "applies to the next watch (a running watch keeps the rules it started with)"
 
@@ -130,7 +148,7 @@ def thresholds(rule):
         if field not in BOUNDS or "eq" not in p:
             continue
         value = p["eq"]
-        if sum(1 for q in preds if q["field"] == field) != 1:
+        if sum(1 for q in preds if q["field"] == field and "eq" in q) != 1:
             continue   # declared more than once: not one threshold
         if not (isinstance(value, int) and not isinstance(value, bool) and value > 0):
             continue
@@ -169,23 +187,17 @@ def check_value(rule, name, value, others=None):
     if not t["low"] <= value <= t["high"]:
         raise OverlayError("%s %s = %d is outside its bounds %d..%d (raqib/overlay.py BOUNDS)" % (
             rule.id, name, value, t["low"], t["high"]))
-    floor_field = AT_LEAST.get(t["field"])
-    if floor_field is not None:
-        floor_name = _short(floor_field)
-        current = dict((k, v["value"]) for k, v in thresholds(rule).items())
-        current.update(others or {})
-        floor = current.get(floor_name)
-        if floor is not None and value < floor:
-            raise OverlayError("%s %s = %d is below its %s (%d): the live window is never shorter than the streak"
-                               % (rule.id, name, value, floor_name, floor))
-    for other_field, base_field in AT_LEAST.items():
-        if base_field == t["field"]:
-            other = _short(other_field)
-            current = dict((k, v["value"]) for k, v in thresholds(rule).items())
-            current.update(others or {})
-            if other in current and current[other] < value:
-                raise OverlayError("%s %s = %d is above its %s (%d): the live window is never shorter than the"
-                                   " streak; raise %s first" % (rule.id, name, value, other, current[other], other))
+    current = dict((k, v["value"]) for k, v in thresholds(rule).items())
+    current.update(others or {})
+    current[name] = value
+    for small, big, why in ORDER:
+        a, b = _short(small), _short(big)
+        if t["field"] not in (small, big) or a not in current or b not in current or current[a] <= current[b]:
+            continue
+        if t["field"] == big:
+            raise OverlayError("%s %s = %d is below its %s (%d): %s" % (rule.id, name, value, a, current[a], why))
+        raise OverlayError("%s %s = %d is above its %s (%d): %s; raise %s first" % (
+            rule.id, name, value, b, current[b], why, b))
 
 
 # --- the file ---------------------------------------------------------------------------------
@@ -382,6 +394,15 @@ def apply(rules, doc, path, state="read", hole=None):
             for attr in ("kind", "cls", "severity", "fp_budget", "fixtures", "id"):
                 if getattr(new, attr) != getattr(rule, attr):   # never: only status and eq values change
                     raise OverlayError("the overlay changed %s of %s" % (attr, rule.id))
+            new.fixture_root = getattr(rule, "fixture_root", None)
+            failed = measure(new, ", ".join("%s=%d" % (n, v[1]) for n, v in sorted(changed.items()))) if changed else []
+            if failed:   # M7.6 REDO A-3: a changed threshold is measured; one that fails is refused, entry whole
+                refused.append("%s: %s" % (rule.id, "; ".join(failed)))
+                if not hasattr(rule, "origin"):
+                    rule.origin = "package"
+                rule.off_by = getattr(rule, "off_by", None)
+                out.append(rule)
+                continue
             new.origin = getattr(rule, "origin", "package")
             new.base_source = rule.source
             new.off_by = path if off else None
@@ -402,43 +423,109 @@ def apply(rules, doc, path, state="read", hole=None):
     return out
 
 
-def load_user_rules(directory, taken):
-    """(rules, refused): the rules of directory/*.yaml the loader and the
-    fixture runner accept (fixtures relative to directory), each marked
-    origin user; refused: one reason per file (A3: said, never dropped)."""
-    rules, refused = [], []
-    if not directory or not os.path.isdir(directory):
-        return rules, refused
-    names = sorted(os.listdir(directory))
-    for name in names:
-        if name.lower().endswith((".yml", ".yaml")) and not name.endswith(".yaml"):
-            refused.append("%s: a rule file must end in .yaml" % os.path.join(directory, name))
-    seen = set(taken)
-    for name in names:
-        if not name.endswith(".yaml"):
-            continue
-        path = os.path.join(directory, name)
+def fixture_file(root, rel):
+    """M7.6 REDO A-1 (ADR-0008 Amendment A, A4): the path of a person's
+    rule's file rel under root, or OverlayError with the path quoted. rel
+    must pass engine.fixture_path_problem (relative, no .., no drive, no
+    root, under the POSIX and the Windows rules alike), use / between its
+    directories (a \\ is read two ways), stay under its base when joined by
+    ntpath AND posixpath, have no link (symlink, junction, any reparse
+    point) at any step below root (the M7.2b I-1 check), and resolve by
+    realpath under realpath(root). Every read and every write of a file of
+    a person's rule goes through here."""
+    why = engine.fixture_path_problem(rel)
+    if why is None and "\\" in rel:
+        why = "a \\ (write / between directories: a \\ is a separator on Windows only)"
+    if why is None:
+        for mod, base in ((ntpath, "C:\\base"), (posixpath, "/base")):
+            joined = mod.normpath(mod.join(base, rel))
+            if not joined.startswith(base + mod.sep):
+                why = "outside its directory when joined by %s (%s)" % (mod.__name__, joined)
+                break
+    if why:
+        raise OverlayError("path %r refused: %s (ADR-0008 A-1: a rule's files stay under rules.d/<rule>/)" % (rel, why))
+    full = os.path.join(root, *rel.split("/"))
+    path = root
+    for part in rel.split("/"):
+        path = os.path.join(path, part)
         try:
-            rule = validate_rule(path, directory, seen)
+            st = os.lstat(path)
+        except FileNotFoundError:
+            break
+        except OSError as exc:
+            raise OverlayError("path %r refused: %s cannot be read (%s)" % (rel, path, exc.strerror or exc))
+        attrs = getattr(st, "st_file_attributes", 0) or 0
+        junction = getattr(os.path, "isjunction", None)
+        if os.path.islink(path) or attrs & 0x400 or (junction is not None and junction(path)):
+            raise OverlayError("path %r refused: %s is a link" % (rel, path))
+    real = os.path.realpath(root)
+    target = os.path.realpath(full)
+    try:
+        under = os.path.commonpath([os.path.normcase(real), os.path.normcase(target)]) == os.path.normcase(real)
+    except ValueError:   # another drive
+        under = False
+    if not under or target == real:
+        raise OverlayError("path %r refused: it resolves to %s, outside %s" % (rel, target, real))
+    return full
+
+
+def load_user_rules(directory, taken):
+    """(rules, refused, refused_ids): the rules of directory/<ID>/<ID>.yaml
+    the loader and the fixture runner accept (their files read through
+    fixture_file, under directory/<ID>/), each marked origin user; refused:
+    one reason per entry (A3: said, never dropped); refused_ids: [{rule_id,
+    reason}] for "N rules off" (A-5)."""
+    rules, refused, ids = [], [], []
+
+    def no(name, reason):
+        refused.append(reason)
+        ids.append({"rule_id": name, "reason": reason})
+    if not directory or not os.path.isdir(directory):
+        return rules, refused, ids
+    seen = set(taken)
+    for name in sorted(os.listdir(directory)):
+        here = os.path.join(directory, name)
+        if not os.path.isdir(here):
+            if name.lower().endswith((".yml", ".yaml")):
+                no(os.path.splitext(name)[0], "%s: a rule lives in rules.d/<ID>/<ID>.yaml with its fixtures beside it"
+                   " (ADR-0008 A-1); this file is not read" % here)
+            continue
+        try:
+            fixture_file(directory, name)   # the rule's own directory: no link, under rules.d
+            yaml_path = fixture_file(here, name + ".yaml")
+            if not os.path.isfile(yaml_path):
+                raise OverlayError("%s: no %s.yaml in it" % (here, name))
+            rule = validate_rule(yaml_path, here, seen, user=True)
         except OverlayError as exc:
-            refused.append(str(exc))
+            no(name, str(exc))
             continue
         rule.origin = "user"
+        rule.fixture_root = here
         seen.add(rule.id)
         rules.append(rule)
-    return rules, refused
+    return rules, refused, ids
 
 
-def validate_rule(path, root, taken=()):
+HOST_FIXED = "host rules are fixed in v1 (the host watch does not load a person's rules yet)"
+
+
+def validate_rule(path, root, taken=(), user=False):
     """The rule of a YAML file when the engine's loader and the fixture
-    runner accept it (fixtures relative to root), else OverlayError with
-    the loader's or the runner's reason."""
+    runner accept it (fixtures relative to root, each through fixture_file
+    for a person's rule), else OverlayError with the loader's or the
+    runner's reason. user: a person's rule (A-6: never of class HOST)."""
     try:
         rule = engine.load_rule(path)
     except engine.RuleError as exc:
         raise OverlayError("%s refused by the loader: %s" % (path, exc))
     if rule.id in taken:
         raise OverlayError("%s: rule id %s is already in the catalog or rules.d" % (path, rule.id))
+    if user and rule.cls == "HOST":   # M7.6 REDO A-6
+        raise OverlayError("%s: class HOST: %s" % (path, HOST_FIXED))
+    if user:
+        for kind in ("positive", "negative"):
+            for p in rule.fixtures[kind]:
+                fixture_file(root, p)
     try:
         result = fixtures.check_rule(rule, root)
     except (fixtures.FixtureError, OSError, ValueError) as exc:
@@ -451,13 +538,38 @@ def validate_rule(path, root, taken=()):
     return rule
 
 
+def measure(rule, label):
+    """M7.6 REDO A-3 (A6): [reasons] the overlaid rule fails its own
+    fixtures for: a positive that no longer fires, a negative that fires,
+    a fixture that is not here to measure with (an installed raqib carries
+    none). label names the change ("k=5"). Empty: measured, it holds."""
+    root = getattr(rule, "fixture_root", None) or ROOT
+    reasons = []
+    for kind in ("positive", "negative"):
+        for p in rule.fixtures[kind]:
+            full = fixture_file(root, p) if getattr(rule, "fixture_root", None) else os.path.join(root, p)
+            if not os.path.isfile(full):
+                reasons.append("%s: cannot be measured: fixture %s is not here (an installed raqib carries none)"
+                               % (label, p))
+    if reasons:
+        return reasons
+    try:
+        result = fixtures.check_rule(rule, root)
+    except (fixtures.FixtureError, OSError, ValueError) as exc:
+        return ["%s: cannot be measured: %s" % (label, exc)]
+    name = lambda p: os.path.splitext(os.path.basename(p))[0]   # noqa: E731
+    reasons += ["%s: %s no longer fires" % (label, name(x["path"])) for x in result["positives"] if not x["fired"]]
+    reasons += ["%s: %s fires" % (label, name(x["path"])) for x in result["negatives"] if x["fired"]]
+    return reasons
+
+
 def build(rules, overlay=None, user_rules=None):
     """engine.load_catalog's overlay step: the catalog rules, the rules of
     user_rules (rules.d), then the overlay file at `overlay` on top."""
     rules = list(rules)
     for r in rules:
         r.origin = getattr(r, "origin", "package")
-    users, user_refused = load_user_rules(user_rules, {r.id for r in rules})
+    users, user_refused, refused_ids = load_user_rules(user_rules, {r.id for r in rules})
     combined = rules + sorted(users, key=lambda r: r.id)   # the catalog's order kept; the person's after it
     if overlay is None:
         doc, state, hole = empty(), "absent", None
@@ -465,7 +577,7 @@ def build(rules, overlay=None, user_rules=None):
         doc, state, hole = read(overlay)
     out = apply(combined, doc, overlay, state, hole)
     out.overlay.update(user_dir=user_rules, user=[{"rule_id": r.id, "source": r.source} for r in users],
-                       user_refused=user_refused)
+                       user_refused=user_refused, user_refused_ids=refused_ids)
     return out
 
 
@@ -485,6 +597,7 @@ def describe(rules):
     info.setdefault("user", [{"rule_id": r.id, "source": r.source} for r in rules
                              if getattr(r, "origin", "package") == "user"])
     info.setdefault("user_refused", [])
+    info.setdefault("user_refused_ids", [])
     info.setdefault("user_dir", None)
     off = []
     for r in rules:
@@ -494,12 +607,27 @@ def describe(rules):
         elif r.status == "disabled":
             off.append({"rule_id": r.id, "by": "its YAML (status: disabled, A6)", "since": None,
                         "severity": r.severity, "kind": r.kind})
+    for u in info["user_refused_ids"]:   # M7.6 REDO A-5: a person's rule refused at load judges nothing: it is off
+        off.append({"rule_id": u["rule_id"], "by": "refused at load", "since": None, "severity": None, "kind": None,
+                    "refused": u["reason"]})
     info["off"] = off
     info["thresholds"] = [{"rule_id": r.id, "name": name, "value": now, "yaml": was}
                           for r in rules for name, (was, now) in sorted((getattr(r, "changed", None) or {}).items())]
-    kinds = sorted({r.kind for r in rules})
-    info["kinds_off"] = [k for k in kinds if all(r.status == "disabled" for r in rules if r.kind == k)]
+    package = [r for r in rules if getattr(r, "origin", "package") == "package"]   # "every catalog rule of kind X"
+    kinds = sorted({r.kind for r in package})
+    info["kinds_off"] = [k for k in kinds if all(r.status == "disabled" for r in package if r.kind == k)]
     return info
+
+
+REASON_MAX = 160   # the characters of a refusal shown in "N rules off" (the report keeps it whole)
+
+
+def off_word(o):
+    """One rule of "N rules off": its id, and "(refused: why)" for a person's rule refused at load (A-5)."""
+    if o.get("refused"):
+        why = str(o["refused"])
+        return "%s (refused: %s)" % (o["rule_id"], why if len(why) <= REASON_MAX else why[:REASON_MAX - 3] + "...")
+    return str(o["rule_id"])
 
 
 def off_text(info):
@@ -507,7 +635,7 @@ def off_text(info):
     off = (info or {}).get("off") or []
     if not off:
         return None
-    return "%d rule%s off: %s" % (len(off), "" if len(off) == 1 else "s", ", ".join(o["rule_id"] for o in off))
+    return "%d rule%s off: %s" % (len(off), "" if len(off) == 1 else "s", ", ".join(off_word(o) for o in off))
 
 
 def start_lines(info):
@@ -567,6 +695,22 @@ def not_judged_text(rule_id, counts):
     return "%s; it would have fired %d time(s), citing %d line(s)" % (text, c["fired"], c["cited"])
 
 
+SUPPRESSED = "%d findings suppressed by the overlay"
+
+
+def suppressed(counts):
+    """M7.6 REDO A-2: how many findings the rules off would have made."""
+    return sum(c.get("fired") or 0 for c in (counts or {}).values())
+
+
+def clean_word(word, counts):
+    """M7.6 REDO A-2 (ADR-0008 Amendment A): a CLEAN result word where an
+    off rule would have fired: "CLEAN (N findings suppressed by the
+    overlay)"; the exit code stays the person's choice, the words do not."""
+    n = suppressed(counts)
+    return "%s (%s)" % (word, SUPPRESSED % n) if n else word
+
+
 def report_lines(info, counts):
     """The final report's RULES section: each rule off, by whom and since
     when, and what it did not judge; the thresholds changed; the refusals."""
@@ -574,6 +718,9 @@ def report_lines(info, counts):
     out = ["RULES OFF (ADR-0008; they do not change the exit code, and the watch is not clean of what they would"
            " have found): %d" % len(off)]
     for o in off:
+        if o.get("refused"):   # A-5
+            out.append("  - %s (a person's rule) off: refused at load: %s" % (o["rule_id"], o["refused"]))
+            continue
         out.append("  - %s [%s] off by %s%s: %s" % (
             o["rule_id"], o.get("severity"), o["by"], " since %s" % o["since"] if o.get("since") else "",
             not_judged_text(o["rule_id"], counts)))
@@ -673,6 +820,9 @@ def set_threshold(rid, name, value, home=None, now=None, catalog=None):
     th[short] = value
     entry.update(thresholds=th, since=now_text(now))
     reasons = check_entry(rule, entry)
+    if not reasons:   # M7.6 REDO A-3: measured on the rule's own fixtures before it is written
+        trial = apply([rule], {"rules": {rid: entry}}, overlay_path(home))
+        reasons = [r.split(": ", 1)[1] for r in trial.overlay["refused"]]
     if reasons:
         raise OverlayError("%s: %s" % (rid, "; ".join(reasons)))
     doc["rules"][rid] = entry
@@ -693,31 +843,37 @@ def reset(rid, home=None, catalog=None):
 
 def add_rule(path, home=None, catalog=None):
     """Validate a person's rule file (the engine's loader and the fixture
-    runner, fixtures relative to the file's directory) and copy it, with its
-    fixture files, under user_dir(home); the line said. Nothing is copied
-    when anything is refused."""
+    runner, fixtures relative to the file's directory, each through
+    fixture_file) and copy it, with its fixture files, under
+    user_dir(home)/<ID>/ - every destination through fixture_file
+    (realpath under that directory, M7.6 REDO A-1); the line said. Nothing
+    is copied when anything is refused; the fixtures are written first and
+    the YAML last, so a copy cut short is a rule with no YAML (refused at
+    load, said)."""
     path = os.path.abspath(path)
     if not path.endswith(".yaml"):
         raise OverlayError("%s: a rule file must end in .yaml" % path)
     src_root = os.path.dirname(path)
-    target_dir = user_dir(home)
     taken = {r.id for r in _base(home, catalog)}
-    rule = validate_rule(path, src_root, taken)
-    copies = [(path, os.path.join(target_dir, rule.id + ".yaml"))]
+    rule = validate_rule(path, src_root, taken, user=True)
+    rules_d = user_dir(home)
+    target_dir = fixture_file(rules_d, rule.id)
+    copies = []
     for kind in ("positive", "negative"):
         for p in rule.fixtures[kind]:
-            copies.append((os.path.join(src_root, p), os.path.join(target_dir, p)))
+            copies.append((fixture_file(src_root, p), fixture_file(target_dir, p)))
+    copies.append((path, fixture_file(target_dir, rule.id + ".yaml")))   # last
     plan = []
     for src, dst in copies:
         try:
             with open(src, "rb") as f:
                 data = f.read()
+            if os.path.exists(dst):
+                with open(dst, "rb") as f:
+                    if f.read() != data:
+                        raise OverlayError("%s exists in rules.d with other content: nothing copied" % dst)
         except OSError as exc:
-            raise OverlayError("%s cannot be read: %s" % (src, exc.strerror or exc))
-        if os.path.exists(dst):
-            with open(dst, "rb") as f:
-                if f.read() != data:
-                    raise OverlayError("%s exists in rules.d with other content: nothing copied" % dst)
+            raise OverlayError("%s cannot be read: %s" % (exc.filename or src, exc.strerror or exc))
         plan.append((dst, data))
     try:
         for dst, data in plan:
@@ -725,4 +881,4 @@ def add_rule(path, home=None, catalog=None):
     except OSError as exc:
         raise OverlayError("cannot write under %s: %s" % (target_dir, exc.strerror or exc))
     return "%s added as %s (origin: user; %d fixture file(s) copied; %s)" % (
-        rule.id, copies[0][1], len(copies) - 1, NEXT_WATCH)
+        rule.id, copies[-1][1], len(copies) - 1, NEXT_WATCH)

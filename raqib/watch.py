@@ -664,6 +664,9 @@ class Watch:
         try:
             rep = self.report()[0]
             body = report.render_text(rep)
+            if rep["result"] == "clean" and overlay.suppressed(self.not_judged):   # M7.6 REDO A-2: not "CLEAN" alone
+                body = body.replace("RESULT: CLEAN (exit", "RESULT: %s (exit" % overlay.clean_word(
+                    "CLEAN", self.not_judged), 1)
         except Exception as exc:
             body = "raqib watch: no final report: it could not be built (%s: %s)\n" % (type(exc).__name__,
                                                                                       _safe(exc))
@@ -905,6 +908,10 @@ class Watch:
         if self.port and self.port.get("warning"):
             out.append("WARNING: %s" % self.port["warning"])
         out.append("")
+        rules_off = overlay.report_lines(self.rules_overlay, self.not_judged)   # M7.6 (ADR-0008 decision 3)
+        first = bool(overlay.suppressed(self.not_judged))   # REDO A-2: first when it suppressed anything
+        if first:
+            out += rules_off
         windows = [a for a in alarms if a["kind"] == "silence-window"]
         out.append("LIVE SILENCE WINDOWS (A3, limit %gs): %d" % (self.gap, len(windows)))
         out += ["  - %s" % a["detail"] for a in windows]
@@ -920,7 +927,8 @@ class Watch:
         out += ["  [%s] %s session %s %s: %s%s" % (
             e["severity"], e["rule_id"], e["session_id"], seq_text(e["cited_seq"]), e["notice"],
             "" if e["settled_by"] == "its lines" else " (settled by %s)" % e["settled_by"]) for e in settled]
-        out += overlay.report_lines(self.rules_overlay, self.not_judged)   # M7.6 (ADR-0008 decision 3)
+        if not first:
+            out += rules_off
         counts = notifier["counts"]
         out.append("NOTIFICATIONS: %s; sent %d, terminal %d, failed %d, folded %d (%d still waiting), off %d"
                    % (band, counts["sent"], counts["terminal"], counts["failed"], counts["folded"],

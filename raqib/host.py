@@ -177,6 +177,9 @@ RULES = (NEW_AGENT, NEW_UNKNOWN, DARK_LIVE, UNWATCHED, RHYTHM)
 # the rule is not in the catalog (a host-rule hole), and a test holds them equal to the YAML's.
 RHYTHM_K, RHYTHM_W, RHYTHM_R = 3, 30, 10
 RHYTHM_FIELDS = {"k": "input_meta.rhythm.k", "w": "input_meta.rhythm.w", "r": "input_meta.rhythm.r"}
+# M7.6 REDO A-3 (ADR-0008 Amendment A): the suspect layer's period, HOST-RHYTHM.yaml's own eq (split from r)
+SUSPECT_EVERY_FIELD = "input_meta.rhythm.suspect_every"
+SUSPECT_EVERY = 10
 BEATS_KEPT = 6                     # beats (cycles) cited on a HostTree line
 # M7.4 E1: what the host does not give, said once per run (A3), never as zero
 WIN_BYTES_HOLE = ("Windows: GetExtendedTcpTable gives each connection's state and owner but no byte counts:"
@@ -1209,6 +1212,8 @@ class HostWatch:
                        " defaults K=%d W=%d R=%d and the rule cannot fire" % (
                            RHYTHM, ", ".join(RHYTHM_FIELDS.values()), RHYTHM_K, RHYTHM_W, RHYTHM_R))
         self.rhythm_k, self.rhythm_w, self.rhythm_r = params or (RHYTHM_K, RHYTHM_W, RHYTHM_R)
+        # M7.6 REDO A-3: how often the suspect layer is asked, its own eq in HOST-RHYTHM.yaml (default 10), not r
+        self.suspect_every = rule_eq(rhythm_rule, SUSPECT_EVERY_FIELD) or SUSPECT_EVERY
         # M7.5 REDO N-1: the live window of AGENT-DARK-LIVE, read from its YAML (the eq on input_meta.live_window)
         dark_rule = next((r for r in self.rules if r.id == DARK_LIVE), None)
         window = rule_eq(dark_rule, LIVE_WINDOW_FIELD)
@@ -1726,7 +1731,7 @@ class HostWatch:
                   "sources": {tree_word(k): self.sources[k].text for k in sorted(
                       current, key=lambda k: (str(k[0]), str(k[1]), str(k[2]))) if k in self.sources}}
         record["source_findings"] = self._poll_sources(now)
-        if self.suspect is not None and n % self.rhythm_r == 0:   # E3: every R rounds
+        if self.suspect is not None and n % self.suspect_every == 0:   # E3: every suspect_every rounds (A-3)
             record["suspect"] = self._suspect_start(now, n)
         self.last_round = record
         self._record(record)
@@ -2823,6 +2828,9 @@ class HostWatch:
     def summary(self):
         result, reasons = self.result()
         code = EXIT[result]
+        not_judged = self.all_not_judged()
+        rules_off = overlay.report_lines(self.rules_overlay, not_judged)   # M7.6 (ADR-0008 decision 3)
+        first = bool(overlay.suppressed(not_judged))   # REDO A-2: RULES OFF first when it suppressed anything
         out = ["Raqib watch --host (ADR-0007): the host, not a name",
                "host: %s; a round every %g s; window %g s; rounds %d%s" % (
                    self.platform, self.every, self.window, self.rounds,
@@ -2831,6 +2839,8 @@ class HostWatch:
                "record: %s; latest inventory: %s" % (self.rounds_path, self.inventory_path),
                "run: %s (seqs %d..%d of the record)" % (self.run, self.first_seq + 1, self.seq),
                "watched: %s to %s" % (self.at(self.t0), self.finished or "-"), ""]
+        if first:
+            out += rules_off
         late = sum(1 for r in self.round_lines if r.get("late"))
         failed = sum(1 for r in self.round_lines if r.get("error"))
         out.append("ROUNDS: %d started, %d with an inventory, %d late, %d failed" % (
@@ -2870,7 +2880,7 @@ class HostWatch:
             "off (no --suspect)" if self.suspect is None else "%s/%s every %d rounds over unknown trees; %d call(s),"
             " %d raised, %d window(s) below the threshold %.2f (no finding, not a clearance); %d line(s) sent, %d"
             " line(s) not judged by the suspect layer" % (
-                self.suspect.name, self.suspect.model, self.rhythm_r, len(self.suspect_runs), len(self.suspicions),
+                self.suspect.name, self.suspect.model, self.suspect_every, len(self.suspect_runs), len(self.suspicions),
                 sum(r.get("below", 0) for r in self.suspect_runs), self.suspect_threshold,
                 sum(self.suspect_sent.values()), sum(t.get("suspect_unsent", 0) for t in self.trees.values()))))
         for f in self.suspicions:
@@ -2910,7 +2920,8 @@ class HostWatch:
         # M7.5 E1/E4: apart from the findings; a note is never an alarm, never a knock
         out.append("DARK AFTER A LIVE TREE (notes, not alarms, not knocked): %d" % len(self.dark_notes))
         out += ["  - %s" % d["text"] for d in self.dark_notes]
-        out += overlay.report_lines(self.rules_overlay, self.all_not_judged())   # M7.6 (ADR-0008 decision 3)
+        if not first:
+            out += rules_off
         out.append("NOTES: %d" % len(self.notes))
         out += ["  - %s" % n for n in self.notes]
         holes = self.holes + self.notifier.holes
@@ -2936,7 +2947,9 @@ class HostWatch:
         out += ["", "ALARMS: %s" % ("; ".join(reasons) if result == "alarm" else "none"),
                 "INCOMPLETE: %s" % ("; ".join(reasons) if result == "incomplete" else "none"),
                 "CLEAN: %s" % ("; ".join(reasons) if result == "clean" else "none"),
-                "RESULT: %s (exit %d: %s)" % (result.upper(), code, why)]
+                # M7.6 REDO A-2: a clean (or none-seen) watch where an off rule would have fired says so; exit kept
+                "RESULT: %s (exit %d: %s)" % (overlay.clean_word(result.upper(), not_judged) if result in (
+                    "clean", "none-seen") else result.upper(), code, why)]
         return "\n".join(_safe(line) for line in out) + "\n", code
 
     # --- the state and the page -----------------------------------------------------
@@ -2971,7 +2984,7 @@ class HostWatch:
                      "rhythm": {"k": self.rhythm_k, "w": self.rhythm_w, "r": self.rhythm_r},
                      "suspect": None if self.suspect is None else {
                          "backend": self.suspect.name, "model": self.suspect.model,
-                         "threshold": self.suspect_threshold, "every_rounds": self.rhythm_r,
+                         "threshold": self.suspect_threshold, "every_rounds": self.suspect_every,
                          "out": self.suspect_call is not None, "runs": self.suspect_runs[-ROUNDS_KEPT:]},
                      "suspicions": self.suspicions,
                      "blind": self.blind,
@@ -3136,7 +3149,7 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
     out.write("raqib watch --host: suspect: %s\n" % (
         "off (no --suspect): no model is asked, nothing leaves the machine" if suspect is None else
         "%s/%s every %d rounds over the unknown trees, never named or benign ones; %s; A2: it may raise suspicion,"
-        " never acquit" % (suspect.name, suspect.model, watcher.rhythm_r, suspect_notice(suspect))))
+        " never acquit" % (suspect.name, suspect.model, watcher.suspect_every, suspect_notice(suspect))))
     for line in overlay.start_lines(watcher.rules_overlay):   # M7.6 (ADR-0008 decision 2): said at the start
         out.write("raqib watch --host: %s\n" % _safe(line))
     for note in watcher.notes:

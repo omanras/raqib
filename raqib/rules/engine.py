@@ -277,9 +277,12 @@ def compile_rule(doc, source="<rule>"):
         if not (isinstance(paths, list) and paths):
             bad("fixtures.%s" % kind, "must be a non-empty list (every rule has both)")
         for p in paths:
-            if not (isinstance(p, str) and p and not p.startswith("/")
-                    and ".." not in p.split("/")):
-                bad("fixtures.%s" % kind, "%r must be a relative path inside the repo" % (p,))
+            why = fixture_path_problem(p)
+            if why:   # M7.6 REDO A-1: one check on every OS, under both path rules
+                bad("fixtures.%s" % kind, "%r must be a relative path inside the repo (%s)" % (p, why))
+    both = sorted(set(fixtures["positive"]) & set(fixtures["negative"]))
+    if both:   # M7.6 REDO A-4 (ADR-0008): a fixture cannot measure a rule both ways; no budget excuses it
+        bad("fixtures", "%s listed as both positive and negative" % ", ".join(repr(p) for p in both))
     agg = doc.get("aggregate")
     if agg is not None:
         if not isinstance(agg, dict) or not {"distinct", "over"} <= set(agg) \
@@ -311,6 +314,31 @@ def compile_rule(doc, source="<rule>"):
         return Rule(doc, source)
     except _NodeError as exc:
         raise RuleError("%s: %s" % (source, exc))
+
+
+def fixture_path_problem(path):
+    r"""M7.6 REDO A-1 (ADR-0008 Amendment A): why a fixture path is not a
+    relative path that stays inside the directory it is joined to under the
+    POSIX AND the Windows path rules alike, on every OS; None when it is
+    one. Refused: a non-string or empty path; a root (a leading / or \, so
+    also //server and \\?\); a colon anywhere (a drive C: or C:x, an NTFS
+    stream); a .. component, split on / and \ both; a path that names no
+    file (only . components). ntpath's rules are those
+    separators, roots and drives, written out here because the gate's
+    child pre-imports only PREIMPORT (tools/gate.py) before a rule file is
+    imported; raqib/overlay.py joins every path under ntpath too."""
+    if not (isinstance(path, str) and path):
+        return "not a non-empty string"
+    if path[0] in "/\\":
+        return "a root (/ or \\)"
+    if ":" in path:
+        return "a drive or a colon"
+    parts = re.split(r"[\\/]", path)
+    if ".." in parts:
+        return "a .. component"
+    if all(p in ("", ".") for p in parts):
+        return "no file name (it is the directory itself)"
+    return None
 
 
 def check_kind(doc, source="<rule>"):

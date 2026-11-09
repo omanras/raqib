@@ -505,6 +505,7 @@ def cmd_rules(args, out):
         return rules_overlay_cmd(args, out)
     if args.set or args.threshold or args.add or args.reset or args.json:
         raise UsageError("--set, --threshold, --add, --reset and --json apply to `raqib rules` with no TRACE")
+    overlay_note()   # M7.6 REDO A-7
     numbered, problems = _read_trace(args.trace)
     rules = _catalog(args.catalog)
     records = [rec for _, rec in numbered]
@@ -617,7 +618,20 @@ def _report(args):
     return rep, numbered, problems
 
 
+def overlay_note(err=None):
+    """M7.6 REDO A-7 (ADR-0008 Amendment A, Q-2): `raqib rules TRACE`, report
+    and ui judge the catalog as declared; when an overlay file exists they
+    say so in one line, on stderr (stdout holds findings, JSON or HTML)."""
+    path = overlay.overlay_path()
+    if os.path.exists(path):
+        (err or sys.stderr).write("raqib: an overlay exists at %s; this command judges the catalog as declared\n"
+                                  % path)
+        return True
+    return False
+
+
 def cmd_report(args, out):
+    overlay_note()
     rep, _, _ = _report(args)
     if args.json:
         out.write(json.dumps(rep, indent=2, sort_keys=True, ensure_ascii=True) + "\n")
@@ -709,6 +723,7 @@ def cmd_suspect(args, out):
 
 
 def cmd_ui(args, out):
+    overlay_note()   # M7.6 REDO A-7
     gap = _gap_seconds(args)
     if args.refresh is not None and not args.serve:
         raise UsageError("--refresh applies to --serve: a static page never reloads itself")

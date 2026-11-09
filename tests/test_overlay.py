@@ -34,6 +34,14 @@ def home(tmp_path, monkeypatch):
     return path
 
 
+@pytest.fixture
+def unmeasured(monkeypatch):
+    """REDO A-3 measures a changed threshold on the rule's fixtures, which carry the YAML's values: every
+    k / w / r / streak / live_window change is refused there (test_redo_a3_...). The tests of what the
+    overlay does once a change is accepted take the measurement as passed."""
+    monkeypatch.setattr(overlay, "measure", lambda rule, label: [])
+
+
 def write_overlay(home, text):
     p = Path(overlay.overlay_path(str(home)))
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -167,7 +175,7 @@ def test_e1_the_overlay_cannot_turn_on_a_rule_its_yaml_disables(home, tmp_path):
                             "severity": "medium", "kind": "signature"}]
 
 
-def test_e1_apply_changes_only_status_and_declared_eq_values(home):
+def test_e1_apply_changes_only_status_and_declared_eq_values(home, unmeasured):
     write_overlay(home, 'rules:\n  HOST-RHYTHM:\n    status: "off"\n    since: "2026-11-09T10:00:00Z"\n'
                         '    thresholds: {k: 5, input_meta.rhythm.w: 60, r: 20}\n'
                         '  AGENT-DARK-LIVE:\n    thresholds: {streak: 4, live_window: 12}\n')
@@ -196,7 +204,7 @@ def test_e1_apply_changes_only_status_and_declared_eq_values(home):
     assert host.rhythm_params(by_id(engine.load_catalog(CATALOG_DIR), "HOST-RHYTHM")) == (3, 30, 10)
 
 
-def test_e1_the_matcher_follows_the_changed_threshold(home):
+def test_e1_the_matcher_follows_the_changed_threshold(home, unmeasured):
     """A HostTree line computed with k=5 fires the overlaid rule; one with k=3 does not."""
     write_overlay(home, "rules:\n  HOST-RHYTHM:\n    thresholds: {k: 5}\n")
     rule = by_id(overlay.load(str(home)), "HOST-RHYTHM")
@@ -210,7 +218,7 @@ def test_e1_the_matcher_follows_the_changed_threshold(home):
     assert engine.run_rule(rule, lines)
 
 
-def test_e1_host_reads_the_changed_k_w_r_streak_and_window(home, tmp_path):
+def test_e1_host_reads_the_changed_k_w_r_streak_and_window(home, tmp_path, unmeasured):
     write_overlay(home, 'rules:\n  HOST-RHYTHM:\n    thresholds: {k: 4, w: 45, r: 12}\n'
                         '  AGENT-DARK-LIVE:\n    thresholds: {streak: 5, live_window: 15}\n')
     from test_watch import FakeRunner, make_notifier
@@ -233,7 +241,7 @@ def test_a6_add_validates_with_the_loader_and_the_fixture_runner_and_copies(home
     src = user_rule(tmp_path / "mine")
     said = overlay.add_rule(str(src), str(home))
     assert "USER-SHRED added" in said and "2 fixture file(s) copied" in said and overlay.NEXT_WATCH in said
-    d = Path(overlay.user_dir(str(home)))
+    d = Path(overlay.user_dir(str(home))) / "USER-SHRED"   # REDO A-1: everything under rules.d/<rule>/
     assert (d / "USER-SHRED.yaml").read_text() == src.read_text()
     assert (d / "fx" / "USER-SHRED" / "positive.json").is_file()
     rules = overlay.load(str(home))
@@ -270,13 +278,13 @@ def test_a6_a_rule_the_loader_or_the_runner_refuses_is_not_copied(home, tmp_path
 
 def test_a6_a_bad_file_put_in_rules_d_by_hand_is_refused_at_load_and_said(home):
     d = Path(overlay.user_dir(str(home)))
-    user_rule(d, positive_head="ls")
+    user_rule(d / "USER-SHRED", positive_head="ls")
     (d / "STRAY.yml").write_text("x: 1\n", encoding="ascii")
     rules = overlay.load(str(home))
     info = overlay.describe(rules)
     assert "USER-SHRED" not in {r.id for r in rules}
     assert len(info["user_refused"]) == 2 and any("positive-missed" in r for r in info["user_refused"])
-    assert any("must end in .yaml" in r for r in info["user_refused"])
+    assert any("a rule lives in rules.d/<ID>/<ID>.yaml" in r for r in info["user_refused"])
     assert sum("user rule REFUSED" in s for s in overlay.start_lines(info)) == 2
 
 
@@ -303,7 +311,7 @@ def test_e2_raqib_rules_lists_every_rule_with_its_columns(home):
     assert data["overlay"]["file"] == "absent"
 
 
-def test_e2_set_threshold_reset_add_and_exit_2_on_refusal(home, tmp_path, capsys):
+def test_e2_set_threshold_reset_add_and_exit_2_on_refusal(home, tmp_path, capsys, unmeasured):
     code, text = run_cli(["rules", "--set", "SECRET-OUTPUT", "off"])
     assert code == 0 and "raqib rules: SECRET-OUTPUT off in" in text and "1 rule off: SECRET-OUTPUT" in text
     code, text = run_cli(["rules", "--threshold", "HOST-RHYTHM", "k", "7"])
@@ -402,7 +410,8 @@ def test_e3_a_project_watch_says_the_overlay_at_start_in_watch_json_and_the_fina
     state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
     ro = state["rules_overlay"]
     assert [o["rule_id"] for o in ro["off"]] == ["SECRET-OUTPUT"] and ro["not_judged"]["SECRET-OUTPUT"]["fired"] >= 1
-    assert ("incomplete", "1 rule off: SECRET-OUTPUT") in ui.band_items(state)
+    # REDO A-2: red while the rule off would have fired
+    assert ("alarm", "1 rule off: SECRET-OUTPUT; 1 finding(s) suppressed by the overlay") in ui.band_items(state)
     assert not any(e["rule_id"] == "SECRET-OUTPUT" for e in state["findings"])
     rep = w.finish()
     assert "RULES OFF (ADR-0008" in w.final_text and "not judged by SECRET-OUTPUT (off): " in w.final_text
@@ -411,7 +420,7 @@ def test_e3_a_project_watch_says_the_overlay_at_start_in_watch_json_and_the_fina
                    if "status" in n)
 
 
-def test_e3_watch_start_prints_the_applied_overlay(home, tmp_path, monkeypatch):
+def test_e3_watch_start_prints_the_applied_overlay(home, tmp_path, unmeasured):
     overlay.set_threshold("HOST-RHYTHM", "k", "4", str(home))
     overlay.set_status("NET-TOOL", "off", str(home))
     info = overlay.describe(overlay.load(str(home)))
@@ -466,7 +475,7 @@ def test_e3_the_band_item_and_rules_off_text():
 
 # --- E4: the panel (state -> text; A4) --------------------------------------------------------------------------
 
-def test_e4_the_rules_panel_state_to_text_and_changes(home, tmp_path):
+def test_e4_the_rules_panel_state_to_text_and_changes(home, tmp_path, unmeasured):
     p = app.RulesPanel(home=str(home))
     text = p.text()
     assert text.startswith(app.RULES_INTRO) and "HOST-RHYTHM" in text and "rules: no rule off" in text
@@ -549,9 +558,32 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
     assert writers == {"_atomic_write"}
     src = ast.get_source_segment((ROOT / "raqib" / "overlay.py").read_text(encoding="utf-8"), funcs["write"])
     assert "path = overlay_path(home)" in src
-    src = ast.get_source_segment((ROOT / "raqib" / "overlay.py").read_text(encoding="utf-8"), funcs["add_rule"])
-    assert "target_dir = user_dir(home)" in src and "os.path.join(target_dir," in src
+    # REDO A-1: the realpath guard, by the AST: every destination add_rule writes is a fixture_file(...) call,
+    # its directory too, and fixture_file resolves the joined path with os.path.realpath and checks containment
+    add = funcs["add_rule"]
+    assigned = {t.targets[0].id: t.value for t in ast.walk(add) if isinstance(t, ast.Assign)
+                and isinstance(t.targets[0], ast.Name)}
+    assert _call_name(assigned["rules_d"]) == "user_dir" and _call_name(assigned["target_dir"]) == "fixture_file"
+    appended = [c.args[0] for c in ast.walk(add) if isinstance(c, ast.Call) and _call_name(c) == "append"
+                and isinstance(c.func, ast.Attribute) and c.func.value.id == "copies"]
+    assert len(appended) == 2
+    for pair in appended:
+        assert isinstance(pair, ast.Tuple) and _call_name(pair.elts[1]) == "fixture_file"
+        assert _call_name(pair.elts[1]) == "fixture_file" and isinstance(pair.elts[1].args[0], ast.Name)
+        assert pair.elts[1].args[0].id == "target_dir"
+    guard = funcs["fixture_file"]
+    calls = {_call_name(c) for c in ast.walk(guard) if isinstance(c, ast.Call)}
+    assert {"realpath", "commonpath", "lstat", "islink", "fixture_path_problem", "normpath"} <= calls
+    realpaths = [c for c in ast.walk(guard) if isinstance(c, ast.Call) and _call_name(c) == "realpath"]
+    assert any(isinstance(c.args[0], ast.Name) and c.args[0].id == "full" for c in realpaths)
+    for name in ("validate_rule", "load_user_rules", "measure"):   # every read of a person's rule's files
+        assert "fixture_file" in {_call_name(c) for c in ast.walk(funcs[name]) if isinstance(c, ast.Call)}, name
     assert "subprocess" not in (ROOT / "raqib" / "overlay.py").read_text(encoding="utf-8")
+
+
+def _call_name(node):
+    f = node.func if isinstance(node, ast.Call) else None
+    return f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
 
 
 def test_e4_a_running_add_or_change_never_touches_a_project(home, tmp_path):
@@ -636,3 +668,220 @@ def test_tk_the_rules_screen_from_the_header(home, tmp_path):
         else:
             root.destroy()
 
+
+
+# --- REDO (ADR-0008 Amendment A): A-1..A-7, each with its test (A-9) -----------------------------------------
+
+PROBES = ("..\\..\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\x.json",
+          "C:/Users/Public/x.json")
+
+
+@pytest.mark.parametrize("probe", PROBES + ("/etc/x.json", "\\x.json", "a/../../x.json", "fx\\..\\..\\x.json",
+                                            "C:x.json", "//server/share/x.json", "x.json:stream"))
+def test_redo_a1_the_reviewers_probes_are_refused_under_both_path_rules(home, tmp_path, probe):
+    """A-1 (P1, A4): the loader refuses them on every OS; joined by ntpath or posixpath they leave the base."""
+    import ntpath
+    import posixpath
+    assert engine.fixture_path_problem(probe) is not None
+    escapes = [mod.__name__ for mod, base in ((ntpath, "C:\\base"), (posixpath, "/base"))
+               if not mod.normpath(mod.join(base, probe)).startswith(base + mod.sep)]
+    if probe in PROBES:
+        assert "ntpath" in escapes   # the reviewer's: out of rules.d on Windows, by ntpath.join
+    with pytest.raises(overlay.OverlayError, match="refused"):
+        overlay.fixture_file(str(tmp_path / "base"), probe)
+    text = USER_RULE.replace("    - fx/USER-SHRED/negative.json", "    - fx/USER-SHRED/negative.json\n    - %s"
+                             % json.dumps(probe))
+    src = user_rule(tmp_path / "mine", text=text)
+    with pytest.raises(overlay.OverlayError) as exc:
+        overlay.add_rule(str(src), str(home))
+    assert repr(probe) in str(exc.value) or json.dumps(probe)[1:-1] in str(exc.value)   # the path quoted
+    assert not Path(overlay.user_dir(str(home))).exists()             # refused whole: nothing copied
+
+
+def test_redo_a1_every_load_reads_only_under_rules_d_rule(home, tmp_path):
+    d = Path(overlay.user_dir(str(home))) / "USER-SHRED"
+    user_rule(d)
+    assert "USER-SHRED" in {r.id for r in overlay.load(str(home))}
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "positive.json").write_text(json.dumps([line(1, "shred")]), encoding="ascii")
+    import shutil
+    shutil.rmtree(d / "fx" / "USER-SHRED")
+    try:
+        os.symlink(str(outside), str(d / "fx" / "USER-SHRED"), target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip("no symlink here: %s" % exc)
+    info = overlay.describe(overlay.load(str(home)))
+    assert "USER-SHRED" not in {u["rule_id"] for u in info["user"]}
+    assert any("is a link" in r for r in info["user_refused"])
+    # a YAML put there by hand that names a path out of its directory is refused at load, the path quoted
+    shutil.rmtree(d)
+    user_rule(d, text=USER_RULE.replace("fx/USER-SHRED/negative.json", "../negative.json"))
+    info = overlay.describe(overlay.load(str(home)))
+    assert any("'../negative.json'" in r for r in info["user_refused"])
+
+
+def scoped_watch(home, tmp_path):
+    """The reviewer's P2 case: SECRET-OUTPUT off, a scoped HANDOFF, its positive fixture in the trace."""
+    from test_watch import Clock, START, make_notifier
+    rules, gap, evaluator = cli._watch_setup()
+    project = tmp_path / "project"
+    project.mkdir(parents=True)
+    (project / "HANDOFF.md").write_text("Task: x\n\nScope:\n  src/\n")
+    evaluate, _ = evaluator(str(project))
+    path = tmp_path / "traces" / "raqib.log.jsonl"
+    path.parent.mkdir(parents=True)
+    path.write_text("")
+    clock = Clock()
+    w = watch.Watch(str(project), str(path), evaluate, rules, gap, make_notifier(), out=io.StringIO(),
+                    err=io.StringIO(), clock=clock, started=START, wall=lambda: START.timestamp() + clock.t - 1000.0)
+    with open(path, "a") as f:
+        f.write("".join(json.dumps(r) + "\n" for r in secret_lines()))
+    w.step()
+    return w
+
+
+def test_redo_a2_a_watch_where_an_off_rule_would_have_fired_is_not_clean_alone(home, tmp_path):
+    overlay.set_status("SECRET-OUTPUT", "off", str(home))
+    w = scoped_watch(home, tmp_path)
+    state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    assert ui.suppressed(state) == 1
+    assert ("alarm", "1 rule off: SECRET-OUTPUT; 1 finding(s) suppressed by the overlay") in ui.band_items(state)
+    rep = w.finish()
+    assert rep["result"] == "clean" and w.final_exit == 0            # the exit code stays the person's choice
+    assert "RESULT: CLEAN (1 findings suppressed by the overlay) (exit 0)" in w.final_text
+    assert "RESULT: CLEAN (exit 0)" not in w.final_text
+    assert w.final_text.index("RULES OFF (ADR-0008") < w.final_text.index("LIVE SILENCE WINDOWS")   # first
+    # without the overlay the same trace is an alarm; with SECRET-OUTPUT on, nothing is suppressed
+    overlay.reset("SECRET-OUTPUT", str(home))
+    w2 = scoped_watch(home, tmp_path / "again")
+    w2.finish()
+    assert w2.final_exit == 1 and "suppressed by the overlay" not in w2.final_text
+    assert overlay.clean_word("NONE-SEEN", {"X-Y": {"fired": 2}}) == "NONE-SEEN (2 findings suppressed by the overlay)"
+    assert overlay.clean_word("CLEAN", {"X-Y": {"fired": 0}}) == "CLEAN"
+
+
+def test_redo_a2_the_host_report_says_suppressed_first(home, tmp_path):
+    import test_host
+    overlay.set_status("NEW-AGENT", "off", str(home))
+    w, clock = test_host.make_host(tmp_path, ["linux"])
+    w2 = host.HostWatch(lambda: test_host.inv("linux"), test_host.CATALOG, overlay.load(str(home)), w.notifier,
+                        out=io.StringIO(), err=io.StringIO(), clock=clock, home=str(home), platform="test")
+    w2.not_judged = {"NEW-AGENT": {"lines": 4, "fired": 2, "cited": 2, "note": None}}
+    text, code = w2.finish()
+    assert text.index("RULES OFF (ADR-0008") < text.index("ROUNDS:")
+    result = [l for l in text.splitlines() if l.startswith("RESULT: ")][0]
+    assert code == 3 and "suppressed" not in result   # no round read: INCOMPLETE, a word the overlay leaves alone
+    w3 = host.HostWatch(lambda: test_host.inv("linux"), test_host.CATALOG, overlay.load(str(home)), w.notifier,
+                        out=io.StringIO(), err=io.StringIO(), clock=clock, home=str(tmp_path / "h3"), platform="test")
+    w3.result = lambda: ("none-seen", [])
+    w3.not_judged = {"NEW-AGENT": {"lines": 1, "fired": 1, "cited": 1, "note": None}}
+    text, code = w3.finish()
+    assert code == 0 and "RESULT: NONE-SEEN (1 findings suppressed by the overlay) (exit 0" in text
+
+
+def test_redo_a3_a_changed_threshold_is_measured_on_its_fixtures(home, capsys):
+    with pytest.raises(overlay.OverlayError, match="k=5: positive-three-cycles no longer fires"):
+        overlay.set_threshold("HOST-RHYTHM", "k", "5", str(home))
+    code, _ = run_cli(["rules", "--threshold", "AGENT-DARK-LIVE", "streak", "2"])
+    assert code == 2 and "streak=2: positive-dark-three-rounds no longer fires" in capsys.readouterr().err
+    assert not Path(overlay.overlay_path(str(home))).exists()     # nothing written
+    # at load, an overlay written by hand is measured the same way, the entry refused whole
+    write_overlay(home, 'rules:\n  HOST-RHYTHM:\n    status: "off"\n    thresholds: {k: 5}\n')
+    rules = overlay.load(str(home))
+    info = overlay.describe(rules)
+    assert by_id(rules, "HOST-RHYTHM").status == "active" and host.rhythm_params(by_id(rules, "HOST-RHYTHM"))[0] == 3
+    assert any("k=5: positive-three-cycles no longer fires" in r for r in info["refused"])
+
+
+def test_redo_a3_a_threshold_under_which_a_negative_fires_is_refused(home, tmp_path, monkeypatch):
+    """The measurement also names a negative that fires (here a negative made to carry k=4)."""
+    rule = by_id(engine.load_catalog(CATALOG_DIR), "HOST-RHYTHM")
+    folder = tmp_path / "root"
+    for kind in ("positive", "negative"):
+        for p in rule.fixtures[kind]:
+            dst = folder / p
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            data = json.loads((ROOT / p).read_text())
+            if kind == "negative" and p.endswith("negative-two-cycles.json"):
+                lines = data["lines"] if isinstance(data, dict) else data
+                pos = fixtures.load_fixture(ROOT / rule.fixtures["positive"][0])[0]
+                lines[:] = pos   # a negative that holds a firing line
+                for rec in lines:
+                    if isinstance(rec.get("input_meta", {}).get("rhythm"), dict):
+                        rec["input_meta"]["rhythm"]["k"] = 4
+            dst.write_text(json.dumps(data))
+    monkeypatch.setattr(overlay, "ROOT", str(folder))
+    with pytest.raises(overlay.OverlayError, match="k=4: negative-two-cycles fires"):
+        overlay.set_threshold("HOST-RHYTHM", "k", "4", str(home))
+    monkeypatch.setattr(overlay, "ROOT", str(tmp_path / "installed"))   # an installed raqib: no fixtures
+    with pytest.raises(overlay.OverlayError, match="cannot be measured: fixture .* is not here"):
+        overlay.set_threshold("HOST-RHYTHM", "k", "4", str(home))
+
+
+def test_redo_a3_a_rule_that_can_never_fire_is_refused_and_suspect_every_is_split(home, tmp_path):
+    with pytest.raises(overlay.OverlayError, match="k = 11 is above its r \\(10\\): k cycle rounds cannot fit"):
+        overlay.set_threshold("HOST-RHYTHM", "k", "11", str(home))
+    with pytest.raises(overlay.OverlayError, match="r = 2 is below its k \\(3\\)"):
+        overlay.set_threshold("HOST-RHYTHM", "r", "2", str(home))
+    base = by_id(engine.load_catalog(CATALOG_DIR), "HOST-RHYTHM")
+    assert host.rule_eq(base, host.SUSPECT_EVERY_FIELD) == host.SUSPECT_EVERY == 10
+    assert "suspect_every" in (CATALOG_DIR / "HOST-RHYTHM.yaml").read_text()
+    assert fixtures.check_rule(base, ROOT)["verdict"] == "ok"   # the YAML's new node keeps the rule as measured
+    said = overlay.set_threshold("HOST-RHYTHM", "suspect_every", "5", str(home))   # measured: it holds
+    assert "suspect_every = 5" in said
+    from test_watch import FakeRunner, make_notifier
+    notifier = make_notifier(FakeRunner())
+    notifier.host = True
+    w = host.HostWatch(lambda: {}, discover.load_catalog(discover.CATALOG), overlay.load(str(home)), notifier,
+                       out=io.StringIO(), err=io.StringIO(), home=str(home), platform="test")
+    assert (w.suspect_every, w.rhythm_r) == (5, 10)
+    src = (ROOT / "raqib" / "host.py").read_text(encoding="utf-8")
+    assert "n % self.suspect_every == 0" in src and "n % self.rhythm_r" not in src
+
+
+def test_redo_a4_a_fixture_both_positive_and_negative_is_refused_by_the_loader(home, tmp_path):
+    text = USER_RULE.replace("    - fx/USER-SHRED/negative.json",
+                             "    - fx/USER-SHRED/negative.json\n    - fx/USER-SHRED/positive.json")
+    src = user_rule(tmp_path / "mine", text=text)
+    with pytest.raises(overlay.OverlayError, match="refused by the loader: .*listed as both positive and negative"):
+        overlay.add_rule(str(src), str(home))
+    with pytest.raises(engine.RuleError, match="both positive and negative"):
+        engine.load_rule(src)
+
+
+def test_redo_a5_a_rule_refused_at_load_is_counted_off_with_why(home, tmp_path):
+    overlay.add_rule(str(user_rule(tmp_path / "mine")), str(home))
+    import shutil
+    shutil.rmtree(Path(overlay.user_dir(str(home))) / "USER-SHRED" / "fx")   # the reviewer's moved fixtures
+    info = overlay.describe(overlay.load(str(home)))
+    text = overlay.off_text(info)
+    assert text.startswith("1 rule off: USER-SHRED (refused: ")
+    assert ui.rules_off_text({"rules_overlay": info}) == text
+    assert ("incomplete", text) in ui.band_items({"rules_overlay": info})
+    assert any(l.startswith("rules: 1 rule off: USER-SHRED (refused: ") for l in overlay.start_lines(info))
+    assert any("USER-SHRED (a person's rule) off: refused at load: " in l for l in overlay.report_lines(info, {}))
+    assert app.RulesPanel(home=str(home)).header() == text
+
+
+def test_redo_a6_a_host_class_user_rule_is_refused_at_add(home, tmp_path):
+    src = user_rule(tmp_path / "mine", text=USER_RULE.replace("class: DESTRUCT", "class: HOST"))
+    with pytest.raises(overlay.OverlayError, match="host rules are fixed in v1"):
+        overlay.add_rule(str(src), str(home))
+    code, _ = run_cli(["rules", "--add", str(src)])
+    assert code == 2 and not Path(overlay.user_dir(str(home))).exists()
+
+
+def test_redo_a7_the_trace_commands_say_the_overlay_exists(home, tmp_path, capsys):
+    trace = tmp_path / "t.jsonl"
+    trace.write_text("".join(json.dumps(r) + "\n" for r in secret_lines()), encoding="ascii")
+    line = "raqib: an overlay exists at %s; this command judges the catalog as declared\n" % overlay.overlay_path()
+    for argv in (["rules", str(trace)], ["report", str(trace)], ["ui", str(trace), "-o", str(tmp_path / "p.html")]):
+        run_cli(argv)
+        assert line not in capsys.readouterr().err, argv     # no file: nothing said
+    overlay.set_status("SECRET-OUTPUT", "off")
+    for argv in (["rules", str(trace)], ["report", str(trace)], ["ui", str(trace), "-o", str(tmp_path / "p.html")]):
+        code, out = run_cli(argv)
+        assert capsys.readouterr().err.count(line) == 1, argv
+        assert code == 1 and "SECRET-OUTPUT" in out + (tmp_path / "p.html").read_text() if argv[0] == "ui" else (
+            code == 1 and "SECRET-OUTPUT" in out), argv

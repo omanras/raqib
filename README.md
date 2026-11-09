@@ -64,9 +64,9 @@ It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt inst
 
 ## Choose the rules
 `raqib rules` lists every rule (id, kind, class, severity, budget, on / off, origin, the thresholds its YAML declares with their bounds); `--set ID on|off`, `--threshold ID FIELD VALUE` (for example `--threshold HOST-RHYTHM k 5`) and `--reset ID` change `~/.raqib/rules.yaml` only, never the package, and exit 2 with the reason when refused; the window's "Rules" button does the same.
-`--add FILE` takes a rule you wrote, with its positive and negative fixtures beside it: it joins only when the loader and the fixture runner accept it (A6), copied into `~/.raqib/rules.d/`, and is shown as `origin: user`.
+`--add FILE` takes a rule you wrote, with its positive and negative fixtures beside it: it joins only when the loader and the fixture runner accept it (A6), copied into `~/.raqib/rules.d/<ID>/` (fixture paths relative, no `..`, no drive), and is shown as `origin: user`; a changed threshold is measured on the rule's fixtures and refused when a positive stops firing or a negative fires.
 A change applies to the next watch; every watch prints the overlay it applied at its start, keeps it in its state, and shows "N rules off: <ids>" in the band and the window's header.
-A rule off is said, not silent: the final report lists it with who turned it off and since when, and "not judged by <id> (off): M lines" with what it would have fired; the exit code is not changed by it ([ADR-0008](docs/specs/ADR-0008-the-rules-panel.md)).
+A rule off is said, not silent: the final report lists it with who turned it off and since when, and "not judged by <id> (off): M lines" with what it would have fired; the exit code is not changed by it, but a clean watch where an off rule would have fired says "CLEAN (N findings suppressed by the overlay)" ([ADR-0008](docs/specs/ADR-0008-the-rules-panel.md)).
 
 ## How it works
 - **Deterministic first.** Rules decide; a model can only add suspicion (A1, A2).

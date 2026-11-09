@@ -70,6 +70,13 @@ match:
     - {field: input_meta.rhythm.k, eq: 3}
     - {field: input_meta.rhythm.w, eq: 30}
     - {field: input_meta.rhythm.r, eq: 10}
+    # M7.6 REDO A-3 (ADR-0008 Amendment A): suspect_every is how often (in rounds) watch --host asks the suspect
+    # layer, split from r (before, every r rounds), so the person can change one without the other. host.py reads
+    # this eq (default 10) and writes nothing for it on a line: it is a parameter of the watch, not a condition of
+    # this rule, so the `any` holds on every line (the field is never there); the rule fires as before.
+    - any:
+        - {field: input_meta.rhythm.suspect_every, eq: 10}
+        - {field: input_meta.rhythm.suspect_every, exists: false}
 fixtures:
   positive:
     - tests/fixtures/rules/HOST-RHYTHM/positive-three-cycles.json
