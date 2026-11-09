@@ -669,3 +669,30 @@ ruled or recorded.
   host talks to one server stay two destinations (under-counts, safe).
 - N-10 (Q-5) Source beats counted one round late: accepted, recorded.
 - N-11 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment O (the Table, 2026-11-09) - judgement on M7.5 (178adc5 + 1e7b012)
+- N-1..N-9 MET as cited in the REDO section of
+  docs/review/2026-11-09-M7.5-questions.md; the Table read the N-1 delta
+  (live_window read from the YAML's eq, 9; was_live recomputed each round
+  from a live candidate link only, never history; the streak restarts when
+  the window closes). Every REDO change names its test (N-11). N-7 is
+  recorded as ADR-0005 Amendment L.
+- CI, read from api.github.com: runs 42566014129 (178adc5) and 42568560843
+  (1e7b012), six jobs success each.
+- Gate on the branch: 2758 passed, 19 skipped; kinds 4 : 7 : 11. Scope
+  clean. Two commits (G-8). The REDO was built in a second worktree
+  because the Table had the main checkout busy: accepted and recorded.
+- The builder's open question (os_sysmon writing the ProcessId on process
+  lines, so N-9's act key is exactly (pid, started) on every source):
+  yes, a later task on raqib/hooks/os_sysmon.py (recorded for M7.7); the
+  image-plus-1-second match stands until then and the report counts the
+  duplicates it merges.
+- The field lessons of Amendment M are closed: dark-after-live is a note
+  within a 9-round window and a knock after it; rhythm reads every source;
+  the NEW-AGENT toast was sent by Raqib and the KNOCKS ledger now lets the
+  next field run compare toast by toast.
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's order.
+- Table ledger for M7.5: one review (no must-fix found), one REDO made by
+  the Table (N-1, an alarm traded for silence); the Table's miss: the
+  HANDOFF's E1 said "was live in this watch" without a window, which is
+  exactly the sticky flag the builder built.
