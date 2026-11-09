@@ -1,4 +1,7 @@
 {
+ "dark_notes": [
+  5
+ ],
  "lines": [
   {
    "cwd": "host",
@@ -121,6 +124,7 @@
     ],
     "dark": true,
     "linked": null,
+    "live_window": 9,
     "path": "C:\\Users\\user\\.kimi",
     "round": 5,
     "run": "fixture-run",

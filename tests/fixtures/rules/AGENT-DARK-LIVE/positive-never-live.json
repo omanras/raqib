@@ -87,6 +87,7 @@
     ],
     "dark": true,
     "linked": null,
+    "live_window": 9,
     "path": "C:\\Users\\user\\.kimi",
     "round": 3,
     "run": "fixture-run",

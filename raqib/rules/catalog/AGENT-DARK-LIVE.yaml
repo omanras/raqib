@@ -11,23 +11,27 @@ severity: medium
 # (C-1b: NEW-AGENT/negative-arrival-linux-desktop.json and
 # negative-arrival-windows-desktop.json, tests/fixtures/host/make.py) list
 # no footprint, so they hold no HostFootprint line and are unmeasured for
-# this rule (C-1a). Its measured negatives are its own four,
-# AGENT-DARK-LIVE/negative-dark-two-rounds.json,
-# negative-dark-then-linked.json and, M7.5 E1 (re-measured, A6),
-# negative-live-then-gone.json and negative-linked-again.json: 0 of 4 fire.
-# The budget is that measure, 0 (questions file, R-2: a benign footprint
-# left by an uninstalled agent is the source no fixture measures yet; the
-# field run of ADR-0007 Amendment M measured the source "dark after the
-# agent's own end": 1 of 2 knocks was it, which E1 makes a note).
+# this rule (C-1a). Its measured negatives are its own two,
+# AGENT-DARK-LIVE/negative-dark-two-rounds.json and
+# negative-dark-then-linked.json: 0 of 2 fire. The budget is that measure,
+# 0 (questions file, R-2: a benign footprint left by an uninstalled agent
+# is the source no fixture measures yet). M7.5 REDO N-2 (as K-9 for
+# HOST-RHYTHM): the E1 fixtures negative-live-then-gone.json and
+# negative-linked-again.json are NOT this rule's negatives: their last line
+# carries was_live true, which this match cannot see (it cannot fire on
+# them), so they measure host.py's note, not this rule; they are under
+# tests/fixtures/host/notes/ (make.py) and tests/test_field_run.py holds them. The field run of ADR-0007 Amendment M is
+# the one field measure: of its 2 knocks, 1 was "dark after the agent's own
+# end", which E1 makes a note.
 fp_budget: 0.0
 holes:
   - "a footprint left by an agent that was uninstalled, or that runs only now and then, is dark by design (a false-positive source)"
   - "an agent that runs between rounds and never in one is dark"
   - "a round whose footprint cannot be judged (no process or connection records) neither counts nor clears; a round with no inventory neither"
   - "the streak counts consecutive rounds with an inventory: a reader that fails in between does not break it"
-  - "M7.5 E1: once a candidate tree linked to the footprint in this watch (input_meta.was_live), a later dark streak is a note, not a finding, for the rest of the watch: an agent that ran once and then runs only between rounds, or is replaced by a silent one at the same footprint, is listed as 'dark after a live tree (note)', never knocked"
+  - "M7.5 REDO N-1: the live window: within live_window (9) rounds after a live (not history) candidate tree linked to the footprint, its dark streak of three is a note, not a finding (input_meta.was_live); an agent that runs only between rounds, or a silent one at the same footprint, goes unknocked for at most that window: when it closes during the dark streak a new streak starts and its third round knocks (live round + 11 at the latest). A history candidate never makes the footprint live"
   - "M7.5 E1: only a candidate link makes the footprint live; a link to an act-root (a tree that acts with no talk seen) does not, so an act-root agent that ends still knocks after three dark rounds"
-description: "A line of raqib watch --host (tool HostFootprint, source os) for a footprint in the homes (raqib/discover/endpoints.yaml footprints) that the round's inventory calls AGENT-DARK - no candidate or act-root links to it - in the third consecutive round with an inventory (the streak), when no candidate tree of THIS watch was ever linked to it (input_meta.was_live false: an installed, silent agent). It fires once per streak; a round where the footprint links to a tree clears the streak, with a note in the record, the page and the final report. M7.5 E1 (ADR-0007 Amendment M, lesson 1): a footprint whose tree was a live candidate in this watch and then left is the agent's normal end: its streak of three is not this rule's; raqib/host.py lists it as 'dark after a live tree (note)' in the record, the page, the window and the final report, never a knock or an alarm. The line cites the round, the sample and the record lines of the inventory (A5)."
+description: "A line of raqib watch --host (tool HostFootprint, source os) for a footprint in the homes (raqib/discover/endpoints.yaml footprints) that the round's inventory calls AGENT-DARK - no candidate or act-root links to it - in the third consecutive round with an inventory (the streak), when no live (not history) candidate tree of THIS watch linked to it within the last live_window rounds (input_meta.was_live false: an installed, silent agent; M7.5 REDO N-1: the window is this rule's eq on input_meta.live_window, read by raqib/host.py, 3 x the streak). It fires once per streak; a round where the footprint links to a tree clears the streak, with a note in the record, the page and the final report. M7.5 E1 (ADR-0007 Amendment M, lesson 1): a footprint whose tree was a live candidate in this watch and then left is the agent's normal end: its streak of three is not this rule's; raqib/host.py lists it as 'dark after a live tree (note)' in the record, the page, the window and the final report, never a knock or an alarm. The line cites the round, the sample and the record lines of the inventory (A5)."
 summary: "{input_meta.agent} footprint {input_meta.path} with no live tree for {input_meta.streak} rounds (round {input_meta.round})"
 match:
   all:
@@ -36,8 +40,10 @@ match:
     - {field: source, eq: os}
     - {field: input_meta.dark, eq: true}
     - {field: input_meta.streak, eq: 3}
-    # M7.5 E1: never after a live tree of this watch (that is a note, written by host.py)
+    # M7.5 E1: never within the live window after a live tree of this watch (that is a note, written by host.py)
     - {field: input_meta.was_live, eq: false}
+    # M7.5 REDO N-1: R_dark, the live window in rounds (3 x the streak); host.py reads it from here
+    - {field: input_meta.live_window, eq: 9}
 fixtures:
   positive:
     - tests/fixtures/rules/AGENT-DARK-LIVE/positive-dark-three-rounds.json
@@ -45,7 +51,5 @@ fixtures:
   negative:
     - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-two-rounds.json
     - tests/fixtures/rules/AGENT-DARK-LIVE/negative-dark-then-linked.json
-    - tests/fixtures/rules/AGENT-DARK-LIVE/negative-live-then-gone.json
-    - tests/fixtures/rules/AGENT-DARK-LIVE/negative-linked-again.json
     - tests/fixtures/rules/NEW-AGENT/negative-arrival-linux-desktop.json
     - tests/fixtures/rules/NEW-AGENT/negative-arrival-windows-desktop.json

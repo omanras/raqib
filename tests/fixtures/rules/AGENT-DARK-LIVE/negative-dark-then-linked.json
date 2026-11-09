@@ -236,6 +236,7 @@
     ],
     "dark": false,
     "linked": "A1",
+    "live_window": 9,
     "path": "C:\\Users\\user\\.kimi",
     "round": 4,
     "run": "fixture-run",

@@ -75,6 +75,7 @@ fixtures:
     - tests/fixtures/rules/HOST-RHYTHM/positive-three-cycles.json
     - tests/fixtures/rules/HOST-RHYTHM/positive-os-three-cycles.json
     - tests/fixtures/rules/HOST-RHYTHM/positive-os-talks-host-acts.json
+    - tests/fixtures/rules/HOST-RHYTHM/positive-host-talks-os-acts.json
   negative:
     - tests/fixtures/rules/HOST-RHYTHM/negative-two-cycles.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-changing-destination.json

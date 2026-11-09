@@ -32,6 +32,7 @@ CATALOG_DIR = ROOT / "raqib" / "rules" / "catalog"
 RULES = engine.load_catalog(CATALOG_DIR)
 RULE_FIXTURES = ROOT / "tests" / "fixtures" / "rules"
 QUESTIONS = ROOT / "docs" / "review" / "2026-11-09-M7.5-questions.md"
+NOTES = ROOT / "tests" / "fixtures" / "host" / "notes"   # N-2: host.py's note fixtures, not a rule's
 KIMI_FP = "C:\\Users\\user\\.kimi"
 # The field run's order (ADR-0007 Amendment M): AGENT-DARK-LIVE at round 3, kimi new at round 10, dark again to 13
 FIELD = ["kimi-gone"] * 9 + ["kimi/two-samples"] + ["kimi-gone"] * 3
@@ -142,27 +143,85 @@ def test_e1_a_link_to_an_act_root_only_does_not_make_the_footprint_live(tmp_path
     assert [f["rule_id"] for f in w.findings] == ["AGENT-DARK-LIVE"] and w.dark_notes == []
 
 
-def test_e1_a_history_candidate_counts_as_live_and_a_note_is_never_an_alarm(tmp_path):
-    w, clock = make_host(tmp_path, ["kimi/two-samples"] + ["kimi-gone"] * 3)
+def test_e1_a_note_is_never_an_alarm(tmp_path):
+    w, clock = make_host(tmp_path, ["kimi-gone", "kimi/two-samples"] + ["kimi-gone"] * 3)
+    run_rounds(w, clock, 5)
+    text, code = w.finish()
+    assert [f["rule_id"] for f in w.findings] == ["NEW-AGENT"] and len(w.dark_notes) == 1
+    result, reasons = w.result()
+    assert result == "alarm" and reasons[0] == "1 finding(s): NEW-AGENT"   # the finding's alarm, not the note's
+    assert "DARK AFTER A LIVE TREE (notes, not alarms, not knocked): 1" in text
+
+
+# --- REDO N-1: the live window; history never makes a footprint live ------------------------------------------
+
+def test_redo_n1_the_reviewers_case_a_history_candidate_then_dark_alarms_as_on_main(tmp_path):
+    """A candidate there at the start (history), then an agent that runs only between rounds: ALARM."""
+    runner = FakeRunner()
+    w, clock = make_host(tmp_path, ["kimi/two-samples"] + ["kimi-gone"] * 3, runner=runner)
     run_rounds(w, clock, 4)
     text, code = w.finish()
-    assert w.findings == [] and len(w.dark_notes) == 1
-    result, reasons = w.result()
-    assert result != "alarm" and code != 1 and not any("finding" in r for r in reasons)
-    assert "DARK AFTER A LIVE TREE (notes, not alarms, not knocked): 1" in text
-    assert "ALARMS: none" in text
+    assert [(f["rule_id"], f["round"]) for f in w.findings] == [("AGENT-DARK-LIVE", 4)] and w.dark_notes == []
+    assert all(l["input_meta"]["was_live"] is False for l in footprint_lines(w))
+    assert code == 1 and runner.titles() == ["Raqib: AGENT-DARK-LIVE"]
+
+
+def test_redo_n1_kimis_case_is_a_note_within_the_window_and_a_knock_after_it(tmp_path):
+    names = FIELD + ["kimi-gone"] * 8   # rounds 14..21
+    runner = FakeRunner()
+    w, clock = make_host(tmp_path, names, runner=runner)
+    run_rounds(w, clock, len(names))
+    assert w.dark_window == host.DARK_WINDOW == 9
+    assert [(f["rule_id"], f["round"]) for f in w.findings] == [
+        ("AGENT-DARK-LIVE", 3), ("NEW-AGENT", 10), ("AGENT-DARK-LIVE", 21)]
+    assert [d["round"] for d in w.dark_notes] == [13]
+    live = {l["input_meta"]["round"]: (l["input_meta"]["was_live"], l["input_meta"]["streak"])
+            for l in footprint_lines(w)}
+    assert live[18] == (True, 8) and live[19] == (False, 1) and live[21] == (False, 3)   # live round 10 + 9
+    assert any("left the live window" in n and "round 19" in n for n in w.notes)
+    assert runner.titles()[-1] == "Raqib: AGENT-DARK-LIVE"
+
+
+def test_redo_n1_the_window_is_the_yamls_eq_and_on_every_line(tmp_path):
+    rule = next(r for r in RULES if r.id == "AGENT-DARK-LIVE")
+    assert host.rule_eq(rule, host.LIVE_WINDOW_FIELD) == 9 == 3 * host.DARK_ROUNDS
+    assert {"field": "input_meta.live_window", "eq": 9} in rule.doc["match"]["all"]
+    assert any("live window" in h and "A history candidate never makes the footprint live" in h for h in rule.holes)
+    assert not any("for the rest of the watch" in h for h in rule.holes)
+    w, clock = make_host(tmp_path, ["kimi-gone"])
+    run_rounds(w, clock, 1)
+    assert footprint_lines(w)[0]["input_meta"]["live_window"] == 9
+    rules = main_rules(tmp_path)   # a catalog whose rule declares no window: a hole, and the default
+    for r in rules:
+        if r.id == "AGENT-DARK-LIVE":
+            r.doc["match"]["all"] = [x for x in r.doc["match"]["all"] if x.get("field") != "input_meta.live_window"]
+    w, clock = make_host(tmp_path / "b", ["kimi-gone"], rules=rules)
+    assert w.dark_window == 9 and any("live window" in h["detail"] for h in w.holes)
+
+
+def test_redo_n1_an_unjudged_round_at_the_windows_end_does_not_keep_a_stale_streak(tmp_path):
+    unjudged = inv("kimi-gone")
+    unjudged["agent_dark"] = []   # the footprint listed, no dark verdict: neither counts nor clears
+    names = FIELD + ["kimi-gone"] * 5 + [unjudged] + ["kimi-gone"] * 3   # rounds 14-18 dark, 19 unjudged, 20-22
+    w, clock = make_host(tmp_path, names)
+    run_rounds(w, clock, len(names))
+    assert [(f["rule_id"], f["round"]) for f in w.findings][-1] == ("AGENT-DARK-LIVE", 22)
 
 
 def test_e1_the_yaml_excludes_was_live_and_lists_the_three_fixtures():
     rule = next(r for r in RULES if r.id == "AGENT-DARK-LIVE")
     assert {"field": "input_meta.was_live", "eq": False} in rule.doc["match"]["all"]
     assert "tests/fixtures/rules/AGENT-DARK-LIVE/positive-never-live.json" in rule.fixtures["positive"]
-    for name in ("negative-live-then-gone.json", "negative-linked-again.json"):
-        assert "tests/fixtures/rules/AGENT-DARK-LIVE/" + name in rule.fixtures["negative"]
+    for name in ("negative-live-then-gone.json", "negative-linked-again.json"):   # N-2: not measured negatives
+        assert not any(name in p for p in rule.fixtures["negative"])
+        assert not (RULE_FIXTURES / "AGENT-DARK-LIVE" / name).exists()
+        assert (NOTES / name).exists()
+    assert "0 of 2 fire" in (CATALOG_DIR / "AGENT-DARK-LIVE.yaml").read_text(encoding="ascii")
     assert "dark after a live tree" in rule.doc["description"] and "was_live" in rule.doc["description"]
     assert any("act-root" in h for h in rule.holes) and rule.fp_budget == 0.0
     for name in ("positive-never-live", "negative-live-then-gone", "negative-linked-again"):
-        doc = json.loads((RULE_FIXTURES / "AGENT-DARK-LIVE" / (name + ".json")).read_text(encoding="ascii"))
+        where = RULE_FIXTURES / "AGENT-DARK-LIVE" if name.startswith("positive") else NOTES
+        doc = json.loads((where / (name + ".json")).read_text(encoding="ascii"))
         (fp,) = [l for l in doc["lines"] if l["tool"] == host.FOOTPRINT_TOOL]
         assert fp["input_meta"]["streak"] == 3 and fp["input_meta"]["was_live"] is (not name.startswith("positive"))
         found, _ = engine.evaluate([rule], doc["lines"])
@@ -172,7 +231,7 @@ def test_e1_the_yaml_excludes_was_live_and_lists_the_three_fixtures():
 def test_e1_e2_check_rules_counts_are_in_the_questions_file():
     reports = {r["rule_id"]: r for r in fixtures.check_catalog(RULES, ROOT, cli.benign_default(ROOT))}
     text = QUESTIONS.read_text(encoding="utf-8")
-    for rule_id, (m, u) in (("AGENT-DARK-LIVE", (4, 10)), ("HOST-RHYTHM", (5, 8))):
+    for rule_id, (m, u) in (("AGENT-DARK-LIVE", (2, 10)), ("HOST-RHYTHM", (5, 8))):   # N-2: 2, not 4
         r = reports[rule_id]
         assert (r["measured"], r["unmeasured"]) == (m, u) and r["verdict"] == "ok" and r["fp_rate"] == 0.0
         assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id
@@ -429,3 +488,175 @@ def test_e4_kinds_stay_4_7_11():
     kinds = [r.kind for r in RULES]
     assert (kinds.count("signature"), kinds.count("demand"), kinds.count("anchor")) == (4, 2, 8)
     assert {r.id: r.kind for r in RULES}["AGENT-DARK-LIVE"] == "anchor" == {r.id: r.kind for r in RULES}[host.RHYTHM]
+
+
+# --- REDO N-3..N-9 ---------------------------------------------------------------------------------------
+
+def test_redo_n3_the_field_runs_shape_host_talks_and_os_acts_fires_at_three_cycles(tmp_path):
+    name = "HOST-RHYTHM/positive-host-talks-os-acts.json"
+    rule = next(r for r in RULES if r.id == host.RHYTHM)
+    assert "tests/fixtures/rules/" + name in rule.fixtures["positive"]
+    w = host_fixtures.rounds_of(host_fixtures.OS_SCENARIOS[name], CATALOG, RULES, str(tmp_path / "h"),
+                                os_rounds=host_fixtures.OS_ROUNDS[name])
+    (f,) = [f for f in w.findings if f["rule_id"] == host.RHYTHM]
+    assert f["destination"] == "192.0.2.10:443" and len(f["beats"]) == 3          # the host's talk
+    assert {a["basis"] for b in f["beats"] for a in b["acts"]} == {"os"}           # the os source's acts
+    doc = json.loads((RULE_FIXTURES / name).read_text(encoding="ascii"))
+    (tree,) = [l for l in doc["lines"] if l["tool"] == host.TREE_TOOL]
+    assert tree["input_meta"]["rhythm"]["cycles"] == 3 and tree["input_meta"]["rhythm"]["fires"] is True
+
+
+def test_redo_n4_beats_of_the_final_poll_are_counted_never_dropped(tmp_path):
+    name = "HOST-RHYTHM/negative-os-two-cycles.json"
+    names = host_fixtures.OS_SCENARIOS[name][:3]
+    calls = {}
+    orig = host_fixtures.rounds_of
+
+    w = orig(names, CATALOG, RULES, str(tmp_path / "h"), os_rounds=(2,))
+    # rounds_of finished the watch; a fresh one whose last os lines arrive after its last round:
+    clock = Clock(0.0)
+    feed = iter([host_fixtures.inventory(n, CATALOG) for n in names])
+    notifier = notify.Notifier(host.HOST, enabled=False, reason="test", host=True)
+    w = host.HostWatch(lambda: next(feed), CATALOG, RULES, notifier, every=10, err=io.StringIO(), clock=clock,
+                       wall=lambda: host_fixtures.WALL0 + clock.t, home=str(tmp_path / "h2"), platform="fixture",
+                       run="fixture-run", sysmon=lambda: (True, "test"), os_follow=host_fixtures._Follow())
+    for _ in names:
+        w.tick(wait=30)
+        clock.t += 10
+    (key,) = [k for k in w.trees if k[0] == host_fixtures.RHYTHM_PID]
+    w.sources[key].first_pass.wait(5)
+    lines, _ = host_fixtures.os_lines(4, "oscycle", 0)
+    with open(w.sources[key].path, "a", encoding="ascii", newline="\n") as f:
+        f.write("".join(json.dumps(x) + "\n" for x in lines))
+    text, _ = w.finish()
+    assert w.late_beats == {host.tree_word(key): 2}   # one talk and one act, read by the final poll only
+    assert "RHYTHM BEATS: beats after the last round: 2 (" in text and "not judged by HOST-RHYTHM" in text
+
+
+def test_redo_n5_the_state_keeps_the_newest_200_knocks_and_the_report_all(tmp_path):
+    w, clock = make_host(tmp_path, ["linux"], rounds_max=1)
+    run_rounds(w, clock, 1)
+    for i in range(205):
+        w._hole(clock.t + i, "test", "x %d" % i, knock="test %d" % i)
+    st = w.state(clock.t + 300)
+    assert len(st["host"]["knocks"]) == host.KNOCKS_KEPT == 200 and st["host"]["knocks_older"] == 5
+    assert st["host"]["knocks"][-1]["body"].endswith("test 204") and st["host"]["knocks"][0]["body"].endswith("test 5")
+    text, _ = w.finish()
+    assert "KNOCKS: 205 " in text and "test 0\\\"" not in text and '"host, test 0"' in text
+
+
+class OsFollow:
+    """N-6: the os source of the field run: kimi's tree gains six process events (depth 1) and one
+    connection when it is attached; every other tree's follow writes nothing."""
+
+    def __init__(self, root=10728):
+        self.root = root
+
+    def __call__(self, root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None,
+                 helpers=None):
+        if root == self.root:
+            from raqib.hooks import common
+            sid = "os-%d" % root
+            recs = [{"ts": "2026-11-03T10:01:20.000Z", "seq": 1, "session_id": sid, "phase": "session_start",
+                     "tool": "session", "source": "os"}]
+            for i in range(6):
+                base = {"ts": "2026-11-03T10:01:2%d.000Z" % (i + 1), "seq": i + 2, "session_id": sid, "tool": "process",
+                        "source": "os", "input_sha256": common.canonical_sha256({"command_line": "cmd %d" % i}),
+                        "input_meta": {"command_head": "cmd", "command_programs": ["cmd"], "depth": 1}}
+                recs += [dict(base, phase="pre"), dict(base, phase="post", output_meta={}, ok=True)]
+            recs.append({"ts": "2026-11-03T10:01:29.000Z", "seq": 8, "session_id": sid, "phase": "session_end",
+                         "tool": "session", "source": "os"})
+            with open(log, "a", encoding="ascii", newline="\n") as f:
+                f.write("".join(json.dumps(r) + "\n" for r in recs))
+        if on_pass:
+            on_pass(1, None)
+        stop.wait(60)
+        return 1
+
+
+def field_inventories():
+    """The field run's rounds with its history terminal: powershell pid 5888, unknown, a candidate there from
+    round 1 (history: listed, never knocked, as Amendment M records it)."""
+    import copy
+    out = []
+    talk = [{"remote": "198.51.100.7:443", "state": "ESTABLISHED", "basis": "ports", "lines": 1, "names": [],
+             "endpoint": [], "cites": [{"src": "win-tcp", "line": 2, "text": "fake terminal connection (N-6)"}]}]
+    for name in FIELD:
+        i = copy.deepcopy(inv(name))
+        i["candidates"].append({"pid": 5888, "image": "powershell", "id": "C9", "talks": talk,
+                               "exe": "C:\\Users\\user\\AppData\\Local\\term\\powershell.exe", "exe_from": "record",
+                               "started": "2026-11-03T09:00:00.000Z", "cwd": None, "acts": [],
+                               "cites": [{"src": "win-process", "line": 2, "text": "fake terminal row (N-6)"}]})
+        out.append(i)
+    return out
+
+
+def test_redo_n6_the_replay_with_the_history_terminal_and_an_os_source(tmp_path):
+    runner = FakeRunner()
+    feed = iter(field_inventories())
+    clock = Clock()
+    notifier = make_notifier(runner)
+    notifier.host = True
+    w = host.HostWatch(lambda: next(feed), CATALOG, main_rules(tmp_path), notifier, every=10, out=io.StringIO(),
+                       err=io.StringIO(), clock=clock, wall=lambda: 1793700000.0 + clock.t - 1000.0,
+                       home=str(tmp_path / "home"), platform="test", sysmon=lambda: (True, "test: Sysmon"),
+                       os_follow=OsFollow())
+    for k in range(len(FIELD)):
+        w.tick(wait=30)
+        for src in list(w.sources.values()):
+            src.first_pass.wait(5)
+        clock.t += w.every
+    text, code = w.finish()
+    (term,) = [t for t in w.trees.values() if t["pid"] == 5888]
+    assert term["history"] is True and not term.get("knocked") and term["source"] == "os"
+    (kimi,) = [t for t in w.trees.values() if t["pid"] == 10728]
+    assert kimi["source"] == "os" and kimi["knocked"] == "sent"
+    assert [(f["rule_id"], f["round"], f["notice"]) for f in w.findings] == [
+        ("AGENT-DARK-LIVE", 3, "sent"), ("NEW-AGENT", 10, "sent"), ("AGENT-DARK-LIVE", 13, "sent")]
+    # the os source's findings of kimi's tree, if any, knock on their own ids, never NEW-AGENT's
+    kimi_ids = [k["limit_id"] for k in w.knock_rows() if "10728" in k["limit_id"]]
+    assert kimi_ids[0] == "NEW-AGENT pid 10728" and all(not i.startswith("NEW-AGENT") for i in kimi_ids[1:])
+    assert [k["status"] for k in w.knock_rows() if k["limit_id"] == "NEW-AGENT pid 10728"] == ["sent"]
+    assert "Raqib: NEW-AGENT kimi\nhost, kimi pid 10728 (named)\n" in [c["text"] for c in runner.calls]
+    assert w.source_findings == [] and len(runner.calls) == 3   # as the field's report: three findings, no source one
+    assert code == 1
+
+
+def test_redo_n6_n8_the_questions_file_keeps_to_the_record():
+    text = QUESTIONS.read_text(encoding="utf-8")
+    assert "10:09" not in text and "18:10:30Z" in text
+    redo = text.split("## REDO (Amendment N)")[1]
+    assert "AppUserModelID" in redo and "struck" in redo
+    head = text.split("## E3")[1].split("## Design points")[0]
+    assert "Kimi ran in a PowerShell terminal at that moment" not in head
+
+
+def test_redo_n9_one_child_seen_by_the_host_and_by_os_is_one_act(tmp_path):
+    import datetime
+    w, clock = make_host(tmp_path, ["linux"])
+    run_rounds(w, clock, 1)
+    key = next(iter(w.trees))
+    at = datetime.datetime(2026, 11, 3, 10, 0, 5, 200000, tzinfo=datetime.timezone.utc)
+    host_act = {"pid": 4401, "image": "bash", "started": "2026-11-03T10:00:05.200Z", "at": at, "basis": "started",
+                "cites": []}
+    os_act = {"pid": None, "image": "BASH.exe", "started": "2026-11-03T10:00:05.000Z",
+              "at": at - datetime.timedelta(seconds=0.2), "basis": "os", "cites": []}
+    other = dict(os_act, image="python")
+    later = dict(os_act, at=at + datetime.timedelta(seconds=5))
+    hooks = {"pid": None, "image": "Bash", "started": "x", "at": at + datetime.timedelta(seconds=0.5),
+             "basis": "hooks", "cites": []}
+    assert w._once(key, [host_act]) == [host_act]
+    assert w._once(key, [os_act, other, later, hooks]) == [other, later]
+    assert w.act_twins == 2
+    assert w._once(key, [dict(host_act)]) == []   # the same pid and start time again
+    text, _ = w.finish()
+    assert "3 act(s) seen by a second source, counted once" in text
+
+
+def test_redo_n2_the_note_fixtures_are_what_make_py_makes_and_each_holds_its_note():
+    built = host_fixtures.build_notes()
+    assert sorted(built) == sorted(p.name for p in NOTES.glob("*.json"))
+    for name, text in built.items():
+        assert (NOTES / name).read_text(encoding="ascii") == text, name
+        doc = json.loads(text)
+        assert doc["dark_notes"] and doc["dark_notes"][-1] == doc["lines"][0]["input_meta"]["round"]

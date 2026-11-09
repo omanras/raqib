@@ -50,7 +50,8 @@ bytes_moved), and a connection kept up with no bytes read is one talk only
 (bytes_moved False; tests/test_rhythm.py).
 
 M7.5 (ADR-0007 Amendment M, the first field run):
-E1 - AGENT-DARK-LIVE's fixtures after a live tree: "kimi-gone" then
+E1 - AGENT-DARK-LIVE's fixtures after a live tree (REDO N-2: the two
+negatives are under tests/fixtures/host/notes/, not the rule's): "kimi-gone" then
 "kimi/two-samples" (kimi a candidate: the footprint links to it, so it was
 live in this watch) then "kimi-gone" three times is a negative (dark after a
 live tree: a note, input_meta.was_live true); the same with kimi live again
@@ -67,6 +68,10 @@ inventory keeps one child seen from round 1 on and a connection with no
 bytes read, so the host gives one talk (round 1) and no act: the cycles are
 the os source's. "ostalk" keeps the host's new child each round ("cycle")
 and takes only the talks from os: the talks are os, the acts host.
+M7.5 REDO N-3: "osact" is the field run's shape (Amendment M: kimi's acts
+came from the os source, its talk from the host's TCP table): the host's
+connection talks each round (bytes read and moving, K-5) and the acts are
+os event 1 lines, 5 s before each round from round 2 on.
 """
 import io
 import json
@@ -127,21 +132,29 @@ RHYTHM_SCENARIOS = {   # M7.4: fake rounds, "rhythm:<scenario>:<round>"
     "HOST-RHYTHM/negative-no-talk.json": ["rhythm:notalk:%d" % k for k in range(1, 6)],
 }
 SCENARIOS.update(RHYTHM_SCENARIOS)
-SCENARIOS.update({   # M7.5 E1: a footprint whose tree was live in this watch, then dark
+SCENARIOS.update({   # M7.5 E1: a footprint never live in this watch, dark
     "AGENT-DARK-LIVE/positive-never-live.json": ["kimi-gone"] * 3,
-    "AGENT-DARK-LIVE/negative-live-then-gone.json": ["kimi-gone", "kimi/two-samples"] + ["kimi-gone"] * 3,
-    "AGENT-DARK-LIVE/negative-linked-again.json": ["kimi-gone", "kimi/two-samples", "kimi-gone", "kimi-gone",
-                                                   "kimi/two-samples"] + ["kimi-gone"] * 3,
 })
+# M7.5 E1, REDO N-2: a footprint whose tree was live in this watch, then dark: host.py's NOTE, which
+# AGENT-DARK-LIVE's match cannot see (was_live true), so they are not its measured negatives (as K-9): they
+# live under tests/fixtures/host/notes/ (NOTES_OUT), made by build_notes(), held by tests/test_field_run.py.
+NOTE_SCENARIOS = {
+    "negative-live-then-gone.json": ["kimi-gone", "kimi/two-samples"] + ["kimi-gone"] * 3,
+    "negative-linked-again.json": ["kimi-gone", "kimi/two-samples", "kimi-gone", "kimi-gone",
+                                   "kimi/two-samples"] + ["kimi-gone"] * 3,
+}
 OS_SCENARIOS = {   # M7.5 E2: "rhythm-os:<scenario>:<round>"; OS_ROUNDS: the rounds os lines are appended before
     "HOST-RHYTHM/positive-os-three-cycles.json": ["rhythm-os:oscycle:%d" % k for k in range(1, 6)],
     "HOST-RHYTHM/negative-os-two-cycles.json": ["rhythm-os:oscycle:%d" % k for k in range(1, 6)],
     "HOST-RHYTHM/positive-os-talks-host-acts.json": ["rhythm-os:ostalk:%d" % k for k in range(1, 6)],
+    # M7.5 REDO N-3: the field run's own shape (Amendment M's kimi tree, SYNTHETIC): host talks, os acts
+    "HOST-RHYTHM/positive-host-talks-os-acts.json": ["rhythm-os:osact:%d" % k for k in range(1, 6)],
 }
 OS_ROUNDS = {
     "HOST-RHYTHM/positive-os-three-cycles.json": (2, 3, 4),
     "HOST-RHYTHM/negative-os-two-cycles.json": (2, 3),
     "HOST-RHYTHM/positive-os-talks-host-acts.json": (2, 3, 4),
+    "HOST-RHYTHM/positive-host-talks-os-acts.json": (2, 3, 4),
 }
 SCENARIOS.update(OS_SCENARIOS)
 OS_DEST = {"hostname": None, "ip": "192.0.2.20", "port": "443", "protocol": "tcp"}   # RFC 5737
@@ -212,9 +225,9 @@ def os_lines(k, scenario, seq, sid="os-%d" % RHYTHM_PID):
     1) 5 s before it. (lines, last seq)."""
     from raqib.hooks import common
     at = (k - 1) * EVERY
-    events = [(at - 8, "net", common.canonical_sha256({"destination": OS_DEST}),
-               {"dest_port": 443, "dest_private": False})]
-    if scenario == "oscycle":
+    events = [] if scenario == "osact" else [(at - 8, "net", common.canonical_sha256({"destination": OS_DEST}),
+                                               {"dest_port": 443, "dest_private": False})]
+    if scenario in ("oscycle", "osact"):
         events.append((at - 5, "process", common.canonical_sha256({"command_line": "fake child %d (make.py)" % k}),
                        {"command_head": "bash", "command_programs": ["bash"], "depth": 1}))
     out = []
@@ -232,6 +245,8 @@ def inventory(name, catalog):
         _, scenario, k = name.split(":")
         if scenario == "ostalk":   # the host's new child each round; the talks are os
             return rhythm_inventory("cycle", int(k), bytes_moved=False)
+        if scenario == "osact":    # N-3: the host's connection talks each round (its bytes move); the acts are os
+            return rhythm_inventory("between", int(k), bytes_moved=True)
         return rhythm_inventory("between", int(k), bytes_moved=False)
     if name.startswith("rhythm:"):
         _, scenario, k = name.split(":")
@@ -410,7 +425,27 @@ def build():
     return out
 
 
+NOTES_OUT = os.path.join(HERE, "notes")
+
+
+def build_notes():
+    """N-2: the last round's lines of each NOTE_SCENARIOS run (host.py's note, not a rule's fixture)."""
+    catalog = discover.load_catalog(discover.CATALOG)
+    rules = engine.load_catalog(os.path.join(ROOT, "raqib", "rules", "catalog"))
+    out = {}
+    with tempfile.TemporaryDirectory() as home:
+        for name, names in NOTE_SCENARIOS.items():
+            watch = rounds_of(names, catalog, rules, os.path.join(home, name))
+            out[name] = json.dumps({"lines": watch.round_lines[-1]["lines"], "dark_notes": [
+                d["round"] for d in watch.dark_notes]}, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
+    return out
+
+
 def main():
+    os.makedirs(NOTES_OUT, exist_ok=True)
+    for name, text in build_notes().items():
+        with open(os.path.join(NOTES_OUT, name), "w", encoding="ascii", newline="\n") as f:
+            f.write(text)
     for name, text in build().items():
         path = os.path.join(OUT, *name.split("/"))
         os.makedirs(os.path.dirname(path), exist_ok=True)
