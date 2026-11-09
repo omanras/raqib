@@ -293,3 +293,36 @@ rulings E-3..E-8; the rest recorded.
 - Table ledger for M7.6c: one review, one CI follow-up, one REDO; the
   Table's misses: "real exports" in the HANDOFF (E-4) and the first
   measurement rule that was not a measurement (A-3 -> E-2).
+
+## Amendment G (the Table, 2026-11-09) - judgement on M7.6d (41e41a3) and the held merge of M7.6c
+- M7.6d (the sandbox path in the M7.1 linux export redacted to the
+  placeholder home): E1..E4 MET as cited in
+  docs/review/2026-11-09-M7.6d-questions.md. The Table verified the
+  redaction (6 -> 0 occurrences in proc.txt), the sha256 proof that the
+  export is otherwise byte-identical, and that check-rules is identical
+  before and after (17 rules; HOST-UNWATCHED 4 measured, NEW-AGENT 5).
+  The path test now asserts on patterns of real homes other than the
+  placeholders on every machine, never on the checkout's own path.
+- Why this merge was held: after merging M7.6c, the gate on the Table's
+  own clone went RED on the new path test, because the M7.1 export named
+  this clone's path (`/home/claude/raqib`) and the test looked for the
+  checkout's path; the same tree was GREEN on CI and in the builder's
+  worktree. A RED main is not pushed (CLAUDE.md: every landed commit
+  passes the gate), so M7.6c's merge waited locally for M7.6d.
+- CI, read from api.github.com: run 42591642173 (41e41a3) six jobs
+  success. One commit. Scope clean.
+- Q-1 (no run.json in the linux export; the note lives in proc.txt's note
+  field and footprints.txt's header): accepted. Q-3 (`/home/ubuntu` in the
+  export's footprints is the image's stock account, left as captured, and
+  allowed by name): accepted; the allowance list is explicit. Q-4 (code
+  docstrings with example homes are not scanned): recorded for the docs
+  pass. Q-5 (future captures do not redact automatically): the capture
+  helper gains `--redact-home` by default at the next M7.1-style capture;
+  recorded. Q-6 (the sandbox home name appears once, in the test that
+  rebuilds the old export to prove identity): accepted - a proof needs
+  its witness.
+- Verdict: **NEXT** for M7.6d; the held M7.6c merge and M7.6d go to main
+  together once the gate on this clone is GREEN.
+- Table ledger: the held merge is the right outcome of a wrong-shaped
+  test the Table had accepted in the M7.6c follow-up (E-1 asked for a
+  machine-independent regeneration and got a machine-dependent assert).
