@@ -76,5 +76,5 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.5 after the first field run (landed 2026-11-09, merge 33c102d): dark-after-live a note within a 9-round window; rhythm reads every source; the KNOCKS ledger
 - M7.6 the rules panel (ADR-0008; landed 2026-11-09, merge da57d36): overlay, `raqib rules`, the panel, rules off said everywhere
 - M7.6b the window's look pass (landed 2026-11-09, merge d060c40; ADR-0008 accepted)
-- M7.6c thresholds that can be measured (ADR-0008 Amendment B, Q-15): parametric fixtures shipped as package data; `bounds:` in the YAMLs
+- M7.6c thresholds that can be measured (landed 2026-11-09): edge pairs per field, bounds in the YAMLs, k/w/r/streak/live_window editable on a sensitive measurement
 - M7.7 os_sysmon writes ProcessId on process lines (ADR-0007 Amendment O); CROSS-SOURCE over host lines
