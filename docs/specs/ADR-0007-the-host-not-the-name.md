@@ -696,3 +696,76 @@ ruled or recorded.
   the Table (N-1, an alarm traded for silence); the Table's miss: the
   HANDOFF's E1 said "was live in this watch" without a window, which is
   exactly the sticky flag the builder built.
+
+## Amendment P (the Table, 2026-11-10) - the second field run (the commander's Windows machine) and what it opens
+Recorded from the commander's report (the watch's own printed lines; his
+machine, his figures). Installed from main after M7.6d; `raqib-app`,
+"Watch this host", no --attach-hooks, no --suspect, overlay empty; 40
+rounds of 10 s, ended by Stop in the window; Sysmon present, so every
+tree's source was `os`. 14 holes in every round.
+- The unknown path fired in the field for the first time:
+  NEW-AGENT-UNKNOWN (medium, sent) on `powershell pid 5888` in round 2 (in
+  the first run the same shell was history), and on `msmpeng pid 9952` in
+  round 16. The second is Windows Defender's engine: a false positive of
+  the benign list (its image is under ProgramData, not under a listed
+  directory).
+- NEW-AGENT (high, sent) on `kimi pid 9176` in round 16, the footprint's
+  AGENT-DARK-LIVE cleared by the link; round 22 gave the M7.5 note "dark
+  after a live tree (note)", not a knock (N-1 holds in the field); round
+  30, the window closed, AGENT-DARK-LIVE knocked again as N-1 says.
+- AGENT-DARK-LIVE knocked in round 3, before Kimi was started: an
+  installed agent that is not running reads as dark 30 s into every
+  watch. Right by the rule; the person's answer is the Rules panel.
+- The shell's tree was "gone" and "back" in alternate rounds thirteen
+  times, and each time its os source was ended ("the tree is gone") and
+  attached again "after a hole", while the process (pid 5888) lived the
+  whole watch. Kimi's tree was a tree of rounds 16 and 19 only in a
+  session of minutes. A tree stops being listed when it does not talk at
+  the sample's instant; the watch calls that gone.
+- No finding came from any source line. The Table read why in the tree:
+  on a host with Sysmon the source is `os`, and no catalog rule judges an
+  os line - NET-TOOL excludes source os, DESTRUCT-CMD matches tool Bash or
+  HostChild only, and an os line keeps the image name as Sysmon logged it
+  (`curl.exe`), which no list holds. Where the record is richest, the
+  acts are recorded, counted for the rhythm, and judged by nothing.
+- The commander's question that day: does Raqib only watch, or can it stop
+  an agent? It only watches (A4; ADR-0001 section 7: Raqib is not a
+  sandbox and blocks nothing); the answer stands and no task changes it.
+- Beside the run the commander showed an agent's own account of a paste
+  test (text an agent stages in the clipboard, which the person pastes
+  into a console that runs each line). Nothing of that account is copied
+  here. What it teaches Raqib is two holes, P-4 and P-5.
+
+Rulings and what they open:
+- P-1 (M7.8) An os line's acts are judged: os_sysmon writes the image
+  name in the one normalised form discover uses, NET-TOOL and DESTRUCT-CMD
+  judge os `process` lines by it, and their lists gain the Windows
+  programs of each kind, each with fixtures and a measured budget (A6).
+- P-2 (M7.8) Gone means the root process is gone. A tree seen before whose
+  root is still in the round's process sample and does not talk now is
+  `quiet`: listed, its source kept, never "gone", never "back", no hole.
+- P-3 (M7.8) Windows Defender's engine under the system drive's
+  ProgramData\Microsoft\Windows Defender is benign by image and directory,
+  with its evasion line; the benign fixture measures it.
+- P-4 (M7.9) The round reads the channel. Where Sysmon is readable, a
+  round's inventory is the sample plus the channel's events since the
+  previous round began, so a tree that starts, talks, acts and ends
+  between two rounds is a tree of that round, marked as seen in the
+  channel only. Linux and a Windows host without Sysmon keep the hole,
+  said in the watch's first lines and in THREAT_MODEL.
+- P-5 (recorded, no rule yet) The person's hands. Text an agent hands to
+  a person (the clipboard, a chat, a file) which the person then runs is
+  the person's act: it runs under the person's shell, outside every agent
+  tree. No timing rule is sound: a pasted burst and a batch file run from
+  the same prompt write the same process record. Raqib does not read the
+  clipboard's text and will not (section 1 of THREAT_MODEL: Raqib must not
+  become a second place where secrets leak). What the record can hold is
+  WHO wrote the clipboard: Sysmon event 24 names the process. Candidate
+  M7.10: an agent tree that writes the clipboard is a finding of that
+  tree (AGENT-CLIPBOARD), the event's header only; where the channel
+  holds no event 24 the watch says so once (Raqib never configures Sysmon,
+  A4). It waits for the commander's word on whether his Sysmon records
+  event 24, and for a real export to measure it on (A6, A7).
+- Open, for the commander: what ran in the shell pid 5888 (the unknown
+  path's first field firing is on it); the KNOCKS ledger of this run
+  against the notification centre.
