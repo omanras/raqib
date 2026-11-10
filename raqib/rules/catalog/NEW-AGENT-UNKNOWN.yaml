@@ -22,7 +22,7 @@ severity: medium
 fp_budget: 0.4
 holes:
   - "Linux: a tree is keyed by (pid, image, its start in clock ticks since boot from /proc/PID/stat, shown as a time where the tick rate is known; M7.8 REDO 3 V-4); where the start is unread (an older snapshot, a process whose stat is hidden) by (pid, image) only, so a pid reused by a process of the same image between rounds is taken for the same tree"
-  - "a tree that lives only between two rounds (shorter than T seconds) is never seen"
+  - "a tree that lives only between two rounds (shorter than T seconds) is seen only where the round reads the Sysmon channel (M7.9: listed brief), else never; a brief tree knocks once per program path per watch, and a later run of the same program is not knocked again (the finding says seen N times), though its acts are still judged by the catalog"
   - "a tree whose talk and act fall in different rounds is never a candidate in one round (the round reads one sample)"
   - "a tree that was a candidate earlier in this watch and comes back with the same pid, image and creation time is not new again (once per tree)"
   - "every hole of raqib discover (liveness, sibling talkers, reparented acts, TCP only, one view) is a hole of this rule"

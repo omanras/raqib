@@ -548,11 +548,13 @@ class Helpers:
         return [self.ended(proc, why) for proc in list(self.running.values())]
 
 
-def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Popen, environ=None):
+def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Popen, environ=None, args=LIVE_ARGS):
     """read_live for a follow's pass (I-5): the same wevtutil, argv and
     environment, started as a child Raqib owns and waited for at most
     timeout seconds; one that has not returned is terminated and recorded on
-    helpers; (text, None) or (None, why it was not read)."""
+    helpers; (text, None) or (None, why it was not read). args (M7.9): the
+    wevtutil arguments after its path (default LIVE_ARGS: the whole channel;
+    a round of raqib watch --host gives round_args, a bounded query)."""
     environ = os.environ if environ is None else environ
     helpers = Helpers() if helpers is None else helpers
     env = {"SystemRoot": environ.get("SystemRoot") or "C:\\Windows"}
@@ -560,7 +562,7 @@ def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Pop
     if os.name == "nt":
         options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        proc = popen([WEVTUTIL] + list(LIVE_ARGS), **options)
+        proc = popen([WEVTUTIL] + list(args), **options)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return None, ("wevtutil could not be run (%s): the Sysmon channel was not read"
                       % (getattr(exc, "strerror", None) or type(exc).__name__))
@@ -629,3 +631,242 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
             on_pass(passes, top)
         if stop.wait(every):
             return passes
+
+
+# --- M7.9 (ADR-0007 Amendment P, ruling P-4): the round reads the channel ------------------------------------
+# One bounded read of the channel per round of raqib watch --host, by the same wevtutil (absolute path, SystemRoot
+# only, a timeout, Raqib's own helper ended and recorded: I-5). The query is built here from two values Raqib holds
+# itself - the watch's start (its own clock) and the highest EventRecordID an earlier round read (an integer parsed
+# by discover.sysmon_events) - and the event ids discover reads; no text of an event or of an agent goes into it.
+
+ROUND_IDS = (1, 3, 11, 22)        # discover.SYSMON_READ: the events the round gives discover
+ROUND_CAP = 2000                  # events per round at most (wevtutil /c:); reaching it is a hole of the round
+ROUND_TIMEOUT = FOLLOW_TIMEOUT    # I-5: one round's read, as a follow's pass
+SILENT_ROUNDS = 3                 # X-3(c): rounds of new sampled processes with no event 1 before the read restarts
+OPEN_CHANNELS = []                # X-1: the channels the live readers of this process own (Stop ends their helpers)
+RECORD_ID = re.compile(r"<EventRecordID>\s*([0-9]{1,20})\s*</EventRecordID>")
+SYSTEM_TIME = re.compile(r"<TimeCreated\s+SystemTime=['\"]([^'\"]{1,40})['\"]")
+
+
+def query_time(moment):
+    """An aware datetime as the XPath SystemTime text, UTC, milliseconds."""
+    offset = moment.utcoffset()
+    if offset is None:
+        raise ValueError("the watch's start must be an aware time")
+    moment = moment.replace(tzinfo=None) - offset
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (moment.microsecond // 1000)
+
+
+def round_query(after_record=None, since=None):
+    """The XPath of one round's read: the events of ROUND_IDS whose
+    EventRecordID is above after_record (an int), or, before any round read
+    a record (and after a restart, X-3c), whose TimeCreated is at or after
+    since. Only Raqib's own values are formatted into it (int(), query_time())."""
+    ids = " or ".join("EventID=%d" % i for i in ROUND_IDS)
+    if after_record is not None:
+        bound = "EventRecordID>%d" % int(after_record)
+    elif since is not None:
+        bound = "TimeCreated[@SystemTime>='%s']" % query_time(since)
+    else:
+        raise ValueError("a round's query needs a bound: an EventRecordID or the watch's start")
+    return "*[System[(%s) and %s]]" % (ids, bound)
+
+
+def round_args(query, cap=ROUND_CAP):
+    """wevtutil's arguments for one round: oldest first (wevtutil's default
+    direction), at most cap events, XML."""
+    return ("qe", CHANNEL, "/q:%s" % query, "/c:%d" % int(cap), "/f:xml")
+
+
+def _chunks(text):
+    """The text cut at each <Event: (chunk, record id or None, SystemTime text or None)."""
+    starts = [m.start() for m in discover.EVENT_START.finditer(text)]
+    out = []
+    for i, at in enumerate(starts):
+        chunk = text[at:starts[i + 1] if i + 1 < len(starts) else len(text)]
+        rid, when = RECORD_ID.search(chunk), SYSTEM_TIME.search(chunk)
+        out.append((chunk, int(rid.group(1)) if rid else None, discover._ts(when.group(1)) if when else None))
+    return text[:starts[0]] if starts else text, out
+
+
+def _age(later, earlier):
+    return round((later - earlier).total_seconds(), 3)
+
+
+class Channel:
+    """The channel as the live reader of raqib watch --host reads it, one
+    bounded read per round (M7.9; REDO X-1: owned by the reader, never
+    passed by a caller). since: the watch's start as the reader knows it
+    (set by the reader before the first record is kept, T-3's adjusted
+    start); after: the highest EventRecordID of a round that was kept
+    (commit(); X-4: a reader that fails after the read loses nothing).
+    reader(args, timeout) -> (text, None) or (None, why): default
+    read_live_bounded with this channel's helpers."""
+
+    def __init__(self, since=None, cap=None, timeout=ROUND_TIMEOUT, reader=None, helpers=None):
+        self.since = since
+        self.cap = int(ROUND_CAP if cap is None else cap)
+        self.timeout = float(timeout)
+        self.helpers = Helpers() if helpers is None else helpers
+        self.reader = reader or (lambda args, timeout: read_live_bounded(timeout, self.helpers, args=args))
+        self.after = None
+        self.reads = self.failed = self.cut = self.events = self.dropped = 0
+        self.kinds = set()            # X-8: the event ids the kept rounds read
+        self.event1_seen = False      # X-3(b): the channel has given an event 1
+        self.silent_rounds = 0        # X-3(b,c)
+        self.restarts = []
+        self.prev_at = None           # the time of the last kept read
+        self.read_times = []          # Z-2: the times of the kept reads (the rounds a process had to be delivered)
+        self.created = {}             # Z-2: pid -> the Sysmon 1 times every kept read so far gave for it
+        self.start = since            # Z-2: the channel's own start (what is older was never asked for)
+        self.early_rounds = 0         # Z-5 (Y12): reads that returned only records older than since
+        self.filtered = set()         # Z-2: images whose event 1 never came while the channel gave others
+        self.closed = False           # Z-6: a closed channel starts no helper
+        self.said = 0                 # helper records already carried by a round's record
+        self.last = None
+
+    def close(self, why="the watch stopped (Stop)"):
+        """Z-6: the channel leaves OPEN_CHANNELS; a helper still out is ended (its texts)."""
+        self.closed = True
+        if self in OPEN_CHANNELS:
+            OPEN_CHANNELS.remove(self)
+        return self.helpers.end(why)
+
+    def read(self, at):
+        """One round's read at `at` (an aware datetime): (kept text or None,
+        record). What came back is checked against what was asked (X-3a): a
+        record not above the bound, or before since, is dropped and said."""
+        if self.start is None:
+            self.start = self.since
+        query = round_query(self.after, self.since)
+        text, failed = (None, "the channel is closed (its watch stopped): not read") if self.closed else \
+            self.reader(round_args(query, self.cap), self.timeout)
+        record = {"query": query, "cap": self.cap, "events": 0, "after": self.after, "top": self.after,
+                  "error": failed, "cut": False, "dropped": 0, "behind_seconds": None, "older_seconds": None,
+                  "kinds": [], "holes": [], "restarted": None, "silent": 0, "at": discover.iso(at),
+                  "since": discover.iso(self.since), "helpers": list(self.helpers.record[self.said:])}
+        self.said = len(self.helpers.record)
+        if failed is not None:
+            self.failed += 1
+            record["holes"].append("the Sysmon channel was not read this round (%s): the round keeps its sample; the"
+                                   " next round reads the records after %s" % (
+                                       failed, "record %d" % self.after if self.after is not None else "the start"))
+            self.last = record
+            return None, record
+        lead, chunks = _chunks(text)
+        kept, low, early = [], None, 0
+        for chunk, rid, when in chunks:
+            below = self.after is not None and rid is not None and rid <= self.after
+            early = self.since is not None and when is not None and when < self.since
+            if below or early:
+                record["dropped"] += 1
+                if below:
+                    low = rid if low is None else min(low, rid)
+                else:
+                    early += 1
+                continue
+            kept.append((chunk, rid, when))
+        kept_text = lead + "".join(c for c, _, _ in kept)
+        ids = [rid for _, rid, _ in kept if rid is not None]
+        times = [w for _, _, w in kept if w is not None]
+        events = list(discover.sysmon_events(kept_text, "sysmon", [], None))
+        record.update(events=len(kept), top=max(ids + ([self.after] if self.after is not None else [])) if ids
+                      else self.after, kinds=sorted({e["event"] for e in events if e["event"] in ROUND_IDS}),
+                      event1=sorted({(_int(e["data"].get("ProcessId", "")), discover.iso(discover._ts(
+                          e["data"].get("UtcTime")))) for e in events if e["event"] == 1} - {(None, None)},
+                          key=lambda x: (x[0] or 0, x[1] or "")))
+        if times:
+            record["behind_seconds"] = _age(at, max(times))
+            length = _age(at, self.prev_at) if self.prev_at is not None else None
+            # Z-8: behind only by more than one round's length (less is the log's ordinary delay)
+            if length is not None and min(times) < self.prev_at and _age(self.prev_at, min(times)) > length:
+                record["older_seconds"] = _age(self.prev_at, min(times))
+        if record["dropped"]:
+            record["holes"].append("the Sysmon channel gave %d record(s) %s: dropped, never a tree (the query's bound"
+                                   " was not applied)" % (record["dropped"], "at or below record %d" % self.after
+                                                          if low is not None else "from before the watch's start"))
+            if low is not None:
+                self.restart(at, record, "its record numbers restarted (record %d at or below the bound %d: the"
+                             " channel was cleared?)" % (low, self.after))
+        self.early_rounds = self.early_rounds + 1 if chunks and early == len(chunks) else 0
+        if self.early_rounds >= 2 and not record["restarted"]:   # Z-5 (Y12): a clock that stepped back
+            self.restart(at, record, "two reads returned only records older than the read's start (%s): the wall"
+                         " clock stepped back?" % discover.iso(self.since))
+        if len(chunks) >= self.cap:
+            record["cut"] = True
+            record["holes"].append("the Sysmon channel gave %d events this round, the cap (/c:%d): the newest read is"
+                                   " %s s behind the round; the records after %s are read by the next round"
+                                   % (len(chunks), self.cap, record["behind_seconds"], "record %s" % record["top"]))
+        elif record["older_seconds"] is not None:
+            record["holes"].append("the round read the channel %s s behind the previous round (the newest read is %s s"
+                                   " behind this round): the rounds lag the channel"
+                                   % (record["older_seconds"], record["behind_seconds"]))
+        self.last = record
+        return kept_text, record
+
+    def restart(self, at, record, why):
+        """X-3(c), Z-5: the read starts again from the round's time; what it skips is said."""
+        skipped = self.prev_at or self.since
+        self.after, self.since, self.silent_rounds, self.early_rounds = None, at, 0, 0
+        text = ("the Sysmon channel's read starts again from %s: %s; what the channel logged from %s to %s that no"
+                " round returned is not read" % (discover.iso(at), why, discover.iso(skipped), discover.iso(at)))
+        self.restarts.append(text)
+        record["restarted"] = text
+        record["holes"].append(text)
+
+    def silence(self, record, sampled, at):
+        """Z-2 (X-3(b) restated): sampled is [(pid, image, start)] of the round's
+        sample. A process is due when it was created after the channel's start
+        and before the previous kept read (a full round to be delivered), and is
+        looked for in every kept read so far. Due and missing while this read
+        holds other event 1s: a note, once per image (record["filtered"]).
+        Due and missing for three rounds in a row whose reads held no event 1
+        at all, after the channel gave event 1 before: the hole "behind,
+        stopped or cleared", in the third round, and the read restarts."""
+        if record.get("error") or record.get("cut") or self.prev_at is None or self.start is None:
+            return
+        seen = {pid: list(times) for pid, times in self.created.items()}
+        for pid, when in record.get("event1") or ():
+            seen.setdefault(pid, []).append(when)
+        lo = self.read_times[-2] if len(self.read_times) >= 2 else self.start
+        due = [(pid, image, start) for pid, image, start in sampled
+               if start is not None and lo <= start <= self.prev_at and image not in self.filtered]
+        missing = [(pid, image) for pid, image, start in due if not any(
+            discover._start_close(start, discover._ts(w)) for w in seen.get(pid, ()) if w)]
+        if not missing:
+            self.silent_rounds = 0
+            return
+        if record.get("event1"):   # the channel gives others: this image is left out of its configuration
+            record["filtered"] = sorted({image or "?" for _, image in missing})
+            self.filtered.update(record["filtered"])
+            self.silent_rounds = 0
+            return
+        if not self.event1_seen:
+            return
+        self.silent_rounds += 1
+        record["silent"] = len(missing)
+        if self.silent_rounds >= SILENT_ROUNDS:
+            record["holes"].append("the Sysmon channel is behind, stopped or cleared: for %d rounds the sample showed"
+                                   " processes created a round earlier and the channel gave no event 1 at all (pid %s)"
+                                   % (SILENT_ROUNDS, ", ".join(str(p) for p, _ in missing[:10])))
+            self.restart(at, record, "%d rounds without any event 1" % SILENT_ROUNDS)
+
+    def commit(self, record, at):
+        """The round that read is kept: its bound moves (X-4)."""
+        if record.get("error"):
+            return
+        if not record.get("restarted"):
+            self.after = record.get("top")
+        self.reads += 1
+        self.events += record.get("events") or 0
+        self.dropped += record.get("dropped") or 0
+        self.cut += 1 if record.get("cut") else 0
+        self.kinds.update(record.get("kinds") or ())
+        self.event1_seen = self.event1_seen or 1 in (record.get("kinds") or ())
+        for pid, when in record.get("event1") or ():
+            times = self.created.setdefault(pid, [])
+            if when not in times:
+                times.append(when)
+                del times[:-8]
+        self.prev_at = at
+        self.read_times = (self.read_times + [at])[-3:]
