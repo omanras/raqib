@@ -298,11 +298,13 @@ def test_e1_named_system_fonts_with_fallbacks():
 # --- E2: the host table ---------------------------------------------------------------------------------------
 
 def test_e2_the_tree_table_has_the_eight_columns_in_order():
-    assert [c[1] for c in app.TREE_COLUMNS] == ["image", "pid", "kind", "source", "findings", "rhythm / suspicion",
+    # the Table, 2026-11-11 (Q-10 of the REDO 2 account): the heading is "rhythm" (131 px of heading cut the
+    # kind's own word at 900 px); the cell and the detail still carry rhythm and suspicion
+    assert [c[1] for c in app.TREE_COLUMNS] == ["image", "pid", "kind", "source", "findings", "rhythm",
                                                 "first seen", "endpoints"]
     names = ["image", "pid", "named", "first seen", "acts", "source", "findings", "rhythm / suspicion", "endpoints"]
     for cid, heading, width, index, kind in app.TREE_COLUMNS:   # each maps to its host_rows cell
-        assert names[index] == {"kind": "named"}.get(heading, heading)
+        assert names[index] == {"kind": "named", "rhythm": "rhythm / suspicion"}.get(heading, heading)
         assert width > 0 and kind in ("text", "number", "severity")
     assert sum(c[2] for c in app.TREE_COLUMNS) <= 600   # M8.1: within the column beside the rail at 900 px
     row = ("img", "7", "named (new)", "2026-11-09T00:00:00Z", "3", "os", "high 1", "-", "1.2.3.4:443")

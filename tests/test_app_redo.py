@@ -198,6 +198,10 @@ def test_redo_b2_b5_the_level_rule_and_its_words():
     assert app.live_level(0, "CRASHED or stuck (31 s)") == "alarm"
     assert app.live_level(1, "WATCHING", lines=0) == "incomplete"      # B-5: the window's one softening
     assert app.live_level(1, "SILENT for 70 s", lines=0) == "alarm"
+    # the Table, 2026-11-11: the softening is for the word WATCHING alone; a capture that failed before any line
+    # was read, or an agent that is gone, keeps the level of the watch's code
+    assert app.live_level(1, "CAPTURE FAILED", lines=0) == "alarm"
+    assert app.live_level(3, "AGENT GONE", lines=0) == "incomplete" and app.live_level(1, "AGENT GONE", lines=0) == "alarm"
     assert app.live_cause(None, 0) == "not judged yet" and app.live_cause(1, 0, lines=0) == "no line read yet"
     assert app.live_cause(1, 0, 0, 2) == "2 holes" and app.live_cause(1, 2) == "" and app.live_cause(1, 0, 1) == ""
     assert app.so_far("Watching this host", 3) == "Watching this host: 3 findings so far"

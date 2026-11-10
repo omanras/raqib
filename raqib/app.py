@@ -401,12 +401,13 @@ def live_level(code, word, lines=None):
     rule, through level_of); a code not known yet is never clean:
     incomplete; a watch whose heartbeat is stale is alarm (C-4). One state is
     the window's to soften: a project watch that has read no line yet
-    (lines == 0) and is not yet SILENT is incomplete, not an alarm at the
-    moment of Start."""
+    (lines == 0) and whose own word is still WATCHING is incomplete, not an
+    alarm at the moment of Start; SILENT, CAPTURE FAILED and every other word
+    keep the level of the code."""
     word = str(word or "")
     if word.startswith("CRASHED or stuck"):
         return "alarm"
-    if lines == 0 and not word.startswith("SILENT"):
+    if lines == 0 and word == "WATCHING":   # only where the watch's own word says nothing is wrong yet
         return "incomplete"
     return level_of(code) if isinstance(code, int) and not isinstance(code, bool) else "incomplete"
 
@@ -652,7 +653,7 @@ def rule_matches(item, text):
 TREE_ORDER = (1, 2, 4, 0, 6, 3, 7, 5)   # REDO A-11: pid, kind, findings, image, first seen, then the rest may be cut
 TREE_COLUMNS = (("image", "image", 96, 0, "text"), ("pid", "pid", 48, 1, "number"),
                 ("kind", "kind", 90, 2, "text"), ("source", "source", 64, 5, "text"),
-                ("findings", "findings", 72, 6, "severity"), ("rhythm", "rhythm / suspicion", 80, 7, "text"),
+                ("findings", "findings", 72, 6, "severity"), ("rhythm", "rhythm", 80, 7, "text"),
                 ("first", "first seen", 86, 3, "text"), ("endpoints", "endpoints", 64, 8, "text"))
 TREE_WHOLE = ("pid", "kind", "findings")   # REDO B-7: cells given their width before any other wants more
 TREE_NEED_ORDER = (4, 1, 2)                 # the severities, the pid, then the kind (its flags, then its word)
@@ -3381,6 +3382,11 @@ class Window:
                    + int(text.cget("spacing3")))   # a line as the text lays it out, its spacing with it
         self.root.update_idletasks()
         _, height = self._geometry()
+        if not self.root.winfo_viewable():
+            # the Table, 2026-11-11 (CI run 42901903944): a window that is not on the screen has no height to
+            # trust - on Windows a withdrawn root reports the size it asks for, so the panel fed its own growth
+            # (675 px of 600). Off the screen the lines are those the minimum size gives.
+            height = self.px(THEME["min_size"])[1]
         slack = height - self.root.winfo_reqheight()
         lines = int(text.cget("height")) + slack // line   # floor: a line short of room is not given
         shown = text.count("1.0", "end", "displaylines") if text.winfo_ismapped() else None
