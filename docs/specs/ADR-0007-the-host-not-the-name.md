@@ -844,3 +844,76 @@ R-3; the Table's rulings R-4..R-10; the rest recorded.
   after M7.8) are the Table's and are recorded at the judgement. Q-2 (the
   window's word for a quiet tree) is built when M8.1 and M7.8 meet on main.
 - R-11 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment T (the Table, 2026-11-10) - rulings on review 2026-11-10-M7.8-redo.md (45ef2df)
+(The letter S is skipped: S-n are the REDO review's findings.) CI run
+42886121515 for 45ef2df: four jobs success, both windows gate jobs
+failed on one test (os.sysconf, which Windows does not have). R-2, R-5,
+R-6, R-7, R-8, R-9 MET; R-1, R-3, R-4 PARTLY. Verdict: REDO on T-1, T-2
+and T-6; the Table's rulings T-3..T-9.
+- T-1 (S1, must; R-3, I-6) The knock belongs to the act, and is decided
+  on the finding as it stands, not on the feed read first. For os lines
+  history is one thing only: the event's time against the watch's start
+  (R-2); the attach-time rule of I-3 no longer applies to them, so two
+  copies of one event always agree. The copies of one act are merged
+  first; the entry that stands is on the nearest tree; then it goes
+  through I-6 on THAT tree, once: it knocks if that tree's rules say so
+  (its FIRST-FINDING if unspent, its own rule if high), whichever feed
+  was read first, and it never knocks twice. The notice and the KNOCKS
+  row name the tree the finding is shown on. Tests: the outer tree's
+  FIRST-FINDING spent and the nested tree's not; each poll order; a copy
+  arriving after the knock.
+- T-2 (S2, S3, S12, must; R-1 is amended) A benign tree keeps its source,
+  and what its acts match is a note. R-1's "no source" made the commonest
+  agent of all - one inside an editor or a browser, whose root is the
+  benign program - judged by nothing; that trade is taken back. A benign
+  tree is sourced like any other. A catalog finding on a benign tree is
+  listed on the tree and in the report under "on benign trees (noted, not
+  knocked)", counted apart; it is not an alarm, does not change the exit
+  code, never knocks and never spends FIRST-FINDING. One act under a
+  benign tree and a nearer non-benign tree is the nearer tree's finding
+  (T-1). HOST-RHYTHM judges a benign tree as K-10 ruled, and knocks. The
+  tree's word is `benign (its acts are noted, not knocked; its rhythm is
+  judged)`. HOST-UNWATCHED judges a benign tree as before R-1. Tests: the
+  person's ssh under explorer is a note, exit 0, no knock; an agent's
+  curl under an editor's own process is a note on that tree; rhythm on a
+  benign tree still knocks.
+- T-3 (S4; R-2) A clock that steps back does not make acts history. The
+  watch keeps its start on both clocks; each round the start is taken as
+  the earlier of the wall clock at the start and (the wall clock now
+  minus the monotonic time elapsed); a step of more than a round is said
+  once as a hole, with its size. THREAT_MODEL says what remains (an act
+  in the seconds before the start reads as live after a step: the alarm
+  side).
+- T-4 (S5; R-5) The Linux key is the kernel's own number: a process's
+  start as /proc/PID/stat gives it (ticks since boot), which a step of
+  the wall clock does not move; the time shown is computed from it for
+  display only. No os.sysconf on a platform that lacks it: the Windows
+  jobs run every test.
+- T-5 (S9) R-2 judges acts. A silence rule's finding is about Raqib's own
+  record during the watch and keeps I-3's rule; the event's time makes
+  only a catalog finding history.
+- T-6 (S6 and the crash on af808a1, must) No thread outlives its test.
+  Every HostWatch a test starts is ended in the test (finish, the
+  sources' threads joined, bounded), by a fixture that fails the test if
+  a thread named for Raqib is alive after it; the fakes wait on the stop
+  they are given, never on a time.
+- T-7 (S7, S10) NET-TOOL's evasion says the parent is known by its name
+  only, and that git starts ssh with what the agent configures. The act
+  key gains the image and the parent image.
+- T-8 (S8, S11, S13, S14, S15) The help text and THREAT_MODEL say what
+  the code does (the four sentences S13 names; quiet's round and source;
+  "not judged this round"); the report's SOURCE FINDINGS line adds up
+  with the entries judged elsewhere and the notes on benign trees named;
+  the pids whose start time was unread are counted and said once per
+  round; the test that asserts nothing asserts something.
+- T-9 Recorded for later tasks: a benign program that talks to a model
+  endpoint the catalog names is still listed only as benign (a browser
+  or an editor hosting an agent: the hole C-1d names); a candidate is
+  "a benign host of a model client", listed with that word (M7.11).
+  S16's SEVERITY_RANK is the window's, built when M8.1 and M7.8 meet.
+- T-10 Every REDO change carries a test for the behaviour it adds (D-8).
+- Table ledger so far for M7.8: R-1 was the Table's own trade of an
+  alarm for silence, written to cure a false positive (the person's
+  programs under explorer) without asking what else has a benign root;
+  the reviewer's S2 caught it. A note, not silence, is the cure.
