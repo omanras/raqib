@@ -1,19 +1,45 @@
-"""Tk objects are finalised on the main thread (ADR-0009 Amendment A, A-16, in its smallest form on this
-branch; M8.1 brings the whole fixture, which also ends every thread a Tk test started).
+"""M8.1 REDO A-16 (ADR-0009 Amendment A): every Tk test ends what it started.
 
-A Tk test leaves Tk objects (a root, Variables) in reference cycles. When the cyclic collector later runs in
-another thread - a watch's worker in a later test - each Variable's finaliser calls Tcl from that thread, and
-tkinter makes it wait a second for a main loop that is not running before it gives up ("main thread is not in
-main loop"); a Tk root collected there makes Tcl abort the process. On CI's windows jobs that stalled a
-worker for long enough to fail a timing test in another file, and once killed the run. So after every Tk
-test the garbage is collected here, on the main thread."""
+A Tk root, or a Tk object with a __del__ (a Variable, a PhotoImage), that is
+garbage-collected from a thread other than the main one makes Tcl abort the
+process ("Windows fatal exception: code 0x80000003"). So after each Tk test
+(a test whose name starts with test_tk) this fixture, on the main thread:
+destroys a root the test left, joins every thread the test started (a bounded
+join; a thread still alive is a failure, never a hang), and collects the
+garbage, so no Tk object is left for another thread to collect."""
 import gc
+import sys
+import threading
 
 import pytest
 
+JOIN_SECONDS = 10.0
+
+
+def end_tk_test(before, join=JOIN_SECONDS):
+    """What a Tk test leaves: its root destroyed, its threads joined (each
+    within `join` s), the garbage collected here. The names of the threads
+    still alive (empty when it ended what it started)."""
+    tkinter = sys.modules.get("tkinter")
+    root = getattr(tkinter, "_default_root", None) if tkinter is not None else None
+    if root is not None:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+    left = [t for t in threading.enumerate() if t not in before and t is not threading.current_thread()]
+    for thread in left:
+        thread.join(join)
+    gc.collect()
+    return [t.name for t in left if t.is_alive()]
+
 
 @pytest.fixture(autouse=True)
-def tk_garbage_is_collected_on_the_main_thread(request):
+def _tk_ends_what_it_started(request):
+    if not request.node.name.startswith("test_tk"):
+        yield
+        return
+    before = set(threading.enumerate())
     yield
-    if request.node.name.startswith("test_tk"):
-        gc.collect()
+    alive = end_tk_test(before)
+    assert alive == [], "a Tk test left threads running after it returned: %s" % alive

@@ -714,8 +714,9 @@ def test_e4_the_window_rows_carry_the_source_and_findings_by_severity(home):
     view = app.host_watch_view(w.state(clock()))
     (row,) = [r for r in view["rows"] if r[1] == "1600"]
     assert row[5] == "host" and row[6] == "medium 1"
-    head = app.host_table(view["rows"])[0]
-    assert "source" in head and "findings" in head
+    heads = [c[1] for c in app.TREE_COLUMNS]   # M8.1 REDO B-8: the row's cells under their headings, as drawn
+    values = app.tree_values(row)
+    assert values[heads.index("source")] == "host" and values[heads.index("findings")] == "medium 1"
     w.finish()
 
 
@@ -736,7 +737,8 @@ def test_e4_the_checkbox_is_off_by_default_and_is_passed_to_the_host_watch(home)
         app.HostSession(o, starter=starter)._open()
     assert seen["attach_hooks"] is True
     src = (ROOT / "raqib" / "app.py").read_text(encoding="ascii")
-    assert "tk.Checkbutton(row, text=ATTACH_TEXT" in src and "self.c.options.attach_hooks = bool(self.attach_var.get())" in src
+    assert "tk.Checkbutton(row, text=sentence(ATTACH_TEXT)" in src   # M8.1: a Switch, its label in sentence case
+    assert "self.c.options.attach_hooks = bool(self.attach_var.get())" in src
 
 
 def test_e4_cli_attach_hooks_reaches_the_host_watch(monkeypatch):
