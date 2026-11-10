@@ -487,9 +487,9 @@ Rulings: ADR-0003 Amendments C and D.
   0.1 until the field test.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
-Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T. True of the tree as
-P-1..P-3, R-2..R-9 and T-1..T-8 leave it (the task after the second field
-run; R-1 is amended by T-2).
+Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V. True of the tree
+as P-1..P-3, R-2..R-9, T-2..T-8 and V-1..V-6 leave it (the task after the
+second field run; R-1 is amended by T-2, T-1 restated by V-1).
 - **What a round sees.** One sample: on Windows one read of the OS API
   (processes and their parents, TCP connections with their owner), on
   Linux one `/proc` snapshot (or `--window S` seconds of them, whose last
@@ -513,8 +513,11 @@ run; R-1 is amended by T-2).
 - **The start time decides, where it was read.** A tree is keyed by its
   root's pid, image and start time (Windows: the process's creation time;
   Linux: the start in clock ticks since boot that `/proc/PID/stat` gives,
-  which a step of the wall clock does not move; the time shown is computed
-  from it for display only). The match is exact: where the start is unread
+  which a step of the wall clock does not move; beside the key the report
+  shows the start as a time, shown as a time where the clock tick rate is
+  known, computed from the ticks and `/proc/stat`'s btime for display
+  only, so after a step of the clock the time shown moves and the key
+  does not). The match is exact: where the start is unread
   in both the tree's key and the sample (an older snapshot, a process whose
   stat is hidden, Windows when the process's times are denied), a process
   of the same image that holds the pid now is taken for the tree: it is not
@@ -547,17 +550,30 @@ run; R-1 is amended by T-2).
   only hashed. An os line written before P-1 has no image: the rules say
   they could not judge it, and the host watch says it once per source; no
   rule guesses the name.
-- **One act, one finding; the past is history.** Nested trees each have a
-  source, and each os follow reads all of its root's descendants: the same
-  event (its time, tool, input hash, image and parent image) read by two
-  feeds is one finding (R-3, T-1). The copies are merged before any knock;
-  the one on the nearest tree (the least depth) stands and goes through
-  I-6 on that tree once, whichever feed was read first; the others are
-  listed "judged on another tree". A copy that comes after the knock moves
-  the finding to its nearer tree without a second knock, and the KNOCKS
-  row says where it is shown. Two different acts of trees that are not
-  nested, the same command line in the same millisecond with the same
-  image and parent, would be taken for one. A catalog finding of an os
+- **One act, one finding, in every order; the past is history.** Nested
+  trees each have a source, and each os follow reads all of its root's
+  descendants: the same event (its time, tool, input hash, image and
+  parent image; one key whether the pre alone or the pre and the post were
+  read) read by several feeds is one act (V-1). The act stands on the
+  nearest tree that read it and is not benign; only when every tree that
+  read it is benign does it stand on the nearest of those, as a note
+  (V-2): an agent that starts a benign program and acts through it has the
+  act on the agent's tree, and an act under a benign program alone is a
+  note, never an alarm, never a knock. While no knock has been sent for an
+  act, each new copy asks I-6 again, first on the standing tree, then on
+  each other non-benign tree that read it (the act is in each of their
+  trees); a sent knock closes the act, never a second; "not notified" does
+  not close it. So the knock, the exit code and the counts do not depend
+  on which feed read the act first, in one poll or across polls; but which
+  tree's FIRST-FINDING the knock spent does (an outer tree whose copy came
+  first may spend its own). Everything said about an act - its status, its
+  KNOCKS row, a fold's outcome, "judged on tree pid N" on the other trees,
+  the tree that knocked - is read from the act when it is shown. A poll a
+  judge cut short is settled in its own `finally`, again by the next poll
+  and by the end; what the end cannot settle is listed as NOT SETTLED, an
+  alarm of its tree. Two different acts of trees that are not nested, the
+  same command line in the same millisecond with the same image and
+  parent, would be taken for one. A catalog finding of an os
   event whose time is before the watch's start is history - listed on its
   tree with its count, never knocked, never an alarm - whenever the tree
   was first seen (R-2): a shell that becomes a tree in round 5 does not
@@ -566,8 +582,10 @@ run; R-1 is amended by T-2).
   (T-5). The start is the earlier of the wall clock at the start and the
   wall clock now minus the monotonic time elapsed, so a clock that steps
   back does not turn acts into history; a step of more than a round is a
-  hole, with its size (T-3). What remains: after such a step an act from
-  the seconds before the start reads as live (the alarm side).
+  hole, with its size, and said again when a later step is larger by more
+  than a round (T-3, V-6). What remains: after such a step an act from the
+  seconds before the start reads as live (the alarm side); a forward step
+  makes nothing history.
 - **Benign programs: sourced, and their acts are notes.** A tree whose root
   is a listed benign image under a listed directory of the system drive is
   listed `benign (its acts are noted, not knocked; its rhythm is judged)`
@@ -577,9 +595,11 @@ run; R-1 is amended by T-2).
   and in the report under "on benign trees (noted, not knocked)", counted
   apart, never an alarm, never knocked, the tree's FIRST-FINDING not
   spent. The person's own programs under explorer are such notes. One act
-  under a benign tree and a nearer non-benign tree is the nearer tree's
-  finding. HOST-RHYTHM judges a benign tree as K-10 ruled, and knocks;
-  HOST-UNWATCHED judges it as any tree. Windows Defender's engine
+  under a benign tree and any non-benign tree is the non-benign tree's
+  finding, nested either way (V-2). HOST-RHYTHM judges a benign tree as
+  K-10 ruled, and knocks; HOST-UNWATCHED judges it as any tree; the tree's
+  word then says what knocked on it (V-3). A rule turned off counts what it
+  would have fired as acts, not copies, and names its would-be notes apart. Windows Defender's engine
   (`MsMpEng.exe`) is benign only under the system drive's
   ProgramData\Microsoft\Windows Defender or Program Files\Windows
   Defender (P-3). An agent with administrator rights can put a program of

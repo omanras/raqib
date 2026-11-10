@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from raqib import app, cli, discover, host, notify, ui  # noqa: E402
 from raqib.rules import engine, fixtures  # noqa: E402
+from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 
 sys.path.insert(0, str(ROOT / "tests"))
 from test_watch import FakeRunner, make_notifier  # noqa: E402
@@ -572,7 +573,7 @@ class OsFollow:
                 f.write("".join(json.dumps(r) + "\n" for r in recs))
         if on_pass:
             on_pass(1, None)
-        stop.wait(60)
+        stop.wait()   # V-5: only the stop it is given ends it
         return 1
 
 

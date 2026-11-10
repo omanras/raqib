@@ -650,10 +650,12 @@ def parse_proc(text, src="proc"):
         # M7.8 REDO R-5, REDO 2 T-4: the start where the snapshot carries it (a tree's key on Linux): the kernel's
         # ticks since boot ("boot+N"), else a start time a snapshot of the first REDO wrote, else none
         ticks = obj.get("start_ticks")
+        shown = obj.get("started") if isinstance(obj.get("started"), str) and obj.get("started") else None
+        started_at = None
         if isinstance(ticks, int) and not isinstance(ticks, bool) and ticks >= 0:
-            started = "boot+%d" % ticks
+            started, started_at = "boot+%d" % ticks, shown   # V-4: the key, and beside it the time to show
         else:
-            started = obj.get("started") if isinstance(obj.get("started"), str) and obj.get("started") else None
+            started = shown
         # G-2: the exe link places a process; argv[0], its own text, is the fallback.
         linked = isinstance(obj.get("exe"), str) and bool(obj.get("exe"))
         exe = obj.get("exe") if linked else (argv or [None])[0]
@@ -661,7 +663,8 @@ def parse_proc(text, src="proc"):
                             image=_linux_image(argv, obj.get("name")), exe=exe,
                             exe_from="record" if linked else "argv",   # M7.2 REDO C-1d
                             cwd=cwd, env_keys=env, sockets=sockets, ts=_ts(obj.get("at")) or at,
-                            unread=[str(u) for u in unread], **({"started": started} if started else {})))
+                            unread=[str(u) for u in unread], **dict({"started": started} if started else {},
+                                                                    **({"started_at": started_at} if started_at else {}))))
     return records, problems
 
 
@@ -2037,7 +2040,7 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
             times += [r["ts"] for r in (q["recs"] if q else []) if r.get("ts")]
         candidates.append(dict(
             entry, id=ids[pid], cwd=p["cwd"] if p else None, acts=acts[pid], inside=inside, started=started_of(p),
-            exe_from=exe_from(p),
+            exe_from=exe_from(p), **_shown_start(p),
             listed_acts=sum(1 for a in acts[pid] if a["listed"]),
             talking_ancestors=talking_up, tree=tree,
             env_footprints=[{"name": k, "cites": _cites(p["recs"], 1)} for k in env],
@@ -2291,6 +2294,23 @@ def started_of(p):
     return None
 
 
+def started_at_of(p):
+    """M7.8 REDO 3 V-4: the time a Linux snapshot computed for display from
+    the start ticks (where the clock tick rate was known), or None. Never the
+    key: started_of is."""
+    for r in (p or {}).get("recs") or ():
+        if r.get("kind") == "proc" and r.get("started_at"):
+            return r["started_at"]
+    return None
+
+
+def _shown_start(p):
+    """V-4: {"started_at": time} where a snapshot gave one, else {} (so the inventories of every shipped
+    export read byte-identical)."""
+    at = started_at_of(p)
+    return {"started_at": at} if at else {}
+
+
 def _descendant_candidates(procs, pid, acts):
     """Candidates below a talker that is not one itself."""
     return [q for q in sorted(_descendants(procs, pid)) if q in acts]
@@ -2445,7 +2465,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         first = heads[0]
         roots.append({
             "pid": pid, "image": p["image"], "exe": p["exe"], "cwd": p["cwd"], "user_dir": place, "started": started_of(p),
-            "exe_from": exe_from(p),
+            "exe_from": exe_from(p), **_shown_start(p),
             "chains": heads, "acts": acts, "cites": _cites(p["recs"]),
             "attributed_to": ids.get(owner) if owner is not None else None,
             "talking_ancestor": ({"pid": owner, "image": procs[owner]["image"] if owner in procs else None,

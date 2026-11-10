@@ -477,7 +477,8 @@ def trees_of(inv, catalog, no_drive=None):
                        for talk in t.get("talks") or () if talk.get("remote")]
             claude, claude_why = claude_code(t, catalog)
             out[key] = {"key": list(key), "pid": t.get("pid"), "image": t.get("image"), "exe": t.get("exe"),
-                        "started": t.get("started"), "class": cls, "id": t.get("id"), "named": ok,
+                        "started": t.get("started"), "started_at": t.get("started_at"),   # V-4: a time to show
+                        "class": cls, "id": t.get("id"), "named": ok,
                         "named_by": why, "benign": benign_by is not None, "benign_by": benign_by,
                         "acts": len(t.get("acts") or []), "endpoints": endpoints,
                         "cites": [dict(c, text=cite_text(c.get("text"))) for c in cites[:CITES_KEPT]],
@@ -1207,10 +1208,11 @@ class HostWatch:
         self.present = set()         # keys in the last inventory
         self.quiet = set()           # M7.8 (P-2): keys whose root was in the last round's process sample, no talk
         self.no_sample_said = False  # M7.8: NO_SAMPLE_NOTE said once
-        self.act_findings = {}       # REDO R-3, T-1: (rule, os events) -> the act: its standing entry, its copies
+        self.acts = {}               # REDO 3 V-1: (rule, the events) -> the act: its copies by tree, `sent`
+        self.off_acts = {}           # V-3: rule off -> {what it would have fired: {tree: benign}} (acts, not copies)
         self.start_wall = self.started   # T-3: the start on the wall clock; start_eff on the monotonic one
         self.start_eff = self.started
-        self.clock_step_said = False
+        self.clock_step_said = 0.0   # T-3, V-6: the largest step said (seconds)
         self.prev_class = {}         # key -> class in the last inventory
         self.history_round = None    # the first round with an inventory
         self.footprints = {}         # path -> {agent, streak, state, fired, ...}
@@ -1459,7 +1461,7 @@ class HostWatch:
         self._say(now, "NOTE %s" % note["text"])
         return note
 
-    def _knock(self, now, event, where, container, key="notice", limit_id=None, subject=None, round_=None):
+    def _knock(self, now, event, where, container, key="notice", limit_id=None, subject=None, round_=None, tree=None):
         """M7.5 E3: every knock of the watch goes through here: the
         notifier's status, and a row of the KNOCKS ledger (round, event,
         title, body, rate-limit id), whose status is read back from
@@ -1469,7 +1471,7 @@ class HostWatch:
         title, body = self.notifier.texts(notify.clean(event, 48) or "RAQIB", where, subject)
         self.knocks.append({"round": round_ if round_ is not None else self.rounds, "at": self.at(now),
                             "event": event, "title": title, "body": body, "limit_id": limit_id or event,
-                            "called": status, "ref": (container, key)})
+                            "called": status, "ref": (container, key), "tree": tree})
         return status
 
     def knock_rows(self, newest=None):
@@ -1480,8 +1482,13 @@ class HostWatch:
         for k in (self.knocks if newest is None else self.knocks[-newest:]):
             container, key = k["ref"]
             now = container.get(key) if isinstance(container, dict) else None
-            rows.append(dict({x: v for x, v in k.items() if x != "ref"},
-                             status=now if isinstance(now, str) and now else k["called"]))
+            row = dict({x: v for x, v in k.items() if x not in ("ref", "tree")},
+                       status=now if isinstance(now, str) and now else k["called"])
+            if isinstance(container, dict) and "copies" in container and container["copies"]:   # V-1: read from the act
+                shown = self._standing(container)
+                row.update(shown_on="tree pid %s" % shown[0], knocked_on="tree pid %s" % (
+                    container["knocked_on"][0] if container.get("knocked_on") else "-"))
+            rows.append(row)
         return rows
 
     # --- one tick ---------------------------------------------------------------
@@ -1636,7 +1643,7 @@ class HostWatch:
             candidate_before = entry["candidate_round"] is not None
             history = (first and t["class"] == "candidate") or entry["history"]
             entry.update({k: t[k] for k in ("class", "id", "named", "named_by", "benign", "benign_by", "acts",
-                                            "endpoints", "cites", "exe")})
+                                            "endpoints", "cites", "exe", "started_at")})
             entry.update(last_round=n, last_seen=ts, present=True, quiet=False, rounds_seen=entry["rounds_seen"] + 1,
                          history=history)
             # REDO 2 T-2 (R-1 amended): a benign tree is sourced like any other; its catalog findings are notes
@@ -1808,7 +1815,8 @@ class HostWatch:
                 where = "%s pid %s, %d cycles to one destination in %d rounds (round %d)" % (
                     str(meta["image"] or "?")[:IMAGE_MAX], meta["pid"], rh["cycles"], rh["r"], n)
             subject = (str(meta["image"] or "?")[:IMAGE_MAX] if f["rule_id"] in NEW_RULES else None)   # M7.5 E3
-            entry["notice"] = self._knock(now, f["rule_id"], where, entry, limit_id=limit, subject=subject, round_=n)
+            entry["notice"] = self._knock(now, f["rule_id"], where, entry, limit_id=limit, subject=subject, round_=n,
+                                          tree=tuple(entry["tree_key"]) if entry.get("tree_key") else None)
             if f["rule_id"] in NEW_RULES:
                 tree["knocked"] = entry["notice"]
             elif f["rule_id"] == UNWATCHED:
@@ -2685,8 +2693,10 @@ class HostWatch:
         a step of more than a round is said once as a hole, with its size."""
         est = datetime.datetime.fromtimestamp(self.wall_clock() - (now - self.t0), datetime.timezone.utc)
         step = (self.start_wall - est).total_seconds()
-        if step > self.every and not self.clock_step_said:
-            self.clock_step_said = True
+        said = self.clock_step_said if not isinstance(self.clock_step_said, bool) else (0.0 if not self.clock_step_said
+                                                                                         else float("inf"))
+        if step > self.every and step > said + (self.every if said else 0):   # V-6: again when larger by > a round
+            self.clock_step_said = step
             self._hole(now, "clock-step", CLOCK_STEP % (step, iso(est)))
         self.start_eff = min(self.start_wall, est)
         return self.start_eff
@@ -2698,7 +2708,13 @@ class HostWatch:
         stands goes through I-6 on the tree it is shown on, once."""
         fired = []
         self._start_now(now)
-        settle = []
+        try:
+            self._poll_feeds(now, final, fired)
+        finally:   # V-1 (U2): what a judge that raised (or a Stop) cut short is settled here, by the next poll, or by finish
+            self._settle_all(now)
+        return fired
+
+    def _poll_feeds(self, now, final, fired):
         self._helper_holes(now)
         for key, src in list(self.sources.items()):
             if src.kind == "none":
@@ -2719,11 +2735,9 @@ class HostWatch:
                     self._hole(now, "source-line", "tree %s: %s line %d: %s" % (
                         tree_word(key), feed.path, p["line"], p["reason"]))
                 if changed or final:
-                    fired += self._judge_feed(now, key, src, feed, final, settle)
-        self._settle(now, settle)
-        return fired
+                    fired += self._judge_feed(now, key, src, feed, final)
 
-    def _judge_feed(self, now, key, src, feed, final, settle=None):
+    def _judge_feed(self, now, key, src, feed, final):
         """A source feed judged: each new finding put on its tree. I-6: a
         finding of an aggregate rule (or SILENCE-OPEN) whose key changed as
         it grew takes over the entry of the same feed, rule and session whose
@@ -2738,9 +2752,14 @@ class HostWatch:
             old = sum(1 for _, rec in feed.numbered if isinstance(rec, dict) and rec.get("source") == "os"
                       and rec.get("tool") == "process" and rec.get("phase") == "pre"
                       and isinstance(rec.get("input_meta"), dict) and "image" not in rec["input_meta"])
-            if old and not src.pre_m78_said:
-                src.pre_m78_said = True
-                self.notes.append("tree %s, its os source: %s" % (tree_word(key), PRE_M78_NOTE % old))
+            if old:   # V-3 (U7): said once, its count kept the latest (the report's is the final count)
+                text = "tree %s, its os source: %s" % (tree_word(key), PRE_M78_NOTE % old)
+                if not src.pre_m78_said:
+                    src.pre_m78_said = True
+                    src.pre_m78_index = len(self.notes)
+                    self.notes.append(text)
+                else:
+                    self.notes[src.pre_m78_index] = text
             if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
                 notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
         if getattr(feed, "not_judged", None):
@@ -2758,6 +2777,14 @@ class HostWatch:
                     and rec.get("phase") == "pre" and (discover._ts(rec.get("ts")) or start) < start)
         if early and entry_tree:   # R-2: the count is said per tree (report, state, page)
             entry_tree["before_start"] = early
+        for r in feed.rules:   # V-3 (U9): what a rule off would have fired, as acts (not copies), the notes apart
+            if r.status != "disabled" or r.context_keys:
+                continue
+            for f in engine.judge(r, [rec for _, rec in feed.numbered], {})[0]:
+                cited = [ln for q in f["cited_seq"] for ln in lines_of.get((f["session_id"], q), [])]
+                events = sorted({act_key(recs.get(ln)) for ln in cited}, key=repr)
+                k = tuple(events) if events and all(events) else (feed.path, f["session_id"], tuple(f["cited_seq"]))
+                self.off_acts.setdefault(r.id, {}).setdefault(k, {})[key] = bool(entry_tree.get("benign"))
         fired = []
         current = {(feed.path, feed.epoch, f["rule_id"], f["session_id"], tuple(f["cited_seq"]), f["summary"])
                    for f in found}
@@ -2795,23 +2822,27 @@ class HostWatch:
                      "source": src.kind, "at": self.at(now), "run": self.run, "history": history,
                      "pending": pending, "notice": None, "fkey": list(fkey), "grown": 0,
                      "state": PENDING_EXIT if pending else "settled"}
-            # REDO R-3, REDO 2 T-1: the same os event(s) judged by the same rule on another tree's feed are one act:
-            # the copies are merged first; the entry on the nearest tree (the least depth of its line) stands; the
-            # knock is decided after every feed of this poll is judged (_settle), on the tree the finding is shown on
-            acts = tuple(act_key(recs.get(ln)) for ln in cited) if cited and not pending else ()
-            acts = acts if acts and all(acts) else None
+            # V-1: an act is one os event (or the events a finding cites), keyed by the EVENTS, whichever lines of
+            # them were read (a pre alone or with its post: U6); its copies are kept by tree; everything shown about
+            # it is derived from the act when it is shown (_refresh); the knock is decided by _settle_all
+            events = sorted({act_key(recs.get(ln)) for ln in cited}, key=repr) if cited and not pending else []
+            akey = (f["rule_id"],) + tuple(events) if events and all(events) else None
             depth = min([d for d in ((recs.get(ln) or {}).get("input_meta", {}).get("depth") for ln in cited)
-                         if isinstance(d, int) and not isinstance(d, bool)] or [0]) if acts else None
-            entry.update(depth=depth, catalog=catalog, src_kind=src.kind)
+                         if isinstance(d, int) and not isinstance(d, bool)] or [0]) if akey else None
+            entry.update(depth=depth, catalog=catalog, src_kind=src.kind, settled=False)
             if pending:
                 self.pending_end.append(entry)
             self.source_findings.append(entry)
-            if acts:
-                self._merge(now, entry, (f["rule_id"], acts))
-            if settle is not None and not entry.get("act_settled"):
-                settle.append(entry)
-            elif settle is None:
-                self._settle(now, [entry])
+            if akey:
+                act = self.acts.setdefault(akey, {"rule": f["rule_id"], "copies": {}, "extra": [], "sent": False,
+                                                  "status": None, "knocked_on": None, "answer": None,
+                                                  "decided": False, "dirty": True})
+                entry["act"] = list(akey)
+                if key in act["copies"]:
+                    act["extra"].append(entry)   # a second finding of one event on one tree: listed on the standing
+                else:
+                    act["copies"][key] = entry
+                    act["dirty"] = True
             fired.append("%s %s" % (f["rule_id"], tree_word(key)))
         not_run = sorted({"%s (%s)" % (n["rule_id"], n["detail"]) for n in notes if n.get("status") in NOT_RUN})
         if not_run and not src.not_run_said:   # I-6 (P8): said once per source, never dropped
@@ -2827,137 +2858,189 @@ class HostWatch:
                 self.notes.append(text)
         return fired
 
-    def _count(self, entry, word):
-        """The finding's count on its tree, under word (moved when the word changes)."""
-        tree = self.trees.get(tuple(entry["tree_key"]))
-        if tree is None:
-            entry["count_word"] = word
-            return
-        counts = tree.setdefault("source_findings", {})
-        old = entry.get("count_word")
-        if old == word:
-            return
-        if old:
-            counts[old] = max(0, counts.get(old, 0) - 1)
-            if not counts[old]:
-                del counts[old]
-        counts[word] = counts.get(word, 0) + 1
-        entry["count_word"] = word
+    # --- V-1: the acts ---------------------------------------------------------------------------------
 
-    def _merge(self, now, entry, akey):
-        """T-1 (R-3): one act, one finding. The entry joins its act's copies; the
-        one on the nearest tree stands (ties: the first). A copy is listed on
-        its tree as "judged on another tree". When the act was already settled
-        (a copy that came after the knock) and the new copy is nearer, the
-        finding moves to it and is not knocked again; the KNOCKS row says on
-        which tree it is shown."""
-        act = self.act_findings.get(akey)
-        if act is None:
-            self.act_findings[akey] = {"standing": entry, "copies": [], "settled": False, "notice": None}
-            entry["act"] = akey
+    def _benign_now(self, key):
+        return bool((self.trees.get(key) or {}).get("benign"))
+
+    def _standing(self, act):
+        """V-1, V-2 (pure, from the copies alone): the nearest tree that read the act and is not benign; only when
+        every tree that read it is benign, the nearest of those (and then the act is a note). Ties: the lower pid."""
+        copies = act["copies"]
+
+        def near(k):
+            d = copies[k].get("depth")
+            return (d if isinstance(d, int) else 0, str(k[0]), str(k))
+        agents = [k for k in copies if not self._benign_now(k)]
+        return min(agents or list(copies), key=near)
+
+    def _is_note(self, act):
+        """V-2: a note only when every tree that read it is benign, and no knock was sent for it."""
+        return not act["sent"] and all(self._benign_now(k) for k in act["copies"])
+
+    def _decide(self, now, act):
+        """V-1: whenever an act's copies changed and no knock has been SENT for it, I-6 is asked: on the standing
+        tree, then on each other non-benign tree that read it, nearest first (the act is in each of their trees):
+        the first that knocks sends it. "not notified" is an answer, not a sent knock. So the knock is decided by a
+        condition that only grows with the copies (a non-benign reader whose FIRST-FINDING is unspent, or a high
+        rule): every order of arrival gives one, or none."""
+        if act["sent"] or not act["copies"]:
             return
-        entry["act"] = akey
-        standing = act["standing"]
-        if tuple(standing["tree_key"]) == tuple(entry["tree_key"]):
-            act["copies"].append(entry)
-            self._as_copy(entry, standing)
+        standing = self._standing(act)
+        entry = act["copies"][standing]
+        act["decided"] = True
+        if entry["history"]:
+            act["answer"] = "history: not knocked"
             return
-        if entry["depth"] < standing["depth"]:
-            act["standing"] = entry
-            act["copies"].append(standing)
-            self._as_copy(standing, entry)
-            for c in act["copies"]:
-                if c is not standing:
-                    self._as_copy(c, entry)
-            if act["settled"] and not act.get("knocked"):
-                # settled with no knock (a note on a benign tree): the nearer tree's rules decide it (T-1, T-2)
-                act["settled"] = False
-                entry["act_settled"] = False
+        if self._is_note(act):
+            act["answer"] = None
+            return
+        order = [standing] + sorted((k for k in act["copies"] if k != standing and not self._benign_now(k)),
+                                    key=lambda k: (act["copies"][k].get("depth") or 0, str(k[0])))
+        answer = None
+        for k in order:
+            notice, knocked = self._source_knock(now, k, act["copies"][k]["src_kind"], entry, container=act,
+                                                 key_name="status", shown=standing)
+            answer = answer or notice
+            if knocked:
+                act.update(sent=True, knocked_on=k, status=notice)
                 return
-            if act["settled"]:   # a nearer copy after the knock: shown here, never knocked twice
-                entry.update(notice="knocked once, as a finding of tree pid %s, before this nearer copy came: %s" % (
-                    standing["pid"], act["notice"]), act_settled=True, history=standing["history"],
-                             benign_note=standing.get("benign_note", False))
-                self._count(entry, self._word(entry))
-                for row in self.knocks:
-                    if row["ref"][0] is act:
-                        row["shown_on"] = "tree pid %s" % entry["pid"]
-            return
-        act["copies"].append(entry)
-        self._as_copy(entry, standing)
+        act["answer"] = answer
 
-    def _as_copy(self, entry, standing):
-        entry.update(judged_on=standing["pid"], act_settled=True,
-                     notice="%s: judged on tree pid %s (one act, one finding)" % (JUDGED_ELSEWHERE, standing["pid"]))
-        self._count(entry, JUDGED_ELSEWHERE)
+    def _settle_entry(self, now, e):
+        """A finding that is not an act (a silence rule's, a hook or host line's): as I-6 says, once."""
+        key = tuple(e["tree_key"])
+        tree = self.trees.get(key) or {}
+        if e["history"]:
+            e["notice"] = "history: not knocked"
+        elif e["pending"]:   # as raqib watch at its end: listed and counted, the exit code is the alarm
+            e["notice"] = "%s: pending for good is silence (ADR-0005 B-1): an alarm of the tree, exit 1" % PENDING_EXIT
+        elif tree.get("benign") and e.get("catalog"):   # T-2: a catalog finding on a benign tree is a note
+            e.update(benign_note=True, notice="%s (%s)" % (BENIGN_NOTE, tree.get("benign_by")))
+        else:
+            e["notice"] = self._source_knock(now, key, e["src_kind"], e)[0]
+        e["settled"] = True
+        self._say(now, "SOURCE FINDING [%s] %s on %s pid %s (%s): %s (%s)" % (
+            e["severity"], e["rule_id"], e["image"] or "?", e["pid"], e["src_kind"], e["summary"], e["notice"]))
+
+    def _settle_all(self, now):
+        """V-1 (U2): every finding not yet settled and every act whose copies changed, each on its own (one that
+        raises is kept with why, and said in the report); then everything shown is derived again."""
+        for e in self.source_findings:
+            if e.get("act") is None and not e.get("settled"):
+                try:
+                    self._settle_entry(now, e)
+                except Exception as exc:   # A3: never silent; finish tries again, the report says it
+                    e["settle_error"] = "%s: %s" % (type(exc).__name__, exc)
+        for akey, act in self.acts.items():
+            if not act["dirty"]:
+                continue
+            try:
+                self._decide(now, act)
+                act["dirty"] = False
+                act.pop("settle_error", None)
+            except Exception as exc:
+                act["settle_error"] = "%s: %s" % (type(exc).__name__, exc)
+        self._refresh()
+
+    def _act_notice(self, act, entry):
+        if act.get("settle_error"):
+            return "not settled (%s)" % act["settle_error"]
+        if act["sent"]:
+            return "%s (knocked on tree pid %s)" % (act["status"], act["knocked_on"][0])
+        if not act["decided"]:
+            return "not settled yet"
+        if entry["history"]:
+            return "history: not knocked"
+        if self._is_note(act):
+            return "%s (%s)" % (BENIGN_NOTE, (self.trees.get(tuple(entry["tree_key"])) or {}).get("benign_by"))
+        return act["answer"]
+
+    def _refresh(self):
+        """V-1: everything shown about an act - each copy's status, "judged on tree pid N", the note, the trees'
+        counts - derived from the act now, so two lines about one act cannot disagree."""
+        for act in self.acts.values():
+            if not act["copies"]:
+                continue
+            standing = self._standing(act)
+            note = self._is_note(act)
+            for k, e in list(act["copies"].items()) + [(None, x) for x in act["extra"]]:
+                if k == standing:
+                    e.update(judged_on=None, benign_note=note and not e["history"],
+                             notice=self._act_notice(act, e), settled=act["decided"] or act["sent"])
+                else:
+                    e.update(judged_on=standing[0], benign_note=False, settled=True,
+                             notice="%s: judged on tree pid %s (one act, one finding)" % (JUDGED_ELSEWHERE, standing[0]))
+        knocked = {}   # V-3 (U8): what knocked on each tree (a rule's knock, or a source act sent on it)
+        for k in self.knocks:
+            if k.get("tree") is not None and k["event"] != HOLE_EVENT:
+                knocked.setdefault(tuple(k["tree"]), []).append(k["event"])
+        for key, tree in self.trees.items():
+            if tree.get("benign"):
+                done = sorted(set(knocked.get(key, [])))
+                tree["benign_knocked"] = done
+                tree["benign_word"] = BENIGN_WORD if not done else (
+                    "benign (its acts are noted; knocked here: %s; its rhythm is judged)" % ", ".join(done))
+        counts = {}
+        for e in self.source_findings:
+            counts.setdefault(tuple(e["tree_key"]), {})
+            word = self._word(e)
+            e["count_word"] = word
+            c = counts[tuple(e["tree_key"])]
+            c[word] = c.get(word, 0) + 1
+        for key, tree in self.trees.items():
+            if key in counts or tree.get("source_findings"):
+                tree["source_findings"] = counts.get(key, {})
 
     @staticmethod
     def _word(entry):
+        if entry.get("judged_on") is not None:
+            return JUDGED_ELSEWHERE
         if entry["history"]:
             return "history"
         if entry["pending"]:
             return PENDING_EXIT
         if entry.get("benign_note"):
             return BENIGN_COUNT
+        if not entry.get("settled"):
+            return "not settled"
         return entry["severity"]
 
-    def _settle(self, now, entries):
-        """T-1, T-2, I-6: each finding that stands, once: history and pending
-        as before; a catalog finding on a benign tree is a note (T-2: never
-        knocked, never an alarm, FIRST-FINDING not spent); else I-6 on the
-        tree it is shown on, whichever feed was read first."""
-        for e in entries:
-            act = self.act_findings.get(e.get("act")) if e.get("act") else None
-            standing = act["standing"] if act is not None else e
-            if (act is not None and act["settled"]) or standing.get("act_settled_done"):
-                continue
-            key = tuple(standing["tree_key"])
-            tree = self.trees.get(key) or {}
-            if standing["history"]:
-                standing["notice"] = "history: not knocked"
-            elif standing["pending"]:   # as raqib watch at its end: listed and counted, the exit code is the alarm
-                standing["notice"] = ("%s: pending for good is silence (ADR-0005 B-1): an alarm of the tree, exit 1"
-                                      % PENDING_EXIT)
-            elif tree.get("benign") and standing.get("catalog"):
-                standing.update(benign_note=True, notice="%s (%s)" % (BENIGN_NOTE, tree.get("benign_by")))
-            else:
-                container = act if act is not None else standing
-                standing["notice"] = self._source_knock(now, key, standing["src_kind"], standing, container)
-                if act is not None:
-                    act["knocked"] = True
-            if act is not None:
-                act.update(settled=True, notice=standing["notice"])
-            standing["act_settled_done"] = True
-            self._count(standing, self._word(standing))
-            self._say(now, "SOURCE FINDING [%s] %s on %s pid %s (%s): %s (%s)" % (
-                standing["severity"], standing["rule_id"], standing["image"] or "?", standing["pid"],
-                standing["src_kind"], standing["summary"], standing["notice"]))
+    def unsettled(self):
+        """V-1 (U2): the findings no settle could decide (the report says them)."""
+        out = [e for e in self.source_findings if e.get("act") is None and not e.get("settled")]
+        out += [e for a in self.acts.values() if a.get("settle_error") or (a["dirty"] and not a["sent"])
+                for e in a["copies"].values() if e.get("judged_on") is None]
+        return out
 
-    def _source_knock(self, now, key, kind, entry, container=None):
+    def _source_knock(self, now, key, kind, entry, container=None, key_name="notice", shown=None):
         """I-6 (ADR-0005 A-4, ADR-0006 A-12): a high finding knocks as its
         rule; the first live finding of each tree knocks once as
         FIRST-FINDING (by the rule when that was high); the rest are not
-        notified. The notice. container (T-1): what the KNOCKS row reads its
-        status from (the act, for a finding read by several feeds)."""
+        notified. (notice, whether a knock was sent). container/key_name
+        (V-1): what the KNOCKS row reads its status from (the act); shown:
+        the tree the finding is shown on, named in the knock's text."""
         container = entry if container is None else container
-        notice = None
+        named = shown or key
+        notice, knocked = None, False
         if entry["severity"] == "high":
             notice = self._knock(
-                now, entry["rule_id"], "%s pid %s via %s" % (str(key[1] or "?")[:IMAGE_MAX], key[0], kind), container,
-                limit_id="%s pid %s" % (entry["rule_id"], key[0]))
+                now, entry["rule_id"], "%s pid %s via %s" % (str(named[1] or "?")[:IMAGE_MAX], named[0], kind),
+                container, key=key_name, limit_id="%s pid %s" % (entry["rule_id"], key[0]), tree=key)
+            knocked = True
         tree = self.trees.get(key)
         if tree is not None and tree.get("first_knock") is None:
-            where = notify.clean("pid %s %s" % (key[0], notify.FirstFinding.where(entry)))
+            where = notify.clean("pid %s %s" % (named[0], notify.FirstFinding.where(entry)))
             if notice is not None:
                 status = notify.BY_THE_RULE
             else:
-                status = self._knock(now, notify.FIRST_EVENT, where, container,
-                                     limit_id="%s pid %s" % (notify.FIRST_EVENT, key[0]))
-                notice = status
+                status = self._knock(now, notify.FIRST_EVENT, where, container, key=key_name,
+                                     limit_id="%s pid %s" % (notify.FIRST_EVENT, key[0]), tree=key)
+                notice, knocked = status, True
             tree["first_knock"] = {"rule_id": entry["rule_id"], "severity": entry["severity"], "where": where,
                                    "status": status, "at": self.at(now)}
             entry["first"] = True
-        return notice if notice is not None else "not notified: severity %s" % entry["severity"]
+        return (notice if notice is not None else "not notified: severity %s" % entry["severity"]), knocked
 
     def stop_sources(self, now):
         """Stop ends every source thread (E4): each os follow is told to
@@ -2991,6 +3074,7 @@ class HostWatch:
     def source_alarms(self):
         """The live source findings: settled ones and, I-3 (ADR-0005 B-1),
         those pending at exit (pending for good is silence). History is not."""
+        self._refresh()   # V-1: derived from the acts now
         return [f for f in self.source_findings if not f["history"] and f.get("judged_on") is None   # R-3: once
                 and not f.get("benign_note")]   # T-2: a note on a benign tree is not an alarm
 
@@ -3033,6 +3117,7 @@ class HostWatch:
             except Exception as exc:   # A3: a source not judged at the end is a hole
                 self._hole(now, "source-final", "the sources were not judged at the end: %s: %s" % (
                     type(exc).__name__, exc))
+            self._settle_all(now)   # V-1 (U2): what is still open; what cannot be settled is said in the report
             self._late_beats()
             if self.suspect is not None:   # K-1: what was never sent is a hole, per tree
                 self._suspect_unsent(now)
@@ -3113,6 +3198,7 @@ class HostWatch:
         return "none-seen", []
 
     def summary(self):
+        self._refresh()
         result, reasons = self.result()
         code = EXIT[result]
         not_judged = self.all_not_judged()
@@ -3126,6 +3212,10 @@ class HostWatch:
                "record: %s; latest inventory: %s" % (self.rounds_path, self.inventory_path),
                "run: %s (seqs %d..%d of the record)" % (self.run, self.first_seq + 1, self.seq),
                "watched: %s to %s" % (self.at(self.t0), self.finished or "-"), ""]
+        notes_off = self.off_notes()
+        if notes_off:   # V-3: named apart, never in the suppressed count
+            rules_off = rules_off + ["  (and %s would-be finding(s) on benign trees, which would have been notes: not"
+                                     " counted above)" % ", ".join("%s %d" % kv for kv in sorted(notes_off.items()))]
         if first:
             out += rules_off
         late = sum(1 for r in self.round_lines if r.get("late"))
@@ -3136,15 +3226,18 @@ class HostWatch:
             r["round"], r["error"])) for r in self.round_lines]
         out.append("TREES SEEN: %d (%d now, %d %s)" % (len(self.trees), len(self.present), len(self.quiet), QUIET))
         for key, t in self.trees.items():
-            out.append("  %s pid %s %s (%s%s): %s; first round %d%s%s; last round %d; %d act(s)%s%s" % (
+            out.append("  %s pid %s %s (%s%s): %s; first round %d%s%s; last round %d; %d act(s)%s%s%s" % (
                 "[%s]" % t["class"], t["pid"], t["image"] or "?", "named" if t["named"] else "unknown",
                 ": " + t["named_by"] if t["named_by"] else "", "now" if t["present"] else
                 t.get("quiet_text") or QUIET if t.get("quiet") else "gone",
                 t["first_round"], " (history, not knocked)" if t["history"] else "",
-                " (benign: %s, not knocked) %s" % (t["benign_by"], BENIGN_WORD) if t.get("benign") else "",   # T-2
+                (" (benign: %s, not knocked) %s" % (t["benign_by"], t.get("benign_word") or BENIGN_WORD)
+                 if not t.get("benign_knocked") else " (benign: %s, knocked: %s) %s" % (
+                     t["benign_by"], ", ".join(t["benign_knocked"]), t["benign_word"])) if t.get("benign") else "",
                 t["last_round"], t["acts"],
                 "; endpoints %s" % ", ".join(t["endpoints"]) if t["endpoints"] else "",
-                "; %s %s" % (NEW_AGENT if t["named"] else NEW_UNKNOWN, t["knocked"]) if t["knocked"] else ""))
+                "; %s %s" % (NEW_AGENT if t["named"] else NEW_UNKNOWN, t["knocked"]) if t["knocked"] else "",
+                "; started %s (key %s)" % (t["started_at"], t["started"]) if t.get("started_at") else ""))   # V-4
             out.append("      source: %s (%s); findings %s%s%s" % (
                 t.get("source") or "none", t.get("source_text") or "nothing attached", severity_text(t.get("source_findings")),
                 "; %s %s" % (UNWATCHED, t["unwatched"]) if t.get("unwatched") else "",
@@ -3195,6 +3288,12 @@ class HostWatch:
                 f["severity"], f["rule_id"], f["image"] or "?", f["pid"], f["source"], f["summary"], f["notice"],
                 f["trace"], ",".join(str(x) for x in f["lines"]) or "-",
                 "; grown %d (not knocked again)" % f["grown"] if f.get("grown") else ""))
+        open_ = self.unsettled()
+        out.append("NOT SETTLED (A3; a finding no settle could decide, an alarm of its tree): %d" % len(open_))
+        for f in open_:   # V-1 (U2): never without a word
+            out.append("  [%s] %s on %s pid %s via %s: %s; %s" % (
+                f["severity"], f["rule_id"], f["image"] or "?", f["pid"], f["source"], f["summary"],
+                f.get("settle_error") or f.get("notice") or "not settled"))
         out.append("ON BENIGN TREES (noted, not knocked): %d" % len(notes_benign))   # T-2: apart, never an alarm
         for f in notes_benign:
             out.append("  [%s] %s on %s pid %s via %s: %s; %s; cites %s lines %s" % (
@@ -3234,7 +3333,8 @@ class HostWatch:
         out += ["  round %s at %s: %s, \"%s\" / \"%s\", id %s: %s%s%s" % (
             k["round"], k["at"], k["event"], k["title"], k["body"], k["limit_id"], k["status"],
             " (at the call: %s)" % k["called"] if k["called"] != k["status"] else "",
-            "; the finding is shown on %s (a nearer copy came later, T-1)" % k["shown_on"] if k.get("shown_on") else "")
+            "; the finding is shown on %s, knocked on %s (V-1)" % (k["shown_on"], k["knocked_on"])
+            if k.get("shown_on") and k.get("shown_on") != k.get("knocked_on") else "")
                 for k in rows]
         n = self.notifier.state()
         counts = n["counts"]
@@ -3258,6 +3358,7 @@ class HostWatch:
         return datetime.datetime.fromtimestamp(self.wall_clock(), datetime.timezone.utc)
 
     def state(self, now):
+        self._refresh()   # V-1: what the state shows about an act is read from it now
         reader = None
         if self.worker is not None:
             reader = {"round": self.worker_round, "since": self.at(self.worker_began),
@@ -3301,15 +3402,29 @@ class HostWatch:
         return state
 
     def all_not_judged(self):
-        """M7.6: what each rule off would have judged: the rounds' lines and every source file's."""
+        """M7.6: what each rule off would have judged: the rounds' lines and every source file's. V-3 (U9): what a
+        rule off would have fired on the sources is counted as acts, not copies, and an act every tree of which is
+        benign (a would-be note) is not counted (off_notes says them)."""
         total = {k: dict(v) for k, v in self.not_judged.items()}
         for counts in self.source_not_judged.values():
             for rid, c in counts.items():
                 t = total.setdefault(rid, {"lines": 0, "fired": 0, "cited": 0, "note": None})
-                for k in ("lines", "fired", "cited"):
-                    t[k] += c[k]
+                t["lines"] += c["lines"]
+                if rid not in self.off_acts:
+                    t["fired"] += c["fired"]
+                    t["cited"] += c["cited"]
                 t["note"] = t["note"] or c.get("note")
+        for rid, acts in self.off_acts.items():
+            t = total.setdefault(rid, {"lines": 0, "fired": 0, "cited": 0, "note": None})
+            alarms = [k for k, trees in acts.items() if not all(trees.values())]
+            t["fired"] += len(alarms)
+            t["cited"] += sum(len(k) if k and isinstance(k[0], tuple) else len(k[2]) for k in alarms)
         return total
+
+    def off_notes(self):
+        """V-3: per rule off, the would-be findings every tree of which is benign (would-be notes)."""
+        return {rid: n for rid, n in ((rid, sum(1 for trees in acts.values() if all(trees.values())))
+                                      for rid, acts in self.off_acts.items()) if n}
 
     @staticmethod
     def _public(r):
@@ -3562,7 +3677,7 @@ class FixtureFollow:
                  helpers=None):
         if on_pass:
             on_pass(1, None)
-        stop.wait(60)
+        stop.wait()   # M7.8 REDO 3 V-5: only its Stop ends it (fixture_rounds finishes the watch)
         return 1
 
 

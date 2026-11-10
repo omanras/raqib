@@ -1179,7 +1179,9 @@ def host_section(state):
                        _text(",".join(str(x) for x in _list(f.get("cited_seq"))))))
     if not found:
         out.append('<p class="empty">None.</p>')
-    sources = [_dict(f) for f in _list(host.get("source_findings"))]
+    every = [_dict(f) for f in _list(host.get("source_findings"))]
+    sources = [f for f in every if not (f.get("benign_note") and f.get("judged_on") is None)]
+    benign_notes = [f for f in every if f.get("benign_note") and f.get("judged_on") is None]   # V-3: their own heading
     out.append("<h3>Source findings (%d)</h3>" % len(sources))
     for f in sources:
         out.append('<div class="card"><span class="tag">%s</span> <span class="tag">%s</span> %s pid %s via %s: %s'
@@ -1188,6 +1190,15 @@ def host_section(state):
                        _text(f.get("pid")), _text(f.get("source")), _text(f.get("summary")), _text(f.get("notice")),
                        _text(f.get("trace")), _text(",".join(str(x) for x in _list(f.get("lines"))) or "-")))
     if not sources:
+        out.append('<p class="empty">None.</p>')
+    out.append("<h3>On benign trees (noted, not knocked) (%d)</h3>" % len(benign_notes))
+    for f in benign_notes:
+        out.append('<div class="card"><span class="tag">note</span> <span class="tag">%s</span> %s pid %s via %s: %s'
+                   ' <span class="meta">%s; %s lines %s</span></div>' % (
+                       _text(f.get("rule_id")), _text(f.get("image") or "?"), _text(f.get("pid")), _text(f.get("source")),
+                       _text(f.get("summary")), _text(f.get("notice")), _text(f.get("trace")),
+                       _text(",".join(str(x) for x in _list(f.get("lines"))) or "-")))
+    if not benign_notes:
         out.append('<p class="empty">None.</p>')
     findings = [_dict(f) for f in _list(host.get("findings"))]
     out.append("<h3>Host findings (%d)</h3>" % len(findings))
@@ -1269,7 +1280,7 @@ def severity_counts(counts):
     history and pending apart), or "none"."""
     counts = counts if isinstance(counts, dict) else {}
     words = ("high", "medium", "low", "history", "pending at exit", "pending", "judged on another tree",   # R-3
-             "noted (benign)")   # T-2
+             "noted (benign)", "not settled")   # T-2, V-1
     parts = ["%s %s" % (k, counts[k]) for k in words if counts.get(k)]
     return ", ".join(parts) or "none"
 

@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 from raqib import app, cli, discover, host, ui  # noqa: E402
 from raqib.rules import engine, fixtures  # noqa: E402
 from raqib.suspect import backends, core  # noqa: E402
+from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 
 sys.path.insert(0, str(ROOT / "tests"))
 from test_watch import FakeRunner, make_notifier  # noqa: E402
@@ -425,7 +426,7 @@ def test_e3_a_failed_or_late_call_is_a_hole_not_a_clearance(home):
 
     class Slow(backends.FakeBackend):
         def judge(self, system, user, schema):
-            gate.wait(10)
+            gate.wait()   # V-5: the test sets the gate
             return {"suspicion": 0.0, "reasons": [], "cited_seq": []}
     (home / "b").mkdir()
     w2, clock2 = make_host(home / "b", scenario("between", 10), suspect=Slow({}), suspect_timeout=5)
@@ -720,7 +721,7 @@ class OsFollow:
         os_lines(log, root, 3)
         if on_pass:
             on_pass(1, None)
-        stop.wait(60)
+        stop.wait()   # V-5: only the stop it is given ends it
         return 1
 
 
@@ -813,7 +814,7 @@ def test_redo_k3_a_call_still_out_at_the_end_is_recorded(home, monkeypatch):
 
     class Stuck(Spy):
         def judge(self, system, user, schema):
-            gate.wait(10)
+            gate.wait()   # V-5: the test sets the gate
             return {"suspicion": 0.0, "reasons": [], "cited_seq": []}
     monkeypatch.setattr(host, "SUSPECT_JOIN_SECONDS", 0.05)
     w, clock = make_host(home, scenario("cycle", 10), suspect=Stuck())

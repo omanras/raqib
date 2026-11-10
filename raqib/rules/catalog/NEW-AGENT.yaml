@@ -18,7 +18,7 @@ severity: high
 # measure: 0, so one benign named tree in a fixture fails the gate.
 fp_budget: 0.0
 holes:
-  - "Linux /proc gives no creation time: a tree is keyed by (pid, image), so a pid reused by a process of the same image between rounds is taken for the same tree"
+  - "Linux: a tree is keyed by (pid, image, its start in clock ticks since boot from /proc/PID/stat, shown as a time where the tick rate is known; M7.8 REDO 3 V-4); where the start is unread (an older snapshot, a process whose stat is hidden) by (pid, image) only, so a pid reused by a process of the same image between rounds is taken for the same tree"
   - "a tree that lives only between two rounds (shorter than T seconds) is never seen"
   - "a tree whose talk and act fall in different rounds is never a candidate in one round (the round reads one sample)"
   - "a tree that was a candidate earlier in this watch and comes back with the same pid, image and creation time is not new again (once per tree)"

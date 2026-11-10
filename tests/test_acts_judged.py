@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 from raqib import discover, host, notify, ui  # noqa: E402
 from raqib.hooks import common, os_sysmon  # noqa: E402
 from raqib.rules import engine, fixtures  # noqa: E402
+from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 
 FIX = ROOT / "tests" / "fixtures"
 RULES_DIR = ROOT / "raqib" / "rules" / "catalog"
@@ -126,28 +127,11 @@ def inventory(rel):
     return discover.run(texts, CATALOG, holes=holes, run=discover.run_record(str(d)), processes=True)
 
 
-WATCHES = []   # REDO 2 T-6: every HostWatch a test of this file starts
+WATCHES = []   # the watches a test of this file built through watch_rounds (the fixture finds them all itself)
 
 
-@pytest.fixture(autouse=True)
-def m78_no_raqib_thread_outlives_its_test():
-    """REDO 2 T-6 (ADR-0007 T-6): every HostWatch the test started is ended in it (finish: its sources' threads
-    told to stop and joined, bounded), and the test fails if a thread named for Raqib that it started is still
-    alive after that. Separately named (a conftest.py of another branch may hold fixtures of its own)."""
-    before = {t for t in threading.enumerate() if t.name.startswith("raqib-")}
-    del WATCHES[:]
-    yield
-    for w in WATCHES:
-        if w.finished is None:
-            w.finish()
-    import time
-    deadline = time.monotonic() + 10
-    left = [t for t in threading.enumerate() if t.name.startswith("raqib-") and t not in before]
-    for t in left:
-        t.join(max(0.0, deadline - time.monotonic()))
-    alive = [t.name for t in left if t.is_alive()]
-    del WATCHES[:]
-    assert not alive, "thread(s) outlived the test: %s" % alive
+# REDO 2 T-6 / REDO 3 V-5: the fixture is tests/hostthreads.py's raqib_threads_end (imported above), which ends every
+# HostWatch a test of this file builds and fails a test that leaves a raqib- thread alive.
 
 
 class CountingFollow:
@@ -448,7 +432,8 @@ def test_e3_an_os_finding_shows_on_its_tree_cites_its_line_and_knocks_as_a_sourc
     # I-6: medium, so no rule knock; the first finding of the tree knocks once as FIRST-FINDING
     events = [k["event"] for k in w.knocks]
     assert events.count(notify.FIRST_EVENT) == 1 and "NET-TOOL" not in events
-    assert sorted(f["notice"] for f in found) == ["not notified: severity medium"] * 2 + ["off"]   # off: a fixture
+    assert sorted(f["notice"] for f in found) == ["not notified: severity medium"] * 2 + [
+        "off (knocked on tree pid 5888)"]   # off: a fixture notifier; V-1: the act says which tree knocked
     # notifier
     text, code = w.finish()
     assert code == 1 and "findings medium 3" in text and "SOURCE FINDINGS: 3 (3 live" in text
@@ -465,10 +450,8 @@ def test_e3_a_source_of_lines_before_m78_is_said_once_and_not_guessed(tmp_path):
     w = watch_rounds(tmp_path, ["defender/before", "quiet/talking", "quiet/talking"], follow=follow)
     assert w.source_findings == []
     said = [n for n in w.notes if "carry no input_meta.image" in n]
-    # said once, with the count the first judge of the feed saw (the follow's thread may still be appending then)
-    (one,) = said
-    count = int(re.match(r"tree %s, its os source: (\d+) " % re.escape(SHELL), one).group(1))
-    assert 1 <= count <= 6 and one == "tree %s, its os source: %s" % (SHELL, host.PRE_M78_NOTE % count)
+    # V-3 (U7): said once, and its count is the final one (the first judge may have seen part of an append)
+    assert said == ["tree %s, its os source: %s" % (SHELL, host.PRE_M78_NOTE % 6)]
     assert not [n for n in w.notes if "NET-TOOL partial" in n or "DESTRUCT-CMD partial" in n]
 
 
@@ -594,10 +577,13 @@ def test_redo2_t2_rhythm_on_a_benign_tree_still_knocks(tmp_path):
         return i
     w = watch_rounds(tmp_path, [str(k) for k in range(1, 5)], sysmon=False, inv=inv)
     (tree,) = w.trees.values()
-    assert tree["benign"] and tree["benign_word"] == host.BENIGN_WORD
     rhythm = [f for f in w.findings if f["rule_id"] == host.RHYTHM]
     assert len(rhythm) == 1 and [k["event"] for k in w.knocks].count(host.RHYTHM) == 1   # K-10: judged, and knocks
-    assert w.finish()[1] == 1
+    text, code = w.finish()
+    assert code == 1 and tree["benign"]
+    # V-3 (U8): the benign word says what happened to the tree, never "not knocked" beside a knock
+    assert tree["benign_word"] == "benign (its acts are noted; knocked here: HOST-RHYTHM; its rhythm is judged)"
+    assert "(benign: c:/windows/*, knocked: HOST-RHYTHM)" in text and "c:/windows/*, not knocked" not in text
 
 
 def test_redo_r2_an_act_from_before_the_watch_is_history_whenever_its_tree_was_first_seen(tmp_path):
@@ -683,7 +669,7 @@ def test_redo2_t1_the_outer_trees_first_finding_spent_the_nested_trees_not(tmp_p
     assert [k["limit_id"] for k in firsts] == ["FIRST-FINDING pid 6100", "FIRST-FINDING pid 6200"]
     assert "pid 6200" in firsts[1]["body"]   # the KNOCKS row names the tree the finding is shown on
     inner = next(k for k in w.trees if k[0] == 6200)
-    assert w.trees[inner]["first_knock"]["rule_id"] == "NET-TOOL" and shown["notice"] == "off"   # off: fixture notifier
+    assert w.trees[inner]["first_knock"]["rule_id"] == "NET-TOOL" and shown["notice"] == "off (knocked on tree pid 6200)"
     assert w.trees[inner]["source_findings"] == {"medium": 1}
 
 
@@ -709,14 +695,16 @@ def test_redo2_t1_a_copy_arriving_after_the_knock_moves_the_finding_and_never_kn
     w = nested_watch(tmp_path, [[(6100, copies[6100])], [(6200, copies[6200])]])
     (shown,), (listed,) = standing_and_copies(w)
     assert shown["pid"] == 6200 and listed["pid"] == 6100 and listed["notice"].startswith(host.JUDGED_ELSEWHERE)
-    assert shown["notice"].startswith("knocked once, as a finding of tree pid 6100, before this nearer copy came")
+    # V-1: read from the act: the knock was sent on 6100's tree (its FIRST unspent) before the nearer copy came
+    assert shown["notice"] == "off (knocked on tree pid 6100)"
     (row,) = [k for k in w.knock_rows() if k["event"] == notify.FIRST_EVENT]
     assert row["limit_id"] == "FIRST-FINDING pid 6100" and row["shown_on"] == "tree pid 6200"
+    assert row["knocked_on"] == "tree pid 6100"
     inner, outer = (next(k for k in w.trees if k[0] == p) for p in (6200, 6100))
     assert w.trees[inner]["source_findings"] == {"medium": 1}
     assert w.trees[outer]["source_findings"] == {host.JUDGED_ELSEWHERE: 1}
     text, _ = w.finish()
-    assert "the finding is shown on tree pid 6200 (a nearer copy came later, T-1)" in text
+    assert "the finding is shown on tree pid 6200, knocked on tree pid 6100 (V-1)" in text
     assert "SOURCE FINDINGS: 2 (1 live, of them 0 pending at exit; 0 history; 1 judged on another tree; 0 on benign" \
            " trees, noted)" in text   # T-8: the counts add up
 
@@ -970,3 +958,313 @@ def test_redo2_t6_the_fakes_wait_on_their_stop_and_finish_ends_every_thread(tmp_
     for t in mine:
         t.join(10)
     assert not [t.name for t in mine if t.is_alive()]   # the fixture checks this after every test of this file
+
+
+# === M7.8 REDO 3 (ADR-0007 Amendment V): the act, in every order of arrival ===================================
+
+import itertools  # noqa: E402
+
+PERM_START = "2026-11-10T07:50:00.000Z"
+
+
+def nested_inventory(spec):
+    """One round's inventory of len(spec) nested trees, outermost first: spec[i] is True when tree i is benign
+    (explorer under the system drive's Windows) and False when it is an agent (a user directory). Each talks and
+    has the next as its child (SYNTHETIC; the trees only: what they read is appended to their files)."""
+    trees = []
+    for i, benign in enumerate(spec):
+        pid = 9100 + 100 * i
+        exe = "C:\\Windows\\explorer.exe" if benign else "C:\\Users\\user\\AppData\\Local\\Programs\\a%d\\a%d.exe" % (i, i)
+        trees.append({"pid": pid, "image": "explorer" if benign else "a%d" % i, "exe": exe, "exe_from": "record",
+                      "started": PERM_START, "cwd": None, "id": "C%d" % (i + 1),
+                      "cites": [{"src": "win-process-1", "line": 3 + i, "text": "tree %d (test)" % pid}],
+                      "acts": [{"how": "process", "pid": pid + 100, "image": "child", "started": PERM_START,
+                                "cites": []}],
+                      "talks": [{"remote": "203.0.113.%d:443" % (60 + i), "endpoint": [], "cites": []}]})
+    return {"records": 20, "holes": [], "incomplete": [], "alarms": [], "problems": [], "result": "alarm",
+            "sources": [], "footprints": [], "agent_dark": [], "system_drive": "c", "live": False,
+            "candidates": trees, "act_roots": [], "processes": [{"pid": t["pid"], "image": t["image"],
+                                                                 "started": PERM_START} for t in trees],
+            "window": {"start": None, "end": None, "snapshots": 0, "samples_read": [1]}}
+
+
+def copy_lines(pid, depth, half=False):
+    """The one curl (the act) as tree pid's source writes it, at depth below its root; half: its pre only."""
+    meta = {"command_head": "curl.exe", "command_programs": ["curl.exe"], "image": "curl", "parent_image": "cmd",
+            "depth": depth}
+    base = {"ts": "2026-11-03T10:00:30.000Z", "seq": 7, "session_id": "os-%d" % pid, "tool": "process",
+            "input_sha256": common.canonical_sha256({"command_line": "curl -s https://198.51.100.70/x"}),
+            "input_meta": meta, "cwd": "C:\\work\\proj", "source": "os"}
+    lines = [dict(base, phase="pre")]
+    return lines if half else lines + [dict(base, phase="post", output_meta={}, ok=True)]
+
+
+def run_order(tmp_path, spec, spent, order, half=frozenset()):
+    """A watch of the nested trees of spec; trees whose index is in spent have their FIRST-FINDING spent; each
+    tree's copy of the act arrives in its own poll, in `order` (indices). The act logic is the same whatever
+    source wrote the lines; the trees' host sources (no Sysmon, no thread) keep the case fast."""
+    inv = nested_inventory(spec)
+    clock = host.FixtureClock()
+    notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
+    w = host.HostWatch(lambda: json.loads(json.dumps(inv)), CATALOG, RULES, notifier, every=10, out=None,
+                       err=io.StringIO(), clock=clock, wall=lambda: 1793700000.0 + clock.t, home=str(tmp_path),
+                       platform="fixture", run="fixture-run", sysmon=lambda: (False, "fixture: no Sysmon"))
+    WATCHES.append(w)
+    w.tick(wait=30)   # round 1: the trees and their sources
+    keys = sorted(w.trees, key=lambda k: k[0])
+    for i in spent:
+        w.trees[keys[i]]["first_knock"] = {"rule_id": "EARLIER", "severity": "medium", "where": "-",
+                                           "status": "off", "at": "-"}
+    n = len(spec)
+    for i in order:
+        os_sysmon.append(w.sources[keys[i]].path, [json.dumps(x, separators=(",", ":"))
+                                                   for x in copy_lines(keys[i][0], n - i, half=i in half)])
+        clock.t += 1
+        w.tick()   # a poll of its own
+    for i in sorted(half):   # U6: the post of a copy read half, in a later poll
+        os_sysmon.append(w.sources[keys[i]].path, [json.dumps(copy_lines(keys[i][0], n - i)[1], separators=(",", ":"))])
+        clock.t += 1
+        w.tick()
+    text, code = w.finish()
+    acts = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
+    shown = [f["pid"] for f in acts if f.get("judged_on") is None]
+    knocks = [k for k in w.knocks if k["event"] in (notify.FIRST_EVENT, "NET-TOOL")]
+    counts = {k[0]: dict(w.trees[k].get("source_findings") or {}) for k in keys}
+    return {"shown": shown, "code": code, "counts": counts, "knocks": len(knocks)}
+
+
+def every_order(tmp_path, n):
+    results = {}
+    for spec in itertools.product((False, True), repeat=n):
+        for spent in itertools.product((False, True), repeat=n):
+            spent_idx = frozenset(i for i, s in enumerate(spent) if s)
+            outs = [run_order(tmp_path / ("%d-%s-%s-%s" % (n, spec, spent, order)).replace(" ", ""), spec, spent_idx,
+                              order) for order in itertools.permutations(range(n))]
+            results[(spec, spent)] = outs
+    return results
+
+
+@pytest.mark.parametrize("n", [2, 3])
+def test_redo3_v1_every_order_of_arrival_gives_one_answer(tmp_path, n):
+    """V-1, the test that matters: for two and three nested trees, each benign or not, its FIRST-FINDING spent
+    or not, EVERY order of arrival over separate polls gives the same standing tree, the same exit code, the
+    same counts, at most one knock, and a knock in every order whenever some order gives one (2 x 4 x 4 x 2 = 32
+    runs for two trees, 8 x 8 x 6 = 384 for three)."""
+    bad = []
+    for (spec, spent), outs in every_order(tmp_path, n).items():
+        first = outs[0]
+        same = all(o["shown"] == first["shown"] and o["code"] == first["code"] and o["counts"] == first["counts"]
+                   for o in outs)
+        once = all(o["knocks"] <= 1 for o in outs)
+        agree = len({o["knocks"] > 0 for o in outs}) == 1
+        if not (same and once and agree and len(first["shown"]) == 1):
+            bad.append((spec, spent, [(o["shown"], o["code"], o["knocks"]) for o in outs]))
+        # V-2: an act is a note only when every tree above it is benign; else it stands on the nearest agent's tree
+        agents = [i for i, b in enumerate(spec) if not b]
+        want = 9100 + 100 * max(agents) if agents else 9100 + 100 * (n - 1)
+        if first["shown"] != [want] or (first["code"] == 1) != bool(agents):
+            bad.append(("standing", spec, spent, first["shown"], first["code"]))
+    assert not bad, bad[:6]
+
+
+def test_redo3_v1_a_half_read_copy_is_the_same_act(tmp_path):
+    """U6: a feed read in the middle of an append judges the pre alone; its key is the event's, as its twin's."""
+    whole = run_order(tmp_path / "w", (False, False), frozenset(), (0, 1))
+    half = run_order(tmp_path / "h", (False, False), frozenset(), (0, 1), half=frozenset({0}))
+    assert half["shown"] == whole["shown"] == [9200] and half["knocks"] == whole["knocks"] == 1
+    assert half["counts"] == whole["counts"]
+
+
+def test_redo3_v1_a_folds_outcome_is_read_from_the_act_by_the_finding_and_its_knocks_row(tmp_path):
+    """U3: the finding's status and its KNOCKS row are one thing (the act's), also after a fold."""
+    w = watch_rounds(tmp_path, ["quiet/ended"], sysmon=False)
+    out = run_order(tmp_path / "f", (False, False), frozenset(), (1, 0))
+    assert out["knocks"] == 1
+    inv = nested_inventory((False, False))
+    clock = host.FixtureClock()
+    notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
+    w = host.HostWatch(lambda: json.loads(json.dumps(inv)), CATALOG, RULES, notifier, every=10, out=None,
+                       err=io.StringIO(), clock=clock, wall=lambda: 1793700000.0 + clock.t, home=str(tmp_path / "w"),
+                       platform="fixture", run="fixture-run", sysmon=lambda: (False, "fixture: no Sysmon"))
+    w.tick(wait=30)
+    keys = sorted(w.trees, key=lambda k: k[0])
+    for i in (0, 1):
+        os_sysmon.append(w.sources[keys[i]].path, [json.dumps(x) for x in copy_lines(keys[i][0], 2 - i)])
+    clock.t += 1
+    w.tick()
+    (row,) = [k for k in w.knocks if k["event"] == notify.FIRST_EVENT]
+    w._folds([row["ref"]], "sent", 2)   # what the notifier writes back when a fold is delivered (C-5)
+    w._refresh()
+    (shown,) = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL" and f.get("judged_on") is None]
+    (krow,) = [k for k in w.knock_rows() if k["event"] == notify.FIRST_EVENT]
+    assert shown["notice"].startswith("folded: sent as 2 more") and krow["status"] == "folded: sent as 2 more"
+    w.finish()
+
+
+def test_redo3_v1_a_poll_cut_short_is_settled_and_what_finish_cannot_settle_is_said(tmp_path, monkeypatch):
+    """U2: a judge that raises mid-poll leaves no finding without a word: the poll's `finally` settles what was
+    judged; an act that cannot be settled at all is in the report's NOT SETTLED, an alarm of its tree."""
+    inv = nested_inventory((False, False))
+    clock = host.FixtureClock()
+    notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
+    w = host.HostWatch(lambda: json.loads(json.dumps(inv)), CATALOG, RULES, notifier, every=10, out=None,
+                       err=io.StringIO(), clock=clock, wall=lambda: 1793700000.0 + clock.t, home=str(tmp_path),
+                       platform="fixture", run="fixture-run", sysmon=lambda: (False, "fixture: no Sysmon"))
+    w.tick(wait=30)
+    keys = sorted(w.trees, key=lambda k: k[0])
+    for i in (0, 1):
+        os_sysmon.append(w.sources[keys[i]].path, [json.dumps(x) for x in copy_lines(keys[i][0], 2 - i)])
+    real = host.HostWatch._judge_feed
+    calls = []
+
+    def judge(self, now, key, src, feed, final):
+        calls.append(key)
+        if len(calls) == 2:
+            raise RuntimeError("the second feed's judge failed (test)")
+        return real(self, now, key, src, feed, final)
+    monkeypatch.setattr(host.HostWatch, "_judge_feed", judge)
+    clock.t += 1
+    with pytest.raises(RuntimeError):
+        w.tick()
+    (first,) = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
+    assert first["settled"] and first["notice"] and first["notice"] != "None"   # settled by the poll's finally
+    assert [k["event"] for k in w.knocks].count(notify.FIRST_EVENT) == 1
+    monkeypatch.setattr(host.HostWatch, "_judge_feed", real)
+    monkeypatch.setattr(host.HostWatch, "_decide", lambda self, now, act: (_ for _ in ()).throw(
+        RuntimeError("cannot decide (test)")))
+    for act in w.acts.values():
+        act["dirty"] = True
+    text, code = w.finish()
+    assert "NOT SETTLED (A3; a finding no settle could decide, an alarm of its tree): 1" in text
+    assert "RuntimeError: cannot decide (test)" in text and code == 1
+
+
+def test_redo3_v1_three_trees_over_three_polls_name_the_tree_that_knocked(tmp_path):
+    """U5: the knock and the finding are named from the act: which tree knocked, where it is shown."""
+    inv = nested_inventory((False, False, False))
+    clock = host.FixtureClock()
+    notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
+    w = host.HostWatch(lambda: json.loads(json.dumps(inv)), CATALOG, RULES, notifier, every=10, out=None,
+                       err=io.StringIO(), clock=clock, wall=lambda: 1793700000.0 + clock.t, home=str(tmp_path),
+                       platform="fixture", run="fixture-run", sysmon=lambda: (False, "fixture: no Sysmon"))
+    w.tick(wait=30)
+    keys = sorted(w.trees, key=lambda k: k[0])
+    w.trees[keys[1]]["first_knock"] = {"rule_id": "EARLIER"}
+    for i in (0, 1, 2):
+        os_sysmon.append(w.sources[keys[i]].path, [json.dumps(x) for x in copy_lines(keys[i][0], 3 - i)])
+        clock.t += 1
+        w.tick()
+    (shown,) = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL" and f.get("judged_on") is None]
+    assert shown["pid"] == 9300 and shown["notice"] == "off (knocked on tree pid 9100)"
+    others = sorted(f["notice"] for f in w.source_findings if f.get("judged_on") is not None)
+    assert others == ["%s: judged on tree pid 9300 (one act, one finding)" % host.JUDGED_ELSEWHERE] * 2
+    (row,) = w.knock_rows()
+    assert (row["knocked_on"], row["shown_on"]) == ("tree pid 9100", "tree pid 9300")
+    w.finish()
+
+
+def test_redo3_v3_the_page_lists_notes_apart_and_rules_off_count_acts(tmp_path):
+    off = []
+    for r in RULES:
+        if r.id == "NET-TOOL":
+            doc = dict(r.doc, status="disabled")
+            r2 = engine.compile_rule(doc, r.source)
+            r2.off_by = "test"
+            off.append(r2)
+        else:
+            off.append(r)
+
+    def run(spec):
+        inv = nested_inventory(spec)
+        clock = host.FixtureClock()
+        notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
+        w = host.HostWatch(lambda: json.loads(json.dumps(inv)), CATALOG, off, notifier, every=10, out=None,
+                           err=io.StringIO(), clock=clock, wall=lambda: 1793700000.0 + clock.t,
+                           home=str(tmp_path / str(spec)), platform="fixture", run="fixture-run",
+                           sysmon=lambda: (False, "fixture: no Sysmon"))
+        w.tick(wait=30)
+        keys = sorted(w.trees, key=lambda k: k[0])
+        for i, k in enumerate(keys):
+            os_sysmon.append(w.sources[k].path, [json.dumps(x) for x in copy_lines(k[0], len(keys) - i)])
+        clock.t += 1
+        w.tick()
+        return w
+    nested = run((False, False))
+    assert nested.all_not_judged()["NET-TOOL"]["fired"] == 1   # one act read by two trees: once, not twice
+    text, code = nested.finish()
+    assert "it would have fired 1 time(s)" in text
+    benign = run((True,))
+    assert benign.all_not_judged()["NET-TOOL"]["fired"] == 0 and benign.off_notes() == {"NET-TOOL": 1}
+    text, code = benign.finish()
+    assert "(and NET-TOOL 1 would-be finding(s) on benign trees, which would have been notes: not counted above)" in text
+    # the page: notes under their own heading, never among the source findings
+    w = run_order(tmp_path / "p", (True,), frozenset(), (0,))
+    assert w["code"] == 0
+    inv = nested_inventory((True,))
+    clock = host.FixtureClock()
+    notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
+    w2 = host.HostWatch(lambda: json.loads(json.dumps(inv)), CATALOG, RULES, notifier, every=10, out=None,
+                        err=io.StringIO(), clock=clock, wall=lambda: 1793700000.0 + clock.t, home=str(tmp_path / "pg"),
+                        platform="fixture", run="fixture-run", sysmon=lambda: (False, "fixture: no Sysmon"))
+    w2.tick(wait=30)
+    (k,) = list(w2.trees)
+    os_sysmon.append(w2.sources[k].path, [json.dumps(x) for x in copy_lines(k[0], 1)])
+    clock.t += 1
+    w2.tick()
+    page = "\n".join(ui.host_section(w2.state(clock())))
+    assert "<h3>Source findings (0)</h3>" in page and "<h3>On benign trees (noted, not knocked) (1)</h3>" in page
+    w2.finish()
+
+
+def test_redo3_v4_the_linux_tree_shows_its_start_as_a_time_beside_the_key(tmp_path):
+    d = FIX / "discover" / "linux-agent"
+    texts, holes = discover.read_dir(str(d))
+    label, text, err = texts["proc"]
+    lines = []
+    for line in text.splitlines(True):
+        if line.startswith("{") and '"pid"' in line:
+            rec = json.loads(line)
+            rec.update(start_ticks=1000 + rec["pid"], started="2026-11-03T09:%02d:00.000Z" % (rec["pid"] % 60))
+            line = json.dumps(rec) + "\n"
+        lines.append(line)
+    texts["proc"] = (label, "".join(lines), err)
+    inv = discover.run(texts, CATALOG, holes=holes, processes=True)
+    (c,) = inv["candidates"] + inv["act_roots"]
+    assert c["started"] == "boot+%d" % (1000 + c["pid"])
+    assert c["started_at"] == "2026-11-03T09:%02d:00.000Z" % (c["pid"] % 60)
+    plain = discover.run(discover.read_dir(str(d))[0], CATALOG, holes=holes)   # a shipped snapshot: no key added
+    assert all("started_at" not in t for t in plain["candidates"] + plain["act_roots"])
+    w = watch_rounds(tmp_path, ["one", "one"], sysmon=False, inv=lambda n: json.loads(json.dumps(inv)))
+    text_, _ = w.finish()
+    assert "started %s (key %s)" % (c["started_at"], c["started"]) in text_
+    for rule_id in ("NEW-AGENT", "NEW-AGENT-UNKNOWN"):
+        assert any(h.startswith("Linux: a tree is keyed by (pid, image, its start in clock ticks since boot")
+                   for h in rule(rule_id).doc["holes"])
+        assert not any("gives no creation time" in h for h in rule(rule_id).doc["holes"])
+    assert "shown as a time where the clock tick rate is known" in " ".join(
+        (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
+
+
+def test_redo3_v5_the_helper_serves_the_four_files_and_a_finish_that_raises_still_stops_the_rest(tmp_path):
+    import hostthreads
+    for name in ("test_acts_judged.py", "test_host_sources.py", "test_rhythm.py", "test_field_run.py"):
+        text = (ROOT / "tests" / name).read_text(encoding="ascii")
+        timed = re.findall(r"(?:stop|release|gate)\.wait\(\d", text)   # a fake waiting on a time
+        assert "from hostthreads import raqib_threads_end" in text and not timed, name
+    assert not re.findall(r"stop\.wait\(\d", (ROOT / "raqib" / "host.py").read_text(encoding="ascii"))
+    assert not (ROOT / "tests" / "conftest.py").exists()
+    w = watch_rounds(tmp_path, ["quiet/talking"], follow=CountingFollow())
+    (src,) = w.sources.values()
+    w.finish = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("finish raised (test)"))
+    hostthreads._stop_sources(w)   # what the teardown does after a finish that raised
+    src.thread.join(5)
+    assert not src.thread.is_alive()
+    del w.finish
+
+
+def test_redo3_v6_a_later_larger_step_is_said_again(tmp_path):
+    steps = {20: 3600, 30: 3600, 40: 7200}
+    w = watch_rounds(tmp_path, ["defender/before"] * 5, sysmon=False,
+                     wall=lambda t: 1793700000.0 + t - max([v for k, v in steps.items() if t >= k] or [0]))
+    holes = [h["detail"] for h in w.holes if h["kind"] == "clock-step"]
+    assert len(holes) == 2 and "stepped back 3600 s" in holes[0] and "stepped back 7200 s" in holes[1]

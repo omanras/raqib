@@ -119,8 +119,8 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       os source's process lines are by their image name, M7.8); its
       findings show on the tree and knock (on a benign tree they are notes,
       not knocked, not an alarm; an os event from before the start is
-      history; one act read by two nested trees is one finding, on the
-      nearest). A tree whose root process is in the round's sample and is not
+      history; one act read by several nested trees is one finding, on the
+      nearest tree that is not benign, knocked at most once). A tree whose root process is in the round's sample and is not
       in the round is "quiet (its root alive in round N; not seen talking
       with an act at the sample; source kept)", with its source's real state
       when that is not running; in a round whose connections were not read it

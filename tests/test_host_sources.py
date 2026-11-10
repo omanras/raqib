@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT))
 from raqib import app, cli, discover, host, install, notify, ui  # noqa: E402
 from raqib.hooks import os_sysmon  # noqa: E402
 from raqib.rules import engine, fixtures, silence, trace  # noqa: E402
+from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 
 sys.path.insert(0, str(ROOT / "tests"))
 from test_watch import FakeRunner, make_notifier  # noqa: E402
@@ -254,9 +255,9 @@ class FakeFollow:
         if on_pass:
             on_pass(1, info["top_record"])
         if self.stubborn:
-            self.release.wait(10)
+            self.release.wait()   # V-5: no fake waits on a time; the test releases it
             return 1
-        stop.wait(60)
+        stop.wait()   # V-5: only the stop it is given ends it
         return 1
 
 
