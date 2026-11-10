@@ -82,5 +82,5 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.9 the round reads the channel (P-4): a tree that lives between two rounds is a tree of that round where Sysmon is readable
 - M7.10 AGENT-CLIPBOARD (P-5, Sysmon event 24's header): waits for the commander's word and a real export
 - M7.11 a benign host of a model client (ADR-0007 T-9): a benign program that talks to a model endpoint the catalog names is listed with that word
-- M8.1 the look (ADR-0009 decisions 1-3): rail, verdict header, the round strip, switches, DPI-aware on Windows
+- M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (ADR-0009 decisions 4-5)
