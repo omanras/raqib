@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from raqib import cli, report  # noqa: E402
+from raqib import cli, discover, report  # noqa: E402
 from raqib.hooks import os_sysmon  # noqa: E402
 from raqib.rules import cross, engine, silence, trace  # noqa: E402
 
@@ -62,6 +62,7 @@ def osl(seq, at, program=None, depth=2, tool="process", phase="pre", meta=None, 
     if phase in ("pre", "post"):
         if meta is None:
             meta = {"command_head": program, "command_programs": [program]} if program else {"command_unread": True}
+            meta["image"] = discover.image_name(program) if program else None   # M7.8: os_sysmon's normalised name
             if depth is not None:
                 meta["depth"] = depth
             if parent is not None:
@@ -267,7 +268,10 @@ def test_e3_report_on_the_positive_fixtures_is_an_alarm_with_the_cited_line_and_
         assert cli.main(["report", str(CROSS_DIR / ("%s.log" % name)), "--scope", "."], out=out) == 1
         text = out.getvalue()
         assert "[high] CROSS-SOURCE (CROSS, anchor) session %s seq %d" % (session, seqs[0]) in text, text
-        assert "FINDINGS: 1" in text and "RULES THAT DID NOT RUN: 0" in text
+        # M7.8 (ADR-0007 P-1): NET-TOOL judges the os process line of curl.exe (image curl) the agent did not ask for
+        found = 2 if name == "done-not-asked" else 1
+        assert "FINDINGS: %d" % found in text and "RULES THAT DID NOT RUN: 0" in text
+        assert ("[medium] NET-TOOL (NET, signature) session os-4100 seq 7" in text) == (name == "done-not-asked"), text
         assert ("source: hook" if session == "s-hook" else "source: os") in text
     for name in ("matched", "rg-helper"):
         out = io.StringIO()
@@ -279,7 +283,9 @@ def test_e3_rules_writes_the_finding_and_report_reads_it_back(tmp_path):
     out = tmp_path / "f.jsonl"
     path = str(CROSS_DIR / "done-not-asked.log")
     assert cli.main(["rules", path, "--scope", ".", "-o", str(out)], out=io.StringIO()) == 1
-    (finding,) = [json.loads(x) for x in out.read_text().splitlines()]
+    found = [json.loads(x) for x in out.read_text().splitlines()]
+    assert sorted(f["rule_id"] for f in found) == ["CROSS-SOURCE", "NET-TOOL"]   # M7.8: curl's os line, by its image
+    (finding,) = [f for f in found if f["rule_id"] == "CROSS-SOURCE"]
     assert finding["rule_id"] == "CROSS-SOURCE" and finding["class"] == "CROSS"
     text = io.StringIO()
     assert cli.main(["report", path, "--scope", ".", "--findings", str(out)], out=text) == 1
@@ -351,7 +357,10 @@ def test_c5_an_os_trace_reports_no_partial_from_the_guarded_signatures():
     lines, _ = os_sysmon.build((FIXTURES / "os" / "sysmon-synthetic.xml").read_text(), 4100, cwd="C:\\w")
     recs = [json.loads(x) for x in lines]
     found, notes = cli.run_rules(recs, engine.load_catalog(CATALOG), {"scope": ["."], "root": "C:\\w"}, 60)
-    assert found == []
+    # M7.8 (ADR-0007 P-1): the os process line of curl.exe carries image curl, so NET-TOOL judges it and fires;
+    # every other os line is judged (not partial): no signature says it could not judge an os line
+    curl = [r["seq"] for r in recs if r["phase"] == "pre" and r["input_meta"].get("image") == "curl"]
+    assert [(f["rule_id"], f["cited_seq"]) for f in found] == [("NET-TOOL", curl)]
     assert [(n["rule_id"], n["status"]) for n in notes] == [("CROSS-SOURCE", "partial")]
 
 

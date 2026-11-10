@@ -480,6 +480,62 @@ Rulings: ADR-0003 Amendments C and D.
   call written more than 10 s after its act, is a finding. Its budget is
   0.1 until the field test.
 
+### The host watch (`raqib watch --host`; ADR-0007, Amendment P)
+Rulings: ADR-0007 Amendments C, H, I, M, N, P. True of the tree as P-1, P-2 and
+P-3 leave it (the task after the second field run).
+- **What a round sees.** One sample: on Windows one read of the OS API
+  (processes and their parents, TCP connections with their owner), on
+  Linux one `/proc` snapshot (or `--window S` seconds of them). A tree is
+  in the round when its root talks at that instant (a candidate) or a
+  user-directory program runs a shell that runs a command (an act-root).
+  Since P-2 the round also keeps its process sample: a tree seen in an
+  earlier round whose root process is still in the sample and does not
+  talk now is **quiet** (listed with that word, its source kept attached,
+  neither gone nor back, no hole); it is **gone** only when its root is not
+  in the sample. A round read from an export with no process sample calls
+  such a tree gone, and says so once.
+- **What lives between two rounds is still a hole.** A tree that starts,
+  talks, acts and ends between two samples is never a tree of any round,
+  and a child that lives only between two samples is never a host-source
+  act. Where Sysmon is, an attached tree's os source sees every child it
+  creates (event 1), whatever the rounds see; reading the channel into the
+  round itself is the next task (ADR-0007 P-4). Linux, and a Windows host without
+  Sysmon, keep the hole.
+- **What the os lines are judged by.** NET-TOOL and DESTRUCT-CMD judge an
+  os process line by its image name (P-1: `input_meta.image`, discover's
+  normalised form, `curl.exe` -> `curl`). Still unseen: a shell builtin
+  (cmd's `del`, `rd`, `copy`), which starts no process; a PowerShell
+  cmdlet (`Invoke-WebRequest`, `Remove-Item`, and Windows PowerShell 5.1's
+  `curl` and `wget`, which are aliases of a cmdlet), which runs inside the
+  shell's own process; a renamed copy of a listed program; and everything
+  that is an argument (the destination, the target, `vssadmin list` versus
+  `vssadmin delete`), since the command line is only hashed. An os line
+  written before P-1 has no image: the rules say they could not judge it,
+  and the host watch says it once per source; the name is never guessed.
+- **Benign programs.** A tree whose root is a listed benign image under a
+  listed directory of the system drive is listed `benign`, never knocked.
+  Windows Defender's engine (`MsMpEng.exe`) is benign only under the system
+  drive's ProgramData\Microsoft\Windows Defender or Program
+  Files\Windows Defender (P-3). An agent with administrator rights
+  can put a program of a benign name there and is then listed as benign;
+  a copy anywhere else knocks.
+- **The person's hands (ADR-0007 P-5).** Text an agent hands to a person
+  (the clipboard, a chat, a file) which the person then runs is the
+  person's act: it runs under the person's own shell, outside every agent
+  tree, and no rule of the agent's tree sees it. There is no timing rule
+  for it, because none is sound: a pasted burst of lines and a batch file
+  run from the same prompt write the same process record. The clipboard's
+  text is never read by Raqib and will not be (section 1: Raqib must not
+  become a second place where secrets leak). Which process wrote the
+  clipboard (Sysmon event 24) is a candidate rule (ADR-0007 P-5), not built.
+- **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No process
+  is signalled, suspended, attached to or killed, and nothing is blocked:
+  a finding is a record and a knock after the act, never a prevention. The
+  only programs the watch starts are its own read-only helpers (the os
+  source's `wevtutil`, the notifier); the only writes are under
+  `~/.raqib`, and the hook settings of a project only with
+  `--attach-hooks`.
+
 ## 6. Attacks on the watcher itself
 
 - **Editing or deleting the trace.** The agent can rewrite or truncate the

@@ -1123,10 +1123,13 @@ def host_section(state):
     """M7.2 E5: the HOST section, from the host watch's memory: the trees
     with their evidence, the findings, the footprints and the rounds."""
     host = _dict(state.get("host"))
-    out = ['<h2 id="host">Host (%d trees seen, %s now)</h2>' % (len(_list(host.get("trees"))), _text(host.get("now"))),
+    out = ['<h2 id="host">Host (%d trees seen, %s now, %s quiet)</h2>' % (
+               len(_list(host.get("trees"))), _text(host.get("now")), _text(host.get("quiet") or 0)),
            '<p class="meta">Rounds of <code>raqib discover</code> on this host every %s s; a tree that talks and acts'
            " (a candidate) or acts with no talk seen (an act-root). Trees of the first round are history: listed, never"
-           " knocked. Every claim cites the record lines of the round&#39;s inventory (A5).</p>" % _text(
+           " knocked. A tree whose root process is still in the round&#39;s process sample and does not talk is quiet"
+           " (M7.8): listed, its source kept; gone means its root is not in the sample. Every claim cites the record"
+           " lines of the round&#39;s inventory (A5).</p>" % _text(
                state.get("every_seconds"))]
     trees = [_dict(t) for t in _list(host.get("trees"))]
     if not trees:
@@ -1147,7 +1150,8 @@ def host_section(state):
                            _text(t.get("first_seen")), _text(t.get("first_round")),
                            (' <span class="tag">history</span>' if t.get("history") else "") +
                            (' <span class="tag">benign</span>' if t.get("benign") else ""),
-                           "yes" if t.get("present") else '<span class="tag">gone</span>', _text(t.get("acts")),
+                           "yes" if t.get("present") else '<span class="tag">quiet</span>' if t.get("quiet")
+                           else '<span class="tag">gone</span>', _text(t.get("acts")),
                            _text(", ".join(str(e) for e in _list(t.get("endpoints"))) or "-"),
                            _text(tree_source(t)), _text(severity_counts(t.get("source_findings"))),
                            _text(tree_rhythm_text(t)), _cites_text(t.get("cites"))))
@@ -1223,9 +1227,10 @@ def host_section(state):
     out.append("<ul>%s</ul>" % "".join("<li>round %s at %s: %s</li>" % (
         _text(r.get("round")), _text(r.get("at")),
         _text("reader FAILED: %s" % r.get("error")) if r.get("error") else _text(
-            "%s records, %s holes, %s; trees %s%s%s" % (
+            "%s records, %s holes, %s; trees %s%s%s%s" % (
                 r.get("records"), r.get("holes"), r.get("result"), len(_list(r.get("trees"))),
                 "; new %s" % ", ".join(_list(r.get("new"))) if r.get("new") else "",
+                "; quiet %s" % ", ".join(_list(r.get("quiet"))) if r.get("quiet") else "",
                 "; late" if r.get("late") else ""))) for r in reversed(rounds)) if rounds else
                '<p class="empty">No round yet.</p>')
     return out

@@ -31,7 +31,8 @@ What is SYNTHETIC here (pure functions of the thresholds; nothing read):
   "between" (the same child every round) and "notalk" (an act-root). A child
   new in round c started HOST_GAP seconds after round c-1 (its talk beat),
   min(HOST_GAP, w): inside W whatever W the person sets.
-- os_lines: the lines os_sysmon writes for Sysmon events before round k: a
+- os_lines: the lines os_sysmon writes for Sysmon events before round k (M7.8:
+  a process line carries its image name, input_meta.image, as os_sysmon's): a
   connection (event 3) OS_GAP s, min(OS_GAP, w), before the round's act; in
   "oscycle" a child (event 1, depth 1) 5 s before the round; in "osact" a
   child min(HOST_GAP, w) s after the round before (the host talks).
@@ -163,7 +164,7 @@ def os_lines(k, scenario, seq, sid="os-%d" % RHYTHM_PID, w=None):
     if scenario in ("oscycle", "osact"):
         when = at - 5 if scenario == "oscycle" else at - EVERY + _gap(HOST_GAP, w)
         events.append((when, "process", common.canonical_sha256({"command_line": "fake child %d (make.py)" % k}),
-                       {"command_head": "bash", "command_programs": ["bash"], "depth": 1}))
+                       {"command_head": "bash", "command_programs": ["bash"], "image": "bash", "depth": 1}))   # M7.8
     out = []
     for when, tool, digest, meta in events:
         seq += 1

@@ -315,3 +315,14 @@ for _name, _text in HOST.build().items():
     os.makedirs(os.path.dirname(R + _name), exist_ok=True)
     open(R + _name, "w", newline="\n").write(_text)
     print("wrote", R + _name)
+
+# M7.8 (ADR-0007 Amendment P, P-1): NET-TOOL and DESTRUCT-CMD judge os process lines by input_meta.image; their
+# os-line fixtures are os-sysmon's lines of the SYNTHETIC exports, made by tests/fixtures/os/synthetic.py.
+_spec = importlib.util.spec_from_file_location("raqib_os_fixtures", os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "os", "synthetic.py"))
+OS = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(OS)
+_exports = OS.os_fixture_exports()
+for _name, (_names, _cite) in OS.OS_RULE_FIXTURES.items():
+    os.makedirs(os.path.dirname(R + _name), exist_ok=True)
+    open(R + _name, "w", newline="\n").write(OS.os_rule_fixture(_names, _cite, _exports))
+    print("wrote", R + _name)

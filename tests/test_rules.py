@@ -945,6 +945,7 @@ M72_NOTE = "Note (2026-11-04, M7.2, ADR-0007 Amendment C"
 M72B_NOTE = "Note (2026-11-04, M7.2b, ADR-0007 Amendment H"
 M72B_QUESTIONS = ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md"
 M72B_EVASION = "host source (M7.2b"
+M78_EVASION = "os source (M7.8"
 # M7.4 (ADR-0007 decision 4): the note the Table writes under "Ratio after M7.2b", with the HOST-RHYTHM row and
 # "Ratio after M7.4: 4 : 7 : 11." (asked in docs/review/2026-11-04-M7.4-questions.md).
 M74_NOTE = "Note (2026-11-04, M7.4, ADR-0007 decision 4"
@@ -1297,8 +1298,10 @@ def test_m41_b4_amendment_a_counts_the_lines_added_beyond_the_table():
     assert set(now) == set(signatures) == set(m41)
     # M7.2b (H-2): NET-TOOL and DESTRUCT-CMD gained one evasion line each, for the host source; the note's
     # "now" line is the Table's (asked in docs/review/2026-11-04-M7.2b-questions.md), so they are counted apart.
-    m72b = {rule_id: sum(1 for e in rule.evasion if e.startswith(M72B_EVASION)) for rule_id, rule in signatures.items()}
-    assert m72b == {"DESTRUCT-CMD": 1, "NET-TOOL": 1, "SCOPE-PATH": 0, "SECRET-OUTPUT": 0}
+    # M7.8 (ADR-0007 P-1): and one more each, for the os source's process lines, counted apart the same way
+    m72b = {rule_id: sum(1 for e in rule.evasion if e.startswith((M72B_EVASION, M78_EVASION)))
+            for rule_id, rule in signatures.items()}
+    assert m72b == {"DESTRUCT-CMD": 2, "NET-TOOL": 2, "SCOPE-PATH": 0, "SECRET-OUTPUT": 0}
     assert now == {rule_id: len(rule.evasion) - len(table[rule_id][1]) - m72b[rule_id]
                    for rule_id, rule in signatures.items()}
     assert "as built in 04e34c0:\n  DESTRUCT-CMD +5, NET-TOOL +4." in note
@@ -1518,9 +1521,9 @@ def test_m42_redo2_e1_an_adversarial_trace_is_never_benign():
     def fired(rule_id):
         report = reports[rule_id]
         return sum(1 for n in report["negatives"] if n["measured"] and n["fired"]), report["measured"]
-    # M5.1b: + the Windows negative; M7.2b: NET-TOOL + its host-source negative (11)
-    assert fired("SCOPE-PATH") == (0, 10) and fired("NET-TOOL") == (1, 11)
-    assert "SCOPE-PATH firing on 0 of 10 benign files and\nNET-TOOL on 1 of 11" in Path(ROOT / "README.md").read_text(
+    # M5.1b: + the Windows negative; M7.2b: NET-TOOL + its host-source negative (11); M7.8: + its os-line negative (12)
+    assert fired("SCOPE-PATH") == (0, 10) and fired("NET-TOOL") == (1, 12)
+    assert "SCOPE-PATH firing on 0 of 10 benign files and\nNET-TOOL on 1 of 12" in Path(ROOT / "README.md").read_text(
         encoding="utf-8")
 
 

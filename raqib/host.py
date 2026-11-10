@@ -278,6 +278,11 @@ DIR_NAME = "host"
 INVENTORY_NAME = "inventory.json"
 ROUNDS_NAME = "rounds.jsonl"
 STATE_SUFFIX = ".watch.json"
+QUIET = "quiet"                    # M7.8 (P-2): a tree whose root is in the round's process sample and does not talk
+NO_SAMPLE_NOTE = ("the round's inventory carries no process sample (an export read as rounds, or a reader before"
+                  " M7.8): a tree not in the round is called gone, never quiet (ADR-0007 P-2)")
+PRE_M78_NOTE = ("%d os process line(s) carry no input_meta.image (written before M7.8): NET-TOOL and DESTRUCT-CMD"
+                " could not judge them by name, and the name is never guessed from command_head (ADR-0007 P-1)")
 LINUX_HOLE = ("Linux: /proc gives no creation time, so a tree is keyed by (pid, image) only: a pid reused by a"
               " process of the same image between rounds is taken for the same tree and is not new")
 
@@ -342,7 +347,9 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None):
         info = {}     # D-3: the run record of this round (hostwin: SystemRoot's drive)
         texts, holes, _ = discover.collect_live(catalog, window=window, homes=homes, platform=platform,
                                                 win_samples=1, win_every=0.0, run_info=info)
-        inv = discover.run(texts, catalog, holes=holes, live=True, run=info)
+        # M7.8 (P-2): the round's process sample rides on the inventory, so a tree whose root is alive and does
+        # not talk is quiet, not gone
+        inv = discover.run(texts, catalog, holes=holes, live=True, run=info, processes=True)
         if platform_.startswith("linux"):
             got, label, hole = discover.read_conn_bytes(ss_paths or discover.SS_PATHS)
             inv["conn_bytes"] = {"from": label, "hole": hole, "by": got}
@@ -766,6 +773,7 @@ class TreeSource:
         self.helpers = None          # I-5: os_sysmon.Helpers of an os follow (Raqib's own wevtutil)
         self.helpers_said = 0        # I-5: how many of its records are holes already
         self.not_run_said = False    # I-6: the rules that cannot run on it were listed once
+        self.pre_m78_said = False    # M7.8 (P-1): its os process lines without input_meta.image were said once
 
     def writes_host(self):
         return self.kind == HOST_SOURCE or self.also_host
@@ -954,9 +962,9 @@ ACTS_SEEN_KEPT = 400               # the acts of a tree remembered for N-9 (a ri
 
 
 def _image_word(image):
-    """N-9: an image name compared across sources: lower case, no .exe."""
-    word = str(image or "").strip().lower()
-    return word[:-4] if word.endswith(".exe") else word
+    """N-9: an image name compared across sources, in discover's one
+    normalised form (discover.image_name; M7.8: not a second normaliser)."""
+    return discover.image_name(str(image or "")) or ""
 
 
 def _bin(ring, at):
@@ -1153,6 +1161,8 @@ class HostWatch:
         self.next_round = self.t0
         self.trees = {}              # key -> tree entry, every tree seen in this watch
         self.present = set()         # keys in the last inventory
+        self.quiet = set()           # M7.8 (P-2): keys whose root was in the last round's process sample, no talk
+        self.no_sample_said = False  # M7.8: NO_SAMPLE_NOTE said once
         self.prev_class = {}         # key -> class in the last inventory
         self.history_round = None    # the first round with an inventory
         self.footprints = {}         # path -> {agent, streak, state, fired, ...}
@@ -1526,7 +1536,7 @@ class HostWatch:
                           knock="round %d, reader failed" % n, round_=n)
         line = {"round": n, "at": self.at(now), "seconds": round(seconds, 3), "late": False, "error": error,
                 "records": None, "holes": None, "result": None, "trees": None, "new": [], "gone": [], "back": [],
-                "dark": [], "cleared": [], "findings": [], "lines": []}
+                "quiet": [], "dark": [], "cleared": [], "findings": [], "lines": []}
         self.last_round = line
         self._record(line)
         self._say(now, "round %d: reader FAILED: %s (%s)" % (n, error, hole["notice"]))
@@ -1568,17 +1578,17 @@ class HostWatch:
         for key in sorted(current, key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
             t = current[key]
             entry = self.trees.get(key)
-            was = self.prev_class.get(key, "absent")
+            was = self.prev_class.get(key, QUIET if key in self.quiet else "absent")
             if entry is None:
                 entry = self.trees[key] = dict(t, first_round=n, first_seen=ts, history=False,
                                                candidate_round=None, knocked=None, rounds_seen=0)
-            elif key not in self.present:
+            elif key not in self.present and key not in self.quiet:   # M7.8: a quiet tree that talks again is not back
                 back.append(tree_word(key))
             candidate_before = entry["candidate_round"] is not None
             history = (first and t["class"] == "candidate") or entry["history"]
             entry.update({k: t[k] for k in ("class", "id", "named", "named_by", "benign", "benign_by", "acts",
                                             "endpoints", "cites", "exe")})
-            entry.update(last_round=n, last_seen=ts, present=True, rounds_seen=entry["rounds_seen"] + 1,
+            entry.update(last_round=n, last_seen=ts, present=True, quiet=False, rounds_seen=entry["rounds_seen"] + 1,
                          history=history)
             src = self._attach(now, n, key, t, entry)
             entry["none_rounds"] = entry.get("none_rounds", 0) + 1 if src.kind == "none" else 0
@@ -1601,11 +1611,27 @@ class HostWatch:
                 entry["candidate_round"] = n
             if not candidate_before and t["class"] == "candidate" and not history:
                 (benign_new if t["benign"] else new).append(tree_word(key))
-        gone_keys = sorted(self.present - set(current), key=lambda k: (str(k[0]), str(k[1]), str(k[2])))
+        # M7.8 (ADR-0007 P-2): gone means the root process is not in the round's process sample; a tree seen before
+        # whose root is in it and that does not talk now is quiet: listed, its source kept, neither gone nor back
+        left = (self.present | self.quiet) - set(current)
+        sampled = inv.get("processes")
+        if isinstance(sampled, list):
+            alive = {(p.get("pid"), p.get("image"), p.get("started")) for p in sampled if isinstance(p, dict)}
+            quiet_keys = {k for k in left if tuple(k) in alive}
+        else:
+            quiet_keys = set()
+            if left and not self.no_sample_said:
+                self.no_sample_said = True
+                self.notes.append("round %d: %s" % (n, NO_SAMPLE_NOTE))
+        gone_keys = sorted(left - quiet_keys, key=lambda k: (str(k[0]), str(k[1]), str(k[2])))
         for key in gone_keys:
-            self.trees[key]["present"] = False
+            self.trees[key].update(present=False, quiet=False)
             gone.append(tree_word(key))
+        quiet = sorted(tree_word(k) for k in quiet_keys)
+        for key in quiet_keys:
+            self.trees[key].update(present=False, quiet=True, quiet_round=n)
         self.present = set(current)
+        self.quiet = quiet_keys
         self.prev_class = {k: v["class"] for k, v in current.items()}
         tree_seq = {tuple(self.trees[k]["key"]): self.trees[k]["line_seq"] for k in current}
         self._host_lines(now, n, ts, sample, current, tree_seq, gone_keys)
@@ -1734,7 +1760,8 @@ class HostWatch:
                   "trees": sorted(tree_word(k) for k in current),
                   "candidates": sum(1 for t in current.values() if t["class"] == "candidate"),
                   "act_roots": sum(1 for t in current.values() if t["class"] == "act-root"),
-                  "history": first, "new": new, "benign": benign_new, "gone": gone, "back": back, "dark": dark_now,
+                  "history": first, "new": new, "benign": benign_new, "gone": gone, "back": back, "quiet": quiet,
+                  "dark": dark_now,
                   "cleared": cleared, "findings": fired, "lines": lines,
                   "dark_notes": [d["path"] for d in self.dark_notes if d["round"] == n],   # M7.5 E1
                   "sources": {tree_word(k): self.sources[k].text for k in sorted(
@@ -2220,7 +2247,9 @@ class HostWatch:
                     depth = meta.get("depth")
                     if not isinstance(depth, int) or isinstance(depth, bool) or depth < 1:
                         continue   # the root itself is not its own act
-                    out.append(("act", {"pid": None, "image": meta.get("command_head") or "?", "started": rec["ts"],
+                    # M7.8: the line's own image name (discover's form); a line before M7.8 has only command_head
+                    out.append(("act", {"pid": None, "image": meta.get("image") or meta.get("command_head") or "?",
+                                        "started": rec["ts"],
                                         "at": at, "basis": "os", "cites": [cite]}))
                 elif rec.get("source") == "os" and rec.get("tool") == "net":
                     digest = rec.get("input_sha256")
@@ -2596,6 +2625,15 @@ class HostWatch:
         I-3: at the end a SILENCE-OPEN / -HALF still pending is "pending at
         exit": pending for good is silence (B-1), an alarm of the tree."""
         found, notes, lines_of = feed.judge()
+        if src.kind == "os":   # M7.8 (P-1, A3): a process line written before M7.8 has no image: said once per source
+            old = sum(1 for _, rec in feed.numbered if isinstance(rec, dict) and rec.get("source") == "os"
+                      and rec.get("tool") == "process" and rec.get("phase") == "pre"
+                      and isinstance(rec.get("input_meta"), dict) and "image" not in rec["input_meta"])
+            if old and not src.pre_m78_said:
+                src.pre_m78_said = True
+                self.notes.append("tree %s, its os source: %s" % (tree_word(key), PRE_M78_NOTE % old))
+            if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
+                notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
         if getattr(feed, "not_judged", None):
             self.source_not_judged[feed.path] = feed.not_judged
         entry_tree = self.trees.get(key) or {}
@@ -2725,12 +2763,12 @@ class HostWatch:
             head += ", %d line(s) could not be read" % r["unread_lines"]
         if r.get("nothing_read"):   # D-2: never "no agent seen" of a round that read nothing
             return "%s; NOTHING READ: an unread round (%s). Not a clearance." % (head, r["sample"])
-        if not r["trees"]:
+        if not r["trees"] and not r.get(QUIET):   # M7.8: a quiet tree is listed, never "no agent seen"
             return "%s; NO AGENT SEEN (%s; %s). Not a clearance." % (head, r["sample"], r["result"])
         parts = ["%d tree(s) now: %d candidate(s), %d act-root(s)" % (len(r["trees"]), r["candidates"], r["act_roots"])]
         if r["history"]:
             parts.append("history (there at the start, not knocked)")
-        for word in ("new", "benign", "back", "gone", "dark"):
+        for word in ("new", "benign", "back", "gone", QUIET, "dark"):
             if r.get(word):
                 parts.append("%s: %s" % (word, ", ".join(r[word])))
         if r.get("dark_notes"):   # M7.5 E1: a note, never a finding
@@ -2856,11 +2894,13 @@ class HostWatch:
             self.rounds, self.applied, late, failed))
         out += ["  %s" % (self.round_text(r) if not r.get("error") else "round %d: reader FAILED: %s" % (
             r["round"], r["error"])) for r in self.round_lines]
-        out.append("TREES SEEN: %d (%d now)" % (len(self.trees), len(self.present)))
+        out.append("TREES SEEN: %d (%d now, %d %s)" % (len(self.trees), len(self.present), len(self.quiet), QUIET))
         for key, t in self.trees.items():
             out.append("  %s pid %s %s (%s%s): %s; first round %d%s%s; last round %d; %d act(s)%s%s" % (
                 "[%s]" % t["class"], t["pid"], t["image"] or "?", "named" if t["named"] else "unknown",
-                ": " + t["named_by"] if t["named_by"] else "", "now" if t["present"] else "gone",
+                ": " + t["named_by"] if t["named_by"] else "", "now" if t["present"] else
+                "%s (its root alive in round %s, no talk; source kept)" % (QUIET, t.get("quiet_round"))
+                if t.get("quiet") else "gone",
                 t["first_round"], " (history, not knocked)" if t["history"] else "",
                 " (benign: %s, not knocked)" % t["benign_by"] if t.get("benign") else "", t["last_round"], t["acts"],
                 "; endpoints %s" % ", ".join(t["endpoints"]) if t["endpoints"] else "",
@@ -2985,7 +3025,7 @@ class HostWatch:
             "host": {"rounds": self.rounds, "applied": self.applied, "reader": reader,
                      "last_round": self._public(self.last_round),
                      "history_round": self.history_round,
-                     "trees": list(self.trees.values()), "now": len(self.present),
+                     "trees": list(self.trees.values()), "now": len(self.present), "quiet": len(self.quiet),
                      "new": sum(1 for f in self.findings if f["rule_id"] in NEW_RULES),
                      "dark": [fp for fp in self.footprints.values() if fp["state"] == "dark"],
                      "footprints": list(self.footprints.values()), "findings": self.findings,

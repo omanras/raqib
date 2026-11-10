@@ -195,6 +195,10 @@ benign_images:
   # Program Files, Program Files (x86) on that drive only); POSIX paths as
   # they are (case-sensitive).
   dirs: ["%systemdrive%/windows/*", "%systemdrive%/program files/*", "%systemdrive%/program files (x86)/*", "/usr/*", "/bin/*", "/sbin/*", "/lib/*", "/opt/*"]
+  # M7.8 (ADR-0007 Amendment P, P-3): a name benign only under its own directories on the
+  # system drive (never under `dirs`): Windows Defender's engine, which talks and has a child.
+  pinned:
+    - {name: msmpeng, dirs: ["%systemdrive%/programdata/microsoft/windows defender/*", "%systemdrive%/program files/windows defender/*"]}
   # D-3: user-writable places under SystemRoot, never benign.
   exclude: ["%systemdrive%/windows/temp/*", "%systemdrive%/windows/tasks/*", "%systemdrive%/windows/tracing/*", "%systemdrive%/windows/registration/*", "%systemdrive%/windows/system32/tasks/*", "%systemdrive%/windows/system32/spool/*", "%systemdrive%/windows/syswow64/tasks/*"]
   evasion:
@@ -203,4 +207,5 @@ benign_images:
     - "a benign program driven by an agent (remote debugging, automation of a browser or an IDE) is benign"
     - "Linux: a process may rename itself; the name is checked against the image path's own basename, so a renamed process outside the listed directories is not benign"
     - "D-3 another drive's windows/: a user can create D:\\Windows or D:\\Program Files on a data drive and put an agent named explorer there; only the system drive (SystemRoot's, recorded in run.json) is benign, and a run record without it makes no Windows image benign; an agent that starts the reader with SystemRoot pointing at another drive's Windows moves the benign directories with it"
+    - "P-3 (M7.8) msmpeng (Windows Defender's engine) is benign only under the system drive's ProgramData\\Microsoft\\Windows Defender or Program Files\\Windows Defender: an agent named MsMpEng.exe copied there is listed as benign and never knocked; on a default install both directories are written only by SYSTEM, TrustedInstaller and administrators (and Defender's tamper protection guards its own), so the copy needs administrator rights; a copy anywhere else (a user directory, another drive, Program Files\\x) is not benign and knocks"
     - "D-3 a user-writable place under SystemRoot: %SystemRoot%\\Temp, Tasks, Tracing, Registration, System32\\Tasks, System32\\spool, SysWOW64\\Tasks are excluded by name; another place under SystemRoot that a user may write (a subdirectory with an ACL of its own) is still taken as benign"

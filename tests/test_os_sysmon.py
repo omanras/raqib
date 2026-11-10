@@ -169,8 +169,8 @@ def test_e1_hashes_of_command_line_path_and_destination_never_the_text():
     bash = rows[("process", "2026-11-03T09:00:05.200Z")]
     command = '"C:\\Program Files\\Git\\usr\\bin\\bash.exe" -c -l "ls -la | grep src"'
     assert bash["input_sha256"] == common.canonical_sha256({"command_line": command})
-    assert bash["input_meta"] == {"command_head": "bash.exe", "command_programs": ["bash.exe"], "depth": 1,
-                                  "parent_seq": 2}   # D-9: the root's own line
+    assert bash["input_meta"] == {"command_head": "bash.exe", "command_programs": ["bash.exe"], "image": "bash",
+                                  "depth": 1, "parent_seq": 2}   # D-9: the root's own line; M7.8: image
     note = rows[("file", "2026-11-03T09:00:12.500Z")]
     assert note["input_sha256"] == common.canonical_sha256({"path": "C:\\work\\proj\\notes.txt"})
     assert note["input_meta"] == {"path": "C:\\work\\proj\\notes.txt"}
@@ -197,11 +197,14 @@ def test_e1_a_path_is_redacted_as_the_hook_redacts_it():
 
 
 @pytest.mark.parametrize("image, meta", [
-    ("C:\\Program Files\\Git\\usr\\bin\\bash.exe", {"command_head": "bash.exe", "command_programs": ["bash.exe"]}),
-    ("C:/tools/Git/usr/bin/LS.EXE", {"command_head": "LS.EXE", "command_programs": ["LS.EXE"]}),
-    ("C:\\Program Files\\App\\Code Helper.exe", {"command_unread": True}),
-    ("C:\\x\\" + "a1B2c3D4e5F6g7H8i9", {"command_unread": True}),   # looks like a key
-    ("", {"command_unread": True}),
+    ("C:\\Program Files\\Git\\usr\\bin\\bash.exe", {"command_head": "bash.exe", "command_programs": ["bash.exe"],
+                                                "image": "bash"}),
+    ("C:/tools/Git/usr/bin/LS.EXE", {"command_head": "LS.EXE", "command_programs": ["LS.EXE"], "image": "ls"}),
+    ("C:\\Windows\\System32\\format.com", {"command_head": "format.com", "command_programs": ["format.com"],
+                                         "image": "format"}),
+    ("C:\\Program Files\\App\\Code Helper.exe", {"command_unread": True, "image": None}),
+    ("C:\\x\\" + "a1B2c3D4e5F6g7H8i9", {"command_unread": True, "image": None}),   # looks like a key
+    ("", {"command_unread": True, "image": None}),
 ])
 def test_e1_program_names_only_through_common(image, meta):
     assert os_sysmon.program_name(image) == meta.get("command_head")
@@ -465,9 +468,11 @@ def test_d4_an_export_read_elsewhere_with_no_cwd_makes_the_scope_cwd_rules_parti
     recs, problems = trace.read(log)
     assert problems == [] and recs and not any("cwd" in r for r in recs)
     out = io.StringIO()
-    assert cli.main(["report", str(log), "--scope", "."], out=out) == 3
+    # M7.8 (ADR-0007 P-1): NET-TOOL judges curl.exe's os line by its image and fires (exit 1); the SCOPE-CWD
+    # rules still could not judge the lines with no cwd (partial)
+    assert cli.main(["report", str(log), "--scope", "."], out=out) == 1
     text = out.getvalue()
-    assert "FINDINGS: 0" in text and "ALARMS (A3, A5): 0" in text
+    assert "FINDINGS: 1" in text and "NET-TOOL (NET, signature) session os-4100" in text
     assert "SCOPE-CWD-MOVED partial" in text and "SCOPE-CWD-ROOT partial" in text
 
 

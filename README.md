@@ -54,6 +54,9 @@ An unknown tree is also judged by its rhythm: HOST-RHYTHM (medium) when it talks
 What is sent is hashes and program names only, and that call is the only network call of the watch, never made by the reader or any capture.
 A footprint dark for 3 rounds after its own tree was live in this watch is the agent's normal end: it is listed as "dark after a live tree (note)" in the report, the page and the window, never knocked and never an alarm; only a footprint never live in the watch is AGENT-DARK-LIVE.
 HOST-RHYTHM takes its beats from every source a tree has (the host's children and connections, Sysmon's process and network events with their own times, the hooks' Bash calls), and the final report lists every knock of the watch with its title, rate-limit id and status (KNOCKS).
+Since M7.8 an os process line carries its image name in discover's form (`input_meta.image`: `curl.exe` -> `curl`), so NET-TOOL and DESTRUCT-CMD judge the programs Sysmon saw the tree start as they judge the host's children, Windows programs included (bitsadmin, plink, vssadmin, diskpart and the like); a cmdlet, a shell builtin, a renamed copy and every argument stay unseen.
+A tree whose root process is still in the round's sample and does not talk is `quiet`: listed with that word, its source kept, neither gone nor back; it is gone only when its root process is not in the sample. Windows Defender's engine under its own directories (ProgramData\Microsoft\Windows Defender, Program Files\Windows Defender) is benign; a copy elsewhere knocks.
+The watch only watches: it stops nothing, and what lives between two rounds is still a hole ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), "The host watch").
 
 ## The window
 `raqib app` opens on the host ([ADR-0007](docs/specs/ADR-0007-the-host-not-the-name.md) decision 5): one discover round at open lists the agents found on this machine (image, pid, named / unknown / benign, first seen, acts, endpoints; or "no agent seen (N records, M holes). Not a clearance."), doctor's lines fold under "Checks", and "Watch this host" runs the watch of `raqib watch --host` with its knocks, its band and, at Stop, its final report.
@@ -143,8 +146,8 @@ design, a quiet minute is reported, not assumed harmless.
 | SILENCE-EMPTY | a session that started and ended with no tool call and no turn, or ended with no start and no tool call (one with tool calls and no start is not judged yet: SILENCE-NOSTART, a later task) |
 | SCOPE-PATH | a file tool touching a path outside the session's directory |
 | SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
-| NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command |
-| DESTRUCT-CMD | rm, dd, shred, mkfs and the like anywhere in a Bash command |
+| NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command; under `raqib watch --host` also a tree's child of those names (the host's record, or Sysmon's process line by `input_meta.image`, Windows programs such as bitsadmin and plink included) |
+| DESTRUCT-CMD | rm, dd, shred, mkfs and the like anywhere in a Bash command; under `raqib watch --host` also a tree's child of those names (the host's record, or Sysmon's process line by `input_meta.image`, Windows programs such as vssadmin, diskpart and format included) |
 | SECRET-OUTPUT | a key, token or private key in a tool's output (by pattern name; the text is never stored) |
 | DRIFT-FILES | edits to more than two files outside the task's declared scope |
 | LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py` on the same Bash call or before it in the session (holes such as a stale, piped or backgrounded gate are listed in the rule) |
@@ -182,7 +185,7 @@ On 50 labelled events the rules miss 9 bad events and flag 9 of 25 benign
 ones (`docs/review/2026-10-16-M2.2-baseline.md`; 8 until M4.2b, whose
 EDIT-NO-TEST flags b11-refactor: dated note 2026-11-03 there). On the rule fixtures
 `raqib check-rules` finds SCOPE-PATH firing on 0 of 10 benign files and
-NET-TOOL on 1 of 11; a trace that expects findings is never benign
+NET-TOOL on 1 of 12; a trace that expects findings is never benign
 (`tests/fixtures/field/`). No model has been
 evaluated yet. See
 **[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)** for every known gap and its
@@ -301,7 +304,8 @@ raqib report $HOME\.raqib\traces\proj.jsonl
 - **What it records.** One session, `os-PID`, with a `pre` and a `post` per
   event at the time of the act, `source: "os"`, tool `process`, `file` or
   `net`. Hashes of the command line, the path or the destination, never the
-  text; the program name (`bash.exe`), its depth below the root and its
+  text; the program name (`bash.exe`), its image name in discover's form
+  (`input_meta.image`, `bash`; since M7.8), its depth below the root and its
   parent's line; the path, redacted as the hook redacts it; the destination
   port and whether it is private. `cwd` is `--cwd DIR` (an absolute
   directory), else the root's own directory in its event 1, else no `cwd`
@@ -343,7 +347,9 @@ raqib report $HOME\.raqib\traces\proj.jsonl
   process partial, and the note names that call; a tool that only has a
   shell word in its name and starts no process is a false-positive source.
   SILENCE-GAP and SILENCE-ORDER do not judge a session of os lines only,
-  and SECRET-OUTPUT and NET-TOOL do not judge os lines.
+  SECRET-OUTPUT does not judge os lines, and NET-TOOL and DESTRUCT-CMD
+  judge an os process line by its image only (M7.8; not its net or file
+  lines; a line written before M7.8 has no image: "could not judge").
 - **What it cannot see.** What a process does inside itself, tools that
   never start a process or touch a file (memory only), and whatever the
   Sysmon configuration leaves out; see

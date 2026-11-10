@@ -480,7 +480,8 @@ def test_e4_readme_has_the_two_lines():
     assert "HOST-RHYTHM takes its beats from every source" in text and "(KNOCKS)" in text
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
-    assert "dark after a live tree (note)" in lines[-2] and "(KNOCKS)" in lines[-1]   # the two lines, at its end
+    # the two lines, at its end until M7.8, whose three lines follow them (test_acts_judged.py)
+    assert "dark after a live tree (note)" in lines[-5] and "(KNOCKS)" in lines[-4]
 
 
 def test_e4_kinds_stay_4_7_11():

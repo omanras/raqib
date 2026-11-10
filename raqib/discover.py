@@ -418,8 +418,9 @@ def _benign_spec(spec, bad):
     `exclude` names the user-writable places under it."""
     if spec is None:
         return None
-    if not (isinstance(spec, dict) and set(spec) == {"kind", "names", "dirs", "exclude", "evasion"}):
-        bad("benign_images", "must hold kind, names, dirs, exclude and evasion")
+    if not (isinstance(spec, dict) and {"kind", "names", "dirs", "exclude", "evasion"} <= set(spec)
+            <= {"kind", "names", "dirs", "exclude", "evasion", "pinned"}):
+        bad("benign_images", "must hold kind, names, dirs, exclude and evasion (and optionally pinned)")
     if spec["kind"] != "signature":
         bad("benign_images.kind", "must be signature (a name and a path the process's record gives)")
     if not (isinstance(spec["evasion"], list) and spec["evasion"]
@@ -435,8 +436,24 @@ def _benign_spec(spec, bad):
                         and d == (d.lower() if d.startswith(SYSTEM_DRIVE) else d) for d in spec[key])):
             bad("benign_images.%s" % key, "must be a non-empty list of '/...' or lower-case '%s/...' globs ending"
                 " in /* (D-3: the system drive only, no '?')" % SYSTEM_DRIVE)
+    # M7.8 (ADR-0007 P-3): pinned names are benign under their own directories only, never under `dirs`
+    pinned = spec.get("pinned", [])
+    if not isinstance(pinned, list):
+        bad("benign_images.pinned", "must be a list of {name, dirs}")
+    pins = {}
+    for i, pin in enumerate(pinned):
+        if not (isinstance(pin, dict) and set(pin) == {"name", "dirs"} and isinstance(pin["name"], str)
+                and pin["name"] and pin["name"] == pin["name"].lower() and pin["name"] not in spec["names"]
+                and pin["name"] not in pins):
+            bad("benign_images.pinned[%d]" % i, "must be {name, dirs}: a lower-case image name, once, not in names")
+        if not (isinstance(pin["dirs"], list) and pin["dirs"]
+                and all(isinstance(d, str) and d.endswith("/*") and "?" not in d and d.startswith(SYSTEM_DRIVE + "/")
+                        and d == d.lower() for d in pin["dirs"])):
+            bad("benign_images.pinned[%d].dirs" % i, "must be a non-empty list of lower-case '%s/...' globs ending in"
+                " /* (D-3: the system drive only)" % SYSTEM_DRIVE)
+        pins[pin["name"]] = list(pin["dirs"])
     return {"names": list(spec["names"]), "dirs": list(spec["dirs"]), "exclude": list(spec["exclude"]),
-            "evasion": list(spec["evasion"])}
+            "evasion": list(spec["evasion"]), "pinned": pins}
 
 
 SYSTEM_DRIVE = "%systemdrive%"     # D-3: the root of a Windows benign glob, the drive SystemRoot is on
@@ -457,12 +474,15 @@ def benign_check(image, exe, exe_from, catalog, system_drive=None):
     compared lower case with '/', and its globs are rooted at the system
     drive (system_drive, one lower-case letter, from run.json): another
     drive's Windows or Program Files is not benign; a POSIX path is
-    compared as it is."""
+    compared as it is. M7.8 (ADR-0007 P-3): a pinned name (Windows
+    Defender's engine, msmpeng) is benign only under its own directories
+    on the system drive, never under the block's other directories."""
     spec = catalog.get("benign_images")
     if not spec or not exe or exe_from != "record" or not isinstance(exe, str):
         return None, None
     name = image_name(exe)
-    if name not in spec["names"] or (image and image != name):
+    pinned = (spec.get("pinned") or {}).get(name)   # M7.8 (P-3): benign by image AND its own directory
+    if (name not in spec["names"] and pinned is None) or (image and image != name):
         return None, None
     path = exe.strip().strip('"')
     windows = "\\" in path or re.match(r"[A-Za-z]:", path) is not None
@@ -474,10 +494,10 @@ def benign_check(image, exe, exe_from, catalog, system_drive=None):
         if not (isinstance(system_drive, str) and re.match(r"[a-z]\Z", system_drive)):
             return None, NO_DRIVE
         root = system_drive + ":"
-        dirs = [d.replace(SYSTEM_DRIVE, root, 1) for d in spec["dirs"] if d.startswith(SYSTEM_DRIVE)]
+        dirs = [d.replace(SYSTEM_DRIVE, root, 1) for d in (pinned or spec["dirs"]) if d.startswith(SYSTEM_DRIVE)]
         exclude = [d.replace(SYSTEM_DRIVE, root, 1) for d in spec["exclude"] if d.startswith(SYSTEM_DRIVE)]
     else:
-        dirs = [d for d in spec["dirs"] if d.startswith("/")]
+        dirs = [d for d in spec["dirs"] if d.startswith("/")] if pinned is None else []
         exclude = [d for d in spec["exclude"] if d.startswith("/")]
     if any(fnmatch.fnmatchcase(path, d) for d in exclude):
         return None, None
@@ -1856,9 +1876,19 @@ def _os_pids(node):
     return node
 
 
-def build(parsed, catalog, window=None, holes=(), live=False):
+PROCESS_LISTS = ("proc", "win-process")   # M7.8: the sources that list the processes alive at a sample
+
+
+def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
     """The inventory (E5) of parsed sources:
-    [{"name", "path", "error", "records", "problems", "lines"}]."""
+    [{"name", "path", "error", "records", "problems", "lines"}].
+    processes (M7.8, ADR-0007 P-2; API for raqib watch --host): the
+    inventory also carries "processes", every process of the round's
+    process sample - read from a process list (a /proc snapshot, a
+    Win32_Process sample), never one known only from a Sysmon event - as
+    {"pid", "image", "started"}, image and started as a tree's (image_name,
+    started_of), so a tree's root can be looked up in it. Off by default:
+    `raqib discover` and its --json are unchanged."""
     holes = list(ALWAYS_HOLES) + list(holes)
     problems = [p for s in parsed for p in s["problems"]]
     records = [r for s in parsed for r in s["records"]]
@@ -2150,7 +2180,13 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     result = "alarm" if alarms else "incomplete" if incomplete else "none-seen"
     times = sorted(r["ts"] for r in records if r.get("ts"))
     connections_from = [s["path"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]]
-    return _os_pids({
+    extra = {}
+    if processes:   # M7.8 (P-2): the round's process sample, for "quiet" (root alive, no talk) against "gone"
+        extra["processes"] = [{"pid": p["pid"], "image": p["image"], "started": started_of(p)}
+                              for _, p in sorted(procs.items())
+                              if not p["derived"] and any((split_name(r["src"]) or (None,))[0] in PROCESS_LISTS
+                                                          for r in p["recs"])]
+    return _os_pids(dict(extra, **{
         "tool": "raqib discover (ADR-0004)",
         "live": live,
         "catalog": catalog["path"],
@@ -2180,7 +2216,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
         "complete": not incomplete,
         "result": result,
         "exit": EXIT[result],
-    })
+    }))
 
 
 def exe_from(p):
@@ -2496,11 +2532,12 @@ def _holes(records, procs, conns, kinds):
     return holes
 
 
-def run(texts, catalog, window=None, holes=(), live=False, run=None):
+def run(texts, catalog, window=None, holes=(), live=False, run=None, processes=False):
     """Parse {kind: (path, text, error)} and build the inventory. A text with
     an error was partly read: it is parsed, and the run is incomplete. run:
     the run record (run.json, or collect_live's run_info); its system drive
-    (D-3) is the inventory's `system_drive`, None without one."""
+    (D-3) is the inventory's `system_drive`, None without one. processes
+    (M7.8): the inventory carries the round's process sample (build())."""
     parsed = []
     unknown = [n for n in texts if not split_name(n)]
     if unknown:
@@ -2512,7 +2549,7 @@ def run(texts, catalog, window=None, holes=(), live=False, run=None):
         parsed.append({"name": name, "kind": kind, "sample": sample, "path": path, "error": error,
                        "records": records, "problems": problems, "text_read": text is not None,
                        "lines": text.count("\n") + (not text.endswith("\n")) if text else 0})
-    inv = build(parsed, catalog, window, holes, live)
+    inv = build(parsed, catalog, window, holes, live, processes=processes)
     inv["system_drive"] = system_drive_of(run)
     return inv
 

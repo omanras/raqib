@@ -1,0 +1,8 @@
+{
+    "note": "M7.8 fixture SYNTHETIC (not captured from a machine) - Windows Defender's engine under the system drive's ProgramData\\Microsoft\\Windows Defender\\Platform, talking, with a child (the field's NEW-AGENT-UNKNOWN on msmpeng, ADR-0007 P-3); host `host`. Redaction (ADR-0004 B-9): user `user`, host `host`; RFC 5737 documentation addresses only",
+    "raqib": "discover-run",
+    "version": 1,
+    "export": "windows",
+    "samples": 1,
+    "seconds_apart": 10
+}

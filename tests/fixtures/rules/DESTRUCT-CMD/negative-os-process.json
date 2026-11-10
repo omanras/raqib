@@ -1,0 +1,1952 @@
+{
+ "lines": [
+  {
+   "cwd": "C:\\Users\\user",
+   "missing_events": [
+    3,
+    11
+   ],
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "explorer.exe",
+    "command_programs": [
+     "explorer.exe"
+    ],
+    "depth": 0,
+    "image": "explorer"
+   },
+   "input_sha256": "634dca3ff8e8791b1be539684d167c2fc87af47e03c3c1fd404fd66040256b5d",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "explorer.exe",
+    "command_programs": [
+     "explorer.exe"
+    ],
+    "depth": 0,
+    "image": "explorer"
+   },
+   "input_sha256": "634dca3ff8e8791b1be539684d167c2fc87af47e03c3c1fd404fd66040256b5d",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "OneDrive.exe",
+    "command_programs": [
+     "OneDrive.exe"
+    ],
+    "depth": 1,
+    "image": "onedrive",
+    "parent_seq": 2
+   },
+   "input_sha256": "5dd9cab62018b2426105910df5a7876435deded5ea8e580b9f1018b87e32bafc",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.500Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "OneDrive.exe",
+    "command_programs": [
+     "OneDrive.exe"
+    ],
+    "depth": 1,
+    "image": "onedrive",
+    "parent_seq": 2
+   },
+   "input_sha256": "5dd9cab62018b2426105910df5a7876435deded5ea8e580b9f1018b87e32bafc",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.500Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "SecurityHealthSystray.exe",
+    "command_programs": [
+     "SecurityHealthSystray.exe"
+    ],
+    "depth": 1,
+    "image": "securityhealthsystray",
+    "parent_seq": 2
+   },
+   "input_sha256": "bd584317ad5a2679df6f89443f375aff6a04925b3dcaa048c43a15e8f6128c62",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.600Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "SecurityHealthSystray.exe",
+    "command_programs": [
+     "SecurityHealthSystray.exe"
+    ],
+    "depth": 1,
+    "image": "securityhealthsystray",
+    "parent_seq": 2
+   },
+   "input_sha256": "bd584317ad5a2679df6f89443f375aff6a04925b3dcaa048c43a15e8f6128c62",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.600Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 1,
+    "image": "code",
+    "parent_seq": 2
+   },
+   "input_sha256": "1006734b93e3d846740addbf26436f0d7fb3fc382495e6c4e0cb6dc17b1bb5d4",
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.700Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 1,
+    "image": "code",
+    "parent_seq": 2
+   },
+   "input_sha256": "1006734b93e3d846740addbf26436f0d7fb3fc382495e6c4e0cb6dc17b1bb5d4",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 5,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.700Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "ba52874c057aec0e7b6c44681879d149d7b17889e4c4bf11c1dcc8c9638dc1f2",
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.800Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "ba52874c057aec0e7b6c44681879d149d7b17889e4c4bf11c1dcc8c9638dc1f2",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 6,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.800Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "f9d7735dddd2b0774901527c044bcd6695ad8c324d89f875df2cee617fa43203",
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.900Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "f9d7735dddd2b0774901527c044bcd6695ad8c324d89f875df2cee617fa43203",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 7,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.900Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "ce924e78f05b78fd8d38357ce3e86d66ea78ff2b2c0c82850690708ec5803434",
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "ce924e78f05b78fd8d38357ce3e86d66ea78ff2b2c0c82850690708ec5803434",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 8,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "8d1a955ac03d76cbe39d93ee65f33d4a9c9c20f100b5ca5da086030ae7fcf7c8",
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.100Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "8d1a955ac03d76cbe39d93ee65f33d4a9c9c20f100b5ca5da086030ae7fcf7c8",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 9,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.100Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "db0082d32e31a468d9e810b49350fba3e18782447319d7eab78a5dfa2335fcd3",
+   "phase": "pre",
+   "seq": 10,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "db0082d32e31a468d9e810b49350fba3e18782447319d7eab78a5dfa2335fcd3",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 10,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "git.exe",
+    "command_programs": [
+     "git.exe"
+    ],
+    "depth": 3,
+    "image": "git",
+    "parent_seq": 10
+   },
+   "input_sha256": "f286f11d017242dce468e7610efc4e637432e61411ab05d372dde6a2ea36b39b",
+   "phase": "pre",
+   "seq": 11,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.300Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "git.exe",
+    "command_programs": [
+     "git.exe"
+    ],
+    "depth": 3,
+    "image": "git",
+    "parent_seq": 10
+   },
+   "input_sha256": "f286f11d017242dce468e7610efc4e637432e61411ab05d372dde6a2ea36b39b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 11,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.300Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "git.exe",
+    "command_programs": [
+     "git.exe"
+    ],
+    "depth": 4,
+    "image": "git",
+    "parent_seq": 11
+   },
+   "input_sha256": "d4271b987441775720f2ce482c88837d89f575a43ee85a102b6bdabfc9d3f824",
+   "phase": "pre",
+   "seq": 12,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "git.exe",
+    "command_programs": [
+     "git.exe"
+    ],
+    "depth": 4,
+    "image": "git",
+    "parent_seq": 11
+   },
+   "input_sha256": "d4271b987441775720f2ce482c88837d89f575a43ee85a102b6bdabfc9d3f824",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 12,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "561c58071f673691ae442f39240158d0a75b798840bd9eb0543b6c281019dcfc",
+   "phase": "pre",
+   "seq": 13,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.500Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 2,
+    "image": "code",
+    "parent_seq": 5
+   },
+   "input_sha256": "561c58071f673691ae442f39240158d0a75b798840bd9eb0543b6c281019dcfc",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 13,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.500Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "OpenConsole.exe",
+    "command_programs": [
+     "OpenConsole.exe"
+    ],
+    "depth": 3,
+    "image": "openconsole",
+    "parent_seq": 13
+   },
+   "input_sha256": "88ab83234ca82e389dbf6b6122e17057e189bbe5e9c8239fdeb4522adf0b9dc0",
+   "phase": "pre",
+   "seq": 14,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.600Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "OpenConsole.exe",
+    "command_programs": [
+     "OpenConsole.exe"
+    ],
+    "depth": 3,
+    "image": "openconsole",
+    "parent_seq": 13
+   },
+   "input_sha256": "88ab83234ca82e389dbf6b6122e17057e189bbe5e9c8239fdeb4522adf0b9dc0",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 14,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.600Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "powershell.exe",
+    "command_programs": [
+     "powershell.exe"
+    ],
+    "depth": 3,
+    "image": "powershell",
+    "parent_seq": 13
+   },
+   "input_sha256": "980fa795bcf338fb1d824c26067896db8068d186030021de98dc68dabe0e6acd",
+   "phase": "pre",
+   "seq": 15,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.700Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "powershell.exe",
+    "command_programs": [
+     "powershell.exe"
+    ],
+    "depth": 3,
+    "image": "powershell",
+    "parent_seq": 13
+   },
+   "input_sha256": "980fa795bcf338fb1d824c26067896db8068d186030021de98dc68dabe0e6acd",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 15,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.700Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "node.exe",
+    "command_programs": [
+     "node.exe"
+    ],
+    "depth": 4,
+    "image": "node",
+    "parent_seq": 15
+   },
+   "input_sha256": "5c8b6becfc5ba684867a48ed1103e5018519e5bec8d093f2d700f1a59b2031b0",
+   "phase": "pre",
+   "seq": 16,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.800Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "node.exe",
+    "command_programs": [
+     "node.exe"
+    ],
+    "depth": 4,
+    "image": "node",
+    "parent_seq": 15
+   },
+   "input_sha256": "5c8b6becfc5ba684867a48ed1103e5018519e5bec8d093f2d700f1a59b2031b0",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 16,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.800Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 1,
+    "image": "msedge",
+    "parent_seq": 2
+   },
+   "input_sha256": "55ab810ae76f4fa71778da7b8185c1edfa8b6632129eacd324179cd6db77035c",
+   "phase": "pre",
+   "seq": 17,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.900Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 1,
+    "image": "msedge",
+    "parent_seq": 2
+   },
+   "input_sha256": "55ab810ae76f4fa71778da7b8185c1edfa8b6632129eacd324179cd6db77035c",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 17,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.900Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "1ed89e3ddcd6648aa9d79f60620b4b7108c5a2141316382f3279403d95b0f147",
+   "phase": "pre",
+   "seq": 18,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.000Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "1ed89e3ddcd6648aa9d79f60620b4b7108c5a2141316382f3279403d95b0f147",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 18,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.000Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "ce861b5849e20179068f36b051d94872e77f9c98262a4872fe43f4e4ebf6554a",
+   "phase": "pre",
+   "seq": 19,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.100Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "ce861b5849e20179068f36b051d94872e77f9c98262a4872fe43f4e4ebf6554a",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 19,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.100Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "d566bd2d5b6b781686ef687b51a9fccbf4d32a9b0f9e7acc6afc4ccd766859aa",
+   "phase": "pre",
+   "seq": 20,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "d566bd2d5b6b781686ef687b51a9fccbf4d32a9b0f9e7acc6afc4ccd766859aa",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 20,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "3e55bcef13333deea87349f438515a72a62418167c6263319d7d1ed083f32114",
+   "phase": "pre",
+   "seq": 21,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.300Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "3e55bcef13333deea87349f438515a72a62418167c6263319d7d1ed083f32114",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 21,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.300Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "436d5bab6ee6302fde182ca37c4d40fbffd1c1ce98b0f16f6ed25e820ca77555",
+   "phase": "pre",
+   "seq": 22,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "436d5bab6ee6302fde182ca37c4d40fbffd1c1ce98b0f16f6ed25e820ca77555",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 22,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "45a804a3c1f967a5840ef9ecf6f4fe5dfe855d7dcbeba89ddc4e517df6cf7f88",
+   "phase": "pre",
+   "seq": 23,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.500Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "msedge.exe",
+    "command_programs": [
+     "msedge.exe"
+    ],
+    "depth": 2,
+    "image": "msedge",
+    "parent_seq": 17
+   },
+   "input_sha256": "45a804a3c1f967a5840ef9ecf6f4fe5dfe855d7dcbeba89ddc4e517df6cf7f88",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 23,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.500Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "phase": "session_end",
+   "seq": 24,
+   "session_id": "os-5100",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:02.500Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "missing_events": [
+    3,
+    11
+   ],
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-6050",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:01.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 0,
+    "image": "code"
+   },
+   "input_sha256": "db0082d32e31a468d9e810b49350fba3e18782447319d7eab78a5dfa2335fcd3",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-6050",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "Code.exe",
+    "command_programs": [
+     "Code.exe"
+    ],
+    "depth": 0,
+    "image": "code"
+   },
+   "input_sha256": "db0082d32e31a468d9e810b49350fba3e18782447319d7eab78a5dfa2335fcd3",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-6050",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "git.exe",
+    "command_programs": [
+     "git.exe"
+    ],
+    "depth": 1,
+    "image": "git",
+    "parent_seq": 2
+   },
+   "input_sha256": "f286f11d017242dce468e7610efc4e637432e61411ab05d372dde6a2ea36b39b",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-6050",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.300Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "git.exe",
+    "command_programs": [
+     "git.exe"
+    ],
+    "depth": 1,
+    "image": "git",
+    "parent_seq": 2
+   },
+   "input_sha256": "f286f11d017242dce468e7610efc4e637432e61411ab05d372dde6a2ea36b39b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-6050",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.300Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "git.exe",
+    "command_programs": [
+     "git.exe"
+    ],
+    "depth": 2,
+    "image": "git",
+    "parent_seq": 3
+   },
+   "input_sha256": "d4271b987441775720f2ce482c88837d89f575a43ee85a102b6bdabfc9d3f824",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-6050",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "git.exe",
+    "command_programs": [
+     "git.exe"
+    ],
+    "depth": 2,
+    "image": "git",
+    "parent_seq": 3
+   },
+   "input_sha256": "d4271b987441775720f2ce482c88837d89f575a43ee85a102b6bdabfc9d3f824",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-6050",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "phase": "session_end",
+   "seq": 5,
+   "session_id": "os-6050",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:01.400Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "missing_events": [
+    3,
+    11
+   ],
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.700Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "kimi.exe",
+    "command_programs": [
+     "kimi.exe"
+    ],
+    "depth": 0,
+    "image": "kimi"
+   },
+   "input_sha256": "b58d5e9ec117693853d72aea922d1addc1951304b76e2206d7aa2acaa6945392",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.700Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "kimi.exe",
+    "command_programs": [
+     "kimi.exe"
+    ],
+    "depth": 0,
+    "image": "kimi"
+   },
+   "input_sha256": "b58d5e9ec117693853d72aea922d1addc1951304b76e2206d7aa2acaa6945392",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.700Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_seq": 2
+   },
+   "input_sha256": "866a278aa674d45b070c8cd5b36041e5edf2908862a7c2182d5ea23b5aaa22a0",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.800Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_seq": 2
+   },
+   "input_sha256": "866a278aa674d45b070c8cd5b36041e5edf2908862a7c2182d5ea23b5aaa22a0",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.800Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 2,
+    "image": "bash",
+    "parent_seq": 3
+   },
+   "input_sha256": "eaa715bb63c09825650845916cc098d98e59b60f932e99271654f451ff36b7b6",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.900Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 2,
+    "image": "bash",
+    "parent_seq": 3
+   },
+   "input_sha256": "eaa715bb63c09825650845916cc098d98e59b60f932e99271654f451ff36b7b6",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.900Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 3,
+    "image": "bash",
+    "parent_seq": 4
+   },
+   "input_sha256": "eaa715bb63c09825650845916cc098d98e59b60f932e99271654f451ff36b7b6",
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 3,
+    "image": "bash",
+    "parent_seq": 4
+   },
+   "input_sha256": "eaa715bb63c09825650845916cc098d98e59b60f932e99271654f451ff36b7b6",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 5,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "PING.EXE",
+    "command_programs": [
+     "PING.EXE"
+    ],
+    "depth": 4,
+    "image": "ping",
+    "parent_seq": 5
+   },
+   "input_sha256": "87a811b42d42894e022b1bcc901405a9da683cd2a4a10ef7a229930d9687583f",
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.100Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "PING.EXE",
+    "command_programs": [
+     "PING.EXE"
+    ],
+    "depth": 4,
+    "image": "ping",
+    "parent_seq": 5
+   },
+   "input_sha256": "87a811b42d42894e022b1bcc901405a9da683cd2a4a10ef7a229930d9687583f",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 6,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.100Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "tee.exe",
+    "command_programs": [
+     "tee.exe"
+    ],
+    "depth": 3,
+    "image": "tee",
+    "parent_seq": 4
+   },
+   "input_sha256": "b87ffe7fd733b1ebf6a5c8f1e50ced4475be01940497e00799d931bf2739b35b",
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "input_meta": {
+    "command_head": "tee.exe",
+    "command_programs": [
+     "tee.exe"
+    ],
+    "depth": 3,
+    "image": "tee",
+    "parent_seq": 4
+   },
+   "input_sha256": "b87ffe7fd733b1ebf6a5c8f1e50ced4475be01940497e00799d931bf2739b35b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 7,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:01.200Z"
+  },
+  {
+   "cwd": "C:\\Users\\user",
+   "phase": "session_end",
+   "seq": 8,
+   "session_id": "os-10728",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:01.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f9eb80e3e920d765a9c231fd2c9b62ea980c208d49ab6bec60cbd504ffee4aaf",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f9eb80e3e920d765a9c231fd2c9b62ea980c208d49ab6bec60cbd504ffee4aaf",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_seq": 2
+   },
+   "input_sha256": "018f97ece20426e11e08e49b7b6fe27bd415222158e6598ddf96af157b4ac862",
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_seq": 2
+   },
+   "input_sha256": "018f97ece20426e11e08e49b7b6fe27bd415222158e6598ddf96af157b4ac862",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 5,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "ls.exe",
+    "command_programs": [
+     "ls.exe"
+    ],
+    "depth": 2,
+    "image": "ls",
+    "parent_seq": 5
+   },
+   "input_sha256": "534a28ea4f6f70ea8fb95be3895f9f3ad608169575d4e2264a9777542d4c86ed",
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "ls.exe",
+    "command_programs": [
+     "ls.exe"
+    ],
+    "depth": 2,
+    "image": "ls",
+    "parent_seq": 5
+   },
+   "input_sha256": "534a28ea4f6f70ea8fb95be3895f9f3ad608169575d4e2264a9777542d4c86ed",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 6,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "grep.exe",
+    "command_programs": [
+     "grep.exe"
+    ],
+    "depth": 2,
+    "image": "grep",
+    "parent_seq": 5
+   },
+   "input_sha256": "a05cf7a6c02098c2528fba0e44a49428436a5faea1abbc499946250dc3e77ed7",
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.310Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "grep.exe",
+    "command_programs": [
+     "grep.exe"
+    ],
+    "depth": 2,
+    "image": "grep",
+    "parent_seq": 5
+   },
+   "input_sha256": "a05cf7a6c02098c2528fba0e44a49428436a5faea1abbc499946250dc3e77ed7",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 7,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.310Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "rg.exe",
+    "command_programs": [
+     "rg.exe"
+    ],
+    "depth": 1,
+    "image": "rg",
+    "parent_seq": 2
+   },
+   "input_sha256": "e4f63ef9def4f76a7dcba33779ddd15cc323a3c777145687db48a640333d44fe",
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:09.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "rg.exe",
+    "command_programs": [
+     "rg.exe"
+    ],
+    "depth": 1,
+    "image": "rg",
+    "parent_seq": 2
+   },
+   "input_sha256": "e4f63ef9def4f76a7dcba33779ddd15cc323a3c777145687db48a640333d44fe",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 8,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:09.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "path": "C:\\work\\proj\\notes.txt"
+   },
+   "input_sha256": "c0cfb9f72ba0b350d4bcf8ad86cfc859eb5e769a0e83a24492d51f4b7e773d0b",
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "file",
+   "ts": "2026-11-03T09:00:12.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "path": "C:\\work\\proj\\notes.txt"
+   },
+   "input_sha256": "c0cfb9f72ba0b350d4bcf8ad86cfc859eb5e769a0e83a24492d51f4b7e773d0b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 9,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "file",
+   "ts": "2026-11-03T09:00:12.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_seq": 2
+   },
+   "input_sha256": "dfde0d07372d982a912d3486e88df0250b7b3ce3928c76f03137a89845396a23",
+   "phase": "pre",
+   "seq": 10,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:39.950Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_seq": 2
+   },
+   "input_sha256": "dfde0d07372d982a912d3486e88df0250b7b3ce3928c76f03137a89845396a23",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 10,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:39.950Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "curl.exe",
+    "command_programs": [
+     "curl.exe"
+    ],
+    "depth": 2,
+    "image": "curl",
+    "parent_seq": 10
+   },
+   "input_sha256": "1cd2240d7780f9e8ea3c273c65f9d422176d1d043337c5fcaef14001ee253676",
+   "phase": "pre",
+   "seq": 11,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:40.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "curl.exe",
+    "command_programs": [
+     "curl.exe"
+    ],
+    "depth": 2,
+    "image": "curl",
+    "parent_seq": 10
+   },
+   "input_sha256": "1cd2240d7780f9e8ea3c273c65f9d422176d1d043337c5fcaef14001ee253676",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 11,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:40.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "edab6deb69f359b9c6c52c08e043427f45a55694eb208787e950bdc020ac477d",
+   "phase": "pre",
+   "seq": 12,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:40.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "edab6deb69f359b9c6c52c08e043427f45a55694eb208787e950bdc020ac477d",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 12,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:40.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 13,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:40.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_seq": 2
+   },
+   "input_sha256": "63f92284431ffe03e83bdbcd41215935e71565a2d8589417e9da14f45cc45442",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_seq": 2
+   },
+   "input_sha256": "63f92284431ffe03e83bdbcd41215935e71565a2d8589417e9da14f45cc45442",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bitsadmin.exe",
+    "command_programs": [
+     "bitsadmin.exe"
+    ],
+    "depth": 2,
+    "image": "bitsadmin",
+    "parent_seq": 4
+   },
+   "input_sha256": "dc4a385cde3b18ec86645a122c76dfbf2c589061954c2ca90f9e7fb099cc0249",
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bitsadmin.exe",
+    "command_programs": [
+     "bitsadmin.exe"
+    ],
+    "depth": 2,
+    "image": "bitsadmin",
+    "parent_seq": 4
+   },
+   "input_sha256": "dc4a385cde3b18ec86645a122c76dfbf2c589061954c2ca90f9e7fb099cc0249",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 5,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "plink.exe",
+    "command_programs": [
+     "plink.exe"
+    ],
+    "depth": 1,
+    "image": "plink",
+    "parent_seq": 2
+   },
+   "input_sha256": "eebb9ef28fb5e3b337ab3743c90eebc9516ecc822bcb8f6db7b471b7391b6b22",
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:09.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "plink.exe",
+    "command_programs": [
+     "plink.exe"
+    ],
+    "depth": 1,
+    "image": "plink",
+    "parent_seq": 2
+   },
+   "input_sha256": "eebb9ef28fb5e3b337ab3743c90eebc9516ecc822bcb8f6db7b471b7391b6b22",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 6,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:09.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "path": "C:\\work\\proj\\notes.txt"
+   },
+   "input_sha256": "c0cfb9f72ba0b350d4bcf8ad86cfc859eb5e769a0e83a24492d51f4b7e773d0b",
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "file",
+   "ts": "2026-11-03T09:00:10.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "path": "C:\\work\\proj\\notes.txt"
+   },
+   "input_sha256": "c0cfb9f72ba0b350d4bcf8ad86cfc859eb5e769a0e83a24492d51f4b7e773d0b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 7,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "file",
+   "ts": "2026-11-03T09:00:10.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 8,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:10.000Z"
+  }
+ ]
+}
