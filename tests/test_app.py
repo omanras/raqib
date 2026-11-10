@@ -151,7 +151,7 @@ def test_e5_app_and_tray_import_tkinter_lazily_and_nothing_deprecated():
 
 def test_e5_app_and_tray_signal_nothing_and_start_no_program():
     """A4: the window and the tray start no program, open no socket, signal
-    no process; tray.py alone uses ctypes (Win32)."""
+    no process; ctypes is tray.py's (Win32) and app.py's two calls only (M8.1 E6)."""
     banned = ("kill", "killpg", "send_signal", "terminate", "system", "popen", "Popen", "startfile", "run",
               "urlopen", "create_connection", "open_new", "open_new_tab", "call", "check_call", "check_output",
               # A-11: no message to another window, no process ended
@@ -176,7 +176,9 @@ def test_e5_app_and_tray_signal_nothing_and_start_no_program():
                     name, named)
         assert not imported & {"subprocess", "socket", "ssl", "urllib", "signal", "asyncio", "webbrowser", "http",
                                "anthropic", "shutil"}, (name, imported)
-        assert ("ctypes" in imported) == (name == "tray.py"), name
+        # M8.1 E6: app.py imports ctypes too, inside _win_api only, for its two calls (the DPI awareness and the
+        # title bar): tests/test_app_design.py::test_e6_the_ast_guard_admits_only_the_two_windows_calls
+        assert ("ctypes" in imported) == (name in ("tray.py", "app.py")), name
         assert imported - {"raqib", "__future__"} <= set(sys.stdlib_module_names)
 
 
@@ -330,9 +332,11 @@ def test_e1_watch_view_band_findings_by_severity_holes_and_url():
     assert view["holes"] == ["trace-truncated: shrank at T (2 times, last at T2)",
                              "silence-window: no line since S (after line 4): open", "tray: it failed"]
     assert ("incomplete", "notifications: off (--no-notify)") in view["badges"]
-    text = app.body_text(view)
-    assert text.startswith("FINDINGS: 3\n  high (1)\n    SECRET-OUTPUT settled session s seq 2")
-    assert "HOLES (A3): 3\n  - trace-truncated" in text
+    # M8.1 REDO A-9, A-13(a): what the window draws - each finding an item, the gravest first; the holes counted
+    items = app.finding_items(state["findings"])
+    assert [(i[0], i[2]) for i in items] == [("high", "SECRET-OUTPUT"), ("medium", "DESTRUCT-CMD"), ("weird", "X")]
+    assert items[0][4] == "session s \u00b7 seq 2 \u00b7 settled" and "None" not in " ".join(i[4] for i in items)
+    assert app.seen_title(app.seen_lines(view["holes"], [])) == "Could not see (3)"
 
 
 def test_e1_doctor_lines_carry_the_verdict_and_level():
@@ -541,12 +545,12 @@ def test_e4_real_tray_starts_and_stops_or_says_why():
 
 # --- E6: the README ------------------------------------------------------------------------------
 
-def test_e6_readme_the_window_in_three_lines():
-    """M6.4's three lines, after M7.3's two (tests/test_app_host.py)."""
+def test_e6_readme_the_window_section_names_the_command_the_gui_script_and_python3_tk():
+    """M6.4's facts in the window's section (M8.1: rewritten for what a person sees)."""
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## The window\n", 1)[1].split("\n## ", 1)[0]
-    lines = [line for line in section.split("\n") if line.strip()][2:]
-    assert len(lines) == 3 and "raqib app" in lines[0] and "python3-tk" in " ".join(lines)
+    flat = " ".join(section.split())
+    assert "`raqib app [PROJECT]`" in flat and "`raqib-app`" in flat and "python3-tk" in flat
 
 
 # --- the Tk window: only with tkinter and a display ------------------------------------------------
@@ -587,7 +591,8 @@ class TkSession(FakeSession):
     def state(self):
         return {"status": "watching", "lines": 2, "url": "http://127.0.0.1:1/", "capture": {},
                 "notifications": {"backend": "off", "reason": "--no-notify", "counts": {}},
-                "findings": [entry("SECRET-OUTPUT", "high", [2])], "holes": [], "silence": []}
+                "findings": [entry("SECRET-OUTPUT", "high", [2])], "holes": [], "silence": [],
+                "code_so_far": 1}   # M8.1 REDO B-4: the watch writes the code of what it read so far
 
 
 def pump(root, cycles=5):
@@ -609,38 +614,42 @@ def test_tk_window_first_screen_watching_screen_stop_and_close(tmp_path):
         assert window.screen == "host"           # M7.3: the window opens on the host
         window.show_first()                      # "Watch a project": M6.4's first screen, unchanged
         window.tick()
-        assert window.screen == "first" and window.band.cget("text") == "DOCTOR: all OK"
-        assert "OK      python   3.12" in window.doctor_text.get("1.0", "end")
+        # M8.1: the verdict says it in a sentence; doctor's checks are rows (pill, name, sentence)
+        assert window.screen == "first" and window.verdict.cget("text") == "Checks: all OK"
+        assert window.verdict_word == "DOCTOR: all OK" and window.pill.cget("text") == "clean"
+        assert "python\t3.12" in window.doctor_rows.get("1.0", "end")
         window.start()
         window.tick()
-        assert window.screen == "watching" and window.band.cget("text") == "WATCHING"
+        assert window.screen == "watching" and window.verdict.cget("text") == "Watching the project: 1 finding so far"
         assert window.url.get() == "http://127.0.0.1:1/"
-        assert "SECRET-OUTPUT settled" in window.body.get("1.0", "end")
-        # A-5: the first-finding line, and the Log pane at any time (bounded)
-        assert window.knock_label.cget("text") == "first finding: none yet (it knocks once, whatever its severity)"
+        assert "\tSECRET-OUTPUT  Agent text" in window.body.get("1.0", "end")   # REDO A-13(a): an item
+        # A-5: the first-finding line, and the Log screen at any time (bounded)
+        assert window.knock_label.cget("text") == "First finding: none yet (it knocks once, whatever its severity)"
         c.session.knock = {"rule_id": "SECRET-OUTPUT", "severity": "high", "status": "by the rule"}
         c.session.log.write("raqib watch: a line of the watch\n")
-        window.toggle_log()
         window.tick()
-        assert window.knock_label.cget("text") == "first finding: SECRET-OUTPUT high (by the rule)"
+        assert window.knock_label.cget("text") == "First finding: SECRET-OUTPUT high (by the rule)"
+        window.show_log()                    # from the project's screen: the project watch's log
+        window.tick()
+        assert window.screen == "log" and window.log_source == "project"
         assert "a line of the watch" in window.log_text.get("1.0", "end")
-        window.toggle_log()
+        window.show_project()
         # A-13: Open page through the controller's opener. The environ is given without CI, because this
         # test runs where CI is set (windows-latest); the refusal under CI is test_a13's.
         c.options = app.Options(None, None, 60, environ={})
         c.opener = lambda url, environ=None: "no opener here"
         window.open_page()
         window.tick()
-        assert "note: page: the page was not opened (no opener here)" in window.foot_text()
-        # A-4: a callback exception is a hole in the footer
+        assert "note: page: the page was not opened (no opener here)" in window.seen_text.get("1.0", "end")
+        # A-4: a callback exception is a hole in "could not see (N)"
         root.report_callback_exception(ValueError, ValueError("boom"), None)
         window.tick()
-        assert "hole: a window callback failed: ValueError: boom" in window.foot_text()
+        assert "hole: a window callback failed: ValueError: boom" in window.seen_text.get("1.0", "end")
         window.on_close()                    # no tray: the watch stops like Ctrl-C, the report stays
         window.tick()
-        assert c.session.stopped == ["window closed"] and window.band.cget("text") == "FINISHED"
+        assert c.session.stopped == ["window closed"] and window.verdict.cget("text") == "The project watch finished"
         assert window.body.get("1.0", "end").startswith("Raqib watch\nthe final report")
-        assert "note: tray" not in window.foot_text()
+        assert "note: tray" not in window.seen_text.get("1.0", "end")
         window.on_close()                    # closing again quits
         assert window.closed
     finally:
@@ -669,7 +678,7 @@ def test_tk_window_hides_to_the_tray_and_shows_on_a_tray_action(tmp_path):
         assert root.state() != "withdrawn"
         t.holes.append("the tray icon could not be added again after Explorer restarted")
         window.tick()
-        assert "hole: tray: the tray icon could not be added again" in window.foot_text()
+        assert "hole: tray: the tray icon could not be added again" in window.seen_text.get("1.0", "end")
         c.actions.put("quit")
         window.tick()
         assert window.closed and c.session.stopped == ["Quit in the tray menu", "the window was closed"]
@@ -1436,7 +1445,7 @@ def test_tk_a3_an_overdue_quit_brings_the_window_back(tmp_path):
         window.tick()
         pump(root)
         assert not window.closed and root.state() != "withdrawn"
-        assert "hole: the watch did not end in 30 s after Quit" in window.foot_text()
+        assert "hole: the watch did not end in 30 s after Quit" in window.seen_text.get("1.0", "end")
         c.session.release.set()
         c.session.thread.join(5)
     finally:

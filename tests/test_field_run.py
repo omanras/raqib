@@ -469,8 +469,9 @@ def test_e4_page_and_window_show_the_note_apart_from_the_findings(tmp_path):
     assert "Dark after a live tree" in findings and "Dark after a live tree" not in head
     view = app.host_watch_view(state)
     assert len(view["findings"]) == 2 and len(view["notes"]) == 1
-    body = app.host_body(view)
-    assert "NOTES (not alarms): 1" in body and body.index("FINDINGS: 2") < body.index("NOTES (not alarms): 1")
+    items = app.host_finding_items(state, view)   # M8.1 REDO A-9: what the window draws, the notes after
+    assert [i[2] for i in items].count("NOTE") == 1 and [i[2] for i in items][-1] == "NOTE"
+    assert [i[1] for i in items if i[2] == "NOTE"] == ["note"]
     assert all(host.DARK_NOTE not in f for f in view["findings"])
     assert view["level"] != "alarm" or w.findings   # the alarm is the findings', never the note's
 
