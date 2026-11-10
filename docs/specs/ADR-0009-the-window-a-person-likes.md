@@ -265,3 +265,58 @@ the Table's rulings B-4..B-10.
   overlay's own description lets the window tell them apart; else
   recorded for the overlay.
 - B-10 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment C (the Table, 2026-11-11) - rulings on review 2026-11-11-M8.1-redo2.md (claude/M8.1-meet 273f568)
+CI: 9024c95 (M8.1 alone) six jobs success; 273f568 (merged with M7.8)
+six jobs success: A-1 and B-1 are proven on Windows. B-3, B-6, B-8, B-9
+MET; the rest PARTLY. Verdict: REDO on C-1; the Table's rulings C-2..C-8.
+- C-1 (G1, must; B-5 was the Table's and it traded an alarm) The one
+  softening is narrowed to what it meant: a project watch that has NEVER
+  read a line, whose state holds no hole and no finding, and whose own
+  word is WATCHING, is incomplete, "no line read yet". A trace that was
+  read and is now empty (removed, truncated: the watch restarts and says
+  a hole) is the alarm its code says, and the sentence says "the trace
+  was emptied or replaced". The state says which: the watch writes
+  whether it ever read a line (one field beside `lines`). Tests: Start,
+  the first line, then the trace truncated and removed.
+- C-2 (G2) A code that cannot be computed is said: the watch writes why
+  beside the code (one field), with alarms() and the key inside the
+  guard, and the window lists it in "Could not see" and says "the watch
+  could not judge itself" - never "its report says".
+- C-3 (G3) A red pill names its cause from the watch's own alarms: the
+  silence windows, closed ones too ("1 silence window, closed"), and the
+  trace's problems ("1 line that could not be read"), counted from the
+  state; "Could not see" lists a closed window as it lists an open one.
+- C-4 (G5, G6, G7, G11) A badge too long for its line ends in an
+  ellipsis and its whole text is a line of "Could not see". A window that
+  comes back on the screen re-lays its open panel (the Map event, from
+  KEYS). A finished watch's holes are read from the watch's final state,
+  not from the last tick that happened to read it. A failure inside the
+  panel's layout cannot stop the tick: the tick always schedules the next.
+- C-5 (G9, G10; where the window meets M7.8) The Selected tree pane
+  counts what its row counts (source findings by their words, notes on a
+  benign tree as notes) and says the tree's own words from the state:
+  the benign word and what knocked on it, quiet and its round, "not
+  judged this round", the events before the start. A source finding
+  pending at exit is the alarm the watch counts. The Final report pane
+  colours SOURCE FINDINGS and NOT SETTLED as it colours FINDINGS.
+- C-6 (G4, recorded with a number asked for) The host's state computes
+  its result on each read. Before it is changed it is measured: a test
+  times state() on a watch with a thousand source findings and says the
+  figure in the questions file; the Table rules from the figure (A7).
+- C-7 (G8, G12, G13, G14, G16) The host's finished sentence is the
+  host's. The held-lock path has a test with a real lock; the argv check
+  reads the detail too; the typed value is tested through the Enter
+  binding; real HostWatches in the window's tests are ended by M7.8's
+  helper. The strip's docstring true. The rhythm cell shows a suspicion
+  first when there is one, so an ellipsis cannot hide it (A2). The guard
+  refuses an alias of ctypes.windll.
+- C-8 Accepted or recorded: G15 (pre-existing: the Rules verdict after a
+  change; with C-1's care, later), G17 (answered in the packet's
+  addendum), G18 (measured at two fonts; the commander's display is the
+  third). Every REDO change carries a test (D-8).
+- Table ledger: B-5's softening was the Table's own, and it made a
+  deleted trace amber. Third time in this run the Table cured a false
+  alarm by loosening a rule without asking what else the looser rule
+  lets through (R-1, B-5). The cure is always the narrowest state that
+  is known to be harmless, named by the watch, not inferred by the window.
