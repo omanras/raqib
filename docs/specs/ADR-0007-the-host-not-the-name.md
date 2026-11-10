@@ -917,3 +917,57 @@ and T-6; the Table's rulings T-3..T-9.
   alarm for silence, written to cure a false positive (the person's
   programs under explorer) without asking what else has a benign root;
   the reviewer's S2 caught it. A note, not silence, is the cure.
+
+## Amendment V (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.8-redo2.md (e1974cc)
+(The letter U is skipped: U-n are the second REDO review's findings.) CI
+run 42892952899 for e1974cc: six jobs success. T-3..T-8 MET; T-1 and T-2
+PARTLY. Verdict: REDO on V-1; the Table's rulings V-2..V-6.
+- V-1 (U1, U2, U3, U4, U5, U6, must) T-1 is restated as a thing that can
+  be tested in every order, because two builds of it were right in one
+  order and wrong in another. An act is one os event: its key is the
+  event's (time, tool, input hash, image, parent image), the same whether
+  one half-line of it or both were read. The watch keeps, per act, the
+  copies seen (which tree's feed, at what depth) and one fact: whether a
+  knock for it was actually SENT. From the copies alone, by one pure
+  function: the standing tree is the nearest tree that is not benign,
+  and only when every tree that read the act is benign, the nearest of
+  those (then the finding is a note). Whenever the copies of an act
+  change and no knock has been sent for it, I-6 is asked on the standing
+  tree; "not notified" is an answer, not a sent knock, and does not close
+  the act. A sent knock closes it: never a second. Everything shown - the
+  finding's status, its KNOCKS row, a fold's outcome, "judged on tree pid
+  N" on the other trees, the tree that knocked - is read from the act,
+  so two lines about one act cannot disagree. An act is never left
+  without a word: what a poll cut short (a judge that raised, a Stop) is
+  settled by the next poll or by finish, and an entry finish cannot
+  settle says so in the report. Test, the one that matters: for two and
+  for three nested trees, benign and not, FIRST-FINDING spent and not,
+  EVERY order of arrival over separate polls gives the same standing
+  tree, the same exit code, the same counts, at most one knock, and a
+  knock whenever some order gives one.
+- V-2 (U4) A note cannot hide an agent's act: an act is a note only when
+  every tree above it is benign. An agent that starts a benign program
+  and acts through it has its act on the agent's tree, in every order.
+  THREAT_MODEL says both directions.
+- V-3 (U7, U8, U9) What is said once is said right: the count of lines
+  written before M7.8 is the report's final count; a benign tree's word
+  says what happened to it (a knocked act after a round that lost the
+  system drive; a rhythm that knocked) and never "not knocked" beside a
+  knock; the page lists notes under their own heading; "not judged by
+  <id> (off)" and the suppressed count count acts, not copies, and name
+  the would-be notes apart.
+- V-4 (U11; scope widened for one line) The Linux tree shows its start
+  as a time where the tick rate is known, beside the key; THREAT_MODEL
+  says what is shown; NEW-AGENT.yaml and NEW-AGENT-UNKNOWN.yaml's "Linux
+  /proc gives no creation time" is made true.
+- V-5 (U12) The fixture that ends every HostWatch and fails a leaked
+  thread serves every test file that starts one (test_host_sources.py,
+  test_rhythm.py, test_field_run.py too), from one helper module under
+  tests/ (not conftest.py, which M8.1 adds); no fake waits on a time;
+  a teardown whose finish raises still stops the rest.
+- V-6 (U10) Recorded: the clock-step hole is said again when a later step
+  is larger by more than a round; nothing else of U10 needs building.
+- V-7 Every REDO change carries a test for the behaviour it adds (D-8).
+- Table ledger: R-3 and T-1 were the Table's words, and both described an
+  outcome without saying it must hold in every order of arrival; the
+  builder built the orders the tests named. V-1 names the property.
