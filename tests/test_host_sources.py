@@ -265,9 +265,7 @@ def test_e1a_sysmon_present_attaches_os_sysmon_rooted_at_the_root_pid_in_a_threa
     w, clock = make_host(home, ["windows", "windows"], sysmon=SYSMON, os_follow=follow)
     rounds(w, clock, 1)
     pids = sorted(c["root"] for c in follow.calls)
-    # M7.8 REDO R-1: every tree but the benign one (msedge 4100) gets its os source
-    assert pids == sorted(t["pid"] for t in w.trees.values() if not t["benign"]) and 4100 not in pids
-    assert {t["pid"]: t["source"] for t in w.trees.values()}[4100] == "benign"
+    assert pids == sorted(t["pid"] for t in w.trees.values())
     for key, src in w.sources.items():
         assert src.kind == "os" and src.thread.is_alive() and not src.stop.is_set()
         assert src.path == str(source_file(w, key[0])) and src.path.startswith(str(home / ".raqib" / "host" / "sources"))
@@ -552,14 +550,13 @@ class FakeChannel:
     wevtutil, by its absolute path and LIVE_ARGS, and returns the synthetic
     export; no process is started."""
 
-    def __init__(self, export=None):
+    def __init__(self):
         self.calls = []
-        self.export = export or SYSMON_XML   # M7.8 REDO: the windows export's own channel, for a sourced tree
 
     def __call__(self, argv, **kw):
         assert argv[0] == os_sysmon.WEVTUTIL and list(argv[1:]) == list(os_sysmon.LIVE_ARGS)
         self.calls.append(argv)
-        data = self.export.read_bytes()
+        data = SYSMON_XML.read_bytes()
 
         class Proc:
             pid, returncode = 4242, 0
@@ -595,8 +592,7 @@ def test_a4_without_the_flag_no_path_outside_raqib_is_written_and_with_it_only_t
     a symlinked `.claude` (I-1) and a kept foreign trace (I-2) are probed."""
     project = tmp_path / "proj"
     project.mkdir()
-    # M7.8 REDO R-1: msedge 4100 (benign) is not sourced; the windows export's own Sysmon events cover nimbus 3300
-    channel = FakeChannel(ROOT / "tests" / "fixtures" / "discover" / "windows" / "sysmon.xml")
+    channel = FakeChannel()
     real_bounded = os_sysmon.read_live_bounded
     monkeypatch.setattr(os_sysmon, "read_live_bounded",
                         lambda timeout, helpers: real_bounded(timeout=timeout, helpers=helpers, popen=channel))
@@ -614,10 +610,7 @@ def test_a4_without_the_flag_no_path_outside_raqib_is_written_and_with_it_only_t
     w, runner = a4_watch([moved("windows", project), moved("windows", project)], home, writes, sysmon=SYSMON,
                          os_follow=follow)
     assert channel.calls and any(s.kind == "os" for s in w.sources.values())
-    # M7.8 REDO R-1: msedge 4100 is benign and not sourced; nimbus 3300 is, over the same fake channel
-    text = source_file(w, 3300).read_text(encoding="ascii")   # its os lines (and os-sysmon's silence lines)
-    assert [json.loads(x) for x in text.splitlines() if x.startswith("{")] and writes.outside(home / ".raqib") == []
-    assert not Path(w._source_path(next(k for k in w.trees if k[0] == 4100))).exists()
+    assert lines_of(source_file(w, 4100)) and writes.outside(home / ".raqib") == []
     assert sorted(p.name for p in project.iterdir()) == [] and writes.programs == []
 
     # 3. the flag: only <project>/.claude and its settings.json

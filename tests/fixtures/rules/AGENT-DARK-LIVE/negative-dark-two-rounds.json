@@ -226,8 +226,8 @@
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-01T05:14:00.112Z .. 2026-11-01T05:15:45.000Z; 0 snapshot(s)",
-    "source": "benign",
-    "source_word": "benign (not sourced: its acts are not judged)",
+    "source": "host",
+    "source_word": "host: the host's own record of the tree",
     "started": "11/1/2026 8:30:02 AM",
     "tree": "4100:msedge:11/1/2026 8:30:02 AM",
     "was": "candidate"

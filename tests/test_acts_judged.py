@@ -126,9 +126,33 @@ def inventory(rel):
     return discover.run(texts, CATALOG, holes=holes, run=discover.run_record(str(d)), processes=True)
 
 
+WATCHES = []   # REDO 2 T-6: every HostWatch a test of this file starts
+
+
+@pytest.fixture(autouse=True)
+def m78_no_raqib_thread_outlives_its_test():
+    """REDO 2 T-6 (ADR-0007 T-6): every HostWatch the test started is ended in it (finish: its sources' threads
+    told to stop and joined, bounded), and the test fails if a thread named for Raqib that it started is still
+    alive after that. Separately named (a conftest.py of another branch may hold fixtures of its own)."""
+    before = {t for t in threading.enumerate() if t.name.startswith("raqib-")}
+    del WATCHES[:]
+    yield
+    for w in WATCHES:
+        if w.finished is None:
+            w.finish()
+    import time
+    deadline = time.monotonic() + 10
+    left = [t for t in threading.enumerate() if t.name.startswith("raqib-") and t not in before]
+    for t in left:
+        t.join(max(0.0, deadline - time.monotonic()))
+    alive = [t.name for t in left if t.is_alive()]
+    del WATCHES[:]
+    assert not alive, "thread(s) outlived the test: %s" % alive
+
+
 class CountingFollow:
     """A fake os follow: each attach is counted; its first pass appends `lines` (os-sysmon's; or by_root[root]),
-    then it waits."""
+    then it waits on the stop it is given, with no time limit (T-6)."""
 
     def __init__(self, lines=(), by_root=None):
         self.lines = list(lines)
@@ -143,24 +167,31 @@ class CountingFollow:
             os_sysmon.append(log, [json.dumps(x, separators=(",", ":")) for x in lines])
         if on_pass:
             on_pass(1, None)
-        stop.wait(60)
+        stop.wait()
         return 1
 
 
-def watch_rounds(tmp_path, names, sysmon=True, follow=None, inv=inventory):
+def watch_rounds(tmp_path, names, sysmon=True, follow=None, inv=inventory, between=None, wall=None):
+    """The HostWatch fed these rounds (fixture clock). between(w, k): called after round k's first tick and
+    before the poll that judges what the sources gained (T-1: to append lines or reorder the feeds). wall(t):
+    the wall clock at fixture time t (T-3), default the fixture's start plus t."""
     invs = iter([inv(n) for n in names])
     clock = host.FixtureClock()
     notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
     kw = {"os_follow": follow} if follow is not None else {}
+    wall = wall or (lambda t: 1793700000.0 + t)
     w = host.HostWatch(lambda: next(invs), CATALOG, RULES, notifier, every=10, out=None, err=io.StringIO(),
-                       clock=clock, wall=lambda: 1793700000.0 + clock.t, home=str(tmp_path), platform="fixture",
+                       clock=clock, wall=lambda: wall(clock.t), home=str(tmp_path), platform="fixture",
                        run="fixture-run", sysmon=(lambda: (True, "fixture: Sysmon")) if sysmon
                        else (lambda: (False, "fixture: no Sysmon")), **kw)
-    for _ in names:
+    WATCHES.append(w)   # T-6: ended by the fixture if the test does not
+    for k, _ in enumerate(names, start=1):
         w.tick(wait=30)
         for src in list(w.sources.values()):
             if src.thread is not None:   # an os follow: its first pass has appended what it read
                 src.first_pass.wait(5)
+        if between is not None:
+            between(w, k)
         w.tick()   # the poll after the pass: the source's lines are read and judged
         clock.t += 10
     return w
@@ -434,7 +465,10 @@ def test_e3_a_source_of_lines_before_m78_is_said_once_and_not_guessed(tmp_path):
     w = watch_rounds(tmp_path, ["defender/before", "quiet/talking", "quiet/talking"], follow=follow)
     assert w.source_findings == []
     said = [n for n in w.notes if "carry no input_meta.image" in n]
-    assert said == ["tree %s, its os source: %s" % (SHELL, host.PRE_M78_NOTE % 6)]
+    # said once, with the count the first judge of the feed saw (the follow's thread may still be appending then)
+    (one,) = said
+    count = int(re.match(r"tree %s, its os source: (\d+) " % re.escape(SHELL), one).group(1))
+    assert 1 <= count <= 6 and one == "tree %s, its os source: %s" % (SHELL, host.PRE_M78_NOTE % count)
     assert not [n for n in w.notes if "NET-TOOL partial" in n or "DESTRUCT-CMD partial" in n]
 
 
@@ -486,31 +520,84 @@ def built(text, root, start_seq=0):
     return [json.loads(x) for x in os_sysmon.build(text, root, cwd="C:\\work\\proj", start_seq=start_seq)[0]]
 
 
-@pytest.mark.parametrize("sysmon", [True, False])
-def test_redo_r1_a_benign_tree_gets_no_source_and_a_nested_agent_is_still_judged(tmp_path, sysmon):
+def test_redo2_t2_the_persons_ssh_under_explorer_is_a_note_exit_0_no_knock(tmp_path):
+    """T-2 (R-1 amended): a benign tree is sourced like any other; what its acts match is a note."""
     text = person_and_agent_export()
-    follow = CountingFollow(by_root={5100: after_start(built(text, 5100)), 6100: after_start(built(text, 6100))})
-    w = watch_rounds(tmp_path, ["benign-person/before", "benign-person/agent", "benign-person/agent"],
-                     sysmon=sysmon, follow=follow)
-    explorer = next(k for k in w.trees if k[0] == 5100)
-    agent = next(k for k in w.trees if k[0] == 6100)
-    assert w.trees[explorer]["benign"] and explorer not in w.sources and agent in w.sources
-    assert follow.attaches == ([6100] if sysmon else [])   # no os follow for the benign tree, ever
-    assert (w.trees[explorer]["source"], w.trees[explorer]["source_text"]) == ("benign", host.BENIGN_WORD)
-    assert w.trees[explorer]["source_findings"] == {}   # the person's ssh and curl: no finding, no knock
-    assert not [f for f in w.source_findings if f["pid"] == 5100]
-    assert [os.path.basename(p).split("-")[2] for p in os.listdir(w.sources_dir)] == ["6100"]   # no host lines
-    lines = [l for r in w.round_lines for l in r["lines"] if l["tool"] == host.TREE_TOOL and l["input_meta"]["pid"] == 5100]
-    assert {l["input_meta"]["source"] for l in lines} == {"benign"} and not [f for f in w.findings
-                                                                              if f["rule_id"] == host.UNWATCHED]
-    if sysmon:   # the agent nested under explorer is its own tree, sourced and judged: its curl knocks (I-6)
-        (f,) = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
-        assert f["pid"] == 6100 and not f["history"] and [k["event"] for k in w.knocks].count(notify.FIRST_EVENT) == 1
-    text_, _ = w.finish()
-    assert "source: benign (benign (not sourced: its acts are not judged))" in text_
+    follow = CountingFollow(by_root={5100: after_start(built(text, 5100))})
+    w = watch_rounds(tmp_path, ["benign-person/before", "benign-person/before"], follow=follow)
+    (explorer,) = list(w.trees)
+    tree = w.trees[explorer]
+    assert tree["benign"] and explorer in w.sources and follow.attaches == [5100]   # sourced again
+    assert tree["benign_word"] == host.BENIGN_WORD == "benign (its acts are noted, not knocked; its rhythm is judged)"
+    notes = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
+    # ssh and curl of the person's cmd, and a curl below explorer that no tree of its own holds in these rounds
+    assert len(notes) == 3 and all(f["benign_note"] and f["notice"].startswith(host.BENIGN_NOTE) for f in notes)
+    assert tree["source_findings"] == {host.BENIGN_COUNT: 3} and tree.get("first_knock") is None   # FIRST not spent
+    assert w.knocks == [] and w.source_alarms() == []
+    text_, code = w.finish()
+    assert code == 0 and "RESULT: CLEAN" in text_   # not an alarm: the exit code is unchanged
+    assert "ON BENIGN TREES (noted, not knocked): 3" in text_ and "0 live" in text_
+    assert "SOURCE FINDINGS: 3 (0 live, of them 0 pending at exit; 0 history; 0 judged on another tree; 3 on benign" \
+           " trees, noted)" in text_
+    lines = [l for r in w.round_lines for l in r["lines"] if l["tool"] == host.TREE_TOOL]
+    assert {l["input_meta"]["source"] for l in lines} == {"os"}   # the HostTree line as before R-1
     st = json.loads(Path(w.state_path).read_text(encoding="ascii"))
-    assert {t["pid"]: t["source"] for t in st["host"]["trees"]}[5100] == "benign"
-    assert host.BENIGN_WORD in "\n".join(ui.host_section(st))
+    page = "\n".join(ui.host_section(st))
+    assert host.BENIGN_WORD in page and host.BENIGN_COUNT + " 3" in page   # on the tree, on the page
+
+
+def editor_export():
+    """code.exe (benign: under the system drive's Program Files) -> its own extension host (code.exe) -> cmd ->
+    curl: an agent inside the editor's own process (SYNTHETIC)."""
+    syn = synthetic()
+    code = "C:\\Program Files\\Microsoft VS Code\\Code.exe"
+    x = syn.Export(first_record=78001)
+    x.proc("00.100", 7100, code, '"%s"' % code, 5100, syn.EXPLORER, "C:\\Windows\\Explorer.EXE")
+    x.proc("00.500", 7110, code, '"%s" --type=extensionHost' % code, 7100, code, '"%s"' % code)
+    x.proc("05.000", 7120, syn.CMD, 'cmd.exe /c "curl -s https://198.51.100.47/x"', 7110, code,
+           '"%s" --type=extensionHost' % code)
+    x.proc("05.100", 7130, syn.CURL, "curl -s https://198.51.100.47/x", 7120, syn.CMD,
+           'cmd.exe /c "curl -s https://198.51.100.47/x"')
+    return x.text(), code
+
+
+def test_redo2_t2_an_agents_curl_under_an_editors_own_process_is_a_note_on_that_tree(tmp_path):
+    text, code = editor_export()
+
+    def inv(name):
+        i = inventory("quiet/ended")
+        if name == "editor":
+            i["candidates"] = [{"pid": 7100, "image": "code", "exe": code, "exe_from": "record",
+                                "started": "2026-11-10T07:46:00.000Z", "cwd": None, "id": "C1",
+                                "cites": [{"src": "win-process-1", "line": 9, "text": "code 7100 (test)"}],
+                                "acts": [{"how": "process", "pid": 7110, "image": "code", "started": None,
+                                          "cites": []}],
+                                "talks": [{"remote": "203.0.113.48:443", "endpoint": [], "cites": []}]}]
+        return i
+    follow = CountingFollow(by_root={7100: after_start(built(text, 7100))})
+    w = watch_rounds(tmp_path, ["none", "editor", "editor"], follow=follow, inv=inv)
+    (key,) = [k for k in w.trees if k[0] == 7100]
+    assert w.trees[key]["benign"] and follow.attaches == [7100]   # an editor's tree is sourced (S2)
+    (f,) = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
+    assert f["pid"] == 7100 and f["benign_note"] and not f["history"]   # the agent's curl: a note on that tree
+    assert w.trees[key]["source_findings"] == {host.BENIGN_COUNT: 1}
+    assert not [k for k in w.knocks if k["event"] in (notify.FIRST_EVENT, "NET-TOOL")]
+
+
+def test_redo2_t2_rhythm_on_a_benign_tree_still_knocks(tmp_path):
+    from raqib.rules import fixturegen
+
+    def inv(name):
+        i = fixturegen.rhythm_inventory("cycle", int(name))
+        tree = i["candidates"][0]
+        tree.update(image="explorer", exe="C:\\Windows\\explorer.exe")   # benign: a listed image and directory
+        return i
+    w = watch_rounds(tmp_path, [str(k) for k in range(1, 5)], sysmon=False, inv=inv)
+    (tree,) = w.trees.values()
+    assert tree["benign"] and tree["benign_word"] == host.BENIGN_WORD
+    rhythm = [f for f in w.findings if f["rule_id"] == host.RHYTHM]
+    assert len(rhythm) == 1 and [k["event"] for k in w.knocks].count(host.RHYTHM) == 1   # K-10: judged, and knocks
+    assert w.finish()[1] == 1
 
 
 def test_redo_r2_an_act_from_before_the_watch_is_history_whenever_its_tree_was_first_seen(tmp_path):
@@ -539,25 +626,99 @@ def test_redo_r2_an_act_from_before_the_watch_is_history_whenever_its_tree_was_f
     assert "source finding" not in " ".join(w2.result()[1])   # never an alarm
 
 
-def test_redo_r3_one_act_one_finding_on_the_nearest_tree_and_one_knock(tmp_path):
+def nested_copies():
+    """The curl of tests/fixtures/os/nested-windows as each tree's os source writes it (after the start): its
+    pre and post lines under the outer root (depth 3) and under the inner one (depth 2), seqs apart."""
     text = (FIX / "os" / "nested-windows.sysmon.xml").read_text(encoding="ascii")
-    follow = CountingFollow(by_root={6100: after_start(built(text, 6100)), 6200: after_start(built(text, 6200))})
-    w = watch_rounds(tmp_path, ["quiet/ended", "nested/both", "nested/both"], follow=follow)
-    assert sorted(follow.attaches) == [6100, 6200]
-    found = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
-    assert len(found) == 2   # the one curl, read by both feeds
-    (shown,) = [f for f in found if f.get("judged_on") is None]
-    (listed,) = [f for f in found if f.get("judged_on") is not None]
-    assert shown["pid"] == 6200 and shown["depth"] == 2 and listed["pid"] == 6100 and listed["depth"] == 3
-    assert listed["judged_on"] == 6200 and listed["notice"].startswith(host.JUDGED_ELSEWHERE + ": judged on tree pid 6200")
+    out = {}
+    for root in (6100, 6200):
+        lines = after_start(built(text, root, start_seq=50))
+        out[root] = [l for l in lines if l.get("input_meta", {}).get("image") == "curl"]
+    return out
+
+
+def own_act(root, seq, image):
+    """An act of one tree only (a child of its root), after the start: a pre and a post line of its os source."""
+    meta = {"command_head": image + ".exe", "command_programs": [image + ".exe"], "image": image,
+            "parent_image": "outer" if root == 6100 else "inner", "depth": 1}
+    base = {"ts": "2026-11-03T10:00:30.000Z", "seq": seq, "session_id": "os-%d" % root, "tool": "process",
+            "input_sha256": common.canonical_sha256({"command_line": "%s %d" % (image, root)}), "input_meta": meta,
+            "cwd": "C:\\work\\proj", "source": "os"}
+    return [dict(base, phase="pre"), dict(base, phase="post", output_meta={}, ok=True)]
+
+
+def append_to(w, pid, lines):
+    key = next(k for k in w.sources if k[0] == pid)
+    os_sysmon.append(w.sources[key].path, [json.dumps(x, separators=(",", ":")) for x in lines])
+
+
+def nested_watch(tmp_path, steps, order=None):
+    """quiet/ended, then nested/both for len(steps) rounds; steps[k] is a list of (pid, lines) appended before
+    round k's poll; order: "inner-first" polls the inner tree's feed first."""
+    def between(w, k):
+        for pid, lines in steps[k - 2] if k >= 2 else ():
+            append_to(w, pid, lines)
+        if order == "inner-first" and k >= 2:
+            w.sources = dict(sorted(w.sources.items(), key=lambda kv: -kv[0][0]))
+    return watch_rounds(tmp_path, ["quiet/ended"] + ["nested/both"] * len(steps), follow=CountingFollow(),
+                        between=between)
+
+
+def standing_and_copies(w):
+    found = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL" and f["image"] in ("outer", "inner")
+             and any(c in f["summary"] for c in ("curl",))]
+    return [f for f in found if f.get("judged_on") is None], [f for f in found if f.get("judged_on") is not None]
+
+
+@pytest.mark.parametrize("order", ["outer-first", "inner-first"])
+def test_redo2_t1_the_outer_trees_first_finding_spent_the_nested_trees_not(tmp_path, order):
+    """S1 (a): A has spent its FIRST-FINDING; nested B acts: the act knocks as B's FIRST-FINDING, in either poll
+    order (T-1: merged first, then I-6 on the tree it is shown on)."""
+    copies = nested_copies()
+    w = nested_watch(tmp_path, [[(6100, own_act(6100, 1, "plink"))], [(6100, copies[6100]), (6200, copies[6200])]],
+                     order=order)
+    (shown,), (listed,) = standing_and_copies(w)
+    assert shown["pid"] == 6200 and listed["pid"] == 6100 and listed["judged_on"] == 6200
+    firsts = [k for k in w.knocks if k["event"] == notify.FIRST_EVENT]
+    assert [k["limit_id"] for k in firsts] == ["FIRST-FINDING pid 6100", "FIRST-FINDING pid 6200"]
+    assert "pid 6200" in firsts[1]["body"]   # the KNOCKS row names the tree the finding is shown on
     inner = next(k for k in w.trees if k[0] == 6200)
-    outer = next(k for k in w.trees if k[0] == 6100)
+    assert w.trees[inner]["first_knock"]["rule_id"] == "NET-TOOL" and shown["notice"] == "off"   # off: fixture notifier
+    assert w.trees[inner]["source_findings"] == {"medium": 1}
+
+
+@pytest.mark.parametrize("order", ["outer-first", "inner-first"])
+def test_redo2_t1_copies_agree_on_history_and_the_standing_one_knocks_once(tmp_path, order):
+    """S1 (b), (c): for os lines history is the event's time only, so the two copies agree; the act knocks once,
+    on the nearest tree, whichever feed is read first."""
+    copies = nested_copies()
+    w = nested_watch(tmp_path, [[(6100, copies[6100]), (6200, copies[6200])]], order=order)
+    (shown,), (listed,) = standing_and_copies(w)
+    assert shown["history"] is listed["history"] is False and shown["pid"] == 6200
+    assert [k["limit_id"] for k in w.knocks if k["event"] == notify.FIRST_EVENT] == ["FIRST-FINDING pid 6200"]
+    assert w.source_alarms() == [shown]
+    old = {r: [dict(l, ts="2026-11-03T09:00:05.300Z") for l in v] for r, v in copies.items()}   # before the start
+    w2 = nested_watch(tmp_path / "h", [[(6100, old[6100]), (6200, old[6200])]], order=order)
+    (shown2,), (listed2,) = standing_and_copies(w2)
+    assert shown2["history"] and listed2["history"] and w2.source_alarms() == []
+    assert not [k for k in w2.knocks if k["event"] in (notify.FIRST_EVENT, "NET-TOOL")]
+
+
+def test_redo2_t1_a_copy_arriving_after_the_knock_moves_the_finding_and_never_knocks_twice(tmp_path):
+    copies = nested_copies()
+    w = nested_watch(tmp_path, [[(6100, copies[6100])], [(6200, copies[6200])]])
+    (shown,), (listed,) = standing_and_copies(w)
+    assert shown["pid"] == 6200 and listed["pid"] == 6100 and listed["notice"].startswith(host.JUDGED_ELSEWHERE)
+    assert shown["notice"].startswith("knocked once, as a finding of tree pid 6100, before this nearer copy came")
+    (row,) = [k for k in w.knock_rows() if k["event"] == notify.FIRST_EVENT]
+    assert row["limit_id"] == "FIRST-FINDING pid 6100" and row["shown_on"] == "tree pid 6200"
+    inner, outer = (next(k for k in w.trees if k[0] == p) for p in (6200, 6100))
     assert w.trees[inner]["source_findings"] == {"medium": 1}
     assert w.trees[outer]["source_findings"] == {host.JUDGED_ELSEWHERE: 1}
-    assert [k["event"] for k in w.knocks].count(notify.FIRST_EVENT) == 1   # one knock, by the first feed
-    assert len(w.source_alarms()) == 1 and "1 source finding(s): NET-TOOL on pid 6200" in " ".join(w.result()[1])
-    text_, _ = w.finish()
-    assert "findings judged on another tree 1" in text_ and "findings medium 1" in text_
+    text, _ = w.finish()
+    assert "the finding is shown on tree pid 6200 (a nearer copy came later, T-1)" in text
+    assert "SOURCE FINDINGS: 2 (1 live, of them 0 pending at exit; 0 history; 1 judged on another tree; 0 on benign" \
+           " trees, noted)" in text   # T-8: the counts add up
 
 
 def test_redo_r4_quiet_says_what_was_seen_and_the_source_as_it_is(tmp_path):
@@ -624,22 +785,36 @@ def test_redo_r5_the_linux_snapshot_carries_the_start_time_and_the_last_snapshot
         (d / "stat").write_text("%d (%s) %s\n" % (pid, name, " ".join(fields)))
     text = discover.snapshot_proc(str(proc), at="2026-11-03T10:00:00.000Z")
     recs = [json.loads(x) for x in text.splitlines()]
-    tick = os.sysconf("SC_CLK_TCK")
-    assert recs[2]["started"] == discover.iso(discover._ts("2026-11-03T10:00:00Z") + __import__("datetime").timedelta(
-        seconds=500 / tick))
+    # T-4: the key is the kernel's own number (ticks since boot), on every platform; the time is for display only,
+    # where the clock tick rate is known (no os.sysconf on Windows: no display time there, the key all the same)
+    assert [r.get("start_ticks") for r in recs[1:]] == [100, 500] and recs[0]["start_unread"] == 0
+    if hasattr(os, "sysconf"):
+        tick = os.sysconf("SC_CLK_TCK")
+        assert recs[2]["started"] == discover.iso(discover._ts("2026-11-03T10:00:00Z")
+                                                  + __import__("datetime").timedelta(seconds=500 / tick))
     parsed, _ = discover.parse_proc(text)
-    assert {r["pid"]: r.get("started") for r in parsed if r["kind"] == "proc"}[300] == recs[2]["started"]
-    old = "\n".join(json.dumps({k: v for k, v in r.items() if k != "started"}) for r in recs) + "\n"
+    assert {r["pid"]: r.get("started") for r in parsed if r["kind"] == "proc"}[300] == "boot+500"
+    stepped = "".join(json.dumps(dict(r, started="2026-11-03T11:00:00.000Z") if "start_ticks" in r else r) + "\n"
+                      for r in recs)   # a stepped wall clock moves the display time (btime); the key does not
+    assert {r["pid"]: r.get("started") for r in discover.parse_proc(stepped)[0] if r["kind"] == "proc"}[300] == "boot+500"
+    old = "\n".join(json.dumps({k: v for k, v in r.items() if k not in ("started", "start_ticks")})
+                    for r in recs) + "\n"
     assert all("started" not in r for r in discover.parse_proc(old)[0])   # an older snapshot reads as before
     # --window: two snapshots; pid 300 ended and its pid is reused by another image in the last one
     second = [dict(recs[0], snapshot="2026-11-03T10:00:01.000Z"), recs[1],
-              dict(recs[2], argv=["/usr/bin/other"], name="other", exe="/usr/bin/other", started="2026-11-03T10:00:00.900Z")]
+              dict(recs[2], argv=["/usr/bin/other"], name="other", exe="/usr/bin/other", start_ticks=590)]
     both = text + "".join(json.dumps(r) + "\n" for r in second)
     inv = discover.run({"proc": ("proc.txt", both, None)}, CATALOG, processes=True)
     sample = {p["pid"]: (p["image"], p["started"]) for p in inv["processes"]}
-    assert sample[300] == ("other", "2026-11-03T10:00:00.900Z") and set(sample) == {1, 300}
-    assert "started" not in discover.run({"proc": ("proc.txt", old, None)}, CATALOG, processes=True)["processes"][0] \
-        or discover.run({"proc": ("proc.txt", old, None)}, CATALOG, processes=True)["processes"][0]["started"] is None
+    assert sample[300] == ("other", "boot+590") and set(sample) == {1, 300}
+    assert discover.run({"proc": ("proc.txt", old, None)}, CATALOG, processes=True)["processes"][0]["started"] is None
+    # T-8 (S14): the pids whose start was unread are counted and said once per round
+    (proc / "300" / "stat").unlink()
+    text2 = discover.snapshot_proc(str(proc), at="2026-11-03T10:00:00.000Z")
+    assert json.loads(text2.splitlines()[0])["start_unread"] == 1
+    holes = discover.run({"proc": ("proc.txt", text2, None)}, CATALOG)["holes"]
+    assert sum(1 for h in holes if "whose start could not be read" in h) == 1 and any(
+        h.startswith("1 process(es) whose start could not be read") for h in holes)
 
 
 def kimi_inventory(kind):
@@ -688,7 +863,8 @@ def test_redo_r7_ssh_started_by_git_is_git_and_the_lines_carry_the_parent_image(
     assert "os-4800" in {l["session_id"] for l in neg}   # the fixture pair: git over SSH in the negative
     old = dict(ssh2, input_meta={k: v for k, v in ssh2["input_meta"].items() if k != "parent_image"})
     assert engine.judge(r, [old]) == ([], [(old["session_id"], old["seq"])])   # never guessed: could not judge
-    assert "parent_image" not in json.dumps(ssh2["input_meta"]).replace('"parent_image": "cmd"', "") or True
+    assert set(ssh2["input_meta"]) == {"command_head", "command_programs", "image", "parent_image", "depth",
+                                       "parent_seq"}   # T-8 (S15): names only, no argument
     (line,) = [e for e in r.evasion if e.startswith("os source (M7.8")]
     assert "through git" in line and "parent_image is git" in line
 
@@ -697,7 +873,7 @@ def test_redo_r8_the_sentences_and_the_evasions():
     text = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
     section = text.split("### The host watch", 1)[1].split(" ## 6.", 1)[0]
     assert "`ss -tinp`" in section and "No watched process is signalled" in section and "its own helpers" in section
-    assert "benign (not sourced: its acts are not judged)" in section and "before the watch's start" in section
+    assert host.BENIGN_WORD in section and "before the watch's start" in section   # T-2 amends R-1's word
     assert host.START_UNREAD in section
     assert "pid, image name and start time" in text.split("## 5.", 1)[0]   # R-10 (Q-7): section 4 names the sample
     for rule_id in ("NET-TOOL", "DESTRUCT-CMD"):
@@ -712,3 +888,85 @@ def test_redo_r9_the_new_rules_carry_the_p3_line():
     for rule_id in ("NEW-AGENT", "NEW-AGENT-UNKNOWN"):
         (line,) = [h for h in rule(rule_id).doc["holes"] if h.startswith("benign_images P-3")]
         assert "msmpeng" in line and "Windows Defender" in line and "anywhere else is knocked" in line
+
+
+# === M7.8 REDO 2 (ADR-0007 Amendment T) =====================================================================
+
+def test_redo2_t2_an_act_under_a_benign_tree_and_a_nearer_agent_is_the_agents_finding(tmp_path):
+    text = person_and_agent_export()
+    follow = CountingFollow(by_root={5100: after_start(built(text, 5100)), 6100: after_start(built(text, 6100))})
+    w = watch_rounds(tmp_path, ["benign-person/before", "benign-person/agent", "benign-person/agent"], follow=follow)
+    agent_curl = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL" and f.get("judged_on") is None
+                  and f["pid"] == 6100]
+    assert len(agent_curl) == 1 and not agent_curl[0].get("benign_note")   # the nearer, non-benign tree's finding
+    assert [k["limit_id"] for k in w.knocks if k["event"] == notify.FIRST_EVENT] == ["FIRST-FINDING pid 6100"]
+    explorer = next(k for k in w.trees if k[0] == 5100)
+    assert w.trees[explorer]["source_findings"] == {host.BENIGN_COUNT: 2, host.JUDGED_ELSEWHERE: 1}
+
+
+def test_redo2_t3_a_clock_that_steps_back_does_not_make_acts_history(tmp_path):
+    lines = os_lines("net-windows.sysmon.xml", 4700)   # 09:00:00-09:00:11, an hour before the watch's start
+    def between(w, k):
+        if k == 3:
+            append_to(w, 5888, lines)
+    stepped = watch_rounds(tmp_path, ["defender/before", "quiet/talking", "quiet/talking"], between=between,
+                           wall=lambda t: 1793700000.0 + t - (3600 if t >= 20 else 0))   # back one hour at t=20
+    live = [f for f in stepped.source_findings if f["rule_id"] == "NET-TOOL"]
+    assert len(live) == 3 and not any(f["history"] for f in live)   # after the step they are acts of the watch
+    (hole,) = [h for h in stepped.holes if h["kind"] == "clock-step"]
+    assert "stepped back 3600 s" in hole["detail"]
+    steady = watch_rounds(tmp_path / "s", ["defender/before", "quiet/talking", "quiet/talking"], between=between)
+    assert all(f["history"] for f in steady.source_findings if f["rule_id"] == "NET-TOOL")   # no step: before it
+    assert not [h for h in steady.holes if h["kind"] == "clock-step"]
+
+
+def test_redo2_t5_a_silence_finding_keeps_i3s_rule_not_the_events_time(tmp_path):
+    lines = [l for l in os_lines("net-windows.sysmon.xml", 4700) if l["phase"] != "session_end"]   # before the start
+    lines = [l for l in lines if not (l["phase"] == "post" and l["seq"] == lines[-1]["seq"])]       # a call left open
+    w = watch_rounds(tmp_path, ["defender/before", "quiet/talking", "quiet/talking"], follow=CountingFollow(lines))
+    w.finish()
+    silence = [f for f in w.source_findings if f["class"] == "SILENCE"]
+    assert silence and not any(f["history"] for f in silence) and any(f["pending"] for f in silence)
+    assert all(f["history"] for f in w.source_findings if f["rule_id"] == "NET-TOOL")   # the catalog's: history
+    assert w.result()[0] == "alarm"   # pending for good is silence (I-3, B-1)
+
+
+def test_redo2_t7_the_act_key_names_the_image_and_the_parent_and_the_evasion_says_the_name_only():
+    rec = os_lines("net-windows.sysmon.xml", 4700)[5]
+    key = host.act_key(rec)
+    assert key[:3] == (rec["ts"], rec["tool"], rec["input_sha256"]) and key[3:] == (
+        rec["input_meta"]["image"], rec["input_meta"]["parent_image"])
+    other = dict(rec, input_meta=dict(rec["input_meta"], image="renamed"))
+    assert host.act_key(other) != key   # the same command line in the same millisecond, another image: two acts
+    (line,) = [e for e in rule("NET-TOOL").evasion if e.startswith("os source (M7.8")]
+    assert "known by its name only" in line and "GIT_SSH_COMMAND" in line and "core.sshCommand" in line
+
+
+def test_redo2_t8_the_help_text_and_threat_model_say_what_the_code_does():
+    from raqib import cli
+    helptext = " ".join(cli.USAGE.split()) if hasattr(cli, "USAGE") else " ".join(
+        (ROOT / "raqib" / "cli.py").read_text(encoding="ascii").split())
+    for words in ("its root alive in round N; not seen talking with an act at the sample; source kept",
+                  "not judged this round (connections unread)", "on a benign tree they are notes"):
+        assert words in helptext, words
+    text = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
+    section = text.split("### The host watch", 1)[1].split(" ## 6.", 1)[0]
+    for words in ("unread in both the tree's key and the sample", "or keeps it, when the round's connections were not"
+                  " read either", "an `ss` that has not returned in 30 s", "process list was not read has an empty"
+                  " sample", "counted once per round", "benign (its acts are noted, not knocked; its rhythm is judged)",
+                  "The silence rules keep I-3's rule", "a clock that steps back"):
+        assert words in section, words
+    assert "or kept when the round's connections were not read either" in host.NO_SAMPLE_NOTE
+
+
+def test_redo2_t6_the_fakes_wait_on_their_stop_and_finish_ends_every_thread(tmp_path):
+    import inspect
+    assert "stop.wait()" in inspect.getsource(CountingFollow.__call__)   # no time: only the stop ends it
+    before = {t for t in threading.enumerate() if t.name.startswith("raqib-")}
+    w = watch_rounds(tmp_path, ["quiet/talking", "quiet/quiet", "quiet/talking"], follow=CountingFollow())
+    mine = [t for t in threading.enumerate() if t.name.startswith("raqib-") and t not in before]
+    assert [t.name for t in mine if t.is_alive()] == ["raqib-host-os-5888"]   # alive while the watch runs
+    w.finish()
+    for t in mine:
+        t.join(10)
+    assert not [t.name for t in mine if t.is_alive()]   # the fixture checks this after every test of this file

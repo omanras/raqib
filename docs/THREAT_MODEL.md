@@ -487,8 +487,9 @@ Rulings: ADR-0003 Amendments C and D.
   0.1 until the field test.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
-Rulings: ADR-0007 Amendments C, H, I, M, N, P, R. True of the tree as P-1,
-P-2, P-3 and R-1..R-9 leave it (the task after the second field run).
+Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T. True of the tree as
+P-1..P-3, R-2..R-9 and T-1..T-8 leave it (the task after the second field
+run; R-1 is amended by T-2).
 - **What a round sees.** One sample: on Windows one read of the OS API
   (processes and their parents, TCP connections with their owner), on
   Linux one `/proc` snapshot (or `--window S` seconds of them, whose last
@@ -505,15 +506,21 @@ P-2, P-3 and R-1..R-9 leave it (the task after the second field run).
   record was not read no tree can be seen talking, so a tree absent from
   it whose root is alive keeps the state it had, `not judged this round
   (connections unread)`. A round read from an export with no process
-  sample calls such a tree gone, and says so once.
+  sample calls such a tree gone (or keeps it, when the round's connections
+  were not read either), and says so once. A round whose process list was
+  not read has an empty sample: every tree absent from it is gone, its
+  source is stopped and attached again when it is next seen.
 - **The start time decides, where it was read.** A tree is keyed by its
   root's pid, image and start time (Windows: the process's creation time;
-  Linux: `/proc/PID/stat`'s start time, since R-5). Where the start time
-  is unread on either side (an older snapshot, a process whose stat is
-  hidden, Windows when the process's times are denied), a process of the
-  same image that holds the pid now is taken for the tree: it is not new,
-  and an ended tree is quiet, not gone; its quiet line ends "start time
-  unread: a process of the same image holds the pid".
+  Linux: the start in clock ticks since boot that `/proc/PID/stat` gives,
+  which a step of the wall clock does not move; the time shown is computed
+  from it for display only). The match is exact: where the start is unread
+  in both the tree's key and the sample (an older snapshot, a process whose
+  stat is hidden, Windows when the process's times are denied), a process
+  of the same image that holds the pid now is taken for the tree: it is not
+  new, and an ended tree is quiet, not gone; its quiet line ends "start
+  time unread: a process of the same image holds the pid". The processes
+  whose start could not be read are counted once per round, as a hole.
 - **What lives between two rounds is still a hole.** A tree that starts,
   talks, acts and ends between two samples is never a tree of any round,
   and a child that lives only between two samples is never a host-source
@@ -526,7 +533,10 @@ P-2, P-3 and R-1..R-9 leave it (the task after the second field run).
   normalised form, `curl.exe` -> `curl`; R-7: and its parent's,
   `input_meta.parent_image`, so ssh started by git is git over SSH and is
   left out, as git is on every source: an agent that reaches the network
-  through git is not seen). Still unseen: a shell builtin (cmd's `del`,
+  through git is not seen; the parent is known by its name only, and git
+  starts ssh with what the agent configures - core.sshCommand,
+  GIT_SSH_COMMAND - so a tunnel or a remote command through real git is
+  git's). Still unseen: a shell builtin (cmd's `del`,
   `rd`, `copy`), which starts no process; a PowerShell cmdlet
   (`Invoke-WebRequest`, `Remove-Item`, and Windows PowerShell 5.1's `curl`
   and `wget`, which are aliases of a cmdlet), which runs inside the shell's
@@ -539,27 +549,42 @@ P-2, P-3 and R-1..R-9 leave it (the task after the second field run).
   rule guesses the name.
 - **One act, one finding; the past is history.** Nested trees each have a
   source, and each os follow reads all of its root's descendants: the same
-  event (its time, tool and input hash) read by two feeds is one finding,
-  shown on the nearest tree (the least depth), listed on the other as
-  "judged on another tree", knocked once (R-3). An os event whose time is
-  before the watch's start is history - listed on its tree with its count,
-  never knocked, never an alarm - whenever the tree was first seen (R-2):
-  a shell that becomes a tree in round 5 does not knock for what it ran
-  before the watch. What happened before the start is therefore not
-  judged as an act of the watch, by design.
-- **Benign programs are not sourced.** A tree whose root is a listed benign
-  image under a listed directory of the system drive is listed `benign
-  (not sourced: its acts are not judged)`: no os follow, no host lines, no
-  source finding, no knock, and HOST-UNWATCHED never judges it (R-1). The
-  person's own programs under a benign root (a terminal under explorer)
-  are therefore under no sourced tree. A candidate or act-root nested under
-  a benign root is its own tree, sourced and judged. HOST-RHYTHM still
-  judges a benign tree by its rhythm (K-10). Windows Defender's engine
+  event (its time, tool, input hash, image and parent image) read by two
+  feeds is one finding (R-3, T-1). The copies are merged before any knock;
+  the one on the nearest tree (the least depth) stands and goes through
+  I-6 on that tree once, whichever feed was read first; the others are
+  listed "judged on another tree". A copy that comes after the knock moves
+  the finding to its nearer tree without a second knock, and the KNOCKS
+  row says where it is shown. Two different acts of trees that are not
+  nested, the same command line in the same millisecond with the same
+  image and parent, would be taken for one. A catalog finding of an os
+  event whose time is before the watch's start is history - listed on its
+  tree with its count, never knocked, never an alarm - whenever the tree
+  was first seen (R-2): a shell that becomes a tree in round 5 does not
+  knock for what it ran before the watch. The silence rules keep I-3's
+  rule: their findings are about Raqib's own record during the watch
+  (T-5). The start is the earlier of the wall clock at the start and the
+  wall clock now minus the monotonic time elapsed, so a clock that steps
+  back does not turn acts into history; a step of more than a round is a
+  hole, with its size (T-3). What remains: after such a step an act from
+  the seconds before the start reads as live (the alarm side).
+- **Benign programs: sourced, and their acts are notes.** A tree whose root
+  is a listed benign image under a listed directory of the system drive is
+  listed `benign (its acts are noted, not knocked; its rhythm is judged)`
+  (T-2, amending R-1). It is sourced like any other tree, so an agent
+  inside an editor or a browser, whose root is the benign program, is
+  still seen; but a catalog finding on it is a note: listed on the tree
+  and in the report under "on benign trees (noted, not knocked)", counted
+  apart, never an alarm, never knocked, the tree's FIRST-FINDING not
+  spent. The person's own programs under explorer are such notes. One act
+  under a benign tree and a nearer non-benign tree is the nearer tree's
+  finding. HOST-RHYTHM judges a benign tree as K-10 ruled, and knocks;
+  HOST-UNWATCHED judges it as any tree. Windows Defender's engine
   (`MsMpEng.exe`) is benign only under the system drive's
   ProgramData\Microsoft\Windows Defender or Program Files\Windows
   Defender (P-3). An agent with administrator rights can put a program of
-  a benign name there and is then listed as benign, and nothing below it
-  is judged; a copy anywhere else knocks.
+  a benign name there and is then listed as benign, its acts noted, not
+  knocked; a copy anywhere else knocks.
 - **The person's hands (ADR-0007 P-5).** Text an agent hands to a person
   (the clipboard, a chat, a file) which the person then runs is the
   person's act: it runs under the person's own shell, outside every agent
@@ -576,8 +601,8 @@ P-2, P-3 and R-1..R-9 leave it (the task after the second field run).
   prevention. The programs the watch starts are its own read-only helpers:
   the os source's `wevtutil` on Windows, `ss -tinp` on Linux every round
   (the bytes of each socket), and the notifier; Raqib ends only its own
-  helpers (a `wevtutil` past its timeout, and every one still out at
-  Stop). The only writes are under `~/.raqib`, and the hook settings of a
+  helpers (a `wevtutil` past its timeout and every one still out at Stop;
+  an `ss` that has not returned in 30 s). The only writes are under `~/.raqib`, and the hook settings of a
   project only with `--attach-hooks`.
 
 ## 6. Attacks on the watcher itself

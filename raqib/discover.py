@@ -630,7 +630,7 @@ def parse_proc(text, src="proc"):
             continue
         if "snapshot" in obj:
             at = _ts(obj["snapshot"])
-            counts = {k: obj[k] for k in ("gone_while_read", "unreadable", "kernel_threads")
+            counts = {k: obj[k] for k in ("gone_while_read", "unreadable", "kernel_threads", "start_unread")
                       if isinstance(obj.get(k), int) and not isinstance(obj.get(k), bool)}
             self_pid = obj.get("self") if isinstance(obj.get("self"), int) else None
             records.append(_rec("snapshot", src, number, raw, ts=at, self=self_pid, counts=counts,
@@ -647,8 +647,13 @@ def parse_proc(text, src="proc"):
             continue
         cwd = obj.get("cwd") if isinstance(obj.get("cwd"), str) else None
         unread = obj.get("unread") if isinstance(obj.get("unread"), list) else []
-        # M7.8 REDO R-5: the start time where the snapshot carries it (a tree's key on Linux), else none
-        started = obj.get("started") if isinstance(obj.get("started"), str) and obj.get("started") else None
+        # M7.8 REDO R-5, REDO 2 T-4: the start where the snapshot carries it (a tree's key on Linux): the kernel's
+        # ticks since boot ("boot+N"), else a start time a snapshot of the first REDO wrote, else none
+        ticks = obj.get("start_ticks")
+        if isinstance(ticks, int) and not isinstance(ticks, bool) and ticks >= 0:
+            started = "boot+%d" % ticks
+        else:
+            started = obj.get("started") if isinstance(obj.get("started"), str) and obj.get("started") else None
         # G-2: the exe link places a process; argv[0], its own text, is the fallback.
         linked = isinstance(obj.get("exe"), str) and bool(obj.get("exe"))
         exe = obj.get("exe") if linked else (argv or [None])[0]
@@ -1088,9 +1093,19 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
         except (OSError, ValueError):
             unreadable += 1
     kernel_parent = 2 if status.get(2, {}).get("Name") == "kthreadd" else None
-    # M7.8 REDO R-5: each process's start time (/proc/PID/stat starttime + /proc/stat btime, read-only); a pid
-    # whose time cannot be read gets no "started" key (optional in the text: older snapshots read as before)
-    starts, _ = proc_start_times(list(status), proc_root)
+    # M7.8 REDO R-5, REDO 2 T-4: each process's start as the kernel gives it, /proc/PID/stat starttime (clock
+    # ticks since boot: the key, which a step of the wall clock does not move), and for display only the time
+    # computed from it with /proc/stat btime where the clock tick rate is known (proc_start_times: no os.sysconf
+    # where the platform has none). A pid whose stat cannot be read gets neither key and is counted (start_unread).
+    ticks = {}
+    for pid in status:
+        try:
+            got = parse_stat_starttime(_read_bytes(os.path.join(proc_root, str(pid), "stat")).decode("utf-8", "replace"))
+        except OSError:
+            got = None
+        if got is not None:
+            ticks[pid] = got
+    starts, _ = proc_start_times(list(ticks), proc_root)
     procs, kernel = [], 0
     for pid in sorted(status):
         fields = status[pid]
@@ -1117,10 +1132,13 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
                       "sockets": get("fd", lambda: _sockets(os.path.join(base, "fd"), own=pid == self_pid)),
                       "exe": get("exe", lambda: os.readlink(os.path.join(base, "exe"))),
                       "unread": unread, "at": at})
+        if pid in ticks:
+            procs[-1]["start_ticks"] = ticks[pid]
         if pid in starts:
             procs[-1]["started"] = starts[pid]
     meta = {"snapshot": at, "self": self_pid, "processes": len(procs), "kernel_threads": kernel,
-            "kernel_parent": kernel_parent, "gone_while_read": gone, "unreadable": unreadable}
+            "kernel_parent": kernel_parent, "gone_while_read": gone, "unreadable": unreadable,
+            "start_unread": sum(1 for p in procs if p["pid"] not in ticks)}   # T-8: counted, said by build()
     if note:
         meta["note"] = note
     return "".join(json.dumps(x, sort_keys=True, ensure_ascii=True) + "\n" for x in [meta] + procs)
@@ -2110,6 +2128,11 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
         if counts.get("unreadable"):
             holes.append("%s: %d process(es) whose status could not be read" % (where, counts["unreadable"]))
             incomplete.append("%s: %d process(es) could not be read" % (where, counts["unreadable"]))
+    unread_starts = sum((snap.get("counts") or {}).get("start_unread", 0) for snap in snapshots)
+    if unread_starts:   # T-8 (S14): said once per round, with the count
+        holes.append("%d process(es) whose start could not be read from /proc/PID/stat in %d snapshot(s): they are"
+                     " keyed by pid and image only (a pid reused by a process of the same image is taken for the same"
+                     " tree)" % (unread_starts, len(snapshots)))
     for s in parsed:
         if not s["text_read"]:
             if s["sample"] is not None:

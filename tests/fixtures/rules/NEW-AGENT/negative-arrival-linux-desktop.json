@@ -153,8 +153,8 @@
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
-    "source": "benign",
-    "source_word": "benign (not sourced: its acts are not judged)",
+    "source": "host",
+    "source_word": "host: the host's own record of the tree",
     "started": null,
     "tree": "2040:code:-",
     "was": "absent"
@@ -238,8 +238,8 @@
     "round": 2,
     "run": "fixture-run",
     "sample": "window 2026-11-03T09:00:00.000Z .. 2026-11-03T09:00:01.000Z; 2 snapshot(s)",
-    "source": "benign",
-    "source_word": "benign (not sourced: its acts are not judged)",
+    "source": "host",
+    "source_word": "host: the host's own record of the tree",
     "started": null,
     "tree": "3000:firefox:-",
     "was": "absent"
