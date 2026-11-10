@@ -1935,57 +1935,79 @@ def _start_close(a, b):
 
 
 def _guid_instances(records):
-    """M7.9 (ADR-0007 P-4, E2): (records, holes). Where the round's channel
-    (source sysmon) shows more than one process under one pid, or a process
-    the round's sample does not hold under a pid the sample holds, each
-    ProcessGuid is its own process: its Sysmon records are keyed apart
-    (pid + REUSE * n, as _instances keys a reused pid) and a child's ppid
-    follows its ParentProcessGuid. A guid whose Sysmon 1 UtcTime is within
-    GUID_SAME_SECONDS of a sampled CreationDate of that pid is that sampled
-    process; a guid with no Sysmon 1 in the round is the sampled process
-    when the pid has exactly one there. Records without a guid are merged
-    by pid as before."""
+    """M7.9 (ADR-0007 P-4, E2; REDO X-2): (records, holes). Two records are
+    one process only when what was read agrees: the pid, the image, and the
+    start within GUID_SAME_SECONDS where it was read on both sides (a
+    sampled CreationDate, a Sysmon 1 UtcTime). Each ProcessGuid of the
+    round's channel is one process: it is the sampled process of its pid
+    when the image and both starts agree; where a start was read on one side
+    only, it is that process when it is the only one of that image on either
+    side (said, once per round: a reuse by the same image is not told);
+    otherwise it is its own process, keyed apart (pid + REUSE * n, as
+    _instances keys a reused pid), and a child's ppid follows its
+    ParentProcessGuid. Records without a guid are merged by pid as before."""
     guids, sampled = {}, {}
     for r in records:
         kind = (split_name(r["src"]) or (None,))[0]
         if kind == "sysmon" and r.get("guid") and r.get("pid") is not None:
-            g = guids.setdefault(r["pid"], {})
-            g.setdefault(r["guid"], None)
-            if r["kind"] == "proc" and r.get("created") and r.get("ts") is not None and g[r["guid"]] is None:
-                g[r["guid"]] = r["ts"]
+            g = guids.setdefault(r["pid"], {}).setdefault(r["guid"], {"image": None, "start": None, "first": None})
+            if r.get("ts") is not None:
+                g["first"] = r["ts"] if g["first"] is None else min(g["first"], r["ts"])
+            if r["kind"] == "proc" and r.get("image") and (g["image"] is None or r.get("created")):
+                g["image"] = r["image"]
+            if r["kind"] == "proc" and r.get("created") and r.get("ts") is not None and g["start"] is None:
+                g["start"] = r["ts"]
         elif kind == "win-process" and r["kind"] == "proc" and not r.get("derived") and r.get("pid") is not None:
-            entry = (r["pid"], _ts(r["started"]) if r.get("started") else None)
+            entry = (r["pid"], r.get("image"), _ts(r["started"]) if r.get("started") else None)
             if entry not in sampled.setdefault(r["pid"] % REUSE, []):
                 sampled[r["pid"] % REUSE].append(entry)
-    remap, holes = {}, []
+    remap, holes, untold = {}, [], []
     for pid in sorted(guids):
         insts, gs = sampled.get(pid, []), guids[pid]
-        if len(gs) == 1 and len(insts) <= 1:
-            continue   # one process in the channel and at most one in the sample: merged by pid, as before
-        used, taken, apart, untold = set(), set(k for k, _ in insts), [], []
-        for g, start in gs.items():
-            free = [(k, s) for k, s in insts if k not in used]
-            match = next((k for k, s in free if _start_close(s, start)), None)
-            if match is None and len(free) == 1 and (start is None or free[0][1] is None):
-                match = free[0][0]   # no start to tell them apart by: merged by pid, said
-                untold.append(g)
-            if match is None and not insts and not used:
-                match = pid
-            if match is None:
+        used, taken, apart = set(), set(k for k, _, _ in insts), []
+        for g, info in gs.items():   # both starts read and agreeing, the same image
+            match = next((k for k, image, s in insts if k not in used and image == info["image"]
+                          and info["start"] is not None and _start_close(s, info["start"])), None)
+            if match is not None:
+                used.add(match)
+                remap[g] = match
+        for k, image, s in insts:    # a start read on one side only: the one process of that image, or none
+            if k in used:
+                continue
+            # a process logs nothing before it was created: a guid with an event before the sampled start is not it
+            free = [g for g, info in gs.items() if g not in remap and info["image"] == image
+                    and (info["start"] is None or s is None)
+                    and not (s is not None and info["first"] is not None
+                             and (s - info["first"]).total_seconds() > GUID_SAME_SECONDS)]
+            others = [x for x in insts if x[0] not in used and x[1] == image]
+            if free and len(others) == 1:   # of two, the one whose first event is nearest the sampled start
+                pick = min(free, key=lambda g: (gs[g]["first"] is None, gs[g]["first"] or 0, g))
+                used.add(k)
+                remap[pick] = k
+                untold.append(pid)
+        for g in gs:                 # the rest: each its own process
+            if g in remap:
+                continue
+            if not insts and not used:
+                remap[g] = pid
+            else:
                 n = 1
                 while pid + REUSE * n in taken:
                     n += 1
-                match = pid + REUSE * n
-                taken.add(match)
+                remap[g] = pid + REUSE * n
+                taken.add(remap[g])
                 apart.append(g)
-            used.add(match)
-            remap[g] = match
+            used.add(remap[g])
         if apart or len(gs) > 1:
             holes.append("pid %d held %d process(es) in this round's channel (ProcessGuid %s)%s: keyed by ProcessGuid,"
-                         " each its own process (M7.9)%s" % (
+                         " each its own process (M7.9)" % (
                              pid, len(gs), ", ".join(gs), ", %d beside the sampled one" % len(apart) if insts and apart
-                             else "", "; %s merged with the sampled process by pid (no start time to tell them apart)"
-                             % ", ".join(untold) if untold else ""))
+                             else ""))
+    if untold:
+        shown = sorted(set(untold))
+        holes.append("%d process(es) whose start was read on one side only (the sample or the channel's event 1) were"
+                     " taken for the sampled process of their pid and image: a reuse of the pid by the same image is"
+                     " not told for them (M7.9): pid %s" % (len(shown), ", ".join(map(str, shown[:20]))))
     if not remap:
         return records, holes
     out = []
@@ -2100,7 +2122,8 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
                 acts.setdefault(anc, []).append({
                     "how": "process", "pid": pid, "image": label or p["image"], "listed": label is not None,
                     "path": None, "via": list(reversed(chain)), "reader_ancestor": pid in self_line,
-                    "started": started_of(p),   # M7.4 E1 (API): the child's creation time where the reader gives it
+                    "started": started_of(p) or (_channel_fields(p)["channel_started"] if channel else None),   # X-6
+                    # M7.4 E1 (API): the child's creation time where the reader gives it (M7.9: or its Sysmon 1 time)
                     "cites": _cites(p["recs"])})
                 break
             chain.append(anc)

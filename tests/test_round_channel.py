@@ -12,6 +12,7 @@ a time in any fake."""
 import io
 import itertools
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -31,7 +32,8 @@ HOSTFIX = FIX / "host"
 CATALOG = discover.load_catalog(discover.CATALOG)
 RULES = engine.load_catalog(ROOT / "raqib" / "rules" / "catalog")
 NS = "http://schemas.microsoft.com/win/2004/08/events/event"
-WALL0 = 1794296700.0          # 2026-11-10T07:45:00Z: the fixture watch's start, before the shell's (07:50)
+WALL0 = 1794296970.0          # 2026-11-10T07:49:30Z: the fixture watch's start, before the shell's (07:50)
+EVERY = 60
 
 
 def guid_of(n):
@@ -113,25 +115,30 @@ def channel_xml(*parts):
         "".join(parts)
 
 
-class FakeChannelReader:
-    """The channel's wevtutil, faked: answers the start's probes (held: the event ids the channel holds) and gives
-    each round's read the next text of `rounds` (None: the read did not return). It records every argv."""
+class FakeWevtutil:
+    """os_sysmon.read_live_bounded, faked: a channel that HONOURS the query (EventRecordID>N, or TimeCreated at or
+    after the start; oldest first; /c:cap), whose records are appended round by round. None in `fail` rounds: the
+    read did not return. Every argv is recorded."""
 
-    def __init__(self, rounds, held=(1, 3, 22)):
+    def __init__(self, rounds, fail=()):
         self.rounds = list(rounds)
-        self.held = held
+        self.fail = set(fail)
+        self.log = []
         self.args = []
 
-    def __call__(self, args, timeout):
+    def __call__(self, timeout, helpers=None, popen=None, environ=None, args=()):
         self.args.append(tuple(args))
-        if "/rd:true" in args:   # a probe
-            eid = int(args[2].split("EventID=")[1].split(")")[0])
-            return (channel_xml(event(eid, 1, "2026-11-10 07:00:00.000", 4, "System", "{0-0-0-0-0}"))
-                    if eid in self.held else "", None)
-        text = self.rounds.pop(0) if self.rounds else ""
-        if text is None:
+        n = len(self.args)
+        if n <= len(self.rounds) and self.rounds[n - 1]:
+            self.log += os_sysmon._chunks(self.rounds[n - 1])[1]
+        if n in self.fail:
             return None, "wevtutil did not return in %g s (fake): the Sysmon channel was not read" % timeout
-        return text, None
+        query, cap = args[2][3:], int(args[3][3:])
+        rid = re.search(r"EventRecordID>([0-9]+)", query)
+        since = re.search(r"SystemTime>='([^']+)'", query)
+        keep = [c for c, r, t in self.log if (rid and r > int(rid.group(1))) or
+                (since and t >= discover._ts(since.group(1)))]
+        return channel_xml(*keep[:cap]), None
 
 
 class SampleSeq:
@@ -142,36 +149,48 @@ class SampleSeq:
 
     def __call__(self, catalog, window=0.0, homes=None, platform=None, win_samples=1, win_every=0.0, run_info=None,
                  **kw):
-        d = HOSTFIX / self.names.pop(0) if not str(self.names[0]).startswith("/") else Path(self.names.pop(0))
+        d = HOSTFIX / self.names.pop(0)
         texts, holes = discover.read_dir(str(d))
-        texts = {k: v for k, v in texts.items() if not k.startswith("sysmon")}
         if run_info is not None:
             run_info.update(discover.run_record(str(d)) or {})
-        return texts, holes, 1
+        return {k: v for k, v in texts.items() if not k.startswith("sysmon")}, holes, 1
 
 
-def channel_follow(text_of):
-    """The real os_sysmon.follow over the channel as it stands (text_of()), never a live wevtutil: its Stop is
+def channel_follow(fake):
+    """The real os_sysmon.follow over the fake channel's records as they stand, never a live wevtutil: its Stop is
     the only thing it waits on (source_every is an hour)."""
     def follow(root, log, stop, **kw):
-        return os_sysmon.follow(root, log, stop, live=lambda: (text_of(), None), nt=True, **kw)
+        return os_sysmon.follow(root, log, stop, live=lambda: (channel_xml(*[c for c, _, _ in fake.log]), None),
+                                nt=True, **kw)
     return follow
 
 
-def channel_watch(tmp_path, monkeypatch, samples, rounds, held=(1, 3, 22), cap=os_sysmon.ROUND_CAP, sysmon=True,
-                  platform="win32", follow=None):
+def window_reader(catalog):
+    """The reader as raqib-app's window builds it (app.py: Options.reader is host.live_reader(catalog, 0.0), wrapped
+    by HostSession.reader in a plain function that takes no argument)."""
+    real = host.live_reader(catalog, 0.0)
+
+    def read():
+        return real()
+    return read
+
+
+def channel_watch(tmp_path, monkeypatch, samples, rounds, fail=(), sysmon=True, wall0=WALL0, follow=None,
+                  reader=None, wevtutil=None):
     seen = []
-    reader = FakeChannelReader(rounds, held)
-    chan = os_sysmon.Channel(since=None, cap=cap, reader=reader)
-    monkeypatch.setattr(discover, "collect_live", SampleSeq(samples))
+    fake = wevtutil or FakeWevtutil(rounds, fail)
     clock = host.FixtureClock()
+    monkeypatch.setattr(os_sysmon, "read_live_bounded", fake)
+    monkeypatch.setattr(os_sysmon, "OPEN_CHANNELS", [])
+    monkeypatch.setattr(host, "sysmon_present", lambda platform=None, registry=None: (sysmon, "fixture: Sysmon"))
+    monkeypatch.setattr(host, "reader_wall", lambda: wall0 + clock.t)
+    monkeypatch.setattr(discover, "collect_live", SampleSeq(samples))
+    monkeypatch.setattr(sys, "platform", "win32")   # the window's reader takes the platform from sys (faked here)
     notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
-    whole = "".join(t for t in reader.rounds if t)
-    w = host.HostWatch(host.live_reader(CATALOG, platform=platform, channel=chan), CATALOG, RULES, notifier, every=10,
-                       out=None, err=io.StringIO(), clock=clock, wall=lambda: WALL0 + clock.t, home=str(tmp_path),
-                       platform=platform, run="fixture-run", source_every=3600,
-                       sysmon=(lambda: (True, "fixture: Sysmon")) if sysmon else (lambda: (False, "fixture: no Sysmon")),
-                       os_follow=follow or channel_follow(lambda: channel_xml(whole)), channel=chan)
+    w = host.HostWatch((reader or window_reader)(CATALOG), CATALOG, RULES, notifier, every=EVERY, out=None,
+                       err=io.StringIO(), clock=clock, wall=lambda: wall0 + clock.t, home=str(tmp_path),
+                       platform="win32", run="fixture-run", source_every=3600,
+                       sysmon=lambda: (sysmon, "fixture: Sysmon"), os_follow=follow or channel_follow(fake))
     for _ in samples:
         w.tick(wait=30)
         for src in list(w.sources.values()):
@@ -179,16 +198,21 @@ def channel_watch(tmp_path, monkeypatch, samples, rounds, held=(1, 3, 22), cap=o
                 src.first_pass.wait(5)
         w.tick()
         seen.append(w.round_lines[-1])
-        clock.t += 10
+        clock.t += EVERY
     w.finish()
-    return w, reader, seen
+    return w, fake, seen
 
 
 def new_findings(w, rule_id=None):
     return [f for f in w.findings if f["rule_id"] in host.NEW_RULES and (rule_id is None or f["rule_id"] == rule_id)]
 
 
-# --- E1: one bounded read per round, by Raqib's own wevtutil -------------------------------------------------
+def new_knocks(w):
+    return [k for k in w.knocks if str(k.get("event") or k.get("rule_id") or k.get("title") or "").startswith("NEW-")
+            or "NEW-AGENT" in json.dumps(k)]
+
+
+# --- E1 / X-1: one bounded read per round, by the live reader's own channel ---------------------------------
 
 def test_e1_the_query_is_bounded_and_made_of_raqibs_own_values():
     import datetime
@@ -206,22 +230,30 @@ def test_e1_the_query_is_bounded_and_made_of_raqibs_own_values():
     assert os_sysmon.ROUND_IDS == discover.SYSMON_READ
 
 
+def test_x1_the_windows_round_reads_the_channel_and_no_caller_passes_one(tmp_path, monkeypatch):
+    import inspect
+    w, fake, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 2, ["", kimi_events()])
+    assert len(fake.args) == 2 and rounds[1][host.BRIEF] == [KIMI_WORD]   # the window's wrapped reader read it
+    for fn in (host.live_reader, host.HostWatch.__init__, host.start, host.command):
+        assert "channel" not in inspect.signature(fn).parameters, fn
+    assert "channel" not in (ROOT / "raqib" / "app.py").read_text(encoding="utf-8").lower().replace(
+        "sysmon channel", "")   # the window is unchanged and passes nothing
+
+
 def test_e1_each_round_reads_on_from_the_last_record_and_round_1_reads_nothing_older_than_the_start(
         tmp_path, monkeypatch):
-    w, reader, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 4,
-                                      ["", shell_events(rec=500), None, kimi_events(rec=600)])
-    reads = [a for a in reader.args if "/rd:true" not in a]
-    assert len(reads) == 4                                        # one read per round
-    assert all(a[0] == "qe" and a[1] == os_sysmon.CHANNEL and a[-1] == "/f:xml" and a[3] == "/c:%d" %
-               os_sysmon.ROUND_CAP for a in reads)
-    assert "TimeCreated[@SystemTime>='2026-11-10T07:45:00.000Z']" in reads[0][2]   # the watch's start
-    assert "TimeCreated[@SystemTime>='2026-11-10T07:45:00.000Z']" in reads[1][2]   # round 1 read no record
-    assert reads[2][2].endswith("EventRecordID>502]]") and reads[3][2].endswith("EventRecordID>502]]")   # a failed read
-    assert w.channel.after == 603
-    assert [r["channel"]["query"] for r in rounds] == [a[2][3:] for a in reads]
+    w, fake, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 4,
+                                    ["", shell_events(rec=500), "", kimi_events(rec=600)], fail={3})
+    assert len(fake.args) == 4 and all(a[0] == "qe" and a[1] == os_sysmon.CHANNEL and a[-1] == "/f:xml"
+                                       and a[3] == "/c:%d" % os_sysmon.ROUND_CAP for a in fake.args)
+    starts = [re.search(r"SystemTime>='([^']+)'", a[2]).group(1) for a in fake.args[:2]]
+    assert all("2026-11-10T07:49:29.9" <= x <= "2026-11-10T07:49:30.000Z" for x in starts), starts   # T-3
+    assert fake.args[2][2].endswith("EventRecordID>502]]") and fake.args[3][2].endswith("EventRecordID>502]]")
+    assert rounds[3]["channel"]["top"] == 603 and rounds[3]["channel"]["events"] == 4   # nothing lost by round 3
+    assert [r["channel"]["query"] for r in rounds] == [a[2][3:] for a in fake.args]
 
 
-def test_e1_the_real_wevtutil_path_a_timeout_ends_the_helper_and_records_it(tmp_path, monkeypatch):
+def test_e1_the_real_wevtutil_path_a_timeout_ends_the_helper_and_records_it():
     calls = []
 
     class Stuck:
@@ -240,13 +272,12 @@ def test_e1_the_real_wevtutil_path_a_timeout_ends_the_helper_and_records_it(tmp_
         def wait(self, timeout=None):
             return 0
 
-    chan = os_sysmon.Channel(since=None)
+    import datetime
+    chan = os_sysmon.Channel(since=datetime.datetime(2026, 11, 10, 7, 45, tzinfo=datetime.timezone.utc))
     chan.reader = lambda args, timeout: os_sysmon.read_live_bounded(timeout, chan.helpers, popen=Stuck,
                                                                     environ={"SystemRoot": "C:\\Windows"}, args=args)
-    import datetime
-    chan.since = datetime.datetime(2026, 11, 10, 7, 45, tzinfo=datetime.timezone.utc)
-    text, holes, record = chan.read()
-    assert text is None and record["error"] and "did not return in 10 s" in holes[0]
+    text, record = chan.read(chan.since)
+    assert text is None and record["error"] and "did not return in 10 s" in record["holes"][0]
     argv, kw = calls[0]
     assert argv[0] == os_sysmon.WEVTUTIL == "C:\\Windows\\System32\\wevtutil.exe" and kw["env"] == {
         "SystemRoot": "C:\\Windows"}
@@ -256,23 +287,56 @@ def test_e1_the_real_wevtutil_path_a_timeout_ends_the_helper_and_records_it(tmp_
 
 
 def test_e1_a_read_that_times_out_is_a_hole_of_its_round_and_the_round_keeps_its_sample(tmp_path, monkeypatch):
-    w, _, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet", "quiet/talking"], ["", None])
+    w, _, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet", "quiet/talking"], ["", ""], fail={2})
     assert rounds[1]["trees"] == ["5888:powershell:2026-11-10T07:50:00.000Z"]   # the sample is kept
     (hole,) = [h for h in w.holes if h["kind"] == "channel-unread"]
     assert hole["round"] == 2 and "did not return" in hole["detail"] and "keeps its sample" in hole["detail"]
-    assert w.result()[0] == "alarm" and any("hole(s) of the watch" in x for x in w.result()[1])
 
 
-def test_e1_the_cap_is_a_hole_and_the_next_round_reads_on(tmp_path, monkeypatch):
-    w, reader, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 3,
-                                      ["", shell_events(rec=500), ""], cap=3)
-    (hole,) = [h for h in w.holes if h["kind"] == "channel-cut"]
-    assert hole["round"] == 2 and "the cap" in hole["detail"] and rounds[1]["channel"]["cut"] is True
-    reads = [a for a in reader.args if "/rd:true" not in a]
-    assert reads[2][2].endswith("EventRecordID>502]]") and reads[0][3] == "/c:3"
+def test_e1_x4_the_cap_is_a_hole_with_its_size_and_the_backlog_is_said_at_stop(tmp_path, monkeypatch):
+    monkeypatch.setattr(os_sysmon, "ROUND_CAP", 3)
+    w, fake, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 3,
+                                    ["", shell_events(rec=500) + kimi_events(rec=600), ""])
+    cuts = [h for h in w.holes if h["kind"] == "channel-cut"]
+    assert [h["round"] for h in cuts] == [2, 3] and "s behind the round" in cuts[0]["detail"]
+    assert fake.args[2][2].endswith("EventRecordID>502]]") and fake.args[0][3] == "/c:3"
+    assert "BACKLOG at Stop" in w.summary()[0]
 
 
-# --- E2 / E3: a brief tree is a tree of its round --------------------------------------------------------------
+def test_x3_a_cleared_channel_is_said_and_the_read_starts_again(tmp_path, monkeypatch):
+    cleared = created(5, "2026-11-10 07:52:00.000", 9500, "C:\\Windows\\System32\\cmd.exe", guid_of(9500), 3000,
+                      EXPLORER, guid_of(3000), "cmd")   # record 5: the numbers restarted (wevtutil cl)
+
+    def unbounded(timeout, helpers=None, popen=None, environ=None, args=()):   # a bound wevtutil did not apply
+        unbounded.args.append(tuple(args))
+        n = len(unbounded.args)
+        return channel_xml(shell_events(rec=500) if n == 2 else cleared if n == 3 else ""), None
+    unbounded.args = []
+    w2, _, rounds2 = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 4, [], wevtutil=unbounded,
+                                   follow=host.FixtureFollow())
+    kinds = [h["kind"] for h in w2.holes]
+    assert "channel-unbounded" in kinds and "channel-restart" in kinds, kinds
+    assert "TimeCreated" in rounds2[3]["channel"]["query"]   # the read started again from the round's time
+
+
+def test_x3b_new_processes_without_their_event_1_say_the_channel_is_behind():
+    import datetime
+    t0 = datetime.datetime(2026, 11, 10, 7, 49, 30, tzinfo=datetime.timezone.utc)
+    chan = os_sysmon.Channel(since=t0, reader=lambda args, timeout: (channel_xml(shell_events(rec=500)), None))
+    text, record = chan.read(t0)
+    chan.commit(record, t0)
+    later = t0 + datetime.timedelta(minutes=2)
+    for k in range(3):
+        chan.reader = lambda args, timeout: ("", None)
+        text, record = chan.read(later)
+        chan.silence(record, [(7000 + k, later - datetime.timedelta(seconds=30))], later)
+        chan.commit(record, later)
+        later += datetime.timedelta(minutes=1)
+        assert record["silent"] == 1 and "behind, stopped or cleared" in record["holes"][0]
+    assert record["restarted"] and chan.after is None and chan.since is not None
+
+
+# --- E2 / E3 / X-2: a brief tree is a tree of its round ----------------------------------------------------------
 
 KIMI_WORD = "9176:kimi:2026-11-10T07:51:00.000Z"
 
@@ -284,6 +348,7 @@ def test_e2_e3_a_brief_named_tree_gives_new_agent_in_its_round_and_its_source_li
     (f,) = new_findings(w)
     assert f["rule_id"] == host.NEW_AGENT and f["round"] == 2 and f["tree"] == KIMI_WORD
     assert all(c["src"] == "sysmon" for c in f["cites"]) and f["cites"]           # A5: the channel's lines
+    assert len([k for k in w.knocks if "kimi" in json.dumps(k) and "NEW-AGENT" in json.dumps(k)]) == 1   # one knock
     (line,) = [x for x in rounds[1]["lines"] if x["tool"] == host.TREE_TOOL]
     assert line["input_meta"]["brief"] is True and line["input_meta"]["seen"] == host.BRIEF_TEXT
     key = tuple(f["tree_key"])
@@ -291,8 +356,7 @@ def test_e2_e3_a_brief_named_tree_gives_new_agent_in_its_round_and_its_source_li
     assert src.kind == "os" and G_KIMI in src.text and "rooted at pid 9176 and ProcessGuid" in src.text
     assert src.error is None and src.ended and "gone" in src.ended               # ended, without a hole
     assert not [h for h in w.holes if h["kind"].startswith("source")]
-    acts = [s for s in w.source_findings if tuple(s.get("tree_key") or ()) == key or s.get("tree") == KIMI_WORD]
-    assert any(s["rule_id"] == "NET-TOOL" for s in acts), w.source_findings       # curl under kimi, judged
+    assert any(s["rule_id"] == "NET-TOOL" for s in w.source_findings), w.source_findings   # curl under kimi
     assert rounds[2]["gone"] == [KIMI_WORD]
     report = w.summary()[0]
     assert "[candidate] [brief] pid 9176 kimi" in report and "CHANNEL (the rounds read" in report
@@ -304,23 +368,34 @@ def test_e2_a_brief_unknown_tree_gives_new_agent_unknown(tmp_path, monkeypatch):
     assert f["rule_id"] == host.NEW_UNKNOWN and f["round"] == 2 and rounds[1][host.BRIEF] == [f["tree"]]
 
 
-FORMS = {   # one round's view of the shell: (sample directory, channel text)
+FORMS = {   # one round's view of the shell: (sample directory, what the channel logged since the last round)
     "sampled": ("quiet/talking", ""),
-    "sampled+channel": ("quiet/talking", shell_events(rec=500)),
-    "alive+channel": ("quiet/quiet", shell_events(rec=500)),
-    "brief": ("quiet/ended", shell_events(rec=500)),
-    "brief-no-create": ("quiet/ended", shell_events(rec=500, create=False)),
+    "sampled+channel": ("quiet/talking", "S"),
+    "alive+channel": ("quiet/quiet", "S"),
+    "alive+talk": ("quiet/quiet", "T"),
+    "brief": ("quiet/ended", "S"),
+    "brief-no-create": ("quiet/ended", "T"),
 }
 
 
 @pytest.mark.parametrize("first, second", list(itertools.product(sorted(FORMS), repeat=2)))
 def test_e2_a_tree_seen_both_ways_is_one_tree_in_every_order(tmp_path, monkeypatch, first, second):
-    samples = ["quiet/quiet", FORMS[first][0], FORMS[second][0]]
-    w, _, rounds = channel_watch(tmp_path, monkeypatch, samples, ["", FORMS[first][1], FORMS[second][1]])
+    made = {"S": shell_events(rec=500), "T": shell_events(rec=510, create=False, at="2026-11-10 07:50:20")}
+    texts = [made.get(FORMS[first][1], ""), made.get(FORMS[second][1], "")]
+    if texts[1] == texts[0]:
+        texts[1] = shell_events(rec=520, create=False, at="2026-11-10 07:51:20") if texts[0] else texts[1]
+    w, _, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet", FORMS[first][0], FORMS[second][0]],
+                                 [""] + texts)
     keys = {k for k in w.trees if k[0] == 5888}
+    news = new_findings(w)
+    if not keys:
+        assert news == []
+        return
     assert len(keys) == 1, (first, second, keys)
-    assert len(new_findings(w)) == 1 and new_findings(w)[0]["round"] in (2, 3)
-    assert len([k for k in w.sources if k[0] == 5888]) == 1
+    assert len(news) == 1 and news[0]["round"] in (2, 3), news
+    assert len([k for k in w.knocks if "5888" in json.dumps(k) and "NEW-AGENT" in json.dumps(k)]) == 1
+    srcs = [w.sources[k] for k in w.sources if k[0] == 5888]
+    assert len(srcs) == 1 and (G_SHELL in srcs[0].text or "ProcessGuid" not in srcs[0].text)
 
 
 @pytest.mark.parametrize("together", [False, True])
@@ -329,52 +404,134 @@ def test_e2_a_reused_pid_is_another_tree(tmp_path, monkeypatch, together):
     rounds = ["", kimi_events() + again, ""] if together else ["", kimi_events(), "", again]
     w, _, seen = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * len(rounds), rounds)
     keys = sorted(k for k in w.trees if k[0] == 9176)
-    assert len(keys) == 2 and len(new_findings(w, host.NEW_AGENT)) == 2, keys
+    assert len(keys) == 2 and len(new_findings(w, host.NEW_AGENT)) == 2, keys   # a named agent: news each time
     assert {w.trees[k]["guid"] for k in keys} == {G_KIMI, G_KIMI2}
 
 
-def test_e2_round_1_a_tree_created_after_the_start_is_not_history_one_there_before_is(tmp_path, monkeypatch):
-    w, _, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/ended", "quiet/ended"], [kimi_events(), ""])
-    assert rounds[0]["new"] == [KIMI_WORD] and len(new_findings(w)) == 1
-    w2, _, rounds2 = channel_watch(tmp_path / "b", monkeypatch, ["quiet/talking"], [""])
-    assert rounds2[0]["history"] and new_findings(w2) == []
+def test_x9_history_is_one_rule_for_both_readers(tmp_path, monkeypatch):
+    # the shell's start (07:50:00) read after the watch's start (07:49:30): not history in round 1, sampled or brief
+    w, _, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/talking"], [""])
+    assert not w.trees[next(iter(w.trees))]["history"] and len(new_findings(w)) == 1
+    w2, _, _ = channel_watch(tmp_path / "b", monkeypatch, ["quiet/ended", "quiet/ended"], [kimi_events(), ""])
+    assert len(new_findings(w2)) == 1
+    # a watch that started after the shell: its start was read and is before the start: history
+    w3, _, rounds3 = channel_watch(tmp_path / "c", monkeypatch, ["quiet/talking"], [""], wall0=WALL0 + 600)
+    assert rounds3[0]["history"] and new_findings(w3) == []
 
 
-# --- E4: what the channel does not hold, and the hole where there is none ---------------------------------------
+def test_x9_brief_then_alive_and_one_nested_under_a_living_tree(tmp_path, monkeypatch):
+    # brief in round 2, alive (sampled, talking) in round 3: one tree, quiet or present, never new twice
+    w, _, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet", "quiet/ended", "quiet/talking"],
+                                 ["", shell_events(rec=500), ""])
+    assert len({k for k in w.trees if k[0] == 5888}) == 1 and len(new_findings(w)) == 1
+    # a brief tree under a living one: the shell sampled and talking; its child kimi starts, talks, acts, ends
+    nested = kimi_events(rec=600).replace("<Data Name='ParentProcessId'>3000</Data>",
+                                          "<Data Name='ParentProcessId'>5888</Data>").replace(
+        guid_of(3000), G_SHELL)
+    w2, _, rounds2 = channel_watch(tmp_path / "b", monkeypatch, ["quiet/talking"] * 2, ["", nested])
+    assert any(k[0] == 9176 for k in w2.trees) and len({k for k in w2.trees if k[0] == 5888}) == 1
 
-def test_e4_what_the_channel_does_not_hold_is_said_once(tmp_path, monkeypatch):
-    w, reader, _ = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 3, ["", "", ""], held=(1,))
-    probes = [a for a in reader.args if "/rd:true" in a]
-    assert [a[2] for a in probes] == ["/q:*[System[(EventID=%d)]]" % i for i in (1, 3, 22)]
-    said = [n for n in w.notes if n.startswith("the Sysmon channel holds no event")]
-    assert len(said) == 2 and "no event 3" in said[0] and "talk between two rounds is not seen" in said[0]
-    assert "no event 22" in said[1]
+
+def test_x1_the_channel_helper_is_ended_at_stop(tmp_path, monkeypatch):
+    class Out:
+        pid = 777
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            return 0
+
+    w, _, _ = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"], [""])
+    chan = os_sysmon.Channel()
+    chan.helpers.running[777] = Out()
+    os_sysmon.OPEN_CHANNELS.append(chan)
+    w2, _, _ = channel_watch(tmp_path / "b", monkeypatch, ["quiet/quiet"], [""])
+    os_sysmon.OPEN_CHANNELS.append(chan)
+    w2.finished = None
+    w2.stop_sources(w2.clock())
+    assert chan.helpers.running == {} and any(h["kind"] == "channel-helper" and "777" in h["detail"]
+                                              for h in w2.holes)
+
+
+# --- X-5: a brief unknown image knocks once per watch; its later trees grow the finding --------------------------
+
+def updater_run(i):
+    """An updater that starts, talks, starts the new version and ends between two rounds (SYNTHETIC)."""
+    pid, rec, at = 9400 + 10 * i, 1000 + 10 * i, "2026-11-10 07:5%d:%02d" % (1 + i // 6, (i * 9) % 60)
+    up = "C:\\Users\\user\\AppData\\Local\\notes\\Update.exe"
+    return "".join([
+        created(rec, at + ".000", pid, up, guid_of(pid), 3000, EXPLORER, guid_of(3000), "Update.exe --update"),
+        talked(rec + 1, at + ".200", pid, up, guid_of(pid), port=51000 + i, dest="203.0.113.80"),
+        created(rec + 2, at + ".400", pid + 1, "C:\\Users\\user\\AppData\\Local\\notes\\app-2.1\\notes.exe",
+                guid_of(pid + 1), pid, up, guid_of(pid), "notes.exe --updated"),
+        event(11, rec + 3, at + ".500", pid, up, guid_of(pid),
+              TargetFilename="C:\\Users\\user\\AppData\\Local\\notes\\packages\\RELEASES")])
+
+
+def git_run(i):
+    """git over https: git-remote-https talks and starts its credential helper (SYNTHETIC)."""
+    pid, rec, at = 9800 + 10 * i, 2000 + 10 * i, "2026-11-10 07:5%d:%02d" % (1 + i // 6, (i * 7 + 3) % 60)
+    git = "C:\\Program Files\\Git\\mingw64\\bin\\git.exe"
+    remote = "C:\\Program Files\\Git\\mingw64\\libexec\\git-core\\git-remote-https.exe"
+    return "".join([
+        created(rec, at + ".000", pid, remote, guid_of(pid), 9799, git, guid_of(9799), "git-remote-https origin"),
+        talked(rec + 1, at + ".100", pid, remote, guid_of(pid), port=52000 + i, dest="203.0.113.81"),
+        created(rec + 2, at + ".300", pid + 1, "C:\\Program Files\\Git\\mingw64\\bin\\git-credential-manager.exe",
+                guid_of(pid + 1), pid, remote, guid_of(pid), "git-credential-manager get")])
+
+
+def test_x5_a_brief_unknown_image_knocks_once_per_watch_and_its_later_runs_grow_it(tmp_path, monkeypatch):
+    rounds = [""] + ["".join(updater_run(2 * k + j) for j in (0, 1)) for k in range(7)]
+    w, _, seen = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * len(rounds), rounds)
+    ups = [k for k in w.trees if k[1] == "update"]
+    news = new_findings(w, host.NEW_UNKNOWN)
+    assert len(ups) == 14 and len(news) == 1 and news[0]["seen"] == 14 and news[0]["grown"].startswith("seen 14 times")
+    assert all(w.sources.get(k) is not None for k in ups)   # each listed and sourced like any tree
+
+
+def test_x5_measured_git_over_https_and_a_living_agents_short_lived_child(tmp_path, monkeypatch):
+    rounds = [""] + [git_run(k) for k in range(5)]
+    w, _, _ = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * len(rounds), rounds)
+    gits = [k for k in w.trees if k[1] == "git-remote-https"]
+    knocks = new_findings(w)
+    # measured: 5 brief trees, at most one NEW-AGENT-UNKNOWN (once for the image), or none where the catalog's
+    # benign list holds the image under the system drive's Program Files
+    assert len(gits) == 5 and len(knocks) <= 1, (gits, knocks)
+    child = created(3000, "2026-11-10 07:50:40.000", 5990, "C:\\Windows\\System32\\curl.exe", guid_of(5990), 5888,
+                    PS, G_SHELL, "curl -s https://198.51.100.20/y")
+    w2, _, _ = channel_watch(tmp_path / "b", monkeypatch, ["quiet/talking"] * 3, ["", child, ""])
+    assert len(w2.trees) == 1 and len(new_findings(w2)) == 1   # the child is an act of the living tree, no tree
+
+
+# --- E4 / X-8: what the channel does not hold, and the hole where there is none ---------------------------------------
+
+def test_x8_no_probe_at_the_start_and_a_kind_not_read_in_three_rounds_is_said_once(tmp_path, monkeypatch):
+    w, fake, _ = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 4, ["", shell_events(rec=500), "", ""])
+    assert len(fake.args) == 4 and not any("/rd:true" in a for a in fake.args)   # no probe: one read per round
+    said = [n for n in w.notes if "read so far" in n]
+    assert len(said) == 1 and "no event 22 read so far" in said[0]
     report = w.summary()[0]
-    assert report.count("holds no event 3") == 2   # NOTES and the CHANNEL line, once each
-    assert not any("source sysmon holds no event" in h for h in w.last_inventory["holes"])   # never per round
+    assert "kinds read: event 1, event 3" in report and report.count("no event 22 read so far") == 2
 
 
-@pytest.mark.parametrize("platform, sysmon", [("linux", False), ("win32", False)])
-def test_e4_without_the_channel_the_between_rounds_hole_stays(tmp_path, monkeypatch, platform, sysmon):
+@pytest.mark.parametrize("platform", ["linux", "win32"])
+def test_e4_without_the_channel_the_between_rounds_hole_stays(tmp_path, monkeypatch, platform):
     clock = host.FixtureClock()
     notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
-    chan = os_sysmon.Channel(since=None, reader=FakeChannelReader([])) if platform == "win32" else None
     w = host.HostWatch(lambda: None, CATALOG, RULES, notifier, out=None, err=io.StringIO(), clock=clock,
                        wall=lambda: WALL0, home=str(tmp_path), platform=platform, run="fixture-run",
-                       sysmon=lambda: (sysmon, "no Sysmon here"), channel=chan)
+                       sysmon=lambda: (False, "no Sysmon here"))
     (note,) = [n for n in w.notes if n.startswith("a tree that lives between two rounds is not seen")]
     assert ("Linux" in note) == (platform == "linux") and ("no Sysmon channel is read" in note) == (platform == "win32")
-    assert chan is None or (chan.on is False and chan.reader.args == [])   # no probe, no read
     w.finish()
-    threat = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
-    threat = " ".join(threat.split())
+    threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
     assert "closed where Sysmon is (ADR-0007 P-4)" in threat and "`brief`" in threat and "between two rounds" in threat
-    assert "does not close" in threat and "keep the whole hole" in threat
+    assert "does not close" in threat and "keep the whole hole" in threat and "cleared" in threat
 
 
-def test_e6_linux_is_unchanged_no_channel_no_sysmon_source(tmp_path, monkeypatch):
+def test_e6_linux_is_unchanged_no_channel_no_sysmon_source(monkeypatch):
     monkeypatch.setattr(discover, "collect_live", SampleSeq(["quiet/talking"]))
-    # the Linux reader's two other reads, faked: this test runs on the windows jobs too (no /proc, no sysconf)
     monkeypatch.setattr(discover, "read_conn_bytes", lambda paths: ({}, "fake ss", "no ss here (fake)"))
     monkeypatch.setattr(discover, "proc_start_times", lambda pids: ({}, "no /proc here (fake)"))
     inv = host.live_reader(CATALOG, platform="linux", ss_paths=("/nonexistent/ss",))()
@@ -384,66 +541,24 @@ def test_e6_linux_is_unchanged_no_channel_no_sysmon_source(tmp_path, monkeypatch
     assert plain["candidates"] and "guid" not in plain["candidates"][0] and "brief" not in plain["candidates"][0]
 
 
-# --- E5: budgets: the benign Windows desktop with its channel -----------------------------------------------------
-
-def desktop_counts(channel):
+def test_e5_the_benign_desktop_with_its_channel_adds_no_tree():
     d = FIX / "discover" / "benign" / "windows-desktop"
     texts, holes = discover.read_dir(str(d))
-    out = {"trees": 0, "act_roots": 0, "unknown_new": 0}
     xml = (FIX / "os" / "benign-windows-desktop.sysmon.xml").read_text(encoding="ascii")
-    for k in (1, 2):
-        one = {n: v for n, v in texts.items() if n.endswith("-%d" % k) or n == "footprints"}
-        if channel:
-            one["sysmon"] = ("fixture channel", xml if k == 1 else "", None)
-        inv = discover.run(one, CATALOG, holes=holes, run=discover.run_record(str(d)), processes=True,
-                           channel=channel)
-        trees = host.trees_of(inv, CATALOG)
-        out["trees"] += len(trees)
-        out["act_roots"] += len(inv["act_roots"])
-        out["unknown_new"] += sum(1 for t in trees.values() if t["class"] == "candidate" and not t["named"]
-                                  and not t["benign"])
-    return out
+    counts = []
+    for channel in (False, True):
+        out = [0, 0]
+        for k in (1, 2):
+            one = {n: v for n, v in texts.items() if n.endswith("-%d" % k) or n == "footprints"}
+            if channel:
+                one["sysmon"] = ("fixture channel", xml if k == 1 else "", None)
+            inv = discover.run(one, CATALOG, holes=holes, run=discover.run_record(str(d)), processes=True,
+                               channel=channel)
+            out[0] += len(host.trees_of(inv, CATALOG))
+            out[1] += len(inv["act_roots"])
+        counts.append(out)
+    assert counts[0] == counts[1] == [4, 0], counts   # measured (A6): trees 4 / 4, act-roots 0 / 0
 
-
-def test_e5_the_benign_desktop_with_its_channel_fires_nothing_new_and_the_budgets_are_said():
-    without, with_channel = desktop_counts(False), desktop_counts(True)
-    # measured (A6): over its two samples the desktop lists 4 unknown candidate trees (history in a watch's round 1)
-    # and no act-root, with the channel and without it: the channel adds no tree, no act-root, no unknown
-    assert with_channel == without == {"trees": 4, "act_roots": 0, "unknown_new": 4}, (without, with_channel)
-
-
-def test_e5_the_budgets_with_the_channel_in_as_the_watch_reads_them(tmp_path, monkeypatch):
-    d = str(FIX / "discover" / "benign" / "windows-desktop")
-    xml = (FIX / "os" / "benign-windows-desktop.sysmon.xml").read_text(encoding="ascii")
-
-    class Desktop(SampleSeq):
-        def __call__(self, catalog, run_info=None, **kw):
-            k = self.names.pop(0)
-            texts, holes = discover.read_dir(d)
-            if run_info is not None:
-                run_info.update(discover.run_record(d) or {})
-            return {n: v for n, v in texts.items() if n.endswith("-%d" % k) or n == "footprints"}, holes, 1
-
-    reader = FakeChannelReader([xml, ""])
-    chan = os_sysmon.Channel(since=None, reader=reader)
-    monkeypatch.setattr(discover, "collect_live", Desktop([1, 2]))
-    clock = host.FixtureClock()
-    w = host.HostWatch(host.live_reader(CATALOG, platform="win32", channel=chan), CATALOG, RULES,
-                       notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True), every=10, out=None,
-                       err=io.StringIO(), clock=clock, wall=lambda: WALL0 + clock.t, home=str(tmp_path),
-                       platform="win32", run="fixture-run", sysmon=lambda: (True, "fixture"), channel=chan,
-                       os_follow=channel_follow(lambda: xml), source_every=3600)
-    for _ in range(2):
-        w.tick(wait=30)
-        w.tick()
-        clock.t += 10
-    w.finish()
-    # the export's events are dated before the watch's start: what they make is history, never a new tree (E5)
-    assert new_findings(w) == [] and w.trees and all(t["history"] for t in w.trees.values())
-    assert w.channel.events == xml.count("<Event ")
-
-
-# --- the help text and the README say it ----------------------------------------------------------------------------
 
 def test_e6_the_readme_and_the_help_say_it():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")

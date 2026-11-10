@@ -487,10 +487,12 @@ Rulings: ADR-0003 Amendments C and D.
   0.1 until the field test.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
-Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V. True of the tree
-as P-1..P-3, R-2..R-9, T-2..T-8 and V-1..V-6 leave it (the task after the
-second field run; R-1 is amended by T-2, T-1 restated by V-1).
-- **What a round sees.** One sample: on Windows one read of the OS API
+Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
+tree as P-1..P-4, R-2..R-9, T-2..T-8, V-1..V-6 and X-1..X-9 leave it (R-1
+is amended by T-2, T-1 restated by V-1).
+- **What a round sees.** One sample, and on Windows with Sysmon the
+  channel's events since the previous round (ADR-0007 P-4, below): on
+  Windows one read of the OS API
   (processes and their parents, TCP connections with their owner), on
   Linux one `/proc` snapshot (or `--window S` seconds of them, whose last
   snapshot is the round's process sample). A tree is in the round when its
@@ -538,7 +540,15 @@ second field run; R-1 is amended by T-2, T-1 restated by V-1).
   ProcessGuid keys it: a reused pid is another tree; a tree seen in the
   channel in one round and in the sample in another is one tree (a
   sampled CreationDate and a Sysmon 1 time within 2 s are one start).
-  What the channel's read does not close: a read that fails, times out or reaches the
+  The read is checked against what it asked (a record not above the
+  bound, or older than the start, is dropped and said); a channel that
+  stops, falls behind or is cleared (`wevtutil cl` restarts the record
+  numbers) is said as a hole of each round it shows - processes the
+  sample shows created since the previous round with no event 1 in what
+  the channel gave - and after three such rounds, or a record numbered at
+  or below the bound, the read starts again from the round's time; on a
+  host where no new process is sampled a stopped channel reads as quiet
+  rounds. What the channel's read does not close: a read that fails, times out or reaches the
   cap of events per round is a hole of that round (the next round reads
   on from the last record read, so a channel busier than the cap makes the
   rounds lag); a channel that holds no event 1, 3 or 22 (Sysmon's

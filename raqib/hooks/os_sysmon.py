@@ -642,10 +642,10 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
 ROUND_IDS = (1, 3, 11, 22)        # discover.SYSMON_READ: the events the round gives discover
 ROUND_CAP = 2000                  # events per round at most (wevtutil /c:); reaching it is a hole of the round
 ROUND_TIMEOUT = FOLLOW_TIMEOUT    # I-5: one round's read, as a follow's pass
-HELD_IDS = (1, 3, 22)             # E4: the kinds whose absence from the channel is said once per watch
-HELD_WORDS = {1: "no event 1 (process create): a tree that starts and ends between two rounds is not seen",
-              3: "no event 3 (network connect): talk between two rounds is not seen (Sysmon without -n logs none)",
-              22: "no event 22 (DNS query): a name asked between two rounds is not seen"}
+SILENT_ROUNDS = 3                 # X-3(c): rounds of new sampled processes with no event 1 before the read restarts
+OPEN_CHANNELS = []                # X-1: the channels the live readers of this process own (Stop ends their helpers)
+RECORD_ID = re.compile(r"<EventRecordID>\s*([0-9]{1,20})\s*</EventRecordID>")
+SYSTEM_TIME = re.compile(r"<TimeCreated\s+SystemTime=['\"]([^'\"]{1,40})['\"]")
 
 
 def query_time(moment):
@@ -660,8 +660,8 @@ def query_time(moment):
 def round_query(after_record=None, since=None):
     """The XPath of one round's read: the events of ROUND_IDS whose
     EventRecordID is above after_record (an int), or, before any round read
-    a record, whose TimeCreated is at or after since (the watch's start).
-    Only Raqib's own values are formatted into it (int(), query_time())."""
+    a record (and after a restart, X-3c), whose TimeCreated is at or after
+    since. Only Raqib's own values are formatted into it (int(), query_time())."""
     ids = " or ".join("EventID=%d" % i for i in ROUND_IDS)
     if after_record is not None:
         bound = "EventRecordID>%d" % int(after_record)
@@ -678,86 +678,146 @@ def round_args(query, cap=ROUND_CAP):
     return ("qe", CHANNEL, "/q:%s" % query, "/c:%d" % int(cap), "/f:xml")
 
 
-def probe_args(event_id):
-    """E4: the newest event of one id (one event at most), read once at the
-    watch's start to say whether the channel holds that kind at all."""
-    return ("qe", CHANNEL, "/q:*[System[(EventID=%d)]]" % int(event_id), "/rd:true", "/c:1", "/f:xml")
+def _chunks(text):
+    """The text cut at each <Event: (chunk, record id or None, SystemTime text or None)."""
+    starts = [m.start() for m in discover.EVENT_START.finditer(text)]
+    out = []
+    for i, at in enumerate(starts):
+        chunk = text[at:starts[i + 1] if i + 1 < len(starts) else len(text)]
+        rid, when = RECORD_ID.search(chunk), SYSTEM_TIME.search(chunk)
+        out.append((chunk, int(rid.group(1)) if rid else None, discover._ts(when.group(1)) if when else None))
+    return text[:starts[0]] if starts else text, out
+
+
+def _age(later, earlier):
+    return round((later - earlier).total_seconds(), 3)
 
 
 class Channel:
-    """The channel as raqib watch --host reads it, one bounded read per
-    round (M7.9). since: the watch's start (an aware datetime): round 1
-    reads nothing older. after: the highest EventRecordID a round read (the
-    next round reads only records above it). reader(args, timeout) ->
-    (text, None) or (None, why): default read_live_bounded with this
-    channel's helpers (tests give a fake; nothing here needs Windows)."""
+    """The channel as the live reader of raqib watch --host reads it, one
+    bounded read per round (M7.9; REDO X-1: owned by the reader, never
+    passed by a caller). since: the watch's start as the reader knows it
+    (set by the reader before the first record is kept, T-3's adjusted
+    start); after: the highest EventRecordID of a round that was kept
+    (commit(); X-4: a reader that fails after the read loses nothing).
+    reader(args, timeout) -> (text, None) or (None, why): default
+    read_live_bounded with this channel's helpers."""
 
-    def __init__(self, since, cap=ROUND_CAP, timeout=ROUND_TIMEOUT, reader=None, helpers=None):
+    def __init__(self, since=None, cap=None, timeout=ROUND_TIMEOUT, reader=None, helpers=None):
         self.since = since
-        self.cap = int(cap)
+        self.cap = int(ROUND_CAP if cap is None else cap)
         self.timeout = float(timeout)
         self.helpers = Helpers() if helpers is None else helpers
         self.reader = reader or (lambda args, timeout: read_live_bounded(timeout, self.helpers, args=args))
         self.after = None
-        self.reads = 0
-        self.failed = 0
-        self.cut = 0
-        self.events = 0
-        self.last = None              # the last round's record: query, events, after, error, cut
-        self.held = {}                # E4: event id -> True (held), False (none in the channel), None (unread)
-        self.held_why = {}
+        self.reads = self.failed = self.cut = self.events = self.dropped = 0
+        self.kinds = set()            # X-8: the event ids the kept rounds read
+        self.event1_seen = False      # X-3(b): the channel has given an event 1
+        self.silent_rounds = 0        # X-3(b,c)
+        self.restarts = []
+        self.prev_at = None           # the time of the last kept read
+        self.said = 0                 # helper records already carried by a round's record
+        self.last = None
 
-    def probe(self):
-        """E4, once at the watch's start: for each of HELD_IDS whether the
-        channel holds one such event. Its events are never a tree: only
-        their ids are counted."""
-        for event_id in HELD_IDS:
-            text, failed = self.reader(probe_args(event_id), self.timeout)
-            if failed is not None:
-                self.held[event_id], self.held_why[event_id] = None, failed
-                continue
-            got = list(discover.sysmon_events(text, "sysmon", [], (event_id,)))
-            self.held[event_id] = bool(got)
-        return self.held
-
-    def missing_lines(self):
-        """The first lines' and the report's words for what the channel does not hold (E4), one per kind."""
-        out = []
-        for event_id in HELD_IDS:
-            if self.held.get(event_id) is False:
-                out.append("the Sysmon channel holds %s" % HELD_WORDS[event_id])
-            elif event_id in self.held and self.held[event_id] is None:
-                out.append("the Sysmon channel could not be asked for event %d at the start (%s): whether it holds"
-                           " one is not known" % (event_id, self.held_why.get(event_id)))
-        return out
-
-    def read(self):
-        """One round's read: (text or None, holes, record). A read that fails
-        or times out gives no text and one hole; reaching the cap gives the
-        text and a hole (the next round reads on from the last record read)."""
+    def read(self, at):
+        """One round's read at `at` (an aware datetime): (kept text or None,
+        record). What came back is checked against what was asked (X-3a): a
+        record not above the bound, or before since, is dropped and said."""
         query = round_query(self.after, self.since)
-        self.reads += 1
         text, failed = self.reader(round_args(query, self.cap), self.timeout)
-        record = {"query": query, "cap": self.cap, "events": 0, "after": self.after, "error": failed, "cut": False}
+        record = {"query": query, "cap": self.cap, "events": 0, "after": self.after, "top": self.after,
+                  "error": failed, "cut": False, "dropped": 0, "behind_seconds": None, "older_seconds": None,
+                  "kinds": [], "holes": [], "restarted": None, "silent": 0, "at": discover.iso(at),
+                  "since": discover.iso(self.since), "helpers": list(self.helpers.record[self.said:])}
+        self.said = len(self.helpers.record)
         if failed is not None:
             self.failed += 1
+            record["holes"].append("the Sysmon channel was not read this round (%s): the round keeps its sample; the"
+                                   " next round reads the records after %s" % (
+                                       failed, "record %d" % self.after if self.after is not None else "the start"))
             self.last = record
-            return None, ["the Sysmon channel was not read this round (%s): the round keeps its sample; the next round"
-                          " reads the records after %s" % (failed, "record %d" % self.after if self.after is not None
-                                                           else "the watch's start")], record
-        count = len(discover.EVENT_START.findall(text))
-        ids = [e["record_id"] for e in discover.sysmon_events(text, "sysmon", [], None)
-               if isinstance(e.get("record_id"), int)]
-        if ids:
-            self.after = max(ids) if self.after is None else max(self.after, max(ids))
-        record.update(events=count, top=self.after)
-        self.events += count
-        holes = []
-        if count >= self.cap:
-            self.cut += 1
+            return None, record
+        lead, chunks = _chunks(text)
+        kept, low = [], None
+        for chunk, rid, when in chunks:
+            below = self.after is not None and rid is not None and rid <= self.after
+            early = self.since is not None and when is not None and when < self.since
+            if below or early:
+                record["dropped"] += 1
+                if below:
+                    low = rid if low is None else min(low, rid)
+                continue
+            kept.append((chunk, rid, when))
+        kept_text = lead + "".join(c for c, _, _ in kept)
+        ids = [rid for _, rid, _ in kept if rid is not None]
+        times = [w for _, _, w in kept if w is not None]
+        events = list(discover.sysmon_events(kept_text, "sysmon", [], None))
+        record.update(events=len(kept), top=max(ids + ([self.after] if self.after is not None else [])) if ids
+                      else self.after, kinds=sorted({e["event"] for e in events if e["event"] in ROUND_IDS}),
+                      event1_pids=sorted({_int(e["data"].get("ProcessId", "")) for e in events if e["event"] == 1}
+                                         - {None}))
+        if times:
+            record["behind_seconds"] = _age(at, max(times))
+            if self.prev_at is not None and min(times) < self.prev_at:
+                record["older_seconds"] = _age(self.prev_at, min(times))
+        if record["dropped"]:
+            record["holes"].append("the Sysmon channel gave %d record(s) %s: dropped, never a tree (the query's bound"
+                                   " was not applied)" % (record["dropped"], "at or below record %d" % self.after
+                                                          if low is not None else "from before the watch's start"))
+            if low is not None:
+                self.restart(at, record, "its record numbers restarted (record %d at or below the bound %d: the"
+                             " channel was cleared?)" % (low, self.after))
+        if len(chunks) >= self.cap:
             record["cut"] = True
-            holes.append("the Sysmon channel gave %d events this round, the cap (/c:%d): the records after %s are read"
-                         " by the next round, not this one (the rounds lag the channel while it is this busy)"
-                         % (count, self.cap, "record %d" % self.after if self.after is not None else "these"))
+            record["holes"].append("the Sysmon channel gave %d events this round, the cap (/c:%d): the newest read is"
+                                   " %s s behind the round; the records after %s are read by the next round"
+                                   % (len(chunks), self.cap, record["behind_seconds"], "record %s" % record["top"]))
+        elif record["older_seconds"] is not None:
+            record["holes"].append("the round read the channel %s s behind the previous round (the newest read is %s s"
+                                   " behind this round): the rounds lag the channel"
+                                   % (record["older_seconds"], record["behind_seconds"]))
         self.last = record
-        return text, holes, record
+        return kept_text, record
+
+    def restart(self, at, record, why):
+        """X-3(c): the read starts again from the round's time."""
+        self.after, self.since, self.silent_rounds = None, at, 0
+        text = "the Sysmon channel's read starts again from %s: %s" % (discover.iso(at), why)
+        self.restarts.append(text)
+        record["restarted"] = text
+        record["holes"].append(text)
+
+    def silence(self, record, sampled, at):
+        """X-3(b): processes the round's sample shows created since the previous
+        kept read with no event 1 in what the channel gave, while the channel has
+        given event 1 before: "behind, stopped or cleared", each round it holds;
+        SILENT_ROUNDS of it restart the read (X-3c). sampled: [(pid, start)]."""
+        if record.get("error") or record.get("cut") or self.prev_at is None:
+            return
+        seen = set(record.get("event1_pids") or ())
+        missing = sorted(pid for pid, start in sampled if start is not None and start > self.prev_at
+                         and pid not in seen)
+        if not missing or not self.event1_seen:
+            self.silent_rounds = 0
+            return
+        self.silent_rounds += 1
+        record["silent"] = len(missing)
+        record["holes"].append("the Sysmon channel is behind, stopped or cleared: %d process(es) the sample shows"
+                               " created since the previous round have no event 1 in what it gave (pid %s)"
+                               % (len(missing), ", ".join(map(str, missing[:10]))))
+        if self.silent_rounds >= SILENT_ROUNDS:
+            self.restart(at, record, "%d rounds in a row without the event 1 of new processes" % SILENT_ROUNDS)
+
+    def commit(self, record, at):
+        """The round that read is kept: its bound moves (X-4)."""
+        if record.get("error"):
+            return
+        if not record.get("restarted"):
+            self.after = record.get("top")
+        self.reads += 1
+        self.events += record.get("events") or 0
+        self.dropped += record.get("dropped") or 0
+        self.cut += 1 if record.get("cut") else 0
+        self.kinds.update(record.get("kinds") or ())
+        self.event1_seen = self.event1_seen or 1 in (record.get("kinds") or ())
+        self.prev_at = at
