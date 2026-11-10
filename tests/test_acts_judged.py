@@ -1252,7 +1252,9 @@ def test_redo3_v5_the_helper_serves_the_four_files_and_a_finish_that_raises_stil
         timed = re.findall(r"(?:stop|release|gate)\.wait\(\d", text)   # a fake waiting on a time
         assert "from hostthreads import raqib_threads_end" in text and not timed, name
     assert not re.findall(r"stop\.wait\(\d", (ROOT / "raqib" / "host.py").read_text(encoding="ascii"))
-    assert not (ROOT / "tests" / "conftest.py").exists()
+    # (the Table, 2026-11-11: tests/conftest.py exists from here on - it collects Tk garbage on the main thread,
+    # ADR-0009 A-16 - and the helper stays its own module, imported by the four files that start a HostWatch)
+    assert "raqib_threads_end" not in (ROOT / "tests" / "conftest.py").read_text(encoding="ascii")
     w = watch_rounds(tmp_path, ["quiet/talking"], follow=CountingFollow())
     (src,) = w.sources.values()
     w.finish = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("finish raised (test)"))
