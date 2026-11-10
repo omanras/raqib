@@ -769,3 +769,78 @@ Rulings and what they open:
 - Open, for the commander: what ran in the shell pid 5888 (the unknown
   path's first field firing is on it); the KNOCKS ledger of this run
   against the notification centre.
+
+## Amendment R (the Table, 2026-11-10) - rulings on review 2026-11-10-M7.8.md (416dfa4)
+(The letter Q is skipped: Q-n are the builders' questions.) Builder's
+record: docs/review/2026-11-10-M7.8-questions.md (Q-1..Q-8). CI run
+42877858974 for 416dfa4: six jobs success. Verdict: REDO on R-1, R-2 and
+R-3; the Table's rulings R-4..R-10; the rest recorded.
+- R-1 (P1, must; C-1d) Benign means not judged, and the tree says so. A
+  benign tree gets no source: no os follow, no host lines, no finding, no
+  knock; it is listed `benign (not sourced: its acts are not judged)` in
+  the report, the state and the page, and HOST-UNWATCHED never judges it.
+  A candidate or act-root nested under a benign root is its own tree with
+  its own source, as today. The person's own programs under explorer are
+  then under no sourced tree, which is what THREAT_MODEL says. Tests: the
+  benign desktop with ssh and curl under explorer gives no finding and no
+  knock; an agent tree nested under explorer is still sourced and judged.
+- R-2 (P17, must; I-3, B-3) An act from before the watch is history. An
+  os line whose time is before the watch's start is listed as history on
+  its tree, never knocked, never an alarm, whenever its tree was first
+  seen (round 1 or later): a shell that became a tree in round 5 does not
+  knock for what it ran yesterday. The count of such lines is said per
+  tree. Test: a tree first seen in round 3 whose channel past holds a
+  listed program from before the start gives a history line and no knock;
+  the same program after the start knocks as I-6 says.
+- R-3 (P6, must; A6) One act, one finding, one knock. The same os event
+  read by two feeds (the same time, tool and input hash) is one finding:
+  it is shown on the nearest tree (the feed where the line's depth is
+  least), the outer tree lists it as "judged on tree pid N", and it knocks
+  once whichever feed delivers it first. Test with the nested fixture.
+- R-4 (P2, P11) Quiet says what was seen. A tree absent from the round
+  whose root is in the sample is `quiet (its root alive in round N; not
+  seen talking with an act at the sample; source kept)` - "source kept"
+  only when a source is attached and running, else its real state. In a
+  round whose connection record was unread (F-9's blind set) a tree keeps
+  the state it had and the round says `not judged this round (connections
+  unread)`. README, the help text and THREAT_MODEL use the same words.
+- R-5 (P3) The start time decides, where it can be read. The Linux
+  snapshot carries each process's start time (optional in the text, so
+  every shipped fixture reads as before) and the tree's key and the sample
+  use it; where it is unread on either side (old snapshots, Windows with
+  the process's times denied) a quiet tree's line ends "start time unread:
+  a process of the same image holds the pid" and THREAT_MODEL says the
+  hole. With --window S the last snapshot of the window is the sample.
+- R-6 (P4; N-1) A quiet tree is a live tree for its footprint: a
+  footprint that linked to a tree which is now quiet is linked (the dark
+  streak is cleared, the live window runs on); it is dark only when its
+  tree is gone. Test: the field run's shape - Kimi quiet for twelve
+  rounds - gives no AGENT-DARK-LIVE; Kimi gone gives the M7.5 note, then
+  the knock after the window, as N-1 says.
+- R-7 (P5, Q-1) The lists are accepted as built, with one change: an os
+  process line carries `input_meta.parent_image` (the parent's image in
+  the same normalised form; a name, never an argument), and NET-TOOL's os
+  branch does not fire on ssh whose parent_image is git: git over SSH is
+  git, which the rule leaves out on every source. The evasion line says
+  it (an agent that reaches the network through git is not seen, as
+  before). certutil, the shells, the cmdlets and the rest stay out for
+  the reasons the builder gave. Fixture pair for the ssh-under-git case.
+- R-8 (P7, P8, P10, P14, P15, P16) THREAT_MODEL's sentences made true (ss
+  on Linux; "no watched process is signalled"; Raqib ends only its own
+  helpers); the dropped "ALARMS: 0" check restored in another form;
+  PRE_M78_NOTE says what the beat does with an old line; the temporary
+  catalog goes to tmp_path; the Defender fixtures' run.json carry
+  system_drive so the export itself reads benign; the evasions name wsl
+  and a multicall binary.
+- R-9 (Q-5; scope widened by this ruling) raqib/rules/catalog/NEW-AGENT.yaml
+  and NEW-AGENT-UNKNOWN.yaml gain the P-3 evasion line only. Only msmpeng
+  is pinned: the field showed that one (A7); the others wait for a run.
+- R-10 Accepted as built: Q-3 (a quiet round writes no closed-connection
+  line; recorded with P12 as an under-count of rhythm, the safe side);
+  Q-4; Q-6; Q-7 (the sample in inventory.json is pid, image name and start
+  time: THREAT_MODEL section 4 names it among what is stored); Q-8 (the
+  trailer names the model that built the commit). P9 (the fixture runner
+  compares seq numbers only) and P13 (ADR-0002's "now" line: +8 and +7
+  after M7.8) are the Table's and are recorded at the judgement. Q-2 (the
+  window's word for a quiet tree) is built when M8.1 and M7.8 meet on main.
+- R-11 Every REDO change carries a test for the behaviour it adds (D-8).
