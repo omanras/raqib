@@ -1119,3 +1119,89 @@ Verdict: REDO on X-1, X-2, X-3 and X-5; the Table's rulings X-4, X-6..X-9.
   own reader; the builder wired the channel where only the CLI passes.
   The Table should have named the window's path as the one that matters:
   it is the commander's.
+
+## Amendment Z (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo.md (da7e007)
+(The letter Y is skipped: Y-n are the REDO review's findings.) CI run
+42918574979 for da7e007: six jobs success. X-1 and X-8 MET; the rest
+PARTLY. Verdict: REDO on Z-1 and Z-2, both of which undo words of the
+Table's own in Amendment X; the Table's rulings Z-3..Z-9.
+- Z-1 (Y1, must; X-9 is withdrawn where it said more than B-3) History
+  is a thing of the first round only, as B-3 and C-4 ruled and the field
+  showed. X-9's "history is one rule: a tree whose start is before the
+  watch's start" made every process older than the watch history for
+  good - an agent that sat idle at the start and acted later would never
+  be new. The rule: a candidate of the FIRST round is history, unless
+  its start was read and is at or after the watch's start (then it is
+  new: it began while Raqib watched). In every later round a candidate
+  that was not a candidate before is new, whatever its start (C-4: an
+  act-root that becomes a candidate knocks). Tests with starts the live
+  reader gives (ISO UTC): an act-root of round 1 that talks in round 3;
+  a shell older than the watch that becomes a tree in round 2; the
+  existing two tests fed a start the reader can read.
+- Z-2 (Y2, must; X-3(b) is restated) Silence is the channel giving
+  nothing, not one process without its event. The hole "the channel is
+  behind, stopped or cleared" is said when, for three rounds in a row,
+  the sample showed processes created at least one full round earlier
+  and the channel's reads in those rounds held no event 1 at all, though
+  the channel gave event 1 before in this watch; then the read restarts
+  (Z-5). One process, or one image, whose event 1 never comes while the
+  channel gives others is a NOTE, once per image per watch ("no event 1
+  from the channel for <image>: its configuration may leave it out; its
+  runs between rounds are not seen"), never a hole, never INCOMPLETE. A
+  process is looked for in every read so far, not in this round's alone,
+  and only after the channel has had a full round to deliver it. Tests
+  through a watch, with fixture times that are true (an event is dated
+  before the read that returns it): a healthy channel over ten rounds
+  says nothing; a filtered image is a note; a stopped channel is the
+  hole in the third round.
+- Z-3 (Y3) The channel is read from the making of the reader: the
+  reader's own start is taken when it is made (the window makes one at
+  each Start and one for the look), not at its first call, so nothing
+  between the watch's start and round 1's read is left unread. What is
+  older than the watch is history by its time (R-2) and by Z-1.
+- Z-4 (Y4, A5) An image is its path where the path was read: the knock
+  for a brief unknown tree is once per image PATH per watch (the name
+  alone where no path was read, said). The finding says how many runs it
+  holds and cites each (A5); the report's line prints "seen N times" and
+  the last. NEW-AGENT-UNKNOWN's holes, README and THREAT_MODEL say that a
+  second run of the same program is not knocked, and what still is (its
+  acts, by the catalog).
+- Z-5 (Y5, Y6, Y12; identity and restarts) A ProcessGuid joins a tree of
+  an earlier round only when that tree's process is in THIS round's
+  sample with the same image, and no event of the guid is older than the
+  sampled start; a guid with no start read and no such process is its
+  own brief tree. In one round the one-side-unread merge (Q-9, accepted
+  as the builder built it) needs uniqueness on BOTH sides, and with the
+  sampled start unread it does not merge at all. The enumeration test
+  covers two rounds, a sample without a CreationDate, and asserts the
+  source's guid. A restart says from when to when nothing was read, and
+  does not read a record twice. Reads that return only records older
+  than their start for two rounds restart, said.
+- Z-6 (Y8, Y11, Y13) No test reaches the live host: live_reader takes
+  the Sysmon check as an argument and the six tests that name "win32"
+  give a stand-in. A channel leaves OPEN_CHANNELS when its reader's watch
+  stops or the reader is dropped; a closed channel starts no helper; a
+  reader still out at Stop finds its channel closed. The between-rounds
+  note is said once; one Sysmon check decides (the reader's).
+- Z-7 (Y7) README and THREAT_MODEL say X-5 and Z-4 (a brief unknown image
+  knocks once), X-8 (kinds said after three rounds), Z-3 (the start), Q-9
+  (when a guid is merged), and "closed where Sysmon is, while the channel
+  is not said to be behind, stopped or cleared"; HOST-RHYTHM's sentence
+  is made plain.
+- Z-8 (Y9, Y14) The tests Y9 names are written and the three weakened
+  assertions restored (NET-TOOL on kimi's tree; no early return; exactly
+  one). channel-behind is a hole only when the newest event read is
+  older than the previous round by more than one round's length; less
+  than that is the log's ordinary delay and is not said.
+- Z-9 Recorded: Y10 (the living tree's curl is judged on the code path; a
+  test now shows it with a follow that passes); Q-6 and the whole-channel
+  follow (M7.7); the 2 s tolerance and whether wevtutil applies the
+  query as Python passes it are the commander's machine's to say (A7).
+  Every REDO change carries a test (D-8).
+- Table ledger: Z-1 and Z-2 are the fourth and fifth time in this run
+  that a ruling of the Table's, written to settle a reviewer's finding,
+  was itself the next must-fix (R-1, T-1, B-5, X-9, X-3(b)). Each time
+  the ruling stated a general rule where the finding needed a narrow
+  one. From here a ruling that changes when something knocks, or when a
+  watch is INCOMPLETE, names the case it is for and the cases it must
+  not touch, and the builder tests both.
