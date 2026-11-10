@@ -261,6 +261,7 @@ class Watch:
         self.history_said = False
         self.epoch = 0
         self.lines = 0
+        self.ever_read = False    # M8.1 REDO C-1: whether this watch ever read a line, whatever came after
         self.numbered, self.problems = [], []
         self.problem_notices = {}  # line -> notice of a live parse problem or RAQIB-SILENCE line
         self.problem_events = {}   # line -> the event it knocked as
@@ -424,6 +425,7 @@ class Watch:
     def _take(self, lines, now, terminated=True):
         base = self.lines
         self.lines += len(lines)
+        self.ever_read = self.ever_read or bool(lines)   # M8.1 REDO C-1
         pairs = []
         for i, raw in enumerate(lines, start=1):
             try:
@@ -733,18 +735,26 @@ class Watch:
         read so far (report.build, the report finish() keeps), built again only
         when what it reads has changed. finish() may still read the last bytes
         and mark pending findings. A report that cannot be built is 1, as in
-        finish(). The caller holds the lock (state() is read under it)."""
-        alarms = self.alarms()
-        key = (len(self.numbered), len(self.problems), len(self.found), repr(self.notes), repr(alarms))
-        cached = getattr(self, "_code_key", None)
-        if cached is not None and cached[0] == key:
-            return cached[1]
+        finish(). The caller holds the lock (state() is read under it).
+        M8.1 REDO C-2: why a code could not be computed is kept in
+        code_error (the state's field beside the code), and alarms() and the
+        key are inside the guard: the watch says it, and goes on."""
         try:
-            code = self._build(list(self.numbered), list(self.problems), list(self.found), list(self.notes),
-                               alarms)["exit"]
-        except Exception:
-            code = 1
-        self._code_key = (key, code)
+            alarms = self.alarms()
+            key = (len(self.numbered), len(self.problems), len(self.found), repr(self.notes), repr(alarms))
+            cached = getattr(self, "_code_key", None)
+            if cached is not None and cached[0] == key:
+                self.code_error = cached[2]
+                return cached[1]
+            try:
+                code, error = self._build(list(self.numbered), list(self.problems), list(self.found),
+                                          list(self.notes), alarms)["exit"], None
+            except Exception as exc:
+                code, error = 1, "%s: %s" % (type(exc).__name__, exc)
+            self._code_key = (key, code, error)
+        except Exception as exc:
+            code, error = 1, "%s: %s" % (type(exc).__name__, exc)
+        self.code_error = error
         return code
 
     def report(self):
@@ -879,6 +889,8 @@ class Watch:
         }
         state["band"] = ui.status(state)[0]   # J-6: the owner's state word, for the pages of other watches
         state["code_so_far"] = self.code_so_far()   # M8.1 REDO B-4: the code of what has been read so far
+        state["code_error"] = self.code_error        # M8.1 REDO C-2: why that code could not be computed, or None
+        state["ever_read"] = self.ever_read          # M8.1 REDO C-1: whether a line was ever read (lines: this content's)
         return state
 
     def _problem(self, p):

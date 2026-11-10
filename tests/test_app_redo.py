@@ -21,7 +21,8 @@ from raqib import app, host, notify, overlay, watch  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
 from test_app import TkSession, tk_or_skip, until  # noqa: E402
 from test_app_host import CATALOG, RULES, FakeHostWatch, TkHost, inv  # noqa: E402
-from test_watch import make_watch, rec, secret_call  # noqa: E402
+from test_watch import append, make_watch, rec, secret_call  # noqa: E402
+from hostthreads import raqib_threads_end  # noqa: E402,F401  (REDO C-7: every real HostWatch here is ended)
 
 sys.path.insert(0, str(ROOT / "tests" / "fixtures" / "host"))
 import make as host_fixtures  # noqa: E402
@@ -30,7 +31,7 @@ WAIT = 30
 # The event sequences Tk documents on Windows, macOS and X11 alike (bind(n), event(n), keysyms(n)): a keysym
 # here is one every Tk knows; <<PrevWindow>> and <<TreeviewSelect>> are Tk's own virtual events.
 PORTABLE = {"<Return>", "<KP_Enter>", "<Tab>", "<MouseWheel>", "<Button-4>", "<Button-5>", "<Configure>",
-            "<FocusIn>", "<<PrevWindow>>", "<<TreeviewSelect>>"}
+            "<FocusIn>", "<<PrevWindow>>", "<<TreeviewSelect>>", "<Map>"}   # C-4: <Map>, Tk's own
 
 
 @pytest.fixture(autouse=True)
@@ -199,14 +200,16 @@ def test_redo_b2_b5_the_level_rule_and_its_words():
     assert [app.live_level(c, "WATCHING HOST") for c in (0, 1, 3)] == ["clean", "alarm", "incomplete"]
     assert app.live_level(None, "WATCHING") == "incomplete"            # B-2: not known is never clean
     assert app.live_level(0, "CRASHED or stuck (31 s)") == "alarm"
-    assert app.live_level(1, "WATCHING", lines=0) == "incomplete"      # B-5: the window's one softening
-    assert app.live_level(1, "SILENT for 70 s", lines=0) == "alarm"
+    assert app.live_level(1, "WATCHING", fresh=True) == "incomplete"   # C-1: the window's one softening
+    assert app.live_level(1, "SILENT for 70 s", fresh=True) == "alarm"
     # the Table, 2026-11-11: the softening is for the word WATCHING alone; a capture that failed before any line
     # was read, or an agent that is gone, keeps the level of the watch's code
-    assert app.live_level(1, "CAPTURE FAILED", lines=0) == "alarm"
-    assert app.live_level(3, "AGENT GONE", lines=0) == "incomplete" and app.live_level(1, "AGENT GONE", lines=0) == "alarm"
-    assert app.live_cause(None, 0) == "not judged yet" and app.live_cause(1, 0, lines=0) == "no line read yet"
-    assert app.live_cause(1, 0, 0, 2) == "2 holes" and app.live_cause(1, 2) == "" and app.live_cause(1, 0, 1) == ""
+    assert app.live_level(1, "CAPTURE FAILED", fresh=True) == "alarm"
+    assert app.live_level(3, "AGENT GONE", fresh=True) == "incomplete" and app.live_level(1, "AGENT GONE", True) == "alarm"
+    assert app.live_cause(None, 0) == "not judged yet" and app.live_cause(1, 0, fresh=True) == "no line read yet"
+    assert app.live_cause(1, 0, 0, ["2 holes"]) == "2 holes" and app.live_cause(1, 2) == ""
+    assert app.live_cause(1, 0, 1) == "" and app.live_cause(0, 0, 0, ["1 hole"]) == ""
+    assert app.live_cause(1, 0) == "an alarm of the watch (its report says)"
     assert app.so_far("Watching this host", 3) == "Watching this host: 3 findings so far"
     assert app.so_far("Watching the project", 0, 0, "1 hole") == "Watching the project: no finding so far; 1 hole"
     assert app.so_far("Watching the project", 0, 1) == "Watching the project: no finding so far, 1 suspicion"
@@ -766,10 +769,10 @@ def test_tk_redo2_b2_b5_the_project_path_with_a_known_code_and_without_one(home,
         pill, sentence_, beside = _said(window)
         assert (pill, sentence_) == ("alarm", "Watching the project: no finding so far; 1 hole")
         assert "Not a clearance." not in beside
-        s.st.update(code_so_far=1, lines=0, holes=[])    # B-5: the window's one softening
+        s.st.update(code_so_far=1, lines=0, records=0, ever_read=False, holes=[])   # C-1: the one softening
         window.tick()
         assert _said(window)[:2] == ("incomplete", "Watching the project: no finding so far; no line read yet")
-        s.st.update(code_so_far=1, lines=2, findings=TkSession("x").state()["findings"])
+        s.st.update(code_so_far=1, lines=2, ever_read=True, findings=TkSession("x").state()["findings"])
         window.tick()
         assert _said(window)[:2] == ("alarm", "Watching the project: 1 finding so far")
     finally:
@@ -987,13 +990,18 @@ def test_tk_redo2_b8_a_typed_value_refused_goes_back_and_says_why_beside_its_row
     window = None
     try:
         window, c = _win(tkinter, root, home, tmp_path)
+        root.deiconify()
         window.show_rules()
         window.tick()
+        root.update()
         field = window.rule_widgets[("HOST-RHYTHM", "k=")]
         was = field.get()
         field.delete(0, "end")
         field.insert(0, typed)
-        window.rules_threshold("HOST-RHYTHM", "k", field.get().strip(), "k=")   # what Enter calls (KEYS act)
+        field.focus_force()
+        root.update()
+        field.event_generate(app.KEYS["act"][0])   # REDO C-7: through the Enter binding, as a person types it
+        root.update()
         assert window.verdict_word == "RULES: REFUSED" and word in window.rule_said[1], window.rule_said
         assert window.rule_widgets[("HOST-RHYTHM", "k=")].get() == was           # the rule's real value, back
         frame = dict((i["id"], f) for i, f in window.rule_rows)["HOST-RHYTHM"]
@@ -1065,6 +1073,15 @@ def _ctypes_refusals(tree):
                                                                                               ast.Attribute) \
                 and n.value.value.attr == "windll" and (n.value.attr, n.attr) not in ALLOWED_CALLS:
             out.append("windll.%s.%s at line %d" % (n.value.attr, n.attr, n.lineno))
+        if isinstance(n, (ast.Assign, ast.AnnAssign, ast.NamedExpr)) and n.value is not None:   # REDO C-7: no alias
+            v = n.value
+            names = []
+            while isinstance(v, ast.Attribute):
+                names.insert(0, v.attr)
+                v = v.value
+            if isinstance(v, ast.Name) and v.id in ("ctypes", "_ctypes") and (not names or names[0] in (
+                    "windll", "oledll", "cdll", "WinDLL", "CDLL") and len(names) < 3):
+                out.append("an alias of ctypes%s at line %d" % ("".join("." + x for x in names), n.lineno))
     return out
 
 
@@ -1075,7 +1092,10 @@ def test_redo2_b9_the_guard_refuses_getattr_on_ctypes_and_pythonapi_and_app_has_
                 "def _win_api():\n    import ctypes\n    return ctypes.pythonapi\n",
                 "def _win_api():\n    import ctypes\n    return ctypes.CDLL('x')\n",
                 "def _win_api():\n    import ctypes\n    return ctypes.windll.kernel32.TerminateProcess\n",
-                "from ctypes import windll\n", "m = __import__('ctypes')\n", "import ctypes.util\n"):
+                "from ctypes import windll\n", "m = __import__('ctypes')\n", "import ctypes.util\n",
+                "def _win_api():\n    import ctypes\n    w = ctypes.windll\n    return w.kernel32.TerminateProcess\n",
+                "def _win_api():\n    import ctypes\n    k = ctypes.windll.kernel32\n    return k.TerminateProcess\n",
+                "def _win_api():\n    import ctypes\n    c = ctypes\n    return c.windll\n"):
         assert _ctypes_refusals(ast.parse(bad)), bad
 
 
@@ -1085,3 +1105,407 @@ def test_redo2_b9_a_refused_user_rule_is_said_refused_in_the_rail_not_also_off()
     assert app.rail_rules(info) == ("No rule off; rules: 1 refused", "incomplete")
     both = dict(info, off=info["off"] + [{"rule_id": "NET-TOOL", "since": "T"}])
     assert app.rail_rules(both) == ("1 rule off; rules: 1 refused", "incomplete")
+
+
+# === REDO 3 (ADR-0009 Amendment C, C-1..C-8): the tests for the behaviour each ruling adds (C-8) ================
+
+class WatchSession(TkSession):
+    """A project watch as the window reads it, over a real raqib.watch.Watch (its lock, its state)."""
+
+    def __init__(self, project, w, clock):
+        super().__init__(project)
+        self.w, self.clock = w, clock
+
+    def state(self):
+        import copy
+        with self.w.lock:
+            return copy.deepcopy(self.w.state(self.clock()))
+
+
+def test_tk_redo3_c1_start_first_line_truncated_removed_the_pill_and_the_sentence(home, tmp_path):
+    """C-1: the softening is the watch's word for "never read a line"; an emptied trace is the alarm it is."""
+    import os
+    w, path, clock = make_watch(tmp_path / "w", gap=5)
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, make_session=lambda p: WatchSession(p, w, clock))
+        window.start()
+        seen = []
+
+        def step(name):
+            clock.t += 1.0
+            w.step()
+            window.tick()
+            st = c.session.state()
+            seen.append((name, st["ever_read"], st["lines"], st["code_so_far"]) + _said(window)[:2])
+        step("start")
+        append(path, [rec(1, "session_start", 0, tool="-")])
+        step("the first line")
+        path.write_text("", encoding="ascii")
+        step("truncated")
+        os.remove(str(path))
+        step("removed")
+        assert seen == [
+            ("start", False, 0, 1, "incomplete", "Watching the project: no finding so far; no line read yet"),
+            ("the first line", True, 1, 1, "alarm", "Watching the project: 1 finding so far"),
+            ("truncated", True, 0, 1, "alarm", "Watching the project: no finding so far; the trace was emptied or"
+                                               " replaced"),   # the pending finding went with the old content
+            ("removed", True, 0, 1, "alarm", "Watching the project: no finding so far; the trace was emptied or"
+                                             " replaced")], seen
+        assert window.shown["rail_watches"][0][:2] == ("Project", "alarm")
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_redo3_c1_the_softening_is_the_watchs_word_never_a_count():
+    base = {"ever_read": False, "holes": [], "findings": [], "records": 0, "lines": 0}
+    assert app.never_read(base, "WATCHING")
+    assert not app.never_read(dict(base, ever_read=True), "WATCHING")         # read once, emptied since
+    assert not app.never_read(dict(base, ever_read=None), "WATCHING")         # not said: never softened
+    assert not app.never_read({k: v for k, v in base.items() if k != "ever_read"}, "WATCHING")
+    assert not app.never_read(dict(base, holes=[{"kind": "x"}]), "WATCHING")
+    assert not app.never_read(dict(base, findings=[{}]), "WATCHING")
+    assert not app.never_read(base, "SILENT for 70 s") and not app.never_read(base, "CAPTURE FAILED")
+    assert app.watch_causes(dict(base, ever_read=True, epoch=1, holes=[{"kind": "trace-missing"}])) == [
+        "the trace was emptied or replaced"]
+
+
+def test_redo3_c2_a_code_that_cannot_be_computed_is_said_by_the_watch(tmp_path, home, monkeypatch):
+    w, path, clock = make_watch(tmp_path)
+    append(path, [rec(1, "session_start", 0, tool="-")])
+    w.step()
+
+    def broken(*a, **k):
+        raise RuntimeError("the report cannot be built")
+    real_build, real_alarms = w._build, w.alarms
+    monkeypatch.setattr(w, "_build", broken)
+    append(path, [rec(2, "pre", 1)])                  # what was read changed: the code is computed again
+    clock.t += 1.0
+    w.step()
+    with w.lock:
+        st = w.state(clock())
+    assert st["code_so_far"] == 1 and st["code_error"] == "RuntimeError: the report cannot be built"
+    monkeypatch.setattr(w, "alarms", broken)                                 # alarms() is inside the guard
+    clock.t += 1.0
+    with w.lock:
+        st = w.state(clock())                                                 # the state is still written
+    assert st["code_so_far"] == 1 and st["code_error"] == "RuntimeError: the report cannot be built"
+    monkeypatch.setattr(w, "_build", real_build)
+    monkeypatch.setattr(w, "alarms", real_alarms)
+    append(path, [rec(2, "post", 2)])                 # mended, and something new read: the code is the report's
+    clock.t += 1.0
+    w.step()
+    with w.lock:
+        st = w.state(clock())
+    assert st["code_error"] is None and st["code_so_far"] == w._build(*w._snapshot())["exit"]
+    h = _host_watch(home, lambda: inv("linux"))
+    h.tick(wait=WAIT)
+    real_result = h.result
+    monkeypatch.setattr(h, "result", broken)
+    st = h.state(h.clock.t)
+    assert st["code_so_far"] == 1 and st["code_error"] == "RuntimeError: the report cannot be built"
+    assert app.host_causes(st)[0] == "the watch could not judge itself"
+    assert app.host_watch_view(st)["holes"][-1] == "the watch could not judge itself: RuntimeError: the report" \
+                                                   " cannot be built"
+    monkeypatch.setattr(h, "result", real_result)
+    assert h.state(h.clock.t)["code_error"] is None
+    h.finish()
+
+
+def test_tk_redo3_c2_the_window_says_the_watch_could_not_judge_itself(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, make_session=StateSession)
+        window.start()
+        c.session.st.update(code_so_far=1, code_error="RuntimeError: x", ever_read=True)
+        window.tick()
+        pill, sentence_, _ = _said(window)
+        assert (pill, sentence_) == ("alarm", "Watching the project: no finding so far; the watch could not judge"
+                                              " itself")
+        assert "its report says" not in sentence_
+        assert "hole: the watch could not judge itself: RuntimeError: x" in window.shown["seen_lines"]
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo3_c3_a_closed_silence_window_and_an_unreadable_line_are_named(home, tmp_path):
+    w, path, clock = make_watch(tmp_path / "w", gap=5)
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, make_session=lambda p: WatchSession(p, w, clock))
+        window.start()
+        append(path, [rec(1, "session_start", 0, tool="-"), rec(2, "stop", 0, tool="-")])
+        w.step()
+        clock.t += 10.0                                       # longer than the gap: a silence window opens
+        w.step()
+        append(path, ["{not json", rec(3, "session_start", 12, session="s-two", tool="-"),
+                      rec(4, "stop", 12, session="s-two", tool="-")])
+        clock.t += 1.0                                        # a line closes it; one line cannot be read
+        w.step()
+        window.tick()
+        st = c.session.state()
+        assert [x["closed"] is not None for x in st["silence"]] == [True] and st["problems"] == 1
+        assert app.watch_causes(st) == ["1 silence window, closed", "1 line that could not be read"]
+        assert window.pill.cget("text") == "alarm"
+        assert window.verdict_word == "WATCHING" and window.verdict.cget("text") == (
+            "Watching the project: no finding so far; 1 silence window, closed; 1 line that could not be read")
+        assert window.shown["rail_watches"][0][1] == "alarm"
+        closed = [x for x in window.shown["seen_lines"] if x.startswith("hole: silence-window: no line from ")]
+        assert len(closed) == 1 and "closed by line" in closed[0]
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_redo3_c3_every_cause_is_counted_from_the_state():
+    st = {"ever_read": True, "records": 4, "epoch": 0, "problems": 2, "state_error": "disk full",
+          "holes": [{"kind": "gap"}, {"kind": "notify"}],
+          "silence": [{"closed": None}, {"closed": "T"}, {"closed": "T"}], "code_error": None}
+    assert app.watch_causes(st) == ["2 holes", "1 silence window, open", "2 silence windows, closed",
+                                    "2 lines that could not be read", "the state file cannot be written"]
+    assert app.live_cause(1, 3, 0, app.watch_causes(st)).startswith("2 holes; ")
+    assert app.watch_causes({"ever_read": False, "records": 0, "holes": [{"kind": "gap"}]}) == [
+        "no line read yet", "1 hole"]
+    view = app.watch_view(dict(st, silence=[{"since": "A", "closed": "B", "after": "line 2", "closed_by_line": 3}]))
+    assert "silence-window: no line from A to B (line 2): closed by line 3" in view["holes"]
+
+
+def test_tk_redo3_c4_a_long_badge_ends_in_an_ellipsis_and_is_whole_in_could_not_see(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, make_session=StateSession)
+        root.deiconify()
+        root.geometry("900x600")
+        window.start()
+        c.session.st.update(code_so_far=1, ever_read=True, state_error="the disk is full " * 30)
+        for _ in range(3):
+            root.update()
+            window.tick()
+        texts = [str(lb.cget("text")) for f in window.badges.winfo_children() for lb in f.winfo_children()
+                 if lb.winfo_class() == "Label"]
+        cut = [t for t in texts if t.startswith("watch.json cannot be written")]
+        assert len(cut) == 1 and cut[0].endswith(app.ELLIPSIS + " (a hole)"), cut   # its last words kept whole
+        whole = "hole: badge in full: watch.json cannot be written: %s (a hole)" % ("the disk is full " * 30)
+        assert whole in window.shown["seen_lines"]
+        assert all(w.winfo_reqwidth() <= window.badges.winfo_width() for f in window.badges.winfo_children()
+                   for w in f.winfo_children())
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo3_c4_back_on_the_screen_the_open_panel_is_laid_again(home, tmp_path, monkeypatch):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path)
+        root.deiconify()
+        root.update()
+        window.seen.invoke()
+        root.update()
+        calls = []
+        real = window._lay_panels
+        monkeypatch.setattr(window, "_lay_panels", lambda: (calls.append(1), real())[1])
+        root.withdraw()
+        root.update()
+        root.deiconify()                     # Show from the tray, a restore: Tk sends <Map> (KEYS["map"])
+        root.update()
+        assert calls, "no re-lay when the window came back"
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_redo3_c4_a_finished_watchs_final_state_is_read_once_by_the_worker(home):
+    from test_app_host import FakeServer, options
+
+    class Ending(FakeHostWatch):
+        def __init__(self):
+            super().__init__()
+            self.added = []
+
+        def finish(self, status, error=None):
+            self.added.append({"kind": "reader-out", "detail": "round 3's reader was out at the end", "at": "T"})
+            return super().finish(status, error)
+
+        def state(self, now):
+            return dict(super().state(now), holes=list(self.added))
+    fake, server = Ending(), FakeServer()
+    notifier = notify.Notifier(host.HOST, enabled=False, reason="t", host=True)
+
+    def starter(catalog, rules, **kw):
+        return host.Running(fake, server, notifier, None, True, {}, kw["out"], kw["err"])
+    s = app.HostSession(options(home, lambda: inv("linux"), every=7), starter=starter).start()
+    assert until(lambda: fake.ticks > 0, WAIT)
+    assert s.state()["holes"] == []                         # what a tick read while it ran
+    s.stop("Stop in the window")
+    s.thread.join(WAIT)
+    assert s.snapshot()["phase"] == "finished"
+    assert [h["kind"] for h in s.final_state["holes"]] == ["reader-out"]   # what finish() added, read at the end
+
+
+def test_tk_redo3_c4_the_window_lists_the_final_states_holes_not_the_last_ticks(home, tmp_path):
+    hole = {"kind": "source-final", "detail": "the last source poll failed", "at": "2026-11-11T10:00:00Z"}
+
+    class Finishing(StateHost):
+        def stop(self, reason):
+            super().stop(reason)
+            self.final_state = dict(self.st, holes=[hole])
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path,
+                         make_host=lambda: Finishing(dict(FakeHostWatch().state(0), code_so_far=0)))
+        window.host_toggle()
+        window.tick()
+        window.host_toggle()
+        window.tick()
+        assert c.host_view().get("final") and "hole: " + app.hole_line(hole) in window.shown["seen_lines"]
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo3_c4_a_failure_in_the_panels_layout_cannot_stop_the_tick(home, tmp_path, monkeypatch):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path)
+        window.seen.invoke()
+
+        def broken(*a, **k):
+            raise RuntimeError("layout")
+        monkeypatch.setattr(window, "_tick", broken)
+        monkeypatch.setattr(window, "_lay_panels", broken)
+        if window.after_id is not None:
+            root.after_cancel(window.after_id)
+            window.after_id = None
+        window.tick()
+        assert window.after_id is not None                                      # the next tick is scheduled
+        assert any(h.startswith("the window could not lay out") for h in c.holes)
+        assert "the window failed to update: RuntimeError: layout" in c.holes
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_redo3_c5_the_detail_pane_counts_what_its_row_counts_and_says_the_trees_words(home):
+    st = _source_state(home)
+    view = app.host_watch_view(st)
+    (i,) = [n for n, r in enumerate(view["rows"]) if r[1] == "1600"]
+    text = app.tree_detail_text(view["rows"][i], view["details"][i])
+    assert view["rows"][i][6] == "medium 1" and "FINDINGS: 1" in text and "NET-TOOL [medium] medium" in text
+    tree = {"benign": True, "benign_word": "benign (its acts are noted, not knocked; its rhythm is judged)",
+            "benign_knocked": [], "quiet": True, "quiet_round": 7, "quiet_text": "quiet since round 7",
+            "not_judged_round": 9, "before_start": 4, "key": [5100, "explorer", None], "pid": 5100}
+    words = app.tree_words(tree, round_now=9)
+    assert words == ["benign (its acts are noted, not knocked; its rhythm is judged)", "quiet since round 7 (round 7)",
+                     "not judged this round (round 9)",
+                     "4 os event(s) before the watch's start: history (never knocked)"]
+    assert "not judged this round (round 9)" not in app.tree_words(tree, round_now=10)
+    note = {"rule_id": "NET-TOOL", "severity": "medium", "summary": "ssh", "tree_key": [5100, "explorer", None],
+            "benign_note": True, "judged_on": None, "history": False, "count_word": "noted (benign)",
+            "trace": "t.jsonl", "cited_seq": [2]}
+    pending = dict(note, benign_note=False, pending=True, count_word="pending at exit", rule_id="DESTRUCT-CMD")
+    (d,) = app.tree_details([tree], sources=[note, pending], round_now=9)
+    assert d["findings"] == [app.source_line(pending)] and d["notes"] == [app.source_line(note)]
+    assert "pending at exit" in d["findings"][0] and "t.jsonl seq 2" in d["notes"][0]
+    items = app.host_finding_items({"host": {"source_findings": [pending]}})
+    assert [(x[1], x[2]) for x in items] == [("alarm", "DESTRUCT-CMD")]     # the alarm the watch counts
+    assert app.row_level(["x", "1", "unknown", "-", "0", "os", "pending at exit 1", "-", "-"]) == "alarm"
+    tags = dict(app.text_tags("SOURCE FINDINGS: 2 (1 live, of them 1 pending at exit; 1 history; 0 x; 0 on benign"
+                              " trees, noted)\n  [medium] A\nNOT SETTLED (A3; a finding no settle could decide, an"
+                              " alarm of its tree): 1\n  [low] B\nON BENIGN TREES (noted, not knocked): 1\n  [low] C\n"))
+    assert tags["  [medium] A"] == "alarm" and tags["  [low] B"] == "alarm" and tags["  [low] C"] == "note"
+    assert dict(app.text_tags("SOURCE FINDINGS: 1 (0 live, of them 0 x)\n  [medium] H\n"))["  [medium] H"] is None
+
+
+def test_redo3_c5_a_real_m78_benign_tree_reads_its_notes_as_notes_in_the_detail_pane(tmp_path):
+    import json
+    import test_acts_judged as aj
+    follow = aj.CountingFollow(by_root={5100: aj.after_start(aj.built(aj.person_and_agent_export(), 5100))})
+    w = aj.watch_rounds(tmp_path, ["benign-person/before", "benign-person/before"], follow=follow)
+    state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    view = app.host_watch_view(state)
+    (i,) = [n for n, r in enumerate(view["rows"]) if r[2].startswith("benign")]
+    text = app.tree_detail_text(view["rows"][i], view["details"][i])
+    assert "FINDINGS: 0" in text and "NOTES (not alarms): 3" in text and host.BENIGN_WORD in text
+    w.finish()
+
+
+def test_redo3_c6_the_host_state_with_a_thousand_source_findings_is_timed(home, capsys):
+    """C-6: the figure the Table rules from (A7): state() of a host watch holding 1000 source findings."""
+    import time
+    import test_host_sources as ths
+    w, clock = ths.make_host(home, ["benign/linux-desktop", "linux-agent"])
+    ths.rounds(w, clock, 2)
+    one = w.source_findings[0]
+    w.source_findings.extend(dict(one, cited_seq=[n + 2], lines=[n + 2]) for n in range(999))
+    times = []
+    for _ in range(5):
+        with w.lock:
+            t0 = time.perf_counter()
+            st = w.state(clock())
+            times.append(time.perf_counter() - t0)
+    times.sort()
+    with capsys.disabled():
+        print("\nC-6: HostWatch.state() with %d source findings: median %.1f ms, max %.1f ms"
+              % (len(w.source_findings), times[2] * 1000, times[-1] * 1000))
+    assert st["code_so_far"] == 1 and app.host_counts(st)[0] == 1000
+    assert times[2] < 5.0   # a bound for a broken machine only; the figure is the questions file's
+    w.finish()
+
+
+def test_redo3_c7_the_host_watchs_finished_sentence_is_the_hosts():
+    st = dict(FakeHostWatch().state(0), status="finished", finished="2026-11-11T10:00:00Z")
+    word = app.host_watch_view(st)["word"]
+    assert word.startswith("HOST WATCH FINISHED") or "FINISHED" not in word
+    assert app.verdict_sentence("HOST WATCH FINISHED (stopping)") == "The host watch finished (stopping)"
+    assert app.rail_state("HOST WATCH FINISHED (stopping)", "clean", 0)[1] == "The host watch finished (stopping)"
+
+
+def test_redo3_c7_a_held_lock_shows_the_last_state_and_says_so(tmp_path):
+    import time
+    import types
+    w, path, clock = make_watch(tmp_path)
+    append(path, [rec(1, "session_start", 0, tool="-")])
+    w.step()
+    s = app.Session(str(tmp_path), None, clock=lambda: clock.t, wall=time.time)
+    s.running = types.SimpleNamespace(watcher=w)
+    first = s.state()
+    assert first["code_so_far"] == 1 and s.read_note is None
+    with w.lock:                                   # the watch's own lock, held as a long step holds it
+        again = s.state()
+    assert s.read_note.startswith("the watch held its state for more than %g s" % app.LOCK_SECONDS)
+    assert again["code_so_far"] == first["code_so_far"] and again["lines"] == first["lines"]
+    assert s.state() is not None and s.read_note is None
+
+
+def test_redo3_c7_the_rhythm_cell_shows_a_suspicion_first():
+    t = {"rhythm": "4 cycles", "rhythm_rounds": [3, 4], "suspicion": 0.82, "suspect_knock": "sent"}
+    assert app.rhythm_cell(t).startswith("suspicion 0.82 (sent); HOST-RHYTHM round(s) 3, 4")
+    assert app.rhythm_cell({"rhythm": "4 cycles", "rhythm_rounds": [3]}) == "HOST-RHYTHM round(s) 3 (4 cycles)"
+    assert app.rhythm_cell({}) == "-"
+    cut = app.fit_cell(app.rhythm_cell(t), 20, len, flags=False)   # as the table cuts this column
+    assert cut.startswith("suspicion 0.82") and cut.endswith(app.ELLIPSIS)
+    assert app.fit_cell("a (b) c (very long bracket words)", 12, len) == "a (b) c (ve" + app.ELLIPSIS

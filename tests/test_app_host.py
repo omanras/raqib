@@ -108,7 +108,9 @@ def test_e1_reading_then_trees_never_a_command_line():
     assert "environment-manager" in body and "anthropic 160.79.104.0/23" in body
     assert "hole: inventory: %s" % i["holes"][0] in body and len(v["holes"]) == 14   # the holes are read
     # E1: never a command line, a cited record's text or an executable path
-    assert "argv" not in table and "--session" not in body and "/usr/local/bin" not in body
+    detail = "".join(app.tree_detail_text(r, d) for r, d in zip(v["rows"], v["details"]))
+    # REDO C-7: the table and the selected tree's detail (a hole may name argv[0] as a word of the doctrine)
+    assert "argv" not in table + detail and "--session" not in body and "/usr/local/bin" not in body
     assert "named" in body and "2026-" in body
 
 

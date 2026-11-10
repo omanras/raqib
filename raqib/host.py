@@ -3203,10 +3203,13 @@ class HostWatch:
         summary() reads it) on what has been read so far; finish() may still
         add a reader that is out, the last source poll, late beats and what
         was never sent. A result that cannot be computed is 1, as a summary
-        that cannot be built is."""
+        that cannot be built is; M8.1 REDO C-2: why is kept in code_error
+        (the state's field beside the code)."""
+        self.code_error = None
         try:
             return EXIT[self.result()[0]]
-        except Exception:
+        except Exception as exc:
+            self.code_error = "%s: %s" % (type(exc).__name__, exc)
             return 1
 
     def summary(self):
@@ -3412,6 +3415,7 @@ class HostWatch:
         }
         state["band"] = ui.status(state)[0]
         state["code_so_far"] = self.code_so_far()   # M8.1 REDO B-4: the code of what has been read so far
+        state["code_error"] = self.code_error        # M8.1 REDO C-2: why that code could not be computed, or None
         return state
 
     def all_not_judged(self):
