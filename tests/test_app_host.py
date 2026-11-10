@@ -154,11 +154,13 @@ def test_e1_kinds_named_unknown_benign_and_what_the_watch_knows():
 
 
 def test_e1_checks_fold_and_open_when_any_missing():
-    assert app.checks_state(None) == ("Checks: running...", False)
+    """M8.1 (the Table, 2026-11-10): the checks fold under a disclosure closed
+    until clicked; its title says what is missing in the alarm colour."""
+    assert app.checks_state(None) == ("Checks: running...", None)
     ok = [("OK", "clean", "x"), ("UNSURE", "incomplete", "y")]
-    assert app.checks_state(ok) == ("Checks: 1 UNSURE", False)
-    assert app.checks_state(ok[:1]) == ("Checks: all OK", False)
-    assert app.checks_state(ok + [("MISSING", "alarm", "z")]) == ("Checks: 1 MISSING", True)
+    assert app.checks_state(ok) == ("Checks: 1 unsure", "incomplete")
+    assert app.checks_state(ok[:1]) == ("Checks: all OK", None)
+    assert app.checks_state(ok + [("MISSING", "alarm", "z")]) == ("Checks: 1 missing", "alarm")
 
 
 def test_e1_the_controller_starts_the_round_at_open_and_a_probe_that_cannot_start_is_a_hole(home):
@@ -483,8 +485,9 @@ def test_e5_readme_says_the_window_opens_on_the_host():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## The window\n", 1)[1].split("\n## ", 1)[0]
     lines = [line for line in section.split("\n") if line.strip()]
-    assert len(lines) == 5 and "opens on the host" in lines[0] and "Watch this host" in lines[0]
-    assert "Watch a project" in lines[1] and "--every" in lines[1]
+    assert "opens on the host" in lines[0] and "Watch this host" in lines[0]
+    flat = " ".join(section.split())
+    assert "Project" in flat and "--every" in flat
 
 
 def test_e5_the_questions_file_has_the_gate_numbers_and_the_tests():
@@ -510,22 +513,24 @@ def test_tk_host_screen_round_at_open_checks_and_watch_this_host(tmp_path):
         assert p.worker is not None             # the round at open started with the window
         assert until(lambda: doctor.result() is not None and p.done(), 10)
         window.tick()
-        assert window.band.cget("text") == "HOST: 2 TREE(S)"
+        assert window.verdict.cget("text") == "2 trees on this host" and window.verdict_word == "HOST: 2 TREE(S)"
         # M7.6b E2: the trees are rows of the Treeview now, not lines of the text
         assert any("environment-manager" in window.host_tree.item(i, "values")
                    for i in window.host_tree.get_children())
-        assert window.checks_button.cget("text") == "Checks: 1 MISSING" and window.checks_open   # MISSING: open
+        # M8.1: the checks fold under a disclosure closed until clicked; its title in the alarm colour
+        assert window.checks.title() == "Checks: 1 missing" and not window.checks.is_open()
+        assert str(window.checks.toggle.cget("style")) == "alarm.Disclosure.TCheckbutton"
         window.host_toggle()                       # Watch this host
         window.tick()
-        assert window.band.cget("text") == "WATCHING HOST"
+        assert window.verdict.cget("text") == "Watching this host"
         assert window.host_button.cget("text") == "Stop host watch"
         window.host_toggle()                       # Stop: the final report
         window.tick()
-        assert window.band.cget("text") == "HOST WATCH FINISHED"
+        assert window.verdict.cget("text") == "The host watch finished"
         assert window.host_text.get("1.0", "end").startswith("Raqib watch --host")
         window.show_first()                        # Watch a project: M6.4's screen
         window.tick()
-        assert window.screen == "first" and window.band.cget("text") == "DOCTOR: 1 MISSING, 0 UNSURE"
+        assert window.screen == "first" and window.verdict.cget("text") == "Checks: 1 missing, 0 unsure"
         window.on_close()
         assert window.closed
     finally:
@@ -651,9 +656,11 @@ def test_redo_f4_a_host_finding_line_cites_run_and_seq():
 
 
 def test_redo_f6_the_host_watch_has_a_log_pane():
+    """M8.1: the Log screen shows the host watch's lines or the project watch's (F-6, A-5)."""
     src = (ROOT / "raqib" / "app.py").read_text(encoding="ascii")
-    assert "def toggle_host_log" in src and "self.host_log_text" in src
-    assert 'log_view(log.text())' in src.split("def _tick_host", 1)[1].split("\n    def ", 1)[0]
+    assert "def show_log" in src and "self.log_text" in src
+    body = src.split("def _tick_log", 1)[1].split("\n    def ", 1)[0]
+    assert 'log_view(log.text())' in body and 'self.c.host if self.log_source == "host"' in body
 
 
 def test_redo_f7_colours_follow_c10_codes_and_green_says_not_a_clearance(home):
@@ -782,21 +789,22 @@ def test_tk_redo_f2_both_watches_running_switch_back_and_forth_every_control_pre
         for _ in range(2):
             window.host_tab.invoke()
             window.tick()
-            assert window.screen == "host" and window.band.cget("text") == "WATCHING HOST"
+            assert window.screen == "host" and window.verdict.cget("text") == "Watching this host"
             assert window.host_button.cget("text") == "Stop host watch"
             window.project_tab.invoke()
             window.tick()
-            assert window.screen == "watching" and window.band.cget("text") == "WATCHING"
+            assert window.screen == "watching" and window.verdict.cget("text") == "Watching the project"
             assert window.stop_button.winfo_manager() == "pack"
-        assert "running: host watch, project watch of" in window.running_note.cget("text")   # M7.6b E3
+        # M8.1 E2: the rail says what is watched, in words
+        assert window.running_note.cget("text") == "Watching the host and project %s" % tmp_path.name
         window.show_first()
         window.start()                             # refused: names the running watch, goes to its screen
         assert window.screen == "watching" and "the project watch of" in window.detail.cget("text")
         window.host_tab.invoke()
-        window.toggle_host_log()                   # F-6
+        window.show_log()                          # F-6: from the host screen, the host watch's lines
         c.host.log.write("raqib watch --host: round 1\n")
         window.tick()
-        assert "round 1" in window.host_log_text.get("1.0", "end")
+        assert window.log_source == "host" and "round 1" in window.log_text.get("1.0", "end")
         c.stop("test")
         window.tick()
         window.on_close()

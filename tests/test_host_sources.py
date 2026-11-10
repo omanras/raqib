@@ -735,7 +735,8 @@ def test_e4_the_checkbox_is_off_by_default_and_is_passed_to_the_host_watch(home)
         app.HostSession(o, starter=starter)._open()
     assert seen["attach_hooks"] is True
     src = (ROOT / "raqib" / "app.py").read_text(encoding="ascii")
-    assert "tk.Checkbutton(row, text=ATTACH_TEXT" in src and "self.c.options.attach_hooks = bool(self.attach_var.get())" in src
+    assert "tk.Checkbutton(row, text=sentence(ATTACH_TEXT)" in src   # M8.1: a Switch, its label in sentence case
+    assert "self.c.options.attach_hooks = bool(self.attach_var.get())" in src
 
 
 def test_e4_cli_attach_hooks_reaches_the_host_watch(monkeypatch):

@@ -531,7 +531,8 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
     window = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "Window")
     panel += [f for f in window.body if isinstance(f, ast.FunctionDef) and f.name.startswith(("rules_", "show_rules",
                                                                                               "_rules"))]
-    assert len(panel) == 8   # M7.6c REDO E-7: and _rules_measuring (the band says a measurement runs)
+    # M7.6c REDO E-7: and _rules_measuring; M8.1 E5: the rows, their switches and steppers, the filter
+    assert len(panel) == 14
     for node in panel:
         for sub in ast.walk(node):
             if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) and sub.value.id == "overlay":
@@ -648,23 +649,18 @@ def test_tk_the_rules_screen_from_the_header(home, tmp_path):
         root.withdraw()
         window.rules_tab.invoke()
         window.tick()
-        assert window.screen == "rules" and window.band.cget("text") == "RULES"
-        # M7.6b E3: the rules are rows of the Treeview now, the text under it holds the rest
-        assert "HOST-RHYTHM" in [window.rules_tree.item(i, "values")[0] for i in window.rules_tree.get_children()]
-        window.rule_id.set("NET-TOOL")
-        window.rules_set(False)
+        assert window.screen == "rules" and window.verdict_word == "RULES"
+        # M8.1 E5: one row per rule, its switch on
+        assert "HOST-RHYTHM" in [item["id"] for item, _ in window.rule_rows] and window.rule_vars["NET-TOOL"].get()
+        window.rules_set("NET-TOOL", False)
         window.tick()
-        assert "1 rule off: NET-TOOL" in window.head_note.cget("text")
+        assert "1 rule off: NET-TOOL" in window.rules_note.cget("text") and not window.rule_vars["NET-TOOL"].get()
         assert "1 rule off: NET-TOOL" in window.rules_text.get("1.0", "end")
-        window.rule_field.set("k")
-        window.rule_value.set("0")
-        window.rule_id.set("HOST-RHYTHM")
-        window.rules_threshold()
-        assert window.band.cget("text") == "RULES: REFUSED"
-        window.rule_id.set("NET-TOOL")
-        window.rules_reset()
+        window.rules_threshold("HOST-RHYTHM", "k", 0)
+        assert window.verdict_word == "RULES: REFUSED" and window.verdict.cget("text") == "The change was refused"
+        window.rules_reset("NET-TOOL")
         window.tick()
-        assert "no rule off" in window.head_note.cget("text")
+        assert "No rule off" in window.rules_note.cget("text") and window.rule_vars["NET-TOOL"].get()
         window.show_host()
         assert window.screen == "host"
     finally:

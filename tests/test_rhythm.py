@@ -534,7 +534,8 @@ def test_e3_the_window_field_is_empty_by_default_and_reaches_the_host_watch(home
     session._open()
     assert got["suspect"].name == "ollama"
     src = (ROOT / "raqib" / "app.py").read_text(encoding="utf-8")
-    assert "tk.Label(row, text=SUSPECT_TEXT)" in src and "self.c.options.suspect = str(self.suspect_var.get()" in src
+    assert "tk.Label(row, text=sentence(SUSPECT_TEXT)" in src   # M8.1: in the watch options, sentence case
+    assert "self.c.options.suspect = str(self.suspect_var.get()" in src
 
 
 # --- E4: report, page, window, exit codes --------------------------------------------------------------------------
