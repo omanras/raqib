@@ -647,6 +647,8 @@ def parse_proc(text, src="proc"):
             continue
         cwd = obj.get("cwd") if isinstance(obj.get("cwd"), str) else None
         unread = obj.get("unread") if isinstance(obj.get("unread"), list) else []
+        # M7.8 REDO R-5: the start time where the snapshot carries it (a tree's key on Linux), else none
+        started = obj.get("started") if isinstance(obj.get("started"), str) and obj.get("started") else None
         # G-2: the exe link places a process; argv[0], its own text, is the fallback.
         linked = isinstance(obj.get("exe"), str) and bool(obj.get("exe"))
         exe = obj.get("exe") if linked else (argv or [None])[0]
@@ -654,7 +656,7 @@ def parse_proc(text, src="proc"):
                             image=_linux_image(argv, obj.get("name")), exe=exe,
                             exe_from="record" if linked else "argv",   # M7.2 REDO C-1d
                             cwd=cwd, env_keys=env, sockets=sockets, ts=_ts(obj.get("at")) or at,
-                            unread=[str(u) for u in unread]))
+                            unread=[str(u) for u in unread], **({"started": started} if started else {})))
     return records, problems
 
 
@@ -1086,6 +1088,9 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
         except (OSError, ValueError):
             unreadable += 1
     kernel_parent = 2 if status.get(2, {}).get("Name") == "kthreadd" else None
+    # M7.8 REDO R-5: each process's start time (/proc/PID/stat starttime + /proc/stat btime, read-only); a pid
+    # whose time cannot be read gets no "started" key (optional in the text: older snapshots read as before)
+    starts, _ = proc_start_times(list(status), proc_root)
     procs, kernel = [], 0
     for pid in sorted(status):
         fields = status[pid]
@@ -1112,6 +1117,8 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
                       "sockets": get("fd", lambda: _sockets(os.path.join(base, "fd"), own=pid == self_pid)),
                       "exe": get("exe", lambda: os.readlink(os.path.join(base, "exe"))),
                       "unread": unread, "at": at})
+        if pid in starts:
+            procs[-1]["started"] = starts[pid]
     meta = {"snapshot": at, "self": self_pid, "processes": len(procs), "kernel_threads": kernel,
             "kernel_parent": kernel_parent, "gone_while_read": gone, "unreadable": unreadable}
     if note:
@@ -2182,10 +2189,7 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
     connections_from = [s["path"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]]
     extra = {}
     if processes:   # M7.8 (P-2): the round's process sample, for "quiet" (root alive, no talk) against "gone"
-        extra["processes"] = [{"pid": p["pid"], "image": p["image"], "started": started_of(p)}
-                              for _, p in sorted(procs.items())
-                              if not p["derived"] and any((split_name(r["src"]) or (None,))[0] in PROCESS_LISTS
-                                                          for r in p["recs"])]
+        extra["processes"] = _last_sample(records, procs)
     return _os_pids(dict(extra, **{
         "tool": "raqib discover (ADR-0004)",
         "live": live,
@@ -2219,6 +2223,28 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
     }))
 
 
+def _last_sample(records, procs):
+    """M7.8 (P-2), REDO R-5: the processes of the LAST sample of the round
+    (the last /proc snapshot of a --window, the last Win32_Process sample),
+    read from a process list (never a Sysmon event), each as {pid, image,
+    started} as that sample's own record gives them (image_name; the start
+    time, None where unread), so a pid that a process of another image or
+    start time holds now does not match a tree's key; a pid in an earlier
+    snapshot only is not in it."""
+    lists = [r for r in records if r["kind"] == "proc" and not r.get("derived")
+             and (split_name(r["src"]) or (None,))[0] in PROCESS_LISTS]
+    if not lists:
+        return []
+    last_src = max({r["src"] for r in lists}, key=_order)
+    snaps = [r["line"] for r in records if r["kind"] == "snapshot" and r["src"] == last_src]
+    after = max(snaps) if snaps else 0
+    out = {}
+    for r in lists:
+        if r["src"] == last_src and r["line"] > after and r["pid"] not in out:
+            out[r["pid"]] = {"pid": r["pid"], "image": r["image"], "started": r.get("started") or None}
+    return [out[pid] for pid in sorted(out)]
+
+
 def exe_from(p):
     """M7.2 REDO C-1d (API for raqib/host.py): where a process's image path
     came from: "record" (Windows ExecutablePath, a Sysmon image, the Linux
@@ -2233,8 +2259,9 @@ def exe_from(p):
 def started_of(p):
     """M7.2 (API for raqib/host.py): the creation time the reader gave for a
     process, as the record holds it (Windows: CreationDate, an export's text
-    or the live reader's ISO UTC), or None: Linux /proc snapshots carry none.
-    raqib watch --host keys a tree by (pid, image, started)."""
+    or the live reader's ISO UTC; Linux since M7.8 REDO R-5: the snapshot's
+    "started", from /proc/PID/stat), or None where none was read (an older
+    snapshot). raqib watch --host keys a tree by (pid, image, started)."""
     for r in (p or {}).get("recs") or ():
         if r.get("kind") == "proc" and r.get("started"):
             return r["started"]

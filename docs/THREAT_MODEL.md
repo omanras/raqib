@@ -123,7 +123,13 @@ item F7 of the M1.2 review packet or questions file.
     `git_error`, one word of a closed set saying why a value could not be
     read. A commit id names a commit: anyone holding the trace can tell
     which commit of a public repository a session ran on. No path, ref
-    name or user name of the repository is kept.
+    name or user name of the repository is kept;
+  - under `raqib watch --host` (ADR-0007): the os source's program names
+    (the image and the parent's image, normalised, never an argument) and
+    paths of created files, redacted; and in `~/.raqib/host/inventory.json`
+    (the latest round only) the round's process sample, each process as
+    pid, image name and start time (no command line, no path), which
+    names every program running on the machine at that instant.
 - **Stored as sha256:** every tool input and output, and on the same
   boundary lines the raw bytes of the git index (`git_index_sha256`).
   - The hashes are unsalted. Anyone holding the trace can confirm a guessed
@@ -480,45 +486,80 @@ Rulings: ADR-0003 Amendments C and D.
   call written more than 10 s after its act, is a finding. Its budget is
   0.1 until the field test.
 
-### The host watch (`raqib watch --host`; ADR-0007, Amendment P)
-Rulings: ADR-0007 Amendments C, H, I, M, N, P. True of the tree as P-1, P-2 and
-P-3 leave it (the task after the second field run).
+### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
+Rulings: ADR-0007 Amendments C, H, I, M, N, P, R. True of the tree as P-1,
+P-2, P-3 and R-1..R-9 leave it (the task after the second field run).
 - **What a round sees.** One sample: on Windows one read of the OS API
   (processes and their parents, TCP connections with their owner), on
-  Linux one `/proc` snapshot (or `--window S` seconds of them). A tree is
-  in the round when its root talks at that instant (a candidate) or a
+  Linux one `/proc` snapshot (or `--window S` seconds of them, whose last
+  snapshot is the round's process sample). A tree is in the round when its
+  root talks at that instant and has a child (a candidate) or a
   user-directory program runs a shell that runs a command (an act-root).
-  Since P-2 the round also keeps its process sample: a tree seen in an
-  earlier round whose root process is still in the sample and does not
-  talk now is **quiet** (listed with that word, its source kept attached,
-  neither gone nor back, no hole); it is **gone** only when its root is not
-  in the sample. A round read from an export with no process sample calls
-  such a tree gone, and says so once.
+  A tree seen in an earlier round whose root process is still in the
+  sample and is not in the round is `quiet (its root alive in round N; not
+  seen talking with an act at the sample; source kept)`: "source kept"
+  only when its source is attached and running, else the source's real
+  state. A root that talks with no child at that instant is quiet too: the
+  words say what the sample showed, not that it was silent. It is gone
+  only when its root is not in the sample. In a round whose connection
+  record was not read no tree can be seen talking, so a tree absent from
+  it whose root is alive keeps the state it had, `not judged this round
+  (connections unread)`. A round read from an export with no process
+  sample calls such a tree gone, and says so once.
+- **The start time decides, where it was read.** A tree is keyed by its
+  root's pid, image and start time (Windows: the process's creation time;
+  Linux: `/proc/PID/stat`'s start time, since R-5). Where the start time
+  is unread on either side (an older snapshot, a process whose stat is
+  hidden, Windows when the process's times are denied), a process of the
+  same image that holds the pid now is taken for the tree: it is not new,
+  and an ended tree is quiet, not gone; its quiet line ends "start time
+  unread: a process of the same image holds the pid".
 - **What lives between two rounds is still a hole.** A tree that starts,
   talks, acts and ends between two samples is never a tree of any round,
   and a child that lives only between two samples is never a host-source
   act. Where Sysmon is, an attached tree's os source sees every child it
   creates (event 1), whatever the rounds see; reading the channel into the
-  round itself is the next task (ADR-0007 P-4). Linux, and a Windows host without
-  Sysmon, keep the hole.
+  round itself is the next task (ADR-0007 P-4). Linux, and a Windows host
+  without Sysmon, keep the hole.
 - **What the os lines are judged by.** NET-TOOL and DESTRUCT-CMD judge an
   os process line by its image name (P-1: `input_meta.image`, discover's
-  normalised form, `curl.exe` -> `curl`). Still unseen: a shell builtin
-  (cmd's `del`, `rd`, `copy`), which starts no process; a PowerShell
-  cmdlet (`Invoke-WebRequest`, `Remove-Item`, and Windows PowerShell 5.1's
-  `curl` and `wget`, which are aliases of a cmdlet), which runs inside the
-  shell's own process; a renamed copy of a listed program; and everything
-  that is an argument (the destination, the target, `vssadmin list` versus
-  `vssadmin delete`), since the command line is only hashed. An os line
-  written before P-1 has no image: the rules say they could not judge it,
-  and the host watch says it once per source; the name is never guessed.
-- **Benign programs.** A tree whose root is a listed benign image under a
-  listed directory of the system drive is listed `benign`, never knocked.
-  Windows Defender's engine (`MsMpEng.exe`) is benign only under the system
-  drive's ProgramData\Microsoft\Windows Defender or Program
-  Files\Windows Defender (P-3). An agent with administrator rights
-  can put a program of a benign name there and is then listed as benign;
-  a copy anywhere else knocks.
+  normalised form, `curl.exe` -> `curl`; R-7: and its parent's,
+  `input_meta.parent_image`, so ssh started by git is git over SSH and is
+  left out, as git is on every source: an agent that reaches the network
+  through git is not seen). Still unseen: a shell builtin (cmd's `del`,
+  `rd`, `copy`), which starts no process; a PowerShell cmdlet
+  (`Invoke-WebRequest`, `Remove-Item`, and Windows PowerShell 5.1's `curl`
+  and `wget`, which are aliases of a cmdlet), which runs inside the shell's
+  own process; a renamed copy of a listed program; a listed program run
+  inside WSL or by a multicall binary (busybox), which is the unlisted
+  image; and everything that is an argument (the destination, the target,
+  `vssadmin list` versus `vssadmin delete`), since the command line is
+  only hashed. An os line written before P-1 has no image: the rules say
+  they could not judge it, and the host watch says it once per source; no
+  rule guesses the name.
+- **One act, one finding; the past is history.** Nested trees each have a
+  source, and each os follow reads all of its root's descendants: the same
+  event (its time, tool and input hash) read by two feeds is one finding,
+  shown on the nearest tree (the least depth), listed on the other as
+  "judged on another tree", knocked once (R-3). An os event whose time is
+  before the watch's start is history - listed on its tree with its count,
+  never knocked, never an alarm - whenever the tree was first seen (R-2):
+  a shell that becomes a tree in round 5 does not knock for what it ran
+  before the watch. What happened before the start is therefore not
+  judged as an act of the watch, by design.
+- **Benign programs are not sourced.** A tree whose root is a listed benign
+  image under a listed directory of the system drive is listed `benign
+  (not sourced: its acts are not judged)`: no os follow, no host lines, no
+  source finding, no knock, and HOST-UNWATCHED never judges it (R-1). The
+  person's own programs under a benign root (a terminal under explorer)
+  are therefore under no sourced tree. A candidate or act-root nested under
+  a benign root is its own tree, sourced and judged. HOST-RHYTHM still
+  judges a benign tree by its rhythm (K-10). Windows Defender's engine
+  (`MsMpEng.exe`) is benign only under the system drive's
+  ProgramData\Microsoft\Windows Defender or Program Files\Windows
+  Defender (P-3). An agent with administrator rights can put a program of
+  a benign name there and is then listed as benign, and nothing below it
+  is judged; a copy anywhere else knocks.
 - **The person's hands (ADR-0007 P-5).** Text an agent hands to a person
   (the clipboard, a chat, a file) which the person then runs is the
   person's act: it runs under the person's own shell, outside every agent
@@ -527,14 +568,17 @@ P-3 leave it (the task after the second field run).
   run from the same prompt write the same process record. The clipboard's
   text is never read by Raqib and will not be (section 1: Raqib must not
   become a second place where secrets leak). Which process wrote the
-  clipboard (Sysmon event 24) is a candidate rule (ADR-0007 P-5), not built.
-- **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No process
-  is signalled, suspended, attached to or killed, and nothing is blocked:
-  a finding is a record and a knock after the act, never a prevention. The
-  only programs the watch starts are its own read-only helpers (the os
-  source's `wevtutil`, the notifier); the only writes are under
-  `~/.raqib`, and the hook settings of a project only with
-  `--attach-hooks`.
+  clipboard (Sysmon event 24) is a candidate rule (ADR-0007 P-5), not
+  built.
+- **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No watched
+  process is signalled, suspended, attached to or killed, and nothing is
+  blocked: a finding is a record and a knock after the act, never a
+  prevention. The programs the watch starts are its own read-only helpers:
+  the os source's `wevtutil` on Windows, `ss -tinp` on Linux every round
+  (the bytes of each socket), and the notifier; Raqib ends only its own
+  helpers (a `wevtutil` past its timeout, and every one still out at
+  Stop). The only writes are under `~/.raqib`, and the hook settings of a
+  project only with `--attach-hooks`.
 
 ## 6. Attacks on the watcher itself
 

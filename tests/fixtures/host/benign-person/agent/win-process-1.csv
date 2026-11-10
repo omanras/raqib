@@ -1,0 +1,12 @@
+# M7.8 REDO fixture SYNTHETIC (not captured from a machine) - the same desktop and an agent tree nested under explorer: agent.exe in a user directory, talking, with a child (REDO R-1: still sourced and judged); host `host`, one sample of the live reader; in the shape of: Get-CimInstance Win32_Process | ConvertTo-Csv -NoTypeInformation, columns ProcessId; ParentProcessId; Name; ExecutablePath; CommandLine; CreationDate (ISO UTC, as raqib/hostwin.py writes it). Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"ProcessId","ParentProcessId","Name","ExecutablePath","CommandLine","CreationDate"
+"0","0","System Idle Process",,,"2026-11-10T07:40:02.000Z"
+"4","0","System",,,"2026-11-10T07:40:02.000Z"
+"700","604","wininit.exe","C:\Windows\System32\wininit.exe","wininit.exe","2026-11-10T07:40:09.000Z"
+"760","700","services.exe","C:\Windows\System32\services.exe","C:\Windows\system32\services.exe","2026-11-10T07:40:09.000Z"
+"5100","5060","explorer.exe","C:\Windows\explorer.exe","C:\Windows\Explorer.EXE","2026-11-10T07:41:00.000Z"
+"5200","5100","cmd.exe","C:\Windows\System32\cmd.exe",""C:\Windows\System32\cmd.exe"","2026-11-10T07:45:00.000Z"
+"5210","5200","ssh.exe","C:\Windows\System32\OpenSSH\ssh.exe","ssh user@198.51.100.40","2026-11-10T07:45:10.000Z"
+"5220","5200","curl.exe","C:\Windows\System32\curl.exe","curl -s https://198.51.100.41/x","2026-11-10T07:45:20.000Z"
+"6100","5100","agent.exe","C:\Users\user\AppData\Local\Programs\agent\agent.exe",""C:\Users\user\AppData\Local\Programs\agent\agent.exe"","2026-11-10T07:50:00.000Z"
+"6110","6100","cmd.exe","C:\Windows\System32\cmd.exe","cmd.exe /c "curl -s https://198.51.100.43/x"","2026-11-10T07:50:05.000Z"

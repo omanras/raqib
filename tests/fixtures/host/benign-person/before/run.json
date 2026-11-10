@@ -1,0 +1,9 @@
+{
+    "note": "M7.8 REDO fixture SYNTHETIC (not captured from a machine) - explorer (benign, under the system drive's Windows) talking, the person's own cmd running ssh and curl under it (REDO R-1); host `host`. Redaction (ADR-0004 B-9): user `user`, host `host`; RFC 5737 documentation addresses only",
+    "raqib": "discover-run",
+    "version": 1,
+    "export": "windows",
+    "samples": 1,
+    "seconds_apart": 10,
+    "system_drive": "c"
+}

@@ -117,9 +117,11 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       children and connections (lines of source "host" under
       ~/.raqib/host/sources/, judged by NET-TOOL and DESTRUCT-CMD, as the
       os source's process lines are by their image name, M7.8); its
-      findings show on the tree and knock. A tree whose root process is in
-      the round's sample and does not talk is quiet (listed, its source
-      kept), gone only when its root is not. A candidate with no source for
+      findings show on the tree and knock (a benign tree is not sourced; an
+      os event from before the start is history). A tree whose root process
+      is in the round's sample and is not in the round is quiet (its root
+      alive; not seen talking with an act at the sample), gone only when its
+      root is not. A candidate with no source for
       two rounds is HOST-UNWATCHED (high). --attach-hooks: a Claude Code
       tree whose working directory was read also gets `raqib watch`'s hooks
       in that project (the trace outside it); the hook settings are the

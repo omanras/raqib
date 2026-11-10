@@ -1150,8 +1150,10 @@ def host_section(state):
                            _text(t.get("first_seen")), _text(t.get("first_round")),
                            (' <span class="tag">history</span>' if t.get("history") else "") +
                            (' <span class="tag">benign</span>' if t.get("benign") else ""),
-                           "yes" if t.get("present") else '<span class="tag">quiet</span>' if t.get("quiet")
-                           else '<span class="tag">gone</span>', _text(t.get("acts")),
+                           "yes" if t.get("present") else '<span class="tag">quiet</span> %s' % _text(
+                               t.get("quiet_text") or "") if t.get("quiet") else '<span class="tag">gone</span>',
+                           _text("%s%s" % (t.get("acts"), "; %s os event(s) before the watch's start: history"
+                                           % t["before_start"] if t.get("before_start") else "")),
                            _text(", ".join(str(e) for e in _list(t.get("endpoints"))) or "-"),
                            _text(tree_source(t)), _text(severity_counts(t.get("source_findings"))),
                            _text(tree_rhythm_text(t)), _cites_text(t.get("cites"))))
@@ -1265,7 +1267,7 @@ def severity_counts(counts):
     """M7.2b E4: a tree's source findings by severity ("high 1, medium 2";
     history and pending apart), or "none"."""
     counts = counts if isinstance(counts, dict) else {}
-    words = ("high", "medium", "low", "history", "pending at exit", "pending")
+    words = ("high", "medium", "low", "history", "pending at exit", "pending", "judged on another tree")   # R-3
     parts = ["%s %s" % (k, counts[k]) for k in words if counts.get(k)]
     return ", ".join(parts) or "none"
 

@@ -21,7 +21,8 @@
      "agent.exe"
     ],
     "depth": 0,
-    "image": "agent"
+    "image": "agent",
+    "parent_image": "explorer"
    },
    "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
    "phase": "pre",
@@ -39,7 +40,8 @@
      "agent.exe"
     ],
     "depth": 0,
-    "image": "agent"
+    "image": "agent",
+    "parent_image": "explorer"
    },
    "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
    "ok": true,
@@ -90,6 +92,7 @@
     ],
     "depth": 1,
     "image": "bash",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "945710e9bddec5d7e7542717e741824bdb90bebcc0797501544c3e34d563b9e3",
@@ -109,6 +112,7 @@
     ],
     "depth": 1,
     "image": "bash",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "945710e9bddec5d7e7542717e741824bdb90bebcc0797501544c3e34d563b9e3",
@@ -130,6 +134,7 @@
     ],
     "depth": 2,
     "image": "rm",
+    "parent_image": "bash",
     "parent_seq": 4
    },
    "input_sha256": "191c585e2bb91eaf10583910561a65347dc0304d9ea965820a0ea047d5e63175",
@@ -149,6 +154,7 @@
     ],
     "depth": 2,
     "image": "rm",
+    "parent_image": "bash",
     "parent_seq": 4
    },
    "input_sha256": "191c585e2bb91eaf10583910561a65347dc0304d9ea965820a0ea047d5e63175",
@@ -170,6 +176,7 @@
     ],
     "depth": 1,
     "image": "cmd",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "9a84984f9eada52b20906e0687acdc9615d33175a337150b1f1ccb0f9cff64c4",
@@ -189,6 +196,7 @@
     ],
     "depth": 1,
     "image": "cmd",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "9a84984f9eada52b20906e0687acdc9615d33175a337150b1f1ccb0f9cff64c4",
@@ -210,6 +218,7 @@
     ],
     "depth": 2,
     "image": "vssadmin",
+    "parent_image": "cmd",
     "parent_seq": 6
    },
    "input_sha256": "280e4fa756fb6d09e048ec141a45cda9709890bbd073bed68e4c2d4b3dd577e4",
@@ -229,6 +238,7 @@
     ],
     "depth": 2,
     "image": "vssadmin",
+    "parent_image": "cmd",
     "parent_seq": 6
    },
    "input_sha256": "280e4fa756fb6d09e048ec141a45cda9709890bbd073bed68e4c2d4b3dd577e4",

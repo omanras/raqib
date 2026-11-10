@@ -70,8 +70,8 @@
     "round": 2,
     "run": "fixture-run",
     "sample": "window - .. -; Windows sample(s) 1,2",
-    "source": "host",
-    "source_word": "host: the host's own record of the tree",
+    "source": "benign",
+    "source_word": "benign (not sourced: its acts are not judged)",
     "started": "11/3/2026 7:41:30 AM",
     "tree": "5100:explorer:11/3/2026 7:41:30 AM",
     "was": "absent"

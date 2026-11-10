@@ -4,5 +4,6 @@
     "version": 1,
     "export": "windows",
     "samples": 1,
-    "seconds_apart": 10
+    "seconds_apart": 10,
+    "system_drive": "c"
 }

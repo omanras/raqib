@@ -2,6 +2,7 @@
  "expect_seq": [
   5,
   6,
+  9,
   11
  ],
  "lines": [
@@ -22,7 +23,8 @@
      "agent.exe"
     ],
     "depth": 0,
-    "image": "agent"
+    "image": "agent",
+    "parent_image": "explorer"
    },
    "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
    "phase": "pre",
@@ -40,7 +42,8 @@
      "agent.exe"
     ],
     "depth": 0,
-    "image": "agent"
+    "image": "agent",
+    "parent_image": "explorer"
    },
    "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
    "ok": true,
@@ -121,6 +124,7 @@
     ],
     "depth": 1,
     "image": "bash",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "018f97ece20426e11e08e49b7b6fe27bd415222158e6598ddf96af157b4ac862",
@@ -140,6 +144,7 @@
     ],
     "depth": 1,
     "image": "bash",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "018f97ece20426e11e08e49b7b6fe27bd415222158e6598ddf96af157b4ac862",
@@ -161,6 +166,7 @@
     ],
     "depth": 2,
     "image": "ls",
+    "parent_image": "bash",
     "parent_seq": 5
    },
    "input_sha256": "534a28ea4f6f70ea8fb95be3895f9f3ad608169575d4e2264a9777542d4c86ed",
@@ -180,6 +186,7 @@
     ],
     "depth": 2,
     "image": "ls",
+    "parent_image": "bash",
     "parent_seq": 5
    },
    "input_sha256": "534a28ea4f6f70ea8fb95be3895f9f3ad608169575d4e2264a9777542d4c86ed",
@@ -201,6 +208,7 @@
     ],
     "depth": 2,
     "image": "grep",
+    "parent_image": "bash",
     "parent_seq": 5
    },
    "input_sha256": "a05cf7a6c02098c2528fba0e44a49428436a5faea1abbc499946250dc3e77ed7",
@@ -220,6 +228,7 @@
     ],
     "depth": 2,
     "image": "grep",
+    "parent_image": "bash",
     "parent_seq": 5
    },
    "input_sha256": "a05cf7a6c02098c2528fba0e44a49428436a5faea1abbc499946250dc3e77ed7",
@@ -241,6 +250,7 @@
     ],
     "depth": 1,
     "image": "rg",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "e4f63ef9def4f76a7dcba33779ddd15cc323a3c777145687db48a640333d44fe",
@@ -260,6 +270,7 @@
     ],
     "depth": 1,
     "image": "rg",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "e4f63ef9def4f76a7dcba33779ddd15cc323a3c777145687db48a640333d44fe",
@@ -309,6 +320,7 @@
     ],
     "depth": 1,
     "image": "bash",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "dfde0d07372d982a912d3486e88df0250b7b3ce3928c76f03137a89845396a23",
@@ -328,6 +340,7 @@
     ],
     "depth": 1,
     "image": "bash",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "dfde0d07372d982a912d3486e88df0250b7b3ce3928c76f03137a89845396a23",
@@ -349,6 +362,7 @@
     ],
     "depth": 2,
     "image": "curl",
+    "parent_image": "bash",
     "parent_seq": 10
    },
    "input_sha256": "1cd2240d7780f9e8ea3c273c65f9d422176d1d043337c5fcaef14001ee253676",
@@ -368,6 +382,7 @@
     ],
     "depth": 2,
     "image": "curl",
+    "parent_image": "bash",
     "parent_seq": 10
    },
    "input_sha256": "1cd2240d7780f9e8ea3c273c65f9d422176d1d043337c5fcaef14001ee253676",
@@ -436,7 +451,8 @@
      "agent.exe"
     ],
     "depth": 0,
-    "image": "agent"
+    "image": "agent",
+    "parent_image": "explorer"
    },
    "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
    "phase": "pre",
@@ -454,7 +470,8 @@
      "agent.exe"
     ],
     "depth": 0,
-    "image": "agent"
+    "image": "agent",
+    "parent_image": "explorer"
    },
    "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
    "ok": true,
@@ -505,6 +522,7 @@
     ],
     "depth": 1,
     "image": "cmd",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "63f92284431ffe03e83bdbcd41215935e71565a2d8589417e9da14f45cc45442",
@@ -524,6 +542,7 @@
     ],
     "depth": 1,
     "image": "cmd",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "63f92284431ffe03e83bdbcd41215935e71565a2d8589417e9da14f45cc45442",
@@ -545,6 +564,7 @@
     ],
     "depth": 2,
     "image": "bitsadmin",
+    "parent_image": "cmd",
     "parent_seq": 4
    },
    "input_sha256": "dc4a385cde3b18ec86645a122c76dfbf2c589061954c2ca90f9e7fb099cc0249",
@@ -564,6 +584,7 @@
     ],
     "depth": 2,
     "image": "bitsadmin",
+    "parent_image": "cmd",
     "parent_seq": 4
    },
    "input_sha256": "dc4a385cde3b18ec86645a122c76dfbf2c589061954c2ca90f9e7fb099cc0249",
@@ -585,6 +606,7 @@
     ],
     "depth": 1,
     "image": "plink",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "eebb9ef28fb5e3b337ab3743c90eebc9516ecc822bcb8f6db7b471b7391b6b22",
@@ -604,6 +626,7 @@
     ],
     "depth": 1,
     "image": "plink",
+    "parent_image": "agent",
     "parent_seq": 2
    },
    "input_sha256": "eebb9ef28fb5e3b337ab3743c90eebc9516ecc822bcb8f6db7b471b7391b6b22",
@@ -646,12 +669,96 @@
   },
   {
    "cwd": "C:\\work\\proj",
-   "phase": "session_end",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "10880d6cf5ae03f853b4cfab7f06884b816477d53adc9119fa25efd479bf91e8",
+   "phase": "pre",
    "seq": 8,
    "session_id": "os-4700",
    "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:11.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "10880d6cf5ae03f853b4cfab7f06884b816477d53adc9119fa25efd479bf91e8",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 8,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:11.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "ssh.exe",
+    "command_programs": [
+     "ssh.exe"
+    ],
+    "depth": 2,
+    "image": "ssh",
+    "parent_image": "cmd",
+    "parent_seq": 8
+   },
+   "input_sha256": "b8a2f1639b3cb405d60f085280eb0766154b05d73fd3d5bc7bf5dbcf43f581df",
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:11.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "ssh.exe",
+    "command_programs": [
+     "ssh.exe"
+    ],
+    "depth": 2,
+    "image": "ssh",
+    "parent_image": "cmd",
+    "parent_seq": 8
+   },
+   "input_sha256": "b8a2f1639b3cb405d60f085280eb0766154b05d73fd3d5bc7bf5dbcf43f581df",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 9,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:11.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 10,
+   "session_id": "os-4700",
+   "source": "os",
    "tool": "-",
-   "ts": "2026-11-03T09:00:10.000Z"
+   "ts": "2026-11-03T09:00:11.100Z"
   }
  ]
 }

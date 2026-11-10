@@ -67,7 +67,9 @@ What is written (C-5), one session per run, `os-<PID>`:
   (discover.image_name: lower case, no .exe/.com/.bat/.cmd: `curl.exe` ->
   `curl`), the field NET-TOOL and DESTRUCT-CMD read on os lines; a line
   written before M7.8 has no "image" key (the host watch says so once per
-  source; the name is never guessed from NAME), D 0 for the root, 1 for its direct
+  source; no rule guesses the name from NAME); "parent_image" (M7.8 REDO
+  R-7) the ParentImage the same way, null when its basename is not a plain
+  name (NET-TOOL leaves out ssh started by git), D 0 for the root, 1 for its direct
   children, 2 and more below, S the seq of the parent's process line in
   this run (absent for the root, and for a direct child when the root's
   own event 1 is not in the export); never an argument. For a file
@@ -340,6 +342,12 @@ def _tree(events, root, root_guid):
     return kept
 
 
+def _image(image):
+    """M7.8 (ADR-0007 P-1): an Image in discover's one normalised form
+    (discover.image_name, as discover names a tree's image), or None."""
+    return discover.image_name(image) or None
+
+
 def _event_fields(e, depth):
     d = e["data"]
     if e["event"] == 1:
@@ -348,7 +356,9 @@ def _event_fields(e, depth):
         # M7.8 (ADR-0007 P-1): the image name in discover's one normalised form (discover.image_name, as discover
         # names a tree's image), the field NET-TOOL and DESTRUCT-CMD read; null when the name is not read. A line
         # written before M7.8 has no "image" key at all (said once per source by the host watch, never guessed).
-        meta["image"] = (discover.image_name(d.get("Image")) or None) if name else None
+        meta["image"] = _image(d.get("Image")) if name else None
+        # M7.8 REDO R-7: the parent's image name, the same way (a name through the same gate, never an argument)
+        meta["parent_image"] = _image(d.get("ParentImage")) if program_name(d.get("ParentImage")) else None
         meta["depth"] = depth
         return common.canonical_sha256({"command_line": d.get("CommandLine")}), meta
     if e["event"] == 11:

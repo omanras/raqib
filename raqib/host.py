@@ -236,7 +236,7 @@ Patterns worth suspicion include: the same destination hash talked to again and 
 Answer with JSON only: {"suspicion": <number 0..1>, "reasons": [<short strings>], "cited_seq": [<seq numbers from this window that support the reasons>]}. Whenever suspicion is above 0, give at least one reason and cite at least one seq."""
 # M7.2b: the sources a tree can have (ADR-0007 decision 3, Amendment H)
 HOST_SOURCE = "host"               # the host's own record of the tree (trace.SOURCES)
-SOURCE_KINDS = ("hooks", "os", HOST_SOURCE, "none")
+SOURCE_KINDS = ("hooks", "os", HOST_SOURCE, "none", "benign")   # "benign": REDO R-1, not sourced
 CHILD_TOOL = "HostChild"
 CONN_TOOL = "HostConnection"
 GONE_TOOL = "HostGone"
@@ -279,12 +279,22 @@ INVENTORY_NAME = "inventory.json"
 ROUNDS_NAME = "rounds.jsonl"
 STATE_SUFFIX = ".watch.json"
 QUIET = "quiet"                    # M7.8 (P-2): a tree whose root is in the round's process sample and does not talk
+QUIET_TEXT = "quiet (its root alive in round %d; not seen talking with an act at the sample; %s)"   # REDO R-4
+SOURCE_KEPT = "source kept"
+START_UNREAD = "start time unread: a process of the same image holds the pid"   # REDO R-5
+NOT_JUDGED = "not judged this round (connections unread)"                        # REDO R-4
+BENIGN_SOURCE = "benign"           # REDO R-1: a benign tree gets no source
+BENIGN_WORD = "benign (not sourced: its acts are not judged)"
+JUDGED_ELSEWHERE = "judged on another tree"   # REDO R-3: one act, one finding, shown on the nearest tree
+BEFORE_START = "before the watch's start: history (never knocked)"                 # REDO R-2
 NO_SAMPLE_NOTE = ("the round's inventory carries no process sample (an export read as rounds, or a reader before"
                   " M7.8): a tree not in the round is called gone, never quiet (ADR-0007 P-2)")
 PRE_M78_NOTE = ("%d os process line(s) carry no input_meta.image (written before M7.8): NET-TOOL and DESTRUCT-CMD"
-                " could not judge them by name, and the name is never guessed from command_head (ADR-0007 P-1)")
-LINUX_HOLE = ("Linux: /proc gives no creation time, so a tree is keyed by (pid, image) only: a pid reused by a"
-              " process of the same image between rounds is taken for the same tree and is not new")
+                " could not judge them by name, and no rule guesses it from command_head (ADR-0007 P-1); HOST-RHYTHM's"
+                " act beat takes such a line's name from command_head, for N-9's twin match only")
+LINUX_HOLE = ("Linux: a tree is keyed by (pid, image, start time from /proc/PID/stat); where the start time is unread"
+              " (an older snapshot, a process whose stat is hidden) by (pid, image) only: a pid reused by a process of"
+              " the same image between rounds is then taken for the same tree, not new, and quiet when it is gone")
 
 
 class HostError(Exception):
@@ -563,6 +573,33 @@ def unread_sources(inv):
             if text not in out:
                 out.append(text)
     return out
+
+
+CONNECTION_KINDS = ("proc-net", "ss", "win-tcp")
+
+
+def connections_unread(inv):
+    """REDO R-4 (A3): True when the round's connection record was not read
+    or only partly read (F-9's blind set, its connection part): no tree
+    could be seen talking, so a tree absent from it is not judged quiet."""
+    if any(str(r).startswith("no connection source read") for r in inv.get("incomplete") or ()):
+        return True
+    for src in inv.get("sources") or ():
+        if not isinstance(src, dict):
+            continue
+        kind = (discover.split_name(str(src.get("name"))) or (None,))[0]
+        if kind in CONNECTION_KINDS and (src.get("error") or not src.get("text_read")):
+            return True
+    return False
+
+
+def act_key(rec):
+    """REDO R-3: one os event, read by any feed: (time, tool, input hash),
+    or None for a line that is not an os event line with a hash."""
+    if not (isinstance(rec, dict) and rec.get("source") == "os" and rec.get("tool") in ("process", "file", "net")
+            and isinstance(rec.get("input_sha256"), str)):
+        return None
+    return (rec.get("ts"), rec.get("tool"), rec.get("input_sha256"))
 
 
 def tree_m74_text(t):
@@ -1163,6 +1200,7 @@ class HostWatch:
         self.present = set()         # keys in the last inventory
         self.quiet = set()           # M7.8 (P-2): keys whose root was in the last round's process sample, no talk
         self.no_sample_said = False  # M7.8: NO_SAMPLE_NOTE said once
+        self.act_findings = {}       # REDO R-3: (rule, os events) -> the one entry that shows it
         self.prev_class = {}         # key -> class in the last inventory
         self.history_round = None    # the first round with an inventory
         self.footprints = {}         # path -> {agent, streak, state, fired, ...}
@@ -1590,7 +1628,9 @@ class HostWatch:
                                             "endpoints", "cites", "exe")})
             entry.update(last_round=n, last_seen=ts, present=True, quiet=False, rounds_seen=entry["rounds_seen"] + 1,
                          history=history)
-            src = self._attach(now, n, key, t, entry)
+            # REDO R-1: a benign tree gets no source (its acts are not judged); one sourced before keeps it (A3)
+            src = (self._benign(now, n, key, t, entry) if t["benign"] and key not in self.sources
+                   else self._attach(now, n, key, t, entry))
             entry["none_rounds"] = entry.get("none_rounds", 0) + 1 if src.kind == "none" else 0
             self.seq += 1
             rhythm = self._rhythm(now, n, key, t, round_at, round_from, self.seq, inv)
@@ -1615,24 +1655,34 @@ class HostWatch:
         # whose root is in it and that does not talk now is quiet: listed, its source kept, neither gone nor back
         left = (self.present | self.quiet) - set(current)
         sampled = inv.get("processes")
+        alive = None
         if isinstance(sampled, list):
-            alive = {(p.get("pid"), p.get("image"), p.get("started")) for p in sampled if isinstance(p, dict)}
-            quiet_keys = {k for k in left if tuple(k) in alive}
-        else:
-            quiet_keys = set()
-            if left and not self.no_sample_said:
-                self.no_sample_said = True
-                self.notes.append("round %d: %s" % (n, NO_SAMPLE_NOTE))
-        gone_keys = sorted(left - quiet_keys, key=lambda k: (str(k[0]), str(k[1]), str(k[2])))
+            alive = {(p.get("pid"), p.get("image"), p.get("started") or None) for p in sampled if isinstance(p, dict)}
+        elif left and not self.no_sample_said:
+            self.no_sample_said = True
+            self.notes.append("round %d: %s" % (n, NO_SAMPLE_NOTE))
+        # REDO R-4: with the connections unread no tree can be seen talking: a tree absent from the round whose root
+        # is alive (or whose root cannot be looked up) keeps the state it had; its root not in the sample is gone
+        kept = set()
+        if connections_unread(inv):
+            kept = {k for k in left if alive is None or tuple(k) in alive}
+        quiet_keys = {k for k in left - kept if alive is not None and tuple(k) in alive}
+        gone_keys = sorted(left - kept - quiet_keys, key=lambda k: (str(k[0]), str(k[1]), str(k[2])))
         for key in gone_keys:
             self.trees[key].update(present=False, quiet=False)
             gone.append(tree_word(key))
         quiet = sorted(tree_word(k) for k in quiet_keys)
         for key in quiet_keys:
-            self.trees[key].update(present=False, quiet=True, quiet_round=n)
-        self.present = set(current)
-        self.quiet = quiet_keys
-        self.prev_class = {k: v["class"] for k, v in current.items()}
+            self.trees[key].update(present=False, quiet=True, quiet_round=n, quiet_text=self._quiet_text(key, n))
+        not_judged = sorted(tree_word(k) for k in kept)
+        for key in kept:
+            self.trees[key]["not_judged_round"] = n
+        old_present, old_quiet = self.present, self.quiet
+        self.present = set(current) | (kept & old_present)
+        self.quiet = quiet_keys | (kept & old_quiet)
+        prev = {k: self.prev_class[k] for k in kept & old_present if k in self.prev_class}
+        prev.update({k: v["class"] for k, v in current.items()})
+        self.prev_class = prev
         tree_seq = {tuple(self.trees[k]["key"]): self.trees[k]["line_seq"] for k in current}
         self._host_lines(now, n, ts, sample, current, tree_seq, gone_keys)
 
@@ -1656,10 +1706,19 @@ class HostWatch:
                 state, link = "linked", f.get("candidate") or f.get("act_root")
             else:
                 state, link = "unjudged", None
-            if state == "linked" and f.get("candidate"):   # M7.5 E1: a candidate tree of THIS watch linked to it
-                lk = next((k for k, v in current.items() if v.get("id") == f.get("candidate")), None)
-                if lk is not None and not self.trees[lk].get("history"):   # N-1: a history link never makes it live
-                    fp.update(live_round=n, live_tree=tree_word(lk))
+            alive_now = self.quiet | (self.present - set(current))   # REDO R-6: quiet, or kept by a blind round
+            if state == "linked":   # M7.5 E1: a candidate tree of THIS watch linked to it
+                lk = next((k for k, v in current.items() if v.get("id") == link), None)
+                if lk is not None:   # REDO R-6: remembered, so a quiet tree still links its footprint
+                    fp["link_key"] = lk
+                    if f.get("candidate") and not self.trees[lk].get("history"):   # N-1: never by a history link
+                        fp["live_key"] = lk
+                        fp.update(live_round=n, live_tree=tree_word(lk))
+            if fp.get("live_key") in alive_now:   # REDO R-6 (N-1): its live tree is quiet, not gone: the window runs on
+                fp.update(live_round=n, live_tree=tree_word(fp["live_key"]))
+            if state == "dark" and (fp.get("live_key") in alive_now or fp.get("link_key") in alive_now):
+                lk = fp["live_key"] if fp.get("live_key") in alive_now else fp["link_key"]   # linked, not dark
+                state, link = "linked", "%s tree %s" % (QUIET if lk in self.quiet else "kept", tree_word(lk))
             # N-1: live only within the last DARK_WINDOW rounds of a live (not history) candidate link
             live = fp["live_round"] is not None and n - fp["live_round"] < self.dark_window
             if fp["was_live"] and not live and fp["streak"]:
@@ -1761,7 +1820,7 @@ class HostWatch:
                   "candidates": sum(1 for t in current.values() if t["class"] == "candidate"),
                   "act_roots": sum(1 for t in current.values() if t["class"] == "act-root"),
                   "history": first, "new": new, "benign": benign_new, "gone": gone, "back": back, "quiet": quiet,
-                  "dark": dark_now,
+                  "not_judged": not_judged, "dark": dark_now,
                   "cleared": cleared, "findings": fired, "lines": lines,
                   "dark_notes": [d["path"] for d in self.dark_notes if d["round"] == n],   # M7.5 E1
                   "sources": {tree_word(k): self.sources[k].text for k in sorted(
@@ -2237,8 +2296,8 @@ class HostWatch:
                 if not isinstance(rec, dict) or rec.get("phase") != "pre" or feed.history(ln):
                     continue
                 at = discover._ts(rec.get("ts"))
-                if at is None:
-                    continue
+                if at is None or (rec.get("source") == "os" and at < self.started):
+                    continue   # REDO R-2: an os event from before the watch's start is history, never a beat
                 meta = rec.get("input_meta") if isinstance(rec.get("input_meta"), dict) else {}
                 where = os.path.basename(feed.path)
                 cite = {"src": where, "line": ln, "text": "%s %s seq %s at %s" % (
@@ -2301,6 +2360,40 @@ class HostWatch:
         self._say(now, "round %d: %s pid %s: %s%s" % (n, t.get("image") or "?", t.get("pid"), src.text,
                                                      " (attached again after a hole)" if again else ""))
         return src
+
+    def _benign(self, now, n, key, t, entry):
+        """REDO R-1 (C-1d): a benign tree gets no source: no os follow, no
+        host lines, no source finding, no knock, and HOST-UNWATCHED never
+        judges it (its source is "benign", not none). Said on the tree."""
+        src = TreeSource(BENIGN_SOURCE, BENIGN_WORD, word=BENIGN_WORD)
+        if entry.get("source") != BENIGN_SOURCE:
+            entry.update(source=BENIGN_SOURCE, source_text=BENIGN_WORD, source_word=BENIGN_WORD, source_round=n,
+                         source_project=None)
+            self._say(now, "round %d: %s pid %s: %s" % (n, t.get("image") or "?", t.get("pid"), BENIGN_WORD))
+        entry.setdefault("source_findings", {})
+        return src
+
+    def _quiet_text(self, key, n):
+        """REDO R-4/R-5: what a quiet round saw, and the tree's source as it is
+        ("source kept" only when one is attached and running)."""
+        entry = self.trees.get(key) or {}
+        src = self.sources.get(key)
+        if entry.get("source") == BENIGN_SOURCE:
+            state = BENIGN_WORD
+        elif src is None:
+            state = "no source attached"
+        elif src.kind == "none":
+            state = "no source: %s" % (src.error or "nothing could be attached")
+        elif src.error is not None:
+            state = "its %s source ended with a hole: %s" % (src.kind, src.error)
+        elif src.thread is not None and (not src.thread.is_alive() or src.stop.is_set()):
+            state = "its %s source ended: %s" % (src.kind, src.ended or "its follow returned")
+        else:
+            state = SOURCE_KEPT
+        text = QUIET_TEXT % (n, state)
+        if key[2] is None:   # R-5: no start time on either side: the pid and the image decided
+            text += "; " + START_UNREAD
+        return text
 
     def _hooks_silent(self, now, n, key, src):
         """I-4 (A3, CLAUDE.md rule 4): a hooks source whose trace has had no
@@ -2637,6 +2730,16 @@ class HostWatch:
         if getattr(feed, "not_judged", None):
             self.source_not_judged[feed.path] = feed.not_judged
         entry_tree = self.trees.get(key) or {}
+        recs = dict(feed.numbered)
+
+        def before_start(ln):   # REDO R-2: an os line whose time is before the watch's start
+            rec = recs.get(ln)
+            at = discover._ts(rec.get("ts")) if isinstance(rec, dict) and rec.get("source") == "os" else None
+            return at is not None and at < self.started
+        early = sum(1 for _, rec in feed.numbered if isinstance(rec, dict) and rec.get("source") == "os"
+                    and rec.get("phase") == "pre" and (discover._ts(rec.get("ts")) or self.started) < self.started)
+        if early and entry_tree:   # R-2: the count is said per tree (report, state, page)
+            entry_tree["before_start"] = early
         fired = []
         current = {(feed.path, feed.epoch, f["rule_id"], f["session_id"], tuple(f["cited_seq"]), f["summary"])
                    for f in found}
@@ -2648,7 +2751,7 @@ class HostWatch:
             if pending and not final:
                 continue
             cited = [ln for s in f["cited_seq"] for ln in lines_of.get((f["session_id"], s), [])]
-            history = bool(cited) and all(feed.history(ln) for ln in cited)
+            history = bool(cited) and all(feed.history(ln) or before_start(ln) for ln in cited)
             self.source_keys.add(fkey)
             if f["rule_id"] in self.source_grows:
                 old = next((e for e in self.source_findings if e.get("fkey") is not None
@@ -2667,19 +2770,40 @@ class HostWatch:
                      "source": src.kind, "at": self.at(now), "run": self.run, "history": history,
                      "pending": pending, "notice": None, "fkey": list(fkey), "grown": 0,
                      "state": PENDING_EXIT if pending else "settled"}
+            # REDO R-3: the same os event(s) judged by the same rule on another tree's feed is one finding: shown on
+            # the nearest tree (the least depth of its line), listed on the other as judged there, knocked once
+            acts = tuple(act_key(recs.get(ln)) for ln in cited) if cited and not pending else ()
+            acts = acts if acts and all(acts) else None
+            depth = min([d for d in ((recs.get(ln) or {}).get("input_meta", {}).get("depth") for ln in cited)
+                         if isinstance(d, int) and not isinstance(d, bool)] or [0]) if acts else None
+            other = self.act_findings.get((f["rule_id"], acts)) if acts else None
+            if other is not None and tuple(other["tree_key"]) == tuple(key):
+                other = None
+            moved = other is not None and depth < other.get("depth", 0)
+            entry.update(depth=depth)
             if history:
                 entry["notice"] = "history: not knocked"
             elif pending:   # as raqib watch at its end: listed and counted, the exit code is the alarm
                 entry["notice"] = "%s: pending for good is silence (ADR-0005 B-1): an alarm of the tree, exit 1" % (
                     PENDING_EXIT)
+            elif other is not None and not moved:
+                entry.update(judged_on=other["pid"], notice="%s: judged on tree pid %s (one act, one finding)" % (
+                    JUDGED_ELSEWHERE, other["pid"]))
+            elif moved:   # this tree is nearer: it shows the finding; the knock was the first feed's
+                entry["notice"] = "knocked once, by tree pid %s: %s" % (other["pid"], other["notice"])
+                self._judged_elsewhere(other, key)
             else:
                 entry["notice"] = self._source_knock(now, key, src, entry)
+            if acts and (other is None or moved):
+                self.act_findings[(f["rule_id"], acts)] = entry
             if pending:
                 self.pending_end.append(entry)
             self.source_findings.append(entry)
             if entry_tree:
                 counts = entry_tree.setdefault("source_findings", {})
-                word = "history" if history else PENDING_EXIT if pending else f["severity"]
+                word = ("history" if history else PENDING_EXIT if pending else JUDGED_ELSEWHERE
+                        if entry.get("judged_on") is not None else f["severity"])
+                entry["count_word"] = word
                 counts[word] = counts.get(word, 0) + 1
             fired.append("%s %s" % (f["rule_id"], tree_word(key)))
             self._say(now, "SOURCE FINDING [%s] %s on %s pid %s (%s): %s (%s)" % (
@@ -2697,6 +2821,21 @@ class HostWatch:
             if text not in self.notes:
                 self.notes.append(text)
         return fired
+
+    def _judged_elsewhere(self, other, key):
+        """REDO R-3: an entry shown so far on an outer tree moves to the nearer
+        tree key: the outer one lists it as judged there (counted apart)."""
+        old_word = other.get("count_word")
+        outer = self.trees.get(tuple(other["tree_key"]))
+        if outer is not None and old_word:
+            counts = outer.setdefault("source_findings", {})
+            counts[old_word] = max(0, counts.get(old_word, 0) - 1)
+            if not counts[old_word]:
+                del counts[old_word]
+            counts[JUDGED_ELSEWHERE] = counts.get(JUDGED_ELSEWHERE, 0) + 1
+        other.update(judged_on=key[0], count_word=JUDGED_ELSEWHERE,
+                     notice="%s: judged on tree pid %s (one act, one finding; knocked here: %s)" % (
+                         JUDGED_ELSEWHERE, key[0], other.get("notice")))
 
     def _source_knock(self, now, key, src, entry):
         """I-6 (ADR-0005 A-4, ADR-0006 A-12): a high finding knocks as its
@@ -2754,7 +2893,7 @@ class HostWatch:
     def source_alarms(self):
         """The live source findings: settled ones and, I-3 (ADR-0005 B-1),
         those pending at exit (pending for good is silence). History is not."""
-        return [f for f in self.source_findings if not f["history"]]
+        return [f for f in self.source_findings if not f["history"] and f.get("judged_on") is None]   # R-3: once
 
     def round_text(self, r):
         head = "round %d%s: %s records read, %s holes" % (r["round"], " (late, %.1f s)" % r["seconds"] if r["late"]
@@ -2763,7 +2902,7 @@ class HostWatch:
             head += ", %d line(s) could not be read" % r["unread_lines"]
         if r.get("nothing_read"):   # D-2: never "no agent seen" of a round that read nothing
             return "%s; NOTHING READ: an unread round (%s). Not a clearance." % (head, r["sample"])
-        if not r["trees"] and not r.get(QUIET):   # M7.8: a quiet tree is listed, never "no agent seen"
+        if not r["trees"] and not r.get(QUIET) and not r.get("not_judged"):   # M7.8: never beside a quiet tree
             return "%s; NO AGENT SEEN (%s; %s). Not a clearance." % (head, r["sample"], r["result"])
         parts = ["%d tree(s) now: %d candidate(s), %d act-root(s)" % (len(r["trees"]), r["candidates"], r["act_roots"])]
         if r["history"]:
@@ -2771,6 +2910,8 @@ class HostWatch:
         for word in ("new", "benign", "back", "gone", QUIET, "dark"):
             if r.get(word):
                 parts.append("%s: %s" % (word, ", ".join(r[word])))
+        if r.get("not_judged"):   # REDO R-4
+            parts.append("%s: %s" % (NOT_JUDGED, ", ".join(r["not_judged"])))
         if r.get("dark_notes"):   # M7.5 E1: a note, never a finding
             parts.append("%s: %s" % (DARK_NOTE, ", ".join(r["dark_notes"])))
         return "%s; %s" % (head, "; ".join(parts))
@@ -2899,15 +3040,15 @@ class HostWatch:
             out.append("  %s pid %s %s (%s%s): %s; first round %d%s%s; last round %d; %d act(s)%s%s" % (
                 "[%s]" % t["class"], t["pid"], t["image"] or "?", "named" if t["named"] else "unknown",
                 ": " + t["named_by"] if t["named_by"] else "", "now" if t["present"] else
-                "%s (its root alive in round %s, no talk; source kept)" % (QUIET, t.get("quiet_round"))
-                if t.get("quiet") else "gone",
+                t.get("quiet_text") or QUIET if t.get("quiet") else "gone",
                 t["first_round"], " (history, not knocked)" if t["history"] else "",
                 " (benign: %s, not knocked)" % t["benign_by"] if t.get("benign") else "", t["last_round"], t["acts"],
                 "; endpoints %s" % ", ".join(t["endpoints"]) if t["endpoints"] else "",
                 "; %s %s" % (NEW_AGENT if t["named"] else NEW_UNKNOWN, t["knocked"]) if t["knocked"] else ""))
-            out.append("      source: %s (%s); findings %s%s" % (
+            out.append("      source: %s (%s); findings %s%s%s" % (
                 t.get("source") or "none", t.get("source_text") or "nothing attached", severity_text(t.get("source_findings")),
-                "; %s %s" % (UNWATCHED, t["unwatched"]) if t.get("unwatched") else ""))
+                "; %s %s" % (UNWATCHED, t["unwatched"]) if t.get("unwatched") else "",
+                "; %d os event(s) %s" % (t["before_start"], BEFORE_START) if t.get("before_start") else ""))
             if t.get("rhythm") or t.get("suspicion") or t.get("suspect_below") or t.get("suspect_unsent") \
                     or t.get("suspect_unsendable"):   # M7.4 E4, K-1, K-2: on the tree
                 out.append("      %s" % tree_m74_text(t))

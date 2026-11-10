@@ -170,7 +170,7 @@ def test_e1_hashes_of_command_line_path_and_destination_never_the_text():
     command = '"C:\\Program Files\\Git\\usr\\bin\\bash.exe" -c -l "ls -la | grep src"'
     assert bash["input_sha256"] == common.canonical_sha256({"command_line": command})
     assert bash["input_meta"] == {"command_head": "bash.exe", "command_programs": ["bash.exe"], "image": "bash",
-                                  "depth": 1, "parent_seq": 2}   # D-9: the root's own line; M7.8: image
+                                  "parent_image": "agent", "depth": 1, "parent_seq": 2}   # D-9; M7.8: image, parent
     note = rows[("file", "2026-11-03T09:00:12.500Z")]
     assert note["input_sha256"] == common.canonical_sha256({"path": "C:\\work\\proj\\notes.txt"})
     assert note["input_meta"] == {"path": "C:\\work\\proj\\notes.txt"}
@@ -212,7 +212,7 @@ def test_e1_program_names_only_through_common(image, meta):
                              "<Data Name='Image'>%s</Data>" % image, 1)
     lines, _ = built(text, cwd=CWD)
     ls = [r for r in pres(lines) if r["ts"] == "2026-11-03T09:00:05.300Z"][0]
-    assert ls["input_meta"] == dict(meta, depth=2, parent_seq=5)
+    assert ls["input_meta"] == dict(meta, parent_image="bash", depth=2, parent_seq=5)   # M7.8 REDO R-7: the parent
 
 
 @pytest.mark.parametrize("ip, private", [
@@ -473,6 +473,7 @@ def test_d4_an_export_read_elsewhere_with_no_cwd_makes_the_scope_cwd_rules_parti
     assert cli.main(["report", str(log), "--scope", "."], out=out) == 1
     text = out.getvalue()
     assert "FINDINGS: 1" in text and "NET-TOOL (NET, signature) session os-4100" in text
+    assert "ALARMS (A3, A5): 0" in text   # M7.8 REDO R-8 (P8): a finding, and still no silence alarm
     assert "SCOPE-CWD-MOVED partial" in text and "SCOPE-CWD-ROOT partial" in text
 
 

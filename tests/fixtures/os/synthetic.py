@@ -34,8 +34,12 @@ this file.
     ExecutablePath, once per (pid, CreationDate), becomes the event 1 Sysmon
     would have logged at its creation (pid, parent pid, image, command line;
     no ProcessGuid, so the pid alone decides; times made up, 0.1 s apart).
-    The roots are the trees `raqib discover` finds there: explorer 5100 and
-    code 6050 of the desktop, kimi 10728.
+    The roots: explorer 5100 of the desktop (the whole desktop, code 6050's
+    subtree in it, once), kimi 10728.
+  - tests/fixtures/os/git-ssh-windows.sysmon.xml (root 4800, M7.8 REDO R-7):
+    git.exe -> Git's ssh.exe, git over SSH (NET-TOOL's negative);
+  - tests/fixtures/os/nested-windows.sysmon.xml (roots 6100 and 6200, REDO
+    R-3): outer.exe -> inner.exe -> cmd.exe -> curl.exe, two nested trees.
   The positives cite the lines of the listed programs (expect_seq, computed
   here from the image names, not from the rule); each rule's negative holds
   the desktop, Kimi's tree and the other rule's positive tree.
@@ -260,7 +264,12 @@ RM = "C:\\Program Files\\Git\\usr\\bin\\rm.exe"
 VSSADMIN = "C:\\Windows\\System32\\vssadmin.exe"
 BITSADMIN = "C:\\Windows\\System32\\bitsadmin.exe"
 PLINK = "C:\\Program Files\\PuTTY\\plink.exe"
-NET_PROGRAMS = ("curl", "bitsadmin", "plink")      # what the NET-TOOL positive must cite
+SSH = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
+GIT = "C:\\Program Files\\Git\\cmd\\git.exe"
+GIT_SSH = "C:\\Program Files\\Git\\usr\\bin\\ssh.exe"
+OUTER = "C:\\Users\\user\\AppData\\Local\\Programs\\outer\\outer.exe"
+INNER = "C:\\Users\\user\\AppData\\Local\\Programs\\inner\\inner.exe"
+NET_PROGRAMS = ("curl", "bitsadmin", "plink", "ssh")   # what the NET-TOOL positive must cite
 DESTRUCT_PROGRAMS = ("rm", "vssadmin")             # what the DESTRUCT-CMD positive must cite
 OS_CWD = "C:\\work\\proj"
 DESKTOP_CWD = "C:\\Users\\user"
@@ -291,6 +300,33 @@ def net_windows():
            'cmd.exe /c "bitsadmin /transfer j https://198.51.100.20/x C:\\work\\x"')
     x.proc("09.000", 4730, PLINK, '"%s" user@198.51.100.21' % PLINK, 4700, AGENT, '"%s"' % AGENT)
     x.file("10.000", 4700, AGENT, "C:\\work\\proj\\notes.txt")
+    # M7.8 REDO R-7: ssh under cmd is NET-TOOL's (git-ssh-windows holds ssh under git, which is not)
+    x.proc("11.000", 4740, CMD, 'cmd.exe /c "ssh user@198.51.100.22"', 4700, AGENT, '"%s"' % AGENT)
+    x.proc("11.100", 4750, SSH, "ssh user@198.51.100.22", 4740, CMD, 'cmd.exe /c "ssh user@198.51.100.22"')
+    return x.text()
+
+
+def git_ssh_windows():
+    """Root 4800 (M7.8 REDO R-7): git over SSH - git.exe starts Git's ssh.exe for a fetch; git is left out of
+    NET-TOOL on every source, so its ssh is too (SYNTHETIC)."""
+    x = Export(first_record=75001)
+    x.proc("00.100", 4800, AGENT, '"%s"' % AGENT, 900, EXPLORER, "C:\\Windows\\Explorer.EXE")
+    x.net("01.000", 4800, AGENT, "203.0.113.7", 443, "api.example.com")
+    x.proc("05.200", 4810, GIT, '"%s" fetch origin' % GIT, 4800, AGENT, '"%s"' % AGENT)
+    x.proc("05.300", 4820, GIT_SSH, "ssh git@198.51.100.23 \"git-upload-pack 'proj.git'\"", 4810, GIT,
+           '"%s" fetch origin' % GIT)
+    return x.text()
+
+
+def nested_windows():
+    """Roots 6100 and 6200 (M7.8 REDO R-3): two nested trees, outer.exe -> inner.exe -> cmd.exe -> curl.exe;
+    each tree's os source reads the curl, at depth 3 under the outer root and 2 under the inner (SYNTHETIC)."""
+    x = Export(first_record=76001)
+    x.proc("00.100", 6100, OUTER, '"%s"' % OUTER, 900, EXPLORER, "C:\\Windows\\Explorer.EXE")
+    x.proc("00.500", 6200, INNER, '"%s"' % INNER, 6100, OUTER, '"%s"' % OUTER)
+    x.proc("05.200", 6210, CMD, 'cmd.exe /c "curl -s https://198.51.100.24/x"', 6200, INNER, '"%s"' % INNER)
+    x.proc("05.300", 6220, CURL, "curl -s https://198.51.100.24/x", 6210, CMD,
+           'cmd.exe /c "curl -s https://198.51.100.24/x"')
     return x.text()
 
 
@@ -336,8 +372,11 @@ def os_fixture_exports():
         "sysmon-synthetic": (synthetic(), (ROOT_PID,), OS_CWD),
         "net-windows": (net_windows(), (4700,), OS_CWD),
         "destruct-windows": (destruct_windows(), (4600,), OS_CWD),
+        # REDO (P6 note): the whole desktop once, under explorer; code 6050's subtree is in it
         "benign-windows-desktop": (as_os_lines_export(os.path.join(discover, "benign", "windows-desktop"), 73001),
-                                   (5100, 6050), DESKTOP_CWD),
+                                   (5100,), DESKTOP_CWD),
+        "git-ssh-windows": (git_ssh_windows(), (4800,), OS_CWD),
+        "nested-windows": (nested_windows(), (6100, 6200), OS_CWD),
         "kimi-two-samples": (as_os_lines_export(os.path.join(discover, "kimi", "two-samples"), 74001), (10728,),
                              DESKTOP_CWD),
     }
@@ -345,10 +384,11 @@ def os_fixture_exports():
 
 OS_RULE_FIXTURES = {   # rule fixture -> the exports whose os lines it holds, and what a positive must cite
     "NET-TOOL/positive-os-process.json": (("sysmon-synthetic", "net-windows"), NET_PROGRAMS),
-    "NET-TOOL/negative-os-process.json": (("benign-windows-desktop", "kimi-two-samples", "destruct-windows"), None),
+    "NET-TOOL/negative-os-process.json": (("benign-windows-desktop", "kimi-two-samples", "destruct-windows",
+                                           "git-ssh-windows"), None),
     "DESTRUCT-CMD/positive-os-process.json": (("destruct-windows",), DESTRUCT_PROGRAMS),
     "DESTRUCT-CMD/negative-os-process.json": (("benign-windows-desktop", "kimi-two-samples", "sysmon-synthetic",
-                                               "net-windows"), None),
+                                               "net-windows", "git-ssh-windows"), None),
 }
 
 
