@@ -302,6 +302,17 @@ LINUX_HOLE = ("Linux: a tree is keyed by (pid, image, its start in clock ticks s
               " the same image between rounds is then taken for the same tree, not new, and quiet when it is gone")
 
 
+BRIEF = "brief"                    # M7.9 (P-4): a tree seen in the round's channel only, not at the sample
+BRIEF_TEXT = "brief (seen in the channel, not at the sample)"
+BETWEEN_HOLE = "a tree that lives between two rounds is not seen: %s"   # M7.9 E4: said in the first lines
+BETWEEN_LINUX = ("Linux: the rounds read /proc only, and no audit source of process events is read (M7.9 reads the"
+                 " Sysmon channel on Windows only); a tree that starts, talks, acts and ends between two snapshots is"
+                 " in no round")
+BETWEEN_NO_SYSMON = ("no Sysmon channel is read (%s): each round is one sample of the OS API, so a tree that starts,"
+                     " talks, acts and ends between two samples is in no round")
+CHANNEL_KINDS = ("channel-unread", "channel-cut", "channel-helper")   # M7.9: the round's channel read, a hole when short
+
+
 class HostError(Exception):
     pass
 
@@ -342,7 +353,7 @@ def write_json(path, value):
 
 # --- the reader ------------------------------------------------------------------
 
-def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None):
+def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, channel=None):
     """The live round: discover's live collection, one sample on Windows
     (--window S on Linux: S seconds of snapshots, 1 s apart), built into an
     inventory as `raqib discover` builds it live. Read-only (A4). M7.4 E1:
@@ -355,7 +366,11 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None):
     (starttime) and /proc/stat (btime), discover.proc_start_times, read-only,
     kept as inv["child_started"] = {"from", "hole", "by": {pid: ISO UTC}}.
     No network call is made here, ever (the suspect call is not in
-    the reader: E3)."""
+    the reader: E3). M7.9 (P-4): channel (an os_sysmon.Channel, Windows with
+    Sysmon): after the sample, the round reads the channel's events since
+    the previous round (one bounded wevtutil) and gives them to the same
+    discover run as its `sysmon` source; a read that fails keeps the sample
+    and is the round's hole (inv["channel"] says what was read)."""
     platform_ = platform or sys.platform
 
     def read():
@@ -364,7 +379,18 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None):
                                                 win_samples=1, win_every=0.0, run_info=info)
         # M7.8 (P-2): the round's process sample rides on the inventory, so a tree whose root is alive and does
         # not talk is quiet, not gone
-        inv = discover.run(texts, catalog, holes=holes, live=True, run=info, processes=True)
+        reading = channel is not None and channel.on and channel.since is not None
+        record = None
+        if reading:   # M7.9: after the sample, so what the sample holds and the channel shows is one round's
+            from raqib.hooks import os_sysmon
+            text, more, record = channel.read()
+            holes = list(holes) + more
+            if text is not None:
+                texts["sysmon"] = ("live: %s qe %s /q:%s" % (os_sysmon.WEVTUTIL, os_sysmon.CHANNEL, record["query"]),
+                                   text, None)
+        inv = discover.run(texts, catalog, holes=holes, live=True, run=info, processes=True, channel=reading)
+        if record is not None:
+            inv["channel"] = record
         if platform_.startswith("linux"):
             got, label, hole = discover.read_conn_bytes(ss_paths or discover.SS_PATHS)
             inv["conn_bytes"] = {"from": label, "hole": hole, "by": got}
@@ -452,7 +478,9 @@ def trees_of(inv, catalog, no_drive=None):
     drive = inv.get("system_drive")
     for cls, group in (("candidate", inv.get("candidates") or []), ("act-root", inv.get("act_roots") or [])):
         for t in group:
-            key = (t.get("pid"), t.get("image"), t.get("started"))
+            # M7.9: a brief tree's start is its Sysmon 1 time; without one, its ProcessGuid stands for it
+            key = (t.get("pid"), t.get("image"), t.get("started") or t.get("channel_started")
+                   or ("guid %s" % t["guid"] if t.get("guid") else None))
             if key in out:     # a pid both: the candidate stands
                 continue
             ok, why = named(t, catalog)
@@ -483,7 +511,9 @@ def trees_of(inv, catalog, no_drive=None):
                         "acts": len(t.get("acts") or []), "endpoints": endpoints,
                         "cites": [dict(c, text=cite_text(c.get("text"))) for c in cites[:CITES_KEPT]],
                         "cwd": t.get("cwd") if isinstance(t.get("cwd"), str) and t.get("cwd") else None,
-                        "children": children, "remotes": remotes, "claude_code": claude, "claude_why": claude_why}
+                        "children": children, "remotes": remotes, "claude_code": claude, "claude_why": claude_why,
+                        "guid": t.get("guid"), "brief": bool(t.get("brief")),     # M7.9 (P-4)
+                        "channel_started": t.get("channel_started")}
     return out
 
 
@@ -1160,8 +1190,10 @@ class HostWatch:
     def __init__(self, reader, catalog, rules, notifier, every=EVERY_DEFAULT, window=0.0, rounds_max=None,
                  out=None, err=None, clock=None, wall=None, home=None, platform=None, deadline=None, run=None,
                  attach_hooks=False, sysmon=None, installer=None, os_follow=None, source_every=None, suspect=None,
-                 suspect_threshold=None, suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None):
-        """M7.2b: attach_hooks is the person's word for this watch
+                 suspect_threshold=None, suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None, channel=None):
+        """M7.9 (P-4): channel is the os_sysmon.Channel the reader reads each
+        round (None: no channel); it is told the watch's start and whether
+        Sysmon is there, and probed once for the kinds it holds (E4). M7.2b: attach_hooks is the person's word for this watch
         (--attach-hooks, or the window's checkbox; False by default, H-1):
         without it no file is written into any project. sysmon() -> (ok,
         why) (default: sysmon_present, read once at the start); installer
@@ -1259,6 +1291,24 @@ class HostWatch:
             self.sysmon = (sysmon or (lambda: sysmon_present(self.platform)))()
         except Exception as exc:     # an unknown channel is not a present one; the host source takes over
             self.sysmon = (False, "the Sysmon check failed: %s: %s" % (type(exc).__name__, exc))
+        self.channel = channel        # M7.9 (P-4)
+        self.guid_keys = {}           # M7.9 E2: ProcessGuid -> the tree's key (one tree, one key)
+        self.channel_said = []        # E4: what the channel does not hold, said once
+        if channel is not None:
+            channel.since, channel.on = self.started, bool(self.sysmon[0])
+            if channel.on:
+                try:
+                    channel.probe()
+                except Exception as exc:   # an unasked channel is said, never taken as complete
+                    channel.held_why = {k: "%s: %s" % (type(exc).__name__, exc) for k in (1, 3, 22)}
+                    channel.held = {k: None for k in (1, 3, 22)}
+                self.channel_said = channel.missing_lines()
+                self.notes += self.channel_said
+        if channel is None or not channel.on:
+            if self.platform.startswith("linux"):
+                self.notes.append(BETWEEN_HOLE % BETWEEN_LINUX)
+            elif self.platform == "win32" or channel is not None:
+                self.notes.append(BETWEEN_HOLE % (BETWEEN_NO_SYSMON % self.sysmon[1]))
         if self.missing_rules:
             self._hole(self.t0, "host-rule", "rule(s) %s not in the catalog: what they judge is not judged"
                        % ", ".join(self.missing_rules))
@@ -1622,7 +1672,8 @@ class HostWatch:
         sample = sample_of(inv)
         ts = self.at(now)
         no_drive = []
-        current = trees_of(inv, self.catalog, no_drive)
+        current = self._one_key(trees_of(inv, self.catalog, no_drive))   # M7.9 E2: the ProcessGuid keys a tree
+        self._channel_holes(now, n, inv)
         round_at = self.started + datetime.timedelta(seconds=now - self.t0)
         round_from = getattr(self, "last_round_at", None) or round_at - datetime.timedelta(seconds=self.every)
         self.last_round_at = round_at
@@ -1636,16 +1687,21 @@ class HostWatch:
             entry = self.trees.get(key)
             was = self.prev_class.get(key, QUIET if key in self.quiet else "absent")
             if entry is None:
-                entry = self.trees[key] = dict(t, first_round=n, first_seen=ts, history=False,
+                entry = self.trees[key] = dict(t, first_round=n, first_seen=ts, history=False, sampled=False,
                                                candidate_round=None, knocked=None, rounds_seen=0)
             elif key not in self.present and key not in self.quiet:   # M7.8: a quiet tree that talks again is not back
                 back.append(tree_word(key))
             candidate_before = entry["candidate_round"] is not None
-            history = (first and t["class"] == "candidate") or entry["history"]
+            # M7.9: a root whose Sysmon 1 the round read began after the watch's start: not the state at the start
+            history = (first and t["class"] == "candidate" and not self._after_start(t.get("channel_started"))
+                       ) or entry["history"]
             entry.update({k: t[k] for k in ("class", "id", "named", "named_by", "benign", "benign_by", "acts",
-                                            "endpoints", "cites", "exe", "started_at")})
+                                            "endpoints", "cites", "exe", "started_at", "brief")})
+            for k in ("guid", "channel_started"):
+                if t.get(k):
+                    entry[k] = t[k]
             entry.update(last_round=n, last_seen=ts, present=True, quiet=False, rounds_seen=entry["rounds_seen"] + 1,
-                         history=history)
+                         history=history, sampled=entry.get("sampled", True) or not t["brief"])
             # REDO 2 T-2 (R-1 amended): a benign tree is sourced like any other; its catalog findings are notes
             src = self._attach(now, n, key, t, entry)
             if t["benign"]:
@@ -1664,6 +1720,8 @@ class HostWatch:
                                    "named_by": t["named_by"], "benign": t["benign"], "benign_by": t["benign_by"],
                                    "acts": t["acts"], "endpoints": t["endpoints"], "run": self.run,
                                    "sample": sample, "cites": [dict(c) for c in t["cites"]], "rhythm": rhythm}}
+            if t["brief"]:   # M7.9 (P-4): only on a brief tree's line, so every other line keeps its shape
+                line["input_meta"].update(brief=True, seen=BRIEF_TEXT)
             lines.append(line)
             entry["line_seq"] = self.seq
             if t["class"] == "candidate" and entry["candidate_round"] is None:
@@ -1677,6 +1735,7 @@ class HostWatch:
         alive = None
         if isinstance(sampled, list):
             alive = {(p.get("pid"), p.get("image"), p.get("started") or None) for p in sampled if isinstance(p, dict)}
+            alive |= {self._same_tree(k, None, k[2]) for k in alive} - {None}   # M7.9: a brief tree sampled now
         elif left and not self.no_sample_said:
             self.no_sample_said = True
             self.notes.append("round %d: %s" % (n, NO_SAMPLE_NOTE))
@@ -1840,6 +1899,8 @@ class HostWatch:
                   "candidates": sum(1 for t in current.values() if t["class"] == "candidate"),
                   "act_roots": sum(1 for t in current.values() if t["class"] == "act-root"),
                   "history": first, "new": new, "benign": benign_new, "gone": gone, "back": back, "quiet": quiet,
+                  BRIEF: sorted(tree_word(k) for k, t in current.items() if t["brief"]),
+                  "channel": inv.get("channel"),
                   "not_judged": not_judged, "dark": dark_now,
                   "cleared": cleared, "findings": fired, "lines": lines,
                   "dark_notes": [d["path"] for d in self.dark_notes if d["round"] == n],   # M7.5 E1
@@ -2342,6 +2403,70 @@ class HostWatch:
 
     # --- the sources (M7.2b) ---------------------------------------------------------
 
+    def _same_tree(self, key, guid, start):
+        """M7.9 E2: the key of a tree seen before that is this process, or
+        None: the same pid and image, no other ProcessGuid, and a start within
+        discover.GUID_SAME_SECONDS (a sampled CreationDate against a Sysmon 1
+        time); with no start on either side, a tree of that pid and image
+        alive in the last round."""
+        at = utc_time(start)
+        for k, e in self.trees.items():
+            if k == key or k[0] != key[0] or k[1] != key[1] or (guid and e.get("guid") and e["guid"] != guid):
+                continue
+            if not guid and not e.get("guid"):
+                continue   # two sampled trees: their keys alone tell them apart (G-6), as before the channel
+            starts = [x for x in (utc_time(k[2]), utc_time(e.get("channel_started"))) if x is not None]
+            if at is not None and starts:
+                if any(discover._start_close(at, x) for x in starts):
+                    return k
+                continue   # two starts that differ: another process under a reused pid
+            if k in (self.present | self.quiet):   # no start on one side: the tree of that pid and image alive now
+                return k
+        return None
+
+    def _after_start(self, text):
+        """M7.9: a Sysmon 1 time at or after the watch's start (a tree created under the watch, not history)."""
+        at = utc_time(text)
+        return at is not None and at >= self.start_eff
+
+    def _one_key(self, current):
+        """M7.9 E2: one tree, one key, whichever way it is seen and in
+        whatever order: a ProcessGuid seen before keeps its key; a tree that
+        is a process seen before (_same_tree) takes that key; a pid reused by
+        another process (another guid, another start) is another tree."""
+        out = {}
+        for key in sorted(current, key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
+            t = current[key]
+            g = t.get("guid")
+            k = self.guid_keys.get(g) if g else None
+            if k is None:
+                k = self._same_tree(key, g, t.get("started") or t.get("channel_started"))
+            if k is None or k in out:
+                k = key
+            if g:
+                self.guid_keys.setdefault(g, k)
+            out[k] = dict(t, key=list(k), started=k[2]) if k != key else t
+        return out
+
+    def _channel_holes(self, now, n, inv):
+        """M7.9 E1: a round's channel read that failed, timed out or reached the cap is a hole of that round."""
+        if self.channel is None or not self.channel.on:
+            return
+        record = inv.get("channel")
+        if not isinstance(record, dict):
+            self._hole(now, "channel-unread", "round %d: the reader gave no record of the channel's read: what the"
+                       " channel holds since the previous round is not seen" % n, round_=n)
+            return
+        if record.get("error"):
+            self._hole(now, "channel-unread", "round %d: the Sysmon channel was not read (%s); the round keeps its"
+                       " sample; query %s" % (n, record["error"], record.get("query")), round_=n)
+        elif record.get("cut"):
+            self._hole(now, "channel-cut", "round %d: the Sysmon channel gave %d events, the cap: the rest are read by"
+                       " the next round; query %s" % (n, record.get("events"), record.get("query")), round_=n)
+        for text in self.channel.helpers.record[getattr(self.channel, "said", 0):]:
+            self._hole(now, "channel-helper", "round %d: %s" % (n, text), round_=n)
+        self.channel.said = len(self.channel.helpers.record)
+
     def _attach(self, now, n, key, t, entry):
         """The tree's source: the one attached, or (first sight, or its
         source ended with a hole) a new one: (c) hooks only under
@@ -2549,7 +2674,8 @@ class HostWatch:
             return self._none(now, n, t, ready)
         from raqib.hooks import os_sysmon
         path = self._source_path(key)
-        first = entry.get("first_round") == self.history_round   # there at the start: the channel's past is history
+        # there at the start: the channel's past is history (M7.9: not a tree whose creation the round's channel read)
+        first = entry.get("first_round") == self.history_round and not entry.get("channel_started")
         old = self.sources.get(key)
         if old is not None and old.thread is not None and old.thread.is_alive():
             old.stop.set()
@@ -2558,8 +2684,9 @@ class HostWatch:
                 self._hole(now, "source-out", "round %d: tree %s: its earlier os follow was still in a pass when it"
                            " was attached again" % (n, tree_word(key)), round_=n)
         feed = Feed(path, self.src_rules, None if first and old is None else self._size(path))
-        src = TreeSource("os", "os: Sysmon, rooted at pid %s: %s" % (t.get("pid"), path), path=path, feeds=[feed],
-                         word="os: Sysmon, rooted at pid %s" % t.get("pid"))
+        guid = " and ProcessGuid %s" % t["guid"] if t.get("guid") else ""
+        src = TreeSource("os", "os: Sysmon, rooted at pid %s%s: %s" % (t.get("pid"), guid, path), path=path,
+                         feeds=[feed], word="os: Sysmon, rooted at pid %s%s" % (t.get("pid"), guid))
         src.stop = threading.Event()
         src.helpers = os_sysmon.Helpers()   # I-5: the wevtutil it starts are Raqib's own, ended at Stop
         src.top = getattr(old, "top", None)
@@ -2574,13 +2701,14 @@ class HostWatch:
 
         def run():
             try:
-                follow(t.get("pid"), path, src.stop, every=self.source_every, out=io.StringIO(), err=io.StringIO(),
+                follow(root, path, src.stop, every=self.source_every, out=io.StringIO(), err=io.StringIO(),
                        on_pass=on_pass, after_record=src.top, helpers=src.helpers)
                 src.ended = src.ended or "stopped"   # I-4: the first reason (the tree is gone) is kept
             except BaseException as exc:   # the source's failure is a hole, never the end of the watch
                 src.error = "%s: %s" % (type(exc).__name__, " ".join(str(exc).split()))
                 if feed.history_bytes is None:
                     feed.history_bytes = self._size(path)
+        root = "%s:%s" % (t.get("pid"), t["guid"]) if t.get("guid") else t.get("pid")   # M7.9 E3: pid AND guid
         src.thread = threading.Thread(target=run, name="raqib-host-os-%s" % t.get("pid"), daemon=True)
         src.thread.start()
         return src
@@ -3060,6 +3188,11 @@ class HostWatch:
             else:
                 src.ended = src.ended or "stopped"
         self._helper_holes(now)
+        if self.channel is not None:   # M7.9 (I-5): the round's wevtutil still out is ended, and recorded
+            self.channel.helpers.end("the watch stopped (Stop)")
+            for text in self.channel.helpers.record[getattr(self.channel, "said", 0):]:
+                self._hole(now, "channel-helper", "the round's channel read: %s" % text)
+            self.channel.said = len(self.channel.helpers.record)
 
     def _helper_holes(self, now):
         """I-5: every wevtutil helper an os follow had to end is a hole of
@@ -3090,7 +3223,7 @@ class HostWatch:
         parts = ["%d tree(s) now: %d candidate(s), %d act-root(s)" % (len(r["trees"]), r["candidates"], r["act_roots"])]
         if r["history"]:
             parts.append("history (there at the start, not knocked)")
-        for word in ("new", "benign", "back", "gone", QUIET, "dark"):
+        for word in ("new", "benign", BRIEF, "back", "gone", QUIET, "dark"):
             if r.get(word):
                 parts.append("%s: %s" % (word, ", ".join(r[word])))
         if r.get("not_judged"):   # REDO R-4
@@ -3224,10 +3357,16 @@ class HostWatch:
             self.rounds, self.applied, late, failed))
         out += ["  %s" % (self.round_text(r) if not r.get("error") else "round %d: reader FAILED: %s" % (
             r["round"], r["error"])) for r in self.round_lines]
+        if self.channel is not None and self.channel.on:   # M7.9 (P-4): what the rounds read of the channel
+            out.append("CHANNEL (the rounds read the Sysmon channel since the previous round): %d read(s), %d failed, %d"
+                       " at the cap of %d; %d event(s); %d brief tree(s) (seen in the channel only)%s" % (
+                           self.channel.reads, self.channel.failed, self.channel.cut, self.channel.cap,
+                           self.channel.events, sum(1 for t in self.trees.values() if not t.get("sampled", True)),
+                           "".join("; %s" % x for x in self.channel_said)))
         out.append("TREES SEEN: %d (%d now, %d %s)" % (len(self.trees), len(self.present), len(self.quiet), QUIET))
         for key, t in self.trees.items():
             out.append("  %s pid %s %s (%s%s): %s; first round %d%s%s; last round %d; %d act(s)%s%s%s" % (
-                "[%s]" % t["class"], t["pid"], t["image"] or "?", "named" if t["named"] else "unknown",
+                "[%s]%s" % (t["class"], " [%s]" % BRIEF if not t.get("sampled", True) else ""), t["pid"], t["image"] or "?", "named" if t["named"] else "unknown",
                 ": " + t["named_by"] if t["named_by"] else "", "now" if t["present"] else
                 t.get("quiet_text") or QUIET if t.get("quiet") else "gone",
                 t["first_round"], " (history, not knocked)" if t["history"] else "",
@@ -3529,7 +3668,12 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
     environ = os.environ if environ is None else environ
     refresh = ui.REFRESH_DEFAULT if refresh is None else ui.check_refresh(refresh)
     platform = platform or sys.platform
-    reader = reader or live_reader(catalog, window, platform)
+    channel = None
+    if reader is None and platform == "win32":   # M7.9 (P-4): the rounds read the channel where Sysmon is
+        from raqib.hooks import os_sysmon
+        channel = os_sysmon.Channel(since=None)
+    reader = reader or (live_reader(catalog, window, platform, channel=channel) if channel is not None
+                        else live_reader(catalog, window, platform))
     notifier = notify.Notifier(HOST, enabled=not no_notify, reason="--no-notify" if no_notify else None,
                                environ=environ, stderr=err, host=True,
                                tmp_root=os.path.join(home, ".raqib", "tmp") if home else None)
@@ -3538,7 +3682,7 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
                             out=out, err=err, home=home, platform=platform, attach_hooks=attach_hooks,
                             sysmon=sysmon, installer=installer, os_follow=os_follow, suspect=suspect,
                             suspect_threshold=suspect_threshold, suspect_timeout=suspect_timeout,
-                            suspect_every=suspect_every)
+                            suspect_every=suspect_every, channel=channel)
     except HostError as exc:
         notifier.close()
         raise watch.WatchError(str(exc))
@@ -3552,7 +3696,10 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
     out.write("raqib watch --host: a round every %g s (%s), the reader's deadline %g s; %s\n" % (
         every, "a /proc snapshot" if platform.startswith("linux") and not window else
         "%g s of /proc snapshots" % window if platform.startswith("linux") else
-        "one sample of the OS API" if platform == "win32" else "the homes only (no live reader here)",
+        ("one sample of the OS API and the Sysmon channel's events 1, 3, 11, 22 since the previous round (one"
+         " bounded wevtutil, at most %d events; a tree seen there only is `%s`)" % (watcher.channel.cap, BRIEF)
+         if watcher.channel is not None and watcher.channel.on else "one sample of the OS API")
+        if platform == "win32" else "the homes only (no live reader here)",
         watcher.deadline_seconds, "%d round(s)" % rounds if rounds else "until Ctrl-C"))
     out.write("raqib watch --host: record %s\nraqib watch --host: state %s\n" % (
         _safe(watcher.rounds_path), _safe(watcher.state_path)))

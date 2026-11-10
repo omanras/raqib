@@ -548,11 +548,13 @@ class Helpers:
         return [self.ended(proc, why) for proc in list(self.running.values())]
 
 
-def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Popen, environ=None):
+def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Popen, environ=None, args=LIVE_ARGS):
     """read_live for a follow's pass (I-5): the same wevtutil, argv and
     environment, started as a child Raqib owns and waited for at most
     timeout seconds; one that has not returned is terminated and recorded on
-    helpers; (text, None) or (None, why it was not read)."""
+    helpers; (text, None) or (None, why it was not read). args (M7.9): the
+    wevtutil arguments after its path (default LIVE_ARGS: the whole channel;
+    a round of raqib watch --host gives round_args, a bounded query)."""
     environ = os.environ if environ is None else environ
     helpers = Helpers() if helpers is None else helpers
     env = {"SystemRoot": environ.get("SystemRoot") or "C:\\Windows"}
@@ -560,7 +562,7 @@ def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Pop
     if os.name == "nt":
         options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        proc = popen([WEVTUTIL] + list(LIVE_ARGS), **options)
+        proc = popen([WEVTUTIL] + list(args), **options)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return None, ("wevtutil could not be run (%s): the Sysmon channel was not read"
                       % (getattr(exc, "strerror", None) or type(exc).__name__))
@@ -629,3 +631,133 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
             on_pass(passes, top)
         if stop.wait(every):
             return passes
+
+
+# --- M7.9 (ADR-0007 Amendment P, ruling P-4): the round reads the channel ------------------------------------
+# One bounded read of the channel per round of raqib watch --host, by the same wevtutil (absolute path, SystemRoot
+# only, a timeout, Raqib's own helper ended and recorded: I-5). The query is built here from two values Raqib holds
+# itself - the watch's start (its own clock) and the highest EventRecordID an earlier round read (an integer parsed
+# by discover.sysmon_events) - and the event ids discover reads; no text of an event or of an agent goes into it.
+
+ROUND_IDS = (1, 3, 11, 22)        # discover.SYSMON_READ: the events the round gives discover
+ROUND_CAP = 2000                  # events per round at most (wevtutil /c:); reaching it is a hole of the round
+ROUND_TIMEOUT = FOLLOW_TIMEOUT    # I-5: one round's read, as a follow's pass
+HELD_IDS = (1, 3, 22)             # E4: the kinds whose absence from the channel is said once per watch
+HELD_WORDS = {1: "no event 1 (process create): a tree that starts and ends between two rounds is not seen",
+              3: "no event 3 (network connect): talk between two rounds is not seen (Sysmon without -n logs none)",
+              22: "no event 22 (DNS query): a name asked between two rounds is not seen"}
+
+
+def query_time(moment):
+    """An aware datetime as the XPath SystemTime text, UTC, milliseconds."""
+    offset = moment.utcoffset()
+    if offset is None:
+        raise ValueError("the watch's start must be an aware time")
+    moment = moment.replace(tzinfo=None) - offset
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (moment.microsecond // 1000)
+
+
+def round_query(after_record=None, since=None):
+    """The XPath of one round's read: the events of ROUND_IDS whose
+    EventRecordID is above after_record (an int), or, before any round read
+    a record, whose TimeCreated is at or after since (the watch's start).
+    Only Raqib's own values are formatted into it (int(), query_time())."""
+    ids = " or ".join("EventID=%d" % i for i in ROUND_IDS)
+    if after_record is not None:
+        bound = "EventRecordID>%d" % int(after_record)
+    elif since is not None:
+        bound = "TimeCreated[@SystemTime>='%s']" % query_time(since)
+    else:
+        raise ValueError("a round's query needs a bound: an EventRecordID or the watch's start")
+    return "*[System[(%s) and %s]]" % (ids, bound)
+
+
+def round_args(query, cap=ROUND_CAP):
+    """wevtutil's arguments for one round: oldest first (wevtutil's default
+    direction), at most cap events, XML."""
+    return ("qe", CHANNEL, "/q:%s" % query, "/c:%d" % int(cap), "/f:xml")
+
+
+def probe_args(event_id):
+    """E4: the newest event of one id (one event at most), read once at the
+    watch's start to say whether the channel holds that kind at all."""
+    return ("qe", CHANNEL, "/q:*[System[(EventID=%d)]]" % int(event_id), "/rd:true", "/c:1", "/f:xml")
+
+
+class Channel:
+    """The channel as raqib watch --host reads it, one bounded read per
+    round (M7.9). since: the watch's start (an aware datetime): round 1
+    reads nothing older. after: the highest EventRecordID a round read (the
+    next round reads only records above it). reader(args, timeout) ->
+    (text, None) or (None, why): default read_live_bounded with this
+    channel's helpers (tests give a fake; nothing here needs Windows)."""
+
+    def __init__(self, since, cap=ROUND_CAP, timeout=ROUND_TIMEOUT, reader=None, helpers=None):
+        self.since = since
+        self.cap = int(cap)
+        self.timeout = float(timeout)
+        self.helpers = Helpers() if helpers is None else helpers
+        self.reader = reader or (lambda args, timeout: read_live_bounded(timeout, self.helpers, args=args))
+        self.after = None
+        self.reads = 0
+        self.failed = 0
+        self.cut = 0
+        self.events = 0
+        self.last = None              # the last round's record: query, events, after, error, cut
+        self.held = {}                # E4: event id -> True (held), False (none in the channel), None (unread)
+        self.held_why = {}
+
+    def probe(self):
+        """E4, once at the watch's start: for each of HELD_IDS whether the
+        channel holds one such event. Its events are never a tree: only
+        their ids are counted."""
+        for event_id in HELD_IDS:
+            text, failed = self.reader(probe_args(event_id), self.timeout)
+            if failed is not None:
+                self.held[event_id], self.held_why[event_id] = None, failed
+                continue
+            got = list(discover.sysmon_events(text, "sysmon", [], (event_id,)))
+            self.held[event_id] = bool(got)
+        return self.held
+
+    def missing_lines(self):
+        """The first lines' and the report's words for what the channel does not hold (E4), one per kind."""
+        out = []
+        for event_id in HELD_IDS:
+            if self.held.get(event_id) is False:
+                out.append("the Sysmon channel holds %s" % HELD_WORDS[event_id])
+            elif event_id in self.held and self.held[event_id] is None:
+                out.append("the Sysmon channel could not be asked for event %d at the start (%s): whether it holds"
+                           " one is not known" % (event_id, self.held_why.get(event_id)))
+        return out
+
+    def read(self):
+        """One round's read: (text or None, holes, record). A read that fails
+        or times out gives no text and one hole; reaching the cap gives the
+        text and a hole (the next round reads on from the last record read)."""
+        query = round_query(self.after, self.since)
+        self.reads += 1
+        text, failed = self.reader(round_args(query, self.cap), self.timeout)
+        record = {"query": query, "cap": self.cap, "events": 0, "after": self.after, "error": failed, "cut": False}
+        if failed is not None:
+            self.failed += 1
+            self.last = record
+            return None, ["the Sysmon channel was not read this round (%s): the round keeps its sample; the next round"
+                          " reads the records after %s" % (failed, "record %d" % self.after if self.after is not None
+                                                           else "the watch's start")], record
+        count = len(discover.EVENT_START.findall(text))
+        ids = [e["record_id"] for e in discover.sysmon_events(text, "sysmon", [], None)
+               if isinstance(e.get("record_id"), int)]
+        if ids:
+            self.after = max(ids) if self.after is None else max(self.after, max(ids))
+        record.update(events=count, top=self.after)
+        self.events += count
+        holes = []
+        if count >= self.cap:
+            self.cut += 1
+            record["cut"] = True
+            holes.append("the Sysmon channel gave %d events this round, the cap (/c:%d): the records after %s are read"
+                         " by the next round, not this one (the rounds lag the channel while it is this busy)"
+                         % (count, self.cap, "record %d" % self.after if self.after is not None else "these"))
+        self.last = record
+        return text, holes, record

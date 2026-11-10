@@ -524,13 +524,30 @@ second field run; R-1 is amended by T-2, T-1 restated by V-1).
   new, and an ended tree is quiet, not gone; its quiet line ends "start
   time unread: a process of the same image holds the pid". The processes
   whose start could not be read are counted once per round, as a hole.
-- **What lives between two rounds is still a hole.** A tree that starts,
-  talks, acts and ends between two samples is never a tree of any round,
-  and a child that lives only between two samples is never a host-source
-  act. Where Sysmon is, an attached tree's os source sees every child it
-  creates (event 1), whatever the rounds see; reading the channel into the
-  round itself is the next task (ADR-0007 P-4). Linux, and a Windows host
-  without Sysmon, keep the hole.
+- **What lives between two rounds: closed where Sysmon is (ADR-0007
+  P-4), a hole everywhere else.** Where the Sysmon channel is readable, each
+  round also reads the channel's events 1, 3, 11 and 22 since the previous
+  round (one wevtutil of Raqib's own, absolute path, SystemRoot only, a
+  timeout, ended and recorded; the query is bounded by the last
+  EventRecordID read, and round 1 by the watch's start, so nothing older
+  is ever a tree) into the same discover run as the sample. A tree that
+  starts, talks, acts and ends between two samples is then a tree of that
+  round, listed as `brief` (seen in the channel, not at the sample), judged
+  by NEW-AGENT / NEW-AGENT-UNKNOWN, benign and history as a sampled tree,
+  and sourced by pid and ProcessGuid, so its acts are judged. Its
+  ProcessGuid keys it: a reused pid is another tree; a tree seen in the
+  channel in one round and in the sample in another is one tree (a
+  sampled CreationDate and a Sysmon 1 time within 2 s are one start).
+  What the channel's read does not close: a read that fails, times out or reaches the
+  cap of events per round is a hole of that round (the next round reads
+  on from the last record read, so a channel busier than the cap makes the
+  rounds lag); a channel that holds no event 1, 3 or 22 (Sysmon's
+  configuration: Raqib never changes it, A4) is said once in the watch's
+  first lines and the report, and what that kind would show between two
+  rounds stays unseen; where neither a start time nor a ProcessGuid tells
+  two processes of one image under one pid apart, they are one tree.
+  Linux (no audit source of process events is read) and a Windows host
+  without Sysmon keep the whole hole, said in the watch's first lines.
 - **What the os lines are judged by.** NET-TOOL and DESTRUCT-CMD judge an
   os process line by its image name (P-1: `input_meta.image`, discover's
   normalised form, `curl.exe` -> `curl`; R-7: and its parent's,

@@ -98,7 +98,9 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
   watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
-      of it; Windows one sample of the OS API), read-only; nothing installed,
+      of it; Windows one sample of the OS API and, where Sysmon is, the
+      channel's events 1, 3, 11, 22 since the previous round: a tree seen
+      only there is listed as brief, M7.9), read-only; nothing installed,
       no project touched. NEW-AGENT (high; NEW-AGENT-UNKNOWN, medium, when
       the catalog does not name it) knocks once per new tree that talks and
       acts ("host, <image> pid <n> (named|unknown)"); trees of the first
@@ -354,7 +356,8 @@ def _parser():
     # M7.2 (ADR-0007 decision 2): the host, not a name.
     w.add_argument("--host", action="store_true",
                    help="watch this host, not a project: discover in rounds; NEW-AGENT and AGENT-DARK-LIVE knock;"
-                        " installs nothing, touches no project")
+                        " installs nothing, touches no project; where Sysmon is, each round also reads the channel"
+                        " since the previous round, and a tree seen only there is listed as brief (M7.9)")
     w.add_argument("--every", type=float, default=None, metavar="T",
                    help="--host: a round every T seconds (default %g; a reader not back in 2 x T is a hole)"
                         % host.EVERY_DEFAULT)
