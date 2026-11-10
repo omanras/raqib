@@ -98,12 +98,18 @@ def test_e1_reading_then_trees_never_a_command_line():
     heads = [c[1] for c in app.TREE_COLUMNS]
     for col in ("image", "pid", "kind", "first seen", "endpoints"):
         assert col in heads
-    text = "\n".join(" ".join(str(c) for c in app.tree_values(r)) for r in v["rows"]) + "".join(
-        app.tree_detail_text(r, d) for r, d in zip(v["rows"], v["details"]))
-    assert "environment-manager" in text and "anthropic 160.79.104.0/23" in text
+    table = "\n".join(" ".join(str(c) for c in app.tree_values(r)) for r in v["rows"])
+    # REDO B-8: the whole screen as the window draws it - the table, the selected tree's detail, the card's
+    # lines, the findings' items, the verdict's detail and every line of "could not see" - as host_body was
+    body = "\n".join([table, "".join(app.tree_detail_text(r, d) for r, d in zip(v["rows"], v["details"])),
+                      app.empty_trees_text(v), v["detail"]] + [" ".join(map(str, it)) for it in
+                                                               app.host_finding_items(None, v)]
+                     + app.seen_lines(v["holes"], v.get("notes") or []))
+    assert "environment-manager" in body and "anthropic 160.79.104.0/23" in body
+    assert "hole: inventory: %s" % i["holes"][0] in body and len(v["holes"]) == 14   # the holes are read
     # E1: never a command line, a cited record's text or an executable path
-    assert "argv" not in text and "--session" not in text and "/usr/local/bin" not in text
-    assert "named" in text and "2026-" in text
+    assert "argv" not in table and "--session" not in body and "/usr/local/bin" not in body
+    assert "named" in body and "2026-" in body
 
 
 def test_e1_empty_round_says_no_agent_seen_with_records_and_holes_not_a_clearance():
@@ -112,7 +118,8 @@ def test_e1_empty_round_says_no_agent_seen_with_records_and_holes_not_a_clearanc
     assert until(p.done, WAIT)
     v = p.view()
     expected = "no agent seen (%d records, %d holes). Not a clearance." % (i["records"], len(i["holes"]))
-    assert v["word"] == "NO AGENT SEEN" and v["lines"] == [expected]   # the trees' card says it (M8.1)
+    assert v["word"] == "NO AGENT SEEN" and v["lines"] == [expected]
+    assert app.empty_trees_text(v) == app.sentence(expected)   # REDO B-8: the trees' card says it (M8.1)
     assert app.empty_line(30, 4) == "no agent seen (30 records, 4 holes). Not a clearance."
 
 
@@ -288,7 +295,8 @@ class FakeHostWatch:
             datetime.timezone.utc)), "heartbeat_age_seconds": 0.0, "stale_after_seconds": 30,
             "notifications": {"backend": "off", "reason": "t", "counts": {}}, "holes": [],
             "host": {"now": 0, "new": 0, "trees": [], "last_round": {"round": 1, "records": 30, "holes": 2,
-                                                                      "at": "T"}}}
+                                                                      "at": "T"}},
+            "code_so_far": 0}   # M8.1 REDO B-4: the watch writes the code of what it read so far
 
 
 class FakeServer:

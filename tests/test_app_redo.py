@@ -23,6 +23,9 @@ from test_app import TkSession, tk_or_skip, until  # noqa: E402
 from test_app_host import CATALOG, RULES, FakeHostWatch, TkHost, inv  # noqa: E402
 from test_watch import make_watch, rec, secret_call  # noqa: E402
 
+sys.path.insert(0, str(ROOT / "tests" / "fixtures" / "host"))
+import make as host_fixtures  # noqa: E402
+
 WAIT = 30
 # The event sequences Tk documents on Windows, macOS and X11 alike (bind(n), event(n), keysyms(n)): a keysym
 # here is one every Tk knows; <<PrevWindow>> and <<TreeviewSelect>> are Tk's own virtual events.
@@ -109,7 +112,7 @@ HOST_SCENARIOS = {
 
 
 @pytest.mark.parametrize("name", sorted(HOST_SCENARIOS))
-def test_redo_a2_host_code_now_is_the_code_the_host_watch_ends_with(home, name):
+def test_redo_b4_the_host_state_says_the_code_the_host_watch_ends_with(home, name):
     feed = list(HOST_SCENARIOS[name])
 
     def reader():
@@ -121,10 +124,32 @@ def test_redo_a2_host_code_now_is_the_code_the_host_watch_ends_with(home, name):
     for _ in range(len(HOST_SCENARIOS[name])):
         w.tick(wait=WAIT)
         w.clock.t += 1.0
-    now = host.code_now(w)
+    now = w.state(w.clock.t)["code_so_far"]   # REDO B-4: written by the watch, in its state
     _, code = w.finish()
     assert now == code, (name, now, code)
-    assert {0, 1, 3} >= {code}
+
+
+@pytest.mark.parametrize("name", host_fixtures.HOSTDATA_NAMES + ["linux", "windows"])
+def test_redo_b4_on_every_host_fixture(home, name):
+    w = _host_watch(home, lambda: host_fixtures.inventory(name.split(":")[0], CATALOG))
+    w.tick(wait=WAIT)
+    w.clock.t += 1.0
+    w.tick(wait=WAIT)
+    now = w.state(w.clock.t)["code_so_far"]
+    _, code = w.finish()
+    assert now == code, (name, now, code)
+
+
+def test_redo_b4_with_sources_attached(home):
+    """A host watch with an os source followed on its trees (test_host_sources' FakeFollow): the field is its
+    code there too."""
+    import test_host_sources as ths
+    w, clock = ths.make_host(home, ["windows", "windows"], sysmon=ths.SYSMON, os_follow=ths.FakeFollow())
+    ths.rounds(w, clock, 2)
+    assert w.sources
+    now = w.state(clock())["code_so_far"]
+    _, code = w.finish()
+    assert now == code and isinstance(now, int)
 
 
 def _project_lines(kind):
@@ -140,7 +165,7 @@ def _project_lines(kind):
 
 @pytest.mark.parametrize("kind", ["a medium finding (alarm)", "a secret in an output (alarm)",
                                   "a quiet session (clean or notes)", "nothing read yet"])
-def test_redo_a2_watch_code_now_is_the_code_the_project_watch_ends_with(tmp_path, kind):
+def test_redo_b4_the_project_state_says_the_code_the_project_watch_ends_with(tmp_path, kind):
     w, path, clock = make_watch(tmp_path)
     lines = _project_lines(kind)
     if lines:
@@ -148,53 +173,58 @@ def test_redo_a2_watch_code_now_is_the_code_the_project_watch_ends_with(tmp_path
     for _ in range(3):
         w.step()
         clock.t += 1.0
-    now = watch.code_now(w)
+    with w.lock:
+        now = w.state(clock())["code_so_far"]
     w.finish()
     assert now == w.final_exit, (kind, now, w.final_exit)
 
 
 @pytest.mark.parametrize("fixture", sorted(p.name for p in (ROOT / "tests" / "fixtures").glob("*.log")))
-def test_redo_a2_watch_code_now_on_every_fixture_trace(tmp_path, fixture):
+def test_redo_b4_on_every_fixture_trace(tmp_path, fixture):
     w, path, clock = make_watch(tmp_path)
     path.write_bytes((ROOT / "tests" / "fixtures" / fixture).read_bytes())
     for _ in range(3):
         w.step()
         clock.t += 1.0
-    now = watch.code_now(w)
+    with w.lock:
+        now = w.state(clock())["code_so_far"]
     w.finish()
     assert now == w.final_exit, (fixture, now, w.final_exit)
 
 
-def test_redo_a2_a_held_state_gives_no_code_and_the_level_rule():
-    class Held:
-        lock = threading.Lock()
-    Held.lock.acquire()
-    try:
-        assert host.code_now(Held(), wait=0.01) is None and watch.code_now(Held(), wait=0.01) is None
-    finally:
-        Held.lock.release()
-    assert [app.live_level(c, "WATCHING HOST", "clean") for c in (0, 1, 3)] == ["clean", "alarm", "incomplete"]
-    assert app.live_level(None, "WATCHING", "clean") == "clean"          # not known yet: the view's
-    assert app.live_level(0, "CRASHED or stuck (31 s)", "clean") == "alarm"
+def test_redo_b2_b5_the_level_rule_and_its_words():
+    assert [app.live_level(c, "WATCHING HOST") for c in (0, 1, 3)] == ["clean", "alarm", "incomplete"]
+    assert app.live_level(None, "WATCHING") == "incomplete"            # B-2: not known is never clean
+    assert app.live_level(0, "CRASHED or stuck (31 s)") == "alarm"
+    assert app.live_level(1, "WATCHING", lines=0) == "incomplete"      # B-5: the window's one softening
+    assert app.live_level(1, "SILENT for 70 s", lines=0) == "alarm"
+    assert app.live_cause(None, 0) == "not judged yet" and app.live_cause(1, 0, lines=0) == "no line read yet"
+    assert app.live_cause(1, 0, 0, 2) == "2 holes" and app.live_cause(1, 2) == "" and app.live_cause(1, 0, 1) == ""
     assert app.so_far("Watching this host", 3) == "Watching this host: 3 findings so far"
+    assert app.so_far("Watching the project", 0, 0, "1 hole") == "Watching the project: no finding so far; 1 hole"
     assert app.so_far("Watching the project", 0, 1) == "Watching the project: no finding so far, 1 suspicion"
     st = FakeHostWatch().state(0)
     st["host"] = dict(st["host"], findings=[{}, {}], source_findings=[{"history": False}, {"history": True}],
                       suspicions=[{}])
     assert app.host_counts(st) == (3, 1)
+    assert [i[2] for i in app.host_finding_items(dict(st, host=dict(st["host"], findings=[], suspicions=[],
+            source_findings=[{"rule_id": "NET-TOOL", "severity": "medium", "summary": "curl", "trace": "t.jsonl",
+                              "cited_seq": [4], "tree": "7:x:-", "history": False}])))] == ["NET-TOOL"]
 
 
 class CodeHost(TkHost):
     def __init__(self, code):
         super().__init__()
-        self.running = type("R", (), {"watcher": type("W", (), {"lock": threading.Lock(), "code": code})()})()
+        self.code = code
+
+    def state(self):
+        return dict(super().state(), code_so_far=self.code)
 
 
 @pytest.mark.parametrize("code, level", [(1, "alarm"), (3, "incomplete"), (0, "clean")])
 def test_tk_redo_a2_a8_the_verdict_and_the_rail_say_the_code_the_watch_would_end_with(home, tmp_path, monkeypatch,
                                                                                        code, level):
     tkinter, root = tk_or_skip()
-    monkeypatch.setattr(host, "code_now", lambda watcher, wait=0.2: watcher.code)
     window = None
     try:
         p = app.HostProbe(lambda: inv("linux"), CATALOG, 20.0)
@@ -208,12 +238,14 @@ def test_tk_redo_a2_a8_the_verdict_and_the_rail_say_the_code_the_watch_would_end
         window.host_toggle()
         window.tick()
         assert window.pill.cget("text") == level and window.verdict.cget("text") == (
-            "Watching this host: no finding so far")
+            "Watching this host: no finding so far" + ("; an alarm of the watch (its report says)" if code == 1
+                                                       else ""))   # B-5: the words say why
         assert ("Not a clearance." in window.note.cget("text") + window.detail.cget("text")) == (level == "clean")
         window.show_rules()                 # A-8: the rail says it on every screen
         window.tick()
         rows = window.shown["rail_watches"]
-        assert rows == [("Host", level, "no finding")]
+        assert rows == [("Host", level, "no finding" + ("; an alarm of the watch (its report says)" if code == 1
+                                                       else ""))]
         assert window.host_page_button.winfo_manager() == "pack"   # Open page on every screen
     finally:
         if window is not None:
@@ -419,25 +451,72 @@ def _rail_need(window):
     return need
 
 
+def _biggest(root, n=5):
+    """REDO B-1: the widgets that ask for the most width and height (class, Tk path, first words of their text)."""
+    out = []
+
+    def walk(w):
+        for c in w.winfo_children():
+            if c.winfo_manager():
+                try:
+                    text = str(c.cget("text"))[:40]
+                except Exception:
+                    text = ""
+                out.append((c.winfo_reqwidth(), c.winfo_reqheight(), c.winfo_class(), str(c), text))
+                walk(c)
+    walk(root)
+    wide = sorted(out, key=lambda x: -x[0])[:n]
+    tall = sorted(out, key=lambda x: -x[1])[:n]
+    return "widest: %s; tallest: %s" % (wide, tall)
+
+
 def _fit(root, window):
+    root.update()   # the wraps follow the widths they were given (Configure events), as in a running window
     root.update_idletasks()
-    return (root.winfo_reqwidth(), root.winfo_reqheight(), _rail_need(window))
+    at = (root.winfo_reqwidth(), root.winfo_reqheight(), _rail_need(window))
+    root.geometry("")           # REDO B-1: the window's natural size, as a withdrawn root on Windows takes it
+    for _ in range(2):
+        root.update_idletasks()
+        window.tick()
+    natural = (root.winfo_reqwidth(), root.winfo_reqheight())
+    root.geometry("900x600")
+    for _ in range(2):
+        root.update_idletasks()
+        window.tick()
+    bad = max(at[0], natural[0]) > 900 or max(at[1], natural[1]) > 600 or at[2] > 600
+    return at + natural + ((_biggest(root),) if bad else ())
 
 
+@pytest.mark.parametrize("font", ["the theme's", "DejaVu Sans"])
 @pytest.mark.parametrize("mode", ["light", "dark"])
-def test_tk_redo_a10_every_screen_and_each_disclosure_fits_900x600_rail_included(home, tmp_path, monkeypatch, mode):
+def test_tk_redo_a10_every_screen_and_each_disclosure_fits_900x600_rail_included(home, tmp_path, monkeypatch, mode,
+                                                                                 font):
+    """REDO A-10, B-1, B-8: every screen, the finished ones too, in both modes, each disclosure open on each
+    screen that has it, at 900x600 and at the window's natural size, the rail included; once more with a font
+    wider than Inter (DejaVu Sans) forced through pick_font. On a failure the message names the five widgets
+    that ask for the most width and height."""
     tkinter, root = tk_or_skip()
     monkeypatch.setattr(app, "os_mode", lambda platform=None, read=None: mode)
+    if font != "the theme's":
+        fonts = dict(app.THEME["fonts"], ui=(font,), display=(font,), mono=("DejaVu Sans Mono",))
+        monkeypatch.setitem(app.THEME, "fonts", fonts)
     window = None
     try:
-        window, c = _window(tkinter, root, home, tmp_path, lines=[("hooks", (False, "not installed"))])
+        window, c = _window(tkinter, root, home, tmp_path, lines=[("hooks", (False, "not installed")),
+                                                                  ("trace", ("UNSURE", "not checked"))])
         root.withdraw()
         root.geometry("900x600")
         seen = {}
+
+        def finish_project():
+            window.show_project()
+            c.stop_project("test")
         for name, go in (("host", window.show_host), ("project", window.show_first), ("rules", window.show_rules),
                          ("log", window.show_log), ("host watching", lambda: (window.show_host(),
                                                                               window.host_toggle())),
-                         ("watching", lambda: (window.show_first(), window.start()))):
+                         ("host finished", window.host_toggle),
+                         ("watching", lambda: (window.show_first(), window.start())),
+                         ("project finished", finish_project)):
             go()
             for _ in range(2):
                 window.tick()
@@ -448,9 +527,9 @@ def test_tk_redo_a10_every_screen_and_each_disclosure_fits_900x600_rail_included
                     window.tick()
                     seen["%s, %s open" % (name, d.name)] = _fit(root, window)
                     d.invoke()
-        bad = {k: v for k, v in seen.items() if v[0] > 900 or v[1] > 600 or v[2] > 600}
+        bad = {k: v for k, v in seen.items() if len(v) > 5}
         assert bad == {}, bad
-        assert len(seen) >= 6 + 7    # every screen, and each disclosure open on each screen that has it
+        assert len(seen) == 8 + 3 + 1 + 2 + 1 + 3 + 3 + 1 + 1   # every screen; each of its disclosures open
     finally:
         if window is not None:
             window.destroy()
@@ -472,6 +551,9 @@ def test_redo_a11_cells_cut_with_an_ellipsis_state_words_kept_first_seen_as_a_ti
     assert app.column_widths(100, [10, 10, 10], [50, 40, 10], (1, 0, 2)) == [50, 40, 10]
     assert app.column_widths(60, [10, 10, 10], [50, 40, 10], (1, 0, 2)) == [10, 40, 10]   # the first in order first
     assert app.column_widths(20, [10, 10], [50, 50]) == [10, 10]
+    # REDO B-7: the needs first (in their order), then the wants: a severity is given its width before an image
+    assert app.column_widths(60, [10, 10, 10], [50, 40, 10], (0, 1, 2), ([10, 25, 10],), (1, 0, 2)) == [25, 25, 10]
+    assert app.column_widths(40, [10, 10, 10], [50, 40, 10], (0, 1, 2), ([10, 25, 10], [10, 40, 10])) == [10, 20, 10]
 
 
 def test_tk_redo_a11_at_900x600_no_heading_and_no_state_word_is_cut(home, tmp_path):
@@ -567,6 +649,7 @@ def test_tk_redo_a13_badges_quiet_when_clean_panels_as_tall_as_the_screen_gives(
         assert named == "7.0" and window.checks_rows.bbox(named) is not None   # the line its title names, in view
         root.geometry("900x600")
         root.update()
+        window.tick()                                                 # the window's next tick follows the size
         root.update_idletasks()
         assert root.winfo_reqheight() <= 600
     finally:
@@ -601,3 +684,397 @@ def test_tk_redo_a16_after_its_teardown_no_thread_of_the_window_is_alive(home, t
             root.destroy()
     assert conftest.end_tk_test(before) == []
     assert not [t for t in threading.enumerate() if t not in before and t.is_alive()]
+
+
+# === REDO 2 (ADR-0009 Amendment B, B-1..B-10): the tests for the behaviour each ruling adds (B-10) ===============
+
+def _win(tkinter, root, home, tmp_path, make_host=None, make_session=None, reader=None, lines=None):
+    """A window over fakes: the look's reader, the host watch, the project watch, the doctor's lines."""
+    p = app.HostProbe(reader or (lambda: inv("linux")), CATALOG, 20.0, home=str(home))
+    c = app.Controller(app.Options(None, None, 60, environ={}), tray=None, make_session=make_session or TkSession,
+                       make_host=make_host or (lambda: TkHost()))
+    doctor = app.DoctorJob(str(tmp_path), checks=lambda x: (x, lines or [("python", (True, "3"))], []))
+    window = app.Window(tkinter, root, c, str(tmp_path), doctor_job=lambda x: doctor, probe=lambda: p,
+                        home=str(home))
+    root.withdraw()
+    assert until(lambda: doctor.result() is not None and p.done(), 10)
+    window.tick()
+    return window, c
+
+
+def _said(window):
+    return window.pill.cget("text"), window.verdict.cget("text"), "%s %s" % (window.note.cget("text"),
+                                                                            window.detail.cget("text"))
+
+
+class StateSession(TkSession):
+    """A project watch whose state the test sets (st); its final report clean, exit 0, when stopped."""
+
+    def __init__(self, project):
+        super().__init__(project)
+        self.st = dict(TkSession.state(self), findings=[])
+
+    def state(self):
+        return dict(self.st)
+
+    def stop(self, reason):
+        self.stopped.append(reason)
+        self.phase, self.final_text = "finished", "Raqib watch\nRESULT: CLEAN (exit 0)\n"
+
+    def snapshot(self):
+        return dict(super().snapshot(), final_exit=0 if self.final_text else None)
+
+
+class StateHost(TkHost):
+    """A host watch whose state the test gives (a real HostWatch's, B-6, B-7)."""
+
+    def __init__(self, st):
+        super().__init__()
+        self.st = st
+
+    def state(self):
+        return dict(self.st)
+
+
+def test_tk_redo2_b2_b5_the_project_path_with_a_known_code_and_without_one(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, make_session=StateSession)
+        window.start()
+        s = c.session
+        s.st["code_so_far"] = None                       # the first ask: no code known yet
+        window.tick()
+        assert _said(window)[:2] == ("incomplete", "Watching the project: no finding so far; not judged yet")
+        assert window.shown["rail_watches"] == [("Project", "incomplete", "no finding; not judged yet")]
+        s.st["code_so_far"] = 0                          # a known code: the watch's own rule says clean
+        window.tick()
+        pill, sentence_, beside = _said(window)
+        assert (pill, sentence_) == ("clean", "Watching the project: no finding so far") and "Not a clearance." in beside
+        s.st["code_so_far"] = None                       # not known now: the last known code, never a guess
+        window.tick()
+        assert _said(window)[:2] == ("clean", "Watching the project: no finding so far")
+        s.st.update(code_so_far=1, holes=[{"kind": "gap", "detail": "no line for 70 s", "at": "T"}])
+        window.tick()                                    # code 1 with no finding: the sentence names the hole
+        pill, sentence_, beside = _said(window)
+        assert (pill, sentence_) == ("alarm", "Watching the project: no finding so far; 1 hole")
+        assert "Not a clearance." not in beside
+        s.st.update(code_so_far=1, lines=0, holes=[])    # B-5: the window's one softening
+        window.tick()
+        assert _said(window)[:2] == ("incomplete", "Watching the project: no finding so far; no line read yet")
+        s.st.update(code_so_far=1, lines=2, findings=TkSession("x").state()["findings"])
+        window.tick()
+        assert _said(window)[:2] == ("alarm", "Watching the project: 1 finding so far")
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo2_b3_an_overlay_hole_decides_the_rules_verdict_after_a_change(home, tmp_path):
+    (home / ".raqib").mkdir()
+    (home / ".raqib" / "rules.yaml").write_text("rules:\n  NO-SUCH-RULE:\n    status: \"off\"\n", encoding="ascii")
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path)
+        window.show_rules()
+        window.tick()
+        assert window.pill.cget("text") == "incomplete" and "1 overlay line not applied" in window.detail.cget("text")
+        window.rule_widgets[("NET-TOOL", "switch")].invoke()   # a change that succeeds
+        assert window.rules_panel.level == "clean" and window.rules_panel.message   # its word is said...
+        assert window.pill.cget("text") == "incomplete"                          # ...the hole decides the level
+        assert "1 overlay line not applied" in window.detail.cget("text")
+        assert window.verdict_word == "RULES"
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def _source_state(home):
+    """A real host watch's state with one source finding and no tree finding (the review's F5 case)."""
+    import test_host_sources as ths
+    w, clock = ths.make_host(home, ["benign/linux-desktop", "linux-agent"])
+    ths.rounds(w, clock, 2)
+    st = w.state(clock())
+    w.finish()
+    assert app.host_counts(st) == (1, 0) and not st["host"].get("findings") and st["code_so_far"] == 1
+    return st
+
+
+def test_tk_redo2_b6_one_count_and_a_source_finding_is_an_item_with_its_cite(home, tmp_path):
+    st = _source_state(home)
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, make_host=lambda: StateHost(st))
+        window.host_toggle()
+        window.tick()
+        assert window.verdict.cget("text") == "Watching this host: 1 finding so far"
+        assert window.shown["rail_watches"] == [("Host", "alarm", "1 finding")]
+        assert window.findings_title.cget("text") == "Findings (1)"
+        assert c.tip.endswith(", 1 findings")                          # the tray's count, the same list
+        text = window.host_text.get("1.0", "end")
+        cite = st["host"]["source_findings"][0]
+        assert "NET-TOOL" in text and "source %s" % cite["trace"] in text and "seq 1" in text
+        assert window.counts["host"] == app.host_counts(st)
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_redo2_b6_one_function_counts_a_project_watch_for_every_place():
+    st = TkSession("x").state()
+    assert app.project_count(st) == 1 and app.project_count(dict(st, findings=[{}, "x", None])) == 1
+    assert app.project_count(None) == 0 and app.project_count({}) == 0
+
+
+def test_tk_redo2_b7_with_each_disclosure_open_the_table_keeps_the_card_width_and_its_words(home, tmp_path):
+    st = _source_state(home)
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, make_host=lambda: StateHost(st),
+                         lines=[("hooks", (False, "not installed")), ("trace", ("UNSURE", "not checked"))])
+        root.deiconify()
+        root.geometry("900x600")
+        window.host_toggle()
+        heads = [x[0] for x in app.TREE_COLUMNS]
+        opened = []
+        for d in [None] + [d for d in window.disclosures if d.toggle.winfo_manager()]:
+            if d is not None:
+                d.invoke()
+                opened.append(d.name)
+            for _ in range(3):
+                root.update()
+                window.tick()
+            tree = window.host_tree
+            total = sum(int(tree.column(x, "width")) for x in heads)
+            assert tree.winfo_width() - window.px(14) <= total <= tree.winfo_width(), (d and d.name, total,
+                                                                                       tree.winfo_width())
+            assert tree.get_children()
+            for iid in tree.get_children():
+                shown, row = tree.item(iid, "values"), window.payload["host"][iid][0]
+                full = app.tree_values(row)
+                kind, findings = heads.index("kind"), heads.index("findings")
+                assert str(shown[findings]) == str(full[findings]), (shown, full)   # a severity word, whole
+                flags = str(full[kind]).partition(" (")[2]
+                assert str(shown[kind]).endswith(" (" + flags) if flags else str(shown[kind]) == str(full[kind])
+                assert app.ELLIPSIS not in str(shown[heads.index("pid")])
+            if d is not None:
+                d.invoke()
+        assert opened == ["seen", "checks", "options"]
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo2_b7_a_panel_grows_with_its_lines_and_is_scrolled_only_when_it_opens(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        lines = [("python", (True, "3"))] * 7 + [("trace", ("UNSURE", "not checked"))]
+        window, c = _win(tkinter, root, home, tmp_path, reader=lambda: dict(inv("linux"), holes=["one"]),
+                         lines=lines)
+        root.deiconify()
+        root.geometry("1100x720")
+        root.update()
+        window.seen.invoke()
+        root.update()
+        window.tick()
+        before = int(window.seen_text.cget("height"))
+        for n in range(4):
+            c.hole("a hole that arrives later, number %d" % n)
+        window.tick()
+        root.update()
+        assert int(window.seen_text.cget("height")) == before + 4      # the panel grew with the lines
+        window.checks.invoke()                                          # opens: scrolled to its named line once
+        root.update()
+        text = window.checks_rows
+        assert text.named_line == "8.0" and text.bbox("8.0") is not None
+        text.yview_moveto(0)                                            # the person scrolls back to the top
+        root.update()
+        root.geometry("1000x700")                                       # a resize, then ticks
+        for _ in range(3):
+            root.update()
+            window.tick()
+        assert text.yview()[0] == 0.0                                   # left where the person put it
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo2_b7_a_finished_host_watchs_holes_are_in_could_not_see(home, tmp_path):
+    hole = {"kind": "reader-out", "detail": "round 2's reader was out at the end", "at": "2026-11-11T10:00:00Z"}
+    st = dict(FakeHostWatch().state(0), holes=[hole], code_so_far=3)
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, make_host=lambda: StateHost(st))
+        window.host_toggle()
+        window.tick()
+        window.host_toggle()                       # stopped: the final report is shown
+        window.tick()
+        assert c.host_view().get("final")
+        lines = window.shown["seen_lines"]
+        assert "hole: " + app.hole_line(hole) in lines
+        assert window.seen.title() == app.seen_title(lines) and lines.count("hole: " + app.hole_line(hole)) == 1
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo_c3_every_green_state_of_both_screens(home, tmp_path):
+    """REDO C-3, B-8 (the test test_app_look's docstring cites): each green state of the host screen and of
+    the project screen says "Not a clearance." beside its pill."""
+    from test_app_host import empty_inv
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path, reader=empty_inv, make_session=StateSession,
+                         make_host=lambda: CodeHost(0))
+        said = {}
+        window.show_host()
+        window.tick()
+        said["the look at open"] = _said(window)
+        window.host_toggle()
+        window.tick()
+        said["the host watch, clean so far"] = _said(window)
+        window.host_toggle()
+        window.tick()
+        said["the host watch, finished exit 0"] = _said(window)
+        window.show_first()
+        window.start()
+        c.session.st["code_so_far"] = 0
+        window.tick()
+        said["the project watch, clean so far"] = _said(window)
+        c.stop_project("test")
+        window.tick()
+        said["the project watch, finished exit 0"] = _said(window)
+        for name, (pill, _, beside) in said.items():
+            assert pill == "clean" and "Not a clearance." in beside, (name, pill, beside)
+        assert len(said) == 5
+        assert "suppressed" not in said["the project watch, clean so far"][2]
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+@pytest.mark.parametrize("typed, word", [("abc", "must be a whole number"), ("", "must be a whole number"),
+                                         ("101", "outside its bounds"), ("0", "outside its bounds")])
+def test_tk_redo2_b8_a_typed_value_refused_goes_back_and_says_why_beside_its_row(home, tmp_path, typed, word):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path)
+        window.show_rules()
+        window.tick()
+        field = window.rule_widgets[("HOST-RHYTHM", "k=")]
+        was = field.get()
+        field.delete(0, "end")
+        field.insert(0, typed)
+        window.rules_threshold("HOST-RHYTHM", "k", field.get().strip(), "k=")   # what Enter calls (KEYS act)
+        assert window.verdict_word == "RULES: REFUSED" and word in window.rule_said[1], window.rule_said
+        assert window.rule_widgets[("HOST-RHYTHM", "k=")].get() == was           # the rule's real value, back
+        frame = dict((i["id"], f) for i, f in window.rule_rows)["HOST-RHYTHM"]
+        texts = [str(w.cget("text")) for w in frame.winfo_children() if w.winfo_class() == "TLabel"]
+        assert window.rule_said[1] in texts
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo2_b8_a_refused_step_goes_back_and_says_why_beside_its_row(home, tmp_path, monkeypatch):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _win(tkinter, root, home, tmp_path)
+        window.show_rules()
+        window.tick()
+        was = window.rule_widgets[("HOST-RHYTHM", "k=")].get()
+
+        def refuse(*a, **k):
+            raise overlay.OverlayError("HOST-RHYTHM k refused: its fixture fails at this value (a test's refusal)")
+        monkeypatch.setattr(overlay, "set_threshold", refuse)
+        window.rule_widgets[("HOST-RHYTHM", "k")].invoke()                       # the plus step
+        assert window.verdict_word == "RULES: REFUSED"
+        assert window.rule_said == ("HOST-RHYTHM", "REFUSED: threshold refused: HOST-RHYTHM k refused: its fixture"
+                                                   " fails at this value (a test's refusal)")   # RulesPanel's words
+        assert window.rule_widgets[("HOST-RHYTHM", "k=")].get() == was
+        frame = dict((i["id"], f) for i, f in window.rule_rows)["HOST-RHYTHM"]
+        assert window.rule_said[1] in [str(w.cget("text")) for w in frame.winfo_children()
+                                       if w.winfo_class() == "TLabel"]
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+# --- B-9: the ctypes guard; a refused user rule said as refused, not off ------------------------------------------
+
+ALLOWED_CTYPES = {"windll", "c_int", "c_long", "c_void_p", "c_uint", "byref", "sizeof"}
+ALLOWED_CALLS = {("shcore", "SetProcessDpiAwareness"), ("dwmapi", "DwmSetWindowAttribute")}
+
+
+def _ctypes_refusals(tree):
+    """Every form of ctypes outside the two declared calls: an import of it outside _win_api, getattr on it,
+    pythonapi, a ctypes attribute or a windll call not in the lists."""
+    win = [f for f in ast.walk(tree) if isinstance(f, ast.FunctionDef) and f.name == "_win_api"]
+    inside = {id(n) for f in win for n in ast.walk(f)}
+    out = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import) and any(a.name.split(".")[0] in ("ctypes", "_ctypes") for a in n.names) or (
+                isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] in ("ctypes", "_ctypes")):
+            if id(n) not in inside or isinstance(n, ast.ImportFrom):
+                out.append("import of ctypes at line %d" % n.lineno)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ("getattr", "__import__") \
+                and n.args and isinstance(n.args[0], (ast.Name, ast.Attribute, ast.Constant)):
+            first = n.args[0]
+            name = first.id if isinstance(first, ast.Name) else getattr(first, "attr", getattr(first, "value", ""))
+            if name in ("ctypes", "_ctypes", "windll") or n.func.id == "__import__":
+                out.append("getattr on ctypes at line %d" % n.lineno)
+        if isinstance(n, ast.Attribute) and n.attr == "pythonapi" or isinstance(n, ast.Name) and n.id == "pythonapi":
+            out.append("pythonapi at line %d" % n.lineno)
+        if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name) and n.value.id == "ctypes" \
+                and n.attr not in ALLOWED_CTYPES:
+            out.append("ctypes.%s at line %d" % (n.attr, n.lineno))
+        if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Attribute) and isinstance(n.value.value,
+                                                                                              ast.Attribute) \
+                and n.value.value.attr == "windll" and (n.value.attr, n.attr) not in ALLOWED_CALLS:
+            out.append("windll.%s.%s at line %d" % (n.value.attr, n.attr, n.lineno))
+    return out
+
+
+def test_redo2_b9_the_guard_refuses_getattr_on_ctypes_and_pythonapi_and_app_has_neither():
+    assert _ctypes_refusals(ast.parse((ROOT / "raqib" / "app.py").read_text(encoding="ascii"))) == []
+    for bad in ("import ctypes\nx = getattr(ctypes, 'windll')\n",
+                "def _win_api():\n    import ctypes\n    return getattr(ctypes, 'windll')\n",
+                "def _win_api():\n    import ctypes\n    return ctypes.pythonapi\n",
+                "def _win_api():\n    import ctypes\n    return ctypes.CDLL('x')\n",
+                "def _win_api():\n    import ctypes\n    return ctypes.windll.kernel32.TerminateProcess\n",
+                "from ctypes import windll\n", "m = __import__('ctypes')\n", "import ctypes.util\n"):
+        assert _ctypes_refusals(ast.parse(bad)), bad
+
+
+def test_redo2_b9_a_refused_user_rule_is_said_refused_in_the_rail_not_also_off():
+    info = {"file": "read", "off": [{"rule_id": "MINE", "refused": "no fixtures beside it"}], "refused": [],
+            "user_refused": ["MINE: no fixtures beside it"]}
+    assert app.rail_rules(info) == ("No rule off; rules: 1 refused", "incomplete")
+    both = dict(info, off=info["off"] + [{"rule_id": "NET-TOOL", "since": "T"}])
+    assert app.rail_rules(both) == ("1 rule off; rules: 1 refused", "incomplete")

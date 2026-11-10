@@ -591,7 +591,8 @@ class TkSession(FakeSession):
     def state(self):
         return {"status": "watching", "lines": 2, "url": "http://127.0.0.1:1/", "capture": {},
                 "notifications": {"backend": "off", "reason": "--no-notify", "counts": {}},
-                "findings": [entry("SECRET-OUTPUT", "high", [2])], "holes": [], "silence": []}
+                "findings": [entry("SECRET-OUTPUT", "high", [2])], "holes": [], "silence": [],
+                "code_so_far": 1}   # M8.1 REDO B-4: the watch writes the code of what it read so far
 
 
 def pump(root, cycles=5):

@@ -713,8 +713,9 @@ def test_e4_the_window_rows_carry_the_source_and_findings_by_severity(home):
     view = app.host_watch_view(w.state(clock()))
     (row,) = [r for r in view["rows"] if r[1] == "1600"]
     assert row[5] == "host" and row[6] == "medium 1"
-    heads = [c[1] for c in app.TREE_COLUMNS]   # M8.1 REDO A-9: the table's headings as the window draws them
-    assert "source" in heads and "findings" in heads
+    heads = [c[1] for c in app.TREE_COLUMNS]   # M8.1 REDO B-8: the row's cells under their headings, as drawn
+    values = app.tree_values(row)
+    assert values[heads.index("source")] == "host" and values[heads.index("findings")] == "medium 1"
     w.finish()
 
 

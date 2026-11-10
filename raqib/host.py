@@ -2834,6 +2834,18 @@ class HostWatch:
                 "%s pid %s" % (t["image"] or "?", t["pid"]) for t in self.trees.values()))]
         return "none-seen", []
 
+    def code_so_far(self):
+        """M8.1 REDO B-4 (ADR-0009 Amendment B): the exit code this watch would
+        end with if it were stopped now, by its own rule (result(), as
+        summary() reads it) on what has been read so far; finish() may still
+        add a reader that is out, the last source poll, late beats and what
+        was never sent. A result that cannot be computed is 1, as a summary
+        that cannot be built is."""
+        try:
+            return EXIT[self.result()[0]]
+        except Exception:
+            return 1
+
     def summary(self):
         result, reasons = self.result()
         code = EXIT[result]
@@ -3007,6 +3019,7 @@ class HostWatch:
             "rules_overlay": dict(self.rules_overlay, not_judged=self.all_not_judged()),   # M7.6 (ADR-0008)
         }
         state["band"] = ui.status(state)[0]
+        state["code_so_far"] = self.code_so_far()   # M8.1 REDO B-4: the code of what has been read so far
         return state
 
     def all_not_judged(self):
@@ -3240,20 +3253,6 @@ def conclude(running, crash):
     if hole:
         out.write("raqib watch --host: %s\n" % _safe(hole))
     return text, code
-
-
-def code_now(watcher, wait=0.2):
-    """M8.1 REDO A-2 (ADR-0009 Amendment A): the exit code the host watch
-    would end with now, by its own rule - result(), which finish() reads
-    through summary() - without finishing it: 0, 1 or 3; None when its state
-    is held longer than `wait` seconds. Reads under the watch's lock;
-    changes nothing."""
-    if not watcher.lock.acquire(timeout=wait):
-        return None
-    try:
-        return EXIT[watcher.result()[0]]
-    finally:
-        watcher.lock.release()
 
 
 def close(running):

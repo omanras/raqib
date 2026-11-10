@@ -11,7 +11,7 @@ only:
   trees found (image, pid, named / unknown / benign, first seen, acts,
   endpoints; never a command line), or "no agent seen (N records, M holes).
   Not a clearance."; a round that read nothing is NOTHING READ. The doctor
-  lines fold under "Checks" (open when any is MISSING). "Watch this host"
+  lines fold under "Checks" (M8.1: it opens only on a click). "Watch this host"
   runs the HostWatch of `raqib watch --host` (HostSession: host.start,
   host.loop with Stop, host.conclude, host.close; a round every --every T
   seconds) in a worker: its table, its NEW-AGENT / AGENT-DARK-LIVE lines,
@@ -115,7 +115,6 @@ from raqib import host as hostmod, notify, overlay, tray as traymod, ui, watch
 
 TITLE = "Raqib"
 TICK_MS = 500                 # how often the window reads the state (after())
-CODE_SECONDS = 1.0            # REDO A-2: how often the window asks a running watch the code it would end with
 LOCK_SECONDS = 0.2            # how long one read waits for the Watch lock before it shows the last state
 JOIN_SECONDS = 30.0           # how long Quit waits for the worker's final report
 LOG_MAX = 1000000             # characters of the watch's own lines kept for the window
@@ -396,23 +395,44 @@ def verdict_sentence(word):
     return out + (STOPPING if stopping else "")
 
 
-def live_level(code, word, level):
-    """REDO A-2: a running watch's level: the level of the code it would end
-    with now (host.code_now / watch.code_now, through level_of); the view's
-    level while that code is not known; a watch whose heartbeat is stale is
-    alarm (C-4)."""
-    if str(word or "").startswith("CRASHED or stuck"):
+def live_level(code, word, lines=None):
+    """REDO A-2, B-2, B-5: a running watch's level: the level of the code it
+    would end with if stopped now (the state's code_so_far, the watch's own
+    rule, through level_of); a code not known yet is never clean:
+    incomplete; a watch whose heartbeat is stale is alarm (C-4). One state is
+    the window's to soften: a project watch that has read no line yet
+    (lines == 0) and is not yet SILENT is incomplete, not an alarm at the
+    moment of Start."""
+    word = str(word or "")
+    if word.startswith("CRASHED or stuck"):
         return "alarm"
-    return level_of(code) if isinstance(code, int) else level_of(level)
+    if lines == 0 and not word.startswith("SILENT"):
+        return "incomplete"
+    return level_of(code) if isinstance(code, int) and not isinstance(code, bool) else "incomplete"
 
 
-def so_far(text, findings, suspicions=0):
-    """REDO A-2: a watching sentence says what the watch found so far: "Watching
-    this host: 3 findings so far" (a suspicion named apart, A2)."""
+def live_cause(code, findings, suspicions=0, holes=0, lines=None):
+    """REDO B-2, B-5: the words that say why when the level is not what the
+    findings alone say: "not judged yet" (no code known), "no line read yet"
+    (a project watch's first moments), or, for a code 1 with no finding and
+    no suspicion, the watch's holes ("1 hole")."""
+    if lines == 0:
+        return "no line read yet"
+    if not isinstance(code, int) or isinstance(code, bool):
+        return "not judged yet"
+    if code == 1 and not findings and not suspicions:
+        return "%d hole%s" % (holes, "" if holes == 1 else "s") if holes else "an alarm of the watch (its report says)"
+    return ""
+
+
+def so_far(text, findings, suspicions=0, cause=""):
+    """REDO A-2, B-5: a watching sentence says what the watch found so far:
+    "Watching this host: 3 findings so far" (a suspicion named apart, A2),
+    and why when that is not the whole of it ("; 1 hole")."""
     words = "%d finding%s so far" % (findings, "" if findings == 1 else "s") if findings else "no finding so far"
     if suspicions:
         words += ", %d suspicion%s" % (suspicions, "" if suspicions == 1 else "s")
-    return "%s: %s" % (text, words)
+    return "%s: %s%s" % (text, words, "; %s" % cause if cause else "")
 
 
 def host_counts(state):
@@ -425,13 +445,21 @@ def host_counts(state):
     return len(found), len([x for x in h.get("suspicions") or [] if isinstance(x, dict)])
 
 
-def rail_state(word, level, findings, suspicions=0):
+def project_count(state):
+    """REDO B-6: a project watch's findings, as the verdict, the rail, the
+    card's title and the tray count them: the state's findings."""
+    found = state.get("findings") if isinstance(state, dict) else None
+    return len([e for e in found or () if isinstance(e, dict)])
+
+
+def rail_state(word, level, findings, suspicions=0, cause=""):
     """REDO A-8: a running watch in the rail: (its level, its state in
     words): "3 findings", "no finding", or what is wrong ("Silent for 40 s",
     "The host reader is late")."""
     if str(word or "").split(" (", 1)[0] in ("WATCHING", "WATCHING HOST", "STARTING", "STARTING HOST WATCH"):
         text = "%d finding%s" % (findings, "" if findings == 1 else "s") if findings else "no finding"
         text += ", %d suspicion%s" % (suspicions, "" if suspicions == 1 else "s") if suspicions else ""
+        text += "; %s" % cause if cause else ""
     else:
         text = verdict_sentence(word)
     return level_of(level), text
@@ -626,6 +654,8 @@ TREE_COLUMNS = (("image", "image", 96, 0, "text"), ("pid", "pid", 48, 1, "number
                 ("kind", "kind", 90, 2, "text"), ("source", "source", 64, 5, "text"),
                 ("findings", "findings", 72, 6, "severity"), ("rhythm", "rhythm / suspicion", 80, 7, "text"),
                 ("first", "first seen", 86, 3, "text"), ("endpoints", "endpoints", 64, 8, "text"))
+TREE_WHOLE = ("pid", "kind", "findings")   # REDO B-7: cells given their width before any other wants more
+TREE_NEED_ORDER = (4, 1, 2)                 # the severities, the pid, then the kind (its flags, then its word)
 SEVERITY_RANK = ("high", "medium", "low", "history", "pending at exit", "pending")
 
 
@@ -724,15 +754,21 @@ def fit_cell(text, width, measure):
     return head.rstrip() + ELLIPSIS + flags
 
 
-def column_widths(avail, mins, wants, order=None):
+def column_widths(avail, mins, wants, order=None, needs=(), need_order=None):
     """REDO A-11: a table's columns in `avail` pixels: each at least its
-    heading's width (mins); what is left given to the columns whose cells
-    want more, as far as they want it, in `order` (the columns whose words
-    must not be cut first), the rest shared evenly."""
+    heading's width (mins); REDO B-7: then each list of needs in turn, in
+    need_order (the words that must not be cut: the severities, the kind's
+    flags); what is left given to the columns whose cells want more, as far
+    as they want it, in `order`, the rest shared evenly."""
     widths = list(mins)
     left = avail - sum(widths)
     if left <= 0 or not widths:
         return widths
+    for wanted in needs:
+        for i in need_order if need_order is not None else range(len(widths)):
+            give = min(max(0, wanted[i] - widths[i]), left)
+            widths[i] += give
+            left -= give
     for i in order if order is not None else range(len(widths)):
         give = min(max(0, wants[i] - widths[i]), left)
         widths[i] += give
@@ -746,6 +782,16 @@ def column_widths(avail, mins, wants, order=None):
 def tree_values(row):
     """The Treeview's values of one host_rows row, in TREE_COLUMNS order."""
     return tuple(row[c[3]] if c[3] < len(row) else "" for c in TREE_COLUMNS)
+
+
+def empty_trees_text(view):
+    """M8.1: what the trees' card says when the table has no row: the view's
+    lines ("No agent seen (30 records, 4 holes). Not a clearance."; an
+    AGENT-DARK footprint is a finding item, not this), else that no tree is
+    read yet or none was in the round."""
+    return "\n".join(sentence(x) for x in (view or {}).get("lines") or () if not x.startswith("AGENT-DARK ")) or (
+        "No tree yet" if (view or {}).get("word") in ("READING HOST", "STARTING HOST WATCH") else
+        "No tree in this round")
 
 
 def row_level(row):
@@ -788,7 +834,7 @@ def rail_rules(info, error=None, states=()):
     rules would have fired, ADR-0008 A-2), "rules: N refused" beside it."""
     if info is None and not error:
         return "Rules: not loaded", "incomplete"
-    off = len((info or {}).get("off") or [])
+    off = len([o for o in (info or {}).get("off") or [] if not o.get("refused")])   # B-9: refused, not off too
     refused = len(overlay_holes(info, error))
     n = sum(ui.suppressed(s) for s in states if isinstance(s, dict))
     text = "%d rule%s off" % (off, "" if off == 1 else "s") if off else "No rule off"
@@ -895,6 +941,14 @@ def host_finding_items(state, view=None):
                            "knocked: %s" % f.get("notice") if f.get("notice") else None,
                            "cites run %s %s" % (f.get("run"), watch.seq_text(list(f.get("cited_seq") or [])))
                            if f.get("run") else None, *beats)))
+    for f in h.get("source_findings") or []:   # REDO B-6: a source's live finding is an item, its cite with it
+        if isinstance(f, dict) and not f.get("history"):
+            out.append((_safe(f.get("severity")), "incomplete" if f.get("pending") else "alarm", _safe(f.get("rule_id")),
+                        sentence(_safe(f.get("summary"))),
+                        _where(tree_name(f.get("tree")) if f.get("tree") else None, "source %s" % f.get("trace")
+                               if f.get("trace") else None, watch.seq_text(list(f.get("cited_seq") or [])),
+                               "pending" if f.get("pending") else None,
+                               "knocked: %s" % f.get("notice") if f.get("notice") else None)))
     for f in h.get("suspicions") or []:
         if isinstance(f, dict):
             out.append(("suspicion", "note", "SUSPECT", sentence(_safe("; ".join(f.get("reasons") or []) or "raised")),
@@ -2569,8 +2623,10 @@ class Window:
         self.rule_rows = []
         self.rule_said = None   # REDO A-6: (rule id, the refusal's words) shown beside its row
         self.strip_fit = 0
-        self.codes = {}    # REDO A-2: id(session) -> (the code it would end with now, when read)
+        self.codes = {}    # REDO B-2: id(session) -> the last code its state said
+        self.laying = False
         self.live = {}     # REDO A-2, A-8: each running watch's word, level, findings, suspicions
+        self.live_states, self.counts = {}, {"host": (0, 0), "project": 0}   # REDO B-6: the tick's states, counts
         self._style()
         self._build(project)
         self.show_host()                  # M7.3: the first screen is the host
@@ -2812,8 +2868,13 @@ class Window:
             for key in KEYS["act"]:
                 self.root.bind_class(cls, key, lambda e: e.widget.invoke())
 
-    def _wrap(self, label, start=None):
-        """A label that wraps at the width it is given (never wider than the window)."""
+    def _wrap(self, label, start=None, fill=True):
+        """A label that wraps at the width it is given. REDO B-1: it asks for
+        one character of width (fill: it is packed or gridded to fill its
+        container), so no width of the window comes from its words; its wrap
+        follows the width it really has."""
+        if fill:
+            label.configure(width=1)
         label.configure(wraplength=start or self.px(THEME["px"]["wrap"]))
         label.bind(KEYS["resize"][0], lambda e, w=label: w.configure(wraplength=max(e.width - self.px(4),
                                                                                        self.px(120))))
@@ -2912,20 +2973,25 @@ class Window:
         self.detail.pack(fill="x", pady=(self.px(4), 0))
         # E3: the round strip, under the host's verdict
         strip = self.strip_row = ttk.Frame(main)
-        self.strip = tk.Canvas(strip, height=self.px(X["cell"] + 2), width=self.px(200), background=p["ground"],
-                               highlightthickness=0, borderwidth=0)
-        self.strip.pack(side="left")
-        self.strip_label = ttk.Label(strip, text="", style="Muted.TLabel")
-        self.strip_label.pack(side="left", padx=(self.px(10), 0))
-        strip.bind(KEYS["resize"][0], lambda e: self._draw_strip())
-        self.host_badges = ttk.Frame(main)     # REDO C-2: one pill per badge, each its level's colour and word
-        self.badges = ttk.Frame(main)
+        self.strip = tk.Canvas(strip, height=self.px(X["cell"] + 2), width=self.px(80), background=p["ground"],
+                               highlightthickness=0, borderwidth=0)   # REDO B-1: asks little, draws what it gets
+        self.strip.pack(fill="x")
+        self.strip_label = self._wrap(ttk.Label(strip, text="", style="Muted.TLabel", anchor="w", justify="left"))
+        self.strip_label.pack(fill="x", pady=(self.px(2), 0))
+        self.strip.bind(KEYS["resize"][0], lambda e: self._draw_strip())
+        self.host_badges = ttk.Frame(main, width=1, height=1)   # REDO C-2: one pill per badge, its colour and word
+        self.badges = ttk.Frame(main, width=1, height=1)
+        for frame in (self.host_badges, self.badges):   # REDO B-1: no width from the pills' words
+            frame.pack_propagate(False)
         for frame in (self.host_badges, self.badges):
             frame.bind(KEYS["resize"][0], lambda e, f=frame: self._flow(f))
-        self.root.bind(KEYS["resize"][0], lambda e: self._lay_panels() if e.widget is self.root else None, add="+")
+        self.root.bind(KEYS["resize"][0], self._resized, add="+")
         # E4: the disclosures under the header, their panels below them
-        tools = self.tools = ttk.Frame(main)
+        tools = self.tools = ttk.Frame(main, width=1, height=1)
+        tools.pack_propagate(False)   # REDO B-1: the toggles' words ask no width; their lines give the height
         tools.pack(fill="x", padx=pad, pady=(self.px(8), 0))
+        self.tools_lines = [ttk.Frame(tools), ttk.Frame(tools)]   # REDO B-1: the toggles flow to a second line
+        tools.bind(KEYS["resize"][0], lambda e: self._flow_tools())
         panels = self.panels = ttk.Frame(main)
         panels.pack(fill="x", padx=pad)
         self.seen = Disclosure(self, tools, panels, seen_title([]), "seen")
@@ -2939,6 +3005,9 @@ class Window:
         self.disclosures = (self.seen, self.checks, self.options, self.overlay)
         self.screens = ttk.Frame(main)
         self.screens.pack(fill="both", expand=True, padx=pad, pady=(gap, self.px(14)))
+        # REDO B-1: the column asks the width it has in a window of the minimum size, no less (a window shown at its
+        # natural size - a withdrawn one on Windows - lays its words as at 900 px) and, by construction, no more
+        ttk.Frame(main, width=self.px(THEME["min_size"][0] - THEME["px"]["rail"]), height=0).pack(side="bottom")
         self.rules_panel.say = self._rules_measuring   # M7.6c REDO E-7: the header says a measurement runs
         self._build_host()
         self._build_options()
@@ -3012,12 +3081,14 @@ class Window:
         self.first_run_label = self._wrap(ttk.Label(inner, text="", style="Muted.Card.TLabel", anchor="w",
                                                     justify="left"))
         frame, self.host_tree = self._table(inner, "host", TREE_COLUMNS, 3)
+        frame.configure(width=1)
+        frame.pack_propagate(False)   # REDO B-1: the columns' widths ask nothing of the window; the card gives them
         frame.pack(fill="both", expand=True)
         self.host_table_frame = frame
         self.host_tree.bind(KEYS["select"][0], lambda e: self._show_tree_detail())
         self.host_tree.bind(KEYS["resize"][0], lambda e: self._table_widths(e.width), add="+")
         self.trees_empty = self._wrap(ttk.Label(inner, text="", style="Muted.Card.TLabel", anchor="center",
-                                                justify="center"), self.px(380))
+                                                justify="center"), self.px(380), fill=False)   # placed: asks nothing
         outer, inner, self.findings_title = self._card(f, "Findings")
         outer.grid(row=2, column=0, sticky="nsew", pady=(gap, 0), padx=(0, gap // 2))
         self.findings_card = outer
@@ -3047,7 +3118,7 @@ class Window:
                                           style="Switch.TCheckbutton")
         self.attach_box.pack(side="left")
         self.host_url = tk.StringVar(master=self.root, value="-")
-        ttk.Entry(row, textvariable=self.host_url, state="readonly", width=10).pack(
+        ttk.Entry(row, textvariable=self.host_url, state="readonly", width=1).pack(
             side="right", fill="x", expand=True, padx=(self.px(8), 0))
         ttk.Label(row, text="Page", style="Card.TLabel").pack(side="right", padx=(self.px(24), 0))
         row = ttk.Frame(inner, style="Inner.TFrame")
@@ -3055,7 +3126,7 @@ class Window:
         # M7.4 E3: "suspect unknown trees", empty (off) by default; M7.6c REDO E-3: its period
         ttk.Label(row, text=sentence(SUSPECT_TEXT), style="Card.TLabel").pack(side="left")
         self.suspect_var = tk.StringVar(master=self.root, value=str(getattr(self.c.options, "suspect", "") or ""))
-        ttk.Entry(row, textvariable=self.suspect_var, width=16).pack(side="left", padx=(self.px(8), self.px(8)))
+        ttk.Entry(row, textvariable=self.suspect_var, width=10).pack(side="left", padx=(self.px(8), self.px(8)))
         ttk.Label(row, text="every", style="Card.TLabel").pack(side="left")
         self.suspect_every_var = tk.StringVar(master=self.root,
                                               value=str(getattr(self.c.options, "suspect_every", "") or ""))
@@ -3071,7 +3142,8 @@ class Window:
         row = ttk.Frame(inner, style="Inner.TFrame")
         row.pack(fill="x")
         self.project = tk.StringVar(master=self.root, value=project)
-        ttk.Entry(row, textvariable=self.project).pack(side="left", fill="x", expand=True, padx=(0, self.px(8)))
+        ttk.Entry(row, textvariable=self.project, width=1).pack(side="left", fill="x", expand=True,
+                                                                padx=(0, self.px(8)))
         ttk.Button(row, text="Browse...", command=self.browse, style="Card.TButton").pack(side="left")
         ttk.Button(row, text="Check again", command=self.check, style="Card.TButton").pack(side="left",
                                                                                        padx=(self.px(6), 0))
@@ -3094,7 +3166,7 @@ class Window:
         row.pack(fill="x", pady=(self.px(8), 0))
         ttk.Label(row, text="Page (read-only)", style="Card.TLabel").pack(side="left")
         self.url = tk.StringVar(master=self.root, value="-")
-        ttk.Entry(row, textvariable=self.url, state="readonly").pack(side="left", fill="x", expand=True,
+        ttk.Entry(row, textvariable=self.url, state="readonly", width=1).pack(side="left", fill="x", expand=True,
                                                                      padx=(self.px(8), 0))
         outer, inner, self.body_title = self._card(f, "Findings")
         outer.pack(fill="both", expand=True, pady=(gap, 0))
@@ -3114,8 +3186,8 @@ class Window:
         row.pack(fill="x")
         ttk.Label(row, text="Filter", style="Card.TLabel").pack(side="left")
         self.rule_filter = tk.StringVar(master=self.root, value="")
-        self.rule_filter_entry = ttk.Entry(row, textvariable=self.rule_filter, width=28)
-        self.rule_filter_entry.pack(side="left", padx=(self.px(8), self.px(12)))
+        self.rule_filter_entry = ttk.Entry(row, textvariable=self.rule_filter, width=1)
+        self.rule_filter_entry.pack(side="left", fill="x", expand=True, padx=(self.px(8), self.px(12)))
         self.rule_filter.trace_add("write", lambda *a: self._rules_filter(True))
         self.rules_count = ttk.Label(row, text="", style="Muted.Card.TLabel")
         self.rules_count.pack(side="left")
@@ -3227,10 +3299,52 @@ class Window:
                  "overlay": self.screen == "rules"}
         for d in self.disclosures:
             d.toggle.pack_forget()
-        for d in self.disclosures:
-            if shown[d.name]:
-                d.toggle.pack(side="left", padx=(0, self.px(18)))
+        self.shown.pop("tools_flow", None)
+        self._flow_tools([d for d in self.disclosures if shown[d.name]])
         self._lay_panels()
+
+    def _width(self):
+        """The content column's width: its real one, else the window's geometry less the rail and the pads."""
+        if self.tools.winfo_width() > 1:
+            return self.tools.winfo_width()
+        w, _ = self._geometry()
+        return w - self.px(THEME["px"]["rail"]) - 2 * self.px(THEME["px"]["pad"])
+
+    def _geometry(self):
+        """REDO B-1: the window's size as its geometry says (a withdrawn window too), else the minimum."""
+        try:
+            size = str(self.root.wm_geometry()).split("+", 1)[0].split("x")
+            w, h = int(size[0]), int(size[1])
+        except (ValueError, IndexError):
+            w, h = 1, 1
+        mw, mh = self.px(THEME["min_size"])
+        return (w if w > 1 else mw), (h if h > 1 else mh)
+
+    def _flow_tools(self, toggles=None):
+        """REDO B-1: the disclosure toggles of the screen in lines of the column's width."""
+        if toggles is None:
+            toggles = [d for d in self.disclosures if d.toggle.winfo_manager()]
+        else:
+            self.tools_toggles = toggles
+        toggles = getattr(self, "tools_toggles", toggles)
+        gap = self.px(18)
+        rows = flow_rows([d.toggle.winfo_reqwidth() + gap for d in toggles], self._width())
+        key = (rows, [d.name for d in toggles])
+        if self.shown.get("tools_flow") == key:
+            return
+        self.shown["tools_flow"] = key
+        for line in self.tools_lines:
+            line.pack_forget()
+        for d in self.disclosures:
+            d.toggle.pack_forget()
+        for line, row in zip(self.tools_lines, rows[:1] + [sum(rows[1:], [])]):
+            if row:
+                line.pack(fill="x")
+                for i in row:
+                    toggles[i].toggle.pack(in_=line, side="left", padx=(0, gap))
+                    toggles[i].toggle.lift(line)
+        line_h = max([d.toggle.winfo_reqheight() for d in toggles] + [1])
+        self.tools.configure(height=max(1, min(2, len(rows)) * line_h))
 
     def _sync_primary(self):
         """The one primary action of the screen, at the right of its verdict."""
@@ -3250,6 +3364,7 @@ class Window:
 
     def _opened(self, disclosure):
         """One disclosure open at a time: opening one closes the others."""
+        self.opened_now = None   # REDO B-7: the one that opens is scrolled to its named line, once
         if disclosure.is_open():
             for d in self.disclosures:
                 if d is not disclosure and d.is_open():
@@ -3257,41 +3372,69 @@ class Window:
         self._lay_panels()
 
     def _panel_lines(self, text):
-        """REDO A-13(c): an open panel's text shows as many lines as the
-        screen can give (the screen's cards keep what they need) and scrolls
-        beyond; at least two."""
-        line = self.font_body.metrics("linespace") + self.px(6)
-        room = self.root.winfo_height() if self.root.winfo_height() > 1 else self.px(THEME["min_size"][1])
-        used = sum(w.winfo_reqheight() for w in (self.head, self.tools)) + self.px(150)
-        used += self.strip_row.winfo_reqheight() if self.strip_row.winfo_manager() else 0
-        used += sum(f.winfo_reqheight() for f in (self.host_badges, self.badges) if f.winfo_manager())
-        keep = self.px(250) if self.screen == "host" else self.px(170)
+        """REDO A-13(c), B-1: an open panel's text shows as many lines as the
+        pixels left in the window give (its height from the geometry, less
+        what everything else asks for), at the text font's own line height
+        read now; at least two, at most its content's."""
+        from tkinter import font as tkfont
+        line = max(1, tkfont.nametofont(str(text.cget("font"))).metrics("linespace") + int(text.cget("spacing1"))
+                   + int(text.cget("spacing3")))   # a line as the text lays it out, its spacing with it
+        self.root.update_idletasks()
+        _, height = self._geometry()
+        slack = height - self.root.winfo_reqheight()
+        lines = int(text.cget("height")) + slack // line   # floor: a line short of room is not given
         shown = text.count("1.0", "end", "displaylines") if text.winfo_ismapped() else None
         want = (shown[0] if isinstance(shown, tuple) else shown) or int(text.index("end-1c").split(".")[0])
-        return max(2, min(want, (room - used - keep) // line))
+        return max(2, min(want, lines))
 
     def _lay_panels(self):
-        """E4: the open disclosures' panels, in their order, under the toggles."""
+        """E4: the open disclosures' panels, in their order, under the toggles;
+        packed again only when which are open changed (REDO B-1: a re-lay
+        that changes nothing changes no size, so no resize answers it)."""
+        if self.laying:
+            return
         visible = {d.name for d in self.disclosures if d.toggle.winfo_manager()}
-        for d in self.disclosures:
-            d.panel.pack_forget()
-        for d in self.disclosures:
-            if d.name in visible and d.is_open():
+        open_ = [d for d in self.disclosures if d.name in visible and d.is_open()]
+        if self.shown.get("panels_open") != [d.name for d in open_]:
+            self.shown["panels_open"] = [d.name for d in open_]
+            for d in self.disclosures:
+                if d.panel.winfo_manager():
+                    d.panel.pack_forget()
+            for d in open_:
                 d.panel.pack(fill="x", pady=(self.px(6), 0))
-                text = {"seen": self.seen_text, "checks": self.checks_rows, "overlay": self.rules_text}.get(d.name)
-                if text is not None:
-                    self._put(text, height=self._panel_lines(text))
-                    named = getattr(text, "named_line", None)
-                    if named:   # REDO A-13(c): the line its title names (a missing or unsure check) is in view
-                        text.see(named)
-        # the trees keep the stretch; with a panel open they ask for two rows, not three (E6: 900x600)
-        rows = 2 if any(d.name in visible and d.is_open() for d in self.disclosures) else 3
-        if rows == 3:   # an emptied pack master keeps its last size: it is told it holds nothing now
-            self.panels.configure(height=1)
-        if int(self.host_tree.cget("height")) != rows:
+            if not open_:   # an emptied pack master keeps its last size: it is told it holds nothing now
+                self.panels.configure(height=1)
+        rows = 2 if open_ else 3   # the trees keep the stretch; with a panel open they ask for two rows (900x600)
+        if int(self.host_tree.cget("height")) != rows or not self.shown.get("table_h"):
             self.host_tree.configure(height=rows)
-        if hasattr(self, "first_run_label"):
-            self._first_run()
+            self.shown["table_h"] = True
+            self.root.update_idletasks()
+            self.host_table_frame.configure(height=self.host_tree.winfo_reqheight())
+        self.laying = True   # what is read and set here answers no resize of its own
+        try:
+            for d in open_:
+                text = {"seen": self.seen_text, "checks": self.checks_rows, "overlay": self.rules_text}.get(d.name)
+                if text is None:
+                    continue
+                for _ in range(3):   # settled when the window asks for no more than it has
+                    lines = self._panel_lines(text)
+                    if lines == int(text.cget("height")):
+                        break
+                    self._put(text, height=lines)
+                named = getattr(text, "named_line", None)
+                if named and d.name != getattr(self, "opened_now", None):   # B-7: only when it opens
+                    self.opened_now = d.name
+                    text.see(named)
+            if hasattr(self, "first_run_label"):
+                self._first_run()
+        finally:
+            self.laying = False
+
+    def _resized(self, event):
+        """REDO B-1: the window's size changed: an open panel takes the lines the new size gives."""
+        if event.widget is self.root and self.shown.get("laid_at") != self._geometry():
+            self.shown["laid_at"] = self._geometry()
+            self._lay_panels()
 
     def show_host(self):
         self._show("host")
@@ -3381,11 +3524,13 @@ class Window:
         """The Rules screen's verdict: the last change's words; else what is
         off and, REDO A-3, incomplete while an overlay hole stands."""
         p = self.rules_panel
-        if p.message:
-            word = "RULES: REFUSED" if p.level == "alarm" else "RULES"
-            self._verdict(word, p.level, p.message)
-            return
         holes = overlay_holes(p.info, p.error)
+        if p.message:   # REDO B-3: an overlay hole decides before the last change's word does
+            word = "RULES: REFUSED" if p.level == "alarm" else "RULES"
+            level = "incomplete" if holes and p.level == "clean" else p.level
+            self._verdict(word, level, p.message + ("; %d overlay line%s not applied (in \"Could not see\")" % (
+                len(holes), "" if len(holes) == 1 else "s") if holes else ""))
+            return
         off = p.info.get("off") if p.info else None
         detail = "%s; a change applies to the next watch" % sentence(p.header())
         if holes:
@@ -3619,7 +3764,7 @@ class Window:
         if self.pill.cget("text") != level_word(level) or str(self.pill.cget("style")) != style:
             self.pill.configure(text=level_word(level), style=style)
         text = verdict_sentence(word)
-        if counts is not None and word in ("WATCHING HOST", "WATCHING"):   # REDO A-2: what it found so far
+        if counts is not None and word in ("WATCHING HOST", "WATCHING"):   # REDO A-2, B-5: what so far, and why
             text = so_far(text, *counts)
         if self.verdict.cget("text") != text:
             self.verdict.configure(text=text)
@@ -3677,6 +3822,8 @@ class Window:
         if self.shown.get(("flow", str(frame))) == (rows, width, len(pills)):
             return
         self.shown[("flow", str(frame))] = (rows, width, len(pills))
+        line_h = max([w.winfo_reqheight() for w in pills] + [1]) + self.px(3)
+        frame.configure(height=max(1, len(rows) * line_h))
         for old in [w for w in frame.winfo_children() if not hasattr(w, "width")]:
             old.destroy()
         for row in rows:
@@ -3690,10 +3837,13 @@ class Window:
         """E4: "could not see (N)": every hole of the screen, one click
         away, never dropped; the notes below them."""
         holes = sum(1 for x in lines if x.startswith("hole: "))
+        grew = self.shown.get("seen_lines") != list(lines)
         self.shown["seen_lines"] = list(lines)
         self.seen.set_title(seen_title(lines), "Hole.Disclosure.TCheckbutton" if holes else "Disclosure.TCheckbutton")
         self._set(self.seen_text, "seen", None, tuple((x, "hole" if x.startswith("hole:") else "note") for x in lines)
                   or (("No hole on this screen.", None),))
+        if grew and self.seen.is_open():   # REDO B-7: the panel grows with the lines that arrive
+            self._lay_panels()
 
     def _fill(self, key, tree, items, columns):
         """E2: a Treeview's rows [(values, level, payload, row)], sorted
@@ -3741,10 +3891,22 @@ class Window:
         pad, arrow = self.px(16), self.px(THEME["px"]["chevron"] + 6)
         mins = [self.font_meta_bold.measure(c[1]) + pad + (arrow if c[0] == column else 0) for c in TREE_COLUMNS]
         rows = [self._display(row) for row in (self.shown.get("host_rows") or [])]
+        cell = self.px(12)
+
+        def need(i, whole):   # REDO B-7: the severities, the pid and the kind's flags first; then the kind whole
+            name = TREE_COLUMNS[i][0]
+            if name not in TREE_WHOLE:
+                return mins[i]
+            texts = [str(r[i]) for r in rows]
+            if name == "kind" and not whole:
+                texts = [ELLIPSIS + " (" + t.split(" (", 1)[1] for t in texts if t.endswith(")") and " (" in t]
+            return max([self.font_body.measure(t) + cell for t in texts] + [mins[i]])
+        needs = ([need(i, False) for i in range(len(mins))], [need(i, True) for i in range(len(mins))])
         wants = [max([self.font_body.measure(r[i]) + self.px(12) for r in rows] + [mins[i]]) for i in range(len(mins))]
         tree = self.host_tree   # what the table asks beyond its columns (its frame, its padding)
         extra = max(0, tree.winfo_reqwidth() - sum(int(tree.column(c[0], "width")) for c in TREE_COLUMNS))
-        widths = column_widths(width - extra - self.px(2), mins, wants, TREE_ORDER)
+        extra = min(extra, self.px(12))   # REDO B-7: a size not yet recomputed is not taken from the card
+        widths = column_widths(width - extra - self.px(2), mins, wants, TREE_ORDER, needs, TREE_NEED_ORDER)
         if self.shown.get("host_widths") != widths:
             self.shown["host_widths"] = widths
             for c, w in zip(TREE_COLUMNS, widths):
@@ -3782,9 +3944,7 @@ class Window:
                  for i, row in enumerate(view.get("rows") or [])]
         if self._fill("host", self.host_tree, items, TREE_COLUMNS):
             self._show_tree_detail()
-        empty = "" if items else "\n".join(sentence(x) for x in view.get("lines") or ()
-                                            if not x.startswith("AGENT-DARK ")) or (
-            "No tree yet" if view.get("word") in ("READING HOST", "STARTING HOST WATCH") else "No tree in this round")
+        empty = "" if items else empty_trees_text(view)
         if self.trees_empty.cget("text") != empty:
             self.trees_empty.configure(text=empty)
         if empty and not self.trees_empty.winfo_manager():
@@ -3938,42 +4098,43 @@ class Window:
                                                                 if "hole: %s" % h not in kept]
         return holes + [x for x in kept if not x.startswith("hole: ")]
 
-    def _code(self, session, module):
-        """REDO A-2: the code a running watch would end with now, by its own
-        rule (module.code_now), read at most once a CODE_SECONDS; the last one
-        while its state is held."""
-        key = id(session)
-        watcher = getattr(getattr(session, "running", None), "watcher", None)
-        now = time.monotonic()
-        if watcher is None or (key in self.codes and now - self.codes[key][1] < CODE_SECONDS):
-            return self.codes.get(key, (None, 0))[0]
-        try:
-            code = module.code_now(watcher, LOCK_SECONDS)
-        except Exception:   # a report that cannot be built now: the last code stands, the watch says why at its end
-            code = None
-        if code is not None:
-            self.codes[key] = (code, now)
-        return self.codes.get(key, (None, 0))[0]
-
     def _live(self, view):
-        """REDO A-2, A-8: each running watch's state word, level (the code it
-        would end with now), findings and suspicions so far."""
+        """REDO A-2, B-2, B-4, B-5, B-6: each running watch's state word,
+        level (the code its state says it would end with so far; the last one
+        known while a state has none; incomplete before any), its findings and
+        suspicions (one count), and why when the level needs it."""
         self.live = {}
-        state = getattr(self.c.host, "last_state", None) if self.c.host is not None else None
-        if self.c.host_watching() and not view.get("final"):
-            found, sus = host_counts(state or {})
-            level = live_level(self._code(self.c.host, hostmod), view["word"], view["level"])
-            self.live["host"] = (view["word"], level, found, sus)
+        host = self.c.host
+        state = (getattr(host, "last_state", None) or host.state()) if host is not None else None
         session = self.c.session
+        pstate = session.state() if self.c.project_watching() else None
+        self.live_states = {"host": state, "project": pstate}   # REDO B-6: what this tick counts, read once
+        self.counts = {"host": host_counts(state or {}), "project": project_count(pstate)}
+        if self.c.host_watching() and not view.get("final"):
+            found, sus = self.counts["host"]
+            code = self._known(self.c.host, (state or {}).get("code_so_far"))
+            holes = len((state or {}).get("holes") or [])
+            self.live["host"] = (view["word"], live_level(code, view["word"]), found, sus,
+                                 live_cause(code, found, sus, holes))
         if self.c.project_watching():
-            pstate = session.state()
-            pview = watch_view(pstate) if pstate else None
-            if pview is None:
-                self.live["project"] = ("STARTING", "incomplete", 0, 0)
+            if not pstate:
+                self.live["project"] = ("STARTING", "incomplete", 0, 0, "not judged yet")
             else:
-                found = sum(len(lines) for _, lines in pview["findings"])
-                self.live["project"] = (pview["word"], live_level(self._code(session, watch), pview["word"],
-                                                                  pview["level"]), found, 0)
+                pview = watch_view(pstate)
+                found = self.counts["project"]
+                code = self._known(session, pstate.get("code_so_far"))
+                holes = len(pstate.get("holes") or []) + sum(1 for w in pstate.get("silence") or []
+                                                             if isinstance(w, dict) and w.get("closed") is None)
+                lines = pstate.get("lines") if isinstance(pstate.get("lines"), int) else None
+                self.live["project"] = (pview["word"], live_level(code, pview["word"], lines), found, 0,
+                                        live_cause(code, found, 0, holes, lines))
+
+    def _known(self, session, code):
+        """REDO B-2: the code a state says, or the last one this session's states said."""
+        if isinstance(code, int) and not isinstance(code, bool):
+            self.codes[id(session)] = code
+            return code
+        return self.codes.get(id(session))
 
     def _rail(self):
         """E2, REDO A-8: the rail's words: what is watched, each running
@@ -3987,8 +4148,8 @@ class Window:
         rows = []
         for key, title in (("host", "Host"), ("project", "Project")):
             if key in self.live:
-                word, level, found, sus = self.live[key]
-                rows.append((title,) + rail_state(word, level, found, sus))
+                word, level, found, sus, cause = self.live[key]
+                rows.append((title,) + rail_state(word, level, found, sus, cause))
         if self.shown.get("rail_watches") != rows:
             self.shown["rail_watches"] = rows
             for child in self.rail_watches.winfo_children():
@@ -4020,10 +4181,11 @@ class Window:
         self._live(view)           # REDO A-2: each running watch's level, the code it would end with now
         self._rail()               # M7.6: rules off; REDO A-8: each running watch's state
         self._first_run()          # E4: gone once the first look is written (and while the host is watched)
-        project = getattr(self.c.session, "last_state", None) if self.c.project_watching() else None
-        sus = view.get("suspicions") or 0   # REDO C-4: suspicions apart from the findings (A2)
-        self.c.host_tip(view.get("trees"), view.get("new"), len(view.get("findings") or []) - sus, sus,
-                        len((project or {}).get("findings") or []))   # E5: the tray's tooltip
+        if self.shown.get("laid_at") != self._geometry() and any(d.is_open() for d in self.disclosures):
+            self.shown["laid_at"] = self._geometry()   # REDO B-1: an open panel follows the window's size
+            self._lay_panels()
+        found, sus = self.counts["host"]   # REDO B-6: one count, the verdict's, the rail's and the card's
+        self.c.host_tip(view.get("trees"), view.get("new"), found, sus, self.counts["project"])   # E5: the tray
         self._sync_primary()
         if self.screen == "rules":
             self._rules_fill()
@@ -4043,7 +4205,7 @@ class Window:
             self._seen(seen_lines(own, notes, look))
             return
         snap = session.snapshot()
-        state = session.state()
+        state = self.live_states.get("project") if self.c.project_watching() else session.state()   # B-6: one read
         extra = snap["holes"] + own + look + ([session.read_note] if session.read_note else [])
         self._put(self.knock_label, text=sentence(first_line(snap.get("knock"))))
         refused = self.refusal and self.c.project_watching()
@@ -4079,8 +4241,7 @@ class Window:
                       suppressed=ui.suppressed(state), counts=live[2:] if live else None)   # REDO C-3
         self._badges(self.badges, "badges", view["badges"])                                                 # REDO C-2
         self.url.set(view["url"])
-        count = sum(len(lines) for _, lines in view["findings"])
-        self._put(self.body_title, text="Findings (%d)" % count)
+        self._put(self.body_title, text="Findings (%d)" % project_count(state))   # REDO B-6: one count
         self._put(self.body, font="TkTextFont")
         self._items(self.body, "body", finding_items(state.get("findings")),
                     "None yet: a finding of this watch is listed here as it lands.")
@@ -4088,7 +4249,7 @@ class Window:
 
     def _tick_host(self, view, own, notes):
         """E1/E2: the host screen from the controller's host view."""
-        state = getattr(self.c.host, "last_state", None) if self.c.host is not None else None
+        state = self.live_states.get("host") if self.c.host is not None else None   # REDO B-6: the tick's state
         suppressed = report_result(view.get("final"))[1] if view.get("final") else ui.suppressed(state or {})
         live = self.live.get("host")      # REDO A-2: the level of the code it would end with now
         detail = view["detail"]
@@ -4109,15 +4270,18 @@ class Window:
         else:
             watched = self.c.host is not None and state is not None
             items = host_finding_items(state if watched else None, view)
-            found = sum(1 for i in items if i[2] not in ("SUSPECT", "NOTE"))
-            sus = sum(1 for i in items if i[2] == "SUSPECT")
+            found, sus = self.counts["host"] if watched else (0, 0)   # REDO B-6: the verdict's and the rail's
             self._put(self.findings_title, text="Findings (%d)%s" % (found, ", %d suspicion%s" % (
                 sus, "" if sus == 1 else "s") if sus else ""))
             self._put(self.host_text, font="TkTextFont")
             self._items(self.host_text, "host", items, "None yet: a finding of this watch is listed here as it"
                         " lands." if watched else "None: the round at open is one look and judges nothing; the rules"
                         " judge the rounds of \"Watch this host\".")
-        self._seen(seen_lines(view["holes"] + [h for h in own if h not in view["holes"]], notes))
+        holes = view["holes"] + [h for h in own if h not in view["holes"]]
+        if view.get("final"):   # REDO B-7: a finished watch's holes are counted here, as its strip draws them
+            holes += [x for x in (hole_line(h) for h in (state or {}).get("holes") or [] if isinstance(h, dict))
+                      if x not in holes]
+        self._seen(seen_lines(holes, notes))
         word = "Stop host watch" if self.c.host_watching() else "Watch this host"
         if self.host_button.cget("text") != word:
             self.host_button.configure(text=word)
@@ -4145,15 +4309,15 @@ class Window:
         canvas, p, X = self.strip, self.palette, THEME["px"]
         cell, gap = self.px(X["cell"]), self.px(X["cell_gap"])
         state = getattr(self, "strip_state", None)
-        width = self.strip_row.winfo_width()
-        width = width if width > 1 else self.px(600)
+        width = self.strip.winfo_width()
+        width = width if width > 1 else self._width()
         total, progress, suspected = strip_total(state), strip_progress(state), strip_suspected(state)
         tail = "" if state or self.c.host_watching() else ": the host is not watched"
         fit = 50
         while True:   # as many cells as fit after the words have their full width
             cells = strip_cells(state, fit)
             text = strip_text(cells, total, progress, suspected) + tail
-            if fit <= 8 or fit * (cell + gap) + self.font_meta.measure(text) + self.px(24) <= width:
+            if fit <= 8 or fit * (cell + gap) <= width:   # REDO B-1: the words have their own line
                 break
             fit -= 1
         key = (cells, text, cell)
@@ -4162,7 +4326,6 @@ class Window:
         self.shown["strip"] = key
         canvas.delete("all")
         one = self.px(1)
-        canvas.configure(width=max(one, len(cells) * (cell + gap) - gap + 2 * one))
         lv = p["levels"]
         for i, (_, kind, _) in enumerate(cells):
             x = one + i * (cell + gap)
@@ -4193,7 +4356,8 @@ class Window:
 
     def _tick_doctor(self):
         """The doctor's result, when it comes: the project screen's rows and
-        header, and the host screen's "Checks" (open when any MISSING)."""
+        header, and the host screen's "Checks" (its title in the level's
+        colour; it opens only on a click, REDO A-7)."""
         job = self.doctor
         result = job.result() if job is not None else None
         if result is None:
@@ -4203,7 +4367,6 @@ class Window:
         self._check_rows(self.doctor_rows, "doctor", lines)
         self._check_rows(self.checks_rows, "checks", lines)
         label, level = checks_state(lines)
-        missing = level == "alarm"
         self.checks.set_title(label, "%s.Disclosure.TCheckbutton" % level if level else "Disclosure.TCheckbutton")
         self.doctor_band = ("DOCTOR: %s" % summary.split(": ", 1)[-1], level or "clean",   # REDO A-12: one level
                             "project %s; Start installs the hooks and watches it, as `raqib watch` does"

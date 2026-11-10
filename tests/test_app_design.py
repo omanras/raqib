@@ -484,8 +484,6 @@ def test_tk_e4_disclosures_closed_by_default_one_open_at_a_time_and_the_keyboard
                      window.host_tree):   # REDO A-12: the table is in the walk, and draws its focus
             assert want in seen, want
         assert {"Table.box"} <= set(map(str, root.tk.call("ttk::style", "element", "names")))
-        for want in ():
-            assert want in seen, want
         # focus is drawn: the focus pictures of the switch, the disclosure and the buttons exist
         p = app.THEME[mode]
         keys = set(window.images)

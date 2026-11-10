@@ -699,6 +699,7 @@ def test_tk_redo_dark_mode_bands_badges_and_every_screen(home, tmp_path, monkeyp
         window = app.Window(tkinter, root, c, str(tmp_path), doctor_job=lambda x: doctor, probe=lambda: p,
                             home=str(home))
         root.withdraw()
+        root.geometry("900x600")
         assert window.mode == "dark" and str(window.host_text.cget("background")) == app.THEME["dark"]["card"]
         assert str(window.rail.cget("background")) == app.THEME["dark"]["rail"]
         assert until(lambda: doctor.result() is not None and p.done(), 10)
@@ -711,11 +712,13 @@ def test_tk_redo_dark_mode_bands_badges_and_every_screen(home, tmp_path, monkeyp
         window.show_first()
         window.tick()
         window.start()
-        st = dict(TkSession("x").state(), rules_overlay={"off": [{"rule_id": "NET-TOOL"}],
-                                                          "not_judged": {"NET-TOOL": {"fired": 2}}})
+        # REDO B-2: a watch with no finding and code 0 (as its state says) is the green one; a finding is alarm
+        st = dict(TkSession("x").state(), findings=[], code_so_far=0, rules_overlay={
+            "off": [{"rule_id": "NET-TOOL"}], "not_judged": {"NET-TOOL": {"fired": 2}}})
         c.session.st = st
         window.tick()
-        assert window.verdict.cget("text") == "Watching the project: 1 finding so far"   # REDO A-2
+        assert window.verdict.cget("text") == "Watching the project: no finding so far"   # REDO A-2
+        assert window.pill.cget("text") == "clean"
         assert window.note.cget("text") == "2 findings suppressed by the overlay. Not a clearance."
         assert str(window.note.cget("foreground")) == dark["suppressed"]
         pills = [w for line in window.badges.winfo_children() for w in line.winfo_children()] or \
@@ -738,7 +741,9 @@ def test_tk_redo_dark_mode_bands_badges_and_every_screen(home, tmp_path, monkeyp
         assert window.note.cget("text") == "2 findings suppressed by the overlay. Not a clearance."
         window.show_host()
         window.tick()
-        assert _fits(root)[0]
+        root.update()   # the wraps follow the widths they were given (Configure events), as in a running window
+        from test_app_redo import _biggest
+        assert _fits(root)[0], (_fits(root), _biggest(root, 4))
     finally:
         if window is not None:
             window.destroy()

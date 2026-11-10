@@ -727,6 +727,26 @@ class Watch:
         return report.build(self.trace_path, numbered, problems, found, notes, report.rule_table(self.rules),
                             SOURCE, extra_alarms=extra)
 
+    def code_so_far(self):
+        """M8.1 REDO B-4 (ADR-0009 Amendment B): the exit code this watch would
+        end with if it were stopped now: the exit of its report of what was
+        read so far (report.build, the report finish() keeps), built again only
+        when what it reads has changed. finish() may still read the last bytes
+        and mark pending findings. A report that cannot be built is 1, as in
+        finish(). The caller holds the lock (state() is read under it)."""
+        alarms = self.alarms()
+        key = (len(self.numbered), len(self.problems), len(self.found), repr(self.notes), repr(alarms))
+        cached = getattr(self, "_code_key", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        try:
+            code = self._build(list(self.numbered), list(self.problems), list(self.found), list(self.notes),
+                               alarms)["exit"]
+        except Exception:
+            code = 1
+        self._code_key = (key, code)
+        return code
+
     def report(self):
         """(report, numbered, problems) of what was read so far."""
         with self.lock:
@@ -858,6 +878,7 @@ class Watch:
             "rules_overlay": dict(self.rules_overlay, not_judged=self.not_judged),   # M7.6 (ADR-0008)
         }
         state["band"] = ui.status(state)[0]   # J-6: the owner's state word, for the pages of other watches
+        state["code_so_far"] = self.code_so_far()   # M8.1 REDO B-4: the code of what has been read so far
         return state
 
     def _problem(self, p):
@@ -1364,21 +1385,6 @@ def conclude(running, crash):
     if hole:
         out.write("raqib watch: %s\n" % _safe(hole))
     return text, code
-
-
-def code_now(watcher, wait=0.2):
-    """M8.1 REDO A-2 (ADR-0009 Amendment A): the exit code the watch would
-    end with now, by its own rule - the report of what was read so far
-    (report(), whose exit finish() keeps) - without finishing it; None when
-    its state is held longer than `wait` seconds. The snapshot is taken
-    under the watch's lock, the report built outside it; nothing changes."""
-    if not watcher.lock.acquire(timeout=wait):
-        return None
-    try:
-        snapshot = watcher._snapshot()
-    finally:
-        watcher.lock.release()
-    return watcher._build(*snapshot)["exit"]
 
 
 def close(running):
