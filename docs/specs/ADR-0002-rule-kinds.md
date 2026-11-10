@@ -86,6 +86,8 @@ counts of A-2):
 Lines beyond the table now: DESTRUCT-CMD +6, NET-TOOL +5, SCOPE-PATH +4, SECRET-OUTPUT +3.
 (Note 2026-11-04, M7.2b: DESTRUCT-CMD and NET-TOOL each gained one evasion
 line for the host source; the counts read +7 and +6 after M7.2b.)
+(Note 2026-11-11, M7.8, ADR-0007 P-1: each gained one more, for the os
+source's process lines; the counts read +8 and +7 after M7.8.)
 
 Note (2026-11-03, M5.3, ruling C-9 of ADR-0003 Amendment C; the table above
 stays as written). M5.3 adds one row, in the table's shape. CROSS-SOURCE is

@@ -971,3 +971,63 @@ PARTLY. Verdict: REDO on V-1; the Table's rulings V-2..V-6.
 - Table ledger: R-3 and T-1 were the Table's words, and both described an
   outcome without saying it must hold in every order of arrival; the
   builder built the orders the tests named. V-1 names the property.
+
+## Amendment W (the Table, 2026-11-11) - judgement on M7.8 (416dfa4 + 45ef2df + e1974cc + 7055026)
+- V-1..V-6 MET as cited in the "## REDO 3" section of
+  docs/review/2026-11-10-M7.8-questions.md. The Table ran the REDO 3
+  tests itself (10 passed) and read the registry: an act's key is its
+  events; `sent` is set only by a knock really made; _standing is a pure
+  function of the copies (the nearest tree that is not benign, else the
+  nearest benign one); what is shown is derived when it is shown. The
+  test V-1 named runs 416 watches (two and three nested trees, benign or
+  not, FIRST-FINDING spent or not, every order of arrival over separate
+  polls); on e1974cc's code it failed exactly where the reviewer's U1 and
+  U4 said, and it passes now.
+- One thing is not as V-1 was worded, and the builder is right: "I-6 is
+  asked on the standing tree" alone cannot hold in every order (an inner
+  tree whose FIRST-FINDING is spent, read first, would silence an outer
+  tree that would have knocked). As built: I-6 is asked on the standing
+  tree, then on each other non-benign tree that read the act, nearest
+  first; the first that knocks sends it. Which tree's FIRST-FINDING the
+  one knock spends still depends on arrival; the number of knocks does
+  not. Accepted; V-1 is amended by this line.
+- CI, read from api.github.com: 416dfa4 six success; 45ef2df four (the
+  os.sysconf test on windows); e1974cc six; 7055026 five, the windows 3.11
+  gate failing twice on tests/test_app.py::test_a2_a_watch_stuck_under_
+  its_lock..., a test and a file M7.8 does not touch, with "Exception
+  ignored in Variable.__del__ ... main thread is not in main loop" beside
+  it: Tk Variables left by the Tk tests before it were finalised in the
+  watch's worker thread, where tkinter waits a second each, so the
+  heartbeat came late. The Table's commit 0c74ade (tests/conftest.py:
+  the garbage of a Tk test is collected on the main thread; ADR-0009
+  A-16's smallest form, M8.1 brings the whole) - run 42902624296, six
+  jobs success.
+- Gate on the branch: 2982 passed, 22 skipped; kinds 4 : 7 : 11 (no rule
+  added; ADR-0002's note for the two evasion lines is on the branch).
+  Scope clean as widened by R-9 and V-4 (one line in each NEW-AGENT
+  YAML); raqib/app.py and raqib/rules/hostdata untouched. Four builder
+  commits (G-8), three packets, four sets of rulings.
+- What M7.8 leaves true: on a host with Sysmon an agent's children are
+  judged by NET-TOOL and DESTRUCT-CMD by image name, Windows programs
+  included; ssh under git is git; an act from before the watch is
+  history; one act is one finding and at most one knock in every order;
+  a benign tree is sourced and its acts are notes unless a tree above it
+  is not benign; a living tree is quiet, not gone, and live for its
+  footprint; Defender's engine is benign in its own directories only; a
+  clock that steps back makes nothing history; the Linux key is the
+  kernel's start tick; THREAT_MODEL has the host watch's section.
+- Still open, recorded: the budgets are a synthetic desktop's (A7: the
+  commander's machine is the measurement); the window's word for a quiet
+  tree and its severity rank for "judged on another tree" and "noted
+  (benign)" (ADR-0009 A-13(d); when M8.1 and M7.8 meet on main); M7.9
+  (the round reads the channel), M7.10 (the clipboard's writer), M7.11 (a
+  benign host of a model client).
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's
+  standing word.
+- Table ledger for M7.8: three reviews, three REDOs, one CI follow-up by
+  the Table. The Table's misses, each caught by a reviewer: R-1 (an alarm
+  traded for silence to cure a false positive); R-3 and T-1 (an outcome
+  described without the property that it holds in every order); V-5's
+  "no conftest.py", which the next commit had to unsay. The lesson kept:
+  where a ruling is about order, the ruling names the property and the
+  test enumerates the orders.
