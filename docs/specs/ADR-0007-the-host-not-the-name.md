@@ -769,3 +769,265 @@ Rulings and what they open:
 - Open, for the commander: what ran in the shell pid 5888 (the unknown
   path's first field firing is on it); the KNOCKS ledger of this run
   against the notification centre.
+
+## Amendment R (the Table, 2026-11-10) - rulings on review 2026-11-10-M7.8.md (416dfa4)
+(The letter Q is skipped: Q-n are the builders' questions.) Builder's
+record: docs/review/2026-11-10-M7.8-questions.md (Q-1..Q-8). CI run
+42877858974 for 416dfa4: six jobs success. Verdict: REDO on R-1, R-2 and
+R-3; the Table's rulings R-4..R-10; the rest recorded.
+- R-1 (P1, must; C-1d) Benign means not judged, and the tree says so. A
+  benign tree gets no source: no os follow, no host lines, no finding, no
+  knock; it is listed `benign (not sourced: its acts are not judged)` in
+  the report, the state and the page, and HOST-UNWATCHED never judges it.
+  A candidate or act-root nested under a benign root is its own tree with
+  its own source, as today. The person's own programs under explorer are
+  then under no sourced tree, which is what THREAT_MODEL says. Tests: the
+  benign desktop with ssh and curl under explorer gives no finding and no
+  knock; an agent tree nested under explorer is still sourced and judged.
+- R-2 (P17, must; I-3, B-3) An act from before the watch is history. An
+  os line whose time is before the watch's start is listed as history on
+  its tree, never knocked, never an alarm, whenever its tree was first
+  seen (round 1 or later): a shell that became a tree in round 5 does not
+  knock for what it ran yesterday. The count of such lines is said per
+  tree. Test: a tree first seen in round 3 whose channel past holds a
+  listed program from before the start gives a history line and no knock;
+  the same program after the start knocks as I-6 says.
+- R-3 (P6, must; A6) One act, one finding, one knock. The same os event
+  read by two feeds (the same time, tool and input hash) is one finding:
+  it is shown on the nearest tree (the feed where the line's depth is
+  least), the outer tree lists it as "judged on tree pid N", and it knocks
+  once whichever feed delivers it first. Test with the nested fixture.
+- R-4 (P2, P11) Quiet says what was seen. A tree absent from the round
+  whose root is in the sample is `quiet (its root alive in round N; not
+  seen talking with an act at the sample; source kept)` - "source kept"
+  only when a source is attached and running, else its real state. In a
+  round whose connection record was unread (F-9's blind set) a tree keeps
+  the state it had and the round says `not judged this round (connections
+  unread)`. README, the help text and THREAT_MODEL use the same words.
+- R-5 (P3) The start time decides, where it can be read. The Linux
+  snapshot carries each process's start time (optional in the text, so
+  every shipped fixture reads as before) and the tree's key and the sample
+  use it; where it is unread on either side (old snapshots, Windows with
+  the process's times denied) a quiet tree's line ends "start time unread:
+  a process of the same image holds the pid" and THREAT_MODEL says the
+  hole. With --window S the last snapshot of the window is the sample.
+- R-6 (P4; N-1) A quiet tree is a live tree for its footprint: a
+  footprint that linked to a tree which is now quiet is linked (the dark
+  streak is cleared, the live window runs on); it is dark only when its
+  tree is gone. Test: the field run's shape - Kimi quiet for twelve
+  rounds - gives no AGENT-DARK-LIVE; Kimi gone gives the M7.5 note, then
+  the knock after the window, as N-1 says.
+- R-7 (P5, Q-1) The lists are accepted as built, with one change: an os
+  process line carries `input_meta.parent_image` (the parent's image in
+  the same normalised form; a name, never an argument), and NET-TOOL's os
+  branch does not fire on ssh whose parent_image is git: git over SSH is
+  git, which the rule leaves out on every source. The evasion line says
+  it (an agent that reaches the network through git is not seen, as
+  before). certutil, the shells, the cmdlets and the rest stay out for
+  the reasons the builder gave. Fixture pair for the ssh-under-git case.
+- R-8 (P7, P8, P10, P14, P15, P16) THREAT_MODEL's sentences made true (ss
+  on Linux; "no watched process is signalled"; Raqib ends only its own
+  helpers); the dropped "ALARMS: 0" check restored in another form;
+  PRE_M78_NOTE says what the beat does with an old line; the temporary
+  catalog goes to tmp_path; the Defender fixtures' run.json carry
+  system_drive so the export itself reads benign; the evasions name wsl
+  and a multicall binary.
+- R-9 (Q-5; scope widened by this ruling) raqib/rules/catalog/NEW-AGENT.yaml
+  and NEW-AGENT-UNKNOWN.yaml gain the P-3 evasion line only. Only msmpeng
+  is pinned: the field showed that one (A7); the others wait for a run.
+- R-10 Accepted as built: Q-3 (a quiet round writes no closed-connection
+  line; recorded with P12 as an under-count of rhythm, the safe side);
+  Q-4; Q-6; Q-7 (the sample in inventory.json is pid, image name and start
+  time: THREAT_MODEL section 4 names it among what is stored); Q-8 (the
+  trailer names the model that built the commit). P9 (the fixture runner
+  compares seq numbers only) and P13 (ADR-0002's "now" line: +8 and +7
+  after M7.8) are the Table's and are recorded at the judgement. Q-2 (the
+  window's word for a quiet tree) is built when M8.1 and M7.8 meet on main.
+- R-11 Every REDO change carries a test for the behaviour it adds (D-8).
+
+## Amendment T (the Table, 2026-11-10) - rulings on review 2026-11-10-M7.8-redo.md (45ef2df)
+(The letter S is skipped: S-n are the REDO review's findings.) CI run
+42886121515 for 45ef2df: four jobs success, both windows gate jobs
+failed on one test (os.sysconf, which Windows does not have). R-2, R-5,
+R-6, R-7, R-8, R-9 MET; R-1, R-3, R-4 PARTLY. Verdict: REDO on T-1, T-2
+and T-6; the Table's rulings T-3..T-9.
+- T-1 (S1, must; R-3, I-6) The knock belongs to the act, and is decided
+  on the finding as it stands, not on the feed read first. For os lines
+  history is one thing only: the event's time against the watch's start
+  (R-2); the attach-time rule of I-3 no longer applies to them, so two
+  copies of one event always agree. The copies of one act are merged
+  first; the entry that stands is on the nearest tree; then it goes
+  through I-6 on THAT tree, once: it knocks if that tree's rules say so
+  (its FIRST-FINDING if unspent, its own rule if high), whichever feed
+  was read first, and it never knocks twice. The notice and the KNOCKS
+  row name the tree the finding is shown on. Tests: the outer tree's
+  FIRST-FINDING spent and the nested tree's not; each poll order; a copy
+  arriving after the knock.
+- T-2 (S2, S3, S12, must; R-1 is amended) A benign tree keeps its source,
+  and what its acts match is a note. R-1's "no source" made the commonest
+  agent of all - one inside an editor or a browser, whose root is the
+  benign program - judged by nothing; that trade is taken back. A benign
+  tree is sourced like any other. A catalog finding on a benign tree is
+  listed on the tree and in the report under "on benign trees (noted, not
+  knocked)", counted apart; it is not an alarm, does not change the exit
+  code, never knocks and never spends FIRST-FINDING. One act under a
+  benign tree and a nearer non-benign tree is the nearer tree's finding
+  (T-1). HOST-RHYTHM judges a benign tree as K-10 ruled, and knocks. The
+  tree's word is `benign (its acts are noted, not knocked; its rhythm is
+  judged)`. HOST-UNWATCHED judges a benign tree as before R-1. Tests: the
+  person's ssh under explorer is a note, exit 0, no knock; an agent's
+  curl under an editor's own process is a note on that tree; rhythm on a
+  benign tree still knocks.
+- T-3 (S4; R-2) A clock that steps back does not make acts history. The
+  watch keeps its start on both clocks; each round the start is taken as
+  the earlier of the wall clock at the start and (the wall clock now
+  minus the monotonic time elapsed); a step of more than a round is said
+  once as a hole, with its size. THREAT_MODEL says what remains (an act
+  in the seconds before the start reads as live after a step: the alarm
+  side).
+- T-4 (S5; R-5) The Linux key is the kernel's own number: a process's
+  start as /proc/PID/stat gives it (ticks since boot), which a step of
+  the wall clock does not move; the time shown is computed from it for
+  display only. No os.sysconf on a platform that lacks it: the Windows
+  jobs run every test.
+- T-5 (S9) R-2 judges acts. A silence rule's finding is about Raqib's own
+  record during the watch and keeps I-3's rule; the event's time makes
+  only a catalog finding history.
+- T-6 (S6 and the crash on af808a1, must) No thread outlives its test.
+  Every HostWatch a test starts is ended in the test (finish, the
+  sources' threads joined, bounded), by a fixture that fails the test if
+  a thread named for Raqib is alive after it; the fakes wait on the stop
+  they are given, never on a time.
+- T-7 (S7, S10) NET-TOOL's evasion says the parent is known by its name
+  only, and that git starts ssh with what the agent configures. The act
+  key gains the image and the parent image.
+- T-8 (S8, S11, S13, S14, S15) The help text and THREAT_MODEL say what
+  the code does (the four sentences S13 names; quiet's round and source;
+  "not judged this round"); the report's SOURCE FINDINGS line adds up
+  with the entries judged elsewhere and the notes on benign trees named;
+  the pids whose start time was unread are counted and said once per
+  round; the test that asserts nothing asserts something.
+- T-9 Recorded for later tasks: a benign program that talks to a model
+  endpoint the catalog names is still listed only as benign (a browser
+  or an editor hosting an agent: the hole C-1d names); a candidate is
+  "a benign host of a model client", listed with that word (M7.11).
+  S16's SEVERITY_RANK is the window's, built when M8.1 and M7.8 meet.
+- T-10 Every REDO change carries a test for the behaviour it adds (D-8).
+- Table ledger so far for M7.8: R-1 was the Table's own trade of an
+  alarm for silence, written to cure a false positive (the person's
+  programs under explorer) without asking what else has a benign root;
+  the reviewer's S2 caught it. A note, not silence, is the cure.
+
+## Amendment V (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.8-redo2.md (e1974cc)
+(The letter U is skipped: U-n are the second REDO review's findings.) CI
+run 42892952899 for e1974cc: six jobs success. T-3..T-8 MET; T-1 and T-2
+PARTLY. Verdict: REDO on V-1; the Table's rulings V-2..V-6.
+- V-1 (U1, U2, U3, U4, U5, U6, must) T-1 is restated as a thing that can
+  be tested in every order, because two builds of it were right in one
+  order and wrong in another. An act is one os event: its key is the
+  event's (time, tool, input hash, image, parent image), the same whether
+  one half-line of it or both were read. The watch keeps, per act, the
+  copies seen (which tree's feed, at what depth) and one fact: whether a
+  knock for it was actually SENT. From the copies alone, by one pure
+  function: the standing tree is the nearest tree that is not benign,
+  and only when every tree that read the act is benign, the nearest of
+  those (then the finding is a note). Whenever the copies of an act
+  change and no knock has been sent for it, I-6 is asked on the standing
+  tree; "not notified" is an answer, not a sent knock, and does not close
+  the act. A sent knock closes it: never a second. Everything shown - the
+  finding's status, its KNOCKS row, a fold's outcome, "judged on tree pid
+  N" on the other trees, the tree that knocked - is read from the act,
+  so two lines about one act cannot disagree. An act is never left
+  without a word: what a poll cut short (a judge that raised, a Stop) is
+  settled by the next poll or by finish, and an entry finish cannot
+  settle says so in the report. Test, the one that matters: for two and
+  for three nested trees, benign and not, FIRST-FINDING spent and not,
+  EVERY order of arrival over separate polls gives the same standing
+  tree, the same exit code, the same counts, at most one knock, and a
+  knock whenever some order gives one.
+- V-2 (U4) A note cannot hide an agent's act: an act is a note only when
+  every tree above it is benign. An agent that starts a benign program
+  and acts through it has its act on the agent's tree, in every order.
+  THREAT_MODEL says both directions.
+- V-3 (U7, U8, U9) What is said once is said right: the count of lines
+  written before M7.8 is the report's final count; a benign tree's word
+  says what happened to it (a knocked act after a round that lost the
+  system drive; a rhythm that knocked) and never "not knocked" beside a
+  knock; the page lists notes under their own heading; "not judged by
+  <id> (off)" and the suppressed count count acts, not copies, and name
+  the would-be notes apart.
+- V-4 (U11; scope widened for one line) The Linux tree shows its start
+  as a time where the tick rate is known, beside the key; THREAT_MODEL
+  says what is shown; NEW-AGENT.yaml and NEW-AGENT-UNKNOWN.yaml's "Linux
+  /proc gives no creation time" is made true.
+- V-5 (U12) The fixture that ends every HostWatch and fails a leaked
+  thread serves every test file that starts one (test_host_sources.py,
+  test_rhythm.py, test_field_run.py too), from one helper module under
+  tests/ (not conftest.py, which M8.1 adds); no fake waits on a time;
+  a teardown whose finish raises still stops the rest.
+- V-6 (U10) Recorded: the clock-step hole is said again when a later step
+  is larger by more than a round; nothing else of U10 needs building.
+- V-7 Every REDO change carries a test for the behaviour it adds (D-8).
+- Table ledger: R-3 and T-1 were the Table's words, and both described an
+  outcome without saying it must hold in every order of arrival; the
+  builder built the orders the tests named. V-1 names the property.
+
+## Amendment W (the Table, 2026-11-11) - judgement on M7.8 (416dfa4 + 45ef2df + e1974cc + 7055026)
+- V-1..V-6 MET as cited in the "## REDO 3" section of
+  docs/review/2026-11-10-M7.8-questions.md. The Table ran the REDO 3
+  tests itself (10 passed) and read the registry: an act's key is its
+  events; `sent` is set only by a knock really made; _standing is a pure
+  function of the copies (the nearest tree that is not benign, else the
+  nearest benign one); what is shown is derived when it is shown. The
+  test V-1 named runs 416 watches (two and three nested trees, benign or
+  not, FIRST-FINDING spent or not, every order of arrival over separate
+  polls); on e1974cc's code it failed exactly where the reviewer's U1 and
+  U4 said, and it passes now.
+- One thing is not as V-1 was worded, and the builder is right: "I-6 is
+  asked on the standing tree" alone cannot hold in every order (an inner
+  tree whose FIRST-FINDING is spent, read first, would silence an outer
+  tree that would have knocked). As built: I-6 is asked on the standing
+  tree, then on each other non-benign tree that read the act, nearest
+  first; the first that knocks sends it. Which tree's FIRST-FINDING the
+  one knock spends still depends on arrival; the number of knocks does
+  not. Accepted; V-1 is amended by this line.
+- CI, read from api.github.com: 416dfa4 six success; 45ef2df four (the
+  os.sysconf test on windows); e1974cc six; 7055026 five, the windows 3.11
+  gate failing twice on tests/test_app.py::test_a2_a_watch_stuck_under_
+  its_lock..., a test and a file M7.8 does not touch, with "Exception
+  ignored in Variable.__del__ ... main thread is not in main loop" beside
+  it: Tk Variables left by the Tk tests before it were finalised in the
+  watch's worker thread, where tkinter waits a second each, so the
+  heartbeat came late. The Table's commit 0c74ade (tests/conftest.py:
+  the garbage of a Tk test is collected on the main thread; ADR-0009
+  A-16's smallest form, M8.1 brings the whole) - run 42902624296, six
+  jobs success.
+- Gate on the branch: 2982 passed, 22 skipped; kinds 4 : 7 : 11 (no rule
+  added; ADR-0002's note for the two evasion lines is on the branch).
+  Scope clean as widened by R-9 and V-4 (one line in each NEW-AGENT
+  YAML); raqib/app.py and raqib/rules/hostdata untouched. Four builder
+  commits (G-8), three packets, four sets of rulings.
+- What M7.8 leaves true: on a host with Sysmon an agent's children are
+  judged by NET-TOOL and DESTRUCT-CMD by image name, Windows programs
+  included; ssh under git is git; an act from before the watch is
+  history; one act is one finding and at most one knock in every order;
+  a benign tree is sourced and its acts are notes unless a tree above it
+  is not benign; a living tree is quiet, not gone, and live for its
+  footprint; Defender's engine is benign in its own directories only; a
+  clock that steps back makes nothing history; the Linux key is the
+  kernel's start tick; THREAT_MODEL has the host watch's section.
+- Still open, recorded: the budgets are a synthetic desktop's (A7: the
+  commander's machine is the measurement); the window's word for a quiet
+  tree and its severity rank for "judged on another tree" and "noted
+  (benign)" (ADR-0009 A-13(d); when M8.1 and M7.8 meet on main); M7.9
+  (the round reads the channel), M7.10 (the clipboard's writer), M7.11 (a
+  benign host of a model client).
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's
+  standing word.
+- Table ledger for M7.8: three reviews, three REDOs, one CI follow-up by
+  the Table. The Table's misses, each caught by a reviewer: R-1 (an alarm
+  traded for silence to cure a false positive); R-3 and T-1 (an outcome
+  described without the property that it holds in every order); V-5's
+  "no conftest.py", which the next commit had to unsay. The lesson kept:
+  where a ruling is about order, the ruling names the property and the
+  test enumerates the orders.

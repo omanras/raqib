@@ -1,0 +1,4 @@
+# M7.8 fixture SYNTHETIC (not captured from a machine) - Windows Defender's engine under the system drive's Program Files\Windows Defender, talking, with a child; host `host`, one sample of the live reader; in the shape of: Get-NetTCPConnection | ConvertTo-Csv -NoTypeInformation, columns LocalAddress; LocalPort; RemoteAddress; RemotePort; State; OwningProcess; CreationTime. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"LocalAddress","LocalPort","RemoteAddress","RemotePort","State","OwningProcess","CreationTime"
+"0.0.0.0","135","0.0.0.0","0","Listen","760","2026-11-10T07:40:10.000Z"
+"192.0.2.10","50200","198.51.100.30","443","Established","4400","2026-11-10T07:52:10.000Z"

@@ -19,9 +19,35 @@ this file.
 - tests/fixtures/cross/<name>.sysmon.xml and <name>.log for the four
   CROSS-SOURCE fixtures: the hook lines below, then os-sysmon's lines for
   the export (`os_sysmon.build`, as `raqib os-sysmon --from` writes them).
+- M7.8 (ADR-0007 Amendment P, P-1): the os-line fixtures of NET-TOOL and
+  DESTRUCT-CMD, tests/fixtures/rules/<RULE>/{positive,negative}-os-process.json,
+  os-sysmon's lines (`os_sysmon.build`) of these exports:
+  - tests/fixtures/os/net-windows.sysmon.xml (root 4700): Windows network
+    programs below an agent (cmd.exe -> bitsadmin.exe; plink.exe);
+  - tests/fixtures/os/destruct-windows.sysmon.xml (root 4600): destructive
+    programs below an agent (Git's bash.exe -> rm.exe; cmd.exe ->
+    vssadmin.exe);
+  - tests/fixtures/os/benign-windows-desktop.sysmon.xml and
+    kimi-two-samples.sysmon.xml: the discover exports
+    tests/fixtures/discover/benign/windows-desktop and kimi/two-samples
+    (themselves SYNTHETIC) READ AS OS LINES: every Win32_Process row with an
+    ExecutablePath, once per (pid, CreationDate), becomes the event 1 Sysmon
+    would have logged at its creation (pid, parent pid, image, command line;
+    no ProcessGuid, so the pid alone decides; times made up, 0.1 s apart).
+    The roots: explorer 5100 of the desktop (the whole desktop, code 6050's
+    subtree in it, once), kimi 10728.
+  - tests/fixtures/os/git-ssh-windows.sysmon.xml (root 4800, M7.8 REDO R-7):
+    git.exe -> Git's ssh.exe, git over SSH (NET-TOOL's negative);
+  - tests/fixtures/os/nested-windows.sysmon.xml (roots 6100 and 6200, REDO
+    R-3): outer.exe -> inner.exe -> cmd.exe -> curl.exe, two nested trees.
+  The positives cite the lines of the listed programs (expect_seq, computed
+  here from the image names, not from the rule); each rule's negative holds
+  the desktop, Kimi's tree and the other rule's positive tree.
 tests/test_os_sysmon.py and tests/test_cross.py check that the files are
 exactly what this script writes.
 """
+import csv
+import io
 import json
 import os
 import sys
@@ -232,12 +258,170 @@ def cross_log(export, hook):
     return "".join(line + "\n" for line in hook + lines)
 
 
+# --- M7.8 (ADR-0007 P-1): the os-line fixtures of NET-TOOL and DESTRUCT-CMD -------------------------------
+CMD = "C:\\Windows\\System32\\cmd.exe"
+RM = "C:\\Program Files\\Git\\usr\\bin\\rm.exe"
+VSSADMIN = "C:\\Windows\\System32\\vssadmin.exe"
+BITSADMIN = "C:\\Windows\\System32\\bitsadmin.exe"
+PLINK = "C:\\Program Files\\PuTTY\\plink.exe"
+SSH = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
+GIT = "C:\\Program Files\\Git\\cmd\\git.exe"
+GIT_SSH = "C:\\Program Files\\Git\\usr\\bin\\ssh.exe"
+OUTER = "C:\\Users\\user\\AppData\\Local\\Programs\\outer\\outer.exe"
+INNER = "C:\\Users\\user\\AppData\\Local\\Programs\\inner\\inner.exe"
+NET_PROGRAMS = ("curl", "bitsadmin", "plink", "ssh")   # what the NET-TOOL positive must cite
+DESTRUCT_PROGRAMS = ("rm", "vssadmin")             # what the DESTRUCT-CMD positive must cite
+OS_CWD = "C:\\work\\proj"
+DESKTOP_CWD = "C:\\Users\\user"
+
+
+def destruct_windows():
+    """Root 4600: Git's bash runs rm; cmd runs vssadmin (SYNTHETIC)."""
+    x = Export(first_record=71001)
+    x.proc("00.100", 4600, AGENT, '"%s"' % AGENT, 900, EXPLORER, "C:\\Windows\\Explorer.EXE")
+    x.net("01.000", 4600, AGENT, "203.0.113.7", 443, "api.example.com")
+    x.proc("05.200", 4610, BASH, '"%s" -c -l "rm -rf build"' % BASH, 4600, AGENT, '"%s"' % AGENT)
+    x.proc("05.300", 4620, RM, "rm -rf build", 4610, BASH, '"%s" -c -l "rm -rf build"' % BASH)
+    x.proc("07.000", 4630, CMD, 'cmd.exe /c "vssadmin delete shadows /all /quiet"', 4600, AGENT, '"%s"' % AGENT)
+    x.proc("07.100", 4640, VSSADMIN, "vssadmin delete shadows /all /quiet", 4630, CMD,
+           'cmd.exe /c "vssadmin delete shadows /all /quiet"')
+    x.file("08.000", 4600, AGENT, "C:\\work\\proj\\notes.txt")
+    return x.text()
+
+
+def net_windows():
+    """Root 4700: cmd runs bitsadmin; the agent runs plink (SYNTHETIC)."""
+    x = Export(first_record=72001)
+    x.proc("00.100", 4700, AGENT, '"%s"' % AGENT, 900, EXPLORER, "C:\\Windows\\Explorer.EXE")
+    x.net("01.000", 4700, AGENT, "203.0.113.7", 443, "api.example.com")
+    x.proc("05.200", 4710, CMD, 'cmd.exe /c "bitsadmin /transfer j https://198.51.100.20/x C:\\work\\x"', 4700,
+           AGENT, '"%s"' % AGENT)
+    x.proc("05.300", 4720, BITSADMIN, "bitsadmin /transfer j https://198.51.100.20/x C:\\work\\x", 4710, CMD,
+           'cmd.exe /c "bitsadmin /transfer j https://198.51.100.20/x C:\\work\\x"')
+    x.proc("09.000", 4730, PLINK, '"%s" user@198.51.100.21' % PLINK, 4700, AGENT, '"%s"' % AGENT)
+    x.file("10.000", 4700, AGENT, "C:\\work\\proj\\notes.txt")
+    # M7.8 REDO R-7: ssh under cmd is NET-TOOL's (git-ssh-windows holds ssh under git, which is not)
+    x.proc("11.000", 4740, CMD, 'cmd.exe /c "ssh user@198.51.100.22"', 4700, AGENT, '"%s"' % AGENT)
+    x.proc("11.100", 4750, SSH, "ssh user@198.51.100.22", 4740, CMD, 'cmd.exe /c "ssh user@198.51.100.22"')
+    return x.text()
+
+
+def git_ssh_windows():
+    """Root 4800 (M7.8 REDO R-7): git over SSH - git.exe starts Git's ssh.exe for a fetch; git is left out of
+    NET-TOOL on every source, so its ssh is too (SYNTHETIC)."""
+    x = Export(first_record=75001)
+    x.proc("00.100", 4800, AGENT, '"%s"' % AGENT, 900, EXPLORER, "C:\\Windows\\Explorer.EXE")
+    x.net("01.000", 4800, AGENT, "203.0.113.7", 443, "api.example.com")
+    x.proc("05.200", 4810, GIT, '"%s" fetch origin' % GIT, 4800, AGENT, '"%s"' % AGENT)
+    x.proc("05.300", 4820, GIT_SSH, "ssh git@198.51.100.23 \"git-upload-pack 'proj.git'\"", 4810, GIT,
+           '"%s" fetch origin' % GIT)
+    return x.text()
+
+
+def nested_windows():
+    """Roots 6100 and 6200 (M7.8 REDO R-3): two nested trees, outer.exe -> inner.exe -> cmd.exe -> curl.exe;
+    each tree's os source reads the curl, at depth 3 under the outer root and 2 under the inner (SYNTHETIC)."""
+    x = Export(first_record=76001)
+    x.proc("00.100", 6100, OUTER, '"%s"' % OUTER, 900, EXPLORER, "C:\\Windows\\Explorer.EXE")
+    x.proc("00.500", 6200, INNER, '"%s"' % INNER, 6100, OUTER, '"%s"' % OUTER)
+    x.proc("05.200", 6210, CMD, 'cmd.exe /c "curl -s https://198.51.100.24/x"', 6200, INNER, '"%s"' % INNER)
+    x.proc("05.300", 6220, CURL, "curl -s https://198.51.100.24/x", 6210, CMD,
+           'cmd.exe /c "curl -s https://198.51.100.24/x"')
+    return x.text()
+
+
+def win_process_rows(directory):
+    """Every Win32_Process row of a discover export directory's win-process
+    files (sample order), once per (ProcessId, CreationDate)."""
+    rows, seen = [], set()
+    names = sorted(n for n in os.listdir(directory) if n.startswith("win-process"))
+    for name in names:
+        with open(os.path.join(directory, name), encoding="utf-8") as f:
+            text = "".join(line for line in f if not line.startswith("#"))
+        for row in csv.DictReader(io.StringIO(text)):
+            mark = (row["ProcessId"], row["CreationDate"])
+            if mark not in seen:
+                seen.add(mark)
+                rows.append(row)
+    return rows
+
+
+def as_os_lines_export(directory, first_record):
+    """A discover export READ AS OS LINES: each process row with an image
+    path is the event 1 Sysmon would have logged at its creation (no
+    ProcessGuid: the pid decides; times 0.1 s apart, made up)."""
+    rows = win_process_rows(directory)
+    image = {r["ProcessId"]: r["ExecutablePath"] for r in rows if r["ExecutablePath"]}
+    command = {r["ProcessId"]: r["CommandLine"] for r in rows}
+    x = Export(first_record=first_record)
+    for i, r in enumerate(rr for rr in rows if rr["ExecutablePath"]):
+        at = "%02d.%03d" % ((i // 10) % 60, (i % 10) * 100)
+        x.event(1, at, [
+            ("RuleName", "-"), ("UtcTime", DAY + at), ("ProcessId", r["ProcessId"]), ("Image", r["ExecutablePath"]),
+            ("CommandLine", r["CommandLine"] or "-"), ("CurrentDirectory", DESKTOP_CWD + "\\"),
+            ("User", "host\\user"), ("ParentProcessId", r["ParentProcessId"]),
+            ("ParentImage", image.get(r["ParentProcessId"], "-")),
+            ("ParentCommandLine", command.get(r["ParentProcessId"]) or "-")])
+    return x.text()
+
+
+def os_fixture_exports():
+    """name -> (export text, the roots read, cwd)."""
+    discover = os.path.join(ROOT, "tests", "fixtures", "discover")
+    return {
+        "sysmon-synthetic": (synthetic(), (ROOT_PID,), OS_CWD),
+        "net-windows": (net_windows(), (4700,), OS_CWD),
+        "destruct-windows": (destruct_windows(), (4600,), OS_CWD),
+        # REDO (P6 note): the whole desktop once, under explorer; code 6050's subtree is in it
+        "benign-windows-desktop": (as_os_lines_export(os.path.join(discover, "benign", "windows-desktop"), 73001),
+                                   (5100,), DESKTOP_CWD),
+        "git-ssh-windows": (git_ssh_windows(), (4800,), OS_CWD),
+        "nested-windows": (nested_windows(), (6100, 6200), OS_CWD),
+        "kimi-two-samples": (as_os_lines_export(os.path.join(discover, "kimi", "two-samples"), 74001), (10728,),
+                             DESKTOP_CWD),
+    }
+
+
+OS_RULE_FIXTURES = {   # rule fixture -> the exports whose os lines it holds, and what a positive must cite
+    "NET-TOOL/positive-os-process.json": (("sysmon-synthetic", "net-windows"), NET_PROGRAMS),
+    "NET-TOOL/negative-os-process.json": (("benign-windows-desktop", "kimi-two-samples", "destruct-windows",
+                                           "git-ssh-windows"), None),
+    "DESTRUCT-CMD/positive-os-process.json": (("destruct-windows",), DESTRUCT_PROGRAMS),
+    "DESTRUCT-CMD/negative-os-process.json": (("benign-windows-desktop", "kimi-two-samples", "sysmon-synthetic",
+                                               "net-windows", "git-ssh-windows"), None),
+}
+
+
+def os_rule_fixture(names, cite, exports):
+    """The fixture's text: os-sysmon's lines of each export's roots; a
+    positive's expect_seq is the seq of every process line whose image is
+    one of `cite` (read from the lines, not from the rule)."""
+    from raqib.hooks import os_sysmon
+    lines = []
+    for name in names:
+        text, roots, cwd = exports[name]
+        for root in roots:
+            got, _ = os_sysmon.build(text, root, cwd=cwd)
+            lines += [json.loads(line) for line in got]
+    doc = {"lines": lines}
+    if cite:
+        doc["expect_seq"] = sorted({r["seq"] for r in lines if r["phase"] == "pre" and r["tool"] == "process"
+                                    and r["input_meta"].get("image") in cite})
+    return json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
+
+
 def files():
     """Relative path -> bytes, everything this script writes."""
     out = {"tests/fixtures/os/sysmon-synthetic.xml": synthetic().encode("ascii")}
     for name, (export, hook) in cross_fixtures().items():
         out["tests/fixtures/cross/%s.sysmon.xml" % name] = export.encode("ascii")
         out["tests/fixtures/cross/%s.log" % name] = cross_log(export, hook).encode("ascii")
+    exports = os_fixture_exports()   # M7.8
+    for name, (text, _, _) in exports.items():
+        if name != "sysmon-synthetic":
+            out["tests/fixtures/os/%s.sysmon.xml" % name] = text.encode("ascii")
+    for rel, (names, cite) in OS_RULE_FIXTURES.items():
+        out["tests/fixtures/rules/%s" % rel] = os_rule_fixture(names, cite, exports).encode("ascii")
     return out
 
 

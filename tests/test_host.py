@@ -135,7 +135,7 @@ def test_e1_the_final_report_lists_the_trees_and_the_exit(tmp_path):
     run_rounds(w, clock, 2)
     text, code = w.finish()
     assert code == 1 and "RESULT: ALARM (exit 1: a finding)" in text
-    assert "TREES SEEN: 6 (4 now)" in text
+    assert "TREES SEEN: 6 (4 now, 0 quiet)" in text
     assert re.search(r"\[candidate\] pid 7000 scribe \(unknown\): now; first round 2; last round 2; 1 act\(s\);.*"
                      r"NEW-AGENT-UNKNOWN sent", text), text
     assert "[candidate] pid 5100 explorer (unknown): gone; first round 1 (history, not knocked)" in text
@@ -280,7 +280,9 @@ def test_e3_dark_then_linked_clears_with_a_note(tmp_path):
     run_rounds(w, clock, 5)
     darks = [f for f in w.findings if f["rule_id"] == "AGENT-DARK-LIVE"]
     assert [(f["agent"], f["round"]) for f in darks] == [("kimi", 3)]
-    assert w.notes[-1] == "round 4: AGENT-DARK-LIVE of the kimi footprint cleared: linked to tree A1"
+    # M7.8: round 5's tree left an export round with no process sample: gone (not quiet), said once after it
+    assert w.notes[-2:] == ["round 4: AGENT-DARK-LIVE of the kimi footprint cleared: linked to tree A1",
+                            "round 5: %s" % host.NO_SAMPLE_NOTE]
     assert "cleared: linked to tree A1" in said(w)
     fp = w.footprints["C:\\Users\\user\\.kimi"]
     assert (fp["state"], fp["streak"], fp["fired"]) == ("dark", 1, False)   # a new streak after round 5
@@ -370,7 +372,7 @@ def test_e5_the_host_page_has_the_band_and_the_trees_and_runs_no_script(tmp_path
     assert 'content="%s"' % ui.CSP in page and "<script" not in page.lower() and "on" + "click" not in page
     for item in ("trees now: 4", "new this session: 3", "dark: 2", "last round: 2 at "):
         assert item in page, item
-    assert '<h2 id="host">Host (6 trees seen, 4 now)</h2>' in page
+    assert '<h2 id="host">Host (6 trees seen, 4 now, 0 quiet)</h2>' in page   # M7.8: the quiet count
     assert "<td>scribe</td><td>7000</td><td>candidate</td><td>unknown</td>" in page
     assert "named: image claude is the catalog&#x27;s claude" in page
     assert "win-process:" in page and "NEW-AGENT" in page and "AGENT-DARK" not in page.split("Host findings")[1][:20]
@@ -526,15 +528,17 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
     # HOST-RHYTHM negative-os-two-cycles (E2).
     # M7.5 REDO N-2: AGENT-DARK-LIVE's two was_live negatives are not listed (its match cannot see them): 2 again.
     # M7.6c REDO E-2: AGENT-DARK-LIVE and HOST-RHYTHM gain their edge negatives (M7.6c questions file)
-    assert got == {"AGENT-DARK-LIVE": (3, 10), "DESTRUCT-CMD": (11, 0), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
+    # M7.8 (ADR-0007 P-1, A6 re-measured): NET-TOOL and DESTRUCT-CMD gain their os-line negative (M7.8 questions file)
+    assert got == {"AGENT-DARK-LIVE": (3, 10), "DESTRUCT-CMD": (12, 0), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
                    "HOST-RHYTHM": (7, 8), "HOST-UNWATCHED": (4, 8),
-                   "LANDED-NO-GATE": (8, 2), "NET-TOOL": (11, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
+                   "LANDED-NO-GATE": (8, 2), "NET-TOOL": (12, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
                    "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
                    "SECRET-OUTPUT": (7, 2)}
     text = (ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md").read_text(encoding="utf-8")
     text += (ROOT / "docs" / "review" / "2026-11-04-M7.4-questions.md").read_text(encoding="utf-8")   # M7.4: HOST-RHYTHM
     text += (ROOT / "docs" / "review" / "2026-11-09-M7.5-questions.md").read_text(encoding="utf-8")   # M7.5: both again
     text += (ROOT / "docs" / "review" / "2026-11-09-M7.6c-questions.md").read_text(encoding="utf-8")   # M7.6c REDO: both again
+    text += (ROOT / "docs" / "review" / "2026-11-10-M7.8-questions.md").read_text(encoding="utf-8")   # M7.8: the os lines
     for rule_id, (m, u) in got.items():
         assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id
 

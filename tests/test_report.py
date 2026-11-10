@@ -295,7 +295,8 @@ def test_e4_check_rules_prints_measured_rate_against_budget():
     # M4.2 REDO-2 E-1: the field trace is not benign (tests/fixtures/field/), so
     # NET-TOOL is 1 of 11 (docs-lookup; negative-programs.json is the 10th, M7.2b's host-source
     # negative-host-child.json the 11th) and SCOPE-PATH 0 of 10 (M5.1b: + the Windows negative).
-    assert rows["NET-TOOL"][1:4] == ["ok", "0.091", "0.25"] and "11 measured" in " ".join(rows["NET-TOOL"])
+    # M7.8: NET-TOOL's os-line negative is measured too (1 of 12)
+    assert rows["NET-TOOL"][1:4] == ["ok", "0.083", "0.25"] and "12 measured" in " ".join(rows["NET-TOOL"])
     assert rows["SCOPE-PATH"][1:4] == ["ok", "0.000", "0.1"] and "10 measured" in " ".join(rows["SCOPE-PATH"])
     data = json.loads(raqib("check-rules", "--json")[1])
     assert {r["verdict"] for r in data} == {"ok"}

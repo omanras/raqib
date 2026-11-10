@@ -1,0 +1,9 @@
+# M7.8 fixture SYNTHETIC (not captured from a machine) - an agent named MsMpEng.exe in a user directory, talking, with a child: not benign; host `host`, one sample of the live reader; in the shape of: Get-CimInstance Win32_Process | ConvertTo-Csv -NoTypeInformation, columns ProcessId; ParentProcessId; Name; ExecutablePath; CommandLine; CreationDate (ISO UTC, as raqib/hostwin.py writes it). Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"ProcessId","ParentProcessId","Name","ExecutablePath","CommandLine","CreationDate"
+"0","0","System Idle Process",,,"2026-11-10T07:40:02.000Z"
+"4","0","System",,,"2026-11-10T07:40:02.000Z"
+"700","604","wininit.exe","C:\Windows\System32\wininit.exe","wininit.exe","2026-11-10T07:40:09.000Z"
+"760","700","services.exe","C:\Windows\System32\services.exe","C:\Windows\system32\services.exe","2026-11-10T07:40:09.000Z"
+"5100","5060","explorer.exe","C:\Windows\explorer.exe","C:\Windows\Explorer.EXE","2026-11-10T07:41:00.000Z"
+"4400","760","MsMpEng.exe","C:\Users\user\AppData\Local\Temp\x\MsMpEng.exe",""C:\Users\user\AppData\Local\Temp\x\MsMpEng.exe"","2026-11-10T07:52:00.000Z"
+"4410","4400","MpCmdRun.exe","C:\Users\user\AppData\Local\Temp\x\MpCmdRun.exe",""C:\Users\user\AppData\Local\Temp\x\MpCmdRun.exe" SignatureUpdate","2026-11-10T07:52:30.000Z"

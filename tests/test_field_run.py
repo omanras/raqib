@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from raqib import app, cli, discover, host, notify, ui  # noqa: E402
 from raqib.rules import engine, fixtures  # noqa: E402
+from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 
 sys.path.insert(0, str(ROOT / "tests"))
 from test_watch import FakeRunner, make_notifier  # noqa: E402
@@ -480,7 +481,8 @@ def test_e4_readme_has_the_two_lines():
     assert "HOST-RHYTHM takes its beats from every source" in text and "(KNOCKS)" in text
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
-    assert "dark after a live tree (note)" in lines[-2] and "(KNOCKS)" in lines[-1]   # the two lines, at its end
+    # the two lines, at its end until M7.8, whose three lines follow them (test_acts_judged.py)
+    assert "dark after a live tree (note)" in lines[-5] and "(KNOCKS)" in lines[-4]
 
 
 def test_e4_kinds_stay_4_7_11():
@@ -571,7 +573,7 @@ class OsFollow:
                 f.write("".join(json.dumps(r) + "\n" for r in recs))
         if on_pass:
             on_pass(1, None)
-        stop.wait(60)
+        stop.wait()   # V-5: only the stop it is given ends it
         return 1
 
 

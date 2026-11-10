@@ -418,8 +418,9 @@ def _benign_spec(spec, bad):
     `exclude` names the user-writable places under it."""
     if spec is None:
         return None
-    if not (isinstance(spec, dict) and set(spec) == {"kind", "names", "dirs", "exclude", "evasion"}):
-        bad("benign_images", "must hold kind, names, dirs, exclude and evasion")
+    if not (isinstance(spec, dict) and {"kind", "names", "dirs", "exclude", "evasion"} <= set(spec)
+            <= {"kind", "names", "dirs", "exclude", "evasion", "pinned"}):
+        bad("benign_images", "must hold kind, names, dirs, exclude and evasion (and optionally pinned)")
     if spec["kind"] != "signature":
         bad("benign_images.kind", "must be signature (a name and a path the process's record gives)")
     if not (isinstance(spec["evasion"], list) and spec["evasion"]
@@ -435,8 +436,24 @@ def _benign_spec(spec, bad):
                         and d == (d.lower() if d.startswith(SYSTEM_DRIVE) else d) for d in spec[key])):
             bad("benign_images.%s" % key, "must be a non-empty list of '/...' or lower-case '%s/...' globs ending"
                 " in /* (D-3: the system drive only, no '?')" % SYSTEM_DRIVE)
+    # M7.8 (ADR-0007 P-3): pinned names are benign under their own directories only, never under `dirs`
+    pinned = spec.get("pinned", [])
+    if not isinstance(pinned, list):
+        bad("benign_images.pinned", "must be a list of {name, dirs}")
+    pins = {}
+    for i, pin in enumerate(pinned):
+        if not (isinstance(pin, dict) and set(pin) == {"name", "dirs"} and isinstance(pin["name"], str)
+                and pin["name"] and pin["name"] == pin["name"].lower() and pin["name"] not in spec["names"]
+                and pin["name"] not in pins):
+            bad("benign_images.pinned[%d]" % i, "must be {name, dirs}: a lower-case image name, once, not in names")
+        if not (isinstance(pin["dirs"], list) and pin["dirs"]
+                and all(isinstance(d, str) and d.endswith("/*") and "?" not in d and d.startswith(SYSTEM_DRIVE + "/")
+                        and d == d.lower() for d in pin["dirs"])):
+            bad("benign_images.pinned[%d].dirs" % i, "must be a non-empty list of lower-case '%s/...' globs ending in"
+                " /* (D-3: the system drive only)" % SYSTEM_DRIVE)
+        pins[pin["name"]] = list(pin["dirs"])
     return {"names": list(spec["names"]), "dirs": list(spec["dirs"]), "exclude": list(spec["exclude"]),
-            "evasion": list(spec["evasion"])}
+            "evasion": list(spec["evasion"]), "pinned": pins}
 
 
 SYSTEM_DRIVE = "%systemdrive%"     # D-3: the root of a Windows benign glob, the drive SystemRoot is on
@@ -457,12 +474,15 @@ def benign_check(image, exe, exe_from, catalog, system_drive=None):
     compared lower case with '/', and its globs are rooted at the system
     drive (system_drive, one lower-case letter, from run.json): another
     drive's Windows or Program Files is not benign; a POSIX path is
-    compared as it is."""
+    compared as it is. M7.8 (ADR-0007 P-3): a pinned name (Windows
+    Defender's engine, msmpeng) is benign only under its own directories
+    on the system drive, never under the block's other directories."""
     spec = catalog.get("benign_images")
     if not spec or not exe or exe_from != "record" or not isinstance(exe, str):
         return None, None
     name = image_name(exe)
-    if name not in spec["names"] or (image and image != name):
+    pinned = (spec.get("pinned") or {}).get(name)   # M7.8 (P-3): benign by image AND its own directory
+    if (name not in spec["names"] and pinned is None) or (image and image != name):
         return None, None
     path = exe.strip().strip('"')
     windows = "\\" in path or re.match(r"[A-Za-z]:", path) is not None
@@ -474,10 +494,10 @@ def benign_check(image, exe, exe_from, catalog, system_drive=None):
         if not (isinstance(system_drive, str) and re.match(r"[a-z]\Z", system_drive)):
             return None, NO_DRIVE
         root = system_drive + ":"
-        dirs = [d.replace(SYSTEM_DRIVE, root, 1) for d in spec["dirs"] if d.startswith(SYSTEM_DRIVE)]
+        dirs = [d.replace(SYSTEM_DRIVE, root, 1) for d in (pinned or spec["dirs"]) if d.startswith(SYSTEM_DRIVE)]
         exclude = [d.replace(SYSTEM_DRIVE, root, 1) for d in spec["exclude"] if d.startswith(SYSTEM_DRIVE)]
     else:
-        dirs = [d for d in spec["dirs"] if d.startswith("/")]
+        dirs = [d for d in spec["dirs"] if d.startswith("/")] if pinned is None else []
         exclude = [d for d in spec["exclude"] if d.startswith("/")]
     if any(fnmatch.fnmatchcase(path, d) for d in exclude):
         return None, None
@@ -610,7 +630,7 @@ def parse_proc(text, src="proc"):
             continue
         if "snapshot" in obj:
             at = _ts(obj["snapshot"])
-            counts = {k: obj[k] for k in ("gone_while_read", "unreadable", "kernel_threads")
+            counts = {k: obj[k] for k in ("gone_while_read", "unreadable", "kernel_threads", "start_unread")
                       if isinstance(obj.get(k), int) and not isinstance(obj.get(k), bool)}
             self_pid = obj.get("self") if isinstance(obj.get("self"), int) else None
             records.append(_rec("snapshot", src, number, raw, ts=at, self=self_pid, counts=counts,
@@ -627,6 +647,15 @@ def parse_proc(text, src="proc"):
             continue
         cwd = obj.get("cwd") if isinstance(obj.get("cwd"), str) else None
         unread = obj.get("unread") if isinstance(obj.get("unread"), list) else []
+        # M7.8 REDO R-5, REDO 2 T-4: the start where the snapshot carries it (a tree's key on Linux): the kernel's
+        # ticks since boot ("boot+N"), else a start time a snapshot of the first REDO wrote, else none
+        ticks = obj.get("start_ticks")
+        shown = obj.get("started") if isinstance(obj.get("started"), str) and obj.get("started") else None
+        started_at = None
+        if isinstance(ticks, int) and not isinstance(ticks, bool) and ticks >= 0:
+            started, started_at = "boot+%d" % ticks, shown   # V-4: the key, and beside it the time to show
+        else:
+            started = shown
         # G-2: the exe link places a process; argv[0], its own text, is the fallback.
         linked = isinstance(obj.get("exe"), str) and bool(obj.get("exe"))
         exe = obj.get("exe") if linked else (argv or [None])[0]
@@ -634,7 +663,8 @@ def parse_proc(text, src="proc"):
                             image=_linux_image(argv, obj.get("name")), exe=exe,
                             exe_from="record" if linked else "argv",   # M7.2 REDO C-1d
                             cwd=cwd, env_keys=env, sockets=sockets, ts=_ts(obj.get("at")) or at,
-                            unread=[str(u) for u in unread]))
+                            unread=[str(u) for u in unread], **dict({"started": started} if started else {},
+                                                                    **({"started_at": started_at} if started_at else {}))))
     return records, problems
 
 
@@ -1066,6 +1096,19 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
         except (OSError, ValueError):
             unreadable += 1
     kernel_parent = 2 if status.get(2, {}).get("Name") == "kthreadd" else None
+    # M7.8 REDO R-5, REDO 2 T-4: each process's start as the kernel gives it, /proc/PID/stat starttime (clock
+    # ticks since boot: the key, which a step of the wall clock does not move), and for display only the time
+    # computed from it with /proc/stat btime where the clock tick rate is known (proc_start_times: no os.sysconf
+    # where the platform has none). A pid whose stat cannot be read gets neither key and is counted (start_unread).
+    ticks = {}
+    for pid in status:
+        try:
+            got = parse_stat_starttime(_read_bytes(os.path.join(proc_root, str(pid), "stat")).decode("utf-8", "replace"))
+        except OSError:
+            got = None
+        if got is not None:
+            ticks[pid] = got
+    starts, _ = proc_start_times(list(ticks), proc_root)
     procs, kernel = [], 0
     for pid in sorted(status):
         fields = status[pid]
@@ -1092,8 +1135,13 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
                       "sockets": get("fd", lambda: _sockets(os.path.join(base, "fd"), own=pid == self_pid)),
                       "exe": get("exe", lambda: os.readlink(os.path.join(base, "exe"))),
                       "unread": unread, "at": at})
+        if pid in ticks:
+            procs[-1]["start_ticks"] = ticks[pid]
+        if pid in starts:
+            procs[-1]["started"] = starts[pid]
     meta = {"snapshot": at, "self": self_pid, "processes": len(procs), "kernel_threads": kernel,
-            "kernel_parent": kernel_parent, "gone_while_read": gone, "unreadable": unreadable}
+            "kernel_parent": kernel_parent, "gone_while_read": gone, "unreadable": unreadable,
+            "start_unread": sum(1 for p in procs if p["pid"] not in ticks)}   # T-8: counted, said by build()
     if note:
         meta["note"] = note
     return "".join(json.dumps(x, sort_keys=True, ensure_ascii=True) + "\n" for x in [meta] + procs)
@@ -1856,9 +1904,19 @@ def _os_pids(node):
     return node
 
 
-def build(parsed, catalog, window=None, holes=(), live=False):
+PROCESS_LISTS = ("proc", "win-process")   # M7.8: the sources that list the processes alive at a sample
+
+
+def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
     """The inventory (E5) of parsed sources:
-    [{"name", "path", "error", "records", "problems", "lines"}]."""
+    [{"name", "path", "error", "records", "problems", "lines"}].
+    processes (M7.8, ADR-0007 P-2; API for raqib watch --host): the
+    inventory also carries "processes", every process of the round's
+    process sample - read from a process list (a /proc snapshot, a
+    Win32_Process sample), never one known only from a Sysmon event - as
+    {"pid", "image", "started"}, image and started as a tree's (image_name,
+    started_of), so a tree's root can be looked up in it. Off by default:
+    `raqib discover` and its --json are unchanged."""
     holes = list(ALWAYS_HOLES) + list(holes)
     problems = [p for s in parsed for p in s["problems"]]
     records = [r for s in parsed for r in s["records"]]
@@ -1982,7 +2040,7 @@ def build(parsed, catalog, window=None, holes=(), live=False):
             times += [r["ts"] for r in (q["recs"] if q else []) if r.get("ts")]
         candidates.append(dict(
             entry, id=ids[pid], cwd=p["cwd"] if p else None, acts=acts[pid], inside=inside, started=started_of(p),
-            exe_from=exe_from(p),
+            exe_from=exe_from(p), **_shown_start(p),
             listed_acts=sum(1 for a in acts[pid] if a["listed"]),
             talking_ancestors=talking_up, tree=tree,
             env_footprints=[{"name": k, "cites": _cites(p["recs"], 1)} for k in env],
@@ -2073,6 +2131,11 @@ def build(parsed, catalog, window=None, holes=(), live=False):
         if counts.get("unreadable"):
             holes.append("%s: %d process(es) whose status could not be read" % (where, counts["unreadable"]))
             incomplete.append("%s: %d process(es) could not be read" % (where, counts["unreadable"]))
+    unread_starts = sum((snap.get("counts") or {}).get("start_unread", 0) for snap in snapshots)
+    if unread_starts:   # T-8 (S14): said once per round, with the count
+        holes.append("%d process(es) whose start could not be read from /proc/PID/stat in %d snapshot(s): they are"
+                     " keyed by pid and image only (a pid reused by a process of the same image is taken for the same"
+                     " tree)" % (unread_starts, len(snapshots)))
     for s in parsed:
         if not s["text_read"]:
             if s["sample"] is not None:
@@ -2150,7 +2213,10 @@ def build(parsed, catalog, window=None, holes=(), live=False):
     result = "alarm" if alarms else "incomplete" if incomplete else "none-seen"
     times = sorted(r["ts"] for r in records if r.get("ts"))
     connections_from = [s["path"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]]
-    return _os_pids({
+    extra = {}
+    if processes:   # M7.8 (P-2): the round's process sample, for "quiet" (root alive, no talk) against "gone"
+        extra["processes"] = _last_sample(records, procs)
+    return _os_pids(dict(extra, **{
         "tool": "raqib discover (ADR-0004)",
         "live": live,
         "catalog": catalog["path"],
@@ -2180,7 +2246,29 @@ def build(parsed, catalog, window=None, holes=(), live=False):
         "complete": not incomplete,
         "result": result,
         "exit": EXIT[result],
-    })
+    }))
+
+
+def _last_sample(records, procs):
+    """M7.8 (P-2), REDO R-5: the processes of the LAST sample of the round
+    (the last /proc snapshot of a --window, the last Win32_Process sample),
+    read from a process list (never a Sysmon event), each as {pid, image,
+    started} as that sample's own record gives them (image_name; the start
+    time, None where unread), so a pid that a process of another image or
+    start time holds now does not match a tree's key; a pid in an earlier
+    snapshot only is not in it."""
+    lists = [r for r in records if r["kind"] == "proc" and not r.get("derived")
+             and (split_name(r["src"]) or (None,))[0] in PROCESS_LISTS]
+    if not lists:
+        return []
+    last_src = max({r["src"] for r in lists}, key=_order)
+    snaps = [r["line"] for r in records if r["kind"] == "snapshot" and r["src"] == last_src]
+    after = max(snaps) if snaps else 0
+    out = {}
+    for r in lists:
+        if r["src"] == last_src and r["line"] > after and r["pid"] not in out:
+            out[r["pid"]] = {"pid": r["pid"], "image": r["image"], "started": r.get("started") or None}
+    return [out[pid] for pid in sorted(out)]
 
 
 def exe_from(p):
@@ -2197,12 +2285,30 @@ def exe_from(p):
 def started_of(p):
     """M7.2 (API for raqib/host.py): the creation time the reader gave for a
     process, as the record holds it (Windows: CreationDate, an export's text
-    or the live reader's ISO UTC), or None: Linux /proc snapshots carry none.
-    raqib watch --host keys a tree by (pid, image, started)."""
+    or the live reader's ISO UTC; Linux since M7.8 REDO R-5: the snapshot's
+    "started", from /proc/PID/stat), or None where none was read (an older
+    snapshot). raqib watch --host keys a tree by (pid, image, started)."""
     for r in (p or {}).get("recs") or ():
         if r.get("kind") == "proc" and r.get("started"):
             return r["started"]
     return None
+
+
+def started_at_of(p):
+    """M7.8 REDO 3 V-4: the time a Linux snapshot computed for display from
+    the start ticks (where the clock tick rate was known), or None. Never the
+    key: started_of is."""
+    for r in (p or {}).get("recs") or ():
+        if r.get("kind") == "proc" and r.get("started_at"):
+            return r["started_at"]
+    return None
+
+
+def _shown_start(p):
+    """V-4: {"started_at": time} where a snapshot gave one, else {} (so the inventories of every shipped
+    export read byte-identical)."""
+    at = started_at_of(p)
+    return {"started_at": at} if at else {}
 
 
 def _descendant_candidates(procs, pid, acts):
@@ -2359,7 +2465,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         first = heads[0]
         roots.append({
             "pid": pid, "image": p["image"], "exe": p["exe"], "cwd": p["cwd"], "user_dir": place, "started": started_of(p),
-            "exe_from": exe_from(p),
+            "exe_from": exe_from(p), **_shown_start(p),
             "chains": heads, "acts": acts, "cites": _cites(p["recs"]),
             "attributed_to": ids.get(owner) if owner is not None else None,
             "talking_ancestor": ({"pid": owner, "image": procs[owner]["image"] if owner in procs else None,
@@ -2496,11 +2602,12 @@ def _holes(records, procs, conns, kinds):
     return holes
 
 
-def run(texts, catalog, window=None, holes=(), live=False, run=None):
+def run(texts, catalog, window=None, holes=(), live=False, run=None, processes=False):
     """Parse {kind: (path, text, error)} and build the inventory. A text with
     an error was partly read: it is parsed, and the run is incomplete. run:
     the run record (run.json, or collect_live's run_info); its system drive
-    (D-3) is the inventory's `system_drive`, None without one."""
+    (D-3) is the inventory's `system_drive`, None without one. processes
+    (M7.8): the inventory carries the round's process sample (build())."""
     parsed = []
     unknown = [n for n in texts if not split_name(n)]
     if unknown:
@@ -2512,7 +2619,7 @@ def run(texts, catalog, window=None, holes=(), live=False, run=None):
         parsed.append({"name": name, "kind": kind, "sample": sample, "path": path, "error": error,
                        "records": records, "problems": problems, "text_read": text is not None,
                        "lines": text.count("\n") + (not text.endswith("\n")) if text else 0})
-    inv = build(parsed, catalog, window, holes, live)
+    inv = build(parsed, catalog, window, holes, live, processes=processes)
     inv["system_drive"] = system_drive_of(run)
     return inv
 

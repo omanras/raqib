@@ -1,0 +1,4 @@
+# M7.8 REDO fixture SYNTHETIC (not captured from a machine) - explorer (benign, under the system drive's Windows) talking, the person's own cmd running ssh and curl under it (REDO R-1); host `host`, one sample of the live reader; in the shape of: Get-NetTCPConnection | ConvertTo-Csv -NoTypeInformation, columns LocalAddress; LocalPort; RemoteAddress; RemotePort; State; OwningProcess; CreationTime. Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"LocalAddress","LocalPort","RemoteAddress","RemotePort","State","OwningProcess","CreationTime"
+"0.0.0.0","135","0.0.0.0","0","Listen","760","2026-11-10T07:40:10.000Z"
+"192.0.2.10","50300","198.51.100.42","443","Established","5100","2026-11-10T07:44:00.000Z"

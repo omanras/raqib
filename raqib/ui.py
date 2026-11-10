@@ -1123,10 +1123,13 @@ def host_section(state):
     """M7.2 E5: the HOST section, from the host watch's memory: the trees
     with their evidence, the findings, the footprints and the rounds."""
     host = _dict(state.get("host"))
-    out = ['<h2 id="host">Host (%d trees seen, %s now)</h2>' % (len(_list(host.get("trees"))), _text(host.get("now"))),
+    out = ['<h2 id="host">Host (%d trees seen, %s now, %s quiet)</h2>' % (
+               len(_list(host.get("trees"))), _text(host.get("now")), _text(host.get("quiet") or 0)),
            '<p class="meta">Rounds of <code>raqib discover</code> on this host every %s s; a tree that talks and acts'
            " (a candidate) or acts with no talk seen (an act-root). Trees of the first round are history: listed, never"
-           " knocked. Every claim cites the record lines of the round&#39;s inventory (A5).</p>" % _text(
+           " knocked. A tree whose root process is still in the round&#39;s process sample and does not talk is quiet"
+           " (M7.8): listed, its source kept; gone means its root is not in the sample. Every claim cites the record"
+           " lines of the round&#39;s inventory (A5).</p>" % _text(
                state.get("every_seconds"))]
     trees = [_dict(t) for t in _list(host.get("trees"))]
     if not trees:
@@ -1146,8 +1149,12 @@ def host_section(state):
                            _text("named: %s" % t.get("named_by") if t.get("named") else "unknown"),
                            _text(t.get("first_seen")), _text(t.get("first_round")),
                            (' <span class="tag">history</span>' if t.get("history") else "") +
-                           (' <span class="tag">benign</span>' if t.get("benign") else ""),
-                           "yes" if t.get("present") else '<span class="tag">gone</span>', _text(t.get("acts")),
+                           (' <span class="tag">benign</span>%s' % (" " + _text(t["benign_word"]) if t.get("benign_word")
+                                                                    else "") if t.get("benign") else ""),   # T-2
+                           "yes" if t.get("present") else '<span class="tag">quiet</span> %s' % _text(
+                               t.get("quiet_text") or "") if t.get("quiet") else '<span class="tag">gone</span>',
+                           _text("%s%s" % (t.get("acts"), "; %s os event(s) before the watch's start: history"
+                                           % t["before_start"] if t.get("before_start") else "")),
                            _text(", ".join(str(e) for e in _list(t.get("endpoints"))) or "-"),
                            _text(tree_source(t)), _text(severity_counts(t.get("source_findings"))),
                            _text(tree_rhythm_text(t)), _cites_text(t.get("cites"))))
@@ -1172,7 +1179,9 @@ def host_section(state):
                        _text(",".join(str(x) for x in _list(f.get("cited_seq"))))))
     if not found:
         out.append('<p class="empty">None.</p>')
-    sources = [_dict(f) for f in _list(host.get("source_findings"))]
+    every = [_dict(f) for f in _list(host.get("source_findings"))]
+    sources = [f for f in every if not (f.get("benign_note") and f.get("judged_on") is None)]
+    benign_notes = [f for f in every if f.get("benign_note") and f.get("judged_on") is None]   # V-3: their own heading
     out.append("<h3>Source findings (%d)</h3>" % len(sources))
     for f in sources:
         out.append('<div class="card"><span class="tag">%s</span> <span class="tag">%s</span> %s pid %s via %s: %s'
@@ -1181,6 +1190,15 @@ def host_section(state):
                        _text(f.get("pid")), _text(f.get("source")), _text(f.get("summary")), _text(f.get("notice")),
                        _text(f.get("trace")), _text(",".join(str(x) for x in _list(f.get("lines"))) or "-")))
     if not sources:
+        out.append('<p class="empty">None.</p>')
+    out.append("<h3>On benign trees (noted, not knocked) (%d)</h3>" % len(benign_notes))
+    for f in benign_notes:
+        out.append('<div class="card"><span class="tag">note</span> <span class="tag">%s</span> %s pid %s via %s: %s'
+                   ' <span class="meta">%s; %s lines %s</span></div>' % (
+                       _text(f.get("rule_id")), _text(f.get("image") or "?"), _text(f.get("pid")), _text(f.get("source")),
+                       _text(f.get("summary")), _text(f.get("notice")), _text(f.get("trace")),
+                       _text(",".join(str(x) for x in _list(f.get("lines"))) or "-")))
+    if not benign_notes:
         out.append('<p class="empty">None.</p>')
     findings = [_dict(f) for f in _list(host.get("findings"))]
     out.append("<h3>Host findings (%d)</h3>" % len(findings))
@@ -1223,9 +1241,10 @@ def host_section(state):
     out.append("<ul>%s</ul>" % "".join("<li>round %s at %s: %s</li>" % (
         _text(r.get("round")), _text(r.get("at")),
         _text("reader FAILED: %s" % r.get("error")) if r.get("error") else _text(
-            "%s records, %s holes, %s; trees %s%s%s" % (
+            "%s records, %s holes, %s; trees %s%s%s%s" % (
                 r.get("records"), r.get("holes"), r.get("result"), len(_list(r.get("trees"))),
                 "; new %s" % ", ".join(_list(r.get("new"))) if r.get("new") else "",
+                "; quiet %s" % ", ".join(_list(r.get("quiet"))) if r.get("quiet") else "",
                 "; late" if r.get("late") else ""))) for r in reversed(rounds)) if rounds else
                '<p class="empty">No round yet.</p>')
     return out
@@ -1260,7 +1279,8 @@ def severity_counts(counts):
     """M7.2b E4: a tree's source findings by severity ("high 1, medium 2";
     history and pending apart), or "none"."""
     counts = counts if isinstance(counts, dict) else {}
-    words = ("high", "medium", "low", "history", "pending at exit", "pending")
+    words = ("high", "medium", "low", "history", "pending at exit", "pending", "judged on another tree",   # R-3
+             "noted (benign)", "not settled")   # T-2, V-1
     parts = ["%s %s" % (k, counts[k]) for k in words if counts.get(k)]
     return ", ".join(parts) or "none"
 

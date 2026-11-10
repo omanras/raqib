@@ -1,0 +1,9 @@
+{
+    "note": "M7.8 fixture SYNTHETIC (not captured from a machine) - an agent named MsMpEng.exe in a user directory, talking, with a child: not benign; host `host`. Redaction (ADR-0004 B-9): user `user`, host `host`; RFC 5737 documentation addresses only",
+    "raqib": "discover-run",
+    "version": 1,
+    "export": "windows",
+    "samples": 1,
+    "seconds_apart": 10,
+    "system_drive": "c"
+}

@@ -115,8 +115,17 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       only reads (M7.2b, ADR-0007 decision 3 and Amendment H): the os source
       where the Sysmon channel exists, else the host's own record of its
       children and connections (lines of source "host" under
-      ~/.raqib/host/sources/, judged by NET-TOOL and DESTRUCT-CMD); its
-      findings show on the tree and knock. A candidate with no source for
+      ~/.raqib/host/sources/, judged by NET-TOOL and DESTRUCT-CMD, as the
+      os source's process lines are by their image name, M7.8); its
+      findings show on the tree and knock (on a benign tree they are notes,
+      not knocked, not an alarm; an os event from before the start is
+      history; one act read by several nested trees is one finding, on the
+      nearest tree that is not benign, knocked at most once). A tree whose root process is in the round's sample and is not
+      in the round is "quiet (its root alive in round N; not seen talking
+      with an act at the sample; source kept)", with its source's real state
+      when that is not running; in a round whose connections were not read it
+      keeps its state, "not judged this round (connections unread)"; it is
+      gone only when its root is not in the sample. A candidate with no source for
       two rounds is HOST-UNWATCHED (high). --attach-hooks: a Claude Code
       tree whose working directory was read also gets `raqib watch`'s hooks
       in that project (the trace outside it); the hook settings are the

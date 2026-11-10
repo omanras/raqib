@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT))
 from raqib import app, cli, discover, host, install, notify, ui  # noqa: E402
 from raqib.hooks import os_sysmon  # noqa: E402
 from raqib.rules import engine, fixtures, silence, trace  # noqa: E402
+from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 
 sys.path.insert(0, str(ROOT / "tests"))
 from test_watch import FakeRunner, make_notifier  # noqa: E402
@@ -200,7 +201,7 @@ def test_e2_the_two_rules_carry_host_fixtures_positive_and_negative_and_the_meas
         (n,) = [n for n in report["negatives"] if Path(n["path"]).as_posix() == neg]   # relpath: \\ on Windows
         assert n["measured"] and not n["fired"]
         assert {l["source"] for l in fixtures.load_fixture(ROOT / neg)[0]} == {"host"}
-        assert round(report["fp_rate"], 3) == 0.091 and report["fp_rate"] <= rule.fp_budget   # 1 of 11
+        assert round(report["fp_rate"], 3) == 0.083 and report["fp_rate"] <= rule.fp_budget   # 1 of 12 (M7.8: + os lines)
         assert any(e.startswith("host source (M7.2b") for e in rule.evasion)
 
 
@@ -254,9 +255,9 @@ class FakeFollow:
         if on_pass:
             on_pass(1, info["top_record"])
         if self.stubborn:
-            self.release.wait(10)
+            self.release.wait()   # V-5: no fake waits on a time; the test releases it
             return 1
-        stop.wait(60)
+        stop.wait()   # V-5: only the stop it is given ends it
         return 1
 
 
@@ -759,7 +760,7 @@ def test_e5_readme_three_lines():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
-    assert len(lines) == 11   # M7.4: + three lines (HOST-RHYTHM, --suspect, the only network call): test_rhythm.py; M7.5: + two
+    assert len(lines) == 14   # M7.8: + three at the end (test_acts_judged.py); M7.4: + three lines (HOST-RHYTHM, --suspect, the only network call): test_rhythm.py; M7.5: + two
     assert "os source (Sysmon)" in lines[3] and "--attach-hooks" in lines[4] and "HOST-UNWATCHED" in lines[5]
     assert "only thing ever written into a project" in lines[4]
 

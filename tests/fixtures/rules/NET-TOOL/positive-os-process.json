@@ -1,0 +1,764 @@
+{
+ "expect_seq": [
+  5,
+  6,
+  9,
+  11
+ ],
+ "lines": [
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f9eb80e3e920d765a9c231fd2c9b62ea980c208d49ab6bec60cbd504ffee4aaf",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f9eb80e3e920d765a9c231fd2c9b62ea980c208d49ab6bec60cbd504ffee4aaf",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "018f97ece20426e11e08e49b7b6fe27bd415222158e6598ddf96af157b4ac862",
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "018f97ece20426e11e08e49b7b6fe27bd415222158e6598ddf96af157b4ac862",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 5,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "ls.exe",
+    "command_programs": [
+     "ls.exe"
+    ],
+    "depth": 2,
+    "image": "ls",
+    "parent_image": "bash",
+    "parent_seq": 5
+   },
+   "input_sha256": "534a28ea4f6f70ea8fb95be3895f9f3ad608169575d4e2264a9777542d4c86ed",
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "ls.exe",
+    "command_programs": [
+     "ls.exe"
+    ],
+    "depth": 2,
+    "image": "ls",
+    "parent_image": "bash",
+    "parent_seq": 5
+   },
+   "input_sha256": "534a28ea4f6f70ea8fb95be3895f9f3ad608169575d4e2264a9777542d4c86ed",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 6,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "grep.exe",
+    "command_programs": [
+     "grep.exe"
+    ],
+    "depth": 2,
+    "image": "grep",
+    "parent_image": "bash",
+    "parent_seq": 5
+   },
+   "input_sha256": "a05cf7a6c02098c2528fba0e44a49428436a5faea1abbc499946250dc3e77ed7",
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.310Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "grep.exe",
+    "command_programs": [
+     "grep.exe"
+    ],
+    "depth": 2,
+    "image": "grep",
+    "parent_image": "bash",
+    "parent_seq": 5
+   },
+   "input_sha256": "a05cf7a6c02098c2528fba0e44a49428436a5faea1abbc499946250dc3e77ed7",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 7,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.310Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "rg.exe",
+    "command_programs": [
+     "rg.exe"
+    ],
+    "depth": 1,
+    "image": "rg",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "e4f63ef9def4f76a7dcba33779ddd15cc323a3c777145687db48a640333d44fe",
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:09.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "rg.exe",
+    "command_programs": [
+     "rg.exe"
+    ],
+    "depth": 1,
+    "image": "rg",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "e4f63ef9def4f76a7dcba33779ddd15cc323a3c777145687db48a640333d44fe",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 8,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:09.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "path": "C:\\work\\proj\\notes.txt"
+   },
+   "input_sha256": "c0cfb9f72ba0b350d4bcf8ad86cfc859eb5e769a0e83a24492d51f4b7e773d0b",
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "file",
+   "ts": "2026-11-03T09:00:12.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "path": "C:\\work\\proj\\notes.txt"
+   },
+   "input_sha256": "c0cfb9f72ba0b350d4bcf8ad86cfc859eb5e769a0e83a24492d51f4b7e773d0b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 9,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "file",
+   "ts": "2026-11-03T09:00:12.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "dfde0d07372d982a912d3486e88df0250b7b3ce3928c76f03137a89845396a23",
+   "phase": "pre",
+   "seq": 10,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:39.950Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bash.exe",
+    "command_programs": [
+     "bash.exe"
+    ],
+    "depth": 1,
+    "image": "bash",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "dfde0d07372d982a912d3486e88df0250b7b3ce3928c76f03137a89845396a23",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 10,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:39.950Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "curl.exe",
+    "command_programs": [
+     "curl.exe"
+    ],
+    "depth": 2,
+    "image": "curl",
+    "parent_image": "bash",
+    "parent_seq": 10
+   },
+   "input_sha256": "1cd2240d7780f9e8ea3c273c65f9d422176d1d043337c5fcaef14001ee253676",
+   "phase": "pre",
+   "seq": 11,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:40.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "curl.exe",
+    "command_programs": [
+     "curl.exe"
+    ],
+    "depth": 2,
+    "image": "curl",
+    "parent_image": "bash",
+    "parent_seq": 10
+   },
+   "input_sha256": "1cd2240d7780f9e8ea3c273c65f9d422176d1d043337c5fcaef14001ee253676",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 11,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:40.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "edab6deb69f359b9c6c52c08e043427f45a55694eb208787e950bdc020ac477d",
+   "phase": "pre",
+   "seq": 12,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:40.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "edab6deb69f359b9c6c52c08e043427f45a55694eb208787e950bdc020ac477d",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 12,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:40.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 13,
+   "session_id": "os-4100",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:40.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 443,
+    "dest_private": false
+   },
+   "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-03T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "63f92284431ffe03e83bdbcd41215935e71565a2d8589417e9da14f45cc45442",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "63f92284431ffe03e83bdbcd41215935e71565a2d8589417e9da14f45cc45442",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bitsadmin.exe",
+    "command_programs": [
+     "bitsadmin.exe"
+    ],
+    "depth": 2,
+    "image": "bitsadmin",
+    "parent_image": "cmd",
+    "parent_seq": 4
+   },
+   "input_sha256": "dc4a385cde3b18ec86645a122c76dfbf2c589061954c2ca90f9e7fb099cc0249",
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "bitsadmin.exe",
+    "command_programs": [
+     "bitsadmin.exe"
+    ],
+    "depth": 2,
+    "image": "bitsadmin",
+    "parent_image": "cmd",
+    "parent_seq": 4
+   },
+   "input_sha256": "dc4a385cde3b18ec86645a122c76dfbf2c589061954c2ca90f9e7fb099cc0249",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 5,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:05.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "plink.exe",
+    "command_programs": [
+     "plink.exe"
+    ],
+    "depth": 1,
+    "image": "plink",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "eebb9ef28fb5e3b337ab3743c90eebc9516ecc822bcb8f6db7b471b7391b6b22",
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:09.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "plink.exe",
+    "command_programs": [
+     "plink.exe"
+    ],
+    "depth": 1,
+    "image": "plink",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "eebb9ef28fb5e3b337ab3743c90eebc9516ecc822bcb8f6db7b471b7391b6b22",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 6,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:09.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "path": "C:\\work\\proj\\notes.txt"
+   },
+   "input_sha256": "c0cfb9f72ba0b350d4bcf8ad86cfc859eb5e769a0e83a24492d51f4b7e773d0b",
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "file",
+   "ts": "2026-11-03T09:00:10.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "path": "C:\\work\\proj\\notes.txt"
+   },
+   "input_sha256": "c0cfb9f72ba0b350d4bcf8ad86cfc859eb5e769a0e83a24492d51f4b7e773d0b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 7,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "file",
+   "ts": "2026-11-03T09:00:10.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "10880d6cf5ae03f853b4cfab7f06884b816477d53adc9119fa25efd479bf91e8",
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:11.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "10880d6cf5ae03f853b4cfab7f06884b816477d53adc9119fa25efd479bf91e8",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 8,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:11.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "ssh.exe",
+    "command_programs": [
+     "ssh.exe"
+    ],
+    "depth": 2,
+    "image": "ssh",
+    "parent_image": "cmd",
+    "parent_seq": 8
+   },
+   "input_sha256": "b8a2f1639b3cb405d60f085280eb0766154b05d73fd3d5bc7bf5dbcf43f581df",
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:11.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "ssh.exe",
+    "command_programs": [
+     "ssh.exe"
+    ],
+    "depth": 2,
+    "image": "ssh",
+    "parent_image": "cmd",
+    "parent_seq": 8
+   },
+   "input_sha256": "b8a2f1639b3cb405d60f085280eb0766154b05d73fd3d5bc7bf5dbcf43f581df",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 9,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:11.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 10,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:11.100Z"
+  }
+ ]
+}

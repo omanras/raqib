@@ -123,7 +123,13 @@ item F7 of the M1.2 review packet or questions file.
     `git_error`, one word of a closed set saying why a value could not be
     read. A commit id names a commit: anyone holding the trace can tell
     which commit of a public repository a session ran on. No path, ref
-    name or user name of the repository is kept.
+    name or user name of the repository is kept;
+  - under `raqib watch --host` (ADR-0007): the os source's program names
+    (the image and the parent's image, normalised, never an argument) and
+    paths of created files, redacted; and in `~/.raqib/host/inventory.json`
+    (the latest round only) the round's process sample, each process as
+    pid, image name and start time (no command line, no path), which
+    names every program running on the machine at that instant.
 - **Stored as sha256:** every tool input and output, and on the same
   boundary lines the raw bytes of the git index (`git_index_sha256`).
   - The hashes are unsalted. Anyone holding the trace can confirm a guessed
@@ -479,6 +485,145 @@ Rulings: ADR-0003 Amendments C and D.
   "asked, not done"; an act started more than 10 s after its call, or a
   call written more than 10 s after its act, is a finding. Its budget is
   0.1 until the field test.
+
+### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
+Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V. True of the tree
+as P-1..P-3, R-2..R-9, T-2..T-8 and V-1..V-6 leave it (the task after the
+second field run; R-1 is amended by T-2, T-1 restated by V-1).
+- **What a round sees.** One sample: on Windows one read of the OS API
+  (processes and their parents, TCP connections with their owner), on
+  Linux one `/proc` snapshot (or `--window S` seconds of them, whose last
+  snapshot is the round's process sample). A tree is in the round when its
+  root talks at that instant and has a child (a candidate) or a
+  user-directory program runs a shell that runs a command (an act-root).
+  A tree seen in an earlier round whose root process is still in the
+  sample and is not in the round is `quiet (its root alive in round N; not
+  seen talking with an act at the sample; source kept)`: "source kept"
+  only when its source is attached and running, else the source's real
+  state. A root that talks with no child at that instant is quiet too: the
+  words say what the sample showed, not that it was silent. It is gone
+  only when its root is not in the sample. In a round whose connection
+  record was not read no tree can be seen talking, so a tree absent from
+  it whose root is alive keeps the state it had, `not judged this round
+  (connections unread)`. A round read from an export with no process
+  sample calls such a tree gone (or keeps it, when the round's connections
+  were not read either), and says so once. A round whose process list was
+  not read has an empty sample: every tree absent from it is gone, its
+  source is stopped and attached again when it is next seen.
+- **The start time decides, where it was read.** A tree is keyed by its
+  root's pid, image and start time (Windows: the process's creation time;
+  Linux: the start in clock ticks since boot that `/proc/PID/stat` gives,
+  which a step of the wall clock does not move; beside the key the report
+  shows the start as a time, shown as a time where the clock tick rate is
+  known, computed from the ticks and `/proc/stat`'s btime for display
+  only, so after a step of the clock the time shown moves and the key
+  does not). The match is exact: where the start is unread
+  in both the tree's key and the sample (an older snapshot, a process whose
+  stat is hidden, Windows when the process's times are denied), a process
+  of the same image that holds the pid now is taken for the tree: it is not
+  new, and an ended tree is quiet, not gone; its quiet line ends "start
+  time unread: a process of the same image holds the pid". The processes
+  whose start could not be read are counted once per round, as a hole.
+- **What lives between two rounds is still a hole.** A tree that starts,
+  talks, acts and ends between two samples is never a tree of any round,
+  and a child that lives only between two samples is never a host-source
+  act. Where Sysmon is, an attached tree's os source sees every child it
+  creates (event 1), whatever the rounds see; reading the channel into the
+  round itself is the next task (ADR-0007 P-4). Linux, and a Windows host
+  without Sysmon, keep the hole.
+- **What the os lines are judged by.** NET-TOOL and DESTRUCT-CMD judge an
+  os process line by its image name (P-1: `input_meta.image`, discover's
+  normalised form, `curl.exe` -> `curl`; R-7: and its parent's,
+  `input_meta.parent_image`, so ssh started by git is git over SSH and is
+  left out, as git is on every source: an agent that reaches the network
+  through git is not seen; the parent is known by its name only, and git
+  starts ssh with what the agent configures - core.sshCommand,
+  GIT_SSH_COMMAND - so a tunnel or a remote command through real git is
+  git's). Still unseen: a shell builtin (cmd's `del`,
+  `rd`, `copy`), which starts no process; a PowerShell cmdlet
+  (`Invoke-WebRequest`, `Remove-Item`, and Windows PowerShell 5.1's `curl`
+  and `wget`, which are aliases of a cmdlet), which runs inside the shell's
+  own process; a renamed copy of a listed program; a listed program run
+  inside WSL or by a multicall binary (busybox), which is the unlisted
+  image; and everything that is an argument (the destination, the target,
+  `vssadmin list` versus `vssadmin delete`), since the command line is
+  only hashed. An os line written before P-1 has no image: the rules say
+  they could not judge it, and the host watch says it once per source; no
+  rule guesses the name.
+- **One act, one finding, in every order; the past is history.** Nested
+  trees each have a source, and each os follow reads all of its root's
+  descendants: the same event (its time, tool, input hash, image and
+  parent image; one key whether the pre alone or the pre and the post were
+  read) read by several feeds is one act (V-1). The act stands on the
+  nearest tree that read it and is not benign; only when every tree that
+  read it is benign does it stand on the nearest of those, as a note
+  (V-2): an agent that starts a benign program and acts through it has the
+  act on the agent's tree, and an act under a benign program alone is a
+  note, never an alarm, never a knock. While no knock has been sent for an
+  act, each new copy asks I-6 again, first on the standing tree, then on
+  each other non-benign tree that read it (the act is in each of their
+  trees); a sent knock closes the act, never a second; "not notified" does
+  not close it. So the knock, the exit code and the counts do not depend
+  on which feed read the act first, in one poll or across polls; but which
+  tree's FIRST-FINDING the knock spent does (an outer tree whose copy came
+  first may spend its own). Everything said about an act - its status, its
+  KNOCKS row, a fold's outcome, "judged on tree pid N" on the other trees,
+  the tree that knocked - is read from the act when it is shown. A poll a
+  judge cut short is settled in its own `finally`, again by the next poll
+  and by the end; what the end cannot settle is listed as NOT SETTLED, an
+  alarm of its tree. Two different acts of trees that are not nested, the
+  same command line in the same millisecond with the same image and
+  parent, would be taken for one. A catalog finding of an os
+  event whose time is before the watch's start is history - listed on its
+  tree with its count, never knocked, never an alarm - whenever the tree
+  was first seen (R-2): a shell that becomes a tree in round 5 does not
+  knock for what it ran before the watch. The silence rules keep I-3's
+  rule: their findings are about Raqib's own record during the watch
+  (T-5). The start is the earlier of the wall clock at the start and the
+  wall clock now minus the monotonic time elapsed, so a clock that steps
+  back does not turn acts into history; a step of more than a round is a
+  hole, with its size, and said again when a later step is larger by more
+  than a round (T-3, V-6). What remains: after such a step an act from the
+  seconds before the start reads as live (the alarm side); a forward step
+  makes nothing history.
+- **Benign programs: sourced, and their acts are notes.** A tree whose root
+  is a listed benign image under a listed directory of the system drive is
+  listed `benign (its acts are noted, not knocked; its rhythm is judged)`
+  (T-2, amending R-1). It is sourced like any other tree, so an agent
+  inside an editor or a browser, whose root is the benign program, is
+  still seen; but a catalog finding on it is a note: listed on the tree
+  and in the report under "on benign trees (noted, not knocked)", counted
+  apart, never an alarm, never knocked, the tree's FIRST-FINDING not
+  spent. The person's own programs under explorer are such notes. One act
+  under a benign tree and any non-benign tree is the non-benign tree's
+  finding, nested either way (V-2). HOST-RHYTHM judges a benign tree as
+  K-10 ruled, and knocks; HOST-UNWATCHED judges it as any tree; the tree's
+  word then says what knocked on it (V-3). A rule turned off counts what it
+  would have fired as acts, not copies, and names its would-be notes apart. Windows Defender's engine
+  (`MsMpEng.exe`) is benign only under the system drive's
+  ProgramData\Microsoft\Windows Defender or Program Files\Windows
+  Defender (P-3). An agent with administrator rights can put a program of
+  a benign name there and is then listed as benign, its acts noted, not
+  knocked; a copy anywhere else knocks.
+- **The person's hands (ADR-0007 P-5).** Text an agent hands to a person
+  (the clipboard, a chat, a file) which the person then runs is the
+  person's act: it runs under the person's own shell, outside every agent
+  tree, and no rule of the agent's tree sees it. There is no timing rule
+  for it, because none is sound: a pasted burst of lines and a batch file
+  run from the same prompt write the same process record. The clipboard's
+  text is never read by Raqib and will not be (section 1: Raqib must not
+  become a second place where secrets leak). Which process wrote the
+  clipboard (Sysmon event 24) is a candidate rule (ADR-0007 P-5), not
+  built.
+- **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No watched
+  process is signalled, suspended, attached to or killed, and nothing is
+  blocked: a finding is a record and a knock after the act, never a
+  prevention. The programs the watch starts are its own read-only helpers:
+  the os source's `wevtutil` on Windows, `ss -tinp` on Linux every round
+  (the bytes of each socket), and the notifier; Raqib ends only its own
+  helpers (a `wevtutil` past its timeout and every one still out at Stop;
+  an `ss` that has not returned in 30 s). The only writes are under `~/.raqib`, and the hook settings of a
+  project only with `--attach-hooks`.
 
 ## 6. Attacks on the watcher itself
 
