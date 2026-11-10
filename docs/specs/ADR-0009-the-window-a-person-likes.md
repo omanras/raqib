@@ -1,6 +1,6 @@
 # ADR-0009 - The window a person likes to open, and a rule made from a form
 
-Status: proposed (the Table, 2026-11-10, on the commander's order of that day).
+Status: accepted for decisions 1-3 (M8.1, 2026-11-11; Amendment D); decisions 4-5 open (M8.2). Proposed 2026-11-10 on the commander's order of that day.
 Amendments appended, never edited in place.
 
 ## Problem
@@ -320,3 +320,62 @@ MET; the rest PARTLY. Verdict: REDO on C-1; the Table's rulings C-2..C-8.
   alarm by loosening a rule without asking what else the looser rule
   lets through (R-1, B-5). The cure is always the narrowest state that
   is known to be harmless, named by the watch, not inferred by the window.
+
+## Amendment D (the Table, 2026-11-11) - judgement on M8.1 (978ea51 + 9ba8969 + 80ccc04 + 30d194e; the Table's 9024c95, 273f568)
+- C-1..C-5 and C-7 MET as cited in the "## REDO 3" section of
+  docs/review/2026-11-10-M8.1-questions.md. The Table read C-1 and C-2 in
+  the code: the watch writes `ever_read` (true at the first line, never
+  reset by a restart) and `code_error`; the window softens only
+  never_read(state, word) - ever_read False said by the watch, no hole,
+  no finding, the word WATCHING - and a state without the field is not
+  softened; alarms() and the key are inside the guard. C-1's test drives
+  a real watch through Start, the first line, a truncated trace and a
+  removed one.
+- C-6: HostWatch.state() with a thousand source findings takes about
+  1.1 ms (median of five, this box). Nothing is changed (A7: measured).
+- CI, read from api.github.com and the job logs. 978ea51: both windows
+  jobs failed (the X11-only keysym; the window did not build). 9ba8969:
+  the window builds on Windows, the fit fails (982 px of 900; up to 650
+  of 600). 80ccc04: the width fits, the height does not (up to 687 with
+  "Could not see" open). 9024c95 (the Table: off the screen a panel takes
+  the minimum size's lines): six jobs success. 273f568 (merged with M7.8):
+  six success. 30d194e (REDO 3): five success, the windows 3.12 gate
+  failing one test this task does not touch, tests/test_rhythm.py::
+  test_e3_named_and_benign_trees_are_never_sent, which looks for the
+  digits of a pid in a prompt that carries sha256 hashes: one hash held
+  "5500" by chance. The Table's fix looks outside the hashes; the commit
+  with this amendment is the run of record.
+- Gate on the merged branch: 3056 passed, 62 skipped; with Tk 8.6 under
+  Xvfb 3104 passed, 14 skipped. Scope: raqib/app.py, tests/, README, and
+  in raqib/host.py and raqib/watch.py the state's fields only
+  (code_so_far, code_error, ever_read), as A-2, B-4, C-1 and C-2 widened
+  it. Four builder commits (G-8), three packets, three sets of rulings,
+  and three commits by the Table.
+- What M8.1 leaves true: a rail, a verdict in a sentence with its level
+  and one primary action, cards; the round strip, every round accounted
+  for; a running watch's level is the level of the code it would end
+  with, written by the watch, never clean while unknown; every hole is
+  counted in "Could not see"; findings are items with their cites; rules
+  are rows with a switch and steppers; the window opens and fits 900x600
+  on Windows, sharp on a scaled display by the two calls on its own
+  process and window; no thread outlives a Tk test; the window reads
+  M7.8's state as the watch's own rule counts it.
+- Not proven by anything here, the commander's to see: what the window
+  looks like on his display (the screenshots are Tk 8.6 under Xvfb with
+  another font); DPI awareness on a scaled display; the dark title bar;
+  an open panel's height in a window that is on the screen (CI measures
+  a withdrawn one).
+- Recorded for later: Q-10 (a column to drop at 900 px); G15 (the Rules
+  verdict after a change, with a rule off); G18 (rows that take their
+  width from their words at a larger system text size); a way for the
+  person to name a program benign (ADR-0007 X-5's knock per image is the
+  stopgap).
+- Verdict: **NEXT**. Merge --no-ff into main under the commander's
+  standing word. Decisions 1-3 are built; decisions 4-5 are M8.2.
+- Table ledger for M8.1: three reviews, three REDOs, three Table commits.
+  The Table's misses: the HANDOFF's E6 asked for the fit "measured on
+  windows-latest" and nothing asked that the window be BUILT there first
+  - the first Windows run of a rewritten window found it could not open;
+  B-5's softening keyed on a count (C-1); A-2's guess about a hole's
+  level (B-5). What worked: CI's windows jobs as the run of record, and
+  a fit test that names the widest widget when it fails.

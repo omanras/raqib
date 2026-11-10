@@ -394,7 +394,10 @@ def test_e3_named_and_benign_trees_are_never_sent(home):
     w, clock = make_host(home, invs, suspect=Spy({}))
     rounds(w, clock, 10)
     settle(w)
-    assert len(seen) == 1 and '"session_id": "t1"' in seen[0] and "5500" not in seen[0] and "4400" not in seen[0]
+    # (the Table, 2026-11-11, CI run 42918149551: the prompt carries sha256 hashes, and one of them held "5500"
+    # by chance on one windows job; the pids are looked for outside the hashes)
+    sent = re.sub(r"[0-9a-f]{64}", "", seen[0])
+    assert len(seen) == 1 and '"session_id": "t1"' in seen[0] and "5500" not in sent and "4400" not in sent
 
 
 def test_e3_what_is_sent_is_hashes_and_names_only(home):
