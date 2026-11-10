@@ -1181,3 +1181,77 @@ def add_rule(path, home=None, catalog=None):
         raise OverlayError("cannot write under %s: %s" % (target_dir, exc.strerror or exc))
     return "%s added as %s (origin: user; %d fixture file(s) copied; %s)" % (
         rule.id, copies[-1][1], len(copies) - 1, NEXT_WATCH)
+
+
+def taken_ids(home=None, catalog=None):
+    """M8.2: the ids a new rule may not take - the package's, the rules of rules.d, and every directory
+    name in rules.d (a rule refused at load still holds its folder)."""
+    ids = {r.id for r in _base(home, catalog)}
+    rules_d = user_dir(home)
+    if os.path.isdir(rules_d):
+        ids |= set(os.listdir(rules_d))
+    return ids
+
+
+REMOVE_PACKAGE = "%s is a package rule: it cannot be removed; switch it off instead (raqib rules --set %s off)"
+
+
+def _delete_tree(target, root):
+    """M8.2 E4 (A4): delete the directory target, which must resolve by realpath to a directory directly
+    under realpath(root); nothing in it may be a link or a reparse point (checked for every entry before
+    anything is deleted, and again for each path removed). The count of files removed."""
+    real_root = os.path.realpath(root)
+    real = os.path.realpath(target)
+    if os.path.normcase(os.path.dirname(real)) != os.path.normcase(real_root):
+        raise OverlayError("%s resolves to %s, not a folder of %s: nothing removed" % (target, real, real_root))
+    plan = []
+    for here, dirs, names in os.walk(target, topdown=False, followlinks=False):
+        for name in names + dirs:
+            path = os.path.join(here, name)
+            st = os.lstat(path)
+            attrs = getattr(st, "st_file_attributes", 0) or 0
+            junction = getattr(os.path, "isjunction", None)
+            if os.path.islink(path) or attrs & 0x400 or (junction is not None and junction(path)):
+                raise OverlayError("%s is a link: nothing removed (remove it by hand)" % path)
+        plan += [(os.path.join(here, n), False) for n in names] + [(os.path.join(here, d), True) for d in dirs]
+    plan.append((target, True))
+    files = 0
+    for path, is_dir in plan:
+        inside = os.path.realpath(path)
+        if os.path.commonpath([os.path.normcase(real), os.path.normcase(inside)]) != os.path.normcase(real):
+            raise OverlayError("%s resolves outside %s: stopped" % (path, real))
+        if is_dir:
+            os.rmdir(path)
+        else:
+            os.remove(path)
+            files += 1
+    return files
+
+
+def remove_rule(rid, home=None, catalog=None):
+    """M8.2 E4 (ADR-0009 decision 4): remove a person's rule - its directory under rules.d (fixture_file:
+    under rules.d by realpath, no link on the way; _delete_tree follows none) and its lines in the overlay;
+    the line said. A package rule is refused (switch it off instead). The overlay is read before anything
+    is deleted: a malformed one refuses the whole removal."""
+    rid = str(rid or "").strip()
+    if not engine.RULE_ID.match(rid):
+        raise OverlayError("%r is not a rule id (MY-RULE): nothing removed" % (rid,))
+    if rid in {r.id for r in engine.load_catalog(catalog or CATALOG)}:
+        raise OverlayError(REMOVE_PACKAGE % (rid, rid))
+    doc = _current(home)
+    rules_d = user_dir(home)
+    target = fixture_file(rules_d, rid)
+    if not os.path.isdir(target):
+        raise OverlayError("no user rule %s in %s: nothing removed" % (rid, rules_d))
+    try:
+        files = _delete_tree(target, rules_d)
+    except OSError as exc:
+        raise OverlayError("cannot remove %s: %s (what is left is refused at load, said)"
+                           % (exc.filename or target, exc.strerror or exc))
+    said = "%s removed: %s deleted (%d file(s))" % (rid, target, files)
+    if rid in doc["rules"]:
+        del doc["rules"][rid]
+        said += "; its entry dropped from %s" % write(doc, home)
+    else:
+        said += "; it had no entry in %s" % overlay_path(home)
+    return "%s; %s" % (said, NEXT_WATCH)
