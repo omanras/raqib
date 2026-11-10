@@ -23,6 +23,7 @@ from raqib import app, host, overlay, tray  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
 from test_app import FakeSession, TkSession, tk_or_skip, until  # noqa: E402
 from test_app_host import CATALOG, FakeHostWatch, TkHost, inv, probe  # noqa: E402
+from test_app_design import contrast_ratio  # noqa: E402
 
 LEVELS = ("clean", "alarm", "incomplete", "note", "hole", "suppressed")
 HEX = re.compile(r"#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3}){0,3}")
@@ -133,17 +134,17 @@ def test_e1_the_theme_has_both_modes_with_the_same_keys_and_every_level():
 
 
 def test_redo_c6_contrast_arithmetic_and_every_level_readable_selected_or_not():
-    assert round(app.contrast_ratio("#000000", "#ffffff"), 2) == 21.0
-    assert app.contrast_ratio("#777777", "#777777") == 1.0
-    assert round(app.contrast_ratio("#ffffff", "#767676"), 2) == 4.54   # the WCAG reference grey
+    assert round(contrast_ratio("#000000", "#ffffff"), 2) == 21.0
+    assert contrast_ratio("#777777", "#777777") == 1.0
+    assert round(contrast_ratio("#ffffff", "#767676"), 2) == 4.54   # the WCAG reference grey
     for mode in ("light", "dark"):
         p = app.THEME[mode]
         for level, colour in p["levels"].items():   # every level read on every ground it is drawn on (M8.1)
             for ground in (p["ground"], p["card"], p["select"], p["pill"][level]):
-                assert app.contrast_ratio(colour, ground) >= 4.5, (mode, level, colour, ground)
-        assert app.contrast_ratio(p["ink"], p["select"]) >= 4.5
+                assert contrast_ratio(colour, ground) >= 4.5, (mode, level, colour, ground)
+        assert contrast_ratio(p["ink"], p["select"]) >= 4.5
     dark = app.THEME["dark"]
-    assert app.contrast_ratio(dark["levels"]["alarm"], dark["select"]) >= 4.5   # the selected red row (C-6)
+    assert contrast_ratio(dark["levels"]["alarm"], dark["select"]) >= 4.5   # the selected red row (C-6)
 
 
 def test_redo_c1_one_function_for_every_level_exit_3_is_incomplete_never_alarm():
@@ -154,17 +155,20 @@ def test_redo_c1_one_function_for_every_level_exit_3_is_incomplete_never_alarm()
     report = "Raqib watch\nRESULT: INCOMPLETE (exit 3)\n"
     assert app.report_level(3, report) == "incomplete" and app.report_level(None, report) == "incomplete"
     assert app.report_level(1, "") == "alarm" and app.report_level(0, "") == "clean"
-    assert app.chip_text(app.report_level(3, report)) == "[incomplete]"
+    assert app.level_word(app.report_level(3, report)) == "incomplete"
     assert app.code_level(None) == "alarm" and app.code_level(3) == "incomplete"
     src = (ROOT / "raqib" / "app.py").read_text(encoding="utf-8")
     assert '"alarm" if snap["final_exit"] else "clean"' not in src
 
 
 def test_redo_c3_not_a_clearance_in_every_green_state():
-    assert app.chip_text("clean", result=True) == "[clean]. Not a clearance."
-    assert app.chip_text(0, 2, result=True) == "[clean] (2 findings suppressed by the overlay). Not a clearance."
-    assert app.chip_text("clean") == "[clean]"                      # RULES, DOCTOR: not a watch's result
-    assert app.chip_text("alarm", 2, result=True) == "[alarm]"
+    """REDO C-3 by the path the window draws (M8.1 REDO A-9): verdict_note
+    beside the pill; the Tk test test_tk_redo_c3_every_green_state_of_both_screens
+    reads it on every green state of both screens."""
+    assert app.verdict_note("clean", result=True) == "Not a clearance."
+    assert app.verdict_note(0, 2, result=True) == "2 findings suppressed by the overlay. Not a clearance."
+    assert app.verdict_note("clean") == ""                       # RULES, DOCTOR: not a watch's result
+    assert app.verdict_note("alarm", 2, result=True) == ""
     word, n = app.report_result("x\nRESULT: CLEAN (2 findings suppressed by the overlay) (exit 0)\n")
     assert (word, n) == ("CLEAN", 2) and app.report_result("RESULT: CLEAN (exit 0)") == ("CLEAN", 0)
     assert app.report_result("no result line") == (None, 0)
@@ -178,7 +182,8 @@ def test_redo_c2_each_badge_keeps_its_level_and_its_word_suppressed_red():
     assert items == [("clean", "trees now: 0", "clean"), ("incomplete", "notifications: off", "incomplete"),
                      ("suppressed", "1 rule off: NET-TOOL; 2 finding(s) suppressed by the overlay", "suppressed"),
                      ("alarm", "3 holes", "alarm")]
-    assert app.level_colour("suppressed") == app.level_colour(1)
+    lv = app.THEME["light"]["levels"]
+    assert lv["suppressed"] == lv[app.level_of(1)]
     rows = app.flow_rows([100, 200, 300, 50, 700], 400, 6)
     assert rows == [[0, 1], [2, 3], [4]] and app.flow_rows([], 400) == []
 
@@ -186,15 +191,13 @@ def test_redo_c2_each_badge_keeps_its_level_and_its_word_suppressed_red():
 def test_e1_level_colour_follows_the_exit_codes_holes_amber_suppressed_red_notes_grey():
     for mode in ("light", "dark"):
         lv = app.THEME[mode]["levels"]
-        assert [app.level_colour(c, mode) for c in (0, 1, 3)] == [lv["clean"], lv["alarm"], lv["incomplete"]]
-        assert app.level_colour(2, mode) == lv["alarm"]          # any other code: alarm, as code_level
-        assert app.level_colour("hole", mode) == lv["incomplete"]          # holes amber
-        assert app.level_colour("suppressed", mode) == lv["alarm"]         # ADR-0008 A-2: red
-        assert app.level_colour("note", mode) not in (lv["clean"], lv["alarm"], lv["incomplete"])   # grey
-        assert app.level_colour("no such level", mode) == lv["incomplete"]
-        assert app.pill_colours(1, mode) == (lv["alarm"], app.THEME[mode]["pill"]["alarm"])
+        assert [lv[app.level_of(c)] for c in (0, 1, 3)] == [lv["clean"], lv["alarm"], lv["incomplete"]]
+        assert lv[app.level_of(2)] == lv["alarm"]          # any other code: alarm, as code_level
+        assert lv["hole"] == lv["incomplete"]               # holes amber
+        assert lv["suppressed"] == lv["alarm"]              # ADR-0008 A-2: red
+        assert lv["note"] not in (lv["clean"], lv["alarm"], lv["incomplete"])   # grey
+        assert app.level_of("no such level") == "incomplete"
     assert [app.level_of(c) for c in (0, 1, 3, 2)] == [app.code_level(c) for c in (0, 1, 3, 2)]
-    assert app.level_colour(0, "no such mode") == app.THEME["light"]["levels"]["clean"]
     assert [app.level_word(c) for c in (0, 1, 3, "note")] == ["clean", "alarm", "incomplete", "note"]
 
 
@@ -297,7 +300,7 @@ def test_e1_named_system_fonts_with_fallbacks():
 def test_e2_the_tree_table_has_the_eight_columns_in_order():
     assert [c[1] for c in app.TREE_COLUMNS] == ["image", "pid", "kind", "source", "findings", "rhythm / suspicion",
                                                 "first seen", "endpoints"]
-    names = [n for n, _ in app.HOST_COLUMNS]
+    names = ["image", "pid", "named", "first seen", "acts", "source", "findings", "rhythm / suspicion", "endpoints"]
     for cid, heading, width, index, kind in app.TREE_COLUMNS:   # each maps to its host_rows cell
         assert names[index] == {"kind": "named"}.get(heading, heading)
         assert width > 0 and kind in ("text", "number", "severity")
@@ -396,22 +399,22 @@ def test_e2_the_look_has_details_too_and_look_json_is_unchanged(home):
     import json
     written = json.loads(Path(app.look_path(str(home))).read_text(encoding="ascii"))
     assert "details" not in written and written["rows"] == [list(r) for r in v["rows"]]
-    # the text under the table: no table there any more (the Treeview has the rows), the rest as host_body
-    body = app.host_text_body(v)
-    assert app.host_table(v["rows"])[0] not in body and body == app.host_body(dict(v, rows=[])).lstrip("\n")
-    assert "HOLES (A3): 14" in body
+    # M8.1: what the window draws of the look beside the table: its holes in "could not see", its findings (none)
+    assert app.seen_title(app.seen_lines(v["holes"], [])) == "Could not see (14)"
+    assert app.host_finding_items(None, v) == []
 
 
 def test_e2_the_empty_state_and_nothing_read_keep_not_a_clearance():
+    """The trees' card says the look's lines when there is no tree (M8.1: the window draws v["lines"] there)."""
     i = dict(inv("linux"), candidates=[], act_roots=[], footprints=[], agent_dark=[], result="clean")
     p, _ = probe(lambda: i)
     assert until(p.done, WAIT)
-    body = app.host_text_body(p.view())
-    assert body.startswith("no agent seen (") and "Not a clearance." in body
+    v = p.view()
+    assert v["rows"] == [] and v["lines"][0].startswith("no agent seen (") and "Not a clearance." in v["lines"][0]
     p, _ = probe(lambda: dict(i, records=0))
     assert until(p.done, WAIT)
     v = p.view()
-    assert v["word"] == "NOTHING READ" and "Not a clearance." in app.host_text_body(v)
+    assert v["word"] == "NOTHING READ" and "Not a clearance." in v["lines"][0] and "Not a clearance." in v["detail"]
 
 
 # --- E3: the Rules table, the header ---------------------------------------------------------------------------
@@ -435,12 +438,16 @@ def test_e3_the_rules_table_says_the_overlay_state_per_row(home):
 
 
 def test_e3_the_header_rules_item_is_red_while_suppressed():
+    """M8.1 REDO A-3, A-10: the rail's rules line, bounded: red with the suppressed count, amber when a rule is
+    off or the overlay refused something, quiet when none is."""
     suppressed = {"rules_overlay": {"not_judged": {"NET-TOOL": {"fired": 2}}}}
-    assert app.header_rules("1 rule off: NET-TOOL", [suppressed, None]) == (
-        "1 rule off: NET-TOOL; 2 finding(s) suppressed by the overlay", "suppressed")
-    assert app.header_rules("1 rule off: NET-TOOL", [{}]) == ("1 rule off: NET-TOOL", "incomplete")
-    assert app.header_rules("no rule off") == ("no rule off", None)
-    assert app.level_colour("suppressed") == app.level_colour(1)
+    info = {"off": [{"rule_id": "NET-TOOL"}], "file": "read", "refused": [], "user_refused": []}
+    assert app.rail_rules(info, None, [suppressed, None]) == ("1 rule off; 2 findings suppressed", "suppressed")
+    assert app.rail_rules(info, None, [{}]) == ("1 rule off", "incomplete")
+    assert app.rail_rules({"off": []}) == ("No rule off", None)
+    bad = {"off": [], "file": "malformed", "path": "rules.yaml", "hole": "line 1: not a mapping"}
+    assert app.rail_rules(bad) == ("No rule off; rules: 1 refused", "incomplete")
+    assert app.rail_rules(None) == ("Rules: not loaded", "incomplete")
 
 
 def test_e3_the_rules_text_under_the_table_has_no_table(home):
@@ -473,7 +480,7 @@ def test_e4_the_first_run_text_appears_and_then_does_not(home):
     assert app.first_run_lines(None, exists=lambda path: False) == list(app.FIRST_RUN)
 
 
-def test_redo_c5_the_footer_keeps_each_of_the_looks_holes_three_shown_n_more():
+def test_redo_c5_could_not_see_keeps_each_of_the_looks_holes():
     """M8.1 E4 replaces C-5's footer: "could not see (N)" holds every line, one click away."""
     lines = app.seen_lines(["tray: x"], ["page: y"], ["round at open: a", "round at open: b", "round at open: c"])
     assert lines == ["hole: tray: x", "hole: round at open: a", "hole: round at open: b", "hole: round at open: c",
@@ -597,8 +604,10 @@ def test_tk_every_screen_fits_900x600_with_its_widgets(home, tmp_path):
         assert window.host_tree.selection() == picked
         # M8.1 E4 (replaces C-5): each of the look's holes stands in "could not see (N)", one click away
         holes = ["hole: %s" % h for h in p.view()["holes"]]
-        assert len(holes) == 14 and all(x in window.holes_text().split("\n") for x in holes)
-        assert window.seen.title().startswith("Could not see (14)") and not window.seen.is_open()
+        assert len(holes) == 14 and all(x in window.seen_text.get("1.0", "end").split("\n") for x in holes)
+        # REDO A-7: the MISSING check is a line of it too
+        assert "hole: check missing: hooks: Not installed" in window.seen_text.get("1.0", "end")
+        assert window.seen.title().startswith("Could not see (15)") and not window.seen.is_open()
         fits = [("host", _fits(root))]
         for d in window.disclosures:   # E4: each disclosure of the host screen open, one at a time
             if d.toggle.winfo_manager():
@@ -610,7 +619,8 @@ def test_tk_every_screen_fits_900x600_with_its_widgets(home, tmp_path):
                 assert not d.is_open() and not d.panel.winfo_manager()
         window.host_toggle()                                           # the host watched: its pills
         _settle(window, root)
-        assert window.verdict.cget("text") == "Watching this host" and window.host_badges.winfo_children()
+        assert window.verdict.cget("text") == "Watching this host: no finding so far"
+        assert window.host_badges.winfo_children()
         fits.append(("host watching", _fits(root)))
         window.options.invoke()
         _settle(window, root)
@@ -622,7 +632,7 @@ def test_tk_every_screen_fits_900x600_with_its_widgets(home, tmp_path):
         window.show_first()
         _settle(window, root)
         # F-3: the look's holes stand on every screen until round 1, said as the look's
-        assert "hole: round at open: %s" % p.view()["holes"][0] in window.holes_text()
+        assert "hole: round at open: %s" % p.view()["holes"][0] in window.seen_text.get("1.0", "end")
         fits.append(("project", _fits(root)))
         window.start()
         _settle(window, root)
@@ -705,7 +715,7 @@ def test_tk_redo_dark_mode_bands_badges_and_every_screen(home, tmp_path, monkeyp
                                                           "not_judged": {"NET-TOOL": {"fired": 2}}})
         c.session.st = st
         window.tick()
-        assert window.verdict.cget("text") == "Watching the project" and window.pill.cget("text") == "clean"
+        assert window.verdict.cget("text") == "Watching the project: 1 finding so far"   # REDO A-2
         assert window.note.cget("text") == "2 findings suppressed by the overlay. Not a clearance."
         assert str(window.note.cget("foreground")) == dark["suppressed"]
         pills = [w for line in window.badges.winfo_children() for w in line.winfo_children()] or \

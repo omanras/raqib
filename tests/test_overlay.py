@@ -654,13 +654,13 @@ def test_tk_the_rules_screen_from_the_header(home, tmp_path):
         assert "HOST-RHYTHM" in [item["id"] for item, _ in window.rule_rows] and window.rule_vars["NET-TOOL"].get()
         window.rules_set("NET-TOOL", False)
         window.tick()
-        assert "1 rule off: NET-TOOL" in window.rules_note.cget("text") and not window.rule_vars["NET-TOOL"].get()
+        assert window.rules_note.cget("text") == "1 rule off" and not window.rule_vars["NET-TOOL"].get()
         assert "1 rule off: NET-TOOL" in window.rules_text.get("1.0", "end")
         window.rules_threshold("HOST-RHYTHM", "k", 0)
         assert window.verdict_word == "RULES: REFUSED" and window.verdict.cget("text") == "The change was refused"
         window.rules_reset("NET-TOOL")
         window.tick()
-        assert "No rule off" in window.rules_note.cget("text") and window.rule_vars["NET-TOOL"].get()
+        assert window.rules_note.cget("text") == "No rule off" and window.rule_vars["NET-TOOL"].get()
         window.show_host()
         assert window.screen == "host"
     finally:

@@ -102,6 +102,7 @@ failure of either is a line in the log. Every screen fits 900x600.
 from __future__ import annotations
 
 import copy
+import gc
 import importlib
 import os
 import queue
@@ -114,6 +115,7 @@ from raqib import host as hostmod, notify, overlay, tray as traymod, ui, watch
 
 TITLE = "Raqib"
 TICK_MS = 500                 # how often the window reads the state (after())
+CODE_SECONDS = 1.0            # REDO A-2: how often the window asks a running watch the code it would end with
 LOCK_SECONDS = 0.2            # how long one read waits for the Watch lock before it shows the last state
 JOIN_SECONDS = 30.0           # how long Quit waits for the worker's final report
 LOG_MAX = 1000000             # characters of the watch's own lines kept for the window
@@ -174,7 +176,8 @@ THEME = {
               ("rail_ink", "rail_hover"), ("rail_muted", "rail"), ("rail_muted", "rail_hover"),
               ("rail_accent", "rail"), ("levels", "ground"), ("levels", "card"), ("levels", "select"),
               ("levels", "head"), ("levels", "hover"), ("levels", "pill"), ("rail_levels", "rail"),
-              ("rail_levels", "rail_hover")),
+              ("rail_levels", "rail_hover"), ("muted", "line"), ("accent", "hover"), ("accent", "chip"),
+              ("muted", "field")),
     "fonts": {
         "ui": ("Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", "Inter", "Noto Sans", "DejaVu Sans"),
         "display": ("Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", "Inter Display", "Inter",
@@ -219,22 +222,9 @@ def level_of(code, word=None):
     return code if code in LEVEL_WORDS else "incomplete"
 
 
-def chip_text(level, suppressed=0, result=False):
-    """E1, REDO C-3: the level's word and what goes with it: "[level]"; in a
-    watch's green state (result=True) it says "Not a clearance." and, when
-    the overlay suppressed findings, how many: "[clean] (N findings
-    suppressed by the overlay). Not a clearance." (A3, ADR-0008 A-2). The
-    window shows the word in the pill and the rest beside it (verdict_note)."""
-    word = "[%s]" % level_word(level)
-    if result and level_of(level) == "clean":
-        return "%s%s. %s" % (word, " (%d findings suppressed by the overlay)" % suppressed if suppressed else "",
-                             NOT_CLEARANCE)
-    return word
-
-
 def verdict_note(level, suppressed=0, result=False, detail=""):
-    """M8.1 E2: what stands beside the verdict's pill: chip_text's words
-    without its "[word]" (the pill says the word): in a watch's green state
+    """M8.1 E2, REDO C-3: what stands beside the verdict's pill (the pill
+    says the level's word): in a watch's green state
     "Not a clearance.", after the suppressed count when there is one ("2
     findings suppressed by the overlay. Not a clearance."); "" otherwise, and
     "" when the detail says "Not a clearance." already and nothing was
@@ -293,45 +283,6 @@ def flow_rows(widths, width, gap=0):
         used += w + (gap if line else 0)
         line.append(i)
     return rows + ([line] if line else [])
-
-
-def contrast_ratio(a, b):
-    """REDO C-6: the WCAG 2 contrast ratio of two #rrggbb colours."""
-    def lum(colour):
-        c = colour.lstrip("#")
-        rgb = [int(c[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
-        lin = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in rgb]
-        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
-    hi, lo = sorted((lum(a), lum(b)), reverse=True)
-    return (hi + 0.05) / (lo + 0.05)
-
-
-def theme_pairs(mode):
-    """E1: every (name, text colour, ground colour) THEME["pairs"] names in
-    mode, the level pairs expanded per level (a level on "pill" is read on
-    its own level's pill)."""
-    p = THEME[mode]
-    out = []
-    for text, ground in THEME["pairs"]:
-        if text in ("levels", "rail_levels"):
-            for level, colour in p[text].items():
-                on = p["pill"][level] if ground == "pill" else p[ground]
-                out.append(("%s.%s on %s" % (text, level, ground), colour, on))
-        else:
-            out.append(("%s on %s" % (text, ground), p[text], p[ground]))
-    return out
-
-
-def level_colour(code, mode="light"):
-    """E1: the colour of a level (or of an exit code) in the theme of mode."""
-    return THEME[mode if mode in ("light", "dark") else "light"]["levels"][level_of(code)]
-
-
-def pill_colours(code, mode="light"):
-    """(text, ground) of a level's pill for a level or an exit code."""
-    palette = THEME[mode if mode in ("light", "dark") else "light"]
-    level = level_of(code)
-    return palette["levels"][level], palette["pill"][level]
 
 
 def level_word(code):
@@ -445,6 +396,47 @@ def verdict_sentence(word):
     return out + (STOPPING if stopping else "")
 
 
+def live_level(code, word, level):
+    """REDO A-2: a running watch's level: the level of the code it would end
+    with now (host.code_now / watch.code_now, through level_of); the view's
+    level while that code is not known; a watch whose heartbeat is stale is
+    alarm (C-4)."""
+    if str(word or "").startswith("CRASHED or stuck"):
+        return "alarm"
+    return level_of(code) if isinstance(code, int) else level_of(level)
+
+
+def so_far(text, findings, suspicions=0):
+    """REDO A-2: a watching sentence says what the watch found so far: "Watching
+    this host: 3 findings so far" (a suspicion named apart, A2)."""
+    words = "%d finding%s so far" % (findings, "" if findings == 1 else "s") if findings else "no finding so far"
+    if suspicions:
+        words += ", %d suspicion%s" % (suspicions, "" if suspicions == 1 else "s")
+    return "%s: %s" % (text, words)
+
+
+def host_counts(state):
+    """REDO A-2: (findings, suspicions) of a host watch's state: its findings
+    and its sources' live findings, which the watch's rule counts as findings;
+    its raised suspicions apart (A2)."""
+    h = state.get("host") if isinstance(state, dict) and isinstance(state.get("host"), dict) else {}
+    found = [x for x in h.get("findings") or [] if isinstance(x, dict)]
+    found += [x for x in h.get("source_findings") or [] if isinstance(x, dict) and not x.get("history")]
+    return len(found), len([x for x in h.get("suspicions") or [] if isinstance(x, dict)])
+
+
+def rail_state(word, level, findings, suspicions=0):
+    """REDO A-8: a running watch in the rail: (its level, its state in
+    words): "3 findings", "no finding", or what is wrong ("Silent for 40 s",
+    "The host reader is late")."""
+    if str(word or "").split(" (", 1)[0] in ("WATCHING", "WATCHING HOST", "STARTING", "STARTING HOST WATCH"):
+        text = "%d finding%s" % (findings, "" if findings == 1 else "s") if findings else "no finding"
+        text += ", %d suspicion%s" % (suspicions, "" if suspicions == 1 else "s") if suspicions else ""
+    else:
+        text = verdict_sentence(word)
+    return level_of(level), text
+
+
 def watch_words(host_on, project=None):
     """M8.1 E2: the rail's words for what is watched now."""
     name = os.path.basename(str(project).rstrip("/\\")) if project else None
@@ -492,7 +484,27 @@ def checks_state(lines):
 # finding, a round not read (failed, nothing read, held, partly read) or late, a place before the watch began.
 STRIP_KINDS = ("clean", "finding", "unread", "before")
 STRIP_IDLE = 12   # places drawn before a host watch starts: the strip's shape, quiet
-UNREAD_HOLES = ("reader-late", "reader-held", "reader-failed", "round-unread", "lines-unread")
+UNREAD_HOLES = ("reader-late", "reader-held", "reader-failed", "reader-out", "round-unread", "lines-unread")
+
+
+def strip_progress(state):
+    """REDO A-4: the round a host watch is reading now (its reader out, not
+    late, the watch not ended), else None: it is named apart, not drawn."""
+    host = state.get("host") if isinstance(state, dict) and isinstance(state.get("host"), dict) else None
+    if host is None or state.get("finished"):
+        return None
+    reader = host.get("reader") if isinstance(host.get("reader"), dict) else {}
+    started = host.get("rounds") if isinstance(host.get("rounds"), int) else None
+    out = {h.get("round") for h in state.get("holes") or [] if isinstance(h, dict) and h.get("kind") == "reader-out"}
+    if started and reader.get("round") == started and not reader.get("late") and started not in out:
+        return started
+    return None
+
+
+def strip_suspected(state):
+    """REDO A-4: the rounds in which a model raised a suspicion (A2: named apart, never a level)."""
+    host = state.get("host") if isinstance(state, dict) and isinstance(state.get("host"), dict) else {}
+    return {f.get("round") for f in host.get("suspicions") or [] if isinstance(f, dict)}
 
 
 def strip_cells(state, fit):
@@ -514,7 +526,7 @@ def strip_cells(state, fit):
     found = {f.get("round") for f in host.get("findings") or [] if isinstance(f, dict)}
     unread = {h.get("round") for h in state.get("holes") or [] if isinstance(h, dict)
               and h.get("kind") in UNREAD_HOLES}
-    last = started - 1 if reader.get("round") == started and not reader.get("late") else started
+    last = started - 1 if strip_progress(state) == started else started
     first = min(tail) if tail and len(tail) >= hostmod.ROUNDS_KEPT else 1
     cells = []
     for n in range(max(first, last - fit + 1), last + 1):
@@ -535,21 +547,34 @@ def strip_cells(state, fit):
     return cells
 
 
-def strip_text(cells, total=None):
+def strip_text(cells, total=None, progress=None, suspected=()):
     """E3: the strip's words: "40 rounds: 36 clean, 3 with findings, 1 not
-    read" (", 2 partly read", ", 1 late" when there are); "the last 40 of
-    212 rounds: ..." when the watch has more than are drawn; "No rounds
-    yet" before the first."""
+    read" (", 2 partly read", ", 1 late", ", 2 with a suspicion" when there
+    are); "the last 40 of 212 rounds: ..." when the watch has more rounds
+    than are drawn (total: the rounds it could draw, the one in progress
+    not among them); "; round N in progress" (REDO A-4); "No rounds yet"
+    before the first."""
     rounds = [c for c in cells if c[1] != "before"]
     if not rounds:
-        return "No rounds yet"
+        return "No rounds yet" + ("; round %d in progress" % progress if progress else "")
     count = {k: sum(1 for c in rounds if c[1] == k) for k in STRIP_KINDS}
     whys = {w: sum(1 for c in rounds if c[2] == w) for w in ("not read", "partly read", "late")}
     head = "%d round%s" % (len(rounds), "" if len(rounds) == 1 else "s")
     if isinstance(total, int) and total > len(rounds):
         head = "The last %d of %d rounds" % (len(rounds), total)
     out = "%s: %d clean, %d with findings, %d not read" % (head, count["clean"], count["finding"], whys["not read"])
-    return out + "".join(", %d %s" % (whys[w], w) for w in ("partly read", "late") if whys[w])
+    out += "".join(", %d %s" % (whys[w], w) for w in ("partly read", "late") if whys[w])
+    sus = sum(1 for c in rounds if c[0] in set(suspected or ()))
+    out += ", %d with a suspicion" % sus if sus else ""
+    return out + ("; round %d in progress" % progress if progress else "")
+
+
+def strip_total(state):
+    """REDO A-4: the rounds a host watch can draw now: every round it began but the one in progress."""
+    host = state.get("host") if isinstance(state, dict) and isinstance(state.get("host"), dict) else None
+    if host is None or not isinstance(host.get("rounds"), int):
+        return None
+    return host["rounds"] - (1 if strip_progress(state) else 0)
 
 
 def rule_items(rows, titles=None):
@@ -596,6 +621,7 @@ def rule_matches(item, text):
 
 # The host screen's tree table (E2): (column id, heading, width px, index in a host_rows row, sort kind).
 # Eight columns; "acts" (row index 4) is in the detail card.
+TREE_ORDER = (1, 2, 4, 0, 6, 3, 7, 5)   # REDO A-11: pid, kind, findings, image, first seen, then the rest may be cut
 TREE_COLUMNS = (("image", "image", 96, 0, "text"), ("pid", "pid", 48, 1, "number"),
                 ("kind", "kind", 90, 2, "text"), ("source", "source", 64, 5, "text"),
                 ("findings", "findings", 72, 6, "severity"), ("rhythm", "rhythm / suspicion", 80, 7, "text"),
@@ -670,6 +696,53 @@ def table_iids(values_list):
     return out
 
 
+ELLIPSIS = "\u2026"
+
+
+def first_seen_text(stamp, today):
+    """REDO A-11: "first seen" in the record's own UTC: the time when its
+    date is today's (UTC), else the date and the minute."""
+    text = str(stamp or "")
+    if len(text) >= 19 and text[4] == "-" and text[10] == "T":
+        return text[11:19] if text[:10] == today else "%s %s" % (text[:10], text[11:16])
+    return text
+
+
+def fit_cell(text, width, measure):
+    """REDO A-11: a cell cut to `width` pixels (measure(text) gives a
+    text's) ends in an ellipsis; the state words in its brackets ("(new)",
+    "(quiet)", "(gone)") are kept whole: the words before them are cut."""
+    text = str(text)
+    if width <= 0 or measure(text) <= width:
+        return text
+    head, flags = text, ""
+    if text.endswith(")") and " (" in text:
+        head, rest = text.split(" (", 1)
+        flags = " (" + rest
+    while head and measure(head + ELLIPSIS + flags) > width:
+        head = head[:-1]
+    return head.rstrip() + ELLIPSIS + flags
+
+
+def column_widths(avail, mins, wants, order=None):
+    """REDO A-11: a table's columns in `avail` pixels: each at least its
+    heading's width (mins); what is left given to the columns whose cells
+    want more, as far as they want it, in `order` (the columns whose words
+    must not be cut first), the rest shared evenly."""
+    widths = list(mins)
+    left = avail - sum(widths)
+    if left <= 0 or not widths:
+        return widths
+    for i in order if order is not None else range(len(widths)):
+        give = min(max(0, wants[i] - widths[i]), left)
+        widths[i] += give
+        left -= give
+    share = left // len(widths)
+    widths = [w + share for w in widths]
+    widths[-1] += left - share * len(widths)
+    return widths
+
+
 def tree_values(row):
     """The Treeview's values of one host_rows row, in TREE_COLUMNS order."""
     return tuple(row[c[3]] if c[3] < len(row) else "" for c in TREE_COLUMNS)
@@ -684,19 +757,44 @@ def row_level(row):
     findings = str(row[6]) if len(row) > 6 else "none"
     if "new" in flags or any(w in findings for w in ("high", "medium", "low")):
         return "alarm"
-    if "gone" in flags:
+    if "gone" in flags or "quiet" in flags:
         return "note"
     return None
 
 
-def header_rules(text, states=()):
-    """E3: the rail's rules item: (text, level). Red (suppressed) while a
-    running watch's off rules would have fired (ADR-0008 A-2), with the
-    count; amber when a rule is off; muted when none is."""
+def overlay_holes(info, error=None):
+    """REDO A-3: the overlay's holes, counted where every hole is: a
+    rules.yaml that cannot be read, an entry refused at load, a person's
+    rule refused at load, a catalog that could not be loaded."""
+    info = info or {}
+    out = ["rules: %s" % error] if error else []
+    if info.get("file") == "malformed":
+        out.append("rules overlay %s is not applied: %s" % (info.get("path"), info.get("hole")))
+    out += ["rules overlay: an entry refused at load: %s" % r for r in info.get("refused") or []]
+    out += ["rules: a user rule refused at load: %s" % r for r in info.get("user_refused") or []]
+    return [_safe(x) for x in out]
+
+
+def missing_checks(lines):
+    """REDO A-7: each MISSING check of doctor is a line of "could not see"."""
+    return [_safe("check missing: %s: %s" % (name, text)) for word, level, name, text in check_rows(lines)
+            if level == "alarm"]
+
+
+def rail_rules(info, error=None, states=()):
+    """REDO A-3, A-10: the rail's rules line, bounded (the ids and the
+    reasons are on the Rules screen and in "could not see"): (text, level):
+    "N rules off" (red with the suppressed count while a running watch's off
+    rules would have fired, ADR-0008 A-2), "rules: N refused" beside it."""
+    if info is None and not error:
+        return "Rules: not loaded", "incomplete"
+    off = len((info or {}).get("off") or [])
+    refused = len(overlay_holes(info, error))
     n = sum(ui.suppressed(s) for s in states if isinstance(s, dict))
-    if n:
-        return "%s; %d finding(s) suppressed by the overlay" % (text, n), "suppressed"
-    return text, ("incomplete" if text not in ("no rule off",) else None)
+    text = "%d rule%s off" % (off, "" if off == 1 else "s") if off else "No rule off"
+    text += "; %d finding%s suppressed" % (n, "" if n == 1 else "s") if n else ""
+    text += "; rules: %d refused" % refused if refused else ""
+    return text, "suppressed" if n else "incomplete" if off or refused else None
 
 
 def seen_lines(holes, notes, look=()):
@@ -741,35 +839,89 @@ def text_tags(text):
     return tuple(out)
 
 
-def findings_tags(view):
-    """M8.1 E2: the project watch's findings card, (line, level): by
-    severity, the gravest first, each group headed in sentence case; the
-    holes are in "could not see (N)", not here."""
+def tree_name(word):
+    """REDO A-13(a): a tree's word ("4242:scribe:2026-11-10T09:12:00Z") as a person reads it: "scribe pid 4242"."""
+    parts = str(word or "").split(":", 2)
+    return "%s pid %s" % (parts[1], parts[0]) if len(parts) >= 2 and parts[0].isdigit() else _safe(word)
+
+
+def _where(*parts):
+    """REDO A-13(a): the quiet line of a finding: its parts that are there, joined; an absent one is not printed."""
+    return " \u00b7 ".join(_safe(x) for x in parts if x not in (None, "", "None", "-"))
+
+
+def finding_items(entries):
+    """REDO A-13(a): the project watch's findings as items, the gravest
+    first: (pill word, level, rule, sentence, where). The pill is the
+    severity with its word, red for a finding, amber while it is pending,
+    grey for history; the where line says the session, the seqs it cites
+    (A5), its state and how it knocked."""
     out = []
-    for sev, lines in view["findings"]:
-        out.append(("%s (%d)" % (sentence(sev), len(lines)), "head"))
-        out += [(line, "alarm") for line in lines]
-    return tuple(out) or (("None yet: a finding of this watch is listed here as it lands.", None),)
+    for sev, items in ui.severity_groups([e for e in entries or () if isinstance(e, dict)]):
+        for e in items:
+            history = e.get("history") or e.get("state") == "history"
+            level = "note" if history else "incomplete" if str(e.get("state", "")).startswith("pending") else "alarm"
+            seqs = watch.seq_text(list(e.get("cited_seq") or []))
+            out.append((_safe(e.get("severity") or sev), level, _safe(e.get("rule_id")), sentence(_safe(e.get("summary"))),
+                        _where("session %s" % e.get("session_id") if e.get("session_id") else None, seqs,
+                               e.get("state"), "history" if e.get("history") else None,
+                               "knocked: %s" % e.get("notice") if e.get("notice") else None)))
+    return out
 
 
-def host_findings_tags(view, watched=True):
-    """M8.1 E2: the host screen's findings card, (line, level): the AGENT-DARK
-    footprints of the look, the findings and suspicions, then the notes
-    (never alarms) under their own head; the holes are in "could not see
-    (N)". watched: a host watch, not the one look at open (which judges
-    nothing)."""
-    out = [(x, "alarm") for x in view.get("lines") or () if x.startswith("AGENT-DARK ")]
-    out += [(f, "alarm") for f in view.get("findings") or ()]
-    notes = view.get("notes") or ()
-    if notes:
-        out.append(("Notes, not alarms (%d)" % len(notes), "head"))
-        out += [(n, "note") for n in notes]
-    if out:
-        return tuple(out)
-    return (("None yet: a finding of this watch is listed here as it lands." if watched else
-             "None: the round at open is one look and judges nothing; the rules judge the rounds of"
-             " \"Watch this host\".", None),)
+def host_finding_items(state, view=None):
+    """REDO A-13(a): the host screen's findings as items: (pill word, level,
+    rule, sentence, where). A finding: its severity's pill (red), the tree,
+    the round, how it knocked, what it cites (run and seq, A5; rhythm's
+    beats); a suspicion apart, named so (A2); a note (never an alarm) grey;
+    the look's AGENT-DARK footprints red, as the look's lines say them."""
+    h = state.get("host") if isinstance(state, dict) and isinstance(state.get("host"), dict) else None
+    out = []
+    if h is None:
+        for line in (view or {}).get("lines") or ():
+            if line.startswith("AGENT-DARK "):
+                head, _, rest = line[len("AGENT-DARK "):].partition(": ")
+                out.append(("footprint", "alarm", "AGENT-DARK", sentence(rest or head), _safe(head)))
+        return out
+    for f in sorted((x for x in h.get("findings") or [] if isinstance(x, dict)),
+                    key=lambda x: SEVERITY_RANK.index(x.get("severity")) if x.get("severity") in SEVERITY_RANK
+                    else len(SEVERITY_RANK)):
+        beats = ["talk round %s seq %s, act round %s seq %s" % (b.get("talk_round"), b.get("talk_seq"), b.get("round"),
+                                                                b.get("seq")) for b in f.get("beats") or ()
+                 if isinstance(b, dict)]
+        out.append((_safe(f.get("severity")), "alarm", _safe(f.get("rule_id")), sentence(_safe(f.get("summary"))),
+                    _where("round %s" % f.get("round") if f.get("round") is not None else None,
+                           tree_name(f.get("tree")) if f.get("tree") else f.get("path"),
+                           "knocked: %s" % f.get("notice") if f.get("notice") else None,
+                           "cites run %s %s" % (f.get("run"), watch.seq_text(list(f.get("cited_seq") or [])))
+                           if f.get("run") else None, *beats)))
+    for f in h.get("suspicions") or []:
+        if isinstance(f, dict):
+            out.append(("suspicion", "note", "SUSPECT", sentence(_safe("; ".join(f.get("reasons") or []) or "raised")),
+                        _where("%.2f" % (f.get("suspicion") or 0), "round %s" % f.get("round"),
+                               tree_name(f.get("tree")),
+                               "by %s/%s" % (f.get("backend"), f.get("model")),
+                               "knocked: %s" % f.get("notice") if f.get("notice") else None,
+                               "cites %s seq %s" % (f.get("trace"), ",".join(str(x) for x in f.get("cited_seq") or [])))))
+    for d in h.get("dark_notes") or []:
+        if isinstance(d, dict):
+            out.append(("note", "note", "NOTE", sentence(_safe(d.get("text"))), ""))
+    return out
 
+
+# M8.1 REDO A-1 (ADR-0009 Amendment A): every event sequence the window binds, in one table. Each is a
+# sequence Tk accepts on every platform (a test binds them all and refuses any other in the code): no X11-only
+# keysym (Tk on Windows refuses the bind, and the window would not open); Shift-Tab is Tk's own virtual event
+# <<PrevWindow>>, which Tk defines for each windowing system.
+KEYS = {
+    "act": ("<Return>", "<KP_Enter>"),      # Enter acts as Space does on a button, a switch, a disclosure
+    "next": ("<Tab>",),                      # out of a text, forwards
+    "prev": ("<<PrevWindow>>",),             # out of a text, backwards (Shift-Tab, whatever the platform)
+    "wheel": ("<MouseWheel>",),              # the wheel on Windows (and macOS)
+    "wheel_up": ("<Button-4>",),             # the wheel under X11 (never sent on Windows, accepted there)
+    "wheel_down": ("<Button-5>",),
+    "resize": ("<Configure>",), "focus": ("<FocusIn>",), "select": ("<<TreeviewSelect>>",),
+}
 
 # --- Windows only (M8.1 E6, A4): Raqib's own process and its own window ------------------------------------
 DPI_SYSTEM_AWARE = 1                 # PROCESS_SYSTEM_DPI_AWARE: Tk 8.6 scales its fonts to the system DPI
@@ -785,12 +937,16 @@ def _win_api():
 
     class Api:
         def SetProcessDpiAwareness(self, value):
-            return ctypes.windll.shcore.SetProcessDpiAwareness(value)
+            fn = ctypes.windll.shcore.SetProcessDpiAwareness
+            fn.argtypes, fn.restype = [ctypes.c_int], ctypes.c_long   # HRESULT (PROCESS_DPI_AWARENESS)
+            return fn(value)
 
         def DwmSetWindowAttribute(self, hwnd, attribute, on):
+            fn = ctypes.windll.dwmapi.DwmSetWindowAttribute
+            fn.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_uint]   # HWND, DWORD, LPCVOID
+            fn.restype = ctypes.c_long                                                      # HRESULT
             flag = ctypes.c_int(1 if on else 0)
-            return ctypes.windll.dwmapi.DwmSetWindowAttribute(ctypes.c_void_p(hwnd), attribute, ctypes.byref(flag),
-                                                              ctypes.sizeof(flag))
+            return fn(hwnd, attribute, ctypes.byref(flag), ctypes.sizeof(flag))
     return Api()
 
 
@@ -1060,20 +1216,6 @@ def first_line(knock):
     return _safe("first finding: %s %s (%s)" % (knock.get("rule_id"), severity, knock.get("status")))
 
 
-def body_text(view):
-    """The watching screen's text: findings by severity, then holes."""
-    out = []
-    count = sum(len(lines) for _, lines in view["findings"])
-    out.append("FINDINGS: %d" % count)
-    for sev, lines in view["findings"]:
-        out.append("  %s (%d)" % (sev, len(lines)))
-        out += ["    %s" % line for line in lines]
-    out.append("")
-    out.append("HOLES (A3): %d" % len(view["holes"]))
-    out += ["  - %s" % h for h in view["holes"]]
-    return "\n".join(out) + "\n"
-
-
 # --- the watch in a worker thread ------------------------------------------------------------
 
 class LogBuffer:
@@ -1341,9 +1483,6 @@ class Session:
 
 # --- the host screen (M7.3, ADR-0007 decision 5) -----------------------------------------------
 
-HOST_COLUMNS = (("image", 22), ("pid", 8), ("named", 22), ("first seen", 25), ("acts", 5), ("source", 24),
-                ("findings", 20), ("rhythm / suspicion", 24),   # M7.4 E4
-                ("endpoints", 0))   # M7.2b E4: the source column and its findings by severity
 NOT_CLEARANCE = "Not a clearance."
 
 
@@ -1369,7 +1508,9 @@ def tree_kind(tree):
         flags.append("history")
     if tree.get("knocked"):
         flags.append("new")
-    if tree.get("present") is False:
+    if tree.get("quiet"):   # M8.1 REDO A-13(d), ADR-0007 P-2: a tree the state marks quiet is never said gone
+        flags.append("quiet")
+    elif tree.get("present") is False:
         flags.append("gone")
     return "%s%s" % (word, " (%s)" % ", ".join(flags) if flags else "")
 
@@ -1439,12 +1580,6 @@ def tree_detail_text(row, detail=None):
     return "\n".join(out) + "\n"
 
 
-def host_text_body(view):
-    """The host screen's text under the tree table: host_body without the
-    table (the rows are in the Treeview, E2), or the final report."""
-    return host_body(dict(view, rows=[])).lstrip("\n")
-
-
 def source_word(tree):
     """M7.2b E4: the source column: os / host / hooks: project P / none, or
     "-" where no source is attached yet (the look at open attaches none)."""
@@ -1455,19 +1590,6 @@ def source_word(tree):
         return "hooks: project %s" % os.path.basename(str(tree.get("source_project") or "").rstrip("/\\")) \
             if tree.get("source_project") else "hooks"
     return str(src)
-
-
-def host_table(rows):
-    """The tree table as fixed-width text lines (a header, then the rows)."""
-    def fmt(cells):
-        out = []
-        for (name, width), cell in zip(HOST_COLUMNS, cells):
-            cell = str(cell)
-            if width and len(cell) >= width:
-                cell = cell[:width - 2] + ".."
-            out.append(cell.ljust(width) if width else cell)
-        return " ".join(out).rstrip()
-    return [fmt([name for name, _ in HOST_COLUMNS])] + [fmt(r) for r in rows]
 
 
 ATTACH_TEXT = "attach hooks to Claude Code projects"   # M7.2b (ADR-0007 H-1): the checkbox, off by default
@@ -1637,20 +1759,6 @@ def host_watch_view(state, extra_holes=()):
             "badges": [(lv, _safe(text)) for lv, text in ui.host_band(state)], "final": None,
             "trees": h.get("now") or 0, "new": h.get("new") or 0, "url": state.get("url") or "-",
             "suspicions": len([f for f in h.get("suspicions") or [] if isinstance(f, dict)])}   # REDO C-4: apart
-
-
-def host_body(view):
-    """The host screen's text: the table (or the empty line), the findings,
-    the holes; or the final report when the host watch ended."""
-    if view.get("final"):
-        return view["final"] + "".join("hole: %s\n" % x for x in view["holes"])
-    out = host_table(view["rows"]) if view["rows"] else []
-    out += view["lines"]
-    out += ["", "FINDINGS: %d" % len(view["findings"])] + ["  %s" % f for f in view["findings"]]
-    if view.get("notes"):   # M7.5 E4: apart from the findings; never an alarm
-        out += ["", "NOTES (not alarms): %d" % len(view["notes"])] + ["  - %s" % x for x in view["notes"]]
-    out += ["", "HOLES (A3): %d" % len(view["holes"])] + ["  - %s" % x for x in view["holes"]]
-    return "\n".join(out) + "\n"
 
 
 LOOK_NAME = "look.json"
@@ -2107,12 +2215,6 @@ class Controller:
         self.session = self.make_session(project).start()
         return None
 
-    def running_text(self):
-        """F-2: the header's line: which watches run now."""
-        names = (["host watch"] if self.host_watching() else []) + (
-            ["project watch of %s" % _safe(self.session.project)] if self.project_watching() else [])
-        return "running: %s" % (", ".join(names) if names else "none")
-
     def project_screen(self):
         """F-2: where "Project" leads: the project watch's screen while it
         runs, else the project field (M6.4's first screen)."""
@@ -2465,7 +2567,10 @@ class Window:
         self.rule_vars = {}
         self.rule_widgets = {}
         self.rule_rows = []
+        self.rule_said = None   # REDO A-6: (rule id, the refusal's words) shown beside its row
         self.strip_fit = 0
+        self.codes = {}    # REDO A-2: id(session) -> (the code it would end with now, when read)
+        self.live = {}     # REDO A-2, A-8: each running watch's word, level, findings, suspicions
         self._style()
         self._build(project)
         self.show_host()                  # M7.3: the first screen is the host
@@ -2649,8 +2754,11 @@ class Window:
                         lightcolor=card, darkcolor=card, arrowsize=w, gripcount=0, relief="flat", borderwidth=0)
         # the tables: tall rows, no grid lines, a quiet header, a tinted selection (the sort arrow drawn)
         rows = self.font_body.metrics("linespace") + 2 * self.px(X["row_pad"])
-        style.layout("Treeview", [("Treeview.padding", {"sticky": "nswe", "children": [
-            ("Treeview.treearea", {"sticky": "nswe"})]})])
+        def table(ring):
+            return self._picture(("table", ring), box(2 * m + 4, 2 * m + 4, m, card, card, ring, self.px(2)))
+        self._element("Table.box", [("", table(card)), ("focus", table(p["accent"]))], m + 1, padding=self.px(2))
+        style.layout("Treeview", [("Table.box", {"sticky": "nswe", "children": [("Treeview.padding", {
+            "sticky": "nswe", "children": [("Treeview.treearea", {"sticky": "nswe"})]})]})])
         style.configure("Treeview", background=card, fieldbackground=card, foreground=p["ink"], rowheight=rows,
                         borderwidth=0, relief="flat")
         style.map("Treeview", background=[("selected", p["select"])], foreground=[("selected", p["ink"])])
@@ -2701,13 +2809,14 @@ class Window:
             self._picture((kind, "off"), sign(self.px(12), kind == "plus", p["line"], card, 1.6 * self.scale))
         self.root.configure(background=g)
         for cls in ("TButton", "TCheckbutton"):   # E4: Enter acts as Space does
-            for key in ("<Return>", "<KP_Enter>"):
+            for key in KEYS["act"]:
                 self.root.bind_class(cls, key, lambda e: e.widget.invoke())
 
     def _wrap(self, label, start=None):
         """A label that wraps at the width it is given (never wider than the window)."""
         label.configure(wraplength=start or self.px(THEME["px"]["wrap"]))
-        label.bind("<Configure>", lambda e, w=label: w.configure(wraplength=max(e.width - 4, self.px(120))))
+        label.bind(KEYS["resize"][0], lambda e, w=label: w.configure(wraplength=max(e.width - self.px(4),
+                                                                                       self.px(120))))
         return label
 
     def _card(self, parent, title=None):
@@ -2730,7 +2839,7 @@ class Window:
         frame = self.ttk.Frame(parent, style="Inner.TFrame")
         text = self.tk.Text(frame, height=height, width=20, wrap="word", font="TkFixedFont" if mono else "TkTextFont",
                             background=p["card"], foreground=p["ink"], insertbackground=p["ink"],
-                            selectbackground=p["select"], selectforeground=p["ink"], highlightthickness=1,
+                            selectbackground=p["select"], selectforeground=p["ink"], highlightthickness=self.px(1),
                             highlightbackground=p["card"], highlightcolor=p["accent"], relief="flat", borderwidth=0,
                             padx=self.px(2), pady=self.px(2), spacing1=self.px(1), spacing3=self.px(2))
         bar = self.ttk.Scrollbar(frame, command=text.yview, style="Thin.Vertical.TScrollbar")
@@ -2739,8 +2848,10 @@ class Window:
         for level, colour in p["levels"].items():
             text.tag_configure(level, foreground=colour)
         text.tag_configure("head", font=self.font_bold)
-        for key in ("<Tab>", "<Shift-Tab>", "<ISO_Left_Tab>"):
-            text.bind(key, self._pass_focus)
+        for key in KEYS["next"]:
+            text.bind(key, lambda e: self._pass_focus(e, False))
+        for key in KEYS["prev"]:
+            text.bind(key, lambda e: self._pass_focus(e, True))
         return frame, text
 
     def _scroller(self, bar, view):
@@ -2755,8 +2866,8 @@ class Window:
         return scroll
 
     @staticmethod
-    def _pass_focus(event):
-        nxt = event.widget.tk_focusPrev() if event.keysym != "Tab" or event.state & 1 else event.widget.tk_focusNext()
+    def _pass_focus(event, back):
+        nxt = event.widget.tk_focusPrev() if back else event.widget.tk_focusNext()
         if nxt is not None:
             nxt.focus_set()
         return "break"
@@ -2801,16 +2912,17 @@ class Window:
         self.detail.pack(fill="x", pady=(self.px(4), 0))
         # E3: the round strip, under the host's verdict
         strip = self.strip_row = ttk.Frame(main)
-        self.strip = tk.Canvas(strip, height=self.px(X["cell"]) + 2, width=self.px(200), background=p["ground"],
+        self.strip = tk.Canvas(strip, height=self.px(X["cell"] + 2), width=self.px(200), background=p["ground"],
                                highlightthickness=0, borderwidth=0)
         self.strip.pack(side="left")
         self.strip_label = ttk.Label(strip, text="", style="Muted.TLabel")
         self.strip_label.pack(side="left", padx=(self.px(10), 0))
-        strip.bind("<Configure>", lambda e: self._draw_strip())
+        strip.bind(KEYS["resize"][0], lambda e: self._draw_strip())
         self.host_badges = ttk.Frame(main)     # REDO C-2: one pill per badge, each its level's colour and word
         self.badges = ttk.Frame(main)
         for frame in (self.host_badges, self.badges):
-            frame.bind("<Configure>", lambda e, f=frame: self._flow(f))
+            frame.bind(KEYS["resize"][0], lambda e, f=frame: self._flow(f))
+        self.root.bind(KEYS["resize"][0], lambda e: self._lay_panels() if e.widget is self.root else None, add="+")
         # E4: the disclosures under the header, their panels below them
         tools = self.tools = ttk.Frame(main)
         tools.pack(fill="x", padx=pad, pady=(self.px(8), 0))
@@ -2846,11 +2958,12 @@ class Window:
         brand = tk.Frame(rail, background=p["rail"])
         brand.pack(fill="x", padx=pad + self.px(6), pady=(self.px(20), self.px(2)))
         cell, step = self.px(6), self.px(9)
-        mark = tk.Canvas(brand, width=4 * step, height=cell + 2, background=p["rail"], highlightthickness=0,
+        one = self.px(1)
+        mark = tk.Canvas(brand, width=4 * step, height=cell + 2 * one, background=p["rail"], highlightthickness=0,
                          borderwidth=0)
         for i in range(4):   # the mark: four rounds, the last not yet read
-            x = 1 + i * step
-            mark.create_rectangle(x, 1, x + cell, 1 + cell, outline=p["rail_accent"],
+            x = one + i * step
+            mark.create_rectangle(x, one, x + cell, one + cell, outline=p["rail_accent"],
                                   fill=p["rail_accent"] if i < 3 else p["rail"])
         mark.pack(side="left", padx=(0, self.px(8)))
         tk.Label(brand, text=TITLE, font=self.font_verdict, background=p["rail"], foreground=p["rail_ink"],
@@ -2858,7 +2971,9 @@ class Window:
         wrap = width - 2 * (pad + self.px(6))
         self.running_note = tk.Label(rail, text="", anchor="w", justify="left", font=self.font_meta,
                                      background=p["rail"], foreground=p["rail_muted"], wraplength=wrap)
-        self.running_note.pack(fill="x", padx=pad + self.px(6), pady=(0, self.px(18)))
+        self.running_note.pack(fill="x", padx=pad + self.px(6), pady=(0, self.px(8)))
+        self.rail_watches = tk.Frame(rail, background=p["rail"])   # REDO A-8: each running watch, its pill
+        self.rail_watches.pack(fill="x", padx=pad + self.px(6), pady=(0, self.px(10)))
         self.host_tab = ttk.Button(rail, text="Host", command=self.show_host, style="Rail.TButton")
         self.project_tab = ttk.Button(rail, text="Project", command=self.show_project, style="Rail.TButton")
         self.rules_tab = ttk.Button(rail, text="Rules", command=self.show_rules, style="Rail.TButton")   # M7.6
@@ -2899,7 +3014,8 @@ class Window:
         frame, self.host_tree = self._table(inner, "host", TREE_COLUMNS, 3)
         frame.pack(fill="both", expand=True)
         self.host_table_frame = frame
-        self.host_tree.bind("<<TreeviewSelect>>", lambda e: self._show_tree_detail())
+        self.host_tree.bind(KEYS["select"][0], lambda e: self._show_tree_detail())
+        self.host_tree.bind(KEYS["resize"][0], lambda e: self._table_widths(e.width), add="+")
         self.trees_empty = self._wrap(ttk.Label(inner, text="", style="Muted.Card.TLabel", anchor="center",
                                                 justify="center"), self.px(380))
         outer, inner, self.findings_title = self._card(f, "Findings")
@@ -3015,13 +3131,13 @@ class Window:
         self.rules_list = ttk.Frame(self.rules_canvas, style="Inner.TFrame")
         self.rules_list.grid_columnconfigure(1, weight=1)
         self.rules_window = self.rules_canvas.create_window(0, 0, window=self.rules_list, anchor="nw")
-        self.rules_list.bind("<Configure>", lambda e: self.rules_canvas.configure(
+        self.rules_list.bind(KEYS["resize"][0], lambda e: self.rules_canvas.configure(
             scrollregion=self.rules_canvas.bbox("all")))
-        self.rules_canvas.bind("<Configure>", lambda e: self.rules_canvas.itemconfigure(self.rules_window,
+        self.rules_canvas.bind(KEYS["resize"][0], lambda e: self.rules_canvas.itemconfigure(self.rules_window,
                                                                                        width=e.width))
-        self.root.bind_all("<MouseWheel>", lambda e: self._wheel(-1 if e.delta > 0 else 1), add="+")
-        self.root.bind_all("<Button-4>", lambda e: self._wheel(-1), add="+")
-        self.root.bind_all("<Button-5>", lambda e: self._wheel(1), add="+")
+        self.root.bind_all(KEYS["wheel"][0], lambda e: self._wheel(-1 if e.delta > 0 else 1), add="+")
+        self.root.bind_all(KEYS["wheel_up"][0], lambda e: self._wheel(-1), add="+")
+        self.root.bind_all(KEYS["wheel_down"][0], lambda e: self._wheel(1), add="+")
         frame, self.rules_text = self._text(self.overlay.inner, 4)   # the intro and what the overlay applies
         frame.pack(fill="both", expand=True)
         self.rules_add_button = ttk.Button(self.primary, text="Add rule file...", command=self.rules_add,
@@ -3086,7 +3202,10 @@ class Window:
             if str(tab.cget("style")) != style:
                 tab.configure(style=style)
         page = {"host": self.host_page_button, "first": self.page_button, "watching": self.page_button,
-                "log": self.host_page_button if self.log_source == "host" else self.page_button}.get(self.screen)
+                "log": self.host_page_button if self.log_source == "host" else self.page_button,
+                # REDO A-8: on every screen; on Rules the host watch's page, else the project watch's
+                "rules": self.host_page_button if self.c.host is not None or self.c.session is None
+                else self.page_button}.get(self.screen)
         for button in (self.host_page_button, self.page_button):
             if button is not page and button.winfo_manager():
                 button.pack_forget()
@@ -3137,6 +3256,20 @@ class Window:
                     d.var.set(False)
         self._lay_panels()
 
+    def _panel_lines(self, text):
+        """REDO A-13(c): an open panel's text shows as many lines as the
+        screen can give (the screen's cards keep what they need) and scrolls
+        beyond; at least two."""
+        line = self.font_body.metrics("linespace") + self.px(6)
+        room = self.root.winfo_height() if self.root.winfo_height() > 1 else self.px(THEME["min_size"][1])
+        used = sum(w.winfo_reqheight() for w in (self.head, self.tools)) + self.px(150)
+        used += self.strip_row.winfo_reqheight() if self.strip_row.winfo_manager() else 0
+        used += sum(f.winfo_reqheight() for f in (self.host_badges, self.badges) if f.winfo_manager())
+        keep = self.px(250) if self.screen == "host" else self.px(170)
+        shown = text.count("1.0", "end", "displaylines") if text.winfo_ismapped() else None
+        want = (shown[0] if isinstance(shown, tuple) else shown) or int(text.index("end-1c").split(".")[0])
+        return max(2, min(want, (room - used - keep) // line))
+
     def _lay_panels(self):
         """E4: the open disclosures' panels, in their order, under the toggles."""
         visible = {d.name for d in self.disclosures if d.toggle.winfo_manager()}
@@ -3145,8 +3278,16 @@ class Window:
         for d in self.disclosures:
             if d.name in visible and d.is_open():
                 d.panel.pack(fill="x", pady=(self.px(6), 0))
+                text = {"seen": self.seen_text, "checks": self.checks_rows, "overlay": self.rules_text}.get(d.name)
+                if text is not None:
+                    self._put(text, height=self._panel_lines(text))
+                    named = getattr(text, "named_line", None)
+                    if named:   # REDO A-13(c): the line its title names (a missing or unsure check) is in view
+                        text.see(named)
         # the trees keep the stretch; with a panel open they ask for two rows, not three (E6: 900x600)
         rows = 2 if any(d.name in visible and d.is_open() for d in self.disclosures) else 3
+        if rows == 3:   # an emptied pack master keeps its last size: it is told it holds nothing now
+            self.panels.configure(height=1)
         if int(self.host_tree.cget("height")) != rows:
             self.host_tree.configure(height=rows)
         if hasattr(self, "first_run_label"):
@@ -3216,6 +3357,12 @@ class Window:
         self._rules_changed(None, None)
 
     def _rules_changed(self, rule_id, part):
+        """REDO A-6: after a change the rows are drawn again from the rules as
+        they are (a refused switch or step goes back at once), and a refusal's
+        reason stands beside its rule's row."""
+        p = self.rules_panel
+        self.rule_said = (rule_id, p.message) if p.level == "alarm" and rule_id else None
+        self.shown.pop("rules_rows", None)
         self._rules_band()
         self._rules_fill()
         widget = self.rule_widgets.get((rule_id, part)) or self.rule_widgets.get((rule_id, "switch"))
@@ -3231,14 +3378,20 @@ class Window:
             pass
 
     def _rules_band(self):
+        """The Rules screen's verdict: the last change's words; else what is
+        off and, REDO A-3, incomplete while an overlay hole stands."""
         p = self.rules_panel
         if p.message:
             word = "RULES: REFUSED" if p.level == "alarm" else "RULES"
             self._verdict(word, p.level, p.message)
             return
+        holes = overlay_holes(p.info, p.error)
         off = p.info.get("off") if p.info else None
-        self._verdict("RULES", "incomplete" if off else "clean", "%s; a change applies to the next watch" % sentence(
-            p.header()))
+        detail = "%s; a change applies to the next watch" % sentence(p.header())
+        if holes:
+            detail += "; %d overlay line%s not applied (in \"Could not see\")" % (len(holes), "" if len(holes) == 1
+                                                                               else "s")
+        self._verdict("RULES", "incomplete" if off or holes else "clean", detail)
 
     def _rules_fill(self):
         """E5: one row per rule - its switch, its name and title, pills for
@@ -3247,7 +3400,7 @@ class Window:
         to undo; rebuilt when the panel's rows change."""
         p = self.rules_panel
         items = rule_items(p.rows, getattr(p, "titles", None))
-        key = (repr(items), p.error)
+        key = (repr(items), p.error, self.rule_said)
         if self.shown.get("rules_rows") == key:
             return
         self.shown["rules_rows"] = key
@@ -3302,10 +3455,15 @@ class Window:
                                    command=lambda r=rid: self.rules_reset(r))
                 reset.pack(anchor="w")
                 self.rule_widgets[(rid, "reset")] = reset
+        if self.rule_said and self.rule_said[0] == rid:   # REDO A-6: the refusal, beside its rule
+            row += 1
+            self._wrap(ttk.Label(frame, text=self.rule_said[1], style="alarm.Level.Card.TLabel", anchor="w",
+                                 justify="left"), self.px(300)).grid(row=row, column=1, columnspan=2, sticky="ew",
+                                                                    pady=(self.px(4), 0))
         ttk.Separator(frame).grid(row=row + 1, column=0, columnspan=3, sticky="ew", pady=(self.px(10), 0))
         for (r, _), widget in self.rule_widgets.items():
             if r == rid:
-                widget.bind("<FocusIn>", lambda e, f=frame: self._rules_see(f), add="+")
+                widget.bind(KEYS["focus"][0], lambda e, f=frame: self._rules_see(f), add="+")
         return frame
 
     def _rules_stepper(self, parent, rid, t):
@@ -3315,8 +3473,14 @@ class Window:
         box_.pack(anchor="w", pady=(0, self.px(4)))
         ttk.Label(box_, text=t["name"], style="Bold.Card.TLabel").pack(side="left", padx=(0, self.px(6)))
         for part, step in (("minus", -1), ("value", 0), ("plus", 1)):
-            if not step:
-                ttk.Label(box_, text=str(t["value"]), style="Card.TLabel", width=4, anchor="center").pack(side="left")
+            if not step:   # REDO A-12: the value can be typed; Enter sets it, measured as a step is
+                entry = ttk.Entry(box_, width=5, justify="center")
+                entry.insert(0, str(t["value"]))
+                entry.pack(side="left", padx=self.px(4))
+                for key in KEYS["act"]:
+                    entry.bind(key, lambda e, n=t["name"]: self.rules_threshold(rid, n, e.widget.get().strip(),
+                                                                               n + "="))
+                self.rule_widgets[(rid, t["name"] + "=")] = entry
                 continue
             target = t["value"] + step
             ok = t["low"] <= target <= t["high"]
@@ -3370,10 +3534,6 @@ class Window:
         """F-11: the host watch's page, by the person's click (never under CI)."""
         self.c.page_note = self.c.open_page("host")
 
-    def toggle_checks(self):
-        """E1: the doctor's rows, in their disclosure."""
-        self.checks.set_open(not self.checks.is_open())
-
     def host_toggle(self):
         """E2: "Watch this host" starts the host watch; while it runs the
         button is its Stop, which ends it with its final report."""
@@ -3396,6 +3556,8 @@ class Window:
         self.shown[key] = (content, tags)
         first, last = widget.yview()
         widget.configure(state="normal")
+        for child in widget.winfo_children():   # pills of items drawn before (A-13)
+            child.destroy()
         widget.delete("1.0", "end")
         if tags is None:
             widget.insert("end", content)
@@ -3409,6 +3571,35 @@ class Window:
             else:
                 widget.yview_moveto(first)
 
+    def _items(self, text, key, items, empty):
+        """REDO A-13(a): findings as items in a text that scrolls: the pill
+        (the severity and its word), the rule's id, its sentence; under them,
+        quiet, where and when (round or seq, how it knocked, what it cites)."""
+        if self.shown.get(key) == ("items", items):
+            return
+        self.shown[key] = ("items", items)
+        p = self.palette
+        first = max([self.font_meta_bold.measure(i[0]) for i in items] + [0]) + 2 * self.pill_r + self.px(10)
+        text.configure(state="normal", tabs=(first,))
+        text.tag_configure("item", lmargin2=first, spacing1=self.px(6))
+        text.tag_configure("rule", font=self.font_bold)
+        text.tag_configure("where", lmargin1=first, lmargin2=first, font=self.font_meta, foreground=p["muted"],
+                           spacing3=self.px(2))
+        for child in text.winfo_children():
+            child.destroy()
+        text.delete("1.0", "end")
+        if not items:
+            text.insert("end", empty + "\n")
+        for word, level, rule, sentence_, where in items:
+            text.window_create("end", window=self.ttk.Label(text, text=word, style=self._pill_style(level, "card")),
+                               align="center")
+            text.insert("end", "\t", "item")
+            text.insert("end", rule, ("item", "rule"))
+            text.insert("end", "  %s\n" % sentence_, "item")
+            if where:
+                text.insert("end", where + "\n", "where")
+        text.configure(state="disabled")
+
     @staticmethod
     def _put(widget, **kw):
         """Configure only what changed (nothing is redrawn at every tick)."""
@@ -3416,7 +3607,7 @@ class Window:
         if changed:
             widget.configure(**changed)
 
-    def _verdict(self, word, level, detail, result=False, suppressed=0):
+    def _verdict(self, word, level, detail, result=False, suppressed=0, counts=None):
         """E2: the verdict header: the level's pill with its word (level_of,
         REDO C-1), the state in one sentence, what goes beside a watch's
         green state ("Not a clearance.", the suppressed count, REDO C-3), the
@@ -3428,6 +3619,8 @@ class Window:
         if self.pill.cget("text") != level_word(level) or str(self.pill.cget("style")) != style:
             self.pill.configure(text=level_word(level), style=style)
         text = verdict_sentence(word)
+        if counts is not None and word in ("WATCHING HOST", "WATCHING"):   # REDO A-2: what it found so far
+            text = so_far(text, *counts)
         if self.verdict.cget("text") != text:
             self.verdict.configure(text=text)
         note = verdict_note(level, suppressed, result, detail)
@@ -3453,6 +3646,11 @@ class Window:
             child.destroy()
         p = self.palette
         for word, text, level in items:
+            if level == "clean":   # REDO A-13(b): a clean badge is quiet text; green is the verdict's and the strip's
+                pill = self.tk.Label(frame, text=text, font=self.font_meta, background=p["ground"],
+                                     foreground=p["muted"], borderwidth=0, padx=0, pady=self.pill_pad)
+                pill.width, pill.level = self.font_meta.measure(text) + self.px(6), level
+                continue
             pill = self.ttk.Frame(frame, style=self._pill_frame_style(level))
             for part, font, pad in ((word, self.font_meta_bold, (self.pill_r, self.px(5))),
                                     (text, self.font_meta, (0, self.pill_r))):
@@ -3492,13 +3690,10 @@ class Window:
         """E4: "could not see (N)": every hole of the screen, one click
         away, never dropped; the notes below them."""
         holes = sum(1 for x in lines if x.startswith("hole: "))
+        self.shown["seen_lines"] = list(lines)
         self.seen.set_title(seen_title(lines), "Hole.Disclosure.TCheckbutton" if holes else "Disclosure.TCheckbutton")
         self._set(self.seen_text, "seen", None, tuple((x, "hole" if x.startswith("hole:") else "note") for x in lines)
                   or (("No hole on this screen.", None),))
-
-    def holes_text(self):
-        """The lines of "could not see (N)", every one (E4)."""
-        return self.seen_text.get("1.0", "end").rstrip("\n")
 
     def _fill(self, key, tree, items, columns):
         """E2: a Treeview's rows [(values, level, payload, row)], sorted
@@ -3531,11 +3726,59 @@ class Window:
         current, reverse = self.sorting[key]
         self.sorting[key] = (column, not reverse if current == column else False)
         self.shown.pop("table:" + key, None)
+        self.shown.pop("host_widths", None)
         self._fill_host(self.c.host_view())
+        self._table_widths()   # the sorted column has room for its arrow
+
+    def _table_widths(self, width=None):
+        """REDO A-11: the trees' columns in the card's whole width (each at
+        least its heading, with room for the sort arrow on the sorted one);
+        the cells drawn again, cut with an ellipsis where they must be."""
+        width = width or self.host_tree.winfo_width()
+        if width <= 1:
+            return
+        column = self.sorting["host"][0]
+        pad, arrow = self.px(16), self.px(THEME["px"]["chevron"] + 6)
+        mins = [self.font_meta_bold.measure(c[1]) + pad + (arrow if c[0] == column else 0) for c in TREE_COLUMNS]
+        rows = [self._display(row) for row in (self.shown.get("host_rows") or [])]
+        wants = [max([self.font_body.measure(r[i]) + self.px(12) for r in rows] + [mins[i]]) for i in range(len(mins))]
+        tree = self.host_tree   # what the table asks beyond its columns (its frame, its padding)
+        extra = max(0, tree.winfo_reqwidth() - sum(int(tree.column(c[0], "width")) for c in TREE_COLUMNS))
+        widths = column_widths(width - extra - self.px(2), mins, wants, TREE_ORDER)
+        if self.shown.get("host_widths") != widths:
+            self.shown["host_widths"] = widths
+            for c, w in zip(TREE_COLUMNS, widths):
+                self.host_tree.column(c[0], width=w, minwidth=min(w, self.px(30)), stretch=False)
+            self.shown.pop("table:host", None)
+            self._fill_host(self.shown.get("host_view") or {})
+
+    def _display(self, row):
+        """The values a tree's row shows: tree_values, "first seen" as a time when it is today's (UTC)."""
+        import datetime
+        today = datetime.datetime.fromtimestamp(time.time(), datetime.timezone.utc).strftime("%Y-%m-%d")
+        values = list(tree_values(row))
+        first = [c[0] for c in TREE_COLUMNS].index("first")
+        values[first] = first_seen_text(values[first], today)
+        return values
 
     def _fill_host(self, view):
         details = view.get("details") or []
-        items = [(tree_values(row), row_level(row), (row, details[i] if i < len(details) else None), row)
+        rows_now = list(view.get("rows") or [])
+        changed = self.shown.get("host_rows") != rows_now
+        self.shown["host_view"], self.shown["host_rows"] = view, rows_now
+        if changed and self.shown.get("host_widths") is not None:   # new cells: the columns shared again
+            self.shown.pop("host_widths", None)
+            self._table_widths()
+            return
+        widths = self.shown.get("host_widths")
+        pad = self.px(10)
+
+        def shown(row):
+            values = self._display(row)
+            if widths:   # REDO A-11: a cell that must be cut ends in an ellipsis; the full text is in Selected tree
+                values = [fit_cell(v, w - pad, self.font_body.measure) for v, w in zip(values, widths)]
+            return tuple(values)
+        items = [(shown(row), row_level(row), (row, details[i] if i < len(details) else None), row)
                  for i, row in enumerate(view.get("rows") or [])]
         if self._fill("host", self.host_tree, items, TREE_COLUMNS):
             self._show_tree_detail()
@@ -3592,6 +3835,9 @@ class Window:
         for child in text.winfo_children():
             child.destroy()
         text.delete("1.0", "end")
+        named = [i for i, r in enumerate(rows) if r[1] == "alarm"] or [i for i, r in enumerate(rows)
+                                                                        if r[1] == "incomplete"]
+        text.named_line = "%d.0" % (named[0] + 1) if named else None   # what the disclosure's title names
         for word, level, name, sentence_ in rows:
             label = self.ttk.Label(text, text=word, style=self._pill_style(level, "card"))
             text.window_create("end", window=label, align="center")
@@ -3662,7 +3908,7 @@ class Window:
             self._tick()
         except Exception as exc:   # A3, A-8: the window says what broke, keeps it, and keeps going
             self.c.hole("the window failed to update: %s: %s" % (type(exc).__name__, exc))
-            self._seen(self._own_lines())
+            self._seen(self._kept_lines())   # REDO A-5: added to the list it had, nothing leaves it
         if self.closed:
             return
         if self.c.can_exit():
@@ -3671,45 +3917,109 @@ class Window:
         if self.c.quit_overdue():   # A-3: the watch did not end: the window comes back, nothing is killed
             self.root.deiconify()
             self.root.lift()
-            self._seen(self._own_lines())
+            self._seen(self._kept_lines())
         self.after_id = self.root.after(TICK_MS, self.tick)
 
     def _own(self):
         """The window's own holes (a tray, a callback, a tick) and the look's
         until the host watch's first round (F-3); the notes."""
         own = self.c.holes + self.c.tray_holes()
+        own += overlay_holes(self.rules_panel.info, self.rules_panel.error)   # REDO A-3: the overlay's, everywhere
+        own += missing_checks(self.checks_lines)                             # REDO A-7: each MISSING check
         notes = list(self.c.notes) + (["page: %s" % self.c.page_note] if self.c.page_note else [])
         return own, self.c.look_holes(), notes
 
-    def _own_lines(self):
-        own, look, notes = self._own()
-        return seen_lines(own, notes, look)
+    def _kept_lines(self):
+        """REDO A-5: the list "could not see" had, with the window's own
+        holes added: a tick that fails takes no line out of it."""
+        kept = list(self.shown.get("seen_lines") or [])
+        own = self.c.holes + self.c.tray_holes()
+        holes = [x for x in kept if x.startswith("hole: ")] + ["hole: %s" % h for h in own
+                                                                if "hole: %s" % h not in kept]
+        return holes + [x for x in kept if not x.startswith("hole: ")]
+
+    def _code(self, session, module):
+        """REDO A-2: the code a running watch would end with now, by its own
+        rule (module.code_now), read at most once a CODE_SECONDS; the last one
+        while its state is held."""
+        key = id(session)
+        watcher = getattr(getattr(session, "running", None), "watcher", None)
+        now = time.monotonic()
+        if watcher is None or (key in self.codes and now - self.codes[key][1] < CODE_SECONDS):
+            return self.codes.get(key, (None, 0))[0]
+        try:
+            code = module.code_now(watcher, LOCK_SECONDS)
+        except Exception:   # a report that cannot be built now: the last code stands, the watch says why at its end
+            code = None
+        if code is not None:
+            self.codes[key] = (code, now)
+        return self.codes.get(key, (None, 0))[0]
+
+    def _live(self, view):
+        """REDO A-2, A-8: each running watch's state word, level (the code it
+        would end with now), findings and suspicions so far."""
+        self.live = {}
+        state = getattr(self.c.host, "last_state", None) if self.c.host is not None else None
+        if self.c.host_watching() and not view.get("final"):
+            found, sus = host_counts(state or {})
+            level = live_level(self._code(self.c.host, hostmod), view["word"], view["level"])
+            self.live["host"] = (view["word"], level, found, sus)
+        session = self.c.session
+        if self.c.project_watching():
+            pstate = session.state()
+            pview = watch_view(pstate) if pstate else None
+            if pview is None:
+                self.live["project"] = ("STARTING", "incomplete", 0, 0)
+            else:
+                found = sum(len(lines) for _, lines in pview["findings"])
+                self.live["project"] = (pview["word"], live_level(self._code(session, watch), pview["word"],
+                                                                  pview["level"]), found, 0)
 
     def _rail(self):
-        """E2: the rail's words: what is watched; the rules off (red while a
-        running watch's off rules would have fired, ADR-0008 A-2)."""
-        host_on, project_on = self.c.host_watching(), self.c.project_watching()
+        """E2, REDO A-8: the rail's words: what is watched, each running
+        watch's state in words and its level's pill; the rules line (red while
+        a running watch's off rules would have fired, ADR-0008 A-2; how many
+        were refused, REDO A-3)."""
+        p = self.palette
+        host_on, project_on = "host" in self.live, "project" in self.live
         words = watch_words(host_on, self.c.session.project if project_on else None)
-        if self.running_note.cget("text") != words:
-            self.running_note.configure(text=words, foreground=self.palette["rail_ink" if host_on or project_on
-                                                                            else "rail_muted"])
+        self._put(self.running_note, text=words, foreground=p["rail_ink" if host_on or project_on else "rail_muted"])
+        rows = []
+        for key, title in (("host", "Host"), ("project", "Project")):
+            if key in self.live:
+                word, level, found, sus = self.live[key]
+                rows.append((title,) + rail_state(word, level, found, sus))
+        if self.shown.get("rail_watches") != rows:
+            self.shown["rail_watches"] = rows
+            for child in self.rail_watches.winfo_children():
+                child.destroy()
+            for title, level, text in rows:
+                row = self.tk.Frame(self.rail_watches, background=p["rail"])
+                row.pack(fill="x", pady=(0, self.px(6)))
+                self.tk.Label(row, text=title, font=self.font_meta_bold, background=p["rail"], foreground=p["rail_ink"],
+                              borderwidth=0, padx=0).pack(side="left")
+                self.ttk.Label(row, text=level_word(level), style=self._pill_style(level, "rail")).pack(side="right")
+                self.tk.Label(self.rail_watches, text=text, font=self.font_meta, background=p["rail"], anchor="w",
+                              justify="left", foreground=p["rail_levels"][level] if level != "clean" else p["rail_muted"],
+                              wraplength=self.px(THEME["px"]["rail"] - 40), borderwidth=0, padx=0).pack(
+                    fill="x", pady=(0, self.px(8)))
         states = [getattr(x, "last_state", None) for x in self.c.sessions() if Controller._live(x)]
-        text, level = header_rules(self.rules_panel.header(), states)
-        colour = self.palette["rail_levels"][level] if level else self.palette["rail_muted"]
-        if self.rules_note.cget("text") != sentence(text) or str(self.rules_note.cget("foreground")) != colour:
-            self.rules_note.configure(text=sentence(text), foreground=colour)
+        text, level = rail_rules(self.rules_panel.info, self.rules_panel.error, states)
+        colour = p["rail_levels"][level] if level else p["rail_muted"]
+        self._put(self.rules_note, text=text, foreground=colour)
 
     def _tick(self):
         for action in self.c.drain():
             if action in ("show", "stop"):
                 self.root.deiconify()
                 self.root.lift()
+        fresh = self._tick_doctor()
         own, look, notes = self._own()
         self.c.report_finished()   # F-8: each finished watch's report, appended to the log once
-        self._rail()               # M7.6: rules off
-        self._first_run()          # E4: gone once the first look is written (and while the host is watched)
-        fresh = self._tick_doctor()
         view = self.c.host_view()
+        self._live(view)           # REDO A-2: each running watch's level, the code it would end with now
+        self._rail()               # M7.6: rules off; REDO A-8: each running watch's state
+        self._first_run()          # E4: gone once the first look is written (and while the host is watched)
         project = getattr(self.c.session, "last_state", None) if self.c.project_watching() else None
         sus = view.get("suspicions") or 0   # REDO C-4: suspicions apart from the findings (A2)
         self.c.host_tip(view.get("trees"), view.get("new"), len(view.get("findings") or []) - sus, sus,
@@ -3764,20 +4074,28 @@ class Window:
             return
         view = watch_view(state, extra)
         word = view["word"] + (STOPPING if snap["phase"] == "stopping" else "")
-        self._verdict(word, view["level"], view["detail"], result=True, suppressed=ui.suppressed(state))   # REDO C-3
+        live = self.live.get("project")   # REDO A-2: the level of the code it would end with now
+        self._verdict(word, live[1] if live else view["level"], view["detail"], result=True,
+                      suppressed=ui.suppressed(state), counts=live[2:] if live else None)   # REDO C-3
         self._badges(self.badges, "badges", view["badges"])                                                 # REDO C-2
         self.url.set(view["url"])
         count = sum(len(lines) for _, lines in view["findings"])
         self._put(self.body_title, text="Findings (%d)" % count)
         self._put(self.body, font="TkTextFont")
-        self._set(self.body, "body", None, findings_tags(view))
+        self._items(self.body, "body", finding_items(state.get("findings")),
+                    "None yet: a finding of this watch is listed here as it lands.")
         self._seen(seen_lines(view["holes"], notes))
 
     def _tick_host(self, view, own, notes):
         """E1/E2: the host screen from the controller's host view."""
         state = getattr(self.c.host, "last_state", None) if self.c.host is not None else None
         suppressed = report_result(view.get("final"))[1] if view.get("final") else ui.suppressed(state or {})
-        self._verdict(view["word"], view["level"], view["detail"], result=True, suppressed=suppressed)   # REDO C-3
+        live = self.live.get("host")      # REDO A-2: the level of the code it would end with now
+        detail = view["detail"]
+        if live and live[1] != "clean" and detail.endswith(" " + NOT_CLEARANCE):   # said only where it is green
+            detail = detail[:-len(" " + NOT_CLEARANCE)]
+        self._verdict(view["word"], live[1] if live else view["level"], detail, result=True,
+                      suppressed=suppressed, counts=live[2:] if live else None)   # REDO C-3
         self._badges(self.host_badges, "host_badges", view.get("badges") or [])                           # REDO C-2
         self.host_url.set(view.get("url") or "-")
         self.strip_state = state
@@ -3789,9 +4107,16 @@ class Window:
             self._put(self.host_text, font="TkFixedFont")
             self._set(self.host_text, "host", None, text_tags(view["final"]))
         else:
-            self._put(self.findings_title, text="Findings (%d)" % len(view.get("findings") or ()))
+            watched = self.c.host is not None and state is not None
+            items = host_finding_items(state if watched else None, view)
+            found = sum(1 for i in items if i[2] not in ("SUSPECT", "NOTE"))
+            sus = sum(1 for i in items if i[2] == "SUSPECT")
+            self._put(self.findings_title, text="Findings (%d)%s" % (found, ", %d suspicion%s" % (
+                sus, "" if sus == 1 else "s") if sus else ""))
             self._put(self.host_text, font="TkTextFont")
-            self._set(self.host_text, "host", None, host_findings_tags(view, self.c.host is not None))
+            self._items(self.host_text, "host", items, "None yet: a finding of this watch is listed here as it"
+                        " lands." if watched else "None: the round at open is one look and judges nothing; the rules"
+                        " judge the rounds of \"Watch this host\".")
         self._seen(seen_lines(view["holes"] + [h for h in own if h not in view["holes"]], notes))
         word = "Stop host watch" if self.c.host_watching() else "Watch this host"
         if self.host_button.cget("text") != word:
@@ -3822,12 +4147,12 @@ class Window:
         state = getattr(self, "strip_state", None)
         width = self.strip_row.winfo_width()
         width = width if width > 1 else self.px(600)
-        total = ((state or {}).get("host") or {}).get("rounds") if isinstance(state, dict) else None
-        tail = "" if state else ": the host is not watched"
+        total, progress, suspected = strip_total(state), strip_progress(state), strip_suspected(state)
+        tail = "" if state or self.c.host_watching() else ": the host is not watched"
         fit = 50
         while True:   # as many cells as fit after the words have their full width
             cells = strip_cells(state, fit)
-            text = strip_text(cells, total) + tail
+            text = strip_text(cells, total, progress, suspected) + tail
             if fit <= 8 or fit * (cell + gap) + self.font_meta.measure(text) + self.px(24) <= width:
                 break
             fit -= 1
@@ -3836,18 +4161,21 @@ class Window:
             return
         self.shown["strip"] = key
         canvas.delete("all")
-        canvas.configure(width=max(1, len(cells) * (cell + gap) - gap + 2))
+        one = self.px(1)
+        canvas.configure(width=max(one, len(cells) * (cell + gap) - gap + 2 * one))
         lv = p["levels"]
         for i, (_, kind, _) in enumerate(cells):
-            x = 1 + i * (cell + gap)
+            x = one + i * (cell + gap)
             if kind == "clean":
-                canvas.create_rectangle(x, 1, x + cell, 1 + cell, fill=lv["clean"], outline=lv["clean"])
+                canvas.create_rectangle(x, one, x + cell, one + cell, fill=lv["clean"], outline=lv["clean"])
             elif kind == "finding":
-                canvas.create_rectangle(x, 1, x + cell, 1 + cell, fill=lv["alarm"], outline=lv["alarm"])
+                canvas.create_rectangle(x, one, x + cell, one + cell, fill=lv["alarm"], outline=lv["alarm"])
             elif kind == "unread":
-                canvas.create_rectangle(x + 1, 2, x + cell - 1, cell, outline=lv["incomplete"], width=2)
+                canvas.create_rectangle(x + one, 2 * one, x + cell - one, cell, outline=lv["incomplete"],
+                                        width=2 * one)
             else:
-                canvas.create_rectangle(x, 1, x + cell - 1, cell, outline=p["line" if state is None else "field_line"])
+                canvas.create_rectangle(x, one, x + cell - one, cell, outline=p["line" if state is None else
+                                                                               "field_line"], width=one)
         self.strip_label.configure(text=text)
 
     def _tick_log(self):
@@ -3877,7 +4205,7 @@ class Window:
         label, level = checks_state(lines)
         missing = level == "alarm"
         self.checks.set_title(label, "%s.Disclosure.TCheckbutton" % level if level else "Disclosure.TCheckbutton")
-        self.doctor_band = ("DOCTOR: %s" % summary.split(": ", 1)[-1], "alarm" if missing else "clean",
+        self.doctor_band = ("DOCTOR: %s" % summary.split(": ", 1)[-1], level or "clean",   # REDO A-12: one level
                             "project %s; Start installs the hooks and watches it, as `raqib watch` does"
                             % _safe(project))
         self.doctor = None
@@ -3915,6 +4243,10 @@ def run(project, options, out=None, tk=None, err=None):
         if not window.closed:
             window.destroy()
     finally:
+        # REDO A-16: the window's Tk objects (its images, its variables) are let go and finalised here, on the
+        # main thread, before the workers are waited for: none is left for another thread's garbage collection
+        window = root = None
+        gc.collect()
         controller.shutdown()
         controller.finish_wait(err=err)   # A-3: never exit with a watch that has not concluded
     controller.report_finished()   # F-8: every watch's report, appended once

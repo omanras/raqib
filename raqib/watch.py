@@ -1366,6 +1366,21 @@ def conclude(running, crash):
     return text, code
 
 
+def code_now(watcher, wait=0.2):
+    """M8.1 REDO A-2 (ADR-0009 Amendment A): the exit code the watch would
+    end with now, by its own rule - the report of what was read so far
+    (report(), whose exit finish() keeps) - without finishing it; None when
+    its state is held longer than `wait` seconds. The snapshot is taken
+    under the watch's lock, the report built outside it; nothing changes."""
+    if not watcher.lock.acquire(timeout=wait):
+        return None
+    try:
+        snapshot = watcher._snapshot()
+    finally:
+        watcher.lock.release()
+    return watcher._build(*snapshot)["exit"]
+
+
 def close(running):
     """The page server down, the notifier's temp files removed."""
     try:

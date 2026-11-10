@@ -3242,6 +3242,20 @@ def conclude(running, crash):
     return text, code
 
 
+def code_now(watcher, wait=0.2):
+    """M8.1 REDO A-2 (ADR-0009 Amendment A): the exit code the host watch
+    would end with now, by its own rule - result(), which finish() reads
+    through summary() - without finishing it: 0, 1 or 3; None when its state
+    is held longer than `wait` seconds. Reads under the watch's lock;
+    changes nothing."""
+    if not watcher.lock.acquire(timeout=wait):
+        return None
+    try:
+        return EXIT[watcher.result()[0]]
+    finally:
+        watcher.lock.release()
+
+
 def close(running):
     try:
         running.server.shutdown()

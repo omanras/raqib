@@ -36,6 +36,31 @@ def home(tmp_path, monkeypatch):
     overlay._MEASURED.clear()
 
 
+def contrast_ratio(a, b):
+    """The WCAG 2 contrast ratio of two #rrggbb colours (the test's own; M8.1 REDO A-9: not a window helper)."""
+    def lum(colour):
+        c = colour.lstrip("#")
+        rgb = [int(c[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
+        lin = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in rgb]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    hi, lo = sorted((lum(a), lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def theme_pairs(mode):
+    """Every (name, text, ground) THEME["pairs"] names in mode, a level on "pill" read on its own level's pill."""
+    p = app.THEME[mode]
+    out = []
+    for text, ground in app.THEME["pairs"]:
+        if text in ("levels", "rail_levels"):
+            for level, colour in p[text].items():
+                out.append(("%s.%s on %s" % (text, level, ground), colour,
+                            p["pill"][level] if ground == "pill" else p[ground]))
+        else:
+            out.append(("%s on %s" % (text, ground), p[text], p[ground]))
+    return out
+
+
 # --- E1: THEME's tokens, its pairs, its fonts -------------------------------------------------------------
 
 def test_e1_theme_holds_adr_0009s_tokens_for_light_and_dark():
@@ -53,10 +78,10 @@ def test_e1_theme_holds_adr_0009s_tokens_for_light_and_dark():
 
 @pytest.mark.parametrize("mode", ["light", "dark"])
 def test_e1_every_text_ground_pair_theme_pairs_is_at_least_4_5_to_1(mode):
-    pairs = app.theme_pairs(mode)
+    pairs = theme_pairs(mode)
     assert len(pairs) > 40 and any(name.startswith("levels.alarm on pill") for name, _, _ in pairs)
-    low = [(name, round(app.contrast_ratio(fg, bg), 2)) for name, fg, bg in pairs
-           if app.contrast_ratio(fg, bg) < 4.5]
+    low = [(name, round(contrast_ratio(fg, bg), 2)) for name, fg, bg in pairs
+           if contrast_ratio(fg, bg) < 4.5]
     assert low == []
     names = {name for name, _, _ in pairs}
     for level in app.LEVEL_WORDS:   # every level on every ground it is drawn on, with its word
@@ -104,16 +129,32 @@ def test_e2_not_a_clearance_beside_every_green_state_and_the_suppressed_count():
     assert app.watch_words(False, "/work/demo") == "Watching project demo"
 
 
-def test_e2_findings_cards_say_findings_and_notes_never_holes():
-    view = {"findings": [("high", ["A"]), ("medium", ["B", "C"])], "holes": ["h"]}
-    assert app.findings_tags(view) == (("High (1)", "head"), ("A", "alarm"), ("Medium (2)", "head"),
-                                       ("B", "alarm"), ("C", "alarm"))
-    assert app.findings_tags({"findings": []})[0][0].startswith("None yet")
-    hv = {"lines": ["no agent seen (3 records, 1 holes). Not a clearance.", "AGENT-DARK codex footprint x"],
-          "findings": ["F"], "notes": ["n"], "holes": ["h"]}
-    assert app.host_findings_tags(hv) == (("AGENT-DARK codex footprint x", "alarm"), ("F", "alarm"),
-                                          ("Notes, not alarms (1)", "head"), ("n", "note"))
-    assert "one look and judges nothing" in app.host_findings_tags({}, watched=False)[0][0]
+def test_redo_a13a_a_finding_is_an_item_pill_rule_sentence_where_and_never_none():
+    entries = [{"rule_id": "DESTRUCT-CMD", "severity": "medium", "cited_seq": [5], "state": "settled",
+                "history": False, "session_id": "s1", "summary": "rm at seq 5", "notice": None},
+               {"rule_id": "SECRET-OUTPUT", "severity": "high", "cited_seq": [2, 3], "state": "pending",
+                "history": False, "session_id": "s1", "summary": "a key", "notice": "sent"},
+               {"rule_id": "NET-TOOL", "severity": "low", "cited_seq": [1], "state": "settled", "history": True,
+                "session_id": "s0", "summary": "curl", "notice": None}]
+    items = app.finding_items(entries)
+    assert [(i[0], i[1], i[2]) for i in items] == [("high", "incomplete", "SECRET-OUTPUT"),
+                                                   ("medium", "alarm", "DESTRUCT-CMD"), ("low", "note", "NET-TOOL")]
+    assert items[1][3] == "Rm at seq 5" and items[1][4] == "session s1 \u00b7 seq 5 \u00b7 settled"
+    assert "knocked: sent" in items[0][4] and all("None" not in i[4] for i in items)   # no "[None]"
+    st = FakeHostWatch().state(0)
+    st["host"] = dict(st["host"], findings=[{"rule_id": "NEW-AGENT", "severity": "high", "round": 2,
+                                             "tree": "2100:claude:-", "summary": "claude", "notice": "sent",
+                                             "run": "r1", "cited_seq": [12]}],
+                      suspicions=[{"suspicion": 0.9, "round": 3, "tree": "7:x:-", "reasons": ["odd"], "notice": None,
+                                   "backend": "fake", "model": "m", "trace": "t", "cited_seq": [5]}],
+                      dark_notes=[{"text": "round 3: a note"}])
+    items = app.host_finding_items(st)
+    assert [(i[0], i[1], i[2]) for i in items] == [("high", "alarm", "NEW-AGENT"), ("suspicion", "note", "SUSPECT"),
+                                                   ("note", "note", "NOTE")]
+    assert items[0][4] == "round 2 \u00b7 claude pid 2100 \u00b7 knocked: sent \u00b7 cites run r1 seq 12"
+    assert "knocked" not in items[1][4]                                   # absent: not printed
+    look = {"lines": ["no agent seen (3 records, 1 holes). Not a clearance.", "AGENT-DARK codex footprint x: no tree"]}
+    assert app.host_finding_items(None, look) == [("footprint", "alarm", "AGENT-DARK", "No tree", "codex footprint x")]
 
 
 # --- E3: the round strip ----------------------------------------------------------------------------------
@@ -379,8 +420,9 @@ def test_tk_e5_toggle_a_switch_step_a_threshold_filter_and_reset(home, tmp_path,
         assert str(switch.cget("style")) == "Switch.TCheckbutton" and window.rule_vars["NET-TOOL"].get()
         switch.invoke()                                     # Space does what invoke does
         window.tick()
-        assert not window.rule_vars["NET-TOOL"].get() and "1 rule off: NET-TOOL" in window.rules_note.cget("text")
-        assert overlay.load(str(home)) and app.RulesPanel(home=str(home)).header() == "1 rule off: NET-TOOL"
+        assert not window.rule_vars["NET-TOOL"].get() and window.rules_note.cget("text") == "1 rule off"
+        assert window.detail.cget("text").startswith("NET-TOOL off in ")   # the change, said in the verdict
+        assert app.RulesPanel(home=str(home)).header() == "1 rule off: NET-TOOL"
         plus = window.rule_widgets[("HOST-RHYTHM", "k")]
         plus.invoke()                                       # k 3 -> 4: measured, then kept
         window.tick()
@@ -437,8 +479,12 @@ def test_tk_e4_disclosures_closed_by_default_one_open_at_a_time_and_the_keyboard
             widget = widget.tk_focusNext()
             if widget is None or widget is window.host_tab:
                 break
-        for want in (window.host_tab, window.rules_tab, window.log_tab, window.host_button, window.seen.toggle,
-                     window.checks.toggle, window.options.toggle, window.attach_box):
+        for want in (window.host_tab, window.project_tab, window.rules_tab, window.log_tab, window.host_button,
+                     window.seen.toggle, window.checks.toggle, window.options.toggle, window.attach_box,
+                     window.host_tree):   # REDO A-12: the table is in the walk, and draws its focus
+            assert want in seen, want
+        assert {"Table.box"} <= set(map(str, root.tk.call("ttk::style", "element", "names")))
+        for want in ():
             assert want in seen, want
         # focus is drawn: the focus pictures of the switch, the disclosure and the buttons exist
         p = app.THEME[mode]
@@ -465,7 +511,7 @@ def test_tk_e6_the_window_at_scale_1_5_and_a_title_bar_that_fails_is_a_log_line(
         window, c = _window(tkinter, root, home, tmp_path, scale=1.5, win_api=fake, tee=tee)
         root.withdraw()
         assert int(window.rail.cget("width")) == 276 and root.minsize() == (1350, 900)
-        assert window.px(10) == 15 and int(window.strip.cget("height")) == 17
+        assert window.px(10) == 15 and int(window.strip.cget("height")) == 18   # px(cell + 2), REDO A-10
         assert [call[2] for call in fake.calls] == [20, 19] and isinstance(fake.calls[0][1], int)
         assert window.title_note.startswith("the title bar was not made dark")
         assert "raqib app: the title bar was not made dark: DwmSetWindowAttribute returned" in tee.getvalue()

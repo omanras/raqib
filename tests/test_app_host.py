@@ -94,15 +94,16 @@ def test_e1_reading_then_trees_never_a_command_line():
     i = inv("linux")
     assert v["word"] == "HOST: 2 TREE(S)" and v["trees"] == 2 and v["level"] == "alarm" and v["code"] == 1
     assert v["holes"] == ["inventory: %s" % h for h in i["holes"]] and len(v["holes"]) == len(i["holes"]) == 14
-    body = app.host_body(v)
-    head = body.splitlines()[0]
-    for col in ("image", "pid", "named", "first seen", "acts", "endpoints"):
-        assert col in head
-    assert "environment-manager" in body and "anthropic 160.79.104.0/23" in body
+    # M8.1 REDO A-9: the rows as the window's table draws them, and the selected tree's detail
+    heads = [c[1] for c in app.TREE_COLUMNS]
+    for col in ("image", "pid", "kind", "first seen", "endpoints"):
+        assert col in heads
+    text = "\n".join(" ".join(str(c) for c in app.tree_values(r)) for r in v["rows"]) + "".join(
+        app.tree_detail_text(r, d) for r, d in zip(v["rows"], v["details"]))
+    assert "environment-manager" in text and "anthropic 160.79.104.0/23" in text
     # E1: never a command line, a cited record's text or an executable path
-    table = "\n".join(app.host_table(v["rows"]))
-    assert "argv" not in table and "--session" not in body and "/usr/local/bin" not in body
-    assert "named" in body and "2026-" in body
+    assert "argv" not in text and "--session" not in text and "/usr/local/bin" not in text
+    assert "named" in text and "2026-" in text
 
 
 def test_e1_empty_round_says_no_agent_seen_with_records_and_holes_not_a_clearance():
@@ -111,7 +112,7 @@ def test_e1_empty_round_says_no_agent_seen_with_records_and_holes_not_a_clearanc
     assert until(p.done, WAIT)
     v = p.view()
     expected = "no agent seen (%d records, %d holes). Not a clearance." % (i["records"], len(i["holes"]))
-    assert v["word"] == "NO AGENT SEEN" and v["lines"] == [expected] and expected in app.host_body(v)
+    assert v["word"] == "NO AGENT SEEN" and v["lines"] == [expected]   # the trees' card says it (M8.1)
     assert app.empty_line(30, 4) == "no agent seen (30 records, 4 holes). Not a clearance."
 
 
@@ -121,7 +122,7 @@ def test_e1_a_round_that_read_nothing_is_nothing_read_never_no_agent_seen():
     assert until(p.done, WAIT)
     v = p.view()
     assert v["word"] == "NOTHING READ" and v["level"] == "incomplete" and v["code"] == 3   # F-7: amber
-    assert "no agent seen" not in app.host_body(v) and "Not a clearance." in v["detail"]
+    assert not any("no agent seen" in x for x in v["lines"]) and "Not a clearance." in v["detail"]
 
 
 def test_e1_a_late_reader_is_the_hole_in_the_band_and_a_failed_one_too():
@@ -153,14 +154,18 @@ def test_e1_kinds_named_unknown_benign_and_what_the_watch_knows():
     assert app.tree_kind({"named": False, "knocked": "sent", "present": False}) == "unknown (new, gone)"
 
 
-def test_e1_checks_fold_and_open_when_any_missing():
-    """M8.1 (the Table, 2026-11-10): the checks fold under a disclosure closed
-    until clicked; its title says what is missing in the alarm colour."""
+def test_e1_checks_fold_closed_until_clicked_and_say_what_is_missing():
+    """M8.1 REDO A-7 (ADR-0009 Amendment A, superseding M7.3 E1's "open when
+    MISSING"): the checks fold under a disclosure closed until clicked; its
+    title says what is missing in the alarm colour; each MISSING check is a
+    line of "could not see"."""
     assert app.checks_state(None) == ("Checks: running...", None)
     ok = [("OK", "clean", "x"), ("UNSURE", "incomplete", "y")]
     assert app.checks_state(ok) == ("Checks: 1 unsure", "incomplete")
     assert app.checks_state(ok[:1]) == ("Checks: all OK", None)
     assert app.checks_state(ok + [("MISSING", "alarm", "z")]) == ("Checks: 1 missing", "alarm")
+    lines = app.doctor_lines([("hooks", (False, "not installed")), ("python", (True, "3"))])
+    assert app.missing_checks(lines) == ["check missing: hooks: Not installed"]
 
 
 def test_e1_the_controller_starts_the_round_at_open_and_a_probe_that_cannot_start_is_a_hole(home):
@@ -224,7 +229,7 @@ def test_e2_watch_this_host_runs_the_same_hostwatch_knocks_and_stop_shows_the_re
     assert until(lambda: not c.host.alive(), WAIT)
     v = c.host_view()
     assert v["word"] == "HOST WATCH FINISHED" and v["level"] == "alarm"
-    assert v["final"].startswith("Raqib watch --host") and "RESULT: ALARM (exit 1" in app.host_body(v)
+    assert v["final"].startswith("Raqib watch --host") and "RESULT: ALARM (exit 1" in v["final"]
     assert c.exit_code() == 1 and c.host_tip(1, 1) == "Raqib: idle"     # not watched: idle (M7.6b E5)
     assert "raqib watch --host: stopped (Stop in the window)" in c.host.log.text()
 
@@ -243,7 +248,7 @@ def test_e2_a_second_host_watch_on_this_home_is_a_hole_line_never_a_crash(home):
     v = c.host_view()
     assert v["word"] == "HOST NOT WATCHED" and v["level"] == "alarm"
     assert any("one host watch per home" in h for h in v["holes"])
-    assert "one host watch per home" in app.host_body(v)
+    assert any("one host watch per home" in x for x in app.seen_lines(v["holes"], []))   # in "could not see"
     assert not c.host_watching() and c.exit_code() == 2          # F-8: a refusal, not a finding
 
 
@@ -522,7 +527,7 @@ def test_tk_host_screen_round_at_open_checks_and_watch_this_host(tmp_path):
         assert str(window.checks.toggle.cget("style")) == "alarm.Disclosure.TCheckbutton"
         window.host_toggle()                       # Watch this host
         window.tick()
-        assert window.verdict.cget("text") == "Watching this host"
+        assert window.verdict.cget("text") == "Watching this host: no finding so far"   # REDO A-2
         assert window.host_button.cget("text") == "Stop host watch"
         window.host_toggle()                       # Stop: the final report
         window.tick()
@@ -566,8 +571,9 @@ def test_redo_f1_an_incomplete_look_is_amber_trees_or_not_never_discovers_result
     v = p.view()
     assert v["level"] == "incomplete" and v["code"] == 3 and "partly blind" in v["detail"]
     assert v["holes"][0] == "unread source: source proc-net not read: denied"
-    body = app.host_body(v)
-    assert "HOLES (A3): %d" % len(v["holes"]) in body and "unread source: source proc-net" in body
+    lines = app.seen_lines(v["holes"], [])   # M8.1: "could not see (N)" holds every hole
+    assert app.seen_title(lines) == "Could not see (%d)" % len(v["holes"])
+    assert "hole: unread source: source proc-net not read: denied" in lines
     # a parse problem and a partly read source listed in the inventory's sources make it amber too
     j = dict(empty_inv(), problems=[{"src": "proc", "line": 3, "reason": "not JSON"}])
     k = dict(empty_inv(), sources=[dict(empty_inv()["sources"][0], error="cut short", text_read=True)])
@@ -586,16 +592,18 @@ def test_redo_f1_the_looks_agent_dark_footprints_are_their_own_lines():
     dark = [x for x in v["lines"] if x.startswith("AGENT-DARK ")]
     assert len(dark) == 2 and v["dark"] == 2 and "2 AGENT-DARK footprint(s)" in v["detail"]
     assert any("codex footprint" in x and "footprints:4" in x for x in dark)
-    assert all(x in app.host_body(v) for x in dark)
+    items = app.host_finding_items(None, v)   # M8.1 REDO A-13(a): the look's footprints as items, red
+    assert len(items) == 2 and all(i[1] == "alarm" and i[2] == "AGENT-DARK" for i in items)
 
 
 def test_redo_f2_the_refusal_names_the_running_watch_and_project_leads_to_its_screen(tmp_path):
     c = app.Controller(None, make_session=FakeSession, make_host=lambda: FakeSession("host"))
-    assert c.project_screen() == "first" and c.running_text() == "running: none"
+    assert c.project_screen() == "first" and app.watch_words(c.host_watching()) == "Not watching"
     c.start(str(tmp_path))
     c.start_host()
     assert c.project_screen() == "watching"
-    assert c.running_text() == "running: host watch, project watch of %s" % tmp_path
+    assert app.watch_words(c.host_watching(), c.session.project) == "Watching the host and project %s" % (
+        tmp_path.name)
     assert c.start(str(tmp_path)) == "a watch is running: the project watch of %s; stop it first" % tmp_path
     assert c.start_host() == "a watch is running: the host watch; stop it first"
 
@@ -669,7 +677,7 @@ def test_redo_f7_colours_follow_c10_codes_and_green_says_not_a_clearance(home):
     assert until(p.done, WAIT)
     v = p.view()
     assert v["word"] == "NO AGENT SEEN" and v["level"] == "clean" and v["code"] == 0
-    assert "Not a clearance." in v["detail"] and "Not a clearance." in app.host_body(v)
+    assert "Not a clearance." in v["detail"] and "Not a clearance." in v["lines"][0]
     assert [app.code_level(x) for x in (0, 1, 3, 2)] == ["clean", "alarm", "incomplete", "alarm"]
     w = app.host_watch_view(FakeHostWatch().state(0))
     assert w["level"] == "clean" and w["detail"].endswith("Not a clearance.")
@@ -789,11 +797,11 @@ def test_tk_redo_f2_both_watches_running_switch_back_and_forth_every_control_pre
         for _ in range(2):
             window.host_tab.invoke()
             window.tick()
-            assert window.screen == "host" and window.verdict.cget("text") == "Watching this host"
+            assert window.screen == "host" and window.verdict.cget("text") == "Watching this host: no finding so far"
             assert window.host_button.cget("text") == "Stop host watch"
             window.project_tab.invoke()
             window.tick()
-            assert window.screen == "watching" and window.verdict.cget("text") == "Watching the project"
+            assert window.screen == "watching" and window.verdict.cget("text").startswith("Watching the project: ")
             assert window.stop_button.winfo_manager() == "pack"
         # M8.1 E2: the rail says what is watched, in words
         assert window.running_note.cget("text") == "Watching the host and project %s" % tmp_path.name
