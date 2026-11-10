@@ -187,3 +187,81 @@ failed. Verdict: REDO on A-1..A-4; the Table's rulings A-5..A-15.
   and the title-bar call; the commander's machine for what a person sees
   on a scaled display.
 - A-15 Every REDO change carries a test for the behaviour it adds (D-8).
+- A-16 (added 2026-11-11; given to the builder by message during the
+  REDO, written here now) No thread outlives a Tk test: each Tk test ends
+  the sessions it started and joins their threads (bounded; a failed join
+  is an assertion); the shared teardown destroys the root and collects
+  garbage on the main thread; a test asserts it. In the window no Tk
+  object is created, dropped or finalised from a worker thread. Cause: a
+  windows gate job on the M7.8 branch died with a fatal exception while a
+  reader thread of a finished Tk test was still running.
+
+## Amendment B (the Table, 2026-11-11) - rulings on review 2026-11-11-M8.1-redo.md (9ba8969)
+CI run 42890893708 for 9ba8969: four jobs success, both windows gate jobs
+failed on the fit alone (4 failed, 2937 passed). A-1 MET on Windows; A-4,
+A-5, A-6, A-8, A-16 MET; the rest PARTLY. Verdict: REDO on B-1, B-2, B-3;
+the Table's rulings B-4..B-10.
+- B-1 (CI, must; decision 1) The window fits 900x600 on Windows. Measured
+  there: the host and project screens ask for 982 and 973 px of width, an
+  open "Could not see" for up to 650 px of height. No width in the content
+  column may come from a font: entries stretch to their container and ask
+  for almost nothing, sentences wrap or end in an ellipsis inside the
+  width they are given, rows of controls flow to a second line, the
+  table's columns sum to what the card gives. An open panel's height is
+  the pixels left on the screen divided by the font's own line height,
+  read at run time, never a count of lines assumed from another font.
+  When the fit test fails it prints the five widgets that ask for the
+  most width and height (class, Tk path, the first words of their text),
+  so the windows log names the cause. The windows jobs are the proof.
+- B-2 (F1, must; A3) A level that is not known is never clean. While the
+  code is not known (the lock held, the first ask) the pill keeps the
+  last code known; before any is known it is incomplete, "not judged
+  yet". A code that cannot be computed is a hole of the window and the
+  watch's own answer for a report it cannot build: alarm. The two tests
+  that held a clean pill beside findings are made right, and the
+  project path with a known code is tested.
+- B-3 (F2, must) On the Rules screen an overlay hole decides the verdict
+  before the last change's word does: incomplete while any stands.
+- B-4 (F9, F4; A-2 is amended) The code is the watch's, written by the
+  watch. The worker writes into its state, where it writes the rest, the
+  code it would end with if stopped now (one field; raqib/watch.py and
+  raqib/host.py, the state only), computed where the watch already
+  builds its report or its result, not a second time for the window; the
+  window reads the field and builds nothing on the Tk thread. The field
+  says what it is: the code of what has been read so far (finish may
+  still add a reader that is out, the last source poll, pending
+  findings), and the sentence keeps "so far". Tests on every host
+  fixture, with sources, and on the fixture traces.
+- B-5 (F3; A-2's guess withdrawn) The pill follows the watch's own rule,
+  and the words say why. A-2's "no finding and a hole: incomplete" was
+  the Table's guess; where the watch would end with 1 for another reason
+  the sentence names it ("1 hole", "1 suspicion"). One state is the
+  window's to soften: a project watch that has read no line yet and is
+  not yet SILENT by the watch's own state is incomplete, "no line read
+  yet", not an alarm at the moment of Start. A raised suspicion makes
+  the host watch's code 1 by the host watch's own rule: accepted (A2: the
+  model may raise; it raised), named as a suspicion, never as a finding.
+- B-6 (F5) One count. The findings the verdict, the rail, the card's
+  title and the tray count are the same list from one function, and a
+  source's live finding is an item of the card with its cite (A5).
+- B-7 (F6, F15, F16) With any disclosure open the table still takes the
+  card's width and cuts no state or severity word (the test opens each
+  and reads the kind and findings columns); a panel grows with the lines
+  that arrive and is scrolled to its named line only when it opens; a
+  finished watch's holes are in "Could not see", so the strip's amber
+  cell and the count agree.
+- B-8 (F7, F8, F13, F12, F14) The test the docstring cites exists: every
+  green state of both screens asserts "Not a clearance.". Docstrings
+  true; dead code out; the weakened assertions restored (the
+  never-a-command-line check reads findings and holes; the empty-trees
+  text; no assertion on a constant; no loop over nothing; an exact
+  count); the refused step and the typed values that are not a number,
+  out of bounds or empty are tested in the window; the fit covers the
+  finished screens in both modes.
+- B-9 (F10, F11, F17) Recorded: the portable key list is proved on the
+  windows jobs, which is where an X11-only name fails. The ctypes guard
+  also refuses getattr(ctypes, ...) and ctypes.pythonapi. A refused user
+  rule is said as refused in the rail, not also as off, where the
+  overlay's own description lets the window tell them apart; else
+  recorded for the overlay.
+- B-10 Every REDO change carries a test for the behaviour it adds (D-8).
