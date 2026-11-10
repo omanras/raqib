@@ -123,7 +123,7 @@ def test_e1_the_reader_is_the_live_discover_path_one_sample_on_windows(monkeypat
         texts, holes = discover.read_dir(str(ROOT / "tests" / "fixtures" / "discover" / "linux"))
         return texts, holes, 1
     monkeypatch.setattr(discover, "collect_live", collect_live)
-    got = host.live_reader(CATALOG, 0.0, "win32")()
+    got = host.live_reader(CATALOG, 0.0, "win32", sysmon=lambda: (False, "test: a stand-in, no Sysmon"))()
     assert calls[0]["win_samples"] == 1 and calls[0]["platform"] == "win32" and calls[0]["window"] == 0.0
     assert got["live"] is True and got["candidates"]
     host.live_reader(CATALOG, 3.0, "linux")()
@@ -190,15 +190,33 @@ def test_e2_notification_text_alphabet_and_length(tmp_path):
         assert "\\" not in where and "/" not in where and " -" not in where
 
 
-def test_e2_an_act_root_that_becomes_a_candidate_is_new(tmp_path):
+LOCAL_START = re.compile(r'"(\d{1,2})/(\d{1,2})/(\d{4}) (\d{1,2}):(\d{2}):(\d{2}) (AM|PM)"')
+
+
+def iso_inv(name):
+    """M7.9 REDO 2 Z-1: a fixture's round with each CreationDate as the live reader gives it (ISO UTC), so a test of
+    history reads the start the field reads."""
+    def iso(m):
+        mo, d, y, h, mi, se, ap = m.groups()
+        h = int(h) % 12 + (12 if ap == "PM" else 0)
+        return '"%s-%02d-%02dT%02d:%s:%s.000Z"' % (y, int(mo), int(d), h, mi, se)
+    texts, holes = discover.read_dir(os.path.join(host_fixtures.DISCOVER, name))
+    texts = {k: (a, LOCAL_START.sub(iso, t) if t and k.startswith("win-process") else t, e)
+             for k, (a, t, e) in texts.items()}
+    return discover.run(texts, CATALOG, holes=holes)
+
+
+@pytest.mark.parametrize("read", [inv, iso_inv])
+def test_e2_an_act_root_that_becomes_a_candidate_is_new(tmp_path, read):
     runner = FakeRunner()
-    w, clock = make_host(tmp_path, ["kimi/one-sample", "kimi/two-samples"], runner=runner)
+    w, clock = make_host(tmp_path, [read("kimi/one-sample"), read("kimi/two-samples")], runner=runner)
     run_rounds(w, clock, 2)
     (f,) = w.findings
     assert (f["rule_id"], f["image"], f["pid"], f["named"]) == ("NEW-AGENT", "kimi", 10728, "named")
     assert runner.calls[0]["text"] == "Raqib: NEW-AGENT kimi\nhost, kimi pid 10728 (named)\n"
     line = [x for x in w.round_lines[-1]["lines"] if x["input_meta"].get("image") == "kimi"][0]
-    assert line["input_meta"]["was"] == "act-root" and line["input_meta"]["started"] == "11/2/2026 10:21:05 AM"
+    assert line["input_meta"]["was"] == "act-root" and line["input_meta"]["started"] == (
+        "11/2/2026 10:21:05 AM" if read is inv else "2026-11-02T10:21:05.000Z")
 
 
 def test_e2_an_act_root_alone_is_listed_not_new_agent(tmp_path):
@@ -712,8 +730,9 @@ def test_redo_c3_stop_ends_at_the_outstanding_readers_deadline(tmp_path, monkeyp
     assert "stopped (the window's Stop)" in running.out.getvalue()
 
 
-def test_redo_c4_a_round_one_act_root_that_becomes_a_candidate_knocks(tmp_path):
-    w, clock = make_host(tmp_path, ["kimi/one-sample", "kimi/two-samples"])
+@pytest.mark.parametrize("read", [inv, iso_inv])
+def test_redo_c4_a_round_one_act_root_that_becomes_a_candidate_knocks(tmp_path, read):
+    w, clock = make_host(tmp_path, [read("kimi/one-sample"), read("kimi/two-samples")])
     run_rounds(w, clock, 2)
     assert [(f["image"], f["rule_id"]) for f in w.findings] == [("kimi", "NEW-AGENT")]
     assert "tests/fixtures/rules/NEW-AGENT/positive-act-root-becomes-candidate.json" in next(
@@ -980,10 +999,10 @@ def test_redo2_d3_hostwin_records_systemroots_drive_in_run_json(tmp_path, monkey
     assert json.loads((tmp_path / "replay.json").read_text(encoding="ascii"))["system_drive"] == "d"
     # the host round's reader carries it too
     monkeypatch.setattr(sys, "platform", "win32")
-    got = host.live_reader(CATALOG, 0.0, "win32", homes=[])()
+    got = host.live_reader(CATALOG, 0.0, "win32", homes=[], sysmon=lambda: (False, "test: a stand-in, no Sysmon"))()
     assert got["system_drive"] == "d"
     monkeypatch.setattr(notify, "windows_root", lambda environ, isdir=None: (None, "SystemRoot is not set"))
-    assert host.live_reader(CATALOG, 0.0, "win32", homes=[])()["system_drive"] is None
+    assert host.live_reader(CATALOG, 0.0, "win32", homes=[], sysmon=lambda: (False, "test: a stand-in, no Sysmon"))()["system_drive"] is None
 
 
 def test_redo2_d6_an_unparseable_heartbeat_refuses_the_second_watch_naming_the_state_file(tmp_path, _home, capsys,

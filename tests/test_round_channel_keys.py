@@ -44,14 +44,14 @@ def ev(eid, rec, name, utc):
             "</Event>\n" % (NS, eid, utc.replace(" ", "T"), rec, body))
 
 
-def sample_row(name):
+def sample_row(name, nodate=False):
     image, start, _ = PROCS[name]
     return '"5890","5888","%s","%s","%s","%s"\n' % (image.rsplit("\\", 1)[1], image, image.rsplit("\\", 1)[1],
-                                                     start.replace(" ", "T") + "Z")
+                                                     "" if nodate else start.replace(" ", "T") + "Z")
 
 
-def procs_of(sampled, events):
-    texts = {"win-process-1": ("fixture", HEAD + (sample_row(sampled) if sampled else ""), None),
+def procs_of(sampled, events, nodate=False):
+    texts = {"win-process-1": ("fixture", HEAD + (sample_row(sampled, nodate) if sampled else ""), None),
              "sysmon": ("fixture channel", "".join(events), None)}
     records, holes = [], []
     for name in sorted(texts, key=discover._order):
@@ -85,11 +85,31 @@ def told(names, forms):
     if all(f[1] or f[2] for f in forms):
         return True   # both in the channel: two ProcessGuids
     starts = [(f[0] or f[1]) for f in forms]   # a start is read from the sample or from an event 1
-    return all(starts)
+    if all(starts):
+        return True
+    sampled = [n for n, f in zip(names, forms) if f[0]]
+    other = [n for n, f in zip(names, forms) if not f[0]]
+    # a process logs nothing before it was created: the other's events before the sampled start tell them apart
+    return bool(sampled and other and PROCS[other[0]][1] < PROCS[sampled[0]][1])
 
 
+def merged_for_sure(names, forms):
+    """Z-5: the sampled process joins its guid only when the records say so: its event 1 read (both starts), or it
+    is the only process of its image with an unread start on the guid side (unique on both sides)."""
+    sampled = [(n, f) for n, f in zip(names, forms) if f[0]]
+    if not sampled or not (sampled[0][1][1] or sampled[0][1][2]):
+        return True   # nothing to merge: the sampled process has no channel record
+    name, (s, e1, e3) = sampled[0]
+    if e1:
+        return True
+    rivals = [n for n, f in zip(names, forms) if n != name and PROCS[n][0] == PROCS[name][0] and (f[1] or f[2])
+              and not f[1] and PROCS[n][1] >= PROCS[name][1]]   # a rival that could be it: nothing logged before it
+    return not rivals
+
+
+@pytest.mark.parametrize("nodate", [False, True])
 @pytest.mark.parametrize("names, forms", list(cases()))
-def test_x2_one_process_one_key_in_every_order(names, forms):
+def test_x2_one_process_one_key_in_every_order(names, forms, nodate):
     events, rec = [], 100
     sampled = None
     for name, (s, e1, e3) in zip(names, forms):
@@ -100,21 +120,29 @@ def test_x2_one_process_one_key_in_every_order(names, forms):
             events.append(ev(1, rec, name, start))
             rec += 1
         if e3:
-            events.append(ev(3, rec, name, start[:-7] + "%02d.000" % (int(start[-6:-4]) + 2)))
+            events.append(ev(3, rec, name, start[:-6] + "%02d.000" % (int(start[-6:-4]) + 2)))
             rec += 1
     expect = {name for name, f in zip(names, forms)}
     for order in itertools.permutations(events):
-        procs, holes = procs_of(sampled, order)
+        procs, holes = procs_of(sampled, order, nodate)
         keys = sorted(procs)
         guids = [{r.get("guid") for r in procs[k]["recs"] if r.get("guid")} for k in keys]
         assert all(len(g) <= 1 for g in guids), (names, forms, guids)   # a root carries its own guid or none
         images = [set(procs[k]["images"]) for k in keys]
         assert all(len(i) == 1 for i in images), (names, forms, images)   # never one key for two images
-        if told(names, forms):
+        for name, f in zip(names, forms):   # each guid in exactly one key: never two processes in one
+            if f[1] or f[2]:
+                assert guids.count({PROCS[name][2]}) == 1, (name, forms, guids)
+        sampled_keys = [k for k in keys if any(r["src"].startswith("win-process") for r in procs[k]["recs"])]
+        assert len(sampled_keys) == (1 if sampled else 0)
+        guided_sample = sampled and any(f[0] and (f[1] or f[2]) for f in forms)
+        if nodate:   # Z-5: the sampled start unread: no merge at all, each guid its own process, said
+            assert len(keys) == len(expect) + (1 if guided_sample else 0), (names, forms, keys)
+            assert sampled_keys == [] or guids[keys.index(sampled_keys[0])] == set()
+        elif told(names, forms) and merged_for_sure(names, forms):
             assert len(keys) == len(expect), (names, forms, keys, guids, holes)
-            for name, f in zip(names, forms):
-                if f[1] or f[2]:
-                    assert {PROCS[name][2]} in guids, (name, forms, guids)
+        elif told(names, forms):   # not unique on both sides: kept apart (never one key for two), said
+            assert len(keys) == len(expect) + 1 and any("beside the sampled one" in h for h in holes), (keys, holes)
         else:   # same pid and image, a start unread on one side: not told apart, and said
             assert any("start" in h and "5890" in h for h in holes), (names, forms, holes)
 

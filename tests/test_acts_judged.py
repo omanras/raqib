@@ -260,7 +260,7 @@ def test_e4_without_a_process_sample_a_tree_that_left_is_gone_and_that_is_said_o
 def test_e4_the_live_reader_asks_discover_for_the_sample_and_discover_json_is_unchanged(monkeypatch):
     texts, holes = discover.read_dir(str(HOSTFIX / "quiet" / "quiet"))
     monkeypatch.setattr(discover, "collect_live", lambda *a, **k: (texts, holes, None))
-    inv = host.live_reader(CATALOG, platform="win32")()
+    inv = host.live_reader(CATALOG, platform="win32", sysmon=lambda: (False, "test: a stand-in, no Sysmon"))()
     assert (5888, "powershell", "2026-11-10T07:50:00.000Z") in {(p["pid"], p["image"], p["started"])
                                                                  for p in inv["processes"]}
     assert "processes" not in discover.run(texts, CATALOG, holes=holes)   # raqib discover --json: no new key

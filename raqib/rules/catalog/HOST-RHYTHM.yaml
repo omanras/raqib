@@ -46,7 +46,7 @@ severity: medium
 fp_budget: 0.0
 holes:
   - "a relay or proxy in between: the talk is the relay's (another process tree), so the tree that acts has no talk beat of its own"
-  - "acts between rounds: a child that starts and ends between two rounds is seen only where the round reads the Sysmon channel (M7.9), else never, so its cycle is not counted"
+  - "acts between rounds: a child that starts and ends between two rounds is counted only where the round reads the Sysmon channel (M7.9); elsewhere it is never seen and its cycle is not counted"
   - "a destination that changes each turn (a pool of model hosts, a CDN, DNS round robin) makes no K cycles to one destination"
   - "a child that is reparented away from the tree (a daemonised child, a service that runs the command) is not the tree's act"
   - "repeated talks on one long connection are unseen without bytes: where no byte counts are read (Windows, GetExtendedTcpTable; a Linux ss without -i counts) an established connection is one talk, when first seen, so an agent that keeps one connection open makes at most one cycle on it"

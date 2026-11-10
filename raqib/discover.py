@@ -1980,10 +1980,11 @@ def _guid_instances(records):
                     and not (s is not None and info["first"] is not None
                              and (s - info["first"]).total_seconds() > GUID_SAME_SECONDS)]
             others = [x for x in insts if x[0] not in used and x[1] == image]
-            if free and len(others) == 1:   # of two, the one whose first event is nearest the sampled start
-                pick = min(free, key=lambda g: (gs[g]["first"] is None, gs[g]["first"] or 0, g))
+            # Z-5: unique on BOTH sides (one guid that can be it, one sampled process of the image), and never with
+            # the sampled start unread
+            if len(free) == 1 and len(others) == 1 and s is not None:
                 used.add(k)
-                remap[pick] = k
+                remap[free[0]] = k
                 untold.append(pid)
         for g in gs:                 # the rest: each its own process
             if g in remap:

@@ -527,19 +527,27 @@ is amended by T-2, T-1 restated by V-1).
   time unread: a process of the same image holds the pid". The processes
   whose start could not be read are counted once per round, as a hole.
 - **What lives between two rounds: closed where Sysmon is (ADR-0007
-  P-4), a hole everywhere else.** Where the Sysmon channel is readable, each
+  P-4), while the channel is not said to be behind, stopped or cleared;
+  a hole everywhere else.** Where the Sysmon channel is readable, each
   round also reads the channel's events 1, 3, 11 and 22 since the previous
   round (one wevtutil of Raqib's own, absolute path, SystemRoot only, a
   timeout, ended and recorded; the query is bounded by the last
-  EventRecordID read, and round 1 by the watch's start, so nothing older
-  is ever a tree) into the same discover run as the sample. A tree that
+  EventRecordID read, and the first read by the moment the live reader
+  was made, the CLI's or the window's; what is older is history by its
+  time) into the same discover run as the sample. A tree that
   starts, talks, acts and ends between two samples is then a tree of that
   round, listed as `brief` (seen in the channel, not at the sample), judged
-  by NEW-AGENT / NEW-AGENT-UNKNOWN, benign and history as a sampled tree,
+  by NEW-AGENT each time where the catalog names it, by
+  NEW-AGENT-UNKNOWN once per program path per watch where it does not (a
+  later run of that program grows the finding, "seen N times", and is not
+  knocked; its acts are still judged), benign as any tree, history only
+  in the first round,
   and sourced by pid and ProcessGuid, so its acts are judged. Its
   ProcessGuid keys it: a reused pid is another tree; a tree seen in the
   channel in one round and in the sample in another is one tree (a
-  sampled CreationDate and a Sysmon 1 time within 2 s are one start).
+  sampled CreationDate and a Sysmon 1 time within 2 s are one start;
+  with a start unread on one side, the only process of its pid and image
+  on both sides, said; with the sampled start unread, never).
   The read is checked against what it asked (a record not above the
   bound, or older than the start, is dropped and said); a channel that
   stops, falls behind or is cleared (`wevtutil cl` restarts the record
@@ -552,8 +560,8 @@ is amended by T-2, T-1 restated by V-1).
   cap of events per round is a hole of that round (the next round reads
   on from the last record read, so a channel busier than the cap makes the
   rounds lag); a channel that holds no event 1, 3 or 22 (Sysmon's
-  configuration: Raqib never changes it, A4) is said once in the watch's
-  first lines and the report, and what that kind would show between two
+  configuration: Raqib never changes it, A4) is said once, after three
+  rounds that read none of it, and the report lists the kinds read, and what that kind would show between two
   rounds stays unseen; where neither a start time nor a ProcessGuid tells
   two processes of one image under one pid apart, they are one tree.
   Linux (no audit source of process events is read) and a Windows host

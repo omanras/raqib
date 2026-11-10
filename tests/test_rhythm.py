@@ -334,7 +334,7 @@ def test_e1_the_live_reader_reads_bytes_on_linux_only(monkeypatch):
     monkeypatch.setattr(discover, "run", lambda *a, **k: {"candidates": []})
     monkeypatch.setattr(discover, "read_conn_bytes", lambda paths: calls.append(paths) or ({}, "ss", None))
     assert host.live_reader(CATALOG, platform="linux")()["conn_bytes"] == {"from": "ss", "hole": None, "by": {}}
-    assert "conn_bytes" not in host.live_reader(CATALOG, platform="win32")() and len(calls) == 1
+    assert "conn_bytes" not in host.live_reader(CATALOG, platform="win32", sysmon=lambda: (False, "test: a stand-in, no Sysmon"))() and len(calls) == 1
 
 
 def test_e1_discover_acts_carry_the_childs_started_time():
@@ -956,7 +956,7 @@ def test_redo_k5_the_live_reader_reads_child_start_times_on_linux_only(monkeypat
     monkeypatch.setattr(discover, "proc_start_times", lambda pids: got.append(pids) or ({9: "T"}, None))
     inv = host.live_reader(CATALOG, platform="linux")()
     assert got == [[9]] and inv["child_started"]["by"] == {"9": "T"}
-    assert "child_started" not in host.live_reader(CATALOG, platform="win32")() and len(got) == 1
+    assert "child_started" not in host.live_reader(CATALOG, platform="win32", sysmon=lambda: (False, "test: a stand-in, no Sysmon"))() and len(got) == 1
 
 
 def test_redo_k6_a_long_lived_connection_writes_no_line_per_round(home):
