@@ -78,8 +78,9 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.6b the window's look pass (landed 2026-11-09, merge d060c40; ADR-0008 accepted)
 - M7.6c thresholds that can be measured (landed 2026-11-09): edge pairs per field, bounds in the YAMLs, k/w/r/streak/live_window editable on a sensitive measurement
 - M7.7 os_sysmon writes ProcessId on process lines (ADR-0007 Amendment O); CROSS-SOURCE over host lines
-- M7.8 the second field run's lessons (ADR-0007 Amendment P: os lines judged by NET-TOOL / DESTRUCT-CMD, quiet is not gone, Defender benign, THREAT_MODEL's host section)
+- M7.8 the second field run's lessons (landed 2026-11-11; ADR-0007 Amendments P, R, T, V, W): os lines judged by NET-TOOL / DESTRUCT-CMD, one act one finding in every order, benign trees noted, quiet is not gone, Defender benign, THREAT_MODEL's host section
 - M7.9 the round reads the channel (P-4): a tree that lives between two rounds is a tree of that round where Sysmon is readable
 - M7.10 AGENT-CLIPBOARD (P-5, Sysmon event 24's header): waits for the commander's word and a real export
+- M7.11 a benign host of a model client (ADR-0007 T-9): a benign program that talks to a model endpoint the catalog names is listed with that word
 - M8.1 the look (ADR-0009 decisions 1-3): rail, verdict header, the round strip, switches, DPI-aware on Windows
 - M8.2 a rule made from a form, and Remove for user rules (ADR-0009 decisions 4-5)
