@@ -1038,7 +1038,8 @@ def records_text(r):
         "{:,}".format(r["fired"]), _n(r["lines"], "line"), _n(r["files"], "file"))
     if r["fired"] and r["files"] > 1:
         text += " (in %d of them)" % r["fired_files"]
-    whole = not (r["cut"] or r["more_files"] or r["walk_cut"] or r["not_read"])   # G-3: never more than it read
+    # G-3 (and H-1): never more than it read; a file read only in part counts whether or not it was judged
+    whole = not (r["cut"] or r["more_files"] or r["walk_cut"] or r["not_read"] or r["big"])
     extra.insert(0, "read: %s (%s)" % ("every file" if whole else "not every file", bounds))
     return text + "; " + "; ".join(extra) + "; information only, never a gate"
 

@@ -595,3 +595,62 @@ def test_tk_redo3_g7_a_delete_by_hand_row_is_reached_by_tab_and_its_path_can_be_
             window.destroy()
         else:
             root.destroy()
+
+
+# --- the Table's commit on review 2026-11-11-M8.2-redo3.md (ADR-0009 Amendment H: H-1..H-3) ---------------------
+
+def _records_with_a_file_of_host_lines(home, **bounds):
+    root = Path(overlay.raqib_dir(str(home)))
+    host_lines, _, _ = fixtures.load_fixture(FIX / "NET-TOOL" / "positive-host-child.json")
+    _write(root / "traces" / "a" / "raqib.log.jsonl", [_bash("ls")], mtime=1000000000)
+    _write(root / "host" / "sources" / "x.jsonl", host_lines * 4, mtime=1100000000)
+    fires, quiet = ruleform.examples("path", "/srv/data", redo2.POSIX)
+    rule = ruleform.test(ans(when="path", values="/srv/data", fires=fires, quiet=quiet), str(home),
+                         where=redo2.POSIX).rule
+    return ruleform.records_text(ruleform.on_records(rule, str(home), **bounds))
+
+
+def test_table_h1_for_a_file_of_host_lines_read_in_part_and_not_judged_is_not_every_file(home):
+    """T1: the bounded file is one the rule is not given; "read: every file" may not stand beside it."""
+    text = _records_with_a_file_of_host_lines(home, max_bytes=600)
+    assert "read: not every file (" in text and "read: every file" not in text, text
+    assert "1 file of host lines not judged" in text and "read only in" in text, text
+
+
+def test_table_h1_must_not_touch_a_file_of_host_lines_read_whole_and_not_judged(home):
+    """Q-16 as built: read whole, not judged, said as not judged: "read: every file" stands."""
+    text = _records_with_a_file_of_host_lines(home)
+    assert text.startswith("on your records: would have fired on 0 of 1 line in 1 file; read: every file (%s); 1 file"
+                           " of host lines not judged: " % BOUNDS) and "read only in" not in text, text
+
+
+def test_table_h2_the_package_refusal_reads_exactly_as_before(home, capsys):
+    """T2: G-2's MUST NOT TOUCH, by its exact words: nothing is appended to the package refusal."""
+    with pytest.raises(overlay.OverlayError) as err:
+        overlay.remove_rule("NET-TOOL", home=str(home))
+    assert str(err.value) == overlay.REMOVE_PACKAGE % ("NET-TOOL", "NET-TOOL")
+    code, _, said = run_cli(["rules", "--remove", "NET-TOOL"], capsys)
+    assert code == 2 and said.rstrip().endswith(overlay.REMOVE_PACKAGE % ("NET-TOOL", "NET-TOOL")), said
+    with pytest.raises(overlay.OverlayError, match="nothing removed"):   # another check's refusal still says it
+        overlay.remove_rule("MY-NONE", home=str(home))
+
+
+def test_table_h3_one_rows_failure_is_that_rows_and_not_the_next_rows(home, monkeypatch):
+    """T4: an entry that cannot be looked at loses its own Remove; the rows after it keep theirs."""
+    d = Path(overlay.user_dir(str(home)))
+    d.mkdir(parents=True)
+    for name in ("MY-A.yaml", "MY-B.yaml"):
+        (d / name).write_text("id: %s\n" % name[:-5])
+    panel = app.RulesPanel(home=str(home))
+    real_entries = overlay.user_entries
+    monkeypatch.setattr(overlay, "user_entries", lambda rules_d: [
+        (n, "other" if n == "MY-A.yaml" else k) for n, k in real_entries(rules_d)])
+
+    def cannot(path):
+        raise PermissionError(13, "Permission denied", path)
+    monkeypatch.setattr(overlay, "is_link", cannot)
+    rows = {i["id"]: i for i in app.rule_items(panel.refused_rows())}
+    a = next(v for k, v in rows.items() if "MY-A" in k)
+    b = next(v for k, v in rows.items() if "MY-B" in k)
+    assert a["removable"] is False and "cannot be read (PermissionError" in a["no_remove"]
+    assert b["removable"] is True and "cannot be read" not in (b.get("no_remove") or ""), b

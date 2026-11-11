@@ -2267,15 +2267,16 @@ class RulesPanel:
             place = u.get("place") or u["rule_id"]
             kind = kinds.get(place, "other")
             path = os.path.join(rules_d or "", place)
+            unread = unlisted   # H-3: one row's failure is that row's, never the next row's
             try:
                 link = kind == "other" and overlay.is_link(path)
             except Exception as exc:   # an entry that cannot be looked at: said, no Remove
-                link, unlisted = False, unlisted or "%s cannot be read (%s: %s): Remove is not offered" % (
+                link, unread = False, unlisted or "%s cannot be read (%s: %s): Remove is not offered" % (
                     path, type(exc).__name__, exc)
             out.append({"id": u["rule_id"], "kind": "-", "class": "-", "severity": "-", "budget": 0, "status": "off",
                         "off_by": "refused", "origin": "user", "thresholds": [], "fixed": [], "refused": u["reason"],
-                        "place": place, "removable": unlisted is None and overlay.removable(place, kind),
-                        "path": path, "no_remove": unlisted or (BY_HAND_LINK if link else BY_HAND)})
+                        "place": place, "removable": unread is None and overlay.removable(place, kind),
+                        "path": path, "no_remove": unread or (BY_HAND_LINK if link else BY_HAND)})
         return out
 
     def origin(self, rule_id):

@@ -1373,7 +1373,9 @@ def place_of(name, home=None, catalog=None):
     if name in entries:
         return name
     if kind == "folder" and fold_id(name) in package_ids(catalog):
-        raise OverlayError(REMOVE_PACKAGE % (name, name))
+        refusal = OverlayError(REMOVE_PACKAGE % (name, name))
+        refusal.as_said = True   # H-2: the package refusal reads as it always did
+        raise refusal
     folded = [n for n in entries if fold_id(n) == fold_id(name)]
     if len(folded) == 1:
         return folded[0]
@@ -1425,7 +1427,7 @@ def remove_rule(rid, home=None, catalog=None, dry_run=False, place=None):
             package = fold_id(entry_key(place, kind)) in package_ids(catalog)   # Q-10: its own entry stays
             real_root = os.path.realpath(rules_d)
         except OverlayError as exc:   # a check's refusal: nothing was removed, and the words say so
-            if "nothing removed" in str(exc):
+            if "nothing removed" in str(exc) or getattr(exc, "as_said", False):
                 raise
             raise OverlayError("%s: nothing removed" % exc)
         except Exception as exc:   # G-5: an entry that cannot be read, a path on another drive: a refusal

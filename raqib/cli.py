@@ -28,7 +28,7 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       bounded, never a gate) and adds it through --add's path; --dry-run
       prints the YAML and writes nothing in rules.d. --remove NAME deletes,
       without asking, one entry of ~/.raqib/rules.d as it is listed: a NAME
-      without a suffix is a folder, a NAME ending .yaml a loose rule file;
+      without a suffix is a folder, a NAME ending .yaml or .yml a loose rule file;
       the one of that kind named exactly NAME, else the one of that kind
       named NAME in any case (several are refused and listed) - its rule
       file first, then the overlay entry of the rule loaded from it, then
@@ -285,7 +285,7 @@ def _parser():
     change.add_argument("--new", metavar="ID", help="no TRACE: make a rule from the form's answers (M8.2)")
     change.add_argument("--remove", metavar="NAME", help="no TRACE: delete a person's rule from ~/.raqib/rules.d"
                         " and its overlay lines, without asking (--dry-run: say what it would do); NAME without a"
-                        " suffix is a folder, NAME.yaml a loose rule file: the one named exactly NAME, else the one"
+                        " suffix is a folder, NAME.yaml or NAME.yml a loose rule file: the one named exactly NAME, else the one"
                         " of that kind named NAME in any case")
     r.add_argument("--when", choices=ruleform.FORMS, help="--new: what to watch for")
     r.add_argument("--values", metavar="A,B", help="--new: the program names, places, host names or tool names")
