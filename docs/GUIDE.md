@@ -397,7 +397,7 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib doctor [PROJECT]` | what `watch` needs and is missing, one line each (above) |
 | `raqib report TRACE [--scope P \| --handoff HANDOFF.md] [--json]` | findings with their cited lines, rules that did not run, every rule's budget; exit 0 clean, 1 alarm, 3 incomplete, 2 usage |
 | `raqib rules TRACE -o findings.jsonl` | findings only, one JSON line each |
-| `raqib rules [--set ID on\|off]` | list every rule; turn a rule on or off; `--add FILE`, `--remove NAME`: your own |
+| `raqib rules [--set ID on\|off]` | list every rule; turn a rule on or off; `--new ID`, `--add FILE`, `--remove NAME` |
 | `raqib ui TRACE -o trace.html` (or `--serve`) | the report as one static page: timeline, findings, silence bands; no script; `--serve` binds 127.0.0.1 |
 | `raqib check-rules [--fixtures-root CHECKOUT]` | each rule's measured false-positive rate against its budget, on the fixtures of a checkout (an installed raqib has none: pass `--fixtures-root`) |
 | `raqib suspect TRACE --backend ollama -o suspicion.jsonl` | model suspicion (`--backend anthropic` needs `pip install anthropic` and ANTHROPIC_API_KEY, and sends trace metadata off the machine); then `report TRACE --suspicion suspicion.jsonl` |

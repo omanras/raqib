@@ -58,8 +58,8 @@ SPLIT = ["Install and watch", "Watch a project", "Doctor"]
 LINK_LINE = "This section begins in the README, under [%s](%sREADME.md#%s)."
 # E-3: the rows the guide's Commands table gained, as in README's table.
 NEW_ROWS = ["| `raqib app [PROJECT]` | open Raqib as a desktop window: the host first, Watch this host, or a project |",
-            "| `raqib rules [--set ID on\\|off]` | list every rule; turn a rule on or off; `--add FILE`, `--remove NAME`:"
-            " your own |",
+            "| `raqib rules [--set ID on\\|off]` | list every rule; turn a rule on or off; `--new ID`, `--add FILE`,"
+            " `--remove NAME` |",
             "| `raqib discover` | find AI agents on a host by what they do |",
             "| `raqib --version` | print raqib <version> and exit 0 |"]
 # The pieces of the guide that are not the old README's (E-6): its title, E-7's lines, E-3's rows (and CHANGED).
@@ -249,7 +249,10 @@ def test_e1_where_it_runs_is_written_fresh_and_each_fact_is_pinned_by_the_code_o
     assert links(where) == ["docs/GUIDE.md#watch-the-host"] and "Watch the host" in headings(GUIDE)
     assert BETWEEN_SENTENCE in flat(section("Watch the host", GUIDE))
     # The window needs tkinter and `raqib watch` does not: doctor's line is UNSURE and never fails its exit.
-    assert "The window, `raqib app`, needs tkinter (`python3-tk`); `raqib watch` does not." in said
+    # ADR-0010 F-1 (J2): python3-tk is Debian's and Ubuntu's package; python.org's Python has tkinter (the guide's words)
+    assert ("The window, `raqib app`, needs tkinter (python.org's Python has it; on Debian or Ubuntu install"
+            " `python3-tk`); `raqib watch` does not.") in said
+    assert "python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`" in TKINTER_SENTENCE
 
     def no_tkinter(name):
         raise ImportError("No module named %r" % name)
@@ -258,8 +261,13 @@ def test_e1_where_it_runs_is_written_fresh_and_each_fact_is_pinned_by_the_code_o
     assert line.startswith(doctor.TK_UNSURE) and doctor.summary([("tkinter", (verdict, line))])[1] == 0
     assert "app" in commands
     # macOS, as the tree stands: osascript and the page opener are written; no live reader; no CI job (above).
-    assert ("On macOS the notifications and the page opener are written for it, but the host watch has no live"
-            " reader and no CI job runs there.") in said
+    # ADR-0010 F-1 (J1): the hooks and doctor are written for it too (the guide's sentences, the old README's);
+    # discover has no live reader there either (collect_live below is discover's own reader); nothing is tested
+    assert ("On macOS the hooks, doctor, the notifications and the page opener are written for it, but `raqib watch"
+            " --host` and `raqib discover` have no live reader there and no CI job runs on macOS: none of it is"
+            " tested.") in said
+    assert "on Linux and macOS `python3` on PATH, which the hooks run" in flat(section("Doctor", GUIDE))
+    assert "Linux, macOS; Windows: capture and installer" in flat(GUIDE)
     knocks = notify.Notifier("p", environ={}, platform="darwin", isfile=lambda path: True)
     assert (knocks.backend, knocks.program) == ("osascript", notify.OSASCRIPT)
     opened = []

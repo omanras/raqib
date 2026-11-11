@@ -69,8 +69,9 @@ Windows: `pipx install C:\path\to\raqib` (or `py -m pip install C:\path\to\raqib
 C:\path\to\project`. Install on the side that runs the agent (Windows or WSL), not both. `raqib watch PROJECT` needs
 Claude Code, whose hooks it installs. `raqib watch --host` needs no agent named: it finds the agents by what they do,
 and on Windows it also reads Sysmon where it is installed ([what it misses without it](docs/GUIDE.md#watch-the-host)).
-The window, `raqib app`, needs tkinter (`python3-tk`); `raqib watch` does not. On macOS the notifications and the page
-opener are written for it, but the host watch has no live reader and no CI job runs there.
+The window, `raqib app`, needs tkinter (python.org's Python has it; on Debian or Ubuntu install `python3-tk`); `raqib
+watch` does not. On macOS the hooks, doctor, the notifications and the page opener are written for it, but `raqib
+watch --host` and `raqib discover` have no live reader there and no CI job runs on macOS: none of it is tested.
 
 ## Commands
 | Command | Does |
@@ -80,7 +81,7 @@ opener are written for it, but the host watch has no live reader and no CI job r
 | `raqib watch --host` | watch this host in rounds of discover |
 | `raqib doctor [PROJECT]` | what `watch` needs and is missing, one line each (above) |
 | `raqib report TRACE` | findings with their cited lines, rules that did not run, every rule's budget |
-| `raqib rules [--set ID on\|off]` | list every rule; turn a rule on or off; `--add FILE`, `--remove NAME`: your own |
+| `raqib rules [--set ID on\|off]` | list every rule; turn a rule on or off; `--new ID`, `--add FILE`, `--remove NAME` |
 | `raqib discover` | find AI agents on a host by what they do |
 | `raqib --version` | print raqib <version> and exit 0 |
 | the rest: `ui`, `suspect`, `proxy`, `os-sysmon`, `check-rules`, `eval` | [in the guide](docs/GUIDE.md#commands) |
