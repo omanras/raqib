@@ -117,20 +117,22 @@ no command, raqib prints its usage and exits 2.
       has them; a signal ignored at the start, as under nohup, stays
       ignored) and Ctrl-Break on Windows (SIGBREAK) stop it as Ctrl-C does,
       for this command and watch --host alike: "stopped (SIGTERM)", the
-      final report, the registry row finished, its exit. What a stop keeps
-      is written before what it prints, so a terminal that is gone (a
-      hung-up tty, a closed pipe) loses the words only, never the record or
-      the code; the first lines say which signals stop it and which were
-      left ignored (REDO B-1, B-3). The handlers are
+      final report, the registry row finished, its exit. A terminal that is
+      gone (a hung-up tty, a closed pipe) loses the words only, never the
+      record or the code, and the words lost are noted in the state file
+      and the registry row; the first lines say what stops it and which
+      signals were left ignored (REDO B-1, B-3, REDO 2 C-3). The handlers are
       installed here, in the main thread only, and the earlier ones are
       restored when the command ends; a second signal does not cut the
       report short; no process is signalled (A4). Out of reach: SIGKILL; on
       Windows TerminateProcess (taskkill /F, the Task Manager) and closing
-      the console window, logoff and shutdown. Such a watch prints nothing:
-      for watch PROJECT, `raqib report TRACE` gives the findings; for watch
-      --host no command re-prints its report: what it had found up to its
-      last round is in its state file ~/.raqib/host/rounds.jsonl.watch.json
-      (findings, holes, knocks, heartbeat, code_so_far) and its record
+      the console window, logoff and shutdown; and a terminal that stops
+      reading (Ctrl-S, a full pipe): the stop waits until it drains. Such a
+      watch prints nothing: for watch PROJECT, `raqib report TRACE` gives
+      the findings; for watch --host no command re-prints its report: what
+      it had found up to its last round is in its state file
+      ~/.raqib/host/rounds.jsonl.watch.json (findings, holes, its newest
+      knocks, heartbeat, code_so_far) and its record
       ~/.raqib/host/rounds.jsonl (one line per round).
   watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
@@ -314,10 +316,13 @@ class Stops:
     cut short. A later signal is counted, never acted on. Nothing here
     signals a process (A4): signal.signal and getsignal only. line() (M9.1
     REDO B-3) is what the watch's first lines say: what stops it and what
-    was left ignored."""
+    was left ignored; on Windows (platform "win32", REDO 2 C-5) it names
+    only what can reach the watch there, Ctrl-C and Ctrl-Break: the SIGTERM
+    handler stays installed, but no other process can send SIGTERM there."""
 
-    def __init__(self, module=signal):
+    def __init__(self, module=signal, platform=None):
         self.signal = module
+        self.platform = sys.platform if platform is None else platform
         self.numbers = {getattr(module, n): n for n in STOP_SIGNALS if getattr(module, n, None) is not None}
         self.name = None        # the first stop signal's name
         self.later = 0          # signals after it, counted, never acted on
@@ -346,18 +351,20 @@ class Stops:
     def line(self):
         """M9.1 REDO (ADR-0010 Amendment B, B-3; A3): what the watch's first lines say of its stop - which
         signals stop it and which were left ignored (ignored when it started, as under nohup), in one line."""
-        stop, ignored = ["Ctrl-C"], list(self.ignored)
+        unreachable = ("SIGTERM",) if self.platform == "win32" else ()   # REDO 2 C-5: os.kill there is TerminateProcess
+        stop, ignored = ["Ctrl-C"], [n for n in self.ignored if n not in unreachable]
         sigint = getattr(self.signal, "SIGINT", None)
         try:
             if sigint is not None and self.signal.getsignal(sigint) == self.signal.SIG_IGN:
                 stop, ignored = [], ["Ctrl-C (SIGINT)"] + ignored
         except (OSError, ValueError, RuntimeError, KeyError):
             pass
-        stop += ["SIGBREAK (Ctrl-Break)" if n == "SIGBREAK" else n for n in self.handled]
+        stop += ["SIGBREAK (Ctrl-Break)" if n == "SIGBREAK" else n for n in self.handled if n not in unreachable]
         text = "%s %s it with its final report and code; left ignored (ignored when it started, as under nohup):" \
                " %s" % (", ".join(stop) or "no signal", "stop" if len(stop) > 1 else "stops", ", ".join(ignored) or "none")
-        if self.unset:
-            text += "; not settable here: %s" % ", ".join(self.unset)
+        unset = [n for n in self.unset if n not in unreachable]
+        if unset:
+            text += "; not settable here: %s" % ", ".join(unset)
         return text
 
     def restore(self):

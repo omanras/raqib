@@ -260,8 +260,10 @@ def _safe(text):
 
 # M9.1 (ADR-0010 decision 5): the line under "ALARMS (A3, A5): N" in the text report (the JSON report has none).
 # M9.1 REDO (Amendment B, B-5): what it counts truly - the trace's alarms and the watch's own.
-ALARMS_SAYS = ("  (the trace's and the watch's own: what could not be read, cited or kept; every finding below also"
-               " makes the RESULT an ALARM)")
+# M9.1 REDO 2 (Amendment C, C-4): what is counted, named - two lines, each at most 120 characters.
+ALARMS_SAYS = (
+    "  (silence, a crash of the watch, a knock that did not arrive, and what could not be read, cited or kept:",
+    "  the trace's and the watch's own; every finding below also makes the RESULT an ALARM)")
 
 
 def render_text(report):
@@ -273,7 +275,7 @@ def render_text(report):
         out.append("sources: %s" % ", ".join("%s %d" % (name, sources[name]) for name in sorted(sources)))
     out += ["findings: %s" % report["findings_source"], ""]
     out.append("ALARMS (A3, A5): %d" % len(report["alarms"]))
-    out.append(ALARMS_SAYS)   # M9.1 (ADR-0010 decision 5): what the line counts; the text report only
+    out += list(ALARMS_SAYS)   # M9.1 (ADR-0010 decision 5, REDO 2 C-4): what it counts; the text report only
     for a in report["alarms"]:
         where = "line %d: " % a["line"] if "line" in a else ""
         out.append("  - %s: %s%s" % (a["kind"], where, a["detail"]))
