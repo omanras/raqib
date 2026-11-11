@@ -1437,3 +1437,57 @@ it is FOR and what it MUST NOT TOUCH, and both are tested (Z-9).
   property (the round without the channel) and held. AC-1 is AB-4 in
   that form: where a ruling takes something out of a judgement, it says
   the judgement is what it would be without it.
+
+## Amendment AD (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo5.md (f5a0da5)
+CI runs 42946728174 (f5a0da5) and 42946732057 (merged onto main): six
+jobs success each. AC-2, AC-4..AC-7 MET; AC-1 and AC-3 PARTLY. Verdict:
+REDO on AD-1 and AD-2. The Table stops ruling this case by case:
+- AD-1 (B1, B3, B4, B9; Q-24; supersedes AB-4 and AC-1) M7.9 does not
+  change how a footprint is judged. In a round that reads the channel,
+  the footprints the watch judges - state, link, live, streak, and so
+  every AGENT-DARK and AGENT-DARK-LIVE knock and note - are those of the
+  same round built WITHOUT the channel's records (the build AB-6 already
+  makes). No tree known or grown only by the channel links a footprint,
+  makes it live, or takes a link away: not an unknown one, not a named
+  one, not a benign one. `held_link`, the trees "taken away" and the
+  inventory's `links` go. FOR, as a property over every fixture watch
+  with a channel: its HostFootprint lines, round by round, are the lines
+  of the same samples watched without the channel (where the linking
+  tree is part of a larger tree in the channel's round, the link names
+  that tree). B1's case is dark and knocks at round 3; B3's case stays
+  linked and never knocks; a benign brief tree makes nothing live. MUST
+  NOT TOUCH: rounds that read no channel; the trees themselves, their
+  sources, acts and knocks (NEW-AGENT for a named brief tree still
+  comes). What this gives up is said in THREAT_MODEL: a footprint whose
+  agent ran only between rounds is judged dark as before M7.9, though
+  the tree was seen; joining the two is a later task (M7.12).
+- AD-2 (B2; AC-3 narrowed) In round 1, a tree known by its guid whose
+  pid and image are those of a tree of that round's sample whose start
+  was not read takes that tree's history: they are taken for one
+  process. FOR: B2's inputs - the guid tree is history, not tagged, not
+  counted, not knocked, unknown or named. MUST NOT TOUCH: AC-3's own
+  case (no candidate of that pid and image at the sample: not history),
+  with the start read and with it unread. That the two are still listed
+  as two trees, in round 1 and in the first round of any tree whose
+  start is unread, is recorded with the tree-key task (M7.12).
+- AD-3 (B5; Q-22) NEW-AGENT.yaml's first-round sentence is AA-5's
+  sentence and in Scope: it says AC-3 and AD-2.
+- AD-4 (B6, B7, B8) Words and fields: "the reader's first check", not
+  "at round 1", wherever it is said; exit 0 is "nothing knocked, and no
+  round or source that could not be read" - the standing holes the first
+  lines print do not change the exit, and the table says so; the state's
+  `candidate_by` on a tree (written, never read, wrong for an act-root)
+  is removed.
+- AD-5 Recorded: Q-23 as built (a tree's acts on os lines are history by
+  their own time; the reviewer's reading, not the builder's). The
+  "no event 11" line (the reviewer's D): it is judged on the whole read,
+  so where Sysmon logs no file-create event at all, every os source says
+  so and the watch ends INCOMPLETE - as it did before M7.9 (M7.2b); the
+  commander's field run says whether his configuration logs event 11.
+- Table ledger: AB-4 and AC-1 each tried to say which channel trees may
+  touch a footprint, and each left a case; AC-3 moved history and met a
+  split the keys already had. The seventh and eighth time. AD-1 is the
+  form the reviewer's own table pointed at (AB-6's): one judgement, made
+  on one build, with nothing of the channel in it. Where a milestone
+  adds a source, what the source may NOT change is ruled first, as a
+  property against the build without it.
