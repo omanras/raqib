@@ -2223,7 +2223,7 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
                            [s["name"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]
                             and holds(s, "conn")]) if judge else []
     footprints, dark = _footprints(records, procs, candidates, talkers, catalog, judged=trees_read,
-                                   act_roots=act_roots)
+                                   act_roots=act_roots, all_links=channel)
     env_fp = []
     owner_of = {}
     for c in candidates:
@@ -2672,7 +2672,7 @@ def _handoff(pid, p, catalog):
                 else "neither a hook image nor marked proxy_capable", pid % REUSE)}
 
 
-def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=()):
+def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=(), all_links=False):
     """Path footprints with the candidate each links to, and AGENT-DARK:
     a footprint no candidate tree links to, by name or by its path in argv
     or cwd, nor an act-root (M5.0b: an act-root is a tree acting in the
@@ -2692,6 +2692,7 @@ def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=
             continue
         agent = fp["agent"]
         link = None
+        links = []   # ADR-0007 AC-1 (a round with the channel): every linker, in this order, each once
         # A candidate whose root goes by the agent's name first, then an
         # act-root whose root does (M5.0b), then any process of a candidate's
         # tree, then any process of an act-root's tree.
@@ -2705,16 +2706,23 @@ def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=
                     q = procs.get(pid)
                     texts = ([q["cwd"] or ""] + q["argv"]) if q else []
                     if q and (_named(q, agent) or any(norm.lower() in t.replace("\\", "/").lower() for t in texts)):
-                        link = (field, c["id"], q)
+                        link = link or (field, c["id"], q)
+                        if all_links and not any(l[field] == c["id"] for l in links if field in l):
+                            links.append({field: c["id"], "cites": _cites(q["recs"], 1)})
                         break
-                if link:
+                if link and not all_links:
                     break
-            if link:
+            if link and not all_links:
                 break
         entry = {"path": r["path"], "match": fp["match"], "agent": agent,
                  "candidate": link[1] if link and link[0] == "candidate" else None,
                  "act_root": link[1] if link and link[0] == "act_root" else None,
                  "cites": [cite(r)] + (_cites(link[2]["recs"], 1) if link else [])}
+        if all_links and link:
+            # AC-1: the host takes the first of these whose tree is not one listed by the channel and not knocked
+            # (the footprint's state is the one it has with those trees taken away); only in a round with the
+            # channel, so every other inventory keeps its shape
+            entry["links"] = links
         footprints.append(entry)
         if link:
             continue

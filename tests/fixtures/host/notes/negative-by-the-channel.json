@@ -1,4 +1,7 @@
 {
+ "by_channel": [
+  "9216:agentx:2026-11-10T07:51:00.000Z"
+ ],
  "lines": [
   {
    "cwd": "host",

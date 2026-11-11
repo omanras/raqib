@@ -134,9 +134,6 @@ NO_SOURCES = {
 }
 SCENARIOS.update(NO_SOURCES)
 SCENARIOS["HOST-UNWATCHED/negative-host-source.json"] = ["linux", "linux"]
-# M7.9 REDO 4 (ADR-0007 AB-5): a round of the quiet host whose channel read holds an unknown program that starts,
-# talks and acts between two rounds: its line is listed by the channel, and NEW-AGENT-UNKNOWN does not fire on it
-SCENARIOS["NEW-AGENT-UNKNOWN/negative-by-the-channel.json"] = ["channel/quiet", "channel/quiet+agentx"]
 RHYTHM_SCENARIOS = fixturegen.rhythm_scenarios(DECLARED["k"])   # M7.4: fake rounds, "rhythm:<scenario>:<round>"
 SCENARIOS.update(RHYTHM_SCENARIOS)
 # M7.5 E1, REDO N-2: a footprint whose tree was live in this watch, then dark: host.py's NOTE, which
@@ -147,6 +144,11 @@ NOTE_SCENARIOS = {
     "negative-linked-again.json": ["kimi-gone", "kimi/two-samples", "kimi-gone", "kimi-gone",
                                    "kimi/two-samples"] + ["kimi-gone"] * 3,
 }
+# M7.9 REDO 4 (ADR-0007 AB-5), REDO 5 (AC-4, as N-2): a round of the quiet host whose channel read holds an unknown
+# program that starts, talks and acts between two rounds: its line is listed by the channel (input_meta.by_channel),
+# which NEW-AGENT-UNKNOWN's match cannot fire on by a field, so it is not that rule's measured negative: it lives
+# under tests/fixtures/host/notes/ (NOTES_OUT), made by build_notes(), held by tests/test_round_channel.py (AB-5)
+CHANNEL_NOTE_SCENARIOS = {"negative-by-the-channel.json": ["channel/quiet", "channel/quiet+agentx"]}
 OS_SCENARIOS = fixturegen.os_scenarios(DECLARED["k"])   # M7.5 E2: "rhythm-os:<scenario>:<round>"
 OS_ROUNDS = fixturegen.os_rounds(DECLARED["k"])         # the rounds os lines are appended before
 SCENARIOS.update(OS_SCENARIOS)
@@ -300,7 +302,8 @@ NOTES_OUT = os.path.join(HERE, "notes")
 
 
 def build_notes():
-    """N-2: the last round's lines of each NOTE_SCENARIOS run (host.py's note, not a rule's fixture)."""
+    """N-2: the last round's lines of each NOTE_SCENARIOS run (host.py's note, not a rule's fixture); AC-4: and of
+    each CHANNEL_NOTE_SCENARIOS run, with the round's trees listed by the channel."""
     catalog = discover.load_catalog(discover.CATALOG)
     rules = engine.load_catalog(CATALOG_DIR)
     out = {}
@@ -309,6 +312,10 @@ def build_notes():
             watch = rounds_of(names, catalog, rules, os.path.join(home, name))
             out[name] = json.dumps({"lines": watch.round_lines[-1]["lines"], "dark_notes": [
                 d["round"] for d in watch.dark_notes]}, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
+        for name, names in CHANNEL_NOTE_SCENARIOS.items():
+            watch = rounds_of(names, catalog, rules, os.path.join(home, name))
+            out[name] = json.dumps({"lines": watch.round_lines[-1]["lines"], "by_channel": watch.round_lines[-1][
+                "by_channel"]}, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
     return out
 
 

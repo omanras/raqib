@@ -1377,3 +1377,63 @@ MUST NOT TOUCH, and both are tested (Z-9, AA-8).
   the build counted sightings; AA-6 said "from the round's inventory"
   for lines printed before any round. A ruling that orders a count names
   its unit; one that orders words names when they are printed.
+
+## Amendment AC (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo4.md (814a355)
+CI runs 42941269218 (814a355) and 42941342463 (merged onto main): six
+jobs success each. AB-1, AB-2, AB-3, AB-5..AB-9, AB-11 MET; AB-4 and
+AB-10 PARTLY. Verdict: REDO on AC-1 and AC-2. Each ruling names the case
+it is FOR and what it MUST NOT TOUCH, and both are tested (Z-9).
+- AC-1 (A1, must; AB-4 restated as a property) A footprint's state in a
+  round is the state it has in that round with the unknown trees listed
+  by the channel and not knocked taken away. So such a tree neither makes
+  a footprint live (AB-4) nor takes the link from a tree that would hold
+  it. FOR: a footprint that a tree knocked at a sample links, and that a
+  by-the-channel tree also links, is linked by the knocked tree and is
+  live, whichever of the two has the lower pid - both orders are tested;
+  AGENT-DARK-LIVE does not fire. MUST NOT TOUCH: AB-4's own case (the
+  by-the-channel tree is the only linker: dark, the knock at the round
+  it came before M7.9); a named tree known only from the channel links
+  as any knocked tree does. THREAT_MODEL's sentence follows.
+- AC-2 (A2, must) README's exit table and the help say what exit 0 is
+  now: no knock and no hole; trees listed, and unknown trees seen a
+  candidate only by the channel are listed and counted, not knocked.
+  "Nothing new" goes wherever it stands beside exit 0.
+- AC-3 (A3; Q-19 ruled) History is what the first round's SAMPLE shows
+  (with Z-1's exception). FOR: a process older than the watch that is no
+  candidate at round 1's sample and is a candidate in round 1 only by
+  channel events at or after the watch's start is not history: unknown,
+  it is listed by the channel, tagged and counted, and a later candidacy
+  at a sample knocks once, as it did before M7.9; named, it knocks
+  NEW-AGENT as a named tree by the channel does in any round. MUST NOT
+  TOUCH: a tree that is a candidate at round 1's sample is history, with
+  or without events of it in the channel; round 1 still reads nothing
+  older than the watch's start. Tested with the look's wider first span.
+- AC-4 (A5; Q-16 ruled) N-2 holds: a negative the match cannot fire on
+  by a field is not a measured negative. The by-the-channel line leaves
+  the rule's measured fixtures for the place N-2 gave such lines; the
+  measure stays 2 of 5 = 0.4 = fp_budget; the two special cases in
+  tests/test_host.py go; AB-5's test reads the line from its new home;
+  the budget comment (A12) is as it was.
+- AC-5 (A4, A11; Q-18 accepted) The benign brief tree's test asserts its
+  note positively (the catalog judged its act, as a note). A run with
+  neither path nor name read is called that ("no path and no name
+  read"), and AA-3's "grouped by its name" has a case with a real name
+  or is said not to be reachable, with the reason.
+- AC-6 (A6, A7, A8, A9, A14) Words and fields: the report says the
+  between-rounds hole once where the reader's check differs (one note,
+  not two); the line names the round in which the reader's check was
+  made; the YAML's description says the mark is the key's presence, and
+  a test pins that no code writes it false; a state field that is
+  written and never read, or goes stale, is updated or removed; the
+  count's time is named for what it is ("first listed at").
+- AC-7 (A10; Q-17) Scope is widened to the one sentence of
+  AGENT-DARK-LIVE.yaml's description that says when a footprint is dark;
+  README and the help follow in the same words. That inventory.json
+  (discover's own record) still shows the link is said in THREAT_MODEL.
+- AC-8 Recorded: Q-20 accepted as built. Q-21 and A13: the Table calls
+  the look's close from the window at the merge.
+- Table ledger: AB-4 ruled for "a tree" linking "a footprint" and the
+  record holds several linkers; the sixth time. AB-6 was ruled as a
+  property (the round without the channel) and held. AC-1 is AB-4 in
+  that form: where a ruling takes something out of a judgement, it says
+  the judgement is what it would be without it.
