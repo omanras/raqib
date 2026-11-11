@@ -520,7 +520,8 @@ def test_e4_the_next_watch_takes_the_overlay_as_it_is_then(home):
 
 PANEL_CALLS = {"set_status", "set_threshold", "reset", "add_rule", "load", "listing", "describe", "off_text",
                "table_text", "start_lines", "OverlayError", "remove_rule",   # M8.2: Remove
-               "user_entries", "removable"}   # M8.2 REDO 2 F-3: readers - a row's own place, and whether it has a Remove
+               "user_entries", "removable",   # M8.2 REDO 2 F-3: readers - a row's own place, and whether it has a Remove
+               "is_link"}   # M8.2 REDO 3 G-6: a reader - a link in rules.d is said as a link
 # M8.2: the panel and the form reach ruleform only through these (its Test and Add, the words it says)
 RULEFORM_CALLS = {"test", "add", "fingerprint", "Result", "examples", "records_text", "cited_text", "FIELDS",
                   "FIELD_WORDS", "FORM_WORDS", "FORMS", "SEVERITIES", "VALUE_HINTS", "MEASURED"}
@@ -538,8 +539,8 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
                                                                                               "_rules"))]
     # M7.6c REDO E-7: and _rules_measuring; M8.1 E5: the rows, their switches and steppers, the filter;
     # M8.2: the form (rules_new, its Test and Add, its answers, its words, its scroll), Remove and Keep;
-    # M8.2 REDO 2 F-10: _rules_form_state (the header's "changed since the test")
-    assert len(panel) == 26
+    # M8.2 REDO 2 F-10: _rules_form_state (the header's "changed since the test"); REDO 3 G-7: _rules_form_preview
+    assert len(panel) == 27
     for node in panel:
         for sub in ast.walk(node):
             if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) and sub.value.id == "overlay":

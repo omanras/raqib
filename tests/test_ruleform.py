@@ -273,7 +273,7 @@ def test_e3_on_your_records_counts_the_lines_it_would_have_fired_on(home):
     tool = ruleform.test(answers("tool"), str(home)).records
     assert tool["not_host"] == 1 and (tool["files"], tool["lines"], tool["fired"]) == (1, 4, 0)
     assert "would have fired on 0 of 4 lines in 1 file;" in ruleform.records_text(tool)
-    assert "1 host source file not judged" in ruleform.records_text(tool)
+    assert "1 file of host lines not judged" in ruleform.records_text(tool)   # REDO 3 G-3: by what it holds
     walked = ruleform.on_records(res.rule, str(home), max_entries=1)
     assert walked["walk_cut"] and "the walk stopped at 1 entries" in ruleform.records_text(walked)
 
@@ -394,7 +394,8 @@ ALLOWED_MODULE_CALLS = {
     ("os", "makedirs"), ("os", "listdir"), ("os", "rmdir"), ("os", "lstat"), ("os", "walk"),
     ("shutil", "rmtree"), ("tempfile", "mkdtemp"), ("hashlib", "sha256"), ("json", "dumps"), ("re", "split"),
     ("re", "compile"), ("os.path", "join"), ("os.path", "dirname"), ("os.path", "basename"),
-    ("os.path", "realpath"), ("os.path", "islink"), ("os.path", "isdir"), ("os.path", "getmtime"),
+    ("os.path", "realpath"), ("os.path", "islink"), ("os.path", "isdir"), ("os.path", "isfile"),
+    ("os.path", "getmtime"),
     ("os.path", "relpath"), ("os.path", "expanduser"), ("os.path", "lexists"), ("time", "time"),
 }
 ALLOWED_MODULE_VALUES = {("os", "SEEK_END"), ("os", "name"), ("os", "path"), ("sys", "version_info")}

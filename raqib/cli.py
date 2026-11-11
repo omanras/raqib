@@ -27,11 +27,14 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       would have fired on in the records under ~/.raqib (read-only,
       bounded, never a gate) and adds it through --add's path; --dry-run
       prints the YAML and writes nothing in rules.d. --remove NAME deletes,
-      without asking, one entry of ~/.raqib/rules.d (the one named exactly
-      NAME, else the one whose id is NAME in any case; several are refused
-      and listed) - its rule file first, then the overlay entry of the rule
-      loaded from it, then the rest; --dry-run says what it would do; a
-      package rule is switched off instead.
+      without asking, one entry of ~/.raqib/rules.d as it is listed: a NAME
+      without a suffix is a folder, a NAME ending .yaml a loose rule file;
+      the one of that kind named exactly NAME, else the one of that kind
+      named NAME in any case (several are refused and listed) - its rule
+      file first, then the overlay entry of the rule loaded from it, then
+      the rest; --dry-run says what it would do; a package rule is switched
+      off instead (a folder of rules.d named as one is removed, the package
+      rule and its overlay entry untouched).
   report TRACE [--findings FILE] [--scope P]... [--handoff FILE] [--json]
       Show the findings with the trace lines they cite (A5), the alarms, the
       rules that did not run (A3) and every rule's fp_budget (A6). Without
@@ -280,9 +283,10 @@ def _parser():
     change.add_argument("--add", metavar="FILE", help="no TRACE: validate a rule file and copy it into ~/.raqib/rules.d")
     change.add_argument("--reset", metavar="ID", help="no TRACE: remove a rule's entry from the overlay")
     change.add_argument("--new", metavar="ID", help="no TRACE: make a rule from the form's answers (M8.2)")
-    change.add_argument("--remove", metavar="NAME", help="no TRACE: delete a person's rule from ~/.raqib/rules.d (the"
-                        " entry named exactly NAME, else the one id NAME in any case) and its overlay lines, without"
-                        " asking (--dry-run: say what it would do)")
+    change.add_argument("--remove", metavar="NAME", help="no TRACE: delete a person's rule from ~/.raqib/rules.d"
+                        " and its overlay lines, without asking (--dry-run: say what it would do); NAME without a"
+                        " suffix is a folder, NAME.yaml a loose rule file: the one named exactly NAME, else the one"
+                        " of that kind named NAME in any case")
     r.add_argument("--when", choices=ruleform.FORMS, help="--new: what to watch for")
     r.add_argument("--values", metavar="A,B", help="--new: the program names, places, host names or tool names")
     r.add_argument("--severity", choices=ruleform.SEVERITIES, help="--new: low, medium or high")
@@ -520,6 +524,8 @@ def rules_overlay_cmd(args, out):
             out.write("raqib rules: %s\n" % overlay.remove_rule(args.remove, dry_run=True))
         except overlay.OverlayError as exc:
             raise UsageError("refused: %s" % exc)
+        except Exception as exc:   # M8.2 REDO 3 G-5: never a traceback - a refusal with words (exit 2)
+            raise UsageError("refused: the removal could not be made: %s: %s" % (type(exc).__name__, exc))
         return 0
     said = None
     try:
@@ -532,7 +538,12 @@ def rules_overlay_cmd(args, out):
         elif args.reset:
             said = overlay.reset(args.reset)
         elif args.remove:
-            said = overlay.remove_rule(args.remove)
+            try:
+                said = overlay.remove_rule(args.remove)
+            except overlay.OverlayError:
+                raise
+            except Exception as exc:   # M8.2 REDO 3 G-5: never a traceback - a refusal with words (exit 2)
+                raise overlay.OverlayError("the removal could not be made: %s: %s" % (type(exc).__name__, exc))
     except overlay.OverlayError as exc:
         raise UsageError("refused: %s" % exc)
     rules = _overlay_catalog()

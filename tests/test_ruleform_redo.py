@@ -206,9 +206,12 @@ def test_redo_e6_a_link_below_rules_d_is_refused(home, tmp_path):
     try:
         os.symlink(str(elsewhere), os.path.join(overlay.user_dir(str(home)), "MY-X"), target_is_directory=True)
     except (OSError, NotImplementedError):
-        pytest.skip("no symlink here (the junction case: test_ruleform_redo2)")
-    with pytest.raises(overlay.OverlayError, match="link"):
+        pytest.skip("no symlink here (the junction case: test_ruleform_redo3)")
+    # REDO 3 G-6 (S7): the refusal's own words, never a word the tmp path holds ("link" is in this test's name)
+    words = "%s is a link, not a rule folder: nothing removed" % os.path.join(overlay.user_dir(str(home)), "MY-X")
+    with pytest.raises(overlay.OverlayError) as err:
         overlay.remove_rule("MY-X", home=str(home))
+    assert str(err.value).startswith(words), str(err.value)
     assert (elsewhere / "keep.txt").read_text() == "x"
 
 
@@ -262,7 +265,7 @@ def test_redo_e9_record_files_follow_no_link(home, tmp_path):
         os.symlink(str(outside), str(traces / "linked"), target_is_directory=True)
     except (OSError, NotImplementedError):
         pytest.skip("no symlink here")
-    assert ruleform.record_files(str(home)) == ([], False, [("traces/linked", "a link")])   # REDO 2 F-7: said
+    assert ruleform.record_files(str(home)) == ([], False, [("traces/linked", "a link", "folder")])   # F-7, G-3
 
 
 # --- E-10: the words and the terminal -----------------------------------------------------------------------------

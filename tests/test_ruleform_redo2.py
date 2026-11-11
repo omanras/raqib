@@ -174,9 +174,9 @@ def test_redo2_f3_for_a_refused_loose_file_beside_the_loaded_rule(home):
 def test_redo2_f3_for_two_folders_a_case_apart(home):
     assert ruleform.add(ans(rid="MY-TF"), str(home)).ok
     other = Path(overlay.user_dir(str(home))) / "my-tf"
+    if os.path.lexists(str(other)):   # REDO 3 G-1: the file system is asked first, before the second is made
+        pytest.skip("this file system folds case: my-tf is the folder MY-TF here, so the two cannot both be kept")
     other.mkdir()
-    if len(rules_d(home)) < 2:
-        pytest.skip("this file system folds case: MY-TF and my-tf are one folder here")
     (other / "my-tf.yaml").write_text("id: broken\n")
     code, _ = run_cli(["rules", "--remove", "My-Tf"])   # several without regard to case: refused, each listed
     assert code == 2 and rules_d(home) == ["MY-TF", "my-tf"]
@@ -189,9 +189,10 @@ def test_redo2_f3_for_two_folders_a_case_apart(home):
 
 def test_redo2_f3_the_terminal_takes_the_exact_name_then_one_without_regard_to_case(home, capsys):
     loose = _loaded_and_loose(home)
-    code, _ = run_cli(["rules", "--remove", "my-tf"])
-    err = capsys.readouterr().err
-    assert code == 2 and "matches 2 entries" in err and "MY-TF, MY-TF.yaml" in err and loose.exists()
+    # REDO 3 G-2: a NAME without a suffix is a folder: the one folder MY-TF matches my-tf; a stem never matches
+    # across kinds (the folder beside the loose file is no second match): test_ruleform_redo3
+    code, out = run_cli(["rules", "--remove", "my-tf", "--dry-run"])
+    assert code == 0 and "would delete %s" % os.path.join(overlay.user_dir(str(home)), "MY-TF") in out
     code, out = run_cli(["rules", "--remove", "MY-TF.yaml"])   # the exact name: the loose file
     assert code == 0 and not loose.exists() and rules_d(home) == ["MY-TF"]
     old = Path(overlay.user_dir(str(home))) / "my-old"
@@ -244,10 +245,10 @@ def test_redo2_f4_for_nothing_deleted_nothing_changed(home, monkeypatch):
     def fails(path, *a, **k):
         calls.append(path)
         raise OSError(13, "Permission denied")
-    monkeypatch.setattr(overlay.os, "remove", fails)
-    with pytest.raises(overlay.OverlayError) as err:
-        overlay.remove_rule("MY-X", home=str(home))
-    monkeypatch.undo()
+    with monkeypatch.context() as m:   # REDO 3 (S13): the autouse HOME stays patched
+        m.setattr(overlay.os, "remove", fails)
+        with pytest.raises(overlay.OverlayError) as err:
+            overlay.remove_rule("MY-X", home=str(home))
     assert str(err.value).startswith("nothing was removed: ") and len(calls) == 1 and calls[0].endswith("MY-X.yaml")
     doc, _, _ = overlay.read(overlay.overlay_path(str(home)))
     assert doc["rules"]["MY-X"]["status"] == "off" and len(list((Path(overlay.user_dir(str(home))) / "MY-X")
@@ -264,14 +265,15 @@ def test_redo2_f4_for_a_removal_stopped_midway_says_what_is_gone_and_what_remain
         if len(calls) == 2:
             raise OSError(13, "Permission denied")
         return real(path, *a, **k)
-    monkeypatch.setattr(overlay.os, "remove", second_fails)
-    with pytest.raises(overlay.OverlayError) as err:
-        overlay.remove_rule("MY-X", home=str(home))
-    monkeypatch.undo()
+    with monkeypatch.context() as m:   # REDO 3 (S13): the autouse HOME stays patched
+        m.setattr(overlay.os, "remove", second_fails)
+        with pytest.raises(overlay.OverlayError) as err:
+            overlay.remove_rule("MY-X", home=str(home))
     text = str(err.value)
     assert calls[0].endswith("MY-X.yaml")   # the rule file first: the rule can no longer load
     assert "stopped midway" in text and "gone: %s" % calls[0] in text and "what remains:" in text
-    assert "it no longer loads" in text and "its entry dropped" in text
+    assert "it no longer loads" in text and "gone: %s, its entry MY-X in " % calls[0] in text   # G-6
+    assert text.startswith("MY-X was not removed whole: stopped midway: ")   # G-6: never "MY-X removed"
     rules = overlay.load(str(home))
     assert "MY-X" not in [r.id for r in rules]
     assert "MY-X" in [u["rule_id"] for u in overlay.describe(rules)["user_refused_ids"]]
@@ -371,7 +373,7 @@ def test_redo2_f7_for_an_os_source_file_is_judged_by_its_lines_not_its_folder(ho
     r = res.records
     assert (r["files"], r["lines"], r["not_host"]) == (1, 3, 1)   # the os file judged and counted; host lines not
     text = ruleform.records_text(r)
-    assert "on 0 of 3 lines in 1 file;" in text and "1 host source file not judged" in text
+    assert "on 0 of 3 lines in 1 file;" in text and "1 file of host lines not judged" in text   # REDO 3 G-3
 
 
 def test_redo2_f7_for_links_and_unreadable_files_are_counted_and_said(home, tmp_path, monkeypatch):
@@ -384,7 +386,7 @@ def test_redo2_f7_for_links_and_unreadable_files_are_counted_and_said(home, tmp_
         pytest.skip(why)
     res = ruleform.test(ans(), str(home))
     text = ruleform.records_text(res.records)
-    assert res.ok and "1 file(s) not read: a link" in text and "no file was judged" in text
+    assert res.ok and "1 folder not read: a link" in text and "no file was judged" in text   # G-3: a folder
     assert "this rule would read yet" not in text   # never "no file yet" when files were refused
     _write(traces / "demo" / "raqib.log.jsonl", [line("Bash", {"command_head": "ls"})])
 
@@ -392,7 +394,7 @@ def test_redo2_f7_for_links_and_unreadable_files_are_counted_and_said(home, tmp_
         raise OSError(13, "Permission denied")
     monkeypatch.setattr(ruleform, "_tail", unreadable)
     text = ruleform.records_text(ruleform.test(ans(), str(home)).records)
-    assert "1 file(s) not read: cannot be read (Permission denied)" in text and "1 file(s) not read: a link" in text
+    assert "1 file not read: cannot be read (Permission denied)" in text and "1 folder not read: a link" in text
 
 
 def test_redo2_f7_for_a_failure_reading_the_records_never_undoes_a_passed_test(home, monkeypatch):
@@ -436,7 +438,7 @@ def test_redo2_f7_must_not_touch_the_bounds():
 def test_redo2_f8_for_every_user_rule_line_says_how_it_was_measured(home):
     assert ruleform.add(ans(), str(home)).ok
     info = overlay.describe(overlay.load(str(home)))
-    words = "measured on its own examples only (6 fixture files), not on a corpus"
+    words = "measured on its own fixture files only (6), not on a corpus"   # REDO 3 G-8 (Q-9)
     assert [x for x in overlay.start_lines(info) if x.startswith("rules: user rule MY-X") and x.endswith(words)]
     assert [x for x in overlay.report_lines(info, {}) if x.startswith("  - user rule MY-X") and x.endswith(words)]
 
@@ -562,7 +564,8 @@ def test_tk_redo2_f3_each_row_removes_its_own_place(home, tmp_path):
             w = todo.pop()
             todo += w.winfo_children()
             texts += [w.cget("text")] if w.winfo_class() == "TLabel" else []
-        assert any("delete it by hand" in t and str(backup) in t for t in texts), texts
+        assert any("delete it by hand" in t for t in texts), texts
+        assert window.rule_widgets[("backup", "path")].get() == str(backup)   # REDO 3 G-7: its path, selectable
         _press(root, window.rule_widgets[("MY-TF.yaml", "remove")])
         assert root.focus_get() is window.rule_widgets[("MY-TF.yaml", "keep")]
         assert ("MY-TF", "confirm") not in window.rule_widgets   # only that row asks

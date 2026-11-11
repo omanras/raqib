@@ -853,11 +853,20 @@ def _refusal(path, root):
         return "cannot be read (%s)" % (exc.strerror or exc)
 
 
+def _what(path):
+    """REDO 3 G-3: what an entry not read is - a folder, a file, or an entry (neither, e.g. a link to nothing)."""
+    try:
+        return "folder" if os.path.isdir(path) else "file" if os.path.isfile(path) else "entry"
+    except (OSError, ValueError):
+        return "entry"
+
+
 def record_files(home=None, max_entries=RECORD_ENTRIES):
     """([(path, name)], cut, refused): the trace and host source files under ~/.raqib, newest first. As the
     fixture paths do (overlay.fixture_file), ~/.raqib itself is followed and no link or reparse point below it is
-    followed or read; at most max_entries directory entries walked (cut: the bound met). refused: [(name, why)]
-    for every link and every entry that could not be read (REDO 2 F-7: counted and said, never dropped)."""
+    followed or read; at most max_entries directory entries walked (cut: the bound met). refused: [(name, why,
+    what)] for every link and every entry that could not be read (REDO 2 F-7: counted and said, never dropped;
+    REDO 3 G-3: what - a folder, a file or an entry - counted as what it is)."""
     root = overlay.raqib_dir(home)
     found, refused, walked, cut = [], [], 0, False
 
@@ -872,13 +881,13 @@ def record_files(home=None, max_entries=RECORD_ENTRIES):
                 break
             why = _refusal(top, root)
             if why:
-                refused.append((rel(top), why))
+                refused.append((rel(top), why, _what(top)))
                 blocked = why
                 break
         if blocked or not os.path.isdir(top):
             continue
         for here, dirs, names in os.walk(top, followlinks=False, onerror=lambda exc: refused.append((
-                rel(exc.filename or top), "cannot be read (%s)" % (exc.strerror or exc)))):
+                rel(exc.filename or top), "cannot be read (%s)" % (exc.strerror or exc), "folder"))):
             walked += len(dirs) + len(names)
             if walked > max_entries:
                 cut = True
@@ -887,7 +896,7 @@ def record_files(home=None, max_entries=RECORD_ENTRIES):
             for d in dirs:
                 why = _refusal(os.path.join(here, d), root)
                 if why:
-                    refused.append((rel(os.path.join(here, d)), why))
+                    refused.append((rel(os.path.join(here, d)), why, _what(os.path.join(here, d))))
                 else:
                     keep.append(d)
             dirs[:] = keep
@@ -902,7 +911,7 @@ def record_files(home=None, max_entries=RECORD_ENTRIES):
                         continue
                     except OSError as exc:
                         why = "cannot be read (%s)" % (exc.strerror or exc)
-                refused.append((rel(path), why))
+                refused.append((rel(path), why, _what(path)))
         if cut:
             break
     found.sort(key=lambda x: (-x[0], x[1]))
@@ -925,7 +934,8 @@ def _tail(path, limit):
 def on_records(rule, home=None, max_files=RECORD_FILES, max_lines=RECORD_LINES, max_bytes=RECORD_BYTES,
                max_entries=RECORD_ENTRIES):
     """The rule run over the newest records under ~/.raqib: {files, lines, fired, fired_files, cited:
-    [(name, seq)], cut, more_files, walk_cut, not_host, not_read: [(name, why)], bounds}. Read-only;
+    [(name, seq)], cut, more_files, walk_cut, not_host, not_read: [(name, why, what)], capped (files the line
+    cap left read in part or not at all), big (files read only in their last max_bytes), bounds}. Read-only;
     information, never a gate. A file is a file of host lines by its lines (source host), not by its folder
     (REDO 2 F-7): the host watch gives it only to a rule whose match names the tool HostChild
     (host.source_rules(..., host_lines=True), REDO E-2), and for another rule it is counted in not_host; every
@@ -934,17 +944,21 @@ def on_records(rule, home=None, max_files=RECORD_FILES, max_lines=RECORD_LINES, 
     reads_host = bool(host.source_rules([rule], host_lines=True))
     out = {"files": 0, "lines": 0, "fired": 0, "fired_files": 0, "cited": [], "cut": False,
            "more_files": max(0, len(files) - max_files), "walk_cut": walk_cut, "not_host": 0,
-           "not_read": list(refused), "bounds": (max_files, max_lines, max_bytes, max_entries)}
+           "not_read": list(refused), "capped": 0, "big": 0,
+           "bounds": (max_files, max_lines, max_bytes, max_entries)}
     left = max_lines
-    for path, name in files[:max_files]:
-        if left <= 0:
+    chosen = files[:max_files]
+    for i, (path, name) in enumerate(chosen):
+        if left <= 0:   # G-3: each bound met is counted and said
             out["cut"] = True
+            out["capped"] += len(chosen) - i
             break
         try:
             text, cut = _tail(path, max_bytes)
         except OSError as exc:
-            out["not_read"].append((name, "cannot be read (%s)" % (exc.strerror or exc)))
+            out["not_read"].append((name, "cannot be read (%s)" % (exc.strerror or exc), "file"))
             continue
+        out["big"] += 1 if cut else 0
         numbered, _ = trace.parse_numbered(text)
         host_lines = any(isinstance(rec, dict) and rec.get("source") == host.HOST_SOURCE for _, rec in numbered)
         if host_lines and not reads_host:
@@ -952,6 +966,7 @@ def on_records(rule, home=None, max_files=RECORD_FILES, max_lines=RECORD_LINES, 
             continue
         if len(numbered) > left:
             numbered, cut = numbered[-left:], True
+            out["capped"] += 1
         out["cut"] = out["cut"] or cut
         left -= len(numbered)
         out["files"] += 1
@@ -977,12 +992,17 @@ def _n(count, one, many=None):
     return "%s %s" % ("{:,}".format(count), one if count == 1 else (many or one + "s"))
 
 
+WHAT = {"file": ("file", "files"), "folder": ("folder", "folders"), "entry": ("entry", "entries")}
+
+
 def _not_read_text(not_read):
-    """"3 file(s) not read: a link", one line per reason, in the order met (REDO 2 F-7)."""
+    """"3 files not read: a link", "1 folder not read: a link" - one line per kind and reason, in the order met
+    (REDO 2 F-7; REDO 3 G-3: a folder is counted as a folder, not as a file)."""
     by = {}
-    for _, why in not_read:
-        by[why] = by.get(why, 0) + 1
-    return ["%d file(s) not read: %s" % (n, why) for why, n in by.items()]
+    for x in not_read:
+        key = (x[2] if len(x) > 2 else "file", x[1])
+        by[key] = by.get(key, 0) + 1
+    return ["%s not read: %s" % (_n(n, *WHAT.get(what, (what, what + "s"))), why) for (what, why), n in by.items()]
 
 
 def records_text(r):
@@ -994,27 +1014,32 @@ def records_text(r):
     bounds = "the newest %d files, at most %s lines in all and %s MB of each" % (nf, "{:,}".format(nl),
                                                                                  "%g" % (nb / 1e6))
     extra = []
-    if r["not_host"]:
+    if r["not_host"]:   # G-3: a file is called by what it holds, not by where it lies
         extra.append("%s not judged: a watch gives host lines only to a rule that reads HostChild lines"
-                     % _n(r["not_host"], "host source file"))
+                     % _n(r["not_host"], "file of host lines", "files of host lines"))
+    if r["more_files"]:   # G-3: each bound met is said, also when no file was judged
+        extra.append("%s not read (the newest %d only)" % (_n(r["more_files"], "older file"), nf))
+    if r.get("capped"):
+        extra.append("%s read in part or not at all: the cap of %s was met" % (_n(r["capped"], "file"),
+                                                                                _n(nl, "line")))
+    if r.get("big"):
+        extra.append("%s read only in %s last %g MB" % (_n(r["big"], "file"), "its" if r["big"] == 1 else "their",
+                                                         nb / 1e6))
     if r["walk_cut"]:
         extra.append("the walk stopped at %s entries: some files were not looked at" % "{:,}".format(ne))
     extra += _not_read_text(r["not_read"])
     if not r["files"]:
-        if r["not_read"] or r["not_host"] or r["walk_cut"]:   # F-7: never "no file yet" when files were refused
-            return ("on your records: no file was judged (it would read %s)%s; information only, never a gate"
-                    % (bounds, "".join("; " + x for x in extra)))
+        if extra:   # F-7: never "no file yet" when files were refused, bounded or not judged
+            return ("on your records: no file was judged (it would read %s); %s; information only, never a gate"
+                    % (bounds, "; ".join(extra)))
         return ("on your records: no trace or host source file under ~/.raqib this rule would read yet, nothing"
                 " to run it on (it would read %s)" % bounds)
     text = "on your records: would have fired on %s of %s in %s" % (
         "{:,}".format(r["fired"]), _n(r["lines"], "line"), _n(r["files"], "file"))
     if r["fired"] and r["files"] > 1:
         text += " (in %d of them)" % r["fired_files"]
-    if r["cut"] or r["more_files"]:
-        extra.insert(0, "read: %s%s" % (bounds, "; %s not read" % _n(r["more_files"], "older file")
-                                        if r["more_files"] else ""))
-    else:
-        extra.insert(0, "read: every file (%s)" % bounds)
+    whole = not (r["cut"] or r["more_files"] or r["walk_cut"] or r["not_read"])   # G-3: never more than it read
+    extra.insert(0, "read: %s (%s)" % ("every file" if whole else "not every file", bounds))
     return text + "; " + "; ".join(extra) + "; information only, never a gate"
 
 

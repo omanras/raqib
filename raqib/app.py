@@ -683,6 +683,10 @@ def strip_total(state):
     return host["rounds"] - (1 if strip_progress(state) else 0)
 
 
+BY_HAND = "Not a rule Raqib wrote: delete it by hand if you mean to:"
+BY_HAND_LINK = "A link in rules.d, not a rule Raqib wrote: remove the link by hand if you mean to (not what it leads to):"
+
+
 def rule_items(rows, titles=None):
     """M8.1 E5: the Rules screen's rows from RulesPanel.rows: per rule its
     id, the YAML's title, on, the overlay state in words ("off by the
@@ -709,6 +713,7 @@ def rule_items(rows, titles=None):
         out.append({"id": _safe(r.get("id")), "key": key, "place": _safe(place) if place else None,
                     "removable": bool(place) and r.get("removable", overlay.removable(place, "folder")),
                     "path": _safe(r.get("path")) if r.get("path") else None,
+                    "no_remove": _safe(r.get("no_remove") or BY_HAND),   # REDO 3 G-5, G-6: why no Remove
                     "title": "" if r.get("refused") else _safe(titles.get(r.get("id")) or ""), "on": on,
                     "state": state, "pills": [_safe(r.get(k)) for k in ("kind", "severity", "origin")],
                     "meta": ("why: %s" % _safe(r["refused"]) if r.get("refused") else
@@ -2211,6 +2216,9 @@ class RulesPanel:
                 "; a watch is running: it keeps the rules it started with" if running else ""), "clean"
         except overlay.OverlayError as exc:
             self.message, self.level = "REFUSED: %s" % exc, "alarm"
+        except Exception as exc:   # M8.2 REDO 3 G-5: whatever else fails is a refusal with words, never nothing
+            self.message, self.level = "REFUSED: the change could not be made: %s: %s" % (
+                type(exc).__name__, _safe(exc)), "alarm"
         self.reload()
         return self.message
 
@@ -2249,14 +2257,25 @@ class RulesPanel:
         so it can be removed from the window - with its own place (REDO 2 F-3); a place Raqib could not have
         written (a folder whose name is no id) has no Remove: the row gives its path, to delete it by hand."""
         out = []
-        kinds = dict(overlay.user_entries((self.info or {}).get("user_dir")))
+        rules_d = (self.info or {}).get("user_dir")
+        try:   # REDO 3 G-5: a rules.d that cannot be listed is said on each row, never a crash while drawing
+            kinds, unlisted = dict(overlay.user_entries(rules_d)), None
+        except Exception as exc:
+            kinds, unlisted = {}, "%s could not be listed (%s: %s): Remove is not offered" % (
+                rules_d, type(exc).__name__, exc)
         for u in (self.info or {}).get("user_refused_ids") or ():
             place = u.get("place") or u["rule_id"]
             kind = kinds.get(place, "other")
-            path = os.path.join((self.info or {}).get("user_dir") or "", place)
+            path = os.path.join(rules_d or "", place)
+            try:
+                link = kind == "other" and overlay.is_link(path)
+            except Exception as exc:   # an entry that cannot be looked at: said, no Remove
+                link, unlisted = False, unlisted or "%s cannot be read (%s: %s): Remove is not offered" % (
+                    path, type(exc).__name__, exc)
             out.append({"id": u["rule_id"], "kind": "-", "class": "-", "severity": "-", "budget": 0, "status": "off",
                         "off_by": "refused", "origin": "user", "thresholds": [], "fixed": [], "refused": u["reason"],
-                        "place": place, "removable": overlay.removable(place, kind), "path": path})
+                        "place": place, "removable": unlisted is None and overlay.removable(place, kind),
+                        "path": path, "no_remove": unlisted or (BY_HAND_LINK if link else BY_HAND)})
         return out
 
     def origin(self, rule_id):
@@ -3939,6 +3958,7 @@ class Window:
             self._rules_form_verdict(state)   # REDO 2 F-10: the header never goes stale
             if state == "changed":
                 self.form_status.configure(text="changed since the test: test again", style="Muted.Card.TLabel")
+                self._rules_form_preview(self.form_result, stale=True)   # REDO 3 G-7: marked as the last test's
             elif self.form_status.cget("text") == "changed since the test: test again":
                 self._rules_form_said(state)   # the same answers again: the passed Test's words back
 
@@ -3962,14 +3982,23 @@ class Window:
         said = "; ".join([short] + notes.get("rule", [])).strip("; ")
         self.form_status.configure(text=rule or said, style="alarm.Level.Card.TLabel" if rule else
                                    "Muted.Card.TLabel")
-        lines = []
-        if res.records is not None:
-            lines = [ruleform.records_text(res.records)] + ["  " + c for c in ruleform.cited_text(res.records)] + [""]
-        self._set(self.form_text, "ruleform", "\n".join(lines) + (res.yaml or "") if res.ok else
-                  "\n".join("refused: %s: %s" % (ruleform.FIELD_WORDS.get(f, f), w) for f, w in res.refusals))
+        self._rules_form_preview(res)
         first = next((f for f in ruleform.FIELDS if f in by), None)
         if first is not None:
             self.form_fields[first].focus_set()
+
+    STALE = ("THE LAST TEST'S, NOT THESE ANSWERS: a field changed since the test; the YAML and \"on your records\""
+             " below are what the last test gave - test again")
+
+    def _rules_form_preview(self, res, stale=False):
+        """The YAML it will write and "on your records" (read-only); stale (REDO 3 G-7): after a field changed,
+        marked as the last test's, not the form's present state."""
+        lines = []
+        if res.records is not None:
+            lines = [ruleform.records_text(res.records)] + ["  " + c for c in ruleform.cited_text(res.records)] + [""]
+        text = "\n".join(lines) + (res.yaml or "") if res.ok else "\n".join(
+            "refused: %s: %s" % (ruleform.FIELD_WORDS.get(f, f), w) for f, w in res.refusals)
+        self._set(self.form_text, "ruleform", (self.STALE + "\n\n" + text) if stale else text)
 
     def _rules_form_verdict(self, res=None):
         """The form's header; its pill says the Test's word (passed, refused, not tested), not an exit code's."""
@@ -4143,9 +4172,14 @@ class Window:
             what = "Its YAML and its fixtures are" if item["place"] == item["id"] or not item.get("refused") else (
                 "%s is" % item["place"])
             if not item.get("removable"):   # REDO 2 F-3: not a place Raqib could have written: no Remove
-                self._wrap(ttk.Label(gone, text="Not a rule Raqib wrote: delete it by hand if you mean to: %s"
-                                     % (item.get("path") or item["place"]), style="Muted.Card.TLabel", anchor="w",
-                                     justify="left"), self.px(300)).pack(anchor="w", fill="x")
+                self._wrap(ttk.Label(gone, text=item.get("no_remove") or BY_HAND, style="Muted.Card.TLabel",
+                                     anchor="w", justify="left"), self.px(300)).pack(anchor="w", fill="x")
+                # REDO 3 G-7: the path is reached by Tab and can be selected and copied (read-only)
+                path = ttk.Entry(gone, width=1, takefocus=True)
+                path.insert(0, item.get("path") or item["place"])
+                path.state(["readonly"])
+                path.pack(anchor="w", fill="x", pady=(self.px(2), 0))
+                self.rule_widgets[(key, "path")] = path
             elif self.rule_confirm == key:
                 self._wrap(ttk.Label(gone, text="Remove %s? %s deleted from rules.d." % (item["place"], what),
                                      style="alarm.Level.Card.TLabel", anchor="w", justify="left"),
