@@ -379,3 +379,74 @@ MET; the rest PARTLY. Verdict: REDO on C-1; the Table's rulings C-2..C-8.
   B-5's softening keyed on a count (C-1); A-2's guess about a hole's
   level (B-5). What worked: CI's windows jobs as the run of record, and
   a fit test that names the widest widget when it fails.
+
+## Amendment E (the Table, 2026-11-11) - rulings on review 2026-11-11-M8.2.md (9616878)
+Builder's record: docs/review/2026-11-11-M8.2-questions.md (Q-1..Q-7). CI
+run 42925338265 for 9616878: six jobs success on the first commit.
+Verdict: REDO on E-1 and E-2; the Table's rulings E-3..E-10. Each ruling
+names the case it is for and what it must not touch (ADR-0007 Z-9).
+- E-1 (P1, must) Nothing a person types can end the form in anything but
+  an answer. For: every typed text (the title, a name, a place, a host,
+  a tool, an example) is checked to be text the rule file can carry and
+  read back; what is not is a refusal beside its field ("a character
+  this file cannot hold: ..."). And whatever fails inside the form that
+  is not a refusal becomes one ("the form could not write this rule:
+  <why>"), in the window and in the terminal (exit 2), never a traceback.
+  Must not touch: text the file can carry stays allowed as typed.
+- E-2 (P2, must; scope widened to raqib/host.py for this) A rule judges
+  the lines it says it reads. For: the host watch gives a file of host
+  lines to every rule whose match names the tool HostChild - NET-TOOL,
+  DESTRUCT-CMD and a person's program rule alike - chosen by that
+  property, not by a list of ids. Must not touch: a rule that does not
+  name HostChild is still not run on host lines (it could only say it
+  cannot judge); the package rules' findings on the shipped host fixtures
+  are unchanged. "On your records" judges a file only with what a watch
+  would judge it with. The tool form says the lines it reads (a hook's
+  and a proxy's tool lines), not "every tool line".
+- E-3 (P3) A program is matched as typed and as capture lower-cases it:
+  where the two differ the rule holds both, and the field says so ("also
+  matched as r"). Must not touch: a name typed in lower case makes the
+  rule it made before.
+- E-4 (P4) A place a person can type fires where a tool is aimed: a
+  place beginning with ~ is written both as typed and with the home it
+  stands for on this machine, said beside the field; the hint's example
+  is a whole path. Must not touch: an absolute place is written as typed.
+- E-5 (P5) Removing takes a deliberate second act: the confirmation's
+  focus is on "Keep it"; Enter on Remove opens the confirmation and never
+  deletes; leaving the screen withdraws a pending confirmation. Tested
+  with key events.
+- E-6 (P6, P12, P13, P14) A user rule that did not load is still a row
+  ("refused at load: <why>") with its Remove. Remove drops the overlay's
+  lines first and the folder second, and says exactly what remains if
+  the second fails; it refuses when rules.d or its parent is a link or a
+  reparse point, as staging does. Ids are compared without regard to
+  case against the folders in rules.d and the package's ids.
+- E-7 (P7, Q-1; scope widened to raqib/rules/engine.py for the word) A
+  person's rule is of class USER: the word joins engine.CLASSES before
+  HOST, and the form's rules carry it. Must not touch: every package
+  rule's class; a rule of class HOST is still refused for a person.
+- E-8 (P8, Q-2; A6) A person's rule declares what its fixtures can
+  measure: it must fire on its firing example and on none of its quiet
+  ones, and it says so (fp_budget 0 on its own examples; the report and
+  the form say "measured on the examples you gave, not on a corpus"). A
+  quiet example that this form's rule could never fire on (another
+  system's path, a thing of another kind) is refused beside its field:
+  a negative must be able to fire.
+- E-9 (P9, P10, P11) Reading the records refuses reparse points as the
+  fixture paths do, walks a bounded number of entries (said), and the
+  form says "testing..." before it reads. Staging folders left by a
+  crash are swept at the next Test, and their count said.
+- E-10 (P15, P16) The tests P15 names are made true (a host-source file
+  of real HostChild lines; the dry run on fixture traces; a running
+  watch; rmdir in the census; an allow-list guard on ruleform). The
+  words P16 names are made true ("fixtures", "1 file", the staging
+  place said); the form never shows "not tested yet" beside an enabled
+  Add; the YAML preview can be reached and read by keyboard; --json with
+  --new is refused; --remove's help says it deletes without asking, and
+  --dry-run says what it would delete; the missing evasions are written.
+  The form's pill says "passed" or "refused", not the exit code's words.
+  Q-3, Q-5, Q-6, Q-7 accepted as built with the above; Q-4 (`.exe` on
+  Bash lines) is E-3's rule: as typed and as lower-cased, no suffix
+  guessed.
+- E-11 Every REDO change carries a test for the behaviour it adds, and
+  for the case it must not touch (D-8, Z-9).
