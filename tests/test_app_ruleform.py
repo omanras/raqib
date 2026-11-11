@@ -100,7 +100,7 @@ def test_tk_m82_new_rule_fill_test_add_the_row_appears_then_remove(home, tmp_pat
         # E4: Remove asks once, beside its row; Keep keeps it; Remove it removes it and says so
         window.rule_widgets[("MY-TF", "remove")].invoke()
         root.update()
-        assert root.focus_get() is window.rule_widgets[("MY-TF", "confirm")]
+        assert root.focus_get() is window.rule_widgets[("MY-TF", "keep")]   # REDO E-5: Keep it has the focus
         window.rule_widgets[("MY-TF", "keep")].invoke()
         root.update()
         assert (Path(overlay.user_dir(str(home))) / "MY-TF").is_dir() and ("MY-TF", "confirm") not in window.rule_widgets
@@ -144,6 +144,102 @@ def test_tk_m82_the_form_is_keyboard_throughout(home, tmp_path):
         window.rules_form_back.event_generate(app.KEYS["act"][0])
         root.update()
         assert window.screen == "rules" and root.focus_get() is window.rules_new_button
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def _press(root, widget, key="act"):
+    """A key as a person types it: the widget focused on a window that is on the screen, the sequence from KEYS."""
+    widget.focus_force()
+    root.update()
+    widget.event_generate(app.KEYS[key][0])
+    root.update()
+
+
+def test_tk_redo_e5_remove_takes_a_deliberate_second_act(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        assert ruleform.add({"id": "MY-TF", "when": "program", "values": "terraform", "severity": "low",
+                             "fires": "terraform", "quiet": "ls"}, str(home)).ok
+        window, c = _window(tkinter, root, home, tmp_path)
+        root.deiconify()
+        root.geometry("900x600")
+        window.show_rules()
+        window.tick()
+        folder = Path(overlay.user_dir(str(home))) / "MY-TF"
+        _press(root, window.rule_widgets[("MY-TF", "remove")])   # Enter on Remove opens the confirmation only
+        assert folder.is_dir() and root.focus_get() is window.rule_widgets[("MY-TF", "keep")]
+        _press(root, root.focus_get())   # a second Enter (a double press, a held key) keeps it
+        assert folder.is_dir() and window.rule_confirm is None and ("MY-TF", "confirm") not in window.rule_widgets
+        _press(root, window.rule_widgets[("MY-TF", "remove")])
+        window.show_host()   # leaving the screen withdraws the pending confirmation
+        assert window.rule_confirm is None
+        window.show_rules()
+        window.tick()
+        assert ("MY-TF", "confirm") not in window.rule_widgets and folder.is_dir()
+        _press(root, window.rule_widgets[("MY-TF", "remove")])
+        _press(root, window.rule_widgets[("MY-TF", "confirm")])   # the deliberate second act deletes
+        assert not folder.exists() and "MY-TF removed" in window.detail.cget("text")
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo_e6_a_rule_refused_at_load_is_a_row_with_remove(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        broken = Path(overlay.user_dir(str(home))) / "MY-OLD"
+        broken.mkdir(parents=True)
+        (broken / "MY-OLD.yaml").write_text("id: MY-OLD\n")
+        window, c = _window(tkinter, root, home, tmp_path)
+        root.withdraw()
+        window.show_rules()
+        window.tick()
+        item = next(i for i, _ in window.rule_rows if i["id"] == "MY-OLD")
+        assert item["state"] == "refused at load" and item["meta"].startswith("why: ") and item["refused"]
+        assert window.rule_widgets[("MY-OLD", "switch")].instate(["disabled"])
+        assert ("NET-TOOL", "remove") not in window.rule_widgets   # must not touch: a package rule has no Remove
+        window.rules_remove("MY-OLD")
+        window.rules_remove("MY-OLD", confirmed=True)
+        assert not broken.exists() and "MY-OLD" not in [i["id"] for i, _ in window.rule_rows]
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_redo_e10_the_form_says_passed_and_its_preview_is_reached_by_keyboard(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        window, c = _window(tkinter, root, home, tmp_path)
+        root.deiconify()   # a Text with takefocus 1 is a Tab stop when it is viewable
+        root.geometry("900x600")
+        window.rules_new()
+        assert window.pill.cget("text") == "not tested"
+        window.form_vars["id"].set("MY-TF")
+        window.form_vars["values"].set("Terraform")
+        window.rules_form_test()
+        assert window.pill.cget("text") == "passed" and window.rules_form_add_button.instate(["!disabled"])
+        assert "also matched as terraform" in window.form_said["values"].cget("text")   # E-3, beside its field
+        assert str(window.form_said["values"].cget("style")) == "Muted.Card.TLabel"
+        assert ruleform.MEASURED in window.detail.cget("text")
+        window.show_rules()
+        window.rules_new()   # back on the form: a passed Test of these answers is said as passed, never "not tested"
+        assert window.pill.cget("text") == "passed" and window.rules_form_add_button.instate(["!disabled"])
+        root.update()
+        assert window.form_text in _focus_chain(root, window.form_fields["id"], 40)
+        window.form_vars["id"].set("my tf")
+        window.rules_form_test()
+        assert window.pill.cget("text") == "refused" and window.rules_form_add_button.instate(["disabled"])
     finally:
         if window is not None:
             window.destroy()

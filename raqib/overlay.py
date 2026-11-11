@@ -1228,30 +1228,65 @@ def _delete_tree(target, root):
     return files
 
 
-def remove_rule(rid, home=None, catalog=None):
-    """M8.2 E4 (ADR-0009 decision 4): remove a person's rule - its directory under rules.d (fixture_file:
-    under rules.d by realpath, no link on the way; _delete_tree follows none) and its lines in the overlay;
-    the line said. A package rule is refused (switch it off instead). The overlay is read before anything
-    is deleted: a malformed one refuses the whole removal."""
+def _is_link(path):
+    """A symlink, a junction or any reparse point (fixture_file's own check)."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return False
+    junction = getattr(os.path, "isjunction", None)
+    return os.path.islink(path) or bool((getattr(st, "st_file_attributes", 0) or 0) & 0x400) or bool(
+        junction is not None and junction(path))
+
+
+def _folder_of(rules_d, rid):
+    """The folder of rules.d whose name is rid without regard to case (M8.2 REDO E-6), or None."""
+    if not os.path.isdir(rules_d):
+        return None
+    return next((n for n in sorted(os.listdir(rules_d)) if n.upper() == rid.upper()), None)
+
+
+def remove_rule(rid, home=None, catalog=None, dry_run=False):
+    """M8.2 E4 (ADR-0009 decision 4; REDO E-6): remove a person's rule - its lines in the overlay first, then
+    its folder under rules.d (fixture_file: under rules.d by realpath, no link on the way; _delete_tree follows
+    none); the line said, and what remains when the folder could not be removed. A package rule is refused
+    (switch it off instead); ids are compared without regard to case; refused when ~/.raqib or rules.d is a
+    link or a reparse point. A rule refused at load is removed the same way (its folder). dry_run: what it
+    would delete, nothing written."""
     rid = str(rid or "").strip()
-    if not engine.RULE_ID.match(rid):
+    if not engine.RULE_ID.match(rid.upper()):   # E-6: a folder refused at load may be named in lower case
         raise OverlayError("%r is not a rule id (MY-RULE): nothing removed" % (rid,))
-    if rid in {r.id for r in engine.load_catalog(catalog or CATALOG)}:
+    if rid.upper() in {r.id.upper() for r in engine.load_catalog(catalog or CATALOG)}:
         raise OverlayError(REMOVE_PACKAGE % (rid, rid))
-    doc = _current(home)
     rules_d = user_dir(home)
-    target = fixture_file(rules_d, rid)
-    if not os.path.isdir(target):
+    for place in (raqib_dir(home), rules_d):
+        if _is_link(place):
+            raise OverlayError("%s is a link or a reparse point: nothing removed (Raqib removes only in its own"
+                               " folders)" % place)
+    doc = _current(home)
+    name = _folder_of(rules_d, rid)
+    if name is None:
         raise OverlayError("no user rule %s in %s: nothing removed" % (rid, rules_d))
+    target = fixture_file(rules_d, name)
+    if not os.path.isdir(target) or _is_link(target):
+        raise OverlayError("%s is not a folder of rules.d: nothing removed" % target)
+    entry = next((k for k in doc["rules"] if k.upper() == rid.upper()), None)
+    if dry_run:
+        files = sorted(os.path.relpath(os.path.join(h, n), target) for h, _, ns in os.walk(target) for n in ns)
+        return "dry run: would delete %s (%d file(s): %s)%s; nothing removed" % (
+            target, len(files), ", ".join(files), "; would drop its entry from %s" % overlay_path(home) if entry
+            else "; it has no entry in %s" % overlay_path(home))
+    said = "%s removed" % rid
+    if entry is not None:   # REDO E-6: the overlay's lines first, so a crash never leaves them to a later rule
+        del doc["rules"][entry]
+        said += ": its entry dropped from %s" % write(doc, home)
+    else:
+        said += ": it had no entry in %s" % overlay_path(home)
     try:
         files = _delete_tree(target, rules_d)
-    except OSError as exc:
-        raise OverlayError("cannot remove %s: %s (what is left is refused at load, said)"
-                           % (exc.filename or target, exc.strerror or exc))
-    said = "%s removed: %s deleted (%d file(s))" % (rid, target, files)
-    if rid in doc["rules"]:
-        del doc["rules"][rid]
-        said += "; its entry dropped from %s" % write(doc, home)
-    else:
-        said += "; it had no entry in %s" % overlay_path(home)
-    return "%s; %s" % (said, NEXT_WATCH)
+    except (OSError, OverlayError) as exc:
+        left = [os.path.join(h, n) for h, _, ns in os.walk(target) for n in ns] if os.path.isdir(target) else []
+        raise OverlayError("%s; but its folder %s could not be removed: %s; what remains: %s (it is refused at load"
+                           " and listed with Remove)" % (said, target, getattr(exc, "strerror", None) or exc,
+                                                         ", ".join(left) or "the empty folder"))
+    return "%s; %s deleted (%d file(s)); %s" % (said, target, files, NEXT_WATCH)

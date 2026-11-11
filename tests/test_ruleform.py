@@ -14,7 +14,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from raqib import app, cli, overlay, ruleform  # noqa: E402
+from raqib import app, cli, host, overlay, ruleform  # noqa: E402
 from raqib.rules import engine, fixtures, trace, yamlite  # noqa: E402
 
 FORMS = {
@@ -63,12 +63,14 @@ def run_cli(argv):
 @pytest.mark.parametrize("when", sorted(FORMS))
 def test_e1_e7_each_form_makes_a_rule_the_engine_accepts(home, when):
     a = answers(when)
-    assert ruleform.examples(when, a["values"]) == (a["fires"], a["quiet"])   # E5: prefilled from the first name
+    fires = ruleform.home_of("~/.aws") + "/example.txt" if when == "path" else a["fires"]   # REDO E-4
+    assert ruleform.examples(when, a["values"]) == (fires, a["quiet"])   # E5: prefilled from the first name
     built = ruleform.build(a, ruleform.taken_ids(str(home)))
     assert built.yaml.isascii() and yamlite.loads(built.yaml) == built.doc   # written in what the loader reads
     doc = built.doc
     assert doc["kind"] == "signature" and doc["evasion"] == list(ruleform.EVASIONS[when]) and doc["evasion"]
-    assert doc["class"] not in ("HOST", engine.CODE_CLASS) and doc["class"] in engine.CLASSES
+    assert doc["class"] == "USER" and "USER" in engine.CLASSES and engine.CLASSES[-1] == "HOST"   # REDO E-7
+    assert doc["fp_budget"] == 0 and ruleform.MEASURED in doc["description"]   # REDO E-8
     assert ruleform.READS[when] in doc["description"]   # which lines it reads, said
     tested = ruleform.test(a, str(home))
     assert tested.ok, tested.refusals
@@ -142,8 +144,9 @@ def test_e1_names_and_places_pass_the_capture_rules(home, when, kw, field, words
 
 
 def test_e1_program_names_are_lower_cased_as_discover_names_images():
-    assert ruleform.check_program("Curl.EXE") == ("curl", None)
-    assert ruleform.check_host("Paste.Example.COM") == ("paste.example.com", None)
+    assert ruleform.check_program("Curl.EXE") == (["curl", "Curl.EXE"], "Curl.EXE is also matched as curl (an os or"
+                                                  " host line's image is lower case)", None)
+    assert ruleform.check_host("Paste.Example.COM") == (["paste.example.com"], None, None)
 
 
 def test_e2_the_examples_are_judged_by_the_engine_not_the_form(home):
@@ -226,30 +229,59 @@ def _write_records(home):
     return t, s
 
 
+def _host_child_lines():
+    """REDO E-10 (P15): the host source's own lines, as the host watch writes them (NET-TOOL's fixture)."""
+    body = json.loads((ROOT / "tests" / "fixtures" / "rules" / "NET-TOOL" / "positive-host-child.json").read_text())
+    return body["lines"]
+
+
+def _write_records(home):
+    base = Path(overlay.raqib_dir(str(home)))
+    t = base / "traces" / "demo-1" / "raqib.log.jsonl"
+    t.parent.mkdir(parents=True)
+    t.write_text("".join(json.dumps(r) + "\n" for r in _trace_lines(["ls", "curl", "make", "terraform"])))
+    s = base / "host" / "sources" / "run-1-tree.jsonl"
+    s.parent.mkdir(parents=True)
+    lines = _host_child_lines()
+    assert lines and all(r.get("source") == "host" for r in lines)
+    s.write_text("".join(json.dumps(r) + "\n" for r in lines))
+    os.utime(str(t), (1000000000, 1000000000))   # the trace is the older file
+    return t, s, len(lines)
+
+
 def test_e3_on_your_records_counts_the_lines_it_would_have_fired_on(home):
-    _write_records(home)
+    _, _, host_n = _write_records(home)
     before = {p: p.stat().st_mtime for p in Path(overlay.raqib_dir(str(home))).rglob("*.jsonl")}
-    res = ruleform.test(answers("program"), str(home))
+    a = answers("program", values="curl", fires="curl", quiet="ls")
+    res = ruleform.test(a, str(home))
     r = res.records
-    assert (r["files"], r["lines"], r["fired"], r["fired_files"]) == (2, 6, 3, 2)
-    assert r["cited"] == [("host/sources/run-1-tree.jsonl", 1), ("traces/demo-1/raqib.log.jsonl", 2),
-                          ("traces/demo-1/raqib.log.jsonl", 4)]   # newest file first; up to three
+    # REDO E-2: the host watch gives host lines to a rule that names HostChild: the program rule reads them
+    assert host.reads_host_lines(res.rule) and r["not_host"] == 0
+    assert (r["files"], r["lines"]) == (2, 4 + host_n) and r["fired"] >= 2 and r["fired_files"] == 2
+    assert r["cited"][0] == ("host/sources/run-1-tree.jsonl", 1)   # newest file first; up to three
+    assert ("traces/demo-1/raqib.log.jsonl", 2) in r["cited"]
     text = ruleform.records_text(r)
-    assert text.startswith("on your records: would have fired on 3 of 6 lines in 2 files")
+    assert text.startswith("on your records: would have fired on %d of %d lines in 2 files (in 2 of them)"
+                           % (r["fired"], 4 + host_n))
     assert "never a gate" in text and "the newest 20 files" in text
-    assert ruleform.cited_text(r)[0] == "host/sources/run-1-tree.jsonl, seq 1"
     assert {p: p.stat().st_mtime for p in before} == before   # read-only
     bounded = ruleform.on_records(res.rule, str(home), max_files=1, max_lines=1)
     assert (bounded["files"], bounded["lines"], bounded["more_files"]) == (1, 1, 1)
-    assert "1 older files not read" in ruleform.records_text(bounded)
-    quiet = ruleform.test(answers("tool"), str(home)).records
-    assert quiet["fired"] == 0 and "would have fired on 0 of 6 lines" in ruleform.records_text(quiet)
+    assert "1 older file not read" in ruleform.records_text(bounded)
+    # E-2, must not touch: a rule that does not name HostChild is not given host lines (said, not judged)
+    tool = ruleform.test(answers("tool"), str(home)).records
+    assert tool["not_host"] == 1 and (tool["files"], tool["lines"], tool["fired"]) == (1, 4, 0)
+    assert "would have fired on 0 of 4 lines in 1 file;" in ruleform.records_text(tool)
+    assert "1 host source file not judged" in ruleform.records_text(tool)
+    walked = ruleform.on_records(res.rule, str(home), max_entries=1)
+    assert walked["walk_cut"] and "the walk stopped at 1 entries" in ruleform.records_text(walked)
 
 
 def test_e3_no_records_is_said_and_never_gates(home):
     res = ruleform.test(answers("host"), str(home))
     assert res.ok and res.records["files"] == 0
-    assert "no trace or host source file under ~/.raqib yet" in ruleform.records_text(res.records)
+    assert "no trace or host source file under ~/.raqib this rule would read yet" in ruleform.records_text(
+        res.records)
 
 
 # --- E4: Remove --------------------------------------------------------------------------------------------------------
@@ -354,12 +386,26 @@ def test_e6_the_terminal_refuses_with_the_forms_words(home, capsys):
 
 # --- A4: the guards ----------------------------------------------------------------------------------------------
 
+# REDO E-10 (P15): an allow-list - every call ruleform makes on a module, and every open's mode, is named here
+ALLOWED_MODULE_CALLS = {
+    ("os", "makedirs"), ("os", "listdir"), ("os", "rmdir"), ("os", "lstat"), ("os", "walk"), ("os", "utime"),
+    ("shutil", "rmtree"), ("tempfile", "mkdtemp"), ("hashlib", "sha256"), ("json", "dumps"), ("json", "loads"),
+    ("re", "split"), ("re", "compile"), ("os.path", "join"), ("os.path", "dirname"), ("os.path", "basename"),
+    ("os.path", "realpath"), ("os.path", "islink"), ("os.path", "isdir"), ("os.path", "getmtime"),
+    ("os.path", "relpath"), ("os.path", "expanduser"), ("os.path", "isjunction"),
+}
+WRITERS = {"_new_stage": {"makedirs", "mkdtemp"}, "_write_stage": {"open-w"}, "_unstage": {"rmtree", "rmdir"}}
+
+
 def test_a4_ruleform_writes_only_in_its_staging_place_and_starts_nothing():
-    tree = ast.parse((ROOT / "raqib" / "ruleform.py").read_text(encoding="ascii"))
-    imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
-                for a in n.names} | {n.module.split(".")[0] for n in ast.walk(tree)
-                                     if isinstance(n, ast.ImportFrom) and n.module}
-    assert not imported & {"subprocess", "socket", "urllib", "http", "ctypes", "multiprocessing"}, imported
+    src = (ROOT / "raqib" / "ruleform.py").read_text(encoding="ascii")
+    tree = ast.parse(src)
+    imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    assert imported == {"hashlib", "json", "os", "re", "shutil", "tempfile"}, imported
+    froms = {(n.module, a.name) for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
+    assert froms == {("__future__", "annotations"), ("raqib", "discover"), ("raqib", "host"), ("raqib", "overlay"),
+                     ("raqib.hooks", "common"), ("raqib.rules", "engine"), ("raqib.rules", "trace"),
+                     ("raqib.rules", "yamlite")}, froms
     funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
     writers = {}
     for name, fn in funcs.items():
@@ -367,29 +413,32 @@ def test_a4_ruleform_writes_only_in_its_staging_place_and_starts_nothing():
             if not isinstance(sub, ast.Call):
                 continue
             f = sub.func
-            called = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
-            owner = getattr(f.value, "id", None) if isinstance(f, ast.Attribute) else None
-            if owner in ("os", "shutil"):
-                assert called not in ("system", "kill", "startfile", "replace", "rename", "remove", "unlink",
-                                      "copy", "copyfile", "move", "symlink", "link"), (name, called)
-            if called in ("makedirs", "mkdtemp", "rmtree", "rmdir", "mkdir"):
-                writers.setdefault(name, set()).add(called)
-            if called == "open":
-                modes = [a.value for a in sub.args[1:] if isinstance(a, ast.Constant)]
-                if modes and modes[0] != "rb":
+            if isinstance(f, ast.Name):
+                assert f.id not in ("exec", "eval", "compile", "__import__", "setattr", "globals"), (name, f.id)
+                if f.id == "getattr":   # only a named attribute (st_file_attributes, isjunction), never a computed one
+                    assert isinstance(sub.args[1], ast.Constant) and sub.args[1].value in (
+                        "st_file_attributes", "isjunction", "doc"), (name, ast.dump(sub)[:80])
+            if isinstance(f, ast.Attribute):
+                owner = ast.unparse(f.value)
+                if owner in ("os", "os.path", "shutil", "tempfile", "hashlib", "json", "re", "subprocess"):
+                    assert (owner, f.attr) in ALLOWED_MODULE_CALLS, (name, owner, f.attr)
+                    if f.attr in ("makedirs", "mkdtemp", "rmtree", "rmdir"):
+                        writers.setdefault(name, set()).add(f.attr)
+            if isinstance(f, ast.Name) and f.id == "open":
+                modes = [a.value for a in sub.args[1:2] if isinstance(a, ast.Constant)] + \
+                        [k.value.value for k in sub.keywords if k.arg == "mode" and isinstance(k.value, ast.Constant)]
+                assert modes and all(m in ("rb", "w") for m in modes), (name, modes)
+                if modes != ["rb"]:
                     writers.setdefault(name, set()).add("open-" + modes[0])
-    assert writers == {"_stage": {"makedirs", "mkdtemp", "open-w"}, "_unstage": {"rmtree", "rmdir"}}
-    stage = ast.get_source_segment((ROOT / "raqib" / "ruleform.py").read_text(encoding="ascii"), funcs["_stage"])
-    assert "base = staging_dir(home)" in stage and "overlay.fixture_file(stage, rel)" in stage
-    unstage = ast.get_source_segment((ROOT / "raqib" / "ruleform.py").read_text(encoding="ascii"),
-                                     funcs["_unstage"])
-    assert "os.path.realpath(staging_dir(home))" in unstage and "os.path.dirname(stage) == base" in unstage
+    assert writers == WRITERS
+    stage = ast.get_source_segment(src, funcs["_new_stage"])
+    assert "base = staging_dir(home)" in stage and "overlay.fixture_file(overlay.raqib_dir(home), STAGING_NAME)" in stage
+    assert "overlay.fixture_file(stage, rel)" in ast.get_source_segment(src, funcs["_write_stage"])
+    unstage = ast.get_source_segment(src, funcs["_unstage"])
+    assert "os.path.realpath(staging_dir(home))" in unstage and "os.path.dirname(real) != base" in unstage
     # Add reaches rules.d through overlay.add_rule only (the --add path)
     calls = {c.func.attr for c in ast.walk(funcs["add"]) if isinstance(c, ast.Call)
              and isinstance(c.func, ast.Attribute) and getattr(c.func.value, "id", None) == "overlay"}
     assert calls == {"add_rule"}
-    assert staging_under_raqib()
+    assert os.path.dirname(ruleform.staging_dir("/h")) == overlay.raqib_dir("/h")
 
-
-def staging_under_raqib():
-    return os.path.dirname(ruleform.staging_dir("/h")) == overlay.raqib_dir("/h")

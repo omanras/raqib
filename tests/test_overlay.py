@@ -521,7 +521,7 @@ PANEL_CALLS = {"set_status", "set_threshold", "reset", "add_rule", "load", "list
                "table_text", "start_lines", "OverlayError", "remove_rule"}   # M8.2: Remove
 # M8.2: the panel and the form reach ruleform only through these (its Test and Add, the words it says)
 RULEFORM_CALLS = {"test", "add", "fingerprint", "Result", "examples", "records_text", "cited_text", "FIELDS",
-                  "FIELD_WORDS", "FORM_WORDS", "FORMS", "SEVERITIES", "VALUE_HINTS"}
+                  "FIELD_WORDS", "FORM_WORDS", "FORMS", "SEVERITIES", "VALUE_HINTS", "MEASURED"}
 
 
 def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
@@ -557,7 +557,8 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
                 continue
             f = sub.func
             called = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
-            if called in ("replace", "rename", "remove", "unlink", "makedirs", "mkstemp", "fdopen", "rmtree"):
+            if called in ("replace", "rename", "remove", "unlink", "makedirs", "mkstemp", "fdopen", "rmtree",
+                          "rmdir"):   # M8.2 REDO E-10: rmdir counted
                 writers.add(name)
             if called == "open":
                 modes = [a.value for a in sub.args[1:] if isinstance(a, ast.Constant)]
@@ -624,14 +625,16 @@ def test_e5_new_and_changed_code_is_ascii():
         (ROOT / name).read_bytes().decode("ascii")
 
 
-def test_e5_readme_says_the_rules_in_four_lines():
+def test_e5_readme_says_the_rules_and_the_form_line_by_line():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## Choose the rules\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
     # M7.6c: two lines more; REDO E-9: the overlay file's assertion restored as code (it had become a comment)
-    # M8.2 E7: one line more, the form and Remove in a person's words
-    assert len(lines) == 7 and "raqib rules" in lines[0] and "~/.raqib/rules.yaml" in " ".join(lines)
-    assert "\"New rule\" opens a form" in section and "raqib rules --new" in section and "--remove" in section
+    # M8.2 E7, REDO E-10: three lines more - the form, its Test and Add, Remove and the terminal
+    assert len(lines) == 9 and "raqib rules" in lines[0] and "~/.raqib/rules.yaml" in " ".join(lines)
+    assert lines[5].startswith("**A new rule from a form.** On the Rules screen, \"New rule\" opens a form")
+    assert lines[6].startswith("\"Test\" writes") and "measured on the examples you gave" in lines[6]
+    assert lines[7].startswith("A rule you added") and "raqib rules --new" in lines[7] and "--remove" in lines[7]
     assert "synthetic desktop" in " ".join(lines) and "benign desktop" not in " ".join(lines)   # REDO E-4
     assert "not judged by" in " ".join(lines) and "rules.d" in " ".join(lines)
 

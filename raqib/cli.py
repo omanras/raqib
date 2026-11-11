@@ -276,14 +276,16 @@ def _parser():
     change.add_argument("--add", metavar="FILE", help="no TRACE: validate a rule file and copy it into ~/.raqib/rules.d")
     change.add_argument("--reset", metavar="ID", help="no TRACE: remove a rule's entry from the overlay")
     change.add_argument("--new", metavar="ID", help="no TRACE: make a rule from the form's answers (M8.2)")
-    change.add_argument("--remove", metavar="ID", help="no TRACE: remove a person's rule from ~/.raqib/rules.d")
+    change.add_argument("--remove", metavar="ID", help="no TRACE: delete a person's rule from ~/.raqib/rules.d and its"
+                        " overlay lines, without asking (--dry-run: say what it would delete)")
     r.add_argument("--when", choices=ruleform.FORMS, help="--new: what to watch for")
     r.add_argument("--values", metavar="A,B", help="--new: the program names, places, host names or tool names")
     r.add_argument("--severity", choices=ruleform.SEVERITIES, help="--new: low, medium or high")
     r.add_argument("--fires", metavar="X", help="--new: one example the rule must fire on")
     r.add_argument("--quiet", metavar="Y", help="--new: one example the rule must stay quiet on")
     r.add_argument("--title", metavar="T", help="--new: the rule's title (default: from the answers)")
-    r.add_argument("--dry-run", action="store_true", help="--new: test and print the YAML; write nothing in rules.d")
+    r.add_argument("--dry-run", action="store_true", help="--new: test and print the YAML, write nothing in rules.d;"
+                   " --remove: say what it would delete, delete nothing")
     r.add_argument("--json", action="store_true", help="no TRACE: print the listing as JSON")
     rep = sub.add_parser("report", help="report findings with their cited trace lines")
     rule_options(rep)
@@ -501,11 +503,19 @@ def rules_overlay_cmd(args, out):
         raise UsageError("-o, --scope, --handoff, --root, --gap-seconds and --catalog apply to `raqib rules TRACE`")
     form = [o for o, v in (("--when", args.when), ("--values", args.values), ("--severity", args.severity),
                            ("--fires", args.fires), ("--quiet", args.quiet), ("--title", args.title),
-                           ("--dry-run", args.dry_run)) if v]
+                           ("--dry-run", args.dry_run and not args.remove)) if v]
     if form and not args.new:
         raise UsageError("%s apply to `raqib rules --new ID`" % ", ".join(form))
+    if args.new and args.json:   # M8.2 REDO E-10: never accepted and ignored
+        raise UsageError("--json does not apply to `raqib rules --new ID` (it prints the rule's YAML with --dry-run)")
     if args.new:
         return rules_new_cmd(args, out)
+    if args.remove and args.dry_run:
+        try:
+            out.write("raqib rules: %s\n" % overlay.remove_rule(args.remove, dry_run=True))
+        except overlay.OverlayError as exc:
+            raise UsageError("refused: %s" % exc)
+        return 0
     said = None
     try:
         if args.set:
@@ -539,7 +549,7 @@ def rules_new_cmd(args, out):
     (raqib/ruleform.py) and the same words; exit 2 with the reasons when refused."""
     answers = {"id": args.new, "title": args.title, "when": args.when, "values": args.values,
                "severity": args.severity, "fires": args.fires, "quiet": args.quiet}
-    tested = ruleform.test(answers)
+    tested = ruleform.test(answers)   # E-1: any failure inside is a refusal (exit 2), never a traceback
     if not tested.ok:
         raise UsageError("; ".join(tested.text()))
     if args.dry_run:
