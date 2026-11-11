@@ -1,0 +1,79 @@
+{
+ "by_channel": [
+  "9216:agentx:2026-11-10T07:51:00.000Z"
+ ],
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 1,
+    "benign": false,
+    "benign_by": null,
+    "brief": true,
+    "by_channel": true,
+    "candidate_before": false,
+    "candidate_by": "channel",
+    "cites": [
+     {
+      "line": 2,
+      "src": "sysmon",
+      "text": "Sysmon 1 2026-11-10 07:51:00.000 pid 9216 C:\\Users\\user\\AppData\\Local\\agentx\\agentx.exe parent 3000 C:\\Windows\\explorer.exe: agentx"
+     },
+     {
+      "line": 3,
+      "src": "sysmon",
+      "text": "Sysmon 3 2026-11-10 07:51:01.000 pid 9216 C:\\Users\\user\\AppData\\Local\\agentx\\agentx.exe 192.0.2.10:50400 -> 203.0.113.70:443 host=-"
+     },
+     {
+      "line": 4,
+      "src": "sysmon",
+      "text": "Sysmon 1 2026-11-10 07:51:02.000 pid 9330 C:\\Windows\\System32\\cmd.exe parent 9216 C:\\Users\\user\\AppData\\Local\\agentx\\agentx.exe: cmd /c dir"
+     }
+    ],
+    "class": "candidate",
+    "endpoints": [
+     "203.0.113.70:443"
+    ],
+    "history": false,
+    "hooks": null,
+    "image": "agentx",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "none_rounds": 0,
+    "pid": 9216,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [],
+     "cycles": 0,
+     "destination": null,
+     "fires": false,
+     "k": 3,
+     "r": 10,
+     "rounds": [],
+     "streak_fired": false,
+     "talks": [
+      "203.0.113.70:443"
+     ],
+     "w": 30
+    },
+    "round": 2,
+    "run": "fixture-run",
+    "sample": "window 2026-11-10T07:51:00.000Z .. 2026-11-10T07:51:02.000Z; Windows sample(s) 1",
+    "seen": "brief (seen in the channel, not at the sample)",
+    "source": "host",
+    "source_word": "host: the host's own record of the tree",
+    "started": null,
+    "tree": "9216:agentx:2026-11-10T07:51:00.000Z",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 1,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:10.000Z"
+  }
+ ]
+}

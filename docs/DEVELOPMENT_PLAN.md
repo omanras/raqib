@@ -79,7 +79,7 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.6c thresholds that can be measured (landed 2026-11-09): edge pairs per field, bounds in the YAMLs, k/w/r/streak/live_window editable on a sensitive measurement
 - M7.7 os_sysmon writes ProcessId on process lines (ADR-0007 Amendment O); CROSS-SOURCE over host lines
 - M7.8 the second field run's lessons (landed 2026-11-11; ADR-0007 Amendments P, R, T, V, W): os lines judged by NET-TOOL / DESTRUCT-CMD, one act one finding in every order, benign trees noted, quiet is not gone, Defender benign, THREAT_MODEL's host section
-- M7.9 the round reads the channel (P-4): a tree that lives between two rounds is a tree of that round where Sysmon is readable
+- M7.9 the round reads the channel (landed 2026-11-11; ADR-0007 Amendments X, Z, AA-AE; P-4): where Sysmon is read, a tree that lives between two rounds is a tree of that round, sourced, its acts judged; a named one knocks, an unknown one known only from the channel is listed and counted (AA-1: the field decides); footprints are judged without the channel (AD-1)
 - M7.10 AGENT-CLIPBOARD (P-5, Sysmon event 24's header): waits for the commander's word and a real export
 - M7.11 a benign host of a model client (ADR-0007 T-9): a benign program that talks to a model endpoint the catalog names is listed with that word
 - M7.12 the tree ledger and its keys (ADR-0007 AB-11, AD-1, AD-2): a bound on by-the-channel trees in the state and the report; one tree for a process whose sampled start is unread and its guid; a footprint whose agent ran only between rounds

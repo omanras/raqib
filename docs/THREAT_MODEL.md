@@ -487,10 +487,12 @@ Rulings: ADR-0003 Amendments C and D.
   0.1 until the field test.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
-Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V. True of the tree
-as P-1..P-3, R-2..R-9, T-2..T-8 and V-1..V-6 leave it (the task after the
-second field run; R-1 is amended by T-2, T-1 restated by V-1).
-- **What a round sees.** One sample: on Windows one read of the OS API
+Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
+tree as P-1..P-4, R-2..R-9, T-2..T-8, V-1..V-6 and X-1..X-9 leave it (R-1
+is amended by T-2, T-1 restated by V-1).
+- **What a round sees.** One sample, and on Windows with Sysmon the
+  channel's events since the previous round (ADR-0007 P-4, below): on
+  Windows one read of the OS API
   (processes and their parents, TCP connections with their owner), on
   Linux one `/proc` snapshot (or `--window S` seconds of them, whose last
   snapshot is the round's process sample). A tree is in the round when its
@@ -524,13 +526,122 @@ second field run; R-1 is amended by T-2, T-1 restated by V-1).
   new, and an ended tree is quiet, not gone; its quiet line ends "start
   time unread: a process of the same image holds the pid". The processes
   whose start could not be read are counted once per round, as a hole.
-- **What lives between two rounds is still a hole.** A tree that starts,
-  talks, acts and ends between two samples is never a tree of any round,
-  and a child that lives only between two samples is never a host-source
-  act. Where Sysmon is, an attached tree's os source sees every child it
-  creates (event 1), whatever the rounds see; reading the channel into the
-  round itself is the next task (ADR-0007 P-4). Linux, and a Windows host
-  without Sysmon, keep the hole.
+- **What lives between two rounds: narrowed where Sysmon is read
+  (ADR-0007 P-4), a hole everywhere else.** Where the Sysmon channel is
+  readable, each round also reads the channel's events 1, 3, 11 and 22
+  since the previous round (one wevtutil of Raqib's own, absolute path,
+  SystemRoot only, a timeout, ended and recorded; the query is bounded by
+  the last EventRecordID read, and the first read by the moment the live
+  reader was made, the CLI's or the window's) into the same discover run
+  as the sample. A tree that starts, talks, acts and ends between two
+  samples is then a tree of that round, listed as `brief` (seen in the
+  channel, not at the sample) and sourced by pid and ProcessGuid, so its
+  acts are judged by the catalog. A tree the catalog names knocks
+  NEW-AGENT each time, brief or not. A tree it does not name that is a
+  candidate only by what the channel gave (never at a sample) is listed
+  `by the channel`, sourced, its acts judged, but it is no
+  NEW-AGENT-UNKNOWN finding and no knock (AA-1; NEW-AGENT-UNKNOWN's match
+  says it, AB-5): the report counts such trees by image path (one per
+  tree, however many rounds it is listed, AB-1; by name where no path was
+  read, said), with the five latest trees cited, until a field run
+  measures how many ordinary programs do this; a watch whose only news is
+  such trees ends CLEAN (exit 0) and its CLEAN and RESULT lines say how
+  many (AB-2); an unknown tree that is a candidate at a sample knocks
+  NEW-AGENT-UNKNOWN as before, once. Reading the channel does not change
+  how a footprint is judged (AD-1, superseding AB-4 and AC-1): in a round that reads the
+  channel, a footprint's state, link, live window and streak - so every
+  AGENT-DARK and AGENT-DARK-LIVE knock and note - are those of the same
+  round built without the channel's records (discover makes that build
+  and its inventory carries its footprints; a link names the tree of the
+  channel's round that holds the linking tree's root, and a tree of the
+  round only by the channel is, for the footprints, quiet or kept as that
+  build has it). No tree known or grown only by the channel - unknown,
+  named or benign - links a footprint, makes it live or takes a link
+  away. What this gives up: a footprint whose agent ran only between
+  rounds is judged dark as before the rounds read the channel, though the
+  tree was seen; joining the two is a later task (M7.12). History is what the first
+  round's sample shows (AC-3): a candidate at round 1's sample is history
+  unless its start was read and is at or after the watch's start, with or
+  without events of it in the channel; a process older than the watch that
+  is a candidate in round 1 only by the channel's events (round 1 reads
+  none older than the watch's start, though the window's round 1 waits for
+  its look and so reads a wider first span) is not history: unknown, it is
+  listed by the channel and counted, and a later candidacy at a sample
+  knocks once; named, it knocks NEW-AGENT in round 1. A tree known by its
+  ProcessGuid in round 1 whose pid and image are those of a tree of round
+  1's sample whose start was not read takes that tree's history (AD-2):
+  the two are taken for one process, though they are still listed as two
+  trees, in round 1 and in the first round of any tree whose start is
+  unread (recorded with the tree-key task, M7.12). A ProcessGuid keys a tree: a reused
+  pid is another tree; a tree seen in the channel in one round and in the
+  sample in another is one tree when the records tell (a sampled
+  CreationDate and a Sysmon 1 time within 2 s; or every event of the guid
+  within the tree's life, from its start, or its first sight where its
+  start was unread, to its last sample - this round's sample when its root
+  is in it (AB-7); within one round's discover run, a start unread on one
+  side joins only the one process of its pid and image on both sides,
+  said, and a guid never joins a sampled process whose start was unread).
+  The read is checked against what it asked: a record not above the bound,
+  or older than the start, is dropped and said; a record at or below the
+  bound restarts the read at once (the record numbers restarted: a cleared
+  channel?), and two reads in a row of only records older than the read's
+  start restart it (a clock that stepped back), said. When a stopped or cleared
+  channel is said: in the third of three rounds in a row, each with a
+  process the sample shows created a round earlier, whose reads held no
+  event 1 at all, after the channel gave event 1 in this watch; then the
+  read restarts from the round's time and says what it skips. When it is
+  not said: on a quiet desktop that creates no process for a round, a
+  stopped or cleared channel reads as quiet rounds - a hole that remains,
+  and the narrowing holds only while the channel delivers. An image whose
+  event 1 does not come while the channel gives others is a note ("left
+  out by its configuration, or late"), withdrawn when an event 1 of that
+  image comes ("an event 1 of <image> came") and said again at its next
+  miss, so the report's last word on an image is its present state (AB-8). What the channel's read does not close: a read that
+  fails, times out or reaches the cap of events per round is a hole of
+  that round (the next round reads on from the last record read, so a
+  channel busier than the cap makes the rounds lag; a lag of more than a
+  round is said); a kind of event 1, 3 or 22 not read after three rounds
+  (Sysmon's configuration: Raqib never changes it, A4) is said once and
+  the report lists the kinds read; where neither a start time nor a
+  ProcessGuid tells two processes of one image under one pid apart, they
+  are one tree. Linux (no audit source of process events is read) and a
+  Windows host without Sysmon keep the whole hole, said once: a `hole:`
+  line of the watch's first lines, which speak from the watch's own check
+  at its start and say so; where the live reader's first check differs
+  (either way), the printed line of the round it is made in says so once,
+  with what the sources are then, and the hole is said there if it was
+  not said first (AB-3, AD-4).
+- **Recorded, not closed (ADR-0007 AB-11).** The tree ledger grows by one
+  entry per tree listed `by the channel`: a program that runs every
+  minute for a day is 1440 entries in the state and in the report's TREES
+  SEEN (each marked `by the channel`); a bound is a later task (M7.12),
+  because it touches the tree key. A pid reused by a process of an image
+  whose event 1 the channel does not give, wholly inside the seconds
+  between a sample and its round's end, joins the earlier tree. An unknown
+  program that repeats as brief runs is judged only by its acts: each run
+  is its own tree, so HOST-RHYTHM and HOST-UNWATCHED never see the
+  repetition; the count by path is its only trace.
+- **Where the channel's watch and the watch without it still differ on
+  a footprint (ADR-0007 AE; each is a knock more, never one fewer).**
+  The footprints are judged from the round built without the channel's
+  records, and three things of the channel still reach them through the
+  trees. (1) A process whose sampled start was not read in the first
+  round and was read later is two trees without the channel and one
+  with it (its guid): with it the tree is history from the first round,
+  so no NEW-AGENT comes for it in a later round, and its link never
+  makes the footprint live (N-1) - the footprint's dark rounds knock
+  where the split watch would have noted them. (2) A sampled program
+  whose command line, known only from the channel, carries `--type=` is
+  taken for a helper in the channel's round and is no act-root there:
+  the footprint it links by name is not held quiet by it, and knocks
+  AGENT-DARK-LIVE after its dark rounds while the program still runs.
+  (3) In a round whose connections were partly read, a tree known only
+  from the channel is said "kept" where the other watch says "quiet";
+  the judgement is the same. What judging footprints without the channel
+  gives up is wider than a run between rounds: the live sample reads no command line, so
+  a sampled agent whose command line or working directory names the
+  footprint only in the channel is not linked by it. The tree key is a
+  later task (M7.12).
 - **What the os lines are judged by.** NET-TOOL and DESTRUCT-CMD judge an
   os process line by its image name (P-1: `input_meta.image`, discover's
   normalised form, `curl.exe` -> `curl`; R-7: and its parent's,

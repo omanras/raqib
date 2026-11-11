@@ -114,18 +114,33 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
   watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
-      of it; Windows one sample of the OS API), read-only; nothing installed,
+      of it; Windows one sample of the OS API and, where Sysmon is, the
+      channel's events 1, 3, 11, 22 since the previous round: a tree seen
+      only there is listed as brief, M7.9), read-only; nothing installed,
       no project touched. NEW-AGENT (high; NEW-AGENT-UNKNOWN, medium, when
       the catalog does not name it) knocks once per new tree that talks and
-      acts ("host, <image> pid <n> (named|unknown)"); trees of the first
-      round are history, a listed benign program under a system directory
-      is benign: listed, not knocked. AGENT-DARK-LIVE (medium) after 3 rounds
-      of a footprint with no tree. Every round prints one line, "NO AGENT
+      acts ("host, <image> pid <n> (named|unknown)"); an unknown tree that
+      is a candidate only by the channel is listed `by the channel` and
+      counted, not knocked (M7.9, ADR-0007 AA-1); the candidates at the
+      first round's sample are history (one in round 1 only by the channel
+      is not: AC-3 - unless no start of it was read and it has the pid and
+      image of a sampled candidate whose start was not read either: then
+      it is taken for that process, AD-2), a listed benign program under a
+      system directory is
+      benign: listed, not knocked. AGENT-DARK-LIVE (medium) after 3 rounds
+      of a footprint that is dark: no candidate or act-root of the round
+      built without the channel's records links to it (AD-1: no tree known
+      or grown only by the channel links it). Every round prints one line,
+      "NO AGENT
       SEEN" included; a reader not back in 2 x T is a hole and a knock.
       Record and latest inventory under ~/.raqib/host/, every line with the
       run's id; one host watch per home. --rounds N (or Stop) ends after N
-      rounds, at the reader's deadline at the latest. Exit 0 trees listed
-      and nothing new (or none seen: not a clearance), 1 a finding, 3 a
+      rounds, at the reader's deadline at the latest. Exit 0 nothing
+      knocked, and no round or source that could not be read (the standing
+      holes the first lines print do not change the exit): trees listed,
+      and unknown trees seen a candidate only by the channel listed and
+      counted, not knocked (or none seen: not a clearance; AC-2, AD-4), 1 a
+      finding, 3 a
       round not read or another hole, 2 usage (also --host with a PROJECT,
       or another host watch on this home). Every tree gets a source that
       only reads (M7.2b, ADR-0007 decision 3 and Amendment H): the os source
@@ -385,7 +400,8 @@ def _parser():
     # M7.2 (ADR-0007 decision 2): the host, not a name.
     w.add_argument("--host", action="store_true",
                    help="watch this host, not a project: discover in rounds; NEW-AGENT and AGENT-DARK-LIVE knock;"
-                        " installs nothing, touches no project")
+                        " installs nothing, touches no project; where Sysmon is, each round also reads the channel"
+                        " since the previous round, and a tree seen only there is listed as brief (M7.9)")
     w.add_argument("--every", type=float, default=None, metavar="T",
                    help="--host: a round every T seconds (default %g; a reader not back in 2 x T is a hole)"
                         % host.EVERY_DEFAULT)

@@ -899,15 +899,18 @@ def _sysmon_ips(results):
 EVENT_START = re.compile(r"<Event(?=[\s>])")
 
 
-def parse_sysmon(text, src="sysmon"):
+def parse_sysmon(text, src="sysmon", keyed=False):
     """Records of Sysmon events 1, 3, 11 and 22 in XML. Events may stand one
     per line (wevtutil /f:xml) or span lines; each is cited at its first line.
     Other providers and event ids are counted, not read. The XML is read by
-    sysmon_events(), the one Sysmon reader (M5.3, ruling C-6)."""
+    sysmon_events(), the one Sysmon reader (M5.3, ruling C-6). keyed (M7.9,
+    a round's channel): each record also carries the ProcessGuid of its
+    process (guid; pguid, created on an event 1's own record); off by
+    default, so the records of every export read as they always did."""
     records, problems = [], []
     for ev in sysmon_events(text, src, problems, SYSMON_READ):
         records += [dict(r, event=ev["event"]) for r in _sysmon_records(src, ev["line"], ev["event"], ev["data"],
-                                                                         problems)]
+                                                                         problems, keyed)]
     return records, problems
 
 
@@ -964,12 +967,13 @@ def sysmon_events(text, src="sysmon", problems=None, ids=None):
         yield {"line": line, "event": event_id, "record_id": record_id, "data": data}
 
 
-def _sysmon_records(src, line, event_id, d, problems):
+def _sysmon_records(src, line, event_id, d, problems, keyed=False):
     """The records of one Sysmon event, all with one rendering of its line:
     the event itself, and a process record derived from its Image (and, for
     event 1, from its Parent fields) so a talker has a name."""
     pid, ts = _int(d.get("ProcessId", "")), _ts(d.get("UtcTime"))
     image = d.get("Image") or None
+    guid = _guid_text(d.get("ProcessGuid"))   # M7.9: the process's own key (None where the event has none)
     if pid is None:
         problems.append(_problem(src, line, "Sysmon event %d without a ProcessId" % event_id))
         return []
@@ -980,10 +984,14 @@ def _sysmon_records(src, line, event_id, d, problems):
         out = [_rec("proc", src, line, text, pid=pid, ppid=ppid, image=image_name(image), exe=image,
                     argv=win_argv(d.get("CommandLine")), cwd=d.get("CurrentDirectory") or None,
                     env_keys=None, ts=ts)]
+        if keyed:
+            out[0].update(guid=guid, pguid=_guid_text(d.get("ParentProcessGuid")), created=True)
         if ppid is not None:
             out.append(_rec("proc", src, line, text, pid=ppid, ppid=None, image=image_name(parent),
                             exe=parent, argv=win_argv(d.get("ParentCommandLine")), cwd=None,
                             env_keys=None, ts=ts, derived=True))
+            if keyed:
+                out[-1]["guid"] = _guid_text(d.get("ParentProcessGuid"))
         return out
     event = None
     if event_id == 3 and (d.get("Protocol") or "tcp").lower() == "tcp":
@@ -1017,7 +1025,19 @@ def _sysmon_records(src, line, event_id, d, problems):
         event = _rec("file", src, line, text, pid=pid, path=path, ts=ts) if path else None
     own = _rec("proc", src, line, text, pid=pid, ppid=None, image=image_name(image), exe=image,
                argv=[], cwd=None, env_keys=None, ts=ts, derived=True)
-    return [own] + ([event] if event else [])
+    out = [own] + ([event] if event else [])
+    return out if not keyed else [dict(r, guid=guid) for r in out]
+
+
+GUID_TEXT = re.compile(r"\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}?\Z")
+
+
+def _guid_text(value):
+    """A ProcessGuid as one text ({...}, lower case), or None (absent, or not a GUID)."""
+    value = (value or "").strip()
+    if not GUID_TEXT.match(value):
+        return None
+    return "{%s}" % value.strip("{}").lower()
 
 
 def parse_footprints(text, src="footprints"):
@@ -1907,7 +1927,219 @@ def _os_pids(node):
 PROCESS_LISTS = ("proc", "win-process")   # M7.8: the sources that list the processes alive at a sample
 
 
-def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
+GUID_SAME_SECONDS = 2.0   # M7.9: a sampled CreationDate and a Sysmon 1 UtcTime this close are one process's start
+
+
+def _start_close(a, b):
+    return a is not None and b is not None and abs((a - b).total_seconds()) <= GUID_SAME_SECONDS
+
+
+def _guid_instances(records):
+    """M7.9 (ADR-0007 P-4, E2; REDO X-2): (records, holes). Two records are
+    one process only when what was read agrees: the pid, the image, and the
+    start within GUID_SAME_SECONDS where it was read on both sides (a
+    sampled CreationDate, a Sysmon 1 UtcTime). Each ProcessGuid of the
+    round's channel is one process: it is the sampled process of its pid
+    when the image and both starts agree; where a start was read on one side
+    only, it is that process when it is the only one of that image on either
+    side (said, once per round: a reuse by the same image is not told);
+    otherwise it is its own process, keyed apart (pid + REUSE * n, as
+    _instances keys a reused pid), and a child's ppid follows its
+    ParentProcessGuid. Records without a guid are merged by pid as before."""
+    guids, sampled = {}, {}
+    for r in records:
+        kind = (split_name(r["src"]) or (None,))[0]
+        if kind == "sysmon" and r.get("guid") and r.get("pid") is not None:
+            g = guids.setdefault(r["pid"], {}).setdefault(r["guid"], {"image": None, "start": None, "first": None})
+            if r.get("ts") is not None:
+                g["first"] = r["ts"] if g["first"] is None else min(g["first"], r["ts"])
+            if r["kind"] == "proc" and r.get("image") and (g["image"] is None or r.get("created")):
+                g["image"] = r["image"]
+            if r["kind"] == "proc" and r.get("created") and r.get("ts") is not None and g["start"] is None:
+                g["start"] = r["ts"]
+        elif kind == "win-process" and r["kind"] == "proc" and not r.get("derived") and r.get("pid") is not None:
+            entry = (r["pid"], r.get("image"), _ts(r["started"]) if r.get("started") else None)
+            if entry not in sampled.setdefault(r["pid"] % REUSE, []):
+                sampled[r["pid"] % REUSE].append(entry)
+    remap, holes, untold = {}, [], []
+    for pid in sorted(guids):
+        insts, gs = sampled.get(pid, []), guids[pid]
+        used, taken, apart = set(), set(k for k, _, _ in insts), []
+        for g, info in gs.items():   # both starts read and agreeing, the same image
+            match = next((k for k, image, s in insts if k not in used and image == info["image"]
+                          and info["start"] is not None and _start_close(s, info["start"])), None)
+            if match is not None:
+                used.add(match)
+                remap[g] = match
+        for k, image, s in insts:    # a start read on one side only: the one process of that image, or none
+            if k in used:
+                continue
+            # a process logs nothing before it was created: a guid with an event before the sampled start is not it
+            free = [g for g, info in gs.items() if g not in remap and info["image"] == image
+                    and (info["start"] is None or s is None)
+                    and not (s is not None and info["first"] is not None
+                             and (s - info["first"]).total_seconds() > GUID_SAME_SECONDS)]
+            others = [x for x in insts if x[0] not in used and x[1] == image]
+            # Z-5: unique on BOTH sides (one guid that can be it, one sampled process of the image), and never with
+            # the sampled start unread
+            if len(free) == 1 and len(others) == 1 and s is not None:
+                used.add(k)
+                remap[free[0]] = k
+                untold.append(pid)
+        for g in gs:                 # the rest: each its own process
+            if g in remap:
+                continue
+            if not insts and not used:
+                remap[g] = pid
+            else:
+                n = 1
+                while pid + REUSE * n in taken:
+                    n += 1
+                remap[g] = pid + REUSE * n
+                taken.add(remap[g])
+                apart.append(g)
+            used.add(remap[g])
+        if apart or len(gs) > 1:
+            holes.append("pid %d held %d process(es) in this round's channel (ProcessGuid %s)%s: keyed by ProcessGuid,"
+                         " each its own process (M7.9)" % (
+                             pid, len(gs), ", ".join(gs), ", %d beside the sampled one" % len(apart) if insts and apart
+                             else ""))
+    if untold:
+        shown = sorted(set(untold))
+        holes.append("%d process(es) whose start was read on one side only (the sample or the channel's event 1) were"
+                     " taken for the sampled process of their pid and image: a reuse of the pid by the same image is"
+                     " not told for them (M7.9): pid %s" % (len(shown), ", ".join(map(str, shown[:20]))))
+    if not remap:
+        return records, holes
+    out = []
+    for r in records:
+        if (split_name(r["src"]) or (None,))[0] != "sysmon":
+            out.append(r)
+            continue
+        changed = {}
+        if r.get("guid") in remap:
+            changed["pid"] = remap[r["guid"]]
+        if r["kind"] == "proc" and r.get("pguid") in remap:
+            changed["ppid"] = remap[r["pguid"]]
+        out.append(dict(r, **changed) if changed else r)
+    return out, holes
+
+
+def _channel_fields(p):
+    """M7.9 (API for raqib/host.py): what the round's channel says of a
+    tree's root: guid (its ProcessGuid, or None), brief (no record of it
+    from the round's process sample: seen in the channel only), and
+    channel_started (its Sysmon 1 UtcTime as ISO UTC, where the round read
+    its creation)."""
+    recs = (p or {}).get("recs") or ()
+    guid = next((r["guid"] for r in recs if r.get("guid") and not r.get("derived")), None) or next(
+        (r["guid"] for r in recs if r.get("guid")), None)
+    started = next((r["ts"] for r in recs if r.get("created") and r.get("ts") is not None), None)
+    sampled = any(not r.get("derived") and (split_name(r["src"]) or (None,))[0] in PROCESS_LISTS for r in recs)
+    return {"guid": guid, "brief": bool(recs) and not sampled, "channel_started": iso(started)}
+
+
+def _acts_core(records, catalog, channel=False):
+    """The anchor of build() (B-6), apart so that a round can be built
+    again without its channel's records (M7.9 REDO 4, ADR-0007 AB-6):
+    (records joined to their sockets, procs, conns, talkers, snapshots,
+    self_pids, self_tree, self_line, acts). A talker with an act is a candidate."""
+    snapshots = [r for r in records if r["kind"] == "snapshot"]
+    self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
+    self_pids |= {p for r in snapshots for p in r.get("launchers") or ()}     # ADR-0007 A-7
+    procs = _merge_procs(records)
+    records = _join_sockets(records, procs)
+    conns = [r for r in records if r["kind"] == "conn"]
+    talkers = {}
+    for c in conns:
+        if talks(c):
+            talkers.setdefault(c["pid"], []).append(c)
+    self_tree = set()
+    for s in self_pids:
+        self_tree |= {s} | _descendants(procs, s)
+    self_line = set()
+    for s in self_pids:
+        self_line |= set(ancestors(procs, s))
+
+    # The anchor (B-6): every process goes to its nearest talking ancestor, so
+    # a talker with a child is a candidate; a file write outside config space
+    # goes to the nearest talking ancestor-or-self. The catalog's act names
+    # only label the child.
+    acts = {}
+    for pid in sorted(procs):
+        p = procs[pid]
+        if pid in self_tree:
+            continue
+        chain = []
+        for anc in ancestors(procs, pid):
+            if anc in talkers:
+                label = next((i for i in p["images"] if _listed(i, catalog)), None)
+                acts.setdefault(anc, []).append({
+                    "how": "process", "pid": pid, "image": label or p["image"], "listed": label is not None,
+                    "path": None, "via": list(reversed(chain)), "reader_ancestor": pid in self_line,
+                    "started": started_of(p) or (_channel_fields(p)["channel_started"] if channel else None),   # X-6
+                    # M7.4 E1 (API): the child's creation time where the reader gives it (M7.9: or its Sysmon 1 time)
+                    "cites": _cites(p["recs"])})
+                break
+            chain.append(anc)
+    for f in (r for r in records if r["kind"] == "file"):
+        writer = procs.get(f["pid"])
+        if f["pid"] in self_tree or _config_write(f["path"], writer["exe"] if writer else None):
+            continue
+        owner = f["pid"] if f["pid"] in talkers else next(
+            (a for a in ancestors(procs, f["pid"]) if a in talkers), None)
+        if owner is not None:
+            acts.setdefault(owner, []).append({
+                "how": "file-write", "pid": f["pid"], "image": writer["image"] if writer else None,
+                "listed": False, "path": f["path"], "via": [], "reader_ancestor": False, "cites": [cite(f)]})
+    return records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts
+
+
+NO_HOLDER = "pid %d (the tree that links it without the channel is no tree of this round: ADR-0007 AD-1)"
+
+
+def _without_channel(records, parsed, catalog, candidates, act_roots):
+    """ADR-0007 AB-6, AD-1: the same round built WITHOUT the channel's
+    records (the sampled records keep their keys: _guid_instances moves
+    Sysmon records only), so M7.9 does not change how a footprint is
+    judged: {"roots": {root pid: "candidate" | "act-root"} of that build,
+    "footprints", "dark"} - its footprints and AGENT-DARK, each link
+    naming the tree of the channel's round that holds the linking tree's
+    root (that root's own tree, else the larger tree it is part of), in
+    the field of the class it has without the channel."""
+    records = [r for r in records if (split_name(r["src"]) or (None,))[0] != "sysmon"]
+    parsed = [s for s in parsed if s["kind"] != "sysmon"]
+    records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts = _acts_core(records, catalog)
+    ids = {pid: "C%d" % i for i, pid in enumerate(sorted(acts), start=1)}
+    cands = [{"pid": pid, "id": ids[pid], "tree": [pid] + [a["pid"] for a in acts[pid] if a["how"] == "process"],
+              "talking_ancestors": [{"pid": a} for a in ancestors(procs, pid) if a in talkers]} for pid in sorted(acts)]
+
+    def held(role, kinds):
+        return [s["name"] for s in parsed if s["text_read"] and s["kind"] in kinds
+                and any(r["kind"] == role for r in s["records"])]
+    trees_read = bool(held("proc", PROCESS_SOURCES)) and bool(held("conn", CONNECTION_SOURCES))
+    roots = _act_roots(procs, talkers, self_tree, ids, catalog, held("conn", CONNECTION_SOURCES)) if (
+        trees_read and catalog["act_root"]["status"] == "ok") else []
+    footprints, dark = _footprints(records, procs, cands, talkers, catalog, judged=trees_read, act_roots=roots)
+    root_of = dict([(c["id"], c["pid"]) for c in cands] + [(a["id"], a["pid"]) for a in roots])
+
+    def holder(pid):
+        for t in list(candidates) + list(act_roots):
+            if t["pid"] == pid:
+                return t["id"]
+        for t in candidates:
+            if pid in t["tree"]:
+                return t["id"]
+        return next((t["id"] for t in act_roots if any(a["pid"] == pid for a in t["acts"])), None)
+    for f in footprints:
+        for field in ("candidate", "act_root"):
+            if f.get(field):
+                f[field] = holder(root_of[f[field]]) or NO_HOLDER % (root_of[f[field]] % REUSE)
+    return {"roots": dict([(c["pid"], "candidate") for c in cands] + [(a["pid"], "act-root") for a in roots]),
+            "footprints": footprints, "dark": dark}
+
+
+def build(parsed, catalog, window=None, holes=(), live=False, processes=False, channel=False):
     """The inventory (E5) of parsed sources:
     [{"name", "path", "error", "records", "problems", "lines"}].
     processes (M7.8, ADR-0007 P-2; API for raqib watch --host): the
@@ -1916,7 +2148,12 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
     Win32_Process sample), never one known only from a Sysmon event - as
     {"pid", "image", "started"}, image and started as a tree's (image_name,
     started_of), so a tree's root can be looked up in it. Off by default:
-    `raqib discover` and its --json are unchanged."""
+    `raqib discover` and its --json are unchanged. channel (M7.9, ADR-0007
+    P-4; API for raqib watch --host): the source sysmon is a round's read of
+    the channel since the previous round: its Sysmon records are keyed by
+    ProcessGuid (_guid_instances), each candidate and act-root carries
+    _channel_fields, and a kind of event the window does not hold is not a
+    gap of the round (the watch says once what the channel holds)."""
     holes = list(ALWAYS_HOLES) + list(holes)
     problems = [p for s in parsed for p in s["problems"]]
     records = [r for s in parsed for r in s["records"]]
@@ -1928,25 +2165,15 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
             kept = [r for r in records if not r.get("ts") or r["ts"] >= cutoff]
             dropped, records = len(records) - len(kept), kept
     records, reuse_holes = _instances(records)
-    snapshots = [r for r in records if r["kind"] == "snapshot"]
-    self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
-    self_pids |= {p for r in snapshots for p in r.get("launchers") or ()}     # ADR-0007 A-7
-    procs = _merge_procs(records)
-    records = _join_sockets(records, procs)
-    conns = [r for r in records if r["kind"] == "conn"]
-    talkers = {}
-    for c in conns:
-        if talks(c):
-            talkers.setdefault(c["pid"], []).append(c)
+    if channel:
+        records, guid_holes = _guid_instances(records)
+        reuse_holes += guid_holes
+    unjoined = records   # AB-6: the round's records before the anchor, for the round built without the channel
+    records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts = _acts_core(
+        records, catalog, channel)
     unowned = [c for c in conns if c["pid"] is None and c["direction"] == "out"
                and c["state"] in TALK_STATES and not _wildcard(c["raddr"])]
     orphans = sorted({c["pid"] for c in conns if talks(c) and c["pid"] not in procs})
-    self_tree = set()
-    for s in self_pids:
-        self_tree |= {s} | _descendants(procs, s)
-    self_line = set()
-    for s in self_pids:
-        self_line |= set(ancestors(procs, s))
 
     # DNS names per IP (any process) and per (pid, IP), with the lines behind them.
     by_ip, by_pid_ip = {}, {}
@@ -1967,36 +2194,6 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
             found.setdefault(c["host"], []).append(c)
         return found
 
-    # The anchor (B-6): every process goes to its nearest talking ancestor, so
-    # a talker with a child is a candidate; a file write outside config space
-    # goes to the nearest talking ancestor-or-self. The catalog's act names
-    # only label the child.
-    acts = {}
-    for pid in sorted(procs):
-        p = procs[pid]
-        if pid in self_tree:
-            continue
-        chain = []
-        for anc in ancestors(procs, pid):
-            if anc in talkers:
-                label = next((i for i in p["images"] if _listed(i, catalog)), None)
-                acts.setdefault(anc, []).append({
-                    "how": "process", "pid": pid, "image": label or p["image"], "listed": label is not None,
-                    "path": None, "via": list(reversed(chain)), "reader_ancestor": pid in self_line,
-                    "started": started_of(p),   # M7.4 E1 (API): the child's creation time where the reader gives it
-                    "cites": _cites(p["recs"])})
-                break
-            chain.append(anc)
-    for f in (r for r in records if r["kind"] == "file"):
-        writer = procs.get(f["pid"])
-        if f["pid"] in self_tree or _config_write(f["path"], writer["exe"] if writer else None):
-            continue
-        owner = f["pid"] if f["pid"] in talkers else next(
-            (a for a in ancestors(procs, f["pid"]) if a in talkers), None)
-        if owner is not None:
-            acts.setdefault(owner, []).append({
-                "how": "file-write", "pid": f["pid"], "image": writer["image"] if writer else None,
-                "listed": False, "path": f["path"], "via": [], "reader_ancestor": False, "cites": [cite(f)]})
 
     candidates = []
     ids = {}
@@ -2069,8 +2266,13 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
     act_roots = _act_roots(procs, talkers, self_tree, ids, catalog,
                            [s["name"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]
                             and holds(s, "conn")]) if judge else []
-    footprints, dark = _footprints(records, procs, candidates, talkers, catalog, judged=trees_read,
-                                   act_roots=act_roots)
+    bare = None
+    if channel:   # ADR-0007 AD-1: the footprints are those of the same round built WITHOUT the channel's records
+        bare = _without_channel(unjoined, parsed, catalog, candidates, act_roots)
+        footprints, dark = bare["footprints"], bare["dark"]
+    else:
+        footprints, dark = _footprints(records, procs, candidates, talkers, catalog, judged=trees_read,
+                                       act_roots=act_roots)
     env_fp = []
     owner_of = {}
     for c in candidates:
@@ -2143,7 +2345,9 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
                              " the run is incomplete (exit 3 unless an alarm)" % (s["sample"], s["name"],
                                                                                  s["error"] or "no text"))
             continue
-        if s["kind"] == "sysmon":
+        if s["kind"] == "sysmon" and channel:
+            pass   # M7.9: a window of the channel; what the channel holds is said once per watch (E4)
+        elif s["kind"] == "sysmon":
             if not holds(s, "proc"):
                 holes.append("source sysmon holds no event 1 (process create): it is not a complete process source")
                 incomplete.append("source sysmon holds no event 1")
@@ -2214,6 +2418,16 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False):
     times = sorted(r["ts"] for r in records if r.get("ts"))
     connections_from = [s["path"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]]
     extra = {}
+    if channel:   # M7.9: a tree's root as the round's channel saw it (guid, brief, its creation)
+        for t in candidates + act_roots:
+            t.update(_channel_fields(procs.get(t["pid"])))
+            # AD-1: the class its root has in the round built without the channel's records (None: a tree of this
+            # round only by the channel), so the watch keeps a footprint's quiet and kept trees as that build does
+            t["bare_class"] = bare["roots"].get(t["pid"])
+        # AB-6 (AA-1): "sample" exactly when the tree is a candidate of the same round built WITHOUT the channel's
+        # records (the sampled records keep their keys: _guid_instances moves Sysmon records only), else "channel"
+        for t in candidates:
+            t["candidate_by"] = "sample" if bare["roots"].get(t["pid"]) == "candidate" else "channel"
     if processes:   # M7.8 (P-2): the round's process sample, for "quiet" (root alive, no talk) against "gone"
         extra["processes"] = _last_sample(records, procs)
     return _os_pids(dict(extra, **{
@@ -2602,7 +2816,7 @@ def _holes(records, procs, conns, kinds):
     return holes
 
 
-def run(texts, catalog, window=None, holes=(), live=False, run=None, processes=False):
+def run(texts, catalog, window=None, holes=(), live=False, run=None, processes=False, channel=False):
     """Parse {kind: (path, text, error)} and build the inventory. A text with
     an error was partly read: it is parsed, and the run is incomplete. run:
     the run record (run.json, or collect_live's run_info); its system drive
@@ -2615,11 +2829,13 @@ def run(texts, catalog, window=None, holes=(), live=False, run=None, processes=F
     for name in sorted(texts, key=_order):
         kind, sample = split_name(name)
         path, text, error = texts[name]
-        records, problems = PARSERS[kind](text, name) if text is not None else ([], [])
+        parser = PARSERS[kind] if not (channel and kind == "sysmon") else (
+            lambda t, n: parse_sysmon(t, n, keyed=True))   # M7.9: a round's channel, keyed by ProcessGuid
+        records, problems = parser(text, name) if text is not None else ([], [])
         parsed.append({"name": name, "kind": kind, "sample": sample, "path": path, "error": error,
                        "records": records, "problems": problems, "text_read": text is not None,
                        "lines": text.count("\n") + (not text.endswith("\n")) if text else 0})
-    inv = build(parsed, catalog, window, holes, live, processes=processes)
+    inv = build(parsed, catalog, window, holes, live, processes=processes, channel=channel)
     inv["system_drive"] = system_drive_of(run)
     return inv
 

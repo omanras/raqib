@@ -1031,3 +1031,519 @@ PARTLY. Verdict: REDO on V-1; the Table's rulings V-2..V-6.
   "no conftest.py", which the next commit had to unsay. The lesson kept:
   where a ruling is about order, the ruling names the property and the
   test enumerates the orders.
+
+## Amendment X (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9.md (000b1bb)
+Builder's record: docs/review/2026-11-11-M7.9-questions.md (Q-1..Q-8). CI
+run 42911290444 for 000b1bb: four jobs success, both windows gate jobs
+failed 3 tests (a `channel=` argument given to a stand-in reader).
+Verdict: REDO on X-1, X-2, X-3 and X-5; the Table's rulings X-4, X-6..X-9.
+- X-1 (P1 and the CI failure, must) The channel belongs to the live
+  reader, not to its caller. Whoever asks for the live reader of a
+  Windows host with Sysmon gets rounds that read the channel: the CLI,
+  the window (which passes its own reader and is not changed by this
+  task), a test's stand-in. What the channel read, could not read, and
+  how far behind it is travels with the round's inventory, where the
+  watch already reads everything else; no caller passes a channel and no
+  stand-in needs to accept one. Its helper is ended with the reader it
+  belongs to. Tests: the round a window-style caller gets (a wrapped
+  live_reader) reads the channel on win32; the three tests of
+  tests/test_host.py pass unchanged on the windows jobs.
+- X-2 (P2, must) Two records are one process only when everything read
+  agrees: the pid, the image, and the start within the tolerance, the
+  start read on BOTH sides; otherwise they are two processes, keyed
+  apart, and when a start was unread on a side the tree says so. A root
+  carries its OWN ProcessGuid or none. Named as a property and tested by
+  enumeration, as V-1 was: for a pid held by one process, by two in
+  turn (another image; the same image again), with the event 1 read or
+  not, sampled or not, in every order of the records and over one round
+  and two - one tree per process, never one for two, never two for one,
+  and its source rooted at its own guid.
+- X-3 (P3, must; A3) The channel's silence is said. (a) What comes back
+  is checked against what was asked: a record whose number is not above
+  the bound, or whose time is before the start, is dropped and is a hole
+  (the bound was not applied). (b) A process the round's sample shows
+  created since the previous round, with no event 1 for it in what the
+  channel gave, while the channel has given event 1 before, is a hole:
+  "the channel is behind, stopped or cleared" - with the count, each
+  round it holds. (c) When the channel's numbers are seen to restart
+  (a record numbered at or below the bound by (a), or (b) for three
+  rounds) the read starts again from the round's time, said as a hole.
+  THREAT_MODEL says the hole is closed only while none of these stands.
+- X-4 (P4, P13) The lag has a size: each round that was cut, or that read
+  events older than the previous round, says how far behind the newest
+  event read is; a tree read late says by how much and is never "back"
+  from events older than its going; at Stop the report says the backlog
+  left unread. `after` moves only when the round that read is kept (a
+  reader that fails afterwards loses nothing).
+- X-5 (P5, must; A6, A7) The false positive this task opens is measured
+  before it ships, and bounded. Fixtures dated AFTER the watch's start:
+  a benign program that starts, talks, writes and ends between rounds
+  (an updater; git over https with its credential helper), repeated, and
+  a living agent's short-lived child. Ruling on what the measurement
+  will show, since each run is a new pid: a brief tree the catalog does
+  not name is listed and sourced like any tree, but NEW-AGENT-UNKNOWN
+  knocks for its IMAGE once per watch; later brief trees of the same
+  image grow that finding ("seen 14 times, last at ...") and are not
+  knocked again (C-2 / E-2's rule for a finding that grows). A brief
+  tree the catalog names knocks NEW-AGENT each time: a named agent that
+  ran is news each time. The budgets are measured with these fixtures
+  and the numbers said; C-1b's arrivals are measured again with the
+  channel in.
+- X-6 (P6) A brief child's act is at its event's time, counted once with
+  its os line (the same event), and the "start unread" blind spot is not
+  said for a start that was read.
+- X-7 (P7; scope widened for one sentence each) Every sentence about
+  "between two rounds" says what is true now: README, THREAT_MODEL's
+  "what a round sees", the rhythm's first-line hole, and the lines in
+  NEW-AGENT.yaml, NEW-AGENT-UNKNOWN.yaml, HOST-RHYTHM.yaml, NET-TOOL.yaml
+  and DESTRUCT-CMD.yaml (holes and evasions only; no match is touched).
+- X-8 (P8, Q-1) No probe at the start. What the channel holds is learned
+  from what the rounds read: a kind not yet read after three rounds with
+  the channel is said once ("no event 3 read so far: talk between rounds
+  may be unseen"), and the report says which kinds were read. The start
+  blocks on nothing.
+- X-9 (P9, P10, P11, P12; Q-2..Q-7) The channel's start is the adjusted
+  start (T-3). History is one rule for both readers: a tree whose start
+  was read and is before the watch's start, or, where no start was read,
+  a tree of the first round (B-3); Q-2 accepted in that form, and the
+  sampled side follows it. A tree is never replaced in a round without a
+  hole. The tests P12 names are written (one knock asserted; a stand-in
+  that honours the query; brief then alive; a benign brief tree; a brief
+  tree nested under a living one; the helper at Stop). Q-3 (behind, never
+  skipping) accepted with X-4; Q-5, Q-7 accepted; Q-6 (a brief tree's
+  follow reads the whole channel) recorded for the task that gives
+  os_sysmon its ProcessId and a bounded follow (M7.7).
+- X-10 Every REDO change carries a test for the behaviour it adds (D-8).
+- Table ledger: the HANDOFF said "NOT raqib/app.py" and "a host round's
+  inventory", and did not say that the window starts the watch with its
+  own reader; the builder wired the channel where only the CLI passes.
+  The Table should have named the window's path as the one that matters:
+  it is the commander's.
+
+## Amendment Z (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo.md (da7e007)
+(The letter Y is skipped: Y-n are the REDO review's findings.) CI run
+42918574979 for da7e007: six jobs success. X-1 and X-8 MET; the rest
+PARTLY. Verdict: REDO on Z-1 and Z-2, both of which undo words of the
+Table's own in Amendment X; the Table's rulings Z-3..Z-9.
+- Z-1 (Y1, must; X-9 is withdrawn where it said more than B-3) History
+  is a thing of the first round only, as B-3 and C-4 ruled and the field
+  showed. X-9's "history is one rule: a tree whose start is before the
+  watch's start" made every process older than the watch history for
+  good - an agent that sat idle at the start and acted later would never
+  be new. The rule: a candidate of the FIRST round is history, unless
+  its start was read and is at or after the watch's start (then it is
+  new: it began while Raqib watched). In every later round a candidate
+  that was not a candidate before is new, whatever its start (C-4: an
+  act-root that becomes a candidate knocks). Tests with starts the live
+  reader gives (ISO UTC): an act-root of round 1 that talks in round 3;
+  a shell older than the watch that becomes a tree in round 2; the
+  existing two tests fed a start the reader can read.
+- Z-2 (Y2, must; X-3(b) is restated) Silence is the channel giving
+  nothing, not one process without its event. The hole "the channel is
+  behind, stopped or cleared" is said when, for three rounds in a row,
+  the sample showed processes created at least one full round earlier
+  and the channel's reads in those rounds held no event 1 at all, though
+  the channel gave event 1 before in this watch; then the read restarts
+  (Z-5). One process, or one image, whose event 1 never comes while the
+  channel gives others is a NOTE, once per image per watch ("no event 1
+  from the channel for <image>: its configuration may leave it out; its
+  runs between rounds are not seen"), never a hole, never INCOMPLETE. A
+  process is looked for in every read so far, not in this round's alone,
+  and only after the channel has had a full round to deliver it. Tests
+  through a watch, with fixture times that are true (an event is dated
+  before the read that returns it): a healthy channel over ten rounds
+  says nothing; a filtered image is a note; a stopped channel is the
+  hole in the third round.
+- Z-3 (Y3) The channel is read from the making of the reader: the
+  reader's own start is taken when it is made (the window makes one at
+  each Start and one for the look), not at its first call, so nothing
+  between the watch's start and round 1's read is left unread. What is
+  older than the watch is history by its time (R-2) and by Z-1.
+- Z-4 (Y4, A5) An image is its path where the path was read: the knock
+  for a brief unknown tree is once per image PATH per watch (the name
+  alone where no path was read, said). The finding says how many runs it
+  holds and cites each (A5); the report's line prints "seen N times" and
+  the last. NEW-AGENT-UNKNOWN's holes, README and THREAT_MODEL say that a
+  second run of the same program is not knocked, and what still is (its
+  acts, by the catalog).
+- Z-5 (Y5, Y6, Y12; identity and restarts) A ProcessGuid joins a tree of
+  an earlier round only when that tree's process is in THIS round's
+  sample with the same image, and no event of the guid is older than the
+  sampled start; a guid with no start read and no such process is its
+  own brief tree. In one round the one-side-unread merge (Q-9, accepted
+  as the builder built it) needs uniqueness on BOTH sides, and with the
+  sampled start unread it does not merge at all. The enumeration test
+  covers two rounds, a sample without a CreationDate, and asserts the
+  source's guid. A restart says from when to when nothing was read, and
+  does not read a record twice. Reads that return only records older
+  than their start for two rounds restart, said.
+- Z-6 (Y8, Y11, Y13) No test reaches the live host: live_reader takes
+  the Sysmon check as an argument and the six tests that name "win32"
+  give a stand-in. A channel leaves OPEN_CHANNELS when its reader's watch
+  stops or the reader is dropped; a closed channel starts no helper; a
+  reader still out at Stop finds its channel closed. The between-rounds
+  note is said once; one Sysmon check decides (the reader's).
+- Z-7 (Y7) README and THREAT_MODEL say X-5 and Z-4 (a brief unknown image
+  knocks once), X-8 (kinds said after three rounds), Z-3 (the start), Q-9
+  (when a guid is merged), and "closed where Sysmon is, while the channel
+  is not said to be behind, stopped or cleared"; HOST-RHYTHM's sentence
+  is made plain.
+- Z-8 (Y9, Y14) The tests Y9 names are written and the three weakened
+  assertions restored (NET-TOOL on kimi's tree; no early return; exactly
+  one). channel-behind is a hole only when the newest event read is
+  older than the previous round by more than one round's length; less
+  than that is the log's ordinary delay and is not said.
+- Z-9 Recorded: Y10 (the living tree's curl is judged on the code path; a
+  test now shows it with a follow that passes); Q-6 and the whole-channel
+  follow (M7.7); the 2 s tolerance and whether wevtutil applies the
+  query as Python passes it are the commander's machine's to say (A7).
+  Every REDO change carries a test (D-8).
+- Table ledger: Z-1 and Z-2 are the fourth and fifth time in this run
+  that a ruling of the Table's, written to settle a reviewer's finding,
+  was itself the next must-fix (R-1, T-1, B-5, X-9, X-3(b)). Each time
+  the ruling stated a general rule where the finding needed a narrow
+  one. From here a ruling that changes when something knocks, or when a
+  watch is INCOMPLETE, names the case it is for and the cases it must
+  not touch, and the builder tests both.
+
+## Amendment AA (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo2.md (a8d1620)
+CI for a8d1620 and for e1671ae (merged onto main with M8.1): six jobs
+success each. Z-1 and Z-2 MET; the rest PARTLY. Verdict: REDO on AA-1,
+AA-2 and AA-3. Each ruling names the case it is for and what it must not
+touch (Z-9).
+- AA-1 (W11, W6; X-5 and Z-4 are superseded where they said "knocks")
+  What the channel alone shows of a program nobody named is listed, not
+  knocked - until it is measured. The reviewer's question has no answer
+  in the tree: on a real Windows desktop, how many ordinary programs
+  connect and start a child between two rounds? Nobody has counted (A6,
+  A7), and before M7.9 such a tree was seen only if it happened to be
+  doing both at the sample's instant. FOR: a tree the catalog does not
+  name that is a candidate ONLY by what the channel gave (it was never a
+  candidate at a sample) - brief, or long-lived and seen to talk and act
+  between rounds. It is listed with the word `by the channel`, sourced,
+  and its acts are judged by the catalog as any tree's (those findings
+  knock by I-6); but it is no NEW-AGENT-UNKNOWN finding, no knock, no
+  alarm by itself. The report counts them by image path with the last
+  five runs' cites ("unknown, by the channel: 14 runs of <path>, last
+  at ..."), the state holds the count and those five, never the whole
+  list. MUST NOT TOUCH: a tree the catalog names knocks NEW-AGENT each
+  time, brief or not; an unknown tree that is a candidate at a sample
+  knocks NEW-AGENT-UNKNOWN exactly as before M7.9, and one first listed
+  by the channel that is later a candidate at a sample knocks then, once.
+  The watch's first lines and THREAT_MODEL say it. The commander's field
+  run gives the count; a later ruling decides whether these knock.
+- AA-2 (W1, must) The restart Z-5 ruled for a clock that stepped back
+  works and is tested: reads that return only records older than their
+  start, for two rounds, restart, said. The counter counts.
+- AA-3 (W4, must; D-8 and Z-9) Both sides of each rule are tested: for
+  the grouping by path - two programs of one name in two directories
+  are two groups, and a run with no path read is grouped by its name and
+  says so; for the lag threshold - a read less than a round behind says
+  nothing; for AA-1 - each of its four cases.
+- AA-4 (W2, W5) A process is not new twice when the records tell: a
+  guid whose every event lies between a tree's first sight and its last
+  sample, with the tree's pid and image, is that tree, whether or not
+  the tree's start was read. Outside that span, or with another image,
+  it is another tree. MUST NOT TOUCH: Z-5's reuse cases (a pid held by
+  two processes in turn stay two trees); the enumeration test grows by
+  these cases over two rounds.
+- AA-5 (W3, W7, W9) The words say what is closed. README and THREAT_MODEL
+  no longer call the between-rounds hole closed: it is "narrowed where
+  Sysmon is read", and they say exactly when a stopped or cleared
+  channel is said (three rounds in a row, each with a process due) and
+  when it is not (a quiet desktop: unsaid, a hole that remains). The
+  note for an image without its event 1 reads "left out by its
+  configuration, or late", and is withdrawn in the report if the event
+  came. THREAT_MODEL's old X-3(b) text goes; history "by its time" is
+  said for round 1 only. Scope widened for the two sentences in
+  NEW-AGENT.yaml and NEW-AGENT-UNKNOWN.yaml that describe the first round.
+- AA-6 (W8) One Sysmon check decides, the reader's: the watch takes
+  what its first lines, its sources and its report say of Sysmon from
+  the round's inventory. A channel is closed by its watch's Stop and by
+  nothing else (no finalizer on another thread); a helper started as the
+  channel closes is ended by the close. Tested: a channel leaves the open
+  set at Stop; a closed channel reads nothing and starts nothing.
+- AA-7 Recorded: W10 (a restart may re-read the records of the span
+  between the round's time and its query: a tree in it is "read late",
+  never new twice by AA-4); W12 (a step back smaller than a round before
+  round 1 is not said); Q-12's two tests (the tree-key hole is not
+  reachable by any path found; a benign brief tree is listed benign,
+  sourced, its findings notes - a test of it is written now that AA-1
+  names the cases); Q-13 accepted with AA-5's words.
+- AA-8 Every REDO change carries a test of its case and of what it must
+  not touch (D-8, Z-9).
+- Table ledger: X-5 ruled a knock "once per image" for a class of trees
+  whose number on a real machine nobody knew, and Z-4 refined the key of
+  that knock. The reviewer's W11 asked the question that should have
+  come first. AA-1 answers it the only way the tree can: show, count,
+  and wait for the field.
+
+## Amendment AB (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo3.md (9f2f665)
+CI run 42931681216 for fc37517 (9f2f665 merged onto main): six jobs
+success. AA-2 and AA-3 MET; AA-1, AA-4, AA-5, AA-6 PARTLY. Verdict: REDO
+on AB-1, AB-2 and AB-3. Each ruling names the case it is FOR and what it
+MUST NOT TOUCH, and both are tested (Z-9, AA-8).
+- AB-1 (V1, V12, must) The by-the-channel record is derived from the
+  trees, never accumulated. A tree is "listed by the channel" from the
+  first round it is an unknown, non-benign candidate only by the channel
+  (that round is kept on the tree) until it is knocked; the report's and
+  the state's count per image path is the number of such TREES, and the
+  five kept are the five latest such trees. FOR: one long-lived tree that
+  is a candidate only by the channel in every round of a watch is 1, not
+  one per round; the 36-order pairs assert the count. A tree that is
+  knocked (a candidate at a sample, before or after) is never tagged
+  `by the channel`, on the page or anywhere, and is not in the count.
+  MUST NOT TOUCH: two runs of one path that are two trees count 2; a tree
+  first listed by the channel and later a candidate at a sample knocks
+  then, once (AA-1 case 4). `by_channel_text` (written, never read) goes.
+- AB-2 (V2, must) Exit 0 stays (AA-1); the words do not lie. FOR: a watch
+  whose only news is unknown trees listed by the channel ends with
+  "CLEAN: N tree(s) listed, none knocked; M unknown tree(s) seen a
+  candidate only by the channel, listed and not knocked (AA-1): <paths
+  with counts>", the RESULT line's reason says the same M, and the state
+  carries M and that sentence for the window (the Table joins the window
+  at the merge; app.py stays out of Scope). MUST NOT TOUCH: with M = 0
+  both lines read exactly as before M7.9.
+- AB-3 (V6, V7; Q-14 ruled, must) E4 stands: the first lines say the
+  hole. The first lines speak from the watch's own check at its start,
+  and say that it is that check. FOR: on Linux, and on Windows where that
+  check finds no Sysmon, the between-rounds hole is a `hole:` line of the
+  first lines, as before M7.9, and a test pins those first lines on each
+  platform. Where the reader's check at round 1 differs from the watch's
+  own (either way), the round's printed line says so once, with what the
+  sources now are; the "sources:" first line is then not left standing
+  as the last word. The hole is said once per watch in all (first lines
+  or round 1, never both). MUST NOT TOUCH: Windows with Sysmon by both
+  checks prints no between-rounds hole and no such round line.
+- AB-4 (V3) "No alarm by itself" also means no silence by itself. FOR: a
+  tree listed by the channel and not knocked does not make a footprint
+  live: the link is shown, `live_key` is not set by it, and the
+  footprint's dark streak knocks AGENT-DARK-LIVE at the round it did
+  before M7.9. MUST NOT TOUCH: a footprint linked by a knocked tree
+  (named, or a candidate at a sample) is live as before.
+- AB-5 (V4; A1) The rule says it, not the host code. Scope is widened to
+  NEW-AGENT-UNKNOWN.yaml (match, description, holes) and its fixtures.
+  FOR: the match carries the by-the-channel condition, so the engine does
+  not fire on such a line, the host's `continue` is gone, a rule switched
+  off does not count such lines as findings it would have made, and a
+  negative fixture holds a by-the-channel line. The hole "knocks once per
+  program path" and the description's "never a nothing" are rewritten to
+  AA-1. MUST NOT TOUCH: a HostTree line with no by-the-channel key (every
+  record written before M7.9, Linux, no Sysmon) is judged and fires as
+  before - the existing fixtures pass unchanged, and a test says it.
+- AB-6 (V9; Q-15 confirmed with this) `candidate_by` is "sample" exactly
+  when the tree is a candidate in the round built WITHOUT the channel's
+  records; else "channel". FOR: a talker at the sample whose only sampled
+  descendant hangs under a process known from the channel alone is "by
+  the channel". MUST NOT TOUCH, as a property over every fixture round
+  with a channel: the trees labelled "sample" are the candidates of the
+  same round built without it, no more and no fewer.
+- AB-7 (V10; AA-4 for W5) The span of AA-4 ends at THIS round's sample
+  for a tree whose root is in this round's sample. FOR: a live process
+  whose sampled start was not read and whose guid's events come in the
+  same round is one tree, in that round and after. MUST NOT TOUCH: Z-5's
+  reuse cases stay two trees; a guid whose events begin after the root
+  left the sample is another tree. The enumeration (FORMS) grows by the
+  case, and AA-4's start-unread side gets its test.
+- AB-8 (V11) The note for an image without its event 1 is said per
+  episode: after a withdrawal, the next miss of that image is said again,
+  and the report's last word on an image is its present state. Any event
+  1 of the image withdraws the note (it shows the configuration does not
+  leave the image out); the words say "an event 1 of <image> came".
+  MUST NOT TOUCH: an image missing in every round is one note, not one
+  per round.
+- AB-9 (V15) A channel is closed by its owner: a watch's Stop closes the
+  channels of that watch's reader and no other; the reader gives a close
+  for a single look. The Table calls it from the window at the merge.
+  The double end of one helper (a Stop between the registration and the
+  closed check) is recorded once. Tested with two open channels.
+- AB-10 (V5, V13, V17) Each sentence V5 lists is made true or removed;
+  each test V13 lists is written (AA-7's benign brief tree among them;
+  the no-path grouping through a round; Q-15's case under AB-6); case 2's
+  fixture is what its comment says; agentx_events' second run has its own
+  guid. The shape changes outside Windows-with-Sysmon (V17) are accepted
+  and said in the builder's record.
+- AB-11 Recorded, said in THREAT_MODEL, not built: V8 (the tree ledger
+  grows by one entry per by-the-channel tree: a program that runs every
+  minute for a day is 1440 entries in the state and the report; a bound
+  is a later task, M7.12, because it touches the tree key; TREES SEEN's
+  line gets the words `by the channel` now, the window's row at the
+  merge); V14 (a pid reused by a process of an image without event 1,
+  wholly inside the seconds between a sample and its round's end, joins
+  the earlier tree); V16 (an unknown program that repeats as brief runs
+  is judged only by its acts: each run is its own tree, so HOST-RHYTHM
+  and HOST-UNWATCHED never see the repetition; the count is the trace).
+- Table ledger: AA-1 said "counted" without saying WHAT is counted, and
+  the build counted sightings; AA-6 said "from the round's inventory"
+  for lines printed before any round. A ruling that orders a count names
+  its unit; one that orders words names when they are printed.
+
+## Amendment AC (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo4.md (814a355)
+CI runs 42941269218 (814a355) and 42941342463 (merged onto main): six
+jobs success each. AB-1, AB-2, AB-3, AB-5..AB-9, AB-11 MET; AB-4 and
+AB-10 PARTLY. Verdict: REDO on AC-1 and AC-2. Each ruling names the case
+it is FOR and what it MUST NOT TOUCH, and both are tested (Z-9).
+- AC-1 (A1, must; AB-4 restated as a property) A footprint's state in a
+  round is the state it has in that round with the unknown trees listed
+  by the channel and not knocked taken away. So such a tree neither makes
+  a footprint live (AB-4) nor takes the link from a tree that would hold
+  it. FOR: a footprint that a tree knocked at a sample links, and that a
+  by-the-channel tree also links, is linked by the knocked tree and is
+  live, whichever of the two has the lower pid - both orders are tested;
+  AGENT-DARK-LIVE does not fire. MUST NOT TOUCH: AB-4's own case (the
+  by-the-channel tree is the only linker: dark, the knock at the round
+  it came before M7.9); a named tree known only from the channel links
+  as any knocked tree does. THREAT_MODEL's sentence follows.
+- AC-2 (A2, must) README's exit table and the help say what exit 0 is
+  now: no knock and no hole; trees listed, and unknown trees seen a
+  candidate only by the channel are listed and counted, not knocked.
+  "Nothing new" goes wherever it stands beside exit 0.
+- AC-3 (A3; Q-19 ruled) History is what the first round's SAMPLE shows
+  (with Z-1's exception). FOR: a process older than the watch that is no
+  candidate at round 1's sample and is a candidate in round 1 only by
+  channel events at or after the watch's start is not history: unknown,
+  it is listed by the channel, tagged and counted, and a later candidacy
+  at a sample knocks once, as it did before M7.9; named, it knocks
+  NEW-AGENT as a named tree by the channel does in any round. MUST NOT
+  TOUCH: a tree that is a candidate at round 1's sample is history, with
+  or without events of it in the channel; round 1 still reads nothing
+  older than the watch's start. Tested with the look's wider first span.
+- AC-4 (A5; Q-16 ruled) N-2 holds: a negative the match cannot fire on
+  by a field is not a measured negative. The by-the-channel line leaves
+  the rule's measured fixtures for the place N-2 gave such lines; the
+  measure stays 2 of 5 = 0.4 = fp_budget; the two special cases in
+  tests/test_host.py go; AB-5's test reads the line from its new home;
+  the budget comment (A12) is as it was.
+- AC-5 (A4, A11; Q-18 accepted) The benign brief tree's test asserts its
+  note positively (the catalog judged its act, as a note). A run with
+  neither path nor name read is called that ("no path and no name
+  read"), and AA-3's "grouped by its name" has a case with a real name
+  or is said not to be reachable, with the reason.
+- AC-6 (A6, A7, A8, A9, A14) Words and fields: the report says the
+  between-rounds hole once where the reader's check differs (one note,
+  not two); the line names the round in which the reader's check was
+  made; the YAML's description says the mark is the key's presence, and
+  a test pins that no code writes it false; a state field that is
+  written and never read, or goes stale, is updated or removed; the
+  count's time is named for what it is ("first listed at").
+- AC-7 (A10; Q-17) Scope is widened to the one sentence of
+  AGENT-DARK-LIVE.yaml's description that says when a footprint is dark;
+  README and the help follow in the same words. That inventory.json
+  (discover's own record) still shows the link is said in THREAT_MODEL.
+- AC-8 Recorded: Q-20 accepted as built. Q-21 and A13: the Table calls
+  the look's close from the window at the merge.
+- Table ledger: AB-4 ruled for "a tree" linking "a footprint" and the
+  record holds several linkers; the sixth time. AB-6 was ruled as a
+  property (the round without the channel) and held. AC-1 is AB-4 in
+  that form: where a ruling takes something out of a judgement, it says
+  the judgement is what it would be without it.
+
+## Amendment AD (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo5.md (f5a0da5)
+CI runs 42946728174 (f5a0da5) and 42946732057 (merged onto main): six
+jobs success each. AC-2, AC-4..AC-7 MET; AC-1 and AC-3 PARTLY. Verdict:
+REDO on AD-1 and AD-2. The Table stops ruling this case by case:
+- AD-1 (B1, B3, B4, B9; Q-24; supersedes AB-4 and AC-1) M7.9 does not
+  change how a footprint is judged. In a round that reads the channel,
+  the footprints the watch judges - state, link, live, streak, and so
+  every AGENT-DARK and AGENT-DARK-LIVE knock and note - are those of the
+  same round built WITHOUT the channel's records (the build AB-6 already
+  makes). No tree known or grown only by the channel links a footprint,
+  makes it live, or takes a link away: not an unknown one, not a named
+  one, not a benign one. `held_link`, the trees "taken away" and the
+  inventory's `links` go. FOR, as a property over every fixture watch
+  with a channel: its HostFootprint lines, round by round, are the lines
+  of the same samples watched without the channel (where the linking
+  tree is part of a larger tree in the channel's round, the link names
+  that tree). B1's case is dark and knocks at round 3; B3's case stays
+  linked and never knocks; a benign brief tree makes nothing live. MUST
+  NOT TOUCH: rounds that read no channel; the trees themselves, their
+  sources, acts and knocks (NEW-AGENT for a named brief tree still
+  comes). What this gives up is said in THREAT_MODEL: a footprint whose
+  agent ran only between rounds is judged dark as before M7.9, though
+  the tree was seen; joining the two is a later task (M7.12).
+- AD-2 (B2; AC-3 narrowed) In round 1, a tree known by its guid whose
+  pid and image are those of a tree of that round's sample whose start
+  was not read takes that tree's history: they are taken for one
+  process. FOR: B2's inputs - the guid tree is history, not tagged, not
+  counted, not knocked, unknown or named. MUST NOT TOUCH: AC-3's own
+  case (no candidate of that pid and image at the sample: not history),
+  with the start read and with it unread. That the two are still listed
+  as two trees, in round 1 and in the first round of any tree whose
+  start is unread, is recorded with the tree-key task (M7.12).
+- AD-3 (B5; Q-22) NEW-AGENT.yaml's first-round sentence is AA-5's
+  sentence and in Scope: it says AC-3 and AD-2.
+- AD-4 (B6, B7, B8) Words and fields: "the reader's first check", not
+  "at round 1", wherever it is said; exit 0 is "nothing knocked, and no
+  round or source that could not be read" - the standing holes the first
+  lines print do not change the exit, and the table says so; the state's
+  `candidate_by` on a tree (written, never read, wrong for an act-root)
+  is removed.
+- AD-5 Recorded: Q-23 as built (a tree's acts on os lines are history by
+  their own time; the reviewer's reading, not the builder's). The
+  "no event 11" line (the reviewer's D): it is judged on the whole read,
+  so where Sysmon logs no file-create event at all, every os source says
+  so and the watch ends INCOMPLETE - as it did before M7.9 (M7.2b); the
+  commander's field run says whether his configuration logs event 11.
+- Table ledger: AB-4 and AC-1 each tried to say which channel trees may
+  touch a footprint, and each left a case; AC-3 moved history and met a
+  split the keys already had. The seventh and eighth time. AD-1 is the
+  form the reviewer's own table pointed at (AB-6's): one judgement, made
+  on one build, with nothing of the channel in it. Where a milestone
+  adds a source, what the source may NOT change is ruled first, as a
+  property against the build without it.
+
+## Amendment AE (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo6.md (ede13c3), and the judgement on M7.9
+AD-3..AD-5 MET; AD-1 and AD-2 PARTLY. Six REDOs, seven packets. The
+reviewer's three must-fixes are of two kinds, and the Table rules them
+apart: a wrong SILENCE is closed now; a knock MORE than the watch
+without the channel gives, in a case nobody has met outside a
+constructed fixture, is said and recorded (A3: where the two differ, the
+alarm is the side to err on).
+- AE-1 (C1(b), must; the Table's own commit) AD-2 is for a guid with no
+  start of its own. FOR: a guid tree whose event 1 the round read, at or
+  after the watch's start, beside a sampled tree of its pid and image
+  whose start was not read (the pid taken again by the same program) is
+  new by Z-1: an unknown one is listed by the channel and knocks at its
+  first sample, once. MUST NOT TOUCH: AD-2's own case (B2: no start of
+  the guid read: history) - its test is unchanged and passes.
+- AE-2 (C3, C8(iv); the Table's own commit) The help says AD-2 beside
+  AC-3; `_history`'s docstring says it.
+- AE-3 (C1(a); accepted in words) Where the guid lets the watch know one
+  process across a start read late, that process is ONE tree and is
+  history from round 1: no NEW-AGENT comes for it in a later round (the
+  watch without the channel knocks there only because it splits the
+  process in two), and by N-1 its link never makes a footprint live, so
+  the footprint's dark rounds knock where the split watch would note
+  them. This is where AD-1's property yields to AD-2, and it is the
+  more exact reading of one process. Said in THREAT_MODEL.
+- AE-4 (C2; Q-25 ruled "stands") A sampled program taken for a helper by
+  a command line only the channel gives is no act-root in that round;
+  the footprint it links by name is not held quiet by it and knocks
+  after its dark rounds. A knock more, said in THREAT_MODEL; the holder
+  of such a link is the tree-key task's (M7.12).
+- AE-5 Q-26 confirmed (the round's read window is one for all its
+  lines). Q-27 confirmed: the quiet / kept handling is what the property
+  needs and is no rule; C4's one word ("kept" for "quiet" in a round
+  partly read) is said in THREAT_MODEL. Q-28 confirmed. C5, C7, C8(i)-
+  (iii) recorded for M7.12 with C6, whose wider sentence is now in
+  THREAT_MODEL (the live sample reads no command line, so a link whose
+  only evidence is in the channel is given up for sampled trees too).
+- Judgement: NEXT for M7.9, on six CI jobs green for the Table's commit
+  and for the merged branch. P-4 is met as far as this ADR now says:
+  where Sysmon is read, a tree that starts, talks, acts and ends between
+  two rounds is a tree of that round, sourced, its acts judged; a named
+  one knocks; an unknown one known only from the channel is listed and
+  counted, not knocked, until the field gives the number (AA-1); history
+  is what the first sample shows (AC-3, AD-2, AE-1); footprints are
+  judged without the channel (AD-1), with AE-3 and AE-4 said. Not
+  reviewed by a fresh reviewer: the Table's own commit (AE-1, AE-2) and
+  its commit joining the window (AB-2, AB-9, AB-11 on the merged
+  branch); the field run is their review.
+- Table ledger for M7.9: eight rulings of the Table became the next
+  packet's must-fix (R-1, T-1, B-5 before it; here X-9, X-3(b), AB-4,
+  AC-1, AC-3, and AD-2 in part). What ended it was not a finer case
+  rule but two things: a property against the build without the new
+  source (AB-6, AD-1), and sorting what was left by its direction -
+  silence is fixed, a knock more is said. Both go into the session
+  protocol's next revision as how a milestone that adds a source is
+  ruled from its first packet.

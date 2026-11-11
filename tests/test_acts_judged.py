@@ -260,7 +260,7 @@ def test_e4_without_a_process_sample_a_tree_that_left_is_gone_and_that_is_said_o
 def test_e4_the_live_reader_asks_discover_for_the_sample_and_discover_json_is_unchanged(monkeypatch):
     texts, holes = discover.read_dir(str(HOSTFIX / "quiet" / "quiet"))
     monkeypatch.setattr(discover, "collect_live", lambda *a, **k: (texts, holes, None))
-    inv = host.live_reader(CATALOG, platform="win32")()
+    inv = host.live_reader(CATALOG, platform="win32", sysmon=lambda: (False, "test: a stand-in, no Sysmon"))()
     assert (5888, "powershell", "2026-11-10T07:50:00.000Z") in {(p["pid"], p["image"], p["started"])
                                                                  for p in inv["processes"]}
     assert "processes" not in discover.run(texts, CATALOG, holes=holes)   # raqib discover --json: no new key
@@ -1158,7 +1158,9 @@ def test_redo3_v1_three_trees_over_three_polls_name_the_tree_that_knocked(tmp_pa
     assert shown["pid"] == 9300 and shown["notice"] == "off (knocked on tree pid 9100)"
     others = sorted(f["notice"] for f in w.source_findings if f.get("judged_on") is not None)
     assert others == ["%s: judged on tree pid 9300 (one act, one finding)" % host.JUDGED_ELSEWHERE] * 2
-    (row,) = w.knock_rows()
+    # M7.9 REDO X-9: the trees' start (PERM_START) is read and after this watch's start, so they are not history and
+    # knock NEW-AGENT-UNKNOWN in round 1; the act's knock is the one row with a tree it was shown on
+    (row,) = [r for r in w.knock_rows() if r.get("shown_on")]
     assert (row["knocked_on"], row["shown_on"]) == ("tree pid 9100", "tree pid 9300")
     w.finish()
 

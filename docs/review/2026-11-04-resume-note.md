@@ -89,3 +89,51 @@ hole text rendered from live values (F, P16); os_sysmon writing ProcessId
 for `raqib watch`; pacing of suspect calls; the README loop's system
 drive; THREAT_MODEL lines; the capture helper redacting homes by default
 (G, Q-5); docstring example homes (G, Q-4); `--remove` for user rules.
+
+## State at the end of the 2026-11-11 session (the Table)
+The commander's order of 2026-11-10 (the correction after the second
+field run; an easy way to add rules in the window; a modern look) is
+built in four tasks, each after review and rulings, all on main:
+M7.8 (ADR-0007 P, R, T, V, W: os lines judged by NET-TOOL / DESTRUCT-CMD
+with Windows programs, one act one finding in every order, benign trees
+noted, quiet is not gone, Defender benign), M8.1 (ADR-0009 A-D: the
+look), M8.2 (ADR-0009 E-H: `raqib rules --new / --remove`, the form with
+Test and "on your records", Remove by the row's own place), M7.9
+(ADR-0007 X, Z, AA-AE: the round reads the Sysmon channel).
+HANDOFF.md none pending. Not reviewed by a fresh reviewer, and said so
+in the amendments: the Table's own last commits on M8.2 (H-1..H-4), on
+M7.9 (AE-1, AE-2) and the window's meeting with M7.9 (AB-2, AB-9, AB-11).
+
+Pending, for the commander - the third field run on the Windows machine:
+1. The look on his display: DPI, the dark title bar, the open "Could not
+   see" panel on a visible window, the form at his window size.
+2. Kimi (or any agent) running curl / ssh / a destructive command: a
+   NET-TOOL or DESTRUCT-CMD finding on its tree, knocked once.
+3. MsMpEng no longer an unknown agent; a benign tree's finding is a note.
+4. The channel: does real wevtutil accept the round's query (no
+   channel-unread hole)? Does his Sysmon log events 3, 11, 22 (the first
+   lines and the SYSMON line say; with no event 11 at all every os source
+   says so and the watch ends INCOMPLETE, as before M7.9)? The count of
+   "unknown, by the channel" trees after an hour of ordinary use: AA-1
+   waits for this number to rule whether such a tree knocks.
+5. A brief agent: start Kimi, let it act, close it inside one round: a
+   NEW-AGENT with the word `brief`, its acts judged.
+6. Rules -> New rule: a program rule (terraform), Test, "on your
+   records", Add, then Remove; `raqib rules --new` / `--remove` in the
+   terminal; a second watch says the rule and how it was measured.
+7. The KNOCKS ledger against the notification centre, toast by toast.
+Still open from the second run: what ran in PowerShell pid 5888; whether
+his Sysmon records event 24 (M7.10 waits for it and a real export).
+
+Recorded later tasks: M7.10 AGENT-CLIPBOARD; M7.11 a benign host of a
+model client; M7.12 the tree ledger and its keys (AB-11, AD-1, AD-2, AE-3,
+AE-4: a bound on by-the-channel trees, one tree across an unread start,
+the holder of a helper's link, a footprint whose agent ran only between
+rounds); M8.3 the window's notes (ADR-0009 H: a log of what the
+catch-alls caught, the orphan overlay entry's words, a real watch under
+the form's "running" test, a way to name a program benign, Q-10's
+column, G15, G18); M7.7 ProcessId on os lines and a bounded follow; the
+session protocol's next revision (ADR-0007 AE ledger: a milestone that
+adds a source is ruled first by a property against the build without
+it, and what remains is sorted by direction - silence fixed, a knock
+more said).

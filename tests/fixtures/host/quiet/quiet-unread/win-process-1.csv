@@ -1,0 +1,9 @@
+# M7.8 fixture SYNTHETIC (not captured from a machine) - the same shell alive at the sample, not talking, its CreationDate unread (M7.9 REDO 4, AB-7); host `host`, one sample of the live reader; in the shape of: Get-CimInstance Win32_Process | ConvertTo-Csv -NoTypeInformation, columns ProcessId; ParentProcessId; Name; ExecutablePath; CommandLine; CreationDate (ISO UTC, as raqib/hostwin.py writes it). Redaction (ADR-0004 B-9): no line of a real export; user `user`, host `host`; addresses loopback, unspecified or RFC 5737 documentation ranges only
+"ProcessId","ParentProcessId","Name","ExecutablePath","CommandLine","CreationDate"
+"0","0","System Idle Process",,,"2026-11-10T07:40:02.000Z"
+"4","0","System",,,"2026-11-10T07:40:02.000Z"
+"700","604","wininit.exe","C:\Windows\System32\wininit.exe","wininit.exe","2026-11-10T07:40:09.000Z"
+"760","700","services.exe","C:\Windows\System32\services.exe","C:\Windows\system32\services.exe","2026-11-10T07:40:09.000Z"
+"5100","5060","explorer.exe","C:\Windows\explorer.exe","C:\Windows\Explorer.EXE","2026-11-10T07:41:00.000Z"
+"5888","5100","powershell.exe","C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",""C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"",""
+"5890","5888","conhost.exe","C:\Windows\System32\conhost.exe","\??\C:\Windows\system32\conhost.exe 0x4","2026-11-10T07:50:00.100Z"

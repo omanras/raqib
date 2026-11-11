@@ -1149,6 +1149,10 @@ def host_section(state):
                            _text("named: %s" % t.get("named_by") if t.get("named") else "unknown"),
                            _text(t.get("first_seen")), _text(t.get("first_round")),
                            (' <span class="tag">history</span>' if t.get("history") else "") +
+                           (' <span class="tag">brief</span> seen in the channel, not at the sample'   # M7.9 (P-4)
+                            if t.get("sampled") is False else "") +
+                           (' <span class="tag">by the channel</span> unknown, not knocked (AA-1)'
+                            if t.get("by_channel") else "") +
                            (' <span class="tag">benign</span>%s' % (" " + _text(t["benign_word"]) if t.get("benign_word")
                                                                     else "") if t.get("benign") else ""),   # T-2
                            "yes" if t.get("present") else '<span class="tag">quiet</span> %s' % _text(

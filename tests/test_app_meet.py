@@ -62,3 +62,65 @@ def test_a_real_watch_with_notes_on_a_benign_tree_reads_clean_in_the_window(tmp_
     assert row[2].startswith("benign") and row[6] == "%s 3" % host.BENIGN_COUNT and app.row_level(row) is None
     _, code = w.finish()
     assert code == 0
+
+
+# --- where the window meets M7.9 (the Table at the merge: ADR-0007 AB-2, AB-9 / Q-21, AB-11) ---------------------
+
+def test_m79_a_tree_listed_by_the_channel_says_so_in_its_kind_and_a_knocked_one_does_not():
+    assert app.tree_kind({"by_channel": True}) == "unknown (%s)" % host.BY_CHANNEL
+    assert host.BY_CHANNEL not in app.tree_kind({"by_channel": True, "knocked": 3})   # AB-1: knocked, never tagged
+    assert app.tree_kind({}) == "unknown" and app.tree_kind({"named": True, "knocked": 2}) == "named (new)"
+
+
+def test_m79_a_clean_host_watch_says_the_trees_it_listed_by_the_channel_and_never_a_path():
+    state = {"host": {"by_channel_count": 2, "by_channel_sentence": "2 unknown tree(s) ...: C:\\Users\\user\\x.exe (2)"}}
+    said = app.by_channel_cause(state)
+    assert said == "2 unknown trees seen only %s, listed, not knocked" % host.BY_CHANNEL and "\\" not in said
+    assert app.by_channel_cause({"host": {"by_channel_count": 1}}).startswith("1 unknown tree seen only ")
+    for none in ({"host": {"by_channel_count": 0}}, {"host": {}}, {}, None, {"host": {"by_channel_count": True}}):
+        assert app.by_channel_cause(none) == ""   # must not touch: M = 0 reads as before
+    # only where the watch's own causes say nothing: an alarm or a hole keeps its words
+    assert app.live_cause(3, 0, 0, app.host_causes({"holes": [{"kind": "x"}]})) == "1 hole"
+
+
+def _look(reader):
+    probe = app.HostProbe(reader, catalog=None, deadline=60.0).start()
+    probe.worker.thread.join(10)
+    assert probe.done()
+    return probe
+
+
+def test_m79_the_look_closes_the_channel_its_reader_opened_once_its_one_read_is_back():
+    calls = []
+
+    def reader():
+        calls.append("read")
+        return {"holes": [], "candidates": [], "act_roots": []}
+
+    def close(why):
+        calls.append(("close", why))
+        return []
+    reader.close = close
+    probe = _look(reader)
+    assert calls == ["read", ("close", "the look ended")] and probe.closed == []
+
+
+def test_m79_what_the_looks_close_had_to_end_is_a_hole_of_the_look_and_a_reader_without_close_is_as_before():
+    def reader():
+        return {"holes": [], "candidates": [], "act_roots": []}
+    assert _look(reader).closed == []   # must not touch: a test's reader, a stand-in: nothing to close
+
+    def failing():
+        raise RuntimeError("no sample")
+    failing.close = lambda why: ["wevtutil ended: %s" % why]
+    probe = _look(failing)   # the reader failed: its channel is closed all the same
+    assert probe.closed == ["the look's channel: wevtutil ended: the look ended"]
+    assert probe.closed[0] in probe.view()["holes"]
+
+    def broken():
+        return {"holes": [], "candidates": [], "act_roots": []}
+
+    def bad_close(why):
+        raise OSError("gone")
+    broken.close = bad_close
+    assert _look(broken).closed == ["the look's channel was not closed: OSError: gone"]
