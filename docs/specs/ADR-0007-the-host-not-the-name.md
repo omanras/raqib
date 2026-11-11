@@ -1547,3 +1547,48 @@ alarm is the side to err on).
   silence is fixed, a knock more is said. Both go into the session
   protocol's next revision as how a milestone that adds a source is
   ruled from its first packet.
+
+## Amendment AF (the Table, 2026-11-11) - the third field run (docs/review/2026-11-11-third-field-run.md)
+The commander's word ("do it") on F1 to F4 of that note. Each ruling
+names the case it is FOR and what it MUST NOT TOUCH; both are tested.
+Ruled from the first packet as M7.9 taught: a property against the watch
+without the source, and what is left sorted by direction.
+- AF-1 (F1; silence, so fixed). The property: on the same rounds, a
+  watch whose channel was never read makes every finding and every knock
+  that the watch on a machine with no Sysmon makes. So while no round of
+  this watch has read the channel, a tree's source is the host's own
+  record, and its source text says why (Sysmon is there, its channel was
+  not read, the reason). FOR: Sysmon registered, the watch not elevated
+  (run 1). MUST NOT TOUCH: a watch whose first round reads the channel
+  gives its trees the os source in that round, as today; a machine with
+  no Sysmon prints the lines it prints today. Said, not fixed (a hole in
+  THREAT_MODEL): a read that fails after rounds that read leaves the os
+  sources in place.
+- AF-2 (F3). The first round whose channel read fails, where the
+  reader's check finds Sysmon and no earlier round of this watch read
+  it, knocks once (HOST-HOLE, its own rate-limit id) and says one line
+  in the terminal: the channel is not read, the reason, and that an
+  elevated terminal reads it. Once for the watch while no read is kept;
+  a failure after reads that were kept knocks once for that episode.
+  FOR: run 1's round 1. MUST NOT TOUCH: no Sysmon on the machine is a
+  note, never this knock; the hole of each round is still recorded.
+- AF-3 (F2). The report's SYSMON line says what the rounds did: every
+  round read - today's words, not a byte changed; none read - present,
+  not read in any of N rounds, the first reason, and that every tree
+  was judged by the host's own record; some - read in K of N rounds.
+- AF-4 (F4). In the text report, the holes of the round's channel read
+  whose words differ only by the round's number and time are one line:
+  the kind, the rounds as ranges, how many, the words once, the first
+  and the last time. The HOLES count is the number of holes, as today,
+  and says how many lines hold them. MUST NOT TOUCH: holes of any other
+  kind; two reasons are two lines; rounds.jsonl, the state, the result
+  and the exit code.
+- AF-5 (Q-2). Not ruled: a test states what the watch does today for a
+  program the catalog does not name, under a benign tree, that leaves
+  its connection to a child; if the child's act is only a note, the
+  builder changes nothing and returns it as a question.
+- AF-6 Said in THREAT_MODEL and the guide: the channel needs an
+  elevated terminal; what an agent without hooks reads with its own
+  code is in no source; in the third field run the watched read the
+  watcher's record. Q-1 and Q-3 wait for the commander.
+

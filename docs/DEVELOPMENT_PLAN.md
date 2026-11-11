@@ -83,6 +83,7 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.10 AGENT-CLIPBOARD (P-5, Sysmon event 24's header): waits for the commander's word and a real export
 - M7.11 a benign host of a model client (ADR-0007 T-9): a benign program that talks to a model endpoint the catalog names is listed with that word
 - M7.12 the tree ledger and its keys (ADR-0007 AB-11, AD-1, AD-2): a bound on by-the-channel trees in the state and the report; one tree for a process whose sampled start is unread and its guid; a footprint whose agent ran only between rounds
+- M7.13 the third field run (ADR-0007 Amendment AF; docs/review/2026-11-11-third-field-run.md): a watch that cannot read the channel judges by the host's own record, knocks once for it, and its report says it in one line
 - M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (landed 2026-11-11; ADR-0009 Amendments E-H, decisions 4-5 accepted): `raqib rules --new / --remove`, the form with its Test and "on your records", class USER, Remove by the row's own place, checks first
 - M8.3 the window's notes after M8.2 (ADR-0009 H): a log of what the catch-alls caught, the orphan overlay entry's words, a real watch under the form's "running" test, a way for the person to name a program benign
