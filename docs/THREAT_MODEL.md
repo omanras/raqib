@@ -726,6 +726,26 @@ is amended by T-2, T-1 restated by V-1).
   become a second place where secrets leak). Which process wrote the
   clipboard (Sysmon event 24) is a candidate rule (ADR-0007 P-5), not
   built.
+- **A channel that is there and not read (ADR-0007 AF; the third field
+  run).** On Windows the Sysmon channel needs an elevated terminal (Run as
+  administrator): a watch that is not elevated is denied every read of it
+  (wevtutil exit 5). While no round of the watch has read the channel,
+  every tree's source is the host's own record, as on a machine without
+  Sysmon, and its source text says why; the first failed read knocks once
+  (HOST-HOLE, its own rate-limit id) and says one line in the terminal;
+  the report's SYSMON line says in how many rounds the channel was read
+  and the first reason, and the rounds' holes of the same words are one
+  line of the text report (each is still a hole of its round, in the
+  record and the state). Said, not fixed: a read that fails after rounds
+  that read leaves the os sources in place; what they cannot read while
+  the reads fail is not seen, and each such run of failed reads knocks
+  once. What an agent without hooks reads with its own code (a file it
+  opens, a directory it lists) is in no source: it starts no child and
+  opens no connection, and Sysmon has no event for a read; the same holds
+  for a file it creates or deletes where Sysmon's event 11 is not read.
+  In the third field run the watched read the watcher's record: the agent
+  read the watch's own files under the home to write its account of the
+  test, as section 6 says it can.
 - **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No watched
   process is signalled, suspended, attached to or killed, and nothing is
   blocked: a finding is a record and a knock after the act, never a
