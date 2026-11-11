@@ -549,3 +549,73 @@ TOUCH, and both are tested (ADR-0007 Z-9).
   made a failed Remove switch a rule back on; and it refused a linked
   home in Remove alone. A ruling about an order names what holds if the
   second step never happens.
+
+## Amendment G (the Table, 2026-11-11) - rulings on review 2026-11-11-M8.2-redo2.md (5e5c956)
+CI run 42940006079 for 5e5c956: both windows gate jobs failed one test
+(S1). F-1, F-2, F-4, F-6, F-8, F-9, F-10 MET; F-3, F-5, F-7, F-11 PARTLY.
+Verdict: REDO on G-1..G-4. Each ruling names the case it is FOR and what
+it MUST NOT TOUCH, and both are tested (ADR-0007 Z-9).
+- G-1 (S1, must) A test of two names a case apart asks the file system
+  first: where it does not keep both, the test skips and says so, before
+  it makes anything. The builder's record then says which tests depend on
+  the system that runs them, truly.
+- G-2 (S2, must; Q-10 ruled) The terminal removes what was named, never
+  a neighbour of it. `--remove NAME` names one entry of rules.d as it is
+  listed: a NAME without a suffix is a folder, a NAME ending .yaml is a
+  loose file; the exact name first, else the one entry of that kind that
+  matches without regard to case; several: refused, all listed, none
+  suggested. A stem is never matched across kinds. FOR: `--remove
+  MY-TF.yaml` with no such file and a loaded MY-TF/ removes nothing and
+  says there is no such file. And Q-10: a NAME that is a package rule's
+  id removes the entry of rules.d of exactly that name where there is
+  one, saying "the package rule NAME is untouched" - its overlay entry
+  (the package rule's own setting) is never dropped by this. MUST NOT
+  TOUCH: `--remove MY-TF` of one loaded rule reads as now; a package id
+  with no such entry in rules.d is refused as now.
+- G-3 (S3, must) "On your records" never says more than it read. "read:
+  every file" is said only when nothing was refused, cut or bounded;
+  each bound met is said also when no file was judged; what was not
+  read is counted as what it is (a file, a folder: "1 folder not read: a
+  link"); a file is called by what it holds, not by where it lies. FOR:
+  the three cases of S3, each with its exact words. MUST NOT TOUCH: with
+  nothing refused and no bound met the words read as now.
+- G-4 (S4, must) README says the Remove that is built: the rule file
+  first, the overlay entry after, and which rows have no Remove.
+- G-5 (S5, S8) Remove never walks into a link. The plan looks at each
+  directory before it enters it and refuses at a link, a junction or any
+  reparse point, by its own name; and whatever fails in Remove or in
+  drawing the rows that is not a refusal becomes one, with words, in the
+  terminal (exit 2) and in the window - never a traceback, never
+  nothing. FOR: a junction inside a rule's folder, tested on Windows
+  with a junction made by the test whether or not the job can make
+  symlinks; a path on another drive; an entry that cannot be read.
+  MUST NOT TOUCH: nothing is deleted in any refused case; a folder with
+  ordinary sub-folders is removed as now.
+- G-6 (S6, S7, S12; Q-15 ruled) The words of a Remove fit its case: a
+  loose file is not "its folder and its overlay entry"; a folder that
+  had no rule file is not said to "no longer load"; an overlay entry
+  that could not be dropped is listed with what remains; a stop midway
+  is not shown under a word that says it was removed whole. A link named
+  as a rule in rules.d is said as a link (the test matches those words,
+  not a folder's name). The Rules header names a refused loose file by
+  its file name. The real place is said wherever it differs from the
+  path written (Q-15: always).
+- G-7 (S10, S11) After a change the preview and "on your records" are
+  marked as the last test's, not the form's present state. A row that
+  says "delete it by hand" can be reached by Tab and its path can be
+  selected and copied. MUST NOT TOUCH: the fit at 900x600.
+- G-8 Questions ruled as built: Q-8 (image, lower case, typed: F-2's
+  "in that order" was the Table's loose wording); Q-11 (the entry of a
+  refused place is left alone and said); Q-13; Q-14. Q-9: the words are
+  "measured on its own fixture files only (N), not on a corpus" - a
+  count is named by its unit (ADR-0007 AB ledger). Q-12: accepted; the
+  test proves the window's words, and that a running watch keeps the
+  rules it started with is the watch's own, recorded for M8.3.
+- G-9 Recorded: S9 (two Tests at once in two processes can remove the
+  staging root between one's makedirs and its mkdtemp; that Test ends as
+  "the form could not write this rule" and can be run again); S13's
+  three notes are tidied where the builder passes.
+- Table ledger: F-3 gave the terminal "the exact name first" and did not
+  say what a name with a suffix names; the build matched stems across
+  kinds. A ruling that takes a name from a person says what kind of
+  thing each form of the name can be.
