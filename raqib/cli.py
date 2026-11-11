@@ -125,16 +125,19 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       first round's sample are history (one in round 1 only by the channel
       is not: AC-3), a listed benign program under a system directory is
       benign: listed, not knocked. AGENT-DARK-LIVE (medium) after 3 rounds
-      of a footprint that is dark: no candidate or act-root links to it, an
-      unknown tree listed by the channel and not knocked taken away (AC-1,
-      AC-7). Every round prints one line, "NO AGENT
+      of a footprint that is dark: no candidate or act-root of the round
+      built without the channel's records links to it (AD-1: no tree known
+      or grown only by the channel links it). Every round prints one line,
+      "NO AGENT
       SEEN" included; a reader not back in 2 x T is a hole and a knock.
       Record and latest inventory under ~/.raqib/host/, every line with the
       run's id; one host watch per home. --rounds N (or Stop) ends after N
-      rounds, at the reader's deadline at the latest. Exit 0 no knock and
-      no hole: trees listed, and unknown trees seen a candidate only by the
-      channel listed and counted, not knocked (or none seen: not a
-      clearance; AC-2), 1 a finding, 3 a
+      rounds, at the reader's deadline at the latest. Exit 0 nothing
+      knocked, and no round or source that could not be read (the standing
+      holes the first lines print do not change the exit): trees listed,
+      and unknown trees seen a candidate only by the channel listed and
+      counted, not knocked (or none seen: not a clearance; AC-2, AD-4), 1 a
+      finding, 3 a
       round not read or another hole, 2 usage (also --host with a PROJECT,
       or another host watch on this home). Every tree gets a source that
       only reads (M7.2b, ADR-0007 decision 3 and Amendment H): the os source

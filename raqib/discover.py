@@ -2095,6 +2095,50 @@ def _acts_core(records, catalog, channel=False):
     return records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts
 
 
+NO_HOLDER = "pid %d (the tree that links it without the channel is no tree of this round: ADR-0007 AD-1)"
+
+
+def _without_channel(records, parsed, catalog, candidates, act_roots):
+    """ADR-0007 AB-6, AD-1: the same round built WITHOUT the channel's
+    records (the sampled records keep their keys: _guid_instances moves
+    Sysmon records only), so M7.9 does not change how a footprint is
+    judged: {"roots": {root pid: "candidate" | "act-root"} of that build,
+    "footprints", "dark"} - its footprints and AGENT-DARK, each link
+    naming the tree of the channel's round that holds the linking tree's
+    root (that root's own tree, else the larger tree it is part of), in
+    the field of the class it has without the channel."""
+    records = [r for r in records if (split_name(r["src"]) or (None,))[0] != "sysmon"]
+    parsed = [s for s in parsed if s["kind"] != "sysmon"]
+    records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts = _acts_core(records, catalog)
+    ids = {pid: "C%d" % i for i, pid in enumerate(sorted(acts), start=1)}
+    cands = [{"pid": pid, "id": ids[pid], "tree": [pid] + [a["pid"] for a in acts[pid] if a["how"] == "process"],
+              "talking_ancestors": [{"pid": a} for a in ancestors(procs, pid) if a in talkers]} for pid in sorted(acts)]
+
+    def held(role, kinds):
+        return [s["name"] for s in parsed if s["text_read"] and s["kind"] in kinds
+                and any(r["kind"] == role for r in s["records"])]
+    trees_read = bool(held("proc", PROCESS_SOURCES)) and bool(held("conn", CONNECTION_SOURCES))
+    roots = _act_roots(procs, talkers, self_tree, ids, catalog, held("conn", CONNECTION_SOURCES)) if (
+        trees_read and catalog["act_root"]["status"] == "ok") else []
+    footprints, dark = _footprints(records, procs, cands, talkers, catalog, judged=trees_read, act_roots=roots)
+    root_of = dict([(c["id"], c["pid"]) for c in cands] + [(a["id"], a["pid"]) for a in roots])
+
+    def holder(pid):
+        for t in list(candidates) + list(act_roots):
+            if t["pid"] == pid:
+                return t["id"]
+        for t in candidates:
+            if pid in t["tree"]:
+                return t["id"]
+        return next((t["id"] for t in act_roots if any(a["pid"] == pid for a in t["acts"])), None)
+    for f in footprints:
+        for field in ("candidate", "act_root"):
+            if f.get(field):
+                f[field] = holder(root_of[f[field]]) or NO_HOLDER % (root_of[f[field]] % REUSE)
+    return {"roots": dict([(c["pid"], "candidate") for c in cands] + [(a["pid"], "act-root") for a in roots]),
+            "footprints": footprints, "dark": dark}
+
+
 def build(parsed, catalog, window=None, holes=(), live=False, processes=False, channel=False):
     """The inventory (E5) of parsed sources:
     [{"name", "path", "error", "records", "problems", "lines"}].
@@ -2222,8 +2266,13 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     act_roots = _act_roots(procs, talkers, self_tree, ids, catalog,
                            [s["name"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]
                             and holds(s, "conn")]) if judge else []
-    footprints, dark = _footprints(records, procs, candidates, talkers, catalog, judged=trees_read,
-                                   act_roots=act_roots, all_links=channel)
+    bare = None
+    if channel:   # ADR-0007 AD-1: the footprints are those of the same round built WITHOUT the channel's records
+        bare = _without_channel(unjoined, parsed, catalog, candidates, act_roots)
+        footprints, dark = bare["footprints"], bare["dark"]
+    else:
+        footprints, dark = _footprints(records, procs, candidates, talkers, catalog, judged=trees_read,
+                                       act_roots=act_roots)
     env_fp = []
     owner_of = {}
     for c in candidates:
@@ -2372,11 +2421,13 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     if channel:   # M7.9: a tree's root as the round's channel saw it (guid, brief, its creation)
         for t in candidates + act_roots:
             t.update(_channel_fields(procs.get(t["pid"])))
+            # AD-1: the class its root has in the round built without the channel's records (None: a tree of this
+            # round only by the channel), so the watch keeps a footprint's quiet and kept trees as that build does
+            t["bare_class"] = bare["roots"].get(t["pid"])
         # AB-6 (AA-1): "sample" exactly when the tree is a candidate of the same round built WITHOUT the channel's
         # records (the sampled records keep their keys: _guid_instances moves Sysmon records only), else "channel"
-        bare = _acts_core([r for r in unjoined if (split_name(r["src"]) or (None,))[0] != "sysmon"], catalog)[-1]
         for t in candidates:
-            t["candidate_by"] = "sample" if t["pid"] in bare else "channel"
+            t["candidate_by"] = "sample" if bare["roots"].get(t["pid"]) == "candidate" else "channel"
     if processes:   # M7.8 (P-2): the round's process sample, for "quiet" (root alive, no talk) against "gone"
         extra["processes"] = _last_sample(records, procs)
     return _os_pids(dict(extra, **{
@@ -2672,7 +2723,7 @@ def _handoff(pid, p, catalog):
                 else "neither a hook image nor marked proxy_capable", pid % REUSE)}
 
 
-def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=(), all_links=False):
+def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=()):
     """Path footprints with the candidate each links to, and AGENT-DARK:
     a footprint no candidate tree links to, by name or by its path in argv
     or cwd, nor an act-root (M5.0b: an act-root is a tree acting in the
@@ -2692,7 +2743,6 @@ def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=
             continue
         agent = fp["agent"]
         link = None
-        links = []   # ADR-0007 AC-1 (a round with the channel): every linker, in this order, each once
         # A candidate whose root goes by the agent's name first, then an
         # act-root whose root does (M5.0b), then any process of a candidate's
         # tree, then any process of an act-root's tree.
@@ -2706,23 +2756,16 @@ def _footprints(records, procs, candidates, talkers, catalog, judged, act_roots=
                     q = procs.get(pid)
                     texts = ([q["cwd"] or ""] + q["argv"]) if q else []
                     if q and (_named(q, agent) or any(norm.lower() in t.replace("\\", "/").lower() for t in texts)):
-                        link = link or (field, c["id"], q)
-                        if all_links and not any(l[field] == c["id"] for l in links if field in l):
-                            links.append({field: c["id"], "cites": _cites(q["recs"], 1)})
+                        link = (field, c["id"], q)
                         break
-                if link and not all_links:
+                if link:
                     break
-            if link and not all_links:
+            if link:
                 break
         entry = {"path": r["path"], "match": fp["match"], "agent": agent,
                  "candidate": link[1] if link and link[0] == "candidate" else None,
                  "act_root": link[1] if link and link[0] == "act_root" else None,
                  "cites": [cite(r)] + (_cites(link[2]["recs"], 1) if link else [])}
-        if all_links and link:
-            # AC-1: the host takes the first of these whose tree is not one listed by the channel and not knocked
-            # (the footprint's state is the one it has with those trees taken away); only in a round with the
-            # channel, so every other inventory keeps its shape
-            entry["links"] = links
         footprints.append(entry)
         if link:
             continue

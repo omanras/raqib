@@ -546,15 +546,20 @@ is amended by T-2, T-1 restated by V-1).
   read, said), with the five latest trees cited, until a field run
   measures how many ordinary programs do this; a watch whose only news is
   such trees ends CLEAN (exit 0) and its CLEAN and RESULT lines say how
-  many (AB-2); a footprint's state in a round is the state it has in that
-  round with the unknown trees listed by the channel and not knocked taken
-  away (AC-1): such a tree neither makes a footprint live nor takes the
-  link from a tree that would hold it (whichever has the lower pid), so a
-  footprint it alone links is dark as before the channel was read (AB-4),
-  and AGENT-DARK-LIVE's description says so (AC-7), while inventory.json
-  (discover's own record) still shows the link: the watch's record and
-  page say why it is dark; an unknown tree that is a candidate at a sample
-  knocks NEW-AGENT-UNKNOWN as before, once. History is what the first
+  many (AB-2); an unknown tree that is a candidate at a sample knocks
+  NEW-AGENT-UNKNOWN as before, once. Reading the channel does not change
+  how a footprint is judged (AD-1, superseding AB-4 and AC-1): in a round that reads the
+  channel, a footprint's state, link, live window and streak - so every
+  AGENT-DARK and AGENT-DARK-LIVE knock and note - are those of the same
+  round built without the channel's records (discover makes that build
+  and its inventory carries its footprints; a link names the tree of the
+  channel's round that holds the linking tree's root, and a tree of the
+  round only by the channel is, for the footprints, quiet or kept as that
+  build has it). No tree known or grown only by the channel - unknown,
+  named or benign - links a footprint, makes it live or takes a link
+  away. What this gives up: a footprint whose agent ran only between
+  rounds is judged dark as before the rounds read the channel, though the
+  tree was seen; joining the two is a later task (M7.12). History is what the first
   round's sample shows (AC-3): a candidate at round 1's sample is history
   unless its start was read and is at or after the watch's start, with or
   without events of it in the channel; a process older than the watch that
@@ -562,7 +567,12 @@ is amended by T-2, T-1 restated by V-1).
   none older than the watch's start, though the window's round 1 waits for
   its look and so reads a wider first span) is not history: unknown, it is
   listed by the channel and counted, and a later candidacy at a sample
-  knocks once; named, it knocks NEW-AGENT in round 1. A ProcessGuid keys a tree: a reused
+  knocks once; named, it knocks NEW-AGENT in round 1. A tree known by its
+  ProcessGuid in round 1 whose pid and image are those of a tree of round
+  1's sample whose start was not read takes that tree's history (AD-2):
+  the two are taken for one process, though they are still listed as two
+  trees, in round 1 and in the first round of any tree whose start is
+  unread (recorded with the tree-key task, M7.12). A ProcessGuid keys a tree: a reused
   pid is another tree; a tree seen in the channel in one round and in the
   sample in another is one tree when the records tell (a sampled
   CreationDate and a Sysmon 1 time within 2 s; or every event of the guid
@@ -597,10 +607,10 @@ is amended by T-2, T-1 restated by V-1).
   are one tree. Linux (no audit source of process events is read) and a
   Windows host without Sysmon keep the whole hole, said once: a `hole:`
   line of the watch's first lines, which speak from the watch's own check
-  at its start and say so; where the live reader's own check at round 1
-  differs (either way), round 1's printed line says so once, with what the
-  sources are then, and the hole is said there if it was not said first
-  (AB-3).
+  at its start and say so; where the live reader's first check differs
+  (either way), the printed line of the round it is made in says so once,
+  with what the sources are then, and the hole is said there if it was
+  not said first (AB-3, AD-4).
 - **Recorded, not closed (ADR-0007 AB-11).** The tree ledger grows by one
   entry per tree listed `by the channel`: a program that runs every
   minute for a day is 1440 entries in the state and in the report's TREES

