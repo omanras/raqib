@@ -1224,6 +1224,20 @@ class Running:
         self.err = err
 
 
+class AskedStop(KeyboardInterrupt):
+    """M9.1 (ADR-0010 decision 1): a stop asked from outside the watch (SIGTERM, SIGHUP, SIGBREAK: raqib/cli.py's
+    Stops raises it while the watch waits between polls). loop() ends on it as on Ctrl-C and says its name."""
+
+    def __init__(self, name):
+        KeyboardInterrupt.__init__(self, name)
+        self.name = name
+
+
+def stopped_by(exc):
+    """What the "stopped (...)" line names: an AskedStop's name, else Ctrl-C (its words, as before)."""
+    return exc.name if isinstance(exc, AskedStop) else "Ctrl-C"
+
+
 def first_step(running):
     """The first-finding knock after a poll (ADR-0006 E3, A-12): the
     FirstFinding record when it knocked now (also kept as watch.json's
@@ -1244,17 +1258,19 @@ def first_step(running):
 
 
 def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=None,
-            err=None, home=None, refresh=None):
+            err=None, home=None, refresh=None, stops=None):
     """raqib watch; returns the exit code of the final report.
     evaluator(project) -> (evaluate, scope note): evaluate(records) gives
     (findings, notes) with the project's context (B-6). refresh: the page's
     reload in seconds (I-1, default ui.REFRESH_DEFAULT). The loop is split
     (M6.4) into start(), loop(), conclude() and close(), so the window runs
-    the same watch in a worker thread and ends it with a Stop."""
+    the same watch in a worker thread and ends it with a Stop. stops (M9.1):
+    the terminal's stop signals (raqib/cli.py's Stops), waited on between
+    polls; None: Ctrl-C only, as before."""
     running = start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=environ,
                     err=err, home=home, refresh=refresh)
     try:
-        crash = loop(running)
+        crash = loop(running, stops=stops)
         text, code = conclude(running, crash)
     finally:
         close(running)
@@ -1328,10 +1344,13 @@ def start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_sec
     return Running(watcher, server, notifier, thread, refresh, environ, no_open, out, err)
 
 
-def loop(running, stop=None, on_step=None):
+def loop(running, stop=None, on_step=None, stops=None):
     """Poll until Ctrl-C (stop None: the terminal) or until stop is set (the
     window's worker thread); None, or the crash text when an exception ended
-    it (B-4). The window's Stop is the equivalent of Ctrl-C. on_step(watcher)
+    it (B-4). The window's Stop is the equivalent of Ctrl-C. stops (M9.1,
+    ADR-0010 decision 1; the terminal only): the wait between polls is
+    stops.nap(), which ends in an AskedStop when a stop signal came, said as
+    "stopped (SIGTERM)" where Ctrl-C says "stopped (Ctrl-C)". on_step(watcher)
     runs after every poll, in this thread, outside the Watch lock; without
     one it is the first-finding knock (first_step, ADR-0006 A-12), so a
     terminal watch knocks on its first finding as the window does."""
@@ -1365,7 +1384,9 @@ def loop(running, stop=None, on_step=None):
         if on_step is not None:
             on_step(watcher)
         while True:
-            if stop is None:
+            if stop is None and stops is not None:
+                stops.nap(_sleep, POLL_SECONDS)   # M9.1: a stop signal ends the wait as Ctrl-C does
+            elif stop is None:
                 _sleep(POLL_SECONDS)
             elif stop.wait(POLL_SECONDS):
                 out.write("\nraqib watch: stopped (%s)\n" % _safe(stop.reason))
@@ -1373,8 +1394,8 @@ def loop(running, stop=None, on_step=None):
             watcher.step()
             if on_step is not None:
                 on_step(watcher)
-    except KeyboardInterrupt:
-        out.write("\nraqib watch: stopped (Ctrl-C)\n")
+    except KeyboardInterrupt as exc:   # Ctrl-C, or (M9.1) a stop signal: an AskedStop
+        out.write("\nraqib watch: stopped (%s)\n" % _safe(stopped_by(exc)))
     except Exception as exc:  # B-4: the watcher's own failure ends in the final report
         crash = "%s: %s" % (type(exc).__name__, exc)
         out.write("\nraqib watch: CRASHED: %s\n" % _safe(crash))

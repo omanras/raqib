@@ -258,6 +258,11 @@ def _safe(text):
     return "".join(c if c.isprintable() else "?" for c in str(text))
 
 
+# M9.1 (ADR-0010 decision 5): the line under "ALARMS (A3, A5): N" in the text report (the JSON report has none).
+ALARMS_SAYS = ("  (the trace's own alarms: A3 silence, A5 a record that cannot be cited; every finding below also"
+               " makes the RESULT an ALARM)")
+
+
 def render_text(report):
     out = ["Raqib report",
            "trace: %s (%d records, %d sessions)" % (report["trace"], report["records"],
@@ -267,6 +272,7 @@ def render_text(report):
         out.append("sources: %s" % ", ".join("%s %d" % (name, sources[name]) for name in sorted(sources)))
     out += ["findings: %s" % report["findings_source"], ""]
     out.append("ALARMS (A3, A5): %d" % len(report["alarms"]))
+    out.append(ALARMS_SAYS)   # M9.1 (ADR-0010 decision 5): what the line counts; the text report only
     for a in report["alarms"]:
         where = "line %d: " % a["line"] if "line" in a else ""
         out.append("  - %s: %s%s" % (a["kind"], where, a["detail"]))

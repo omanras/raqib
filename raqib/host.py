@@ -4058,9 +4058,11 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
 _sleep = time.sleep   # the tick wait; tests replace it
 
 
-def loop(running, stop=None):
+def loop(running, stop=None, stops=None):
     """Tick until --rounds are done, Ctrl-C, or stop is set; None, or the
-    crash text."""
+    crash text. stops (M9.1, ADR-0010 decision 1; the terminal only, from
+    raqib/cli.py): the wait between ticks is stops.nap(), which ends as
+    Ctrl-C does when a stop was asked from outside, with its name."""
     from raqib import watch
     watcher, out = running.watcher, running.out
     crash = None
@@ -4093,12 +4095,14 @@ def loop(running, stop=None):
             if stopped is not None and watcher.settled():
                 out.write("\nraqib watch --host: stopped (%s)\n" % _safe(stopped))
                 break
-            if stop is None or stopped is not None:
+            if stop is None and stops is not None:
+                stops.nap(_sleep, POLL_SECONDS)   # M9.1: a stop asked from outside ends the wait as Ctrl-C does
+            elif stop is None or stopped is not None:
                 _sleep(POLL_SECONDS)
             else:
                 stop.wait(POLL_SECONDS)
-    except KeyboardInterrupt:
-        out.write("\nraqib watch --host: stopped (Ctrl-C)\n")
+    except KeyboardInterrupt as exc:   # Ctrl-C, or (M9.1) watch.AskedStop
+        out.write("\nraqib watch --host: stopped (%s)\n" % _safe(watch.stopped_by(exc)))
     except Exception as exc:
         crash = "%s: %s" % (type(exc).__name__, exc)
         out.write("\nraqib watch --host: CRASHED: %s\n" % _safe(crash))
@@ -4209,15 +4213,17 @@ def fixture_builder(catalog=None):
 
 def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
             out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
-            sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None):
-    """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code."""
+            sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None,
+            stops=None):
+    """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code.
+    stops (M9.1): the terminal's stops (raqib/cli.py), waited on between ticks; None: Ctrl-C only."""
     out = out or sys.stdout
     running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, out, err, environ, home,
                     refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon, installer=installer,
                     os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
                     suspect_every=suspect_every)
     try:
-        crash = loop(running)
+        crash = loop(running, stops=stops)
         text, code = conclude(running, crash)
     finally:
         close(running)

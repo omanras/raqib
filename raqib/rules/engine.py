@@ -50,6 +50,18 @@ true. Lines a rule could not judge are counted and reported as a "partial"
 note, so a quiet rule is never mistaken for a clean one. Write `exists: true`
 in front of a predicate when a missing field should mean "does not apply".
 
+summary placeholders: {seq}, {count}, {<field>} (the line's value, "-" when
+missing), and (M9.1, ADR-0010 decision 4) {matched:<field>[,<field>...]}:
+the values of those fields that the rule's match holds on the line the
+summary is rendered on - the elements of a list that a has_any's list
+holds, a scalar an eq, in, regex, prefix or glob holds - read only in the
+branches that hold on that line (an all or any that is true, never inside
+a not), field by field in the order named and each value once, joined by
+", "; "-" when none. Deterministic, from the cited line alone (A1, A5): for
+programs ["curl", "bash", "rm"] DESTRUCT-CMD's list holds rm, not the head.
+It changes no finding but its sentence: the lines that fire and the cited
+seqs are match's, as before.
+
 ADR-0002: a signature matches the shape of a bad act and is cheap to evade,
 so it must list its evasions; a demand requires evidence of an act and its
 absence is the finding; an anchor measures against a record the agent does
@@ -173,6 +185,9 @@ class Rule:
         self.bounds = bounds_of(doc)
         self.context_keys = set()
         self.match = _compile(doc["match"], "match", self)
+        # M9.1 (ADR-0010 decision 4): what the match holds on a line, for {matched:...}; built only when used
+        self.explain = (_explainer(doc["match"], "match", self)
+                        if any(_matched_fields(n) for n in PLACEHOLDER.findall(self.summary)) else None)
         agg = doc.get("aggregate")
         self.aggregate = None
         if agg is not None:
@@ -317,7 +332,7 @@ def compile_rule(doc, source="<rule>"):
     summary = doc.get("summary")
     if summary is not None:
         for name in PLACEHOLDER.findall(summary):
-            if name not in ("seq", "count") and not FIELD.match(name):
+            if name not in ("seq", "count") and not FIELD.match(name) and _matched_fields(name) is None:
                 bad("summary", "bad placeholder {%s}" % name)
     try:
         return Rule(doc, source)
@@ -854,7 +869,7 @@ def judge(rule, lines, context=None):
             elif result and key not in seen:
                 seen.add(key)
                 out.append(_emit(rule, rec["session_id"], [rec["seq"]], ts,
-                                 _render(rule.summary, rec, rec["seq"], 1)))
+                                 _render(rule.summary, rec, rec["seq"], 1, rule, context)))
         return out, unknown
     agg = rule.aggregate
     per_session = {}
@@ -885,7 +900,8 @@ def judge(rule, lines, context=None):
             else:
                 seqs = sorted(set(entry["seqs"]))
             out.append(_emit(rule, session_id, seqs, entry["ts"],
-                             _render(rule.summary, entry["last"], entry["last"]["seq"], count)))
+                             _render(rule.summary, entry["last"], entry["last"]["seq"], count, rule,
+                                     context)))
     return out, unknown
 
 
@@ -966,7 +982,8 @@ def _judge_require(rule, records, context):
             elif evidence.get(sid) == "unknown":
                 unknown.append(_Why(key, CAUSE_EVIDENCE))
             else:
-                out.append(_emit(rule, sid, [rec["seq"]], ts, _render(rule.summary, rec, rec["seq"], 1)))
+                out.append(_emit(rule, sid, [rec["seq"]], ts, _render(rule.summary, rec, rec["seq"], 1, rule,
+                                                                          context)))
         return out, unknown
     pending = {}   # session_id -> [[key, cause]]; cause None: open, else why it is unknown
     for rec, ghost in zip(records, ghosts):
@@ -979,7 +996,8 @@ def _judge_require(rule, records, context):
             fire = sorted({k[1] for k, cause in waiting if cause is None})
             if fire:
                 seqs = sorted(set(fire) | {rec["seq"]})
-                out.append(_emit(rule, sid, seqs, ts, _render(rule.summary, rec, rec["seq"], len(fire))))
+                out.append(_emit(rule, sid, seqs, ts, _render(rule.summary, rec, rec["seq"], len(fire), rule,
+                                                              context)))
             del waiting[:]
         elif d is UNKNOWN and waiting:
             unknown += [_Why(k, cause or CAUSE_DEADLINE) for k, cause in waiting]
@@ -1042,20 +1060,99 @@ def check_finding(finding):
     return finding
 
 
-def _render(template, line, seq, count):
+def _shown(v):
+    text = v if isinstance(v, str) else json.dumps(v, sort_keys=True)
+    return "".join(c if c.isprintable() else "?" for c in text)
+
+
+def _cut(text):
+    if len(text) > SUMMARY_VALUE_MAX:
+        keep = SUMMARY_VALUE_MAX - 3
+        text = text[:keep // 2] + "..." + text[-(keep - keep // 2):]
+    return text
+
+
+def _render(template, line, seq, count, rule=None, ctx=None):
+    held = []   # M9.1: what the match holds on this line, read once if a {matched:...} asks for it
+
     def value(match):
         name = match.group(1)
         if name == "seq":
             return str(seq)
         if name == "count":
             return str(count)
+        fields = _matched_fields(name)
+        if fields is not None:
+            if not held:
+                held.append(rule.explain(line, ctx or {})[1] if rule is not None and rule.explain else [])
+            return _cut(matched_text(held[0], fields))
         v = _getter(name)(line)
         if v is MISSING or v is None:
             return "-"
-        text = v if isinstance(v, str) else json.dumps(v, sort_keys=True)
-        text = "".join(c if c.isprintable() else "?" for c in text)
-        if len(text) > SUMMARY_VALUE_MAX:
-            keep = SUMMARY_VALUE_MAX - 3
-            text = text[:keep // 2] + "..." + text[-(keep - keep // 2):]
-        return text
+        return _cut(_shown(v))
     return PLACEHOLDER.sub(value, template)
+
+
+# --- {matched:...} (M9.1, ADR-0010 decision 4) ------------------------------------------------------------
+# The sentence names what the rule's own list holds on the cited line, not the command's first word. The
+# explainer walks the same match tree the compiled rule judges with, three-valued, and returns with the value
+# the (field, value) pairs its value predicates held on, from the branches that hold only.
+
+MATCHED = "matched:"
+VALUE_OPS = ("eq", "in", "has_any", "regex", "prefix", "glob")
+
+
+def _matched_fields(name):
+    """The fields of a {matched:F1,F2} placeholder, or None when name is not one."""
+    if not name.startswith(MATCHED):
+        return None
+    fields = name[len(MATCHED):].split(",")
+    return fields if fields and all(FIELD.match(f) for f in fields) else None
+
+
+def matched_text(held, fields):
+    """The values of held [(field, value)] for these fields, field by field, each once, joined; "-": none."""
+    out = []
+    for field in fields:
+        for f, v in held:
+            text = _shown(v)
+            if f == field and text not in out:
+                out.append(text)
+    return ", ".join(out) if out else "-"
+
+
+def _explainer(node, where, rule):
+    """fn(line, ctx) -> (value, [(field, held value)]): value is the compiled node's own (the same predicates,
+    combined by _all and _any); the pairs come from the value predicates of the branches that are true."""
+    keys = set(node)
+    if keys in ({"all"}, {"any"}):
+        (kind,) = keys
+        parts = [_explainer(n, "%s.%s[%d]" % (where, kind, i), rule) for i, n in enumerate(node[kind])]
+        combine = _all if kind == "all" else _any
+
+        def branch(line, ctx):
+            results = [p(line, ctx) for p in parts]
+            v = combine([r for r, _ in results])
+            return v, ([pair for r, pairs in results if r is True for pair in pairs] if v is True else [])
+        return branch
+    if keys == {"not"}:
+        inner = _explainer(node["not"], where + ".not", rule)
+
+        def negate(line, ctx):   # a not names nothing: what it holds is what the rule refuses
+            v = inner(line, ctx)[0]
+            return (UNKNOWN if v is UNKNOWN else not v), []
+        return negate
+    test = _predicate(node, where, rule)
+    field = node["field"]
+    (op,) = [k for k in node if k != "field"]
+    get = _getter(field)
+
+    def leaf(line, ctx):
+        v = test(line, ctx)
+        if v is not True or op not in VALUE_OPS:
+            return v, []
+        got = get(line)
+        if op == "has_any":
+            return v, [(field, x) for x in got if any(_same(x, a) for a in node[op])]
+        return v, [(field, got)]
+    return leaf

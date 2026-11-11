@@ -1423,7 +1423,8 @@ def test_m42_e2_the_branch_reads_only_bash_pre_lines():
 def test_m42_e2_summaries_name_the_programs():
     rec = dict(line(3), input_meta={"command_head": "cd", "command_programs": ["cd", "rm"]})
     (f,) = engine.run_rule(catalog_rule("DESTRUCT-CMD"), [rec])
-    assert f["summary"] == 'Bash runs cd at seq 3 (programs ["cd", "rm"])'
+    # M9.1 (ADR-0010 decision 4): the program the rule's list holds, not the head (was "Bash runs cd")
+    assert f["summary"] == 'Bash runs rm at seq 3 (programs ["cd", "rm"])'
     (f,) = engine.run_rule(catalog_rule("NET-TOOL"), [dict(line(4), input_meta={"command_head": "curl"})])
     assert f["summary"] == "Bash may reach the network at seq 4 (host -, program curl, programs -)"
 

@@ -83,9 +83,10 @@ def test_m63_e3_first_screen_is_install_and_watch():
     first_screen = README.split("\n## Doctor\n", 1)[0]
     assert len(first_screen.splitlines()) <= 25
     block = section("Install and watch").split("```bash\n", 1)[1].split("```", 1)[0].splitlines()
+    # M9.1 (ADR-0010 decision 6): clone, install, pipx ensurepath, watch; doctor follows the block (test_first_run)
     assert [line.split("#")[0].strip() for line in block] == [
         "git clone https://github.com/omanras/raqib ~/raqib", "pipx install ~/raqib",
-        "raqib doctor ~/my-project", "raqib watch ~/my-project"]
+        "pipx ensurepath", "raqib watch ~/my-project"]
     assert "pip install ~/raqib" in block[1] and "Python %d.%d or newer" % (3, 11) in section("Install and watch")
     assert "raqib watch /path/to/project` installs the hooks" in section("Watch a project")
     manual = section("Manual steps")

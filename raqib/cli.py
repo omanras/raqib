@@ -2,6 +2,8 @@
 
 `raqib` is the console script of an installed raqib (pyproject.toml, M6.3:
 raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
+`raqib --version` (or -V) prints "raqib <version>" and exits 0 (M9.1); with
+no command, raqib prints its usage and exits 2.
 
   rules TRACE [-o FILE] [--scope P]... [--handoff FILE] [--gap-seconds N]
       Run the silence rules and the rule catalog on a trace. Findings go to
@@ -111,6 +113,16 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       already in the trace at the start are history: shown, never notified.
       Notifications are off under CI or with --no-notify.
       Ctrl-C, or a crash, prints the final report; exit as for report.
+      M9.1 (ADR-0010 decision 1): SIGTERM and SIGHUP (where the platform
+      has them; a signal ignored at the start, as under nohup, stays
+      ignored) and Ctrl-Break on Windows (SIGBREAK) stop it as Ctrl-C does,
+      for this command and watch --host alike: "stopped (SIGTERM)", the
+      final report, the registry row finished, its exit. The handlers are
+      installed here, in the main thread only, and the earlier ones are
+      restored when the command ends; a second signal does not cut the
+      report short; no process is signalled (A4). SIGKILL, and on Windows
+      TerminateProcess, stay out of reach: `raqib report TRACE` then gives
+      the findings.
   watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
@@ -223,7 +235,8 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       settings of PROJECT (installed / foreign / missing), the notifier, the
       window's tkinter (`app`), Sysmon (Windows) and whether the trace can
       be written. One line per check, OK,
-      MISSING or UNSURE (cannot be checked here); exit 1 if any is MISSING,
+      MISSING or UNSURE (cannot be checked here, or a fallback watch does
+      not need: tkinter, a notifier that is the terminal only, M9.1); exit 1 if any is MISSING,
       else 0. Read-only; the only
       program it runs is `claude --version`, by absolute path.
 
@@ -237,7 +250,9 @@ import argparse
 import hashlib
 import json
 import os
+import signal
 import sys
+import threading
 
 from raqib import app as window_app
 from raqib import discover
@@ -269,8 +284,104 @@ class UsageError(Exception):
     pass
 
 
+# M9.1 (ADR-0010 decision 1): the signals a terminal watch takes as a stop, where the platform has them.
+STOP_SIGNALS = ("SIGTERM", "SIGHUP", "SIGBREAK")
+
+
+class Stops:
+    """M9.1 (ADR-0010 decision 1): `raqib watch` and `raqib watch --host`
+    from the terminal stop on SIGTERM and SIGHUP (where the platform has
+    them) and on Windows Ctrl-Break (SIGBREAK) as on Ctrl-C.
+
+    install() sets this handler for each of STOP_SIGNALS the platform has,
+    in the main thread only (elsewhere it sets none), and keeps the handler
+    it replaced; restore() puts those back when the command ends. A signal
+    ignored when the command starts (SIG_IGN: nohup) is left ignored. The
+    first signal is the stop: its name is kept and, while the watch waits
+    between polls (nap), it ends the wait with watch.AskedStop (a
+    KeyboardInterrupt, so loop() ends as on Ctrl-C and prints "stopped
+    (SIGTERM)"); one that comes while the watch starts, polls or writes its
+    final report is only kept, and the next nap ends the loop - nothing is
+    cut short. A later signal is counted, never acted on. Nothing here
+    signals a process (A4): signal.signal and getsignal only."""
+
+    def __init__(self, module=signal):
+        self.signal = module
+        self.numbers = {getattr(module, n): n for n in STOP_SIGNALS if getattr(module, n, None) is not None}
+        self.name = None        # the first stop signal's name
+        self.later = 0          # signals after it, counted, never acted on
+        self.napping = False
+        self.previous = {}      # number -> the handler install() replaced
+        self.ignored = []       # names left ignored (SIG_IGN at the start)
+
+    def install(self):
+        """The names of the signals now handled ([] outside the main thread)."""
+        if threading.current_thread() is not threading.main_thread():
+            return []
+        for number, name in sorted(self.numbers.items(), key=lambda kv: kv[1]):
+            try:
+                if self.signal.getsignal(number) == self.signal.SIG_IGN:
+                    self.ignored.append(name)
+                    continue
+                self.previous[number] = self.signal.signal(number, self.handler)
+            except (OSError, ValueError, RuntimeError):   # a signal this platform will not let us set
+                continue
+        return sorted(self.numbers[n] for n in self.previous)
+
+    def restore(self):
+        for number, old in list(self.previous.items()):
+            try:
+                self.signal.signal(number, self.signal.SIG_DFL if old is None else old)
+            except (OSError, ValueError, RuntimeError, TypeError):
+                pass
+        self.previous = {}
+
+    def handler(self, signum, frame):
+        if self.name is not None:
+            self.later += 1
+            return
+        self.name = self.numbers.get(signum, "signal %s" % signum)
+        if self.napping:
+            self.napping = False
+            raise watch.AskedStop(self.name)
+
+    def nap(self, sleep, seconds):
+        """The wait between two polls: sleep(seconds), ended by the first stop signal (watch.AskedStop)."""
+        if self.name is None:
+            self.napping = True
+            try:
+                sleep(seconds)
+            finally:
+                self.napping = False
+        if self.name is not None:
+            raise watch.AskedStop(self.name)
+
+
+class _VersionAsked(Exception):
+    """M9.1 (ADR-0010 decision 2): --version or -V was given."""
+
+
+class _Version(argparse.Action):
+    """`raqib --version` / `-V`: main() prints "raqib <version>" to its out and returns 0 (argparse's own
+    version action would print to sys.stdout and exit from inside parse_args)."""
+
+    def __init__(self, option_strings, dest, **kwargs):
+        super().__init__(option_strings, dest, nargs=0, default=argparse.SUPPRESS,
+                         help="print raqib <version> and exit 0")
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        raise _VersionAsked()
+
+
+def version_line():
+    """M9.1 (ADR-0010 decision 2): what --version prints."""
+    from raqib import __version__
+    return "raqib %s" % __version__
+
+
 def _parser():
     p = argparse.ArgumentParser(prog="raqib", description="Raqib: an external watcher for AI agents.")
+    p.add_argument("-V", "--version", action=_Version)
     sub = p.add_subparsers(dest="command", required=True)
 
     def rule_options(sp, trace_optional=False):
@@ -1065,20 +1176,35 @@ def _watch_setup():
 
 
 def cmd_watch(args, out):
+    """M9.1 (ADR-0010 decision 1): the terminal's watches take the stop signals (Stops); `raqib app`, which
+    runs its watches in threads, and every other command install none and keep their defaults."""
+    stops = Stops()
+    stops.install()
+    try:
+        return _watch(args, out, stops)
+    finally:
+        try:
+            out.flush()
+        except (OSError, ValueError):
+            pass
+        stops.restore()
+
+
+def _watch(args, out, stops):
     if args.host:
-        return _watch_host(args, out)
+        return _watch_host(args, out, stops)
     if (args.every is not None or args.window is not None or args.rounds is not None or args.attach_hooks
             or args.suspect is not None or args.suspect_threshold is not None or args.suspect_every is not None):
         raise UsageError("--every, --window, --rounds, --attach-hooks and --suspect apply to watch --host only")
     rules, gap, evaluator = _watch_setup()
     try:
         return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
-                             evaluator, rules, gap, refresh=args.refresh)
+                             evaluator, rules, gap, refresh=args.refresh, stops=stops)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 
 
-def _watch_host(args, out):
+def _watch_host(args, out, stops=None):
     """M7.2: raqib watch --host [--every T] [--window S] [--rounds N]."""
     if args.project is not None:
         raise UsageError("--host watches this host, not a project: give no PROJECT (watch --host, or watch PROJECT)")
@@ -1121,7 +1247,8 @@ def _watch_host(args, out):
         return host.command(catalog, rules, every=every, window=window, rounds=args.rounds, no_open=args.no_open,
                             no_notify=args.no_notify, port=args.port, out=out, refresh=args.refresh,
                             attach_hooks=args.attach_hooks, suspect=backend,
-                            suspect_threshold=args.suspect_threshold, suspect_every=args.suspect_every)
+                            suspect_threshold=args.suspect_threshold, suspect_every=args.suspect_every,
+                            stops=stops)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 
@@ -1172,6 +1299,9 @@ def main(argv=None, out=None):
         args = _parser().parse_args(argv)
     except SystemExit as exc:
         return 2 if exc.code else 0
+    except _VersionAsked:   # M9.1 (ADR-0010 decision 2); `raqib` alone still exits 2 with its usage
+        out.write(version_line() + "\n")
+        return 0
     try:
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
