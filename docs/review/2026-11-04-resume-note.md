@@ -163,3 +163,13 @@ on a terminal that is gone is a failed knock; the page shows the
 lost-words note; the record written once more after the report; three
 docstrings that still say "the README").
 
+## The third field run's first minute (2026-11-11, evening)
+The commander opened the window from main 082aad6 on his Windows machine
+(Python 3.14): white, Not Responding. M8.4 (ADR-0009 Amendment I,
+docs/review/2026-11-11-M8.4.md): ttk tiles an image element's middle and
+the middles were two pixels; measured on windows-latest, the window was
+white for 19 to 118 s by scale and Python, and about a second after the
+fix. The Table's own fix, not yet read by a fresh reviewer. Recorded:
+M8.5 (a timing probe of the opening in CI; Python 3.14 in the matrix).
+The rest of the third field run's checklist above still stands.
+
