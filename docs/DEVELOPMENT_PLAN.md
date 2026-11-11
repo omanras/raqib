@@ -86,3 +86,8 @@ point. Phase 6 runs before the rest of Phase 5.
 - M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (landed 2026-11-11; ADR-0009 Amendments E-H, decisions 4-5 accepted): `raqib rules --new / --remove`, the form with its Test and "on your records", class USER, Remove by the row's own place, checks first
 - M8.3 the window's notes after M8.2 (ADR-0009 H): a log of what the catch-alls caught, the orphan overlay entry's words, a real watch under the form's "running" test, a way for the person to name a program benign
+
+## Phase 9 — A stranger's first run (ADR-0010; the commander's order, 2026-11-11)
+- M9.1 what the outsider's rehearsal found (decisions 1-6): a watch asked to stop ends with its report and its code (SIGTERM, SIGHUP, Ctrl-Break); `raqib --version`; doctor's notifier line; a finding names the program that made it; the report's ALARMS line explained; the quickstart's first command succeeds
+- M9.2 the README's top is one screen (decision 7): the detail moves under docs/, each pinned sentence followed by its test
+- M9.3 a LICENSE and the `license` field (decision 8): waits for the commander's word on which licence
