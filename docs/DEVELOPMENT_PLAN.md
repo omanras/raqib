@@ -90,4 +90,4 @@ point. Phase 6 runs before the rest of Phase 5.
 ## Phase 9 — A stranger's first run (ADR-0010; the commander's order, 2026-11-11)
 - M9.1 what the outsider's rehearsal found (decisions 1-6): a watch asked to stop ends with its report and its code (SIGTERM, SIGHUP, Ctrl-Break); `raqib --version`; doctor's notifier line; a finding names the program that made it; the report's ALARMS line explained; the quickstart's first command succeeds
 - M9.2 the README's top is one screen (decision 7): the detail moves under docs/, each pinned sentence followed by its test
-- M9.3 a LICENSE and the `license` field (decision 8): waits for the commander's word on which licence
+- M9.3 a LICENSE and the `license` field (landed 2026-11-11; ADR-0010 Amendment A): CC0 1.0 Universal, the commander's word

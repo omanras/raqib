@@ -11,6 +11,10 @@ name = "raqib"
 dynamic = ["version"]
 description = "An external watcher for AI coding agents: deterministic rules first; a model may raise suspicion, never acquit."
 readme = "README.md"
+# ADR-0010 decision 8 (the commander, 2026-11-11): dedicated to the public domain.
+# The table form: every setuptools from 61 on reads it (the tests build a wheel offline with the one at hand);
+# the SPDX string of PEP 639 needs 77. LICENSE goes into the wheel by setuptools' default patterns.
+license = {text = "CC0-1.0"}
 requires-python = ">=3.11"
 dependencies = []
 

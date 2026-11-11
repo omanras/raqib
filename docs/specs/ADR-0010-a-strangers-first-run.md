@@ -79,3 +79,19 @@ Each names the case it is FOR and what it MUST NOT TOUCH (ADR-0007 Z-9).
 - Decision 3 lowers one doctor line from MISSING to UNSURE: a headless
   box passes doctor; a desktop with no notifier also passes, and reads
   the line that says its knocks reach the terminal only.
+
+## Amendment A (the Table, 2026-11-11) - decision 8, the commander's word
+The commander, the same morning: CC0. The Table wrote it (M9.3): `LICENSE`
+is the CC0 1.0 Universal legal code, unedited, as SPDX publishes it
+(spdx/license-list-data, text/CC0-1.0.txt); `pyproject.toml` says
+`license = {text = "CC0-1.0"}`, the table form, because every setuptools
+from 61 on reads it and the tests build a real wheel offline with the one
+at hand (68 here refuses PEP 639's string; 84 reads the table with a
+deprecation warning - when a setuptools drops it, the field becomes the
+string and the build needs 77: recorded); README's last section
+says it in plain words, with what CC0 does not give (a warranty, a patent
+or trademark right). A test pins the three. No name is written in the
+dedication: the commander adds his if he wishes. The other branches of
+the repository (mizan, qayd, qayd-web, dawr) carry no licence; this one
+covers what is on main.
+

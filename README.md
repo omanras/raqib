@@ -545,3 +545,10 @@ Status: v0.1 candidate: capture, rules, report, suspicion
 layer, evaluation, web view and docs. The last exit criterion of the plan
 (M3.3) is still open: one person outside the project runs this quickstart
 and files one issue.
+
+## Licence
+Raqib is dedicated to the public domain: [CC0 1.0 Universal](LICENSE). To the
+extent possible under law, its author has waived all copyright and related
+rights in it. Use it, change it and pass it on, for any purpose, without
+asking and without credit. It comes with no warranty; CC0 waives no patent
+or trademark right.
