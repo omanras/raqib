@@ -134,6 +134,9 @@ NO_SOURCES = {
 }
 SCENARIOS.update(NO_SOURCES)
 SCENARIOS["HOST-UNWATCHED/negative-host-source.json"] = ["linux", "linux"]
+# M7.9 REDO 4 (ADR-0007 AB-5): a round of the quiet host whose channel read holds an unknown program that starts,
+# talks and acts between two rounds: its line is listed by the channel, and NEW-AGENT-UNKNOWN does not fire on it
+SCENARIOS["NEW-AGENT-UNKNOWN/negative-by-the-channel.json"] = ["channel/quiet", "channel/quiet+agentx"]
 RHYTHM_SCENARIOS = fixturegen.rhythm_scenarios(DECLARED["k"])   # M7.4: fake rounds, "rhythm:<scenario>:<round>"
 SCENARIOS.update(RHYTHM_SCENARIOS)
 # M7.5 E1, REDO N-2: a footprint whose tree was live in this watch, then dark: host.py's NOTE, which
@@ -173,6 +176,14 @@ def inventory(name, catalog, w=None):
     """The inventory of a round name: a synthetic one (fixturegen), else
     discover.run over the discover export it names (with the variants
     below)."""
+    if name.startswith("channel/"):   # M7.9 REDO 4 (AB-5): the quiet host, and its channel read (SYNTHETIC)
+        quiet = os.path.join(HERE, "quiet", "quiet")
+        texts, holes = discover.read_dir(quiet)
+        read = name.endswith("+agentx")
+        if read:
+            with open(os.path.join(HERE, "channel", "agentx.sysmon.xml"), encoding="ascii") as f:
+                texts["sysmon"] = ("tests/fixtures/host/channel/agentx.sysmon.xml (SYNTHETIC)", f.read(), None)
+        return discover.run(texts, catalog, holes=holes, run=host_record(quiet), processes=True, channel=read)
     synthetic = fixturegen.synthetic_inventory(name, w)
     if synthetic is not None:
         return synthetic

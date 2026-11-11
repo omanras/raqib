@@ -113,6 +113,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 
 from raqib import discover
 from raqib.hooks import capture, common
@@ -522,6 +523,7 @@ class Helpers:
         self.running = {}
         self.record = []
         self.closed = False
+        self.lock = threading.Lock()   # AB-9: one helper is ended, and recorded, once
 
     @staticmethod
     def _stop(proc):
@@ -538,8 +540,13 @@ class Helpers:
             return "not ended (%s)" % (type(exc).__name__,)
 
     def ended(self, proc, why):
+        """The helper ended and recorded; its text, or None when another caller
+        took it first (AB-9: a Stop between its registration and the closed
+        check ends it once and records it once)."""
+        with self.lock:
+            if self.running.pop(proc.pid, None) is None:
+                return None
         how = self._stop(proc)
-        self.running.pop(proc.pid, None)
         text = "wevtutil pid %s (Raqib's own helper) %s: %s" % (proc.pid, how, why)
         self.record.append(text)
         return text
@@ -548,7 +555,7 @@ class Helpers:
         """Every helper still running is ended and recorded; their texts. AA-6:
         closed first, so a helper registered after this snapshot ends itself."""
         self.closed = True
-        return [self.ended(proc, why) for proc in list(self.running.values())]
+        return [t for t in (self.ended(proc, why) for proc in list(self.running.values())) if t is not None]
 
 
 def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Popen, environ=None, args=LIVE_ARGS):
@@ -570,18 +577,16 @@ def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Pop
         return None, ("wevtutil could not be run (%s): the Sysmon channel was not read"
                       % (getattr(exc, "strerror", None) or type(exc).__name__))
     helpers.running[proc.pid] = proc
-    if getattr(helpers, "closed", False):   # AA-6: closed while it was being started: ended here, recorded
-        if proc.pid in helpers.running:
-            helpers.ended(proc, "its channel was closed as it started")
+    if getattr(helpers, "closed", False):   # AA-6: closed while it was being started: ended here, recorded once
+        helpers.ended(proc, "its channel was closed as it started")
         return None, "wevtutil was ended as it started (its channel was closed): the Sysmon channel was not read"
     try:
         data, said = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        text = helpers.ended(proc, "did not return in %g s" % timeout)
+        text = helpers.ended(proc, "did not return in %g s" % timeout) or "ended by its watch's Stop"
         return None, "wevtutil did not return in %g s (%s): the Sysmon channel was not read" % (timeout, text)
     except Exception as exc:   # ended from outside (Stop) while waited for
-        if proc.pid in helpers.running:
-            helpers.ended(proc, "its pass failed: %s" % type(exc).__name__)
+        helpers.ended(proc, "its pass failed: %s" % type(exc).__name__)
         return None, "wevtutil was ended before it returned: the Sysmon channel was not read"
     helpers.running.pop(proc.pid, None)
     if proc.returncode != 0:
@@ -650,7 +655,39 @@ ROUND_IDS = (1, 3, 11, 22)        # discover.SYSMON_READ: the events the round g
 ROUND_CAP = 2000                  # events per round at most (wevtutil /c:); reaching it is a hole of the round
 ROUND_TIMEOUT = FOLLOW_TIMEOUT    # I-5: one round's read, as a follow's pass
 SILENT_ROUNDS = 3                 # X-3(c): rounds of new sampled processes with no event 1 before the read restarts
-OPEN_CHANNELS = []                # X-1: the channels the live readers of this process own (Stop ends their helpers)
+OPEN_CHANNELS = []                # X-1: the channels open in this process; each is closed by its owner (AB-9)
+
+
+class ChannelOwner:
+    """AB-9: a channel is closed by its owner. The channels one watch's live
+    reader opened (the reader runs with OWNER.owner set to its watch's); that
+    watch's Stop closes them and no other. A channel opened after its owner's
+    Stop is closed at once."""
+
+    def __init__(self):
+        self.channels = []
+        self.closed = None
+        self.lock = threading.Lock()
+
+    def add(self, channel):
+        with self.lock:
+            self.channels.append(channel)
+            closed = self.closed
+        return channel.close(closed) if closed is not None else []
+
+    def close(self, why="the watch stopped (Stop)"):
+        """Each channel of this owner closed; the texts of the helpers it ended."""
+        with self.lock:
+            self.closed = why
+            channels = list(self.channels)
+        texts = []
+        for ch in channels:
+            texts += ch.close(why)
+            ch.said = len(ch.helpers.record)
+        return texts
+
+
+OWNER = threading.local()         # AB-9: OWNER.owner, the ChannelOwner of the watch whose reader runs in this thread
 RECORD_ID = re.compile(r"<EventRecordID>\s*([0-9]{1,20})\s*</EventRecordID>")
 SYSTEM_TIME = re.compile(r"<TimeCreated\s+SystemTime=['\"]([^'\"]{1,40})['\"]")
 

@@ -2039,49 +2039,11 @@ def _channel_fields(p):
     return {"guid": guid, "brief": bool(recs) and not sampled, "channel_started": iso(started)}
 
 
-def _candidate_by(pid, talkers, acts, procs):
-    """M7.9 REDO 3 AA-1 (API for raqib/host.py): what made a candidate one:
-    "sample" when it talks in a sampled connection (not a Sysmon event) AND
-    has an act sampled as such (a child in the round's process sample) - a
-    candidate as it would have been before M7.9 - else "channel" (its talk,
-    or its act, is known only from the round's channel)."""
-    def sampled(p):
-        return any(not r.get("derived") and (split_name(r["src"]) or (None,))[0] in PROCESS_LISTS
-                   for r in (p or {}).get("recs") or ())
-    talk = any((split_name(c["src"]) or (None,))[0] != "sysmon" for c in talkers.get(pid) or ())
-    act = any(a["how"] == "process" and sampled(procs.get(a["pid"])) for a in acts.get(pid) or ())
-    return "sample" if talk and act else "channel"
-
-
-def build(parsed, catalog, window=None, holes=(), live=False, processes=False, channel=False):
-    """The inventory (E5) of parsed sources:
-    [{"name", "path", "error", "records", "problems", "lines"}].
-    processes (M7.8, ADR-0007 P-2; API for raqib watch --host): the
-    inventory also carries "processes", every process of the round's
-    process sample - read from a process list (a /proc snapshot, a
-    Win32_Process sample), never one known only from a Sysmon event - as
-    {"pid", "image", "started"}, image and started as a tree's (image_name,
-    started_of), so a tree's root can be looked up in it. Off by default:
-    `raqib discover` and its --json are unchanged. channel (M7.9, ADR-0007
-    P-4; API for raqib watch --host): the source sysmon is a round's read of
-    the channel since the previous round: its Sysmon records are keyed by
-    ProcessGuid (_guid_instances), each candidate and act-root carries
-    _channel_fields, and a kind of event the window does not hold is not a
-    gap of the round (the watch says once what the channel holds)."""
-    holes = list(ALWAYS_HOLES) + list(holes)
-    problems = [p for s in parsed for p in s["problems"]]
-    records = [r for s in parsed for r in s["records"]]
-    dropped = 0
-    if window and not live:
-        times = [r["ts"] for r in records if r.get("ts")]
-        if times:
-            cutoff = max(times) - datetime.timedelta(seconds=window)
-            kept = [r for r in records if not r.get("ts") or r["ts"] >= cutoff]
-            dropped, records = len(records) - len(kept), kept
-    records, reuse_holes = _instances(records)
-    if channel:
-        records, guid_holes = _guid_instances(records)
-        reuse_holes += guid_holes
+def _acts_core(records, catalog, channel=False):
+    """The anchor of build() (B-6), apart so that a round can be built
+    again without its channel's records (M7.9 REDO 4, ADR-0007 AB-6):
+    (records joined to their sockets, procs, conns, talkers, snapshots,
+    self_pids, self_tree, self_line, acts). A talker with an act is a candidate."""
     snapshots = [r for r in records if r["kind"] == "snapshot"]
     self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
     self_pids |= {p for r in snapshots for p in r.get("launchers") or ()}     # ADR-0007 A-7
@@ -2092,34 +2054,12 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     for c in conns:
         if talks(c):
             talkers.setdefault(c["pid"], []).append(c)
-    unowned = [c for c in conns if c["pid"] is None and c["direction"] == "out"
-               and c["state"] in TALK_STATES and not _wildcard(c["raddr"])]
-    orphans = sorted({c["pid"] for c in conns if talks(c) and c["pid"] not in procs})
     self_tree = set()
     for s in self_pids:
         self_tree |= {s} | _descendants(procs, s)
     self_line = set()
     for s in self_pids:
         self_line |= set(ancestors(procs, s))
-
-    # DNS names per IP (any process) and per (pid, IP), with the lines behind them.
-    by_ip, by_pid_ip = {}, {}
-    for r in records:
-        if r["kind"] == "dns":
-            for ip in r["ips"]:
-                for n in r["names"]:
-                    by_ip.setdefault(ip, {}).setdefault(n, []).append(r)
-                    if r["pid"] is not None:
-                        by_pid_ip.setdefault((r["pid"], ip), {}).setdefault(n, []).append(r)
-
-    def names_for(c):
-        found = {}
-        for table in (by_pid_ip.get((c["pid"], c["raddr"]), {}), by_ip.get(c["raddr"], {})):
-            for n, recs in table.items():
-                found.setdefault(n, []).extend(recs)
-        if c.get("host"):
-            found.setdefault(c["host"], []).append(c)
-        return found
 
     # The anchor (B-6): every process goes to its nearest talking ancestor, so
     # a talker with a child is a candidate; a file write outside config space
@@ -2152,6 +2092,64 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
             acts.setdefault(owner, []).append({
                 "how": "file-write", "pid": f["pid"], "image": writer["image"] if writer else None,
                 "listed": False, "path": f["path"], "via": [], "reader_ancestor": False, "cites": [cite(f)]})
+    return records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts
+
+
+def build(parsed, catalog, window=None, holes=(), live=False, processes=False, channel=False):
+    """The inventory (E5) of parsed sources:
+    [{"name", "path", "error", "records", "problems", "lines"}].
+    processes (M7.8, ADR-0007 P-2; API for raqib watch --host): the
+    inventory also carries "processes", every process of the round's
+    process sample - read from a process list (a /proc snapshot, a
+    Win32_Process sample), never one known only from a Sysmon event - as
+    {"pid", "image", "started"}, image and started as a tree's (image_name,
+    started_of), so a tree's root can be looked up in it. Off by default:
+    `raqib discover` and its --json are unchanged. channel (M7.9, ADR-0007
+    P-4; API for raqib watch --host): the source sysmon is a round's read of
+    the channel since the previous round: its Sysmon records are keyed by
+    ProcessGuid (_guid_instances), each candidate and act-root carries
+    _channel_fields, and a kind of event the window does not hold is not a
+    gap of the round (the watch says once what the channel holds)."""
+    holes = list(ALWAYS_HOLES) + list(holes)
+    problems = [p for s in parsed for p in s["problems"]]
+    records = [r for s in parsed for r in s["records"]]
+    dropped = 0
+    if window and not live:
+        times = [r["ts"] for r in records if r.get("ts")]
+        if times:
+            cutoff = max(times) - datetime.timedelta(seconds=window)
+            kept = [r for r in records if not r.get("ts") or r["ts"] >= cutoff]
+            dropped, records = len(records) - len(kept), kept
+    records, reuse_holes = _instances(records)
+    if channel:
+        records, guid_holes = _guid_instances(records)
+        reuse_holes += guid_holes
+    unjoined = records   # AB-6: the round's records before the anchor, for the round built without the channel
+    records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts = _acts_core(
+        records, catalog, channel)
+    unowned = [c for c in conns if c["pid"] is None and c["direction"] == "out"
+               and c["state"] in TALK_STATES and not _wildcard(c["raddr"])]
+    orphans = sorted({c["pid"] for c in conns if talks(c) and c["pid"] not in procs})
+
+    # DNS names per IP (any process) and per (pid, IP), with the lines behind them.
+    by_ip, by_pid_ip = {}, {}
+    for r in records:
+        if r["kind"] == "dns":
+            for ip in r["ips"]:
+                for n in r["names"]:
+                    by_ip.setdefault(ip, {}).setdefault(n, []).append(r)
+                    if r["pid"] is not None:
+                        by_pid_ip.setdefault((r["pid"], ip), {}).setdefault(n, []).append(r)
+
+    def names_for(c):
+        found = {}
+        for table in (by_pid_ip.get((c["pid"], c["raddr"]), {}), by_ip.get(c["raddr"], {})):
+            for n, recs in table.items():
+                found.setdefault(n, []).extend(recs)
+        if c.get("host"):
+            found.setdefault(c["host"], []).append(c)
+        return found
+
 
     candidates = []
     ids = {}
@@ -2374,8 +2372,11 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     if channel:   # M7.9: a tree's root as the round's channel saw it (guid, brief, its creation)
         for t in candidates + act_roots:
             t.update(_channel_fields(procs.get(t["pid"])))
-        for t in candidates:   # AA-1: decided here, where candidacy is, and carried
-            t["candidate_by"] = _candidate_by(t["pid"], talkers, acts, procs)
+        # AB-6 (AA-1): "sample" exactly when the tree is a candidate of the same round built WITHOUT the channel's
+        # records (the sampled records keep their keys: _guid_instances moves Sysmon records only), else "channel"
+        bare = _acts_core([r for r in unjoined if (split_name(r["src"]) or (None,))[0] != "sysmon"], catalog)[-1]
+        for t in candidates:
+            t["candidate_by"] = "sample" if t["pid"] in bare else "channel"
     if processes:   # M7.8 (P-2): the round's process sample, for "quiet" (root alive, no talk) against "gone"
         extra["processes"] = _last_sample(records, procs)
     return _os_pids(dict(extra, **{

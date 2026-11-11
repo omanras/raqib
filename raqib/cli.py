@@ -103,7 +103,9 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       only there is listed as brief, M7.9), read-only; nothing installed,
       no project touched. NEW-AGENT (high; NEW-AGENT-UNKNOWN, medium, when
       the catalog does not name it) knocks once per new tree that talks and
-      acts ("host, <image> pid <n> (named|unknown)"); trees of the first
+      acts ("host, <image> pid <n> (named|unknown)"); an unknown tree that
+      is a candidate only by the channel is listed `by the channel` and
+      counted, not knocked (M7.9, ADR-0007 AA-1); trees of the first
       round are history, a listed benign program under a system directory
       is benign: listed, not knocked. AGENT-DARK-LIVE (medium) after 3 rounds
       of a footprint with no tree. Every round prints one line, "NO AGENT
