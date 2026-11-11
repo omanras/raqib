@@ -123,7 +123,10 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       is a candidate only by the channel is listed `by the channel` and
       counted, not knocked (M7.9, ADR-0007 AA-1); the candidates at the
       first round's sample are history (one in round 1 only by the channel
-      is not: AC-3), a listed benign program under a system directory is
+      is not: AC-3 - unless no start of it was read and it has the pid and
+      image of a sampled candidate whose start was not read either: then
+      it is taken for that process, AD-2), a listed benign program under a
+      system directory is
       benign: listed, not knocked. AGENT-DARK-LIVE (medium) after 3 rounds
       of a footprint that is dark: no candidate or act-root of the round
       built without the channel's records links to it (AD-1: no tree known

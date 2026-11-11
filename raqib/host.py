@@ -1805,7 +1805,10 @@ class HostWatch:
             candidate_before = entry["candidate_round"] is not None
             # M7.9: a root whose Sysmon 1 the round read began after the watch's start: not the state at the start
             history = self._history(first, t) or entry["history"]
-            if t["brief"] and t.get("guid") and (t["pid"], t["image"]) in unread_start:   # AD-2
+            own_start = utc_time(t.get("started")) or utc_time(t.get("channel_started"))
+            # AD-2, and AE-1: only where the guid's own start was not read either - a start the round read is Z-1's
+            if (t["brief"] and t.get("guid") and own_start is None
+                    and (t["pid"], t["image"]) in unread_start):
                 history = self._history(first, unread_start[(t["pid"], t["image"])]) or entry["history"]
             entry.update({k: t[k] for k in ("class", "id", "named", "named_by", "benign", "benign_by", "acts",
                                             "endpoints", "cites", "exe", "started_at", "brief")})
@@ -2650,7 +2653,10 @@ class HostWatch:
         round a candidate that was not one before is new, whatever its start.
         ADR-0007 AC-3: history is what round 1's SAMPLE shows: a candidate of
         round 1 only by the channel's events (round 1 reads none older than
-        the watch's start) is not history, whatever its start."""
+        the watch's start) is not history, whatever its start. (AD-2, AE-1,
+        in _apply: such a tree with no start of its own read, beside a
+        sampled tree of its pid and image whose start was not read either,
+        takes that tree's history.)"""
         if not first or t["class"] != "candidate":
             return False
         if t.get("candidate_by") == "channel":

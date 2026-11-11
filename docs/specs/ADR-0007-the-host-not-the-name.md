@@ -1491,3 +1491,59 @@ REDO on AD-1 and AD-2. The Table stops ruling this case by case:
   on one build, with nothing of the channel in it. Where a milestone
   adds a source, what the source may NOT change is ruled first, as a
   property against the build without it.
+
+## Amendment AE (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo6.md (ede13c3), and the judgement on M7.9
+AD-3..AD-5 MET; AD-1 and AD-2 PARTLY. Six REDOs, seven packets. The
+reviewer's three must-fixes are of two kinds, and the Table rules them
+apart: a wrong SILENCE is closed now; a knock MORE than the watch
+without the channel gives, in a case nobody has met outside a
+constructed fixture, is said and recorded (A3: where the two differ, the
+alarm is the side to err on).
+- AE-1 (C1(b), must; the Table's own commit) AD-2 is for a guid with no
+  start of its own. FOR: a guid tree whose event 1 the round read, at or
+  after the watch's start, beside a sampled tree of its pid and image
+  whose start was not read (the pid taken again by the same program) is
+  new by Z-1: an unknown one is listed by the channel and knocks at its
+  first sample, once. MUST NOT TOUCH: AD-2's own case (B2: no start of
+  the guid read: history) - its test is unchanged and passes.
+- AE-2 (C3, C8(iv); the Table's own commit) The help says AD-2 beside
+  AC-3; `_history`'s docstring says it.
+- AE-3 (C1(a); accepted in words) Where the guid lets the watch know one
+  process across a start read late, that process is ONE tree and is
+  history from round 1: no NEW-AGENT comes for it in a later round (the
+  watch without the channel knocks there only because it splits the
+  process in two), and by N-1 its link never makes a footprint live, so
+  the footprint's dark rounds knock where the split watch would note
+  them. This is where AD-1's property yields to AD-2, and it is the
+  more exact reading of one process. Said in THREAT_MODEL.
+- AE-4 (C2; Q-25 ruled "stands") A sampled program taken for a helper by
+  a command line only the channel gives is no act-root in that round;
+  the footprint it links by name is not held quiet by it and knocks
+  after its dark rounds. A knock more, said in THREAT_MODEL; the holder
+  of such a link is the tree-key task's (M7.12).
+- AE-5 Q-26 confirmed (the round's read window is one for all its
+  lines). Q-27 confirmed: the quiet / kept handling is what the property
+  needs and is no rule; C4's one word ("kept" for "quiet" in a round
+  partly read) is said in THREAT_MODEL. Q-28 confirmed. C5, C7, C8(i)-
+  (iii) recorded for M7.12 with C6, whose wider sentence is now in
+  THREAT_MODEL (the live sample reads no command line, so a link whose
+  only evidence is in the channel is given up for sampled trees too).
+- Judgement: NEXT for M7.9, on six CI jobs green for the Table's commit
+  and for the merged branch. P-4 is met as far as this ADR now says:
+  where Sysmon is read, a tree that starts, talks, acts and ends between
+  two rounds is a tree of that round, sourced, its acts judged; a named
+  one knocks; an unknown one known only from the channel is listed and
+  counted, not knocked, until the field gives the number (AA-1); history
+  is what the first sample shows (AC-3, AD-2, AE-1); footprints are
+  judged without the channel (AD-1), with AE-3 and AE-4 said. Not
+  reviewed by a fresh reviewer: the Table's own commit (AE-1, AE-2) and
+  its commit joining the window (AB-2, AB-9, AB-11 on the merged
+  branch); the field run is their review.
+- Table ledger for M7.9: eight rulings of the Table became the next
+  packet's must-fix (R-1, T-1, B-5 before it; here X-9, X-3(b), AB-4,
+  AC-1, AC-3, and AD-2 in part). What ended it was not a finer case
+  rule but two things: a property against the build without the new
+  source (AB-6, AD-1), and sorting what was left by its direction -
+  silence is fixed, a knock more is said. Both go into the session
+  protocol's next revision as how a milestone that adds a source is
+  ruled from its first packet.

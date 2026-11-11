@@ -1723,3 +1723,29 @@ def test_ad4_the_readers_first_check_and_exit_0_beside_a_standing_hole(tmp_path,
     assert any(x.startswith("raqib watch --host: hole: ") and BETWEEN in x for x in lines)
     w, _, _ = channel_watch(tmp_path / "w", monkeypatch, ["quiet/quiet"] * 2, ["", ""], sysmon=False, own=False)
     assert BETWEEN in " ".join(w.notes) and w.holes == [] and w.result()[0] in ("clean", "none-seen"), w.result()
+
+
+# --- the Table's commit on review 2026-11-11-M7.9-redo6.md (ADR-0007 Amendment AE) ----------------------------------
+
+def test_ae1_ad2_does_not_reach_a_guid_tree_whose_own_start_the_round_read(tmp_path, monkeypatch):
+    """C1(b): round 1 samples pid 5888 with its start unread, and the channel holds an event 1 of that pid and image
+    AFTER the watch's start (the pid taken again). Z-1: a start the round read at or after the watch's start is new;
+    AD-2 is for a guid with no start of its own. So it is listed by the channel, and knocks once at round 2's sample."""
+    import shutil
+    began = shell_events(rec=500, start="2026-11-10 08:00:05.000", create=True, at="2026-11-10 08:00:06")
+    later = tmp_path / "later"
+    shutil.copytree(str(HOSTFIX / "quiet" / "talking"), str(later))
+    rows = (later / "win-process-1.csv").read_text(encoding="ascii")
+    assert rows.count('.exe"","2026-11-10T07:50:00.000Z"') == 1
+    (later / "win-process-1.csv").write_text(rows.replace(
+        '.exe"","2026-11-10T07:50:00.000Z"', '.exe"","2026-11-10T08:00:05.000Z"', 1), encoding="ascii")
+    w, _, rounds = look_watch(tmp_path / "w", monkeypatch, [talking_unread(tmp_path, "t"), later, later],
+                              [began, "", ""])
+    guid_keys = [k for k in w.trees if k[0] == 5888 and w.trees[k].get("guid") == G_SHELL]
+    assert len(guid_keys) == 1 and not w.trees[guid_keys[0]]["history"]   # FOR: Z-1, not AD-2
+    assert rounds[0]["by_channel"] == [host.tree_word(guid_keys[0])] and rounds[0]["new"] == []
+    found = new_findings(w)
+    assert [(f["rule_id"], f["round"]) for f in found] == [(host.NEW_UNKNOWN, 2)], found   # once, at the sample
+    assert w.by_channel_count() == 0 and not w.trees[guid_keys[0]].get("by_channel")
+    # must not touch: AD-2's own case (no start of the guid read) is test_ad2_b2_*, unchanged
+
