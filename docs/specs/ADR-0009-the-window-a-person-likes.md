@@ -688,3 +688,10 @@ at scale 1.0, 38 at 2.0, 87 at 3.0 (docs/review/2026-11-11-M8.4.md).
 - I-4 Not reviewed by a fresh reviewer: the Table's own fix, made while
   the commander waited. The probe on top of it and his next opening are
   its review; a reviewer reads it with M8.3.
+- I-5 Measured after, on windows-latest by the same probe (run
+  43033937244): the window white for about half a second at scale 1.0,
+  one second at 2.0, two at 3.0, where it was 19 to 26, 38 to 52 and 87
+  to 118; the real app about one second where it was 29 to 40. CI for
+  the fix: six jobs success. Judgement: NEXT for M8.4; the commander's
+  own opening of it is still the test that counts.
+
