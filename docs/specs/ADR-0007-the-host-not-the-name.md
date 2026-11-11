@@ -1277,3 +1277,103 @@ touch (Z-9).
   that knock. The reviewer's W11 asked the question that should have
   come first. AA-1 answers it the only way the tree can: show, count,
   and wait for the field.
+
+## Amendment AB (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo3.md (9f2f665)
+CI run 42931681216 for fc37517 (9f2f665 merged onto main): six jobs
+success. AA-2 and AA-3 MET; AA-1, AA-4, AA-5, AA-6 PARTLY. Verdict: REDO
+on AB-1, AB-2 and AB-3. Each ruling names the case it is FOR and what it
+MUST NOT TOUCH, and both are tested (Z-9, AA-8).
+- AB-1 (V1, V12, must) The by-the-channel record is derived from the
+  trees, never accumulated. A tree is "listed by the channel" from the
+  first round it is an unknown, non-benign candidate only by the channel
+  (that round is kept on the tree) until it is knocked; the report's and
+  the state's count per image path is the number of such TREES, and the
+  five kept are the five latest such trees. FOR: one long-lived tree that
+  is a candidate only by the channel in every round of a watch is 1, not
+  one per round; the 36-order pairs assert the count. A tree that is
+  knocked (a candidate at a sample, before or after) is never tagged
+  `by the channel`, on the page or anywhere, and is not in the count.
+  MUST NOT TOUCH: two runs of one path that are two trees count 2; a tree
+  first listed by the channel and later a candidate at a sample knocks
+  then, once (AA-1 case 4). `by_channel_text` (written, never read) goes.
+- AB-2 (V2, must) Exit 0 stays (AA-1); the words do not lie. FOR: a watch
+  whose only news is unknown trees listed by the channel ends with
+  "CLEAN: N tree(s) listed, none knocked; M unknown tree(s) seen a
+  candidate only by the channel, listed and not knocked (AA-1): <paths
+  with counts>", the RESULT line's reason says the same M, and the state
+  carries M and that sentence for the window (the Table joins the window
+  at the merge; app.py stays out of Scope). MUST NOT TOUCH: with M = 0
+  both lines read exactly as before M7.9.
+- AB-3 (V6, V7; Q-14 ruled, must) E4 stands: the first lines say the
+  hole. The first lines speak from the watch's own check at its start,
+  and say that it is that check. FOR: on Linux, and on Windows where that
+  check finds no Sysmon, the between-rounds hole is a `hole:` line of the
+  first lines, as before M7.9, and a test pins those first lines on each
+  platform. Where the reader's check at round 1 differs from the watch's
+  own (either way), the round's printed line says so once, with what the
+  sources now are; the "sources:" first line is then not left standing
+  as the last word. The hole is said once per watch in all (first lines
+  or round 1, never both). MUST NOT TOUCH: Windows with Sysmon by both
+  checks prints no between-rounds hole and no such round line.
+- AB-4 (V3) "No alarm by itself" also means no silence by itself. FOR: a
+  tree listed by the channel and not knocked does not make a footprint
+  live: the link is shown, `live_key` is not set by it, and the
+  footprint's dark streak knocks AGENT-DARK-LIVE at the round it did
+  before M7.9. MUST NOT TOUCH: a footprint linked by a knocked tree
+  (named, or a candidate at a sample) is live as before.
+- AB-5 (V4; A1) The rule says it, not the host code. Scope is widened to
+  NEW-AGENT-UNKNOWN.yaml (match, description, holes) and its fixtures.
+  FOR: the match carries the by-the-channel condition, so the engine does
+  not fire on such a line, the host's `continue` is gone, a rule switched
+  off does not count such lines as findings it would have made, and a
+  negative fixture holds a by-the-channel line. The hole "knocks once per
+  program path" and the description's "never a nothing" are rewritten to
+  AA-1. MUST NOT TOUCH: a HostTree line with no by-the-channel key (every
+  record written before M7.9, Linux, no Sysmon) is judged and fires as
+  before - the existing fixtures pass unchanged, and a test says it.
+- AB-6 (V9; Q-15 confirmed with this) `candidate_by` is "sample" exactly
+  when the tree is a candidate in the round built WITHOUT the channel's
+  records; else "channel". FOR: a talker at the sample whose only sampled
+  descendant hangs under a process known from the channel alone is "by
+  the channel". MUST NOT TOUCH, as a property over every fixture round
+  with a channel: the trees labelled "sample" are the candidates of the
+  same round built without it, no more and no fewer.
+- AB-7 (V10; AA-4 for W5) The span of AA-4 ends at THIS round's sample
+  for a tree whose root is in this round's sample. FOR: a live process
+  whose sampled start was not read and whose guid's events come in the
+  same round is one tree, in that round and after. MUST NOT TOUCH: Z-5's
+  reuse cases stay two trees; a guid whose events begin after the root
+  left the sample is another tree. The enumeration (FORMS) grows by the
+  case, and AA-4's start-unread side gets its test.
+- AB-8 (V11) The note for an image without its event 1 is said per
+  episode: after a withdrawal, the next miss of that image is said again,
+  and the report's last word on an image is its present state. Any event
+  1 of the image withdraws the note (it shows the configuration does not
+  leave the image out); the words say "an event 1 of <image> came".
+  MUST NOT TOUCH: an image missing in every round is one note, not one
+  per round.
+- AB-9 (V15) A channel is closed by its owner: a watch's Stop closes the
+  channels of that watch's reader and no other; the reader gives a close
+  for a single look. The Table calls it from the window at the merge.
+  The double end of one helper (a Stop between the registration and the
+  closed check) is recorded once. Tested with two open channels.
+- AB-10 (V5, V13, V17) Each sentence V5 lists is made true or removed;
+  each test V13 lists is written (AA-7's benign brief tree among them;
+  the no-path grouping through a round; Q-15's case under AB-6); case 2's
+  fixture is what its comment says; agentx_events' second run has its own
+  guid. The shape changes outside Windows-with-Sysmon (V17) are accepted
+  and said in the builder's record.
+- AB-11 Recorded, said in THREAT_MODEL, not built: V8 (the tree ledger
+  grows by one entry per by-the-channel tree: a program that runs every
+  minute for a day is 1440 entries in the state and the report; a bound
+  is a later task, M7.12, because it touches the tree key; TREES SEEN's
+  line gets the words `by the channel` now, the window's row at the
+  merge); V14 (a pid reused by a process of an image without event 1,
+  wholly inside the seconds between a sample and its round's end, joins
+  the earlier tree); V16 (an unknown program that repeats as brief runs
+  is judged only by its acts: each run is its own tree, so HOST-RHYTHM
+  and HOST-UNWATCHED never see the repetition; the count is the trace).
+- Table ledger: AA-1 said "counted" without saying WHAT is counted, and
+  the build counted sightings; AA-6 said "from the round's inventory"
+  for lines printed before any round. A ruling that orders a count names
+  its unit; one that orders words names when they are printed.
