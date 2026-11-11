@@ -619,3 +619,43 @@ it MUST NOT TOUCH, and both are tested (ADR-0007 Z-9).
   say what a name with a suffix names; the build matched stems across
   kinds. A ruling that takes a name from a person says what kind of
   thing each form of the name can be.
+
+## Amendment H (the Table, 2026-11-11) - rulings on review 2026-11-11-M8.2-redo3.md (6957d6b), and the judgement on M8.2
+G-1, G-2, G-4..G-8 MET; G-3 PARTLY on one case (T1). The reviewer: "Everything
+else may land with T2 recorded as should-fix and T3-T12 as notes." The
+one must-fix is one condition in one line, so the Table closes it itself
+rather than spend a fourth round on it (CLAUDE.md rule 8), each change
+with a test of its case and of what it must not touch:
+- H-1 (T1; Q-16 ruled) "read: every file" is not said when any file was
+  read only in part, judged or not. FOR: a file of host lines over the
+  per-file bound that the rule is not given. MUST NOT TOUCH (Q-16, as
+  built): a file of host lines read whole and not judged leaves "read:
+  every file" standing, with its own clause "not judged".
+- H-2 (T2) The package refusal reads exactly as it did before M8.2;
+  nothing is appended to it. MUST NOT TOUCH: every other check's refusal
+  still ends "nothing removed".
+- H-3 (T4) A row that cannot be looked at loses its own Remove and says
+  why; the rows after it keep theirs.
+- H-4 (T10; Q-17 ruled yes) The help and README name .yml beside .yaml,
+  and README quotes both forms of "nothing removed".
+- Q-18 and Q-19 ruled as built. Recorded for M8.3 (the window's next
+  task), none of them a wrong act or a false word today: T3 (a failure
+  that is no OSError while deleting lists less than is gone); T5 (a link
+  named as a package id is said as a package rule); T6 (three tests
+  prove less than their names); T7 (the catch-alls say the error's type
+  and words but keep no traceback anywhere: a log of them under
+  ~/.raqib); T8, T12 (which tests depend on the system: the success
+  words depend on realpath of the temp folder); T9 (a mount point inside
+  a rule folder is entered); T11; Q-19's orphan entry, whose words
+  should name `raqib rules --reset ID`; Q-12 (G-8); S9 (G-9).
+- Judgement: NEXT for M8.2, on six CI jobs green for the Table's commit.
+  Decisions 4 and 5 of this ADR are accepted with Amendments E-H: a
+  person adds a rule by answering a form, the engine and the fixture
+  runner judge it as any rule, it is measured on its own fixture files
+  and says so, and Remove acts on the row's own place, checks first,
+  and never says more than it did. Not reviewed by a fresh reviewer: the
+  Table's own commit (H-1..H-4); the field run is its review.
+- Table ledger for M8.2: three REDOs. E-6's order (a failed Remove
+  switched a rule back on), F-3's "exact name first" (a name with a
+  suffix matched across kinds) and G-3's "bounded" (not said to cover a
+  file that is not judged) were each the Table's words read exactly.
