@@ -1205,3 +1205,75 @@ Table's own in Amendment X; the Table's rulings Z-3..Z-9.
   one. From here a ruling that changes when something knocks, or when a
   watch is INCOMPLETE, names the case it is for and the cases it must
   not touch, and the builder tests both.
+
+## Amendment AA (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.9-redo2.md (a8d1620)
+CI for a8d1620 and for e1671ae (merged onto main with M8.1): six jobs
+success each. Z-1 and Z-2 MET; the rest PARTLY. Verdict: REDO on AA-1,
+AA-2 and AA-3. Each ruling names the case it is for and what it must not
+touch (Z-9).
+- AA-1 (W11, W6; X-5 and Z-4 are superseded where they said "knocks")
+  What the channel alone shows of a program nobody named is listed, not
+  knocked - until it is measured. The reviewer's question has no answer
+  in the tree: on a real Windows desktop, how many ordinary programs
+  connect and start a child between two rounds? Nobody has counted (A6,
+  A7), and before M7.9 such a tree was seen only if it happened to be
+  doing both at the sample's instant. FOR: a tree the catalog does not
+  name that is a candidate ONLY by what the channel gave (it was never a
+  candidate at a sample) - brief, or long-lived and seen to talk and act
+  between rounds. It is listed with the word `by the channel`, sourced,
+  and its acts are judged by the catalog as any tree's (those findings
+  knock by I-6); but it is no NEW-AGENT-UNKNOWN finding, no knock, no
+  alarm by itself. The report counts them by image path with the last
+  five runs' cites ("unknown, by the channel: 14 runs of <path>, last
+  at ..."), the state holds the count and those five, never the whole
+  list. MUST NOT TOUCH: a tree the catalog names knocks NEW-AGENT each
+  time, brief or not; an unknown tree that is a candidate at a sample
+  knocks NEW-AGENT-UNKNOWN exactly as before M7.9, and one first listed
+  by the channel that is later a candidate at a sample knocks then, once.
+  The watch's first lines and THREAT_MODEL say it. The commander's field
+  run gives the count; a later ruling decides whether these knock.
+- AA-2 (W1, must) The restart Z-5 ruled for a clock that stepped back
+  works and is tested: reads that return only records older than their
+  start, for two rounds, restart, said. The counter counts.
+- AA-3 (W4, must; D-8 and Z-9) Both sides of each rule are tested: for
+  the grouping by path - two programs of one name in two directories
+  are two groups, and a run with no path read is grouped by its name and
+  says so; for the lag threshold - a read less than a round behind says
+  nothing; for AA-1 - each of its four cases.
+- AA-4 (W2, W5) A process is not new twice when the records tell: a
+  guid whose every event lies between a tree's first sight and its last
+  sample, with the tree's pid and image, is that tree, whether or not
+  the tree's start was read. Outside that span, or with another image,
+  it is another tree. MUST NOT TOUCH: Z-5's reuse cases (a pid held by
+  two processes in turn stay two trees); the enumeration test grows by
+  these cases over two rounds.
+- AA-5 (W3, W7, W9) The words say what is closed. README and THREAT_MODEL
+  no longer call the between-rounds hole closed: it is "narrowed where
+  Sysmon is read", and they say exactly when a stopped or cleared
+  channel is said (three rounds in a row, each with a process due) and
+  when it is not (a quiet desktop: unsaid, a hole that remains). The
+  note for an image without its event 1 reads "left out by its
+  configuration, or late", and is withdrawn in the report if the event
+  came. THREAT_MODEL's old X-3(b) text goes; history "by its time" is
+  said for round 1 only. Scope widened for the two sentences in
+  NEW-AGENT.yaml and NEW-AGENT-UNKNOWN.yaml that describe the first round.
+- AA-6 (W8) One Sysmon check decides, the reader's: the watch takes
+  what its first lines, its sources and its report say of Sysmon from
+  the round's inventory. A channel is closed by its watch's Stop and by
+  nothing else (no finalizer on another thread); a helper started as the
+  channel closes is ended by the close. Tested: a channel leaves the open
+  set at Stop; a closed channel reads nothing and starts nothing.
+- AA-7 Recorded: W10 (a restart may re-read the records of the span
+  between the round's time and its query: a tree in it is "read late",
+  never new twice by AA-4); W12 (a step back smaller than a round before
+  round 1 is not said); Q-12's two tests (the tree-key hole is not
+  reachable by any path found; a benign brief tree is listed benign,
+  sourced, its findings notes - a test of it is written now that AA-1
+  names the cases); Q-13 accepted with AA-5's words.
+- AA-8 Every REDO change carries a test of its case and of what it must
+  not touch (D-8, Z-9).
+- Table ledger: X-5 ruled a knock "once per image" for a class of trees
+  whose number on a real machine nobody knew, and Z-4 refined the key of
+  that knock. The reviewer's W11 asked the question that should have
+  come first. AA-1 answers it the only way the tree can: show, count,
+  and wait for the field.
