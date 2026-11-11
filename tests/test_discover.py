@@ -1227,8 +1227,8 @@ def test_m50b_e1_unnumbered_files_beside_samples_are_merged_and_said(tmp_path):
     ({"raqib": "discover-run", "version": 1, "samples": 0}, "samples must be a whole number"),
     ({"raqib": "discover-run", "version": 1, "samples": True}, "samples must be a whole number"),
     ({"raqib": "discover-run", "version": 1, "samples": "6"}, "samples must be a whole number"),
-    ({"raqib": "discover-run", "version": 1}, "the README loop's"),
-    ({"raqib": "other", "samples": 2}, "the README loop's"),
+    ({"raqib": "discover-run", "version": 1}, "the docs/GUIDE.md loop's"),   # M9.2 REDO E-4: was "the README loop's"
+    ({"raqib": "other", "samples": 2}, "the docs/GUIDE.md loop's"),
     ([1, 2], "not a JSON object"),
 ], ids=["zero", "bool", "string", "no-samples", "not-ours", "not-an-object"])
 def test_m50b_e1_a_run_json_that_cannot_be_read_is_a_usage_error(tmp_path, run, error):

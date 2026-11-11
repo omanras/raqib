@@ -1,12 +1,16 @@
 # The Raqib guide
 
 ## Install and watch
+This section begins in the README, under [Install and watch](../README.md#install-and-watch).
+
 On Windows the path rules judge drive (`C:\`) and UNC paths (`\\server\share`, recognised by its two
 leading backslashes only) in any ASCII case, with `\` or `/`; the forward-slash form
 `//server/share` is read as a POSIX path (a hole), `/mnt/c/...` (WSL) and `C:\...` are different
 paths, and `--root /x` means `\x` on the current drive.
 
 ## Watch a project
+This section begins in the README, under [Watch a project](../README.md#watch-a-project).
+
 The page reloads itself every `--refresh` N seconds (default 5) and runs no script: a band
 (WATCHING, SILENT for N s, AGENT GONE or CAPTURE FAILED, with notifications on or off, the trace and
 the last line's time), the alarms, the findings by severity, the live silence windows in the
@@ -38,6 +42,8 @@ and heartbeat, and `code_so_far`, the code of what it had read) and its record
 ([ADR-0005](specs/ADR-0005-one-command-watch.md)).
 
 ## Doctor
+This section begins in the README, under [Doctor](../README.md#doctor).
+
 It checks Python (and on Linux and macOS `python3` on PATH, which the hooks run), `claude` on PATH
 and its version, the project's hook settings (installed; foreign: a Raqib entry of another checkout
 or install; or missing), the notifier, tkinter (for `raqib app`), Sysmon on Windows, the host
@@ -385,11 +391,13 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 `python3 -m raqib COMMAND`. TRACE is a `raqib.log.jsonl`.
 | Command | Does |
 |---|---|
+| `raqib app [PROJECT]` | open Raqib as a desktop window: the host first, Watch this host, or a project |
 | `raqib watch [PROJECT]` | install the hooks, tail the trace, knock, serve the page (above) |
 | `raqib watch --host [--every T] [--window S] [--rounds N] [--attach-hooks]` | watch this host in rounds of discover: NEW-AGENT, NEW-AGENT-UNKNOWN, AGENT-DARK-LIVE, HOST-UNWATCHED and each tree's own source (above); exit 0 nothing knocked, and no round or source that could not be read (the standing holes the first lines print do not change the exit; trees listed; unknown trees seen a candidate only by the channel are listed and counted, not knocked), 1 a finding, 3 a round not read |
 | `raqib doctor [PROJECT]` | what `watch` needs and is missing, one line each (above) |
 | `raqib report TRACE [--scope P \| --handoff HANDOFF.md] [--json]` | findings with their cited lines, rules that did not run, every rule's budget; exit 0 clean, 1 alarm, 3 incomplete, 2 usage |
 | `raqib rules TRACE -o findings.jsonl` | findings only, one JSON line each |
+| `raqib rules [--set ID on\|off]` | list every rule; turn a rule on or off; `--add FILE`, `--remove NAME`: your own |
 | `raqib ui TRACE -o trace.html` (or `--serve`) | the report as one static page: timeline, findings, silence bands; no script; `--serve` binds 127.0.0.1 |
 | `raqib check-rules [--fixtures-root CHECKOUT]` | each rule's measured false-positive rate against its budget, on the fixtures of a checkout (an installed raqib has none: pass `--fixtures-root`) |
 | `raqib suspect TRACE --backend ollama -o suspicion.jsonl` | model suspicion (`--backend anthropic` needs `pip install anthropic` and ANTHROPIC_API_KEY, and sends trace metadata off the machine); then `report TRACE --suspicion suspicion.jsonl` |
@@ -397,6 +405,8 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events: a checkout's tests/fixtures/eval/events.json or --events FILE (an installed raqib has none and exits 2) |
 | `raqib proxy --listen 127.0.0.1:PORT --upstream URL --log TRACE [--cwd DIR]` | relay another agent's model API calls and record its tool calls (below) |
 | `raqib os-sysmon --root PID[:GUID] --log TRACE [--from FILE.xml] [--cwd DIR]` | record what Sysmon saw the agent's process tree do (below); exit 1 when it wrote a `RAQIB-SILENCE:` line, 2 off Windows without `--from` |
+| `raqib discover` | find AI agents on a host by what they do |
+| `raqib --version` | print raqib <version> and exit 0 |
 
 ## Watch another agent
 An agent without Claude Code hooks can be watched through the proxy source
@@ -727,5 +737,5 @@ M5.0b ones (`kimi/`, `benign/`, `linux-agent/`) are synthetic, made by
 
 Status: v0.1 candidate: capture, rules, report, suspicion
 layer, evaluation, web view and docs. The last exit criterion of the plan
-(M3.3) is still open: one person outside the project runs this quickstart
-and files one issue.
+(M3.3) is still open: one person outside the project runs the quickstart in the README
+([Install and watch](../README.md#install-and-watch)) and files one issue.

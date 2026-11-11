@@ -29,21 +29,28 @@ shown but never knocked; `--no-notify` or a set `CI` turns the knocks off.
 UNSURE, and exit 1 if any line is MISSING.
 
 ## What an alarm looks like
+`raqib report TRACE` prints this; `raqib watch PROJECT` prints it for its own trace when it ends, after its summary.
 ```text
 Raqib report
-trace: tests/fixtures/docs/alarm-sample.log (1 records, 1 sessions)
-sources: hook 1
+trace: tests/fixtures/docs/alarm-sample.log (5 records, 1 sessions)
+sources: hook 5
 findings: rules run on this trace (catalog raqib/rules/catalog)
 
 ALARMS (A3, A5): 0
   (silence, a crash of the watch, a knock that did not arrive, and what could not be read, cited or kept:
   the trace's and the watch's own; every finding below also makes the RESULT an ALARM)
 
-FINDINGS: 1
-  [high] SILENCE-OPEN (SILENCE, demand) session fixture-silence-0001 seq 1
+FINDINGS: 2
+  [medium] DESTRUCT-CMD (DESTRUCT, signature) session demo-1 seq 2
       source: hook
-      session started but its trace ends at session_start seq 1 without session_end or stop
-      seq 1: line 1  session_start - seq 1  2026-10-16T12:00:00.000Z  cwd="/work/example"
+      Bash runs rm at seq 2 (programs ["curl", "bash", "rm"])
+      seq 2: line 2  pre Bash seq 2  2026-11-11T09:00:02.000Z  input_meta={"command_head": "curl", "command_programs": ["curl", "bash", "rm"]}  cwd="/work/demo"
+      seq 2: line 3  post Bash seq 2  2026-11-11T09:00:04.000Z  ok=true  input_meta={"command_head": "curl", "command_programs": ["curl", "bash", "rm"]}  output_meta={"scan": "full", "secret_kinds": []}  cwd="/work/demo"
+  [medium] NET-TOOL (NET, signature) session demo-1 seq 2
+      source: hook
+      Bash may reach the network at seq 2 (host -, program curl, programs ["curl", "bash", "rm"])
+      seq 2: line 2  pre Bash seq 2  2026-11-11T09:00:02.000Z  input_meta={"command_head": "curl", "command_programs": ["curl", "bash", "rm"]}  cwd="/work/demo"
+      seq 2: line 3  post Bash seq 2  2026-11-11T09:00:04.000Z  ok=true  input_meta={"command_head": "curl", "command_programs": ["curl", "bash", "rm"]}  output_meta={"scan": "full", "secret_kinds": []}  cwd="/work/demo"
 
 SUSPICION (model, raises only, A2): 0
 
@@ -51,54 +58,34 @@ RULES THAT DID NOT RUN: 1
   - DRIFT-FILES not-evaluated: needs context: scope
 
 RULES (A6 fp_budget): 22
-  id              class     kind      sev     fp_budget status
-  SILENCE-GAP     SILENCE   demand    high    -         active
-  SILENCE-OPEN    SILENCE   demand    high    -         active
-  SILENCE-HALF    SILENCE   demand    high    -         active
-  SILENCE-ORDER   SILENCE   demand    high    -         active
-  SILENCE-EMPTY   SILENCE   demand    high    -         active
-  CROSS-SOURCE    CROSS     anchor    high    0.1       active
-  HEAD-UNMOVED    DRIFT     anchor    medium  0.1       active
-  INDEX-UNTOUCHED DRIFT     anchor    medium  0.1       active
-  AGENT-DARK-LIVE HOST      anchor    medium  0         active
-  DESTRUCT-CMD    DESTRUCT  signature medium  0.25      active
-  DRIFT-FILES     DRIFT     anchor    medium  0.1       active
-  EDIT-NO-TEST    DRIFT     demand    medium  0.1       active
-  HOST-RHYTHM     HOST      anchor    medium  0         active
-  HOST-UNWATCHED  HOST      anchor    high    0         active
-  LANDED-NO-GATE  DRIFT     demand    high    0.05      active
-  NET-TOOL        NET       signature medium  0.25      active
-  NEW-AGENT-UNKNOWN HOST      anchor    medium  0.4       active
-  NEW-AGENT       HOST      anchor    high    0         active
-  SCOPE-CWD-MOVED SCOPE     anchor    medium  0.1       active
-  SCOPE-CWD-ROOT  SCOPE     anchor    medium  0.1       active
-  SCOPE-PATH      SCOPE     signature medium  0.1       active
-  SECRET-OUTPUT   SECRET    signature high    0.05      active
+  ... (22 rows: every rule, its kind, severity and budget)
 
 RESULT: ALARM (exit 1)
 ```
 
 ## Where it runs
-On Windows: `pipx install C:\path\to\raqib` (or `py -m pip install C:\path\to\raqib`), then `raqib watch
-C:\path\to\project`. Install on the side that runs the agent (Windows or WSL), not both. It needs tkinter: python.org
-Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`; without it, or without a display, `raqib app` exits
-2 and says so (`raqib-app`: in a message box on Windows, its log in `~/.raqib/app.log`), and `raqib watch` still works
-([ADR-0006](docs/specs/ADR-0006-the-window.md)). On Linux, and on Windows without Sysmon, a tree that lives between two
-rounds is not seen, and the watch says so once: in its first lines where its own check at its start finds no Sysmon,
-else in the line of the round the live reader's first check is made in, when that check finds none.
+Raqib runs on Linux and Windows, on Python 3.11 or newer and its standard library only; the tests run on both. On
+Windows: `pipx install C:\path\to\raqib` (or `py -m pip install C:\path\to\raqib`), then `raqib watch
+C:\path\to\project`. Install on the side that runs the agent (Windows or WSL), not both. `raqib watch PROJECT` needs
+Claude Code, whose hooks it installs. `raqib watch --host` needs no agent named: it finds the agents by what they do,
+and on Windows it also reads Sysmon where it is installed ([what it misses without it](docs/GUIDE.md#watch-the-host)).
+The window, `raqib app`, needs tkinter (`python3-tk`); `raqib watch` does not. On macOS the notifications and the page
+opener are written for it, but the host watch has no live reader and no CI job runs there.
 
 ## Commands
 | Command | Does |
 |---|---|
+| `raqib app [PROJECT]` | open Raqib as a desktop window: the host first, Watch this host, or a project |
 | `raqib watch [PROJECT]` | install the hooks, tail the trace, knock, serve the page (above) |
 | `raqib watch --host` | watch this host in rounds of discover |
 | `raqib doctor [PROJECT]` | what `watch` needs and is missing, one line each (above) |
 | `raqib report TRACE` | findings with their cited lines, rules that did not run, every rule's budget |
-| `raqib ui TRACE` | the report as one static page: timeline, findings, silence bands |
-| `raqib rules TRACE` | findings only, one JSON line each |
-| `raqib suspect TRACE --backend ollama` | model suspicion |
-| `raqib proxy` | relay another agent's model API calls and record its tool calls |
-| `raqib os-sysmon` | record what Sysmon saw the agent's process tree do |
+| `raqib rules [--set ID on\|off]` | list every rule; turn a rule on or off; `--add FILE`, `--remove NAME`: your own |
+| `raqib discover` | find AI agents on a host by what they do |
+| `raqib --version` | print raqib <version> and exit 0 |
+| the rest: `ui`, `suspect`, `proxy`, `os-sysmon`, `check-rules`, `eval` | [in the guide](docs/GUIDE.md#commands) |
+
+TRACE is a trace file, a `raqib.log.jsonl` of JSON lines; `raqib watch` keeps it under `~/.raqib/traces/` by default.
 
 ## More
 [docs/GUIDE.md](docs/GUIDE.md): [Install and watch](docs/GUIDE.md#install-and-watch), [Watch a

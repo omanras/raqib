@@ -842,6 +842,9 @@ def test_e5_readme_watch_a_project_in_three_lines():
     # and the third line are in docs/GUIDE.md. Each is a paragraph (wrapped); the three lines are rebuilt.
     from readme_text import GUIDE, section as cut, units
     top, rest = units(cut("Watch a project")), units(cut("Watch a project", GUIDE))
+    # M9.2 REDO (ADR-0010 E-7): the guide's part begins with one line to the README's start; then as before.
+    assert rest[0] == "This section begins in the README, under [Watch a project](../README.md#watch-a-project)."
+    rest = rest[1:]
     assert len(top) == 2 and len(rest) == 2 and rest[0].startswith("The page reloads itself")
     lines = [top[0] + " " + rest[0], top[1], rest[1]]
     assert len(lines) == 3 and "raqib watch" in lines[0] and "--no-notify" in lines[1]

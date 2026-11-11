@@ -98,11 +98,13 @@ def test_m63_e3_first_screen_is_install_and_watch():
         assert "claude/v0.1" not in text and "--branch" not in text
     guide_headings = re.findall(r"^## (.+)$", GUIDE, re.M)   # M9.2: both sections are in docs/GUIDE.md
     assert guide_headings.index("Manual steps") > guide_headings.index("How it works")
-    # G-7: the Windows path-rules line is on the first screen; since M5.1b it
+    # G-7 (M5.1b) put the Windows path-rules line on the first screen; since M5.1b it
     # says what the rules do with Windows paths (ruling C-4), not a caveat;
     # UNC by backslashes only, the forward-slash form a hole (C-12); ASCII case (C-11).
     # M9.2: the line moved to the guide's "Install and watch" (the 25-line first screen at 120 characters
-    # cannot hold it); it is one paragraph there, wrapped at 100, compared flattened.
+    # cannot hold it); it is one paragraph there, wrapped at 100, compared flattened. ADR-0010 E-5 retired
+    # G-7's first-screen property on record: the Windows install line is in README's "Where it runs" (E-1,
+    # tests/test_readme_top.py) and the path-rules sentence is the guide's.
     assert ("On Windows the path rules judge drive (`C:\\`) and UNC paths (`\\\\server\\share`, recognised by"
             " its two leading backslashes only) in any ASCII case, with `\\` or `/`; the forward-slash form"
             " `//server/share` is read as a POSIX path (a hole), `/mnt/c/...` (WSL) and `C:\\...` are different"
