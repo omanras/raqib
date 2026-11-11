@@ -2039,6 +2039,20 @@ def _channel_fields(p):
     return {"guid": guid, "brief": bool(recs) and not sampled, "channel_started": iso(started)}
 
 
+def _candidate_by(pid, talkers, acts, procs):
+    """M7.9 REDO 3 AA-1 (API for raqib/host.py): what made a candidate one:
+    "sample" when it talks in a sampled connection (not a Sysmon event) AND
+    has an act sampled as such (a child in the round's process sample) - a
+    candidate as it would have been before M7.9 - else "channel" (its talk,
+    or its act, is known only from the round's channel)."""
+    def sampled(p):
+        return any(not r.get("derived") and (split_name(r["src"]) or (None,))[0] in PROCESS_LISTS
+                   for r in (p or {}).get("recs") or ())
+    talk = any((split_name(c["src"]) or (None,))[0] != "sysmon" for c in talkers.get(pid) or ())
+    act = any(a["how"] == "process" and sampled(procs.get(a["pid"])) for a in acts.get(pid) or ())
+    return "sample" if talk and act else "channel"
+
+
 def build(parsed, catalog, window=None, holes=(), live=False, processes=False, channel=False):
     """The inventory (E5) of parsed sources:
     [{"name", "path", "error", "records", "problems", "lines"}].
@@ -2360,6 +2374,8 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     if channel:   # M7.9: a tree's root as the round's channel saw it (guid, brief, its creation)
         for t in candidates + act_roots:
             t.update(_channel_fields(procs.get(t["pid"])))
+        for t in candidates:   # AA-1: decided here, where candidacy is, and carried
+            t["candidate_by"] = _candidate_by(t["pid"], talkers, acts, procs)
     if processes:   # M7.8 (P-2): the round's process sample, for "quiet" (root alive, no talk) against "gone"
         extra["processes"] = _last_sample(records, procs)
     return _os_pids(dict(extra, **{

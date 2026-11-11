@@ -521,6 +521,7 @@ class Helpers:
     def __init__(self):
         self.running = {}
         self.record = []
+        self.closed = False
 
     @staticmethod
     def _stop(proc):
@@ -544,7 +545,9 @@ class Helpers:
         return text
 
     def end(self, why="the watch stopped"):
-        """Every helper still running is ended and recorded; their texts."""
+        """Every helper still running is ended and recorded; their texts. AA-6:
+        closed first, so a helper registered after this snapshot ends itself."""
+        self.closed = True
         return [self.ended(proc, why) for proc in list(self.running.values())]
 
 
@@ -567,6 +570,10 @@ def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Pop
         return None, ("wevtutil could not be run (%s): the Sysmon channel was not read"
                       % (getattr(exc, "strerror", None) or type(exc).__name__))
     helpers.running[proc.pid] = proc
+    if getattr(helpers, "closed", False):   # AA-6: closed while it was being started: ended here, recorded
+        if proc.pid in helpers.running:
+            helpers.ended(proc, "its channel was closed as it started")
+        return None, "wevtutil was ended as it started (its channel was closed): the Sysmon channel was not read"
     try:
         data, said = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -757,8 +764,8 @@ class Channel:
         kept, low, early = [], None, 0
         for chunk, rid, when in chunks:
             below = self.after is not None and rid is not None and rid <= self.after
-            early = self.since is not None and when is not None and when < self.since
-            if below or early:
+            old = self.since is not None and when is not None and when < self.since
+            if below or old:
                 record["dropped"] += 1
                 if below:
                     low = rid if low is None else min(low, rid)
@@ -774,7 +781,9 @@ class Channel:
                       else self.after, kinds=sorted({e["event"] for e in events if e["event"] in ROUND_IDS}),
                       event1=sorted({(_int(e["data"].get("ProcessId", "")), discover.iso(discover._ts(
                           e["data"].get("UtcTime")))) for e in events if e["event"] == 1} - {(None, None)},
-                          key=lambda x: (x[0] or 0, x[1] or "")))
+                          key=lambda x: (x[0] or 0, x[1] or "")),
+                      event1_images=sorted({_image(e["data"].get("Image")) for e in events
+                                            if e["event"] == 1} - {None, ""}))
         if times:
             record["behind_seconds"] = _age(at, max(times))
             length = _age(at, self.prev_at) if self.prev_at is not None else None
@@ -863,6 +872,10 @@ class Channel:
         self.cut += 1 if record.get("cut") else 0
         self.kinds.update(record.get("kinds") or ())
         self.event1_seen = self.event1_seen or 1 in (record.get("kinds") or ())
+        came = sorted(self.filtered & set(record.get("event1_images") or ()))   # AA-5: a note withdrawn
+        if came:
+            self.filtered.difference_update(came)
+            record["unfiltered"] = came
         for pid, when in record.get("event1") or ():
             times = self.created.setdefault(pid, [])
             if when not in times:

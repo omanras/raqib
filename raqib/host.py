@@ -150,7 +150,6 @@ import os
 import sys
 import tempfile
 import threading
-import weakref
 import time
 import traceback
 
@@ -312,6 +311,8 @@ BETWEEN_LINUX = ("Linux: the rounds read /proc only, and no audit source of proc
 BETWEEN_NO_SYSMON = ("no Sysmon channel is read (%s): each round is one sample of the OS API, so a tree that starts,"
                      " talks, acts and ends between two samples is in no round")
 CHANNEL_KINDS = ("channel-unread", "channel-cut", "channel-helper")   # M7.9: the round's channel read, a hole when short
+BY_CHANNEL = "by the channel"     # AA-1: an unknown tree a candidate only by what the channel gave: listed, not knocked
+BY_CHANNEL_RUNS = 5                # AA-1 (W6): the runs of a path kept with their cites (the count holds the rest)
 CHANNEL_KIND_ROUNDS = 3            # REDO X-8: a kind not read after this many rounds with the channel is said once
 CHANNEL_HELD = {1: "no event 1 read so far: a tree that starts and ends between two rounds may be unseen",
                 3: "no event 3 read so far: talk between rounds may be unseen (Sysmon without -n logs none)",
@@ -404,7 +405,6 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
                 from raqib.hooks import os_sysmon
                 own["channel"] = os_sysmon.Channel()
                 os_sysmon.OPEN_CHANNELS.append(own["channel"])
-                weakref.finalize(read, own["channel"].close, "its reader was dropped")   # Z-6
         return own["channel"]
 
     def read():
@@ -559,7 +559,8 @@ def trees_of(inv, catalog, no_drive=None):
                         "children": children, "remotes": remotes, "claude_code": claude, "claude_why": claude_why,
                         "guid": t.get("guid"), "brief": bool(t.get("brief")),     # M7.9 (P-4)
                         "channel_started": t.get("channel_started"),
-                        "seen_last": (t.get("seen") or {}).get("last"), "seen_first": (t.get("seen") or {}).get("first")}
+                        "seen_last": (t.get("seen") or {}).get("last"), "seen_first": (t.get("seen") or {}).get("first"),
+                        "candidate_by": t.get("candidate_by") or "sample"}   # AA-1: what made it a candidate
     return out
 
 
@@ -1342,13 +1343,13 @@ class HostWatch:
         self.channel_last = None      # REDO X-1: the last round's channel record (from its inventory)
         self.channel_rounds = 0       # rounds whose inventory carried a kept read of the channel
         self.channel_said = []        # X-8: what the rounds have not read, said once
-        self.brief_unknown = {}       # X-5: image -> the NEW-AGENT-UNKNOWN finding its brief trees grow
+        self.by_channel = {}          # AA-1: image path -> {count, last_at, runs: the last BY_CHANNEL_RUNS}
+        self.reader_sysmon = None     # AA-6: what the live reader's own check said, from the round's inventory
+        self.channel_off = None
         self.gone_at = {}             # X-4: tree key -> the round time it went gone
         if self.platform.startswith("linux"):
             self.notes.append(BETWEEN_HOLE % BETWEEN_LINUX)
-        elif self.platform == "win32" and not self.sysmon[0]:   # Z-6: said once (the round's record says the same)
-            self.between_said = True
-            self.notes.append(BETWEEN_HOLE % (BETWEEN_NO_SYSMON % self.sysmon[1]))
+        # AA-6: on Windows the live reader's own check decides; its round's record says it (once, _channel_holes)
         if self.missing_rules:
             self._hole(self.t0, "host-rule", "rule(s) %s not in the catalog: what they judge is not judged"
                        % ", ".join(self.missing_rules))
@@ -1726,7 +1727,7 @@ class HostWatch:
         if no_drive:   # D-3: said as a hole, once per round
             self._hole(now, "benign-no-drive", "round %d: %s; judged as not benign: %s" % (
                 n, discover.NO_DRIVE, ", ".join(no_drive)), round_=n)
-        lines, new, back, gone, benign_new, late_read = [], [], [], [], [], []
+        lines, new, back, gone, benign_new, late_read, by_channel_now = [], [], [], [], [], [], []
         for key in sorted(current, key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
             t = current[key]
             entry = self.trees.get(key)
@@ -1774,12 +1775,22 @@ class HostWatch:
                 if last is not None and (round_at - last).total_seconds() > self.every:   # X-4: read late, by how much
                     entry["late_seconds"] = line["input_meta"]["read_late_seconds"] = round(
                         (round_at - last).total_seconds(), 3)
+            # AA-1: an unknown tree a candidate only by the channel's events is listed, counted, not knocked
+            channel_only = (t["class"] == "candidate" and t.get("candidate_by") == "channel" and not t["named"]
+                            and not t["benign"])
+            entry["by_channel"] = channel_only
+            if channel_only:
+                line["input_meta"].update(by_channel=True, candidate_by="channel")
             lines.append(line)
             entry["line_seq"] = self.seq
-            if t["class"] == "candidate" and entry["candidate_round"] is None:
+            if t["class"] == "candidate" and entry["candidate_round"] is None and not channel_only:
                 entry["candidate_round"] = n
             if not candidate_before and t["class"] == "candidate" and not history:
-                (benign_new if t["benign"] else new).append(tree_word(key))
+                if channel_only:
+                    by_channel_now.append(tree_word(key))
+                    self._count_by_channel(key, t, entry, ts, n)
+                else:
+                    (benign_new if t["benign"] else new).append(tree_word(key))
         # M7.8 (ADR-0007 P-2): gone means the root process is not in the round's process sample; a tree seen before
         # whose root is in it and that does not talk now is quiet: listed, its source kept, neither gone nor back
         left = (self.present | self.quiet) - set(current)
@@ -1797,6 +1808,8 @@ class HostWatch:
         if connections_unread(inv):
             kept = {k for k in left if alive is None or tuple(k) in alive}
         quiet_keys = {k for k in left - kept if alive is not None and tuple(k) in alive}
+        for k in (quiet_keys | {k for k, t in current.items() if not t["brief"]}):   # AA-4: its life, to its last sample
+            self.trees[k]["last_sampled_at"] = iso(round_at)
         gone_keys = sorted(left - kept - quiet_keys, key=lambda k: (str(k[0]), str(k[1]), str(k[2])))
         for key in gone_keys:
             self.trees[key].update(present=False, quiet=False)
@@ -1898,6 +1911,8 @@ class HostWatch:
         for f in found:
             line = by_seq[f["cited_seq"][0]]
             meta = line["input_meta"]
+            if f["rule_id"] == NEW_UNKNOWN and meta.get("by_channel"):
+                continue   # AA-1: no finding, no knock, no alarm by itself: counted by its path (_count_by_channel)
             entry = {"rule_id": f["rule_id"], "kind": f["kind"], "class": f.get("class"), "severity": f["severity"],
                      "summary": f["summary"], "cited_seq": f["cited_seq"], "round": n, "sample": sample, "at": ts,
                      "session_id": f["session_id"], "run": self.run, "notice": None}
@@ -1926,25 +1941,6 @@ class HostWatch:
                              ][:CITES_KEPT * 2])
                 where = "%s pid %s, %d cycles to one destination in %d rounds (round %d)" % (
                     str(meta["image"] or "?")[:IMAGE_MAX], meta["pid"], rh["cycles"], rh["r"], n)
-            if f["rule_id"] == NEW_UNKNOWN and tree.get("brief"):   # REDO X-5, Z-4: grown, not knocked again
-                by = tree.get("exe") or "name %s (no path read)" % meta["image"]   # Z-4: the image's path where read
-                run = {"tree": entry["tree"], "at": ts, "round": n, "cites": tree["cites"][:2]}
-                grown = self.brief_unknown.get(by)
-                if grown is not None:
-                    grown["seen"] = grown.get("seen", 1) + 1
-                    grown["last_at"] = ts
-                    grown.setdefault("grown_trees", []).append(entry["tree"])
-                    grown["runs"].append(run)
-                    grown["cites"] = grown["cites"] + [c for c in run["cites"] if c not in grown["cites"]]
-                    grown["grown"] = "seen %d times, last at %s (round %d): %s" % (grown["seen"], ts, n, by)
-                    tree["knocked"] = "grown into the NEW-AGENT-UNKNOWN of %s (round %s): not knocked again" % (
-                        grown["tree"], grown["round"])
-                    fired.append("%s %s (grown)" % (f["rule_id"], entry["tree"]))
-                    self._say(now, "FINDING grown [%s] %s round %d: %s brief tree %s: %s" % (
-                        f["severity"], f["rule_id"], n, meta["image"], entry["tree"], grown["grown"]))
-                    continue
-                entry.update(seen=1, runs=[run], by_path=by)
-                self.brief_unknown[by] = entry
             subject = (str(meta["image"] or "?")[:IMAGE_MAX] if f["rule_id"] in NEW_RULES else None)   # M7.5 E3
             entry["notice"] = self._knock(now, f["rule_id"], where, entry, limit_id=limit, subject=subject, round_=n,
                                           tree=tuple(entry["tree_key"]) if entry.get("tree_key") else None)
@@ -1972,6 +1968,7 @@ class HostWatch:
                   "act_roots": sum(1 for t in current.values() if t["class"] == "act-root"),
                   "history": first, "new": new, "benign": benign_new, "gone": gone, "back": back, "quiet": quiet,
                   BRIEF: sorted(tree_word(k) for k, t in current.items() if t["brief"]), "read_late": late_read,
+                  "by_channel": by_channel_now,
                   "channel": inv.get("channel"),
                   "not_judged": not_judged, "dark": dark_now,
                   "cleared": cleared, "findings": fired, "lines": lines,
@@ -2477,7 +2474,31 @@ class HostWatch:
 
     # --- the sources (M7.2b) ---------------------------------------------------------
 
-    def _same_tree(self, key, guid, start, first=None):
+    def sysmon_ok(self):
+        """AA-6: the live reader's check where its round said it (inv["channel"]), else the watch's own (a reader
+        that gives no channel record: a stand-in, an export read as rounds)."""
+        return self.sysmon[0] if self.reader_sysmon is None else self.reader_sysmon
+
+    def _count_by_channel(self, key, t, entry, ts, n):
+        """AA-1: one more run of an unknown program seen a candidate only in the channel, under its image's path
+        (the name where no path was read, said); the last BY_CHANNEL_RUNS runs keep their cites (W6)."""
+        by = t.get("exe") or "%s (no path read: grouped by name)" % (t.get("image") or "?")
+        g = self.by_channel.setdefault(by, {"path": by, "count": 0, "last_at": None, "runs": []})
+        g["count"] += 1
+        g["last_at"] = ts
+        g["runs"] = (g["runs"] + [{"tree": tree_word(key), "round": n, "at": ts,
+                                   "cites": [dict(c) for c in (t.get("cites") or [])[:2]]}])[-BY_CHANNEL_RUNS:]
+        entry["by_channel_text"] = "%s: unknown, a candidate only in the channel (run %d of %s)" % (
+            BY_CHANNEL, g["count"], by)
+
+    def by_channel_lines(self):
+        """AA-1: the report's and the page's count, one line per image path."""
+        return ["unknown, %s: %d run(s) of %s, last at %s (not knocked: AA-1); the last %d: %s" % (
+            BY_CHANNEL, g["count"], g["path"], g["last_at"], len(g["runs"]), "; ".join(
+                "%s round %s (%s)" % (r["tree"], r["round"], cites_text(r["cites"])) for r in g["runs"]))
+            for g in sorted(self.by_channel.values(), key=lambda g: (-g["count"], g["path"]))]
+
+    def _same_tree(self, key, guid, start, first=None, last=None):
         """M7.9 E2, Z-5: the key of a tree seen before that is this process, or
         None: the same pid and image, no other ProcessGuid, and either both
         starts read and within discover.GUID_SAME_SECONDS, or (a start unread
@@ -2494,6 +2515,13 @@ class HostWatch:
                 if any(discover._start_close(at, x) for x in starts):
                     return k
                 continue   # two starts that differ: another process under a reused pid
+            if guid and at is None and not e.get("guid"):   # AA-4: within the earlier tree's life, the records tell
+                lo = utc_time(k[2]) or utc_time(e.get("first_seen"))
+                hi = utc_time(e.get("last_sampled_at"))
+                a, b = utc_time(first), utc_time(last)
+                if None not in (lo, hi, a, b) and (lo - a).total_seconds() <= discover.GUID_SAME_SECONDS \
+                        and (b - hi).total_seconds() <= discover.GUID_SAME_SECONDS:
+                    return k
             sampled = utc_time(self.sampled_now.get((key[0], key[1])))
             if sampled is None:
                 continue   # no sampled start to hold the guid against: its own tree
@@ -2527,7 +2555,8 @@ class HostWatch:
             g = t.get("guid")
             k = self.guid_keys.get(g) if g else None
             if k is None:
-                k = self._same_tree(key, g, t.get("started") or t.get("channel_started"), t.get("seen_first"))
+                k = self._same_tree(key, g, t.get("started") or t.get("channel_started"), t.get("seen_first"),
+                                    t.get("seen_last"))
             if k is None or k in out:
                 k = key
             if k in out:   # X-9: a tree is never replaced in a round without a hole
@@ -2544,17 +2573,23 @@ class HostWatch:
         its channel read: each hole of the read is a hole of that round."""
         record = inv.get("channel")
         if record is None:
-            if self.platform == "win32" and self.sysmon[0]:
+            if self.platform == "win32" and self.sysmon_ok():
                 self._note_once("no-channel", "round %d: %s" % (n, NO_CHANNEL_READ))
             return
+        self.reader_sysmon = isinstance(record, dict) and not record.get("off")   # AA-6: the reader's check
+        self.channel_off = record if isinstance(record, dict) and record.get("off") else None
         if not isinstance(record, dict) or record.get("off"):
             if not self.between_said:
                 self.between_said = self._note_once("between", BETWEEN_HOLE % (BETWEEN_NO_SYSMON % (
                     record.get("off") if isinstance(record, dict) else "no record")))
             return
         for image in record.get("filtered") or ():   # Z-2: a note, never a hole
-            self._note_once("filtered-%s" % image, "round %d: no event 1 from the channel for %s: its configuration may"
-                            " leave it out; its runs between rounds are not seen" % (n, image))
+            self._note_once("filtered-%s" % image, "round %d: no event 1 from the channel for %s: left out by its"
+                            " configuration, or late; its runs between rounds are not seen" % (n, image))
+        for image in record.get("unfiltered") or ():   # AA-5: the note withdrawn when its event 1 came
+            if "filtered-%s" % image in self.notes_said:
+                self._note_once("unfiltered-%s" % image, "round %d: the note \"no event 1 from the channel for %s\" is"
+                                " withdrawn: its event 1 came" % (n, image))
         self.channel_last = record
         kinds = {"error": "channel-unread", "cut": "channel-cut", "dropped": "channel-unbounded",
                  "silent": "channel-silent", "restarted": "channel-restart"}
@@ -2592,7 +2627,7 @@ class HostWatch:
             src, note = self._attach_hooks(now, n, key, t, entry)
         if src is None or src.kind != "hooks":
             failed_os = again and prev.kind == "os" and prev.error is not None   # ended with a hole: host next
-            src = (self._attach_os(now, n, key, t, entry) if self.sysmon[0] and not failed_os
+            src = (self._attach_os(now, n, key, t, entry) if self.sysmon_ok() and not failed_os
                    else self._attach_host(now, n, key, t, entry))
             if failed_os:
                 src.text = "%s (the os source ended with a hole: %s)" % (src.text, prev.error)
@@ -3330,7 +3365,7 @@ class HostWatch:
         parts = ["%d tree(s) now: %d candidate(s), %d act-root(s)" % (len(r["trees"]), r["candidates"], r["act_roots"])]
         if r["history"]:
             parts.append("history (there at the start, not knocked)")
-        for word in ("new", "benign", BRIEF, "back", "gone", QUIET, "dark"):
+        for word in ("new", "benign", BRIEF, "by_channel", "back", "gone", QUIET, "dark"):
             if r.get(word):
                 parts.append("%s: %s" % (word, ", ".join(r[word])))
         if r.get("not_judged"):   # REDO R-4
@@ -3492,6 +3527,10 @@ class HostWatch:
                            " not read" % (c.get("behind_seconds"), c.get("top")) if c.get("cut") else "",
                            "; the last round's read failed: what the channel holds after record %s was not read"
                            % c.get("after") if c.get("error") else ""))
+        if self.by_channel:   # AA-1: counted by image path, not knocked
+            out.append("UNKNOWN, %s (listed and sourced, not knocked, AA-1): %d path(s)" % (
+                BY_CHANNEL.upper(), len(self.by_channel)))
+            out += ["  - %s" % x for x in self.by_channel_lines()]
         out.append("TREES SEEN: %d (%d now, %d %s)" % (len(self.trees), len(self.present), len(self.quiet), QUIET))
         for key, t in self.trees.items():
             out.append("  %s pid %s %s (%s%s): %s; first round %d%s%s; last round %d; %d act(s)%s%s%s" % (
@@ -3524,10 +3563,9 @@ class HostWatch:
                     len(unread) + (self.rounds - self.applied if not read else 0)))
         out.append("FINDINGS: %d" % len(self.findings))
         for f in self.findings:
-            out.append("  [%s] %s round %d (%s): %s; %s%s; cites %s" % (
+            out.append("  [%s] %s round %d (%s): %s; %s; cites %s" % (
                 f["severity"], f["rule_id"], f["round"], f["sample"], f["summary"], f["notice"],
-                "; %s; runs: %s" % (f["grown"], ", ".join("%s round %s" % (r["tree"], r["round"]) for r in f["runs"]))
-                if f.get("grown") else "", cites_text(f.get("cites"))))
+                cites_text(f.get("cites"))))
         out.append("SUSPICION (A2: a model may raise suspicion, never acquit): %s" % (
             "off (no --suspect)" if self.suspect is None else "%s/%s every %d rounds over unknown trees; %d call(s),"
             " %d raised, %d window(s) below the threshold %.2f (no finding, not a clearance); %d line(s) sent, %d"
@@ -3576,7 +3614,9 @@ class HostWatch:
         out.append("HOOKS: %s" % ("attached only with --attach-hooks: on (the hook settings are the only write into"
                                   " a project)" if self.attach_hooks else
                                   "not attached (%s): nothing is written into any project" % NO_FLAG))
-        out.append("SYSMON: %s" % self.sysmon[1])
+        out.append("SYSMON: %s" % (self.sysmon[1] if self.reader_sysmon is None else (
+            "the live reader's check: present, the rounds read its channel" if self.reader_sysmon else
+            "the live reader's check: %s" % ((self.channel_off or {}).get("off") or "not present"))))
         out.append("FOOTPRINTS: %d" % len(self.footprints))
         for fp in self.footprints.values():
             out.append("  %s (%s): %s%s%s" % (
@@ -3662,7 +3702,8 @@ class HostWatch:
                      # M7.5 E1/E3; REDO N-5: the state keeps the newest KNOCKS_KEPT knocks and the count of the rest
                      "dark_notes": self.dark_notes, "knocks": self.knock_rows(KNOCKS_KEPT),
                      "knocks_older": max(0, len(self.knocks) - KNOCKS_KEPT),
-                     "notes": self.notes, "rounds_tail": [self._public(r) for r in self.round_lines]},
+                     "notes": self.notes, "rounds_tail": [self._public(r) for r in self.round_lines],
+                     "by_channel": sorted(self.by_channel.values(), key=lambda g: g["path"])},   # AA-1
             "holes": self.holes + self.notifier.holes, "notifications": self.notifier.state(),
             "state_error": self.state_error, "refresh_seconds": self.refresh, "registry": self.registry_state,
             "rules_overlay": dict(self.rules_overlay, not_judged=self.all_not_judged()),   # M7.6 (ADR-0008)
@@ -3823,9 +3864,10 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
     out.write("raqib watch --host: a round every %g s (%s), the reader's deadline %g s; %s\n" % (
         every, "a /proc snapshot" if platform.startswith("linux") and not window else
         "%g s of /proc snapshots" % window if platform.startswith("linux") else
-        ("one sample of the OS API and, read by the live reader, the Sysmon channel's events 1, 3, 11, 22 since"
-         " the previous round (one bounded wevtutil; a tree seen there only is `%s`; each round's record says what"
-         " was read)" % BRIEF if watcher.sysmon[0] else "one sample of the OS API")
+        ("one sample of the OS API and, where the live reader's own check at round 1 finds Sysmon (AA-6: it decides),"
+         " the Sysmon channel's events 1, 3, 11, 22 since the previous round (one bounded wevtutil; a tree seen there"
+         " only is `%s`; an unknown tree a candidate only there is `%s`: listed and counted, not knocked, AA-1)"
+         % (BRIEF, BY_CHANNEL))
         if platform == "win32" else "the homes only (no live reader here)",
         watcher.deadline_seconds, "%d round(s)" % rounds if rounds else "until Ctrl-C"))
     out.write("raqib watch --host: record %s\nraqib watch --host: state %s\n" % (
