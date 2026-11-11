@@ -249,15 +249,13 @@ def test_e2_the_tree_key_is_pid_image_and_creation_time(tmp_path):
 def test_e2_both_rules_are_catalog_anchors_with_budgets_and_fixtures():
     """C-1c, C-1e, C-13: three anchors of class HOST; each budget is the rate measured on its negatives."""
     rules = {r.id: r for r in RULES}
-    # M7.9 REDO 4 (ADR-0007 AB-5): NEW-AGENT-UNKNOWN gains a measured negative (a line listed by the channel, which
-    # does not fire): its rate is 2 of 6, under the budget of 0.4 measured on the five before it (Q-16 to the Table)
-    for rule_id, severity, rate, budget in (("NEW-AGENT", "high", 0.0, 0.0), ("NEW-AGENT-UNKNOWN", "medium", 2 / 6, 0.4),
-                                            ("AGENT-DARK-LIVE", "medium", 0.0, 0.0)):
+    for rule_id, severity, rate in (("NEW-AGENT", "high", 0.0), ("NEW-AGENT-UNKNOWN", "medium", 0.4),
+                                    ("AGENT-DARK-LIVE", "medium", 0.0)):
         r = rules[rule_id]
         assert (r.kind, r.cls, r.severity, r.status) == ("anchor", "HOST", severity, "active") and 0 <= r.fp_budget < 1
         assert r.holes and r.fixtures["positive"] and r.fixtures["negative"]
         report = fixtures.check_rule(r, ROOT, ())
-        assert report["verdict"] == "ok" and report["fp_rate"] == rate and r.fp_budget == budget >= rate, report
+        assert report["verdict"] == "ok" and report["fp_rate"] == rate == r.fp_budget, report
         assert all(p["fired"] for p in report["positives"])
     assert set(host.RULES) == {"NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE", "HOST-UNWATCHED", "HOST-RHYTHM"}   # M7.2b
 
@@ -549,10 +547,9 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
     # M7.5 REDO N-2: AGENT-DARK-LIVE's two was_live negatives are not listed (its match cannot see them): 2 again.
     # M7.6c REDO E-2: AGENT-DARK-LIVE and HOST-RHYTHM gain their edge negatives (M7.6c questions file)
     # M7.8 (ADR-0007 P-1, A6 re-measured): NET-TOOL and DESTRUCT-CMD gain their os-line negative (M7.8 questions file)
-    # M7.9 REDO 4 (ADR-0007 AB-5): NEW-AGENT-UNKNOWN gains its by-the-channel negative (M7.9 questions file, REDO 4)
     assert got == {"AGENT-DARK-LIVE": (3, 10), "DESTRUCT-CMD": (12, 0), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
                    "HOST-RHYTHM": (7, 8), "HOST-UNWATCHED": (4, 8),
-                   "LANDED-NO-GATE": (8, 2), "NET-TOOL": (12, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (6, 8),
+                   "LANDED-NO-GATE": (8, 2), "NET-TOOL": (12, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
                    "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
                    "SECRET-OUTPUT": (7, 2)}
     text = (ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md").read_text(encoding="utf-8")
@@ -560,7 +557,6 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
     text += (ROOT / "docs" / "review" / "2026-11-09-M7.5-questions.md").read_text(encoding="utf-8")   # M7.5: both again
     text += (ROOT / "docs" / "review" / "2026-11-09-M7.6c-questions.md").read_text(encoding="utf-8")   # M7.6c REDO: both again
     text += (ROOT / "docs" / "review" / "2026-11-10-M7.8-questions.md").read_text(encoding="utf-8")   # M7.8: the os lines
-    text += (ROOT / "docs" / "review" / "2026-11-11-M7.9-questions.md").read_text(encoding="utf-8")   # M7.9: AB-5
     for rule_id, (m, u) in got.items():
         assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id
 
@@ -643,9 +639,6 @@ def test_redo_c1e_each_budget_names_the_fixture_it_came_from():
         head = Path(rule.source).read_text(encoding="ascii").split("\nfp_budget:")[0].rsplit("\nseverity:", 1)[1]
         assert "C-1e" in head and "negative-arrival-linux-desktop.json" in head, rule_id
         report = fixtures.check_rule(rule, ROOT, cli.benign_default(ROOT))
-        if rule_id == "NEW-AGENT-UNKNOWN":   # M7.9 REDO 4 (AB-5): one more measured negative, 2 of 6 (Q-16)
-            assert report["fp_rate"] == 2 / 6 and rule.fp_budget == 0.4, (rule_id, report["fp_rate"])
-            continue
         assert report["fp_rate"] == rule.fp_budget, (rule_id, report["fp_rate"])
 
 

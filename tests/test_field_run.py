@@ -662,4 +662,8 @@ def test_redo_n2_the_note_fixtures_are_what_make_py_makes_and_each_holds_its_not
     for name, text in built.items():
         assert (NOTES / name).read_text(encoding="ascii") == text, name
         doc = json.loads(text)
+        if "by_channel" in doc:   # M7.9 REDO 5 (ADR-0007 AC-4, as N-2): a line listed by the channel, its own note
+            assert doc["by_channel"] and [x["input_meta"]["tree"] for x in doc["lines"]
+                                          if x["input_meta"].get("by_channel")] == doc["by_channel"]
+            continue
         assert doc["dark_notes"] and doc["dark_notes"][-1] == doc["lines"][0]["input_meta"]["round"]

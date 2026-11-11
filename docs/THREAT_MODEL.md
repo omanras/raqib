@@ -546,11 +546,23 @@ is amended by T-2, T-1 restated by V-1).
   read, said), with the five latest trees cited, until a field run
   measures how many ordinary programs do this; a watch whose only news is
   such trees ends CLEAN (exit 0) and its CLEAN and RESULT lines say how
-  many (AB-2); such a tree does not make a footprint live, so a footprint
-  it alone links is dark as before the channel was read (AB-4); an unknown tree that is a candidate at a sample knocks
-  NEW-AGENT-UNKNOWN as before, once. History is a thing of the first
-  round: a candidate of round 1 is history unless its start was read and
-  is at or after the watch's start. A ProcessGuid keys a tree: a reused
+  many (AB-2); a footprint's state in a round is the state it has in that
+  round with the unknown trees listed by the channel and not knocked taken
+  away (AC-1): such a tree neither makes a footprint live nor takes the
+  link from a tree that would hold it (whichever has the lower pid), so a
+  footprint it alone links is dark as before the channel was read (AB-4),
+  and AGENT-DARK-LIVE's description says so (AC-7), while inventory.json
+  (discover's own record) still shows the link: the watch's record and
+  page say why it is dark; an unknown tree that is a candidate at a sample
+  knocks NEW-AGENT-UNKNOWN as before, once. History is what the first
+  round's sample shows (AC-3): a candidate at round 1's sample is history
+  unless its start was read and is at or after the watch's start, with or
+  without events of it in the channel; a process older than the watch that
+  is a candidate in round 1 only by the channel's events (round 1 reads
+  none older than the watch's start, though the window's round 1 waits for
+  its look and so reads a wider first span) is not history: unknown, it is
+  listed by the channel and counted, and a later candidacy at a sample
+  knocks once; named, it knocks NEW-AGENT in round 1. A ProcessGuid keys a tree: a reused
   pid is another tree; a tree seen in the channel in one round and in the
   sample in another is one tree when the records tell (a sampled
   CreationDate and a Sysmon 1 time within 2 s; or every event of the guid
