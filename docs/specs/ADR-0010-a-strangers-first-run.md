@@ -79,3 +79,64 @@ Each names the case it is FOR and what it MUST NOT TOUCH (ADR-0007 Z-9).
 - Decision 3 lowers one doctor line from MISSING to UNSURE: a headless
   box passes doctor; a desktop with no notifier also passes, and reads
   the line that says its knocks reach the terminal only.
+
+## Amendment B (the Table, 2026-11-11) - rulings on review 2026-11-11-M9.1.md (9846a52)
+E2, E3, E4, E5, E6 MET; E1 and E7 PARTLY. Verdict: REDO on B-1 and B-2.
+Each ruling names the case it is FOR and what it MUST NOT TOUCH.
+- B-1 (D1, must) A stop never depends on its own words being written.
+  When a watch is stopped - by a signal or by Ctrl-C - what it keeps is
+  written first and whatever it prints is written after, and no failure
+  to write to the terminal (a hung-up tty, a closed pipe) skips the
+  record or changes the code: watch.json finished, the registry row
+  finished, the host watch's sources and channel closed, and the exit
+  code 0 / 1 / 3 - not 1 from a traceback, not 120 from a last flush.
+  FOR: decision 1's own case, a closed terminal or a dropped ssh. Tested
+  in process with an `out` that raises on every write after the signal,
+  for `raqib watch` and `raqib watch --host`, and with a real child whose
+  output pipe the test closes before the SIGHUP. MUST NOT TOUCH: with a
+  terminal that takes the words, the words and their order are as now.
+- B-2 (D2, must; the Table's own sentence in decision 1) What a killed
+  watch leaves is said per watch. A killed `raqib watch PROJECT` prints
+  nothing, and `raqib report <trace>` gives its findings. A killed
+  `raqib watch --host` prints nothing, and no command re-prints its
+  report: what it had found up to its last round is in its state file
+  and its rounds record under ~/.raqib/host/, named by path. README and
+  the help say exactly that, after the builder reads what those two
+  files hold.
+- B-3 (D4, D6; Q-2 confirmed) The words name every case. README's
+  out-of-reach list gains: on Windows, closing the console window,
+  logoff and shutdown end the process before the report (Ctrl-Break is
+  what stops it there); and a signal that was already ignored when the
+  watch started (nohup) is left ignored. The watch's first lines say
+  which signals stop it and which were left ignored (A3).
+- B-4 (D3, D7) The real-child test sends one signal; "a second signal
+  does not cut the report short" is tested in process, where it can be
+  timed. The two narrow windows - a signal before the handlers are set,
+  and one after they are restored at the very end - are recorded: the
+  second gives 143 or 129 after a complete report.
+- B-5 (D8; Q-6: the Table's wording in decision 5) The line under ALARMS
+  says what is counted truly: the alarms of the trace and of the watch
+  itself - what could not be read, cited or kept - and that every
+  finding below also makes the RESULT an ALARM.
+- B-6 (D10) Scope is widened to one line of raqib/ruleform.py: a
+  person's program rule made from the form names the matched program in
+  its sentence, as DESTRUCT-CMD and NET-TOOL now do. MUST NOT TOUCH: the
+  other three forms; a rule already in rules.d is not rewritten.
+- B-7 Questions ruled. Q-1: confirmed as built - the two keys that hold
+  the sentence live within one run and nothing reads them back (the
+  reviewer traced each); decision 4's "no key changes" is read as "no
+  key that outlives a run or decides a knock", and those are shown
+  equal. Q-3 confirmed (single-value tests count). Q-4, D5: confirmed as
+  built - a signal ends a host watch at once, as Ctrl-C does; a round
+  whose reader is still out is a hole and the exit is 3. It does not
+  wait for the round as the window's Stop does, because a supervisor's
+  grace before SIGKILL (ten seconds by default for docker stop) is
+  shorter than a reader's deadline and a watch killed there says
+  nothing; README says it. Q-5: answered by B-1. D9 and D11 recorded
+  (NET-TOOL fired by a host alone says "program -" beside the programs
+  list: true, and plain enough).
+- Table ledger: decision 1 listed "a closed terminal" among the cases
+  and asked for no test of a terminal that is gone; decision 1's
+  out-of-reach sentence named `raqib report` for both watches without
+  reading what the host watch leaves. A FOR case is tested as the person
+  meets it, not in its easiest form.
