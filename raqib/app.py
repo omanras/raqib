@@ -371,6 +371,7 @@ SENTENCES = {
     "RULES: REFUSED": "The change was refused", "RULES: MEASURING": "Measuring the thresholds...",
     "NEW RULE": "A new rule, from a form", "NEW RULE: PASSED": "The test passed: the rule can be added",
     "NEW RULE: REFUSED": "The rule was refused", "NEW RULE: ADDED": "The rule was added",
+    "NEW RULE: CHANGED": "Changed since the test: test again",
     "CAPTURE FAILED": "Capture failed", "AGENT GONE": "The agent is gone",
     "LOG": "The watch's own lines", "NO LOG": "No log yet"}
 STOPPING = " (stopping)"
@@ -699,7 +700,16 @@ def rule_items(rows, titles=None):
             "thresholds set" if changed else "")
         if r.get("refused"):   # M8.2 REDO E-6: a person's rule refused at load is a row, with its Remove
             state = "refused at load"
-        out.append({"id": _safe(r.get("id")), "title": _safe(titles.get(r.get("id")) or ""), "on": on,
+        place = r.get("place") if r.get("origin") == "user" else None
+        # M8.2 REDO 2 F-3: a person's row is keyed by its own place in rules.d (a folder or a loose file), never by
+        # a name looked up again; a place Raqib could not have written gets no Remove, only its path to delete it by
+        key = _safe(place) if place else _safe(r.get("id"))
+        if place and r.get("refused") and key in {x.get("id") for x in rows if x.get("origin") != "user"}:
+            key = "rules.d/" + key   # a folder named as a package rule: its own row
+        out.append({"id": _safe(r.get("id")), "key": key, "place": _safe(place) if place else None,
+                    "removable": bool(place) and r.get("removable", overlay.removable(place, "folder")),
+                    "path": _safe(r.get("path")) if r.get("path") else None,
+                    "title": "" if r.get("refused") else _safe(titles.get(r.get("id")) or ""), "on": on,
                     "state": state, "pills": [_safe(r.get(k)) for k in ("kind", "severity", "origin")],
                     "meta": ("why: %s" % _safe(r["refused"]) if r.get("refused") else
                              "class %s, budget %g" % (_safe(r.get("class")), r.get("budget") or 0)),
@@ -2228,18 +2238,25 @@ class RulesPanel:
             return self.message
         return self._do(overlay.add_rule, path, running=running)
 
-    def remove_rule(self, rule_id, running=False):
+    def remove_rule(self, rule_id, running=False, place=None):
         """M8.2 E4: a person's rule removed from rules.d with its overlay lines (overlay.remove_rule); a
-        package rule refused ("switch it off instead")."""
-        return self._do(overlay.remove_rule, str(rule_id or "").strip(), running=running)
+        package rule refused ("switch it off instead"). place: the row's own entry of rules.d (REDO 2 F-3:
+        Remove acts on it, never on a name looked up again)."""
+        return self._do(overlay.remove_rule, str(rule_id or "").strip(), running=running, place=place)
 
     def refused_rows(self):
-        """M8.2 REDO E-6: a row for each person's rule refused at load (its folder is in rules.d), so it can be
-        removed from the window."""
+        """M8.2 REDO E-6: a row for each person's rule refused at load (its folder or loose file is in rules.d),
+        so it can be removed from the window - with its own place (REDO 2 F-3); a place Raqib could not have
+        written (a folder whose name is no id) has no Remove: the row gives its path, to delete it by hand."""
         out = []
+        kinds = dict(overlay.user_entries((self.info or {}).get("user_dir")))
         for u in (self.info or {}).get("user_refused_ids") or ():
+            place = u.get("place") or u["rule_id"]
+            kind = kinds.get(place, "other")
+            path = os.path.join((self.info or {}).get("user_dir") or "", place)
             out.append({"id": u["rule_id"], "kind": "-", "class": "-", "severity": "-", "budget": 0, "status": "off",
-                        "off_by": "refused", "origin": "user", "thresholds": [], "fixed": [], "refused": u["reason"]})
+                        "off_by": "refused", "origin": "user", "thresholds": [], "fixed": [], "refused": u["reason"],
+                        "place": place, "removable": overlay.removable(place, kind), "path": path})
         return out
 
     def origin(self, rule_id):
@@ -3845,20 +3862,25 @@ class Window:
         self.rules_panel.add(chosen or None, running=self.c.watching())
         self._rules_changed(None, None)
 
-    def rules_remove(self, rule_id, confirmed=False):
+    def rules_remove(self, key, confirmed=False):
         """M8.2 E4: a person's rule's Remove - first a confirmation beside its row, then RulesPanel.remove
-        (its folder under rules.d and its overlay lines; a running watch keeps the rules it started with)."""
+        (its folder under rules.d and its overlay lines; a running watch keeps the rules it started with). key:
+        the row's own key; the removal acts on the row's place in rules.d (REDO 2 F-3)."""
         if not confirmed:
-            self.rule_confirm = rule_id
+            self.rule_confirm = key
             self.shown.pop("rules_rows", None)
             self._rules_fill()
-            widget = self.rule_widgets.get((rule_id, "keep"))   # REDO E-5: a second deliberate act deletes
+            widget = self.rule_widgets.get((key, "keep"))   # REDO E-5: a second deliberate act deletes
             if widget is not None:
                 widget.focus_set()
             return
         self.rule_confirm = None
-        self.rules_panel.remove_rule(rule_id, running=self.c.watching())
-        self._rules_changed(rule_id, "remove")
+        item = next((i for i, _ in self.rule_rows if i["key"] == key), None)
+        if item is None or not item.get("place"):
+            self.rules_panel.message, self.rules_panel.level = "REFUSED: no row %s to remove" % key, "alarm"
+        else:
+            self.rules_panel.remove_rule(item["id"], running=self.c.watching(), place=item["place"])
+        self._rules_changed(key, "remove")
         if self.rules_panel.level == "clean" and self.screen == "rules":
             self.rules_new_button.focus_set()
 
@@ -3870,10 +3892,16 @@ class Window:
         """M8.2 E5: the form, from the Rules screen's primary action; the first field has the focus."""
         self._show("ruleform")
         self._sync_primary()
-        last = self.form_result   # REDO E-10: back on the form, a passed Test of these answers is said as passed
-        self._rules_form_verdict(last if last is not None and last.ok and self.rules_panel.can_add(
-            self._rules_form_answers()) else None)
+        self._rules_form_verdict(self._rules_form_state())   # REDO E-10: a passed Test of these answers: passed
         self.form_fields["id"].focus_set()
+
+    def _rules_form_state(self):
+        """The form's state for its header: the passed Test when the answers are the same, "changed" when a field
+        was edited after a passed Test (REDO 2 F-10), else None (not tested)."""
+        last = getattr(self, "form_result", None)
+        if last is None or not last.ok or last.records is None:
+            return None
+        return last if self.rules_panel.can_add(self._rules_form_answers()) else "changed"
 
     def _rules_form_see(self, widget):
         """The form's canvas scrolls to the field that has the keyboard's focus."""
@@ -3906,6 +3934,13 @@ class Window:
             self.form_prefilled = (fires, quiet)
         ok = self.rules_panel.can_add(self._rules_form_answers())
         self.rules_form_add_button.state(["!disabled"] if ok else ["disabled"])
+        if name != "test" and getattr(self, "screen", None) == "ruleform" and self._rules_form_state() is not None:
+            state = self._rules_form_state()
+            self._rules_form_verdict(state)   # REDO 2 F-10: the header never goes stale
+            if state == "changed":
+                self.form_status.configure(text="changed since the test: test again", style="Muted.Card.TLabel")
+            elif self.form_status.cget("text") == "changed since the test: test again":
+                self._rules_form_said(state)   # the same answers again: the passed Test's words back
 
     def _rules_form_said(self, res):
         """Each refusal beside its field (the rule's own beside Test), the YAML and "on your records"."""
@@ -3942,6 +3977,10 @@ class Window:
             self._verdict("NEW RULE", "incomplete", "not tested yet: Test runs it on its examples and on your"
                           " records, and writes nothing in rules.d")
             word = "not tested"
+        elif res == "changed":   # REDO 2 F-10: a field edited after a passed Test
+            self._verdict("NEW RULE: CHANGED", "incomplete", "changed since the test: test again (Add is for the"
+                          " answers that passed a Test)")
+            word = "changed"
         elif res.ok and res.records is not None:
             self._verdict("NEW RULE: PASSED", "clean", "the loader and the fixture runner accept it (%s); Add puts"
                           " it in rules.d for the next watch" % ruleform.MEASURED)
@@ -3950,8 +3989,11 @@ class Window:
             self._verdict("NEW RULE: ADDED", "clean", res.said)
             word = "added"
         else:
-            self._verdict("NEW RULE: REFUSED", "alarm", "%d refusal%s, each beside its field; nothing was written"
-                          " in rules.d" % (len(res.refusals), "" if len(res.refusals) == 1 else "s"))
+            wrote = any("cannot write under" in str(w) for _, w in res.refusals)   # add_rule stopped while writing
+            self._verdict("NEW RULE: REFUSED", "alarm", "%d refusal%s, each beside its field; %s" % (
+                len(res.refusals), "" if len(res.refusals) == 1 else "s", "Add stopped while writing in rules.d: what"
+                " it wrote is a rule with no YAML (refused at load, listed with Remove)" if wrote else
+                "nothing was written in rules.d"))
             word = "refused"
         self.pill.configure(text=word)
 
@@ -3987,6 +4029,7 @@ class Window:
         they are (a refused switch or step goes back at once), and a refusal's
         reason stands beside its rule's row."""
         p = self.rules_panel
+        rule_id = self._row_key(rule_id)
         self.rule_said = (rule_id, p.message) if p.level == "alarm" and rule_id else None
         self.shown.pop("rules_rows", None)
         self._rules_band()
@@ -3994,6 +4037,14 @@ class Window:
         widget = self.rule_widgets.get((rule_id, part)) or self.rule_widgets.get((rule_id, "switch"))
         if widget is not None and self.screen == "rules":
             widget.focus_set()
+
+    def _row_key(self, rule_id):
+        """REDO 2 F-3: the key of the row a change was made on: a row's key as given, else the loaded row of that
+        rule id (a person's rule whose folder is not named as its id)."""
+        rows = getattr(self, "rule_rows", None) or []
+        if rule_id is None or any(i["key"] == rule_id for i, _ in rows):
+            return rule_id
+        return next((i["key"] for i, _ in rows if i["id"] == rule_id and not i.get("refused")), rule_id)
 
     def _rules_measuring(self, line):
         """M7.6c REDO E-7: the header says a measurement runs (it may take seconds), drawn before it starts."""
@@ -4045,17 +4096,17 @@ class Window:
 
     def _rules_row(self, item):
         tk, ttk, p, X = self.tk, self.ttk, self.palette, THEME["px"]
-        rid = item["id"]
+        rid, key = item["id"], item["key"]   # REDO 2 F-3: widgets keyed by the row's own key (a person's: its place)
         frame = ttk.Frame(self.rules_list, style="Inner.TFrame")
         frame.grid_columnconfigure(1, weight=1)
         var = tk.BooleanVar(master=self.root, value=item["on"])
-        self.rule_vars[rid] = var
+        self.rule_vars[key] = var
         switch = ttk.Checkbutton(frame, variable=var, style="Switch.TCheckbutton",
                                  command=lambda r=rid, v=var: self.rules_set(r, v.get()))
         switch.grid(row=0, column=0, rowspan=2, sticky="nw", padx=(0, self.px(6)), pady=(self.px(2), 0))
         if item.get("refused"):   # E-6: nothing to switch; Remove below
             switch.state(["disabled"])
-        self.rule_widgets[(rid, "switch")] = switch
+        self.rule_widgets[(key, "switch")] = switch
         head = ttk.Frame(frame, style="Inner.TFrame")
         head.grid(row=0, column=1, sticky="ew")
         ttk.Label(head, text=rid, style="Bold.Card.TLabel").pack(side="left")
@@ -4076,7 +4127,7 @@ class Window:
             steps = ttk.Frame(frame, style="Inner.TFrame")
             steps.grid(row=row, column=1, columnspan=2, sticky="ew", pady=(self.px(6), 0))
             for t in item["steppers"]:
-                self._rules_stepper(steps, rid, t)
+                self._rules_stepper(steps, rid, t, key)
             for text in item["fixed"]:
                 self._wrap(ttk.Label(steps, text=text, style="Muted.Card.TLabel", anchor="w", justify="left")).pack(
                     anchor="w", fill="x", pady=(0, self.px(4)))
@@ -4084,40 +4135,48 @@ class Window:
                 reset = ttk.Button(steps, text="Reset to the YAML", style="Link.TButton",
                                    command=lambda r=rid: self.rules_reset(r))
                 reset.pack(anchor="w")
-                self.rule_widgets[(rid, "reset")] = reset
-        if item.get("origin") == "user":   # M8.2 E4: a person's rule can be removed (one confirmation)
+                self.rule_widgets[(key, "reset")] = reset
+        if item.get("origin") == "user" and item.get("place"):   # M8.2 E4: a person's rule can be removed
             row += 1
             gone = ttk.Frame(frame, style="Inner.TFrame")
             gone.grid(row=row, column=1, columnspan=2, sticky="ew", pady=(self.px(4), 0))
-            if self.rule_confirm == rid:
-                self._wrap(ttk.Label(gone, text="Remove %s? Its YAML and its fixtures are deleted from rules.d."
-                                     % rid, style="alarm.Level.Card.TLabel", anchor="w", justify="left"),
+            what = "Its YAML and its fixtures are" if item["place"] == item["id"] or not item.get("refused") else (
+                "%s is" % item["place"])
+            if not item.get("removable"):   # REDO 2 F-3: not a place Raqib could have written: no Remove
+                self._wrap(ttk.Label(gone, text="Not a rule Raqib wrote: delete it by hand if you mean to: %s"
+                                     % (item.get("path") or item["place"]), style="Muted.Card.TLabel", anchor="w",
+                                     justify="left"), self.px(300)).pack(anchor="w", fill="x")
+            elif self.rule_confirm == key:
+                self._wrap(ttk.Label(gone, text="Remove %s? %s deleted from rules.d." % (item["place"], what),
+                                     style="alarm.Level.Card.TLabel", anchor="w", justify="left"),
                            self.px(300)).pack(anchor="w", fill="x")
                 sure = ttk.Button(gone, text="Remove it", style="Card.TButton",
-                                  command=lambda r=rid: self.rules_remove(r, confirmed=True))
+                                  command=lambda r=key: self.rules_remove(r, confirmed=True))
                 sure.pack(side="left", pady=(self.px(4), 0))
-                keep = ttk.Button(gone, text="Keep it", style="Link.TButton", command=lambda r=rid: self.rules_keep(r))
+                keep = ttk.Button(gone, text="Keep it", style="Link.TButton", command=lambda r=key: self.rules_keep(r))
                 keep.pack(side="left", padx=(self.px(8), 0), pady=(self.px(4), 0))
-                self.rule_widgets[(rid, "confirm")] = sure
-                self.rule_widgets[(rid, "keep")] = keep
+                self.rule_widgets[(key, "confirm")] = sure
+                self.rule_widgets[(key, "keep")] = keep
             else:
-                remove = ttk.Button(gone, text="Remove", style="Link.TButton", command=lambda r=rid: self.rules_remove(r))
+                remove = ttk.Button(gone, text="Remove", style="Link.TButton", command=lambda r=key: self.rules_remove(r))
                 remove.pack(anchor="w")
-                self.rule_widgets[(rid, "remove")] = remove
-        if self.rule_said and self.rule_said[0] == rid:   # REDO A-6: the refusal, beside its rule
+                self.rule_widgets[(key, "remove")] = remove
+        if self.rule_said and self.rule_said[0] == key:   # REDO A-6: the refusal, beside its rule
             row += 1
             self._wrap(ttk.Label(frame, text=self.rule_said[1], style="alarm.Level.Card.TLabel", anchor="w",
                                  justify="left"), self.px(300)).grid(row=row, column=1, columnspan=2, sticky="ew",
                                                                     pady=(self.px(4), 0))
         ttk.Separator(frame).grid(row=row + 1, column=0, columnspan=3, sticky="ew", pady=(self.px(10), 0))
         for (r, _), widget in self.rule_widgets.items():
-            if r == rid:
+            if r == key:
                 widget.bind(KEYS["focus"][0], lambda e, f=frame: self._rules_see(f), add="+")
         return frame
 
-    def _rules_stepper(self, parent, rid, t):
-        """E5: a threshold's stepper within its bounds: minus, the value, plus, and its words."""
+    def _rules_stepper(self, parent, rid, t, key=None):
+        """E5: a threshold's stepper within its bounds: minus, the value, plus, and its words (its widgets
+        keyed by the row's key, REDO 2 F-3)."""
         ttk = self.ttk
+        row_key = rid if key is None else key
         box_ = ttk.Frame(parent, style="Inner.TFrame")
         box_.pack(anchor="w", pady=(0, self.px(4)))
         ttk.Label(box_, text=t["name"], style="Bold.Card.TLabel").pack(side="left", padx=(0, self.px(6)))
@@ -4129,7 +4188,7 @@ class Window:
                 for key in KEYS["act"]:
                     entry.bind(key, lambda e, n=t["name"]: self.rules_threshold(rid, n, e.widget.get().strip(),
                                                                                n + "="))
-                self.rule_widgets[(rid, t["name"] + "=")] = entry
+                self.rule_widgets[(row_key, t["name"] + "=")] = entry
                 continue
             target = t["value"] + step
             ok = t["low"] <= target <= t["high"]
@@ -4139,7 +4198,7 @@ class Window:
             if not ok:
                 button.state(["disabled"])
             button.pack(side="left")
-            self.rule_widgets[(rid, key)] = button
+            self.rule_widgets[(row_key, key)] = button
         ttk.Label(box_, text=t["words"], style="Muted.Card.TLabel").pack(side="left", padx=(self.px(8), 0))
 
     def _rules_filter(self, top=False):

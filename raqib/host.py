@@ -2789,8 +2789,8 @@ class HostWatch:
                 else:
                     self.notes[src.pre_m78_index] = text
             if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
-                host_ids = {r.id for r in self.host_rules}   # M8.2 REDO E-2: the rules given host lines
-                notes = [x for x in notes if not (x.get("rule_id") in host_ids and x.get("status") == "partial")]
+                # M8.2 REDO 2 F-6: only the notes of the rules PRE_M78_NOTE names; a person's rule keeps its own
+                notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
         if getattr(feed, "not_judged", None):
             self.source_not_judged[feed.path] = feed.not_judged
         entry_tree = self.trees.get(key) or {}

@@ -19,8 +19,10 @@ in rules.d when anything is refused.
 
 Nothing a person types becomes part of a file path except the id, after
 its check (engine.RULE_ID). Program names follow the capture's own name
-rule (raqib/hooks/common.py HEAD_NAME), lower-cased as discover.image_name
-does; hosts are host names; places are whole paths.
+rule (raqib/hooks/common.py HEAD_NAME) and are matched as discover.image_name
+names an image, as typed in lower case, and as typed (REDO 2 F-2); hosts are
+host names; places are whole paths, a ~ place also with the home it stands
+for (home_of: pure in the home and its system, REDO 2 F-1).
 
 "On your records" (E3): the rule, once accepted in staging, is run over
 the traces under ~/.raqib/traces and the host source files under
@@ -36,6 +38,12 @@ carry and read back (E-1); whatever fails inside the form becomes a
 refusal, never a traceback; a person's rule is of class USER (E-7) and
 declares fp_budget 0, measured on the examples given, not on a corpus
 (E-8).
+
+REDO 2 (ADR-0009 Amendment F): a file of host lines is known by its lines,
+not by its folder (F-7); every link, unreadable entry and bound met while
+reading the records is counted and said, and a failure there is words of
+that step, never a refused Test; the default title and the description
+name a place as typed, never the home (F-9).
 """
 from __future__ import annotations
 
@@ -44,7 +52,9 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
+import time
 
 from raqib import discover, host, overlay
 from raqib.hooks import common
@@ -55,7 +65,7 @@ FORM_WORDS = {"program": "a program is run", "path": "a file under a place is to
               "host": "a network host is reached", "tool": "a tool is used"}
 VALUE_WORDS = {"program": "program names", "path": "places", "host": "host names", "tool": "tool names"}
 VALUE_HINTS = {
-    "program": "Program names, separated by commas (terraform, tofu): the name capture records, no .exe",
+    "program": "Program names, separated by commas (terraform, tofu): each as the agent runs it",
     "path": "Whole places, separated by commas (/srv/data, C:\\Users\\me\\keys); ~ also means your home;"
             " * or ? make a pattern",
     "host": "Host names, separated by commas (paste.example.com): each name whole",
@@ -86,6 +96,9 @@ RECORD_LINES = 20000       # E3: the lines read, in all
 RECORD_BYTES = 4000000     # E3: the bytes read of one file (its end: the newest lines)
 RECORD_ENTRIES = 10000     # REDO E-9: the directory entries walked under traces and host/sources, in all
 CITED_MAX = 3
+STAGE_YOUNG = 600          # REDO 2 F-7: a form-* folder younger than this (seconds) may be another Test's: left alone
+# REDO 2 F-10: the tool names the host source and the os source write; their lines are not hook lines
+SOURCE_TOOLS = (host.CHILD_TOOL, host.CONN_TOOL, host.GONE_TOOL, "process", "net", "file")
 QUIET_PROGRAMS = ("ls", "git", "make")
 QUIET_HOSTS = ("example.org", "example.net", "example.com")
 QUIET_TOOLS = ("Read", "Grep", "LS")
@@ -103,15 +116,17 @@ EVASIONS = {
         " the program it runs is an argument, and capture never records arguments",
         "a Bash command capture cannot read in full is matched by its first program only (command_unread: true)",
         "code given to a shell on stdin or in a script file (bash x.sh, ./x.sh) records the shell or the script only",
-        "on a Bash line a program is matched as written: Curl or curl.exe is another name there (an os line's"
-        " image is lower case with no .exe)",
+        "on a Bash line a program is matched as the rule names it (as typed, as typed in lower case, and as an"
+        " image is named), with no suffix guessed: curl.exe typed by an agent is another name than a rule's curl"
+        " there (an os or host line's image is lower case with no .exe)",
         "host source (raqib watch --host): a child that lives only between two rounds is never seen",
         "os source: a process line written before M7.8 has no image and is not judged; a program run inside WSL"
         " or by a multicall binary (busybox x) is another image",
     ),
     "path": (
-        "a place is compared as written: ~/.aws matches only paths written with ~, never /home/me/.aws; no link,"
-        " junction or subst drive is followed",
+        "a place is compared as written: a ~ place matches paths written with ~ and under the home it stood for"
+        " where the rule was made; another user's home (~other/.aws, /home/other/.aws) and a path relative to the"
+        " project are other places; no link, junction or subst drive is followed",
         "a Bash command that touches the place (cat, cp, a script) records its program, never its arguments",
         "a tool whose path is in a field other than file_path, notebook_path or path",
         "the os source's file lines and the host source's lines are not read by this rule",
@@ -197,18 +212,31 @@ def carried(text):
 
 
 def check_program(value):
-    """(names, note, why): a program as typed (a Bash line keeps the case the agent typed) and as capture
-    lower-cases an image name (discover.image_name: an os or host line); both when they differ (REDO E-3)."""
+    """(names, note, why): a program as capture names an image (discover.image_name: an os or host line), as
+    typed in lower case and as typed (a Bash line keeps what the agent typed): the distinct ones, in that order
+    (REDO E-3, REDO 2 F-2: terraform gives [terraform], R gives [r, R], curl.exe gives [curl, curl.exe])."""
     value = value.strip()
     if "/" in value or "\\" in value:
         return None, None, "%r is a path: write the program's name only (curl), capture records names, never paths" % value
-    low = discover.image_name(value)
-    if not common.HEAD_NAME.match(value) or not low or not common.HEAD_NAME.match(low):
+    image = discover.image_name(value)
+    if not common.HEAD_NAME.match(value) or not image or not common.HEAD_NAME.match(image):
         return None, None, ("%r is not a program name capture records: letters, digits and _ . + [ - only, up to"
                             " %d" % (value, common.COMMAND_HEAD_MAX))
-    if value == value.lower():   # E-3, must not touch: a name typed in lower case makes the rule it made before
-        return [low], None, None
-    return [low, value], "%s is also matched as %s (an os or host line's image is lower case)" % (value, low), None
+    low = value.lower()
+    names = []
+    for name in (image, low, value):
+        if name not in names:
+            names.append(name)
+    if len(names) == 1:   # must not touch: a name typed in lower case with no suffix makes the rule it made before
+        return names, None, None
+    if image == low:
+        why = "an os or host line's image is lower case"
+    else:
+        why = "an os or host line names its image %s" % image
+        if low != value:
+            why += "; %s: as typed in lower case" % low
+    also = [n for n in names if n != value]
+    return names, "%s is also matched as %s (%s)" % (value, " and ".join(also), why), None
 
 
 def check_host(value):
@@ -229,6 +257,10 @@ def check_tool(value):
     if not TOOL_NAME.match(value):
         return None, None, ("%r is not a tool name: a letter, then letters, digits, _ . or - (Bash, WebFetch,"
                             " mcp__server__tool)" % value)
+    if value in SOURCE_TOOLS:   # REDO 2 F-10: never a rule that passes its Test and can never fire
+        return None, None, ("%r is a name the host source or the os source writes, not a hook: this form reads the"
+                            " lines a hook or a proxy writes, where no tool has it; to watch a program choose \"a"
+                            " program is run\", to watch a file \"a file under a place is touched\"" % value)
     return [value], None, None
 
 
@@ -238,18 +270,36 @@ def path_system(place):
     return placed[0] if placed else "posix"
 
 
-def home_of(place):
-    """REDO E-4: a place beginning with ~ with the home it stands for on this machine, or None."""
-    if not (place == "~" or place.startswith(("~/", "~\\"))):
+def this_home():
+    """(home, system): the home ~ stands for on this machine (os.path.expanduser) and its system ("windows" or
+    "posix"): the default `where` of home_of, check and build."""
+    return os.path.expanduser("~"), ("windows" if os.name == "nt" else "posix")
+
+
+def _home_place(place):
+    return place == "~" or place.startswith(("~/", "~\\"))
+
+
+def home_of(place, home, system):
+    """REDO E-4, REDO 2 F-1: a place beginning with ~ with the home it stands for, or None. Pure in the home
+    and its system: on Windows the place is written with the home's separator throughout (~/.aws with the home
+    C:\\Users\\user is C:\\Users\\user\\.aws, one path); on POSIX the home and the rest are joined as typed. None
+    when the place is not a ~ place or the home is not known."""
+    if not _home_place(place) or not home or home == "~":
         return None
-    home = os.path.expanduser("~")
-    return None if home in ("~", "") else home.rstrip("/\\") + place[1:]
+    rest = place[1:]
+    if system == "windows":   # F-1: the separator of that home (a backslash unless it holds only /)
+        sep = "/" if "/" in home and "\\" not in home else "\\"
+        return (home.rstrip("/\\") + rest).replace("/", sep).replace("\\", sep)
+    return home.rstrip("/\\") + rest   # F-1, must not touch: on POSIX exactly as before
 
 
-def check_place(value, example=False):
+def check_place(value, example=False, where=None):
     """(names, note, why): a whole path (/, ~, a drive or a UNC share), one line of printable characters with
     no .. part; a place (not an example) may hold * or ? as a pattern. A ~ place is written as typed and with
-    the home it stands for on this machine (REDO E-4); an absolute place as typed."""
+    the home it stands for (REDO E-4; where: (home, system), default this machine's); an absolute place as
+    typed. A place of another user's home (~user/...) is refused; a ~ place whose home cannot be written is
+    held as typed only, and that is said (REDO 2 F-10)."""
     value = value.strip()
     if not value:
         return None, None, "empty"
@@ -266,14 +316,29 @@ def check_place(value, example=False):
         return None, None, "%r: an example is one file, with no * or ?" % value
     if example:
         return [value], None, None
-    home = home_of(value)
-    if home is None or home == value or carried(home) or len(home) > PLACE_MAX:
+    if value.startswith("~") and not _home_place(value):
+        return None, None, ("%r: ~ followed by a name is another user's home, which the form does not look up:"
+                            " write that home's whole path (/home/user/.aws, C:\\Users\\user\\.aws)" % value)
+    if not _home_place(value):
         return [value], None, None
-    return [value, home], "%s is also matched as %s (the home it stands for on this machine)" % (value, home), None
+    home, system = where or this_home()
+    full = home_of(value, home, system)
+    if full is None:
+        return [value], "%s is matched as typed only: this machine's home is not known" % value, None
+    why = carried(full)
+    if why:
+        return [value], ("%s is matched as typed only: the home it stands for cannot be written in the rule file"
+                         " (%s)" % (value, why)), None
+    if len(full) > PLACE_MAX:
+        return [value], ("%s is matched as typed only: with the home it stands for it is longer than %d characters"
+                         % (value, PLACE_MAX)), None
+    if full == value:
+        return [value], None, None
+    return [value, full], "%s is also matched as %s (the home it stands for on this machine)" % (value, full), None
 
 
-CHECKERS = {"program": check_program, "host": check_host, "tool": check_tool,
-            "path": lambda v: check_place(v)}
+CHECKERS = {"program": lambda v, where=None: check_program(v), "host": lambda v, where=None: check_host(v),
+            "tool": lambda v, where=None: check_tool(v), "path": lambda v, where=None: check_place(v, where=where)}
 EXAMPLE_CHECKERS = {"program": check_program, "host": check_host, "tool": check_tool,
                     "path": lambda v: check_place(v, example=True)}
 
@@ -304,19 +369,21 @@ def never_fires(when, names, quiet):
             " must be one it could fire on" % (quiet, " and ".join(sorted(systems)), mine))
 
 
-def check(answers, taken=()):
+def check(answers, taken=(), where=None):
     """(clean answers, refusals): every field checked, every refusal named with its field. The clean answers
-    carry notes [(field, words)]: what a name or place is also matched as (E-3, E-4)."""
+    carry notes [(field, words)]: what a name or place is also matched as (E-3, E-4), and the places as typed
+    ("typed": the default title and the description name them, never the home, REDO 2 F-9). where: (home,
+    system) a ~ place stands for (default: this machine's, this_home)."""
     a = dict(answers or {})
     out, refusals, notes = {}, [], []
     rid = str(a.get("id") or "").strip()
-    taken_up = {str(t).upper() for t in taken}   # REDO E-6: ids compared without regard to case
+    taken_up = {overlay.fold_id(t) for t in taken}   # REDO E-6: ids compared without regard to case (ASCII, F-3)
     if not rid:
         refusals.append(("id", "empty: give the rule an id such as MY-RULE"))
     elif len(rid) > ID_MAX or not engine.RULE_ID.match(rid):
         refusals.append(("id", "%r: an id is upper-case letters and digits in parts joined by dashes, such as"
                                " MY-RULE (at most %d characters; it names the rule's folder)" % (rid, ID_MAX)))
-    elif rid.upper() in taken_up:
+    elif overlay.fold_id(rid) in taken_up:
         refusals.append(("id", "%s is taken: a rule of the package or a folder of rules.d has it (in any case)" % rid))
     out["id"] = rid
     when = str(a.get("when") or "").strip()
@@ -328,7 +395,7 @@ def check(answers, taken=()):
         refusals.append(("severity", "choose one of %s" % ", ".join(SEVERITIES)))
     out["severity"] = severity
     values = split_values(a.get("values"))
-    names = []
+    names, typed = [], []
     if when in FORMS:
         if not values:
             refusals.append(("values", "empty: name at least one (%s)" % VALUE_WORDS[when]))
@@ -337,14 +404,16 @@ def check(answers, taken=()):
         else:
             for v in values:
                 why = carried(v)
-                got, note, why = (None, None, why) if why else CHECKERS[when](v)
+                got, note, why = (None, None, why) if why else CHECKERS[when](v, where=where)
                 if why:
                     refusals.append(("values", why))
                     break
                 if note:
                     notes.append(("values", note))
                 names += [n for n in got if n not in names]
+                typed += [] if v in typed else [v]
     out["values"] = names
+    out["typed"] = typed if when == "path" else list(names)   # F-9: a place as typed; the other forms as before
     for field in ("fires", "quiet"):
         text = str(a.get(field) or "").strip()
         value = None
@@ -363,8 +432,8 @@ def check(answers, taken=()):
     title = str(a.get("title") or "").strip()
     if title and carried(title):
         refusals.append(("title", carried(title)))
-    elif not title and when in FORMS and names:
-        title = "%s: %s" % (FORM_WORDS[when][0].upper() + FORM_WORDS[when][1:], ", ".join(names))
+    elif not title and when in FORMS and names:   # F-9: the places as typed (~/.aws), never the home
+        title = "%s: %s" % (FORM_WORDS[when][0].upper() + FORM_WORDS[when][1:], ", ".join(out["typed"]))
         if len(title) > TITLE_MAX:
             title = title[:TITLE_MAX - 3].rstrip(", ") + "..."
     if title and not carried(title) and (len(title) > TITLE_MAX or "{" in title or "}" in title):
@@ -374,11 +443,12 @@ def check(answers, taken=()):
     return out, refusals
 
 
-def examples(when, values):
-    """The two examples prefilled from the first name: (fires, quiet), or ("", "") when nothing to go on."""
+def examples(when, values, where=None):
+    """The two examples prefilled from the first name: (fires, quiet), or ("", "") when nothing to go on. A ~
+    place's examples are of the system of the home it stands for (where, default this machine's; REDO 2 F-1)."""
     names = []
     for v in split_values(values):
-        got, _, why = CHECKERS[when](v) if when in CHECKERS and not carried(v) else (None, None, "")
+        got, _, why = CHECKERS[when](v, where=where) if when in CHECKERS and not carried(v) else (None, None, "")
         if got:
             names += got if when != "path" else got[-1:]   # E-4: a ~ place's example where a tool is aimed
     if not names:
@@ -533,9 +603,22 @@ class Built:
         self.rid, self.when = answers["id"], answers["when"]
 
 
-def build(answers, taken=()):
+def unhome(text, where=None):
+    """REDO 2 F-9: text with the home written as ~ (an example under the home, said in the description)."""
+    home, system = where or this_home()
+    text = str(text)
+    if not home or home == "~":
+        return text
+    base = home.rstrip("/\\")
+    fold = (lambda x: x.lower()) if system == "windows" else (lambda x: x)
+    if base and fold(text[:len(base)]) == fold(base) and (len(text) == len(base) or text[len(base)] in "/\\"):
+        return "~" + text[len(base):]
+    return text
+
+
+def build(answers, taken=(), where=None):
     """The rule's YAML text and its fixture files from the answers (Built), or Refused naming each field."""
-    a, refusals = check(answers, taken)
+    a, refusals = check(answers, taken, where)
     if refusals:
         raise Refused(refusals)
     when, names, rid = a["when"], a["values"], a["id"]
@@ -548,24 +631,24 @@ def build(answers, taken=()):
                 body["expect_seq"] = [1]
             files[rel] = json.dumps(body, indent=1, sort_keys=True, ensure_ascii=True) + "\n"
             into.append(rel)
-    what = ", ".join(names)
+    what = ", ".join(a["typed"])   # F-9: the places as typed; the home is in the match only
     doc = {
         "id": rid, "title": a["title"], "class": CLASS_OF[when], "kind": "signature",
         "evasion": list(EVASIONS[when]), "severity": a["severity"], "fp_budget": FP_BUDGET,
         "description": "A person's rule, made from the rule form (M8.2): fires when %s (%s: %s). %s The two"
                        " examples given (must fire on %s, must stay quiet on %s) are its fixtures: fp_budget 0,"
-                       " %s." % (FORM_WORDS[when], VALUE_WORDS[when], what, READS[when], a["fires"], a["quiet"],
-                                 MEASURED),
+                       " %s." % (FORM_WORDS[when], VALUE_WORDS[when], what, READS[when], unhome(a["fires"], where),
+                                 unhome(a["quiet"], where), MEASURED),
         "summary": SUMMARIES[when], "match": _match(when, names),
         "fixtures": {"positive": positive, "negative": negative},
     }
     return Built(a, doc, dumps(doc, rid), files)
 
 
-def fingerprint(answers):
+def fingerprint(answers, where=None):
     """The answers as checked, one string: Add is enabled only after a passing Test of the same answers."""
     try:
-        a, _ = check(answers)
+        a, _ = check(answers, where=where)
     except Exception:   # E-1: never a traceback; answers that cannot be checked never match a passed Test
         return None
     return json.dumps(a, sort_keys=True, ensure_ascii=True)
@@ -577,18 +660,50 @@ def staging_dir(home=None):
     return os.path.join(overlay.raqib_dir(home), STAGING_NAME)
 
 
-def _new_stage(home=None):
+def _new_stage(home=None, now=None):
     """(stage, swept): a new directory under staging_dir(home) (no link at rules.staging; realpath under
-    ~/.raqib), after the form-* folders an earlier Test or Add left there (a crash) are removed and counted
-    (REDO E-9)."""
+    ~/.raqib), after the form-* folders an earlier Test or Add left there (a crash) are removed (REDO E-9).
+    swept: {"removed": N, "young": N, "failed": [why]} - a folder younger than STAGE_YOUNG seconds is left
+    alone (another Test may own it), and what could not be removed is said (REDO 2 F-7)."""
     base = staging_dir(home)
     overlay.fixture_file(overlay.raqib_dir(home), STAGING_NAME)   # no link: the staging place is Raqib's own
-    swept = 0
+    swept = {"removed": 0, "young": 0, "failed": []}
+    now = time.time() if now is None else now
     for name in sorted(os.listdir(base)) if os.path.isdir(base) else ():
-        if name.startswith("form-") and _unstage(os.path.join(base, name), home) is None:
-            swept += 1
+        if not name.startswith("form-"):   # must not touch: a folder not named form-*
+            continue
+        path = os.path.join(base, name)
+        try:
+            age = now - os.lstat(path).st_mtime
+        except OSError as exc:
+            swept["failed"].append("%s: %s" % (path, exc.strerror or exc))
+            continue
+        if age < STAGE_YOUNG:
+            swept["young"] += 1
+            continue
+        why = _unstage(path, home)
+        if why is None:
+            swept["removed"] += 1
+        else:
+            swept["failed"].append(why)
     os.makedirs(base, exist_ok=True)
     return tempfile.mkdtemp(prefix="form-", dir=base), swept
+
+
+def swept_notes(swept):
+    """REDO 2 F-7: what the sweep of left-over staging folders did, in words: [(field, words)]."""
+    out = []
+    if swept["removed"]:
+        n = swept["removed"]
+        out.append(("rule", "%d staging folder%s an earlier Test left %s removed" % (
+            n, "" if n == 1 else "s", "was" if n == 1 else "were")))
+    if swept["young"]:
+        n = swept["young"]
+        out.append(("rule", "%d staging folder%s younger than ten minutes left alone (another Test may be using %s)"
+                    % (n, "" if n == 1 else "s", "it" if n == 1 else "them")))
+    for why in swept["failed"]:
+        out.append(("rule", "a left-over staging folder was not removed: %s" % why))
+    return out
 
 
 def _write_stage(stage, built):
@@ -609,7 +724,10 @@ def _unstage(stage, home=None):
     if os.path.islink(stage) or os.path.dirname(real) != base or not os.path.basename(real).startswith("form-"):
         return "%s is not a staging folder of the form: left as it is" % stage
     failed = []
-    shutil.rmtree(real, onerror=lambda fn, path, exc: failed.append("%s: %s" % (path, exc[1])))
+    if sys.version_info >= (3, 12):   # REDO 2 F-10: onerror is deprecated from 3.12
+        shutil.rmtree(real, onexc=lambda fn, path, exc: failed.append("%s: %s" % (path, exc)))
+    else:
+        shutil.rmtree(real, onerror=lambda fn, path, exc: failed.append("%s: %s" % (path, exc[1])))
     try:
         os.rmdir(base)
     except OSError:
@@ -659,22 +777,20 @@ class Result:
         return lines
 
 
-def _run(step, answers, home, catalog):
+def _run(step, answers, home, catalog, where=None):
     """Build, stage, step(yaml_path, stage, built, res, taken), unstage: a Result. E-1: a refusal of the form or
     of the overlay is said beside its field; any other failure is a refusal of the rule, never a traceback."""
     res = Result()
     stage = None
     try:
         taken = taken_ids(home, catalog)
-        built = build(answers, taken)
+        built = build(answers, taken, where)
         res.answers, res.yaml, res.files = built.answers, built.yaml, built.files
         res.notes = list(built.answers.get("notes") or [])
         stage, swept = _new_stage(home)
+        res.notes += swept_notes(swept)
         yaml_path = _write_stage(stage, built)
         step(yaml_path, stage, built, res, taken)
-        if swept:
-            res.notes.append(("rule", "%d staging folder%s an earlier Test left %s removed" % (
-                swept, "" if swept == 1 else "s", "was" if swept == 1 else "were")))
     except Refused as exc:
         res.ok, res.refusals = False, exc.refusals
     except overlay.OverlayError as exc:
@@ -691,9 +807,10 @@ def _run(step, answers, home, catalog):
     return res
 
 
-def test(answers, home=None, catalog=None, records=True):
+def test(answers, home=None, catalog=None, records=True, where=None):
     """E1-E3 without writing in rules.d: build, stage, judge by overlay.validate_rule, run on the records
-    (read-only, bounded; never a gate), unstage. Result."""
+    (read-only, bounded; never a gate: a failure there is words of that step, never a refused Test, REDO 2
+    F-7), unstage. Result. where: the (home, system) a ~ place stands for (default this machine's)."""
     def step(yaml_path, stage, built, res, taken):
         res.rule = overlay.validate_rule(yaml_path, stage, taken, user=True)
         res.ok = True
@@ -701,58 +818,95 @@ def test(answers, home=None, catalog=None, records=True):
                     " and stays quiet on the other (%s); nothing is written in rules.d, and the staging folder"
                     " is removed" % (built.rid, MEASURED))
         if records:
-            res.records = on_records(res.rule, home)
-    return _run(step, answers, home, catalog)
+            try:
+                res.records = on_records(res.rule, home)
+            except Exception as exc:   # F-7: information only: never undoes the passed Test
+                res.records = records_failed(exc)
+    return _run(step, answers, home, catalog, where)
 
 
-def add(answers, home=None, catalog=None):
+def add(answers, home=None, catalog=None, where=None):
     """Build and stage the rule and add it through overlay.add_rule (the --add path: validated again there,
     copied under rules.d/<ID>/ by fixture_file); the staging place emptied; Result (said: add_rule's line)."""
     def step(yaml_path, stage, built, res, taken):
         res.said = overlay.add_rule(yaml_path, home, catalog)
         res.ok = True
-    return _run(step, answers, home, catalog)
+    return _run(step, answers, home, catalog, where)
 
 
 # --- on your records (E3): read-only, bounded, never a gate ----------------------------------------------
 
 def _link(path):
-    """A symlink, a junction or any reparse point (the fixture paths' own check, overlay.fixture_file)."""
-    try:
-        st = os.lstat(path)
-    except OSError:
-        return True
+    """A symlink, a junction or any reparse point (the fixture paths' own check, overlay.fixture_file); an
+    entry that cannot be read is reported apart (OSError)."""
+    st = os.lstat(path)
     junction = getattr(os.path, "isjunction", None)
     return os.path.islink(path) or bool((getattr(st, "st_file_attributes", 0) or 0) & 0x400) or bool(
         junction is not None and junction(path))
 
 
+def _refusal(path, root):
+    """Why path is not read (a link, or why it cannot be read), or None."""
+    try:
+        return "a link" if _link(path) else None
+    except OSError as exc:
+        return "cannot be read (%s)" % (exc.strerror or exc)
+
+
 def record_files(home=None, max_entries=RECORD_ENTRIES):
-    """([(path, name, host_lines)], cut): the trace and host source files under ~/.raqib, newest first; no
-    link or reparse point followed or read; at most max_entries directory entries walked (cut: the bound met).
-    host_lines: a file of host/sources, which the host watch judges as host lines."""
+    """([(path, name)], cut, refused): the trace and host source files under ~/.raqib, newest first. As the
+    fixture paths do (overlay.fixture_file), ~/.raqib itself is followed and no link or reparse point below it is
+    followed or read; at most max_entries directory entries walked (cut: the bound met). refused: [(name, why)]
+    for every link and every entry that could not be read (REDO 2 F-7: counted and said, never dropped)."""
     root = overlay.raqib_dir(home)
-    found, walked, cut = [], 0, False
-    for top, host_lines in ((os.path.join(root, "traces"), False), (os.path.join(root, "host", "sources"), True)):
-        if not os.path.isdir(top) or _link(top) or _link(os.path.dirname(top)):
+    found, refused, walked, cut = [], [], 0, False
+
+    def rel(path):
+        return os.path.relpath(path, root).replace("\\", "/")
+    for parts in (("traces",), ("host", "sources")):
+        top, blocked = root, None
+        for part in parts:   # every step below ~/.raqib down to the top: no link
+            top = os.path.join(top, part)
+            if not os.path.lexists(top):
+                blocked = "absent"
+                break
+            why = _refusal(top, root)
+            if why:
+                refused.append((rel(top), why))
+                blocked = why
+                break
+        if blocked or not os.path.isdir(top):
             continue
-        for here, dirs, names in os.walk(top, followlinks=False):
+        for here, dirs, names in os.walk(top, followlinks=False, onerror=lambda exc: refused.append((
+                rel(exc.filename or top), "cannot be read (%s)" % (exc.strerror or exc)))):
             walked += len(dirs) + len(names)
             if walked > max_entries:
                 cut = True
                 break
-            dirs[:] = [d for d in dirs if not _link(os.path.join(here, d))]
+            keep = []
+            for d in dirs:
+                why = _refusal(os.path.join(here, d), root)
+                if why:
+                    refused.append((rel(os.path.join(here, d)), why))
+                else:
+                    keep.append(d)
+            dirs[:] = keep
             for name in names:
                 path = os.path.join(here, name)
-                if name.endswith(".jsonl") and not _link(path):
+                if not name.endswith(".jsonl"):
+                    continue
+                why = _refusal(path, root)
+                if why is None:
                     try:
-                        found.append((os.path.getmtime(path), path, host_lines))
-                    except OSError:
+                        found.append((os.path.getmtime(path), path))
                         continue
+                    except OSError as exc:
+                        why = "cannot be read (%s)" % (exc.strerror or exc)
+                refused.append((rel(path), why))
         if cut:
             break
     found.sort(key=lambda x: (-x[0], x[1]))
-    return [(p, os.path.relpath(p, root).replace("\\", "/"), h) for _, p, h in found], cut
+    return [(p, rel(p)) for _, p in found], cut, refused
 
 
 def _tail(path, limit):
@@ -771,28 +925,31 @@ def _tail(path, limit):
 def on_records(rule, home=None, max_files=RECORD_FILES, max_lines=RECORD_LINES, max_bytes=RECORD_BYTES,
                max_entries=RECORD_ENTRIES):
     """The rule run over the newest records under ~/.raqib: {files, lines, fired, fired_files, cited:
-    [(name, seq)], cut, more_files, walk_cut, not_host, unreadable, bounds}. Read-only; information, never a
-    gate. A host source file is judged only when the host watch would give it to this rule
-    (host.source_rules(..., host_lines=True), REDO E-2); else it is counted in not_host, unread."""
-    files, walk_cut = record_files(home, max_entries)
+    [(name, seq)], cut, more_files, walk_cut, not_host, not_read: [(name, why)], bounds}. Read-only;
+    information, never a gate. A file is a file of host lines by its lines (source host), not by its folder
+    (REDO 2 F-7): the host watch gives it only to a rule whose match names the tool HostChild
+    (host.source_rules(..., host_lines=True), REDO E-2), and for another rule it is counted in not_host; every
+    other file (a trace, an os source file) is judged as the watch judges it, with every rule."""
+    files, walk_cut, refused = record_files(home, max_entries)
     reads_host = bool(host.source_rules([rule], host_lines=True))
     out = {"files": 0, "lines": 0, "fired": 0, "fired_files": 0, "cited": [], "cut": False,
-           "more_files": max(0, len(files) - max_files), "walk_cut": walk_cut, "not_host": 0, "unreadable": [],
-           "bounds": (max_files, max_lines, max_bytes, max_entries)}
+           "more_files": max(0, len(files) - max_files), "walk_cut": walk_cut, "not_host": 0,
+           "not_read": list(refused), "bounds": (max_files, max_lines, max_bytes, max_entries)}
     left = max_lines
-    for path, name, host_lines in files[:max_files]:
-        if host_lines and not reads_host:
-            out["not_host"] += 1
-            continue
+    for path, name in files[:max_files]:
         if left <= 0:
             out["cut"] = True
             break
         try:
             text, cut = _tail(path, max_bytes)
         except OSError as exc:
-            out["unreadable"].append("%s: %s" % (name, exc.strerror or exc))
+            out["not_read"].append((name, "cannot be read (%s)" % (exc.strerror or exc)))
             continue
         numbered, _ = trace.parse_numbered(text)
+        host_lines = any(isinstance(rec, dict) and rec.get("source") == host.HOST_SOURCE for _, rec in numbered)
+        if host_lines and not reads_host:
+            out["not_host"] += 1
+            continue
         if len(numbered) > left:
             numbered, cut = numbered[-left:], True
         out["cut"] = out["cut"] or cut
@@ -811,12 +968,28 @@ def on_records(rule, home=None, max_files=RECORD_FILES, max_lines=RECORD_LINES, 
     return out
 
 
+def records_failed(exc):
+    """REDO 2 F-7: the records step failed: its words, in the shape records_text reads."""
+    return {"error": "your records could not be read: %s: %s" % (type(exc).__name__, exc), "cited": []}
+
+
 def _n(count, one, many=None):
     return "%s %s" % ("{:,}".format(count), one if count == 1 else (many or one + "s"))
 
 
+def _not_read_text(not_read):
+    """"3 file(s) not read: a link", one line per reason, in the order met (REDO 2 F-7)."""
+    by = {}
+    for _, why in not_read:
+        by[why] = by.get(why, 0) + 1
+    return ["%d file(s) not read: %s" % (n, why) for why, n in by.items()]
+
+
 def records_text(r):
-    """E3's line, in a person's words; no records is said, never hidden; what was not read is said."""
+    """E3's line, in a person's words; no records is said, never hidden; what was not read is said, and a
+    failure of this step is said as this step's (REDO 2 F-7)."""
+    if r.get("error"):
+        return "on your records: %s; information only, never a gate (the Test itself passed)" % r["error"]
     nf, nl, nb, ne = r["bounds"]
     bounds = "the newest %d files, at most %s lines in all and %s MB of each" % (nf, "{:,}".format(nl),
                                                                                  "%g" % (nb / 1e6))
@@ -826,11 +999,13 @@ def records_text(r):
                      % _n(r["not_host"], "host source file"))
     if r["walk_cut"]:
         extra.append("the walk stopped at %s entries: some files were not looked at" % "{:,}".format(ne))
-    if r["unreadable"]:
-        extra.append("%s could not be read" % _n(len(r["unreadable"]), "file"))
+    extra += _not_read_text(r["not_read"])
     if not r["files"]:
+        if r["not_read"] or r["not_host"] or r["walk_cut"]:   # F-7: never "no file yet" when files were refused
+            return ("on your records: no file was judged (it would read %s)%s; information only, never a gate"
+                    % (bounds, "".join("; " + x for x in extra)))
         return ("on your records: no trace or host source file under ~/.raqib this rule would read yet, nothing"
-                " to run it on (it would read %s)%s" % (bounds, "".join("; " + x for x in extra)))
+                " to run it on (it would read %s)" % bounds)
     text = "on your records: would have fired on %s of %s in %s" % (
         "{:,}".format(r["fired"]), _n(r["lines"], "line"), _n(r["files"], "file"))
     if r["fired"] and r["files"] > 1:

@@ -100,15 +100,22 @@ def test_redo_e2_host_lines_go_to_the_rules_that_name_hostchild(home):
     assert "MY-T" in [r.id for r in host.source_rules(rules)]   # must not touch: the other sources keep every rule
 
 
+# REDO 2 F-11 (R13): the package's findings on its shipped host fixtures, pinned (rule, session, cited seq)
+PINNED = {
+    ("NET-TOOL", "positive-host-child.json"): [("NET-TOOL", "host-1600", (1,))],
+    ("NET-TOOL", "negative-host-child.json"): [("DESTRUCT-CMD", "host-1600", (1,))],
+    ("DESTRUCT-CMD", "positive-host-child.json"): [("DESTRUCT-CMD", "host-1600", (1,))],
+    ("DESTRUCT-CMD", "negative-host-child.json"): [("NET-TOOL", "host-1600", (1,))],
+}
+
+
 def test_redo_e2_the_package_findings_on_the_shipped_host_fixtures_are_unchanged():
     package = engine.load_catalog(CATALOG)
-    by_id = [r for r in package if r.id in ("NET-TOOL", "DESTRUCT-CMD")]   # the old selection, by id
-    for rid in ("NET-TOOL", "DESTRUCT-CMD"):
-        for name in ("positive-host-child.json", "negative-host-child.json"):
-            lines, _, _ = fixtures.load_fixture(FIX / rid / name)
-            old = host.judge_source(by_id, lines)
-            new = host.judge_source(host.source_rules(package, host_lines=True), lines)
-            assert json.dumps(new, sort_keys=True, default=str) == json.dumps(old, sort_keys=True, default=str)
+    for (rid, name), expected in PINNED.items():
+        lines, _, _ = fixtures.load_fixture(FIX / rid / name)
+        found, notes = host.judge_source(host.source_rules(package, host_lines=True), lines)
+        assert sorted((f["rule_id"], f["session_id"], tuple(f["cited_seq"])) for f in found) == expected, (rid, name)
+        assert not [n for n in notes if n.get("rule_id") in host.HOST_LINE_RULES], notes
 
 
 def test_redo_e2_a_persons_program_rule_fires_on_a_real_hostchild_line(home):
@@ -135,17 +142,19 @@ def test_redo_e3_a_program_is_matched_as_typed_and_as_lower_cased(home):
     assert engine.judge(rule, bash, {})[0]
     # must not touch: a name typed in lower case makes the rule it made before
     assert ruleform.build(ans()).doc["match"]["all"][1]["any"][0]["all"][2]["in"] == ["terraform"]
-    assert ruleform.check_program("curl.exe") == (["curl"], None, None)
+    # REDO 2 F-2: curl.exe is matched as an image is named and as typed
+    assert ruleform.check_program("curl.exe") == (["curl", "curl.exe"], "curl.exe is also matched as curl (an os or"
+                                                  " host line names its image curl)", None)
 
 
 def test_redo_e4_a_home_place_is_also_written_with_the_home(home):
-    res = ruleform.test(ans(when="path", values="~/.aws", fires="~/.aws/x", quiet="/tmp/x"), str(home))
-    expanded = os.path.join(str(home), ".aws") if os.name != "nt" else ruleform.home_of("~/.aws")
-    assert res.ok and any("also matched as %s" % expanded in w for f, w in res.notes if f == "values")
+    where = ("/home/user", "posix")   # REDO 2 F-1: pure in the home and its system (F-1's own tests: test_ruleform_redo2)
+    res = ruleform.test(ans(when="path", values="~/.aws", fires="~/.aws/x", quiet="/tmp/x"), str(home), where=where)
+    assert res.ok and any("also matched as /home/user/.aws" in w for f, w in res.notes if f == "values")
     under = res.rule.doc["match"]["all"][3]["any"][0]["under_any"]
-    assert under == ["~/.aws", ruleform.home_of("~/.aws")]
+    assert under == ["~/.aws", "/home/user/.aws"]
     read = [{"ts": "2026-11-11T08:00:01.000Z", "seq": 1, "session_id": "s", "phase": "pre", "tool": "Read",
-             "cwd": "/w", "input_sha256": "0" * 64, "input_meta": {"path": ruleform.home_of("~/.aws") + "/c"}}]
+             "cwd": "/w", "input_sha256": "0" * 64, "input_meta": {"path": "/home/user/.aws/c"}}]
     assert engine.judge(res.rule, read, {})[0]   # fires where a tool is aimed
     plain = ruleform.build(ans(when="path", values="/srv/data", fires="/srv/data/a", quiet="/tmp/a"))
     assert plain.doc["match"]["all"][3]["any"][0]["under_any"] == ["/srv/data"]   # must not touch
@@ -167,34 +176,40 @@ def test_redo_e6_a_rule_refused_at_load_is_removed_and_ids_ignore_case(home):
         overlay.remove_rule("net-tool", home=str(home))
 
 
-def test_redo_e6_overlay_lines_go_first_and_what_remains_is_said(home, monkeypatch):
+def test_redo_e6_a_removal_that_deletes_nothing_changes_nothing(home, monkeypatch):
+    """Superseded by REDO 2 F-4 (the Table ledger: E-6's "overlay entry first" made a failed Remove switch a rule
+    back on): every check first, the rule file first, the entry only once the rule file is gone."""
     assert ruleform.add(ans(), str(home)).ok
     overlay.set_status("MY-X", "off", home=str(home))
+    real = os.remove
 
-    def fails(target, root):
+    def fails(path, *a, **k):
         raise OSError(13, "Permission denied")
-    monkeypatch.setattr(overlay, "_delete_tree", fails)
+    monkeypatch.setattr(overlay.os, "remove", fails)
     with pytest.raises(overlay.OverlayError) as err:
         overlay.remove_rule("MY-X", home=str(home))
+    monkeypatch.setattr(overlay.os, "remove", real)
     text = str(err.value)
-    assert "its entry dropped" in text and "could not be removed: Permission denied" in text
-    assert "what remains:" in text and "MY-X.yaml" in text
+    assert text.startswith("nothing was removed: ") and "Permission denied" in text and "MY-X.yaml" in text
     doc, _, _ = overlay.read(overlay.overlay_path(str(home)))
-    assert "MY-X" not in doc["rules"] and rules_d(home) == ["MY-X"]
+    assert doc["rules"]["MY-X"]["status"] == "off" and rules_d(home) == ["MY-X"]
+    assert next(r for r in overlay.load(str(home)) if r.id == "MY-X").status == "disabled"   # it stays off
 
 
-def test_redo_e6_a_linked_rules_d_or_raqib_folder_is_refused(home, tmp_path):
+def test_redo_e6_a_link_below_rules_d_is_refused(home, tmp_path):
+    """REDO 2 F-5 supersedes E-6's refusal of a linked rules.d (followed by Add and Remove alike:
+    test_ruleform_redo2); a link BELOW rules.d is refused, nothing deleted."""
     elsewhere = tmp_path / "elsewhere"
-    (elsewhere / "MY-X").mkdir(parents=True)
-    (elsewhere / "MY-X" / "keep.txt").write_text("x")
-    Path(overlay.raqib_dir(str(home))).mkdir()
+    elsewhere.mkdir()
+    (elsewhere / "keep.txt").write_text("x")
+    Path(overlay.user_dir(str(home))).mkdir(parents=True)
     try:
-        os.symlink(str(elsewhere), overlay.user_dir(str(home)), target_is_directory=True)
+        os.symlink(str(elsewhere), os.path.join(overlay.user_dir(str(home)), "MY-X"), target_is_directory=True)
     except (OSError, NotImplementedError):
-        pytest.skip("no symlink here")
-    with pytest.raises(overlay.OverlayError, match="link or a reparse point"):
+        pytest.skip("no symlink here (the junction case: test_ruleform_redo2)")
+    with pytest.raises(overlay.OverlayError, match="link"):
         overlay.remove_rule("MY-X", home=str(home))
-    assert (elsewhere / "MY-X" / "keep.txt").read_text() == "x"
+    assert (elsewhere / "keep.txt").read_text() == "x"
 
 
 def test_redo_e10_remove_dry_run_says_what_it_would_delete(home):
@@ -229,6 +244,9 @@ def test_redo_e9_leftover_staging_folders_are_swept_and_counted(home):
     (base / "form-crashed1" / "MY-X.yaml").write_text("x")
     (base / "form-crashed2").mkdir()
     (base / "kept-other").mkdir()   # must not touch: only the form's own folders
+    old = 1000000000   # REDO 2 F-7: older than ten minutes (a younger one may be another Test's)
+    for name in ("form-crashed1", "form-crashed2", "kept-other"):
+        os.utime(str(base / name), (old, old))
     res = ruleform.test(ans(), str(home))
     assert res.ok and ("rule", "2 staging folders an earlier Test left were removed") in res.notes
     assert sorted(p.name for p in base.iterdir()) == ["kept-other"]
@@ -244,7 +262,7 @@ def test_redo_e9_record_files_follow_no_link(home, tmp_path):
         os.symlink(str(outside), str(traces / "linked"), target_is_directory=True)
     except (OSError, NotImplementedError):
         pytest.skip("no symlink here")
-    assert ruleform.record_files(str(home)) == ([], False)
+    assert ruleform.record_files(str(home)) == ([], False, [("traces/linked", "a link")])   # REDO 2 F-7: said
 
 
 # --- E-10: the words and the terminal -----------------------------------------------------------------------------

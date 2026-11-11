@@ -19,7 +19,7 @@ from raqib.rules import engine, fixtures, trace, yamlite  # noqa: E402
 
 FORMS = {
     "program": ("terraform, tofu", "terraform", "ls"),
-    "path": ("~/.aws, C:\\Users\\me\\secrets, /srv/keys/*.pem", "~/.aws/example.txt", "/work/example/notes.txt"),
+    "path": ("~/.aws, C:\\Users\\user\\secrets, /srv/keys/*.pem", "~/.aws/example.txt", "/work/example/notes.txt"),
     "host": ("paste.example.com", "paste.example.com", "example.org"),
     "tool": ("WebSearch, mcp__notes__write", "WebSearch", "Read"),
 }
@@ -60,22 +60,30 @@ def run_cli(argv):
 
 # --- E1, E2, E7: per form the rule loads, its fixtures pass, the positive fires, the negative does not --------
 
-@pytest.mark.parametrize("when", sorted(FORMS))
-def test_e1_e7_each_form_makes_a_rule_the_engine_accepts(home, when):
+# REDO 2 F-1: the home a ~ place stands for and its system are arguments: both shapes run on every system
+WHERE = {"posix": ("/home/user", "posix"), "windows": ("C:\\Users\\user", "windows")}
+PATH_EXAMPLES = {"posix": ("/home/user/.aws/example.txt", "/work/example/notes.txt"),
+                 "windows": ("C:\\Users\\user\\.aws\\example.txt", "C:\\work\\example\\notes.txt")}
+
+
+@pytest.mark.parametrize("when, system", [(w, "posix") for w in sorted(FORMS)] + [("path", "windows")])
+def test_e1_e7_each_form_makes_a_rule_the_engine_accepts(home, when, system):
+    where = WHERE[system]
     a = answers(when)
-    fires = ruleform.home_of("~/.aws") + "/example.txt" if when == "path" else a["fires"]   # REDO E-4
-    assert ruleform.examples(when, a["values"]) == (fires, a["quiet"])   # E5: prefilled from the first name
-    built = ruleform.build(a, ruleform.taken_ids(str(home)))
+    expected = PATH_EXAMPLES[system] if when == "path" else (a["fires"], a["quiet"])   # REDO E-4, REDO 2 F-1
+    assert ruleform.examples(when, a["values"], where) == expected   # E5: prefilled from the first name
+    a["fires"], a["quiet"] = expected   # the form's own prefilled examples pass its Test
+    built = ruleform.build(a, ruleform.taken_ids(str(home)), where)
     assert built.yaml.isascii() and yamlite.loads(built.yaml) == built.doc   # written in what the loader reads
     doc = built.doc
     assert doc["kind"] == "signature" and doc["evasion"] == list(ruleform.EVASIONS[when]) and doc["evasion"]
     assert doc["class"] == "USER" and "USER" in engine.CLASSES and engine.CLASSES[-1] == "HOST"   # REDO E-7
     assert doc["fp_budget"] == 0 and ruleform.MEASURED in doc["description"]   # REDO E-8
     assert ruleform.READS[when] in doc["description"]   # which lines it reads, said
-    tested = ruleform.test(a, str(home))
+    tested = ruleform.test(a, str(home), where=where)
     assert tested.ok, tested.refusals
     assert rules_d(home) == [] and not staged(home)   # Test writes nothing in rules.d; staging emptied
-    added = ruleform.add(a, str(home))
+    added = ruleform.add(a, str(home), where=where)
     assert added.ok, added.refusals
     assert "added as" in added.said and "origin: user" in added.said
     assert rules_d(home) == [a["id"]] and not staged(home)
@@ -90,6 +98,9 @@ def test_e1_e7_each_form_makes_a_rule_the_engine_accepts(home, when):
         assert not fixtures.fires(rule, os.path.join(rule.fixture_root, rel))
     if when == "program":   # the three lines NET-TOOL reads: Bash, the host's HostChild, the os process image
         assert sorted(rule.fixtures["positive"]) == ["positive-bash.json", "positive-host.json", "positive-os.json"]
+    if when == "path":   # F-1: one path of the home's system, held beside the place as typed
+        held = rule.doc["match"]["all"][3]["any"][0]["under_any"]
+        assert held[:2] == ["~/.aws", WHERE[system][0] + ("\\.aws" if system == "windows" else "/.aws")]
 
 
 def test_e1_the_path_form_reads_places_and_patterns(home):
@@ -97,7 +108,7 @@ def test_e1_the_path_form_reads_places_and_patterns(home):
     assert ruleform.test(a, str(home)).ok
     built = ruleform.build(a)
     assert {"field": "input_meta.path", "glob": "/srv/keys/*.pem"} in built.doc["match"]["all"][3]["any"]
-    a = answers("path", values="C:\\Users\\me\\secrets", fires="c:/users/ME/secrets/a.txt", quiet="C:\\work\\a.txt")
+    a = answers("path", values="C:\\Users\\user\\secrets", fires="c:/users/USER/secrets/a.txt", quiet="C:\\work\\a.txt")
     assert ruleform.test(a, str(home)).ok   # placed by the engine's own path rule (Windows folded A-Z)
 
 
@@ -144,8 +155,9 @@ def test_e1_names_and_places_pass_the_capture_rules(home, when, kw, field, words
 
 
 def test_e1_program_names_are_lower_cased_as_discover_names_images():
-    assert ruleform.check_program("Curl.EXE") == (["curl", "Curl.EXE"], "Curl.EXE is also matched as curl (an os or"
-                                                  " host line's image is lower case)", None)
+    assert ruleform.check_program("Curl.EXE") == (["curl", "curl.exe", "Curl.EXE"], "Curl.EXE is also matched as curl"
+                                                  " and curl.exe (an os or host line names its image curl; curl.exe:"
+                                                  " as typed in lower case)", None)   # REDO 2 F-2
     assert ruleform.check_host("Paste.Example.COM") == (["paste.example.com"], None, None)
 
 
@@ -217,18 +229,6 @@ def _trace_lines(heads, sid="s-1"):
     return out
 
 
-def _write_records(home):
-    base = Path(overlay.raqib_dir(str(home)))
-    t = base / "traces" / "demo-1" / "raqib.log.jsonl"
-    t.parent.mkdir(parents=True)
-    t.write_text("".join(json.dumps(r) + "\n" for r in _trace_lines(["ls", "terraform", "make", "tofu"])))
-    s = base / "host" / "sources" / "run-1-tree.jsonl"
-    s.parent.mkdir(parents=True)
-    s.write_text("".join(json.dumps(r) + "\n" for r in _trace_lines(["terraform", "git"], sid="s-2")))
-    os.utime(str(t), (1000000000, 1000000000))   # the trace is the older file
-    return t, s
-
-
 def _host_child_lines():
     """REDO E-10 (P15): the host source's own lines, as the host watch writes them (NET-TOOL's fixture)."""
     body = json.loads((ROOT / "tests" / "fixtures" / "rules" / "NET-TOOL" / "positive-host-child.json").read_text())
@@ -257,7 +257,8 @@ def test_e3_on_your_records_counts_the_lines_it_would_have_fired_on(home):
     r = res.records
     # REDO E-2: the host watch gives host lines to a rule that names HostChild: the program rule reads them
     assert host.reads_host_lines(res.rule) and r["not_host"] == 0
-    assert (r["files"], r["lines"]) == (2, 4 + host_n) and r["fired"] >= 2 and r["fired_files"] == 2
+    # REDO 2 F-11: exact - the trace's curl (seq 2) and the host source's one HostChild line that starts curl
+    assert (r["files"], r["lines"]) == (2, 4 + host_n) and r["fired"] == 2 and r["fired_files"] == 2
     assert r["cited"][0] == ("host/sources/run-1-tree.jsonl", 1)   # newest file first; up to three
     assert ("traces/demo-1/raqib.log.jsonl", 2) in r["cited"]
     text = ruleform.records_text(r)
@@ -386,26 +387,65 @@ def test_e6_the_terminal_refuses_with_the_forms_words(home, capsys):
 
 # --- A4: the guards ----------------------------------------------------------------------------------------------
 
-# REDO E-10 (P15): an allow-list - every call ruleform makes on a module, and every open's mode, is named here
+# REDO E-10 (P15): an allow-list - every call ruleform makes on a module, and every open's mode, is named here;
+# REDO 2 F-11: names bound by an import are resolved (import os as o is os), a module's function is only called
+# (never bound to a name), and every entry is used
 ALLOWED_MODULE_CALLS = {
-    ("os", "makedirs"), ("os", "listdir"), ("os", "rmdir"), ("os", "lstat"), ("os", "walk"), ("os", "utime"),
-    ("shutil", "rmtree"), ("tempfile", "mkdtemp"), ("hashlib", "sha256"), ("json", "dumps"), ("json", "loads"),
-    ("re", "split"), ("re", "compile"), ("os.path", "join"), ("os.path", "dirname"), ("os.path", "basename"),
+    ("os", "makedirs"), ("os", "listdir"), ("os", "rmdir"), ("os", "lstat"), ("os", "walk"),
+    ("shutil", "rmtree"), ("tempfile", "mkdtemp"), ("hashlib", "sha256"), ("json", "dumps"), ("re", "split"),
+    ("re", "compile"), ("os.path", "join"), ("os.path", "dirname"), ("os.path", "basename"),
     ("os.path", "realpath"), ("os.path", "islink"), ("os.path", "isdir"), ("os.path", "getmtime"),
-    ("os.path", "relpath"), ("os.path", "expanduser"), ("os.path", "isjunction"),
+    ("os.path", "relpath"), ("os.path", "expanduser"), ("os.path", "lexists"), ("time", "time"),
 }
+ALLOWED_MODULE_VALUES = {("os", "SEEK_END"), ("os", "name"), ("os", "path"), ("sys", "version_info")}
+STDLIB = ("os", "os.path", "shutil", "tempfile", "hashlib", "json", "re", "sys", "time", "subprocess")
 WRITERS = {"_new_stage": {"makedirs", "mkdtemp"}, "_write_stage": {"open-w"}, "_unstage": {"rmtree", "rmdir"}}
+
+
+def _bound_modules(tree):
+    """{name bound in the module: the module it stands for} of every import (an alias resolved)."""
+    out = {}
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                out[a.asname or a.name.split(".")[0]] = a.name if a.asname else a.name.split(".")[0]
+        elif isinstance(n, ast.ImportFrom) and n.module in STDLIB:
+            for a in n.names:
+                out[a.asname or a.name] = "%s.%s" % (n.module, a.name)
+    return out
+
+
+def _owner(node, bound):
+    """The module an expression stands for (os, os.path), resolved through the import names, or None."""
+    if isinstance(node, ast.Name):
+        return bound.get(node.id)
+    if isinstance(node, ast.Attribute):
+        base = _owner(node.value, bound)
+        return "%s.%s" % (base, node.attr) if base else None
+    return None
 
 
 def test_a4_ruleform_writes_only_in_its_staging_place_and_starts_nothing():
     src = (ROOT / "raqib" / "ruleform.py").read_text(encoding="ascii")
     tree = ast.parse(src)
-    imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
-    assert imported == {"hashlib", "json", "os", "re", "shutil", "tempfile"}, imported
+    bound = _bound_modules(tree)
+    imported = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+    assert imported == {"hashlib", "json", "os", "re", "shutil", "sys", "tempfile", "time"}, imported
     froms = {(n.module, a.name) for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) for a in n.names}
     assert froms == {("__future__", "annotations"), ("raqib", "discover"), ("raqib", "host"), ("raqib", "overlay"),
                      ("raqib.hooks", "common"), ("raqib.rules", "engine"), ("raqib.rules", "trace"),
                      ("raqib.rules", "yamlite")}, froms
+    called = {id(c.func) for c in ast.walk(tree) if isinstance(c, ast.Call)}
+    used = set()
+    for node in ast.walk(tree):   # every use of a module's attribute: a call in the list, or a listed value
+        if isinstance(node, ast.Attribute) and _owner(node.value, bound) in STDLIB:
+            pair = (_owner(node.value, bound), node.attr)
+            if id(node) in called:
+                assert pair in ALLOWED_MODULE_CALLS, pair
+                used.add(pair)
+            else:
+                assert pair in ALLOWED_MODULE_VALUES or "%s.%s" % pair in STDLIB, pair   # never f = shutil.rmtree
+    assert used == ALLOWED_MODULE_CALLS, ALLOWED_MODULE_CALLS - used   # no entry the module does not use
     funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
     writers = {}
     for name, fn in funcs.items():
@@ -415,15 +455,13 @@ def test_a4_ruleform_writes_only_in_its_staging_place_and_starts_nothing():
             f = sub.func
             if isinstance(f, ast.Name):
                 assert f.id not in ("exec", "eval", "compile", "__import__", "setattr", "globals"), (name, f.id)
+                assert f.id not in bound or bound[f.id] not in STDLIB, (name, f.id)   # no module called by a bare name
                 if f.id == "getattr":   # only a named attribute (st_file_attributes, isjunction), never a computed one
                     assert isinstance(sub.args[1], ast.Constant) and sub.args[1].value in (
                         "st_file_attributes", "isjunction", "doc"), (name, ast.dump(sub)[:80])
-            if isinstance(f, ast.Attribute):
-                owner = ast.unparse(f.value)
-                if owner in ("os", "os.path", "shutil", "tempfile", "hashlib", "json", "re", "subprocess"):
-                    assert (owner, f.attr) in ALLOWED_MODULE_CALLS, (name, owner, f.attr)
-                    if f.attr in ("makedirs", "mkdtemp", "rmtree", "rmdir"):
-                        writers.setdefault(name, set()).add(f.attr)
+            owner = _owner(f.value, bound) if isinstance(f, ast.Attribute) else None
+            if owner in STDLIB and f.attr in ("makedirs", "mkdtemp", "rmtree", "rmdir"):
+                writers.setdefault(name, set()).add(f.attr)
             if isinstance(f, ast.Name) and f.id == "open":
                 modes = [a.value for a in sub.args[1:2] if isinstance(a, ast.Constant)] + \
                         [k.value.value for k in sub.keywords if k.arg == "mode" and isinstance(k.value, ast.Constant)]

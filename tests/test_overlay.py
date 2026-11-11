@@ -248,7 +248,8 @@ def test_a6_add_validates_with_the_loader_and_the_fixture_runner_and_copies(home
     rule = by_id(rules, "USER-SHRED")
     assert rule.origin == "user" and all(r.origin == "package" for r in rules if r.id != "USER-SHRED")
     info = overlay.describe(rules)
-    assert info["user"] == [{"rule_id": "USER-SHRED", "source": str(d / "USER-SHRED.yaml")}]
+    assert info["user"] == [{"rule_id": "USER-SHRED", "source": str(d / "USER-SHRED.yaml"), "place": "USER-SHRED",
+                             "examples": 2}]   # M8.2 REDO 2 F-3 (its place), F-8 (what it was measured on)
     assert any("user rule USER-SHRED (origin: user)" in s for s in overlay.start_lines(info))
     row = next(r for r in overlay.listing(rules) if r["id"] == "USER-SHRED")
     assert row["origin"] == "user" and row["status"] == "on"
@@ -518,7 +519,8 @@ def test_e4_the_next_watch_takes_the_overlay_as_it_is_then(home):
 
 
 PANEL_CALLS = {"set_status", "set_threshold", "reset", "add_rule", "load", "listing", "describe", "off_text",
-               "table_text", "start_lines", "OverlayError", "remove_rule"}   # M8.2: Remove
+               "table_text", "start_lines", "OverlayError", "remove_rule",   # M8.2: Remove
+               "user_entries", "removable"}   # M8.2 REDO 2 F-3: readers - a row's own place, and whether it has a Remove
 # M8.2: the panel and the form reach ruleform only through these (its Test and Add, the words it says)
 RULEFORM_CALLS = {"test", "add", "fingerprint", "Result", "examples", "records_text", "cited_text", "FIELDS",
                   "FIELD_WORDS", "FORM_WORDS", "FORMS", "SEVERITIES", "VALUE_HINTS", "MEASURED"}
@@ -535,8 +537,9 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
     panel += [f for f in window.body if isinstance(f, ast.FunctionDef) and f.name.startswith(("rules_", "show_rules",
                                                                                               "_rules"))]
     # M7.6c REDO E-7: and _rules_measuring; M8.1 E5: the rows, their switches and steppers, the filter;
-    # M8.2: the form (rules_new, its Test and Add, its answers, its words, its scroll), Remove and Keep
-    assert len(panel) == 25
+    # M8.2: the form (rules_new, its Test and Add, its answers, its words, its scroll), Remove and Keep;
+    # M8.2 REDO 2 F-10: _rules_form_state (the header's "changed since the test")
+    assert len(panel) == 26
     for node in panel:
         for sub in ast.walk(node):
             if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) and sub.value.id == "overlay":

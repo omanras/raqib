@@ -8,7 +8,7 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       FILE (one JSON finding per line; ADR-0001 section 6) or stdout. With -o,
       FILE.notes.json records which rules did not run and why. The catalog
       is judged as its YAMLs declare it: the overlay below is the watches'.
-  rules [--set ID on|off | --threshold ID FIELD VALUE | --add FILE | --reset ID | --remove ID] [--json]
+  rules [--set ID on|off | --threshold ID FIELD VALUE | --add FILE | --reset ID | --remove NAME [--dry-run]] [--json]
   rules --new ID --when program|path|host|tool --values A,B --severity S --fires X --quiet Y [--title T]
         [--dry-run]
       M7.6 (ADR-0008): with no TRACE, list every rule as the next watch will
@@ -22,13 +22,16 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       watch. Exit 2 when a change is refused (the reason on stderr), 0
       otherwise. M8.2 (ADR-0009 decision 4): --new makes a rule from the
       form's answers (raqib/ruleform.py, the window's form): it writes the
-      rule's YAML and its two fixtures in a staging place under ~/.raqib,
+      rule's YAML and its fixtures in a staging place under ~/.raqib,
       the loader and the fixture runner judge them, it says what the rule
       would have fired on in the records under ~/.raqib (read-only,
       bounded, never a gate) and adds it through --add's path; --dry-run
-      prints the YAML and writes nothing in rules.d. --remove deletes a
-      person's rule from ~/.raqib/rules.d and its overlay lines; a package
-      rule is switched off instead.
+      prints the YAML and writes nothing in rules.d. --remove NAME deletes,
+      without asking, one entry of ~/.raqib/rules.d (the one named exactly
+      NAME, else the one whose id is NAME in any case; several are refused
+      and listed) - its rule file first, then the overlay entry of the rule
+      loaded from it, then the rest; --dry-run says what it would do; a
+      package rule is switched off instead.
   report TRACE [--findings FILE] [--scope P]... [--handoff FILE] [--json]
       Show the findings with the trace lines they cite (A5), the alarms, the
       rules that did not run (A3) and every rule's fp_budget (A6). Without
@@ -125,7 +128,8 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       only reads (M7.2b, ADR-0007 decision 3 and Amendment H): the os source
       where the Sysmon channel exists, else the host's own record of its
       children and connections (lines of source "host" under
-      ~/.raqib/host/sources/, judged by NET-TOOL and DESTRUCT-CMD, as the
+      ~/.raqib/host/sources/, judged by every rule whose match names the
+      tool HostChild - NET-TOOL, DESTRUCT-CMD, a person's program rule - as the
       os source's process lines are by their image name, M7.8); its
       findings show on the tree and knock (on a benign tree they are notes,
       not knocked, not an alarm; an os event from before the start is
@@ -276,8 +280,9 @@ def _parser():
     change.add_argument("--add", metavar="FILE", help="no TRACE: validate a rule file and copy it into ~/.raqib/rules.d")
     change.add_argument("--reset", metavar="ID", help="no TRACE: remove a rule's entry from the overlay")
     change.add_argument("--new", metavar="ID", help="no TRACE: make a rule from the form's answers (M8.2)")
-    change.add_argument("--remove", metavar="ID", help="no TRACE: delete a person's rule from ~/.raqib/rules.d and its"
-                        " overlay lines, without asking (--dry-run: say what it would delete)")
+    change.add_argument("--remove", metavar="NAME", help="no TRACE: delete a person's rule from ~/.raqib/rules.d (the"
+                        " entry named exactly NAME, else the one id NAME in any case) and its overlay lines, without"
+                        " asking (--dry-run: say what it would do)")
     r.add_argument("--when", choices=ruleform.FORMS, help="--new: what to watch for")
     r.add_argument("--values", metavar="A,B", help="--new: the program names, places, host names or tool names")
     r.add_argument("--severity", choices=ruleform.SEVERITIES, help="--new: low, medium or high")
