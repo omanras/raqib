@@ -497,6 +497,14 @@ def _fit(root, window):
     return at + natural + ((_biggest(root),) if bad else ())
 
 
+def _form_test(window, rid, values="terraform, tofu"):
+    """M8.2: the form filled and tested (the examples prefilled from the first name)."""
+    window.rules_new()
+    window.form_vars["id"].set(rid)
+    window.form_vars["values"].set(values)
+    window.rules_form_test()
+
+
 @pytest.mark.parametrize("font", ["the theme's", "DejaVu Sans"])
 @pytest.mark.parametrize("mode", ["light", "dark"])
 def test_tk_redo_a10_every_screen_and_each_disclosure_fits_900x600_rail_included(home, tmp_path, monkeypatch, mode,
@@ -526,7 +534,10 @@ def test_tk_redo_a10_every_screen_and_each_disclosure_fits_900x600_rail_included
                                                                               window.host_toggle())),
                          ("host finished", window.host_toggle),
                          ("watching", lambda: (window.show_first(), window.start())),
-                         ("project finished", finish_project)):
+                         ("project finished", finish_project),
+                         # M8.2 E5: the rule form - empty, after a passing Test, with refusals beside their fields
+                         ("rule form", window.rules_new), ("rule form tested", lambda: _form_test(window, "MY-TF")),
+                         ("rule form refused", lambda: _form_test(window, "my tf", values="/usr/bin/x"))):
             go()
             for _ in range(2):
                 window.tick()
@@ -539,7 +550,7 @@ def test_tk_redo_a10_every_screen_and_each_disclosure_fits_900x600_rail_included
                     d.invoke()
         bad = {k: v for k, v in seen.items() if len(v) > 5}
         assert bad == {}, bad
-        assert len(seen) == 8 + 3 + 1 + 2 + 1 + 3 + 3 + 1 + 1   # every screen; each of its disclosures open
+        assert len(seen) == 8 + 3 + 1 + 2 + 1 + 3 + 3 + 1 + 1 + 3 * 2   # every screen; each disclosure open
     finally:
         if window is not None:
             window.destroy()

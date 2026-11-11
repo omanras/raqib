@@ -457,6 +457,7 @@ def apply(rules, doc, path, state="read", hole=None, say=None, cache=None):
                 if getattr(new, attr) != getattr(rule, attr):   # never: only status and eq values change
                     raise OverlayError("the overlay changed %s of %s" % (attr, rule.id))
             new.fixture_root = getattr(rule, "fixture_root", None)
+            new.place = getattr(rule, "place", None)   # M8.2 REDO 2 F-3: the entry of rules.d it was loaded from
             label = ", ".join("%s=%d" % (n, v[1]) for n, v in sorted(changed.items()))
             new.changed_fields = sorted(changed)
             failed = []
@@ -557,9 +558,9 @@ def load_user_rules(directory, taken):
     reason}] for "N rules off" (A-5)."""
     rules, refused, ids = [], [], []
 
-    def no(name, reason):
+    def no(name, reason, place):
         refused.append(reason)
-        ids.append({"rule_id": name, "reason": reason})
+        ids.append({"rule_id": name, "reason": reason, "place": place})   # REDO 2 F-3: the row's own place
     if not directory or not os.path.isdir(directory):
         return rules, refused, ids
     seen = set(taken)
@@ -568,7 +569,7 @@ def load_user_rules(directory, taken):
         if not os.path.isdir(here):
             if name.lower().endswith((".yml", ".yaml")):
                 no(os.path.splitext(name)[0], "%s: a rule lives in rules.d/<ID>/<ID>.yaml with its fixtures beside it"
-                   " (ADR-0008 A-1); this file is not read" % here)
+                   " (ADR-0008 A-1); this file is not read" % here, name)
             continue
         try:
             fixture_file(directory, name)   # the rule's own directory: no link, under rules.d
@@ -577,10 +578,11 @@ def load_user_rules(directory, taken):
                 raise OverlayError("%s: no %s.yaml in it" % (here, name))
             rule = validate_rule(yaml_path, here, seen, user=True)
         except OverlayError as exc:
-            no(name, str(exc))
+            no(name, str(exc), name)
             continue
         rule.origin = "user"
         rule.fixture_root = here
+        rule.place = name   # REDO 2 F-3: the entry of rules.d it was loaded from
         seen.add(rule.id)
         rules.append(rule)
     return rules, refused, ids
@@ -856,7 +858,8 @@ def build(rules, overlay=None, user_rules=None, say=None):
     if overlay is not None and state == "read":
         cache = load_measured(os.path.join(os.path.dirname(overlay), MEASURED_NAME), stamp(combined, overlay))
     out = apply(combined, doc, overlay, state, hole, say=say, cache=cache)
-    out.overlay.update(user_dir=user_rules, user=[{"rule_id": r.id, "source": r.source} for r in users],
+    out.overlay.update(user_dir=user_rules, user=[{"rule_id": r.id, "source": r.source, "place": r.place,
+                                                   "examples": examples_of(r)} for r in users],
                        user_refused=user_refused, user_refused_ids=refused_ids)
     return out
 
@@ -870,14 +873,29 @@ def load(home=None, catalog=None, say=None):
 
 # --- what is said ----------------------------------------------------------------------------------
 
+def examples_of(rule):
+    """REDO 2 F-8: the fixture files a person's rule was measured on (its own examples)."""
+    return sum(len((getattr(rule, "fixtures", None) or {}).get(k) or ()) for k in ("positive", "negative"))
+
+
+MEASURED_OWN = "measured on its own fixture files only%s, not on a corpus"   # REDO 3 G-8 (Q-9): N
+
+
+def user_line(u):
+    """REDO 2 F-8: a person's rule as every watch's start and the report say it, with how it was measured."""
+    n = u.get("examples")
+    return "user rule %s (origin: user) from %s; %s" % (u["rule_id"], u["source"], MEASURED_OWN % (
+        " (%d)" % n if isinstance(n, int) else ""))
+
+
 def describe(rules):
     """What the overlay did, JSON-able: watch.json and the host state keep
     it as rules_overlay. off lists every rule that judges nothing: by the
     overlay (since) or by its YAML (status: disabled, A6)."""
     info = dict(getattr(rules, "overlay", None) or {"path": None, "file": "not loaded", "hole": None,
                                                     "refused": [], "applied": []})
-    info.setdefault("user", [{"rule_id": r.id, "source": r.source} for r in rules
-                             if getattr(r, "origin", "package") == "user"])
+    info.setdefault("user", [{"rule_id": r.id, "source": r.source, "place": getattr(r, "place", None),
+                              "examples": examples_of(r)} for r in rules if getattr(r, "origin", "package") == "user"])
     info.setdefault("user_refused", [])
     info.setdefault("user_refused_ids", [])
     info.setdefault("user_dir", None)
@@ -891,7 +909,7 @@ def describe(rules):
                         "severity": r.severity, "kind": r.kind})
     for u in info["user_refused_ids"]:   # M7.6 REDO A-5: a person's rule refused at load judges nothing: it is off
         off.append({"rule_id": u["rule_id"], "by": "refused at load", "since": None, "severity": None, "kind": None,
-                    "refused": u["reason"]})
+                    "refused": u["reason"], "name": u.get("place") or u["rule_id"]})   # REDO 3 G-6: its own name
     info["off"] = off
     info["thresholds"] = [{"rule_id": r.id, "name": name, "value": now, "yaml": was}
                           for r in rules for name, (was, now) in sorted((getattr(r, "changed", None) or {}).items())]
@@ -908,7 +926,8 @@ def off_word(o):
     """One rule of "N rules off": its id, and "(refused: why)" for a person's rule refused at load (A-5)."""
     if o.get("refused"):
         why = str(o["refused"])
-        return "%s (refused: %s)" % (o["rule_id"], why if len(why) <= REASON_MAX else why[:REASON_MAX - 3] + "...")
+        return "%s (refused: %s)" % (o.get("name") or o["rule_id"], why if len(why) <= REASON_MAX else
+                                     why[:REASON_MAX - 3] + "...")   # G-6: a loose file by its file name
     return str(o["rule_id"])
 
 
@@ -936,7 +955,7 @@ def start_lines(info):
         out.append("rules overlay: not loaded (the catalog as its YAMLs declare it)")
     out += ["rules overlay: applied: %s" % a for a in info.get("applied") or []]
     out += ["rules overlay: REFUSED (not applied): %s" % r for r in info.get("refused") or []]
-    out += ["rules: user rule %s (origin: user) from %s" % (u["rule_id"], u["source"]) for u in info.get("user") or []]
+    out += ["rules: %s" % user_line(u) for u in info.get("user") or []]
     out += ["rules: user rule REFUSED: %s" % r for r in info.get("user_refused") or []]
     text = off_text(info)
     out.append("rules: %s (not judged; each is listed in the final report)" % text if text else
@@ -1010,7 +1029,7 @@ def report_lines(info, counts):
     out += ["  - threshold %s %s = %s (its YAML: %s)" % (t["rule_id"], t["name"], t["value"], t["yaml"])
             for t in info.get("thresholds") or []]
     out += ["  - REFUSED (not applied): %s" % r for r in info.get("refused") or []]
-    out += ["  - user rule %s (origin: user) from %s" % (u["rule_id"], u["source"]) for u in info.get("user") or []]
+    out += ["  - %s" % user_line(u) for u in info.get("user") or []]
     out += ["  - user rule REFUSED: %s" % r for r in info.get("user_refused") or []]
     for kind in info.get("kinds_off") or []:
         out.append("  - every catalog rule of kind %s is off" % kind)
@@ -1029,6 +1048,7 @@ def listing(rules):
                      "status": "off" if r.status == "disabled" else "on",
                      "off_by": "overlay" if getattr(r, "off_by", None) else ("yaml" if r.status == "disabled" else None),
                      "origin": getattr(r, "origin", "package"),
+                     "place": getattr(r, "place", None),   # M8.2 REDO 2 F-3: a person's rule's entry of rules.d
                      "thresholds": [{"name": n, "value": t["value"], "low": t["low"], "high": t["high"],
                                      "lo": t["lo"], "hi": t["hi"],
                                      "yaml": changed.get(n, (t["value"],))[0]} for n, t in thresholds(r).items()],
@@ -1181,3 +1201,291 @@ def add_rule(path, home=None, catalog=None):
         raise OverlayError("cannot write under %s: %s" % (target_dir, exc.strerror or exc))
     return "%s added as %s (origin: user; %d fixture file(s) copied; %s)" % (
         rule.id, copies[-1][1], len(copies) - 1, NEXT_WATCH)
+
+
+def taken_ids(home=None, catalog=None):
+    """M8.2: the ids a new rule may not take - the package's, the rules of rules.d, and every entry of rules.d
+    as the id it stands for: a folder's name (a rule refused at load still holds its folder) and a loose rule
+    file's stem (REDO 2 F-3: MY-TF.yaml holds MY-TF)."""
+    ids = {r.id for r in _base(home, catalog)}
+    for name, kind in user_entries(user_dir(home)):
+        ids.add(entry_key(name, kind) or name)
+    return ids
+
+
+REMOVE_PACKAGE = "%s is a package rule: it cannot be removed; switch it off instead (raqib rules --set %s off)"
+RULE_SUFFIXES = (".yaml", ".yml")
+ASCII_UP = {c: c - 32 for c in range(ord("a"), ord("z") + 1)}
+
+
+def fold_id(text):
+    """M8.2 REDO 2 F-3: an id folded as the engine folds names (ASCII a-z to A-Z only, C-11): MY-ss is MY-SS,
+    my-\u00df is not."""
+    return str(text).translate(ASCII_UP)
+
+
+def user_entries(rules_d):
+    """[(name, kind)]: the entries of rules.d a row can stand for, sorted - kind "folder" (a directory, not a
+    link) or "file" (a loose .yaml or .yml file, refused at load); "other" for the rest (a link, another file)."""
+    if not rules_d or not os.path.isdir(rules_d):
+        return []
+    out = []
+    for name in sorted(os.listdir(rules_d)):
+        path = os.path.join(rules_d, name)
+        if _is_link(path):
+            kind = "other"
+        elif os.path.isdir(path):
+            kind = "folder"
+        elif name.lower().endswith(RULE_SUFFIXES):
+            kind = "file"
+        else:
+            kind = "other"
+        out.append((name, kind))
+    return out
+
+
+def entry_key(name, kind):
+    """The id an entry of rules.d stands for (a folder's name, a loose rule file's stem), or None."""
+    if kind == "folder":
+        return name
+    if kind == "file":
+        return os.path.splitext(name)[0]
+    return None
+
+
+def removable(name, kind):
+    """REDO 2 F-3: an entry Raqib could have written (a folder, or a loose rule file, whose id folded is an
+    id): it has a Remove; any other is deleted by hand."""
+    key = entry_key(name, kind)
+    return key is not None and bool(engine.RULE_ID.match(fold_id(key)))
+
+
+def _inside(real, path):
+    """REDO 3 G-5: path is real or below it (both resolved); never an exception - a path on another drive
+    (os.path.commonpath's ValueError) is not inside."""
+    try:
+        return os.path.commonpath([os.path.normcase(real), os.path.normcase(path)]) == os.path.normcase(real)
+    except ValueError:
+        return False
+
+
+def _tree_plan(target, root, first=None):
+    """M8.2 E4 (A4), REDO 2 F-4, REDO 3 G-5: every check of a removal, with nothing written - target must
+    resolve by realpath to an entry directly under realpath(root) (root itself may be a link: followed, F-5);
+    each directory is looked at BEFORE it is entered, and the walk refuses at a link, a junction or any reparse
+    point, by its own name; every path resolves inside it. The paths to delete, in order: first (the rule file,
+    so the rule can no longer load), then the other files, then the folders bottom-up."""
+    real_root = os.path.realpath(root)
+    real = os.path.realpath(target)
+    if os.path.normcase(os.path.dirname(real)) != os.path.normcase(real_root):
+        raise OverlayError("%s resolves to %s, not an entry of %s: nothing removed" % (target, real, real_root))
+    if _is_link(target):
+        raise OverlayError("%s is a link: nothing removed (remove it by hand)" % target)
+    if not os.path.isdir(target):
+        return [(target, False)]
+    files, folders, todo = [], [], [target]
+    while todo:
+        here = todo.pop()
+        folders.append(here)   # entered only once it was checked (below, as an entry of its parent)
+        for name in sorted(os.listdir(here)):
+            path = os.path.join(here, name)
+            if _is_link(path):   # a symlink, a junction, any reparse point: never entered
+                raise OverlayError("%s is a link: nothing removed (remove it by hand)" % path)
+            if not _inside(real, os.path.realpath(path)):
+                raise OverlayError("%s resolves outside %s: nothing removed" % (path, real))
+            if os.path.isdir(path):
+                todo.append(path)
+            else:
+                files.append(path)
+    plan = [(p, False) for p in files] + [(d, True) for d in reversed(folders)]   # a folder after all below it
+    if first is not None and (first, False) in plan:   # the rule file first (a list rebuilt: nothing removed here)
+        plan = [(first, False)] + [x for x in plan if x != (first, False)]
+    return plan
+
+
+class _Stopped(Exception):
+    """A removal stopped midway: gone (the paths deleted) and why."""
+
+    def __init__(self, gone, why):
+        super().__init__(why)
+        self.gone, self.why = gone, why
+
+
+def _delete_tree(plan, target):
+    """M8.2 E4 (A4): delete the paths of plan (_tree_plan's, in its order), each resolved again by realpath
+    inside realpath(target) before it is removed. The count of files removed; _Stopped (what is gone, why)
+    when one cannot be removed."""
+    real = os.path.realpath(target)
+    files, gone = 0, []
+    for path, is_dir in plan:
+        if not _inside(real, os.path.realpath(path)):
+            raise _Stopped(gone, "%s resolves outside %s: stopped" % (path, real))
+        try:
+            if is_dir:
+                os.rmdir(path)
+            else:
+                os.remove(path)
+        except OSError as exc:
+            raise _Stopped(gone, "%s: %s" % (path, exc.strerror or exc))
+        gone.append(path)
+        files += 0 if is_dir else 1
+    return files
+
+
+def _is_link(path):
+    """A symlink, a junction (os.path.isjunction where it exists) or any reparse point (st_file_attributes
+    0x400) - fixture_file's own check. An entry that cannot be looked at raises OSError (a refusal, said by
+    the caller); one that is gone is no link."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return False
+    junction = getattr(os.path, "isjunction", None)
+    return os.path.islink(path) or bool((getattr(st, "st_file_attributes", 0) or 0) & 0x400) or bool(
+        junction is not None and junction(path))
+
+
+def is_link(path):
+    """REDO 3 G-6: the window's reader of _is_link (a link in rules.d is said as a link)."""
+    return _is_link(path)
+
+
+def package_ids(catalog=None):
+    """The package rules' ids, folded (C-11)."""
+    return {fold_id(r.id) for r in engine.load_catalog(catalog or CATALOG)}
+
+
+def place_of(name, home=None, catalog=None):
+    """REDO 2 F-3, REDO 3 G-2: the entry of rules.d `raqib rules --remove NAME` removes. NAME names one entry
+    as it is listed: without a suffix a folder, ending .yaml or .yml a loose rule file; a stem is never matched
+    across kinds. The entry of that kind named exactly NAME; else, for a package rule's id, refused (switch it
+    off instead); else the one entry of that kind whose name matches NAME without regard to case (ASCII); with
+    several, refused, each listed and none suggested. A link of that name is said as a link."""
+    name = str(name or "").strip()
+    kind = "file" if name.lower().endswith(RULE_SUFFIXES) else "folder"
+    stem = os.path.splitext(name)[0] if kind == "file" else name
+    if not engine.RULE_ID.match(fold_id(stem)):   # E-6: a folder refused at load may be named in lower case
+        raise OverlayError("%r is not a rule id (MY-RULE) or a rule file's name (MY-RULE.yaml): nothing removed"
+                           % (name,))
+    rules_d = user_dir(home)
+    listed = user_entries(rules_d)
+    entries = [n for n, k in listed if k == kind and removable(n, k)]
+    if name in entries:
+        return name
+    if kind == "folder" and fold_id(name) in package_ids(catalog):
+        refusal = OverlayError(REMOVE_PACKAGE % (name, name))
+        refusal.as_said = True   # H-2: the package refusal reads as it always did
+        raise refusal
+    folded = [n for n in entries if fold_id(n) == fold_id(name)]
+    if len(folded) == 1:
+        return folded[0]
+    what = "rule folder" if kind == "folder" else "loose rule file"
+    if not folded:
+        links = [n for n, k in listed if fold_id(n) == fold_id(name) and _is_link(os.path.join(rules_d, n))]
+        if links:   # G-6: a link named as a rule is said as a link
+            raise OverlayError(LINK_IN_RULES_D % (os.path.join(rules_d, links[0]), what))
+        raise OverlayError("no %s %s in %s: nothing removed" % (what, name, rules_d))
+    raise OverlayError("%s matches %d %ss of %s without regard to case: %s; nothing removed (name the one to"
+                       " remove exactly as it is listed)" % (name, len(folded), what, rules_d, ", ".join(folded)))
+
+
+LINK_IN_RULES_D = ("%s is a link, not a %s: nothing removed; remove the link by hand if you mean to (what it"
+                   " leads to is not touched)")
+
+
+def remove_rule(rid, home=None, catalog=None, dry_run=False, place=None):
+    """M8.2 E4 (ADR-0009 decision 4; REDO E-6, REDO 2 F-3..F-5, REDO 3 G-2, G-5, G-6): remove a person's rule
+    - one entry of rules.d, the row's own place (place: its name in rules.d, as the window's row carries it;
+    else place_of(rid), the terminal's NAME). Every check first, nothing written (no link below rules.d, the
+    real place, a folder or a loose rule file Raqib could have written, a readable overlay); then its rule
+    file, so the rule can no longer load; then the overlay entry of the rule loaded from that place (only that
+    one; never a package rule's); then the rest. A linked ~/.raqib or rules.d is followed, as Add follows it,
+    and the real place is said wherever it differs from the path written (Q-15). A removal that deletes
+    nothing changes nothing and says so; one that stops midway says what is gone and what remains. Whatever
+    fails is a refusal (OverlayError) with words, never another exception. dry_run: what the real run would
+    do, its refusal included; nothing written."""
+    try:
+        try:
+            place = place_of(rid, home, catalog) if place is None else str(place)
+            rules_d = user_dir(home)
+            kinds = dict(user_entries(rules_d))
+            if place not in kinds:
+                raise OverlayError("no entry %s in %s: nothing removed" % (place, rules_d))
+            kind = kinds[place]
+            if kind == "other" and _is_link(os.path.join(rules_d, place)):
+                raise OverlayError(LINK_IN_RULES_D % (os.path.join(rules_d, place), "rule folder or a rule file"))
+            target = fixture_file(rules_d, place)
+            if not removable(place, kind):
+                raise OverlayError("%s is not a rule folder or a rule file Raqib could have written: nothing"
+                                   " removed; delete it by hand if you mean to (%s)" % (place, target))
+            doc = _current(home)
+            rule_file = os.path.join(target, place + ".yaml") if kind == "folder" else target
+            has_rule_file = os.path.isfile(rule_file)
+            plan = _tree_plan(target, rules_d, rule_file if has_rule_file else None)
+            loaded = next((r for r in _base(home, catalog) if getattr(r, "origin", "package") == "user"
+                           and getattr(r, "place", None) == place), None)   # F-3: the rule loaded from this place
+            package = fold_id(entry_key(place, kind)) in package_ids(catalog)   # Q-10: its own entry stays
+            real_root = os.path.realpath(rules_d)
+        except OverlayError as exc:   # a check's refusal: nothing was removed, and the words say so
+            if "nothing removed" in str(exc) or getattr(exc, "as_said", False):
+                raise
+            raise OverlayError("%s: nothing removed" % exc)
+        except Exception as exc:   # G-5: an entry that cannot be read, a path on another drive: a refusal
+            raise OverlayError("nothing removed: the removal could not be checked: %s" % _why(exc))
+    except OverlayError as exc:
+        if dry_run:
+            raise OverlayError("dry run: the removal would be refused: %s" % exc)
+        raise
+    entry = loaded.id if loaded is not None and loaded.id in doc["rules"] else None
+    # F-5, Q-15: the real place is said wherever it differs from the path written
+    where = "" if os.path.normcase(real_root) == os.path.normcase(os.path.abspath(rules_d)) else (
+        " (in %s, where %s leads)" % (real_root, rules_d))
+    untouched = "; the package rule %s is untouched" % fold_id(entry_key(place, kind)) if package else ""
+    entry_words = ("its entry dropped from %s" if entry else "it had no entry in %s") % overlay_path(home)
+    would = ("would drop its entry from %s" if entry else "it has no entry in %s") % overlay_path(home)
+    if loaded is None:   # F-3: an overlay entry is dropped only for the rule loaded from the place removed
+        entry_words = would = "no rule loaded from it: %s is not changed" % overlay_path(home)
+    if dry_run:
+        files = sorted(os.path.relpath(p, target) if p != target else os.path.basename(p)
+                       for p, d in plan if not d)
+        return "dry run: would delete %s%s (%d file(s): %s); %s%s; nothing removed" % (
+            target, where, len(files), ", ".join(files), would, untouched)
+    try:   # F-4: the rule file first; if it cannot go, nothing was removed and nothing changed
+        files = _delete_tree(plan[:1], target)
+    except Exception as exc:
+        whole = ("the rule, its folder and its overlay entry are as they were" if entry else
+                 "the rule and its folder are as they were" if loaded is not None else
+                 "its folder is as it was") if kind == "folder" else "the file is as it was"
+        raise OverlayError("nothing was removed: %s could not be deleted (%s); %s%s" % (
+            plan[0][0], getattr(exc, "why", None) or _why(exc), whole, where))
+    said, dropped = "%s removed" % place, entry is None
+    try:
+        if entry is not None:   # only once the rule file is gone: the rule can no longer load
+            del doc["rules"][entry]
+            said += ": its entry dropped from %s" % write(doc, home)
+            dropped = True
+        else:
+            said += ": %s" % entry_words
+        files += _delete_tree(plan[1:], target)
+    except Exception as exc:   # G-6: a stop midway is never said as a removal made whole
+        gone = [plan[0][0]] + list(getattr(exc, "gone", ()))
+        left = [p for p, _ in plan if p not in gone and os.path.lexists(p)]
+        if entry is not None and dropped:
+            gone.insert(1, "its entry %s in %s" % (entry, overlay_path(home)))
+        if not dropped:
+            left.append("its entry %s in %s" % (entry, overlay_path(home)))
+        state = ("its rule file is gone: it no longer loads" if loaded is not None else "its rule file is gone"
+                 if has_rule_file or kind == "file" else "")
+        raise OverlayError("%s was not removed whole: stopped midway: %s; gone: %s; what remains: %s%s%s%s" % (
+            place, getattr(exc, "why", None) or _why(exc), ", ".join(gone), ", ".join(left) or "nothing",
+            " (%s)" % state if state else "", where, untouched))
+    return "%s; %s deleted (%d file(s))%s%s; %s" % (said, target, files, where, untouched, NEXT_WATCH)
+
+
+def _why(exc):
+    """An exception in a person's words: its kind and what it says (an OSError's own words and its path)."""
+    if isinstance(exc, OverlayError):
+        return str(exc)
+    if isinstance(exc, OSError) and exc.strerror:
+        return "%s cannot be read or changed (%s)" % (exc.filename, exc.strerror) if exc.filename else exc.strerror
+    return "%s: %s" % (type(exc).__name__, exc)

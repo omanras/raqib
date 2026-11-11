@@ -248,7 +248,8 @@ def test_a6_add_validates_with_the_loader_and_the_fixture_runner_and_copies(home
     rule = by_id(rules, "USER-SHRED")
     assert rule.origin == "user" and all(r.origin == "package" for r in rules if r.id != "USER-SHRED")
     info = overlay.describe(rules)
-    assert info["user"] == [{"rule_id": "USER-SHRED", "source": str(d / "USER-SHRED.yaml")}]
+    assert info["user"] == [{"rule_id": "USER-SHRED", "source": str(d / "USER-SHRED.yaml"), "place": "USER-SHRED",
+                             "examples": 2}]   # M8.2 REDO 2 F-3 (its place), F-8 (what it was measured on)
     assert any("user rule USER-SHRED (origin: user)" in s for s in overlay.start_lines(info))
     row = next(r for r in overlay.listing(rules) if r["id"] == "USER-SHRED")
     assert row["origin"] == "user" and row["status"] == "on"
@@ -518,7 +519,12 @@ def test_e4_the_next_watch_takes_the_overlay_as_it_is_then(home):
 
 
 PANEL_CALLS = {"set_status", "set_threshold", "reset", "add_rule", "load", "listing", "describe", "off_text",
-               "table_text", "start_lines", "OverlayError"}
+               "table_text", "start_lines", "OverlayError", "remove_rule",   # M8.2: Remove
+               "user_entries", "removable",   # M8.2 REDO 2 F-3: readers - a row's own place, and whether it has a Remove
+               "is_link"}   # M8.2 REDO 3 G-6: a reader - a link in rules.d is said as a link
+# M8.2: the panel and the form reach ruleform only through these (its Test and Add, the words it says)
+RULEFORM_CALLS = {"test", "add", "fingerprint", "Result", "examples", "records_text", "cited_text", "FIELDS",
+                  "FIELD_WORDS", "FORM_WORDS", "FORMS", "SEVERITIES", "VALUE_HINTS", "MEASURED"}
 
 
 def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
@@ -531,12 +537,16 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
     window = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "Window")
     panel += [f for f in window.body if isinstance(f, ast.FunctionDef) and f.name.startswith(("rules_", "show_rules",
                                                                                               "_rules"))]
-    # M7.6c REDO E-7: and _rules_measuring; M8.1 E5: the rows, their switches and steppers, the filter
-    assert len(panel) == 14
+    # M7.6c REDO E-7: and _rules_measuring; M8.1 E5: the rows, their switches and steppers, the filter;
+    # M8.2: the form (rules_new, its Test and Add, its answers, its words, its scroll), Remove and Keep;
+    # M8.2 REDO 2 F-10: _rules_form_state (the header's "changed since the test"); REDO 3 G-7: _rules_form_preview
+    assert len(panel) == 27
     for node in panel:
         for sub in ast.walk(node):
             if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) and sub.value.id == "overlay":
                 assert sub.attr in PANEL_CALLS | {"NEXT_WATCH"}, sub.attr
+            if isinstance(sub, ast.Attribute) and isinstance(sub.value, ast.Name) and sub.value.id == "ruleform":
+                assert sub.attr in RULEFORM_CALLS, sub.attr
             if isinstance(sub, ast.Call):
                 f = sub.func
                 name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
@@ -551,14 +561,25 @@ def test_e4_a4_the_panel_writes_the_overlay_only_and_copies_into_rules_d_only():
                 continue
             f = sub.func
             called = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
-            if called in ("replace", "rename", "remove", "unlink", "makedirs", "mkstemp", "fdopen", "rmtree"):
+            if called in ("replace", "rename", "remove", "unlink", "makedirs", "mkstemp", "fdopen", "rmtree",
+                          "rmdir"):   # M8.2 REDO E-10: rmdir counted
                 writers.add(name)
             if called == "open":
                 modes = [a.value for a in sub.args[1:] if isinstance(a, ast.Constant)]
                 assert all(m in ("rb", "r") for m in modes), (name, modes)   # every open reads
             if called == "_atomic_write":
                 assert name in ("write", "add_rule", "save_measured"), name   # E-7: rules.measured.json
-    assert writers == {"_atomic_write"}
+    # M8.2 E4: one deleter, _delete_tree, called by remove_rule only, on a fixture_file(...) under user_dir;
+    # it resolves every path it removes by realpath inside the target (tests/test_ruleform.py: no link followed)
+    assert writers == {"_atomic_write", "_delete_tree"}
+    deleters = {name for name, fn in funcs.items() for c in ast.walk(fn) if isinstance(c, ast.Call)
+                and _call_name(c) == "_delete_tree"}
+    assert deleters == {"remove_rule"}
+    removed = {t.targets[0].id: t.value for t in ast.walk(funcs["remove_rule"]) if isinstance(t, ast.Assign)
+               and isinstance(t.targets[0], ast.Name)}
+    assert _call_name(removed["rules_d"]) == "user_dir" and _call_name(removed["target"]) == "fixture_file"
+    assert "realpath" in {getattr(c.func, "attr", None) for c in ast.walk(funcs["_delete_tree"])
+                          if isinstance(c, ast.Call)}
     src = ast.get_source_segment((ROOT / "raqib" / "overlay.py").read_text(encoding="utf-8"), funcs["write"])
     assert "path = overlay_path(home)" in src
     # REDO A-1: the realpath guard, by the AST: every destination add_rule writes is a fixture_file(...) call,
@@ -608,12 +629,16 @@ def test_e5_new_and_changed_code_is_ascii():
         (ROOT / name).read_bytes().decode("ascii")
 
 
-def test_e5_readme_says_the_rules_in_four_lines():
+def test_e5_readme_says_the_rules_and_the_form_line_by_line():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     section = text.split("## Choose the rules\n", 1)[1].split("\n## ", 1)[0]
     lines = [l for l in section.split("\n") if l.strip()]
     # M7.6c: two lines more; REDO E-9: the overlay file's assertion restored as code (it had become a comment)
-    assert len(lines) == 6 and "raqib rules" in lines[0] and "~/.raqib/rules.yaml" in " ".join(lines)
+    # M8.2 E7, REDO E-10: three lines more - the form, its Test and Add, Remove and the terminal
+    assert len(lines) == 9 and "raqib rules" in lines[0] and "~/.raqib/rules.yaml" in " ".join(lines)
+    assert lines[5].startswith("**A new rule from a form.** On the Rules screen, \"New rule\" opens a form")
+    assert lines[6].startswith("\"Test\" writes") and "measured on the examples you gave" in lines[6]
+    assert lines[7].startswith("A rule you added") and "raqib rules --new" in lines[7] and "--remove" in lines[7]
     assert "synthetic desktop" in " ".join(lines) and "benign desktop" not in " ".join(lines)   # REDO E-4
     assert "not judged by" in " ".join(lines) and "rules.d" in " ".join(lines)
 
