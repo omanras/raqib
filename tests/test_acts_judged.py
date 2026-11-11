@@ -467,9 +467,11 @@ def test_e6_threat_model_says_what_the_host_watch_sees():
 
 
 def test_e7_readme_says_it():
-    text = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    from readme_text import GUIDE, README, flat
+    text = flat(GUIDE)   # M9.2: Watch the host, the table and os-sysmon are in docs/GUIDE.md
     assert "quiet" in text and "input_meta.image" in text and "bitsadmin" in text and "vssadmin" in text
-    assert "SECRET-OUTPUT and NET-TOOL do not judge os lines" not in text
+    for text in (text, flat(README)):
+        assert "SECRET-OUTPUT and NET-TOOL do not judge os lines" not in text
 
 
 # === M7.8 REDO (ADR-0007 Amendment R, rulings R-1..R-9) ======================================================

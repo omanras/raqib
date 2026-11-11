@@ -497,9 +497,10 @@ def test_e5_files_are_ascii():
 # --- E5: README, questions --------------------------------------------------------------------------------
 
 def test_e5_readme_says_the_window_opens_on_the_host():
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    from readme_text import GUIDE, units
+    text = GUIDE   # M9.2: docs/GUIDE.md; a long line is a paragraph there
     section = text.split("## The window\n", 1)[1].split("\n## ", 1)[0]
-    lines = [line for line in section.split("\n") if line.strip()]
+    lines = units(section)
     assert "opens on the host" in lines[0] and "Watch this host" in lines[0]
     flat = " ".join(section.split())
     assert "Project" in flat and "--every" in flat

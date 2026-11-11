@@ -838,9 +838,12 @@ def test_ui_band_is_escaped_and_the_a6_byte_for_byte_rule_is_retired(tmp_path):
 # --- E5: the README ------------------------------------------------------------------------
 
 def test_e5_readme_watch_a_project_in_three_lines():
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
-    section = text.split("## Watch a project\n", 1)[1].split("\n## ", 1)[0]
-    lines = [line for line in section.split("\n") if line.strip()]
+    # M9.2: README keeps the first line's first sentence and the second line; the first line's page sentence
+    # and the third line are in docs/GUIDE.md. Each is a paragraph (wrapped); the three lines are rebuilt.
+    from readme_text import GUIDE, section as cut, units
+    top, rest = units(cut("Watch a project")), units(cut("Watch a project", GUIDE))
+    assert len(top) == 2 and len(rest) == 2 and rest[0].startswith("The page reloads itself")
+    lines = [top[0] + " " + rest[0], top[1], rest[1]]
     assert len(lines) == 3 and "raqib watch" in lines[0] and "--no-notify" in lines[1]
     assert "final report" in lines[2]
     # B-8 and B-3

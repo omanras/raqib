@@ -542,7 +542,8 @@ def test_e6_files_are_ascii():
 def test_e6_readme_the_windows_three_lines_refreshed():
     """M8.1: the README's window section says what a person sees: the rail, the verdict, the strip, the doctrine,
     the tray tip."""
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    from readme_text import GUIDE
+    text = GUIDE   # M9.2: docs/GUIDE.md
     section = " ".join(text.split("## The window\n", 1)[1].split("\n## ", 1)[0].split())
     for words in ("Host, Project, Rules and Log", "Rules decide; a model may only raise suspicion.",
                   "Raqib: N trees, K new, F findings", "round strip", "Could not see (N)", "Not a clearance."):

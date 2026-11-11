@@ -25,6 +25,7 @@ FIX = ROOT / "tests" / "fixtures" / "discover"
 LINUX, WINDOWS = FIX / "linux", FIX / "windows"
 CATALOG = discover.load_catalog()
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+from readme_text import GUIDE  # noqa: E402  (M9.2: docs/GUIDE.md holds what README.md no longer does)
 AT = "2026-11-02T10:00:00.000Z"
 NET_HEAD = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode"
 
@@ -1068,7 +1069,7 @@ def test_d8_r7_unowned_lines_name_inode_0_states_and_the_opening_race():
 # --- README (B-4, B-5, B-8, D12) ------------------------------------------------------
 
 def test_readme_states_the_rulings():
-    section = README.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
+    section = GUIDE.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
     flat = " ".join(section.split())
     assert "/rd:true" in section                                             # B-5
     for phrase in ("IDE terminals", "package managers", "CI runners", "loopback"):   # B-8
@@ -1270,7 +1271,7 @@ def test_m50b_e1_cli_save_writes_the_sample_count(tmp_path, monkeypatch):
 
 
 def test_m50b_e1_readme_windows_export_is_the_loop():
-    section = README.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
+    section = GUIDE.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
     block, sysmon = [b.split("```", 1)[0] for b in section.split("```powershell\n")[1:3]]
     assert block.startswith("$N = 6; $T = 10\n") and "wevtutil" not in block                  # G-10
     assert sysmon.startswith("wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml /rd:true /c:5000 > sysmon.xml")
@@ -1749,7 +1750,7 @@ def test_g4_a_blank_image_path_is_a_hole_and_places_nothing():
     assert ("2 process(es) without image path (export not elevated?): act-root cannot place them: pid 10, 20"
             in inv["holes"])                                       # pids 0 and 4 never have one
     assert not any("without image path" in h for h in from_dir(KIMI1)["holes"])
-    section = README.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
+    section = GUIDE.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
     assert "elevated" in section and "counted in a hole" in " ".join(section.split())
 
 
@@ -1760,7 +1761,7 @@ def test_g5_a_missing_sample_with_no_candidate_is_exit_3_unless_an_alarm(tmp_pat
     assert (inv["candidates"], inv["act_roots"], inv["alarms"], inv["result"], inv["exit"]) == ([], [], [], "incomplete", 3)
     assert any(h.startswith("sample 2: source win-process-2 not read") and h.endswith(
         "the run is incomplete (exit 3 unless an alarm)") for h in inv["holes"])
-    flat = " ".join(README.split())
+    flat = " ".join(GUIDE.split())   # M9.2: the discover section is in docs/GUIDE.md
     assert "incomplete (exit 3 unless an alarm)" in flat
     adr = " ".join((ROOT / "docs" / "specs" / "ADR-0004-agent-discovery.md").read_text(encoding="utf-8").split())
     assert "Note (2026-11-03, M5.0b REDO, G-5; corrects this item): a missing sample makes the run incomplete (exit 3" \
@@ -1846,7 +1847,7 @@ def test_g11_moonshot_hosts_are_names_only_from_vendor_docs():
 
 
 def test_g14_readme_names_the_benign_set_and_records_2_of_2():
-    flat = " ".join(README.split("## Find the agents on a host (discover)")[1].split("\n## ")[0].split())
+    flat = " ".join(GUIDE.split("## Find the agents on a host (discover)")[1].split("\n## ")[0].split())
     for phrase in ("a JetBrains IDE under `~/.local`, each with a terminal running make -> cc",
                    "its terminal running a command (powershell -> node)", "candidates fire on 2 of 2",
                    "the anchor still declares no budget", "act-root declares fp_budget 0.25 and fires on 0 of 2",

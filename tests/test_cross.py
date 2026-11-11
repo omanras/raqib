@@ -21,6 +21,7 @@ FIXTURES = ROOT / "tests" / "fixtures"
 CROSS_DIR = FIXTURES / "cross"
 CATALOG = ROOT / "raqib" / "rules" / "catalog"
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+from readme_text import GUIDE  # noqa: E402  (M9.2: docs/GUIDE.md holds what README.md no longer does)
 THREAT = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
 EXPECTED = {"asked-not-done": [("s-hook", [2])], "done-not-asked": [("os-4100", [7])],
             "matched": [], "rg-helper": []}
@@ -367,7 +368,7 @@ def test_c5_an_os_trace_reports_no_partial_from_the_guarded_signatures():
 # --- C-9 and E4: docs ------------------------------------------------------------------------
 
 def test_c9_readme_names_the_rule_the_shell_tools_the_window_and_sysmon_n():
-    flat = " ".join(README.split())
+    flat = " ".join(GUIDE.split())   # M9.2: the os-sysmon section, the rule count and the table: docs/GUIDE.md
     for phrase in ("Twenty-two rules turn the trace into findings",   # M4.2b: was Thirteen; M4.3: Seventeen; M7.2: Nineteen; REDO: Twenty; M7.2b: Twenty-one; M7.4: Twenty-two
                    "| CROSS-SOURCE | only in a trace with `os` lines:",
                    "`raqib os-sysmon --root PID[:GUID] --log TRACE [--from FILE.xml] [--cwd DIR]`",
@@ -432,7 +433,7 @@ def test_d7_an_os_only_trace_of_the_agents_own_processes_has_nothing_to_judge(tm
 
 
 def test_d7_both_directions_of_c2_are_in_readme_and_threat_model():
-    flat = " ".join(README.split())
+    flat = " ".join(GUIDE.split())   # M9.2: the os-sysmon section, the rule count and the table: docs/GUIDE.md
     assert "A trace with no os line is not judged and gets no note; a trace with os lines and no hook or proxy line" \
            " is INCOMPLETE, by a partial note or, when every os process is the agent's own, \"nothing to judge\"" in flat
     threat = " ".join(THREAT.split())
@@ -542,7 +543,7 @@ def test_d10_an_unread_pre_in_the_window_makes_the_process_partial_and_is_named(
 
 
 def test_d10_the_holes_are_named():
-    flat = " ".join(README.split())
+    flat = " ".join(GUIDE.split())   # M9.2: the os-sysmon section, the rule count and the table: docs/GUIDE.md
     assert "Matching is by name only, so a renamed program passes as the name it carries" in flat
     assert "a tool that only has a shell word in its name and starts no process is a false-positive source" in flat
     threat = " ".join(THREAT.split())

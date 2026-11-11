@@ -1327,7 +1327,7 @@ def test_a3_run_writes_session_end_for_the_open_conversations_when_it_stops(tmp_
 # --- E5 and the Amendment A docs -----------------------------------------------------------------
 
 def test_e5_readme_watch_another_agent_and_adr_0003_accepted():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = (ROOT / "docs" / "GUIDE.md").read_text(encoding="utf-8")   # M9.2: docs/GUIDE.md
     section = " ".join(readme.split("\n## Watch another agent\n", 1)[1].split("\n## ", 1)[0].split())
     assert "raqib proxy --listen 127.0.0.1:8787 --upstream https://api.moonshot.ai --log" in section
     assert "OpenAI-compatible chat/completions API" in section and "Anthropic messages API" in section

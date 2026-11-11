@@ -547,7 +547,8 @@ def test_e4_real_tray_starts_and_stops_or_says_why():
 
 def test_e6_readme_the_window_section_names_the_command_the_gui_script_and_python3_tk():
     """M6.4's facts in the window's section (M8.1: rewritten for what a person sees)."""
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    from readme_text import GUIDE
+    text = GUIDE   # M9.2: docs/GUIDE.md
     section = text.split("## The window\n", 1)[1].split("\n## ", 1)[0]
     flat = " ".join(section.split())
     assert "`raqib app [PROJECT]`" in flat and "`raqib-app`" in flat and "python3-tk" in flat

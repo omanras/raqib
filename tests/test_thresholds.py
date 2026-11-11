@@ -396,7 +396,8 @@ def test_e5_new_and_changed_files_are_ascii_and_the_readme_says_it_in_two_lines(
     for name in ("raqib/rules/fixturegen.py", "raqib/rules/hostdata/inventories.json", "raqib/overlay.py",
                  "raqib/rules/engine.py", "raqib/app.py", "tests/fixtures/host/make.py", "tests/test_thresholds.py"):
         (ROOT / name).read_bytes().decode("ascii")
-    section = (ROOT / "README.md").read_text(encoding="utf-8").split("## Choose the rules\n", 1)[1].split("\n## ", 1)[0]
+    from readme_text import GUIDE, flat, section as cut   # M9.2: docs/GUIDE.md, wrapped: compared flattened
+    section = flat(cut("Choose the rules", GUIDE))
     assert "within the bounds its rule's YAML declares" in section and "generated at the new value" in section
 
 

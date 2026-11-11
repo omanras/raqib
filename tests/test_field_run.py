@@ -477,11 +477,12 @@ def test_e4_page_and_window_show_the_note_apart_from_the_findings(tmp_path):
 
 
 def test_e4_readme_has_the_two_lines():
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "dark after a live tree (note)" in text and "never knocked and never an alarm" in text
-    assert "HOST-RHYTHM takes its beats from every source" in text and "(KNOCKS)" in text
+    from readme_text import GUIDE, flat, units
+    text = GUIDE   # M9.2: docs/GUIDE.md, wrapped at 100: the phrases are compared flattened
+    assert "dark after a live tree (note)" in flat(text) and "never knocked and never an alarm" in flat(text)
+    assert "HOST-RHYTHM takes its beats from every source" in flat(text) and "(KNOCKS)" in flat(text)
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
-    lines = [l for l in section.split("\n") if l.strip()]
+    lines = units(section)
     # the two lines, at its end until M7.8, whose three lines follow them (test_acts_judged.py)
     assert "dark after a live tree (note)" in lines[-5] and "(KNOCKS)" in lines[-4]
 
