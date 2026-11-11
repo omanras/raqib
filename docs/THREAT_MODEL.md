@@ -621,6 +621,27 @@ is amended by T-2, T-1 restated by V-1).
   program that repeats as brief runs is judged only by its acts: each run
   is its own tree, so HOST-RHYTHM and HOST-UNWATCHED never see the
   repetition; the count by path is its only trace.
+- **Where the channel's watch and the watch without it still differ on
+  a footprint (ADR-0007 AE; each is a knock more, never one fewer).**
+  The footprints are judged from the round built without the channel's
+  records, and three things of the channel still reach them through the
+  trees. (1) A process whose sampled start was not read in the first
+  round and was read later is two trees without the channel and one
+  with it (its guid): with it the tree is history from the first round,
+  so no NEW-AGENT comes for it in a later round, and its link never
+  makes the footprint live (N-1) - the footprint's dark rounds knock
+  where the split watch would have noted them. (2) A sampled program
+  whose command line, known only from the channel, carries `--type=` is
+  taken for a helper in the channel's round and is no act-root there:
+  the footprint it links by name is not held quiet by it, and knocks
+  AGENT-DARK-LIVE after its dark rounds while the program still runs.
+  (3) In a round whose connections were partly read, a tree known only
+  from the channel is said "kept" where the other watch says "quiet";
+  the judgement is the same. What judging footprints without the channel
+  gives up is wider than a run between rounds: the live sample reads no command line, so
+  a sampled agent whose command line or working directory names the
+  footprint only in the channel is not linked by it. The tree key is a
+  later task (M7.12).
 - **What the os lines are judged by.** NET-TOOL and DESTRUCT-CMD judge an
   os process line by its image name (P-1: `input_meta.image`, discover's
   normalised form, `curl.exe` -> `curl`; R-7: and its parent's,
