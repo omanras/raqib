@@ -659,3 +659,32 @@ with a test of its case and of what it must not touch:
   switched a rule back on), F-3's "exact name first" (a name with a
   suffix matched across kinds) and G-3's "bounded" (not said to cover a
   file that is not judged) were each the Table's words read exactly.
+
+## Amendment I (the Table, 2026-11-11) - the third field run's first minute: the window did not open (M8.4)
+The commander installed main 082aad6 on his Windows machine and saw a
+white window, "Not Responding". His stack dump put the main thread in
+Tk's first idle pass thirty seconds after the start. The Table measured
+it on windows-latest with a probe: the window was white for 19 seconds
+at scale 1.0, 38 at 2.0, 87 at 3.0 (docs/review/2026-11-11-M8.4.md).
+- I-1 The cause is decision 2's own means. M8.1 drew every box as a
+  small picture and gave it to ttk as an image element; ttk tiles an
+  element's middle, one blit per tile, and the middles were two pixels.
+- I-2 The ruling: a picture that is stretched has a middle a redraw can
+  afford. FOR: every image element with a border is given pictures whose
+  middle, in each direction it has one, is THEME's tile; the whole
+  window as one card is some dozens of blits. MUST NOT TOUCH: the look -
+  the same pixels in the corners, the same colour in the middle, no
+  widget a pixel larger (the element asks its drawn picture's room); an
+  element with no border keeps its picture. The painter decides without
+  sampling every pixel the arc does not cross, and gives every pixel the
+  value sampling gave. Each side tested (tests/test_app_tile.py).
+- I-3 What M8.1's judgement missed, for the ledger: Amendment D accepted
+  "opens and fits on Windows" on six green jobs, and a green job builds
+  the window and never waits to see it. Three packets and the Table read
+  the code that draws and none asked what one redraw costs. A window is
+  judged by a person opening it; until a field run, a probe that times
+  the opening on each system stands in for him (recorded: a timing probe
+  in CI that reports and never fails; Python 3.14 in CI's matrix).
+- I-4 Not reviewed by a fresh reviewer: the Table's own fix, made while
+  the commander waited. The probe on top of it and his next opening are
+  its review; a reviewer reads it with M8.3.

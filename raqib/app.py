@@ -188,7 +188,7 @@ THEME = {
     # padding and corner, the buttons, a table row's padding, a strip cell, the switch, a scrollbar
     "px": {"rail": 184, "pad": 20, "gap": 12, "card_pad": 12, "card_radius": 10, "radius": 6, "row_pad": 7,
            "cell": 10, "cell_gap": 4, "switch": (34, 18), "scroll": 10, "chevron": 12, "wrap": 420, "list_h": 180, "form_h": 196,
-           "focus": 2},
+           "focus": 2, "tile": 64},   # tile: the middle a stretched picture is given (M8.4: ttk tiles, never scales)
     "min_size": (900, 600), "size": (1100, 720),
 }
 LEVEL_WORDS = {"clean": "clean", "alarm": "alarm", "incomplete": "incomplete", "note": "note",
@@ -1180,6 +1180,18 @@ def _cover_rect(px, py, x0, y0, x1, y1, r, n=4):
     inside = px >= x0 and py >= y0 and px + 1 <= x1 and py + 1 <= y1
     if inside and (x0 + r <= px and px + 1 <= x1 - r or y0 + r <= py and py + 1 <= y1 - r):
         return 1.0
+    if inside and x0 + r <= x1 - r and y0 + r <= y1 - r:   # (a radius over half a side keeps the samples)
+        # M8.4: a pixel wholly in one corner's quarter is decided by its farthest and nearest points to that
+        # corner's centre; only a pixel the arc crosses is sampled. The value is what the samples gave.
+        cx = x0 + r if px + 1 <= x0 + r else (x1 - r if px >= x1 - r else None)
+        cy = y0 + r if py + 1 <= y0 + r else (y1 - r if py >= y1 - r else None)
+        if cx is not None and cy is not None:
+            ax, bx, ay, by = abs(px - cx), abs(px + 1 - cx), abs(py - cy), abs(py + 1 - cy)
+            far = max(ax, bx) ** 2 + max(ay, by) ** 2
+            if far <= r * r:
+                return 1.0
+            if min(ax, bx) ** 2 + min(ay, by) ** 2 >= r * r:
+                return 0.0
     hit = 0
     for i in range(n):
         sx = px + (i + 0.5) / n
@@ -2889,6 +2901,7 @@ class Window:
         self.scale = scale or screen_scale(root.winfo_fpixels("1i"))   # E6: 1.0 at 96 dpi
         self.images = {}                       # the drawn pictures (Tk drops a PhotoImage no one holds)
         self.styles = set()
+        self.elements = {}                     # M8.4: each image element's (border, its pictures as given to ttk)
         root.title(TITLE)
         width, height = self.px(THEME["size"])
         root.geometry("%dx%d" % (min(width, max(root.winfo_screenwidth() - self.px(40), self.px(900))),
@@ -2935,15 +2948,58 @@ class Window:
             self.images[key] = img
         return self.images[key]
 
+    def _wide(self, img, border):
+        """M8.4 (the third field run): ttk does not scale an image element's
+        middle, it TILES it, one blit per tile. A picture drawn as small as
+        its corners allow has a middle of two pixels, so a card the size of
+        the window was some hundred thousand blits a redraw: seconds on X11,
+        and on the commander's Windows a white window that never answered.
+        The same picture with its middle repeated to TILE pixels (Tk's own
+        photo copy tiles a region in C; the corners are copied as they are)
+        looks the same and is a few dozen blits. A dimension with no middle
+        between its borders is left as it is."""
+        w, h = img.width(), img.height()
+        if not isinstance(border, int) or isinstance(border, bool) or border <= 0:
+            return img
+        tile = self.px(THEME["px"]["tile"])
+        spans = []
+        for size in (w, h):
+            middle = size - 2 * border
+            if middle <= 0 or middle >= tile:   # nothing to stretch, or already wide
+                spans.append([(0, size, 0, size)])
+            else:
+                spans.append([(0, border, 0, border), (border, size - border, border, border + tile),
+                              (size - border, size, border + tile, 2 * border + tile)])
+        if len(spans[0]) == 1 and len(spans[1]) == 1:
+            return img
+        key = ("wide", str(img), border)
+        if key not in self.images:
+            big = self.tk.PhotoImage(master=self.root, width=spans[0][-1][3], height=spans[1][-1][3])
+            for sx0, sx1, dx0, dx1 in spans[0]:
+                for sy0, sy1, dy0, dy1 in spans[1]:
+                    # Tk's own photo command (a Tcl script of two image names and eight whole numbers)
+                    self.root.tk.eval("%s copy %s -from %d %d %d %d -to %d %d %d %d" % (
+                        big, img, sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1))
+            self.images[key] = big
+        return self.images[key]
+
     def _element(self, name, pictures, border, sticky="nswe", padding=0):
         """A ttk image element from (state, picture) pairs, the first the
         default; its corners `border` wide stay, its middle stretches; its
-        own padding is `padding` (the style's padding places the content)."""
+        own padding is `padding` (the style's padding places the content).
+        M8.4: each picture is given a middle wide enough to tile cheaply
+        (_wide) and asks the room its drawn picture asked; what the element
+        was made from is kept in self.elements."""
         if name in self.styles:
             return
         self.styles.add(name)
+        asked = (pictures[0][1].width(), pictures[0][1].height())   # ttk asks the picture's size for the element
+        pictures = [(state, self._wide(img, border)) for state, img in pictures]
+        self.elements[name] = (border, [img for _, img in pictures], asked)
+        size = {} if pictures[0][1].width() == asked[0] and pictures[0][1].height() == asked[1] else {
+            "width": asked[0], "height": asked[1]}   # the widened picture asks no more room than the drawn one
         self.style.element_create(name, "image", pictures[0][1], *[tuple(pair) for pair in pictures[1:]],
-                                  border=border, sticky=sticky, padding=padding)
+                                  border=border, sticky=sticky, padding=padding, **size)
 
     def _button_style(self, name, fill, hover, pressed, text, ground, border=None, ring=None, bar=None,
                       padding=(14, 6), font=None, anchor="center"):
