@@ -471,6 +471,16 @@ def host_causes(state):
     return out
 
 
+def by_channel_cause(state):
+    """ADR-0007 AB-2 at the merge: what a host watch that would end clean still has to say - the unknown trees it
+    listed by the channel and did not knock (the count the state carries; never a path: the window shows names only)."""
+    host = (state or {}).get("host") if isinstance(state, dict) else None
+    m = host.get("by_channel_count") if isinstance(host, dict) else None
+    if not isinstance(m, int) or isinstance(m, bool) or m <= 0:
+        return ""
+    return "%d unknown tree%s seen only %s, listed, not knocked" % (m, "" if m == 1 else "s", hostmod.BY_CHANNEL)
+
+
 def live_cause(code, findings, suspicions=0, causes=(), fresh=False):
     """REDO B-2, B-5, C-1..C-3: the words that say why when the level is
     not what the findings alone say: "no line read yet" (fresh), "not
@@ -1700,6 +1710,8 @@ def tree_kind(tree):
         flags.append("history")
     if tree.get("knocked"):
         flags.append("new")
+    if tree.get("by_channel") and not tree.get("knocked"):   # ADR-0007 AA-1, AB-11: listed, counted, not knocked
+        flags.append(hostmod.BY_CHANNEL)
     if tree.get("quiet"):   # M8.1 REDO A-13(d), ADR-0007 P-2: a tree the state marks quiet is never said gone
         flags.append("quiet")
     elif tree.get("present") is False:
@@ -2031,13 +2043,27 @@ class HostProbe:
         self.seen_late = False   # F-3: the look was READER LATE at some view; that hole stays when it comes back
         self.written = None      # F-10: what look.json holds now ("late", "done"), or None
         self.write_error = None
+        self.closed = []         # AB-9: what closing the look's channel said
 
     def start(self):
         import datetime
         self.began = self.clock()
         self.at = hostmod.iso(datetime.datetime.fromtimestamp(self.wall(), datetime.timezone.utc))
-        self.worker = hostmod.Worker(self.reader)
+        self.worker = hostmod.Worker(self._read_once)
         return self
+
+    def _read_once(self):
+        """ADR-0007 AB-9 (Q-21): the look owns the channel its reader opened and closes it when its one read is
+        back, in the reader's own thread; what the close had to end is a hole of the look."""
+        try:
+            return self.reader()
+        finally:
+            close = getattr(self.reader, "close", None)
+            if close is not None:
+                try:
+                    self.closed = ["the look's channel: %s" % t for t in close("the look ended") or ()]
+                except Exception as exc:
+                    self.closed = ["the look's channel was not closed: %s: %s" % (type(exc).__name__, exc)]
 
     def done(self):
         return self.worker is not None and self.worker.done()
@@ -2054,6 +2080,8 @@ class HostProbe:
                 self._write(view, now, stage)
         if self.write_error:
             view = dict(view, holes=view["holes"] + [self.write_error])
+        if self.closed:
+            view = dict(view, holes=view["holes"] + list(self.closed))
         return view
 
     def _write(self, view, now, stage):
@@ -4734,7 +4762,8 @@ class Window:
             found, sus = self.counts["host"]
             code = self._known(self.c.host, (state or {}).get("code_so_far"))
             self.live["host"] = (view["word"], live_level(code, view["word"]), found, sus,
-                                 live_cause(code, found, sus, host_causes(state)))   # REDO C-2, C-3
+                                 live_cause(code, found, sus, host_causes(state))   # REDO C-2, C-3
+                                 or by_channel_cause(state))
         if self.c.project_watching():
             if not pstate:
                 self.live["project"] = ("STARTING", "incomplete", 0, 0, "not judged yet")

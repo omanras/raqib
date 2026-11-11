@@ -382,8 +382,9 @@ def test_x1_the_windows_round_reads_the_channel_and_no_caller_passes_one(tmp_pat
     assert len(fake.args) == 2 and rounds[1][host.BRIEF] == [KIMI_WORD]   # the window's wrapped reader read it
     for fn in (host.live_reader, host.HostWatch.__init__, host.start, host.command):
         assert "channel" not in inspect.signature(fn).parameters, fn
-    assert "channel" not in (ROOT / "raqib" / "app.py").read_text(encoding="utf-8").lower().replace(
-        "sysmon channel", "")   # the window is unchanged and passes nothing
+    # the window passes no channel to any reader (at the merge, AB-2 / AB-9: it reads the state's by-the-channel
+    # count and closes the channel its look's reader opened; it still hands none in)
+    assert not re.search(r"\bchannel\s*=", (ROOT / "raqib" / "app.py").read_text(encoding="utf-8"))
 
 
 def test_e1_each_round_reads_on_from_the_last_record_and_round_1_reads_nothing_older_than_the_start(
