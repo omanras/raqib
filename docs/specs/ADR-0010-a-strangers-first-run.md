@@ -312,3 +312,39 @@ paragraph keeps its words and loses its subject.
   move honest, and so made the first page say that Raqib needs tkinter.
   A constraint that protects one property (nothing lost) is not applied
   where another matters more (what a stranger reads is true).
+
+## Amendment F (the Table, 2026-11-11) - rulings on review 2026-11-11-M9.2-redo.md (83bd583), and the judgement on M9.2
+E-1..E-7 MET; no must-fix; no sentence of the old README lost (the
+reviewer found 15 more pieces by hand); the verdict is NEXT on CI.
+- F-1 (J1, J2, J12; the Table's own commit, each with its pin) Three
+  sentences of the first page said less than the tree: tkinter is
+  python.org's Python's own, and `python3-tk` is Debian's and Ubuntu's
+  package for it; on macOS the hooks and doctor are written for it as
+  well as the notifications and the page opener, `raqib discover` has no
+  live reader there either, and none of it is tested; and the rules row
+  names `--new ID`, the terminal's twin of the form.
+- F-2 (Q-10, ruled while the build ran; J7) E-2's "lines at most 120"
+  and the handoff's E1 give way inside the sample's fence: a cited line
+  is what the code prints (142 characters at the least for a Bash line,
+  220 here) and is not cut a second time; every line outside the fence
+  keeps 120. The test's cap on a fenced line is the report's own.
+- F-3 Recorded: Q-11 and J10 (three docstrings, never printed, still say
+  "the README" for what the guide now holds; they are listed in the
+  test, and go with the next change to those files); J3 (whether a watch
+  that is not elevated can read the Sysmon channel is said nowhere: the
+  commander's field run answers it); J4, J5, J13 (four pins hold words
+  or help text, not a fact of the code); J6 (the sample trace has the
+  rule fixtures' older shape: no source key, no git keys; the report is
+  the same); J9 (`discover --read` is in the help and not in the guide);
+  J11 (the nothing-lost test checks membership, not count, in the
+  reverse direction, and not order).
+- Judgement: NEXT for M9.2, on six CI jobs green for the Table's commit.
+  Decision 7 is accepted with Amendments E and F: the README is one
+  page a stranger can read - what Raqib is, how to start it, what an
+  alarm about an agent's act looks like (the code's own report, tested),
+  where it runs, the commands with the window first - and everything
+  else it said is in docs/GUIDE.md word for word, each pin following its
+  sentence. With it ADR-0010 is accepted whole. Not reviewed by a fresh
+  reviewer: the Table's wording commit (F-1).
+- Table ledger for M9.2: one REDO, and its cause was the handoff. "Move,
+  do not rewrite" was applied to the one section that had to be written.
