@@ -452,8 +452,9 @@ def test_e1_the_module_runs_nothing_but_wevtutil_and_opens_no_socket():
     tree = ast.parse((ROOT / "raqib" / "hooks" / "os_sysmon.py").read_text(encoding="utf-8"))
     names = {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     names |= {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-    assert names == {"__future__", "ipaddress", "json", "os", "re", "subprocess", "sys", "raqib", "raqib.hooks",
-                     "raqib.rules"}
+    # M7.9 REDO 4 (ADR-0007 AB-9): threading for a lock and a thread-local owner (no process, no socket)
+    assert names == {"__future__", "ipaddress", "json", "os", "re", "subprocess", "sys", "threading", "raqib",
+                     "raqib.hooks", "raqib.rules"}
     assert (ROOT / "raqib" / "hooks" / "os_sysmon.py").read_bytes().isascii()
     assert (ROOT / "raqib" / "rules" / "cross.py").read_bytes().isascii()
 

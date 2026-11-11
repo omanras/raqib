@@ -540,22 +540,30 @@ is amended by T-2, T-1 restated by V-1).
   NEW-AGENT each time, brief or not. A tree it does not name that is a
   candidate only by what the channel gave (never at a sample) is listed
   `by the channel`, sourced, its acts judged, but it is no
-  NEW-AGENT-UNKNOWN finding and no knock (AA-1): the report counts such
-  trees by image path (by name where no path was read, said), with the
-  last five runs cited, until a field run measures how many ordinary
-  programs do this; an unknown tree that is a candidate at a sample knocks
+  NEW-AGENT-UNKNOWN finding and no knock (AA-1; NEW-AGENT-UNKNOWN's match
+  says it, AB-5): the report counts such trees by image path (one per
+  tree, however many rounds it is listed, AB-1; by name where no path was
+  read, said), with the five latest trees cited, until a field run
+  measures how many ordinary programs do this; a watch whose only news is
+  such trees ends CLEAN (exit 0) and its CLEAN and RESULT lines say how
+  many (AB-2); such a tree does not make a footprint live, so a footprint
+  it alone links is dark as before the channel was read (AB-4); an unknown tree that is a candidate at a sample knocks
   NEW-AGENT-UNKNOWN as before, once. History is a thing of the first
   round: a candidate of round 1 is history unless its start was read and
   is at or after the watch's start. A ProcessGuid keys a tree: a reused
   pid is another tree; a tree seen in the channel in one round and in the
   sample in another is one tree when the records tell (a sampled
   CreationDate and a Sysmon 1 time within 2 s; or every event of the guid
-  within the tree's life, from its start or first sight to its last
-  sample; with a start unread on one side in one round, the only process
-  of its pid and image on both sides, said; with the sampled start
-  unread, never). The read is checked against what it asked (a record not
-  above the bound, or older than the start, is dropped and said; two reads
-  of only such records restart the read, said). When a stopped or cleared
+  within the tree's life, from its start, or its first sight where its
+  start was unread, to its last sample - this round's sample when its root
+  is in it (AB-7); within one round's discover run, a start unread on one
+  side joins only the one process of its pid and image on both sides,
+  said, and a guid never joins a sampled process whose start was unread).
+  The read is checked against what it asked: a record not above the bound,
+  or older than the start, is dropped and said; a record at or below the
+  bound restarts the read at once (the record numbers restarted: a cleared
+  channel?), and two reads in a row of only records older than the read's
+  start restart it (a clock that stepped back), said. When a stopped or cleared
   channel is said: in the third of three rounds in a row, each with a
   process the sample shows created a round earlier, whose reads held no
   event 1 at all, after the channel gave event 1 in this watch; then the
@@ -564,8 +572,9 @@ is amended by T-2, T-1 restated by V-1).
   stopped or cleared channel reads as quiet rounds - a hole that remains,
   and the narrowing holds only while the channel delivers. An image whose
   event 1 does not come while the channel gives others is a note ("left
-  out by its configuration, or late"), withdrawn in the report if its
-  event 1 comes. What the channel's read does not close: a read that
+  out by its configuration, or late"), withdrawn when an event 1 of that
+  image comes ("an event 1 of <image> came") and said again at its next
+  miss, so the report's last word on an image is its present state (AB-8). What the channel's read does not close: a read that
   fails, times out or reaches the cap of events per round is a hole of
   that round (the next round reads on from the last record read, so a
   channel busier than the cap makes the rounds lag; a lag of more than a
@@ -574,7 +583,22 @@ is amended by T-2, T-1 restated by V-1).
   the report lists the kinds read; where neither a start time nor a
   ProcessGuid tells two processes of one image under one pid apart, they
   are one tree. Linux (no audit source of process events is read) and a
-  Windows host without Sysmon keep the whole hole, said once.
+  Windows host without Sysmon keep the whole hole, said once: a `hole:`
+  line of the watch's first lines, which speak from the watch's own check
+  at its start and say so; where the live reader's own check at round 1
+  differs (either way), round 1's printed line says so once, with what the
+  sources are then, and the hole is said there if it was not said first
+  (AB-3).
+- **Recorded, not closed (ADR-0007 AB-11).** The tree ledger grows by one
+  entry per tree listed `by the channel`: a program that runs every
+  minute for a day is 1440 entries in the state and in the report's TREES
+  SEEN (each marked `by the channel`); a bound is a later task (M7.12),
+  because it touches the tree key. A pid reused by a process of an image
+  whose event 1 the channel does not give, wholly inside the seconds
+  between a sample and its round's end, joins the earlier tree. An unknown
+  program that repeats as brief runs is judged only by its acts: each run
+  is its own tree, so HOST-RHYTHM and HOST-UNWATCHED never see the
+  repetition; the count by path is its only trace.
 - **What the os lines are judged by.** NET-TOOL and DESTRUCT-CMD judge an
   os process line by its image name (P-1: `input_meta.image`, discover's
   normalised form, `curl.exe` -> `curl`; R-7: and its parent's,

@@ -4,7 +4,7 @@ Task: where Sysmon is readable, a host round's inventory is the OS sample plus t
 round began, so a tree that starts, talks, acts and ends between two rounds is a tree of that round.
 
 Scope:
-  raqib/host.py, raqib/discover.py, raqib/hooks/os_sysmon.py, raqib/ui.py, raqib/cli.py (help text only), tests/, README.md, docs/THREAT_MODEL.md, docs/review/   (NOT raqib/app.py)
+  raqib/host.py, raqib/discover.py, raqib/hooks/os_sysmon.py, raqib/ui.py, raqib/cli.py (help text only), tests/, README.md, docs/THREAT_MODEL.md, docs/review/, raqib/rules/catalog/NEW-AGENT-UNKNOWN.yaml (AB-5; NEW-AGENT.yaml: AA-5's sentence only)   (NOT raqib/app.py)
 
 Exit criteria:
 - E1 One read of the channel per round, by Raqib's own wevtutil as os_sysmon runs it (absolute path, SystemRoot-only environment, a timeout, the helper ended and recorded at Stop: I-5), asking only for records newer than the last one the previous round read (a bound in the query, never the whole channel); round 1 reads nothing older than the watch's start. A read that fails, times out or is cut is a hole of that round (A3) and the round keeps its sample. A cap on events per round, a hole when hit.
