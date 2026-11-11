@@ -1592,3 +1592,69 @@ without the source, and what is left sorted by direction.
   code is in no source; in the third field run the watched read the
   watcher's record. Q-1 and Q-3 wait for the commander.
 
+## Amendment AG (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.13.md (3c35d06) and the builder's questions
+Sorted by direction: silence is fixed, more said is trimmed where it
+is cheap, false words are made true. Each ruling names its case and
+what it must not touch; both are tested.
+- AG-1 (R-1, Q-C; silence, fixed). AF-1's word is "while". The
+  property: from the round after the first kept read, a tree is sourced
+  as it is in the watch whose every round read. So a tree that has the
+  host's record only because no round had read the channel is attached
+  again, as the os source, in the first round it is in after a kept
+  read; the lines its host record wrote stay judged; an act both
+  sources saw is one act (the registry, as for any second source). FOR:
+  round 1's read does not return in time (or wevtutil could not be
+  run), round 2 on reads. MUST NOT TOUCH: a tree that has the host's
+  record for another reason (no Sysmon, its os source ended with a
+  hole) keeps it; a watch that never reads keeps AF-1.
+- AG-2 (W-1, W-5, question 3). The cause is one of a few words the
+  code decides from the reader's error, not its stderr: denied (exit
+  5), not back in time, could not be run, other. The elevated terminal
+  is named only for denied. The knock's body is the cause word first
+  and fits the notifier's cut with the field's longest reason; the
+  full reason is in the hole and the terminal line. MUST NOT TOUCH:
+  the hole's own words.
+- AG-3 (S-1, W-2, question 5). AF-2's one terminal line also says
+  that what lives between two rounds is not seen until a round reads,
+  and that trees are judged by the host's own record until then and
+  attached again after (AG-1). A tree's own attach line and source
+  text name the cause in its few words, never the advice and never the
+  full reason again.
+- AG-4 (W-3, W-4, W-7, the builder's "after record None"). True
+  words: the AB-3 note says the sources the trees now get; the CHANNEL
+  line of a watch with no read kept is headed by that fact, not by
+  "the rounds read", and says nothing of the channel was read since
+  the watch's start, never "record None"; the SYSMON line's N is the
+  number of channel reads asked, and says so. MUST NOT TOUCH: both
+  lines of a watch whose every round read, byte for byte.
+- AG-5 (W-6, Q-D). Q-D confirmed inside one episode: a start that
+  moves while no read is kept is a time. One folded line per episode
+  (a run of failed rounds with no kept read between), so holes before
+  the first kept read and holes after a restart are two lines.
+- AG-6 (W-8, W-9, W-10). THREAT_MODEL: the watch never checks
+  elevation, it reports the denial; who may read the channel is
+  Windows' and Sysmon's configuration (administrators on a default
+  install). "Every tree" excepts a Claude Code tree with hooks
+  attached and a tree with no source. A file's deletion is in no
+  source at all (events 23 and 26 are never asked for); a creation
+  only where event 11 is read.
+- AG-7 (Q-A). The README is not touched: ADR-0010 E-1's eight lines
+  stand, and the guide and THREAT_MODEL say it. The guide gets its
+  paragraph in "Watch the host", written to AG-1 to AG-6, and the two
+  pins are amended with it by the builder: the paragraph's sentences
+  join GUIDE_NEW, the paragraph count is 15.
+- AG-8 (Q-B, question 6). The Table's word: the header stays
+  "HOLES (A3): N"; the line count is the first line under it, only
+  when lines were folded.
+- AG-9 (question 2). Confirmed: a denied watch with no finding ends
+  INCOMPLETE (exit 3), with its one knock. That is the class.
+- AG-10 (TESTS). No test reads a file under docs/review (the Table's
+  to edit); E2's one terminal line is shown on a watch with trees;
+  E3's "never beside 0 kept" is shown on the CHANNEL line too; E4 has
+  two episodes as two lines and the moved-start clause.
+- Not ruled, for the commander: question 4 (a channel that goes
+  silent or restarts mid-watch is a hole and no knock; an agent with
+  administrator rights that stops Sysmon looks like that), and Q-2
+  (the child of an unnamed program under a benign tree is a note:
+  RESULT CLEAN).
+
