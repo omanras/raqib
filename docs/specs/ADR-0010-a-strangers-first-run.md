@@ -199,3 +199,40 @@ and C-2. Each ruling names the case it is FOR and what it MUST NOT TOUCH.
   and again did not read what the count holds. Two more of the Table's
   sentences read exactly. A ruling states the property it protects (a
   write cannot skip the record), not a sequence that happens to give it.
+
+## Amendment D (the Table, 2026-11-11) - rulings on review 2026-11-11-M9.1-redo2.md (30ab1a4), and the judgement on M9.1
+C-1..C-5 MET; no must-fix; the reviewer's verdict is NEXT on Windows CI.
+- D-1 Questions ruled as built: Q-12 (the project state's "notes" key
+  is there only when words were lost; the page shows it in M9.4), Q-13
+  (the count is of failed writes and flushes: a lower bound, and the
+  note says "writes"), Q-14 (the first line and the stop line use one
+  name, SIGBREAK, with the key beside it). Q-11 (G1): the note counts
+  what was lost up to the moment the record was kept; the report printed
+  after it may be lost too and the record cannot say so - README and the
+  help now say "up to the moment the record was kept" (the Table's
+  commit, with its test); writing the record once more after the report
+  is M9.4's, with the page.
+- D-2 (G3; the Table's commit) README and the help no longer say that a
+  terminal which stops reading "prints nothing": it holds the stop until
+  it drains and then says its words; "prints nothing" is said of the
+  watch that is killed or whose console is closed. The test pins both
+  sentences and their order.
+- D-3 Recorded for M9.4 (the terminal's knock and its page): G2, G4
+  (the first lines are matched as a subsequence), G5, G6 (the note of a
+  terminal gone and still gone), G7, G8 (the ALARMS lines read loosely
+  for the model layer's alarms and are printed by `raqib report` too),
+  with C-6's list.
+- Judgement: NEXT for M9.1, on six CI jobs green for the Table's commit.
+  Decisions 1-6 are accepted with Amendments B-D: a watch asked to stop
+  ends with its report, its record and its code, and a terminal that is
+  gone costs the words only; `raqib --version`; doctor's notifier line;
+  a finding names the program that made it, in the catalog and from the
+  form; the ALARMS lines say what is counted; the quickstart's first
+  command succeeds. Not reviewed by a fresh reviewer: the Table's own
+  wording commit (D-1, D-2).
+- Table ledger for M9.1: two REDOs. Of five must-fixes, three were the
+  Table's sentences (decision 1's untested "closed terminal" and its
+  `raqib report` for both watches; B-1's order nobody needed) and two
+  were tests that could not pass on Windows. The reviewer's first
+  question from now on is the one that found them soonest: can every
+  new test pass on the other system, read line by line.
