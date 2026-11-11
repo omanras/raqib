@@ -7,9 +7,11 @@ in a finally; a platform that cannot deliver a signal is asked first and the
 test skips with the reason. Every record here is synthetic (no host, user or
 address of any real machine)."""
 import ast
+import errno
 import io
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -25,7 +27,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "tests" / "fixtures" / "host"))
 
 import raqib  # noqa: E402
-from raqib import cli, doctor, host, notify, report, ui, watch  # noqa: E402
+from raqib import cli, doctor, host, notify, overlay, report, ruleform, ui, watch  # noqa: E402
 from raqib.rules import engine, fixtures  # noqa: E402
 from hostthreads import raqib_threads_end  # noqa: E402,F401  (every HostWatch ended, no thread leaked)
 
@@ -346,7 +348,8 @@ def test_e5_the_text_report_says_under_alarms_what_it_counts(tmp_path):
     rows = out.getvalue().splitlines()
     i = rows.index("ALARMS (A3, A5): 0")
     assert rows[i + 1] == report.ALARMS_SAYS and rows.count(report.ALARMS_SAYS) == 1
-    assert "every finding below also makes the RESULT an ALARM" in rows[i + 1] and "A3 silence" in rows[i + 1]
+    assert "every finding below also makes the RESULT an ALARM" in rows[i + 1]   # REDO B-5: the words, truly
+    assert "the trace's and the watch's own: what could not be read, cited or kept" in rows[i + 1]
     assert code == 1 and result_lines(out.getvalue()) == ["RESULT: ALARM (exit 1)"]
     assert any(r.startswith("FINDINGS: ") and r != "FINDINGS: 0" for r in rows)
 
@@ -359,12 +362,12 @@ def test_e5_must_not_touch_the_json_report_counts_codes_and_page(tmp_path):
     code_json = cli.main(["report", str(trace), "--scope", ".", "--json"], out=js)
     rep = json.loads(js.getvalue())
     assert code_text == code_json == rep["exit"] == 1
-    assert "the trace's own alarms" not in js.getvalue()
+    assert report.ALARMS_SAYS.strip() not in js.getvalue()
     assert "ALARMS (A3, A5): %d" % len(rep["alarms"]) in text.getvalue()
     assert "FINDINGS: %d" % len(rep["findings"]) in text.getvalue()
     page = io.StringIO()
     cli.main(["ui", str(trace), "--scope", "."], out=page)
-    assert "the trace's own alarms" not in page.getvalue()
+    assert report.ALARMS_SAYS.strip() not in page.getvalue()
     # an empty trace: the alarm is counted as before, the line is the same
     empty = write_trace(tmp_path / "e.jsonl", [])
     out = io.StringIO()
@@ -605,8 +608,9 @@ def wait_for(path, proc, text, timeout=CHILD_TIMEOUT):
     pytest.fail("no %r from the child within %d s" % (text, timeout))
 
 
-def stop_child(tmp_path, home, args, send, ready, name, again=False, **popen):
-    """Start `python -m raqib <args>`, wait for its ready line, send() the stop, and read what it ended with."""
+def stop_child(tmp_path, home, args, send, ready, name, **popen):
+    """Start `python -m raqib <args>`, wait for its ready line, send() the stop once, and read what it ended
+    with (REDO B-4: one signal; a second one while the report is written is tested in process)."""
     out_path = tmp_path / "child.out"
     proj_args = [str(a) for a in args]
     with open(out_path, "wb") as out:
@@ -615,10 +619,6 @@ def stop_child(tmp_path, home, args, send, ready, name, again=False, **popen):
         try:
             wait_for(out_path, proc, ready)
             send(proc)
-            if again:   # a second signal, once it is stopping: the report is not cut short
-                wait_for(out_path, proc, "stopped (%s)" % name)
-                if proc.poll() is None:
-                    send(proc)
             code = proc.wait(timeout=CHILD_TIMEOUT)
         finally:
             if proc.poll() is None:
@@ -654,7 +654,7 @@ def test_e7_a_real_watch_stopped_by_a_signal_ends_with_its_report_and_code(tmp_p
     proj = tmp_path / "proj"
     proj.mkdir()
     code, text = stop_child(tmp_path, home, ["watch", proj, "--no-open", "--no-notify", "--port", "0"],
-                            lambda p: p.send_signal(number), "raqib watch: page ", name, again=(name == "SIGTERM"))
+                            lambda p: p.send_signal(number), "raqib watch: page ", name)
     assert_stopped(code, text, "raqib watch", name, home)
 
 
@@ -691,3 +691,431 @@ def test_e7_a_real_watch_on_windows_stopped_by_ctrl_break(tmp_path, home, args, 
     code, text = stop_child(tmp_path, home, argv, send, "%s: page " % prefix, "SIGBREAK",
                             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
     assert_stopped(code, text, prefix, "SIGBREAK", home)
+
+
+# --- M9.1 REDO (ADR-0010 Amendment B, rulings B-1..B-6) ----------------------------------------------------------
+
+class DyingOut(io.StringIO):
+    """A terminal that takes the words until it is gone (dead): from then every write and every flush raises
+    OSError(EIO), as a hung-up tty does."""
+    dead = False
+    raised = 0
+
+    def _gone(self):
+        self.raised += 1
+        raise OSError(errno.EIO, os.strerror(errno.EIO))
+
+    def write(self, text):
+        if self.dead:
+            self._gone()
+        return super().write(text)
+
+    def flush(self):
+        if self.dead:
+            self._gone()
+        return super().flush()
+
+
+class Plain:
+    """The words as before Amendment B: out and err as given, nothing held (for the MUST NOT TOUCH side)."""
+
+    def __init__(self, out, err):
+        self.out, self.err = out, err
+
+    def hold(self):
+        pass
+
+    def release(self):
+        pass
+
+
+def use_host_fixture(monkeypatch):
+    import make as host_fixtures   # tests/fixtures/host
+    catalog = cli.discover.load_catalog(cli.discover.CATALOG)
+    monkeypatch.setattr(host, "live_reader", lambda c, window, platform: lambda: host_fixtures.inventory(
+        "linux", catalog))
+
+
+def stop_in_process(base, monkeypatch, kind, how, out, during_finish=None, until=None):
+    """`raqib watch PROJ` or `raqib watch --host` (kind) in process, under base (its own HOME and project), ended
+    by how: "SIGTERM" calls the handler the CLI installed as the OS would, "Ctrl-C" raises KeyboardInterrupt.
+    A DyingOut is made dead the moment the stop is asked. Returns (code, seen): the watcher, the code it
+    computed, the text out held when the registry row was marked, the stop_sources calls. until(home): the
+    stop waits for it (bounded), so a host watch can apply a round first."""
+    base.mkdir(parents=True, exist_ok=True)
+    home, proj = base / "home", base / "proj"
+    home.mkdir(exist_ok=True)
+    proj.mkdir(exist_ok=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    target, cls = (host, host.HostWatch) if kind == "--host" else (watch, watch.Watch)
+    argv = (["watch", "--host"] if kind == "--host" else ["watch", str(proj)]) + ["--no-open", "--no-notify",
+                                                                                  "--port", "0"]
+    before = signal.getsignal(signal.SIGTERM)
+    seen = {"stop_sources": 0, "home": home, "base": base}
+
+    end = time.monotonic() + CHILD_TIMEOUT
+
+    def fake_sleep(seconds):
+        if until is not None and not until(home) and time.monotonic() < end:
+            time.sleep(0.05)
+            return
+        if isinstance(out, DyingOut):
+            out.dead = True   # the terminal is gone as the stop is asked
+        if how == "Ctrl-C":
+            raise KeyboardInterrupt
+        signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+        raise AssertionError("the handler did not end the wait")
+    monkeypatch.setattr(target, "_sleep", fake_sleep)
+    real_finish, real_unregister = cls.finish, cls.unregister
+
+    def finish(self, *a, **kw):
+        seen["watcher"] = self
+        if during_finish is not None:
+            during_finish(self)
+        got = real_finish(self, *a, **kw)
+        seen["final_exit"], seen["final_text"] = self.final_exit, self.final_text
+        return got
+
+    def unregister(self, *a, **kw):
+        got = real_unregister(self, *a, **kw)
+        seen["said_at_keep"] = out.getvalue()
+        return got
+    monkeypatch.setattr(cls, "finish", finish)
+    monkeypatch.setattr(cls, "unregister", unregister)
+    if kind == "--host":
+        real_stop_sources = host.HostWatch.stop_sources
+
+        def stop_sources(self, now):
+            seen["stop_sources"] += 1
+            return real_stop_sources(self, now)
+        monkeypatch.setattr(host.HostWatch, "stop_sources", stop_sources)
+        use_host_fixture(monkeypatch)
+    code = cli.main(argv, out=out)
+    assert signal.getsignal(signal.SIGTERM) == before   # restored when the command ended
+    return code, seen
+
+
+def state_of(home, kind):
+    if kind == "--host":
+        path = Path(host.host_dir(str(home))) / (host.ROUNDS_NAME + host.STATE_SUFFIX)
+    else:
+        (row,) = json.loads((Path(home) / ".raqib" / watch.REGISTRY_NAME).read_text(encoding="ascii"))["watches"]
+        path = Path(row["state"])
+    return json.loads(path.read_text(encoding="ascii"))
+
+
+@pytest.mark.parametrize("how", ["SIGTERM", "Ctrl-C"])
+@pytest.mark.parametrize("kind", ["PROJ", "--host"])
+def test_b1_a_terminal_gone_at_the_stop_loses_the_words_never_the_record_or_the_code(tmp_path, monkeypatch, kind,
+                                                                                       how):
+    out = DyingOut()
+    code, seen = stop_in_process(tmp_path / "b1", monkeypatch, kind, how, out)
+    prefix = "raqib watch --host" if kind == "--host" else "raqib watch"
+    assert out.dead and out.raised > 0                      # every word after the stop raised OSError(EIO)
+    assert "%s: page " % prefix in out.getvalue() and "stopped (" not in out.getvalue()
+    assert code in (0, 1, 3) and code == seen["final_exit"]   # Raqib's code, not 1 from a traceback
+    assert finished_rows(seen["home"]) == [("finished", True)]
+    state = state_of(seen["home"], kind)
+    assert state["status"] == "finished" and state["finished"] is not None
+    if kind == "--host":   # its sources and channel closed: stop_sources ran, no source thread is left
+        assert seen["stop_sources"] == 1
+        assert all(s.thread is None or not s.thread.is_alive() for s in seen["watcher"].sources.values())
+
+
+@pytest.mark.parametrize("kind", ["PROJ", "--host"])
+def test_b1_what_a_stop_keeps_is_written_before_what_it_prints(tmp_path, monkeypatch, kind):
+    out = io.StringIO()
+    code, seen = stop_in_process(tmp_path / "keep", monkeypatch, kind, "SIGTERM", out)
+    prefix = "raqib watch --host" if kind == "--host" else "raqib watch"
+    stopped = "\n%s: stopped (SIGTERM)\n" % prefix
+    assert stopped not in seen["said_at_keep"]   # the registry row was marked (watch.json before it) first
+    assert out.getvalue().count(stopped) == 1 and out.getvalue().endswith("\n" + seen["final_text"])
+
+
+def normalised(text, base):
+    """The clock, the port and the trace directory's hash of the project's path are the run's own."""
+    return re.sub(r"\d+", "N", re.sub(r"proj-[0-9a-f]+", "proj-H", text.replace(str(base), "BASE")))
+
+
+@pytest.mark.parametrize("kind", ["PROJ", "--host"])
+def test_b1_must_not_touch_a_terminal_that_takes_the_words_gets_them_as_before_in_their_order(tmp_path, monkeypatch,
+                                                                                               kind):
+    def word(w):   # said while the record is kept: under the hold it still comes after "stopped", before the report
+        w._say(w.clock(), "a word said while finishing")
+    texts = []
+    for name, speech in (("now", watch.Speech), ("before", Plain)):
+        with monkeypatch.context() as m:   # each run wraps the real finish, never the other run's wrapper
+            m.setattr(watch, "Speech", speech)
+            out = io.StringIO()
+            code, seen = stop_in_process(tmp_path / name, m, kind, "SIGTERM", out, during_finish=word)
+        text = out.getvalue()
+        prefix = "raqib watch --host" if kind == "--host" else "raqib watch"
+        tail = re.escape("\n%s: stopped (SIGTERM)\n" % prefix) + r"\[\d\d:\d\d:\d\dZ\] a word said while finishing\n"
+        assert re.search(tail + re.escape("\n" + seen["final_text"]) + r"\Z", text), text[-600:]
+        assert code == seen["final_exit"]
+        texts.append(normalised(text, seen["base"]))
+    assert texts[0] == texts[1]   # the same words in the same order, byte for byte but the clock and the port
+
+
+def read_until(fd, proc, text, timeout=CHILD_TIMEOUT):
+    """POSIX: read the child's output from fd (a pipe or a pty) until text is in it; bounded, never blocking."""
+    import select
+    got, end = b"", time.monotonic() + timeout
+    while time.monotonic() < end:
+        ready, _, _ = select.select([fd], [], [], 0.1)
+        if ready:
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError:   # a pty whose other side is gone
+                chunk = b""
+            if not chunk:
+                pytest.fail("the child's output ended (%s) before %r:\n%r" % (proc.poll(), text, got))
+            got += chunk
+            if text.encode("ascii") in got:
+                return got
+        elif proc.poll() is not None:
+            pytest.fail("the child ended (%s) before printing %r:\n%r" % (proc.returncode, text, got))
+    pytest.fail("no %r from the child within %d s" % (text, timeout))
+
+
+def child_argv(kind, proj):
+    return [sys.executable, "-m", "raqib", "watch"] + (["--host"] if kind == "--host" else [str(proj)]) + [
+        "--no-open", "--no-notify", "--port", "0"]
+
+
+def assert_kept(code, home, kind):
+    assert code in (0, 1, 3), code   # Raqib's code: not 1 from a traceback, not 120 from the last flush
+    assert finished_rows(home) == [("finished", True)]
+    state = state_of(home, kind)
+    assert state["status"] == "finished" and state["finished"] is not None
+
+
+@pytest.mark.parametrize("buffered", [True, False], ids=["block-buffered", "unbuffered"])
+@pytest.mark.parametrize("kind", ["PROJ", "--host"])
+def test_b1_a_real_watch_whose_output_pipe_is_closed_before_the_sighup_keeps_its_record_and_code(tmp_path, home,
+                                                                                                 kind, buffered):
+    number = posix_signal_or_skip("SIGHUP")
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    env = child_env(home)
+    if not buffered:
+        env["PYTHONUNBUFFERED"] = "1"   # every write goes out at once, as to a terminal: the "stopped" line raises
+    prefix = "raqib watch --host" if kind == "--host" else "raqib watch"
+    proc = subprocess.Popen(child_argv(kind, proj), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            stdin=subprocess.DEVNULL, env=env, cwd=str(tmp_path))
+    try:
+        read_until(proc.stdout.fileno(), proc, "%s: page " % prefix)
+        proc.stdout.close()   # the read end: every later write of the child fails (EPIPE)
+        proc.send_signal(number)
+        code = proc.wait(timeout=CHILD_TIMEOUT)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=CHILD_TIMEOUT)
+        if not proc.stdout.closed:
+            proc.stdout.close()
+    assert_kept(code, home, kind)
+
+
+@pytest.mark.parametrize("kind", ["PROJ", "--host"])
+def test_b1_a_real_watch_on_a_terminal_that_hangs_up_keeps_its_record_and_code(tmp_path, home, kind):
+    number = posix_signal_or_skip("SIGHUP")
+    if not hasattr(os, "openpty"):
+        pytest.skip("this platform has no os.openpty, so no terminal can be hung up here")
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    prefix = "raqib watch --host" if kind == "--host" else "raqib watch"
+    master, slave = os.openpty()
+    try:
+        proc = subprocess.Popen(child_argv(kind, proj), stdout=slave, stderr=slave, stdin=subprocess.DEVNULL,
+                                env=child_env(home), cwd=str(tmp_path))
+    except BaseException:
+        os.close(master)
+        raise
+    finally:
+        os.close(slave)
+    try:
+        read_until(master, proc, "%s: page " % prefix)
+        os.close(master)   # the terminal is closed: the child's writes now fail (EIO), as in D1's case
+        master = None
+        proc.send_signal(number)
+        code = proc.wait(timeout=CHILD_TIMEOUT)
+    finally:
+        if master is not None:
+            os.close(master)
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=CHILD_TIMEOUT)
+    assert_kept(code, home, kind)
+
+
+def test_b1_must_not_touch_a_live_stdout_is_left_as_it_is_and_a_dead_one_points_at_devnull(monkeypatch):
+    live = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", live)
+    assert cli._quiet_if_dead("stdout") is False and sys.stdout is live
+    dead = DyingOut()
+    dead.dead = True
+    monkeypatch.setattr(sys, "stdout", dead)   # no descriptor to point: the stream is replaced by os.devnull
+    assert cli._quiet_if_dead("stdout") is True and sys.stdout is not dead
+    try:
+        sys.stdout.write("lost\n")
+        sys.stdout.flush()
+    finally:
+        sys.stdout.close()
+
+
+def test_b2_readme_and_help_say_what_a_killed_watch_leaves_per_watch():
+    state = "~/.raqib/host/%s%s" % (host.ROUNDS_NAME, host.STATE_SUFFIX)
+    record = "~/.raqib/host/%s" % host.ROUNDS_NAME
+    assert host.host_dir("~").replace("\\", "/") == "~/.raqib/host"
+    flat = " ".join(readme_section("Watch a project").split())
+    for phrase in ("Such a watch prints nothing. For `raqib watch PROJECT`, `raqib report <trace>` gives the findings.",
+                   "For `raqib watch --host`, no command re-prints its report: what it had found up to its last round"
+                   " is in its state file `%s`" % state, "and its record `%s` (one line per round" % record,
+                   "`code_so_far`"):
+        assert phrase in flat, phrase
+    helped = " ".join(cli.__doc__.split())
+    for phrase in ("for watch PROJECT, `raqib report TRACE` gives the findings; for watch --host no command re-prints"
+                   " its report: what it had found up to its last round is in its state file %s" % state,
+                   "and its record %s (one line per round)" % record):
+        assert phrase in helped, phrase
+
+
+def test_b2_the_host_state_and_record_hold_what_the_sentence_says(tmp_path, monkeypatch):
+    def a_round(home):
+        rounds = Path(host.host_dir(str(home))) / host.ROUNDS_NAME
+        return rounds.exists() and rounds.stat().st_size > 0
+    code, seen = stop_in_process(tmp_path / "b2", monkeypatch, "--host", "Ctrl-C", io.StringIO(), until=a_round)
+    d = Path(host.host_dir(str(seen["home"])))
+    w = seen["watcher"]
+    assert Path(w.state_path) == d / (host.ROUNDS_NAME + host.STATE_SUFFIX) and Path(w.rounds_path) == d / host.ROUNDS_NAME
+    state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    assert {"findings", "knocks", "source_findings"} <= set(state["host"])     # its findings and knocks
+    assert {"holes", "heartbeat", "code_so_far"} <= set(state)                 # its holes, heartbeat, code so far
+    rounds = [json.loads(x) for x in Path(w.rounds_path).read_text(encoding="ascii").splitlines() if x.strip()]
+    assert rounds and all({"round", "holes", "lines"} <= set(r) for r in rounds)   # one line per round
+    # no command re-prints its report: `raqib report` reads a trace, and finds none of the host watch's findings
+    found = {f["rule_id"] for f in state["host"]["findings"]}
+    rep = json.loads(cli_text(["report", w.rounds_path, "--json"]))
+    assert not found & {f["rule_id"] for f in rep["findings"]}
+    assert "raqib watch --host" not in cli_text(["report", w.rounds_path])
+
+
+def cli_text(argv):
+    out = io.StringIO()
+    cli.main(argv, out=out)
+    return out.getvalue()
+
+
+def test_b3_readme_names_every_case_out_of_reach_and_the_ignored_signal():
+    flat = " ".join(readme_section("Watch a project").split())
+    for phrase in ("Out of reach are SIGKILL and, on Windows, TerminateProcess (`taskkill /F`, the Task Manager) and"
+                   " closing the console window, logoff and shutdown, which end the process before its report"
+                   " (Ctrl-Break is what stops it there).",
+                   "a signal already ignored when it started (`nohup`) stays ignored",
+                   "The watch's first lines say which signals stop it and which were left ignored"):
+        assert phrase in flat, phrase
+
+
+NOHUP_WORDS = "left ignored (ignored when it started, as under nohup): "
+
+
+def test_b3_the_stop_line_says_what_stops_it_and_what_was_left_ignored():
+    stops = cli.Stops(FakeSignals())
+    stops.install()
+    assert stops.line() == "Ctrl-C, SIGHUP, SIGTERM stop it with its final report and code; %snone" % NOHUP_WORDS
+    one = cli.Stops(FakeSignals(ignored=("SIGHUP",)))
+    one.install()
+    assert one.line() == "Ctrl-C, SIGTERM stop it with its final report and code; %sSIGHUP" % NOHUP_WORDS
+    win = cli.Stops(FakeSignals(names=("SIGTERM", "SIGBREAK")))   # Windows: SIGBREAK, no SIGHUP
+    win.install()
+    said = win.line()
+    assert said == "Ctrl-C, SIGBREAK (Ctrl-Break), SIGTERM stop it with its final report and code; %snone" % NOHUP_WORDS
+    win.restore()
+    assert win.line() == said   # what the first lines said stays true of the watch after the restore
+    sigint = FakeSignals()
+    sigint.SIGINT = 2
+    sigint.handlers[2] = sigint.SIG_IGN   # started with SIGINT ignored (a shell's `&`): Ctrl-C does nothing
+    off = cli.Stops(sigint)
+    off.install()
+    assert off.line() == "SIGHUP, SIGTERM stop it with its final report and code; %sCtrl-C (SIGINT)" % NOHUP_WORDS
+
+
+@pytest.mark.parametrize("ignore", [False, True], ids=["nothing-ignored", "one-ignored"])
+@pytest.mark.parametrize("kind", ["PROJ", "--host"])
+def test_b3_the_watch_s_first_lines_say_which_signals_stop_it(tmp_path, monkeypatch, kind, ignore):
+    name = "SIGHUP" if hasattr(signal, "SIGHUP") else "SIGBREAK"
+    number = getattr(signal, name)
+    earlier = signal.getsignal(number)
+    if earlier == signal.SIG_IGN and not ignore:
+        pytest.skip("%s is ignored in this job already (nohup?)" % name)
+    prefix = "raqib watch --host" if kind == "--host" else "raqib watch"
+    out = io.StringIO()
+    if ignore:
+        signal.signal(number, signal.SIG_IGN)
+    try:
+        stop_in_process(tmp_path / "b3", monkeypatch, kind, "Ctrl-C", out)
+        assert signal.getsignal(number) == (signal.SIG_IGN if ignore else earlier)   # left as it was
+    finally:
+        signal.signal(number, earlier)
+    rows = out.getvalue().splitlines()
+    (said,) = [r for r in rows if "stop it with its final report and code" in r or
+               "stops it with its final report and code" in r]
+    assert said.startswith(prefix + ": ") and rows.index(said) < rows.index("%s: stopped (Ctrl-C)" % prefix)
+    shown = rows.index(said) - 1
+    assert rows[shown].startswith(prefix + ": page ")   # among the first lines, under the page's own
+    stop_part = said.split(";")[0]
+    if ignore:
+        assert said.endswith(NOHUP_WORDS + name) and name not in stop_part
+    else:
+        assert said.endswith(NOHUP_WORDS + "none") and name in stop_part
+
+
+def test_b5_the_line_under_alarms_counts_the_watch_s_own_alarms_too(tmp_path, monkeypatch):
+    def broken(self, *a, **kw):
+        raise RuntimeError("a synthetic failure of the watch")
+    monkeypatch.setattr(watch.Watch, "step", broken)
+    out = io.StringIO()
+    code, seen = stop_in_process(tmp_path / "b5", monkeypatch, "PROJ", "Ctrl-C", out)
+    rows = out.getvalue().splitlines()
+    (i,) = [k for k, r in enumerate(rows) if r.startswith("ALARMS (A3, A5): ")]
+    assert int(rows[i].rsplit(" ", 1)[1]) >= 1 and rows[i + 1] == report.ALARMS_SAYS
+    assert any("crash" in r for r in rows[i + 2:i + 2 + int(rows[i].rsplit(" ", 1)[1])])   # the watch's own
+    assert code == 1 and len(report.ALARMS_SAYS) <= 130
+
+
+OLD_PROGRAM = ("{tool} runs a watched program at seq {seq} (program {input_meta.command_head}, programs"
+               " {input_meta.command_programs}, image {input_meta.image})")
+
+
+def form(rid="MY-PROGRAM", values="terraform, tofu"):
+    return {"id": rid, "when": "program", "values": values, "severity": "high", "fires": "terraform", "quiet": "ls"}
+
+
+def test_b6_a_program_rule_from_the_form_names_the_matched_program(home):
+    built = ruleform.build(form())
+    assert "program {matched:input_meta.command_programs,input_meta.image,input_meta.command_head}" in built.yaml
+    rule = engine.compile_rule(built.doc, "<form>")
+    (f,) = engine.run_rule(rule, [line(2, command_head="env", command_programs=["env", "terraform"])])
+    assert f["summary"] == ('Bash runs a watched program at seq 2 (program terraform, programs ["env", "terraform"],'
+                            ' image -)')
+    head = engine.run_rule(rule, [line(3, command_head="tofu")])[0]["summary"]
+    assert "(program tofu," in head
+    osl = dict(line(4, tool="process", image="tofu"), source="os")
+    assert "(program tofu," in engine.run_rule(rule, [osl])[0]["summary"]
+    assert engine.run_rule(rule, [line(5, command_head="env", command_programs=["env", "ls"])]) == []
+    assert ruleform.add(form(), str(home)).ok   # its own fixtures pass the engine and the overlay
+
+
+def test_b6_must_not_touch_the_other_three_forms_and_a_rule_already_in_rules_d(home, monkeypatch):
+    assert ruleform.SUMMARIES["path"] == "{tool} touches {input_meta.path} at seq {seq}"
+    assert ruleform.SUMMARIES["host"] == "{tool} reaches {input_meta.url_host} at seq {seq}"
+    assert ruleform.SUMMARIES["tool"] == "{tool} is used at seq {seq}"
+    with monkeypatch.context() as m:   # a person's rule added before this ruling, in its old words
+        m.setitem(ruleform.SUMMARIES, "program", OLD_PROGRAM)
+        assert ruleform.add(form("MY-OLD"), str(home)).ok
+    (old,) = [p for p in Path(overlay.user_dir(str(home))).rglob("*.yaml") if "MY-OLD" in p.read_text("utf-8")]
+    kept = old.read_bytes()
+    assert ruleform.add(form("MY-NEW"), str(home)).ok
+    assert old.read_bytes() == kept and b"program {input_meta.command_head}" in kept   # not rewritten

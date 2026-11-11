@@ -1238,6 +1238,73 @@ def stopped_by(exc):
     return exc.name if isinstance(exc, AskedStop) else "Ctrl-C"
 
 
+class Speech:
+    """M9.1 REDO (ADR-0010 Amendment B, B-1): a stop never depends on its own words being written. The out and
+    err of a terminal watch (command() here, host.command()) are written through this. A write or a flush that
+    fails - a hung-up terminal (EIO), a closed pipe (EPIPE), a closed stream - is dropped and never raised, so
+    no failure to write skips what the watch keeps or changes its code. On a stop (Ctrl-C or a stop signal)
+    loop() calls hold(): from then every word of out and err is queued, in its order, until release(), which
+    command() calls once conclude() has kept the record (watch.json finished, the registry row; the host
+    watch's sources and channel closed). What is kept is written first, what is printed after; a terminal
+    that takes the words gets them as before, in the same order. The window (raqib/app.py) does not use it."""
+
+    def __init__(self, out, err):
+        self.lock = threading.Lock()
+        self.queue = None   # [(stream, text; None for a flush)] from hold() to release()
+        self.out, self.err = _Said(self, out), _Said(self, err)
+
+    def hold(self):
+        with self.lock:
+            if self.queue is None:
+                self.queue = []
+
+    def release(self):
+        """What was held, written in its order (a word another thread says meanwhile joins the queue)."""
+        while True:
+            with self.lock:
+                if not self.queue:
+                    self.queue = None
+                    return
+                said, text = self.queue.pop(0)
+            said.put(text)
+
+    def queued(self, said, text):
+        with self.lock:
+            if self.queue is None:
+                return False
+            self.queue.append((said, text))
+            return True
+
+
+class _Said:
+    """One stream of a Speech (its out or its err): write and flush as the stream's, never raising OSError or
+    ValueError; every other attribute is the stream's own."""
+
+    def __init__(self, speech, stream):
+        self.speech, self.stream = speech, stream
+
+    def write(self, text):
+        if not self.speech.queued(self, text):
+            self.put(text)
+        return len(text)
+
+    def flush(self):
+        if not self.speech.queued(self, None):
+            self.put(None)
+
+    def put(self, text):
+        try:
+            if text is None:
+                self.stream.flush()
+            else:
+                self.stream.write(text)
+        except (OSError, ValueError):   # a terminal that is gone: the words are lost, the watch goes on (B-1)
+            pass
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
 def first_step(running):
     """The first-finding knock after a poll (ADR-0006 E3, A-12): the
     FirstFinding record when it knocked now (also kept as watch.json's
@@ -1266,15 +1333,19 @@ def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_s
     (M6.4) into start(), loop(), conclude() and close(), so the window runs
     the same watch in a worker thread and ends it with a Stop. stops (M9.1):
     the terminal's stop signals (raqib/cli.py's Stops), waited on between
-    polls; None: Ctrl-C only, as before."""
-    running = start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=environ,
-                    err=err, home=home, refresh=refresh)
+    polls; None: Ctrl-C only, as before. out and err are written through a
+    Speech (M9.1 REDO B-1): a terminal that is gone loses the words, never
+    the record or the code."""
+    speech = Speech(out, err or sys.stderr)
+    running = start(project, log, no_open, no_notify, port, speech.out, evaluator, rules, gap_seconds,
+                    environ=environ, err=speech.err, home=home, refresh=refresh)
     try:
-        crash = loop(running, stops=stops)
+        crash = loop(running, stops=stops, on_stop=speech.hold)
         text, code = conclude(running, crash)
     finally:
+        speech.release()   # B-1: the record is kept; now what was said since the stop
         close(running)
-    out.write("\n" + text)
+    speech.out.write("\n" + text)
     return code
 
 
@@ -1344,13 +1415,16 @@ def start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_sec
     return Running(watcher, server, notifier, thread, refresh, environ, no_open, out, err)
 
 
-def loop(running, stop=None, on_step=None, stops=None):
+def loop(running, stop=None, on_step=None, stops=None, on_stop=None):
     """Poll until Ctrl-C (stop None: the terminal) or until stop is set (the
     window's worker thread); None, or the crash text when an exception ended
     it (B-4). The window's Stop is the equivalent of Ctrl-C. stops (M9.1,
     ADR-0010 decision 1; the terminal only): the wait between polls is
     stops.nap(), which ends in an AskedStop when a stop signal came, said as
-    "stopped (SIGTERM)" where Ctrl-C says "stopped (Ctrl-C)". on_step(watcher)
+    "stopped (SIGTERM)" where Ctrl-C says "stopped (Ctrl-C)"; the first lines
+    say what stops it and what was left ignored (stops.line(), REDO B-3).
+    on_stop() (REDO B-1: the terminal's Speech.hold) is called on Ctrl-C or
+    a stop signal before the "stopped" line is written. on_step(watcher)
     runs after every poll, in this thread, outside the Watch lock; without
     one it is the first-finding knock (first_step, ADR-0006 A-12), so a
     terminal watch knocks on its first finding as the window does."""
@@ -1370,6 +1444,8 @@ def loop(running, stop=None, on_step=None, stops=None):
             out.write("raqib watch: WARNING: %s\n" % watcher.port["warning"])
         out.write("raqib watch: page %s (read-only, reloads every %d s; %s stops the watch and prints the"
                   " final report)\n" % (watcher.url, running.refresh, "Ctrl-C" if stop is None else "Stop"))
+        if stops is not None:   # M9.1 REDO B-3 (A3): which signals stop it, which were left ignored
+            out.write("raqib watch: %s\n" % stops.line())
         if watcher.registry is not None:
             out.write("raqib watch: registry %s (this watch is a row; rows are never removed)\n"
                       % _safe(watcher.registry.path))
@@ -1395,6 +1471,8 @@ def loop(running, stop=None, on_step=None, stops=None):
             if on_step is not None:
                 on_step(watcher)
     except KeyboardInterrupt as exc:   # Ctrl-C, or (M9.1) a stop signal: an AskedStop
+        if on_stop is not None:
+            on_stop()   # REDO B-1: what the stop keeps is written before what it says
         out.write("\nraqib watch: stopped (%s)\n" % _safe(stopped_by(exc)))
     except Exception as exc:  # B-4: the watcher's own failure ends in the final report
         crash = "%s: %s" % (type(exc).__name__, exc)

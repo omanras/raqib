@@ -259,7 +259,8 @@ def _safe(text):
 
 
 # M9.1 (ADR-0010 decision 5): the line under "ALARMS (A3, A5): N" in the text report (the JSON report has none).
-ALARMS_SAYS = ("  (the trace's own alarms: A3 silence, A5 a record that cannot be cited; every finding below also"
+# M9.1 REDO (Amendment B, B-5): what it counts truly - the trace's alarms and the watch's own.
+ALARMS_SAYS = ("  (the trace's and the watch's own: what could not be read, cited or kept; every finding below also"
                " makes the RESULT an ALARM)")
 
 

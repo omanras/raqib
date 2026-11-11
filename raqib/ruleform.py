@@ -507,7 +507,7 @@ def _match(when, names):
 
 
 SUMMARIES = {
-    "program": "{tool} runs a watched program at seq {seq} (program {input_meta.command_head}, programs"
+    "program": "{tool} runs a watched program at seq {seq} (program {matched:input_meta.command_programs,input_meta.image,input_meta.command_head}, programs"
                " {input_meta.command_programs}, image {input_meta.image})",
     "path": "{tool} touches {input_meta.path} at seq {seq}",
     "host": "{tool} reaches {input_meta.url_host} at seq {seq}",

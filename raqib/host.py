@@ -4058,11 +4058,14 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
 _sleep = time.sleep   # the tick wait; tests replace it
 
 
-def loop(running, stop=None, stops=None):
+def loop(running, stop=None, stops=None, on_stop=None):
     """Tick until --rounds are done, Ctrl-C, or stop is set; None, or the
     crash text. stops (M9.1, ADR-0010 decision 1; the terminal only, from
     raqib/cli.py): the wait between ticks is stops.nap(), which ends as
-    Ctrl-C does when a stop was asked from outside, with its name."""
+    Ctrl-C does when a stop was asked from outside, with its name; the first
+    lines say what stops it and what was left ignored (REDO B-3). on_stop()
+    (REDO B-1: the terminal's watch.Speech.hold) is called on Ctrl-C or a
+    stop asked from outside before the "stopped" line is written."""
     from raqib import watch
     watcher, out = running.watcher, running.out
     crash = None
@@ -4071,6 +4074,8 @@ def loop(running, stop=None, stops=None):
             out.write("raqib watch --host: WARNING: %s\n" % watcher.port["warning"])
         out.write("raqib watch --host: page %s (read-only, reloads every %d s; %s ends the watch)\n" % (
             watcher.url, watcher.refresh, "Ctrl-C" if stop is None else "Stop"))
+        if stops is not None:   # M9.1 REDO B-3 (A3): what stops it, what was left ignored
+            out.write("raqib watch --host: %s\n" % stops.line())
         if running.no_open or running.environ.get("CI"):
             out.write("raqib watch --host: page not opened (%s)\n" % ("--no-open" if running.no_open else "CI is set"))
         else:
@@ -4102,6 +4107,8 @@ def loop(running, stop=None, stops=None):
             else:
                 stop.wait(POLL_SECONDS)
     except KeyboardInterrupt as exc:   # Ctrl-C, or (M9.1) watch.AskedStop
+        if on_stop is not None:
+            on_stop()   # REDO B-1: what the stop keeps is written before what it says
         out.write("\nraqib watch --host: stopped (%s)\n" % _safe(watch.stopped_by(exc)))
     except Exception as exc:
         crash = "%s: %s" % (type(exc).__name__, exc)
@@ -4216,16 +4223,20 @@ def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_ope
             sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None,
             stops=None):
     """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code.
-    stops (M9.1): the terminal's stops (raqib/cli.py), waited on between ticks; None: Ctrl-C only."""
-    out = out or sys.stdout
-    running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, out, err, environ, home,
-                    refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon, installer=installer,
-                    os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
+    stops (M9.1): the terminal's stops (raqib/cli.py), waited on between ticks; None: Ctrl-C only.
+    out and err are written through a watch.Speech (M9.1 REDO B-1): a terminal that is gone loses the words,
+    never the record (the state finished, the registry row, the sources and channel closed) or the code."""
+    from raqib import watch
+    speech = watch.Speech(out or sys.stdout, err or sys.stderr)
+    running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, speech.out, speech.err,
+                    environ, home, refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon,
+                    installer=installer, os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
                     suspect_every=suspect_every)
     try:
-        crash = loop(running, stops=stops)
+        crash = loop(running, stops=stops, on_stop=speech.hold)
         text, code = conclude(running, crash)
     finally:
+        speech.release()   # B-1: the record is kept; now what was said since the stop
         close(running)
-    out.write("\n" + text)
+    speech.out.write("\n" + text)
     return code

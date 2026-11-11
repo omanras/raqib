@@ -117,12 +117,21 @@ no command, raqib prints its usage and exits 2.
       has them; a signal ignored at the start, as under nohup, stays
       ignored) and Ctrl-Break on Windows (SIGBREAK) stop it as Ctrl-C does,
       for this command and watch --host alike: "stopped (SIGTERM)", the
-      final report, the registry row finished, its exit. The handlers are
+      final report, the registry row finished, its exit. What a stop keeps
+      is written before what it prints, so a terminal that is gone (a
+      hung-up tty, a closed pipe) loses the words only, never the record or
+      the code; the first lines say which signals stop it and which were
+      left ignored (REDO B-1, B-3). The handlers are
       installed here, in the main thread only, and the earlier ones are
       restored when the command ends; a second signal does not cut the
-      report short; no process is signalled (A4). SIGKILL, and on Windows
-      TerminateProcess, stay out of reach: `raqib report TRACE` then gives
-      the findings.
+      report short; no process is signalled (A4). Out of reach: SIGKILL; on
+      Windows TerminateProcess (taskkill /F, the Task Manager) and closing
+      the console window, logoff and shutdown. Such a watch prints nothing:
+      for watch PROJECT, `raqib report TRACE` gives the findings; for watch
+      --host no command re-prints its report: what it had found up to its
+      last round is in its state file ~/.raqib/host/rounds.jsonl.watch.json
+      (findings, holes, knocks, heartbeat, code_so_far) and its record
+      ~/.raqib/host/rounds.jsonl (one line per round).
   watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
@@ -303,7 +312,9 @@ class Stops:
     (SIGTERM)"); one that comes while the watch starts, polls or writes its
     final report is only kept, and the next nap ends the loop - nothing is
     cut short. A later signal is counted, never acted on. Nothing here
-    signals a process (A4): signal.signal and getsignal only."""
+    signals a process (A4): signal.signal and getsignal only. line() (M9.1
+    REDO B-3) is what the watch's first lines say: what stops it and what
+    was left ignored."""
 
     def __init__(self, module=signal):
         self.signal = module
@@ -313,6 +324,8 @@ class Stops:
         self.napping = False
         self.previous = {}      # number -> the handler install() replaced
         self.ignored = []       # names left ignored (SIG_IGN at the start)
+        self.handled = []       # REDO B-3: the names install() set (kept after restore)
+        self.unset = []         # REDO B-3: the names this platform would not let install() set
 
     def install(self):
         """The names of the signals now handled ([] outside the main thread)."""
@@ -325,8 +338,27 @@ class Stops:
                     continue
                 self.previous[number] = self.signal.signal(number, self.handler)
             except (OSError, ValueError, RuntimeError):   # a signal this platform will not let us set
+                self.unset.append(name)
                 continue
-        return sorted(self.numbers[n] for n in self.previous)
+        self.handled = sorted(self.numbers[n] for n in self.previous)
+        return list(self.handled)
+
+    def line(self):
+        """M9.1 REDO (ADR-0010 Amendment B, B-3; A3): what the watch's first lines say of its stop - which
+        signals stop it and which were left ignored (ignored when it started, as under nohup), in one line."""
+        stop, ignored = ["Ctrl-C"], list(self.ignored)
+        sigint = getattr(self.signal, "SIGINT", None)
+        try:
+            if sigint is not None and self.signal.getsignal(sigint) == self.signal.SIG_IGN:
+                stop, ignored = [], ["Ctrl-C (SIGINT)"] + ignored
+        except (OSError, ValueError, RuntimeError, KeyError):
+            pass
+        stop += ["SIGBREAK (Ctrl-Break)" if n == "SIGBREAK" else n for n in self.handled]
+        text = "%s %s it with its final report and code; left ignored (ignored when it started, as under nohup):" \
+               " %s" % (", ".join(stop) or "no signal", "stop" if len(stop) > 1 else "stops", ", ".join(ignored) or "none")
+        if self.unset:
+            text += "; not settable here: %s" % ", ".join(self.unset)
+        return text
 
     def restore(self):
         for number, old in list(self.previous.items()):
@@ -1187,7 +1219,37 @@ def cmd_watch(args, out):
             out.flush()
         except (OSError, ValueError):
             pass
+        for name in ("stdout", "stderr"):   # M9.1 REDO B-1: the exit is Raqib's code, not 120 from a dead stream
+            _quiet_if_dead(name)
         stops.restore()
+
+
+def _quiet_if_dead(name):
+    """M9.1 REDO (ADR-0010 Amendment B, B-1): sys.stdout or sys.stderr (name) that cannot be flushed - a
+    hung-up terminal, a closed pipe - is pointed at os.devnull (as the Python docs' note on SIGPIPE says), so the
+    interpreter's last flush at exit neither prints a traceback nor turns Raqib's code into 120. A stream that
+    takes its words is left as it is. True when it was dead."""
+    stream = getattr(sys, name, None)
+    if stream is None:
+        return False
+    try:
+        stream.flush()
+        return False
+    except (OSError, ValueError):
+        pass
+    try:
+        null = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(null, stream.fileno())
+        finally:
+            os.close(null)
+        stream.flush()
+    except (OSError, ValueError, AttributeError):   # no descriptor to point, or still not flushed: replaced
+        try:
+            setattr(sys, name, open(os.devnull, "w"))
+        except OSError:
+            pass
+    return True
 
 
 def _watch(args, out, stops):
