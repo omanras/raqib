@@ -444,11 +444,13 @@ def test_e2_a_raqib_without_capture_cannot_have_its_hooks_installed(tmp_path, ho
 
 # --- notifier and sysmon -----------------------------------------------------------------
 
-def test_e2_notifier_terminal_only_is_missing(tmp_path, home):
+def test_e2_notifier_terminal_only_is_unsure_since_m91(tmp_path, home):
+    """M9.1 (ADR-0010 decision 3): was MISSING; a fallback that works is UNSURE, said, outside the exit."""
     proj = make_project(tmp_path)
     _, _, checks, _ = run(tmp_path, proj, home, isfile=lambda p: p == "/bin/sh")
-    assert checks["notifier"] == ("MISSING", "terminal bell and stderr only (no /usr/bin/notify-send or"
-                                             " /bin/notify-send)")
+    assert checks["notifier"] == ("UNSURE", "terminal bell and stderr only: a knock reaches the terminal that runs"
+                                            " the watch, no desktop notification; watch does not need one (no"
+                                            " /usr/bin/notify-send or /bin/notify-send)")
 
 
 def test_e2_notifier_off_under_ci_is_missing(tmp_path, home):

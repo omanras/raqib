@@ -819,6 +819,7 @@ class Watch:
         if self.registry is None:
             return None
         own = self.own()
+        lost = lost_note(self.out)   # M9.1 REDO 2 C-3: the words the terminal lost, one note of the row
 
         def edit(rows, note):
             mine = [r for r in rows if isinstance(r, dict) and (r.get("pid"), r.get("trace"), r.get("started")) == own]
@@ -826,12 +827,14 @@ class Watch:
                 r.update(finished=self.finished, status=self.status)
                 if note:
                     r["notes"] = (r["notes"] if isinstance(r.get("notes"), list) else []) + [note]
+                if lost:
+                    r["notes"] = (r["notes"] if isinstance(r.get("notes"), list) else []) + [lost]
             if not mine:
                 rows.append({"pid": own[0], "project": self.project, "port": (self.port or {}).get("used"),
                              "trace": self.trace_path, "state": self.state_path, "url": self.url,
                              "started": own[2], "finished": self.finished, "status": self.status,
                              "notes": ["this row was not in the registry at the end: added again"] +
-                                      ([note] if note else [])})
+                                      ([note] if note else []) + ([lost] if lost else [])})
         return self._registry_change(edit, "marked %s" % self.status, now)
 
     def registry_off(self, path, why, now=None):
@@ -891,6 +894,9 @@ class Watch:
         state["code_so_far"] = self.code_so_far()   # M8.1 REDO B-4: the code of what has been read so far
         state["code_error"] = self.code_error        # M8.1 REDO C-2: why that code could not be computed, or None
         state["ever_read"] = self.ever_read          # M8.1 REDO C-1: whether a line was ever read (lines: this content's)
+        lost = lost_note(self.out)   # M9.1 REDO 2 C-3: the words a terminal that went away lost, a note (no hole)
+        if lost:
+            state["notes"] = [lost]
         return state
 
     def _problem(self, p):
@@ -938,6 +944,9 @@ class Watch:
                "scope: %s" % (self.scope or "-"),
                "watched: %s to %s; %d lines read in this trace content; %d trace resets"
                % (self.at(self.t0), self.finished or "-", self.lines, self.epoch)]
+        lost = lost_note(self.out)   # M9.1 REDO 2 C-3: said once, if these words can be written at all
+        if lost:
+            out.append("note: %s" % lost)
         if self.port and self.port.get("warning"):
             out.append("WARNING: %s" % self.port["warning"])
         out.append("")
@@ -1224,6 +1233,85 @@ class Running:
         self.err = err
 
 
+class AskedStop(KeyboardInterrupt):
+    """M9.1 (ADR-0010 decision 1): a stop asked from outside the watch (SIGTERM, SIGHUP, SIGBREAK: raqib/cli.py's
+    Stops raises it while the watch waits between polls). loop() ends on it as on Ctrl-C and says its name."""
+
+    def __init__(self, name):
+        KeyboardInterrupt.__init__(self, name)
+        self.name = name
+
+
+def stopped_by(exc):
+    """What the "stopped (...)" line names: an AskedStop's name, else Ctrl-C (its words, as before)."""
+    return exc.name if isinstance(exc, AskedStop) else "Ctrl-C"
+
+
+class Speech:
+    """M9.1 REDO (ADR-0010 Amendment B, B-1; REDO 2, Amendment C, C-1 and C-3): a stop never depends on its own
+    words being written. The out and err of a terminal watch (command() here, host.command()) are written through
+    this, every word at once, as it comes (C-1: nothing is held). A write or a flush that fails - a hung-up
+    terminal (EIO), a closed pipe (EPIPE), a closed stream - is dropped and never raised, so no failure to write
+    skips what the watch keeps or changes its code. The first failure (its UTC time, which stream, the error's
+    words) and the count of the writes and flushes that failed are kept (C-3): note() is the one note the watch's
+    state file, its registry row and its final report carry - a note, never a hole, so no code changes. The
+    window (raqib/app.py) does not use it."""
+
+    def __init__(self, out, err, wall=None):
+        self.lock = threading.Lock()
+        self.wall = wall or time.time
+        self.first = None   # {"at", "stream", "error"}: the first write or flush that failed
+        self.lost = 0       # the writes and flushes that failed
+        self.out, self.err = _Said(self, out, "stdout"), _Said(self, err, "stderr")
+
+    def failed(self, said, exc):
+        with self.lock:
+            self.lost += 1
+            if self.first is None:
+                at = datetime.datetime.fromtimestamp(self.wall(), datetime.timezone.utc)
+                words = ("%s: %s" % (type(exc).__name__, exc)).encode("ascii", "backslashreplace").decode("ascii")
+                self.first = {"at": at.strftime("%Y-%m-%dT%H:%M:%SZ"), "stream": said.label, "error": _safe(words)}
+
+    def note(self):
+        """C-3: "N writes to the terminal were lost since <time>: <stream>: <why>", or None when none was lost."""
+        with self.lock:
+            if not self.lost:
+                return None
+            return "%d %s to the terminal %s lost since %s: %s: %s" % (
+                self.lost, "write" if self.lost == 1 else "writes", "was" if self.lost == 1 else "were",
+                self.first["at"], self.first["stream"], self.first["error"])
+
+
+class _Said:
+    """One stream of a Speech (its out or its err): write and flush as the stream's, at once, never raising
+    OSError or ValueError (a failure is counted by the Speech); every other attribute is the stream's own."""
+
+    def __init__(self, speech, stream, label):
+        self.speech, self.stream, self.label = speech, stream, label
+
+    def write(self, text):
+        try:
+            self.stream.write(text)
+        except (OSError, ValueError) as exc:   # a terminal that is gone: the words are lost, the watch goes on (B-1)
+            self.speech.failed(self, exc)
+        return len(text)
+
+    def flush(self):
+        try:
+            self.stream.flush()
+        except (OSError, ValueError) as exc:
+            self.speech.failed(self, exc)
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+def lost_note(stream):
+    """M9.1 REDO 2 (Amendment C, C-3): the note of the words a terminal watch lost, from its out (a Speech's
+    stream), or None: nothing lost, or not a terminal watch (the window, a fixture)."""
+    return stream.speech.note() if isinstance(stream, _Said) else None
+
+
 def first_step(running):
     """The first-finding knock after a poll (ADR-0006 E3, A-12): the
     FirstFinding record when it knocked now (also kept as watch.json's
@@ -1244,21 +1332,27 @@ def first_step(running):
 
 
 def command(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=None,
-            err=None, home=None, refresh=None):
+            err=None, home=None, refresh=None, stops=None):
     """raqib watch; returns the exit code of the final report.
     evaluator(project) -> (evaluate, scope note): evaluate(records) gives
     (findings, notes) with the project's context (B-6). refresh: the page's
     reload in seconds (I-1, default ui.REFRESH_DEFAULT). The loop is split
     (M6.4) into start(), loop(), conclude() and close(), so the window runs
-    the same watch in a worker thread and ends it with a Stop."""
-    running = start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_seconds, environ=environ,
-                    err=err, home=home, refresh=refresh)
+    the same watch in a worker thread and ends it with a Stop. stops (M9.1):
+    the terminal's stop signals (raqib/cli.py's Stops), waited on between
+    polls; None: Ctrl-C only, as before. out and err are written through a
+    Speech (M9.1 REDO B-1, REDO 2 C-1): every word at once; a terminal that
+    is gone loses the words, never the record or the code, and the words
+    lost are noted (C-3)."""
+    speech = Speech(out, err or sys.stderr)
+    running = start(project, log, no_open, no_notify, port, speech.out, evaluator, rules, gap_seconds,
+                    environ=environ, err=speech.err, home=home, refresh=refresh)
     try:
-        crash = loop(running)
+        crash = loop(running, stops=stops)
         text, code = conclude(running, crash)
     finally:
-        close(running)
-    out.write("\n" + text)
+        close(running)   # REDO 2 C-1: the finally's only statement, so it runs on every path
+    speech.out.write("\n" + text)
     return code
 
 
@@ -1328,10 +1422,15 @@ def start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_sec
     return Running(watcher, server, notifier, thread, refresh, environ, no_open, out, err)
 
 
-def loop(running, stop=None, on_step=None):
+def loop(running, stop=None, on_step=None, stops=None):
     """Poll until Ctrl-C (stop None: the terminal) or until stop is set (the
     window's worker thread); None, or the crash text when an exception ended
-    it (B-4). The window's Stop is the equivalent of Ctrl-C. on_step(watcher)
+    it (B-4). The window's Stop is the equivalent of Ctrl-C. stops (M9.1,
+    ADR-0010 decision 1; the terminal only): the wait between polls is
+    stops.nap(), which ends in an AskedStop when a stop signal came, said as
+    "stopped (SIGTERM)" where Ctrl-C says "stopped (Ctrl-C)"; the first lines
+    say what stops it and what was left ignored (stops.line(), REDO B-3).
+    The "stopped" line is written at once (REDO 2 C-1). on_step(watcher)
     runs after every poll, in this thread, outside the Watch lock; without
     one it is the first-finding knock (first_step, ADR-0006 A-12), so a
     terminal watch knocks on its first finding as the window does."""
@@ -1351,6 +1450,8 @@ def loop(running, stop=None, on_step=None):
             out.write("raqib watch: WARNING: %s\n" % watcher.port["warning"])
         out.write("raqib watch: page %s (read-only, reloads every %d s; %s stops the watch and prints the"
                   " final report)\n" % (watcher.url, running.refresh, "Ctrl-C" if stop is None else "Stop"))
+        if stops is not None:   # M9.1 REDO B-3 (A3): which signals stop it, which were left ignored
+            out.write("raqib watch: %s\n" % stops.line())
         if watcher.registry is not None:
             out.write("raqib watch: registry %s (this watch is a row; rows are never removed)\n"
                       % _safe(watcher.registry.path))
@@ -1365,7 +1466,9 @@ def loop(running, stop=None, on_step=None):
         if on_step is not None:
             on_step(watcher)
         while True:
-            if stop is None:
+            if stop is None and stops is not None:
+                stops.nap(_sleep, POLL_SECONDS)   # M9.1: a stop signal ends the wait as Ctrl-C does
+            elif stop is None:
                 _sleep(POLL_SECONDS)
             elif stop.wait(POLL_SECONDS):
                 out.write("\nraqib watch: stopped (%s)\n" % _safe(stop.reason))
@@ -1373,8 +1476,8 @@ def loop(running, stop=None, on_step=None):
             watcher.step()
             if on_step is not None:
                 on_step(watcher)
-    except KeyboardInterrupt:
-        out.write("\nraqib watch: stopped (Ctrl-C)\n")
+    except KeyboardInterrupt as exc:   # Ctrl-C, or (M9.1) a stop signal: an AskedStop
+        out.write("\nraqib watch: stopped (%s)\n" % _safe(stopped_by(exc)))
     except Exception as exc:  # B-4: the watcher's own failure ends in the final report
         crash = "%s: %s" % (type(exc).__name__, exc)
         out.write("\nraqib watch: CRASHED: %s\n" % _safe(crash))

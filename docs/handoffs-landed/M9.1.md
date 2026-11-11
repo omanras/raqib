@@ -5,7 +5,7 @@ ADR-0010 rules it: a watch asked to stop ends with its report and its code; --ve
 sentence, report line and quickstart.
 
 Scope:
-  raqib/watch.py, raqib/host.py, raqib/cli.py, raqib/doctor.py, raqib/report.py, raqib/rules/engine.py, raqib/rules/catalog/DESTRUCT-CMD.yaml and NET-TOOL.yaml (the summary line only), tests/, README.md, docs/review/
+  raqib/watch.py, raqib/host.py, raqib/cli.py, raqib/doctor.py, raqib/report.py, raqib/rules/engine.py, raqib/rules/catalog/DESTRUCT-CMD.yaml and NET-TOOL.yaml (the summary line only), raqib/ruleform.py (B-6: the program form's summary line only), tests/, README.md, docs/review/
 
 Exit criteria:
 - E1 (decision 1) `raqib watch` and `raqib watch --host` from the terminal take SIGTERM and SIGHUP (where the platform has them) and SIGBREAK on Windows as a stop: "stopped (<signal's name>)", the final report, the registry row finished, exit 0 / 1 / 3. Handlers are installed by the CLI in the main thread only and the earlier ones restored; a second signal does not cut the report short; `raqib app` installs none; no process is signalled (A4). README says what stays out of reach (SIGKILL, TerminateProcess) and names `raqib report`.

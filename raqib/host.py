@@ -3776,8 +3776,9 @@ class HostWatch:
         out += ["  - %s" % d["text"] for d in self.dark_notes]
         if not first:
             out += rules_off
-        out.append("NOTES: %d" % len(self.notes))
-        out += ["  - %s" % n for n in self.notes]
+        notes = self.all_notes()   # M9.1 REDO 2 C-3: with the note of the words the terminal lost, if any
+        out.append("NOTES: %d" % len(notes))
+        out += ["  - %s" % n for n in notes]
         holes = self.holes + self.notifier.holes
         out.append("HOLES (A3): %d" % len(holes))
         out += ["  - %s: %s at %s%s" % (h["kind"], h["detail"], h["at"], " (%s)" % h["notice"] if h.get("notice")
@@ -3852,7 +3853,7 @@ class HostWatch:
                      # M7.5 E1/E3; REDO N-5: the state keeps the newest KNOCKS_KEPT knocks and the count of the rest
                      "dark_notes": self.dark_notes, "knocks": self.knock_rows(KNOCKS_KEPT),
                      "knocks_older": max(0, len(self.knocks) - KNOCKS_KEPT),
-                     "notes": self.notes, "rounds_tail": [self._public(r) for r in self.round_lines],
+                     "notes": self.all_notes(), "rounds_tail": [self._public(r) for r in self.round_lines],
                      "by_channel": sorted(self.by_channel.values(), key=lambda g: g["path"]),   # AA-1, AB-1
                      "by_channel_count": self.by_channel_count(),            # AB-2: M, for the window
                      "by_channel_sentence": self.by_channel_sentence()},
@@ -3864,6 +3865,13 @@ class HostWatch:
         state["code_so_far"] = self.code_so_far()   # M8.1 REDO B-4: the code of what has been read so far
         state["code_error"] = self.code_error        # M8.1 REDO C-2: why that code could not be computed, or None
         return state
+
+    def all_notes(self):
+        """The run's notes; M9.1 REDO 2 (Amendment C, C-3): and, last, the note of the words a terminal watch's
+        terminal lost (watch.Speech) - a note, never a hole. A watch that lost none has its notes as before."""
+        from raqib import watch
+        lost = watch.lost_note(self.out)
+        return self.notes + [lost] if lost else self.notes
 
     def all_not_judged(self):
         """M7.6: what each rule off would have judged: the rounds' lines and every source file's. V-3 (U9): what a
@@ -3942,6 +3950,8 @@ class HostWatch:
         if self.registry is None:
             return None
         own = self.own()
+        from raqib import watch
+        lost = watch.lost_note(self.out)   # M9.1 REDO 2 C-3: the words the terminal lost, one note of the row
 
         def edit(rows, note):
             mine = [r for r in rows if isinstance(r, dict) and (r.get("pid"), r.get("trace"), r.get("started")) == own]
@@ -3949,11 +3959,14 @@ class HostWatch:
                 r.update(finished=self.finished, status=self.status)
                 if note:
                     r["notes"] = (r["notes"] if isinstance(r.get("notes"), list) else []) + [note]
+                if lost:
+                    r["notes"] = (r["notes"] if isinstance(r.get("notes"), list) else []) + [lost]
             if not mine:
                 rows.append({"pid": own[0], "project": HOST, "mode": HOST, "port": (self.port or {}).get("used"),
                              "trace": self.rounds_path, "state": self.state_path, "url": self.url,
                              "started": own[2], "finished": self.finished, "status": self.status,
-                             "notes": ["this row was not in the registry at the end: added again"]})
+                             "notes": ["this row was not in the registry at the end: added again"] +
+                                      ([lost] if lost else [])})
         return self._registry_change(edit, "marked %s" % self.status)
 
     def _registry_change(self, edit, what):
@@ -4058,9 +4071,13 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
 _sleep = time.sleep   # the tick wait; tests replace it
 
 
-def loop(running, stop=None):
+def loop(running, stop=None, stops=None):
     """Tick until --rounds are done, Ctrl-C, or stop is set; None, or the
-    crash text."""
+    crash text. stops (M9.1, ADR-0010 decision 1; the terminal only, from
+    raqib/cli.py): the wait between ticks is stops.nap(), which ends as
+    Ctrl-C does when a stop was asked from outside, with its name; the first
+    lines say what stops it and what was left ignored (REDO B-3); the
+    "stopped" line is written at once (REDO 2 C-1)."""
     from raqib import watch
     watcher, out = running.watcher, running.out
     crash = None
@@ -4069,6 +4086,8 @@ def loop(running, stop=None):
             out.write("raqib watch --host: WARNING: %s\n" % watcher.port["warning"])
         out.write("raqib watch --host: page %s (read-only, reloads every %d s; %s ends the watch)\n" % (
             watcher.url, watcher.refresh, "Ctrl-C" if stop is None else "Stop"))
+        if stops is not None:   # M9.1 REDO B-3 (A3): what stops it, what was left ignored
+            out.write("raqib watch --host: %s\n" % stops.line())
         if running.no_open or running.environ.get("CI"):
             out.write("raqib watch --host: page not opened (%s)\n" % ("--no-open" if running.no_open else "CI is set"))
         else:
@@ -4093,12 +4112,14 @@ def loop(running, stop=None):
             if stopped is not None and watcher.settled():
                 out.write("\nraqib watch --host: stopped (%s)\n" % _safe(stopped))
                 break
-            if stop is None or stopped is not None:
+            if stop is None and stops is not None:
+                stops.nap(_sleep, POLL_SECONDS)   # M9.1: a stop asked from outside ends the wait as Ctrl-C does
+            elif stop is None or stopped is not None:
                 _sleep(POLL_SECONDS)
             else:
                 stop.wait(POLL_SECONDS)
-    except KeyboardInterrupt:
-        out.write("\nraqib watch --host: stopped (Ctrl-C)\n")
+    except KeyboardInterrupt as exc:   # Ctrl-C, or (M9.1) watch.AskedStop
+        out.write("\nraqib watch --host: stopped (%s)\n" % _safe(watch.stopped_by(exc)))
     except Exception as exc:
         crash = "%s: %s" % (type(exc).__name__, exc)
         out.write("\nraqib watch --host: CRASHED: %s\n" % _safe(crash))
@@ -4209,17 +4230,23 @@ def fixture_builder(catalog=None):
 
 def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
             out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
-            sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None):
-    """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code."""
-    out = out or sys.stdout
-    running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, out, err, environ, home,
-                    refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon, installer=installer,
-                    os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
+            sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None,
+            stops=None):
+    """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code.
+    stops (M9.1): the terminal's stops (raqib/cli.py), waited on between ticks; None: Ctrl-C only.
+    out and err are written through a watch.Speech (M9.1 REDO B-1, REDO 2 C-1): every word at once; a terminal
+    that is gone loses the words, never the record (the state finished, the registry row, the sources and channel
+    closed) or the code, and the words lost are noted (C-3)."""
+    from raqib import watch
+    speech = watch.Speech(out or sys.stdout, err or sys.stderr)
+    running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, speech.out, speech.err,
+                    environ, home, refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon,
+                    installer=installer, os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
                     suspect_every=suspect_every)
     try:
-        crash = loop(running)
+        crash = loop(running, stops=stops)
         text, code = conclude(running, crash)
     finally:
-        close(running)
-    out.write("\n" + text)
+        close(running)   # REDO 2 C-1: the finally's only statement, so it runs on every path
+    speech.out.write("\n" + text)
     return code

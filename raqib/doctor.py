@@ -25,9 +25,12 @@ and exits 1 when any line is MISSING, else 0:
             all six are installed and no settings file sets disableAllHooks.
             `raqib watch PROJECT` installs or replaces them.
 - notifier  the backend `raqib watch` would use (raqib/notify.py): OK for a
-            Windows toast, osascript or notify-send; MISSING when only the
-            terminal bell is left or notifications are off (CI is set, or
-            SystemRoot is not trusted).
+            Windows toast, osascript or notify-send; UNSURE when only the
+            terminal bell and stderr are left (M9.1, ADR-0010 decision 3: the
+            knocks still reach the terminal that runs the watch, no desktop
+            notifier was found; watch does not need one, so, as tkinter's
+            line, it never fails doctor's exit); MISSING when notifications
+            are off (CI is set, or SystemRoot is not trusted).
 - tkinter   `raqib app` (M6.4, ADR-0006) can open its window: tkinter
             imports in this Python (OK with the Tk version; UNSURE, "the
             window needs it (python3-tk); watch does not", when it does not:
@@ -297,12 +300,16 @@ def check_hooks(project, windows, capture=None):
     return True, "%s: installed for all %d events (trace %s)" % (settings, len(states), ", ".join(traces))
 
 
+NOTIFIER_UNSURE = ("terminal bell and stderr only: a knock reaches the terminal that runs the watch, no desktop"
+                   " notification; watch does not need one")
+
+
 def check_notifier(project, environ, platform, isfile, isdir):
     n = notify.Notifier(project, environ=environ, platform=platform, isfile=isfile, isdir=isdir)
     if n.backend in ("windows-toast", "osascript", "notify-send"):
         return True, "%s (%s)" % (n.backend, n.program)
-    if n.backend == "terminal":
-        return False, "terminal bell and stderr only (%s)" % n.reason
+    if n.backend == "terminal":   # M9.1 (ADR-0010 decision 3): a fallback that works is not MISSING
+        return UNSURE, "%s (%s)" % (NOTIFIER_UNSURE, n.reason)
     return False, "off (%s)" % n.reason
 
 

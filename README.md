@@ -7,10 +7,11 @@ never acquit.
 ## Install and watch
 ```bash
 git clone https://github.com/omanras/raqib ~/raqib
-pipx install ~/raqib          # or, in a venv: pip install ~/raqib; puts `raqib` on PATH
-raqib doctor ~/my-project     # one line per check, OK, MISSING or UNSURE; exit 1 if anything is missing
+pipx install ~/raqib          # or, in a venv: pip install ~/raqib
+pipx ensurepath               # puts `raqib` on PATH (~/.local/bin); open a new terminal after it
 raqib watch ~/my-project      # then use Claude Code in ~/my-project as usual; Ctrl-C ends the watch
 ```
+`raqib doctor ~/my-project` says what is missing: one line per check, OK, MISSING or UNSURE; exit 1 if anything is missing. Before the first watch it reports the hooks MISSING and exits 1, because `raqib watch` is what installs them.
 You need Python 3.11 or newer and Claude Code. Raqib itself is stdlib only and
 is not on PyPI. On Windows: `pipx install C:\path\to\raqib` (or
 `py -m pip install C:\path\to\raqib`), then `raqib watch C:\path\to\project`.
@@ -20,7 +21,7 @@ Install on the side that runs the agent (Windows or WSL), not both.
 ## Watch a project
 `raqib watch /path/to/project` installs the hooks, keeps the trace outside the project (by default under `~/.raqib/traces/`), takes the rules' scope from the project's `HANDOFF.md` when there is one, serves the read-only page on 127.0.0.1 and opens it once. The page reloads itself every `--refresh` N seconds (default 5) and runs no script: a band (WATCHING, SILENT for N s, AGENT GONE or CAPTURE FAILED, with notifications on or off, the trace and the last line's time), the alarms, the findings by severity, the live silence windows in the timeline, the other watches listed in `~/.raqib/watches.json` (a GONE row is kept; any process of yours can write that file), and a discover tab when `<trace dir>/discover.json` (`raqib discover --json`) is there.
 High findings knock once settled, as do silence (no trace line for `RAQIB_GAP_SECONDS`, default 60 s), capture failures and trace holes: OS notifications, one per rule per minute; lines already in the trace when watch starts are history, shown but never knocked; `--no-notify` or a set `CI` turns the knocks off.
-Ctrl-C, or a crash, prints the final report; `<trace>.watch.json` keeps the findings, the silence windows, the holes and a heartbeat ([ADR-0005](docs/specs/ADR-0005-one-command-watch.md)).
+Ctrl-C, or a crash, prints the final report; so do SIGTERM and SIGHUP (`kill`, `systemctl stop`, `docker stop`, a closed terminal, a dropped ssh) and Ctrl-Break on Windows, for `raqib watch` and `raqib watch --host` from the terminal: "stopped (SIGTERM)", the final report and its exit code 0 / 1 / 3 ([ADR-0010](docs/specs/ADR-0010-a-strangers-first-run.md)). A terminal that is gone (a hung-up tty, a closed pipe) loses the words only, never the record or the code: the watch's state file and its registry row carry one note of the writes that were lost (how many up to the moment the record was kept, since when, on which stream and why), and the final report says it if it can still be printed. Not yet done (M9.4): a knock whose only road is the terminal's bell, rung on a terminal that is gone, is still recorded as delivered ("terminal"), not as a failed knock. The watch's first lines say which signals stop it and which were left ignored: a signal already ignored when it started (`nohup`) stays ignored. Out of reach are SIGKILL and, on Windows, TerminateProcess (`taskkill /F`, the Task Manager) and closing the console window, logoff and shutdown, which end the process before its report (Ctrl-Break is what stops it there). A watch ended that way prints nothing. A terminal that stops reading (Ctrl-S, a full pipe) is another matter: the stop waits until it drains, and then says its words. For a watch that printed nothing: for `raqib watch PROJECT`, `raqib report <trace>` gives the findings. For `raqib watch --host`, no command re-prints its report: what it had found up to its last round is in its state file `~/.raqib/host/rounds.jsonl.watch.json` (written every tick: its findings, holes, its newest knocks and heartbeat, and `code_so_far`, the code of what it had read) and its record `~/.raqib/host/rounds.jsonl` (one line per round: its deltas, counts, holes and host lines). `<trace>.watch.json` keeps the findings, the silence windows, the holes and a heartbeat ([ADR-0005](docs/specs/ADR-0005-one-command-watch.md)).
 
 ## Doctor
 `raqib doctor [PROJECT]` says in one screen what `raqib watch` needs and is
@@ -41,6 +42,7 @@ If the venv moves on Windows, the hook names its `python.exe` by path, so
 Claude Code shows a hook error and no `RAQIB-SILENCE:` line is printed.
 Either way doctor shows the hooks as foreign, and `raqib watch` replaces them.
 A check that cannot be made on this host is UNSURE, counted apart and never a failure: today the Windows trace line, which says "not checked" because os.access cannot tell there and doctor writes nothing to find out.
+A notifier that is the terminal bell and stderr only is UNSURE too: the knocks reach the terminal that runs the watch, not the desktop, and watch does not need more; notifications off (`CI` set, `SystemRoot` not trusted) stay MISSING.
 
 ## Watch the host
 `raqib watch --host [--every T] [--rounds N]` watches the machine, not a project: every T seconds (default 10) a read-only round of `raqib discover`; nothing is installed and no project is touched.
