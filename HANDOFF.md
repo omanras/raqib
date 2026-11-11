@@ -4,7 +4,7 @@ Task: a person adds a rule from the window by answering a form; the package writ
 loader and the fixture runner judge them as any rule (A6), and a user rule can be removed. The terminal does the same.
 
 Scope:
-  raqib/ruleform.py (new, no Tk), raqib/overlay.py, raqib/cli.py, raqib/app.py (the form, Remove), tests/, README.md, docs/review/
+  raqib/ruleform.py (new, no Tk), raqib/overlay.py, raqib/cli.py, raqib/app.py (the form, Remove), tests/, README.md, docs/review/, raqib/host.py (E-2's selection and F-6's filter only), raqib/rules/engine.py (E-7: CLASSES only)
 
 Exit criteria:
 - E1 raqib/ruleform.py, pure: the answers (id, title, what to watch for: program | path | host | tool, the names or places, severity, an example that must fire, one that must not) give the rule's YAML text and its positive and negative fixture files, or a refusal that names the field and says why in a person's words. Kind signature; the evasions each form always has are written into the YAML (ADR-0002); the description says which lines the rule reads (which sources and tools). Names and places pass the capture's own name rules; nothing a person typed is written unchecked into a path.

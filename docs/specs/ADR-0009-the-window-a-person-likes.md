@@ -450,3 +450,102 @@ names the case it is for and what it must not touch (ADR-0007 Z-9).
   guessed.
 - E-11 Every REDO change carries a test for the behaviour it adds, and
   for the case it must not touch (D-8, Z-9).
+
+## Amendment F (the Table, 2026-11-11) - rulings on review 2026-11-11-M8.2-redo.md (4710945)
+CI run 42931272861 for 4710945: both windows gate jobs failed one test
+(the path form). E-1, E-4, E-5, E-7 MET; the rest PARTLY. Verdict: REDO
+on F-1..F-4. Each ruling names the case it is FOR and what it MUST NOT
+TOUCH, and both are tested (ADR-0007 Z-9).
+- F-1 (CI, must) A `~` place on Windows is one path, not two halves. The
+  home a `~` place stands for is written with the separators of that
+  home throughout, and the prefilled examples are of the same system as
+  the place. `home_of` takes the home and the system as arguments, so
+  the Linux gate tests the Windows shape and the Windows jobs the POSIX
+  one. FOR: `~/.aws` with a home `C:\Users\user` is held as typed and as
+  `C:\Users\user\.aws`. MUST NOT TOUCH: on POSIX exactly as now.
+- F-2 (R1, must; Q-4 as ruled) A program is matched as typed, as typed in
+  lower case, and as capture names an image (discover.image_name); the
+  distinct ones, in that order of need. FOR: `curl.exe` passes Test with
+  its own prefilled example, fires on a Bash line `curl.exe ...` and on
+  an os or host line whose image is curl. MUST NOT TOUCH: `terraform`
+  gives [terraform] and `R` gives [r, R], the rules they gave before.
+- F-3 (R2, must) Remove acts on the row's own place, never on a name
+  looked up again. A row carries the place it came from (a folder or a
+  loose file of rules.d); its widgets are keyed by that place; Remove
+  deletes that place and nothing else, and drops an overlay entry only
+  when the place removed is the loaded rule's. `taken_ids` counts loose
+  files, so the form cannot make an id a loose file holds. The terminal's
+  `--remove NAME` takes the exact name first; with no exact match, one
+  match without regard to case; with several, it refuses and lists them.
+  FOR: a refused loose MY-TF.yaml beside the loaded MY-TF/ - Remove on
+  the refused row deletes the file; the loaded rule, its folder and its
+  entry stay. And MY-TF beside my-tf on a file system that keeps both.
+  MUST NOT TOUCH: one rule, one row, removed as now. A row that is not a
+  rule file or a rule folder Raqib could have written (a folder whose
+  name is no id) gets no Remove: the row says to delete it by hand, with
+  its path. Ids are folded as the engine folds them (ASCII, C-11).
+- F-4 (R3, must) A Remove that deletes nothing changes nothing, and says
+  so. Order: every check first (links, the real place) with nothing
+  written; then the rule file, so the rule can no longer load; then the
+  rest; the overlay entry is dropped only once the rule file is gone.
+  FOR: a rule switched off whose folder cannot be deleted at all stays
+  off, its folder and entry whole, and the words are "nothing was
+  removed: <why>". A removal that fails midway says what is gone and
+  lists what remains; that rule no longer loads. MUST NOT TOUCH: a
+  removal that succeeds reads as now. The dry run says what the real
+  run would do, a refusal included (R18).
+- F-5 (R7) Remove follows what Add follows. A linked ~/.raqib or rules.d
+  (a folder kept on another disk) is followed by both, and Remove names
+  the real place it deleted in; a link BELOW rules.d is refused by both,
+  nothing written or deleted. This supersedes E-6's refusal of a linked
+  ~/.raqib. FOR: with ~/.raqib a link, the form adds and Remove removes.
+  MUST NOT TOUCH: _delete_tree's checks below the rule's folder.
+- F-6 (R4; scope: raqib/host.py, that filter only) The pre-M7.8 note
+  hides only the notes of the rules it names. FOR: a person's rule that
+  could not judge old os lines keeps its "could not judge N lines".
+  MUST NOT TOUCH: NET-TOOL's and DESTRUCT-CMD's same-cause notes stay
+  folded into that one note.
+- F-7 (R5, R6, R11) "On your records" says what it read and what it did
+  not. A file is a file of host lines by its lines, not by its folder:
+  an os source file is judged as the watch judges it and its lines are
+  counted. Every link, unreadable entry and bound met is counted and
+  said ("3 file(s) not read: a link"); never "no file yet" when files
+  were refused. A failure while reading the records is words of that
+  step ("your records could not be read: <why>") and never undoes a
+  passed Test. The sweep of left-over form-* folders says what it could
+  not remove and leaves a folder younger than ten minutes alone (another
+  Test may own it). MUST NOT TOUCH: the bounds, and a folder not named
+  form-*.
+- F-8 (R8) Every user rule's line at the watch's start and in the report
+  says how it was measured: "measured on its own examples only (N), not
+  on a corpus". MUST NOT TOUCH: a package rule's line.
+- F-9 (R16) A person's home does not travel in a title. The default
+  title and the description name the place as typed (`~/.aws`); the home
+  is in the match only, in the file under ~/.raqib. Tested: no default
+  title or description holds the home. A title the person typed is theirs.
+- F-10 (R10, R17, R18) The words are true: the `~` evasion is rewritten
+  (it now names what is still missed: another user's home, a relative
+  path); the docstring, cli.py:25 and :127 and the usage line follow the
+  code. `~user/...`, a home that cannot be carried and a home too long
+  are refusals or said notes, never silence. The form's header says "changed since the
+  test: test again" once a field is edited after a passed Test. The tool
+  form refuses HostChild, process, net and file as tool names with words
+  (those lines are not hook lines). No call deprecated in Python 3.12.
+- F-11 (R9, R13, R14, R15) Tests: a Tk test with a watch running (P15);
+  "testing..." shown; a failure after staging began (E-1's unstaging,
+  not vacuous); the package-findings test pins findings, not a list
+  recomputed beside itself; test_e3's count is exact again; the dead
+  helper goes. The allow-list resolves import aliases and has no entry
+  the module does not use. A gate test: no catalog rule declares class
+  USER. Link refusals on Windows are tested where the job can make a
+  junction (mklink /J needs no privilege) and skipped with the reason
+  where it cannot.
+- F-12 Recorded: R12 (a hand-written rule that names HostChild shares
+  the host-line poll with NET-TOOL; a regex that never ends stalls that
+  poll, as it already could on a trace feed: the Table writes the line in
+  THREAT_MODEL at the merge); R15's rest (`--add FILE` of any class but
+  HOST is accepted, as before M8.2).
+- Table ledger: E-6 ordered "the overlay entry first" for a crash and
+  made a failed Remove switch a rule back on; and it refused a linked
+  home in Remove alone. A ruling about an order names what holds if the
+  second step never happens.
