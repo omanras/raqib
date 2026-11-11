@@ -1658,3 +1658,53 @@ what it must not touch; both are tested.
   (the child of an unnamed program under a benign tree is a note:
   RESULT CLEAN).
 
+## Amendment AH (the Table, 2026-11-11) - rulings on review 2026-11-11-M7.13-redo.md (7921664), and the judgement on M7.13
+The packet finds no silence. Sorted by direction: what is more said is
+said and left; the false words are made true by the Table's own commit.
+- AH-1 (S-1 to S-5, Q-R1 to Q-R4; more said, left). AG-1's "one act"
+  is the rhythm's registry: a child the host record wrote and the
+  channel gives again can be two source findings of one act, and no
+  second knock with the package's rules. A tree attached again reads
+  its past as live for the silence and cross-source rules; a Claude
+  Code tree tries its hooks again; a tree quiet or gone at the first
+  kept read and never in a round again is never read by os; a child
+  new in that round is judged as in the watch whose every round read
+  (by its event 1). All said in THREAT_MODEL; the keys that would join
+  a host line and an os line are M7.12's (the tree ledger).
+- AH-2 (W-1, W-5, W-8, W-9). The attach-again words name the round of
+  the attach and say only that a round of the watch read, and only on
+  a tree that did get the os source; a tree's source text names the
+  cause of the round's own failed read; a start that moved is "between"
+  its earliest and latest value; the CHANNEL line never ends on a
+  dangling phrase.
+- AH-3 (CI, windows). Two tests asserted the tick of the real
+  monotonic clock (a start that moved by a millisecond on Linux and
+  not on Windows). They now accept it there or not, and the clause's
+  words are tested on holes whose starts the test gives.
+- AH-4 (W-2, W-3, W-4, Q-R5). The guide and THREAT_MODEL: "while no
+  read is kept" before the first knock; one line for the holes "whose
+  words differ only by the round and its time"; one act "of the tree's
+  rhythm"; a later run of failed reads names its cause and no
+  terminal (AG-2 as built; a denial after reads that were kept means
+  the rights changed under the watch, and the cause word says it).
+- AH-5 (W-6, W-7, Q-R6, the builder's REDO-1 and REDO-4). Recorded,
+  not built: the questions file's mechanism sentence is the builder's
+  and stays as written beside this ruling; SYSMON's "every tree" with a
+  hooked tree that also writes host lines; tests of earlier builds
+  that read docs/review (a task of its own, with M7.12).
+- Judgement: NEXT for M7.13, on the gate and six CI jobs green for the
+  Table's commit. What the third field run found is met as this ADR
+  says: a watch that cannot read the channel judges its trees as a
+  machine without Sysmon does (AF-1), goes back to the channel when a
+  round reads (AG-1), knocks once for it with the cause first (AF-2,
+  AG-2), and its report says it truly and in one line (AF-3, AF-4,
+  AG-4, AG-5). Not reviewed by a fresh reviewer: this commit of the
+  Table (AH-2, AH-3, AH-4); the commander's next watch is its review.
+  For the commander: Q-1, Q-2 (a note, RESULT CLEAN), Q-3, and whether
+  a channel that goes silent or restarts under the watch knocks.
+- Table ledger: AF-1 was ruled as a property against the watch without
+  the source from the first packet, and the REDO was one, not six. The
+  one must-fix was the Table's own word read too narrowly ("while"
+  built as "at the attach"): a ruling that names a duration also names
+  what ends it.
+

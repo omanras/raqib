@@ -173,3 +173,16 @@ fix. The Table's own fix, not yet read by a fresh reviewer. Recorded:
 M8.5 (a timing probe of the opening in CI; Python 3.14 in the matrix).
 The rest of the third field run's checklist above still stands.
 
+## After the third field run (2026-11-11, night)
+Three watches of Kimi on two Windows machines
+(docs/review/2026-11-11-third-field-run.md). Built from them: M7.13
+(ADR-0007 AF, AG, AH). Still to be shown by the commander's machines:
+an elevated watch's final report with Kimi acting (which event kinds
+his Sysmon logs; the `by the channel` count), the knock and the one
+terminal line of a watch that is not elevated, and the window's opening
+time on his display (M8.4). Waiting for his word: Q-1 (what an agent
+asks its person to do), Q-2 (an unnamed program under a benign tree
+that leaves its talk to a child is a note, RESULT CLEAN), Q-3 (naming
+a catalog image at its start), a knock for a channel that goes silent
+or restarts, M7.10 (the clipboard: needs an export of event 24).
+

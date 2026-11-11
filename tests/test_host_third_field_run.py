@@ -320,8 +320,9 @@ def test_e4_216_rounds_of_the_same_hole_are_one_line_and_the_count_stays(tmp_pat
     assert line.count("Access is denied.") == 1 and "round 2" not in line   # the words once
     assert "; first at 2026-11-10T07:49:30.000Z, last at 2026-11-10T14:59:30.000Z; round 1 knocked (off)" in line
     # AG-5 (Q-D confirmed): inside one episode a start that moves is a time, and the line says it moved
-    assert ("; the query's start (the watch's start as each round computed it) moved from 2026-11-10T07:49:29.999Z to"
-            " 2026-11-10T07:49:30.000Z; first at") in line
+    # (AH-3: whether the start moved is the real monotonic clock's tick, there on one machine and not on another:
+    # where the line says it, it says it in these words; the words themselves are test_e5_ah3 below)
+    assert_moved_or_not(line)
     from raqib import app   # the window reads the count as a number and marks the lines under it as holes
     tags = dict(app.text_tags("\n".join(holes)))
     assert tags[holes[0]] == tags[holes[1]] == tags[holes[2]] == "hole"
@@ -476,8 +477,8 @@ def test_e1_ag1_a_tree_host_because_round_1_was_not_back_in_time_is_attached_aga
     (key,) = late.trees
     src = late.sources[key]
     assert src.kind == "os" and late.trees[key]["source_round"] == 2
-    assert src.text.endswith("(attached again as os: round 2 read the Sysmon channel; the lines of the host's own"
-                             " record before it stay judged)")
+    assert src.text.endswith("(attached again as os in round 2: a round of the watch read the Sysmon channel; the"
+                             " lines of the host's own record before it stay judged)")
     (line,) = [x for x in said.splitlines() if "round 2: kimi pid 9176: os: Sysmon, rooted at pid 9176" in x]
     assert "stay judged)" in line and "(attached again after a hole)" not in line
     tree = next(i for i, x in enumerate(report(late)) if "pid 9176 kimi" in x)
@@ -613,11 +614,42 @@ def test_e5_ag5_holes_before_the_first_kept_read_and_after_a_restart_are_two_lin
     unread = [x for x in holes if x.startswith("  - channel-unread:")]
     assert [x.split(" (", 1)[0] for x in unread] == ["  - channel-unread: rounds 1-2",
                                                      "  - channel-unread: rounds 5-6"]   # two episodes: two lines
-    assert ("; the query's start (the watch's start as each round computed it) moved from 2026-11-10T07:49:29.999Z to"
-            " 2026-11-10T07:49:30.000Z") in unread[0]
-    assert "moved from" not in unread[1] and "2026-11-10T07:57:30" in unread[1]   # the restart's start, said once
+    assert_moved_or_not(unread[0])
+    assert "was between" not in unread[1] and "2026-11-10T07:57:30" in unread[1]   # the restart's start, said once
     assert [k["round"] for k in channel_knocks(w)] == [1, 5]
-    print("\n".join(holes))
+
+
+MOVED = "; the query's start (the watch's start as each round computed it) was between "
+
+
+def assert_moved_or_not(line):
+    """AH-3: the clause is there only where the real clock ticked between two rounds' starts; where it is there,
+    it is these words, two times in order, before "; first at"."""
+    if MOVED in line:
+        a, b = line.split(MOVED, 1)[1].split("; first at", 1)[0].split(" and ")
+        assert a < b and a.startswith("2026-11-10T07:49:") and b.startswith("2026-11-10T07:49:")
+    else:
+        assert "was between" not in line
+
+
+def test_e5_ah3_a_start_that_moved_is_said_once_with_both_times_and_a_start_that_did_not_is_not(tmp_path, monkeypatch):
+    """ADR-0007 AG-5, AH-3 (Q-D): the moved-start clause, on holes whose starts the test gives (the real
+    clock's tick is not the test's to command): three holes of one episode, the same words, starts A, B, A:
+    one line, the clause once, the earlier time first; the same three with one start: one line, no clause."""
+    w, said, rounds = watch(tmp_path, monkeypatch, ["quiet/quiet"] * 2, channel=Channel())
+    q = "*[System[(EventID=1) and TimeCreated[@SystemTime>='%s']]]"
+    a, b = "2026-11-10T07:49:29.984Z", "2026-11-10T07:49:30.000Z"
+
+    def holes(starts):
+        return [{"kind": "channel-unread", "round": i + 1, "notice": None, "at": "2026-11-10T07:5%d:00.000Z" % i,
+                 "detail": "round %d: the Sysmon channel was not read this round (x); query %s" % (i + 1, q % s)}
+                for i, s in enumerate(starts)]
+    (line,) = w.hole_lines(holes([b, a, b]))
+    assert line.startswith("  - channel-unread: rounds 1-3 (3 holes in this line")
+    assert line.count(MOVED) == 1 and (MOVED + a + " and " + b + "; first at 2026-11-10T07:50:00.000Z, last at"
+                                       " 2026-11-10T07:52:00.000Z") in line
+    (line,) = w.hole_lines(holes([b, b, b]))
+    assert "was between" not in line and "first at 2026-11-10T07:50:00.000Z" in line
     # AG-4: the CHANNEL line never says "record None" (the last round failed after a restart)
     assert not [x for x in report(w) if "record None" in x]
 

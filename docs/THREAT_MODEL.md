@@ -730,35 +730,46 @@ is amended by T-2, T-1 restated by V-1).
   field run).** On Windows the Sysmon channel is read with wevtutil, and
   who may read the channel is Windows' and Sysmon's configuration
   (administrators on a default install): a terminal that is not elevated
-  may be denied it (wevtutil exit 5, as in the third field run). The watch
-  never checks elevation: it reports the denial. Each failed read has a
-  cause the watch names from the reader's own words (denied, not back in
-  time, could not be run, other failure), and only a denial names the
-  elevated terminal (Run as administrator). While no round of the watch
-  has read the channel, every tree's source is the host's own record, as
-  on a machine without Sysmon, except a Claude Code tree with hooks
-  attached and a tree with no source; its source text names the cause. In
-  the first round a tree is in after a read is kept, it is attached again
-  as the os source: what its host record wrote stays judged, and an act
-  both sources saw is one act. The first failed read knocks once
-  (HOST-HOLE, its own rate-limit id, the cause first) and says one line in
-  the terminal: the reason, that what lives between two rounds is not seen
+  may be denied it (wevtutil exit 5, as in the third field run). The
+  watch never checks elevation: it reports the denial. Each failed read
+  has a cause the watch names from the reader's own words (denied, not
+  back in time, could not be run, other failure), and only a denial
+  names the elevated terminal (Run as administrator). While no round of
+  the watch has read the channel, every tree's source is the host's own
+  record, as on a machine without Sysmon, except a Claude Code tree with
+  hooks attached and a tree with no source; its source text names the
+  cause. In the first round a tree is in after a read is kept, it is
+  attached again as the os source: what its host record wrote stays
+  judged, and an act of the tree's rhythm both sources saw is one act.
+  While no read is kept, the first failed read knocks once (HOST-HOLE,
+  its own rate-limit id, the cause first) and says one line in the
+  terminal: the reason, that what lives between two rounds is not seen
   until a round reads, and that the trees are judged by the host's own
   record until then. The report's SYSMON line says how many of the reads
-  the rounds asked were kept, with the first reason, and the holes of one
-  run of failed reads whose words differ only by the round and its time
-  are one line of the text report (each is still a hole of its round, in
-  the record and the state). Said, not fixed: a read that fails after
-  rounds that read leaves the os sources in place; what they cannot read
-  while the reads fail is not seen, and each such run of failed reads
-  knocks once. What an agent without hooks reads with its own code (a file
-  it opens, a directory it lists) is in no source: it starts no child and
-  opens no connection, and Sysmon has no event for a read. A file's
-  deletion is in no source at all (Sysmon's events 23 and 26 are never
-  asked for); a creation only where event 11 is read. In the third field
-  run the watched read the watcher's record: the agent read the watch's
-  own files under the home to write its account of the test, as section 6
-  says it can.
+  the rounds asked were kept, with the first reason, and the holes of
+  one run of failed reads whose words differ only by the round and its
+  time are one line of the text report (each is still a hole of its
+  round, in the record and the state). Said, not fixed: a read that
+  fails after rounds that read leaves the os sources in place; what they
+  cannot read while the reads fail is not seen, and each such run of
+  failed reads knocks once, naming its cause and no terminal. What an
+  agent without hooks reads with its own code (a file it opens, a
+  directory it lists) is in no source: it starts no child and opens no
+  connection, and Sysmon has no event for a read. A file's deletion is
+  in no source at all (Sysmon's events 23 and 26 are never asked for); a
+  creation only where event 11 is read. In the third field run the
+  watched read the watcher's record: the agent read the watch's own
+  files under the home to write its account of the test, as section 6
+  says it can. Said, not fixed, of a tree attached again as os (more
+  said, never less): a child its host record wrote and the channel then
+  gives again can be two source findings of the one act; the follow's
+  first pass reads the tree's past in the channel, and the silence and
+  cross-source rules judge that past as live; a Claude Code tree tries
+  its hooks again, and a second failure is a second hole; a tree that is
+  quiet or gone when the first read is kept and never in a round again
+  is never read by os; a child new in that round's sample is judged only
+  where the channel gives its start, as in a watch whose every round
+  read.
 - **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No watched
   process is signalled, suspended, attached to or killed, and nothing is
   blocked: a finding is a record and a knock after the act, never a

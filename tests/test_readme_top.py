@@ -73,13 +73,14 @@ HOST_UNREAD = [
      " and its source text names the cause (denied, not back in time, could not be run, other failure); in"
      " the first round a tree is in after a read is kept, it is attached again as the os source, and what "
      "its host record wrote stays judged.",
-    "The first failed read knocks once (HOST-HOLE, the cause first) and says one line in the terminal: "
-     "the reason, that what lives between two rounds is not seen until a round reads, and, for a denial "
-     "only, that an elevated terminal (Run as administrator) reads it.",
+    "While no read is kept, the first failed read knocks once (HOST-HOLE, the cause first) and says one line"
+     " in the terminal: the reason, that what lives between two rounds is not seen until a round reads, and,"
+     " for a denial, that an elevated terminal (Run as administrator) reads it.",
     "The report's SYSMON line says how many of the reads the rounds asked were kept, and the holes of one"
-     " run of failed reads are one line of the report (ADR-0007 Amendments AF and AG).",
+     " run of failed reads whose words differ only by the round and its time are one line of the report "
+     "(ADR-0007 Amendments AF and AG).",
     "A read that fails after rounds that read leaves the os sources in place: what they cannot read is "
-     "not seen, and each such run of failed reads knocks once.",
+     "not seen, and each such run of failed reads knocks once, naming its cause and no terminal.",
     "What an agent without hooks reads with its own code (a file it opens, a directory it lists) is in no"
      " source: it starts no child and opens no connection, and Sysmon has no event for a read; a file's "
      "deletion is in no source at all.",

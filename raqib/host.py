@@ -336,8 +336,8 @@ UNREAD_SAY = ("%s round %d: the Sysmon channel is not read (%s: %s): until a rou
 AFTER_KNOCK = "%s: round %d: the Sysmon channel read failed after %d read(s) kept"   # AF-2, AG-2: a later episode
 AFTER_SAY = ("%s round %d: the Sysmon channel's read failed after %d read(s) kept (%s: %s): the os sources stay in"
              " place, and what they cannot read is not seen (a hole) (%s)")
-REREAD = ("attached again as os: round %d read the Sysmon channel; the lines of the host's own record before it stay"
-          " judged")                                                   # AG-1: a tree host only while unread
+REREAD = ("attached again as os in round %d: a round of the watch read the Sysmon channel; the lines of the host's"
+          " own record before it stay judged")                                                   # AG-1: a tree host only while unread
 SYSMON_ALL = "the live reader's check: present, the rounds read its channel"   # AF-3: every round read (today's)
 SYSMON_NONE = ("the live reader's check: present, but none of the %d read(s) of its channel the rounds asked was kept"
                " (the first reason, round %d: %s): %s")                  # AF-3, AG-4: none read; N = reads asked
@@ -2896,12 +2896,15 @@ class HostWatch:
             unread = self.sysmon_ok() and self.channel_unread()
             src = (self._attach_os(now, n, key, t, entry) if self.sysmon_ok() and not failed_os and not unread
                    else self._attach_host(now, n, key, t, entry))
+            # AH-2: the cause is this round's failed read's (the latest), not the watch's first
+            cause = channel_cause((self.channel_last or {}).get("error") or self.channel_first_failure[1]) \
+                if unread else None
             if unread and src.kind == HOST_SOURCE and not failed_os:
                 src.unread_host = n   # AG-1: host only because the channel was unread
-                src.text = "%s (%s)" % (src.text, UNREAD_SOURCE % (n, channel_cause(self.channel_first_failure[1])))
+                src.text = "%s (%s)" % (src.text, UNREAD_SOURCE % (n, cause))
             elif unread and src.kind == HOST_SOURCE:
-                src.text = "%s (%s)" % (src.text, UNREAD_SOURCE % (n, channel_cause(self.channel_first_failure[1])))
-            if reread:
+                src.text = "%s (%s)" % (src.text, UNREAD_SOURCE % (n, cause))
+            if reread and src.kind == "os":   # AH-2: said only of a tree that did get the os source
                 src.text = "%s (%s)" % (src.text, REREAD % n)
             if failed_os:
                 src.text = "%s (the os source ended with a hole: %s)" % (src.text, prev.error)
@@ -3838,7 +3841,7 @@ class HostWatch:
                                                    if h.get("notice") else ""))
                 continue
             starts = [self.fold_words(x)[1] for x in hs]
-            moved = ("; the query's start (the watch's start as each round computed it) moved from %s to %s" % (
+            moved = ("; the query's start (the watch's start as each round computed it) was between %s and %s" % (
                 min(starts), max(starts)) if len(set(starts)) > 1 else "")
             knocked = "".join("; round %d knocked (%s)" % (x["round"], x["notice"]) for x in hs if x.get("notice"))
             out.append(FOLD_TEXT % (h["kind"], round_ranges([x["round"] for x in hs]), len(hs),
@@ -3886,8 +3889,9 @@ class HostWatch:
                            "; BACKLOG at Stop: the last round was cut at the cap, %s s behind: the records after %s were"
                            " not read" % (c.get("behind_seconds"), c.get("top")) if c.get("cut") else "",
                            "; the last round's read failed: what the channel holds after %s was not read" % (
-                               "record %s" % c.get("after") if c.get("after") is not None else "its query's start %s"
-                               % (query_start(c.get("query")) or "")) if c.get("error") else ""))
+                               "record %s" % c.get("after") if c.get("after") is not None else (
+                                   "its query's start %s" % query_start(c.get("query"))
+                                   if query_start(c.get("query")) else "the watch's start")) if c.get("error") else ""))
         if self.by_channel:   # AA-1, AB-1: the trees counted by image path, not knocked
             out.append("UNKNOWN, %s (listed and sourced, not knocked, AA-1): %d tree(s) of %d path(s)" % (
                 BY_CHANNEL.upper(), self.by_channel_count(), len(self.by_channel)))
