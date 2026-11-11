@@ -63,7 +63,30 @@ NEW_ROWS = ["| `raqib app [PROJECT]` | open Raqib as a desktop window: the host 
             "| `raqib discover` | find AI agents on a host by what they do |",
             "| `raqib --version` | print raqib <version> and exit 0 |"]
 # The pieces of the guide that are not the old README's (E-6): its title, E-7's lines, E-3's rows (and CHANGED).
-GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS
+# ADR-0007 AG-7: the paragraph "Watch the host" gained after "Every tree gets a source that only reads, by
+# itself" (the channel that is there and not read, AF and AG), its sentences as cut() makes them.
+HOST_UNREAD = [
+    "On Windows, who may read the Sysmon channel is Windows' and Sysmon's configuration (administrators "
+     "on a default install); the watch never checks elevation, it reports the denial.",
+    "While no round of the watch has read the channel, every tree's source is the host's own record, as "
+     "on a machine without Sysmon (but a Claude Code tree with hooks attached, and a tree with no source),"
+     " and its source text names the cause (denied, not back in time, could not be run, other failure); in"
+     " the first round a tree is in after a read is kept, it is attached again as the os source, and what "
+     "its host record wrote stays judged.",
+    "The first failed read knocks once (HOST-HOLE, the cause first) and says one line in the terminal: "
+     "the reason, that what lives between two rounds is not seen until a round reads, and, for a denial "
+     "only, that an elevated terminal (Run as administrator) reads it.",
+    "The report's SYSMON line says how many of the reads the rounds asked were kept, and the holes of one"
+     " run of failed reads are one line of the report (ADR-0007 Amendments AF and AG).",
+    "A read that fails after rounds that read leaves the os sources in place: what they cannot read is "
+     "not seen, and each such run of failed reads knocks once.",
+    "What an agent without hooks reads with its own code (a file it opens, a directory it lists) is in no"
+     " source: it starts no child and opens no connection, and Sysmon has no event for a read; a file's "
+     "deletion is in no source at all.",
+    "In the third field run the watched read the watcher's record: the agent read the watch's own files "
+     "under the home ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)).",
+]
+GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + HOST_UNREAD
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")

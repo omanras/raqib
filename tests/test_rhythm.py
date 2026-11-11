@@ -584,9 +584,10 @@ def test_e5_readme_three_lines():
     text = GUIDE   # M9.2: docs/GUIDE.md; each old line is a paragraph there
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
     lines = units(section)
-    assert len(lines) == 14   # M7.5: + two lines at the end (test_field_run.py); M7.8: + three at the end
-    assert "HOST-RHYTHM" in lines[6] and "--suspect" in lines[7] and "never acquit" in lines[7]
-    assert "only network call" in lines[8]
+    assert len(lines) == 15   # M7.5: + two lines at the end (test_field_run.py); M7.8: + three at the end; ADR-0007
+    # AG-7: + one after the os source's (test_host_sources.py), so these are one further on
+    assert "HOST-RHYTHM" in lines[7] and "--suspect" in lines[8] and "never acquit" in lines[8]
+    assert "only network call" in lines[9]
 
 
 def test_e5_questions_file():

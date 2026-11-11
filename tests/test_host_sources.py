@@ -763,9 +763,10 @@ def test_e5_readme_three_lines():
     text = GUIDE   # M9.2: docs/GUIDE.md; each old line is a paragraph there
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
     lines = units(section)
-    assert len(lines) == 14   # M7.8: + three at the end (test_acts_judged.py); M7.4: + three lines (HOST-RHYTHM, --suspect, the only network call): test_rhythm.py; M7.5: + two
-    assert "os source (Sysmon)" in lines[3] and "--attach-hooks" in lines[4] and "HOST-UNWATCHED" in lines[5]
-    assert "only thing ever written into a project" in lines[4]
+    assert len(lines) == 15   # ADR-0007 AG-7: + one after the os source's (the channel there and not read); M7.8: + three at the end (test_acts_judged.py); M7.4: + three lines (HOST-RHYTHM, --suspect, the only network call): test_rhythm.py; M7.5: + two
+    assert "os source (Sysmon)" in lines[3] and "--attach-hooks" in lines[5] and "HOST-UNWATCHED" in lines[6]
+    assert "only thing ever written into a project" in lines[5]
+    assert "the watch never checks elevation" in lines[4]   # AG-7: the paragraph after the os source's
 
 
 def test_e5_questions_file_has_the_gate_numbers_the_tests_and_what_the_table_must_write():

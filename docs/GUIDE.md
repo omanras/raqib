@@ -83,6 +83,24 @@ Every tree gets a source that only reads, by itself: the os source (Sysmon) wher
 exists, else the host's own record of its children and connections, judged by NET-TOOL and
 DESTRUCT-CMD; its findings show on the tree and knock.
 
+On Windows, who may read the Sysmon channel is Windows' and Sysmon's configuration (administrators
+on a default install); the watch never checks elevation, it reports the denial. While no round of
+the watch has read the channel, every tree's source is the host's own record, as on a machine
+without Sysmon (but a Claude Code tree with hooks attached, and a tree with no source), and its
+source text names the cause (denied, not back in time, could not be run, other failure); in the
+first round a tree is in after a read is kept, it is attached again as the os source, and what its
+host record wrote stays judged. The first failed read knocks once (HOST-HOLE, the cause first) and
+says one line in the terminal: the reason, that what lives between two rounds is not seen until a
+round reads, and, for a denial only, that an elevated terminal (Run as administrator) reads it. The
+report's SYSMON line says how many of the reads the rounds asked were kept, and the holes of one run
+of failed reads are one line of the report (ADR-0007 Amendments AF and AG). A read that fails after
+rounds that read leaves the os sources in place: what they cannot read is not seen, and each such
+run of failed reads knocks once. What an agent without hooks reads with its own code (a file it
+opens, a directory it lists) is in no source: it starts no child and opens no connection, and Sysmon
+has no event for a read; a file's deletion is in no source at all. In the third field run the
+watched read the watcher's record: the agent read the watch's own files under the home
+([docs/THREAT_MODEL.md](THREAT_MODEL.md)).
+
 `--attach-hooks` (the window: "attach hooks to Claude Code projects", off by default) also installs
 `raqib watch`'s hooks into the project a Claude Code tree works in: that settings file is the only
 thing ever written into a project, and only with that word.
