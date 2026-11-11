@@ -4,7 +4,7 @@ Task: a stranger reads the first screen of README.md and knows what Raqib is, wh
 start it and what an alarm looks like. The ruling-by-ruling detail moves under docs/, and no sentence or test is lost.
 
 Scope:
-  README.md, docs/GUIDE.md (new), tests/ (only what reads README.md: where it reads from, and the new tests), docs/review/
+  README.md, docs/GUIDE.md (new), tests/ (only what reads README.md: where it reads from, and the new tests), docs/review/, raqib/cli.py and raqib/discover.py (E-4: the words that cite the README, nothing else)
 
 Exit criteria:
 - E1 README.md is at most 120 lines, no line longer than 120 characters, in this order: the name and what it is (three lines); "Install and watch" (the block as M9.1 left it); "Watch a project"; "Doctor" - the three first headings stay and the first screen stays within its pinned 25 lines; then: what an alarm looks like (a sample final report); where it runs (Linux, Windows, Python 3.11+, Claude Code; what `raqib watch --host` and the window need); the commands in one short table; "More" with links into docs/GUIDE.md by heading; "Licence" as it is.

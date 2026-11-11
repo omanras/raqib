@@ -251,3 +251,64 @@ C-1..C-5 MET; no must-fix; the reviewer's verdict is NEXT on Windows CI.
   were tests that could not pass on Windows. The reviewer's first
   question from now on is the one that found them soonest: can every
   new test pass on the other system, read line by line.
+
+## Amendment E (the Table, 2026-11-11) - rulings on review 2026-11-11-M9.2.md (4cf5064)
+E2 MET; E3, E4 met as tested; E1 PARTLY; no sentence lost. Verdict: REDO
+on E-1. The Table read the new README as a stranger before the reviewer
+did, and the two agree: the HANDOFF's "move, do not rewrite" was right
+for the guide and wrong for the first page - a sentence cut from its
+paragraph keeps its words and loses its subject.
+- E-1 (H1, H2, H4, H8; Q-4; must) "Where it runs" is written fresh, in
+  at most eight lines, and each fact in it is pinned by a test against
+  the code or the guide: Linux and Windows (and WSL: install on the side
+  that runs the agent); Python 3.11 or newer, the standard library only;
+  Claude Code for `raqib watch PROJECT`; `raqib watch --host` names no
+  agent, and on Windows reads Sysmon where it is installed (what it
+  misses without it: a link to the guide); the window, `raqib app`,
+  needs tkinter and `raqib watch` does not; macOS as the tree stands -
+  what is written for it, that the host watch has no reader there, and
+  that no test runs there. The two sentences copied from the guide leave
+  the README; the guide keeps them where they were. MUST NOT TOUCH: the
+  first screen and its pins.
+- E-2 (H6; Q-2, Q-7) The sample is an alarm about an agent's act. A new
+  fixture trace of one short session in which a Bash command is caught
+  by DESTRUCT-CMD and NET-TOOL (the rehearsal's own case: curl piped to
+  a shell that runs rm), ended properly so that silence is not the
+  story. The README's block is the code's own report of it with ONE
+  marked cut: the rows of the RULES table become a single line that says
+  so; the test derives the block from the code's output by exactly that
+  rule and compares. One sentence before the block says which commands
+  print it. Lines at most 120. Decision 7's "top" is read as the README
+  itself; the sample stays after Doctor.
+- E-3 (H7; Q-5) The Commands table is for a person, so new rows are
+  allowed here and in the guide's table, each row's words checked
+  against the help: `raqib app` first (the window), `raqib watch`,
+  `raqib watch --host`, `raqib doctor`, `raqib report`, `raqib rules`
+  (list, switch, add, remove), `raqib discover`, `raqib --version`, and
+  the rest in one row that points at the guide. A row's command, typed
+  as shown with real values for its capital words, runs; TRACE is said
+  in one line under the table.
+- E-4 (H10; Q-6) Scope is widened to the words in raqib/cli.py and
+  raqib/discover.py that send a person to "the README" for what now
+  lives in docs/GUIDE.md: help text, messages, hole text, and the
+  docstrings that instruct. They name the guide. The E5 test covers
+  every such string in raqib/, not cli.py's help alone. History (ADRs,
+  review notes, THREAT_MODEL's past tense) is left.
+- E-5 (H5; Q-3) G-7's first-screen property is retired on record: the
+  Windows install line is in "Where it runs" (E-1), the path-rules
+  sentence is the guide's, and the test's comment says so.
+- E-6 (H9) The nothing-lost test counts: a code or table line that the
+  old README had n times is in the two files at least n times; a
+  sentence is found under its own heading where that heading is in the
+  guide; and the other way round, every piece of the guide is from the
+  old README except a listed few (its title, the linking lines of E-7,
+  the rows of E-3).
+- E-7 (H14) Where a section was split, the guide's part begins with one
+  line that says the start is in the README, with the link; "this
+  quickstart" names where the quickstart is.
+- E-8 Ruled as built: Q-1 (tables and code keep their width; E3's wrap
+  is for prose), Q-8, Q-9. H11-H13 recorded.
+- Table ledger: the handoff forbade new words everywhere to keep the
+  move honest, and so made the first page say that Raqib needs tkinter.
+  A constraint that protects one property (nothing lost) is not applied
+  where another matters more (what a stranger reads is true).
