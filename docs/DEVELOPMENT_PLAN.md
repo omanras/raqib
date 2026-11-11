@@ -89,6 +89,6 @@ point. Phase 6 runs before the rest of Phase 5.
 
 ## Phase 9 — A stranger's first run (ADR-0010; the commander's order, 2026-11-11)
 - M9.1 what the outsider's rehearsal found (landed 2026-11-11; ADR-0010 Amendments B-D, decisions 1-6 accepted): a watch asked to stop ends with its report, its record and its code (SIGTERM, SIGHUP, Ctrl-Break; a terminal that is gone costs the words only); `raqib --version`; doctor's notifier line; a finding names the program that made it; the ALARMS lines say what is counted; the quickstart's first command succeeds
-- M9.2 the README's top is one screen (decision 7): the detail moves under docs/, each pinned sentence followed by its test
+- M9.2 the README's top is one screen (landed 2026-11-11; ADR-0010 Amendments E-F, decision 7 accepted): README 556 lines to 106, the code's own sample report, "Where it runs" written fresh and pinned, the window first among the commands; everything else word for word in docs/GUIDE.md, each pin following its sentence
 - M9.3 a LICENSE and the `license` field (landed 2026-11-11; ADR-0010 Amendment A): CC0 1.0 Universal, the commander's word
 - M9.4 the terminal's knock and its page (ADR-0010 C-6, D-3): a bell rung on a terminal that is gone is a failed knock (notify.py); the page shows the lost-words note; the record written once more after the report; signals after the first said; `raqib watch P >&-`

@@ -1524,7 +1524,7 @@ def test_m42_redo2_e1_an_adversarial_trace_is_never_benign():
         return sum(1 for n in report["negatives"] if n["measured"] and n["fired"]), report["measured"]
     # M5.1b: + the Windows negative; M7.2b: NET-TOOL + its host-source negative (11); M7.8: + its os-line negative (12)
     assert fired("SCOPE-PATH") == (0, 10) and fired("NET-TOOL") == (1, 12)
-    assert "SCOPE-PATH firing on 0 of 10 benign files and\nNET-TOOL on 1 of 12" in Path(ROOT / "README.md").read_text(
+    assert "SCOPE-PATH firing on 0 of 10 benign files and\nNET-TOOL on 1 of 12" in Path(ROOT / "docs" / "GUIDE.md").read_text(
         encoding="utf-8")
 
 
@@ -1544,7 +1544,7 @@ def test_m42_redo2_e6_code_on_stdin_a_heredoc_or_a_script_records_the_shell_only
         assert "records the shell or the script only" in text and "M4.2b Q-A" not in text
         assert "since M4.2b the script's basename is input_meta.command_scripts, ruling G-2" in text   # G-2
     assert "- code given to a shell on stdin, by a here-document or a here-string, or in\n  a script file" in (
-        ROOT / "README.md").read_text(encoding="utf-8")
+        ROOT / "docs" / "GUIDE.md").read_text(encoding="utf-8")   # M9.2: What it cannot see, docs/GUIDE.md
     rules = [catalog_rule("DESTRUCT-CMD"), catalog_rule("NET-TOOL")]
     for i, command in enumerate(("echo 'rm -rf x; curl y' | sh", "bash <<'EOF'\nrm -rf x\ncurl y\nEOF",
                                  "bash <<< 'curl y'", "bash deploy.sh", "./wipe-all.sh"), start=1):

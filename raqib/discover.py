@@ -31,7 +31,7 @@ two requests owns no connection, so its acts go to a talking ancestor.
   OwningProcess 0, Linux inode 0) or a DNS cache row (a name, no pid) for a
   catalog endpoint. Evidence with cites; never a candidate or an act-root
   by itself; with neither in the run it is incomplete (exit 3, G-3).
-- the Windows window: the README export is a loop of N samples; each sample
+- the Windows window: the docs/GUIDE.md export is a loop of N samples; each sample
   is one file per kind, win-process-<k>.csv, win-tcp-<k>.csv and
   win-dns-<k>.csv, merged as the Linux window merges its snapshots. The
   loop's run.json declares N; a sample without its process or connection
@@ -60,8 +60,8 @@ their names under --from DIR:
   win-tcp.csv      Get-NetTCPConnection | ConvertTo-Csv
   win-dns.csv      Get-DnsClientCache | ConvertTo-Csv
                    (or win-process-<k>.csv, win-tcp-<k>.csv, win-dns-<k>.csv:
-                   sample k of the README loop; source name win-tcp-<k>)
-  run.json         --save's record of a live run, or the README loop's
+                   sample k of the docs/GUIDE.md loop; source name win-tcp-<k>)
+  run.json         --save's record of a live run, or the docs/GUIDE.md loop's
                    {"raqib": "discover-run", "samples": N}
   sysmon.xml       Sysmon events as XML (wevtutil qe ... /f:xml): 1 process
                    create, 3 network connect, 11 file create, 22 DNS query
@@ -106,7 +106,7 @@ FILE_NAMES = {"proc": "proc.txt", "proc-net": "proc-net.txt", "ss": "ss.txt",
               "sysmon": "sysmon.xml", "footprints": "footprints.txt"}
 PROCESS_SOURCES = ("proc", "win-process", "sysmon")
 CONNECTION_SOURCES = ("proc-net", "ss", "win-tcp", "sysmon")
-# E1 (M5.0b): the README loop writes one file per kind and sample k = 1..N.
+# E1 (M5.0b): the docs/GUIDE.md loop writes one file per kind and sample k = 1..N.
 SAMPLED = ("win-process", "win-tcp", "win-dns")
 SAMPLE_NEEDS = ("win-process", "win-tcp")   # a sample without both is not read (A3)
 SAMPLE_NAME = re.compile(r"(win-process|win-tcp|win-dns)-([1-9][0-9]{0,4})\Z")
@@ -1416,7 +1416,7 @@ def scan_footprints(homes, catalog):
     return "\n".join(lines) + "\n"
 
 
-WIN_SAMPLES, WIN_EVERY = 6, 10.0   # M7.1: the README loop's defaults, live
+WIN_SAMPLES, WIN_EVERY = 6, 10.0   # M7.1: the docs/GUIDE.md loop's defaults, live
 
 
 def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/proc", ss_paths=SS_PATHS,
@@ -1431,7 +1431,7 @@ def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/pro
     so the run is incomplete, not clean (B-2, D-2) - also when ss stood in.
     On Windows (M7.1): `win_samples` samples `win_every` seconds apart read
     by raqib/hostwin.py through `api` (default: the real Win32 API) as
-    win-process-<k>, win-tcp-<k> and win-dns-<k>, the shapes of the README
+    win-process-<k>, win-tcp-<k> and win-dns-<k>, the shapes of the docs/GUIDE.md
     loop; run_info (a dict) receives the APIs read and the sample times for
     run.json; a failed process snapshot raises LiveRefused.
     Elsewhere: the homes only. Read-only (A4)."""
@@ -1505,8 +1505,9 @@ def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/pro
             run_info.update(info)
     else:
         holes.append("no live process or connection reader on %s: export the Win32_Process,"
-                     " Get-NetTCPConnection and Get-DnsClientCache CSVs (the README loop) or Sysmon XML and"
-                     " give them with --read or --from (README)" % platform)
+                     " Get-NetTCPConnection and Get-DnsClientCache CSVs (the docs/GUIDE.md loop,"
+                     ' "Find the agents on a host (discover)") or Sysmon XML and give them with --read or --from'
+                     " (docs/GUIDE.md)" % platform)
     homes = default_homes(platform) if homes is None else list(homes)
     texts["footprints"] = ("live: homes %s" % (", ".join(homes) or "(none)"), scan_footprints(homes, catalog), None)
     return texts, holes, samples
@@ -1545,7 +1546,7 @@ def _order(name):
 
 def inputs_in(directory):
     """{name: path} for the known source files present in a directory: the
-    files of FILE_NAMES, and the numbered samples of the README loop
+    files of FILE_NAMES, and the numbered samples of the docs/GUIDE.md loop
     (win-process-<k>.csv, win-tcp-<k>.csv, win-dns-<k>.csv; E1)."""
     found = {kind: os.path.join(directory, FILE_NAMES[kind]) for kind in SOURCES
              if os.path.isfile(os.path.join(directory, FILE_NAMES[kind]))}
@@ -1591,7 +1592,8 @@ def window_gaps(texts, directory, declared=None):
         holes.append("sample(s) %s read beyond the %d that run.json declares" % (", ".join(map(str, beyond)), top))
     if declared is None:
         holes.append("no run.json beside the numbered samples: the sample count is taken as the highest found"
-                      " (%d); a loop that stopped after it is not seen (the README loop writes run.json first)" % top)
+                      " (%d); a loop that stopped after it is not seen (the docs/GUIDE.md loop,"
+                      ' "Find the agents on a host (discover)", writes run.json first)' % top)
     return holes
 
 
@@ -1638,7 +1640,7 @@ def read_dir(directory):
     """(texts, holes) of a directory of source texts. With a run.json from
     --save, every source keeps its recorded label and error and the live
     holes come back, so a replay of an incomplete run is incomplete and the
-    ss path survives (D-4). A run.json without sources is the README loop's
+    ss path survives (D-4). A run.json without sources is the docs/GUIDE.md loop's
     (E1): {"raqib": "discover-run", "samples": N}; the directory's files are
     read and every sample 1..N must be there (window_gaps). A ValueError if
     run.json cannot be read. Without run.json, proc-net.txt is read and an
@@ -1660,8 +1662,8 @@ def read_dir(directory):
         samples = _samples_field(run)
         if "sources" not in run:
             if run.get("raqib") != "discover-run" or samples is None:
-                raise ValueError("a run.json without sources must be the README loop's: raqib discover-run"
-                                 " and its samples count")
+                raise ValueError("a run.json without sources must be the docs/GUIDE.md loop's"
+                                 ' ("Find the agents on a host (discover)"): raqib discover-run and its samples count')
             texts = read_inputs(inputs_in(directory))
             return texts, window_gaps(texts, directory, samples)
         sources, saved_holes = run["sources"], run["holes"]

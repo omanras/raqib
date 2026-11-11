@@ -580,9 +580,10 @@ def test_e5_ci_counts_rhythm_zero_on_the_runners():
 
 
 def test_e5_readme_three_lines():
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    from readme_text import GUIDE, units
+    text = GUIDE   # M9.2: docs/GUIDE.md; each old line is a paragraph there
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
-    lines = [l for l in section.split("\n") if l.strip()]
+    lines = units(section)
     assert len(lines) == 14   # M7.5: + two lines at the end (test_field_run.py); M7.8: + three at the end
     assert "HOST-RHYTHM" in lines[6] and "--suspect" in lines[7] and "never acquit" in lines[7]
     assert "only network call" in lines[8]

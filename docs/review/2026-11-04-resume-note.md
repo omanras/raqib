@@ -137,3 +137,29 @@ session protocol's next revision (ADR-0007 AE ledger: a milestone that
 adds a source is ruled first by a property against the build without
 it, and what remains is sorted by direction - silence fixed, a knock
 more said).
+
+## Later the same day (2026-11-11): the outsider's rehearsal (ADR-0010)
+The commander handed the Table an outsider's rehearsal of main 0e8b007
+(docs/review/2026-11-11-outsider-rehearsal.md) with "fix the errors",
+and named the licence. Built, each after review and rulings, all on
+main: M9.1 (a watch asked to stop - SIGTERM, SIGHUP, Ctrl-Break - ends
+with its report, its record and its code; a terminal that is gone costs
+the words only; `raqib --version`; doctor's notifier line; a finding
+names the program that made it; the ALARMS lines; the quickstart),
+M9.2 (the README is one page, the rest word for word in docs/GUIDE.md),
+M9.3 (CC0 1.0 Universal: LICENSE, the package field, README).
+HANDOFF.md none pending. Not reviewed by a fresh reviewer: the Table's
+wording commits on M9.1 (D-1, D-2) and M9.2 (F-1), and M9.3.
+
+Added to the commander's third field run: `raqib --version`; stop a
+watch by closing its console window (Windows ends it before the report:
+said in the guide) and by Ctrl-Break; whether a watch that is not
+elevated reads the Sysmon channel (said nowhere: ADR-0010 F-3).
+Open with him: his name in the licence's dedication (none is written);
+a licence for the other branches (mizan, qayd, qayd-web, dawr have none).
+
+Recorded later task: M9.4 the terminal's knock and its page (a bell rung
+on a terminal that is gone is a failed knock; the page shows the
+lost-words note; the record written once more after the report; three
+docstrings that still say "the README").
+

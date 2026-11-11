@@ -388,6 +388,7 @@ def test_e5_must_not_touch_the_json_report_counts_codes_and_page(tmp_path):
 # --- E6 (decision 6): the quickstart's first command succeeds ------------------------------------------------
 
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+from readme_text import GUIDE, flat as flat_text, section as cut, units  # noqa: E402  (M9.2: README.md and docs/GUIDE.md)
 
 
 def readme_section(title):
@@ -402,7 +403,12 @@ def test_e6_install_block_is_clone_install_ensurepath_watch_and_doctor_follows()
         "raqib watch ~/my-project"]
     assert "puts `raqib` on PATH" in block[2]
     after = install.split("```bash\n", 1)[1].split("```\n", 1)[1]
-    first = after.splitlines()[0]
+    # M9.2: the README is wrapped at 120 now; the old first line (the two sentences) is the start of the first
+    # paragraph after the block, flattened - and it must still start with exactly those two sentences.
+    first = units(after)[0]
+    assert first.startswith("`raqib doctor ~/my-project` says what is missing: one line per check, OK, MISSING or"
+                            " UNSURE; exit 1 if anything is missing. Before the first watch it reports the hooks"
+                            " MISSING and exits 1, because `raqib watch` is what installs them.")
     assert first.startswith("`raqib doctor ~/my-project` says what is missing")
     assert ("Before the first watch it reports the hooks MISSING and exits 1, because `raqib watch` is what"
             " installs them.") in first
@@ -415,12 +421,12 @@ def test_e6_must_not_touch_the_three_first_headings_and_the_first_screen():
 
 
 def test_e1_readme_says_what_stops_a_watch_and_what_stays_out_of_reach():
-    flat = " ".join(readme_section("Watch a project").split())
+    flat = " ".join(cut("Watch a project", GUIDE).split())   # M9.2: the stop's line is in docs/GUIDE.md
     for phrase in ("so do SIGTERM and SIGHUP", "Ctrl-Break on Windows", "`raqib watch --host`",
                    '"stopped (SIGTERM)"', "exit code 0 / 1 / 3", "SIGKILL", "TerminateProcess (`taskkill /F`,",
                    "`raqib report <trace>` gives the findings"):
         assert phrase in flat, phrase
-    doctor_text = " ".join(readme_section("Doctor").split())
+    doctor_text = " ".join(cut("Doctor", GUIDE).split())
     assert "A notifier that is the terminal bell and stderr only is UNSURE too" in doctor_text
 
 
@@ -1117,7 +1123,7 @@ def test_b2_readme_and_help_say_what_a_killed_watch_leaves_per_watch():
     state = "~/.raqib/host/%s%s" % (host.ROUNDS_NAME, host.STATE_SUFFIX)
     record = "~/.raqib/host/%s" % host.ROUNDS_NAME
     assert host.host_dir("~").replace("\\", "/") == "~/.raqib/host"
-    flat = " ".join(readme_section("Watch a project").split())
+    flat = " ".join(cut("Watch a project", GUIDE).split())   # M9.2: docs/GUIDE.md
     for phrase in ("A watch ended that way prints nothing.",
                    "For a watch that printed nothing: for `raqib watch PROJECT`, `raqib report <trace>` gives the"
                    " findings.",
@@ -1159,7 +1165,7 @@ def cli_text(argv):
 
 
 def test_b3_readme_names_every_case_out_of_reach_and_the_ignored_signal():
-    flat = " ".join(readme_section("Watch a project").split())
+    flat = " ".join(cut("Watch a project", GUIDE).split())   # M9.2: docs/GUIDE.md
     for phrase in ("Out of reach are SIGKILL and, on Windows, TerminateProcess (`taskkill /F`, the Task Manager) and"
                    " closing the console window, logoff and shutdown, which end the process before its report"
                    " (Ctrl-Break is what stops it there).",
@@ -1279,11 +1285,13 @@ def test_b6_must_not_touch_the_other_three_forms_and_a_rule_already_in_rules_d(h
 # --- M9.1 REDO 2 (ADR-0010 Amendment C, rulings C-1..C-5) ---------------------------------------------------------
 
 def test_c1_readme_and_help_drop_the_sentence_about_the_order():
-    flat = " ".join(readme_section("Watch a project").split())
+    flat = " ".join(cut("Watch a project", GUIDE).split())   # M9.2: docs/GUIDE.md
     helped = " ".join(cli.__doc__.split())
     for text in (flat, helped):
         assert "is written before what it prints" not in text and "What a stop keeps" not in text
         assert "loses the words only, never the record or the code" in text   # B-1's own case, still said
+    top = flat_text(readme_section("Watch a project"))   # M9.2: and the part of the section README keeps
+    assert "is written before what it prints" not in top and "What a stop keeps" not in top
     assert not hasattr(watch.Speech, "hold") and not hasattr(watch.Speech, "release")
     for target in (watch, host):
         src = (ROOT / "raqib" / (target.__name__.rsplit(".", 1)[1] + ".py")).read_text(encoding="ascii")
@@ -1374,7 +1382,7 @@ def test_c3_must_not_touch_a_watch_that_lost_nothing_has_no_such_note(tmp_path, 
 
 
 def test_c3_readme_says_the_note_and_what_it_does_not_yet_do():
-    flat = " ".join(readme_section("Watch a project").split())
+    flat = " ".join(cut("Watch a project", GUIDE).split())   # M9.2: docs/GUIDE.md
     for phrase in ("the watch's state file and its registry row carry one note of the writes that were lost (how many up"
                    " to the moment the record was kept, since when, on which stream and why), and the final report says it if it"
                    " can still be printed.",
@@ -1421,7 +1429,7 @@ def test_c5_on_windows_the_stop_line_names_ctrl_c_and_ctrl_break_only():
 
 
 def test_c5_readme_names_a_terminal_that_stops_reading_and_the_newest_knocks():
-    flat = " ".join(readme_section("Watch a project").split())
+    flat = " ".join(cut("Watch a project", GUIDE).split())   # M9.2: docs/GUIDE.md
     # ADR-0010 D-2 (G3): a terminal that stops reading is not "a watch that prints nothing": it prints when it drains
     assert ("A terminal that stops reading (Ctrl-S, a full pipe) is another matter: the stop waits until it drains,"
             " and then says its words." in flat)

@@ -1,0 +1,5 @@
+{"ts": "2026-11-11T09:00:00.000Z", "seq": 1, "session_id": "demo-1", "phase": "session_start", "tool": "-", "cwd": "/work/demo"}
+{"ts": "2026-11-11T09:00:02.000Z", "seq": 2, "session_id": "demo-1", "phase": "pre", "tool": "Bash", "tool_use_id": "toolu_demo_2", "input_sha256": "fd689bf7dc651179820e2c893049e6f14d4181c97197c2c8aa8bdf1684256d97", "input_meta": {"command_head": "curl", "command_programs": ["curl", "bash", "rm"]}, "cwd": "/work/demo"}
+{"ts": "2026-11-11T09:00:04.000Z", "seq": 2, "session_id": "demo-1", "phase": "post", "tool": "Bash", "tool_use_id": "toolu_demo_2", "input_sha256": "fd689bf7dc651179820e2c893049e6f14d4181c97197c2c8aa8bdf1684256d97", "input_meta": {"command_head": "curl", "command_programs": ["curl", "bash", "rm"]}, "output_sha256": "bcd1d51aafd41e95bd8735772a2f61090c6aec85ef5f259eefb84f05d33f46b7", "output_meta": {"scan": "full", "secret_kinds": []}, "ok": true, "cwd": "/work/demo"}
+{"ts": "2026-11-11T09:00:05.000Z", "seq": 3, "session_id": "demo-1", "phase": "stop", "tool": "-", "cwd": "/work/demo"}
+{"ts": "2026-11-11T09:00:06.000Z", "seq": 4, "session_id": "demo-1", "phase": "session_end", "tool": "-", "cwd": "/work/demo"}

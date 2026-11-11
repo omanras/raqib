@@ -12,6 +12,7 @@ from raqib import eval as evaluation, report  # noqa: E402
 from raqib.rules import engine, tree  # noqa: E402
 
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+from readme_text import GUIDE, flat, section as cut, units  # noqa: E402  (M9.2: README.md and docs/GUIDE.md)
 THREAT = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
 CATALOG = ROOT / "raqib" / "rules" / "catalog"
 WORDS = {4: "4", 6: "Six", 7: "7", 11: "Eleven", 12: "Twelve", 13: "Thirteen", 14: "Fourteen", 15: "Fifteen",
@@ -24,35 +25,35 @@ def test_readme_counts_the_rules():
     silence = [r for r in table if r["class"] == "SILENCE" and r["fp_budget"] is None]
     crossing = [r for r in table if r["class"] == "CROSS"]   # M5.3 C-1: the code rule of cross.py
     anchors = [r for r in table if r["id"] in tree.RULE_KINDS]   # M4.3 J-1: the code rules of tree.py
-    assert "%s rules turn the trace into findings" % WORDS[len(table)] in README
+    assert "%s rules turn the trace into findings" % WORDS[len(table)] in GUIDE   # M9.2: How it works
     assert len(table) == len(silence) + len(crossing) + len(anchors) + len(rules) == 22   # M7.4: + HOST-RHYTHM; M7.2: 5 + 1 + 14 (REDO C-1c: + NEW-AGENT-UNKNOWN); M7.2b: + HOST-UNWATCHED
     assert ("The rules are %d silence rules, %d cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and %d"
             " more: %d YAML rules in `raqib/rules/catalog` and %d tree anchors (%s, `raqib/rules/tree.py`)." % (
                 len(silence), len(crossing), len(anchors) + len(rules), len(rules), len(anchors),
-                ", ".join(tree.RULES))) in " ".join(README.split())
+                ", ".join(tree.RULES))) in " ".join(GUIDE.split())
     named = {"SILENCE-GAP", "SILENCE-OPEN", "SILENCE-HALF", "SILENCE-ORDER", "SILENCE-EMPTY", "SCOPE-PATH",
              "SCOPE-CWD-ROOT", "SCOPE-CWD-MOVED", "NET-TOOL", "DESTRUCT-CMD", "SECRET-OUTPUT",
              "DRIFT-FILES", "CROSS-SOURCE", "LANDED-NO-GATE", "EDIT-NO-TEST", "HEAD-UNMOVED", "INDEX-UNTOUCHED",
              "NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE", "HOST-UNWATCHED", "HOST-RHYTHM"}   # M7.2; REDO C-1c; M7.2b; M7.4
     assert {r["id"] for r in table} == named, "update the README rule table"
     # Every rule has a row of the README's rule table, alone or in a row of its family (M4.2).
-    rows = [line.split("|")[1].strip() for line in section("What it catches").splitlines()
+    rows = [line.split("|")[1].strip() for line in section("What it catches", GUIDE).splitlines()
             if line.startswith("| ") and not line.startswith("| Rule ")]
     for rule_id in named:
         family, last = rule_id.split("-")[0], rule_id.rsplit("-", 1)[1]
         assert any(rule_id == row or (re.split(r"[ /-]+", row)[0] == family and last in re.split(r"[ /-]+", row))
                    for row in rows), rule_id
-    assert "| SILENCE-EMPTY |" in README and "| CROSS-SOURCE | only in a trace with `os` lines:" in README
-    assert "| HEAD-UNMOVED | ok edits under the session's directory" in README
-    assert "| INDEX-UNTOUCHED | ok edits under the session's directory" in README
+    assert "| SILENCE-EMPTY |" in GUIDE and "| CROSS-SOURCE | only in a trace with `os` lines:" in GUIDE
+    assert "| HEAD-UNMOVED | ok edits under the session's directory" in GUIDE
+    assert "| INDEX-UNTOUCHED | ok edits under the session's directory" in GUIDE
 
 
 def test_readme_counts_the_hooks():
     install = (ROOT / "raqib" / "install.py").read_text(encoding="utf-8")  # M6.3: the installer's home
     events = re.findall(r'^    \("(\w+)", (?:"\*"|None)\),$', install, re.M)
     assert len(events) == 6
-    assert "%s Claude Code hooks" % WORDS[len(events)] in README
-    assert "adds six hooks" in README
+    assert "%s Claude Code hooks" % WORDS[len(events)] in GUIDE   # M9.2: How it works and Manual steps
+    assert "adds six hooks" in GUIDE
 
 
 def test_readme_states_the_real_baseline():
@@ -60,7 +61,7 @@ def test_readme_states_the_real_baseline():
     (row,) = evaluation.evaluate(events, engine.load_catalog(CATALOG))["rows"]
     benign = evaluation.label_counts(events)["benign"]
     assert "On %d labelled events the rules miss %d bad events and flag %d of %d benign" % (
-        len(events), row["fn"], row["fp"], benign) in README.replace("\n", " ")
+        len(events), row["fn"], row["fp"], benign) in GUIDE.replace("\n", " ")   # M9.2: What it cannot see
     baseline = (ROOT / "docs" / "review" / "2026-10-16-M2.2-baseline.md").read_text()
     assert "FN %d" % row["fn"] in baseline and "FP %d" % row["fp"] in baseline
 
@@ -71,8 +72,8 @@ def test_threat_model_citations_name_review_files():
         assert any(name.startswith("2026-10-16-%s" % task) for name in review), task
 
 
-def section(title):
-    return README.split("## %s\n" % title, 1)[1].split("\n## ", 1)[0]
+def section(title, text=README):
+    return cut(title, text)   # M9.2: the one helper (tests/readme_text.py)
 
 
 def test_m63_e3_first_screen_is_install_and_watch():
@@ -89,20 +90,27 @@ def test_m63_e3_first_screen_is_install_and_watch():
         "pipx ensurepath", "raqib watch ~/my-project"]
     assert "pip install ~/raqib" in block[1] and "Python %d.%d or newer" % (3, 11) in section("Install and watch")
     assert "raqib watch /path/to/project` installs the hooks" in section("Watch a project")
-    manual = section("Manual steps")
+    manual = section("Manual steps", GUIDE)
     for step in ("~/raqib/tools/gate.sh", "~/raqib/tools/install-hooks.sh /path/to/project",
                  "python3 -m raqib report /path/to/project/raqib.log.jsonl --scope ."):
         assert step in manual, step
-    assert "claude/v0.1" not in README and "--branch" not in README
-    assert headings.index("Manual steps") > headings.index("How it works")
-    # G-7: the Windows path-rules line is on the first screen; since M5.1b it
+    for text in (README, GUIDE):
+        assert "claude/v0.1" not in text and "--branch" not in text
+    guide_headings = re.findall(r"^## (.+)$", GUIDE, re.M)   # M9.2: both sections are in docs/GUIDE.md
+    assert guide_headings.index("Manual steps") > guide_headings.index("How it works")
+    # G-7 (M5.1b) put the Windows path-rules line on the first screen; since M5.1b it
     # says what the rules do with Windows paths (ruling C-4), not a caveat;
     # UNC by backslashes only, the forward-slash form a hole (C-12); ASCII case (C-11).
+    # M9.2: the line moved to the guide's "Install and watch" (the 25-line first screen at 120 characters
+    # cannot hold it); it is one paragraph there, wrapped at 100, compared flattened. ADR-0010 E-5 retired
+    # G-7's first-screen property on record: the Windows install line is in README's "Where it runs" (E-1,
+    # tests/test_readme_top.py) and the path-rules sentence is the guide's.
     assert ("On Windows the path rules judge drive (`C:\\`) and UNC paths (`\\\\server\\share`, recognised by"
             " its two leading backslashes only) in any ASCII case, with `\\` or `/`; the forward-slash form"
             " `//server/share` is read as a POSIX path (a hole), `/mnt/c/...` (WSL) and `C:\\...` are different"
-            " paths, and `--root /x` means `\\x` on the current drive.") in section("Install and watch").splitlines()
-    assert "until M5.1b" not in README and "bad-context" not in README
+            " paths, and `--root /x` means `\\x` on the current drive.") in units(section("Install and watch", GUIDE))
+    for text in (README, GUIDE):
+        assert "until M5.1b" not in text and "bad-context" not in text
 
 
 def test_m51b_threat_model_section_7_says_what_the_path_rules_do_on_windows():
@@ -147,20 +155,20 @@ def test_m51b_threat_model_section_7_says_what_the_path_rules_do_on_windows():
 def test_m51b_c7_readme_platform_line_says_since_m51b():
     """C-7: README.md:68 no longer reads as if the Windows path rules were to
     come; line 122's count is held by tests/test_rules.py (M4.2 REDO-2 E-1)."""
-    manual = section("Manual steps")
+    manual = section("Manual steps", GUIDE)
     assert "Linux, macOS; Windows: capture and installer (path rules since M5.1b). You need" in manual
-    assert "path rules in M5.1b" not in README
+    assert "path rules in M5.1b" not in README and "path rules in M5.1b" not in GUIDE
 
 
 def test_g1_readme_says_what_a_moved_package_does_per_platform():
     """Amendment G-1 (P1): POSIX, the hook wrapper prints RAQIB-SILENCE;
     Windows, a hook error from Claude Code and no line."""
-    doctor = " ".join(section("Doctor").split())
+    doctor = " ".join(section("Doctor", GUIDE).split())   # M9.2: the rest of Doctor is in docs/GUIDE.md
     assert ("If the installed package moves on Linux or macOS, the hook command's own `|| echo` prints one"
             " `RAQIB-SILENCE:` line, because `capture.py` is gone.") in doctor
     assert ("If the venv moves on Windows, the hook names its `python.exe` by path, so Claude Code shows a hook"
             " error and no `RAQIB-SILENCE:` line is printed.") in doctor
-    assert "capture prints `RAQIB-SILENCE:`" not in doctor
+    assert "capture prints `RAQIB-SILENCE:`" not in doctor and "capture prints" not in flat(section("Doctor"))
     assert ("A check that cannot be made on this host is UNSURE, counted apart and never a failure: today the"
             ' Windows trace line, which says "not checked"') in doctor   # H-1
 
@@ -169,18 +177,21 @@ def test_g6_readme_and_help_say_where_eval_events_come_from():
     from raqib import cli
     source = "a checkout's tests/fixtures/eval/events.json or --events FILE"
     assert cli.EVENTS_SOURCE == source
-    assert source + " (an installed raqib has none and exits 2)" in section("Commands")
+    assert source + " (an installed raqib has none and exits 2)" in section("Commands", GUIDE)   # the full table
 
 
 def test_m63_e3_readme_commands_are_the_installed_ones():
-    commands = section("Commands")
+    commands = section("Commands", GUIDE)   # M9.2: the full table; README holds a short one (test_readme_top)
     rows = [line for line in commands.splitlines() if line.startswith("| `")]
     assert rows and all(line.startswith("| `raqib ") for line in rows)
     for name in ("watch", "doctor", "report", "rules", "ui", "check-rules", "suspect", "eval"):
         assert any(line.startswith("| `raqib %s" % name) for line in rows), name
     assert "--fixtures-root" in commands and "`python3 -m raqib COMMAND`" in commands
-    doctor = " ".join(section("Doctor").split())
-    for phrase in ("OK, MISSING or UNSURE", "exit 1", "installed; foreign", "or missing", "Sysmon on Windows",
+    doctor = " ".join(section("Doctor").split())   # M9.2: README keeps Doctor's first sentence
+    for phrase in ("OK, MISSING or UNSURE", "exit 1"):
+        assert phrase in doctor, phrase
+    doctor = " ".join(section("Doctor", GUIDE).split())   # and docs/GUIDE.md the rest
+    for phrase in ("installed; foreign", "or missing", "Sysmon on Windows",
                    "read-only", "`claude --version`", "absolute path"):
         assert phrase in doctor, phrase
 
@@ -188,10 +199,10 @@ def test_m63_e3_readme_commands_are_the_installed_ones():
 def test_m42_redo2_e2_e6_readme_names_the_holes():
     """E-2: the SILENCE-EMPTY row says "no start and no tool call" and names
     the open SILENCE-NOSTART; E-6: code on stdin, here-doc or script."""
-    (row,) = [line for line in section("What it catches").splitlines() if line.startswith("| SILENCE-EMPTY |")]
+    (row,) = [line for line in section("What it catches", GUIDE).splitlines() if line.startswith("| SILENCE-EMPTY |")]
     assert "or ended with no start and no tool call" in row and "SILENCE-NOSTART, a later task" in row   # K-3
-    assert "SILENCE-NOSTART, M4.3" not in README
-    cannot = " ".join(section("What it cannot see").split())
+    assert "SILENCE-NOSTART, M4.3" not in README and "SILENCE-NOSTART, M4.3" not in GUIDE
+    cannot = " ".join(section("What it cannot see", GUIDE).split())
     assert ("code given to a shell on stdin, by a here-document or a here-string, or in a script file: only the"
             " shell or the script is recorded") in cannot
 

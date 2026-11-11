@@ -22,6 +22,7 @@ from raqib.rules import engine, fixtures  # noqa: E402
 CATALOG = ROOT / "raqib" / "rules" / "catalog"
 CAPTURE = ROOT / "raqib" / "hooks" / "capture.py"
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+from readme_text import GUIDE  # noqa: E402  (M9.2: docs/GUIDE.md holds what README.md no longer does)
 THREAT = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
 EVIDENCE = ["pytest", "python", "python3", "gate.sh", "gate.py"]
 
@@ -738,11 +739,11 @@ def test_e3_e4_the_close_shape_of_this_project_fires_neither_demand(tmp_path):
 # --- E5: counts and docs ------------------------------------------------------------------------------
 
 def test_e5_readme_rows_capture_bullet_and_cannot_see():
-    flat = " ".join(README.split())
+    flat = " ".join(GUIDE.split())   # M9.2: How it works, the table and What it cannot see: docs/GUIDE.md
     assert "Twenty-two rules turn the trace into findings" in flat and "and 16 more: 14 YAML rules" in flat   # M4.3; M7.2; REDO C-1c; M7.2b; M7.4
-    assert "| LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py`" in README
-    assert "| EDIT-NO-TEST | an edit under `raqib/` or `tests/` with no ok run of pytest" in README
-    assert "never its arguments" not in README
+    assert "| LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py`" in GUIDE
+    assert "| EDIT-NO-TEST | an edit under `raqib/` or `tests/` with no ok run of pytest" in GUIDE
+    assert "never its arguments" not in README and "never its arguments" not in GUIDE
     assert ("Of a command's arguments only two things are kept: the file name of the script python or bash runs"
             " (`command_scripts`), and the first word of a `git commit` message") in flat
     assert ("a gate or test run that failed behind a pipe (`| tail`), an `||` or the background: LANDED-NO-GATE and"
@@ -791,7 +792,7 @@ def test_h1_the_windows_landing_is_clean_and_measured():
                if n["path"].endswith("negative-windows.json")]   # relpath: \ on Windows
     assert windows == [{"path": "tests/fixtures/rules/LANDED-NO-GATE/negative-windows.json", "fired": False,
                         "measured": True}]
-    assert "python -I tools\\gate.py" in README   # the form the fixture holds
+    assert "python -I tools\\gate.py" in GUIDE   # the form the fixture holds (M9.2: Manual steps, docs/GUIDE.md)
     meta = common.input_meta("Bash", {"command": "python -I tools\\gate.py"})
     assert meta == {"command_head": "python", "command_programs": ["python"], "command_scripts": ["gate.py"]}
 

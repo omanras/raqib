@@ -828,7 +828,8 @@ def test_e5_the_benign_desktop_with_its_channel_adds_no_tree():
 
 
 def test_e6_the_readme_and_the_help_say_it():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    from readme_text import GUIDE, flat
+    readme = flat(GUIDE)   # M9.2: Watch the host is in docs/GUIDE.md, wrapped: compared flattened
     assert "M7.9" in readme and "`brief`" in readme and "between two rounds is not seen" in readme
     cli_text = (ROOT / "raqib" / "cli.py").read_text(encoding="ascii")
     assert "listed as brief" in cli_text and cli_text.count("M7.9") >= 2
@@ -1511,8 +1512,12 @@ def test_ac6_state_fields_are_current_and_the_counts_time_is_first_listed(tmp_pa
 
 def test_ac2_ac7_the_readme_and_the_help_say_exit_0_and_when_a_footprint_is_dark():
     # kept true to AD-4's exit-0 words and AD-1's dark words (rewritten)
-    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    from readme_text import GUIDE, README, flat
+    readme = flat(GUIDE)   # M9.2: the full Commands table and Watch the host are in docs/GUIDE.md
     cli_text = " ".join((ROOT / "raqib" / "cli.py").read_text(encoding="ascii").split())
+    top = flat(README)   # and nothing README keeps says the words withdrawn
+    assert "exit 0 nothing new" not in top and "trees listed and nothing new" not in top
+    assert "no knock and no hole" not in top and "taken away" not in top and "a footprint with no tree" not in top
     for text in (readme, cli_text):
         assert "exit 0 nothing new" not in text and "trees listed and nothing new" not in text
         assert "no knock and no hole" not in text   # AD-4: the standing holes the first lines print are holes too
@@ -1715,7 +1720,8 @@ def test_ad4_the_readers_first_check_and_exit_0_beside_a_standing_hole(tmp_path,
     lines, _ = first_lines(tmp_path / "f", "win32", True)
     text = "\n".join(lines)
     assert "the live reader's first check" in text and "own check at round 1" not in text   # AD-4 (B6)
-    for path in (ROOT / "raqib" / "host.py", ROOT / "docs" / "THREAT_MODEL.md", ROOT / "README.md"):
+    for path in (ROOT / "raqib" / "host.py", ROOT / "docs" / "THREAT_MODEL.md", ROOT / "README.md",
+                 ROOT / "docs" / "GUIDE.md"):   # M9.2: and the guide
         body = " ".join(path.read_text(encoding="utf-8").split())
         assert "check at round 1 differs" not in body and "own check at round 1 finds Sysmon" not in body, path
     # AD-4 (B7): the standing hole the first lines print does not change the exit

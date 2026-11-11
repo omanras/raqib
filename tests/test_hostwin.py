@@ -681,7 +681,7 @@ def test_windows_real_api_one_sample_finds_this_python_and_is_no_candidate():
 # --- E5: README ---------------------------------------------------------------------------------
 
 def test_e5_readme_windows_discover_starts_live_and_keeps_the_loop_as_an_export():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = (ROOT / "docs" / "GUIDE.md").read_text(encoding="utf-8")   # M9.2: docs/GUIDE.md
     section = readme.split("## Find the agents on a host (discover)")[1].split("\n## ")[0]
     windows = section[section.index("On Windows, "):]
     assert windows.startswith("On Windows, `raqib discover` reads the live host in-process")

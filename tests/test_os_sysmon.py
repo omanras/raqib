@@ -558,7 +558,7 @@ def test_d5_a_bad_root_is_a_usage_error(tmp_path, value):
 
 
 def test_d5_readme_says_the_latest_holder_is_the_root():
-    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    readme = " ".join((ROOT / "docs" / "GUIDE.md").read_text(encoding="utf-8").split())   # M9.2: docs/GUIDE.md
     assert "The root is the LATEST process that held the pid in the export" in readme
     assert "`--root PID:GUID` (its Sysmon ProcessGuid) picks another" in readme
     assert "the ProcessGuid keeps a reused pid out" in readme
@@ -616,7 +616,7 @@ def test_d13_no_claim_about_a_default_configuration():
     text = (FIXTURES / "os" / "synthetic.py").read_text(encoding="utf-8")
     assert "default configuration" not in text and "Raqib names the event ids an export does not hold" in " ".join(
         text.split())
-    readme = " ".join((ROOT / "README.md").read_text(encoding="utf-8").split())
+    readme = " ".join((ROOT / "docs" / "GUIDE.md").read_text(encoding="utf-8").split())   # M9.2: docs/GUIDE.md
     assert "Raqib names the event ids your configuration does not log" in readme
     assert ("For Claude Code on Windows the root is `claude.exe`'s pid, from `raqib discover` or Task Manager"
             in readme)

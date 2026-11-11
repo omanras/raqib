@@ -93,8 +93,9 @@ no command, raqib prints its usage and exits 2.
       candidate and no act-root it makes the run incomplete (3).
       --save DIR writes the texts and a run.json (each source's error, the
       live holes, the sample count); --from DIR replays them, incomplete if
-      the run was, or reads the README's Windows loop (win-*-<k>.csv for
-      each sample k, and its run.json) and merges the samples.
+      the run was, or reads the Windows loop of docs/GUIDE.md,
+      "Find the agents on a host (discover)" (win-*-<k>.csv for each
+      sample k, and its run.json) and merges the samples.
   discover --check [--fixtures-root DIR] [--json] [-o FILE]
       Measure candidates and act-roots on the fixtures the catalog's act_root
       block names, against act-root's fp_budget (A6; candidates declare
@@ -515,7 +516,8 @@ def _parser():
     e.add_argument("-o", "--out", metavar="FILE", help="write the result here (default: stdout)")
     d = sub.add_parser("discover", help="find AI agents on a host by what they do (ADR-0004)")
     d.add_argument("--from", dest="from_dir", metavar="DIR",
-                   help="read the source texts in DIR: %s, and the samples of the README's Windows loop"
+                   help="read the source texts in DIR: %s, and the samples of the Windows loop of docs/GUIDE.md,"
+                        ' "Find the agents on a host (discover)"'
                         " (win-process-<k>.csv, win-tcp-<k>.csv, win-dns-<k>.csv, run.json)"
                         % ", ".join(discover.FILE_NAMES[k] for k in discover.SOURCES))
     d.add_argument("--read", action="append", default=[], metavar="KIND=FILE",

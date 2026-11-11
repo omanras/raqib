@@ -759,9 +759,10 @@ def test_e5_ci_asserts_every_tree_has_a_source_or_host_unwatched():
 
 
 def test_e5_readme_three_lines():
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    from readme_text import GUIDE, units
+    text = GUIDE   # M9.2: docs/GUIDE.md; each old line is a paragraph there
     section = text.split("## Watch the host\n", 1)[1].split("\n## ", 1)[0]
-    lines = [l for l in section.split("\n") if l.strip()]
+    lines = units(section)
     assert len(lines) == 14   # M7.8: + three at the end (test_acts_judged.py); M7.4: + three lines (HOST-RHYTHM, --suspect, the only network call): test_rhythm.py; M7.5: + two
     assert "os source (Sysmon)" in lines[3] and "--attach-hooks" in lines[4] and "HOST-UNWATCHED" in lines[5]
     assert "only thing ever written into a project" in lines[4]

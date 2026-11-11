@@ -630,9 +630,10 @@ def test_e5_new_and_changed_code_is_ascii():
 
 
 def test_e5_readme_says_the_rules_and_the_form_line_by_line():
-    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    from readme_text import GUIDE, units
+    text = GUIDE   # M9.2: docs/GUIDE.md; each old line is a paragraph there
     section = text.split("## Choose the rules\n", 1)[1].split("\n## ", 1)[0]
-    lines = [l for l in section.split("\n") if l.strip()]
+    lines = units(section)
     # M7.6c: two lines more; REDO E-9: the overlay file's assertion restored as code (it had become a comment)
     # M8.2 E7, REDO E-10: three lines more - the form, its Test and Add, Remove and the terminal
     assert len(lines) == 9 and "raqib rules" in lines[0] and "~/.raqib/rules.yaml" in " ".join(lines)

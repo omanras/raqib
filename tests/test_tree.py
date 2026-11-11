@@ -31,6 +31,7 @@ COMMON = ROOT / "raqib" / "hooks" / "common.py"
 TREE_FIXTURES = ROOT / "tests" / "fixtures" / "tree"
 FILE_TOOLS = ROOT / "tests" / "fixtures" / "file-tools-d7841d1-claude-code-2.1.301.log"
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+from readme_text import GUIDE  # noqa: E402  (M9.2: docs/GUIDE.md holds what README.md no longer does)
 THREAT = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
 WINDOWS = os.name == "nt"
 HEAD_A = "0123456789abcdef0123456789abcdef01234567"
@@ -1135,7 +1136,7 @@ def test_e4_the_threat_model_names_what_the_anchor_sees_and_every_hole():
 
 
 def test_e4_the_readme_names_the_tree_anchors_and_their_gaps():
-    flat = " ".join(README.split())
+    flat = " ".join(GUIDE.split())   # M9.2: How it works and What it cannot see are in docs/GUIDE.md
     assert "Twenty-two rules turn the trace into findings" in flat   # M7.2 REDO C-1c; M7.2b: HOST-UNWATCHED; M7.4: HOST-RHYTHM
     assert "the local git state, read from the files under `.git` (no `git` is run)" in flat
     assert "for the tree anchors, what moved the head or the index" in flat
