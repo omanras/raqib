@@ -140,3 +140,62 @@ Each ruling names the case it is FOR and what it MUST NOT TOUCH.
   out-of-reach sentence named `raqib report` for both watches without
   reading what the host watch leaves. A FOR case is tested as the person
   meets it, not in its easiest form.
+
+## Amendment C (the Table, 2026-11-11) - rulings on review 2026-11-11-M9.1-redo.md (84a2907)
+B-2, B-3, B-4, B-6 MET; B-1 PARTLY (its own test cannot pass on Windows);
+B-5 met as worded, and the words were the Table's. Verdict: REDO on C-1
+and C-2. Each ruling names the case it is FOR and what it MUST NOT TOUCH.
+- C-1 (F3, F5; Q-7; B-1's first sentence withdrawn) The words of a stop
+  are said as they come. B-1 said "what it keeps is written first and
+  whatever it prints after"; built as written, a person who presses
+  Ctrl-C on a host watch can wait ten seconds for "stopped (Ctrl-C)",
+  and a second press in that silence cuts the conclusion. The record's
+  safety does not need the order: a write that cannot raise cannot skip
+  the conclusion. So the hold, the queue and the release go; every word
+  is written at once, guarded. FOR: "stopped (...)" is on the terminal
+  before the conclusion begins, as it was before M9.1 - tested by its
+  place among the calls, not by a clock. MUST NOT TOUCH: B-1's own case
+  (a terminal that is gone loses the words and nothing else: the record,
+  the row, the sources and the code), and close(running) runs on every
+  path of the finally. README and the help drop the sentence about the
+  order.
+- C-2 (F1, must) The test of "a terminal that takes the words gets them
+  as before" passes on Windows: it compares the watch's words with what
+  the tree before M9.1's REDO printed for the same watch (the words and
+  their order), and where it must hide a path it hides it in every
+  spelling the code prints (the hook command on Windows writes forward
+  slashes).
+- C-3 (F2; Q-8 ruled "note it") Words that were lost are said where they
+  can still be read. The terminal's guard keeps the first failure (when,
+  which stream, why) and a count; the watch's state file and its
+  registry row carry it as a note ("N writes to the terminal were lost
+  since <time>: <why>"), and the final report says it if it can be
+  printed at all. It is a note, not a hole: the code does not change
+  (B-1). FOR: a watch whose terminal went away mid-watch. MUST NOT
+  TOUCH: a watch that lost no word has no such note. What this does NOT
+  yet do is said in README and recorded as M9.4: a knock whose only
+  road is the terminal's bell, rung on a terminal that is gone, is
+  still written down as delivered ("terminal") - making it a failed
+  knock, and so a hole, is notify.py's and was out of Scope here.
+- C-4 (F4; the Table's words in B-5, again) The line under ALARMS names
+  what is counted: silence, a crash of the watch, a knock that did not
+  arrive, and what could not be read, cited or kept - the trace's and
+  the watch's own - and that every finding below also makes the RESULT
+  an ALARM. Two lines if one is too wide. A test pins a silence window
+  and a crash under it.
+- C-5 (F6, F7, F9, F12) Words and one test: on Windows the first line
+  names what can reach the watch there (Ctrl-C and Ctrl-Break), not a
+  signal no other process can send; README's out-of-reach list gains a
+  terminal that stops reading (Ctrl-S, a full pipe: the stop waits until
+  it drains) and says "its newest knocks" of the host state; test_b6
+  pins the sentence on a HostChild line.
+- C-6 Recorded for M9.4: the terminal knock on a dead stream (C-3); F10
+  (`raqib watch P >&-`: no stdout at all crashes at the start, as
+  before); Q-10 (signals after the first are counted and said nowhere);
+  F8; a second Ctrl-C during the conclusion still cuts it, as before
+  M9.1.
+- Table ledger: B-1's "kept first, printed after" was an order nobody
+  needed, ruled because it sounded safe; B-5 rewrote decision 5's line
+  and again did not read what the count holds. Two more of the Table's
+  sentences read exactly. A ruling states the property it protects (a
+  write cannot skip the record), not a sequence that happens to give it.
