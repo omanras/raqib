@@ -103,7 +103,11 @@ watch attaches ONE source to it, the first of these that applies:
     in a thread with a Stop, appending to ~/.raqib/host/sources/<run>-<pid>-
     <started>.jsonl (I-8: keyed by run, pid and creation time); each pass's
     wevtutil, Raqib's own child, has 10 s and is then terminated, a hole
-    (I-5); one still out at Stop is ended and recorded;
+    (I-5); one still out at Stop is ended and recorded. M7.13 (ADR-0007
+    AF-1): while the live reader finds Sysmon and no round of this watch
+    has read its channel (a terminal that is not elevated: access denied),
+    a tree gets (b) instead, and its source text says why; AF-2: the first
+    such failed read knocks once (HOST-HOLE, its own rate-limit id);
 (b) host: the host's own record of the tree as a source: every round, per
     tree, lines of source "host" (raqib/rules/trace.py SOURCES) appended to
     the same per-tree file: tool HostChild (input_meta.command_programs:
@@ -142,6 +146,7 @@ under --attach-hooks / the checkbox.
 """
 from __future__ import annotations
 
+import bisect
 import datetime
 import hashlib
 import io
@@ -313,6 +318,36 @@ BETWEEN_LINUX = ("Linux: the rounds read /proc only, and no audit source of proc
 BETWEEN_NO_SYSMON = ("no Sysmon channel is read (%s): each round is one sample of the OS API, so a tree that starts,"
                      " talks, acts and ends between two samples is in no round")
 CHANNEL_KINDS = ("channel-unread", "channel-cut", "channel-helper")   # M7.9: the round's channel read, a hole when short
+CHANNEL_UNREAD = "channel-unread"  # M7.13 (AF-2, AF-4): the hole of a round whose channel read failed
+CHANNEL_KNOCK_ID = "%s %s" % (HOLE_EVENT, CHANNEL_UNREAD)   # AF-2: its knock's own rate-limit id
+ELEVATED = "an elevated terminal (Run as administrator) reads it"   # AF-2, AF-6: what reads the channel
+# AG-2: the cause of a failed read, one of a few words the code decides from the reader's own words (os_sysmon's
+# "wevtutil exited 5 (", ...), never from wevtutil's stderr; the elevated terminal is named only for "denied"
+CAUSE_DENIED = "denied"
+CAUSES = (("wevtutil exited 5 (", CAUSE_DENIED), ("wevtutil did not return in ", "not back in time"),
+          ("wevtutil could not be run", "could not be run"))
+CAUSE_OTHER = "other failure"
+UNREAD_SOURCE = ("Sysmon is registered, but no round up to round %d read its channel (%s): judged by the host's own"
+                 " record, as on a machine without Sysmon, until a round reads it")   # AF-1, AG-3: the cause only
+UNREAD_KNOCK = "%s: round %d: the Sysmon channel is not read%s"   # AF-2, AG-2: the cause first; no reason (the cut)
+UNREAD_SAY = ("%s round %d: the Sysmon channel is not read (%s: %s): until a round reads it, what lives between two"
+              " rounds is not seen and the trees are judged by the host's own record; a round that reads attaches"
+              " them again as os (Sysmon)%s (%s)")                  # AF-2, AG-3: the one terminal line
+AFTER_KNOCK = "%s: round %d: the Sysmon channel read failed after %d read(s) kept"   # AF-2, AG-2: a later episode
+AFTER_SAY = ("%s round %d: the Sysmon channel's read failed after %d read(s) kept (%s: %s): the os sources stay in"
+             " place, and what they cannot read is not seen (a hole) (%s)")
+REREAD = ("attached again as os in round %d: a round of the watch read the Sysmon channel; the lines of the host's"
+          " own record before it stay judged")                                                   # AG-1: a tree host only while unread
+SYSMON_ALL = "the live reader's check: present, the rounds read its channel"   # AF-3: every round read (today's)
+SYSMON_NONE = ("the live reader's check: present, but none of the %d read(s) of its channel the rounds asked was kept"
+               " (the first reason, round %d: %s): %s")                  # AF-3, AG-4: none read; N = reads asked
+SYSMON_SOME = ("the live reader's check: present; %d of the %d read(s) of its channel the rounds asked were kept (the"
+               " first failed read, round %d: %s)")                      # AF-3, AG-4: some read
+CHANNEL_NONE = ("CHANNEL (no round kept a read of the Sysmon channel): %s read(s) kept, %s failed: nothing the channel"
+                " holds since the watch's start was read")             # AG-4: never "the rounds read", never "None"
+FOLD_TEXT = ("  - %s: rounds %s (%d holes in this line: their words differ only by the round and its time): %s; first"
+             " at %s, last at %s%s")                                     # AF-4: one line for the same hole
+QUERY_START = "SystemTime>='"      # AF-4: where a round's query says the time it starts at (os_sysmon.round_query)
 BY_CHANNEL = "by the channel"     # AA-1: an unknown tree a candidate only by what the channel gave: listed, not knocked
 BY_CHANNEL_RUNS = 5                # AA-1 (W6): the runs of a path kept with their cites (the count holds the rest)
 CHANNEL_KIND_ROUNDS = 3            # REDO X-8: a kind not read after this many rounds with the channel is said once
@@ -636,6 +671,37 @@ def cites_text(cites):
         head = "round %s seq %s " % (c["round"], c["seq"]) if c.get("round") is not None else ""
         out.append("%s%s:%s" % (head, c.get("src"), c.get("line")))
     return ", ".join(out) or "-"
+
+
+def channel_cause(error):
+    """ADR-0007 AG-2: the cause of a failed read of the channel, from the reader's own words (os_sysmon:
+    "wevtutil exited 5 (" a denial, "wevtutil did not return in " not back in time, "wevtutil could not be run"),
+    never from wevtutil's stderr inside them; anything else is CAUSE_OTHER."""
+    text = " ".join(str(error).split())
+    return next((word for head, word in CAUSES if text.startswith(head)), CAUSE_OTHER)
+
+
+def query_start(query):
+    """AF-4, AG-4: the time a round's query starts at (os_sysmon.round_query's SystemTime>='...'), or None."""
+    text = str(query)
+    at = text.rfind(QUERY_START)
+    end = text.find("'", at + len(QUERY_START)) if at >= 0 else -1
+    return text[at + len(QUERY_START):end] if end >= 0 else None
+
+
+def round_ranges(rounds):
+    """AF-4: round numbers as ranges, in order: [1, 2, 3, 5, 7, 8] -> "1-3, 5, 7-8"."""
+    out, run = [], []
+    for n in sorted(set(rounds)):
+        if run and n == run[-1] + 1:
+            run.append(n)
+            continue
+        if run:
+            out.append(str(run[0]) if len(run) == 1 else "%d-%d" % (run[0], run[-1]))
+        run = [n]
+    if run:
+        out.append(str(run[0]) if len(run) == 1 else "%d-%d" % (run[0], run[-1]))
+    return ", ".join(out)
 
 
 def run_id(started, pid):
@@ -1380,6 +1446,10 @@ class HostWatch:
         self.sampled_now = {}         # Z-5: (pid, image) -> start of this round's sample
         self.channel_last = None      # REDO X-1: the last round's channel record (from its inventory)
         self.channel_rounds = 0       # rounds whose inventory carried a kept read of the channel
+        self.channel_failed = 0       # M7.13 (AF-3): rounds whose inventory carried a failed read of the channel
+        self.channel_first_failure = None   # AF-1, AF-3: (round, reason) of the first failed read
+        self.channel_knocked = False  # AF-2: this episode of failed reads has knocked (a kept read ends it)
+        self.channel_kept = []        # AG-5: the rounds whose inventory carried a kept read of the channel
         self.channel_said = []        # X-8: what the rounds have not read, said once
         self.reader_sysmon = None     # AA-6: what the live reader's own check said, from the round's inventory
         self.channel_off = None
@@ -2711,6 +2781,12 @@ class HostWatch:
                 if not self.between_said:   # AC-6 (A6): the hole is in this one note, not in a second one
                     self.between_said = True
                     text += "; hole: " + BETWEEN_HOLE % (BETWEEN_NO_SYSMON % why)
+            elif record.get("error") is not None and not self.channel_rounds:   # AG-4: what the trees now get
+                why = _safe(" ".join(str(record["error"]).split()))
+                text = ("round %d: the live reader's own check at round %d finds Sysmon, though %s did not (%s), and"
+                        " its read of the channel failed (%s: %s): the trees get the host's own record until a round"
+                        " reads the channel, then os (Sysmon); the between-rounds hole of the first lines stands until"
+                        " then" % (n, n, OWN_CHECK, self.sysmon[1], channel_cause(why), why))
             else:
                 text = ("round %d: the live reader's own check at round %d finds Sysmon, though %s did not (%s): the"
                         " sources are now os (Sysmon) for every tree, and each round reads the channel: the"
@@ -2734,23 +2810,63 @@ class HostWatch:
                 self.notes.append("round %d: the note \"no event 1 from the channel for %s\" is withdrawn: an event 1"
                                   " of %s came" % (n, image, image))
         self.channel_last = record
-        kinds = {"error": "channel-unread", "cut": "channel-cut", "dropped": "channel-unbounded",
+        kinds = {"error": CHANNEL_UNREAD, "cut": "channel-cut", "dropped": "channel-unbounded",
                  "silent": "channel-silent", "restarted": "channel-restart"}
+        made = []
         for text in record.get("holes") or ():
             kind = next((k for f, k in kinds.items() if record.get(f) and (
                 f != "cut" or "the cap" in text) and (f != "restarted" or text == record.get("restarted"))
                 and (f != "dropped" or "dropped" in text) and (f != "silent" or "behind, stopped" in text)),
                 "channel-behind")
-            self._hole(now, kind, "round %d: %s; query %s" % (n, text, record.get("query")), round_=n)
+            made.append(self._hole(now, kind, "round %d: %s; query %s" % (n, text, record.get("query")), round_=n))
         for text in record.get("helpers") or ():
             self._hole(now, "channel-helper", "round %d: %s" % (n, text), round_=n)
         if record.get("error") is None:
             self.channel_rounds += 1
+            self.channel_kept.append(n)    # AG-5: the rounds that kept a read (an episode of holes ends at one)
+            self.channel_knocked = False   # AF-2: a kept read ends the episode of failed reads
+        else:
+            self.channel_failed += 1
+            if self.channel_first_failure is None:
+                self.channel_first_failure = (n, _safe(" ".join(str(record["error"]).split())))
+            if not self.channel_knocked:
+                self._channel_knock(now, n, record, made)
         if self.channel_rounds >= CHANNEL_KIND_ROUNDS:   # X-8: learned from what the rounds read, said once
             for kind, text in sorted(CHANNEL_HELD.items()):
                 if kind not in (record.get("kinds_read") or ()) and self._note_once(
                         "channel-kind-%d" % kind, "round %d: the Sysmon channel: %s" % (n, text)):
                     self.channel_said.append(text)
+
+    def _channel_knock(self, now, n, record, made):
+        """M7.13 (ADR-0007 AF-2, F3): the first failed read of an episode
+        knocks once (HOST-HOLE, under CHANNEL_KNOCK_ID, in the KNOCKS ledger)
+        and says one terminal line. With no read kept yet in this watch (the
+        live reader finds Sysmon; a terminal that is not elevated: access
+        denied) the episode is the watch's while no read is kept; after
+        kept reads, each run of failed reads is one episode. The knock rides
+        on the round's channel-unread hole; every round's hole is still
+        recorded, as before."""
+        self.channel_knocked = True
+        why = _safe(" ".join(str(record.get("error")).split()))
+        hole = next((h for h in made if h["kind"] == CHANNEL_UNREAD), None)
+        container = hole if hole is not None else {"notice": None}   # a stand-in's record with no hole of its own
+        cause = channel_cause(why)   # AG-2: the body is the cause first and keeps the cut; the reason is below
+        advice = ", " + ELEVATED if cause == CAUSE_DENIED else ""
+        if self.channel_rounds:
+            where = AFTER_KNOCK % (cause, n, self.channel_rounds)
+        else:
+            where = UNREAD_KNOCK % (cause, n, advice)
+        container["notice"] = self._knock(now, HOLE_EVENT, where, container, limit_id=CHANNEL_KNOCK_ID, round_=n)
+        if self.channel_rounds:
+            self._say(now, AFTER_SAY % (HOLE_EVENT, n, self.channel_rounds, cause, why, container["notice"]))
+        else:   # AG-3: the one line with the reason and the advice, however many trees
+            self._say(now, UNREAD_SAY % (HOLE_EVENT, n, cause, why, advice.replace(", ", "; ", 1),
+                                         container["notice"]))
+
+    def channel_unread(self):
+        """M7.13 (AF-1): the rounds carried the live reader's channel record (it finds Sysmon) and no round of
+        this watch has kept a read of it: the trees are judged by the host's own record (_attach)."""
+        return self.channel_last is not None and self.channel_rounds == 0 and bool(self.reader_sysmon)
 
     def _attach(self, now, n, key, t, entry):
         """The tree's source: the one attached, or (first sight, or its
@@ -2758,7 +2874,12 @@ class HostWatch:
         attach_hooks, else (a) os where Sysmon is, else (b) host; none when
         nothing could be attached (HOST-UNWATCHED). Recorded on the tree."""
         prev = self.sources.get(key)
-        if prev is not None and prev.error is None and not (prev.thread is not None and (
+        # ADR-0007 AG-1: a tree given the host's record only because no round had read the channel is attached
+        # again, as os, in the first round it is in after a kept read (its host lines stay judged; an act both
+        # sources saw is one act, _once). A host source for any other reason is kept.
+        reread = (prev is not None and prev.error is None and getattr(prev, "unread_host", None) is not None
+                  and self.channel_rounds > 0 and self.sysmon_ok())
+        if prev is not None and prev.error is None and not reread and not (prev.thread is not None and (
                 not prev.thread.is_alive() or prev.stop.is_set())):
             prev.rounds_after += 1
             self._hooks_silent(now, n, key, prev)
@@ -2770,8 +2891,21 @@ class HostWatch:
             src, note = self._attach_hooks(now, n, key, t, entry)
         if src is None or src.kind != "hooks":
             failed_os = again and prev.kind == "os" and prev.error is not None   # ended with a hole: host next
-            src = (self._attach_os(now, n, key, t, entry) if self.sysmon_ok() and not failed_os
+            # M7.13 (AF-1, F1): Sysmon registered and its channel never read by a round of this watch: the os
+            # source could read nothing; the tree is judged by the host's own record, as without Sysmon
+            unread = self.sysmon_ok() and self.channel_unread()
+            src = (self._attach_os(now, n, key, t, entry) if self.sysmon_ok() and not failed_os and not unread
                    else self._attach_host(now, n, key, t, entry))
+            # AH-2: the cause is this round's failed read's (the latest), not the watch's first
+            cause = channel_cause((self.channel_last or {}).get("error") or self.channel_first_failure[1]) \
+                if unread else None
+            if unread and src.kind == HOST_SOURCE and not failed_os:
+                src.unread_host = n   # AG-1: host only because the channel was unread
+                src.text = "%s (%s)" % (src.text, UNREAD_SOURCE % (n, cause))
+            elif unread and src.kind == HOST_SOURCE:
+                src.text = "%s (%s)" % (src.text, UNREAD_SOURCE % (n, cause))
+            if reread and src.kind == "os":   # AH-2: said only of a tree that did get the os source
+                src.text = "%s (%s)" % (src.text, REREAD % n)
             if failed_os:
                 src.text = "%s (the os source ended with a hole: %s)" % (src.text, prev.error)
             elif again and prev.kind == "os":   # I-4 (P5): gone and back, the real reason, never "None"
@@ -2788,7 +2922,7 @@ class HostWatch:
                      source_project=src.project)
         entry.setdefault("source_findings", {})
         self._say(now, "round %d: %s pid %s: %s%s" % (n, t.get("image") or "?", t.get("pid"), src.text,
-                                                     " (attached again after a hole)" if again else ""))
+                                                     " (attached again after a hole)" if again and not reread else ""))
         return src
 
     def _quiet_text(self, key, n):
@@ -3633,6 +3767,87 @@ class HostWatch:
             self.code_error = "%s: %s" % (type(exc).__name__, exc)
             return 1
 
+    def sysmon_text(self):
+        """M7.13 (ADR-0007 AF-3, F2): the report's SYSMON line says what the rounds did. The watch's own check
+        where no round carried the live reader's record, the reader's "not present" as before; where the reader
+        found Sysmon: every round read - today's words, not a byte changed; none read - the rounds, the first
+        reason, and how the trees were judged; some read - K of N rounds and the first failed read."""
+        if self.reader_sysmon is None:
+            return self.sysmon[1]
+        if not self.reader_sysmon:
+            return "the live reader's check: %s" % ((self.channel_off or {}).get("off") or "not present")
+        if not self.channel_failed:
+            return SYSMON_ALL
+        total = self.channel_rounds + self.channel_failed
+        first, why = self.channel_first_failure
+        if self.channel_rounds:
+            return SYSMON_SOME % (self.channel_rounds, total, first, why)
+        judged = sum(1 for k in self.trees if k in self.sources and self.sources[k].writes_host())
+        if not self.trees:
+            how = "no tree was seen; a tree would have been judged by the host's own record (AF-1)"
+        elif judged == len(self.trees):
+            how = "every tree was judged by the host's own record (AF-1)"
+        else:   # a tree with no source (the sources directory could not be written): said, never "every tree"
+            how = "%d of %d tree(s) were judged by the host's own record (AF-1; each tree's source says the rest)" % (
+                judged, len(self.trees))
+        return SYSMON_NONE % (total, first, why, how)
+
+    @staticmethod
+    def fold_words(hole):
+        """AF-4: (the words of a round's channel-read hole without its round, the time its query starts at or
+        None), or None: a hole that is never folded (any other kind, or one whose detail does not start with its
+        round). While no read is kept each round's query starts at the watch's start as that round computes it
+        (live_reader, T-3), a time that may move by a clock tick from round to round: a time, not other words."""
+        n = hole.get("round")
+        head = "round %s: " % n
+        if hole.get("kind") != CHANNEL_UNREAD or not isinstance(n, int) or not str(hole.get("detail")).startswith(head):
+            return None
+        words = hole["detail"][len(head):]
+        start = words.rfind(QUERY_START)
+        if start < 0:
+            return words, None
+        end = words.find("'", start + len(QUERY_START))
+        if end < 0:
+            return words, None
+        return words, words[start + len(QUERY_START):end]
+
+    def hole_lines(self, holes):
+        """M7.13 (ADR-0007 AF-4, F4): the text report's HOLES lines. The holes of the round's channel read
+        (channel-unread) whose words differ only by the round's number and time are one line, where the first
+        of them stands: the kind, the rounds as ranges, how many, the words once (the first's; where the query's
+        start moved, its first and last value are said), the first and the last time, and the knock each
+        carried. A hole that is alone, two reasons, and every other kind: one line each, as before. Only the
+        text: the holes themselves (state, rounds.jsonl, the result) are not touched."""
+        groups, order = {}, []
+        for h in holes:
+            got = self.fold_words(h)
+            if got is None:
+                order.append([h])
+                continue
+            words, at = got
+            key = words if at is None else words.replace(QUERY_START + at + "'", QUERY_START + "'", 1)
+            # AG-5: one line per episode (a run of failed reads with no kept read between)
+            key = (bisect.bisect_left(getattr(self, "channel_kept", None) or [], h["round"]), key)
+            if key not in groups:
+                groups[key] = [h]
+                order.append(groups[key])
+            else:
+                groups[key].append(h)
+        out = []
+        for hs in order:
+            h = hs[0]
+            if len(hs) == 1:
+                out.append("  - %s: %s at %s%s" % (h["kind"], h["detail"], h["at"], " (%s)" % h["notice"]
+                                                   if h.get("notice") else ""))
+                continue
+            starts = [self.fold_words(x)[1] for x in hs]
+            moved = ("; the query's start (the watch's start as each round computed it) was between %s and %s" % (
+                min(starts), max(starts)) if len(set(starts)) > 1 else "")
+            knocked = "".join("; round %d knocked (%s)" % (x["round"], x["notice"]) for x in hs if x.get("notice"))
+            out.append(FOLD_TEXT % (h["kind"], round_ranges([x["round"] for x in hs]), len(hs),
+                                    self.fold_words(h)[0] + moved, h["at"], hs[-1]["at"], knocked))
+        return out
+
     def summary(self):
         self._refresh()
         result, reasons = self.result()
@@ -3661,7 +3876,9 @@ class HostWatch:
         out += ["  %s" % (self.round_text(r) if not r.get("error") else "round %d: reader FAILED: %s" % (
             r["round"], r["error"])) for r in self.round_lines]
         c = self.channel_last
-        if c is not None:   # M7.9 (P-4): what the rounds read of the channel, as their inventories said it
+        if c is not None and not self.channel_rounds:   # AG-4: no read kept: headed by that fact
+            out.append(CHANNEL_NONE % (c.get("reads"), c.get("failed")))
+        elif c is not None:   # M7.9 (P-4): what the rounds read of the channel, as their inventories said it
             out.append("CHANNEL (the rounds read the Sysmon channel since the previous round): %s read(s) kept, %s"
                        " failed, %s at the cap of %s; %s event(s); kinds read: %s; %d brief tree(s) (seen in the channel"
                        " only)%s%s%s" % (
@@ -3671,8 +3888,10 @@ class HostWatch:
                            "".join("; %s" % x for x in self.channel_said),
                            "; BACKLOG at Stop: the last round was cut at the cap, %s s behind: the records after %s were"
                            " not read" % (c.get("behind_seconds"), c.get("top")) if c.get("cut") else "",
-                           "; the last round's read failed: what the channel holds after record %s was not read"
-                           % c.get("after") if c.get("error") else ""))
+                           "; the last round's read failed: what the channel holds after %s was not read" % (
+                               "record %s" % c.get("after") if c.get("after") is not None else (
+                                   "its query's start %s" % query_start(c.get("query"))
+                                   if query_start(c.get("query")) else "the watch's start")) if c.get("error") else ""))
         if self.by_channel:   # AA-1, AB-1: the trees counted by image path, not knocked
             out.append("UNKNOWN, %s (listed and sourced, not knocked, AA-1): %d tree(s) of %d path(s)" % (
                 BY_CHANNEL.upper(), self.by_channel_count(), len(self.by_channel)))
@@ -3762,9 +3981,7 @@ class HostWatch:
         out.append("HOOKS: %s" % ("attached only with --attach-hooks: on (the hook settings are the only write into"
                                   " a project)" if self.attach_hooks else
                                   "not attached (%s): nothing is written into any project" % NO_FLAG))
-        out.append("SYSMON: %s" % (self.sysmon[1] if self.reader_sysmon is None else (
-            "the live reader's check: present, the rounds read its channel" if self.reader_sysmon else
-            "the live reader's check: %s" % ((self.channel_off or {}).get("off") or "not present"))))
+        out.append("SYSMON: %s" % self.sysmon_text())
         out.append("FOOTPRINTS: %d" % len(self.footprints))
         for fp in self.footprints.values():
             out.append("  %s (%s): %s%s%s" % (
@@ -3780,9 +3997,12 @@ class HostWatch:
         out.append("NOTES: %d" % len(notes))
         out += ["  - %s" % n for n in notes]
         holes = self.holes + self.notifier.holes
-        out.append("HOLES (A3): %d" % len(holes))
-        out += ["  - %s: %s at %s%s" % (h["kind"], h["detail"], h["at"], " (%s)" % h["notice"] if h.get("notice")
-                                        else "") for h in holes]
+        hole_lines = self.hole_lines(holes)   # AF-4: one line for the same hole of many rounds
+        out.append("HOLES (A3): %d" % len(holes))   # the count stays the holes' (and the window reads it as a number)
+        if len(hole_lines) < len(holes):
+            out.append("  (%d hole(s) in %d line(s): the holes of a round's channel read whose words differ only by the"
+                       " round and its time are one line, AF-4)" % (len(holes), len(hole_lines)))
+        out += hole_lines
         out.append("BLIND SPOTS (K-8, holes of the class %s, counted apart; they do not change the result): %d" % (
             BLIND, len(self.blind)))
         out += ["  - %s: %s; %d round(s)" % (b["kind"], b["detail"], len(b["rounds"])) for b in self.blind]
