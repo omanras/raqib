@@ -8,7 +8,9 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       FILE (one JSON finding per line; ADR-0001 section 6) or stdout. With -o,
       FILE.notes.json records which rules did not run and why. The catalog
       is judged as its YAMLs declare it: the overlay below is the watches'.
-  rules [--set ID on|off | --threshold ID FIELD VALUE | --add FILE | --reset ID] [--json]
+  rules [--set ID on|off | --threshold ID FIELD VALUE | --add FILE | --reset ID | --remove NAME [--dry-run]] [--json]
+  rules --new ID --when program|path|host|tool --values A,B --severity S --fires X --quiet Y [--title T]
+        [--dry-run]
       M7.6 (ADR-0008): with no TRACE, list every rule as the next watch will
       load it (id, kind, class, severity, budget, status, origin, declared
       thresholds with their bounds) from the package's catalog, the
@@ -18,7 +20,21 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       rule file with the loader and the fixture runner and copies it, with
       its fixtures, into ~/.raqib/rules.d. A change applies to the next
       watch. Exit 2 when a change is refused (the reason on stderr), 0
-      otherwise.
+      otherwise. M8.2 (ADR-0009 decision 4): --new makes a rule from the
+      form's answers (raqib/ruleform.py, the window's form): it writes the
+      rule's YAML and its fixtures in a staging place under ~/.raqib,
+      the loader and the fixture runner judge them, it says what the rule
+      would have fired on in the records under ~/.raqib (read-only,
+      bounded, never a gate) and adds it through --add's path; --dry-run
+      prints the YAML and writes nothing in rules.d. --remove NAME deletes,
+      without asking, one entry of ~/.raqib/rules.d as it is listed: a NAME
+      without a suffix is a folder, a NAME ending .yaml or .yml a loose rule file;
+      the one of that kind named exactly NAME, else the one of that kind
+      named NAME in any case (several are refused and listed) - its rule
+      file first, then the overlay entry of the rule loaded from it, then
+      the rest; --dry-run says what it would do; a package rule is switched
+      off instead (a folder of rules.d named as one is removed, the package
+      rule and its overlay entry untouched).
   report TRACE [--findings FILE] [--scope P]... [--handoff FILE] [--json]
       Show the findings with the trace lines they cite (A5), the alarms, the
       rules that did not run (A3) and every rule's fp_budget (A6). Without
@@ -115,7 +131,8 @@ raqib = raqib.cli:main); from a checkout, python -m raqib runs the same main.
       only reads (M7.2b, ADR-0007 decision 3 and Amendment H): the os source
       where the Sysmon channel exists, else the host's own record of its
       children and connections (lines of source "host" under
-      ~/.raqib/host/sources/, judged by NET-TOOL and DESTRUCT-CMD, as the
+      ~/.raqib/host/sources/, judged by every rule whose match names the
+      tool HostChild - NET-TOOL, DESTRUCT-CMD, a person's program rule - as the
       os source's process lines are by their image name, M7.8); its
       findings show on the tree and knock (on a benign tree they are notes,
       not knocked, not an alarm; an os event from before the start is
@@ -214,6 +231,7 @@ from raqib import host
 from raqib import overlay
 from raqib import eval as evaluation
 from raqib import report
+from raqib import ruleform
 from raqib import ui
 from raqib import watch
 from raqib.hooks import os_sysmon, proxy
@@ -264,6 +282,19 @@ def _parser():
                         help="no TRACE: set a declared threshold of a rule, within its bounds (the overlay)")
     change.add_argument("--add", metavar="FILE", help="no TRACE: validate a rule file and copy it into ~/.raqib/rules.d")
     change.add_argument("--reset", metavar="ID", help="no TRACE: remove a rule's entry from the overlay")
+    change.add_argument("--new", metavar="ID", help="no TRACE: make a rule from the form's answers (M8.2)")
+    change.add_argument("--remove", metavar="NAME", help="no TRACE: delete a person's rule from ~/.raqib/rules.d"
+                        " and its overlay lines, without asking (--dry-run: say what it would do); NAME without a"
+                        " suffix is a folder, NAME.yaml or NAME.yml a loose rule file: the one named exactly NAME, else the one"
+                        " of that kind named NAME in any case")
+    r.add_argument("--when", choices=ruleform.FORMS, help="--new: what to watch for")
+    r.add_argument("--values", metavar="A,B", help="--new: the program names, places, host names or tool names")
+    r.add_argument("--severity", choices=ruleform.SEVERITIES, help="--new: low, medium or high")
+    r.add_argument("--fires", metavar="X", help="--new: one example the rule must fire on")
+    r.add_argument("--quiet", metavar="Y", help="--new: one example the rule must stay quiet on")
+    r.add_argument("--title", metavar="T", help="--new: the rule's title (default: from the answers)")
+    r.add_argument("--dry-run", action="store_true", help="--new: test and print the YAML, write nothing in rules.d;"
+                   " --remove: say what it would delete, delete nothing")
     r.add_argument("--json", action="store_true", help="no TRACE: print the listing as JSON")
     rep = sub.add_parser("report", help="report findings with their cited trace lines")
     rule_options(rep)
@@ -479,6 +510,23 @@ def rules_overlay_cmd(args, out):
     """M7.6 E2: raqib rules [--set | --threshold | --add | --reset] [--json]."""
     if args.out or args.scope or args.handoff or args.root or args.gap_seconds is not None or args.catalog != CATALOG:
         raise UsageError("-o, --scope, --handoff, --root, --gap-seconds and --catalog apply to `raqib rules TRACE`")
+    form = [o for o, v in (("--when", args.when), ("--values", args.values), ("--severity", args.severity),
+                           ("--fires", args.fires), ("--quiet", args.quiet), ("--title", args.title),
+                           ("--dry-run", args.dry_run and not args.remove)) if v]
+    if form and not args.new:
+        raise UsageError("%s apply to `raqib rules --new ID`" % ", ".join(form))
+    if args.new and args.json:   # M8.2 REDO E-10: never accepted and ignored
+        raise UsageError("--json does not apply to `raqib rules --new ID` (it prints the rule's YAML with --dry-run)")
+    if args.new:
+        return rules_new_cmd(args, out)
+    if args.remove and args.dry_run:
+        try:
+            out.write("raqib rules: %s\n" % overlay.remove_rule(args.remove, dry_run=True))
+        except overlay.OverlayError as exc:
+            raise UsageError("refused: %s" % exc)
+        except Exception as exc:   # M8.2 REDO 3 G-5: never a traceback - a refusal with words (exit 2)
+            raise UsageError("refused: the removal could not be made: %s: %s" % (type(exc).__name__, exc))
+        return 0
     said = None
     try:
         if args.set:
@@ -489,6 +537,13 @@ def rules_overlay_cmd(args, out):
             said = overlay.add_rule(args.add)
         elif args.reset:
             said = overlay.reset(args.reset)
+        elif args.remove:
+            try:
+                said = overlay.remove_rule(args.remove)
+            except overlay.OverlayError:
+                raise
+            except Exception as exc:   # M8.2 REDO 3 G-5: never a traceback - a refusal with words (exit 2)
+                raise overlay.OverlayError("the removal could not be made: %s: %s" % (type(exc).__name__, exc))
     except overlay.OverlayError as exc:
         raise UsageError("refused: %s" % exc)
     rules = _overlay_catalog()
@@ -501,6 +556,28 @@ def rules_overlay_cmd(args, out):
         out.write("raqib rules: %s\n" % said)
     out.write(overlay.table_text(overlay.listing(rules)))
     for line in overlay.start_lines(info):
+        out.write("raqib rules: %s\n" % line)
+    return 0
+
+
+def rules_new_cmd(args, out):
+    """M8.2 E6: raqib rules --new ID ... [--dry-run]: the window's form in the terminal, the same logic
+    (raqib/ruleform.py) and the same words; exit 2 with the reasons when refused."""
+    answers = {"id": args.new, "title": args.title, "when": args.when, "values": args.values,
+               "severity": args.severity, "fires": args.fires, "quiet": args.quiet}
+    tested = ruleform.test(answers)   # E-1: any failure inside is a refusal (exit 2), never a traceback
+    if not tested.ok:
+        raise UsageError("; ".join(tested.text()))
+    if args.dry_run:
+        out.write(tested.yaml)
+        for line in tested.text():
+            out.write("raqib rules: %s\n" % line)
+        out.write("raqib rules: dry run: nothing written in %s\n" % overlay.user_dir())
+        return 0
+    added = ruleform.add(answers)
+    if not added.ok:
+        raise UsageError("; ".join(added.text()))
+    for line in tested.text()[1:] + added.text():
         out.write("raqib rules: %s\n" % line)
     return 0
 
@@ -523,8 +600,9 @@ def _overlay_catalog():
 def cmd_rules(args, out):
     if args.trace is None:
         return rules_overlay_cmd(args, out)
-    if args.set or args.threshold or args.add or args.reset or args.json:
-        raise UsageError("--set, --threshold, --add, --reset and --json apply to `raqib rules` with no TRACE")
+    if args.set or args.threshold or args.add or args.reset or args.json or args.new or args.remove:
+        raise UsageError("--set, --threshold, --add, --reset, --new, --remove and --json apply to `raqib rules`"
+                         " with no TRACE")
     overlay_note()   # M7.6 REDO A-7
     numbered, problems = _read_trace(args.trace)
     rules = _catalog(args.catalog)

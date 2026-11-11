@@ -241,7 +241,7 @@ CHILD_TOOL = "HostChild"
 CONN_TOOL = "HostConnection"
 GONE_TOOL = "HostGone"
 SOURCES_DIR = "sources"
-HOST_LINE_RULES = ("NET-TOOL", "DESTRUCT-CMD")   # H-2: the rules that judge host lines
+HOST_LINE_RULES = ("NET-TOOL", "DESTRUCT-CMD")   # H-2: the package's rules that judge host lines (E-2: by property)
 PENDING = ("SILENCE-OPEN", "SILENCE-HALF")        # later lines can take them back: listed at the end
 CLAUDE_IMAGES = ("claude",)
 NODE_IMAGES = ("node",)
@@ -659,13 +659,41 @@ def plain_program(name):
     return None
 
 
+def _names_tool(node, tool):
+    """True when a match node names tool on the field tool (an eq, or one of an in), outside a not."""
+    if isinstance(node, list):
+        return any(_names_tool(x, tool) for x in node)
+    if not isinstance(node, dict):
+        return False
+    if node.get("field") == "tool" and (node.get("eq") == tool or
+                                        (isinstance(node.get("in"), list) and tool in node["in"])):
+        return True
+    return any(_names_tool(node[k], tool) for k in ("all", "any") if k in node)
+
+
+def reads_host_lines(rule):
+    """M8.2 REDO E-2 (ADR-0009 Amendment E): True when the rule's match names the tool HostChild - the
+    rules whose fields a host line fits (NET-TOOL, DESTRUCT-CMD, a person's program rule). A property of
+    the rule, computed once from its match tree and kept on it."""
+    known = getattr(rule, "host_lines", None)
+    if known is None:
+        doc = getattr(rule, "doc", None)
+        known = _names_tool(doc.get("match") if isinstance(doc, dict) else None, CHILD_TOOL)
+        try:
+            rule.host_lines = known
+        except AttributeError:
+            pass
+    return known
+
+
 def source_rules(rules, host_lines=False):
     """The rules that judge a source's lines: the catalog's, minus the host
     watch's own (class HOST judges rounds.jsonl, not a source); for a file
-    of host lines only NET-TOOL and DESTRUCT-CMD (H-2: the rules whose
-    fields a host line fits; the others would only say "could not judge")."""
+    of host lines the rules whose match names the tool HostChild (H-2, M8.2
+    REDO E-2: chosen by that property, not by id; the others would only say
+    "could not judge"). HOST_LINE_RULES are the package's two."""
     if host_lines:
-        return [r for r in rules if r.id in HOST_LINE_RULES]
+        return [r for r in rules if r.cls != "HOST" and reads_host_lines(r)]
     return [r for r in rules if r.cls != "HOST"]
 
 
@@ -2761,6 +2789,7 @@ class HostWatch:
                 else:
                     self.notes[src.pre_m78_index] = text
             if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
+                # M8.2 REDO 2 F-6: only the notes of the rules PRE_M78_NOTE names; a person's rule keeps its own
                 notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
         if getattr(feed, "not_judged", None):
             self.source_not_judged[feed.path] = feed.not_judged

@@ -627,6 +627,19 @@ second field run; R-1 is amended by T-2, T-1 restated by V-1).
 
 ## 6. Attacks on the watcher itself
 
+- **A rule a person adds (ADR-0009 Amendments E-H).** A rule made
+  from the form, or added as a file, is judged by the engine as any rule,
+  but it is measured on its own fixture files only, never on a corpus:
+  its false-positive budget is what its two examples show. The watch's
+  first lines and the report say so for every user rule.
+  - A hand-written rule that reads host lines (it names HostChild) is
+    polled with NET-TOOL and DESTRUCT-CMD. A regex in it that never ends
+    stalls that poll, and those rules' judgement of that feed with it -
+    as a hand-written rule already could on a trace feed. The form
+    offers no regex.
+  - Whoever can write in `~/.raqib/rules.d` or `rules.yaml` can switch a
+    rule off or add one. Raqib says every rule that is off and every
+    user rule at each start; it does not sign them.
 - **Editing or deleting the trace.** The agent can rewrite or truncate the
   file. Lines are not signed or chained.
   - The silence rules catch some tampering: seq or time going back

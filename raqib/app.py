@@ -111,7 +111,7 @@ import threading
 import time
 import traceback
 
-from raqib import host as hostmod, notify, overlay, tray as traymod, ui, watch
+from raqib import host as hostmod, notify, overlay, ruleform, tray as traymod, ui, watch
 
 TITLE = "Raqib"
 TICK_MS = 500                 # how often the window reads the state (after())
@@ -187,7 +187,7 @@ THEME = {
     # every pixel size, before scaled(): the rail, the outer padding, the gap between cards, the card's own
     # padding and corner, the buttons, a table row's padding, a strip cell, the switch, a scrollbar
     "px": {"rail": 184, "pad": 20, "gap": 12, "card_pad": 12, "card_radius": 10, "radius": 6, "row_pad": 7,
-           "cell": 10, "cell_gap": 4, "switch": (34, 18), "scroll": 10, "chevron": 12, "wrap": 420, "list_h": 180,
+           "cell": 10, "cell_gap": 4, "switch": (34, 18), "scroll": 10, "chevron": 12, "wrap": 420, "list_h": 180, "form_h": 196,
            "focus": 2},
     "min_size": (900, 600), "size": (1100, 720),
 }
@@ -369,6 +369,9 @@ SENTENCES = {
     "WATCHING": "Watching the project", "FINISHED": "The project watch finished",
     "NOT WATCHING": "The project watch did not start", "RULES": "Rules for the next watch",
     "RULES: REFUSED": "The change was refused", "RULES: MEASURING": "Measuring the thresholds...",
+    "NEW RULE": "A new rule, from a form", "NEW RULE: PASSED": "The test passed: the rule can be added",
+    "NEW RULE: REFUSED": "The rule was refused", "NEW RULE: ADDED": "The rule was added",
+    "NEW RULE: CHANGED": "Changed since the test: test again",
     "CAPTURE FAILED": "Capture failed", "AGENT GONE": "The agent is gone",
     "LOG": "The watch's own lines", "NO LOG": "No log yet"}
 STOPPING = " (stopping)"
@@ -680,6 +683,10 @@ def strip_total(state):
     return host["rounds"] - (1 if strip_progress(state) else 0)
 
 
+BY_HAND = "Not a rule Raqib wrote: delete it by hand if you mean to:"
+BY_HAND_LINK = "A link in rules.d, not a rule Raqib wrote: remove the link by hand if you mean to (not what it leads to):"
+
+
 def rule_items(rows, titles=None):
     """M8.1 E5: the Rules screen's rows from RulesPanel.rows: per rule its
     id, the YAML's title, on, the overlay state in words ("off by the
@@ -695,12 +702,27 @@ def rule_items(rows, titles=None):
         on = r.get("status") != "off"
         state = ("off in its YAML" if r.get("off_by") == "yaml" else "off by the overlay") if not on else (
             "thresholds set" if changed else "")
-        out.append({"id": _safe(r.get("id")), "title": _safe(titles.get(r.get("id")) or ""), "on": on,
+        if r.get("refused"):   # M8.2 REDO E-6: a person's rule refused at load is a row, with its Remove
+            state = "refused at load"
+        place = r.get("place") if r.get("origin") == "user" else None
+        # M8.2 REDO 2 F-3: a person's row is keyed by its own place in rules.d (a folder or a loose file), never by
+        # a name looked up again; a place Raqib could not have written gets no Remove, only its path to delete it by
+        key = _safe(place) if place else _safe(r.get("id"))
+        if place and r.get("refused") and key in {x.get("id") for x in rows if x.get("origin") != "user"}:
+            key = "rules.d/" + key   # a folder named as a package rule: its own row
+        out.append({"id": _safe(r.get("id")), "key": key, "place": _safe(place) if place else None,
+                    "removable": bool(place) and r.get("removable", overlay.removable(place, "folder")),
+                    "path": _safe(r.get("path")) if r.get("path") else None,
+                    "no_remove": _safe(r.get("no_remove") or BY_HAND),   # REDO 3 G-5, G-6: why no Remove
+                    "title": "" if r.get("refused") else _safe(titles.get(r.get("id")) or ""), "on": on,
                     "state": state, "pills": [_safe(r.get(k)) for k in ("kind", "severity", "origin")],
-                    "meta": "class %s, budget %g" % (_safe(r.get("class")), r.get("budget") or 0),
+                    "meta": ("why: %s" % _safe(r["refused"]) if r.get("refused") else
+                             "class %s, budget %g" % (_safe(r.get("class")), r.get("budget") or 0)),
+                    "refused": bool(r.get("refused")),
                     "steppers": steps, "resettable": r.get("off_by") == "overlay" or changed,
                     "fixed": [overlay.threshold_text(t) for t in r.get("fixed") or ()],
-                    "level": None if on else "incomplete"})
+                    "level": "alarm" if r.get("refused") else (None if on else "incomplete"),
+                    "origin": _safe(r.get("origin"))})   # M8.2: Remove
     return out
 
 
@@ -2169,6 +2191,7 @@ class RulesPanel:
         self.measuring = []   # the lines said (tests read them)
         self.rows, self.info, self.error, self.titles = [], None, None, {}
         self.message, self.level = None, "clean"
+        self.form_passed = None   # M8.2: the fingerprint of the answers whose Test passed
         self.reload()
 
     def _say(self, line):
@@ -2193,6 +2216,9 @@ class RulesPanel:
                 "; a watch is running: it keeps the rules it started with" if running else ""), "clean"
         except overlay.OverlayError as exc:
             self.message, self.level = "REFUSED: %s" % exc, "alarm"
+        except Exception as exc:   # M8.2 REDO 3 G-5: whatever else fails is a refusal with words, never nothing
+            self.message, self.level = "REFUSED: the change could not be made: %s: %s" % (
+                type(exc).__name__, _safe(exc)), "alarm"
         self.reload()
         return self.message
 
@@ -2219,6 +2245,69 @@ class RulesPanel:
             self.message, self.level = "no file chosen: nothing added", "incomplete"
             return self.message
         return self._do(overlay.add_rule, path, running=running)
+
+    def remove_rule(self, rule_id, running=False, place=None):
+        """M8.2 E4: a person's rule removed from rules.d with its overlay lines (overlay.remove_rule); a
+        package rule refused ("switch it off instead"). place: the row's own entry of rules.d (REDO 2 F-3:
+        Remove acts on it, never on a name looked up again)."""
+        return self._do(overlay.remove_rule, str(rule_id or "").strip(), running=running, place=place)
+
+    def refused_rows(self):
+        """M8.2 REDO E-6: a row for each person's rule refused at load (its folder or loose file is in rules.d),
+        so it can be removed from the window - with its own place (REDO 2 F-3); a place Raqib could not have
+        written (a folder whose name is no id) has no Remove: the row gives its path, to delete it by hand."""
+        out = []
+        rules_d = (self.info or {}).get("user_dir")
+        try:   # REDO 3 G-5: a rules.d that cannot be listed is said on each row, never a crash while drawing
+            kinds, unlisted = dict(overlay.user_entries(rules_d)), None
+        except Exception as exc:
+            kinds, unlisted = {}, "%s could not be listed (%s: %s): Remove is not offered" % (
+                rules_d, type(exc).__name__, exc)
+        for u in (self.info or {}).get("user_refused_ids") or ():
+            place = u.get("place") or u["rule_id"]
+            kind = kinds.get(place, "other")
+            path = os.path.join(rules_d or "", place)
+            unread = unlisted   # H-3: one row's failure is that row's, never the next row's
+            try:
+                link = kind == "other" and overlay.is_link(path)
+            except Exception as exc:   # an entry that cannot be looked at: said, no Remove
+                link, unread = False, unlisted or "%s cannot be read (%s: %s): Remove is not offered" % (
+                    path, type(exc).__name__, exc)
+            out.append({"id": u["rule_id"], "kind": "-", "class": "-", "severity": "-", "budget": 0, "status": "off",
+                        "off_by": "refused", "origin": "user", "thresholds": [], "fixed": [], "refused": u["reason"],
+                        "place": place, "removable": unread is None and overlay.removable(place, kind),
+                        "path": path, "no_remove": unread or (BY_HAND_LINK if link else BY_HAND)})
+        return out
+
+    def origin(self, rule_id):
+        return next((r["origin"] for r in self.rows if r["id"] == rule_id), None)
+
+    def test_form(self, answers):
+        """M8.2 E1-E3: the form's Test - ruleform.test (staged, judged by the engine, run on the records;
+        nothing written in rules.d). A pass remembers the answers' fingerprint: Add is for those only."""
+        res = ruleform.test(answers, self.home, self.catalog)
+        self.form_passed = ruleform.fingerprint(answers) if res.ok else None
+        return res
+
+    def can_add(self, answers):
+        return self.form_passed is not None and self.form_passed == ruleform.fingerprint(answers)
+
+    def add_form(self, answers, running=False):
+        """M8.2 E2: the form's Add, after a passing Test of the same answers: ruleform.add (overlay.add_rule's
+        path); the message said as every change is."""
+        if not self.can_add(answers):
+            res = ruleform.Result()
+            res.refusals = [("rule", "Test these answers first: Add is for answers that passed a Test")]
+            return res
+        res = ruleform.add(answers, self.home, self.catalog)
+        if res.ok:
+            self.message, self.level = res.said + (
+                "; a watch is running: it keeps the rules it started with" if running else ""), "clean"
+            self.form_passed = None
+        else:
+            self.message, self.level = "REFUSED: %s" % "; ".join(res.text()), "alarm"
+        self.reload()
+        return res
 
     def header(self):
         """The header's word: "N rules off: <ids>" (or "no rule off")."""
@@ -2790,6 +2879,7 @@ class Window:
         self.rule_widgets = {}
         self.rule_rows = []
         self.rule_said = None   # REDO A-6: (rule id, the refusal's words) shown beside its row
+        self.rule_confirm = None   # M8.2 E4: the user rule whose Remove asks its one confirmation
         self.strip_fit = 0
         self.codes = {}    # REDO B-2: id(session) -> the last code its state said
         self.laying = False
@@ -3033,7 +3123,7 @@ class Window:
             self._picture((kind,), sign(self.px(12), kind == "plus", p["ink"], card, 1.6 * self.scale))
             self._picture((kind, "off"), sign(self.px(12), kind == "plus", p["line"], card, 1.6 * self.scale))
         self.root.configure(background=g)
-        for cls in ("TButton", "TCheckbutton"):   # E4: Enter acts as Space does
+        for cls in ("TButton", "TCheckbutton", "TRadiobutton"):   # E4: Enter acts as Space does (M8.2: the form)
             for key in KEYS["act"]:
                 self.root.bind_class(cls, key, lambda e: e.widget.invoke())
 
@@ -3361,6 +3451,9 @@ class Window:
         self.rule_filter.trace_add("write", lambda *a: self._rules_filter(True))
         self.rules_count = ttk.Label(row, text="", style="Muted.Card.TLabel")
         self.rules_count.pack(side="left")
+        # M8.2 E5: "New rule" is the screen's primary action; a YAML file can still be added (secondary)
+        self.rules_add_button = ttk.Button(row, text="Add rule file...", command=self.rules_add, style="Card.TButton")
+        self.rules_add_button.pack(side="right", padx=(self.px(12), 0))
         ttk.Separator(inner).pack(fill="x", pady=(self.px(10), 0))
         box_ = ttk.Frame(inner, style="Inner.TFrame")
         box_.pack(fill="both", expand=True)
@@ -3382,8 +3475,114 @@ class Window:
         self.root.bind_all(KEYS["wheel_down"][0], lambda e: self._wheel(1), add="+")
         frame, self.rules_text = self._text(self.overlay.inner, 4)   # the intro and what the overlay applies
         frame.pack(fill="both", expand=True)
-        self.rules_add_button = ttk.Button(self.primary, text="Add rule file...", command=self.rules_add,
+        self.rules_new_button = ttk.Button(self.primary, text="New rule", command=self.rules_new,
                                            style="Primary.TButton")
+        self._build_rules_form()
+
+    def _build_rules_form(self):
+        """M8.2 E5 (ADR-0009 decision 4): the form a rule is made from, a screen of the Rules item: the four
+        choices in words, the fields, the two examples (prefilled from the first name), Test, and Add - the
+        screen's primary action, enabled only after a passing Test of the same answers. Each refusal stands
+        beside its field. Every entry asks for one character of width (REDO B-1)."""
+        tk, ttk, p = self.tk, self.ttk, self.palette
+        style = ttk.Style(self.root)
+        style.configure("Card.TRadiobutton", background=p["card"], foreground=p["ink"], font=self.font_body,
+                        padding=(0, self.px(1)), indicatorbackground=p["field"], indicatorforeground=p["accent"],
+                        upperbordercolor=p["field_line"], lowerbordercolor=p["field_line"])
+        style.map("Card.TRadiobutton", background=[("active", p["hover"])], foreground=[("disabled", p["muted"])],
+                  indicatorbackground=[("pressed", p["chip"]), ("selected", p["field"])])
+        f = self.formf = ttk.Frame(self.screens)
+        outer, inner, _ = self._card(f)
+        outer.pack(fill="both", expand=True)
+        # the fields scroll in a canvas whose height is theirs up to form_h, so a long refusal never pushes the
+        # screen past 900x600 (REDO B-1); the focused field is scrolled into view
+        box_ = ttk.Frame(inner, style="Inner.TFrame")
+        box_.pack(fill="both", expand=True)
+        self.form_canvas = tk.Canvas(box_, background=p["card"], highlightthickness=0, borderwidth=0,
+                                     height=self.px(THEME["px"]["form_h"]), width=self.px(300),
+                                     yscrollincrement=self.px(24))
+        bar = ttk.Scrollbar(box_, command=self.form_canvas.yview, style="Thin.Vertical.TScrollbar")
+        self.form_canvas.pack(side="left", fill="both", expand=True)
+        self.form_canvas.configure(yscrollcommand=self._scroller(bar, self.form_canvas))
+        grid = ttk.Frame(self.form_canvas, style="Inner.TFrame")
+        self.form_grid = grid
+        window_ = self.form_canvas.create_window(0, 0, window=grid, anchor="nw")
+        grid.bind(KEYS["resize"][0], lambda e: self.form_canvas.configure(
+            scrollregion=self.form_canvas.bbox("all"), height=min(e.height, self.px(THEME["px"]["form_h"]))))
+        self.form_canvas.bind(KEYS["resize"][0], lambda e: self.form_canvas.itemconfigure(window_, width=e.width))
+        for col in (0, 1):
+            grid.grid_columnconfigure(col, weight=1, uniform="form")
+        self.form_vars, self.form_said, self.form_fields, self.form_prefilled = {}, {}, {}, ("", "")
+        self.form_result = None   # the last Test's or Add's Result
+        self.form_after = {}   # the widget a field's refusal is packed after, beside its field
+
+        def block(row, col):
+            box_ = ttk.Frame(grid, style="Inner.TFrame")
+            box_.grid(row=row, column=col, sticky="new", padx=(0, self.px(12)) if col == 0 else (0, 0),
+                      pady=(0, self.px(6)))
+            return box_
+
+        def said(name, box_):
+            label = self._wrap(ttk.Label(box_, text="", style="alarm.Level.Card.TLabel", anchor="w",
+                                         justify="left"), self.px(200))
+            self.form_said[name] = label   # packed only while it says something
+            return label
+
+        def entry(name, label, row, col):
+            box_ = block(row, col)
+            ttk.Label(box_, text=label, style="Bold.Card.TLabel").pack(anchor="w")
+            var = tk.StringVar(master=self.root, value="")
+            field = ttk.Entry(box_, textvariable=var, width=1)
+            field.pack(fill="x", pady=(self.px(2), 0))
+            field.bind(KEYS["focus"][0], lambda e: self._rules_form_see(e.widget), add="+")
+            self.form_vars[name], self.form_fields[name], self.form_after[name] = var, field, field
+            said(name, box_)
+            return box_
+
+        def choices(name, label, box_, options, side):
+            ttk.Label(box_, text=label, style="Bold.Card.TLabel").pack(anchor="w", pady=(self.px(4), 0))
+            var = tk.StringVar(master=self.root, value=options[0][0])
+            line = ttk.Frame(box_, style="Inner.TFrame")
+            line.pack(anchor="w", fill="x")
+            buttons = []
+            for value, words in options:
+                b = ttk.Radiobutton(line, text=words, value=value, variable=var, style="Card.TRadiobutton")
+                b.pack(side=side, anchor="w", padx=(0, self.px(10)) if side == "left" else 0)
+                b.bind(KEYS["focus"][0], lambda e: self._rules_form_see(e.widget), add="+")
+                buttons.append(b)
+            self.form_vars[name], self.form_fields[name], self.form_after[name] = var, buttons[0], line
+            said(name, box_)
+        entry("id", ruleform.FIELD_WORDS["id"] + " (MY-RULE)", 0, 0)
+        entry("title", ruleform.FIELD_WORDS["title"] + " (optional)", 0, 1)
+        choices("when", ruleform.FIELD_WORDS["when"], block(1, 0),
+                [(k, ruleform.FORM_WORDS[k][:1].upper() + ruleform.FORM_WORDS[k][1:]) for k in ruleform.FORMS], "top")
+        values = entry("values", ruleform.FIELD_WORDS["values"], 1, 1)
+        self.form_hint = self._wrap(ttk.Label(values, text="", style="Muted.Card.TLabel", anchor="w", justify="left"),
+                                    self.px(200))
+        self.form_hint.pack(anchor="w", fill="x")
+        choices("severity", ruleform.FIELD_WORDS["severity"], values, [(k, k) for k in ruleform.SEVERITIES], "left")
+        self.form_vars["severity"].set("medium")
+        entry("fires", ruleform.FIELD_WORDS["fires"], 2, 0)
+        entry("quiet", ruleform.FIELD_WORDS["quiet"], 2, 1)
+        row = ttk.Frame(inner, style="Inner.TFrame")
+        row.pack(fill="x", pady=(self.px(2), self.px(6)))
+        self.rules_form_test_button = ttk.Button(row, text="Test", command=self.rules_form_test, style="Card.TButton")
+        self.rules_form_test_button.pack(side="left")
+        self.rules_form_back = ttk.Button(row, text="Back to the rules", command=self.rules_form_back_to,
+                                          style="Link.TButton")
+        self.rules_form_back.pack(side="left", padx=(self.px(8), 0))
+        self.form_status = self._wrap(ttk.Label(row, text="", style="Muted.Card.TLabel", anchor="w",
+                                                justify="left"), self.px(200))
+        self.form_status.pack(side="left", fill="x", expand=True, padx=(self.px(12), 0))
+        frame, self.form_text = self._text(inner, 3, mono=True)   # the YAML it will write, and "on your records"
+        self.form_text.configure(takefocus=1)   # REDO E-10: the preview is reached and read by keyboard
+        frame.pack(fill="both", expand=True)
+        self.rules_form_add_button = ttk.Button(self.primary, text="Add rule", command=self.rules_form_add,
+                                                style="Primary.TButton")
+        self.rules_form_add_button.state(["disabled"])
+        for name in ruleform.FIELDS:
+            self.form_vars[name].trace_add("write", lambda *a, n=name: self._rules_form_changed(n))
+        self._rules_form_changed("when")
 
     def _build_log(self):
         """A-5, F-6, M8.1 E2: the Log screen - the host watch's or the
@@ -3424,8 +3623,10 @@ class Window:
     def _show(self, name):
         if self.screen == name:
             return False
+        if name != "rules":   # M8.2 REDO E-5: leaving the Rules screen withdraws a pending Remove
+            self.rule_confirm = None
         frames = {"host": self.hostf, "first": self.first, "watching": self.watching, "rules": self.rulesf,
-                  "log": self.logf}
+                  "log": self.logf, "ruleform": self.formf}
         for key, frame in frames.items():
             if key != name:
                 frame.pack_forget()
@@ -3438,7 +3639,7 @@ class Window:
         """E2: the rail's current item, its Open page; the screen's primary
         action, its strip and pills, its disclosures."""
         current = {"host": self.host_tab, "first": self.project_tab, "watching": self.project_tab,
-                   "rules": self.rules_tab, "log": self.log_tab}.get(self.screen)
+                   "rules": self.rules_tab, "ruleform": self.rules_tab, "log": self.log_tab}.get(self.screen)
         for tab in (self.host_tab, self.project_tab, self.rules_tab, self.log_tab):
             style = "Current.Rail.TButton" if tab is current else "Rail.TButton"
             if str(tab.cget("style")) != style:
@@ -3518,14 +3719,14 @@ class Window:
 
     def _sync_primary(self):
         """The one primary action of the screen, at the right of its verdict."""
-        want = {"host": [self.host_button], "first": [self.start_button], "rules": [self.rules_add_button],
-                "log": [self.log_jump]}.get(self.screen)
+        want = {"host": [self.host_button], "first": [self.start_button], "rules": [self.rules_new_button],
+                "ruleform": [self.rules_form_add_button], "log": [self.log_jump]}.get(self.screen)
         if want is None:   # the watching screen: Stop while it runs, Back after it
             session = self.c.session
             ended = session is not None and session.snapshot()["phase"] in ("finished", "failed")
             want = [self.back_button if ended else self.stop_button]
         for button in (self.host_button, self.start_button, self.stop_button, self.back_button,
-                       self.rules_add_button, self.log_jump):
+                       self.rules_new_button, self.rules_form_add_button, self.log_jump):
             if button not in want and button.winfo_manager():
                 button.pack_forget()
         for button in want:
@@ -3681,11 +3882,184 @@ class Window:
         self.rules_panel.add(chosen or None, running=self.c.watching())
         self._rules_changed(None, None)
 
+    def rules_remove(self, key, confirmed=False):
+        """M8.2 E4: a person's rule's Remove - first a confirmation beside its row, then RulesPanel.remove
+        (its folder under rules.d and its overlay lines; a running watch keeps the rules it started with). key:
+        the row's own key; the removal acts on the row's place in rules.d (REDO 2 F-3)."""
+        if not confirmed:
+            self.rule_confirm = key
+            self.shown.pop("rules_rows", None)
+            self._rules_fill()
+            widget = self.rule_widgets.get((key, "keep"))   # REDO E-5: a second deliberate act deletes
+            if widget is not None:
+                widget.focus_set()
+            return
+        self.rule_confirm = None
+        item = next((i for i, _ in self.rule_rows if i["key"] == key), None)
+        if item is None or not item.get("place"):
+            self.rules_panel.message, self.rules_panel.level = "REFUSED: no row %s to remove" % key, "alarm"
+        else:
+            self.rules_panel.remove_rule(item["id"], running=self.c.watching(), place=item["place"])
+        self._rules_changed(key, "remove")
+        if self.rules_panel.level == "clean" and self.screen == "rules":
+            self.rules_new_button.focus_set()
+
+    def rules_keep(self, rule_id):
+        self.rule_confirm = None
+        self._rules_changed(rule_id, "remove")
+
+    def rules_new(self):
+        """M8.2 E5: the form, from the Rules screen's primary action; the first field has the focus."""
+        self._show("ruleform")
+        self._sync_primary()
+        self._rules_form_verdict(self._rules_form_state())   # REDO E-10: a passed Test of these answers: passed
+        self.form_fields["id"].focus_set()
+
+    def _rules_form_state(self):
+        """The form's state for its header: the passed Test when the answers are the same, "changed" when a field
+        was edited after a passed Test (REDO 2 F-10), else None (not tested)."""
+        last = getattr(self, "form_result", None)
+        if last is None or not last.ok or last.records is None:
+            return None
+        return last if self.rules_panel.can_add(self._rules_form_answers()) else "changed"
+
+    def _rules_form_see(self, widget):
+        """The form's canvas scrolls to the field that has the keyboard's focus."""
+        self.root.update_idletasks()
+        top = widget.winfo_rooty() - self.form_grid.winfo_rooty()
+        height = widget.winfo_height()
+        total = max(self.form_grid.winfo_height(), 1)
+        view = self.form_canvas.yview()
+        if top / float(total) < view[0] or (top + height) / float(total) > view[1]:
+            self.form_canvas.yview_moveto(max(0.0, (top - self.px(24)) / float(total)))
+
+    def rules_form_back_to(self):
+        self.show_rules()
+        self.rules_new_button.focus_set()
+
+    def _rules_form_answers(self):
+        return {name: self.form_vars[name].get() for name in ruleform.FIELDS}
+
+    def _rules_form_changed(self, name):
+        """The examples follow the first name while the person has not written their own; the hint follows
+        the choice; Add is enabled only for the answers that passed a Test."""
+        when = self.form_vars["when"].get()
+        if name in ("when", "values"):
+            self.form_hint.configure(text=ruleform.VALUE_HINTS.get(when, ""))
+            fires, quiet = ruleform.examples(when, self.form_vars["values"].get())
+            for field, value, was in (("fires", fires, self.form_prefilled[0]), ("quiet", quiet,
+                                                                                 self.form_prefilled[1])):
+                if self.form_vars[field].get() in ("", was) and self.form_vars[field].get() != value:
+                    self.form_vars[field].set(value)
+            self.form_prefilled = (fires, quiet)
+        ok = self.rules_panel.can_add(self._rules_form_answers())
+        self.rules_form_add_button.state(["!disabled"] if ok else ["disabled"])
+        if name != "test" and getattr(self, "screen", None) == "ruleform" and self._rules_form_state() is not None:
+            state = self._rules_form_state()
+            self._rules_form_verdict(state)   # REDO 2 F-10: the header never goes stale
+            if state == "changed":
+                self.form_status.configure(text="changed since the test: test again", style="Muted.Card.TLabel")
+                self._rules_form_preview(self.form_result, stale=True)   # REDO 3 G-7: marked as the last test's
+            elif self.form_status.cget("text") == "changed since the test: test again":
+                self._rules_form_said(state)   # the same answers again: the passed Test's words back
+
+    def _rules_form_said(self, res):
+        """Each refusal beside its field (the rule's own beside Test), the YAML and "on your records"."""
+        by, notes = {}, {}
+        for field, why in res.refusals:
+            by.setdefault(field if field in self.form_said else "rule", []).append(why)
+        for field, words in res.notes:   # REDO E-3, E-4: what a name or place is also matched as
+            notes.setdefault(field if field in self.form_said else "rule", []).append(words)
+        for field, label in self.form_said.items():
+            text = "; ".join(by.get(field, []) or notes.get(field, []))
+            label.configure(text=text, style="alarm.Level.Card.TLabel" if by.get(field) else "Muted.Card.TLabel")
+            if text and not label.winfo_manager():
+                label.pack(anchor="w", fill="x", pady=(self.px(2), 0), after=self.form_after[field])
+            elif not text and label.winfo_manager():
+                label.pack_forget()
+        rule = "; ".join(by.get("rule", []))
+        short = "test passed: nothing is written in rules.d; the staging folder is removed" if (
+            res.ok and res.records is not None) else (res.said or "")   # the header says what was measured
+        said = "; ".join([short] + notes.get("rule", [])).strip("; ")
+        self.form_status.configure(text=rule or said, style="alarm.Level.Card.TLabel" if rule else
+                                   "Muted.Card.TLabel")
+        self._rules_form_preview(res)
+        first = next((f for f in ruleform.FIELDS if f in by), None)
+        if first is not None:
+            self.form_fields[first].focus_set()
+
+    STALE = ("THE LAST TEST'S, NOT THESE ANSWERS: a field changed since the test; the YAML and \"on your records\""
+             " below are what the last test gave - test again")
+
+    def _rules_form_preview(self, res, stale=False):
+        """The YAML it will write and "on your records" (read-only); stale (REDO 3 G-7): after a field changed,
+        marked as the last test's, not the form's present state."""
+        lines = []
+        if res.records is not None:
+            lines = [ruleform.records_text(res.records)] + ["  " + c for c in ruleform.cited_text(res.records)] + [""]
+        text = "\n".join(lines) + (res.yaml or "") if res.ok else "\n".join(
+            "refused: %s: %s" % (ruleform.FIELD_WORDS.get(f, f), w) for f, w in res.refusals)
+        self._set(self.form_text, "ruleform", (self.STALE + "\n\n" + text) if stale else text)
+
+    def _rules_form_verdict(self, res=None):
+        """The form's header; its pill says the Test's word (passed, refused, not tested), not an exit code's."""
+        if res is None:
+            self._verdict("NEW RULE", "incomplete", "not tested yet: Test runs it on its examples and on your"
+                          " records, and writes nothing in rules.d")
+            word = "not tested"
+        elif res == "changed":   # REDO 2 F-10: a field edited after a passed Test
+            self._verdict("NEW RULE: CHANGED", "incomplete", "changed since the test: test again (Add is for the"
+                          " answers that passed a Test)")
+            word = "changed"
+        elif res.ok and res.records is not None:
+            self._verdict("NEW RULE: PASSED", "clean", "the loader and the fixture runner accept it (%s); Add puts"
+                          " it in rules.d for the next watch" % ruleform.MEASURED)
+            word = "passed"
+        elif res.ok:
+            self._verdict("NEW RULE: ADDED", "clean", res.said)
+            word = "added"
+        else:
+            wrote = any("cannot write under" in str(w) for _, w in res.refusals)   # add_rule stopped while writing
+            self._verdict("NEW RULE: REFUSED", "alarm", "%d refusal%s, each beside its field; %s" % (
+                len(res.refusals), "" if len(res.refusals) == 1 else "s", "Add stopped while writing in rules.d: what"
+                " it wrote is a rule with no YAML (refused at load, listed with Remove)" if wrote else
+                "nothing was written in rules.d"))
+            word = "refused"
+        self.pill.configure(text=word)
+
+    def rules_form_test(self):
+        """M8.2 E1-E3: Test - RulesPanel.test_form (staged, judged by the engine, run on the records)."""
+        self.form_status.configure(text="testing... (the rule is staged, judged on its examples, and run on your"
+                                   " records)", style="Muted.Card.TLabel")
+        self.root.update_idletasks()   # REDO E-9: said before it reads
+        res = self.form_result = self.rules_panel.test_form(self._rules_form_answers())
+        self._rules_form_said(res)
+        self._rules_form_verdict(res)
+        self._rules_form_changed("test")
+        if res.ok:
+            self.rules_form_add_button.focus_set()
+
+    def rules_form_add(self):
+        """M8.2 E2: Add - RulesPanel.add_form (overlay.add_rule's path); back to the list, the new row seen."""
+        answers = self._rules_form_answers()
+        res = self.form_result = self.rules_panel.add_form(answers, running=self.c.watching())
+        if not res.ok:
+            self._rules_form_said(res)
+            self._rules_form_verdict(res)
+            self._rules_form_changed("add")
+            return
+        for name in ("id", "title", "values", "fires", "quiet"):
+            self.form_vars[name].set("")
+        self._rules_form_said(ruleform.Result())
+        self.show_rules()
+        self._rules_changed(answers["id"].strip(), "switch")
+
     def _rules_changed(self, rule_id, part):
         """REDO A-6: after a change the rows are drawn again from the rules as
         they are (a refused switch or step goes back at once), and a refusal's
         reason stands beside its rule's row."""
         p = self.rules_panel
+        rule_id = self._row_key(rule_id)
         self.rule_said = (rule_id, p.message) if p.level == "alarm" and rule_id else None
         self.shown.pop("rules_rows", None)
         self._rules_band()
@@ -3693,6 +4067,14 @@ class Window:
         widget = self.rule_widgets.get((rule_id, part)) or self.rule_widgets.get((rule_id, "switch"))
         if widget is not None and self.screen == "rules":
             widget.focus_set()
+
+    def _row_key(self, rule_id):
+        """REDO 2 F-3: the key of the row a change was made on: a row's key as given, else the loaded row of that
+        rule id (a person's rule whose folder is not named as its id)."""
+        rows = getattr(self, "rule_rows", None) or []
+        if rule_id is None or any(i["key"] == rule_id for i, _ in rows):
+            return rule_id
+        return next((i["key"] for i, _ in rows if i["id"] == rule_id and not i.get("refused")), rule_id)
 
     def _rules_measuring(self, line):
         """M7.6c REDO E-7: the header says a measurement runs (it may take seconds), drawn before it starts."""
@@ -3726,8 +4108,8 @@ class Window:
         measurement's words, what is fixed, Reset when there is something
         to undo; rebuilt when the panel's rows change."""
         p = self.rules_panel
-        items = rule_items(p.rows, getattr(p, "titles", None))
-        key = (repr(items), p.error, self.rule_said)
+        items = rule_items(p.rows + p.refused_rows(), getattr(p, "titles", None))
+        key = (repr(items), p.error, self.rule_said, self.rule_confirm)
         if self.shown.get("rules_rows") == key:
             return
         self.shown["rules_rows"] = key
@@ -3744,15 +4126,17 @@ class Window:
 
     def _rules_row(self, item):
         tk, ttk, p, X = self.tk, self.ttk, self.palette, THEME["px"]
-        rid = item["id"]
+        rid, key = item["id"], item["key"]   # REDO 2 F-3: widgets keyed by the row's own key (a person's: its place)
         frame = ttk.Frame(self.rules_list, style="Inner.TFrame")
         frame.grid_columnconfigure(1, weight=1)
         var = tk.BooleanVar(master=self.root, value=item["on"])
-        self.rule_vars[rid] = var
+        self.rule_vars[key] = var
         switch = ttk.Checkbutton(frame, variable=var, style="Switch.TCheckbutton",
                                  command=lambda r=rid, v=var: self.rules_set(r, v.get()))
         switch.grid(row=0, column=0, rowspan=2, sticky="nw", padx=(0, self.px(6)), pady=(self.px(2), 0))
-        self.rule_widgets[(rid, "switch")] = switch
+        if item.get("refused"):   # E-6: nothing to switch; Remove below
+            switch.state(["disabled"])
+        self.rule_widgets[(key, "switch")] = switch
         head = ttk.Frame(frame, style="Inner.TFrame")
         head.grid(row=0, column=1, sticky="ew")
         ttk.Label(head, text=rid, style="Bold.Card.TLabel").pack(side="left")
@@ -3773,7 +4157,7 @@ class Window:
             steps = ttk.Frame(frame, style="Inner.TFrame")
             steps.grid(row=row, column=1, columnspan=2, sticky="ew", pady=(self.px(6), 0))
             for t in item["steppers"]:
-                self._rules_stepper(steps, rid, t)
+                self._rules_stepper(steps, rid, t, key)
             for text in item["fixed"]:
                 self._wrap(ttk.Label(steps, text=text, style="Muted.Card.TLabel", anchor="w", justify="left")).pack(
                     anchor="w", fill="x", pady=(0, self.px(4)))
@@ -3781,21 +4165,53 @@ class Window:
                 reset = ttk.Button(steps, text="Reset to the YAML", style="Link.TButton",
                                    command=lambda r=rid: self.rules_reset(r))
                 reset.pack(anchor="w")
-                self.rule_widgets[(rid, "reset")] = reset
-        if self.rule_said and self.rule_said[0] == rid:   # REDO A-6: the refusal, beside its rule
+                self.rule_widgets[(key, "reset")] = reset
+        if item.get("origin") == "user" and item.get("place"):   # M8.2 E4: a person's rule can be removed
+            row += 1
+            gone = ttk.Frame(frame, style="Inner.TFrame")
+            gone.grid(row=row, column=1, columnspan=2, sticky="ew", pady=(self.px(4), 0))
+            what = "Its YAML and its fixtures are" if item["place"] == item["id"] or not item.get("refused") else (
+                "%s is" % item["place"])
+            if not item.get("removable"):   # REDO 2 F-3: not a place Raqib could have written: no Remove
+                self._wrap(ttk.Label(gone, text=item.get("no_remove") or BY_HAND, style="Muted.Card.TLabel",
+                                     anchor="w", justify="left"), self.px(300)).pack(anchor="w", fill="x")
+                # REDO 3 G-7: the path is reached by Tab and can be selected and copied (read-only)
+                path = ttk.Entry(gone, width=1, takefocus=True)
+                path.insert(0, item.get("path") or item["place"])
+                path.state(["readonly"])
+                path.pack(anchor="w", fill="x", pady=(self.px(2), 0))
+                self.rule_widgets[(key, "path")] = path
+            elif self.rule_confirm == key:
+                self._wrap(ttk.Label(gone, text="Remove %s? %s deleted from rules.d." % (item["place"], what),
+                                     style="alarm.Level.Card.TLabel", anchor="w", justify="left"),
+                           self.px(300)).pack(anchor="w", fill="x")
+                sure = ttk.Button(gone, text="Remove it", style="Card.TButton",
+                                  command=lambda r=key: self.rules_remove(r, confirmed=True))
+                sure.pack(side="left", pady=(self.px(4), 0))
+                keep = ttk.Button(gone, text="Keep it", style="Link.TButton", command=lambda r=key: self.rules_keep(r))
+                keep.pack(side="left", padx=(self.px(8), 0), pady=(self.px(4), 0))
+                self.rule_widgets[(key, "confirm")] = sure
+                self.rule_widgets[(key, "keep")] = keep
+            else:
+                remove = ttk.Button(gone, text="Remove", style="Link.TButton", command=lambda r=key: self.rules_remove(r))
+                remove.pack(anchor="w")
+                self.rule_widgets[(key, "remove")] = remove
+        if self.rule_said and self.rule_said[0] == key:   # REDO A-6: the refusal, beside its rule
             row += 1
             self._wrap(ttk.Label(frame, text=self.rule_said[1], style="alarm.Level.Card.TLabel", anchor="w",
                                  justify="left"), self.px(300)).grid(row=row, column=1, columnspan=2, sticky="ew",
                                                                     pady=(self.px(4), 0))
         ttk.Separator(frame).grid(row=row + 1, column=0, columnspan=3, sticky="ew", pady=(self.px(10), 0))
         for (r, _), widget in self.rule_widgets.items():
-            if r == rid:
+            if r == key:
                 widget.bind(KEYS["focus"][0], lambda e, f=frame: self._rules_see(f), add="+")
         return frame
 
-    def _rules_stepper(self, parent, rid, t):
-        """E5: a threshold's stepper within its bounds: minus, the value, plus, and its words."""
+    def _rules_stepper(self, parent, rid, t, key=None):
+        """E5: a threshold's stepper within its bounds: minus, the value, plus, and its words (its widgets
+        keyed by the row's key, REDO 2 F-3)."""
         ttk = self.ttk
+        row_key = rid if key is None else key
         box_ = ttk.Frame(parent, style="Inner.TFrame")
         box_.pack(anchor="w", pady=(0, self.px(4)))
         ttk.Label(box_, text=t["name"], style="Bold.Card.TLabel").pack(side="left", padx=(0, self.px(6)))
@@ -3807,7 +4223,7 @@ class Window:
                 for key in KEYS["act"]:
                     entry.bind(key, lambda e, n=t["name"]: self.rules_threshold(rid, n, e.widget.get().strip(),
                                                                                n + "="))
-                self.rule_widgets[(rid, t["name"] + "=")] = entry
+                self.rule_widgets[(row_key, t["name"] + "=")] = entry
                 continue
             target = t["value"] + step
             ok = t["low"] <= target <= t["high"]
@@ -3817,7 +4233,7 @@ class Window:
             if not ok:
                 button.state(["disabled"])
             button.pack(side="left")
-            self.rule_widgets[(rid, key)] = button
+            self.rule_widgets[(row_key, key)] = button
         ttk.Label(box_, text=t["words"], style="Muted.Card.TLabel").pack(side="left", padx=(self.px(8), 0))
 
     def _rules_filter(self, top=False):
@@ -3847,9 +4263,9 @@ class Window:
             self.rules_canvas.yview_moveto(max(0.0, (top - self.px(8)) / float(total)))
 
     def _wheel(self, step):
-        """The mouse wheel scrolls the Rules list while the pointer is over it."""
-        canvas = self.rules_canvas
-        if self.screen != "rules" or not canvas.winfo_ismapped():
+        """The mouse wheel scrolls the Rules list (M8.2: or the form) while the pointer is over it."""
+        canvas = self.form_canvas if self.screen == "ruleform" else self.rules_canvas
+        if self.screen not in ("rules", "ruleform") or not canvas.winfo_ismapped():
             return
         x, y = self.root.winfo_pointerxy()
         left, top = canvas.winfo_rootx(), canvas.winfo_rooty()
@@ -4388,8 +4804,9 @@ class Window:
         found, sus = self.counts["host"]   # REDO B-6: one count, the verdict's, the rail's and the card's
         self.c.host_tip(view.get("trees"), view.get("new"), found, sus, self.counts["project"])   # E5: the tray
         self._sync_primary()
-        if self.screen == "rules":
-            self._rules_fill()
+        if self.screen in ("rules", "ruleform"):   # M8.2: the form is a screen of the Rules item
+            if self.screen == "rules":
+                self._rules_fill()
             self._seen(seen_lines(own, notes, look))
             return
         if self.screen == "log":
