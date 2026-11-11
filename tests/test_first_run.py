@@ -1118,7 +1118,9 @@ def test_b2_readme_and_help_say_what_a_killed_watch_leaves_per_watch():
     record = "~/.raqib/host/%s" % host.ROUNDS_NAME
     assert host.host_dir("~").replace("\\", "/") == "~/.raqib/host"
     flat = " ".join(readme_section("Watch a project").split())
-    for phrase in ("Such a watch prints nothing. For `raqib watch PROJECT`, `raqib report <trace>` gives the findings.",
+    for phrase in ("A watch ended that way prints nothing.",
+                   "For a watch that printed nothing: for `raqib watch PROJECT`, `raqib report <trace>` gives the"
+                   " findings.",
                    "For `raqib watch --host`, no command re-prints its report: what it had found up to its last round"
                    " is in its state file `%s`" % state, "and its record `%s` (one line per round" % record,
                    "`code_so_far`"):
@@ -1373,8 +1375,9 @@ def test_c3_must_not_touch_a_watch_that_lost_nothing_has_no_such_note(tmp_path, 
 
 def test_c3_readme_says_the_note_and_what_it_does_not_yet_do():
     flat = " ".join(readme_section("Watch a project").split())
-    for phrase in ("the watch's state file and its registry row carry one note of the writes that were lost (how many,"
-                   " since when, on which stream and why), and the final report says it if it can still be printed.",
+    for phrase in ("the watch's state file and its registry row carry one note of the writes that were lost (how many up"
+                   " to the moment the record was kept, since when, on which stream and why), and the final report says it if it"
+                   " can still be printed.",
                    "Not yet done (M9.4): a knock whose only road is the terminal's bell, rung on a terminal that is"
                    " gone, is still recorded as delivered (\"terminal\"), not as a failed knock."):
         assert phrase in flat, phrase
@@ -1419,10 +1422,12 @@ def test_c5_on_windows_the_stop_line_names_ctrl_c_and_ctrl_break_only():
 
 def test_c5_readme_names_a_terminal_that_stops_reading_and_the_newest_knocks():
     flat = " ".join(readme_section("Watch a project").split())
-    assert ("Out of reach too is a terminal that stops reading (Ctrl-S, a full pipe): the stop waits until it drains."
-            in flat)
+    # ADR-0010 D-2 (G3): a terminal that stops reading is not "a watch that prints nothing": it prints when it drains
+    assert ("A terminal that stops reading (Ctrl-S, a full pipe) is another matter: the stop waits until it drains,"
+            " and then says its words." in flat)
+    assert flat.index("A watch ended that way prints nothing.") < flat.index("A terminal that stops reading")
     assert "(written every tick: its findings, holes, its newest knocks and heartbeat," in flat
     assert host.KNOCKS_KEPT > 0   # the state keeps the newest KNOCKS_KEPT knocks and counts the older
     helped = " ".join(cli.__doc__.split())
-    assert "a terminal that stops reading (Ctrl-S, a full pipe): the stop waits until it drains" in helped
+    assert "a terminal that stops reading (Ctrl-S, a full pipe): the stop waits until it drains, and then says" in helped
     assert "its newest knocks" in helped

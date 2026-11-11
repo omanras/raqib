@@ -119,21 +119,23 @@ no command, raqib prints its usage and exits 2.
       for this command and watch --host alike: "stopped (SIGTERM)", the
       final report, the registry row finished, its exit. A terminal that is
       gone (a hung-up tty, a closed pipe) loses the words only, never the
-      record or the code, and the words lost are noted in the state file
-      and the registry row; the first lines say what stops it and which
+      record or the code, and the words lost up to the moment the record
+      was kept are noted in the state file and the registry row; the first
+      lines say what stops it and which
       signals were left ignored (REDO B-1, B-3, REDO 2 C-3). The handlers are
       installed here, in the main thread only, and the earlier ones are
       restored when the command ends; a second signal does not cut the
       report short; no process is signalled (A4). Out of reach: SIGKILL; on
       Windows TerminateProcess (taskkill /F, the Task Manager) and closing
-      the console window, logoff and shutdown; and a terminal that stops
-      reading (Ctrl-S, a full pipe): the stop waits until it drains. Such a
-      watch prints nothing: for watch PROJECT, `raqib report TRACE` gives
-      the findings; for watch --host no command re-prints its report: what
+      the console window, logoff and shutdown. A watch ended that way
+      prints nothing: for watch PROJECT, `raqib report TRACE` gives the
+      findings; for watch --host no command re-prints its report: what
       it had found up to its last round is in its state file
       ~/.raqib/host/rounds.jsonl.watch.json (findings, holes, its newest
       knocks, heartbeat, code_so_far) and its record
-      ~/.raqib/host/rounds.jsonl (one line per round).
+      ~/.raqib/host/rounds.jsonl (one line per round). Another matter is
+      a terminal that stops reading (Ctrl-S, a full pipe): the stop waits
+      until it drains, and then says its words.
   watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
