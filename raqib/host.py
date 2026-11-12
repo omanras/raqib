@@ -296,6 +296,7 @@ CLOCK_STEP = ("the wall clock stepped back %.0f s during the watch (the watch's 
               " now %s): an os event is history only when it is before that earlier start (T-3)")
 JUDGED_ELSEWHERE = "judged on another tree"   # REDO R-3: one act, one finding, shown on the nearest tree
 BEFORE_START = "before the watch's start: history (never knocked)"                 # REDO R-2
+LOGGED_EVENT = {"process": 1, "file": 11, "net": 3}   # AM-2: an os line's tool -> its Sysmon event (os_sysmon.TOOLS)
 NO_SAMPLE_NOTE = ("the round's inventory carries no process sample (an export read as rounds, or a reader before"
                   " M7.8): a tree not in the round is called gone, never quiet (ADR-0007 P-2), or kept when the"
                   " round's connections were not read either (R-4)")
@@ -1626,6 +1627,7 @@ class HostWatch:
         self.late_beats = {}         # M7.5 REDO N-4: tree word -> source beats read by the final poll (no round)
         self.rhythm_state = {}       # tree key -> {"fired", "last_cycle"} (once per streak)
         self.notes_said = set()      # M7.4 E1: the per-run notes said once
+        self.not_judged_at = {}      # AM-3: (tree, file, rule) -> the index in notes of its "could not judge" note
         self.blind = []              # K-8: the blind spots of the run (bytes, start times): counted apart
         self.conn_state = {}         # K-5: tree key -> {"open": remotes of its last round, "bytes": last read}
         self.notes.append(RHYTHM_HOLES_NOTE)
@@ -2878,9 +2880,18 @@ class HostWatch:
             out[k] = dict(t, key=list(k), started=k[2]) if k != key else t
         return out
 
+    def _logged_time(self, skews):
+        """AM-2: a Sysmon event kind whose time was taken from the log (AM-1), said once per kind per watch: a
+        note, not a hole and not a knock (nothing is lost; the watch's result is not changed by it). skews: event
+        id (text or int) -> the skew in whole seconds."""
+        for kind, skew in sorted((skews or {}).items(), key=lambda x: str(x[0])):
+            if isinstance(skew, int) and not isinstance(skew, bool):
+                self._note_once(("logged-time", str(kind)), discover.logged_note(kind, skew))
+
     def _channel_holes(self, now, n, inv):
         """M7.9 E1, REDO X-1/X-3/X-4/X-8: what the round's inventory says of
         its channel read: each hole of the read is a hole of that round."""
+        self._logged_time(inv.get("logged_time"))
         record = inv.get("channel")
         if record is None:
             if self.platform == "win32" and self.sysmon_ok() and not self.between_said:   # AB-3: said once, printed
@@ -3476,6 +3487,13 @@ class HostWatch:
             if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
                 # M8.2 REDO 2 F-6: only the notes of the rules PRE_M78_NOTE names; a person's rule keeps its own
                 notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
+        if src.kind == "os":   # AM-2: a follow's line timed from the log: said once per event kind per watch
+            skews = {}
+            for _, rec in feed.numbered:
+                meta = rec.get("input_meta") if isinstance(rec, dict) and rec.get("phase") == "pre" else None
+                if isinstance(meta, dict) and meta.get("time_from") == "logged" and rec.get("source") == "os":
+                    skews.setdefault(LOGGED_EVENT.get(rec.get("tool"), rec.get("tool")), meta.get("time_skew_s"))
+            self._logged_time(skews)
         if getattr(feed, "not_judged", None):
             self.source_not_judged[feed.path] = feed.not_judged
         entry_tree = self.trees.get(key) or {}
@@ -3575,6 +3593,17 @@ class HostWatch:
                 continue
             text = "tree %s, %s: rule %s %s: %s" % (tree_word(key), feed.path, note["rule_id"], note["status"],
                                                    note["detail"])
+            if note.get("status") == "partial" and str(note.get("detail", "")).startswith("could not judge"):
+                # AM-3 (F2): one note per tree, file and rule, the latest count: a later pass replaces it in place
+                where = (tree_word(key), feed.path, note["rule_id"])
+                at = self.not_judged_at.get(where)
+                if at is not None:
+                    self.notes[at] = text
+                    continue
+                if text not in self.notes:
+                    self.notes.append(text)
+                self.not_judged_at[where] = self.notes.index(text)
+                continue
             if text not in self.notes:
                 self.notes.append(text)
         return fired

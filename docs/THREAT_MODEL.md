@@ -485,6 +485,28 @@ Rulings: ADR-0003 Amendments C and D.
   "asked, not done"; an act started more than 10 s after its call, or a
   call written more than 10 s after its act, is a finding. Its budget is
   0.1 until the field test.
+- **A Sysmon that stamps its events behind the time they were logged
+  (ADR-0007 Amendment AM).** On a machine that was suspended for weeks (a
+  virtual one) Sysmon can stamp an event's own UtcTime weeks before the
+  time the log gives it (System/TimeCreated): its network events were
+  seen 26 days behind while its process and file events were not. Taken
+  as it stands, every connection would be before the watch's start:
+  history, never knocked, and a round's window would start weeks back.
+  So the time Raqib uses for a Sysmon event - before or after the watch's
+  start, the order of a tree's lines, a beat, a window - is the time it
+  was logged wherever that is read and UtcTime is more than 60 s from it;
+  where the two agree within 60 s, or the export has no TimeCreated,
+  UtcTime as before, to the byte. An os line timed from the log says so:
+  input_meta.time_from "logged" and input_meta.time_skew_s, the skew in
+  whole seconds (positive: UtcTime is behind). The lag itself is a note,
+  said once per event kind per watch ("Sysmon's event 3 carries a time
+  26 days 7 hours behind the time it was logged (... s): the logged time
+  is used"): not a hole and not a knock, since nothing is lost once the
+  logged time is used, and a watch on such a machine can still end
+  CLEAN. What is not covered: an event whose logged time is itself wrong
+  (the log's clock) is taken as the log gives it; a lag of 60 s or less
+  is not corrected; where its two times agree, a process's start (event
+  1) matches a sampled CreationDate exactly as before.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the

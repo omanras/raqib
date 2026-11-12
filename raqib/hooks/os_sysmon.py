@@ -60,7 +60,9 @@ same as an oldest-first one.
 What is written (C-5), one session per run, `os-<PID>`:
 - session_start at the first kept event's time; when the export holds no
   event of some read id, the line carries `missing_events` (the ids);
-- per event a `pre` and a `post` with one seq, at the event's UtcTime (the
+- per event a `pre` and a `post` with one seq, at the event's time (AM-1:
+  its UtcTime, or the time it was logged where the two are more than 60 s
+  apart: its input_meta then has time_from "logged" and time_skew_s; the
   time of the act, not of the read), tool `process`, `file` or `net`, and
   `source: "os"`; the post carries `ok: true` and `output_meta: {}` (an os
   event has no output);
@@ -262,12 +264,15 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     for ev in discover.sysmon_events(text, "sysmon", problems, READ):
         present.add(ev["event"])
         d = ev["data"]
-        pid, ts = _int(d.get("ProcessId")), discover._ts(d.get("UtcTime"))
+        # AM-1: the time it was logged where UtcTime is more than discover.SKEW from it, else UtcTime as before
+        ts, time_from, skew = discover.event_time(d.get("UtcTime"), ev.get("logged"))
+        pid = _int(d.get("ProcessId"))
         if pid is None or ts is None:
             silences.append("the event at line %d (Sysmon %d) has no ProcessId or UtcTime: it is not recorded"
                             % (ev["line"], ev["event"]))
             continue
-        events.append(dict(ev, pid=pid, ts=ts, guid=_guid(d.get("ProcessGuid"))))
+        events.append(dict(ev, pid=pid, ts=ts, guid=_guid(d.get("ProcessGuid")), time_from=time_from,
+                           time_skew_s=skew))
     for p in problems:
         silences.append("the export's line %d cannot be read (%s): that event is not recorded"
                         % (p["line"], p["reason"]))
@@ -434,6 +439,8 @@ def _lines(kept, root, cwd, start_seq, missing):
     for e, depth, parent in kept:
         seq += 1
         digest, meta = _event_fields(e, depth)
+        if e.get("time_from") is not None:   # AM-1: a line timed from the log says so (else no key: as before)
+            meta.update(time_from=e["time_from"], time_skew_s=e["time_skew_s"])
         if e["event"] == 1:
             if parent is not None and parent in line_of:
                 meta["parent_seq"] = line_of[parent]
@@ -918,8 +925,9 @@ class Channel:
         events = list(discover.sysmon_events(kept_text, "sysmon", [], None))
         record.update(events=len(kept), top=max(ids + ([self.after] if self.after is not None else [])) if ids
                       else self.after, kinds=sorted({e["event"] for e in events if e["event"] in ROUND_IDS}),
-                      event1=sorted({(_int(e["data"].get("ProcessId", "")), discover.iso(discover._ts(
-                          e["data"].get("UtcTime")))) for e in events if e["event"] == 1} - {(None, None)},
+                      event1=sorted({(_int(e["data"].get("ProcessId", "")), discover.iso(discover.event_time(
+                          e["data"].get("UtcTime"), e.get("logged"))[0])) for e in events if e["event"] == 1}
+                          - {(None, None)},
                           key=lambda x: (x[0] or 0, x[1] or "")),
                       event1_images=sorted({_image(e["data"].get("Image")) for e in events
                                             if e["event"] == 1} - {None, ""}))

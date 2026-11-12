@@ -230,6 +230,41 @@ def _ts(value):
     return dt.replace(tzinfo=datetime.timezone.utc) if dt.tzinfo is None else dt.astimezone(datetime.timezone.utc)
 
 
+SKEW = 60   # AM-1: seconds within which a Sysmon event's UtcTime and the time it was logged are one time
+
+
+def event_time(utc, logged):
+    """AM-1: the time of a Sysmon event, from its UtcTime text and the text
+    of System/TimeCreated's SystemTime (the time it was logged): (time,
+    time_from, skew_s). UtcTime (time_from None, skew_s None) where no
+    logged time is read, where UtcTime is not read, or where the two are
+    within SKEW seconds: as before, to the byte. Else the logged time,
+    "logged", and the skew in whole seconds (positive: UtcTime is behind)."""
+    at, when = _ts(utc), _ts(logged)
+    if at is None or when is None:
+        return at, None, None
+    skew = (when - at).total_seconds()
+    if abs(skew) <= SKEW:
+        return at, None, None
+    return when, "logged", int(round(skew))
+
+
+def skew_words(skew_s):
+    """AM-2: a skew in seconds as days and hours (minutes under an hour), and its side of the logged time."""
+    left = abs(int(skew_s))
+    days, hours, minutes = left // 86400, left % 86400 // 3600, left % 3600 // 60
+    parts = [("%d day%s" % (days, "" if days == 1 else "s")) if days else "",
+             ("%d hour%s" % (hours, "" if hours == 1 else "s")) if hours else ""]
+    text = " ".join(x for x in parts if x) or "%d minute%s" % (minutes, "" if minutes == 1 else "s")
+    return "%s %s" % (text, "behind" if skew_s > 0 else "ahead of")
+
+
+def logged_note(kind, skew_s):
+    """AM-2: the note said once per event kind per watch where a Sysmon event's time is taken from the log."""
+    return ("Sysmon's event %s carries a time %s the time it was logged (%d s): the logged time is used"
+            % (kind, skew_words(skew_s), skew_s))
+
+
 def iso(dt):
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z" if dt else None
 
@@ -910,7 +945,7 @@ def parse_sysmon(text, src="sysmon", keyed=False):
     records, problems = [], []
     for ev in sysmon_events(text, src, problems, SYSMON_READ):
         records += [dict(r, event=ev["event"]) for r in _sysmon_records(src, ev["line"], ev["event"], ev["data"],
-                                                                         problems, keyed)]
+                                                                         problems, keyed, ev.get("logged"))]
     return records, problems
 
 
@@ -926,7 +961,8 @@ def sysmon_events(text, src="sysmon", problems=None, ids=None):
     line (the line of its <Event>), event (the EventID), record_id (the
     EventRecordID, or None) and data (every named Data field as text,
     stripped: the whole CommandLine, ProcessGuid and ParentProcessGuid, and
-    Protocol, so a UDP event 3 is there too). Events of other providers are
+    Protocol, so a UDP event 3 is there too) and logged (System/TimeCreated's
+    SystemTime text, the time it was logged, or None: AM-1). Events of other providers are
     skipped. An event that cannot be read (no </Event>, a DOCTYPE or ENTITY,
     malformed XML) is appended to problems as it is met, so a caller that
     adds problems of its own keeps them in text order."""
@@ -950,7 +986,7 @@ def sysmon_events(text, src="sysmon", problems=None, ids=None):
         except ET.ParseError as exc:
             problems.append(_problem(src, line, "XML: %s" % exc))
             continue
-        provider = event_id = record_id = None
+        provider = event_id = record_id = logged = None
         data = {}
         for el in event.iter():
             tag = el.tag.rsplit("}", 1)[-1]
@@ -960,18 +996,32 @@ def sysmon_events(text, src="sysmon", problems=None, ids=None):
                 event_id = _int(el.text or "")
             elif tag == "EventRecordID":
                 record_id = _int(el.text or "")
+            elif tag == "TimeCreated" and logged is None:
+                logged = el.get("SystemTime")
             elif tag == "Data" and el.get("Name"):
                 data[el.get("Name")] = (el.text or "").strip()
         if provider != SYSMON_PROVIDER or (ids is not None and event_id not in ids):
             continue
-        yield {"line": line, "event": event_id, "record_id": record_id, "data": data}
+        yield {"line": line, "event": event_id, "record_id": record_id, "data": data, "logged": logged}
 
 
-def _sysmon_records(src, line, event_id, d, problems, keyed=False):
+def _sysmon_records(src, line, event_id, d, problems, keyed=False, logged=None):
     """The records of one Sysmon event, all with one rendering of its line:
     the event itself, and a process record derived from its Image (and, for
-    event 1, from its Parent fields) so a talker has a name."""
-    pid, ts = _int(d.get("ProcessId", "")), _ts(d.get("UtcTime"))
+    event 1, from its Parent fields) so a talker has a name. AM-1: ts is
+    event_time()'s (the logged time where UtcTime is more than SKEW from
+    it: each record then carries time_from "logged" and time_skew_s; the
+    line's text keeps the event's own UtcTime)."""
+    out = _sysmon_records_at(src, line, event_id, d, problems, keyed, event_time(d.get("UtcTime"), logged))
+    return out
+
+
+def _sysmon_records_at(src, line, event_id, d, problems, keyed, timed):
+    ts, time_from, skew = timed
+    if time_from is not None:
+        return [dict(r, time_from=time_from, time_skew_s=skew)
+                for r in _sysmon_records_at(src, line, event_id, d, problems, keyed, (ts, None, None))]
+    pid = _int(d.get("ProcessId", ""))
     image = d.get("Image") or None
     guid = _guid_text(d.get("ProcessGuid"))   # M7.9: the process's own key (None where the event has none)
     if pid is None:
@@ -2838,6 +2888,13 @@ def run(texts, catalog, window=None, holes=(), live=False, run=None, processes=F
                        "records": records, "problems": problems, "text_read": text is not None,
                        "lines": text.count("\n") + (not text.endswith("\n")) if text else 0})
     inv = build(parsed, catalog, window, holes, live, processes=processes, channel=channel)
+    logged = {}   # AM-1, AM-2: per Sysmon event id, the skew of its first event timed from the log
+    for source in parsed:
+        for r in source["records"]:
+            if r.get("time_from") == "logged" and isinstance(r.get("event"), int):
+                logged.setdefault(r["event"], r["time_skew_s"])
+    if logged:   # only where an event was timed from the log: every other inventory as before
+        inv["logged_time"] = {str(k): logged[k] for k in sorted(logged)}
     inv["system_drive"] = system_drive_of(run)
     return inv
 
