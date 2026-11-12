@@ -1,0 +1,75 @@
+# The real-agents probe (never merged; the commander's word of 2026-11-13: run the agents on GitHub's machines,
+# without asking each time). A real agent CLI is installed on the runner and pointed at tools/rig/model.py, a
+# scripted model on the runner itself that asks for three fixed commands (curl, curl, whoami). No key, no secret,
+# read-only permissions; the machine is thrown away after the job.
+name: agents-probe
+on:
+  push:
+    branches: [claude/rig-probe]
+permissions:
+  contents: read
+jobs:
+  linux:
+    name: agents (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: install raqib and the agents
+        run: |
+          python -m pip install --disable-pip-version-check .
+          npm install -g @qwen-code/qwen-code || echo "qwen: install failed"
+          npm install -g opencode-ai || echo "opencode: install failed"
+          python -m pip install --disable-pip-version-check kimi-cli || echo "kimi: install failed"
+          qwen --version || true; opencode --version || true; kimi --version || true
+      - name: the scripted model
+        run: |
+          ip=$(hostname -I | awk '{print $1}')
+          echo "RIG_URL=http://$ip:8790/v1" >> "$GITHUB_ENV"
+          nohup python tools/rig/model.py --port 8790 --log "$RUNNER_TEMP/model.log" > /dev/null 2>&1 &
+          sleep 2; curl -s "http://$ip:8790/v1/models"; echo
+      - name: qwen under the watch
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/w-qwen" && cd "$RUNNER_TEMP/w-qwen"
+          raqib watch --host --rounds 22 --every 5 --no-open > ../watch-qwen.out 2> ../watch-qwen.err &
+          w=$!; sleep 7
+          OPENAI_API_KEY=rig OPENAI_BASE_URL="$RIG_URL" OPENAI_MODEL=rig-model timeout 80 qwen -p "Do the task." --yolo > ../agent-qwen.out 2>&1 || echo "qwen rc=$?"
+          wait $w || true
+          echo "=== agent"; tail -30 ../agent-qwen.out; echo "=== model log"; cat "$RUNNER_TEMP/model.log"; : > "$RUNNER_TEMP/model.log"
+          echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-qwen.out
+      - name: kimi under the watch
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/w-kimi" && cd "$RUNNER_TEMP/w-kimi"
+          raqib watch --host --rounds 22 --every 5 --no-open > ../watch-kimi.out 2> ../watch-kimi.err &
+          w=$!; sleep 7
+          KIMI_API_KEY=rig KIMI_BASE_URL="$RIG_URL" KIMI_MODEL_NAME=rig-model timeout 80 kimi --print -p "Do the task." --yolo > ../agent-kimi.out 2>&1 || echo "kimi rc=$?"
+          wait $w || true
+          echo "=== agent"; tail -30 ../agent-kimi.out; echo "=== model log"; cat "$RUNNER_TEMP/model.log"; : > "$RUNNER_TEMP/model.log"
+          echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-kimi.out
+      - name: opencode under the watch
+        continue-on-error: true
+        run: |
+          mkdir -p "$RUNNER_TEMP/w-opencode" && cd "$RUNNER_TEMP/w-opencode"
+          cat > opencode.json <<JSON
+          {"\$schema": "https://opencode.ai/config.json",
+           "provider": {"rig": {"npm": "@ai-sdk/openai-compatible", "name": "Rig",
+                                "options": {"baseURL": "$RIG_URL", "apiKey": "rig"},
+                                "models": {"rig-model": {"name": "Rig"}}}},
+           "model": "rig/rig-model", "permission": {"bash": "allow", "edit": "allow"}}
+          JSON
+          raqib watch --host --rounds 22 --every 5 --no-open > ../watch-opencode.out 2> ../watch-opencode.err &
+          w=$!; sleep 7
+          timeout 80 opencode run "Do the task." > ../agent-opencode.out 2>&1 || echo "opencode rc=$?"
+          wait $w || true
+          echo "=== agent"; tail -30 ../agent-opencode.out; echo "=== model log"; cat "$RUNNER_TEMP/model.log"
+          echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-opencode.out
