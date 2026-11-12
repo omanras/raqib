@@ -1,17 +1,17 @@
-# HANDOFF — M7.16 REDO  (ADR-0007 Amendment AN on review 2026-11-13-M7.16.md)
+# HANDOFF — M7.17  (the rhythm and a tree that is quiet at the sample: ADR-0007 Amendment AP)
 
-Task: the REDO of M7.16 (4278453). AM-1 to AM-3 stand as built. Rulings AN-1 to AN-6.
+Task: a tree's source beats are taken only in a round the tree is in; a tree that is quiet at the sample keeps a source
+whose beats nothing judges (the final poll counts them "in no round"). Rulings AP-1 to AP-4.
 
 Scope:
-  raqib/hooks/os_sysmon.py, raqib/discover.py, raqib/host.py, tests/, docs/THREAT_MODEL.md, docs/review/2026-11-13-M7.16-questions.md
+  raqib/host.py, raqib/rules/catalog/HOST-RHYTHM.yaml, tests/ (the rule's fixtures and tests/fixtures/host/make.py included), tools/rig/check.py, docs/THREAT_MODEL.md, docs/review/
 
 Exit criteria:
-- E1 (AN-1) A TimeCreated that is there and does not parse: the follow writes one RAQIB-SILENCE line per event kind saying the logged time was not read and UtcTime is used unchecked; the round's record has a problem saying the same; tested through the follow and through a round (the hole is in the report). An event with an unreadable UtcTime and a readable logged time is a line timed from the log. Not touched, tested: no TimeCreated at all gives no word and the same lines.
-- E2 (AN-2) Within one pass, an event keyed by ProcessGuid joins the tree if its guid is in the tree by the end of the pass; an event 1 if its parent is. Tested with the packet's R-2 case through the real follow (a child's event 1 logged 61.1 s late, its event 3 logged 59 s late: both lines are written), and a grandchild's subtree. Not touched, tested: the existing fixtures and exports give byte for byte the lines they gave; pid-only events as before.
-- E3 (AN-4) The beats read by the final poll are judged by HOST-RHYTHM before the report, by the code that judges a round's beats: a rhythm completing in the last round is a finding (and its knock) where the same beats one round earlier are; RHYTHM BEATS no longer reports them as "in no round" unjudged. Not touched, tested: a watch whose final poll reads no beat; no finding is made twice. If it needs a second road: questions file, no guess.
-- E4 (AN-5) The ALARMS line's count of source findings is the listing's, and says the number of findings behind it when a pair was joined; RESULT and the exit code unchanged. Tested through a watch where one curl is seen by both sources.
-- E5 (AN-3, AN-6) THREAT_MODEL says AN-3's three cases and AN-6's cause-not-established; os_sysmon's docstrings are true; the note names the record its skew was measured on where read. Event 1 beyond 60 s has a test that states what happens (two trees or one).
-- E6 Gate green; code and tests ASCII; no test reads docs/review or asserts the real clock.
-Not in scope: the clipboard, docs/GUIDE.md, README.md, raqib/app.py, raqib/hostwin.py, new rules, ADR-0011.
-Commit: `landed: M7.16 REDO an event's time is when it was logged` or `STOP: M7.16 REDO <reason>`.
+- E1 (AP-2) In a round, a quiet tree whose source gained a beat since the last round gets a HostTree line of that round written by the code that writes a candidate's line, with input_meta.class "quiet" and input_meta.rhythm from `_rhythm` (same ring, K, W, R). Tested through rounds and the report with a tree seen at one sample and then quiet, whose os source reads three cycles (a talk to one destination, a child within 30 s) between samples: HOST-RHYTHM fires in the round that reads the third, once, cites its beats, and knocks as a candidate's does; RHYTHM BEATS no longer counts those beats as "in no round".
+- E2 (AP-2, not touched; a test each) A quiet line makes no NEW-AGENT or NEW-AGENT-UNKNOWN finding and changes no tree's history, candidate_before or first round; every rule of the catalog that reads a HostTree line gives on the existing fixtures what it gave (the gate's check-rules), and a test states what each gives on a quiet line; a quiet tree with no new beat has no line; a gone tree has none; a named quiet tree's rhythm does not fire HOST-RHYTHM (named: NEW-AGENT's); a benign quiet tree's rhythm is judged as a benign candidate's is.
+- E3 (AP-3) HOST-RHYTHM.yaml: the match takes class candidate or quiet (by what the engine's match already offers; a new match operator is a design question: questions file); its fixtures gain one quiet positive and two quiet negatives (no cycle; a few beats of a long-lived service), made by tests/fixtures/host/make.py; fp_budget is the measured number and the comment says how it was measured; holes and description say the reach and what is out.
+- E4 (AP-4) tools/rig/check.py X12: MET when no beat waits for the final poll, MISSED otherwise (no longer OPEN); tests/test_rig_check.py follows.
+- E5 THREAT_MODEL says it (no milestone tokens). Gate green; code and tests ASCII; no test reads docs/review or asserts the real clock.
+Not in scope: beats that arrive after the last round (said, as today); the final poll; raqib/discover.py; raqib/app.py; the clipboard; new rules.
+Commit: `landed: M7.17 the rhythm of a quiet tree` or `STOP: M7.17 <reason>`.
 Read HANDOFF.md and do only the task it specifies.

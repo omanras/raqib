@@ -86,7 +86,8 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.13 the third field run (landed 2026-11-11; ADR-0007 Amendments AF, AG, AH; docs/review/2026-11-11-third-field-run.md): a watch that cannot read the channel judges by the host's own record, knocks once for it, and its report says it in one line
 - M7.14 a follow that returns (landed 2026-11-12; ADR-0007 Amendments AI, AJ, AK, AL; the watches of 2026-11-12): a tree's os follow asks the channel a bounded question; a tree whose follow reads nothing is judged by the host's own record too
 - M7.15 recorded: a process of another account whose start time the reader does not read though the system lists it
-- M7.16 an event's time is when it was logged (ADR-0007 Amendment AM; docs/review/2026-11-13-the-elevated-watch.md): Sysmon's network events stamped weeks behind are no longer history; the lag is a note; a rule's not-judged note is one note
+- M7.16 an event's time is when it was logged (landed 2026-11-13; ADR-0007 Amendments AM, AN, AO; docs/review/2026-11-13-the-elevated-watch.md): Sysmon's network events stamped weeks behind are no longer history; the lag is a note; a rule's not-judged note is one note
+- M7.17 the rhythm and a tree that is quiet at the sample (ADR-0007 AO-2; the rig reproduces it): begun by a test that confirms or refutes that a quiet tree's source beats wait for the final poll; with what AO-3 records
 - M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (landed 2026-11-11; ADR-0009 Amendments E-H, decisions 4-5 accepted): `raqib rules --new / --remove`, the form with its Test and "on your records", class USER, Remove by the row's own place, checks first
 - M8.3 the window's notes after M8.2 (ADR-0009 H): a log of what the catch-alls caught, the orphan overlay entry's words, a real watch under the form's "running" test, a way for the person to name a program benign
@@ -103,4 +104,9 @@ point. Phase 6 runs before the rest of Phase 5.
 Nothing is built until he judges the ADR. Its order: the event (`raqib-event/1`, technique ids, a heartbeat); the
 sinks (Event Log, syslog); the service; accounts, logons, tasks, services and a tree's reach; the proxy joined to
 the host watch and PROXY-BYPASS; file reads, measured first.
+
+## Phase 11 — The rig (ADR-0012; the commander's order, 2026-11-13)
+- M11.1 the rig (landed with ADR-0012): a workflow of its own; a real Windows with Sysmon and Linux; a stand-in agent whose acts are known; tools/rig/check.py states each expectation MET, MISSED or OPEN; reports, does not fail
+- M11.2 recorded: real agents under a scripted model server on the runner (no key, no cost), more than one
+- M11.3 recorded: a watch that is not elevated on the rig; the window's opening time (with M8.5)
 

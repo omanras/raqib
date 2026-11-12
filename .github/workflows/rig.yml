@@ -1,13 +1,20 @@
-# The rig probe (never merged): Raqib on a real Windows with a real Sysmon, watching a stand-in agent whose acts
-# are known. It prints what the watch reported; it asserts nothing yet.
-name: rig-probe
+# The rig (ADR-0012): Raqib on a real machine, watching a stand-in agent whose acts are known, on every push.
+# Windows with a real Sysmon (installed here, all events of the kinds Raqib reads), and Linux. tools/rig/check.py
+# states each expectation as MET, MISSED or OPEN; the job reports and does not fail on a MISSED one (the gate is
+# what decides a merge). It needs no secret; it downloads Sysmon from Microsoft and talks to two public hosts.
+name: rig
+
 on:
   push:
-    branches: [claude/rig-probe]
+    branches: [main, "claude/**"]
+  workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   windows:
+    name: rig (windows, Sysmon)
     runs-on: windows-latest
     timeout-minutes: 20
     env:
@@ -22,38 +29,76 @@ jobs:
           python-version: "3.12"
       - name: install raqib
         run: python -m pip install --disable-pip-version-check .
-      - name: install Sysmon (all events of the kinds Raqib reads, and the clipboard)
+      - name: install Sysmon
         shell: pwsh
         run: |
           Invoke-WebRequest https://download.sysinternals.com/files/Sysmon.zip -OutFile $env:RUNNER_TEMP\Sysmon.zip
+          "Sysmon.zip sha256 " + (Get-FileHash $env:RUNNER_TEMP\Sysmon.zip -Algorithm SHA256).Hash
           Expand-Archive $env:RUNNER_TEMP\Sysmon.zip $env:RUNNER_TEMP\Sysmon -Force
-          (Get-FileHash $env:RUNNER_TEMP\Sysmon.zip -Algorithm SHA256).Hash
           & $env:RUNNER_TEMP\Sysmon\Sysmon64.exe -accepteula -i tools\rig\sysmon-all.xml
           Start-Sleep 3
-          & $env:RUNNER_TEMP\Sysmon\Sysmon64.exe -c | Select-Object -First 30
-      - name: doctor
-        shell: pwsh
-        continue-on-error: true
-        run: raqib --version; raqib doctor
       - name: watch the host while the stand-in agent works
         shell: pwsh
         run: |
           $out = "$env:RUNNER_TEMP\watch.out"; $err = "$env:RUNNER_TEMP\watch.err"
           $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","16","--every","5","--no-open" -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
           Start-Sleep 7
-          python tools\rig\workload.py
+          python tools\rig\workload.py | Tee-Object -FilePath $env:RUNNER_TEMP\workload.out
           $w.WaitForExit(180000) | Out-Null
-          "=== exit code: $($w.ExitCode)"
-          "=== watch stdout"; Get-Content $out
-          "=== watch stderr"; Get-Content $err
-      - name: the sources the watch kept
+          "code=$($w.ExitCode)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "=== the watch's report"; Get-Content $out
+          "=== the watch's stderr"; Get-Content $err
+      - name: read the report against what the stand-in did
         shell: pwsh
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --summary $env:GITHUB_STEP_SUMMARY
+      - name: gather what the watch wrote
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force rig-out | Out-Null
+          Copy-Item $env:RUNNER_TEMP\watch.out, $env:RUNNER_TEMP\watch.err, $env:RUNNER_TEMP\workload.out rig-out -ErrorAction SilentlyContinue
+          Copy-Item $HOME\.raqib\host\sources rig-out\sources -Recurse -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rig-windows
+          path: rig-out/
+          if-no-files-found: ignore
+
+  linux:
+    name: rig (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install raqib
+        run: python -m pip install --disable-pip-version-check .
+      - name: watch the host while the stand-in agent works
+        run: |
+          raqib watch --host --rounds 16 --every 5 --no-open > "$RUNNER_TEMP/watch.out" 2> "$RUNNER_TEMP/watch.err" &
+          w=$!
+          sleep 7
+          python tools/rig/workload.py | tee "$RUNNER_TEMP/workload.out"
+          code=0; wait $w || code=$?
+          echo "code=$code" >> "$GITHUB_ENV"
+          echo "=== the watch's report"; cat "$RUNNER_TEMP/watch.out"
+          echo "=== the watch's stderr"; cat "$RUNNER_TEMP/watch.err"
+      - name: read the report against what the stand-in did
+        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --summary "$GITHUB_STEP_SUMMARY"
+      - name: gather what the watch wrote
         if: always()
         run: |
-          Get-ChildItem $HOME\.raqib\host\sources | ForEach-Object { "=== $($_.Name) ($($_.Length) bytes)"; Get-Content $_.FullName -TotalCount 60 }
-      - name: what Sysmon logged of the clipboard (event 24, header only)
-        shell: pwsh
+          mkdir -p rig-out
+          cp "$RUNNER_TEMP/watch.out" "$RUNNER_TEMP/watch.err" "$RUNNER_TEMP/workload.out" rig-out/ 2>/dev/null || true
+          cp -r "$HOME/.raqib/host/sources" rig-out/sources 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
         if: always()
-        continue-on-error: true
-        run: |
-          wevtutil qe Microsoft-Windows-Sysmon/Operational "/q:*[System[EventID=24]]" /c:3 /rd:true /f:text
+        with:
+          name: rig-linux
+          path: rig-out/
+          if-no-files-found: ignore
