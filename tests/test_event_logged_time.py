@@ -13,6 +13,7 @@ earlier). SYNTHETIC: host `host`, user `user`, RFC 5737 addresses only. No test
 here reads the Table's review folder or the real clock.
 """
 import datetime
+import hashlib
 import json
 import re
 import sys
@@ -31,6 +32,7 @@ from test_round_channel import EXPLORER, G_KIMI, G_SHELL, PS, WALL0, channel_xml
 from test_host_third_field_run import KIMI, CURL, report, watch  # noqa: E402
 from test_host_follow_returns import START, FollowChannel, Rounds, Script, at, follow_through, rounds, \
     settled_follows  # noqa: E402
+from test_host_follow_returns import CURL_BORN, CURL_TALK, KIMI_WORD, Follow, against_without  # noqa: E402
 
 UTC = datetime.timezone.utc
 LAG = datetime.timedelta(days=26, hours=7, minutes=41, seconds=33, milliseconds=383)   # the field's lag
@@ -114,8 +116,11 @@ def test_e1_am1_the_time_is_the_logged_one_beyond_sixty_seconds_else_utctime_to_
                   "not a time"):
         assert discover.event_time("2026-11-12 20:42:11.297", agree) == (utc, None, None)   # within 60 s, or unread
     assert discover.event_time("2026-11-12 20:42:11.296", "2026-11-12T20:43:11.297Z")[1:] == ("logged", 60)
-    assert discover.event_time(None, "2026-11-12T20:43:11.297Z") == (None, None, None)   # no UtcTime: as before
-    assert discover.event_time("x", "2026-11-12T20:43:11.297Z") == (None, None, None)
+    # AN-1: no UtcTime read and a logged time read: timed from the log, no skew (before AN-1: dropped)
+    assert discover.event_time(None, "2026-11-12T20:43:11.297Z") == (logged.replace(microsecond=297000), "logged",
+                                                                      None)
+    assert discover.event_time("x", "2026-11-12T20:43:11.297Z")[1:] == ("logged", None)
+    assert discover.event_time("x", "not a time") == discover.event_time(None, None) == (None, None, None)
 
 
 def test_e2_am2_the_notes_words_name_the_kind_and_the_skew_in_days_and_hours():
@@ -142,9 +147,12 @@ def test_e1_am1_through_the_follow_the_net_lines_are_live_in_order_with_the_proc
                                                                                      "time_skew_s": SKEW_S}
         else:
             assert "time_from" not in json.dumps(x) and "time_skew_s" not in json.dumps(x)
-    old_times(monkeypatch)   # before AM-1: the talks were weeks before the watch's start: the follow wrote no line
+    old_times(monkeypatch)   # UtcTime alone (before AM-1): the talks weeks before the watch's start
     before, _, _, _ = follow_through(FollowChannel([shape()]), 1, log=tmp_path / "old.jsonl", since=START)
-    assert pres(before) == [x for x in FIELD_ORDER if x[0] != "net"]
+    assert [x for x in pres(before) if x[0] != "net"] == [x for x in FIELD_ORDER if x[0] != "net"]
+    # AN-2: sorted before their process's event 1 they are still the tree's: at their UtcTime, weeks back (history)
+    olds = [x for x in pres(before) if x[0] == "net"]
+    assert len(olds) == 2 and all(discover._ts(t) < START for _, t in olds)
 
 
 def build_lines(text, root=9176):
@@ -204,10 +212,11 @@ def test_e1_e2_am1_am2_through_the_rounds_a_trees_talk_is_in_its_round_its_windo
     assert seen[1]["sample"].startswith(window)   # the round's window is the round's: its talks at their logged time
     assert "2026-10-" not in w.final_text and "2026-10-" not in said   # no window or line starts weeks back
     (tree,) = [k for k in w.trees if k[0] == 9500]
-    assert w.trees[tree].get("first_round", 2) == 2
-    # AM-2: one note, in the notes and the report, naming the kind and the skew; not a hole, not a knock
-    assert [x for x in w.notes if "carries a time" in x] == [NOTE3]
-    assert [x for x in report(w) if "carries a time" in x] == ["  - " + NOTE3]
+    assert w.trees[tree]["first_round"] == 2   # W-6: the key itself, never a default
+    # AM-2: one note, in the notes and the report, naming the kind and the skew; not a hole, not a knock; AN-6: and
+    # the record its skew was measured on (the round's first event 3 timed from the log)
+    assert [x for x in w.notes if "carries a time" in x] == [NOTE3 + " (measured on record 701)"]
+    assert [x for x in report(w) if "carries a time" in x] == ["  - " + NOTE3 + " (measured on record 701)"]
     assert "carries a time" not in json.dumps(w.holes) + json.dumps(w.knocks, default=str)
     agree, said_agree, seen_agree = brief_watch(tmp_path / "agree", monkeypatch, lag=False)   # not touched: no note
     assert not [x for x in agree.notes if "carries a time" in x] and seen_agree[1]["sample"].startswith(window)
@@ -390,3 +399,177 @@ def test_e5_the_code_and_tests_are_ascii_and_no_test_here_reads_docs_review():
     assert ("docs" + "/review") not in code and ("docs" + '" / "review') not in code
     addresses = set(re.findall(r"\b[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\b", code))
     assert addresses and all(a.startswith(("192.0.2.", "198.51.100.", "203.0.113.")) for a in addresses)
+
+
+# --- M7.16 REDO (ADR-0007 Amendment AN) ----------------------------------------------------------------------------
+
+UNREAD3 = ("Sysmon's event 3 carries a TimeCreated that is not read: the time it was logged is not read, and its"
+           " UtcTime is used unchecked")
+
+
+def unread_logged(part, eid=3):
+    """One event of the export with its TimeCreated there and in a form that does not parse (a converter's)."""
+    if "<EventID>%d</EventID>" % eid not in part:
+        return part
+    return re.sub(r"SystemTime='[^']*'", "SystemTime='11/10/2026 7:54:01 AM'", part)
+
+
+def test_e1_an1_through_the_follow_an_unread_timecreated_is_one_silence_line_per_kind_utctime_unchecked(tmp_path):
+    parts = [unread_logged(p) for p in shape("agree")]
+    assert sum("7:54:01 AM" in p for p in parts) == 2   # both talks, one in each pass
+    lines, silences, _, _ = follow_through(FollowChannel([parts[:2], parts[2:]]), 2, log=tmp_path / "os.jsonl")
+    said = [x for x in silences if "TimeCreated" in x or "UtcTime that" in x]
+    assert len(said) == 1 and UNREAD3 in said[0]   # once for the kind, across the passes
+    assert pres(lines) == FIELD_ORDER   # the talks at their UtcTime (unchecked), the other lines as they were
+    assert "time_from" not in "".join(json.dumps(x) for x in lines)
+    assert discover.UTC_UNREAD % 3 not in "".join(silences)
+
+
+def test_e1_an1_through_discover_a_time_there_and_unread_is_a_problem_once_per_kind_a_utctime_unread_is_logged():
+    parts = [unread_logged(p) for p in shape("agree")]
+    records, problems = discover.parse_sysmon(channel_xml(*parts), "sysmon", keyed=True)
+    assert [x["reason"] for x in problems] == [UNREAD3]
+    assert not [r for r in records if "time_from" in r]
+    talk = talked(990, "", 9600, BASH, G_BASH, logged="2026-11-10 07:54:09.250")   # no UtcTime read, logged read
+    records, problems = discover.parse_sysmon(channel_xml(talk, talk.replace("990", "991")), "sysmon", keyed=True)
+    assert [x["reason"] for x in problems] == [discover.UTC_UNREAD % 3]
+    nets = [r for r in records if r["kind"] == "conn"]
+    assert nets and all(r["ts"] == discover._ts("2026-11-10 07:54:09.250") and r["time_from"] == "logged"
+                        and "time_skew_s" not in r and "time_record" not in r for r in nets)
+
+
+def test_e1_an1_not_touched_no_timecreated_at_all_is_no_word_and_the_same_lines():
+    none = channel_xml(*shape("none"))
+    assert "TimeCreated" not in none
+    lines, silences = os_sysmon.build(none, 9176, cwd="C:\\work")
+    assert silences == [] and lines == build_lines(channel_xml(*shape("agree")))
+    assert discover.parse_sysmon(none, "sysmon", keyed=True)[1] == []
+    assert not discover.logged_unread(None) and discover.logged_unread("") and discover.logged_unread("11/10/2026")
+
+
+def test_e1_an1_through_a_round_an_unread_timecreated_is_a_problem_of_the_rounds_record_in_the_report(tmp_path,
+                                                                                                    monkeypatch):
+    settled_follows(monkeypatch)
+    ends = {}
+    for name, xml in (("unread", [unread_logged(p) for p in brief(lag=False)]), ("read", brief(lag=False))):
+        w, _, _ = watch(tmp_path / name, monkeypatch, rounds(tmp_path / name, 3), channel=Rounds(xml={2: xml}),
+                        follow=Script(fail_from=1), wall0=WALL0 + 240)
+        ends[name] = w
+    assert UNREAD3 in ends["unread"].final_text and UNREAD3 in json.dumps(ends["unread"].holes)
+    assert UNREAD3 not in ends["read"].final_text and "TimeCreated" not in json.dumps(ends["read"].holes)
+
+
+G_C, G_GC, G_GGC = guid_of(9630), guid_of(9631), guid_of(9632)
+
+
+def test_e2_an2_r2_an_act_sorted_before_its_process_start_is_the_trees_through_the_follow(tmp_path):
+    # the packet's case: the child's event 1 logged 61.1 s late (the logged time), its event 3 59 s late (UtcTime)
+    born = created(810, at("07:54:02"), 9620, PS, G_PS, 9176, KIMI, G_KIMI, "powershell -c x",
+                   logged="2026-11-10 07:55:03.100")
+    talk = talked(811, at("07:54:05"), 9620, PS, G_PS, port=50410, dest="203.0.113.41", logged="2026-11-10 07:55:04.000")
+    lines, silences, _, _ = follow_through(FollowChannel([[born, talk]]), 1, log=tmp_path / "os.jsonl", since=START)
+    assert pres(lines) == [("net", "2026-11-10T07:54:05.000Z"), ("process", "2026-11-10T07:55:03.100Z")]
+    assert not silences
+    net, proc = [x for x in lines if x.get("phase") == "pre"]
+    assert "time_from" not in net["input_meta"]
+    assert {k: proc["input_meta"].get(k) for k in ("time_from", "time_skew_s", "time_record", "depth")} == {
+        "time_from": "logged", "time_skew_s": 61, "time_record": 810, "depth": 1}
+
+
+def test_e2_an2_a_grandchilds_subtree_sorted_before_its_parents_start_is_the_trees_through_the_follow(tmp_path):
+    parts = [created(820, at("07:54:02"), 9630, CMD, G_C, 9176, KIMI, G_KIMI, "cmd /c x",
+                     logged="2026-11-10 07:55:03.100"),   # 61.1 s: its logged time, after its subtree's
+             created(821, at("07:54:08"), 9631, PS, G_GC, 9630, CMD, G_C, "powershell", logged="2026-11-10 07:55:03.200"),
+             talked(822, at("07:54:09"), 9631, PS, G_GC, port=50420, logged="2026-11-10 07:55:03.300"),
+             created(823, at("07:54:10"), 9632, CURL, G_GGC, 9631, PS, G_GC, "curl", logged="2026-11-10 07:55:03.400"),
+             event(11, 824, at("07:54:11"), 9632, CURL, G_GGC, logged="2026-11-10 07:55:03.500",
+                   TargetFilename="C:\\Users\\user\\out.txt")]
+    lines, silences, _, _ = follow_through(FollowChannel([parts]), 1, log=tmp_path / "os.jsonl", since=START)
+    pre = [x for x in lines if x.get("phase") == "pre"]
+    assert [(x["tool"], x["ts"][11:23], x["input_meta"].get("depth")) for x in pre] == [
+        ("process", "07:54:08.000", 2), ("net", "07:54:09.000", None), ("process", "07:54:10.000", 3),
+        ("file", "07:54:11.000", None), ("process", "07:55:03.100", 1)]   # lines in time order
+    assert "parent_seq" not in pre[0]["input_meta"] and pre[2]["input_meta"]["parent_seq"] == pre[0]["seq"]
+    assert "parent_seq" not in pre[4]["input_meta"] and not silences   # its parent (kimi) has no line in the window
+
+
+def no_guids(text):
+    return re.sub(r"<Data Name='(Parent)?ProcessGuid'>[^<]*</Data>", "", text)
+
+
+def test_e2_an2_membership_is_a_fixed_point_whatever_order_the_times_give_and_pid_only_events_are_as_before():
+    # a chain whose times run against it (no TimeCreated: UtcTime alone): two rounds of trying again
+    text = channel_xml(created(830, at("07:54:20"), 9630, CMD, G_C, 9176, KIMI, G_KIMI, "cmd", logged=""),
+                       created(831, at("07:54:15"), 9631, PS, G_GC, 9630, CMD, G_C, "powershell", logged=""),
+                       created(832, at("07:54:10"), 9632, CURL, G_GGC, 9631, PS, G_GC, "curl", logged=""),
+                       talked(833, at("07:54:11"), 9632, CURL, G_GGC, port=50430, logged=""))
+    lines, _ = os_sysmon.build(text, 9176)
+    assert [(x["tool"], x["ts"][11:19], x["input_meta"].get("depth")) for x in pres_of(lines)] == [
+        ("process", "07:54:10", 3), ("net", "07:54:11", None), ("process", "07:54:15", 2), ("process", "07:54:20", 1)]
+    # MUST NOT TOUCH: an event known by its pid alone is placed in the one walk: before its process joined, not
+    pids = channel_xml(talked(840, at("07:54:05"), 9640, CURL, "x", port=50440, logged=""),
+                       created(841, at("07:54:06"), 9640, CURL, "x", 9176, KIMI, "x", "curl", logged=""),
+                       talked(842, at("07:54:07"), 9640, CURL, "x", port=50441, logged=""))
+    lines, _ = os_sysmon.build(no_guids(pids), 9176)
+    assert [(x["tool"], x["ts"][11:19]) for x in pres_of(lines)] == [("process", "07:54:06"), ("net", "07:54:07")]
+
+
+def pres_of(lines):
+    return [x for x in map(json.loads, lines) if x.get("phase") == "pre"]
+
+
+def every_fixture_build():
+    """os_sysmon.build of every Sysmon fixture for every pid it names, whole and as a follow's pass (tree)."""
+    out = []
+    for p in sorted((ROOT / "tests" / "fixtures").rglob("*.xml"), key=lambda p: p.relative_to(ROOT).as_posix()):
+        text = p.read_text(encoding="utf-8", errors="replace")
+        for pid in sorted({int(x) for x in re.findall(r"Name=['\"](?:Parent)?ProcessId['\"]>\s*(\d+)", text)}):
+            for tree in (None, {}):
+                lines, silences = os_sysmon.build(text, pid, tree=tree, info={} if tree is not None else None)
+                out += ["== %s %d %s" % (p.relative_to(ROOT).as_posix(), pid, tree is not None)] + lines + silences
+    return hashlib.sha256("\n".join(out).encode("utf-8")).hexdigest(), len(out)
+
+
+FIXTURES_BUILT = ("c3d84456c2d1d899b64eb9bc20fa72e300f5b5bafcd274acc27b12468a94dca2", 2179)   # the parent commit's code (b713bd2) gave these, to the byte
+
+
+def test_e2_an2_not_touched_every_fixture_gives_the_lines_it_gave_to_the_byte():
+    assert every_fixture_build() == FIXTURES_BUILT
+
+
+def test_e5_an3_an_event_1_logged_more_than_60_s_late_is_two_processes_said_never_one_unsaid():
+    sampled = {"src": "win-process", "kind": "proc", "pid": 5888, "image": discover.image_name(PS),
+               "started": "2026-11-10T07:50:00.000Z", "cites": []}
+    holes = {}
+    for name, logged in (("late", "2026-11-10 07:51:01.000"), ("near", "2026-11-10 07:50:40.000")):
+        born = created(500, "2026-11-10 07:50:00.412", 5888, PS, G_SHELL, 5100, EXPLORER, guid_of(5100), "powershell",
+                       logged=logged)
+        records, _ = discover.parse_sysmon(channel_xml(born), "sysmon", keyed=True)
+        holes[name] = discover._guid_instances(records + [dict(sampled)])[1]
+    # 60.588 s late: its start is the logged time, it does not match the sampled CreationDate: two processes, said
+    assert len(holes["late"]) == 1 and "pid 5888 held 1 process(es)" in holes["late"][0]
+    assert "1 beside the sampled one" in holes["late"][0]
+    assert holes["near"] == []   # within 60 s: UtcTime, one process, as before
+
+
+def test_e4_an5_the_alarms_line_counts_what_the_listing_lists_and_says_the_findings_behind_a_joined_pair(
+        tmp_path, monkeypatch):
+    follow = Follow(unread=0, then=[CURL_BORN, CURL_TALK], go=True)
+    w, _, without, _ = against_without(tmp_path, monkeypatch, "both", rounds(tmp_path, 3), follow,
+                                       rounds(tmp_path / "w", 3))
+    live = w.source_alarms()
+    assert sorted(f["source"] for f in live if f["tree"] == KIMI_WORD) == ["host", "host", "os"]
+    lines = report(w)
+    alarms = next(x for x in lines if x.startswith("ALARMS: "))
+    head = next(x for x in lines if x.startswith("SOURCE FINDINGS: "))
+    listed = int(re.search(r"\(([0-9]+) live", head).group(1))
+    assert ("%d source finding(s) listed (%d findings: a pair taken for the same act is listed once): NET-TOOL on pid"
+            " 9176" % (listed, len(live))) in alarms and listed == len(live) - 1
+    result = [x for x in lines if x.startswith("RESULT: ")]
+    monkeypatch.setattr(host, "told_twice", lambda findings, sources: {})   # the same watch, no pair joined
+    text, code = w.summary()
+    assert [x for x in text.splitlines() if x.startswith("RESULT: ")] == result and code == w.final_exit == 1
+    assert "%d source finding(s): NET-TOOL on pid 9176" % len(live) in text and " listed (" not in text
+    # MUST NOT TOUCH: a watch whose sources joined no pair says its count as before
+    before = next(x for x in report(without) if x.startswith("ALARMS: "))
+    assert "source finding(s): NET-TOOL on pid 9176" in before and " listed (" not in before

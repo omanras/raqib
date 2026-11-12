@@ -53,17 +53,30 @@ read. A process joins the tree when its event 1 names a tree process as its
 parent (ParentProcessId, with ParentProcessGuid deciding which process
 holding that pid is meant, so a reused pid does not join an unrelated
 process). Events 3 and 11 are kept when their ProcessGuid (or, with none,
-their pid) is in the tree. Events are taken in UtcTime order,
-EventRecordID breaking ties, so a newest-first export (/rd:true) reads the
-same as an oldest-first one.
+their pid) is in the tree. Events are taken in the order of their time
+(AM-1: UtcTime, or the time it was logged, as below), EventRecordID
+breaking ties, so a newest-first export (/rd:true) reads the same as an
+oldest-first one. AN-2: that order does not decide membership by
+ProcessGuid: within one pass (one export read), an event whose
+ProcessGuid is in the tree by the end of the pass is the tree's, and an
+event 1 whose ParentProcessGuid is, whatever came first in that order
+(events kept aside are tried again until none more joins); the lines are
+still written in time order, so a child's line before its parent's has no
+parent_seq. An event keyed by its pid alone is placed in the one walk, as
+before. AN-1: a TimeCreated that is there and does not parse is said once
+per event kind (a silence line; that event's UtcTime is used unchecked);
+an event whose UtcTime does not parse and whose logged time does is timed
+from the log (time_from "logged", no time_skew_s), said once per kind.
 
 What is written (C-5), one session per run, `os-<PID>`:
 - session_start at the first kept event's time; when the export holds no
   event of some read id, the line carries `missing_events` (the ids);
 - per event a `pre` and a `post` with one seq, at the event's time (AM-1:
   its UtcTime, or the time it was logged where the two are more than 60 s
-  apart: its input_meta then has time_from "logged" and time_skew_s; the
-  time of the act, not of the read), tool `process`, `file` or `net`, and
+  apart: its input_meta then has time_from "logged", time_skew_s and,
+  where the EventRecordID was read, time_record (AN-6); the logged time is
+  when the log took the event, which can be later than the act, never the
+  time of the read), tool `process`, `file` or `net`, and
   `source: "os"`; the post carries `ok: true` and `output_meta: {}` (an os
   event has no output);
 - input_sha256 is the sha256 of the canonical JSON of the command line
@@ -261,11 +274,16 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     problems = []
     events = []
     present = set()
+    unread = set()   # AN-1: (what, event id) said
     for ev in discover.sysmon_events(text, "sysmon", problems, READ):
         present.add(ev["event"])
         d = ev["data"]
         # AM-1: the time it was logged where UtcTime is more than discover.SKEW from it, else UtcTime as before
         ts, time_from, skew = discover.event_time(d.get("UtcTime"), ev.get("logged"))
+        for what, words in discover.time_words(ev):   # AN-1: once per event kind (the follow: once per watch)
+            if (what, ev["event"]) not in unread:
+                unread.add((what, ev["event"]))
+                silences.append(words)
         pid = _int(d.get("ProcessId"))
         if pid is None or ts is None:
             silences.append("the event at line %d (Sysmon %d) has no ProcessId or UtcTime: it is not recorded"
@@ -353,14 +371,22 @@ def _tree(events, root, root_guid, tree=None):
     """[(event, depth, parent)] of the events of the tree under root, in
     order; parent is the identity (ProcessGuid, else ("pid", pid)) of an
     event 1's parent, None otherwise. tree (AI-1): the members an earlier
-    pass of a bounded follow found, kept in it and grown here."""
+    pass of a bounded follow found, kept in it and grown here.
+    AN-2 (ADR-0007): membership by ProcessGuid does not depend on where a
+    mixed clock sorts an event. An event keyed by a ProcessGuid not yet in
+    the tree, or an event 1 whose ParentProcessGuid is not yet in it, is
+    kept aside and tried again after the walk, until none more joins (a
+    fixed point): by the end of the pass it joins if that guid is in the
+    tree. The kept events are still returned in time order (the order of
+    `events`). Events keyed by a pid alone are placed in the one walk, as
+    before (a pid is only somebody's at a time)."""
     by_guid = {_gkey(root_guid): 0} if root_guid else {}   # AJ-4 (R-2): keyed by _gkey, as _same_guid compares
     by_pid = {root: 0}   # for events that carry no ProcessGuid
     if tree is not None:
         by_guid = tree.setdefault("by_guid", by_guid)
         by_pid = tree.setdefault("by_pid", by_pid)
-    kept = []
-    for e in events:
+    kept, aside, pid_at = [], [], {}   # pid_at: a pid -> the index of the last event of the walk that placed it
+    for i, e in enumerate(events):
         d = e["data"]
         parent = None
         if e["event"] == 1:
@@ -376,18 +402,42 @@ def _tree(events, root, root_guid, tree=None):
             if depth is None:
                 if e["pid"] in by_pid and e["pid"] != root:
                     del by_pid[e["pid"]]   # the pid now names a process outside the tree
+                    pid_at[e["pid"]] = i
+                if pguid is not None:
+                    aside.append((i, e, parent))   # AN-2: its parent may join later in this pass
                 continue
             if depth == 0:
                 parent = None
             if e["guid"] is not None:
                 by_guid[_gkey(e["guid"])] = depth
             by_pid[e["pid"]] = depth
+            pid_at[e["pid"]] = i
         else:
             depth = by_guid.get(_gkey(e["guid"])) if e["guid"] is not None else by_pid.get(e["pid"])
             if depth is None:
+                if e["guid"] is not None:
+                    aside.append((i, e, None))   # AN-2: its process may join later in this pass
                 continue
-        kept.append((e, depth, parent))
-    return kept
+        kept.append((i, e, depth, parent))
+    joined = True
+    while aside and joined:   # AN-2: the fixed point; each round tries what is aside, in time order
+        joined, left = False, []
+        for i, e, parent in aside:
+            key = parent if e["event"] == 1 else _gkey(e["guid"])
+            if key not in by_guid:
+                left.append((i, e, parent))
+                continue
+            depth = by_guid[key] + 1 if e["event"] == 1 else by_guid[key]
+            if e["event"] == 1:
+                if e["guid"] is not None:
+                    by_guid[_gkey(e["guid"])] = depth
+                if pid_at.get(e["pid"], -1) <= i:   # a pid a later event of the walk placed stays that event's
+                    by_pid[e["pid"]], pid_at[e["pid"]] = depth, i
+            kept.append((i, e, depth, parent))
+            joined = True
+        aside = left
+    kept.sort(key=lambda k: k[0])   # lines in time order, as the walk met them
+    return [(e, depth, parent) for _, e, depth, parent in kept]
 
 
 def _image(image):
@@ -440,7 +490,11 @@ def _lines(kept, root, cwd, start_seq, missing):
         seq += 1
         digest, meta = _event_fields(e, depth)
         if e.get("time_from") is not None:   # AM-1: a line timed from the log says so (else no key: as before)
-            meta.update(time_from=e["time_from"], time_skew_s=e["time_skew_s"])
+            meta["time_from"] = e["time_from"]
+            if e["time_skew_s"] is not None:   # AN-1: none where the UtcTime was not read
+                meta["time_skew_s"] = e["time_skew_s"]
+                if e["record_id"] is not None:   # AN-6: the record its skew was measured on
+                    meta["time_record"] = e["record_id"]
         if e["event"] == 1:
             if parent is not None and parent in line_of:
                 meta["parent_seq"] = line_of[parent]
@@ -657,7 +711,13 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     run() does (a bad root or cwd, off Windows without a `live` reader, a
     trace it cannot read or write); the caller's thread turns that into a
     hole. Every pass that could not read the channel writes its reason once
-    as a RAQIB-SILENCE line (A3). on_pass(n, top), when given, is called
+    as a RAQIB-SILENCE line (A3); so is, once per event kind for the
+    follow's life, a TimeCreated that is there and does not parse, and a
+    UtcTime that does not parse beside a logged time that does (AN-1). A
+    pass is one export: a ProcessGuid's events join the tree when the guid
+    is in it by the end of the pass (AN-2), whatever order their mixed
+    times sort them in; across passes the tree carries over, an event of
+    an earlier pass is not read again. on_pass(n, top), when given, is called
     after each pass has appended what it read, with its bound: the highest
     EventRecordID appended so far, and for a bounded follow the highest
     EventRecordID its passes have read in the whole export (the tree's or

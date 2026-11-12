@@ -237,10 +237,15 @@ def event_time(utc, logged):
     """AM-1: the time of a Sysmon event, from its UtcTime text and the text
     of System/TimeCreated's SystemTime (the time it was logged): (time,
     time_from, skew_s). UtcTime (time_from None, skew_s None) where no
-    logged time is read, where UtcTime is not read, or where the two are
-    within SKEW seconds: as before, to the byte. Else the logged time,
-    "logged", and the skew in whole seconds (positive: UtcTime is behind)."""
+    logged time is read, or where the two are within SKEW seconds: as
+    before, to the byte. AN-1: where UtcTime is not read and the logged
+    time is, the logged time, "logged", and no skew (None); where neither
+    is read, None. Else the logged time, "logged", and the skew in whole
+    seconds (positive: UtcTime is behind). A logged time that is there and
+    is not read is said by the callers (time_words), never here."""
     at, when = _ts(utc), _ts(logged)
+    if at is None and when is not None:   # AN-1: UtcTime not read, the logged time read: timed from the log
+        return when, "logged", None
     if at is None or when is None:
         return at, None, None
     skew = (when - at).total_seconds()
@@ -259,10 +264,35 @@ def skew_words(skew_s):
     return "%s %s" % (text, "behind" if skew_s > 0 else "ahead of")
 
 
-def logged_note(kind, skew_s):
-    """AM-2: the note said once per event kind per watch where a Sysmon event's time is taken from the log."""
-    return ("Sysmon's event %s carries a time %s the time it was logged (%d s): the logged time is used"
-            % (kind, skew_words(skew_s), skew_s))
+def logged_note(kind, skew_s, record=None):
+    """AM-2: the note said once per event kind per watch where a Sysmon event's time is taken from the log.
+    AN-6: record, the EventRecordID of the event its skew was measured on, where it was read."""
+    return ("Sysmon's event %s carries a time %s the time it was logged (%d s): the logged time is used%s"
+            % (kind, skew_words(skew_s), skew_s, "" if record is None else " (measured on record %d)" % record))
+
+
+# AN-1: an event's time that is there and not read, said once per event kind (a round's problem, a follow's silence)
+LOGGED_UNREAD = ("Sysmon's event %s carries a TimeCreated that is not read: the time it was logged is not read, and"
+                 " its UtcTime is used unchecked")
+UTC_UNREAD = ("Sysmon's event %s carries a UtcTime that is not read: it is timed from the time it was logged"
+              " (time_from \"logged\", no skew)")
+
+
+def logged_unread(logged):
+    """AN-1: a TimeCreated that is there (its SystemTime text; "" when it has none) and does not parse. None, no
+    TimeCreated at all (an older export), is not: no word, as before."""
+    return logged is not None and _ts(logged) is None
+
+
+def time_words(ev):
+    """AN-1: what one event of sysmon_events() leaves unread of its two times: [(what, words)], what "logged" (a
+    TimeCreated that does not parse: UtcTime used unchecked) or "utc" (a UtcTime that does not parse, the logged
+    time read: timed from the log). The callers say each (what, event id) once."""
+    if logged_unread(ev.get("logged")):
+        return [("logged", LOGGED_UNREAD % ev["event"])]
+    if _ts((ev.get("data") or {}).get("UtcTime")) is None and _ts(ev.get("logged")) is not None:
+        return [("utc", UTC_UNREAD % ev["event"])]
+    return []
 
 
 def iso(dt):
@@ -943,9 +973,17 @@ def parse_sysmon(text, src="sysmon", keyed=False):
     process (guid; pguid, created on an event 1's own record); off by
     default, so the records of every export read as they always did."""
     records, problems = [], []
+    unread = set()   # AN-1: (what, event id) said
     for ev in sysmon_events(text, src, problems, SYSMON_READ):
-        records += [dict(r, event=ev["event"]) for r in _sysmon_records(src, ev["line"], ev["event"], ev["data"],
-                                                                         problems, keyed, ev.get("logged"))]
+        recs = [dict(r, event=ev["event"]) for r in _sysmon_records(src, ev["line"], ev["event"], ev["data"],
+                                                                    problems, keyed, ev.get("logged"))]
+        for what, words in time_words(ev):   # AN-1: a time there and not read, a problem once per event kind
+            if (what, ev["event"]) not in unread:
+                unread.add((what, ev["event"]))
+                problems.append(_problem(src, ev["line"], words))
+        if ev.get("record_id") is not None:   # AN-6: the record a skew is measured on, on a record timed by one
+            recs = [dict(r, time_record=ev["record_id"]) if r.get("time_skew_s") is not None else r for r in recs]
+        records += recs
     return records, problems
 
 
@@ -997,7 +1035,7 @@ def sysmon_events(text, src="sysmon", problems=None, ids=None):
             elif tag == "EventRecordID":
                 record_id = _int(el.text or "")
             elif tag == "TimeCreated" and logged is None:
-                logged = el.get("SystemTime")
+                logged = el.get("SystemTime", "")   # AN-1: "" for a TimeCreated with no SystemTime: there, unread
             elif tag == "Data" and el.get("Name"):
                 data[el.get("Name")] = (el.text or "").strip()
         if provider != SYSMON_PROVIDER or (ids is not None and event_id not in ids):
@@ -1019,7 +1057,7 @@ def _sysmon_records(src, line, event_id, d, problems, keyed=False, logged=None):
 def _sysmon_records_at(src, line, event_id, d, problems, keyed, timed):
     ts, time_from, skew = timed
     if time_from is not None:
-        return [dict(r, time_from=time_from, time_skew_s=skew)
+        return [dict(r, time_from=time_from, **({} if skew is None else {"time_skew_s": skew}))   # AN-1: no skew
                 for r in _sysmon_records_at(src, line, event_id, d, problems, keyed, (ts, None, None))]
     pid = _int(d.get("ProcessId", ""))
     image = d.get("Image") or None
@@ -2888,13 +2926,18 @@ def run(texts, catalog, window=None, holes=(), live=False, run=None, processes=F
                        "records": records, "problems": problems, "text_read": text is not None,
                        "lines": text.count("\n") + (not text.endswith("\n")) if text else 0})
     inv = build(parsed, catalog, window, holes, live, processes=processes, channel=channel)
-    logged = {}   # AM-1, AM-2: per Sysmon event id, the skew of its first event timed from the log
+    logged, measured = {}, {}   # AM-1, AM-2: per Sysmon event id, the skew of its first event timed from the log
     for source in parsed:
         for r in source["records"]:
-            if r.get("time_from") == "logged" and isinstance(r.get("event"), int):
-                logged.setdefault(r["event"], r["time_skew_s"])
+            if (r.get("time_from") == "logged" and isinstance(r.get("event"), int) and r.get("time_skew_s") is not None
+                    and r["event"] not in logged):
+                logged[r["event"]] = r["time_skew_s"]
+                if r.get("time_record") is not None:   # AN-6: the record it was measured on, where read
+                    measured[r["event"]] = r["time_record"]
     if logged:   # only where an event was timed from the log: every other inventory as before
         inv["logged_time"] = {str(k): logged[k] for k in sorted(logged)}
+    if measured:
+        inv["logged_record"] = {str(k): measured[k] for k in sorted(measured)}
     inv["system_drive"] = system_drive_of(run)
     return inv
 

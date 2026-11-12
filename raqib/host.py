@@ -2880,18 +2880,21 @@ class HostWatch:
             out[k] = dict(t, key=list(k), started=k[2]) if k != key else t
         return out
 
-    def _logged_time(self, skews):
+    def _logged_time(self, skews, records=None):
         """AM-2: a Sysmon event kind whose time was taken from the log (AM-1), said once per kind per watch: a
-        note, not a hole and not a knock (nothing is lost; the watch's result is not changed by it). skews: event
-        id (text or int) -> the skew in whole seconds."""
+        note, not a hole and not a knock (the event is kept, at its logged time; the watch's result is not changed by
+        it). skews: event id (text or int) -> the skew in whole seconds; records (AN-6): event id -> the
+        EventRecordID of the event it was measured on, where read."""
         for kind, skew in sorted((skews or {}).items(), key=lambda x: str(x[0])):
             if isinstance(skew, int) and not isinstance(skew, bool):
-                self._note_once(("logged-time", str(kind)), discover.logged_note(kind, skew))
+                record = (records or {}).get(kind)
+                record = record if isinstance(record, int) and not isinstance(record, bool) else None
+                self._note_once(("logged-time", str(kind)), discover.logged_note(kind, skew, record))
 
     def _channel_holes(self, now, n, inv):
         """M7.9 E1, REDO X-1/X-3/X-4/X-8: what the round's inventory says of
         its channel read: each hole of the read is a hole of that round."""
-        self._logged_time(inv.get("logged_time"))
+        self._logged_time(inv.get("logged_time"), inv.get("logged_record"))
         record = inv.get("channel")
         if record is None:
             if self.platform == "win32" and self.sysmon_ok() and not self.between_said:   # AB-3: said once, printed
@@ -3488,12 +3491,15 @@ class HostWatch:
                 # M8.2 REDO 2 F-6: only the notes of the rules PRE_M78_NOTE names; a person's rule keeps its own
                 notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
         if src.kind == "os":   # AM-2: a follow's line timed from the log: said once per event kind per watch
-            skews = {}
+            skews, records = {}, {}
             for _, rec in feed.numbered:
                 meta = rec.get("input_meta") if isinstance(rec, dict) and rec.get("phase") == "pre" else None
-                if isinstance(meta, dict) and meta.get("time_from") == "logged" and rec.get("source") == "os":
-                    skews.setdefault(LOGGED_EVENT.get(rec.get("tool"), rec.get("tool")), meta.get("time_skew_s"))
-            self._logged_time(skews)
+                if (isinstance(meta, dict) and meta.get("time_from") == "logged" and rec.get("source") == "os"
+                        and meta.get("time_skew_s") is not None):   # AN-1: a line with no skew is no note
+                    kind = LOGGED_EVENT.get(rec.get("tool"), rec.get("tool"))
+                    if kind not in skews:
+                        skews[kind], records[kind] = meta.get("time_skew_s"), meta.get("time_record")
+            self._logged_time(skews, records)
         if getattr(feed, "not_judged", None):
             self.source_not_judged[feed.path] = feed.not_judged
         entry_tree = self.trees.get(key) or {}
@@ -3909,7 +3915,10 @@ class HostWatch:
                 sorted({"pid %s" % f["pid"] for f in self.suspicions}))))
         live = self.source_alarms()
         if live:   # M7.2b E4: a source's finding on a tree is a finding of the watch
-            alarms.append("%d source finding(s): %s" % (len(live), ", ".join(sorted(
+            pairs = told_twice(self.source_findings, self.sources)   # AN-5: the listing's count (AJ-2's join)
+            listed = len([f for f in live if id(f) not in pairs])
+            alarms.append("%d source finding(s)%s: %s" % (listed, "" if listed == len(live) else (
+                " listed (%d findings: a pair taken for the same act is listed once)" % len(live)), ", ".join(sorted(
                 {"%s on pid %s%s" % (f["rule_id"], f["pid"], " (%s)" % PENDING_EXIT if f["pending"] else "")
                  for f in live}))))
         if not self.applied:
