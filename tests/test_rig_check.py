@@ -94,8 +94,13 @@ def test_x5_the_sysmon_line_beside_no_read_kept_is_the_third_field_runs_lie():
     assert states(report=true)["X5"] == check.MET
 
 
-def test_x12_beats_left_for_the_final_poll_are_open_not_missed_and_x13_x14_read_the_sources():
-    assert states(report=REPORT.replace("beats after the last round: 0", "beats after the last round: 9"))["X12"] == check.OPEN
+def test_x12_beats_left_for_the_final_poll_are_missed_and_x13_x14_read_the_sources():
+    # ADR-0007 AP-4: X12 is an expectation that can be MISSED (no longer OPEN); none left is MET
+    assert states(report=REPORT.replace("beats after the last round: 0", "beats after the last round: 9"))["X12"] == check.MISSED
+    assert states()["X12"] == check.MET
+    said = [w for i, s, w in check.read(REPORT.replace("beats after the last round: 0", "beats after the last round: 9"),
+                                        WORKLOAD, platform="win32", sysmon=True) if i.startswith("X12")]
+    assert said and "Amendment AP" in said[0] and "9 beat(s)" in said[0]
     got = states(sources=[("run-9828-aa.jsonl", "{}")])
     assert got["X13"] == got["X14"] == check.MISSED
 

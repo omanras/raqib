@@ -122,8 +122,11 @@ def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=
         say("X11 a healthy machine has no hole", SKIP, "HOLES (A3): %s (not judged on this machine)" % count)
 
     beats = number(r"beats after the last round: (\d+)", first(lines, "RHYTHM BEATS:") or "")
-    say("X12 no beat waits for the final poll unjudged", MET if beats == 0 else OPEN,
-        "%s beat(s) read by the final poll, in no round (M7.17, recorded)" % beats)
+    # ADR-0007 Amendment AP (AP-1, AP-4): a beat is judged in the round that reads it, quiet tree or not: a beat
+    # left for the final poll is in no round and no rule judged it, so X12 can be MISSED (it was OPEN)
+    say("X12 no beat waits for the final poll unjudged", MET if beats == 0 else MISSED,
+        "%s beat(s) read by the final poll, in no round (ADR-0007 Amendment AP: a beat is judged in the round"
+        " that reads it)" % beats)
 
     text = "\n".join(t for _, t in sources)
     if sources and platform == "win32" and sysmon:

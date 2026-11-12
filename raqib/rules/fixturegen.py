@@ -109,12 +109,15 @@ def _gap(limit, w):
 # --- the synthetic rounds (M7.4, M7.5 E2) ------------------------------------------------------------
 
 def rhythm_inventory(scenario, k, pid=RHYTHM_PID, image="relay-bot", every=EVERY, remote=None, children=None,
-                     bytes_moved=True, act_after=HOST_GAP):
+                     bytes_moved=True, act_after=HOST_GAP, sampled=False):
     """Round k (1-based) of a fake scenario, in discover's inventory shape
     (SYNTHETIC). Round k is read at t = (k-1) * every; a child new in round
     c started act_after s after round c-1. bytes_moved: the connection's
     byte counts (a fake ss) grow each round (K-5: a talk beat each round);
-    False: no bytes are read (the round carries none)."""
+    False: no bytes are read (the round carries none). sampled (ADR-0007
+    AQ-1): the round carries a process sample (`processes`) holding the
+    tree's root, so a round the tree is not in finds it quiet, not gone;
+    False (every fixture made before AQ): no sample, as they were made."""
     at = (k - 1) * every
     if children is None:
         if scenario in ("cycle", "change", "notalk"):
@@ -145,6 +148,19 @@ def rhythm_inventory(scenario, k, pid=RHYTHM_PID, image="relay-bot", every=EVERY
         if bytes_moved:
             inv["conn_bytes"] = {"from": "fake ss -tinp (make.py)", "hole": None, "by": {
                 "%d %s" % (pid, remote): {"bytes_sent": 1000 * k, "bytes_received": 5000 * k, "sockets": 1}}}
+    if sampled:
+        inv["processes"] = [{"pid": pid, "image": image, "started": tree["started"], "cites": cites}]
+    return inv
+
+
+def quiet_inventory(k, pid=RHYTHM_PID, image="relay-bot"):
+    """ADR-0007 AP-2, AQ-1 (SYNTHETIC): round k of a tree seen at the
+    sample in round 1 and quiet after it: from round 2 the round's process
+    sample holds its root, and no candidate and no act-root (the sample
+    does not see it talk); its os source reads what os_lines writes."""
+    inv = rhythm_inventory("between", k, pid=pid, image=image, bytes_moved=False, sampled=True)
+    if k > 1:
+        inv["candidates"] = []
     return inv
 
 
@@ -185,6 +201,8 @@ def synthetic_inventory(name, w=None):
         if scenario == "osact":    # N-3: the host's connection talks each round (its bytes move); the acts are os
             return rhythm_inventory("between", int(k), bytes_moved=True)
         return rhythm_inventory("between", int(k), bytes_moved=False)
+    if name.startswith("rhythm-quiet:"):   # AP-2: candidate in round 1, quiet after; the os lines name the scenario
+        return quiet_inventory(int(name.split(":")[2]))
     if name.startswith("rhythm:"):
         _, scenario, k = name.split(":")
         return rhythm_inventory(scenario, int(k), act_after=_gap(HOST_GAP, w))
@@ -218,6 +236,12 @@ def os_scenarios(k):
         "HOST-RHYTHM/negative-os-two-cycles.json": ["rhythm-os:oscycle:%d" % i for i in range(1, k + 3)],
         "HOST-RHYTHM/positive-os-talks-host-acts.json": ["rhythm-os:ostalk:%d" % i for i in range(1, k + 3)],
         "HOST-RHYTHM/positive-host-talks-os-acts.json": ["rhythm-os:osact:%d" % i for i in range(1, k + 3)],
+        # ADR-0007 AP-3, AQ-1: a tree seen at the sample in round 1 and quiet after it, its cycles all between samples
+        # (os lines before rounds 2..k+1: k cycles, the k-th read in round k+2), talks with no act (no cycle), and
+        # the rig's shape: a few beats of a long-lived tree (k-1 cycles; the last round still reads one)
+        "HOST-RHYTHM/positive-quiet-three-cycles.json": ["rhythm-quiet:oscycle:%d" % i for i in range(1, k + 3)],
+        "HOST-RHYTHM/negative-quiet-no-cycle.json": ["rhythm-quiet:ostalk:%d" % i for i in range(1, k + 3)],
+        "HOST-RHYTHM/negative-quiet-few-beats.json": ["rhythm-quiet:oscycle:%d" % i for i in range(1, k + 2)],
     }
 
 
@@ -228,6 +252,9 @@ def os_rounds(k):
         "HOST-RHYTHM/negative-os-two-cycles.json": tuple(range(2, k + 1)),
         "HOST-RHYTHM/positive-os-talks-host-acts.json": tuple(range(2, k + 2)),
         "HOST-RHYTHM/positive-host-talks-os-acts.json": tuple(range(2, k + 2)),
+        "HOST-RHYTHM/positive-quiet-three-cycles.json": tuple(range(2, k + 2)),
+        "HOST-RHYTHM/negative-quiet-no-cycle.json": tuple(range(2, k + 2)),
+        "HOST-RHYTHM/negative-quiet-few-beats.json": tuple(range(2, k + 1)),
     }
 
 
@@ -403,6 +430,7 @@ CONDITIONS = {
         "k must be >= 2: at k=1 the one cycle that left the last r rounds fired when it was made",
     "HOST-RHYTHM/positive-host-talks-os-acts.json": "r must be >= k+2: an os act is read one round late",
     "HOST-RHYTHM/positive-os-three-cycles.json": "r must be >= k+2: an os act is read one round late",
+    "HOST-RHYTHM/positive-quiet-three-cycles.json": "r must be >= k+2: an os act is read one round late",
     "HOST-RHYTHM/positive-os-talks-host-acts.json": "r must be >= k+1: the first talk must stay in the last r rounds",
     "HOST-RHYTHM/positive-three-cycles.json": "r must be >= k+1: the first talk must stay in the last r rounds",
 }
