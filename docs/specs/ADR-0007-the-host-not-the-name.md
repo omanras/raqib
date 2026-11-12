@@ -1743,3 +1743,52 @@ his channel holds four weeks. The tree's acts were judged by nothing;
   start time the reader does not read though the system lists it (it
   knocked as new at round 3, four weeks old); the tree ledger's keys.
 
+## Amendment AJ (the Table, 2026-11-12) - rulings on review 2026-11-12-M7.14.md (2b8b746) and the builder's questions
+Three silences (R-1 a follow attached again forgets the tree's
+children, R-2 a ProcessGuid compared by its letters' case, R-3 a
+cleared channel read as nothing forever) and four more behind them in
+the questions. Each is a case in which the os source reads less than
+the host's own record would, with nothing to say so. AI-2 tried to
+detect that case by counting passes; the packet shows the cases are
+many. The Table does not rule them one by one (the ledger of M7.9):
+the property is made the structure.
+- AJ-1 (the property, by construction). Under `raqib watch --host` a
+  tree whose source is os also has the host's own record, from its
+  attach, as a tree with hooks has had it. The os source adds what a
+  sample cannot see; it never stands in for the sample. So a watch
+  with Sysmon judges every tree by at least what the watch without it
+  does - whatever the follow missed, and whether or not the watch
+  knows it missed. AI-2's counting of passes, and its two source
+  texts, are withdrawn. FOR: R-1, R-2, R-3, S-3, S-5 and the packet's
+  questions 1, 2, 4 and 5, at once. MUST NOT TOUCH: AF-1 and AG-1 (no
+  round read the channel: the host's record alone, then os with it); a
+  tree with hooks; a tree known only from the channel (not sampled:
+  there is no host line to write); HOST-RHYTHM, which counts an act
+  two sources saw once.
+- AJ-2 (more said, bounded). The price is one act told twice: a child
+  in the sample is a HostChild line, and its event 1 an os line, and a
+  rule can fire on both. In the report's SOURCE FINDINGS such a pair
+  on one tree (the same rule, the same child pid and image) is one
+  entry naming both lines, counted once, if that can be done in the
+  listing without touching the act registry or a knock; if it cannot,
+  the pair stands as two, is said in THREAT_MODEL, and the join is the
+  tree ledger's task. No pair knocks twice with the catalog's rules;
+  a test says so.
+- AJ-3 (one label, by the line). A finding's source is the source of
+  the line it cites: a host line of an os tree says host. A tree with
+  hooks keeps today's label (recorded with the ledger).
+- AJ-4 (the os source itself, fixed where it is small). R-1: a follow
+  attached again is given the tree the earlier follow of the same tree
+  had found. R-2: a ProcessGuid is compared as _same_guid compares it
+  everywhere, and the root's is kept in that one form. R-3: when the
+  round's read restarts, every follow's bound restarts with it at the
+  restart's time, and the round's restart hole says so. Each with its
+  test; none of them is any longer what keeps a tree from silence.
+- AJ-5 (words). W-1 to W-6 made true; the kept tree is never pruned
+  for the life of a follow (said); the follow's first pass starts at
+  the watch's start and the round's read at the reader's own (said;
+  not joined here).
+- Answered: the builder's questions 2 (AJ-4), 4 and 5 (AJ-1, AJ-3);
+  question 1 stays unseen and said, and the host's record now covers
+  what a sample shows of such a child; 3, 6: said.
+
