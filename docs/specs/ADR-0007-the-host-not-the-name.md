@@ -2065,3 +2065,27 @@ does not see.
   Table before the judgement (a rhythm finding on a runner's own agent
   there would be the budget's first field number).
 
+## Amendment AQ (the Table, 2026-11-13) - the builder's STOP on M7.17 (39329f3) and its three questions
+- AQ-1 (Q1). HOST-RHYTHM is a generated rule: its fixtures are
+  planned in raqib/rules/fixturegen.py, which the HANDOFF left out of
+  Scope. It is added. The quiet scenarios are planned there beside the
+  others, by the same functions; a synthetic inventory gains the
+  process list it needs for a tree to be quiet and not gone. MUST NOT
+  TOUCH: every fixture that exists is generated to the byte it is.
+- AQ-2 (Q2). AP-1 is about the beat, not the word for the tree: a
+  tree that is not in the round and whose source gained a beat gets
+  its line whether it is quiet or kept by a round that could not read
+  the connections; the line's class is the tree's own state (quiet,
+  kept), and HOST-RHYTHM's match takes candidate, quiet and kept (the
+  engine's `in`).
+- AQ-3 (Q3). Confirmed: a line for a tree that is not in the round
+  takes its sources' beats only. It reads and resets nothing of the
+  tree's connections as the sample knows them, and nothing of its
+  children: when the tree is in a round again, a connection or a
+  child is new or old exactly as if no such line had been written
+  (a test).
+- AQ-4 (the builder's note; said, not fixed). The ring has an entry
+  only for a round with a line: a beat of a round with none is put
+  into an older entry, and two cycles can count as one. A test states
+  it; the rule's holes say it; the ring's shape is the tree ledger's.
+
