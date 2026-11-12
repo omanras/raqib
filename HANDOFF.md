@@ -1,19 +1,21 @@
-# HANDOFF — M7.14 REDO  (ADR-0007 Amendment AJ on review 2026-11-12-M7.14.md)
+# HANDOFF — M7.14 REDO 2  (ADR-0007 Amendment AK on review 2026-11-12-M7.14-redo.md)
 
-Task: the REDO of M7.14 (2b8b746). AI-1's bounded pass stands. AI-2's counting of passes is withdrawn: a tree whose
-source is os always has the host's own record beside it (AJ-1). Rulings AJ-1 to AJ-5.
+Task: the second REDO of M7.14 (9e1aaa1). AI-1's bounded pass, AJ-1's rule (an os tree has the host's own record), AJ-2's
+join and AJ-4's three fixes stand. What changes is how an os tree gets its host lines: by the host source's own road
+(AK-1), and the rulings AK-2 to AK-8.
 
 Scope:
   raqib/hooks/os_sysmon.py, raqib/host.py, tests/, docs/THREAT_MODEL.md, docs/GUIDE.md, docs/review/2026-11-12-M7.14-questions.md
 
 Exit criteria:
-- E1 (AJ-1) Under the host watch a tree attached as os has the host's own record from its attach (as a hooks tree has); the pass counters and the two AI-2 texts are gone. Tested through rounds and the report, each against the same rounds without Sysmon, the findings of the host's record equal: a follow that never reads; one that read once and then fails; one attached again; a channel cleared under it. Not touched, tested: no round read the channel (AF-1, AG-1); a hooks tree; a tree known only from the channel has no host line; HOST-RHYTHM counts an act two sources saw once.
-- E2 (AJ-2) A rule firing on a HostChild line and on the os line of the same child (rule, tree, child pid and image) is one entry of SOURCE FINDINGS naming both lines, counted once - only if done in the listing without touching the act registry or a knock; else leave two, say it in THREAT_MODEL and return it in the questions file. Either way a test shows no second knock with the catalog's rules.
-- E3 (AJ-3) A finding's source is the source of the line it cites, for an os tree; a hooks tree's labels are byte for byte as before.
-- E4 (AJ-4) A follow attached again knows the earlier follow's tree (a child's event 3 after the attach is its act); a ProcessGuid given in another case or without braces joins; when the round's read restarts, the follows' bounds restart with it and read on, said in the restart's hole. A test each, through the real follow.
-- E5 (AJ-5) THREAT_MODEL, the guide (and HOST_UNREAD) and os_sysmon's docstrings are true of the code: W-1 to W-6 of the packet.
-- E6 Existing tests that change do so only because an os tree now has host lines too; each such change is listed in the questions file under "REDO: tests changed" with its reason. If more than about thirty tests change, STOP and list them.
-- E7 Gate green; code and tests ASCII; no test reads docs/review; no test asserts the real clock.
+- E1 (AK-1) An os tree's host lines are written to their own file and judged by their own feed with the host's rules and the host source's history rule, by the code a hooks tree uses for its host lines (one code path; `host_from` is gone). The os feed's history is as before M7.14.
+- E2 (AK-2) An os follow that raises, ends or is still in a pass does not stop that round's host lines.
+- E3 (AK-3) Host lines hold the sample only: no host line for a tree that is not sampled; no child or talk the channel alone gave. tests/test_round_channel.py ab10 asserts what it asserted before M7.14. If a sampled child cannot be told from a channel-only one: questions file, no guess.
+- E4 (AK-4) The terminal line and the knock's body of a finding name the cited line's source; for a host line they are word for word those of the watch without Sysmon.
+- E5 (AK-5, AK-6) The tree handed to a follow attached again is the one published after the earlier follow's last finished pass. A follow attached after a restart says in its source text that it reads from the restart's time.
+- E6 (AK-7) The join's words are "taken for the same act (one image, starts within 1 s)"; the guide and THREAT_MODEL say the join is the listing's, the window and state count both, the catalog's rules knock for the pair at most once.
+- E7 (AK-8) The property tests compare, between the watch with Sysmon and the same rounds without it, each host-line finding's rule, tree, child, history, notice, knock and terminal words, in these cases: a tree there at the start with a child in round 1; the tree's host file restarted; a follow that ends in the round of its attach; a tree known only from the channel (through rounds); a follow attached again knows the earlier one's child (through the watch); a restart through the rounds, with its hole's words.
+- E8 Docs true of the code (the packet's W-4, W-5); the questions file's stale "REDO STOP" section replaced by the present state. Gate green; ASCII; no test reads docs/review or asserts the real clock.
 Not in scope: raqib/hostwin.py, raqib/app.py, README.md, new rules, the act registry's keys, ADR-0011.
-Commit: `landed: M7.14 REDO a follow that returns` or `STOP: M7.14 REDO <reason>`.
+Commit: `landed: M7.14 REDO 2 a follow that returns` or `STOP: M7.14 REDO 2 <reason>`.
 Read HANDOFF.md and do only the task it specifies.

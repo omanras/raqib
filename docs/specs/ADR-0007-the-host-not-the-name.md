@@ -1792,3 +1792,55 @@ the property is made the structure.
   question 1 stays unseen and said, and the host's record now covers
   what a sample shows of such a child; 3, 6: said.
 
+## Amendment AK (the Table, 2026-11-12) - rulings on review 2026-11-12-M7.14-redo.md (9e1aaa1)
+The packet: REDO. AJ-1's property fails where the build gave an os
+tree its host lines by another road than the host source's own: one
+file and one feed for both kinds of line, a history bound of its own
+(host_from), the catalog instead of the host's rules, and a skip when
+the follow had ended. Every must-fix and most should-fix are places
+where that second road differs from the first. The Table's AJ-1 said
+"has the host's own record" and did not say how; a property made the
+structure must name the structure.
+- AK-1 (one road). The host's record of an os tree is the host source
+  itself: its own file, its own feed, the host's rules, the same
+  history rule as on a machine without Sysmon (the round-1 rule for a
+  tree there at the start, a file that restarts) - the code a tree
+  with hooks already has for its host lines, not a copy of it.
+  host_from is withdrawn. FOR: R-1, S-2, S-3, S-7 of the packet, at
+  once. MUST NOT TOUCH: the os feed's own history, as before M7.14
+  (the first pass of a tree there at the start).
+- AK-2 (R-2). What becomes of an os follow - an error, an end, a pass
+  still out - never stops, skips or delays the tree's host lines.
+- AK-3 (S-1; a MUST NOT TOUCH of AJ-1, restored). A host line says
+  what the round's sample holds: a tree that is not sampled has none,
+  and a child or a talk only the round's channel gave is in no host
+  line. The changed test (ab10) goes back to what it asserted. If the
+  code cannot tell a sampled child from a channel-only one, returned
+  as a question.
+- AK-4 (W-1; AJ-3 everywhere). The terminal line and the knock's body
+  name the source of the cited line, as the listing does: the words of
+  a host-line knock are those of the watch without Sysmon.
+- AK-5 (S-6). A follow attached again is given the tree the earlier
+  follow published at the end of its last finished pass; nothing is
+  read from a follow while a pass runs.
+- AK-6 (S-4, S-5; said, left). A restart moves every follow's bound to
+  the restart's time whether or not the record numbers restarted: a
+  child between the old bound and that time is not read by the follow
+  (the host's record has what the sample shows of it). A follow
+  attached after a restart says in its source text that it reads from
+  the restart's time.
+- AK-7 (W-2, W-3, question 8). The listing's join stays, with true
+  words: "taken for the same act (one image, starts within 1 s)", not
+  "the same act"; the guide says the join is the listing's, that the
+  window and the state count both, and that the catalog's rules knock
+  for the pair at most once.
+- AK-8 (TESTS). The property is tested as written: for each case the
+  host-line findings of the watch with Sysmon equal those of the same
+  rounds without it in rule, tree, child, lines' history, notice,
+  knock and terminal words - with a tree there at the start that has
+  a child in round 1, a tree's file that restarts, a follow that ends
+  in the round of its attach, a tree known only from the channel
+  (through the rounds, not an empty call), a follow attached again
+  that knows the earlier one's child (through the watch), and a
+  restart through the rounds with its hole's words.
+
