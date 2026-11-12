@@ -54,23 +54,29 @@ G_KIMI2 = guid_of(19176)
 G_AGENTX = guid_of(9216)
 
 
-def event(eid, rec, utc, pid, image, guid, **data):
+def event(eid, rec, utc, pid, image, guid, logged=None, **data):
+    """logged (M7.16, AM-1): the System/TimeCreated SystemTime as "YYYY-MM-DD HH:MM:SS.fff..." (default: the UtcTime,
+    as every fixture before it; "": no TimeCreated element at all)."""
     fields = dict(UtcTime=utc, ProcessGuid=guid, ProcessId=str(pid), Image=image, **data)
     body = "".join("<Data Name='%s'>%s</Data>" % (k, v) for k, v in fields.items())
+    when = "" if logged == "" else "<TimeCreated SystemTime='%sZ'/>" % (utc if logged is None else logged).replace(
+        " ", "T")
     return ("<Event xmlns='%s'><System><Provider Name='Microsoft-Windows-Sysmon'/><EventID>%d</EventID>"
-            "<TimeCreated SystemTime='%sZ'/><EventRecordID>%d</EventRecordID>"
+            "%s<EventRecordID>%d</EventRecordID>"
             "<Channel>Microsoft-Windows-Sysmon/Operational</Channel><Computer>host</Computer></System>"
-            "<EventData>%s</EventData></Event>\n" % (NS, eid, utc.replace(" ", "T"), rec, body))
+            "<EventData>%s</EventData></Event>\n" % (NS, eid, when, rec, body))
 
 
-def created(rec, utc, pid, image, guid, ppid, pimage, pguid, cmd):
-    return event(1, rec, utc, pid, image, guid, CommandLine=cmd, CurrentDirectory="C:\\Users\\user\\",
-                 ParentProcessGuid=pguid, ParentProcessId=str(ppid), ParentImage=pimage, ParentCommandLine="-")
+def created(rec, utc, pid, image, guid, ppid, pimage, pguid, cmd, logged=None):
+    return event(1, rec, utc, pid, image, guid, logged=logged, CommandLine=cmd,
+                 CurrentDirectory="C:\\Users\\user\\", ParentProcessGuid=pguid, ParentProcessId=str(ppid),
+                 ParentImage=pimage, ParentCommandLine="-")
 
 
-def talked(rec, utc, pid, image, guid, port=50200, dest="203.0.113.40"):
-    return event(3, rec, utc, pid, image, guid, Protocol="tcp", Initiated="true", SourceIp="192.0.2.10",
-                 SourcePort=str(port), DestinationIp=dest, DestinationHostname="-", DestinationPort="443")
+def talked(rec, utc, pid, image, guid, port=50200, dest="203.0.113.40", logged=None):
+    return event(3, rec, utc, pid, image, guid, logged=logged, Protocol="tcp", Initiated="true",
+                 SourceIp="192.0.2.10", SourcePort=str(port), DestinationIp=dest, DestinationHostname="-",
+                 DestinationPort="443")
 
 
 PS = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"

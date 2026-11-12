@@ -1934,3 +1934,46 @@ rule is a new rule and waits for his answer.
 - Recorded: the sample window's words; whether event 22 lags; the
   clipboard (the note's Q-1).
 
+## Amendment AN (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.16.md (4278453), the builder's questions, and the rig's first run
+The packet: REDO, narrow; the field's case is fixed and tested. Two
+silences of low likelihood, one question that is a silence at every
+watch's end, and one false line the Table's own rig found.
+- AN-1 (R-1). A logged time that is there and cannot be read is said:
+  a RAQIB-SILENCE line of the follow, a problem of the round's record,
+  once per event kind; UtcTime is then used, and the words say it is
+  unchecked. An event whose UtcTime cannot be read and whose logged
+  time can is timed from the log (time_from "logged", no skew), not
+  dropped. MUST NOT TOUCH: no TimeCreated at all (an older export) is
+  no word, as today.
+- AN-2 (R-2; the structure, not the case). Whether an event belongs
+  to a tree is not decided by where a mixed clock sorts it: within one
+  pass, an event keyed by a ProcessGuid joins the tree if that guid is
+  in the tree by the end of the pass, whatever came first in time
+  order; an event 1 joins if its parent does, likewise. Lines are
+  still written in time order. Events keyed by pid alone are placed
+  as before (a pid is only somebody's at a time). FOR: an act whose
+  process's start took the logged time and sorted after it. MUST NOT
+  TOUCH: every export whose order was causal gives the lines it gave.
+- AN-3 (Q-2, S-1, S-2, S-3). Confirmed as built: an event 1 more than
+  60 s off takes its logged time too; where that is wrong it says
+  more (one process as two trees, a knock), never less. Said in
+  THREAT_MODEL with S-2 and S-3.
+- AN-4 (Q-1, F3; a silence at every watch's end). The beats the final
+  poll reads are judged by HOST-RHYTHM once more before the report: a
+  rhythm that completes in the last round is a finding, as it would be
+  one round earlier. If that cannot be done by the code that judges a
+  round's beats (one more call, no second road), the builder returns
+  it. MUST NOT TOUCH: a watch whose final poll reads no beat.
+- AN-5 (the rig's first run, on a real Windows with Sysmon). The
+  report said "SOURCE FINDINGS: 2" and, in its last lines, "4 source
+  finding(s)": AJ-2's join reached the listing and not the ALARMS
+  line. The ALARMS line counts what the listing lists and says how
+  many findings that is ("2 source finding(s) listed (4 findings: a
+  pair taken for the same act is listed once)"). The result and the
+  exit code are not touched.
+- AN-6 (W-1 to W-4). True words in os_sysmon's docstrings; the
+  THREAT_MODEL item says the lag was seen on a machine suspended for
+  about that long and that its cause is not established; the note
+  names the record its skew was measured on where the record's number
+  is read.
+

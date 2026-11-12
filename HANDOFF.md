@@ -1,18 +1,17 @@
-# HANDOFF — M7.16  (an event's time is when it was logged: ADR-0007 Amendment AM)
+# HANDOFF — M7.16 REDO  (ADR-0007 Amendment AN on review 2026-11-13-M7.16.md)
 
-Task: on the commander's machine Sysmon stamps its network events weeks behind the time they were logged, and Raqib
-takes that stamp: every connection is "before the watch's start", history, never knocked
-(docs/review/2026-11-13-the-elevated-watch.md, F1 to F3). Rulings AM-1 to AM-4.
+Task: the REDO of M7.16 (4278453). AM-1 to AM-3 stand as built. Rulings AN-1 to AN-6.
 
 Scope:
-  raqib/hooks/os_sysmon.py, raqib/discover.py, raqib/host.py, raqib/rules/engine.py, raqib/rules/tree.py, raqib/rules/cross.py (the not-judged note only), tests/, docs/THREAT_MODEL.md, docs/review/
+  raqib/hooks/os_sysmon.py, raqib/discover.py, raqib/host.py, tests/, docs/THREAT_MODEL.md, docs/review/2026-11-13-M7.16-questions.md
 
 Exit criteria:
-- E1 (AM-1) Wherever a Sysmon event's time is taken (the follow's lines, the round's records, a tree's talks and acts), it is the logged time (System/TimeCreated SystemTime) when that is read and UtcTime is more than 60 s from it, else UtcTime exactly as before; a line timed from the log carries input_meta.time_from "logged" and the skew in seconds. Tested with a made-up export of the field's shape (events 1 and 11 at the watch's minute, events 3 logged then and stamped 26 days earlier): through the follow, the net lines are live, in order with the process lines; through the rounds, a tree's talk is in its round and the report's window does not start weeks back. Not touched, tested: an export whose two times agree, and one with no TimeCreated, give byte for byte the lines they gave (the existing fixtures unchanged); event 1's match with a sampled CreationDate.
-- E2 (AM-2) One note per event kind per watch naming the kind and the skew (days, hours), saying the logged time is used; not a hole, not a knock; a watch with only that note can end CLEAN (exit 0). Tested through rounds and the report. Not touched: no skew, no note.
-- E3 (AM-3) A rule's "could not judge N line(s)" note for one tree's file is one note with the latest count across passes; two rules or two files are two notes; the JSON's and the state's counts unchanged. Tested through a follow of three passes.
-- E4 (AM-4) A test states RHYTHM BEATS for the made-up export before the fix's times and after. If "beats after the last round" is not explained by the times: change nothing, write docs/review/2026-11-13-M7.16-questions.md.
-- E5 THREAT_MODEL says it (no milestone tokens): a Sysmon that stamps events behind the log; which time Raqib uses; that the lag itself is a note. Gate green; code and tests ASCII; no test reads docs/review or asserts the real clock; the made-up export uses documentation addresses and no name of the field.
-Not in scope: the clipboard (M7.10), docs/GUIDE.md, README.md, raqib/app.py, raqib/hostwin.py, new rules, ADR-0011.
-Commit: `landed: M7.16 an event's time is when it was logged` or `STOP: M7.16 <reason>`.
+- E1 (AN-1) A TimeCreated that is there and does not parse: the follow writes one RAQIB-SILENCE line per event kind saying the logged time was not read and UtcTime is used unchecked; the round's record has a problem saying the same; tested through the follow and through a round (the hole is in the report). An event with an unreadable UtcTime and a readable logged time is a line timed from the log. Not touched, tested: no TimeCreated at all gives no word and the same lines.
+- E2 (AN-2) Within one pass, an event keyed by ProcessGuid joins the tree if its guid is in the tree by the end of the pass; an event 1 if its parent is. Tested with the packet's R-2 case through the real follow (a child's event 1 logged 61.1 s late, its event 3 logged 59 s late: both lines are written), and a grandchild's subtree. Not touched, tested: the existing fixtures and exports give byte for byte the lines they gave; pid-only events as before.
+- E3 (AN-4) The beats read by the final poll are judged by HOST-RHYTHM before the report, by the code that judges a round's beats: a rhythm completing in the last round is a finding (and its knock) where the same beats one round earlier are; RHYTHM BEATS no longer reports them as "in no round" unjudged. Not touched, tested: a watch whose final poll reads no beat; no finding is made twice. If it needs a second road: questions file, no guess.
+- E4 (AN-5) The ALARMS line's count of source findings is the listing's, and says the number of findings behind it when a pair was joined; RESULT and the exit code unchanged. Tested through a watch where one curl is seen by both sources.
+- E5 (AN-3, AN-6) THREAT_MODEL says AN-3's three cases and AN-6's cause-not-established; os_sysmon's docstrings are true; the note names the record its skew was measured on where read. Event 1 beyond 60 s has a test that states what happens (two trees or one).
+- E6 Gate green; code and tests ASCII; no test reads docs/review or asserts the real clock.
+Not in scope: the clipboard, docs/GUIDE.md, README.md, raqib/app.py, raqib/hostwin.py, new rules, ADR-0011.
+Commit: `landed: M7.16 REDO an event's time is when it was logged` or `STOP: M7.16 REDO <reason>`.
 Read HANDOFF.md and do only the task it specifies.
