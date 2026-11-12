@@ -84,6 +84,8 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.11 a benign host of a model client (ADR-0007 T-9): a benign program that talks to a model endpoint the catalog names is listed with that word
 - M7.12 the tree ledger and its keys (ADR-0007 AB-11, AD-1, AD-2): a bound on by-the-channel trees in the state and the report; one tree for a process whose sampled start is unread and its guid; a footprint whose agent ran only between rounds
 - M7.13 the third field run (landed 2026-11-11; ADR-0007 Amendments AF, AG, AH; docs/review/2026-11-11-third-field-run.md): a watch that cannot read the channel judges by the host's own record, knocks once for it, and its report says it in one line
+- M7.14 a follow that returns (ADR-0007 Amendment AI; the watches of 2026-11-12): a tree's os follow asks the channel a bounded question; a tree whose follow reads nothing is judged by the host's own record too
+- M7.15 recorded: a process of another account whose start time the reader does not read though the system lists it
 - M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (landed 2026-11-11; ADR-0009 Amendments E-H, decisions 4-5 accepted): `raqib rules --new / --remove`, the form with its Test and "on your records", class USER, Remove by the row's own place, checks first
 - M8.3 the window's notes after M8.2 (ADR-0009 H): a log of what the catch-alls caught, the orphan overlay entry's words, a real watch under the form's "running" test, a way for the person to name a program benign
@@ -95,3 +97,9 @@ point. Phase 6 runs before the rest of Phase 5.
 - M9.2 the README's top is one screen (landed 2026-11-11; ADR-0010 Amendments E-F, decision 7 accepted): README 556 lines to 106, the code's own sample report, "Where it runs" written fresh and pinned, the window first among the commands; everything else word for word in docs/GUIDE.md, each pin following its sentence
 - M9.3 a LICENSE and the `license` field (landed 2026-11-11; ADR-0010 Amendment A): CC0 1.0 Universal, the commander's word
 - M9.4 the terminal's knock and its page (ADR-0010 C-6, D-3): a bell rung on a terminal that is gone is a failed knock (notify.py); the page shows the lost-words note; the record written once more after the report; signals after the first said; `raqib watch P >&-`
+
+## Phase 10 — Below the agent, beside other watchers (ADR-0011, proposed; the commander's words, 2026-11-12)
+Nothing is built until he judges the ADR. Its order: the event (`raqib-event/1`, technique ids, a heartbeat); the
+sinks (Event Log, syslog); the service; accounts, logons, tasks, services and a tree's reach; the proxy joined to
+the host watch and PROXY-BYPASS; file reads, measured first.
+

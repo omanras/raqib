@@ -1708,3 +1708,38 @@ said and left; the false words are made true by the Table's own commit.
   built as "at the attach"): a ruling that names a duration also names
   what ends it.
 
+## Amendment AI (the Table, 2026-11-12) - the watches of 2026-11-12: a tree's follow that never returns
+The commander's two watches on main 33427dd. Not elevated: AF and AG
+as built (one knock with the cause first, one terminal line, the
+host's record). Elevated: the rounds read the channel (17 of 17, events
+1, 3, 11 and 22), and every pass of the one tree's os follow was ended
+at its 10 s: a follow's pass asks wevtutil for the whole channel, and
+his channel holds four weeks. The tree's acts were judged by nothing;
+17 holes said so. F1 again, one level down. His word: start.
+- AI-1 (silence, fixed). A follow's pass asks a bounded question, as
+  the round's read does: the first pass the events since the watch's
+  start, each later pass the records after the highest it has read,
+  with the round's cap, a cut being a hole. FOR: a channel that holds
+  weeks. MUST NOT TOUCH: `raqib os-sysmon` run by a person (the whole
+  channel, or --from a file) reads what it read; no event between two
+  passes is lost or read twice. Said, not fixed: a tree's past before
+  the watch's start is no longer read by its follow (it was history,
+  listed and never knocked); a child that started before the watch is
+  known to the follow only if the builder can seed it from the round's
+  sample - if not, returned as a question.
+- AI-2 (the property, as AF-1 one level down). A tree whose os follow
+  has had two passes and none that read is judged by the host's own
+  record too, from the next round it is in, and its source text says
+  so with the cause word; when a pass reads, it is the os source's
+  again. A watch with Sysmon never judges a tree by less than the
+  watch without it. MUST NOT TOUCH: a tree whose follow reads.
+- AI-3 (the Table's own false words, AF-6). "What an agent without
+  hooks reads with its own code is in no source" is false: the proxy
+  source records the tool call where the agent is pointed at it
+  (ADR-0003). The guide and THREAT_MODEL say: in no source of the host
+  watch; the proxy has it; the host watch does not read the proxy's
+  trace (ADR-0011 decision 5).
+- Recorded, not in this build: a process of another account whose
+  start time the reader does not read though the system lists it (it
+  knocked as new at round 3, four weeks old); the tree ledger's keys.
+
