@@ -1460,7 +1460,7 @@ def test_redo3_c5_a_real_m78_benign_tree_reads_its_notes_as_notes_in_the_detail_
     view = app.host_watch_view(state)
     (i,) = [n for n, r in enumerate(view["rows"]) if r[2].startswith("benign")]
     text = app.tree_detail_text(view["rows"][i], view["details"][i])
-    assert "FINDINGS: 0" in text and "NOTES (not alarms): 3" in text and host.BENIGN_WORD in text
+    assert "FINDINGS: 0" in text and "NOTES (not alarms): 4" in text and host.BENIGN_WORD in text
     w.finish()
 
 

@@ -516,19 +516,25 @@ def test_redo2_t2_the_persons_ssh_under_explorer_is_a_note_exit_0_no_knock(tmp_p
     assert tree["benign_word"] == host.BENIGN_WORD == "benign (its acts are noted, not knocked; its rhythm is judged)"
     notes = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
     # ssh and curl of the person's cmd, and a curl below explorer that no tree of its own holds in these rounds
-    assert len(notes) == 3 and all(f["benign_note"] and f["notice"].startswith(host.BENIGN_NOTE) for f in notes)
-    assert tree["source_findings"] == {host.BENIGN_COUNT: 3} and tree.get("first_knock") is None   # FIRST not spent
+    # REDO M7.14 (AJ-1): and the host's record of the os tree (a HostChild line of the sampled curl); REDO 2 (AK-1):
+    # its round-1 line of a tree there at the start is history, as on a machine without Sysmon
+    assert len(notes) == 4 and sorted(f["source"] for f in notes) == ["host", "os", "os", "os"]
+    assert all(f["benign_note"] and f["notice"].startswith(host.BENIGN_NOTE) for f in notes if f["source"] == "os")
+    (hl,) = [f for f in notes if f["source"] == "host"]
+    assert hl["history"] and hl["notice"] == "history: not knocked" and not hl.get("benign_note")
+    assert tree["source_findings"] == {host.BENIGN_COUNT: 3, "history": 1} and tree.get("first_knock") is None
     assert w.knocks == [] and w.source_alarms() == []
     text_, code = w.finish()
     assert code == 0 and "RESULT: CLEAN" in text_   # not an alarm: the exit code is unchanged
+    # REDO 2 M7.14 (AK-1): the HostChild line's finding is listed, as history (AJ-2 joins no pair of two standings)
     assert "ON BENIGN TREES (noted, not knocked): 3" in text_ and "0 live" in text_
-    assert "SOURCE FINDINGS: 3 (0 live, of them 0 pending at exit; 0 history; 0 judged on another tree; 3 on benign" \
+    assert "SOURCE FINDINGS: 4 (0 live, of them 0 pending at exit; 1 history; 0 judged on another tree; 3 on benign" \
            " trees, noted)" in text_
     lines = [l for r in w.round_lines for l in r["lines"] if l["tool"] == host.TREE_TOOL]
     assert {l["input_meta"]["source"] for l in lines} == {"os"}   # the HostTree line as before R-1
     st = json.loads(Path(w.state_path).read_text(encoding="ascii"))
     page = "\n".join(ui.host_section(st))
-    assert host.BENIGN_WORD in page and host.BENIGN_COUNT + " 3" in page   # on the tree, on the page
+    assert host.BENIGN_WORD in page and host.BENIGN_COUNT + " 3" in page   # on the tree, on the page (REDO 2: AK-1)
 
 
 def editor_export():
@@ -891,7 +897,9 @@ def test_redo2_t2_an_act_under_a_benign_tree_and_a_nearer_agent_is_the_agents_fi
     assert len(agent_curl) == 1 and not agent_curl[0].get("benign_note")   # the nearer, non-benign tree's finding
     assert [k["limit_id"] for k in w.knocks if k["event"] == notify.FIRST_EVENT] == ["FIRST-FINDING pid 6100"]
     explorer = next(k for k in w.trees if k[0] == 5100)
-    assert w.trees[explorer]["source_findings"] == {host.BENIGN_COUNT: 2, host.JUDGED_ELSEWHERE: 1}
+    # REDO M7.14 (AJ-1): one more finding, the host's record of the os tree (its HostChild line); REDO 2 (AK-1): its
+    # round-1 line of a tree there at the start is history, as on a machine without Sysmon
+    assert w.trees[explorer]["source_findings"] == {host.BENIGN_COUNT: 2, "history": 1, host.JUDGED_ELSEWHERE: 1}
 
 
 def test_redo2_t3_a_clock_that_steps_back_does_not_make_acts_history(tmp_path):

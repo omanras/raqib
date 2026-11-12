@@ -336,6 +336,7 @@ UNREAD_SAY = ("%s round %d: the Sysmon channel is not read (%s: %s): until a rou
 AFTER_KNOCK = "%s: round %d: the Sysmon channel read failed after %d read(s) kept"   # AF-2, AG-2: a later episode
 AFTER_SAY = ("%s round %d: the Sysmon channel's read failed after %d read(s) kept (%s: %s): the os sources stay in"
              " place, and what they cannot read is not seen (a hole) (%s)")
+FOLLOW_RESTART = "; the trees' os follows read from %s too (%d follow(s))"   # AJ-4 (R-3): said in the restart's hole
 REREAD = ("attached again as os in round %d: a round of the watch read the Sysmon channel; the lines of the host's"
           " own record before it stay judged")                                                   # AG-1: a tree host only while unread
 SYSMON_ALL = "the live reader's check: present, the rounds read its channel"   # AF-3: every round read (today's)
@@ -673,6 +674,120 @@ def cites_text(cites):
     return ", ".join(out) or "-"
 
 
+def carry_host(old, src):
+    """ADR-0007 AJ-1 (S-1): a source that writes the host's own record carries what an earlier host or os source of
+    the tree wrote of it (the children, the remotes, K-6's open set and bytes), so no child is written twice."""
+    if old is not None and old.kind in (HOST_SOURCE, "os") and old.writes_host():
+        src.children, src.remotes = set(old.children), set(old.remotes)
+        src.open, src.last_bytes = set(old.open), dict(old.last_bytes)
+
+
+def tree_copy(tree):
+    """ADR-0007 AK-5: a copy of an os follow's tree (its top level and the dicts in it), taken by the follow's own
+    thread at the end of a pass, or of a copy already published: never of the live dict of a running follow."""
+    return {k: (dict(v) if isinstance(v, dict) else v) for k, v in (tree or {}).items()}
+
+
+def _when(text):
+    try:
+        t = datetime.datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return t if t.tzinfo is not None else t.replace(tzinfo=datetime.timezone.utc)
+
+
+def told_twice(findings, sources):
+    """ADR-0007 AJ-2: {id(os entry): host entry}, the pairs of one act told twice on an os tree, for the report's
+    listing only (the acts, the knocks and the entries are not touched): the same tree, the same rule, the same
+    standing (live, history, judged elsewhere, benign); the host entry cites HostChild lines, the os entry os process
+    lines whose every child is one of them: of its image, started within ACT_SAME_SECONDS (an os line keeps no pid:
+    N-9's rule, as _once). AK-1: the two entries are of the tree's two files (its host record's, its os follow's),
+    each read through its own feed. AK-7: "taken for the same act" (one image, starts within 1 s), never more. A
+    line no longer read (no feed, or a file restarted since: another epoch than the entry's) joins nothing."""
+    cache = {}
+
+    def recs(f):
+        epoch = (list(f.get("fkey") or ()) + [None, None])[1]
+        if (f["trace"], epoch) not in cache:
+            src = sources.get(tuple(f.get("tree_key") or ()))
+            feed = next((d for d in (src.feeds if src is not None else ()) if d.path == f["trace"]), None)
+            cache[(f["trace"], epoch)] = dict(feed.numbered) if feed is not None and feed.epoch == epoch else {}
+        return [cache[(f["trace"], epoch)].get(ln) for ln in f["lines"]]
+
+    def standing(f):
+        return (f.get("judged_on") is not None, bool(f.get("benign_note")), bool(f["history"]))
+    hosts = [f for f in findings if f["source"] == HOST_SOURCE and f.get("src_kind") == "os" and f["lines"]]
+    pairs, used = {}, set()
+    for o in findings:
+        got = recs(o) if o["source"] == "os" and o["lines"] else [None]
+        if not all(r and r.get("source") == "os" and r.get("tool") == "process" for r in got):
+            continue
+        for h in hosts:
+            kids = [c for r in recs(h) if r and r.get("tool") == "HostChild"
+                    for c in (r.get("input_meta") or {}).get("children") or ()]
+            if id(h) in used or (h["rule_id"], h["tree_key"], standing(h)) != (o["rule_id"], o["tree_key"], standing(o)):
+                continue
+            if all(any(_image_word(c.get("image")) == _image_word((r.get("input_meta") or {}).get("image"))
+                       and None not in (_when(c.get("started")), _when(r.get("ts")))
+                       and abs((_when(c.get("started")) - _when(r.get("ts"))).total_seconds()) <= ACT_SAME_SECONDS
+                       for c in kids) for r in got):
+                pairs[id(o)], _ = h, used.add(id(h))
+                break
+    return pairs
+
+
+def both_said(twin, f):
+    """AJ-2, AK-7: the os line a host entry is taken to tell too, in the report's listing."""
+    o = twin.get(id(f))
+    return "" if o is None else "; and via os, %s, counted once: cites %s lines %s" % (TAKEN_SAME, 
+        o["trace"], ",".join(str(x) for x in o["lines"]))
+
+
+TAKEN_SAME = "taken for the same act (one image, starts within 1 s)"   # AK-7: the listing's join, its true words
+
+
+class FollowRestart:
+    """ADR-0007 AJ-4 (R-3): the round's restarts of its read of the channel, shared with every os follow of the
+    watch: get() is (the restart's number, its time) or None; a follow consults it before each pass and, at a new
+    restart, asks the events since that time again (no thread is ended)."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.last = None
+
+    def get(self):
+        with self.lock:
+            return self.last
+
+    def restart(self, at):
+        with self.lock:
+            self.last = (1 if self.last is None else self.last[0] + 1, at)
+
+
+def said_by(entry):
+    """ADR-0007 AK-4 (AJ-3): the source a finding's terminal line and knock name: its cited lines' (the listing's
+    "source"), so a host line of an os tree is said as on a machine without Sysmon."""
+    return entry.get("source") or entry["src_kind"]
+
+
+def follows_said(record, text):
+    """AJ-4 (R-3): the hole of the round's restart (the one its own text names)."""
+    return bool(record.get("restarted")) and text == record.get("restarted")
+
+
+def follow_kw(follow, **extra):
+    """ADR-0007 AI-1, AJ-4: the keywords an os follow is given beyond M7.13's (since, on_read), only where it takes
+    them: a follow with M7.13's signature (a stand-in of the tests) is called as it was."""
+    import inspect
+    try:
+        params = inspect.signature(follow).parameters
+    except (TypeError, ValueError):
+        return {}
+    if any(p.kind == p.VAR_KEYWORD for p in params.values()):
+        return dict(extra)
+    return {k: v for k, v in extra.items() if k in params}
+
+
 def channel_cause(error):
     """ADR-0007 AG-2: the cause of a failed read of the channel, from the reader's own words (os_sysmon:
     "wevtutil exited 5 (" a denial, "wevtutil did not return in " not back in time, "wevtutil could not be run"),
@@ -976,10 +1091,12 @@ class TreeSource:
         self.kind = kind
         self.text = text
         self.word = word or kind     # what a HostTree line carries: no path of ~/.raqib (fixtures stay what make.py makes)
-        self.path = path             # the per-tree file under ~/.raqib/host/sources/ (os and host lines)
+        self.path = path             # the per-tree file under ~/.raqib/host/sources/ (the os follow's, or host lines)
+        self.host_path = None        # AK-1: the file of the host's own record of the tree (host, hooks and os alike)
+        self.host_error = None       # AK-2: that file could not be written (the one thing that stops its lines)
         self.feeds = list(feeds)     # what is judged: the per-tree file, and the hooks' trace
         self.project = project
-        self.also_host = also_host   # hooks: the host lines go on beside them (Q-5 of the questions file)
+        self.also_host = also_host   # hooks, os (AJ-1): the host lines go on beside them (Q-5 of the questions file)
         self.thread = None
         self.stop = None
         self.hooks_note = None       # a Claude Code tree without hooks: "hooks: not attached (<why>)"
@@ -1000,6 +1117,8 @@ class TreeSource:
         self.helpers_said = 0        # I-5: how many of its records are holes already
         self.not_run_said = False    # I-6: the rules that cannot run on it were listed once
         self.pre_m78_said = False    # M7.8 (P-1): its os process lines without input_meta.image were said once
+        self.os_tree = None          # AJ-4 (R-1): the tree its os follow found (the root, ProcessGuid and pid -> depth)
+        self.os_published = None     # AK-5: a copy of it the follow published at the end of its last finished pass
 
     def writes_host(self):
         return self.kind == HOST_SOURCE or self.also_host
@@ -1433,6 +1552,7 @@ class HostWatch:
         self.sources = {}            # tree key -> TreeSource (the latest attached)
         self.file_seq = {}           # a host source file -> its last seq (a re-attach continues it)
         self.source_findings = []    # the findings of the sources, each on its tree
+        self.follow_restart = FollowRestart()   # AJ-4 (R-3): the round's restarts, consulted by every os follow
         self.source_keys = set()
         self.source_grows = {r.id for r in self.src_rules if r.aggregate is not None} | set(GROWS)   # I-6
         self.pending_end = []        # SILENCE-OPEN / -HALF of the sources at the end: listed, not knocked
@@ -2812,12 +2932,19 @@ class HostWatch:
         self.channel_last = record
         kinds = {"error": CHANNEL_UNREAD, "cut": "channel-cut", "dropped": "channel-unbounded",
                  "silent": "channel-silent", "restarted": "channel-restart"}
-        made = []
+        made, follows = [], 0
+        if record.get("restarted"):   # AJ-4 (R-3): every os follow's bound restarts with the round's read
+            at = datetime.datetime.strptime(record["at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=datetime.timezone.utc)
+            self.follow_restart.restart(at)
+            follows = sum(1 for s in self.sources.values() if s.kind == "os" and s.thread is not None
+                          and s.thread.is_alive() and not s.stop.is_set())
         for text in record.get("holes") or ():
             kind = next((k for f, k in kinds.items() if record.get(f) and (
                 f != "cut" or "the cap" in text) and (f != "restarted" or text == record.get("restarted"))
                 and (f != "dropped" or "dropped" in text) and (f != "silent" or "behind, stopped" in text)),
                 "channel-behind")
+            if follows_said(record, text) and follows:
+                text = text + FOLLOW_RESTART % (record["at"], follows)
             made.append(self._hole(now, kind, "round %d: %s; query %s" % (n, text, record.get("query")), round_=n))
         for text in record.get("helpers") or ():
             self._hole(now, "channel-helper", "round %d: %s" % (n, text), round_=n)
@@ -2961,9 +3088,11 @@ class HostWatch:
                        _safe(src.project)), round_=n)
         src.text = "%s; %s" % (src.text, HOOKS_SILENT)
 
-    def _source_path(self, key):
-        """I-8: the per-tree file, keyed by (run, pid, started), never pid alone."""
-        return os.path.join(self.sources_dir, "%s-%s-%s.jsonl" % (self.run, key[0], started_tag(key[2])))
+    def _source_path(self, key, tag=None):
+        """I-8: the per-tree file, keyed by (run, pid, started), never pid alone; AK-1: tag "host" names the file of
+        the host's own record of a tree whose source is os (its os follow keeps the untagged one)."""
+        return os.path.join(self.sources_dir, "%s-%s-%s%s.jsonl" % (self.run, key[0], started_tag(key[2]),
+                                                                    "-%s" % tag if tag else ""))
 
     def _sources_ready(self):
         """None, or why the sources directory cannot be had."""
@@ -3064,6 +3193,7 @@ class HostWatch:
         src = TreeSource("hooks", "hooks: project %s (trace %s)" % (_safe(project), _safe(trace_path)), path=path,
                          feeds=feeds, project=project, also_host=path is not None, word="hooks: project %s" % _safe(project))
         src.attach_size = size_at_attach
+        src.host_path = path   # AK-1: its host lines' own file and feed (the road an os tree's host lines take too)
         src.foreign = foreign
         self.notes.append("round %d: hooks attached to %s for %s pid %s (--attach-hooks): %s" % (
             n, _safe(project), t.get("image"), t.get("pid"), "; ".join(
@@ -3075,14 +3205,14 @@ class HostWatch:
         ready = self._sources_ready()
         if ready:
             return self._none(now, n, t, ready)
-        path = self._source_path(key)
-        feed = Feed(path, self.host_rules, self._size(path))
         old = self.sources.get(key)
+        # AK-1: the host's record of a tree whose source was os goes on in its own file
+        path = old.host_path if old is not None and old.kind == "os" and old.host_path else self._source_path(key)
+        feed = Feed(path, self.host_rules, self._size(path))
         src = TreeSource(HOST_SOURCE, "host: the host's own record of the tree: %s" % path, path=path, feeds=[feed],
                           word="host: the host's own record of the tree")
-        if old is not None and old.kind == HOST_SOURCE:
-            src.children, src.remotes = set(old.children), set(old.remotes)
-            src.open, src.last_bytes = set(old.open), dict(old.last_bytes)
+        src.host_path = path
+        carry_host(old, src)
         return src
 
     def _attach_os(self, now, n, key, t, entry):
@@ -3103,25 +3233,46 @@ class HostWatch:
                 self._hole(now, "source-out", "round %d: tree %s: its earlier os follow was still in a pass when it"
                            " was attached again" % (n, tree_word(key)), round_=n)
         feed = Feed(path, self.src_rules, None if first and old is None else self._size(path))
+        # AJ-1, AK-1: under the host watch a tree whose source is os also has the host's own record, from its attach,
+        # by the road a tree with hooks has it: its own file and feed, the host's rules, the host source's history
+        # rule (_host_lines: the round-1 rule of a tree there at the start; Feed.poll: a file that restarts)
+        host_path = self._source_path(key, HOST_SOURCE)
+        host_feed = Feed(host_path, self.host_rules, self._size(host_path))
         guid = " and ProcessGuid %s" % t["guid"] if t.get("guid") else ""
-        src = TreeSource("os", "os: Sysmon, rooted at pid %s%s: %s" % (t.get("pid"), guid, path), path=path,
-                         feeds=[feed], word="os: Sysmon, rooted at pid %s%s" % (t.get("pid"), guid))
+        top = getattr(old, "top", None)
+        # AK-5: the tree the earlier follow published at the end of its last finished pass (never its live dict)
+        kept = tree_copy(getattr(old, "os_published", None) if old is not None and old.kind == "os" else None)
+        restarted = self.follow_restart.get()
+        since = ""   # AK-6: a follow attached after a restart of the rounds' read says it reads from the restart's time
+        if restarted is not None and (kept.get("restart") != restarted if "restart" in kept else top is None):
+            since = " (it reads the channel from the restart's time %s, not from the watch's start)" % iso(restarted[1])
+        src = TreeSource("os", "os: Sysmon, rooted at pid %s%s: %s%s" % (t.get("pid"), guid, path, since), path=path,
+                         feeds=[feed, host_feed], word="os: Sysmon, rooted at pid %s%s" % (t.get("pid"), guid),
+                         also_host=True)
+        src.host_path = host_path
+        carry_host(old, src)   # S-1: the children and remotes already written are not written again
         src.stop = threading.Event()
         src.helpers = os_sysmon.Helpers()   # I-5: the wevtutil it starts are Raqib's own, ended at Stop
-        src.top = getattr(old, "top", None)
+        src.top = top
+        src.os_tree, src.os_published = kept, tree_copy(kept)
         follow = self.os_follow or os_sysmon.follow
 
         def on_pass(count, top):
             src.passes = count
             src.top = top
+            src.os_published = tree_copy(src.os_tree)   # AK-5: in the follow's own thread, its pass finished
             if count == 1 and feed.history_bytes is None:   # the channel's past of a tree there at the start
                 feed.history_bytes = self._size(path)
             src.first_pass.set()
 
+        # AI-1: the follow asks a bounded question, the first pass since the watch's start; AJ-4: it is given the
+        # tree an earlier follow found (R-1) and the round's restarts (R-3: its bound restarts with the round's read)
+        more = follow_kw(follow, since=self.start_eff, tree=src.os_tree, restart=self.follow_restart.get)
+
         def run():
             try:
                 follow(root, path, src.stop, every=self.source_every, out=io.StringIO(), err=io.StringIO(),
-                       on_pass=on_pass, after_record=src.top, helpers=src.helpers)
+                       on_pass=on_pass, after_record=src.top, helpers=src.helpers, **more)
                 src.ended = src.ended or "stopped"   # I-4: the first reason (the tree is gone) is kept
             except BaseException as exc:   # the source's failure is a hole, never the end of the watch
                 src.error = "%s: %s" % (type(exc).__name__, " ".join(str(exc).split()))
@@ -3149,8 +3300,12 @@ class HostWatch:
     def _host_lines(self, now, n, ts, sample, current, tree_seq, gone_keys):
         """(b) per round, per tree with the host source: HostChild for its
         new children, HostConnection for each new remote, HostGone when it
-        left the round; appended to the tree's file. A child whose name is
-        not a plain program name is a recorded hole, not a line."""
+        left the round; appended to the file of the host's own record of the
+        tree (host_path: a host, hooks or os source alike, ADR-0007 AK-1). A
+        child whose name is not a plain program name is a recorded hole, not
+        a line. AK-2: only that file's own write failure stops the lines (an
+        os follow's error, end or pass never does); AK-3: a tree the round's
+        sample does not hold (brief) has none."""
         for key in sorted(set(current) | set(gone_keys), key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
             src = self.sources.get(key)
             if src is None:
@@ -3159,11 +3314,15 @@ class HostWatch:
                 if src.stop is not None:   # the os follow of a tree that is gone ends
                     src.stop.set()
                     src.ended = src.ended or "the tree is gone (round %d)" % n
-            if not src.writes_host() or src.error is not None or not src.path:
+            if not src.writes_host() or not src.host_path or src.host_error is not None or (
+                    src.kind != "os" and src.error is not None):
                 continue
+            if not (self.trees.get(key) or {}).get("sampled", True) or (
+                    key not in gone_keys and current[key].get("brief")):
+                continue   # AK-3: known from the channel only: no sample of it, no line of the host's record
             pid = key[0]
             sid = "host-%s" % pid
-            seq = self.file_seq.get(src.path, 0)
+            seq = self.file_seq.get(src.host_path, 0)
             out = []
             if key in gone_keys:
                 seq += 1
@@ -3220,18 +3379,25 @@ class HostWatch:
             if not out:
                 continue
             try:
-                self._append(src.path, out)
-                self.file_seq[src.path] = seq
+                self._append(src.host_path, out)
+                self.file_seq[src.host_path] = seq
             except Exception as exc:
-                src.error = "cannot append to %s: %s" % (src.path, getattr(exc, "strerror", None) or exc)
+                why = "cannot append to %s: %s" % (src.host_path, getattr(exc, "strerror", None) or exc)
+                if src.kind == "os":   # AL-1: the os follow goes on and is judged; only these host lines are lost
+                    self._hole(now, "source-unwritable", "round %d: tree %s: %s; these lines of the host's own record"
+                               " are not written; its os source goes on, and the host's record is written again from"
+                               " the next round's new lines" % (n, tree_word(key), why), round_=n)
+                    continue
+                src.host_error = why
+                src.error = src.error or src.host_error
                 self._hole(now, "source-unwritable", "round %d: tree %s: %s; the source is attached again next round"
-                           % (n, tree_word(key), src.error), round_=n)
+                           % (n, tree_word(key), src.host_error), round_=n)
                 continue
             entry = self.trees.get(key)
             if entry is not None and entry.get("first_round") == self.history_round == n:
                 for feed in src.feeds:   # the first round's lines of a tree there at the start are history
-                    if feed.path == src.path:
-                        feed.history_bytes = self._size(src.path)
+                    if feed.path == src.host_path:
+                        feed.history_bytes = self._size(src.host_path)
 
     def _start_now(self, now):
         """T-3 (R-2): the watch's start as the earlier of the wall clock at the
@@ -3360,14 +3526,18 @@ class HostWatch:
                     old.update(summary=f["summary"], cited_seq=list(f["cited_seq"]), lines=cited[:6],
                                fkey=list(fkey), grown=old.get("grown", 0) + 1)
                     self._say(now, "SOURCE FINDING grown [%s] %s on %s pid %s (%s): %s (grown %d, not knocked"
-                              " again)" % (f["severity"], f["rule_id"], key[1] or "?", key[0], src.kind,
+                              " again)" % (f["severity"], f["rule_id"], key[1] or "?", key[0],
+                                           old.get("source") or src.kind,
                                            f["summary"], old["grown"]))
                     continue
             entry = {"rule_id": f["rule_id"], "kind": f.get("kind"), "class": f.get("class"),
                      "severity": f["severity"], "summary": f["summary"], "cited_seq": list(f["cited_seq"]),
                      "session_id": f["session_id"], "trace": feed.path, "lines": cited[:6],
                      "tree": tree_word(key), "tree_key": list(key), "pid": key[0], "image": key[1],
-                     "source": src.kind, "at": self.at(now), "run": self.run, "history": history,
+                     # AJ-3, AK-1: an os tree's finding is the source of the lines it cites (its host record's feed:
+                     # host); hooks: as before
+                     "source": HOST_SOURCE if src.kind == "os" and feed.path == src.host_path else src.kind,
+                     "at": self.at(now), "run": self.run, "history": history,
                      "pending": pending, "notice": None, "fkey": list(fkey), "grown": 0,
                      "state": PENDING_EXIT if pending else "settled"}
             # V-1: an act is one os event (or the events a finding cites), keyed by the EVENTS, whichever lines of
@@ -3393,10 +3563,13 @@ class HostWatch:
                     act["dirty"] = True
             fired.append("%s %s" % (f["rule_id"], tree_word(key)))
         not_run = sorted({"%s (%s)" % (n["rule_id"], n["detail"]) for n in notes if n.get("status") in NOT_RUN})
-        if not_run and not src.not_run_said:   # I-6 (P8): said once per source, never dropped
-            src.not_run_said = True
+        # AL-2: an os tree has two files, each with its own rules: said once per file, by the file's own source
+        which = HOST_SOURCE if src.kind == "os" and feed.path == src.host_path else src.kind
+        said_for = src.not_run_said if isinstance(src.not_run_said, set) else set()
+        if not_run and (which not in said_for if src.kind == "os" else not src.not_run_said):
+            src.not_run_said = (said_for | {which}) if src.kind == "os" else True   # I-6 (P8): once, never dropped
             self.notes.append("tree %s, its %s source: %d rule(s) did not run on it: %s" % (
-                tree_word(key), src.kind, len(not_run), "; ".join(not_run)))
+                tree_word(key), which, len(not_run), "; ".join(not_run)))
         for note in notes:
             if note.get("status") in NOT_RUN:
                 continue
@@ -3447,7 +3620,7 @@ class HostWatch:
                                     key=lambda k: (act["copies"][k].get("depth") or 0, str(k[0])))
         answer = None
         for k in order:
-            notice, knocked = self._source_knock(now, k, act["copies"][k]["src_kind"], entry, container=act,
+            notice, knocked = self._source_knock(now, k, said_by(act["copies"][k]), entry, container=act,
                                                  key_name="status", shown=standing)
             answer = answer or notice
             if knocked:
@@ -3466,10 +3639,10 @@ class HostWatch:
         elif tree.get("benign") and e.get("catalog"):   # T-2: a catalog finding on a benign tree is a note
             e.update(benign_note=True, notice="%s (%s)" % (BENIGN_NOTE, tree.get("benign_by")))
         else:
-            e["notice"] = self._source_knock(now, key, e["src_kind"], e)[0]
+            e["notice"] = self._source_knock(now, key, said_by(e), e)[0]
         e["settled"] = True
         self._say(now, "SOURCE FINDING [%s] %s on %s pid %s (%s): %s (%s)" % (
-            e["severity"], e["rule_id"], e["image"] or "?", e["pid"], e["src_kind"], e["summary"], e["notice"]))
+            e["severity"], e["rule_id"], e["image"] or "?", e["pid"], said_by(e), e["summary"], e["notice"]))
 
     def _settle_all(self, now):
         """V-1 (U2): every finding not yet settled and every act whose copies changed, each on its own (one that
@@ -3952,27 +4125,32 @@ class HostWatch:
                            self.late_beats.items())), self.act_twins))
         notes_benign = [f for f in self.source_findings if f.get("benign_note") and f.get("judged_on") is None]
         elsewhere = [f for f in self.source_findings if f.get("judged_on") is not None]
+        pairs = told_twice(self.source_findings, self.sources)   # AJ-2: one act told twice, one entry, counted once
+        by_id = {id(f): f for f in self.source_findings}
+        twin = {id(h): by_id[o_id] for o_id, h in pairs.items()}
+        alarms = [f for f in self.source_alarms() if id(f) not in pairs]
         out.append("SOURCE FINDINGS: %d (%d live, of them %d %s; %d history; %d %s; %d on benign trees, noted)" % (
-            len(self.source_findings), len(self.source_alarms()),
-            sum(1 for f in self.source_alarms() if f["pending"]), PENDING_EXIT,
-            sum(1 for f in self.source_findings if f["history"] and f.get("judged_on") is None),
-            len(elsewhere), JUDGED_ELSEWHERE, len(notes_benign)))   # T-8: the four add up
-        for f in [f for f in self.source_findings if f not in notes_benign]:
-            out.append("  [%s] %s on %s pid %s via %s: %s; %s; cites %s lines %s%s" % (
+            len(self.source_findings) - len(pairs), len(alarms), sum(1 for f in alarms if f["pending"]), PENDING_EXIT,
+            sum(1 for f in self.source_findings if f["history"] and f.get("judged_on") is None and id(f) not in pairs),
+            sum(1 for f in elsewhere if id(f) not in pairs), JUDGED_ELSEWHERE,
+            sum(1 for f in notes_benign if id(f) not in pairs)))   # T-8: the four add up
+        for f in [f for f in self.source_findings if f not in notes_benign and id(f) not in pairs]:
+            out.append("  [%s] %s on %s pid %s via %s: %s; %s; cites %s lines %s%s%s" % (
                 f["severity"], f["rule_id"], f["image"] or "?", f["pid"], f["source"], f["summary"], f["notice"],
                 f["trace"], ",".join(str(x) for x in f["lines"]) or "-",
-                "; grown %d (not knocked again)" % f["grown"] if f.get("grown") else ""))
+                "; grown %d (not knocked again)" % f["grown"] if f.get("grown") else "", both_said(twin, f)))
         open_ = self.unsettled()
         out.append("NOT SETTLED (A3; a finding no settle could decide, an alarm of its tree): %d" % len(open_))
         for f in open_:   # V-1 (U2): never without a word
             out.append("  [%s] %s on %s pid %s via %s: %s; %s" % (
                 f["severity"], f["rule_id"], f["image"] or "?", f["pid"], f["source"], f["summary"],
                 f.get("settle_error") or f.get("notice") or "not settled"))
-        out.append("ON BENIGN TREES (noted, not knocked): %d" % len(notes_benign))   # T-2: apart, never an alarm
-        for f in notes_benign:
-            out.append("  [%s] %s on %s pid %s via %s: %s; %s; cites %s lines %s" % (
+        noted = [f for f in notes_benign if id(f) not in pairs]   # AJ-2: as above
+        out.append("ON BENIGN TREES (noted, not knocked): %d" % len(noted))   # T-2: apart, never an alarm
+        for f in noted:
+            out.append("  [%s] %s on %s pid %s via %s: %s; %s; cites %s lines %s%s" % (
                 f["severity"], f["rule_id"], f["image"] or "?", f["pid"], f["source"], f["summary"], f["notice"],
-                f["trace"], ",".join(str(x) for x in f["lines"]) or "-"))
+                f["trace"], ",".join(str(x) for x in f["lines"]) or "-", both_said(twin, f)))
         if self.attach_hooks:   # I-10: Stop leaves attached hooks in place, as raqib watch does
             for project in sorted({s.project for s in self.sources.values() if s.kind == "hooks" and s.project}):
                 out.append("HOOKS LEFT IN PLACE: %s/.claude/settings.json keeps the Raqib hooks after this watch (as"

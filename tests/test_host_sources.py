@@ -280,6 +280,11 @@ def test_e1a_sysmon_present_attaches_os_sysmon_rooted_at_the_root_pid_in_a_threa
         assert src.stop.is_set() and not src.thread.is_alive() and src.ended == "stopped"
     os_lines = lines_of(source_file(w, 2100))
     assert {l["source"] for l in os_lines} == {"os"} and os_lines[0]["session_id"] == "os-4100"
+    # REDO 2 M7.14 (ADR-0007 AK-1): the host's own record of the os tree is in a file of its own (the os file is as
+    # before M7.14)
+    key = next(k for k in w.trees if k[0] == 2100)
+    assert {(l["source"], l["session_id"]) for l in lines_of(Path(w._source_path(key, "host")))} == {
+        ("host", "host-2100")}
 
 
 def test_e1a_sysmon_present_is_read_from_doctors_registry_check_on_windows_only():

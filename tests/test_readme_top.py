@@ -73,17 +73,43 @@ HOST_UNREAD = [
      " and its source text names the cause (denied, not back in time, could not be run, other failure); in"
      " the first round a tree is in after a read is kept, it is attached again as the os source, and what "
      "its host record wrote stays judged.",
-    "While no read is kept, the first failed read knocks once (HOST-HOLE, the cause first) and says one line"
-     " in the terminal: the reason, that what lives between two rounds is not seen until a round reads, and,"
-     " for a denial, that an elevated terminal (Run as administrator) reads it.",
+    "While no read is kept, the first failed read knocks once (HOST-HOLE, the cause first) and says one "
+     "line in the terminal: the reason, that what lives between two rounds is not seen until a round "
+     "reads, and, for a denial, that an elevated terminal (Run as administrator) reads it.",
     "The report's SYSMON line says how many of the reads the rounds asked were kept, and the holes of one"
      " run of failed reads whose words differ only by the round and its time are one line of the report "
      "(ADR-0007 Amendments AF and AG).",
     "A read that fails after rounds that read leaves the os sources in place: what they cannot read is "
      "not seen, and each such run of failed reads knocks once, naming its cause and no terminal.",
+    "Under the host watch a tree whose source is os also has the host's own record, from its attach, by "
+     "the road a host source has it: a file of its own beside the os follow's, its own feed, the host's "
+     "rules and the host source's history (a tree there at the start: its first round's lines are history;"
+     " a file that restarts: what follows is live); a write of that file that fails loses those lines and "
+     "is a hole, and never ends the follow, and nothing that becomes of the follow stops the file; a tree "
+     "known only from the channel has no line, though a child of a sampled tree that only the channel gave"
+     " can be in one; so a tree is judged from its host record by the rules, the history and the words of "
+     "the watch without Sysmon, and knocks no less: its one first-finding knock may go to an act the os "
+     "source saw first, and a tree that began on the host's record alone continues it in a new file whose "
+     "lines are numbered from one again (ADR-0007 Amendments AJ, AK and AL).",
+    "Each pass of a tree's os follow asks the channel a bounded question, as a round's read does (events "
+     "1, 3 and 11: the first pass those since the watch's start, then the records after the highest it has"
+     " read in the whole channel, at most the round's cap; a cut is a hole); the rounds' own read starts "
+     "at the live reader's start, which can differ by the reader's start delay.",
+    "A follow attached again is given the tree the earlier follow published at the end of its last "
+     "finished pass, and when the round's read restarts, every follow's bound restarts at the restart's "
+     "time, whether or not the record numbers restarted, as the restart's hole says of the follows then "
+     "running; a follow attached after a restart says in its source text that it reads from the restart's "
+     "time; the follow no longer reads the tree's past before the watch's start (after a restart, nor what"
+     " came between the watch's start and it), and a child that started before the watch is not known to "
+     "it (the host's record has what a sample shows of it).",
+    "A child in the sample is a HostChild line and its event 1 an os line: where one rule fires on both, "
+     "the report's listing shows one entry naming both lines, taken for the same act (one image, starts "
+     "within 1 s), and counts it once; the join is the listing's only: the window and the state count both"
+     " findings, and the catalog's rules knock for the pair at most once.",
     "What an agent without hooks reads with its own code (a file it opens, a directory it lists) is in no"
-     " source: it starts no child and opens no connection, and Sysmon has no event for a read; a file's "
-     "deletion is in no source at all.",
+     " source of the host watch; the proxy source records the tool call where the agent is pointed at it; "
+     "the host watch does not read the proxy's trace; the read starts no child and opens no connection, "
+     "and Sysmon has no event for a read; a file's deletion is in no source at all.",
     "In the third field run the watched read the watcher's record: the agent read the watch's own files "
      "under the home ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)).",
 ]

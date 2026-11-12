@@ -754,22 +754,83 @@ is amended by T-2, T-1 restated by V-1).
   cannot read while the reads fail is not seen, and each such run of
   failed reads knocks once, naming its cause and no terminal. What an
   agent without hooks reads with its own code (a file it opens, a
-  directory it lists) is in no source: it starts no child and opens no
-  connection, and Sysmon has no event for a read. A file's deletion is
-  in no source at all (Sysmon's events 23 and 26 are never asked for); a
-  creation only where event 11 is read. In the third field run the
-  watched read the watcher's record: the agent read the watch's own
-  files under the home to write its account of the test, as section 6
-  says it can. Said, not fixed, of a tree attached again as os (more
+  directory it lists) is in no source of the host watch; the proxy
+  source records the tool call where the agent is pointed at it; the
+  host watch does not read the proxy's trace; the read starts no child
+  and opens no connection, and Sysmon has no event for a read. A file's
+  deletion is in no source at all (Sysmon's events 23 and 26 are never
+  asked for); a creation only where event 11 is read. In the third field
+  run the watched read the watcher's record: the agent read the watch's
+  own files under the home to write its account of the test, as section
+  6 says it can. Said, not fixed, of a tree attached again as os (more
   said, never less): a child its host record wrote and the channel then
   gives again can be two source findings of the one act; the follow's
-  first pass reads the tree's past in the channel, and the silence and
-  cross-source rules judge that past as live; a Claude Code tree tries
-  its hooks again, and a second failure is a second hole; a tree that is
-  quiet or gone when the first read is kept and never in a round again
-  is never read by os; a child new in that round's sample is judged only
-  where the channel gives its start, as in a watch whose every round
-  read.
+  first pass reads the channel from the watch's start, and the silence
+  and cross-source rules judge what it gives as live; a Claude Code tree
+  tries its hooks again, and a second failure is a second hole; a tree
+  that is quiet or gone when the first read is kept and never in a round
+  again is never read by os; a child new in that round's sample is
+  judged by the host's record too. Under the host watch a tree whose
+  source is os also has the host's own record, from its attach, by the
+  road a host source has it: a file of its own beside the os follow's,
+  its own feed, the host's rules and the host source's history (the
+  first round's lines of a tree there at the start are history; after a
+  file restarts its lines are live); what becomes of the follow (an
+  error, an end, a pass still out) never stops or delays those lines; a
+  write of that file that fails loses those lines, is a hole, and does
+  not end the follow; a tree no round's sample holds (known only from
+  the channel) has no host line. So whatever its follow missed (a follow
+  that never read, one that read once and then fails, one that ends in
+  the round of its attach, one attached again, a channel cleared under
+  it), a sampled tree is judged from its host record by the rules, the
+  history and the words of the watch without Sysmon, and knocks no less.
+  Not equal in three things, each more said or other words, none a
+  silence: the tree's one first-finding knock may go to an act the os
+  source saw before the round's sample, so the host line's own finding
+  then says not notified; a tree that began on the host's record alone,
+  while no round had read the channel, continues that record in a new
+  file, where its lines are numbered from one again, so a knock's line
+  number can differ; and an os tree attached again after its host file
+  restarted judges that file's lines a second time, as history. Said,
+  not fixed: a child or a talk of a sampled tree that only the round's
+  channel gave can still be in its host line (the act's record does not
+  say which source gave it). Each pass of a tree's os follow asks the
+  channel a bounded question, as a round's read does: events 1, 3 and 11
+  (the round's read asks 22 too), the first pass those since the watch's
+  start (the rounds' read starts at the live reader's own start, which
+  can differ by the reader's start delay), then the records after the
+  highest it has read in the whole channel, at most the round's cap, a
+  cut being a hole. A follow attached again is given the tree the
+  earlier follow published at the end of its last finished pass, never
+  the live tree of a follow still in a pass; the tree a follow keeps is
+  never pruned for its life (memory, not judgment); when the round's
+  read restarts (record numbers that restarted, a cleared or stopped
+  channel, a clock that stepped back), every follow's bound restarts at
+  the restart's time, whether or not the record numbers restarted, and
+  the restart's hole says so of the follows then running; a follow
+  attached after a restart says in its source text that it reads from
+  the restart's time. Said, not fixed: a child between a follow's old
+  bound and the restart's time is not read by the follow (the host's
+  record has what the sample shows of it). A follow's pass that cannot
+  read is a hole: a pass not back in time writes its own line (the
+  helper's pid), a denial or a wevtutil that could not be run one line
+  for the follow. Said, not fixed: the follow no longer reads the tree's
+  past before the watch's start (it was history, listed and never
+  knocked), and a child that started before the watch is not known to
+  the follow, so its acts after the start are in the tree's sources only
+  as the host's record shows them. The price is one act told twice: a
+  child in the sample is a HostChild line and its event 1 an os line,
+  and a rule can fire on both; the report's listing shows such a pair
+  (the same tree, rule and standing, the os line's child of the
+  HostChild line's image and started within a second of it, as the
+  rhythm's twin rule) as one entry naming both lines, taken for the same
+  act (one image, starts within 1 s), counted once; the join is the
+  listing's only: the record, the state and the window keep and count
+  both findings; two children of one image started within a second can
+  be folded so (the words say taken for, not the same); a HostChild line
+  that names several children joins at most one os line, the others stay
+  apart; the rhythm counts the act once, and the catalog's rules knock
+  for the pair at most once.
 - **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No watched
   process is signalled, suspended, attached to or killed, and nothing is
   blocked: a finding is a record and a knock after the act, never a
