@@ -1900,3 +1900,37 @@ words. Sorted by direction, and closed by the Table's own commit.
   here is a finer case of the one before - and one is added: "has X"
   is not a ruling until it says by which code.
 
+## Amendment AM (the Table, 2026-11-13) - the elevated watch on 0eef874 (docs/review/2026-11-13-the-elevated-watch.md)
+F1 of that note is a silence found in the field: defects of a field
+run are fixed under the commander's standing order; the clipboard
+rule is a new rule and waits for his answer.
+- AM-1 (F1; silence, fixed). The time of a Sysmon event, for
+  everything the watch decides by time - before or after the watch's
+  start, the order of a tree's lines, a beat, a window - is the time
+  it was logged (System/TimeCreated) wherever that is read and the
+  event's own UtcTime is more than SKEW (60 s) away from it; where the
+  two agree within SKEW, or no logged time is read (an export without
+  it), UtcTime as before, to the byte. A line whose time was taken
+  from the log says so (input_meta.time_from: "logged", and the skew
+  in whole seconds). FOR: a machine whose Sysmon stamps its network
+  events weeks behind. MUST NOT TOUCH: every fixture and export whose
+  two times agree gives the lines it gave; no text of an event enters
+  a query; a process's start (event 1) still matches a sampled
+  CreationDate as before.
+- AM-2 (said once, not a hole). Per event kind, once per watch, a
+  note: Sysmon's event N carries a time D behind (or ahead of) the
+  time it was logged; the logged time is used. A note, not a hole and
+  not a knock: nothing is lost once AM-1 holds, and a watch on such a
+  machine must still be able to end CLEAN.
+- AM-3 (F2). A rule's "could not judge N line(s)" note for one tree's
+  file is one note, the latest count; a later pass replaces it. MUST
+  NOT TOUCH: two rules, or two files, are two notes; the count of
+  not-judged lines in the JSON and the state.
+- AM-4 (F3; stated first). A test on a made-up export of the watch's
+  shape (process events at the watch's minute, network events weeks
+  behind) says what RHYTHM BEATS reports before and after AM-1. If
+  "beats after the last round" is still not explained by the times,
+  the builder changes nothing there and returns it as a question.
+- Recorded: the sample window's words; whether event 22 lags; the
+  clipboard (the note's Q-1).
+
