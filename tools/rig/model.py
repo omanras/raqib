@@ -12,11 +12,10 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SCRIPT = [
-    "curl -s --max-time 20 --limit-rate 2000 --output rig.bin https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe",
-    "curl -s --max-time 10 https://example.com/",
-    "whoami",
-]
+SLOW = "curl -s --max-time 7 --limit-rate 300 --output rig.bin https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe"
+# five turns that each outlast a round of 5 s (so each model call and the command after it fall in a round of their
+# own: the rhythm rule's K cycles need K rounds), then the two short ones
+SCRIPT = [SLOW, SLOW, SLOW, SLOW, SLOW, "curl -s --max-time 10 https://example.com/", "whoami"]
 SHELL = re.compile(r"shell|bash|command|terminal|exec", re.I)
 LOCK = threading.Lock()
 LOG = None

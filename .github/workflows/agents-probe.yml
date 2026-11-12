@@ -40,17 +40,18 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p "$RUNNER_TEMP/w-qwen" && cd "$RUNNER_TEMP/w-qwen"
-          raqib watch --host --rounds 22 --every 5 --no-open > ../watch-qwen.out 2> ../watch-qwen.err &
+          raqib watch --host --rounds 30 --every 5 --no-open > ../watch-qwen.out 2> ../watch-qwen.err &
           w=$!; sleep 7
-          OPENAI_API_KEY=rig OPENAI_BASE_URL="$RIG_URL" OPENAI_MODEL=rig-model timeout 80 qwen -p "Do the task." --yolo > ../agent-qwen.out 2>&1 || echo "qwen rc=$?"
+          OPENAI_API_KEY=rig OPENAI_BASE_URL="$RIG_URL" OPENAI_MODEL=rig-model timeout 130 qwen -p "Do the task." --yolo > ../agent-qwen.out 2>&1 || echo "qwen rc=$?"
           wait $w || true
           echo "=== agent"; tail -30 ../agent-qwen.out; echo "=== model log"; cat "$RUNNER_TEMP/model.log"; : > "$RUNNER_TEMP/model.log"
           echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-qwen.out
+          echo "=== rhythm"; python "$GITHUB_WORKSPACE/tools/rig/rhythm_read.py" node qwen opencode bun curl || true
       - name: kimi under the watch
         continue-on-error: true
         run: |
           mkdir -p "$RUNNER_TEMP/w-kimi" && cd "$RUNNER_TEMP/w-kimi"
-          raqib watch --host --rounds 22 --every 5 --no-open > ../watch-kimi.out 2> ../watch-kimi.err &
+          raqib watch --host --rounds 30 --every 5 --no-open > ../watch-kimi.out 2> ../watch-kimi.err &
           w=$!; sleep 7
           KIMI_API_KEY=rig KIMI_BASE_URL="$RIG_URL" KIMI_MODEL_NAME=rig-model timeout 80 kimi --print -p "Do the task." --yolo > ../agent-kimi.out 2>&1 || echo "kimi rc=$?"
           wait $w || true
@@ -67,11 +68,12 @@ jobs:
                                 "models": {"rig-model": {"name": "Rig"}}}},
            "model": "rig/rig-model", "permission": {"bash": "allow", "edit": "allow"}}
           JSON
-          raqib watch --host --rounds 22 --every 5 --no-open > ../watch-opencode.out 2> ../watch-opencode.err &
+          raqib watch --host --rounds 30 --every 5 --no-open > ../watch-opencode.out 2> ../watch-opencode.err &
           w=$!; sleep 7
-          timeout 80 opencode run "Do the task." > ../agent-opencode.out 2>&1 || echo "opencode rc=$?"
+          timeout 130 opencode run "Do the task." > ../agent-opencode.out 2>&1 || echo "opencode rc=$?"
           wait $w || true
           echo "=== agent"; tail -30 ../agent-opencode.out; echo "=== model log"; cat "$RUNNER_TEMP/model.log"
+          echo "=== rhythm"; python "$GITHUB_WORKSPACE/tools/rig/rhythm_read.py" node qwen opencode bun curl || true
           echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-opencode.out
 
   windows:
@@ -124,6 +126,7 @@ jobs:
           "=== agent"; Get-Content ..\agent-qwen.out -Tail 20
           "=== model log"; Get-Content $env:RUNNER_TEMP\model-qwen.log
           "=== report"; $t = Get-Content ..\watch-qwen.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
+          "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl
       - name: opencode under the watch
         shell: pwsh
         continue-on-error: true
@@ -142,4 +145,5 @@ jobs:
           "=== agent"; Get-Content ..\agent-opencode.out -Tail 20
           "=== model log"; Get-Content $env:RUNNER_TEMP\model-opencode.log
           "=== report"; $t = Get-Content ..\watch-opencode.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
+          "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl
 
