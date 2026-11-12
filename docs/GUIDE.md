@@ -96,17 +96,24 @@ reads it. The report's SYSMON line says how many of the reads the rounds asked w
 holes of one run of failed reads whose words differ only by the round and its time are one line of
 the report (ADR-0007 Amendments AF and AG). A read that fails after rounds that read leaves the os
 sources in place: what they cannot read is not seen, and each such run of failed reads knocks once,
-naming its cause and no terminal. Each pass of a tree's os follow asks the channel a bounded
-question, as a round's read does (the events since the watch's start, then the records after the
-highest it has read, at most the round's cap; a cut is a hole), and a tree whose follow has had two
-passes and none that read is judged by the host's own record too, from the next round it is in,
-until a pass reads; so the follow no longer reads the tree's past before the watch's start, and a
-child that started before the watch is not known to it (ADR-0007 Amendment AI). What an agent
-without hooks reads with its own code (a file it opens, a directory it lists) is in no source of
-the host watch; the proxy source records the tool call where the agent is pointed at it; the host
-watch does not read the proxy's trace; the read starts no child and opens no connection, and Sysmon
-has no event for a read; a file's deletion is in no source at all. In the third field run the
-watched read the watcher's record: the agent read the watch's own files under the home
+naming its cause and no terminal. Under the host watch a tree whose source is os also has the host's
+own record, from its attach, as a tree with hooks has it: the os source adds what a sample cannot
+see and never stands in for it, so a watch with Sysmon judges every tree by at least what the watch
+without it does, whether or not its follow read (ADR-0007 Amendment AJ). Each pass of a tree's os
+follow asks the channel a bounded question, as a round's read does (events 1, 3 and 11: the first
+pass those since the watch's start, then the records after the highest it has read in the whole
+channel, at most the round's cap; a cut is a hole); the rounds' own read starts at the live reader's
+start, which can differ by the reader's start delay. A follow attached again is given the tree the
+earlier follow found, and when the round's read restarts, every follow's bound restarts with it, as
+the restart's hole says; the follow no longer reads the tree's past before the watch's start, and a
+child that started before the watch is not known to it (the host's record has what a sample shows of
+it). A child in the sample is a HostChild line and its event 1 an os line: where one rule fires on
+both, the report lists one entry naming both lines and counts it once, and the pair knocks once.
+What an agent without hooks reads with its own code (a file it opens, a directory it lists) is in no
+source of the host watch; the proxy source records the tool call where the agent is pointed at it;
+the host watch does not read the proxy's trace; the read starts no child and opens no connection,
+and Sysmon has no event for a read; a file's deletion is in no source at all. In the third field run
+the watched read the watcher's record: the agent read the watch's own files under the home
 ([docs/THREAT_MODEL.md](THREAT_MODEL.md)).
 
 `--attach-hooks` (the window: "attach hooks to Claude Code projects", off by default) also installs

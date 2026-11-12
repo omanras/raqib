@@ -730,59 +730,77 @@ is amended by T-2, T-1 restated by V-1).
   field run).** On Windows the Sysmon channel is read with wevtutil, and
   who may read the channel is Windows' and Sysmon's configuration
   (administrators on a default install): a terminal that is not elevated
-  may be denied it (wevtutil exit 5, as in the third field run). The
-  watch never checks elevation: it reports the denial. Each failed read
-  has a cause the watch names from the reader's own words (denied, not
-  back in time, could not be run, other failure), and only a denial
-  names the elevated terminal (Run as administrator). While no round of
-  the watch has read the channel, every tree's source is the host's own
-  record, as on a machine without Sysmon, except a Claude Code tree with
-  hooks attached and a tree with no source; its source text names the
-  cause. In the first round a tree is in after a read is kept, it is
-  attached again as the os source: what its host record wrote stays
-  judged, and an act of the tree's rhythm both sources saw is one act.
-  While no read is kept, the first failed read knocks once (HOST-HOLE,
-  its own rate-limit id, the cause first) and says one line in the
-  terminal: the reason, that what lives between two rounds is not seen
-  until a round reads, and that the trees are judged by the host's own
-  record until then. The report's SYSMON line says how many of the reads
-  the rounds asked were kept, with the first reason, and the holes of
-  one run of failed reads whose words differ only by the round and its
-  time are one line of the text report (each is still a hole of its
-  round, in the record and the state). Said, not fixed: a read that
-  fails after rounds that read leaves the os sources in place; what they
-  cannot read while the reads fail is not seen, and each such run of
-  failed reads knocks once, naming its cause and no terminal. What an
-  agent without hooks reads with its own code (a file it opens, a
-  directory it lists) is in no source of the host watch; the proxy
-  source records the tool call where the agent is pointed at it; the
-  host watch does not read the proxy's trace; the read starts no child
-  and opens no connection, and Sysmon has no event for a read. A file's deletion is
-  in no source at all (Sysmon's events 23 and 26 are never asked for); a
-  creation only where event 11 is read. In the third field run the
-  watched read the watcher's record: the agent read the watch's own
-  files under the home to write its account of the test, as section 6
-  says it can. Said, not fixed, of a tree attached again as os (more
-  said, never less): a child its host record wrote and the channel then
-  gives again can be two source findings of the one act; the follow's
-  first pass reads the tree's past in the channel, and the silence and
-  cross-source rules judge that past as live; a Claude Code tree tries
+  may be denied it (wevtutil exit 5, as in the third field run). The watch
+  never checks elevation: it reports the denial. Each failed read has a
+  cause the watch names from the reader's own words (denied, not back in
+  time, could not be run, other failure), and only a denial names the
+  elevated terminal (Run as administrator). While no round of the watch
+  has read the channel, every tree's source is the host's own record, as
+  on a machine without Sysmon, except a Claude Code tree with hooks
+  attached and a tree with no source; its source text names the cause. In
+  the first round a tree is in after a read is kept, it is attached again
+  as the os source: what its host record wrote stays judged, and an act of
+  the tree's rhythm both sources saw is one act. While no read is kept,
+  the first failed read knocks once (HOST-HOLE, its own rate-limit id, the
+  cause first) and says one line in the terminal: the reason, that what
+  lives between two rounds is not seen until a round reads, and that the
+  trees are judged by the host's own record until then. The report's
+  SYSMON line says how many of the reads the rounds asked were kept, with
+  the first reason, and the holes of one run of failed reads whose words
+  differ only by the round and its time are one line of the text report
+  (each is still a hole of its round, in the record and the state). Said,
+  not fixed: a read that fails after rounds that read leaves the os
+  sources in place; what they cannot read while the reads fail is not
+  seen, and each such run of failed reads knocks once, naming its cause
+  and no terminal. What an agent without hooks reads with its own code (a
+  file it opens, a directory it lists) is in no source of the host watch;
+  the proxy source records the tool call where the agent is pointed at it;
+  the host watch does not read the proxy's trace; the read starts no child
+  and opens no connection, and Sysmon has no event for a read. A file's
+  deletion is in no source at all (Sysmon's events 23 and 26 are never
+  asked for); a creation only where event 11 is read. In the third field
+  run the watched read the watcher's record: the agent read the watch's
+  own files under the home to write its account of the test, as section 6
+  says it can. Said, not fixed, of a tree attached again as os (more said,
+  never less): a child its host record wrote and the channel then gives
+  again can be two source findings of the one act; the follow's first pass
+  reads the channel from the watch's start, and the silence and
+  cross-source rules judge what it gives as live; a Claude Code tree tries
   its hooks again, and a second failure is a second hole; a tree that is
-  quiet or gone when the first read is kept and never in a round again
-  is never read by os; a child new in that round's sample is judged only
-  where the channel gives its start, as in a watch whose every round
-  read. Each pass of a tree's os follow asks the channel a bounded
-  question, as a round's read does: the events since the watch's start,
-  then the records after the highest it has read, at most the round's
-  cap, a cut being a hole; a tree whose follow has had two passes and
-  none that read is judged by the host's own record too, from the next
-  round it is in, until a pass reads (its source text says so, with the
-  cause). Said, not fixed: the follow no longer reads the tree's past
-  before the watch's start (it was history, listed and never knocked),
-  and a child that started before the watch is not known to the follow,
-  so its acts after the start are not in the tree's os source; a follow
-  that read once and then fails is a hole of each pass, not the host's
-  record.
+  quiet or gone when the first read is kept and never in a round again is
+  never read by os; a child new in that round's sample is judged by the
+  host's record too. Under the host watch a tree whose source is os also
+  has the host's own record, from its attach, as a tree with hooks has it:
+  the os source adds what a sample cannot see and never stands in for it,
+  so whatever its follow missed (a follow that never read, one that read
+  once and then fails, one attached again, a channel cleared under it),
+  and whether or not the watch knows it missed, the tree is judged by at
+  least what the watch without Sysmon judges. Each pass of a tree's os
+  follow asks the channel a bounded question, as a round's read does:
+  events 1, 3 and 11 (the round's read asks 22 too), the first pass those
+  since the watch's start (the rounds' read starts at the live reader's
+  own start, which can differ by the reader's start delay), then the
+  records after the highest it has read in the whole channel, at most the
+  round's cap, a cut being a hole. A follow attached again is given the
+  tree the earlier follow found; the tree a follow keeps is never pruned
+  for its life (memory, not judgment); when the round's read restarts
+  (record numbers that restarted, a cleared or stopped channel, a clock
+  that stepped back), every follow's bound restarts at the restart's time,
+  and the restart's hole says so. A follow's pass that cannot read is a
+  hole: a pass not back in time writes its own line (the helper's pid), a
+  denial or a wevtutil that could not be run one line for the follow.
+  Said, not fixed: the follow no longer reads the tree's past before the
+  watch's start (it was history, listed and never knocked), and a child
+  that started before the watch is not known to the follow, so its acts
+  after the start are in the tree's sources only as the host's record
+  shows them. The price is one act told twice: a child in the sample is a
+  HostChild line and its event 1 an os line, and a rule can fire on both;
+  the report lists such a pair (the same tree and rule, the os line's
+  child of the HostChild line's image and started within a second of it,
+  as the rhythm's twin rule) as one entry naming both lines, counted once,
+  while the record and the state keep both findings; a HostChild line that
+  names several children joins at most one os line, the others stay apart;
+  the rhythm counts the act once, and the pair knocks once.
 - **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No watched
   process is signalled, suspended, attached to or killed, and nothing is
   blocked: a finding is a record and a knock after the act, never a

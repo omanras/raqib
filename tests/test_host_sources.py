@@ -279,7 +279,10 @@ def test_e1a_sysmon_present_attaches_os_sysmon_rooted_at_the_root_pid_in_a_threa
     for src in w.sources.values():   # E4: Stop ends every source thread
         assert src.stop.is_set() and not src.thread.is_alive() and src.ended == "stopped"
     os_lines = lines_of(source_file(w, 2100))
-    assert {l["source"] for l in os_lines} == {"os"} and os_lines[0]["session_id"] == "os-4100"
+    # REDO M7.14 (ADR-0007 AJ-1): an os tree's file holds the host's own record beside the os lines
+    os_only = [l for l in os_lines if l["source"] == "os"]
+    assert {l["source"] for l in os_lines} == {"os", "host"} and os_only[0]["session_id"] == "os-4100"
+    assert {l["session_id"] for l in os_lines if l["source"] == "host"} == {"host-2100"}
 
 
 def test_e1a_sysmon_present_is_read_from_doctors_registry_check_on_windows_only():

@@ -51,12 +51,12 @@ def test_a_real_watch_with_notes_on_a_benign_tree_reads_clean_in_the_window(tmp_
     """The person's own ssh and curl under explorer (ADR-0007 T-2): the watch ends 0, and the window says so."""
     follow = aj.CountingFollow(by_root={5100: aj.after_start(aj.built(aj.person_and_agent_export(), 5100))})
     w = aj.watch_rounds(tmp_path, ["benign-person/before", "benign-person/before"], follow=follow)
-    assert w.source_alarms() == [] and len([f for f in w.source_findings if f.get("benign_note")]) == 3
+    assert w.source_alarms() == [] and len([f for f in w.source_findings if f.get("benign_note")]) == 4
     state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
     assert state["code_so_far"] == 0                                   # M8.1 B-4, on M7.8's watch
     assert app.host_counts(state) == (0, 0)                            # the verdict, the rail, the card, the tray
     items = app.host_finding_items(state)
-    assert [(i[0], i[1], i[2]) for i in items] == [("noted", "note", "NET-TOOL")] * 3
+    assert [(i[0], i[1], i[2]) for i in items] == [("noted", "note", "NET-TOOL")] * 4
     assert app.live_level(state["code_so_far"], "WATCHING") == "clean"
     (row,) = app.host_rows(state["host"]["trees"])
     assert row[2].startswith("benign") and row[6] == "%s 3" % host.BENIGN_COUNT and app.row_level(row) is None
