@@ -430,6 +430,35 @@ def test_e2_e7_ak2_a_follow_that_ends_in_the_round_of_its_attach_stops_no_host_l
     assert any("FIRST-FINDING" in x for x in rows) and len(terminal) == 3
 
 
+def test_al1_a_host_file_write_that_fails_loses_its_lines_says_so_and_never_ends_the_os_follow(tmp_path, monkeypatch):
+    """ADR-0007 AL-1 (the packet's R-1): an os tree's host-record file that cannot be appended in one round
+    (round 3: curl2) is a hole with true words; the os source is not ended, not replaced by a host source and its
+    follow is not orphaned (one attach, stopped at the end); the next round's new child (curl3) is written."""
+    real, failed = host.HostWatch._append, []
+
+    def append(self, path, lines):
+        if str(path).endswith("-host.jsonl") and not failed and any("9310" in json.dumps(x) for x in lines):
+            failed.append(path)
+            raise OSError(13, "Permission denied (SYNTHETIC)")
+        return real(self, path, lines)
+    monkeypatch.setattr(host.HostWatch, "_append", append)
+    settled_follows(monkeypatch)
+    follow = Script(fail_from=1)
+    w, said, _ = watch(tmp_path, monkeypatch, rounds(tmp_path, 4), channel=Rounds(follow), follow=follow,
+                       wall0=WALL0 + 240)
+    assert len(failed) == 1 and len(follow.kw) == 1                      # one follow for the tree, never a second
+    (key,) = [k for k in w.trees if k[0] == 9176]
+    src = w.sources[key]
+    assert src.kind == "os" and src.error is None and src.host_error is None
+    (hole,) = [h for h in w.holes if h["kind"] == "source-unwritable"]
+    assert hole["detail"].endswith("these lines of the host's own record are not written; its os source goes on, and"
+                                   " the host's record is written again from the next round's new lines")
+    assert "source-ended" not in [h["kind"] for h in w.holes]
+    assert "attached again next round" not in w.final_text
+    found, _, _ = host_said(w, said)
+    assert [x[2] for x in found] == [("9300",), ("9320",)]                # curl and curl3; curl2's line was lost, said
+
+
 BRIEF_G, BRIEF_CURL_G = guid_of(9500), guid_of(9510)
 BRIEF = [created(700, at("07:55:00"), 9500, KIMI, BRIEF_G, 5888, EXPLORER, G_SHELL, "kimi"),
          talked(701, at("07:55:01"), 9500, KIMI, BRIEF_G, port=50400, dest="203.0.113.60"),

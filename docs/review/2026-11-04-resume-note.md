@@ -186,3 +186,19 @@ that leaves its talk to a child is a note, RESULT CLEAN), Q-3 (naming
 a catalog image at its start), a knock for a channel that goes silent
 or restarts, M7.10 (the clipboard: needs an export of event 24).
 
+## After the watches of 2026-11-12
+Not elevated: M7.13 as built (one knock, the cause first, one terminal
+line). Elevated: the rounds read the channel (events 1, 3, 11, 22), and
+every pass of the tree's os follow was ended at 10 s - M7.14 (ADR-0007
+AI to AL): a bounded pass, and the host's own record beside every os
+source. Still to be shown by his machine: an elevated watch on M7.14
+with an agent acting. A process there since 2026-10-16, of another
+account, talking to a lab address every 20 s, knocked as new (its start
+unread): M7.15, and his own check of what it is. His direction of the
+day is ADR-0011 (proposed): the watch as a service, the system's own
+logs for accounts and logons, a tree's reach beyond its descendants,
+the proxy joined to the host watch, and every finding as an event
+other systems carry. Corrected the same day: the Table had written
+that an agent's own file reads are in no source; the proxy source has
+them.
+

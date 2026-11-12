@@ -3382,7 +3382,13 @@ class HostWatch:
                 self._append(src.host_path, out)
                 self.file_seq[src.host_path] = seq
             except Exception as exc:
-                src.host_error = "cannot append to %s: %s" % (src.host_path, getattr(exc, "strerror", None) or exc)
+                why = "cannot append to %s: %s" % (src.host_path, getattr(exc, "strerror", None) or exc)
+                if src.kind == "os":   # AL-1: the os follow goes on and is judged; only these host lines are lost
+                    self._hole(now, "source-unwritable", "round %d: tree %s: %s; these lines of the host's own record"
+                               " are not written; its os source goes on, and the host's record is written again from"
+                               " the next round's new lines" % (n, tree_word(key), why), round_=n)
+                    continue
+                src.host_error = why
                 src.error = src.error or src.host_error
                 self._hole(now, "source-unwritable", "round %d: tree %s: %s; the source is attached again next round"
                            % (n, tree_word(key), src.host_error), round_=n)
@@ -3557,10 +3563,13 @@ class HostWatch:
                     act["dirty"] = True
             fired.append("%s %s" % (f["rule_id"], tree_word(key)))
         not_run = sorted({"%s (%s)" % (n["rule_id"], n["detail"]) for n in notes if n.get("status") in NOT_RUN})
-        if not_run and not src.not_run_said:   # I-6 (P8): said once per source, never dropped
-            src.not_run_said = True
+        # AL-2: an os tree has two files, each with its own rules: said once per file, by the file's own source
+        which = HOST_SOURCE if src.kind == "os" and feed.path == src.host_path else src.kind
+        said_for = src.not_run_said if isinstance(src.not_run_said, set) else set()
+        if not_run and (which not in said_for if src.kind == "os" else not src.not_run_said):
+            src.not_run_said = (said_for | {which}) if src.kind == "os" else True   # I-6 (P8): once, never dropped
             self.notes.append("tree %s, its %s source: %d rule(s) did not run on it: %s" % (
-                tree_word(key), src.kind, len(not_run), "; ".join(not_run)))
+                tree_word(key), which, len(not_run), "; ".join(not_run)))
         for note in notes:
             if note.get("status") in NOT_RUN:
                 continue

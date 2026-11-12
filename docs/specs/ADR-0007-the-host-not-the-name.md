@@ -1844,3 +1844,59 @@ structure must name the structure.
   that knows the earlier one's child (through the watch), and a
   restart through the rounds with its hole's words.
 
+## Amendment AL (the Table, 2026-11-12) - rulings on review 2026-11-12-M7.14-redo2.md (6ea33c5), and the judgement on M7.14
+The packet: REDO, narrow. The road of AK-1 is found sound: one code
+path for the host lines of host, hooks and os trees, the host
+source's history, nothing of the follow able to stop them. One
+silence, rare, and new with this build; the rest is more said or
+words. Sorted by direction, and closed by the Table's own commit.
+- AL-1 (R-1; silence, fixed). An os tree's host file that cannot be
+  written in a round loses those lines and is a hole with true words;
+  it does not end the os source, replace it by a host source, or leave
+  its follow running with nobody reading it. The next round writes on.
+  Tested through the rounds.
+- AL-2 (S-4). The rules that did not run on a tree are said once for
+  each of an os tree's two files, each by its own source's name.
+- AL-3 (S-1, S-2, S-3, W-1; AK-8 said too much). What AJ-1 holds is:
+  from its host record a tree is judged by the rules, the history and
+  the words of the watch without Sysmon, and knocks no less. Not
+  equal, and now said in THREAT_MODEL and the guide: the tree's one
+  first-finding knock may go to an act the os source saw first; a tree
+  that began on the host's record alone (AF-1) continues it in a new
+  file whose lines are numbered from one again; an os tree attached
+  again after its host file restarted judges those lines a second
+  time, as history. None is a silence.
+- AL-4 (S-5, Q11; said, left). A child of a sampled tree that only the
+  round's channel gave can be in its HostChild line, and can be the
+  tree's knock on a host line where the watch without Sysmon has none
+  (the os line of that child would knock it too). Telling the two
+  apart needs the act's record to carry its source: raqib/discover.py,
+  with the tree ledger.
+- AL-5 (recorded with the tree ledger, not built): one file name rule
+  for the host record so AG-1 keeps its numbering (Q12); a feed
+  attached again keeps the earlier feed's epoch (S-3); the os source's
+  text names its host file too (W-2); AJ-3 for the round-1 host lines
+  an AG-1 tree's os feed still reads (question 7); a follow attached
+  again after a restart with nothing read since (W-5).
+- AL-6 (TESTS, said plainly). Four of the six property cases use a
+  follow that reads nothing; two tests are vacuous as the packet says
+  (the at-start check of the os feed's history; told_twice across a
+  restarted file); AK-5's test cannot tell the published copy from the
+  live one. They stay, named here, and are the next reviewer's to
+  replace with the ledger's task. AL-1 has a test that fails without
+  its fix.
+- Judgement: NEXT for M7.14, on the gate and six CI jobs green for the
+  Table's commit. What the commander's elevated watch showed is met as
+  this ADR says: a tree's follow asks the channel a bounded question
+  (AI-1), and whatever the follow reads or misses, the tree has the
+  host's own record by the host source's road (AJ-1, AK-1). Not read
+  by a fresh reviewer: this commit (AL-1, AL-2, the words). His next
+  elevated watch with an agent acting is its review.
+- Table ledger. Three packets, each a REDO, each closing a class: the
+  whole channel (AI-1); detecting a blind follow by counting (AI-2,
+  withdrawn for AJ-1: the property made the structure); the structure
+  built by a second road (AK-1: a ruling that makes a property the
+  structure names the structure). The lesson of M7.9 held - no ruling
+  here is a finer case of the one before - and one is added: "has X"
+  is not a ruling until it says by which code.
+
