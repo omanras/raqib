@@ -107,19 +107,20 @@ class Handler(BaseHTTPRequestHandler):
         if not body.get("stream"):
             return self._json(200, dict(base, object="chat.completion", usage=usage,
                                         choices=[{"index": 0, "message": message, "finish_reason": finish}]))
+        # chunked, so the connection stays open between the agent's turns, as a real provider's does
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "close")
+        self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
         chunks = [dict(base, object="chat.completion.chunk", choices=[{"index": 0, "delta": delta, "finish_reason": None}]),
                   dict(base, object="chat.completion.chunk", choices=[{"index": 0, "delta": {}, "finish_reason": finish}]),
                   dict(base, object="chat.completion.chunk", choices=[], usage=usage)]
-        for c in chunks:
-            self.wfile.write(("data: %s\n\n" % json.dumps(c)).encode())
-        self.wfile.write(b"data: [DONE]\n\n")
+        for text in ["data: %s\n\n" % json.dumps(c) for c in chunks] + ["data: [DONE]\n\n"]:
+            data = text.encode()
+            self.wfile.write(b"%x\r\n%s\r\n" % (len(data), data))
+        self.wfile.write(b"0\r\n\r\n")
         self.wfile.flush()
-        self.close_connection = True
 
 
 def main(argv=None):

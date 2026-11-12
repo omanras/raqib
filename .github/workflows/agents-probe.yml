@@ -73,3 +73,69 @@ jobs:
           wait $w || true
           echo "=== agent"; tail -30 ../agent-opencode.out; echo "=== model log"; cat "$RUNNER_TEMP/model.log"
           echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-opencode.out
+
+  windows:
+    name: agents (windows, Sysmon)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: install raqib, Sysmon and the agents
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check .
+          Invoke-WebRequest https://download.sysinternals.com/files/Sysmon.zip -OutFile $env:RUNNER_TEMP\Sysmon.zip
+          Expand-Archive $env:RUNNER_TEMP\Sysmon.zip $env:RUNNER_TEMP\Sysmon -Force
+          & $env:RUNNER_TEMP\Sysmon\Sysmon64.exe -accepteula -i tools\rig\sysmon-all.xml
+          npm install -g "@qwen-code/qwen-code"
+          npm install -g opencode-ai
+          qwen --version; opencode --version
+      - name: the scripted model
+        shell: pwsh
+        run: |
+          $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
+          "RIG_URL=http://${ip}:8790/v1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Start-Process python -ArgumentList "tools\rig\model.py","--port","8790","--log","$env:RUNNER_TEMP\model.log" -NoNewWindow
+          Start-Sleep 3
+          (Invoke-WebRequest "http://${ip}:8790/v1/models" -UseBasicParsing).Content
+      - name: qwen under the watch
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\w-qwen | Out-Null; Set-Location $env:RUNNER_TEMP\w-qwen
+          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","30","--every","5","--no-open" -RedirectStandardOutput ..\watch-qwen.out -RedirectStandardError ..\watch-qwen.err -PassThru -NoNewWindow
+          Start-Sleep 7
+          $env:OPENAI_API_KEY = "rig"; $env:OPENAI_BASE_URL = $env:RIG_URL; $env:OPENAI_MODEL = "rig-model"
+          $a = Start-Process cmd -ArgumentList "/c","qwen -p `"Do the task.`" --yolo > ..\agent-qwen.out 2>&1" -PassThru -NoNewWindow
+          if (-not $a.WaitForExit(110000)) { taskkill /T /F /PID $a.Id | Out-Null; "qwen: stopped at its time" }
+          $w.WaitForExit(200000) | Out-Null
+          "=== agent"; Get-Content ..\agent-qwen.out -Tail 20
+          "=== model log"; Get-Content $env:RUNNER_TEMP\model.log; Clear-Content $env:RUNNER_TEMP\model.log
+          "=== report"; $t = Get-Content ..\watch-qwen.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
+      - name: opencode under the watch
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\w-opencode | Out-Null; Set-Location $env:RUNNER_TEMP\w-opencode
+          $cfg = @{ '$schema' = "https://opencode.ai/config.json"; provider = @{ rig = @{ npm = "@ai-sdk/openai-compatible"; name = "Rig"; options = @{ baseURL = $env:RIG_URL; apiKey = "rig" }; models = @{ "rig-model" = @{ name = "Rig" } } } }; model = "rig/rig-model"; permission = @{ bash = "allow"; edit = "allow" } }
+          $cfg | ConvertTo-Json -Depth 8 | Out-File opencode.json -Encoding utf8
+          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","30","--every","5","--no-open" -RedirectStandardOutput ..\watch-opencode.out -RedirectStandardError ..\watch-opencode.err -PassThru -NoNewWindow
+          Start-Sleep 7
+          $a = Start-Process cmd -ArgumentList "/c","opencode run `"Do the task.`" > ..\agent-opencode.out 2>&1" -PassThru -NoNewWindow
+          if (-not $a.WaitForExit(110000)) { taskkill /T /F /PID $a.Id | Out-Null; "opencode: stopped at its time" }
+          $w.WaitForExit(200000) | Out-Null
+          "=== agent"; Get-Content ..\agent-opencode.out -Tail 20
+          "=== model log"; Get-Content $env:RUNNER_TEMP\model.log
+          "=== report"; $t = Get-Content ..\watch-opencode.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
+
