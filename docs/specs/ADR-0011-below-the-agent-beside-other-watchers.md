@@ -1,6 +1,7 @@
 # ADR-0011 - Raqib below the agent, and beside other watchers
 
-Status: proposed 2026-11-12, on the commander's words of that day after the third field run: Raqib must sit in a
+Status: accepted 2026-11-13 with Amendment A (the commander's words of that day: do as proposed; and amend what
+limits Raqib). Proposed 2026-11-12, on the commander's words of that day after the third field run: Raqib must sit in a
 deep layer of the system, so that an agent that makes another user, local or not, is still seen; and it must be
 possible to connect it to other monitoring systems, such as an XDR or his Guardian - "this is very important".
 Nothing here is built until he judges it. Amendments appended, never edited in place.
@@ -83,3 +84,51 @@ seen here only as that bridge.
 - Q-2 The order above puts the event and its sinks before the service. His order?
 - Q-3 Which collector is the first to be shown end to end (the Event Log and a tailed file reach most of them)?
 - Q-4 Windows first, Linux after: accepted?
+
+## Amendment A (the Table, 2026-11-13) - the commander's ruling on the link to other systems, and on what Raqib is for
+His words, in substance: this ADR limits Raqib's properties and its effect. Toward an XDR, a SIEM or any other
+security control Raqib only sends them notice, by logs, passively; it takes no action; the security system decides
+whether to act. That takes much of the reviewing load off the Guardian. And as the tests show, Raqib is not only
+for AI agents: it can catch any other suspicious movement, by a logic tighter than the known systems'.
+What that changes, and what it leaves:
+
+- A-1 (passive, in both directions). Raqib emits; it never acts on what it sees and never takes an order from the
+  system it reports to: no command, no query, no configuration comes back over the link. A4 stands and is the
+  whole of Raqib's side of the bargain: the deciding and the acting are the other system's.
+- A-2 (decision 6 widened: Raqib may send). Besides the local sinks (the file, the Windows Event Log, the local
+  syslog socket), Raqib can forward its own events, one way, to a collector the person names: syslog over UDP,
+  TCP or TLS (RFC 5424), and an HTTP(S) event collector that takes a JSON body (the shape Splunk's HEC and its
+  like accept). Off until the person sets a destination; each destination and what is sent to it is said at the
+  watch's start and in the window. Decision 7's "sending events over the network by Raqib itself" is withdrawn
+  from what is not in this ADR.
+- A-3 (CLAUDE.md rule 5 holds as written, and how). The forwarder is not the capture path: capture writes the
+  event to the local file and is done; a forwarder of its own reads that file and sends. A collector that is
+  slow, down or refusing never delays or loses a capture: the events wait in the file, and the link's failure is
+  said (A3: a hole of the link, a heartbeat not delivered), in the report and the window. The watch's line
+  "nothing leaves the machine" is true only while no destination is set, and says so.
+- A-4 (what is sent: everything Raqib judged, not only what it knocks for). A person is knocked only by what the
+  budgets allow (A6); a system whose work is to decide is sent the whole judgement, each event with its level,
+  its rule, the rule's kind and declared false-positive budget, its evidence (A5) and whether Raqib knocked for
+  it: findings and source findings; notes on benign trees; trees listed and not knocked (unknown, by the
+  channel); holes and blind spots; the heartbeat. Decision 3's "notes until measured" now means: a note in
+  Raqib's own window and no knock, and an event to the collector from the first day.
+- A-5 (not only agents). The records Raqib reads and the rules that judge them are about what a process does,
+  not about what it is called (ADR-0007). A finding of decisions 2 and 3 - an account made, a logon with other
+  credentials, a task or a service registered, a log cleared - is a finding whether or not a tree stands behind
+  it; a tree, where there is one, is its attribution. The same holds for what the catalog already judges. The
+  project's first sentence ("a watcher for AI agents") is the commander's to reword; this ADR does not touch
+  CLAUDE.md or the constitution.
+- A-6 (the window). A panel for the link: each destination, what is sent to it, how many events, the last one
+  delivered, the last failure, and a button that sends one marked test event.
+- A-7 (secrets, A9). A collector's token is a secret: kept in the person's own configuration outside any trace,
+  record or event, never printed, never in the tree; an event carries no secret and no text the trace does not
+  already hold.
+- A-8 (the Guardian). It reads these events as any consumer does. Nothing of it is in this tree and nothing here
+  names its formats (A9).
+
+Order of building, replacing the list above (one HANDOFF each): the event and its file, with the technique ids
+and the heartbeat; the forwarders (syslog, HTTP) and the local sinks, with the window's panel; the service;
+accounts, logons, tasks, services and reach, as findings with or without a tree; the proxy joined and
+PROXY-BYPASS; file reads, measured first. Questions Q-1 to Q-4 are answered by his words: the service is accepted;
+the link comes first; Windows first. Q-3 (which collector is shown end to end first) is still his to name.
+

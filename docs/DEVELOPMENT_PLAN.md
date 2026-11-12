@@ -100,8 +100,8 @@ point. Phase 6 runs before the rest of Phase 5.
 - M9.3 a LICENSE and the `license` field (landed 2026-11-11; ADR-0010 Amendment A): CC0 1.0 Universal, the commander's word
 - M9.4 the terminal's knock and its page (ADR-0010 C-6, D-3): a bell rung on a terminal that is gone is a failed knock (notify.py); the page shows the lost-words note; the record written once more after the report; signals after the first said; `raqib watch P >&-`
 
-## Phase 10 — Below the agent, beside other watchers (ADR-0011, proposed; the commander's words, 2026-11-12)
-Nothing is built until he judges the ADR. Its order: the event (`raqib-event/1`, technique ids, a heartbeat); the
+## Phase 10 — Below the agent, beside other watchers (ADR-0011, accepted 2026-11-13 with Amendment A)
+Amendment A (his ruling): Raqib is passive toward other systems and may itself send its events, one way; it sends everything it judged; a finding stands with or without an agent's tree. Its order: the event (`raqib-event/1`, technique ids, a heartbeat); the
 sinks (Event Log, syslog); the service; accounts, logons, tasks, services and a tree's reach; the proxy joined to
 the host watch and PROXY-BYPASS; file reads, measured first.
 
