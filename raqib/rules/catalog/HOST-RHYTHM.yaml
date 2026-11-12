@@ -47,7 +47,12 @@ severity: medium
 # generate, at the declared k, w, r): 0 of the 9 measured negatives fire
 # (the two quiet ones included; the synthetic desktops are not counted),
 # and positive-quiet-three-cycles.json fires once, in its last round; the
-# budget is that measure, 0. The
+# budget is that measure, 0. ADR-0007 AR-2 (re-measured the same way, A6):
+# with negative-gone-few-beats.json (the same tree gone from the sample,
+# its last K-1 cycles read on gone lines) 0 of the 10 measured negatives
+# fire (`raqib check-rules`: 8 positive, 10 measured), and
+# positive-gone-three-cycles.json fires once, in its last round, on a gone
+# line; the budget is that measure, 0. The
 # benign desktops' arrivals are not listed: a tree seen in one round cannot
 # have a cycle. The field source - an IDE that polls one server and builds
 # for hours - is the commander's to measure (as the act-root budget); until
@@ -65,10 +70,10 @@ holes:
   - "a tree the catalog names (by image or endpoint) is not judged by rhythm: an agent that takes a catalog agent's name escapes this rule (and is knocked as NEW-AGENT instead)"
   - "M7.5 E2: the os source's destination is a hash of (hostname, ip, port, protocol): the same server reached by another name or address is another destination, and an os talk and a host talk to one server are two destinations"
   - "M7.5 E2: several cycles inside one round's interval count as one (each act round counts once per destination), so an os source that sees a fast agent's every turn still counts at most one cycle per round"
-  - "ADR-0007 AP-2, AQ-4: a tree not in the round (quiet at the sample, or kept by a round that could not read the connections) has a line only in a round its source gained a beat, so its ring has no entry for a round with none: a beat of that round's interval is put into an older entry, and two cycles of two intervals can count as one"
-  - "ADR-0007 AP-3: a quiet tree with no source of its own (no os follow, no hooks trace: the host source only) has no beat between samples and no line: its cycles between samples are not seen"
-  - "ADR-0007 AP-3: a source's beats are counted one round late, so the beats the final poll reads after the last round are in no round: counted per tree and said in the report (RHYTHM BEATS), never judged"
-description: "A line of raqib watch --host (tool HostTree, source os) for a candidate tree, or (ADR-0007 AP-2, AQ-2) a tree not in the round - quiet at the sample, or kept by a round that could not read the connections - whose source gained a beat (its class its own state), whose think-act cycle reached K cycles to one destination within the last R rounds: in K rounds a child of the tree started within W seconds after the tree talked to the same remote host:port (a connection new in the round, or one whose bytes moved: input_meta.rhythm, computed by raqib/host.py from the rounds' records; K, W and R are this rule's own eq values). The sources of the beats (M7.5 E2): acts from the host's children, the os source's Sysmon event 1 (UtcTime) and the hooks source's Bash calls; talks from the host's connections and the os source's Sysmon event 3 (UtcTime). It fires once per streak (input_meta.rhythm.fires); the streak ends when R rounds pass without a cycle. Only an UNKNOWN tree is judged (ADR-0007 decision 4: input_meta.named false); a benign program is unknown to the catalog and is judged too: the rhythm is the tree's, not its name's. A tree there at the start that cycles under the watch fires: the cycle is live (K-10). The line cites the rounds and the record lines of each beat (A5). Out of reach: a tree with no source of its own between samples, and the beats read after the last round (counted, said)."
+  - "ADR-0007 AP-2, AR-1: a tree not in the round (quiet, kept or gone) has a line only in a round its source gained a beat; its ring still has one entry for every round from its first line on (an empty one, with that round's own interval, for a round with no line), so a beat goes to the round whose interval holds it and a cycle cites that round (no seq where it had no line); several cycles inside one round's interval still count as one"
+  - "ADR-0007 AP-3: a quiet or gone tree with no source of its own (no os follow, no hooks trace: the host source only) has no beat between samples and no line: its cycles between samples, and in its last intervals, are not seen"
+  - "ADR-0007 AP-3, AR-2: a source's beats are counted one round late; a gone tree's beats a round reads are judged on its gone line, but the beats the final poll reads after the last round (of a tree alive at the end, or gone in the last round or two) are in no round: counted per tree and said in the report (RHYTHM BEATS), never judged"
+description: "A line of raqib watch --host (tool HostTree, source os) for a candidate tree, or (ADR-0007 AP-2, AQ-2, AR-2) a tree not in the round - quiet at the sample, kept by a round that could not read the connections, or gone - whose source gained a beat (its class its own state; AR-3: such a line carries no acts, endpoints or cites of an earlier sample, and its rhythm names the beats its round read: read_talks, read_acts, read_cites), whose think-act cycle reached K cycles to one destination within the last R rounds: in K rounds a child of the tree started within W seconds after the tree talked to the same remote host:port (a connection new in the round, or one whose bytes moved: input_meta.rhythm, computed by raqib/host.py from the rounds' records; K, W and R are this rule's own eq values). The sources of the beats (M7.5 E2): acts from the host's children, the os source's Sysmon event 1 (UtcTime) and the hooks source's Bash calls; talks from the host's connections and the os source's Sysmon event 3 (UtcTime). It fires once per streak (input_meta.rhythm.fires); the streak ends when R rounds pass without a cycle. Only an UNKNOWN tree is judged (ADR-0007 decision 4: input_meta.named false); a benign program is unknown to the catalog and is judged too: the rhythm is the tree's, not its name's. A tree there at the start that cycles under the watch fires: the cycle is live (K-10). The line cites the rounds and the record lines of each beat (A5): AR-1, the ring has an entry for every round from the tree's first line on, so a beat is in the round whose interval holds it, and a round with no line is cited with no seq. Out of reach: a tree with no source of its own between samples, and the beats read after the last round (counted, said)."
 summary: "{input_meta.named_word} tree {input_meta.image} pid {input_meta.pid}: {input_meta.rhythm.cycles} talk-then-act cycles to {input_meta.rhythm.destination} in the last {input_meta.rhythm.r} rounds (round {input_meta.round})"
 match:
   all:
@@ -78,7 +83,8 @@ match:
     # ADR-0007 AP-2, AQ-2: a tree not in the round (quiet at the sample, or kept by a round that could not read the
     # connections) whose source gained a beat has its line too, its class its own state: a beat is judged in the
     # round that reads it.
-    - {field: input_meta.class, in: [candidate, quiet, kept]}
+    # ADR-0007 AR-2: and a tree that is gone whose source still gained a beat (class gone), in the round that reads it.
+    - {field: input_meta.class, in: [candidate, quiet, kept, gone]}
     # ADR-0007 decision 4: the unknown is judged by rhythm (a tree the catalog names is NEW-AGENT's).
     - {field: input_meta.named, eq: false}
     - {field: input_meta.rhythm.fires, eq: true}
@@ -95,6 +101,8 @@ fixtures:
     - tests/fixtures/rules/HOST-RHYTHM/positive-host-talks-os-acts.json
     # ADR-0007 AP-3: a tree quiet at the sample whose os source reads k cycles between samples
     - tests/fixtures/rules/HOST-RHYTHM/positive-quiet-three-cycles.json
+    # ADR-0007 AR-2: the same tree gone from the sample, its k-th cycle read after it is gone (a gone line)
+    - tests/fixtures/rules/HOST-RHYTHM/positive-gone-three-cycles.json
     # M7.6c REDO E-2 (ADR-0008 Amendment E): the edge pairs of W and R (raqib/rules/fixturegen.py): an act exactly
     # W s after its talk, a first cycle that is the oldest of the last R rounds
     - tests/fixtures/rules/HOST-RHYTHM/positive-w-edge.json
@@ -108,6 +116,8 @@ fixtures:
     # AP-3: a quiet tree whose beats make no cycle (talks only); the rig's shape, a few beats (k-1 cycles)
     - tests/fixtures/rules/HOST-RHYTHM/negative-quiet-no-cycle.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-quiet-few-beats.json
+    # AR-2: a gone tree whose last k-1 cycles are read after it is gone
+    - tests/fixtures/rules/HOST-RHYTHM/negative-gone-few-beats.json
     # E-2: an act W+1 s after its talk; a first cycle one round out of the last R rounds
     - tests/fixtures/rules/HOST-RHYTHM/negative-w-edge.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-r-edge.json

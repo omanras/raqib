@@ -3,31 +3,13 @@
   {
    "cwd": "host",
    "input_meta": {
-    "acts": 1,
+    "acts": 0,
     "benign": false,
     "benign_by": null,
     "candidate_before": true,
-    "cites": [
-     {
-      "line": 2,
-      "src": "win-process",
-      "text": "fake process row of pid 4400 (make.py)"
-     },
-     {
-      "line": 2,
-      "src": "win-tcp",
-      "text": "fake connection of pid 4400 to 192.0.2.10:443 (make.py)"
-     },
-     {
-      "line": 3,
-      "src": "win-process",
-      "text": "fake child row 4401 (make.py)"
-     }
-    ],
+    "cites": [],
     "class": "quiet",
-    "endpoints": [
-     "192.0.2.10:443"
-    ],
+    "endpoints": [],
     "history": true,
     "hooks": null,
     "image": "relay-bot",
@@ -56,9 +38,9 @@
          "started": "2026-11-03T10:00:05.000000Z"
         }
        ],
-       "round": 1,
+       "round": 2,
        "run": "fixture-run",
-       "seq": 1,
+       "seq": null,
        "talk_cites": [
         {
          "line": 1,
@@ -66,8 +48,8 @@
          "text": "os net seq 1 at 2026-11-03T10:00:02.000000Z"
         }
        ],
-       "talk_round": 1,
-       "talk_seq": 1
+       "talk_round": 2,
+       "talk_seq": null
       },
       {
        "acts": [
@@ -104,8 +86,22 @@
      "fires": false,
      "k": 3,
      "r": 10,
+     "read_acts": 1,
+     "read_cites": [
+      {
+       "line": 5,
+       "src": "fixture-run-4400-967bfa9193.jsonl",
+       "text": "os net seq 3 at 2026-11-03T10:00:12.000000Z"
+      },
+      {
+       "line": 7,
+       "src": "fixture-run-4400-967bfa9193.jsonl",
+       "text": "os process seq 4 at 2026-11-03T10:00:15.000000Z"
+      }
+     ],
+     "read_talks": 1,
      "rounds": [
-      1,
+      2,
       3
      ],
      "streak_fired": false,

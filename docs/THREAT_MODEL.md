@@ -567,13 +567,22 @@ is amended by T-2, T-1 restated by V-1).
   source is stopped and attached again when it is next seen.
 - **A beat is judged in the round that reads it (ADR-0007 Amendments AP
   and AQ).** A tree that is not in the round - quiet at the sample, or
-  kept by a round whose connections were not read - and whose own source
-  (its os follow or its hooks trace) gained a beat since the last round
-  gets its HostTree line of that round, written by the same code as a
-  candidate's, its class its own state (`quiet`, `kept`) and its rhythm
-  from the same ring with the same K, W and R. HOST-RHYTHM judges it, so
-  an unnamed tree whose talk-then-act cycles all fall between two samples
-  is no longer seen only by the final poll. Such a line is not an
+  kept by a round whose connections were not read, or gone from the
+  sample - and whose own source (its os follow or its hooks trace) gained
+  a beat since the last round gets its HostTree line of that round,
+  written by the same code as a candidate's, its class its own state
+  (`quiet`, `kept`, `gone`) and its rhythm from the same ring with the
+  same K, W and R. HOST-RHYTHM judges it, so an unnamed tree whose
+  talk-then-act cycles all fall between two samples, or in its last
+  intervals before it exits, is judged in the round that reads them.
+  The tree's ring has one entry for every round from its first line on:
+  a round in which it had no line has an empty entry with that round's
+  own interval, so a beat is put into the round whose interval holds its
+  time, R rounds are R entries, and a cycle cites the round of its beats
+  (with no seq where that round had no line). A line of a tree that is
+  not in the round says what its round read: no acts, endpoints or
+  cites of an earlier sample, and the count and cites of the beats it
+  read from its sources. Such a line is not an
   arrival: NEW-AGENT, NEW-AGENT-UNKNOWN and HOST-UNWATCHED read a
   candidate's line only, and the tree's history, first round and
   candidate state do not change. It takes the sources' beats only: the
@@ -581,14 +590,15 @@ is amended by T-2, T-1 restated by V-1).
   read again or reset, so when the tree is next in a round a connection
   or child is new or old exactly as before. A named tree's rhythm is
   still not HOST-RHYTHM's; a benign tree's is judged. What is not
-  covered: a quiet tree with no source of its own (the host source only)
-  has no beat between samples and no line; a tree that is gone gets no
-  line; a source's beats are counted one round late, so those the final
-  poll reads after the last round are counted and said in the report,
-  not judged; the ring has an entry only for a round with a line, so a
-  beat of a round that had none is put into an older entry and two
-  cycles of two intervals can count as one; the rig's X12 now reads a
-  beat left for the final poll as missed.
+  covered: a quiet or gone tree with no source of its own (the host
+  source only) has no beat between samples and no line; a source's beats
+  are counted one round late, so those the final poll reads after the
+  last round (of a tree alive at the end, or of one gone in the last
+  round or two) are counted and said in the report, not judged; several
+  cycles inside one round's interval still count as one. The rig's X12
+  reads a beat left for the final poll as missed where the machine has
+  Sysmon, and is not judged (n/a) where no tree can have a source with
+  beats.
 - **The start time decides, where it was read.** A tree is keyed by its
   root's pid, image and start time (Windows: the process's creation time;
   Linux: the start in clock ticks since boot that `/proc/PID/stat` gives,

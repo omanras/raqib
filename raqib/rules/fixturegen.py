@@ -164,6 +164,16 @@ def quiet_inventory(k, pid=RHYTHM_PID, image="relay-bot"):
     return inv
 
 
+def gone_inventory(k, gone, pid=RHYTHM_PID, image="relay-bot"):
+    """ADR-0007 AR-2 (SYNTHETIC): round k of the tree quiet_inventory
+    makes, its root not in the round's process sample from round `gone`
+    on: gone, not quiet; its os source still reads what os_lines writes."""
+    inv = quiet_inventory(k, pid=pid, image=image)
+    if k >= gone:
+        inv["processes"] = []
+    return inv
+
+
 def os_lines(k, scenario, seq, sid="os-%d" % RHYTHM_PID, w=None):
     """M7.5 E2 (SYNTHETIC): the lines os_sysmon writes (its _lines shape:
     a pre and a post per event, tool net / process, source os, the hash of
@@ -203,6 +213,9 @@ def synthetic_inventory(name, w=None):
         return rhythm_inventory("between", int(k), bytes_moved=False)
     if name.startswith("rhythm-quiet:"):   # AP-2: candidate in round 1, quiet after; the os lines name the scenario
         return quiet_inventory(int(name.split(":")[2]))
+    if name.startswith("rhythm-gone:"):   # AR-2: the same, its root gone from the sample from round <gone> on
+        _, _, k, gone = name.split(":")
+        return gone_inventory(int(k), int(gone))
     if name.startswith("rhythm:"):
         _, scenario, k = name.split(":")
         return rhythm_inventory(scenario, int(k), act_after=_gap(HOST_GAP, w))
@@ -242,6 +255,11 @@ def os_scenarios(k):
         "HOST-RHYTHM/positive-quiet-three-cycles.json": ["rhythm-quiet:oscycle:%d" % i for i in range(1, k + 3)],
         "HOST-RHYTHM/negative-quiet-no-cycle.json": ["rhythm-quiet:ostalk:%d" % i for i in range(1, k + 3)],
         "HOST-RHYTHM/negative-quiet-few-beats.json": ["rhythm-quiet:oscycle:%d" % i for i in range(1, k + 2)],
+        # ADR-0007 AR-2: the same tree gone from the sample in round k+1, its last cycles read after it is gone (os
+        # lines before rounds 2..k+1: k cycles, the k-th read in round k+2 on a gone line); and k-1 of them
+        "HOST-RHYTHM/positive-gone-three-cycles.json": ["rhythm-gone:oscycle:%d:%d" % (i, k + 1)
+                                                        for i in range(1, k + 3)],
+        "HOST-RHYTHM/negative-gone-few-beats.json": ["rhythm-gone:oscycle:%d:%d" % (i, k + 1) for i in range(1, k + 3)],
     }
 
 
@@ -255,6 +273,8 @@ def os_rounds(k):
         "HOST-RHYTHM/positive-quiet-three-cycles.json": tuple(range(2, k + 2)),
         "HOST-RHYTHM/negative-quiet-no-cycle.json": tuple(range(2, k + 2)),
         "HOST-RHYTHM/negative-quiet-few-beats.json": tuple(range(2, k + 1)),
+        "HOST-RHYTHM/positive-gone-three-cycles.json": tuple(range(2, k + 2)),
+        "HOST-RHYTHM/negative-gone-few-beats.json": tuple(range(3, k + 2)),
     }
 
 
@@ -431,6 +451,7 @@ CONDITIONS = {
     "HOST-RHYTHM/positive-host-talks-os-acts.json": "r must be >= k+2: an os act is read one round late",
     "HOST-RHYTHM/positive-os-three-cycles.json": "r must be >= k+2: an os act is read one round late",
     "HOST-RHYTHM/positive-quiet-three-cycles.json": "r must be >= k+2: an os act is read one round late",
+    "HOST-RHYTHM/positive-gone-three-cycles.json": "r must be >= k+2: an os act is read one round late",
     "HOST-RHYTHM/positive-os-talks-host-acts.json": "r must be >= k+1: the first talk must stay in the last r rounds",
     "HOST-RHYTHM/positive-three-cycles.json": "r must be >= k+1: the first talk must stay in the last r rounds",
 }

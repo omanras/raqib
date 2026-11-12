@@ -57,6 +57,7 @@ def test_the_made_up_report_is_all_met_but_the_clipboard_which_is_open():
     got = states()
     assert got.pop("X15") == check.OPEN                                   # no rule for the clipboard yet: recorded
     assert set(got.values()) == {check.MET} and sorted(got, key=lambda x: int(x[1:])) == ["X%d" % i for i in range(1, 15)]
+    assert got["X12"] == check.MET   # ADR-0007 AR-4: with Sysmon X12 is judged (MET here), n/a only without it
 
 
 BROKEN = [
@@ -109,6 +110,13 @@ def test_no_report_at_all_is_one_missed_line_and_linux_skips_what_needs_sysmon()
     assert [(i.split(" ", 1)[0], s) for i, s, _ in check.read("raqib watch --host: started\n", WORKLOAD)] == [("X1", check.MISSED)]
     got = states(platform="linux", sysmon=False, sources=[])
     assert got["X3"] == got["X4"] == got["X5"] == got["X11"] == check.SKIP and "X13" not in got and got["X7"] == check.MET
+    # ADR-0007 AR-4: no Sysmon, no tree with a source with beats: X12 measured nothing there, so n/a (MET or MISSED)
+    for left in ("0", "9"):
+        report = REPORT.replace("beats after the last round: 0", "beats after the last round: %s" % left)
+        assert states(report=report, platform="linux", sysmon=False, sources=[])["X12"] == check.SKIP
+        assert states(report=report, platform="win32", sysmon=False)["X12"] == check.SKIP
+    (said,) = [w for i, s, w in check.read(REPORT, WORKLOAD, platform="linux", sysmon=False) if i.startswith("X12")]
+    assert "no Sysmon: no tree can have a source with beats here" in said and "AR-4" in said
 
 
 def test_main_prints_the_table_exits_0_and_1_only_when_strict_and_missed(tmp_path, capsys):

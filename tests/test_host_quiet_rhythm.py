@@ -1,10 +1,12 @@
-"""ADR-0007 Amendments AP and AQ: the rhythm of a tree that is not in the round.
+"""ADR-0007 Amendments AP, AQ and AR: the rhythm of a tree that is not in the round.
 
 A beat is judged in the round that reads it (AP-1): a tree quiet at the
-sample, or kept by a round that could not read the connections, whose
-source gained a beat gets its HostTree line by the code that writes a
-candidate's (AP-2, AQ-2), from its sources' beats only (AQ-3). Every run
-here is synthetic (raqib/rules/fixturegen.py), on a fake clock.
+sample, or kept by a round that could not read the connections, or gone
+(AR-2), whose source gained a beat gets its HostTree line by the code that
+writes a candidate's (AP-2, AQ-2), from its sources' beats only (AQ-3); its
+ring has an entry for every round from its first line on (AR-1), and its
+line says what its round read (AR-3). Every run here is synthetic
+(raqib/rules/fixturegen.py), on a fake clock.
 """
 import copy
 import io
@@ -74,6 +76,34 @@ def run(home, invs, os_at):
     return watch, seen, text
 
 
+def cand(n):
+    """Rounds 1..n: the same tree a candidate at every sample (a line in every round)."""
+    return [fixturegen.synthetic_inventory("rhythm-os:oscycle:%d" % k) for k in range(1, n + 1)]
+
+
+def gone_from(invs, g):
+    """The same rounds, the tree's root not in the process sample from round g on: gone, not quiet."""
+    out = copy.deepcopy(invs)
+    for inv in out[g - 1:]:
+        inv["processes"] = []
+    return out
+
+
+def arriving(n):
+    """Rounds 1..n: no tree in round 1; the tree arrives in round 2 as an act-root (it acts, it is not seen
+    talking: not history, never a candidate); quiet after it (its root in the sample)."""
+    first = fixturegen.quiet_inventory(1)
+    first["candidates"], first["processes"] = [], []
+    return [first, fixturegen.rhythm_inventory("notalk", 2, sampled=True)] + [
+        fixturegen.quiet_inventory(k) for k in range(3, n + 1)]
+
+
+def by_value(f):
+    """A HOST-RHYTHM finding's rounds and cites, without the seqs (a round with no line has none)."""
+    return (f["round"], f["cycle_rounds"], [(b["talk_round"], b["round"]) for b in f["beats"]],
+            [(c["round"], c["src"], c["line"], c["text"]) for c in f["cites"]])
+
+
 def tree_lines(record):
     return [l for l in record["lines"] if l["tool"] == "HostTree"]
 
@@ -110,21 +140,60 @@ def test_e1_a_quiet_trees_cycles_between_samples_fire_once_in_the_round_that_rea
         assert (meta["rhythm"]["k"], meta["rhythm"]["w"], meta["rhythm"]["r"]) == (3, 30, 10)   # the same K, W, R
     assert [tree_lines(r)[0]["input_meta"]["rhythm"]["cycles"] for r in rounds[2:]] == [1, 2, 3]
     (f,) = [f for f in watch.findings if f["rule_id"] == "HOST-RHYTHM"]   # once
-    assert f["round"] == 5 and f["cited_seq"] == [tree_lines(rounds[4])[0]["seq"]] and f["cycle_rounds"] == [1, 3, 4]
+    assert f["round"] == 5 and f["cited_seq"] == [tree_lines(rounds[4])[0]["seq"]] and f["cycle_rounds"] == [2, 3, 4]
     assert len(f["beats"]) == 3 and all(b["talk_cites"] and b["acts"] and b["acts"][0]["cites"] for b in f["beats"])
     assert any("os net seq" in c["text"] for c in f["cites"]) and any("os process seq" in c["text"] for c in f["cites"])
     assert [x["rule_id"] for x in watch.findings] == ["HOST-RHYTHM"]
     tree = watch.trees[key_of(watch)]
     assert tree["rhythm"] == f["notice"] and tree["rhythm_rounds"] == [5]
-    # it knocks as a candidate's does: the same rounds with the tree a candidate at every sample
-    cand_invs = [fixturegen.synthetic_inventory("rhythm-os:oscycle:%d" % k) for k in range(1, 6)]
-    cwatch, _, ctext = run(home / "candidate", cand_invs, CYCLES)
+    # AR-5: it knocks as a candidate's does, by value: the same rounds with the tree a candidate at every sample
+    cwatch, _, ctext = run(home / "candidate", cand(5), CYCLES)
     (cf,) = [x for x in cwatch.findings if x["rule_id"] == "HOST-RHYTHM"]
-    assert sorted(cf) == sorted(f) and cf["notice"] == f["notice"] and cf["round"] == 5
+    assert sorted(cf) == sorted(f) and cf["notice"] == f["notice"] and by_value(cf) == by_value(f)
+    assert (cf["round"], cf["cycle_rounds"], cf["destination"]) == (5, [2, 3, 4], f["destination"])
+    # AR-1: round 2 had no line of the quiet tree: its cites name the round, no seq; the candidate's have one
+    assert {c["round"] for c in f["cites"] if "seq" not in c} == {2} and all("seq" in c for c in cf["cites"])
     assert "HOST-RHYTHM in round(s) 5" in text and "HOST-RHYTHM in round(s) 5" in ctext
     # RHYTHM BEATS: none of its beats waits for the final poll, "in no round"
     assert beats_line(text).startswith("RHYTHM BEATS: beats after the last round: 0 (") and "relay-bot" not in beats_line(text)
     assert beats_line(text) == beats_line(ctext)
+
+
+def test_e1_ar1_a_tree_quiet_for_r_minus_1_rounds_then_k_cycles_fires_as_a_candidate_every_round_does(home):
+    # the review's case: a candidate in round 1, no beat in rounds 2..11, one cycle in each of intervals 11, 12, 13
+    late = {11: [(11, "oscycle")], 12: [(12, "oscycle")], 13: [(13, "oscycle")]}
+    watch, rounds, text = run(home, quiet(14), late)
+    cwatch, crounds, ctext = run(home / "candidate", cand(14), late)
+    assert [len(tree_lines(r)) for r in rounds] == [1] + [0] * 10 + [1, 1, 1]
+    assert [tree_lines(r)[0]["input_meta"]["rhythm"]["cycles"] for r in rounds[11:]] == [1, 2, 3]
+    (f,) = [x for x in watch.findings if x["rule_id"] == "HOST-RHYTHM"]
+    (cf,) = [x for x in cwatch.findings if x["rule_id"] == "HOST-RHYTHM"]
+    assert f["round"] == cf["round"] == 14 and f["cycle_rounds"] == cf["cycle_rounds"] == [11, 12, 13]
+    assert by_value(f) == by_value(cf)
+    # each cycle cites the round of its beats: round 11 had no line of the quiet tree (no seq), 12 and 13 had
+    assert [(b["talk_round"], b["round"], b["seq"]) for b in f["beats"]] == [
+        (11, 11, None), (12, 12, tree_lines(rounds[11])[0]["seq"]), (13, 13, tree_lines(rounds[12])[0]["seq"])]
+    c11 = next(c for c in f["cites"] if c["round"] == 11)
+    assert "seq" not in c11 and "round 11 %s:%s" % (c11["src"], c11["line"]) in text
+    assert "HOST-RHYTHM in round(s) 14" in text and "HOST-RHYTHM in round(s) 14" in ctext
+    assert beats_line(text).startswith("RHYTHM BEATS: beats after the last round: 0 (") and beats_line(text) == beats_line(
+        ctext)
+    # the ring: R entries, one per round, the empty ones with their round's own interval and no seq
+    ring = watch.rings[key_of(watch)]
+    assert [e["round"] for e in ring] == list(range(5, 15))
+    assert [e["seq"] for e in ring] == [None] * 7 + [tree_lines(r)[0]["seq"] for r in rounds[11:]]
+    assert all(e["from"] == watch.rings[key_of(watch)][i - 1]["at"] for i, e in enumerate(ring) if i)
+
+
+def test_e1_ar1_must_not_touch_a_tree_with_a_line_in_every_round_has_the_ring_it_had(home):
+    watch, rounds, _ = run(home, cand(14), {11: [(11, "oscycle")], 12: [(12, "oscycle")], 13: [(13, "oscycle")]})
+    ring = watch.rings[key_of(watch)]
+    # no entry is added: each entry is a round's line (its seq), the last R of them
+    assert [(e["round"], e["seq"]) for e in ring] == [
+        (r["round"], tree_lines(r)[0]["seq"]) for r in rounds[4:]] and None not in [e["seq"] for e in ring]
+    for r in rounds:   # and a candidate's line carries no key of a line of a tree not in the round
+        (line,) = tree_lines(r)
+        assert not {"read_talks", "read_acts", "read_cites"} & set(line["input_meta"]["rhythm"])
 
 
 # --- E2 (AP-2): what it must not touch -------------------------------------------------------------------------------
@@ -155,11 +224,21 @@ def test_e2_what_each_rule_that_reads_a_host_tree_line_gives_on_a_quiet_or_kept_
     doc = json.loads((ROOT / "tests" / "fixtures" / "rules" / "HOST-RHYTHM" / "positive-quiet-three-cycles.json")
                      .read_text(encoding="ascii"))
     (line,) = doc["lines"]
-    for cls in (host.QUIET, host.KEPT):
-        for change in ({}, {"named": True, "named_word": "named"}, {"source": "none", "none_rounds": 9},
-                       {"candidate_before": False}):
+    # AR-5 (S-3): an arrival's other fields (not history, never a candidate; HOST-UNWATCHED's two rounds): on a
+    # candidate's line each arrival rule fires, so on a line of a tree not in the round only its class stops it
+    arrival = {"history": False, "candidate_before": False}
+    changes = (({}, "NEW-AGENT-UNKNOWN"), ({"named": True, "named_word": "named"}, "NEW-AGENT"),
+               ({"source": "none", "none_rounds": 2}, "HOST-UNWATCHED"))
+    for change, rid in changes:
+        got = copy.deepcopy(line)
+        got["input_meta"].update(arrival, **change)
+        got["input_meta"]["class"] = "candidate"
+        assert engine.judge(next(r for r in RULES if r.id == rid), [got], {})[0], rid
+    for cls in (host.QUIET, host.KEPT, host.GONE):
+        for change, _ in changes:
             got = copy.deepcopy(line)
-            got["input_meta"].update(change, **{"class": cls})
+            got["input_meta"].update(arrival, **change)
+            got["input_meta"]["class"] = cls
             for rule in RULES:
                 if rule.id in TREE_RULES:
                     fires = bool(engine.judge(rule, [got], {})[0])
@@ -174,13 +253,73 @@ def test_e2_a_quiet_tree_with_no_new_beat_has_no_line(home):
     assert [len(tree_lines(r)) for r in rounds] == [1, 0, 0, 0, 0] and all(r["quiet"] for r in rounds[1:])
 
 
-def test_e2_a_gone_tree_has_no_line(home):
-    invs = quiet(5)
-    for inv in invs[2:]:
-        inv["processes"] = []   # its root not in the sample from round 3: gone, not quiet
-    watch, rounds, _ = run(home, invs, {2: [(2, "oscycle")], 3: [(3, "oscycle")]})
+def test_e2_ar2_a_gone_tree_whose_source_gained_a_beat_gets_its_line_class_gone(home):
+    watch, rounds, text = run(home, gone_from(quiet(5), 3), {2: [(2, "oscycle")], 3: [(3, "oscycle")]})
+    assert [len(tree_lines(r)) for r in rounds] == [1, 0, 1, 1, 0]   # round 5: no new beat, no line
+    word = tree_lines(rounds[0])[0]["input_meta"]["tree"]
+    assert rounds[2]["gone"] == [word] and rounds[3]["gone"] == []   # gone in round 3, said once
+    for r, cycles in zip(rounds[2:4], (1, 2)):
+        meta = tree_lines(r)[0]["input_meta"]
+        assert meta["class"] == host.GONE and meta["tree"] not in r["trees"] and meta["rhythm"]["cycles"] == cycles
+    assert watch.findings == [] and beats_line(text).startswith("RHYTHM BEATS: beats after the last round: 0 (")
+
+
+def test_e2_ar2_a_tree_that_makes_k_cycles_in_its_last_intervals_and_exits_fires_on_its_gone_line(home):
+    watch, rounds, text = run(home, gone_from(quiet(5), 4), CYCLES)
+    assert [tree_lines(r)[0]["input_meta"]["class"] for r in rounds[2:]] == [host.QUIET, host.GONE, host.GONE]
+    (f,) = watch.findings
+    assert (f["rule_id"], f["round"], f["cycle_rounds"]) == ("HOST-RHYTHM", 5, [2, 3, 4])
+    assert f["cited_seq"] == [tree_lines(rounds[4])[0]["seq"]] and "HOST-RHYTHM in round(s) 5" in text
+    # the same beats on a tree that stays quiet: the same finding by value
+    qwatch, _, _ = run(home / "quiet", quiet(5), CYCLES)
+    (qf,) = qwatch.findings
+    assert by_value(qf) == by_value(f) and qf["notice"] == f["notice"]
+
+
+def test_e2_ar2_a_gone_tree_with_no_new_beat_has_no_line(home):
+    _, rounds, text = run(home, gone_from(quiet(5), 3), {})
     assert [len(tree_lines(r)) for r in rounds] == [1, 0, 0, 0, 0] and rounds[2]["gone"]
-    assert watch.findings == []
+
+
+def test_e2_e5_an_arriving_tree_quiet_or_gone_with_beats_makes_no_arrival_finding_through_rounds(home):
+    # AR-5 (S-3): the real risk case: an act-root that arrived during the watch (not history, never a candidate)
+    late = {3: [(3, "oscycle")], 4: [(4, "oscycle")], 5: [(5, "oscycle")]}
+    for name, invs, cls in (("quiet", arriving(6), host.QUIET), ("gone", gone_from(arriving(6), 4), host.GONE)):
+        watch, rounds, text = run(home / name, invs, late)
+        assert rounds[1]["new"] == [] and all(r["new"] == [] and r["back"] == [] for r in rounds)
+        metas = [tree_lines(r)[0]["input_meta"] for r in rounds[4:]]
+        assert [m["class"] for m in metas] == [cls, cls] and metas[-1]["rhythm"]["fires"] is True
+        assert all(m["history"] is False and m["candidate_before"] is False and m["named"] is False for m in metas)
+        assert [(f["rule_id"], f["round"]) for f in watch.findings] == [("HOST-RHYTHM", 6)], name
+        assert "HOST-RHYTHM in round(s) 6" in text
+        assert not [x for x in ("NEW-AGENT in round", "NEW-AGENT-UNKNOWN in round", "HOST-UNWATCHED in round")
+                    if x in text], name
+
+
+def test_e3_ar3_a_line_of_a_tree_not_in_the_round_says_what_its_round_read(home):
+    watch, rounds, _ = run(home, quiet(5), CYCLES)
+    first = tree_lines(rounds[0])[0]["input_meta"]   # the candidate's line: the sample's acts, endpoints, cites
+    assert first["acts"] == 1 and first["endpoints"] == ["192.0.2.10:443"] and first["cites"]
+    assert not {"read_talks", "read_acts", "read_cites"} & set(first["rhythm"])
+    for r in rounds[2:]:
+        meta = tree_lines(r)[0]["input_meta"]
+        assert (meta["acts"], meta["endpoints"], meta["cites"]) == (0, [], [])   # nothing of an earlier sample
+        assert set(meta) == set(first) and set(meta["rhythm"]) == set(first["rhythm"]) | {
+            "read_talks", "read_acts", "read_cites"}
+        rh = meta["rhythm"]
+        assert (rh["read_talks"], rh["read_acts"], rh["talks"], rh["acts"]) == (1, 1, [], 0)   # put in an older entry
+        assert [c["text"].split(" seq ")[0] for c in rh["read_cites"]] == ["os net", "os process"]
+        assert all(c["src"].endswith(".jsonl") and isinstance(c["line"], int) for c in rh["read_cites"])
+
+
+def test_e5_ar5_a_gone_trees_waiting_beats_are_in_the_report_where_no_round_read_them(home):
+    # gone in round 3; the cycle of interval 2 is read by round 3 (a gone line); interval 5's waits for the final poll
+    watch, rounds, text = run(home, gone_from(quiet(5), 3), {2: [(2, "oscycle")], 5: [(5, "oscycle")]})
+    assert [len(tree_lines(r)) for r in rounds] == [1, 0, 1, 0, 0]
+    word = tree_lines(rounds[0])[0]["input_meta"]["tree"]
+    assert watch.late_beats == {word: 2}
+    assert beats_line(text).startswith("RHYTHM BEATS: beats after the last round: 2 (") and (
+        "; %s: 2;" % word) in beats_line(text)
 
 
 def test_e2_a_named_quiet_trees_rhythm_does_not_fire(home):
@@ -210,7 +349,8 @@ def test_e2_a_benign_quiet_trees_rhythm_is_judged_as_a_benign_candidates(home):
 def test_e6_the_fixtures_made_before_aq_carry_no_process_sample():
     scenarios, _ = fixturegen.plan(RHYTHM)
     new = {"HOST-RHYTHM/positive-quiet-three-cycles.json", "HOST-RHYTHM/negative-quiet-no-cycle.json",
-           "HOST-RHYTHM/negative-quiet-few-beats.json"}
+           "HOST-RHYTHM/negative-quiet-few-beats.json", "HOST-RHYTHM/positive-gone-three-cycles.json",
+           "HOST-RHYTHM/negative-gone-few-beats.json"}
     assert new <= set(scenarios)
     for name, (names, _) in scenarios.items():
         for n in names:
@@ -251,12 +391,13 @@ def test_e6_a_line_for_a_tree_not_in_the_round_leaves_its_connections_and_childr
         assert meta["class"] == "candidate" and meta["rhythm"]["talks"] == [] and meta["rhythm"]["acts"] == 0
 
 
-def test_e6_the_rings_gap_two_cycles_of_two_intervals_read_in_one_round_count_once(home):
-    # AQ-4 (said, not fixed): a source that hands two intervals' cycles to one round with no line between: the ring
-    # has no entry for rounds 2..4, both beats go to round 1's entry, and two cycles count as one
+def test_e1_ar1_two_cycles_of_two_intervals_read_in_one_round_count_twice(home):
+    # AQ-4's merge, undone by AR-1: a source hands two intervals' cycles to one round with no line between; the ring
+    # has an empty entry for rounds 2..4 with their own intervals, so each beat goes to its own round
     watch, rounds, _ = run(home, quiet(5), {4: [(2, "oscycle"), (3, "oscycle")]})
     assert [len(tree_lines(r)) for r in rounds] == [1, 0, 0, 0, 1]
     rhythm = tree_lines(rounds[4])[0]["input_meta"]["rhythm"]
-    assert rhythm["cycles"] == 1 and rhythm["rounds"] == [1]
+    assert rhythm["cycles"] == 2 and rhythm["rounds"] == [2, 3] and rhythm["read_acts"] == 2
     ring = watch.rings[key_of(watch)]
-    assert [e["round"] for e in ring] == [1, 5] and len(ring[0]["acts"]) == 2 and ring[1]["acts"] == []
+    assert [(e["round"], len(e["acts"]), e["seq"] is None) for e in ring] == [
+        (1, 0, False), (2, 1, True), (3, 1, True), (4, 0, True), (5, 0, False)]
