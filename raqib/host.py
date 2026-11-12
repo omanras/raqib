@@ -284,6 +284,8 @@ INVENTORY_NAME = "inventory.json"
 ROUNDS_NAME = "rounds.jsonl"
 STATE_SUFFIX = ".watch.json"
 QUIET = "quiet"                    # M7.8 (P-2): a tree whose root is in the round's process sample and does not talk
+KEPT = "kept"                      # REDO R-4, AQ-2: a tree absent from a round that could not read the connections
+GONE = "gone"                      # ADR-0007 AR-2: the class of a gone tree's line (its source gained a beat)
 QUIET_TEXT = "quiet (its root alive in round %d; not seen talking with an act at the sample; %s)"   # REDO R-4
 SOURCE_KEPT = "source kept"
 START_UNREAD = "start time unread: a process of the same image holds the pid"   # REDO R-5
@@ -670,9 +672,17 @@ def cites_text(cites):
     for c in cites or ():
         if not isinstance(c, dict):
             continue
-        head = "round %s seq %s " % (c["round"], c["seq"]) if c.get("round") is not None else ""
+        head = ("" if c.get("round") is None else "round %s " % c["round"] if c.get("seq") is None
+                else "round %s seq %s " % (c["round"], c["seq"]))   # AR-1: a round with no line has no seq
         out.append("%s%s:%s" % (head, c.get("src"), c.get("line")))
     return ", ".join(out) or "-"
+
+
+def _at_round(cite, round_, seq):
+    """K-7 (A5): a cite with the round (and seq) of its beat; ADR-0007
+    AR-1: a beat of a round in which the tree had no line cites the round
+    and no seq."""
+    return dict(cite, round=round_) if seq is None else dict(cite, round=round_, seq=seq)
 
 
 def carry_host(old, src):
@@ -1621,6 +1631,7 @@ class HostWatch:
         # M7.6: the streak of AGENT-DARK-LIVE, read from its YAML (the eq on input_meta.streak; the overlay may change it)
         self.dark_rounds = rule_eq(dark_rule, STREAK_FIELD) or DARK_ROUNDS
         self.rings = {}              # tree key -> its last R rounds (rhythm_of's ring)
+        self.round_times = {}        # ADR-0007 AR-1: round -> (at, from), the last R rounds' own intervals
         self.kids = {}               # tree key -> the (child pid, started) seen in its rounds
         self.act_seen = {}           # M7.5 REDO N-9: tree key -> the acts counted, across sources
         self.act_twins = 0           # N-9: acts not counted again (a second source's report of one child)
@@ -1970,6 +1981,9 @@ class HostWatch:
         self._channel_holes(now, n, inv)
         round_from = getattr(self, "last_round_at", None) or round_at - datetime.timedelta(seconds=self.every)
         self.last_round_at = round_at
+        self.round_times[n] = (round_at, round_from)   # AR-1: an empty ring entry of a round has its own interval
+        for m in [m for m in self.round_times if m <= n - self.rhythm_r]:
+            del self.round_times[m]
         self._bytes_note(now, n, inv)
         if no_drive:   # D-3: said as a hole, once per round
             self._hole(now, "benign-no-drive", "round %d: %s; judged as not benign: %s" % (
@@ -2014,25 +2028,8 @@ class HostWatch:
             if t["benign"]:
                 entry["benign_word"] = BENIGN_WORD
             entry["none_rounds"] = entry.get("none_rounds", 0) + 1 if src.kind == "none" else 0
-            self.seq += 1
-            rhythm = self._rhythm(now, n, key, t, round_at, round_from, self.seq, inv)
-            line = {"ts": ts, "seq": self.seq, "session_id": SESSION, "phase": "pre", "tool": TREE_TOOL,
-                    "cwd": CWD, "source": SOURCE,
-                    "input_meta": {"round": n, "tree": tree_word(key), "pid": t["pid"], "image": t["image"],
-                                   "source": src.kind, "source_word": src.word, "none_rounds": entry["none_rounds"],
-                                   "hooks": src.hooks_note if src.kind != "hooks" else src.word,
-                                   "started": t["started"], "class": t["class"], "was": was,
-                                   "history": history, "candidate_before": candidate_before,
-                                   "named": t["named"], "named_word": "named" if t["named"] else "unknown",
-                                   "named_by": t["named_by"], "benign": t["benign"], "benign_by": t["benign_by"],
-                                   "acts": t["acts"], "endpoints": t["endpoints"], "run": self.run,
-                                   "sample": sample, "cites": [dict(c) for c in t["cites"]], "rhythm": rhythm}}
-            if t["brief"]:   # M7.9 (P-4): only on a brief tree's line, so every other line keeps its shape
-                line["input_meta"].update(brief=True, seen=BRIEF_TEXT)
-                last = utc_time(t.get("seen_last"))
-                if last is not None and (round_at - last).total_seconds() > self.every:   # X-4: read late, by how much
-                    entry["late_seconds"] = line["input_meta"]["read_late_seconds"] = round(
-                        (round_at - last).total_seconds(), 3)
+            line = self._tree_line(now, n, key, t, entry, src, was, history, candidate_before, ts, sample,
+                                   (round_at, round_from), inv, lines)
             # AA-1, AB-1: an unknown, non-benign tree a candidate only by the channel's events is listed `by the
             # channel` from the first round it is one (kept on the tree: by_channel_round) until it is knocked; a tree
             # that is a candidate at a sample (before or after) is never tagged. AB-5: the line says it
@@ -2044,8 +2041,6 @@ class HostWatch:
                 if entry.get("by_channel_round") is None:
                     entry.update(by_channel=True, by_channel_round=n, by_channel_at=ts)
                     by_channel_now.append(tree_word(key))
-            lines.append(line)
-            entry["line_seq"] = self.seq
             if t["class"] == "candidate" and entry["candidate_round"] is None and not channel_now:
                 entry["candidate_round"] = n
                 for k in ("by_channel", "by_channel_round", "by_channel_at"):   # AB-1: knocked, never tagged
@@ -2082,6 +2077,24 @@ class HostWatch:
         not_judged = sorted(tree_word(k) for k in kept)
         for key in kept:
             self.trees[key]["not_judged_round"] = n
+        # ADR-0007 AP-1, AP-2, AQ-2: a beat is judged in the round that reads it. A tree not in the round (quiet, or
+        # kept by a round that could not read the connections) whose source gained a beat gets its HostTree line by
+        # the code that writes a candidate's (_tree_line), its class its own state; AQ-3: the line takes its
+        # sources' beats only (no connection, no child of the sample is read or reset). Before prev_class and quiet
+        # are reassigned, so `was` is a candidate line's formula. A tree with no new beat has no line, as before.
+        # AR-2: and a tree that is gone (in this round or an earlier one) whose source still gained a beat: class
+        # gone; so the final poll's count (_late_beats) holds only the beats read after the last round.
+        gone_read = {k for k in self.sources if k in self.rings and k in self.trees} - set(current) - quiet_keys - kept
+        for key in sorted(quiet_keys | kept | gone_read, key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
+            entry, src = self.trees[key], self.sources.get(key)
+            fresh = self._source_beats(key)   # read once: no beat, no line (the beats are not lost: none)
+            if src is None or not fresh:
+                continue
+            t = dict(entry, brief=False, children=(), remotes=())
+            t["class"] = QUIET if key in quiet_keys else KEPT if key in kept else GONE
+            was = self.prev_class.get(key, QUIET if key in self.quiet else "absent")
+            self._tree_line(now, n, key, t, entry, src, was, entry["history"], entry["candidate_round"] is not None,
+                            ts, sample, (round_at, round_from), inv, lines, fresh=fresh)
         old_present, old_quiet = self.present, self.quiet
         self.present = set(current) | (kept & old_present)
         self.quiet = quiet_keys | (kept & old_quiet)
@@ -2206,8 +2219,8 @@ class HostWatch:
                 rh = meta["rhythm"]
                 entry.update(beats=rh["beats"], destination=rh["destination"], cycle_rounds=rh["rounds"],
                              cites=[c for b in rh["beats"] for c in (   # K-7: each cite with its round and seq
-                                 [dict(x, round=b["talk_round"], seq=b["talk_seq"]) for x in b["talk_cites"]]
-                                 + [dict(x, round=b["round"], seq=b["seq"]) for a in b["acts"] for x in a["cites"]])
+                                 [_at_round(x, b["talk_round"], b["talk_seq"]) for x in b["talk_cites"]]
+                                 + [_at_round(x, b["round"], b["seq"]) for a in b["acts"] for x in a["cites"]])
                              ][:CITES_KEPT * 2])
                 where = "%s pid %s, %d cycles to one destination in %d rounds (round %d)" % (
                     str(meta["image"] or "?")[:IMAGE_MAX], meta["pid"], rh["cycles"], rh["r"], n)
@@ -2569,18 +2582,75 @@ class HostWatch:
         self._blind(now, "started", LINUX_STARTED_HOLE if self.platform.startswith("linux") else STARTED_UNREAD, n)
         return None, "round"
 
-    def _rhythm(self, now, n, key, t, round_at, round_from, seq, inv=None):
+    def _tree_line(self, now, n, key, t, entry, src, was, history, candidate_before, ts, sample, interval, inv,
+                   lines, fresh=None):
+        """ADR-0007 AP-2 (AQ-2): the HostTree line of one tree in round n,
+        appended to lines, its seq on the tree's entry (line_seq: what a
+        finding on it is found by). One code for every tree that gets a
+        line: a tree of the round (fresh None: its rhythm takes the sample's
+        children and connections and its sources' beats) and a tree not in
+        it, quiet or kept (fresh: the beats its sources gained, read once by
+        the caller; AQ-3: those only, so nothing of the sample's connections
+        or children of the tree is read or reset). t["class"] is the line's
+        class (the tree's own state for a tree not in the round)."""
+        round_at, round_from = interval
+        self.seq += 1
+        rhythm = self._rhythm(now, n, key, t, round_at, round_from, self.seq, inv, fresh=fresh)
+        line = {"ts": ts, "seq": self.seq, "session_id": SESSION, "phase": "pre", "tool": TREE_TOOL,
+                "cwd": CWD, "source": SOURCE,
+                "input_meta": {"round": n, "tree": tree_word(key), "pid": t["pid"], "image": t["image"],
+                               "source": src.kind, "source_word": src.word, "none_rounds": entry["none_rounds"],
+                               "hooks": src.hooks_note if src.kind != "hooks" else src.word,
+                               "started": t["started"], "class": t["class"], "was": was,
+                               "history": history, "candidate_before": candidate_before,
+                               "named": t["named"], "named_word": "named" if t["named"] else "unknown",
+                               "named_by": t["named_by"], "benign": t["benign"], "benign_by": t["benign_by"],
+                               "acts": t["acts"], "endpoints": t["endpoints"], "run": self.run,
+                               "sample": sample, "cites": [dict(c) for c in t["cites"]], "rhythm": rhythm}}
+        if fresh is not None:   # ADR-0007 AR-3: a tree not in the round: nothing of an earlier sample is said as now
+            line["input_meta"].update(acts=0, endpoints=[], cites=[])
+        if t["brief"]:   # M7.9 (P-4): only on a brief tree's line, so every other line keeps its shape
+            line["input_meta"].update(brief=True, seen=BRIEF_TEXT)
+            last = utc_time(t.get("seen_last"))
+            if last is not None and (round_at - last).total_seconds() > self.every:   # X-4: read late, by how much
+                entry["late_seconds"] = line["input_meta"]["read_late_seconds"] = round(
+                    (round_at - last).total_seconds(), 3)
+        lines.append(line)
+        entry["line_seq"] = self.seq
+        return line
+
+    def _rhythm(self, now, n, key, t, round_at, round_from, seq, inv=None, fresh=None):
         """E2: this round's beats of one tree (talk: K-5's talk beats; act:
         each child first seen in it, never in the tree's first round) into
         its ring of the last R rounds, and its rhythm with the YAML's K, W
         and R: the HostTree line's input_meta.rhythm. `fires` is True once
         per streak: when K cycles to one destination are first reached; the
-        streak ends when R rounds pass without a cycle."""
+        streak ends when R rounds pass without a cycle. fresh (ADR-0007
+        AP-2, AQ-3): the beats the tree's sources gained, read by the caller
+        for a tree NOT in the round: they are its only beats (acts through
+        _once as every act); the sample's children and connections of the
+        tree (self.kids, conn_state) are neither read nor reset. AR-1: the
+        ring has one entry for every round from the tree's first line on: a
+        round with no line has an empty entry (seq None) with that round's
+        own interval, so a beat goes to the round whose interval holds its
+        time. AR-3: on such a line the rhythm also names what this round
+        read from the sources (read_talks, read_acts, read_cites)."""
         k, w, r = self.rhythm_k, self.rhythm_w, self.rhythm_r
-        fresh = self._source_beats(key)   # read once: what the tree's os / hooks sources gained
-        acts = self.act_beats(now, n, key, t, round_at, inv, fresh)
-        talks = self.talk_beats(key, t, fresh)
+        read = fresh   # AR-3: what a line of a tree not in the round read (None: a tree of the round)
+        if fresh is None:
+            fresh = self._source_beats(key)   # read once: what the tree's os / hooks sources gained
+            acts = self.act_beats(now, n, key, t, round_at, inv, fresh)
+            talks = self.talk_beats(key, t, fresh)
+        else:
+            acts = self._once(key, [beat for kind, beat in fresh if kind == "act"])
+            talks = [beat for kind, beat in fresh if kind == "talk"]
         ring = self.rings.setdefault(key, [])
+        if ring:   # AR-1: the rounds since its last entry with no line (only the last R can stay in the ring)
+            for m in range(max(ring[-1]["round"] + 1, n - r + 1), n):
+                if m in self.round_times:
+                    m_at, m_from = self.round_times[m]
+                    ring.append({"round": m, "at": m_at, "from": m_from, "talks": {}, "talk_at": {}, "acts": [],
+                                 "seq": None})
         ring.append({"round": n, "at": round_at, "from": round_from, "talks": {}, "talk_at": {}, "acts": [],
                      "seq": seq})
         del ring[:-r]
@@ -2608,10 +2678,16 @@ class HostWatch:
                             "cites": [dict(c, text=cite_text(c.get("text"))) for c in a["cites"]]}
                            for a in b["acts"][:4]]} for b in got["beats"]]
         now_e = ring[-1]
-        return {"k": k, "w": w, "r": r, "cycles": got["cycles"], "destination": got["destination"],
-                "rounds": got["rounds"], "talks": sorted(now_e["talks"]), "acts": len(now_e["acts"]),
-                "act_basis": sorted({a["basis"] for a in now_e["acts"]}), "fires": fires, "streak_fired": st["fired"],
-                "beats": beats}
+        out = {"k": k, "w": w, "r": r, "cycles": got["cycles"], "destination": got["destination"],
+               "rounds": got["rounds"], "talks": sorted(now_e["talks"]), "acts": len(now_e["acts"]),
+               "act_basis": sorted({a["basis"] for a in now_e["acts"]}), "fires": fires, "streak_fired": st["fired"],
+               "beats": beats}
+        if read is not None:   # AR-3: only on a line of a tree not in the round, so a candidate's keeps its shape
+            out.update(read_talks=sum(1 for kind, _ in read if kind == "talk"),
+                       read_acts=sum(1 for kind, _ in read if kind == "act"),
+                       read_cites=[dict(c, text=cite_text(c.get("text"))) for _, b in read
+                                   for c in b["cites"]][:CITES_KEPT])
+        return out
 
     def act_beats(self, now, n, key, t, round_at, inv=None, fresh=None):
         """M7.5 E2 (ADR-0007 Amendment M, lesson 2): the act beats of one
@@ -2647,7 +2723,9 @@ class HostWatch:
         the last round (Q-5: a source's beats are counted one round late)
         are in no round, so HOST-RHYTHM never judged them: counted per tree,
         "beats after the last round: N", in the report; never dropped
-        silently."""
+        silently. ADR-0007 AR-2: a gone tree's beats a round read were
+        judged on its gone line, so only those after the last round are
+        here."""
         for key in list(self.sources):
             if key not in self.rings:
                 continue

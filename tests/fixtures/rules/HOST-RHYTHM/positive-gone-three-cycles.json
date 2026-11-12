@@ -1,0 +1,161 @@
+{
+ "expect_seq": [
+  4
+ ],
+ "lines": [
+  {
+   "cwd": "host",
+   "input_meta": {
+    "acts": 0,
+    "benign": false,
+    "benign_by": null,
+    "candidate_before": true,
+    "cites": [],
+    "class": "gone",
+    "endpoints": [],
+    "history": true,
+    "hooks": null,
+    "image": "relay-bot",
+    "named": false,
+    "named_by": null,
+    "named_word": "unknown",
+    "none_rounds": 0,
+    "pid": 4400,
+    "rhythm": {
+     "act_basis": [],
+     "acts": 0,
+     "beats": [
+      {
+       "acts": [
+        {
+         "basis": "os",
+         "cites": [
+          {
+           "line": 3,
+           "src": "fixture-run-4400-967bfa9193.jsonl",
+           "text": "os process seq 2 at 2026-11-03T10:00:05.000000Z"
+          }
+         ],
+         "image": "bash",
+         "pid": null,
+         "started": "2026-11-03T10:00:05.000000Z"
+        }
+       ],
+       "round": 2,
+       "run": "fixture-run",
+       "seq": null,
+       "talk_cites": [
+        {
+         "line": 1,
+         "src": "fixture-run-4400-967bfa9193.jsonl",
+         "text": "os net seq 1 at 2026-11-03T10:00:02.000000Z"
+        }
+       ],
+       "talk_round": 2,
+       "talk_seq": null
+      },
+      {
+       "acts": [
+        {
+         "basis": "os",
+         "cites": [
+          {
+           "line": 7,
+           "src": "fixture-run-4400-967bfa9193.jsonl",
+           "text": "os process seq 4 at 2026-11-03T10:00:15.000000Z"
+          }
+         ],
+         "image": "bash",
+         "pid": null,
+         "started": "2026-11-03T10:00:15.000000Z"
+        }
+       ],
+       "round": 3,
+       "run": "fixture-run",
+       "seq": 2,
+       "talk_cites": [
+        {
+         "line": 5,
+         "src": "fixture-run-4400-967bfa9193.jsonl",
+         "text": "os net seq 3 at 2026-11-03T10:00:12.000000Z"
+        }
+       ],
+       "talk_round": 3,
+       "talk_seq": 2
+      },
+      {
+       "acts": [
+        {
+         "basis": "os",
+         "cites": [
+          {
+           "line": 11,
+           "src": "fixture-run-4400-967bfa9193.jsonl",
+           "text": "os process seq 6 at 2026-11-03T10:00:25.000000Z"
+          }
+         ],
+         "image": "bash",
+         "pid": null,
+         "started": "2026-11-03T10:00:25.000000Z"
+        }
+       ],
+       "round": 4,
+       "run": "fixture-run",
+       "seq": 3,
+       "talk_cites": [
+        {
+         "line": 9,
+         "src": "fixture-run-4400-967bfa9193.jsonl",
+         "text": "os net seq 5 at 2026-11-03T10:00:22.000000Z"
+        }
+       ],
+       "talk_round": 4,
+       "talk_seq": 3
+      }
+     ],
+     "cycles": 3,
+     "destination": "os:1a0c032e3174",
+     "fires": true,
+     "k": 3,
+     "r": 10,
+     "read_acts": 1,
+     "read_cites": [
+      {
+       "line": 9,
+       "src": "fixture-run-4400-967bfa9193.jsonl",
+       "text": "os net seq 5 at 2026-11-03T10:00:22.000000Z"
+      },
+      {
+       "line": 11,
+       "src": "fixture-run-4400-967bfa9193.jsonl",
+       "text": "os process seq 6 at 2026-11-03T10:00:25.000000Z"
+      }
+     ],
+     "read_talks": 1,
+     "rounds": [
+      2,
+      3,
+      4
+     ],
+     "streak_fired": true,
+     "talks": [],
+     "w": 30
+    },
+    "round": 5,
+    "run": "fixture-run",
+    "sample": "window 2026-11-03T10:00:40.000000Z .. 2026-11-03T10:00:40.000000Z; Windows sample(s) 5",
+    "source": "os",
+    "source_word": "os: Sysmon, rooted at pid 4400",
+    "started": "2026-11-03T09:00:00.000000Z",
+    "tree": "4400:relay-bot:2026-11-03T09:00:00.000000Z",
+    "was": "absent"
+   },
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "host",
+   "source": "os",
+   "tool": "HostTree",
+   "ts": "2026-11-03T10:00:40.000Z"
+  }
+ ]
+}

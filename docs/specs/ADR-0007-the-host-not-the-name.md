@@ -2065,3 +2065,72 @@ does not see.
   Table before the judgement (a rhythm finding on a runner's own agent
   there would be the budget's first field number).
 
+## Amendment AQ (the Table, 2026-11-13) - the builder's STOP on M7.17 (39329f3) and its three questions
+- AQ-1 (Q1). HOST-RHYTHM is a generated rule: its fixtures are
+  planned in raqib/rules/fixturegen.py, which the HANDOFF left out of
+  Scope. It is added. The quiet scenarios are planned there beside the
+  others, by the same functions; a synthetic inventory gains the
+  process list it needs for a tree to be quiet and not gone. MUST NOT
+  TOUCH: every fixture that exists is generated to the byte it is.
+- AQ-2 (Q2). AP-1 is about the beat, not the word for the tree: a
+  tree that is not in the round and whose source gained a beat gets
+  its line whether it is quiet or kept by a round that could not read
+  the connections; the line's class is the tree's own state (quiet,
+  kept), and HOST-RHYTHM's match takes candidate, quiet and kept (the
+  engine's `in`).
+- AQ-3 (Q3). Confirmed: a line for a tree that is not in the round
+  takes its sources' beats only. It reads and resets nothing of the
+  tree's connections as the sample knows them, and nothing of its
+  children: when the tree is in a round again, a connection or a
+  child is new or old exactly as if no such line had been written
+  (a test).
+- AQ-4 (the builder's note; said, not fixed). The ring has an entry
+  only for a round with a line: a beat of a round with none is put
+  into an older entry, and two cycles can count as one. A test states
+  it; the rule's holes say it; the ring's shape is the tree ledger's.
+
+## Amendment AR (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.17.md (1a3ef49) and the rig's run on it
+The rig on 1a3ef49, a real Windows with Sysmon: no beat left for the
+final poll (it was 7 to 9 on every run), and no HOST-RHYTHM finding on
+any of the runner's own six trees - the budget's first field number.
+The packet: REDO. Its must-fix is the thing AQ-4 called "said, not
+fixed"; the packet shows it is a loss, and likely: after R-1 rounds
+with no line, a quiet tree's first beats go into an entry already out
+of the window, are in no cycle and in no count. The Table's AQ-4 was
+wrong to leave it; and its E2 ("a gone tree has none") was wrong by its
+own AP-1.
+- AR-1 (R-1, W-3; the ring's shape, named). A tree's ring has one
+  entry for every round of the watch from the tree's first line on: a
+  round in which the tree had no line has an empty entry with that
+  round's own interval (the watch keeps each round's times). So a beat
+  is put into the entry of the round whose interval holds its time, R
+  rounds are R entries, and a cycle cites the round of its beats. FOR:
+  a tree quiet for R-1 rounds whose K cycles then come in K intervals:
+  it fires in the round that reads the K-th, as a tree that is a
+  candidate every round does. MUST NOT TOUCH: a tree that has a line
+  in every round (no entry is added: every generated fixture of such a
+  tree is byte for byte what it is). If a fixture of a tree with a
+  gap changes, the builder says which and why in the questions file,
+  and it changes only by this ruling.
+- AR-2 (S-1, W-6; AP-1 holds for a tree that is gone). A tree that is
+  gone and whose source still gained a beat gets its line in the round
+  that reads it (class gone), by the same code; HOST-RHYTHM's match
+  takes it. A gone tree with no new beat has no line. The report's
+  "beats after the last round" then counts only what its words say.
+- AR-3 (W-1, W-2, Q6; a line says what its round saw). A line for a
+  tree that is not in the round carries no acts, endpoints or cites of
+  an earlier sample; its rhythm names the beats this round read from
+  its sources (their count and cites), whichever entry they were put
+  into.
+- AR-4 (S-2). The rig's X12 is "n/a" on a machine where no tree can
+  have a source with beats (no Sysmon, no hooks): it measured nothing
+  there.
+- AR-5 (S-3, tests). Through rounds: a tree that arrived during the
+  watch (not history), goes quiet and has beats makes no NEW-AGENT
+  finding; a finding on a quiet line and on a candidate's line of the
+  same beats are compared by value (its rounds, its cites), not by
+  key; a gone tree's waiting beats are in the report.
+- Recorded, not built: W-4 (a brief tree's quiet line), W-5 (the
+  panel's count of lines a disabled rule would have judged), the
+  builder's Q4 and Q5.
+
