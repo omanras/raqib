@@ -508,8 +508,10 @@ Rulings: ADR-0003 Amendments C and D.
   (measured on record N)", the record where its number is read): not a
   hole and not a knock, since the event is kept, at its logged time, and
   a watch on such a machine can still end CLEAN. A TimeCreated that is
-  there and does not parse is said once per event kind (a RAQIB-SILENCE
-  line of the follow, a problem of the round's record): that event's
+  there and does not parse is said once per event kind by each reader (a
+  RAQIB-SILENCE line once for a follow's life, a problem of each round's
+  record: on a machine where every such time is unread, a hole in every
+  round): that event's
   UtcTime is then used, unchecked; an export with no TimeCreated at all
   is no word, as before. An event whose UtcTime does not parse and whose
   logged time does is timed from the log (time_from "logged", no
@@ -522,7 +524,8 @@ Rulings: ADR-0003 Amendments C and D.
   placed as before. Where the logged time is wrong for the act, Raqib
   says more, never less: a process whose start (event 1) was logged more
   than 60 s after it does not match its sampled CreationDate and is
-  listed as two processes (two trees; the round says the pid held two); an
+  listed as two processes (the round says the pid held one more beside
+  the sampled one); an
   event that happened before the watch's start and was logged more than
   60 s after it is live, and can be knocked; an os process line timed so
   can fall outside CROSS-SOURCE's hook window, a "done, not asked"

@@ -1977,3 +1977,49 @@ watch's end, and one false line the Table's own rig found.
   names the record its skew was measured on where the record's number
   is read.
 
+## Amendment AO (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.16-redo.md (c4ae12d), the rig's second run, and the judgement on M7.16
+The packet: NEXT; no must-fix in what the REDO changed.
+- AO-1 (the rig, on the REDO's code, a real Windows with Sysmon).
+  HOLES 0: the builder's own additions (an unread UtcTime said, a
+  TimeCreated with no SystemTime said: N-1, N-2) do not fire on a real
+  Sysmon, so no healthy watch becomes INCOMPLETE by them; they stand,
+  as holes (the packet's Q-1: an unread field is A3's). The ALARMS
+  line and the listing agree (AN-5). The notes fell from 25 to 17.
+- AO-2 (AN-4, returned; the rig shows why). The rig's stand-in agent
+  ended twenty seconds before the watch did, and five of its beats
+  were still "read by the final poll, in no round". So the builder's
+  account (one round late) is not the whole of it, and F3 is not a
+  matter of the last round: the Table's hypothesis, not yet read in
+  the code, is that a tree's source beats are taken only in rounds
+  the tree is in, so the acts of a tree that is quiet at the sample
+  wait for the final poll and are judged by nothing. That would be
+  HOST-RHYTHM blind to an agent that is not talking at the sample: a
+  task of its own, begun by a test that confirms or refutes it. AN-4
+  is withdrawn into it.
+- AO-3 (S-1, S-2, S-3, W-1, W-2, W-4, W-5, the packet's Q-2 and Q-5;
+  recorded for that task or the tree ledger, not built). A pid reused
+  by an unrelated event 1 between a late join and its guard, for
+  events keyed by pid alone (real Sysmon events carry a ProcessGuid);
+  an unread time said for an event that is not the tree's; the
+  follow's silence naming its record; the round's hole's words ("a
+  line could not be read") for a line that was read; os_sysmon's
+  stale docstring lines; an act read in an earlier pass than its
+  process's start (N-4).
+- AO-4 (W-3, W-6). THREAT_MODEL's two sentences made true by the
+  Table: once per event kind "by each reader"; "one more beside the
+  sampled one".
+- Judgement: NEXT for M7.16, on the gate and six CI jobs green for
+  the Table's commit. What the commander's elevated watch showed is
+  met: a Sysmon event stamped weeks behind is timed by its logged
+  time, lives in its round and can be knocked (AM-1); the lag is a
+  note (AM-2); a rule's not-judged note is one note (AM-3); a time
+  that is there and unread is said (AN-1); membership does not depend
+  on how two clocks sort (AN-2). Not shown yet: his own machine's
+  report with these in it.
+- Table ledger. The rig found in five minutes what three reviewers
+  reading the code had not (a line of the report that contradicted
+  another), and turned a question no test could state (F3) into a
+  case it reproduces. Reading finds what a path can do; running finds
+  what the whole says. Both, from now on, before the commander is
+  asked to try.
+
