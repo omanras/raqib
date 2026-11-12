@@ -754,8 +754,10 @@ is amended by T-2, T-1 restated by V-1).
   cannot read while the reads fail is not seen, and each such run of
   failed reads knocks once, naming its cause and no terminal. What an
   agent without hooks reads with its own code (a file it opens, a
-  directory it lists) is in no source: it starts no child and opens no
-  connection, and Sysmon has no event for a read. A file's deletion is
+  directory it lists) is in no source of the host watch; the proxy
+  source records the tool call where the agent is pointed at it; the
+  host watch does not read the proxy's trace; the read starts no child
+  and opens no connection, and Sysmon has no event for a read. A file's deletion is
   in no source at all (Sysmon's events 23 and 26 are never asked for); a
   creation only where event 11 is read. In the third field run the
   watched read the watcher's record: the agent read the watch's own
@@ -769,7 +771,18 @@ is amended by T-2, T-1 restated by V-1).
   quiet or gone when the first read is kept and never in a round again
   is never read by os; a child new in that round's sample is judged only
   where the channel gives its start, as in a watch whose every round
-  read.
+  read. Each pass of a tree's os follow asks the channel a bounded
+  question, as a round's read does: the events since the watch's start,
+  then the records after the highest it has read, at most the round's
+  cap, a cut being a hole; a tree whose follow has had two passes and
+  none that read is judged by the host's own record too, from the next
+  round it is in, until a pass reads (its source text says so, with the
+  cause). Said, not fixed: the follow no longer reads the tree's past
+  before the watch's start (it was history, listed and never knocked),
+  and a child that started before the watch is not known to the follow,
+  so its acts after the start are not in the tree's os source; a follow
+  that read once and then fails is a hole of each pass, not the host's
+  record.
 - **Raqib watches and stops nothing (A4; ADR-0001 section 7).** No watched
   process is signalled, suspended, attached to or killed, and nothing is
   blocked: a finding is a record and a knock after the act, never a

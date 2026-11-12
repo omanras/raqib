@@ -224,13 +224,20 @@ def _same_guid(a, b):
     return a is not None and b is not None and a.strip("{}").lower() == b.strip("{}").lower()
 
 
-def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=None):
+def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=None, tree=None):
     """(trace lines, silence details) for an export's text. Pure.
     API (M7.2b): after_record, when given, keeps only the tree's events
     whose EventRecordID is above it (an event with none was written by the
     pass that had after_record None); info, a dict, receives "top_record",
     the highest EventRecordID of the tree's events in the export (None when
-    none has one). Without them build is what it was."""
+    none has one). Without them build is what it was.
+    tree (ADR-0007 AI-1), a dict a bounded follow keeps across its passes:
+    the root found and the tree's members (ProcessGuid and pid -> depth)
+    carry over, so an event of a child whose event 1 an earlier pass read is
+    the tree's; a pass's window that holds no event of the root, or no event
+    of a kind, is not a silence (a window of seconds, not the channel);
+    info also receives "last_record", the highest EventRecordID of the
+    export, and "events", its number of events (the cut)."""
     silences = []
     problems = []
     events = []
@@ -248,13 +255,27 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
         silences.append("the export's line %d cannot be read (%s): that event is not recorded"
                         % (p["line"], p["reason"]))
     missing = sorted(set(READ) - present)
-    silences += [SILENT_IF_MISSING[i] for i in sorted(SILENT_IF_MISSING) if i in missing]
+    if tree is None:
+        silences += [SILENT_IF_MISSING[i] for i in sorted(SILENT_IF_MISSING) if i in missing]
+    else:   # AI-1: a pass's window, not the channel: a kind it does not hold is not the configuration's
+        missing = []
+        if info is not None:
+            ids = [int(m.group(1)) for m in RECORD_ID.finditer(text)]
+            info["last_record"] = max(ids) if ids else None
+            info["events"] = len(discover.EVENT_START.findall(text))
     events.sort(key=lambda e: (e["ts"], e["record_id"] if e["record_id"] is not None else float("inf"), e["line"]))
-    found, root_guid, said = _root(events, root, guid)
+    if tree is not None and tree.get("found"):   # AI-1: the root an earlier pass found
+        found, root_guid, said = True, tree.get("root_guid"), []
+    else:
+        found, root_guid, said = _root(events, root, guid)
+        if tree is not None and not found:   # AI-1: the root did nothing in this window (by its GUID: known)
+            found, root_guid, said = guid is not None, guid, []
+        if tree is not None and found:
+            tree["found"], tree["root_guid"] = True, root_guid
     silences += said
     if not found:
         return [], silences
-    kept = _tree(events, root, root_guid)
+    kept = _tree(events, root, root_guid, tree)
     if info is not None:
         ids = [e["record_id"] for e, _, _ in kept if e["record_id"] is not None]
         info["top_record"] = max(ids) if ids else None
@@ -306,12 +327,16 @@ def _root(events, root, guid):
     return True, latest, said
 
 
-def _tree(events, root, root_guid):
+def _tree(events, root, root_guid, tree=None):
     """[(event, depth, parent)] of the events of the tree under root, in
     order; parent is the identity (ProcessGuid, else ("pid", pid)) of an
-    event 1's parent, None otherwise."""
+    event 1's parent, None otherwise. tree (AI-1): the members an earlier
+    pass of a bounded follow found, kept in it and grown here."""
     by_guid = {root_guid: 0} if root_guid else {}
     by_pid = {root: 0}   # for events that carry no ProcessGuid
+    if tree is not None:
+        by_guid = tree.setdefault("by_guid", by_guid)
+        by_pid = tree.setdefault("by_pid", by_pid)
     kept = []
     for e in events:
         d = e["data"]
@@ -596,8 +621,12 @@ def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Pop
     return decode(data or b""), None
 
 
+FOLLOW_CUT = ("the follow's pass read %d events, the cap (/c:%d): the records after record %s are read by its next"
+              " pass")   # AI-1: a cut is a hole
+
+
 def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, live=None, nt=None, on_pass=None,
-           after_record=None, helpers=None, timeout=FOLLOW_TIMEOUT):
+           after_record=None, helpers=None, timeout=FOLLOW_TIMEOUT, since=None, cap=None, on_read=None, reader=None):
     """API (M7.2b): the os source followed live until stop is set (see the
     module docstring). Returns the number of passes. Raises UsageError as
     run() does (a bad root or cwd, off Windows without a `live` reader, a
@@ -608,7 +637,18 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     EventRecordID appended so far; after_record starts a follow there (a
     follow of the same tree resumed: the events already appended are not
     appended again). Without `live`, each pass reads through
-    read_live_bounded(timeout, helpers) (I-5)."""
+    read_live_bounded(timeout, helpers) (I-5).
+    ADR-0007 AI-1: given since (the watch's start, an aware time) or
+    after_record, each pass asks a bounded question, as a round's read does
+    (round_query over READ, round_args with cap, default ROUND_CAP): the
+    first pass the events since `since` (or after after_record), each later
+    pass the records after the highest the follow has read; a pass that
+    reaches the cap is a hole (FOLLOW_CUT), the next pass reads on. The
+    tree found carries over the passes (build's tree). Without either, the
+    whole channel (LIVE_ARGS), as before. reader(args, timeout) -> (text,
+    None) or (None, why) replaces read_live_bounded. on_read(n, read, why),
+    when given, is called after each pass, before on_pass: read is whether
+    the pass read the channel, why its reason when it did not (AI-2)."""
     out = sys.stdout if out is None else out
     err = sys.stderr if err is None else err
     nt = (os.name == "nt") if nt is None else nt
@@ -617,18 +657,37 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
         check_cwd(cwd)
     if live is None and not nt:
         raise UsageError("os-sysmon follows the live Sysmon channel on Windows only")
+    bounded = live is None and (since is not None or after_record is not None)
+    cap = int(ROUND_CAP if cap is None else cap)
+    if bounded and since is not None:
+        try:
+            query_time(since)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise UsageError("a follow's start must be an aware time: %s" % exc)
+    tree = {} if bounded else None   # AI-1: the tree found, across the passes
     top, said, passes = after_record, set(), 0
     while True:
         passes += 1
-        text, failed = live() if live is not None else read_live_bounded(timeout, helpers)
+        if live is not None:
+            text, failed = live()
+        elif bounded:   # AI-1: only Raqib's own values in the query (the start, an integer record number)
+            args = round_args(round_query(top, None if top is not None else since, ids=READ), cap)
+            text, failed = reader(args, timeout) if reader is not None else \
+                read_live_bounded(timeout, helpers, args=args)
+        else:
+            text, failed = reader(LIVE_ARGS, timeout) if reader is not None else read_live_bounded(timeout, helpers)
         if failed is not None:
             lines, silences = [], [failed]
         else:
             info = {}
             lines, silences = build(text, pid, guid=guid, cwd=cwd, start_seq=last_seq(log, session_id(pid)),
-                                    after_record=top, info=info)
+                                    after_record=top, info=info, tree=tree)
             if info.get("top_record") is not None:
                 top = info["top_record"] if top is None else max(top, info["top_record"])
+            if bounded and info.get("last_record") is not None:   # the records after the highest read, next
+                top = info["last_record"] if top is None else max(top, info["last_record"])
+            if bounded and info.get("events", 0) >= cap:
+                silences.append(FOLLOW_CUT % (info["events"], cap, top))
         fresh = [s for s in silences if s not in said]
         said.update(fresh)
         marked = [silence_line(pid, s) for s in fresh]
@@ -639,6 +698,8 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
             append(log, marked + lines)
         out.write("raqib os-sysmon: follow pass %d: %d events of the tree under pid %d -> %s; %d RAQIB-SILENCE"
                   " line(s)\n" % (passes, max(0, (len(lines) - 2) // 2), pid, log, len(marked)))
+        if on_read is not None:
+            on_read(passes, failed is None, failed)
         if on_pass is not None:
             on_pass(passes, top)
         if stop.wait(every):
@@ -701,12 +762,13 @@ def query_time(moment):
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (moment.microsecond // 1000)
 
 
-def round_query(after_record=None, since=None):
-    """The XPath of one round's read: the events of ROUND_IDS whose
+def round_query(after_record=None, since=None, ids=ROUND_IDS):
+    """The XPath of one round's read: the events of ids (ROUND_IDS; a
+    follow's pass, AI-1: READ) whose
     EventRecordID is above after_record (an int), or, before any round read
     a record (and after a restart, X-3c), whose TimeCreated is at or after
     since. Only Raqib's own values are formatted into it (int(), query_time())."""
-    ids = " or ".join("EventID=%d" % i for i in ROUND_IDS)
+    ids = " or ".join("EventID=%d" % int(i) for i in ids)
     if after_record is not None:
         bound = "EventRecordID>%d" % int(after_record)
     elif since is not None:

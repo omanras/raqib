@@ -336,6 +336,10 @@ UNREAD_SAY = ("%s round %d: the Sysmon channel is not read (%s: %s): until a rou
 AFTER_KNOCK = "%s: round %d: the Sysmon channel read failed after %d read(s) kept"   # AF-2, AG-2: a later episode
 AFTER_SAY = ("%s round %d: the Sysmon channel's read failed after %d read(s) kept (%s: %s): the os sources stay in"
              " place, and what they cannot read is not seen (a hole) (%s)")
+FOLLOW_UNREAD = ("its os follow read nothing in %d passes (%s): judged by the host's own record too from round %d, as"
+                 " on a machine without Sysmon, until a pass reads the channel")   # AI-2: the cause word only
+FOLLOW_READ = ("a pass of its os follow read the channel by round %d: the host's own record stopped; its lines before"
+               " stay judged")                                                  # AI-2: the os source's again
 REREAD = ("attached again as os in round %d: a round of the watch read the Sysmon channel; the lines of the host's"
           " own record before it stay judged")                                                   # AG-1: a tree host only while unread
 SYSMON_ALL = "the live reader's check: present, the rounds read its channel"   # AF-3: every round read (today's)
@@ -673,6 +677,19 @@ def cites_text(cites):
     return ", ".join(out) or "-"
 
 
+def follow_kw(follow, **extra):
+    """ADR-0007 AI-1, AI-2: the keywords an os follow is given beyond M7.13's (since, on_read), only where it takes
+    them: a follow with M7.13's signature (a stand-in of the tests) is called as it was."""
+    import inspect
+    try:
+        params = inspect.signature(follow).parameters
+    except (TypeError, ValueError):
+        return {}
+    if any(p.kind == p.VAR_KEYWORD for p in params.values()):
+        return dict(extra)
+    return {k: v for k, v in extra.items() if k in params}
+
+
 def channel_cause(error):
     """ADR-0007 AG-2: the cause of a failed read of the channel, from the reader's own words (os_sysmon:
     "wevtutil exited 5 (" a denial, "wevtutil did not return in " not back in time, "wevtutil could not be run"),
@@ -1000,6 +1017,11 @@ class TreeSource:
         self.helpers_said = 0        # I-5: how many of its records are holes already
         self.not_run_said = False    # I-6: the rules that cannot run on it were listed once
         self.pre_m78_said = False    # M7.8 (P-1): its os process lines without input_meta.image were said once
+        self.follow_passes = 0       # AI-2: the passes of its os follow (on_read), and how many read the channel
+        self.follow_reads = 0
+        self.follow_why = None       # AI-2: the reason of its follow's last pass that did not read
+        self.unread_follow = None    # AI-2: the round from which the host's record judges it too
+        self.base_text = None        # AI-2: its source text before that
 
     def writes_host(self):
         return self.kind == HOST_SOURCE or self.also_host
@@ -2882,6 +2904,7 @@ class HostWatch:
         if prev is not None and prev.error is None and not reread and not (prev.thread is not None and (
                 not prev.thread.is_alive() or prev.stop.is_set())):
             prev.rounds_after += 1
+            self._follow_unread(now, n, t, prev, entry)
             self._hooks_silent(now, n, key, prev)
             return prev
         again = prev is not None
@@ -3085,6 +3108,25 @@ class HostWatch:
             src.open, src.last_bytes = set(old.open), dict(old.last_bytes)
         return src
 
+    def _follow_unread(self, now, n, t, src, entry):
+        """ADR-0007 AI-2 (AF-1 one level down): an os source whose follow has had two passes and none that read is
+        judged by the host's own record too, from the next round it is in, and its source text says so with the
+        cause word (channel_cause of the pass's own reason); when a pass reads, it is the os source's again (the
+        host lines stop; those written stay judged). MUST NOT TOUCH: a tree whose follow reads."""
+        if src.kind != "os":
+            return
+        if src.unread_follow is None and not src.also_host and src.follow_passes >= 2 and src.follow_reads == 0:
+            src.unread_follow, src.base_text = n, src.text
+            src.text = "%s (%s)" % (src.text, FOLLOW_UNREAD % (src.follow_passes, channel_cause(src.follow_why), n))
+            src.also_host = True
+        elif src.unread_follow is not None and src.also_host and src.follow_reads > 0:
+            src.also_host, src.unread_follow = False, None
+            src.text = "%s (%s)" % (src.base_text, FOLLOW_READ % n)
+        else:
+            return
+        entry.update(source_text=src.text)
+        self._say(now, "round %d: %s pid %s: %s" % (n, t.get("image") or "?", t.get("pid"), src.text))
+
     def _attach_os(self, now, n, key, t, entry):
         """(a) os-sysmon live, rooted at the tree's root pid, in a thread
         with a Stop; its passes append to the per-tree file."""
@@ -3118,10 +3160,20 @@ class HostWatch:
                 feed.history_bytes = self._size(path)
             src.first_pass.set()
 
+        def on_read(count, read, why=None):   # AI-2: whether each pass read the channel, and why not
+            if read:
+                src.follow_reads += 1
+            else:
+                src.follow_why = why
+            src.follow_passes = count
+
+        # AI-1: the follow asks a bounded question, the first pass since the watch's start
+        more = follow_kw(follow, since=self.start_eff, on_read=on_read)
+
         def run():
             try:
                 follow(root, path, src.stop, every=self.source_every, out=io.StringIO(), err=io.StringIO(),
-                       on_pass=on_pass, after_record=src.top, helpers=src.helpers)
+                       on_pass=on_pass, after_record=src.top, helpers=src.helpers, **more)
                 src.ended = src.ended or "stopped"   # I-4: the first reason (the tree is gone) is kept
             except BaseException as exc:   # the source's failure is a hole, never the end of the watch
                 src.error = "%s: %s" % (type(exc).__name__, " ".join(str(exc).split()))
@@ -3367,7 +3419,9 @@ class HostWatch:
                      "severity": f["severity"], "summary": f["summary"], "cited_seq": list(f["cited_seq"]),
                      "session_id": f["session_id"], "trace": feed.path, "lines": cited[:6],
                      "tree": tree_word(key), "tree_key": list(key), "pid": key[0], "image": key[1],
-                     "source": src.kind, "at": self.at(now), "run": self.run, "history": history,
+                     "source": HOST_SOURCE if src.unread_follow is not None and str(f.get("session_id") or "")
+                     .startswith("host-") else src.kind,   # AI-2: the host's record judged it, not the os follow
+                     "at": self.at(now), "run": self.run, "history": history,
                      "pending": pending, "notice": None, "fkey": list(fkey), "grown": 0,
                      "state": PENDING_EXIT if pending else "settled"}
             # V-1: an act is one os event (or the events a finding cites), keyed by the EVENTS, whichever lines of

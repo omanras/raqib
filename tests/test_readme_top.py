@@ -81,9 +81,18 @@ HOST_UNREAD = [
      "(ADR-0007 Amendments AF and AG).",
     "A read that fails after rounds that read leaves the os sources in place: what they cannot read is "
      "not seen, and each such run of failed reads knocks once, naming its cause and no terminal.",
+    # ADR-0007 AI-1 (said): the bounded follow, and what it no longer reads
+    "Each pass of a tree's os follow asks the channel a bounded question, as a round's read does (the "
+     "events since the watch's start, then the records after the highest it has read, at most the round's"
+     " cap; a cut is a hole), and a tree whose follow has had two passes and none that read is judged by "
+     "the host's own record too, from the next round it is in, until a pass reads; so the follow no longer"
+     " reads the tree's past before the watch's start, and a child that started before the watch is not "
+     "known to it (ADR-0007 Amendment AI).",
+    # ADR-0007 AI-3: the one sentence amended (the proxy has it; the host watch does not read the proxy's trace)
     "What an agent without hooks reads with its own code (a file it opens, a directory it lists) is in no"
-     " source: it starts no child and opens no connection, and Sysmon has no event for a read; a file's "
-     "deletion is in no source at all.",
+     " source of the host watch; the proxy source records the tool call where the agent is pointed at it; "
+     "the host watch does not read the proxy's trace; the read starts no child and opens no connection, and"
+     " Sysmon has no event for a read; a file's deletion is in no source at all.",
     "In the third field run the watched read the watcher's record: the agent read the watch's own files "
      "under the home ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)).",
 ]
