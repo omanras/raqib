@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import re
 import os
 import subprocess
 import sys
@@ -594,10 +595,22 @@ def test_d12_a_root_named_only_as_a_parent_is_found():
 
 
 def test_d12_an_event_with_a_pid_and_no_utctime_is_a_silence_line():
-    text = e2_text().replace("<Data Name='UtcTime'>2026-11-03 09:00:12.500</Data>", "", 1)
+    # M7.16 REDO (ADR-0007 AN-1): with no time read at all (no UtcTime, and an export with no TimeCreated) as before
+    text = re.sub(r"<TimeCreated[^>]*/>", "", e2_text().replace(
+        "<Data Name='UtcTime'>2026-11-03 09:00:12.500</Data>", "", 1))
     lines, silences = built(text, cwd=CWD)
     assert silences == ["the event at line 11 (Sysmon 11) has no ProcessId or UtcTime: it is not recorded"]
     assert not [r for r in pres(lines) if r["tool"] == "file"]
+
+
+def test_d12_an1_an_event_with_no_utctime_and_a_logged_time_is_a_line_timed_from_the_log():
+    text = e2_text().replace("<Data Name='UtcTime'>2026-11-03 09:00:12.500</Data>", "", 1)
+    lines, silences = built(text, cwd=CWD)
+    assert silences == ["Sysmon's event 11 carries a UtcTime that is not read: it is timed from the time it was"
+                        " logged (time_from \"logged\", no skew)"]
+    (f,) = [r for r in pres(lines) if r["tool"] == "file"]
+    assert f["input_meta"]["time_from"] == "logged" and "time_skew_s" not in f["input_meta"]
+    assert "time_record" not in f["input_meta"]
 
 
 def test_d9_process_lines_link_their_parent_line():

@@ -1934,3 +1934,92 @@ rule is a new rule and waits for his answer.
 - Recorded: the sample window's words; whether event 22 lags; the
   clipboard (the note's Q-1).
 
+## Amendment AN (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.16.md (4278453), the builder's questions, and the rig's first run
+The packet: REDO, narrow; the field's case is fixed and tested. Two
+silences of low likelihood, one question that is a silence at every
+watch's end, and one false line the Table's own rig found.
+- AN-1 (R-1). A logged time that is there and cannot be read is said:
+  a RAQIB-SILENCE line of the follow, a problem of the round's record,
+  once per event kind; UtcTime is then used, and the words say it is
+  unchecked. An event whose UtcTime cannot be read and whose logged
+  time can is timed from the log (time_from "logged", no skew), not
+  dropped. MUST NOT TOUCH: no TimeCreated at all (an older export) is
+  no word, as today.
+- AN-2 (R-2; the structure, not the case). Whether an event belongs
+  to a tree is not decided by where a mixed clock sorts it: within one
+  pass, an event keyed by a ProcessGuid joins the tree if that guid is
+  in the tree by the end of the pass, whatever came first in time
+  order; an event 1 joins if its parent does, likewise. Lines are
+  still written in time order. Events keyed by pid alone are placed
+  as before (a pid is only somebody's at a time). FOR: an act whose
+  process's start took the logged time and sorted after it. MUST NOT
+  TOUCH: every export whose order was causal gives the lines it gave.
+- AN-3 (Q-2, S-1, S-2, S-3). Confirmed as built: an event 1 more than
+  60 s off takes its logged time too; where that is wrong it says
+  more (one process as two trees, a knock), never less. Said in
+  THREAT_MODEL with S-2 and S-3.
+- AN-4 (Q-1, F3; a silence at every watch's end). The beats the final
+  poll reads are judged by HOST-RHYTHM once more before the report: a
+  rhythm that completes in the last round is a finding, as it would be
+  one round earlier. If that cannot be done by the code that judges a
+  round's beats (one more call, no second road), the builder returns
+  it. MUST NOT TOUCH: a watch whose final poll reads no beat.
+- AN-5 (the rig's first run, on a real Windows with Sysmon). The
+  report said "SOURCE FINDINGS: 2" and, in its last lines, "4 source
+  finding(s)": AJ-2's join reached the listing and not the ALARMS
+  line. The ALARMS line counts what the listing lists and says how
+  many findings that is ("2 source finding(s) listed (4 findings: a
+  pair taken for the same act is listed once)"). The result and the
+  exit code are not touched.
+- AN-6 (W-1 to W-4). True words in os_sysmon's docstrings; the
+  THREAT_MODEL item says the lag was seen on a machine suspended for
+  about that long and that its cause is not established; the note
+  names the record its skew was measured on where the record's number
+  is read.
+
+## Amendment AO (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.16-redo.md (c4ae12d), the rig's second run, and the judgement on M7.16
+The packet: NEXT; no must-fix in what the REDO changed.
+- AO-1 (the rig, on the REDO's code, a real Windows with Sysmon).
+  HOLES 0: the builder's own additions (an unread UtcTime said, a
+  TimeCreated with no SystemTime said: N-1, N-2) do not fire on a real
+  Sysmon, so no healthy watch becomes INCOMPLETE by them; they stand,
+  as holes (the packet's Q-1: an unread field is A3's). The ALARMS
+  line and the listing agree (AN-5). The notes fell from 25 to 17.
+- AO-2 (AN-4, returned; the rig shows why). The rig's stand-in agent
+  ended twenty seconds before the watch did, and five of its beats
+  were still "read by the final poll, in no round". So the builder's
+  account (one round late) is not the whole of it, and F3 is not a
+  matter of the last round: the Table's hypothesis, not yet read in
+  the code, is that a tree's source beats are taken only in rounds
+  the tree is in, so the acts of a tree that is quiet at the sample
+  wait for the final poll and are judged by nothing. That would be
+  HOST-RHYTHM blind to an agent that is not talking at the sample: a
+  task of its own, begun by a test that confirms or refutes it. AN-4
+  is withdrawn into it.
+- AO-3 (S-1, S-2, S-3, W-1, W-2, W-4, W-5, the packet's Q-2 and Q-5;
+  recorded for that task or the tree ledger, not built). A pid reused
+  by an unrelated event 1 between a late join and its guard, for
+  events keyed by pid alone (real Sysmon events carry a ProcessGuid);
+  an unread time said for an event that is not the tree's; the
+  follow's silence naming its record; the round's hole's words ("a
+  line could not be read") for a line that was read; os_sysmon's
+  stale docstring lines; an act read in an earlier pass than its
+  process's start (N-4).
+- AO-4 (W-3, W-6). THREAT_MODEL's two sentences made true by the
+  Table: once per event kind "by each reader"; "one more beside the
+  sampled one".
+- Judgement: NEXT for M7.16, on the gate and six CI jobs green for
+  the Table's commit. What the commander's elevated watch showed is
+  met: a Sysmon event stamped weeks behind is timed by its logged
+  time, lives in its round and can be knocked (AM-1); the lag is a
+  note (AM-2); a rule's not-judged note is one note (AM-3); a time
+  that is there and unread is said (AN-1); membership does not depend
+  on how two clocks sort (AN-2). Not shown yet: his own machine's
+  report with these in it.
+- Table ledger. The rig found in five minutes what three reviewers
+  reading the code had not (a line of the report that contradicted
+  another), and turned a question no test could state (F3) into a
+  case it reproduces. Reading finds what a path can do; running finds
+  what the whole says. Both, from now on, before the commander is
+  asked to try.
+

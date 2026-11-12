@@ -485,6 +485,59 @@ Rulings: ADR-0003 Amendments C and D.
   "asked, not done"; an act started more than 10 s after its call, or a
   call written more than 10 s after its act, is a finding. Its budget is
   0.1 until the field test.
+- **A Sysmon that stamps its events behind the time they were logged
+  (ADR-0007 Amendments AM and AN).** On a machine that had been
+  suspended for about that long (a virtual one), Sysmon's own UtcTime of
+  an event was seen weeks before the time the log gives it
+  (System/TimeCreated): its network events were seen 26 days behind
+  while its process and file events were not. The cause is not
+  established: the suspension is what was seen beside the lag, and which
+  Sysmon versions do this was not checked. Taken as it stands, every
+  connection would be before the watch's start: history, never knocked,
+  and a round's window would start weeks back. So the time Raqib uses
+  for a Sysmon event - before or after the watch's start, the order of a
+  tree's lines, a beat, a window - is the time it was logged wherever
+  that is read and UtcTime is more than 60 s from it; where the two agree
+  within 60 s, or the export has no TimeCreated, UtcTime as before, to
+  the byte. An os line timed from the log says so: input_meta.time_from
+  "logged", input_meta.time_skew_s, the skew in whole seconds (positive:
+  UtcTime is behind), and input_meta.time_record, the EventRecordID it
+  was measured on, where read. The lag itself is a note, said once per
+  event kind per watch ("Sysmon's event 3 carries a time 26 days 7 hours
+  behind the time it was logged (... s): the logged time is used
+  (measured on record N)", the record where its number is read): not a
+  hole and not a knock, since the event is kept, at its logged time, and
+  a watch on such a machine can still end CLEAN. A TimeCreated that is
+  there and does not parse is said once per event kind by each reader (a
+  RAQIB-SILENCE line once for a follow's life, a problem of each round's
+  record: on a machine where every such time is unread, a hole in every
+  round): that event's
+  UtcTime is then used, unchecked; an export with no TimeCreated at all
+  is no word, as before. An event whose UtcTime does not parse and whose
+  logged time does is timed from the log (time_from "logged", no
+  time_skew_s), said once per kind, not dropped. Within one read of the
+  channel an event joins its tree by its ProcessGuid whatever order the
+  two clocks sort it in: an act sorted before its own process's start,
+  or a child's start sorted before its parent's, is still the tree's;
+  the lines are still written in time order (a child's line before its
+  parent's has no parent_seq), and an event known by its pid alone is
+  placed as before. Where the logged time is wrong for the act, Raqib
+  says more, never less: a process whose start (event 1) was logged more
+  than 60 s after it does not match its sampled CreationDate and is
+  listed as two processes (the round says the pid held one more beside
+  the sampled one); an
+  event that happened before the watch's start and was logged more than
+  60 s after it is live, and can be knocked; an os process line timed so
+  can fall outside CROSS-SOURCE's hook window, a "done, not asked"
+  finding where hooks are present. What is not covered: an event whose
+  logged time is itself wrong (the log's clock) is taken as the log gives
+  it; a lag of 60 s or less is not corrected; the note gives the first
+  skew of a kind, and a second, different lag of that kind later in the
+  watch is not said again; an act whose process's start is read in a
+  later read of the channel than the act is not joined back; the beats
+  the final poll reads after the last round are counted in the report,
+  not judged by HOST-RHYTHM; where its two times agree, a process's start
+  (event 1) matches a sampled CreationDate exactly as before.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
