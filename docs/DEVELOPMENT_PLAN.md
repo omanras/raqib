@@ -105,3 +105,8 @@ Nothing is built until he judges the ADR. Its order: the event (`raqib-event/1`,
 sinks (Event Log, syslog); the service; accounts, logons, tasks, services and a tree's reach; the proxy joined to
 the host watch and PROXY-BYPASS; file reads, measured first.
 
+## Phase 11 — The rig (ADR-0012; the commander's order, 2026-11-13)
+- M11.1 the rig (landed with ADR-0012): a workflow of its own; a real Windows with Sysmon and Linux; a stand-in agent whose acts are known; tools/rig/check.py states each expectation MET, MISSED or OPEN; reports, does not fail
+- M11.2 recorded: real agents under a scripted model server on the runner (no key, no cost), more than one
+- M11.3 recorded: a watch that is not elevated on the rig; the window's opening time (with M8.5)
+
