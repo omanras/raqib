@@ -51,15 +51,18 @@ jobs:
       - name: read the report against what the stand-in did
         shell: pwsh
         run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --summary $env:GITHUB_STEP_SUMMARY
+      - name: gather what the watch wrote
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force rig-out | Out-Null
+          Copy-Item $env:RUNNER_TEMP\watch.out, $env:RUNNER_TEMP\watch.err, $env:RUNNER_TEMP\workload.out rig-out -ErrorAction SilentlyContinue
+          Copy-Item $HOME\.raqib\host\sources rig-out\sources -Recurse -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: rig-windows
-          path: |
-            ${{ runner.temp }}/watch.out
-            ${{ runner.temp }}/watch.err
-            ${{ runner.temp }}/workload.out
-            ~/.raqib/host/sources/
+          path: rig-out/
           if-no-files-found: ignore
 
   linux:
@@ -87,12 +90,15 @@ jobs:
           echo "=== the watch's stderr"; cat "$RUNNER_TEMP/watch.err"
       - name: read the report against what the stand-in did
         run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --summary "$GITHUB_STEP_SUMMARY"
+      - name: gather what the watch wrote
+        if: always()
+        run: |
+          mkdir -p rig-out
+          cp "$RUNNER_TEMP/watch.out" "$RUNNER_TEMP/watch.err" "$RUNNER_TEMP/workload.out" rig-out/ 2>/dev/null || true
+          cp -r "$HOME/.raqib/host/sources" rig-out/sources 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: rig-linux
-          path: |
-            ${{ runner.temp }}/watch.out
-            ${{ runner.temp }}/watch.err
-            ${{ runner.temp }}/workload.out
+          path: rig-out/
           if-no-files-found: ignore
