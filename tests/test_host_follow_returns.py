@@ -8,7 +8,9 @@ cut is a hole); `raqib os-sysmon` run by a person reads what it read. REDO
 (Amendment AJ): AI-2's counting of passes is withdrawn; a tree whose source is
 os has the host's own record from its attach (AJ-1), a finding is the source of
 the line it cites (AJ-3), one act told twice is one entry of the listing (AJ-2),
-and the follow keeps its tree, its GUIDs and the round's restarts (AJ-4). AI-3: the
+and the follow keeps its tree, its GUIDs and the round's restarts (AJ-4). REDO 2 (Amendment AK): the host's
+record of an os tree is the host source's own road (its own file and feed, the host's rules, its history rule), and
+the property is tested as written: with Sysmon and without, the same host-line findings, knocks and words. AI-3: the
 guide and THREAT_MODEL say the proxy has what an agent without hooks reads with
 its own code. The stand-in wevtutil here is a Python class (never a process)
 that honours the query and records its arguments. SYNTHETIC: host `host`, user
@@ -33,7 +35,7 @@ from raqib.hooks import os_sysmon  # noqa: E402
 from hostthreads import raqib_threads_end  # noqa: E402,F401  (every HostWatch ended, no thread leaked)
 from test_round_channel import G_KIMI, G_SHELL, EXPLORER, WALL0, channel_xml, created, guid_of, talked  # noqa: E402
 from test_host_third_field_run import (CURL, KIMI, KIMI_WORD, TIMED_OUT, Channel, FakeWevtutil, judged,  # noqa: E402
-                                       kimi_then_curl, report, sample, watch)
+                                       kimi_then_curl, report, sample, section, watch)
 
 START = datetime.datetime(2026, 11, 10, 7, 53, 30, tzinfo=datetime.timezone.utc)   # WALL0 + 240: the watch's start
 CHANNEL = "Microsoft-Windows-Sysmon/Operational"
@@ -190,7 +192,8 @@ def test_e1_ai1_not_touched_raqib_os_sysmon_by_a_person_reads_the_whole_channel_
     assert channel.args == [WHOLE] and len(acts(lines)) == 2
 
 
-# --- E1 (AJ-1): an os tree has the host's own record from its attach; E2 (AJ-2); E3 (AJ-3); E4 (AJ-4) ------------
+# --- E1 (AJ-1, AK-1): an os tree has the host's own record by the host source's road; E2 (AK-2); E3 (AK-3);
+# --- E4 (AK-4); E5 (AK-5, AK-6); E7 (AK-8): the property, as written -------------------------------------------
 
 class Follow:
     """A tree's os follow for raqib watch --host: the real os_sysmon.follow (bounded: the watch gives it its start),
@@ -231,43 +234,48 @@ class Follow:
 
 
 class Rounds(Channel):
-    """The rounds' channel: every round read (an empty kept read); at round `release` the follow's waiting pass is
-    let go first and the round waits for it."""
+    """The rounds' channel: every round read (an empty kept read, or `xml[n]` in round n); at round `release` the
+    follow's waiting pass is let go first and the round waits for it."""
 
-    def __init__(self, follow, release=None):
+    def __init__(self, follow=None, release=None, xml=None):
         super().__init__(denied=set())
-        self.follow, self.release = follow, release
+        self.follow, self.release, self.xml = follow, release, dict(xml or {})
 
     def __call__(self, timeout, helpers=None, popen=None, environ=None, args=()):
         if self.release is not None and len(self.args) + 1 == self.release:
             self.follow.go.set()
             assert self.follow.done.wait(5)
-        return super().__call__(timeout, helpers, popen, environ, args)
+        got = super().__call__(timeout, helpers, popen, environ, args)
+        return (channel_xml(*self.xml[len(self.args)]), None) if len(self.args) in self.xml else got
+
+
+KIMI_T = (9176, 5888, KIMI, "kimi", "2026-11-10T07:51:00.000")
+CURL_T = (9300, 9176, CURL, "curl -s https://198.51.100.20/x", "2026-11-10T07:54:20.000")
+CURL2_T = (9310, 9176, CURL, "curl -s https://198.51.100.21/y", "2026-11-10T07:56:20.000")
+CURL3_T = (9320, 9176, CURL, "curl -s https://192.0.2.30/z", "2026-11-10T07:58:20.000")
+TALKS = [(50300, "203.0.113.50", 9176, "2026-11-10T07:51:01.000"), (50310, "198.51.100.20", 9300,
+         "2026-11-10T07:54:21.000"), (50320, "198.51.100.21", 9310, "2026-11-10T07:56:21.000"),
+         (50340, "192.0.2.30", 9320, "2026-11-10T07:58:21.000")]
 
 
 def rounds(tmp_path, n=3):
     """kimi (round 1); its child curl talks (round 2: its tree is attached, os); a second child curl talks (round 3:
     the round after the follow's two passes); a third (round 4) (SYNTHETIC)."""
-    kimi = (9176, 5888, KIMI, "kimi", "2026-11-10T07:51:00.000")
-    curl = (9300, 9176, CURL, "curl -s https://198.51.100.20/x", "2026-11-10T07:54:20.000")
-    curl2 = (9310, 9176, CURL, "curl -s https://198.51.100.21/y", "2026-11-10T07:56:20.000")
-    talk = (50300, "203.0.113.50", 9176, "2026-11-10T07:51:01.000")
-    curl3 = (9320, 9176, CURL, "curl -s https://192.0.2.30/z", "2026-11-10T07:58:20.000")
-    talks = [talk, (50310, "198.51.100.20", 9300, "2026-11-10T07:54:21.000"),
-             (50320, "198.51.100.21", 9310, "2026-11-10T07:56:21.000"), (50340, "192.0.2.30", 9320,
-                                                                        "2026-11-10T07:58:21.000")]
-    return [sample(tmp_path, "r%d" % (i + 1), [kimi, curl, curl2, curl3][:i + 1], talks[:i + 1]) for i in range(n)]
+    return [sample(tmp_path, "r%d" % (i + 1), [KIMI_T, CURL_T, CURL2_T, CURL3_T][:i + 1], TALKS[:i + 1])
+            for i in range(n)]
 
 
-def file_lines(w):
+def at_start(tmp_path):
+    """kimi and its curl both in round 1 (a tree there at the start with a child in round 1), then curl2, curl3."""
+    return [sample(tmp_path, "s%d" % (i + 1), [KIMI_T, CURL_T, CURL2_T, CURL3_T][:i + 2], TALKS[:i + 2])
+            for i in range(3)]
+
+
+def host_file_lines(w):
     (src,) = w.sources.values()
-    return [json.loads(x) for x in Path(src.path).read_text(encoding="ascii").splitlines() if x.startswith("{")]
-
-
-def host_children(lines):
-    """The child pids the host's own record wrote (HostChild lines)."""
-    return sorted({c["pid"] for x in lines if x["source"] == "host" and x.get("tool") == "HostChild"
-                   for c in x["input_meta"]["children"]})
+    path = Path(src.host_path)
+    return [json.loads(x) for x in path.read_text(encoding="ascii").splitlines() if x.startswith("{")] \
+        if path.exists() else []
 
 
 def source_line(w):
@@ -279,15 +287,18 @@ def source_line(w):
 class Script:
     """A tree's os follow for raqib watch --host: the real os_sysmon.follow over a FollowChannel (its passes, its
     failing calls; every call from `fail_from` on does not return in time). A pass after the scripted ones waits a
-    little on the Stop first, so the follow does not spin (no clock is asserted). Records each attach."""
+    little on the Stop first, so the follow does not spin (no clock is asserted). Records each attach and the tree
+    it was handed (`raises`: the follow raises at once, in the round of its attach)."""
 
-    def __init__(self, passes=(), fail=(), fail_from=None):
+    def __init__(self, passes=(), fail=(), fail_from=None, raises=False):
         self.channel = FollowChannel(passes, fail)
-        self.fail_from, self.kw, self.trees = fail_from, [], []
+        self.fail_from, self.kw, self.trees, self.raises = fail_from, [], [], raises
 
     def __call__(self, root, log, stop, **kw):
         self.kw.append(sorted(kw))
         self.trees.append(kw.get("tree"))
+        if self.raises:
+            raise os_sysmon.UsageError("the stand-in follow ends at once (SYNTHETIC)")
 
         def reader(args, timeout):
             n = len(self.channel.args) + 1
@@ -304,20 +315,58 @@ class Script:
 KW = ["after_record", "err", "every", "helpers", "on_pass", "out", "restart", "since", "tree"]
 
 
-def host_record(w):
-    """The host's own record of the watch: each child its HostChild lines wrote (twice if written twice), and the
-    source findings made on those lines (rule, tree, pid, source, a note or not)."""
-    written = sorted(c["pid"] for x in file_lines(w) if x["source"] == "host" and x.get("tool") == "HostChild"
-                     for c in x["input_meta"]["children"])
-    return written, sorted(f for f in judged(w)[1] if f[3] == "host")
+def settled_follows(monkeypatch, truncate=None):
+    """Before each round's host lines, every os follow has finished its first pass or ended (deterministic: no
+    clock); in round `truncate` the tree's file of the host's own record is emptied first (a file that restarts),
+    in the watch with Sysmon and in the one without alike."""
+    real = host.HostWatch._host_lines
+
+    def _host_lines(self, now, n, *rest):
+        for src in list(self.sources.values()):
+            while src.thread is not None and src.thread.is_alive() and not src.first_pass.is_set():
+                src.first_pass.wait(0.01)
+            if n == truncate and src.host_path and Path(src.host_path).exists():
+                Path(src.host_path).write_bytes(b"")
+        return real(self, now, n, *rest)
+    monkeypatch.setattr(host.HostWatch, "_host_lines", _host_lines)
 
 
-def against_without(tmp_path, monkeypatch, name, samples, follow, without_samples):
-    w, said, _ = watch(tmp_path / name, monkeypatch, samples, channel=Rounds(follow), follow=follow,
+def host_said(w, said):
+    """What the person meets of the host-line findings of a watch: each (rule, tree, the children or remote of the
+    lines it cites, their seqs, history, notice); the KNOCKS rows of the source findings; and the terminal lines of
+    the host-line findings."""
+    found = []
+    for f in w.source_findings:
+        if f["source"] != host.HOST_SOURCE:
+            continue
+        src = w.sources.get(tuple(f["tree_key"]))
+        feed = next((d for d in (src.feeds if src is not None else ()) if d.path == f["trace"]
+                     and d.epoch == f["fkey"][1]), None)
+        recs = dict(feed.numbered) if feed is not None else {}
+        what = tuple(sorted("%s" % c.get("pid") for ln in f["lines"]
+                            for c in ((recs.get(ln) or {}).get("input_meta") or {}).get("children") or ())
+                     or sorted("%s" % ((recs.get(ln) or {}).get("input_meta") or {}).get("remote") for ln in f["lines"]))
+        found.append((f["rule_id"], f["tree"], what, tuple(f["cited_seq"]), f["history"], f["notice"]))
+    rows = [x for x in section(report(w), "KNOCKS:", "NOTIFICATIONS:")[1:]
+            if "FIRST-FINDING" in x or " via " in x]
+    terminal = [x.split("SOURCE FINDING", 1)[1] for x in said.splitlines()
+                if "SOURCE FINDING" in x and " (host): " in x]
+    return sorted(found), rows, terminal
+
+
+def property_holds(w, said, without, said_without):
+    got, want = host_said(w, said), host_said(without, said_without)
+    assert got == want, (got, want)
+    return got
+
+
+def against_without(tmp_path, monkeypatch, name, samples, follow, without_samples, channel=None, truncate=None):
+    settled_follows(monkeypatch, truncate)
+    w, said, _ = watch(tmp_path / name, monkeypatch, samples, channel=channel or Rounds(follow), follow=follow,
                        wall0=WALL0 + 240)
-    without, _, _ = watch(tmp_path / (name + "-without"), monkeypatch, without_samples, sysmon=False,
-                          wall0=WALL0 + 240)
-    return w, said, without
+    without, said_without, _ = watch(tmp_path / (name + "-without"), monkeypatch, without_samples, sysmon=False,
+                                     wall0=WALL0 + 240)
+    return w, said, without, property_holds(w, said, without, said_without)
 
 
 def cited_sources(w, f):
@@ -325,16 +374,21 @@ def cited_sources(w, f):
     return {json.loads(lines[ln - 1])["source"] for ln in f["lines"]}
 
 
-def test_e1_aj1_a_follow_that_never_reads_has_the_host_record_from_its_attach_as_without_sysmon(tmp_path,
-                                                                                               monkeypatch):
+def test_e1_ak1_an_os_tree_has_two_files_the_host_record_by_the_host_sources_road(tmp_path, monkeypatch):
     follow = Script(fail_from=1)
-    w, said, without = against_without(tmp_path, monkeypatch, "never", rounds(tmp_path, 4), follow,
-                                       rounds(tmp_path / "w", 4))
+    w, said, without, (found, rows, terminal) = against_without(tmp_path, monkeypatch, "never", rounds(tmp_path, 4),
+                                                                follow, rounds(tmp_path / "w", 4))
     (key,) = w.trees
     src = w.sources[key]
     assert src.kind == "os" and src.also_host and src.writes_host() and follow.kw == [KW]
-    assert host_record(w) == host_record(without) and host_record(w)[0] == [9300, 9310, 9320]
-    assert ("NET-TOOL", KIMI_WORD, 9176, "host", False) in judged(w)[1]
+    # two files: the os follow's own (the untagged per-tree file) and the host's own record's (tagged "host"),
+    # each with its own feed: the catalog on the os lines, the host's rules on the host lines
+    assert src.path == w._source_path(key) and src.host_path == w._source_path(key, "host") != src.path
+    assert [(d.path, d.rules) for d in src.feeds] == [(src.path, w.src_rules), (src.host_path, w.host_rules)]
+    assert not hasattr(src, "host_from")
+    assert [c["pid"] for x in host_file_lines(w) if x["tool"] == "HostChild" for c in x["input_meta"]["children"]] \
+        == [9300, 9310, 9320]
+    assert ("NET-TOOL", KIMI_WORD, ("9300",), (1,), False) == found[0][:5] and len(found) == 3 and rows and terminal
     assert source_line(w).startswith("      source: os (os: Sysmon, rooted at pid 9176")
     for gone in ("its os follow read nothing", "the host's own record stopped"):   # AI-2's texts, withdrawn
         assert gone not in said and gone not in w.final_text
@@ -343,57 +397,113 @@ def test_e1_aj1_a_follow_that_never_reads_has_the_host_record_from_its_attach_as
     assert not hasattr(host.HostWatch, "_follow_unread")
 
 
-def test_e1_aj1_a_follow_that_read_once_and_then_fails_has_the_host_record_as_without_sysmon(tmp_path, monkeypatch):
-    follow = Script(passes=[[CURL_BORN, CURL_TALK]], fail_from=2)
-    w, _, without = against_without(tmp_path, monkeypatch, "once", rounds(tmp_path, 4), follow,
-                                    rounds(tmp_path / "w", 4))
-    assert host_record(w) == host_record(without) and host_record(w)[0] == [9300, 9310, 9320]
-    # E3 (AJ-3): a finding of the os tree is the source of the lines it cites: host lines say host, os lines os
-    tree = [f for f in w.source_findings if f["tree"] == KIMI_WORD]
-    assert {f["source"] for f in tree} == {"host", "os"}
-    assert all(cited_sources(w, f) == {f["source"]} for f in tree)
+def test_e7_ak8_a_tree_there_at_the_start_with_a_child_in_round_1(tmp_path, monkeypatch):
+    follow = Script(fail_from=1)
+    w, _, without, (found, _, _) = against_without(tmp_path, monkeypatch, "start", at_start(tmp_path), follow,
+                                                   at_start(tmp_path / "w"))
+    (key,) = w.trees
+    assert w.trees[key]["first_round"] == w.history_round == 1 and w.sources[key].kind == "os"
+    # round 1's HostChild line (curl) is history, as on a machine without Sysmon (the round-1 rule); later ones live
+    assert [(x[2], x[4]) for x in found] == [(("9300",), True), (("9310",), False), (("9320",), False)]
+    assert found[0][5] == "history: not knocked"
+    # not touched (AK-1): the os feed's own history is as before M7.14 (unknown until the first pass, a tree there
+    # at the start): the host lines do not set it
+    assert w.sources[key].feeds[0].history_bytes == 0 or w.sources[key].passes >= 1
 
 
-def test_e1_aj1_a_tree_attached_again_as_os_keeps_the_host_record_and_writes_no_child_twice(tmp_path, monkeypatch):
+def test_e7_ak8_the_trees_host_file_restarted(tmp_path, monkeypatch):
+    follow = Script(fail_from=1)
+    w, said, _, (found, rows, _) = against_without(tmp_path, monkeypatch, "restart", rounds(tmp_path, 4), follow,
+                                                   rounds(tmp_path / "w", 4), truncate=4)
+    # the line written after the restart (curl3, round 4) is live, as on a machine without Sysmon (R-1)
+    assert [x[4] for x in found if x[2] == ("9320",)] == [False]
+    assert "source-hole" in [h["kind"] for h in w.holes]
+
+
+def test_e2_e7_ak2_a_follow_that_ends_in_the_round_of_its_attach_stops_no_host_line(tmp_path, monkeypatch):
+    follow = Script(raises=True)
+    w, said, _, (found, rows, terminal) = against_without(tmp_path, monkeypatch, "ends", rounds(tmp_path, 4),
+                                                          follow, rounds(tmp_path / "w", 4))
+    assert follow.kw and "UsageError: the stand-in follow ends at once" in w.final_text   # it ended, said
+    # its round's HostChild line (curl, round 2) is written and judged, and knocks as without Sysmon
+    assert [x[2] for x in found] == [("9300",), ("9310",), ("9320",)] and found[0][5] != "history: not knocked"
+    assert any("FIRST-FINDING" in x for x in rows) and len(terminal) == 3
+
+
+BRIEF_G, BRIEF_CURL_G = guid_of(9500), guid_of(9510)
+BRIEF = [created(700, at("07:55:00"), 9500, KIMI, BRIEF_G, 5888, EXPLORER, G_SHELL, "kimi"),
+         talked(701, at("07:55:01"), 9500, KIMI, BRIEF_G, port=50400, dest="203.0.113.60"),
+         created(702, at("07:55:02"), 9510, CURL, BRIEF_CURL_G, 9500, KIMI, BRIEF_G, "curl -s https://198.51.100.30/w"),
+         talked(703, at("07:55:03"), 9510, CURL, BRIEF_CURL_G, port=50410, dest="198.51.100.30")]
+
+
+def test_e3_e7_ak3_a_tree_known_only_from_the_channel_has_no_host_line_through_the_rounds(tmp_path, monkeypatch):
+    follow = Script(fail_from=1)
+    w, _, _, (found, _, _) = against_without(tmp_path, monkeypatch, "brief", rounds(tmp_path, 3), follow,
+                                             rounds(tmp_path / "w", 3), channel=Rounds(xml={2: BRIEF}))
+    brief = [k for k in w.trees if k[0] == 9500]
+    assert brief and not w.trees[brief[0]].get("sampled", True)   # the channel's tree, never sampled
+    src = w.sources[brief[0]]
+    assert src.host_path and (not Path(src.host_path).exists() or Path(src.host_path).read_bytes() == b"")
+    assert not [f for f in w.source_findings if f["source"] == "host" and tuple(f["tree_key"]) == brief[0]]
+    assert all(x[1] == KIMI_WORD for x in found)
+
+
+CMD_BORN = created(610, at("07:54:30"), 9400, CMD, G_CMD, 9176, KIMI, G_KIMI, "cmd /c dir")
+
+
+def test_e5_e7_ak5_a_follow_attached_again_knows_the_earlier_ones_child_through_the_watch(tmp_path, monkeypatch):
     r, rw = rounds(tmp_path, 4), rounds(tmp_path / "w", 4)
-    follow = Script(passes=[[CURL_BORN, CURL_TALK]])
-    w, _, without = against_without(tmp_path, monkeypatch, "again", [r[0], r[1], "quiet/quiet", r[3]], follow,
-                                    [rw[0], rw[1], "quiet/quiet", rw[3]])
-    assert len(follow.kw) == 2 and isinstance(follow.trees[1], dict)   # AJ-4 (R-1): the earlier follow's tree
-    assert follow.trees[1] is not follow.trees[0]
-    assert host_record(w) == host_record(without) and host_record(w)[0] == [9300, 9310, 9320]   # S-1: once each
-    assert [x["tool"] for x in file_lines(w) if x["source"] == "host"].count("HostGone") == 1
+    follow = Script(passes=[[CMD_BORN]])   # the first follow finds kimi's cmd (no sample holds it)
+    w, _, _, (found, _, _) = against_without(tmp_path, monkeypatch, "again", [r[0], r[1], "quiet/quiet", r[3]],
+                                             follow, [rw[0], rw[1], "quiet/quiet", rw[3]])
+    assert len(follow.kw) == 2
+    first, second = follow.trees
+    # AK-5: the second follow is handed the tree the first published after its last finished pass: it knows the cmd
+    assert second is not first and second.get("found") and second["by_guid"][os_sysmon._gkey(G_CMD)] == 1
+    # S-1: each child once (curl2 and curl3 are new in round 4, after the quiet round: one HostChild line)
+    assert [x[2] for x in found if x[0] == "NET-TOOL"] == [("9300",), ("9310", "9320")]
+    assert [x["tool"] for x in host_file_lines(w)].count("HostGone") == 1
 
 
-def test_e1_aj1_a_channel_cleared_under_the_follow_has_the_host_record_as_without_sysmon(tmp_path, monkeypatch):
-    cleared = [created(1, at("07:56:20"), 9310, CURL, G_CURL2, 9176, KIMI, G_KIMI, "curl -s https://198.51.100.21/y"),
-               talked(2, at("07:56:21"), 9310, CURL, G_CURL2, port=50320, dest="198.51.100.21")]
-    follow = Script(passes=[[CURL_BORN, CURL_TALK], cleared])   # every pass reads; above 603 nothing ever comes
-    w, _, without = against_without(tmp_path, monkeypatch, "cleared", rounds(tmp_path, 4), follow,
-                                    rounds(tmp_path / "w", 4))
-    assert host_record(w) == host_record(without) and host_record(w)[0] == [9300, 9310, 9320]
+def test_e5_e7_ak6_a_restart_through_the_rounds_its_holes_words_and_a_follow_attached_after_it(tmp_path,
+                                                                                            monkeypatch):
+    explorer = [talked(500, at("07:53:40"), 5888, EXPLORER, G_SHELL, port=50299)]
+    again = [talked(5, at("07:54:10"), 5888, EXPLORER, G_SHELL, port=50298)]   # record 5: the numbers restarted
+    r, rw = rounds(tmp_path, 3), rounds(tmp_path / "w", 3)
+    follow = Script(fail_from=1)
+    # the restart in round 2, before kimi's tree is attached (round 3)
+    w, said, _, (found, _, _) = against_without(tmp_path, monkeypatch, "before", [r[0], r[0], r[1], r[2]], follow,
+                                                [rw[0], rw[0], rw[1], rw[2]],
+                                                channel=Rounds(xml={1: explorer, 2: again}))
+    (restart,) = [h for h in w.holes if h["kind"] == "channel-restart"]
+    assert restart["round"] == 2 and "its record numbers restarted (record 5 at or below the bound 500" in restart[
+        "detail"] and host.FOLLOW_RESTART.split(" %s")[0] not in restart["detail"]   # no follow ran yet
+    (key,) = [k for k in w.trees if k[0] == 9176]
+    # AK-6: a follow attached after the restart says in its source text that it reads from the restart's time
+    assert ("(it reads the channel from the restart's time %s, not from the watch's start)"
+            % host.iso(w.follow_restart.get()[1])) in w.sources[key].text
+    assert [x[2] for x in found] == [("9300",), ("9310",)]
+    # the restart in round 3, kimi's follow running (attached in round 2): the hole says its bound restarts too
+    follow = Script(fail_from=1)
+    w, said, _, _ = against_without(tmp_path, monkeypatch, "running", rounds(tmp_path / "x", 3), follow,
+                                    rounds(tmp_path / "xw", 3), channel=Rounds(xml={1: explorer, 3: again}))
+    (restart,) = [h for h in w.holes if h["kind"] == "channel-restart"]
+    assert restart["round"] == 3 and restart["detail"].split("; query ")[0].endswith(
+        host.FOLLOW_RESTART % (host.iso(w.follow_restart.get()[1]), 1))
+    (key,) = [k for k in w.trees if k[0] == 9176]
+    assert "(it reads the channel from the restart's time" not in w.sources[key].text   # attached before it
 
 
-def test_e1_aj1_not_touched_no_round_read_the_channel_the_trees_are_host_and_no_follow_is_attached(tmp_path,
+def test_e1_ak1_not_touched_no_round_read_the_channel_the_trees_are_host_and_no_follow_is_attached(tmp_path,
                                                                                                  monkeypatch):
     follow = Script()
     w, said, _ = watch(tmp_path / "denied", monkeypatch, rounds(tmp_path, 3), follow=follow, wall0=WALL0 + 240)
-    without, _, _ = watch(tmp_path / "without", monkeypatch, rounds(tmp_path / "w", 3), sysmon=False,
-                          wall0=WALL0 + 240)
+    without, said_without, _ = watch(tmp_path / "without", monkeypatch, rounds(tmp_path / "w", 3), sysmon=False,
+                                     wall0=WALL0 + 240)
     assert follow.kw == [] and [s.kind for s in w.sources.values()] == ["host"]   # AF-1: the host's record alone
-    assert host_record(w) == host_record(without)
+    property_holds(w, said, without, said_without)
     assert "Sysmon is registered, but no round up to round" in source_line(w)
-
-
-def test_e1_aj1_not_touched_a_tree_known_only_from_the_channel_has_no_host_line(tmp_path, monkeypatch):
-    follow = Script(fail_from=1)
-    w, _, _ = watch(tmp_path / "brief", monkeypatch, rounds(tmp_path, 2), channel=Rounds(follow), follow=follow,
-                    wall0=WALL0 + 240)
-    (src,) = w.sources.values()
-    before = Path(src.path).read_bytes()
-    # a round whose sample does not hold the tree (known only from the channel): no sample, no host line to write
-    w._host_lines(None, 9, "2026-11-10T08:00:00.000Z", "fixture", {}, {}, set())
-    assert Path(src.path).read_bytes() == before
 
 
 def test_e1_aj1_not_touched_host_rhythm_counts_an_act_two_sources_saw_once(tmp_path, monkeypatch):
@@ -407,33 +517,48 @@ def test_e1_aj1_not_touched_host_rhythm_counts_an_act_two_sources_saw_once(tmp_p
     assert every.act_twins == 1 and "; 1 act(s) seen by a second source, counted once" in every.final_text
 
 
-def test_e2_aj2_a_curl_both_sources_saw_is_one_entry_of_the_listing_and_knocks_as_without_sysmon(tmp_path,
-                                                                                               monkeypatch):
+def test_e4_e6_ak4_ak7_a_curl_both_sources_saw_is_one_listing_entry_and_says_and_knocks_as_without_sysmon(
+        tmp_path, monkeypatch):
     follow = Follow(unread=0, then=[CURL_BORN, CURL_TALK], go=True)
-    w, _, without = against_without(tmp_path, monkeypatch, "both", rounds(tmp_path, 3), follow,
-                                    rounds(tmp_path / "w", 3))
+    w, said, without, (found, rows, terminal) = against_without(tmp_path, monkeypatch, "both", rounds(tmp_path, 3),
+                                                                follow, rounds(tmp_path / "w", 3))
     nets = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL" and f["tree"] == KIMI_WORD]
     # curl (round 2's sample, and the follow's event 1) and curl2 (round 3's sample only): the record keeps all three
     assert sorted(f["source"] for f in nets) == ["host", "host", "os"]
+    assert all(cited_sources(w, f) == {f["source"]} for f in nets)   # AJ-3: two files, each its own lines
     lines = report(w)
     head = next(x for x in lines if x.startswith("SOURCE FINDINGS: "))
     assert head.startswith("SOURCE FINDINGS: %d (" % (len(w.source_findings) - 1))
     listed = [x for x in lines if "] NET-TOOL on kimi pid 9176 via " in x]
     assert len(listed) == 2 and all(" via host: " in x for x in listed)
-    both = [x for x in listed if "; and via os, the same act (counted once): cites %s lines " % nets[0]["trace"] in x]
+    os_entry = next(f for f in nets if f["source"] == "os")
+    both = [x for x in listed if "; and via os, %s, counted once: cites %s lines " % (host.TAKEN_SAME,
+                                                                                       os_entry["trace"]) in x]
     assert len(both) == 1 and "program curl" in both[0]
-    # no pair knocks twice: the knocks are the watch's without Sysmon
+    assert host.TAKEN_SAME == "taken for the same act (one image, starts within 1 s)"
+    assert "the same act (counted once)" not in w.final_text
+    # AK-4: the knocks and the terminal lines name the cited line's source: those of the watch without Sysmon
+    assert any(" via host" in x or "FIRST-FINDING" in x for x in rows) and terminal
     assert judged(w)[2] == judged(without)[2]
 
 
-def test_e2_aj2_not_touched_two_curls_of_two_images_or_times_stay_two(tmp_path, monkeypatch):
+def test_e6_ak7_not_touched_two_curls_of_two_images_or_times_stay_two(tmp_path, monkeypatch):
     late = created(602, at("07:54:25"), 9300, CURL, G_CURL, 9176, KIMI, G_KIMI, "curl -s https://198.51.100.20/x")
     follow = Follow(unread=0, then=[late, CURL_TALK], go=True)   # started 5 s from the sample's: not one child
     w, _, _ = watch(tmp_path / "apart", monkeypatch, rounds(tmp_path, 3), channel=Rounds(follow), follow=follow,
                     wall0=WALL0 + 240)
     listed = [x for x in report(w) if "] NET-TOOL on kimi pid 9176 via " in x]
     assert sorted(x.split(" via ")[1].split(":")[0] for x in listed) == ["host", "host", "os"]
-    assert not any("the same act (counted once)" in x for x in listed)
+    assert not any(host.TAKEN_SAME in x for x in listed)
+
+
+def test_e1_ak1_told_twice_joins_nothing_across_a_restarted_file():
+    feed = type("F", (), {"path": "h", "epoch": 1, "numbered": [(1, {"tool": "HostChild"})]})()
+    src = type("S", (), {"feeds": [feed]})()
+    f = {"trace": "h", "fkey": ["h", 0], "lines": [1], "tree_key": ["k"], "source": "host", "src_kind": "os",
+         "rule_id": "NET-TOOL", "history": False}
+    o = dict(f, source="os", trace="h")
+    assert host.told_twice([f, o], {("k",): src}) == {}   # the entries' epoch is not the feed's: no record read
 
 
 # --- E4 (AJ-4): the os source itself, through the real follow ------------------------------------------------------
@@ -518,7 +643,9 @@ def test_e3_ai1_the_guide_and_threat_model_say_what_a_bounded_follow_no_longer_r
                  "the first pass those since the watch's start",
                  "then the records after the highest it has read in the whole channel",
                  "under the host watch a tree whose source is os also has the host's own record, from its attach",
-                 "a follow attached again is given the tree the earlier follow found",
+                 "a follow attached again is given the tree the earlier follow published at the end of its last finished pass",
+                 "a follow attached after a restart says in its source text that it reads from the restart's time",
+                 "taken for the same act (one image, starts within 1 s)",
                  "every follow's bound restarts",
                  "the follow no longer reads the tree's past before the watch's start",
                  "a child that started before the watch is not known to",

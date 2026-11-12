@@ -682,6 +682,12 @@ def carry_host(old, src):
         src.open, src.last_bytes = set(old.open), dict(old.last_bytes)
 
 
+def tree_copy(tree):
+    """ADR-0007 AK-5: a copy of an os follow's tree (its top level and the dicts in it), taken by the follow's own
+    thread at the end of a pass, or of a copy already published: never of the live dict of a running follow."""
+    return {k: (dict(v) if isinstance(v, dict) else v) for k, v in (tree or {}).items()}
+
+
 def _when(text):
     try:
         t = datetime.datetime.fromisoformat(str(text).replace("Z", "+00:00"))
@@ -695,15 +701,18 @@ def told_twice(findings, sources):
     listing only (the acts, the knocks and the entries are not touched): the same tree, the same rule, the same
     standing (live, history, judged elsewhere, benign); the host entry cites HostChild lines, the os entry os process
     lines whose every child is one of them: of its image, started within ACT_SAME_SECONDS (an os line keeps no pid:
-    N-9's rule, as _once). A line no longer read (no feed, a file restarted) joins nothing."""
+    N-9's rule, as _once). AK-1: the two entries are of the tree's two files (its host record's, its os follow's),
+    each read through its own feed. AK-7: "taken for the same act" (one image, starts within 1 s), never more. A
+    line no longer read (no feed, or a file restarted since: another epoch than the entry's) joins nothing."""
     cache = {}
 
     def recs(f):
-        if f["trace"] not in cache:
+        epoch = (list(f.get("fkey") or ()) + [None, None])[1]
+        if (f["trace"], epoch) not in cache:
             src = sources.get(tuple(f.get("tree_key") or ()))
             feed = next((d for d in (src.feeds if src is not None else ()) if d.path == f["trace"]), None)
-            cache[f["trace"]] = dict(feed.numbered) if feed is not None else {}
-        return [cache[f["trace"]].get(ln) for ln in f["lines"]]
+            cache[(f["trace"], epoch)] = dict(feed.numbered) if feed is not None and feed.epoch == epoch else {}
+        return [cache[(f["trace"], epoch)].get(ln) for ln in f["lines"]]
 
     def standing(f):
         return (f.get("judged_on") is not None, bool(f.get("benign_note")), bool(f["history"]))
@@ -728,10 +737,13 @@ def told_twice(findings, sources):
 
 
 def both_said(twin, f):
-    """AJ-2: the os line of the act a host entry also names, in the report's listing."""
+    """AJ-2, AK-7: the os line a host entry is taken to tell too, in the report's listing."""
     o = twin.get(id(f))
-    return "" if o is None else "; and via os, the same act (counted once): cites %s lines %s" % (
+    return "" if o is None else "; and via os, %s, counted once: cites %s lines %s" % (TAKEN_SAME, 
         o["trace"], ",".join(str(x) for x in o["lines"]))
+
+
+TAKEN_SAME = "taken for the same act (one image, starts within 1 s)"   # AK-7: the listing's join, its true words
 
 
 class FollowRestart:
@@ -750,6 +762,12 @@ class FollowRestart:
     def restart(self, at):
         with self.lock:
             self.last = (1 if self.last is None else self.last[0] + 1, at)
+
+
+def said_by(entry):
+    """ADR-0007 AK-4 (AJ-3): the source a finding's terminal line and knock name: its cited lines' (the listing's
+    "source"), so a host line of an os tree is said as on a machine without Sysmon."""
+    return entry.get("source") or entry["src_kind"]
 
 
 def follows_said(record, text):
@@ -1073,7 +1091,9 @@ class TreeSource:
         self.kind = kind
         self.text = text
         self.word = word or kind     # what a HostTree line carries: no path of ~/.raqib (fixtures stay what make.py makes)
-        self.path = path             # the per-tree file under ~/.raqib/host/sources/ (os and host lines)
+        self.path = path             # the per-tree file under ~/.raqib/host/sources/ (the os follow's, or host lines)
+        self.host_path = None        # AK-1: the file of the host's own record of the tree (host, hooks and os alike)
+        self.host_error = None       # AK-2: that file could not be written (the one thing that stops its lines)
         self.feeds = list(feeds)     # what is judged: the per-tree file, and the hooks' trace
         self.project = project
         self.also_host = also_host   # hooks, os (AJ-1): the host lines go on beside them (Q-5 of the questions file)
@@ -1098,6 +1118,7 @@ class TreeSource:
         self.not_run_said = False    # I-6: the rules that cannot run on it were listed once
         self.pre_m78_said = False    # M7.8 (P-1): its os process lines without input_meta.image were said once
         self.os_tree = None          # AJ-4 (R-1): the tree its os follow found (the root, ProcessGuid and pid -> depth)
+        self.os_published = None     # AK-5: a copy of it the follow published at the end of its last finished pass
 
     def writes_host(self):
         return self.kind == HOST_SOURCE or self.also_host
@@ -3067,9 +3088,11 @@ class HostWatch:
                        _safe(src.project)), round_=n)
         src.text = "%s; %s" % (src.text, HOOKS_SILENT)
 
-    def _source_path(self, key):
-        """I-8: the per-tree file, keyed by (run, pid, started), never pid alone."""
-        return os.path.join(self.sources_dir, "%s-%s-%s.jsonl" % (self.run, key[0], started_tag(key[2])))
+    def _source_path(self, key, tag=None):
+        """I-8: the per-tree file, keyed by (run, pid, started), never pid alone; AK-1: tag "host" names the file of
+        the host's own record of a tree whose source is os (its os follow keeps the untagged one)."""
+        return os.path.join(self.sources_dir, "%s-%s-%s%s.jsonl" % (self.run, key[0], started_tag(key[2]),
+                                                                    "-%s" % tag if tag else ""))
 
     def _sources_ready(self):
         """None, or why the sources directory cannot be had."""
@@ -3170,6 +3193,7 @@ class HostWatch:
         src = TreeSource("hooks", "hooks: project %s (trace %s)" % (_safe(project), _safe(trace_path)), path=path,
                          feeds=feeds, project=project, also_host=path is not None, word="hooks: project %s" % _safe(project))
         src.attach_size = size_at_attach
+        src.host_path = path   # AK-1: its host lines' own file and feed (the road an os tree's host lines take too)
         src.foreign = foreign
         self.notes.append("round %d: hooks attached to %s for %s pid %s (--attach-hooks): %s" % (
             n, _safe(project), t.get("image"), t.get("pid"), "; ".join(
@@ -3181,11 +3205,13 @@ class HostWatch:
         ready = self._sources_ready()
         if ready:
             return self._none(now, n, t, ready)
-        path = self._source_path(key)
-        feed = Feed(path, self.host_rules, self._size(path))
         old = self.sources.get(key)
+        # AK-1: the host's record of a tree whose source was os goes on in its own file
+        path = old.host_path if old is not None and old.kind == "os" and old.host_path else self._source_path(key)
+        feed = Feed(path, self.host_rules, self._size(path))
         src = TreeSource(HOST_SOURCE, "host: the host's own record of the tree: %s" % path, path=path, feeds=[feed],
                           word="host: the host's own record of the tree")
+        src.host_path = path
         carry_host(old, src)
         return src
 
@@ -3207,24 +3233,34 @@ class HostWatch:
                 self._hole(now, "source-out", "round %d: tree %s: its earlier os follow was still in a pass when it"
                            " was attached again" % (n, tree_word(key)), round_=n)
         feed = Feed(path, self.src_rules, None if first and old is None else self._size(path))
+        # AJ-1, AK-1: under the host watch a tree whose source is os also has the host's own record, from its attach,
+        # by the road a tree with hooks has it: its own file and feed, the host's rules, the host source's history
+        # rule (_host_lines: the round-1 rule of a tree there at the start; Feed.poll: a file that restarts)
+        host_path = self._source_path(key, HOST_SOURCE)
+        host_feed = Feed(host_path, self.host_rules, self._size(host_path))
         guid = " and ProcessGuid %s" % t["guid"] if t.get("guid") else ""
-        # AJ-1: under the host watch a tree whose source is os also has the host's own record, from its attach, as a
-        # tree with hooks has had it (also_host): the os source adds what a sample cannot see, never stands in for it
-        src = TreeSource("os", "os: Sysmon, rooted at pid %s%s: %s" % (t.get("pid"), guid, path), path=path,
-                         feeds=[feed], word="os: Sysmon, rooted at pid %s%s" % (t.get("pid"), guid), also_host=True)
+        top = getattr(old, "top", None)
+        # AK-5: the tree the earlier follow published at the end of its last finished pass (never its live dict)
+        kept = tree_copy(getattr(old, "os_published", None) if old is not None and old.kind == "os" else None)
+        restarted = self.follow_restart.get()
+        since = ""   # AK-6: a follow attached after a restart of the rounds' read says it reads from the restart's time
+        if restarted is not None and (kept.get("restart") != restarted if "restart" in kept else top is None):
+            since = " (it reads the channel from the restart's time %s, not from the watch's start)" % iso(restarted[1])
+        src = TreeSource("os", "os: Sysmon, rooted at pid %s%s: %s%s" % (t.get("pid"), guid, path, since), path=path,
+                         feeds=[feed, host_feed], word="os: Sysmon, rooted at pid %s%s" % (t.get("pid"), guid),
+                         also_host=True)
+        src.host_path = host_path
         carry_host(old, src)   # S-1: the children and remotes already written are not written again
-        src.host_from = self._size(path)   # AJ-1: its host lines before the attach are history, as a host source's
         src.stop = threading.Event()
         src.helpers = os_sysmon.Helpers()   # I-5: the wevtutil it starts are Raqib's own, ended at Stop
-        src.top = getattr(old, "top", None)
-        # AJ-4 (R-1): the tree the earlier follow of the same tree found (a copy: that follow may still be in a pass)
-        kept = getattr(old, "os_tree", None) if old is not None and old.kind == "os" else None
-        src.os_tree = {k: (dict(v) if isinstance(v, dict) else v) for k, v in (kept or {}).items()}
+        src.top = top
+        src.os_tree, src.os_published = kept, tree_copy(kept)
         follow = self.os_follow or os_sysmon.follow
 
         def on_pass(count, top):
             src.passes = count
             src.top = top
+            src.os_published = tree_copy(src.os_tree)   # AK-5: in the follow's own thread, its pass finished
             if count == 1 and feed.history_bytes is None:   # the channel's past of a tree there at the start
                 feed.history_bytes = self._size(path)
             src.first_pass.set()
@@ -3264,8 +3300,12 @@ class HostWatch:
     def _host_lines(self, now, n, ts, sample, current, tree_seq, gone_keys):
         """(b) per round, per tree with the host source: HostChild for its
         new children, HostConnection for each new remote, HostGone when it
-        left the round; appended to the tree's file. A child whose name is
-        not a plain program name is a recorded hole, not a line."""
+        left the round; appended to the file of the host's own record of the
+        tree (host_path: a host, hooks or os source alike, ADR-0007 AK-1). A
+        child whose name is not a plain program name is a recorded hole, not
+        a line. AK-2: only that file's own write failure stops the lines (an
+        os follow's error, end or pass never does); AK-3: a tree the round's
+        sample does not hold (brief) has none."""
         for key in sorted(set(current) | set(gone_keys), key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
             src = self.sources.get(key)
             if src is None:
@@ -3274,11 +3314,15 @@ class HostWatch:
                 if src.stop is not None:   # the os follow of a tree that is gone ends
                     src.stop.set()
                     src.ended = src.ended or "the tree is gone (round %d)" % n
-            if not src.writes_host() or src.error is not None or not src.path:
+            if not src.writes_host() or not src.host_path or src.host_error is not None or (
+                    src.kind != "os" and src.error is not None):
                 continue
+            if not (self.trees.get(key) or {}).get("sampled", True) or (
+                    key not in gone_keys and current[key].get("brief")):
+                continue   # AK-3: known from the channel only: no sample of it, no line of the host's record
             pid = key[0]
             sid = "host-%s" % pid
-            seq = self.file_seq.get(src.path, 0)
+            seq = self.file_seq.get(src.host_path, 0)
             out = []
             if key in gone_keys:
                 seq += 1
@@ -3335,18 +3379,19 @@ class HostWatch:
             if not out:
                 continue
             try:
-                self._append(src.path, out)
-                self.file_seq[src.path] = seq
+                self._append(src.host_path, out)
+                self.file_seq[src.host_path] = seq
             except Exception as exc:
-                src.error = "cannot append to %s: %s" % (src.path, getattr(exc, "strerror", None) or exc)
+                src.host_error = "cannot append to %s: %s" % (src.host_path, getattr(exc, "strerror", None) or exc)
+                src.error = src.error or src.host_error
                 self._hole(now, "source-unwritable", "round %d: tree %s: %s; the source is attached again next round"
-                           % (n, tree_word(key), src.error), round_=n)
+                           % (n, tree_word(key), src.host_error), round_=n)
                 continue
             entry = self.trees.get(key)
             if entry is not None and entry.get("first_round") == self.history_round == n:
                 for feed in src.feeds:   # the first round's lines of a tree there at the start are history
-                    if feed.path == src.path:
-                        feed.history_bytes = self._size(src.path)
+                    if feed.path == src.host_path:
+                        feed.history_bytes = self._size(src.host_path)
 
     def _start_now(self, now):
         """T-3 (R-2): the watch's start as the earlier of the wall clock at the
@@ -3465,8 +3510,6 @@ class HostWatch:
                 rec = recs.get(ln)
                 if catalog and isinstance(rec, dict) and rec.get("source") == "os":
                     return before_start(ln)
-                if src.kind == "os" and isinstance(rec, dict) and rec.get("source") == HOST_SOURCE:
-                    return feed.ends.get(ln, 0) <= src.host_from   # AJ-1: a host line's history, as the host source's
                 return feed.history(ln)
             history = bool(cited) and all(history_of(ln) for ln in cited)
             self.source_keys.add(fkey)
@@ -3477,16 +3520,17 @@ class HostWatch:
                     old.update(summary=f["summary"], cited_seq=list(f["cited_seq"]), lines=cited[:6],
                                fkey=list(fkey), grown=old.get("grown", 0) + 1)
                     self._say(now, "SOURCE FINDING grown [%s] %s on %s pid %s (%s): %s (grown %d, not knocked"
-                              " again)" % (f["severity"], f["rule_id"], key[1] or "?", key[0], src.kind,
+                              " again)" % (f["severity"], f["rule_id"], key[1] or "?", key[0],
+                                           old.get("source") or src.kind,
                                            f["summary"], old["grown"]))
                     continue
             entry = {"rule_id": f["rule_id"], "kind": f.get("kind"), "class": f.get("class"),
                      "severity": f["severity"], "summary": f["summary"], "cited_seq": list(f["cited_seq"]),
                      "session_id": f["session_id"], "trace": feed.path, "lines": cited[:6],
                      "tree": tree_word(key), "tree_key": list(key), "pid": key[0], "image": key[1],
-                     "source": HOST_SOURCE if src.kind == "os" and cited and all(
-                         (recs.get(ln) or {}).get("source") == HOST_SOURCE for ln in cited)
-                     else src.kind,   # AJ-3: an os tree's finding is the source of the lines it cites; hooks: as before
+                     # AJ-3, AK-1: an os tree's finding is the source of the lines it cites (its host record's feed:
+                     # host); hooks: as before
+                     "source": HOST_SOURCE if src.kind == "os" and feed.path == src.host_path else src.kind,
                      "at": self.at(now), "run": self.run, "history": history,
                      "pending": pending, "notice": None, "fkey": list(fkey), "grown": 0,
                      "state": PENDING_EXIT if pending else "settled"}
@@ -3567,7 +3611,7 @@ class HostWatch:
                                     key=lambda k: (act["copies"][k].get("depth") or 0, str(k[0])))
         answer = None
         for k in order:
-            notice, knocked = self._source_knock(now, k, act["copies"][k]["src_kind"], entry, container=act,
+            notice, knocked = self._source_knock(now, k, said_by(act["copies"][k]), entry, container=act,
                                                  key_name="status", shown=standing)
             answer = answer or notice
             if knocked:
@@ -3586,10 +3630,10 @@ class HostWatch:
         elif tree.get("benign") and e.get("catalog"):   # T-2: a catalog finding on a benign tree is a note
             e.update(benign_note=True, notice="%s (%s)" % (BENIGN_NOTE, tree.get("benign_by")))
         else:
-            e["notice"] = self._source_knock(now, key, e["src_kind"], e)[0]
+            e["notice"] = self._source_knock(now, key, said_by(e), e)[0]
         e["settled"] = True
         self._say(now, "SOURCE FINDING [%s] %s on %s pid %s (%s): %s (%s)" % (
-            e["severity"], e["rule_id"], e["image"] or "?", e["pid"], e["src_kind"], e["summary"], e["notice"]))
+            e["severity"], e["rule_id"], e["image"] or "?", e["pid"], said_by(e), e["summary"], e["notice"]))
 
     def _settle_all(self, now):
         """V-1 (U2): every finding not yet settled and every act whose copies changed, each on its own (one that

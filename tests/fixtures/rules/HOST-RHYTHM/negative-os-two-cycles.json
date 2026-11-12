@@ -46,7 +46,7 @@
          "basis": "os",
          "cites": [
           {
-           "line": 5,
+           "line": 3,
            "src": "fixture-run-4400-967bfa9193.jsonl",
            "text": "os process seq 2 at 2026-11-03T10:00:05.000000Z"
           }
@@ -61,7 +61,7 @@
        "seq": 2,
        "talk_cites": [
         {
-         "line": 3,
+         "line": 1,
          "src": "fixture-run-4400-967bfa9193.jsonl",
          "text": "os net seq 1 at 2026-11-03T10:00:02.000000Z"
         }
@@ -75,7 +75,7 @@
          "basis": "os",
          "cites": [
           {
-           "line": 9,
+           "line": 7,
            "src": "fixture-run-4400-967bfa9193.jsonl",
            "text": "os process seq 4 at 2026-11-03T10:00:15.000000Z"
           }
@@ -90,7 +90,7 @@
        "seq": 3,
        "talk_cites": [
         {
-         "line": 7,
+         "line": 5,
          "src": "fixture-run-4400-967bfa9193.jsonl",
          "text": "os net seq 3 at 2026-11-03T10:00:12.000000Z"
         }

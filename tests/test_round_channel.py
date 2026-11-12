@@ -1289,14 +1289,10 @@ def test_ab10_a_benign_brief_tree_is_listed_benign_sourced_its_findings_notes(tm
     # AC-5 (A4): positively: the catalog judged its act (curl under it: NET-TOOL), as a note on a benign tree
     noted = [f for f in w.source_findings if f.get("benign_note") and f["rule_id"] == "NET-TOOL"
              and f.get("tree") == host.tree_word(key)]
-    # REDO M7.14 (AJ-1): the host's record of the os tree judged the curl too (its HostChild line): two entries
-    assert sorted(f["source"] for f in noted) == ["host", "os"] and all(
-        host.BENIGN_NOTE in f["notice"] for f in noted), w.source_findings
+    assert len(noted) == 1 and host.BENIGN_NOTE in noted[0]["notice"], w.source_findings
     benign = w.summary()[0].split("ON BENIGN TREES (noted, not knocked): ", 1)[1].splitlines()
     noted_all = [f for f in w.source_findings if f.get("benign_note") and f.get("judged_on") is None]
-    # REDO M7.14 (AJ-2): the curl's HostChild note and its os note are one entry of the listing, counted once
-    assert int(benign[0]) == len(noted_all) - 1 >= 1 and any("NET-TOOL on " in x for x in benign[1:len(noted_all)])
-    assert sum("; and via os, the same act (counted once): cites " in x for x in benign[1:len(noted_all)]) == 1
+    assert int(benign[0]) == len(noted_all) >= 1 and any("NET-TOOL on " in x for x in benign[1:1 + len(noted_all)])
 
 
 def test_ab10_a_named_long_lived_tree_a_candidate_only_by_the_channel_knocks(tmp_path, monkeypatch):

@@ -653,7 +653,12 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     as a RAQIB-SILENCE line (A3). on_pass(n, top), when given, is called
     after each pass has appended what it read, with its bound: the highest
     EventRecordID appended so far, and for a bounded follow the highest
-    EventRecordID the pass read in the whole export (the tree's or not);
+    EventRecordID its passes have read in the whole export (the tree's or
+    not): cumulative, and after a restart of the round's read it starts
+    again (None, then what the passes since the restart read), so it can
+    go down (ADR-0007 AK-6); the caller (raqib/host.py) takes a copy of
+    `tree` there, in the follow's own thread (AK-5: what a follow attached
+    again is given);
     after_record starts a follow there (a follow of the same tree resumed:
     the events already appended are not appended again). Without `live`,
     each pass reads through read_live_bounded(timeout, helpers) (I-5).

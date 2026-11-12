@@ -51,16 +51,18 @@ def test_a_real_watch_with_notes_on_a_benign_tree_reads_clean_in_the_window(tmp_
     """The person's own ssh and curl under explorer (ADR-0007 T-2): the watch ends 0, and the window says so."""
     follow = aj.CountingFollow(by_root={5100: aj.after_start(aj.built(aj.person_and_agent_export(), 5100))})
     w = aj.watch_rounds(tmp_path, ["benign-person/before", "benign-person/before"], follow=follow)
-    assert w.source_alarms() == [] and len([f for f in w.source_findings if f.get("benign_note")]) == 4
+    assert w.source_alarms() == [] and len([f for f in w.source_findings if f.get("benign_note")]) == 3
+    # REDO 2 M7.14 (AK-1): the host line of the tree there at the start is history (round 1), as without Sysmon
+    assert [f["source"] for f in w.source_findings if f["history"]] == ["host"]
     state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
     assert state["code_so_far"] == 0                                   # M8.1 B-4, on M7.8's watch
     assert app.host_counts(state) == (0, 0)                            # the verdict, the rail, the card, the tray
     items = app.host_finding_items(state)
-    assert [(i[0], i[1], i[2]) for i in items] == [("noted", "note", "NET-TOOL")] * 4
+    assert [(i[0], i[1], i[2]) for i in items] == [("noted", "note", "NET-TOOL")] * 3
     assert app.live_level(state["code_so_far"], "WATCHING") == "clean"
     (row,) = app.host_rows(state["host"]["trees"])
-    # AJ-1: the host line too (the window counts findings; the report's listing joins the pair)
-    assert row[2].startswith("benign") and row[6] == "%s 4" % host.BENIGN_COUNT and app.row_level(row) is None
+    # AJ-1: the host line too (the window counts findings); REDO 2 (AK-1): as history, beside the notes
+    assert row[2].startswith("benign") and ("%s 3" % host.BENIGN_COUNT) in row[6] and app.row_level(row) is None
     _, code = w.finish()
     assert code == 0
 

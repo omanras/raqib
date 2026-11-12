@@ -81,21 +81,29 @@ HOST_UNREAD = [
      "(ADR-0007 Amendments AF and AG).",
     "A read that fails after rounds that read leaves the os sources in place: what they cannot read is "
      "not seen, and each such run of failed reads knocks once, naming its cause and no terminal.",
-    # ADR-0007 AJ-1, AJ-2, AJ-4 (REDO M7.14): the host's record beside the os source; the bounded follow
-    "Under the host watch a tree whose source is os also has the host's own record, from its attach, as a"
-     " tree with hooks has it: the os source adds what a sample cannot see and never stands in for it, so "
-     "a watch with Sysmon judges every tree by at least what the watch without it does, whether or not its"
-     " follow read (ADR-0007 Amendment AJ).",
+    # ADR-0007 AJ-1, AJ-2, AJ-4; AK-1 to AK-7 (REDO 2): the host's record by the host source's road; the follow
+    "Under the host watch a tree whose source is os also has the host's own record, from its attach, by "
+     "the road a host source has it: a file of its own beside the os follow's, its own feed, the host's "
+     "rules and the host source's history (a tree there at the start: its first round's lines are history;"
+     " a file that restarts: what follows is live); only that file's own write failure stops it, never "
+     "what becomes of the follow, and it holds what the round's sample holds (a tree known only from the "
+     "channel has no line), so the host's record of a sampled tree is judged, knocked and said as on the "
+     "watch without Sysmon (ADR-0007 Amendments AJ and AK).",
     "Each pass of a tree's os follow asks the channel a bounded question, as a round's read does (events "
      "1, 3 and 11: the first pass those since the watch's start, then the records after the highest it has"
      " read in the whole channel, at most the round's cap; a cut is a hole); the rounds' own read starts "
      "at the live reader's start, which can differ by the reader's start delay.",
-    "A follow attached again is given the tree the earlier follow found, and when the round's read "
-     "restarts, every follow's bound restarts with it, as the restart's hole says; the follow no longer "
-     "reads the tree's past before the watch's start, and a child that started before the watch is not "
-     "known to it (the host's record has what a sample shows of it).",
+    "A follow attached again is given the tree the earlier follow published at the end of its last "
+     "finished pass, and when the round's read restarts, every follow's bound restarts at the restart's "
+     "time, whether or not the record numbers restarted, as the restart's hole says of the follows then "
+     "running; a follow attached after a restart says in its source text that it reads from the restart's "
+     "time; the follow no longer reads the tree's past before the watch's start (after a restart, nor what"
+     " came between the watch's start and it), and a child that started before the watch is not known to "
+     "it (the host's record has what a sample shows of it).",
     "A child in the sample is a HostChild line and its event 1 an os line: where one rule fires on both, "
-     "the report lists one entry naming both lines and counts it once, and the pair knocks once.",
+     "the report's listing shows one entry naming both lines, taken for the same act (one image, starts "
+     "within 1 s), and counts it once; the join is the listing's only: the window and the state count both"
+     " findings, and the catalog's rules knock for the pair at most once.",
     # ADR-0007 AI-3: the one sentence amended (the proxy has it; the host watch does not read the proxy's trace)
     "What an agent without hooks reads with its own code (a file it opens, a directory it lists) is in no"
      " source of the host watch; the proxy source records the tool call where the agent is pointed at it; "
