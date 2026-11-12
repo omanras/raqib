@@ -2023,3 +2023,45 @@ The packet: NEXT; no must-fix in what the REDO changed.
   what the whole says. Both, from now on, before the commander is
   asked to try.
 
+## Amendment AP (the Table, 2026-11-13) - the rhythm and a tree that is quiet at the sample (AO-2, read in the code)
+AO-2's hypothesis is true of the code: a tree's source beats are taken
+by `_rhythm`, and `_rhythm` is called only for a tree that is in the
+round (seen talking with an act at the sample). A tree that is quiet
+keeps its os source, the source keeps reading its starts and its
+talks, and nothing takes those beats until the tree is in a round
+again; if it never is, the final poll counts them, "in no round", and
+no rule judged them. The commander's watch: nineteen such beats on one
+tree; the rig: five on its stand-in agent, on every run (X12).
+HOST-RHYTHM is the rule for a tree the catalog does not name; such a
+tree that talks in short bursts between samples is exactly what it
+does not see.
+- AP-1 (the property). A beat is judged in the round that reads it,
+  whether or not that round's sample sees its tree talk.
+- AP-2 (the structure, named). In a round, a tree that is quiet and
+  whose source gained a beat since the last round is given its
+  HostTree line of that round by the code that writes a candidate's
+  line, with input_meta.class "quiet" and its rhythm from `_rhythm`
+  (the same ring, the same K, W and R). No second road: if the line or
+  the rhythm cannot come from that code, the builder returns it.
+  HOST-RHYTHM's match takes the class candidate or quiet. FOR: an
+  unnamed tree whose cycles (a talk to one destination, a child within
+  30 s) are all between samples. MUST NOT TOUCH: NEW-AGENT and
+  NEW-AGENT-UNKNOWN (a quiet line is not an arrival: no finding, no
+  knock, no change of history or of candidate_before); every other
+  rule that reads a HostTree line gives on a candidate's line what it
+  gave, and what each does with a quiet line is stated by a test; a
+  quiet tree with no new beat gets no line, as today; a tree that is
+  gone is not quiet; the benign and the named are judged as today
+  (rhythm of the benign is judged, the named are NEW-AGENT's).
+- AP-3 (the budget). HOST-RHYTHM's fp_budget is measured again with a
+  quiet positive and quiet negatives (a quiet tree whose beats make no
+  cycle; the rig's shape: a runner's own agent with a few beats); the
+  rule's holes and description say the new reach and what is still
+  out (a tree with no source; beats that arrive after the last round,
+  which stay counted and said).
+- AP-4 (the rig). X12 becomes an expectation that can be MISSED: no
+  beat waits for the final poll but those of the last round's
+  interval; the rig's own run on the task's branch is read by the
+  Table before the judgement (a rhythm finding on a runner's own agent
+  there would be the budget's first field number).
+
