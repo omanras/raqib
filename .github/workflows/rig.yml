@@ -1,0 +1,59 @@
+# The rig probe (never merged): Raqib on a real Windows with a real Sysmon, watching a stand-in agent whose acts
+# are known. It prints what the watch reported; it asserts nothing yet.
+name: rig-probe
+on:
+  push:
+    branches: [claude/rig-probe]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install raqib
+        run: python -m pip install --disable-pip-version-check .
+      - name: install Sysmon (all events of the kinds Raqib reads, and the clipboard)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://download.sysinternals.com/files/Sysmon.zip -OutFile $env:RUNNER_TEMP\Sysmon.zip
+          Expand-Archive $env:RUNNER_TEMP\Sysmon.zip $env:RUNNER_TEMP\Sysmon -Force
+          (Get-FileHash $env:RUNNER_TEMP\Sysmon.zip -Algorithm SHA256).Hash
+          & $env:RUNNER_TEMP\Sysmon\Sysmon64.exe -accepteula -i tools\rig\sysmon-all.xml
+          Start-Sleep 3
+          & $env:RUNNER_TEMP\Sysmon\Sysmon64.exe -c | Select-Object -First 30
+      - name: doctor
+        shell: pwsh
+        continue-on-error: true
+        run: raqib --version; raqib doctor
+      - name: watch the host while the stand-in agent works
+        shell: pwsh
+        run: |
+          $out = "$env:RUNNER_TEMP\watch.out"; $err = "$env:RUNNER_TEMP\watch.err"
+          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","16","--every","5","--no-open" -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+          Start-Sleep 7
+          python tools\rig\workload.py
+          $w.WaitForExit(180000) | Out-Null
+          "=== exit code: $($w.ExitCode)"
+          "=== watch stdout"; Get-Content $out
+          "=== watch stderr"; Get-Content $err
+      - name: the sources the watch kept
+        shell: pwsh
+        if: always()
+        run: |
+          Get-ChildItem $HOME\.raqib\host\sources | ForEach-Object { "=== $($_.Name) ($($_.Length) bytes)"; Get-Content $_.FullName -TotalCount 60 }
+      - name: what Sysmon logged of the clipboard (event 24, header only)
+        shell: pwsh
+        if: always()
+        continue-on-error: true
+        run: |
+          wevtutil qe Microsoft-Windows-Sysmon/Operational "/q:*[System[EventID=24]]" /c:3 /rd:true /f:text
