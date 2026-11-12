@@ -1,18 +1,17 @@
-# HANDOFF — M7.17  (the rhythm and a tree that is quiet at the sample: ADR-0007 Amendments AP and AQ)
+# HANDOFF — M7.17 REDO  (ADR-0007 Amendment AR on review 2026-11-13-M7.17.md)
 
-Task: a tree's source beats are taken only in a round the tree is in; a tree that is quiet at the sample keeps a source
-whose beats nothing judges (the final poll counts them "in no round"). Rulings AP-1 to AP-4.
+Task: the REDO of M7.17 (1a3ef49). AP-2's one road (`_tree_line`), AQ-2 and AQ-3 stand as built. Rulings AR-1 to AR-5.
 
 Scope:
-  raqib/host.py, raqib/rules/fixturegen.py (AQ-1), raqib/rules/catalog/HOST-RHYTHM.yaml, tests/ (the rule's fixtures and tests/fixtures/host/make.py included), tools/rig/check.py, docs/THREAT_MODEL.md, docs/review/
+  raqib/host.py, raqib/rules/fixturegen.py, raqib/rules/catalog/HOST-RHYTHM.yaml, tests/ (the rule's fixtures and tests/fixtures/host/make.py included), tools/rig/check.py, docs/THREAT_MODEL.md, docs/review/2026-11-13-M7.17-questions.md
 
 Exit criteria:
-- E1 (AP-2) In a round, a quiet tree whose source gained a beat since the last round gets a HostTree line of that round written by the code that writes a candidate's line, with input_meta.class "quiet" and input_meta.rhythm from `_rhythm` (same ring, K, W, R). Tested through rounds and the report with a tree seen at one sample and then quiet, whose os source reads three cycles (a talk to one destination, a child within 30 s) between samples: HOST-RHYTHM fires in the round that reads the third, once, cites its beats, and knocks as a candidate's does; RHYTHM BEATS no longer counts those beats as "in no round".
-- E2 (AP-2, not touched; a test each) A quiet line makes no NEW-AGENT or NEW-AGENT-UNKNOWN finding and changes no tree's history, candidate_before or first round; every rule of the catalog that reads a HostTree line gives on the existing fixtures what it gave (the gate's check-rules), and a test states what each gives on a quiet line; a quiet tree with no new beat has no line; a gone tree has none; a named quiet tree's rhythm does not fire HOST-RHYTHM (named: NEW-AGENT's); a benign quiet tree's rhythm is judged as a benign candidate's is.
-- E3 (AP-3) HOST-RHYTHM.yaml: the match takes class candidate or quiet (by what the engine's match already offers; a new match operator is a design question: questions file); its fixtures gain one quiet positive and two quiet negatives (no cycle; a few beats of a long-lived service), made by tests/fixtures/host/make.py; fp_budget is the measured number and the comment says how it was measured; holes and description say the reach and what is out.
-- E4 (AP-4) tools/rig/check.py X12: MET when no beat waits for the final poll, MISSED otherwise (no longer OPEN); tests/test_rig_check.py follows.
-- E5 THREAT_MODEL says it (no milestone tokens). Gate green; code and tests ASCII; no test reads docs/review or asserts the real clock.
-- E6 (AQ-1 to AQ-4) Every existing generated fixture is byte for byte what it is; a kept tree with a new beat gets its line (class kept) as a quiet one does; a line for a tree not in the round leaves its connections and children as the sample knows them (a test: back in a round, nothing is new that was old); a test states the ring's gap.
-Not in scope: beats that arrive after the last round (said, as today); the final poll; raqib/discover.py; raqib/app.py; the clipboard; new rules.
-Commit: `landed: M7.17 the rhythm of a quiet tree` or `STOP: M7.17 <reason>`.
+- E1 (AR-1) A tree's ring has one entry for every round of the watch from its first line on (an empty entry, with that round's own interval, for a round with no line); `_bin` and `rhythm_of` are otherwise unchanged. Tested through rounds and the report with the packet's case (a candidate in round 1, no beat in rounds 2-11, one cycle in each of intervals 11, 12, 13): HOST-RHYTHM fires in round 14, as on a tree that is a candidate every round, and each cycle cites the round of its beats. The test of AQ-4's merge (two cycles count once) now shows two. Not touched, tested: a tree with a line in every round has the ring it had; every generated fixture is byte for byte what it is, or the questions file names the one that changed and why.
+- E2 (AR-2) A gone tree whose source gained a beat gets its line (class gone) in the round that reads it, by `_tree_line`; HOST-RHYTHM's match takes class gone; a tree that makes K cycles in its last intervals and exits fires. A gone tree with no new beat has no line. NEW-AGENT, NEW-AGENT-UNKNOWN and HOST-UNWATCHED make nothing of a gone line (through rounds).
+- E3 (AR-3) A line for a tree not in the round has empty acts, endpoints and cites of the sample; its input_meta.rhythm names the beats this round read from its sources (count and cites). A candidate's line is unchanged.
+- E4 (AR-4) tools/rig/check.py X12 is n/a without --sysmon; tests/test_rig_check.py follows.
+- E5 (AR-5) Through rounds: a tree that arrived in the watch, goes quiet and has beats makes no NEW-AGENT(-UNKNOWN) finding; a quiet line's finding equals a candidate's of the same beats by value (rounds, cites); a gone tree's waiting beats are in the report where no round read them.
+- E6 The rule's holes and description, and THREAT_MODEL (no milestone tokens), say AR-1 and AR-2 and no longer the loss; fp_budget measured again with a gone positive and a gone negative. Gate green; ASCII; no new test reads docs/review.
+Not in scope: raqib/discover.py, raqib/app.py, the clipboard, new rules, W-4, W-5.
+Commit: `landed: M7.17 REDO the rhythm of a quiet tree` or `STOP: M7.17 REDO <reason>`.
 Read HANDOFF.md and do only the task it specifies.
