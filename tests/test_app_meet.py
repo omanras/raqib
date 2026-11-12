@@ -59,7 +59,8 @@ def test_a_real_watch_with_notes_on_a_benign_tree_reads_clean_in_the_window(tmp_
     assert [(i[0], i[1], i[2]) for i in items] == [("noted", "note", "NET-TOOL")] * 4
     assert app.live_level(state["code_so_far"], "WATCHING") == "clean"
     (row,) = app.host_rows(state["host"]["trees"])
-    assert row[2].startswith("benign") and row[6] == "%s 3" % host.BENIGN_COUNT and app.row_level(row) is None
+    # AJ-1: the host line too (the window counts findings; the report's listing joins the pair)
+    assert row[2].startswith("benign") and row[6] == "%s 4" % host.BENIGN_COUNT and app.row_level(row) is None
     _, code = w.finish()
     assert code == 0
 
