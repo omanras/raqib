@@ -469,4 +469,6 @@ def test_m718_a_quiet_or_gone_trees_finding_is_high_as_a_candidates_and_a_named_
     # a named quiet tree with the same rhythm: still not HOST-RHYTHM's
     named, nrounds, _ = run(home / "named", retype(quiet(5), "claude",
                                                    "C:\\Users\\user\\AppData\\Local\\claude\\claude.exe"), CYCLES)
-    assert tree_lines(nrounds[4])[0]["input_meta"]["named"] is True and named.findings == []
+    nmeta = tree_lines(nrounds[4])[0]["input_meta"]
+    assert nmeta["named"] is True and named.findings == []
+    assert nmeta["rhythm"]["cycles"] >= 3 and nmeta["rhythm"]["fires"]   # AT-6: it did cycle; only its name spares it

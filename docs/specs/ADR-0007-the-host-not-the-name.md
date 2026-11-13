@@ -2229,4 +2229,20 @@ each given seven turns (five of them a command that outlasts a round), on Window
   leave a count that could never be anything but 0. The workflow is in Scope, and the count matches the rule at
   any level (`^  \[[a-z]+\] HOST-RHYTHM `), so no later change of level can silence it. The ledger: a HANDOFF
   names a file only after the Table has opened it.
+- AT-6 (review 2026-11-13-M7.18.md on d68b4ce: REDO, narrow; the Table made the fixes, CLAUDE.md rule 8).
+  The level changes one thing a person sees beyond the word: the window's list sorts by level, so the rhythm's
+  row now stands above an arrival's; tested on the function the window draws from. The help of `raqib watch
+  --host` said medium (a file the HANDOFF left out of Scope and the builder's survey missed): corrected, and
+  pinned. The named quiet tree's test now shows the tree did cycle. The questions file's status line said
+  nothing had landed: corrected. No judgement went silent by the change: the knock, the exit code, the band, the
+  tray and the suspect layer do not read the level.
+- AT-7 (the Table's own run, after the landing, and what it corrects). The two real agents were run again on
+  d68b4ce's code: three of the four fired at high; opencode on Windows did not. Its seven turns were all to one
+  model server, and its cycles were counted under two destinations (two cycles each, K is three): an os talk's
+  destination is a hash of the host name, the address, the port and the protocol, and Sysmon gives a host name
+  on some events of one server and none on others. The first run's "4 of 4" was partly luck: its record shows
+  the same split, with three cycles falling on one side. So the measure is 7 of 8 over the two runs, and the
+  hole "the same server reached by another name is another destination" (M7.5 E2) is not rare on Windows: it
+  is what Sysmon does. MUST be built next, as its own task (M7.20): one server is one destination, whichever
+  events name it. Until then the rule's level is right and its reach on Windows is less than Linux's; said.
 

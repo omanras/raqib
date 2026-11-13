@@ -58,8 +58,10 @@ severity: high
 # have a cycle. The field source - an IDE that polls one server and builds
 # for hours - is the commander's to measure (as the act-root budget); until
 # then this budget says nothing about it.
-# ADR-0007 AT-1, the first field numbers on real agents (Qwen Code, opencode; GitHub's runners, Windows and Linux):
-# seven turns: 4 of 4 agent trees fired, none of the runners' own; three short turns: none (fewer than K rounds).
+# ADR-0007 AT-1, AT-7, the first field numbers on real agents (Qwen Code, opencode; GitHub's runners, Windows
+# and Linux; the probe branch, never merged; these are not the budget's measure): seven turns: 7 of 8 agent trees
+# fired over two runs (one on Windows did not: its talks to one server were two destinations), none of the
+# runners' own; three short turns: none (fewer than K rounds).
 fp_budget: 0.0
 holes:
   - "a relay or proxy in between: the talk is the relay's (another process tree), so the tree that acts has no talk beat of its own"

@@ -1132,7 +1132,7 @@ def test_m718_e1_the_level_is_high_and_the_match_thresholds_budget_and_streak_ar
     assert "a high finding, not a verdict" in ide and "still owed" in ide and "medium" not in ide
     assert len(RULE.holes) == 16
     text = (ROOT / "raqib" / "rules" / "catalog" / "HOST-RHYTHM.yaml").read_text(encoding="ascii")
-    assert "4 of 4 agent trees fired, none of the runners' own; three short turns: none" in text   # AT-1's measure
+    assert "7 of 8 agent trees" in text and "none of the\n# runners' own; three short turns: none" in text   # AT-1, AT-7
 
 
 def test_m718_e2_check_rules_gives_the_same_counts():
@@ -1154,6 +1154,15 @@ def test_m718_e3_through_rounds_the_finding_is_high_and_knocks_by_its_path_the_a
     view = app.host_watch_view(json.loads(json.dumps(w.state(clock()))))
     assert [x.split(":", 1)[0] for x in view["findings"]] == ["NEW-AGENT-UNKNOWN [medium] round 2",
                                                              "HOST-RHYTHM [high] round 5"]
+    # AT-6: the list the window draws (host_finding_items) sorts by level: the rhythm's row is now first, its pill
+    # "high", above the arrival's (medium) though the arrival came three rounds earlier
+    items = app.host_finding_items(json.loads(json.dumps(w.state(clock()))))
+    assert [(pill, rule) for pill, _, rule, _, _ in items if rule in ("HOST-RHYTHM", "NEW-AGENT-UNKNOWN")] == [
+        ("high", "HOST-RHYTHM"), ("medium", "NEW-AGENT-UNKNOWN")]
+    # AT-6: the help of `raqib watch --host` names the rule's level as the rule file does
+    assert "RHYTHM (M7.4, anchor, high)" in cli.__doc__ and "anchor, medium" not in cli.__doc__
+    # once per streak, said: six rounds of cycles, one finding
+    assert len(rhythm_findings(w)) == 1 and w.trees[next(iter(w.trees))]["rhythm_rounds"] == [5]
     text, code = w.finish()
     said = [l for l in text.splitlines() if re.match(r"^  \[[a-z]+\] (HOST-RHYTHM|NEW-AGENT-UNKNOWN) ", l)]
     assert [l.split(" (", 1)[0] for l in said] == ["  [medium] NEW-AGENT-UNKNOWN round 2", "  [high] HOST-RHYTHM round 5"]
