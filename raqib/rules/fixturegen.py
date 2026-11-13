@@ -35,7 +35,10 @@ What is SYNTHETIC here (pure functions of the thresholds; nothing read):
   a process line carries its image name, input_meta.image, as os_sysmon's): a
   connection (event 3) OS_GAP s, min(OS_GAP, w), before the round's act; in
   "oscycle" a child (event 1, depth 1) 5 s before the round; in "osact" a
-  child min(HOST_GAP, w) s after the round before (the host talks).
+  child min(HOST_GAP, w) s after the round before (the host talks); a
+  connection line carries dest_sha256 as the host watch's os follow writes
+  it (ADR-0007 AU-1, AW-2: the follow asks for it); in "osnamed" Sysmon
+  names its host (OS_NAME) before an even round only.
 - the scenarios, parametric in k (rounds 1..k+1 for k cycles, 1..k for k-1,
   k+2 for the others and the os ones, the os rounds 2..k+1 or 2..k) and in the
   streak s (s dark rounds, s-1, s then a linked round).
@@ -81,6 +84,7 @@ EVERY = 10                # a fixture run's round period T
 RHYTHM_PID = 4400
 SYSTEM_DRIVE = "c"        # make.py's host_record gives the Windows exports' rounds this drive (D-3)
 OS_DEST = {"hostname": None, "ip": "192.0.2.20", "port": "443", "protocol": "tcp"}   # RFC 5737
+OS_NAME = "model.example"   # ADR-0007 AU-1: the host name Sysmon gives on some events of one server (RFC 2606)
 HOST_GAP = 5              # s from a talk beat of the host (a round's time) to the child it is followed by
 OS_GAP = 3                # s from an os talk (Sysmon event 3) to the act of its round
 BEFORE = ":before"
@@ -182,11 +186,18 @@ def os_lines(k, scenario, seq, sid="os-%d" % RHYTHM_PID, w=None):
     before the round) and, in "oscycle", that child (depth 1); in "osact"
     only a child, min(HOST_GAP, w) s after the round before (the host's own
     connection talks there). (lines, last seq)."""
-    from raqib.hooks import common
+    from raqib.hooks import common, os_sysmon
     at = (k - 1) * EVERY
+    # ADR-0007 AU-1: "osnamed" is "oscycle" whose connection Sysmon names (OS_NAME) before an even round only: one
+    # server, two input_sha256, one dest_sha256 (AW-2: written as the host watch's follow, which asks for it)
+    dest = dict(OS_DEST, hostname=OS_NAME) if scenario == "osnamed" and k % 2 == 0 else OS_DEST
     events = [] if scenario == "osact" else [(at - 5 - _gap(OS_GAP, w), "net",
-                                               common.canonical_sha256({"destination": OS_DEST}),
-                                               {"dest_port": 443, "dest_private": False})]
+                                               common.canonical_sha256({"destination": dest}),
+                                               {"dest_port": 443, "dest_private": False,
+                                                "dest_sha256": os_sysmon.dest_sha256(dest["ip"], dest["port"],
+                                                                                     dest["protocol"])})]
+    if scenario == "osnamed":
+        scenario = "oscycle"
     if scenario in ("oscycle", "osact"):
         when = at - 5 if scenario == "oscycle" else at - EVERY + _gap(HOST_GAP, w)
         events.append((when, "process", common.canonical_sha256({"command_line": "fake child %d (make.py)" % k}),
@@ -260,6 +271,9 @@ def os_scenarios(k):
         "HOST-RHYTHM/positive-gone-three-cycles.json": ["rhythm-gone:oscycle:%d:%d" % (i, k + 1)
                                                         for i in range(1, k + 3)],
         "HOST-RHYTHM/negative-gone-few-beats.json": ["rhythm-gone:oscycle:%d:%d" % (i, k + 1) for i in range(1, k + 3)],
+        # ADR-0007 AU-4: AU-1's pair, one server Sysmon names on some events and not on others (k cycles; k-1)
+        "HOST-RHYTHM/positive-os-named-some.json": ["rhythm-os:osnamed:%d" % i for i in range(1, k + 3)],
+        "HOST-RHYTHM/negative-os-named-some.json": ["rhythm-os:osnamed:%d" % i for i in range(1, k + 3)],
     }
 
 
@@ -275,6 +289,8 @@ def os_rounds(k):
         "HOST-RHYTHM/negative-quiet-few-beats.json": tuple(range(2, k + 1)),
         "HOST-RHYTHM/positive-gone-three-cycles.json": tuple(range(2, k + 2)),
         "HOST-RHYTHM/negative-gone-few-beats.json": tuple(range(3, k + 2)),
+        "HOST-RHYTHM/positive-os-named-some.json": tuple(range(2, k + 2)),
+        "HOST-RHYTHM/negative-os-named-some.json": tuple(range(2, k + 1)),
     }
 
 
@@ -452,6 +468,7 @@ CONDITIONS = {
     "HOST-RHYTHM/positive-os-three-cycles.json": "r must be >= k+2: an os act is read one round late",
     "HOST-RHYTHM/positive-quiet-three-cycles.json": "r must be >= k+2: an os act is read one round late",
     "HOST-RHYTHM/positive-gone-three-cycles.json": "r must be >= k+2: an os act is read one round late",
+    "HOST-RHYTHM/positive-os-named-some.json": "r must be >= k+2: an os act is read one round late",
     "HOST-RHYTHM/positive-os-talks-host-acts.json": "r must be >= k+1: the first talk must stay in the last r rounds",
     "HOST-RHYTHM/positive-three-cycles.json": "r must be >= k+1: the first talk must stay in the last r rounds",
 }

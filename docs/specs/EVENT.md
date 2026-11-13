@@ -302,7 +302,7 @@ From run L: the note of the words a terminal lost (D-1), said again only with a 
 From run B.
 
 ```json
-{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:11","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","for":"finding:1","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":11,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:12","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","for":"finding:1","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: heartbeat
@@ -310,7 +310,7 @@ From run B.
 From run B (at its last round, before its end).
 
 ```json
-{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":3,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:13","kind":"heartbeat","n":13,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"WATCHING","time":"2026-11-03T10:00:20.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"heartbeat","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"WATCHING","time":"2026-11-03T10:00:20.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: watch start
@@ -326,7 +326,7 @@ From run B.
 From run B (after its end, exit 1).
 
 ```json
-{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":3,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:13","kind":"watch","n":13,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"end","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"watch","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"end","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: settled
@@ -342,7 +342,7 @@ From run B.
 From run D.
 
 ```json
-{"about":"source-finding:1","alarm":false,"evidence":{"lines":[1],"run":"fixture-run","seqs":[1],"source":"host","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0-host.jsonl"},"id":"fixture-run:5","kind":"source-finding","knocked":{"status":"history: not knocked"},"n":5,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"history","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"HostChild may reach the network at seq 1 (host -, program ssh, curl, programs [\"cmd\", \"ssh\", \"curl\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:4","alarm":false,"evidence":{"lines":[1],"run":"fixture-run","seqs":[1],"source":"host","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0-host.jsonl"},"id":"fixture-run:8","kind":"source-finding","knocked":{"status":"history: not knocked"},"n":8,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"history","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"HostChild may reach the network at seq 1 (host -, program ssh, curl, programs [\"cmd\", \"ssh\", \"curl\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: judged on another tree
@@ -350,7 +350,7 @@ From run D.
 From run D.
 
 ```json
-{"about":"source-finding:4","alarm":false,"evidence":{"lines":[14,15],"run":"fixture-run","seqs":[8],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:8","kind":"source-finding","knocked":{"status":"judged on another tree: judged on tree pid 6100 (one act, one finding)"},"n":8,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"judged on another tree","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 8 (host -, program curl, programs [\"curl.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:3","alarm":false,"evidence":{"lines":[14,15],"run":"fixture-run","seqs":[8],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:7","kind":"source-finding","knocked":{"status":"judged on another tree: judged on tree pid 6100 (one act, one finding)"},"n":7,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"judged on another tree","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 8 (host -, program curl, programs [\"curl.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: noted
@@ -358,7 +358,7 @@ From run D.
 From run D.
 
 ```json
-{"about":"source-finding:2","alarm":false,"evidence":{"lines":[6,7],"run":"fixture-run","seqs":[4],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:6","kind":"source-finding","knocked":{"status":"noted on a benign tree, not knocked (c:/windows/*)"},"n":6,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"noted","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 4 (host -, program ssh, programs [\"ssh.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:1","alarm":false,"evidence":{"lines":[6,7],"run":"fixture-run","seqs":[4],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:5","kind":"source-finding","knocked":{"status":"noted on a benign tree, not knocked (c:/windows/*)"},"n":5,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"noted","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 4 (host -, program ssh, programs [\"ssh.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: pending at exit

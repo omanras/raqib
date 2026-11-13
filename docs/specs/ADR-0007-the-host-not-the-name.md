@@ -2270,6 +2270,20 @@ others. A second split stands beside it and was stated long ago (M7.5 E2): a tal
   others: K cycles fire; K-1 do not) and for AU-3 (cycles split between the two sources).
 - AU-5 (the field check is the Table's). The two real agents are run again on the built code; the task is not
   merged on a run in which an agent that made seven turns to one server is not found.
+- AU-6 (the builder's STOP, 09c1eb5: built whole, stopped on two of the Table's own contradictions; the Table
+  answered both and made the changes, CLAUDE.md rule 8). (Q1) The HANDOFF said a test that pins the rule's
+  fixture counts would pass untouched, and AU-4 adds four fixtures: the amendment's word stands, the count is
+  10 and 12. (Q2) The launching message said no other rule's fixture may change, and AU-1 puts the key on
+  every os net line: the fixtures the generators write from os_sysmon's own output are generated again
+  (NET-TOOL's and DESTRUCT-CMD's two os fixtures, the four CROSS logs), and the test that holds every fixture's
+  lines to the byte now holds two things: with the new key taken out, every line is what it was (the old
+  hash, kept); with it, the lines are the new ones. The ledger, a second time today: a HANDOFF's "untouched"
+  is checked against the amendment's own "added" before it is written.
+- AU-7 (Q3: the name of a destination within a streak). As built: the count is one from the first cycle; the
+  destination is named by the sample's address:port while the ring holds the sample's talk to that server, and
+  by the os talk's hash otherwise, so a name can change within a streak and a finding keeps the name it was
+  said under. Accepted: the count is the ruling, the name is the best one known when the line is written. Q4's
+  four points are accepted as built and are in the hole.
 
 ## Amendment AV (the Table, 2026-11-13) - what the real agents showed, corrected
 AT and AT-7 stated numbers the Table measured wrongly, and they are in the tree: this amendment corrects them.
@@ -2301,4 +2315,84 @@ and wrong about whose talks they were. Both an unnamed tree's arrival (NEW-AGENT
   HOST-RHYTHM on the agent's tree, on the model server; on Windows, OPEN until M7.21.
 - The ledger. A measure that passes is read to the line that made it pass before it is called a pass: the
   destination in a finding is evidence, and the Table had the hash in front of it twice.
+
+## Amendment AW (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.20.md: REDO, and AU-3 withdrawn
+The packet: STOP, on three things. The Table accepted the builder's Q3 (AU-7) on a description the watch does
+not follow; one connection that both sources see can be two talks in two rounds, so one turn can count two
+cycles, in a rule that is now high; and the field check was owed. The field check is Amendment AV: it showed
+that the case AU-3 was FOR (the sample sees the first turn, the os source the later ones) is not where the
+hole is - the later turns make no new connection at all.
+- AW-1 (AU-3 is withdrawn, and AU-7 with it). A host talk and an os talk stay two destinations, as before AU:
+  `server_of` and `one_server` are taken out, the ring is not renamed, the split-sources fixtures and their
+  scenario go. FOR: one turn is never two cycles because two sources saw its one connection (M1). The hole
+  says again that an os talk and a host talk to one server are two destinations. M2, M3, M4, S2 and S3 fall
+  with it. MUST NOT TOUCH: AU-1 and AU-2 (one server is one os destination, whatever Sysmon named).
+- AW-2 (section 5: what the key reveals, and where it is written). The key is written only where the caller
+  asks for it: the host watch's follow asks; `raqib os-sysmon` on its own and every other caller do not. So
+  the other rules' fixtures and the CROSS logs are byte for byte what main has, their generators untouched, and
+  the every-fixture test is main's again. Under the host watch nothing more is revealed than lies beside it:
+  the host's own record of the tree, in the same directory, holds each remote address in clear. THREAT_MODEL
+  says both things plainly: that the server hash has no salt and, the port being in clear on the line, an IPv4
+  address can be found by trying them all; and that the host's record already holds it. "A connection's line
+  holds hashes only" is corrected.
+- AW-3 (E2, M5, S1, section 6: the note). Said once per source object, as the note of a process line without
+  an image is, with its count; its words are true of both causes (a line written before the key, or one whose
+  address, port or protocol did not parse); it says an old line and a new one to one server are two
+  destinations.
+- AW-4 (tests). The self-comparison in tests/test_os_sysmon.py and the parameter that adds nothing are
+  replaced; a test through rounds holds AW-1's FOR case: one connection seen by the sample in one round and by
+  the os source in the round before is one cycle on each destination, never two on one.
+- AW-5 (the field check, the Table's). A scripted model that closes the connection after every turn makes the
+  two real agents open one for each turn: on Windows with Sysmon HOST-RHYTHM must then fire on the model
+  server's own hash. Not merged on a run where it does not.
+
+## Amendment AX (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.20-redo.md, and the field check
+The packet: STOP, with no defect found in what was built; the stops are the Table's own words. The Table made
+the changes itself (CLAUDE.md rule 8). The field check AW-5 is met and was read to the destination this time:
+with a model that ends the connection after every answer, both real agents on Windows with Sysmon were found
+at high in rounds 7 and 8, and the destination named in both findings is the hash of the model server's own
+address and port (computed from the run's address and compared). On Linux, the same agents with a connection
+for each turn were not found by rhythm: no source there sees a connection that opens and closes between two
+samples (the stated hole), and in one run the rule fired on the runner's own tree instead (AX-4).
+- AX-1 (AW-2's sentence was false, and is corrected). "The host's own record holds each remote address in
+  clear" is true only of a connection a sample saw. For one that opened and closed between two samples - the
+  very case AW-5 measures - the os line is the only record, and its address can now be found from the server's
+  hash by trying every IPv4 address. THREAT_MODEL says exactly that. It is accepted for this task: what learns
+  it is a reader of the watch's own files on the watched machine. A salt kept only in the running watch's
+  memory ends it without changing the rhythm; recorded as M7.23.
+- AX-2 (Q5; the note where the first build said it and the REDO did not). The note is said for a hooks source
+  too: a project's trace can hold net lines `raqib os-sysmon` wrote on its own, which never carry the key, and
+  the rhythm reads them as talks. A source attached again says the note again with the whole trace's count, as
+  the note of a process line without an image does: accepted, and said in the hole.
+- AX-3 (two things the holes did not say). Another protocol to one server is another destination (tcp and udp
+  on one port). Two servers behind one address and port are one destination: for the os source that is new
+  (Sysmon's name used to part them when it gave one), for the sample's talks it was always so.
+- AX-4 (the first false finding at high, and its cause; the next task, M7.22). On Linux, with a connection for
+  each turn, the agent's tree was quiet at every sample after its first (no connection open at the sample),
+  and its children - the commands of each turn - were given to the nearest talking ancestor, the runner's own
+  worker, which talks to its server all the time: three talk-then-act cycles, HOST-RHYTHM at high, on the wrong
+  tree. The anchor rule ("every process goes to its nearest talking ancestor") does not know the trees the
+  watch already holds. M7.22: a process under the root of a tree the watch holds, quiet or kept, is that
+  tree's and no ancestor's.
+- Recorded: the measure counts a pair of fixtures whose shipped lines equal an older pair's (the new scenario
+  differs only before the watch's own lines are made); no test goes from the watch through the real follow to
+  the rhythm in one piece.
+
+## Amendment AY (the Table, 2026-11-13) - a process under a tree the watch holds is that tree's (AX-4's task, M7.22)
+- AY-1 (the rule). In a round, a child that the inventory gives to a candidate is not that candidate's when
+  the path from the candidate down to the child (the child itself included) passes through the root of
+  another tree the watch holds as quiet or kept - the same tree by its key, its root alive in this sample. It
+  is that tree's. The inventory already says the path of every act; the watch decides, in one place, before
+  anything is written or counted. FOR: an agent whose connection is closed at the sample and whose commands
+  were counted as its parent's cycles (a false HOST-RHYTHM at high on the parent; the agent's own commands
+  judged on the wrong tree). MUST NOT TOUCH: a child with no held tree's root on its path (it goes to its
+  nearest talking ancestor, as it does); a tree whose root is not in the sample (gone: its orphans go as they
+  do, a stated hole); a candidate nested in a candidate; every existing fixture, byte for byte.
+- AY-2 (what the held tree then has). The child is written to that tree's own host record, judged there by the
+  rules that judge a tree's children, and is an act beat of its ring. The tree is still quiet (it was not seen
+  talking); a quiet tree that gained an act gets its line of the round by the one road a tree not in the
+  round has (AP-2). No arrival is said again.
+- AY-3 (said). A quiet tree's acts with no talk seen make no cycle: on Linux, where no source sees a connection
+  between two samples, the agent of AX-4's case is still not found by rhythm. It is found as an arrival, and
+  its commands are judged on its own tree. The hole is said where the rule's holes are.
 
