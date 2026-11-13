@@ -31,7 +31,8 @@ class: HOST
 # history lines of a source are not beats. The act_basis of a line names
 # where its acts came from (started, stat, round, os, hooks).
 kind: anchor
-severity: medium
+# ADR-0007 AT-1 (M7.18): an agent with no name, by what it does; nothing else of the rule changes by it.
+severity: high
 # Measured on SYNTHETIC fixtures only (K-9): the negatives are the four
 # synthetic cases tests/fixtures/host/make.py makes from fake rounds:
 # negative-two-cycles.json (K-1 cycles), negative-changing-destination.json
@@ -57,6 +58,10 @@ severity: medium
 # have a cycle. The field source - an IDE that polls one server and builds
 # for hours - is the commander's to measure (as the act-root budget); until
 # then this budget says nothing about it.
+# ADR-0007 AT-1, AT-7, the first field numbers on real agents (Qwen Code, opencode; GitHub's runners, Windows
+# and Linux; the probe branch, never merged; these are not the budget's measure): seven turns: 7 of 8 agent trees
+# fired over two runs (one on Windows did not: its talks to one server were two destinations), none of the
+# runners' own; three short turns: none (fewer than K rounds).
 fp_budget: 0.0
 holes:
   - "a relay or proxy in between: the talk is the relay's (another process tree), so the tree that acts has no talk beat of its own"
@@ -66,7 +71,7 @@ holes:
   - "repeated talks on one long connection are unseen without bytes: where no byte counts are read (Windows, GetExtendedTcpTable; a Linux ss without -i counts) an established connection is one talk, when first seen, so an agent that keeps one connection open makes at most one cycle on it"
   - "a child start time that cannot be read (Linux /proc/PID/stat gone or hidden, an export's local CreationDate) places the act at the round's time, so W is as coarse as the round interval for it (a blind spot of the run)"
   - "bytes are recorded and compared, not judged by size: a talk is any change of the counts"
-  - "a benign program that polls one server and spawns helpers (an IDE, an updater) has the same rhythm: a medium finding, not a verdict"
+  - "a benign program that polls one server and spawns helpers (an IDE, an updater) has the same rhythm: a high finding, not a verdict (ADR-0007 AT-1); the commander's field measure on such a program (an IDE) is still owed"
   - "a tree the catalog names (by image or endpoint) is not judged by rhythm: an agent that takes a catalog agent's name escapes this rule (and is knocked as NEW-AGENT instead)"
   - "M7.5 E2: the os source's destination is a hash of (hostname, ip, port, protocol): the same server reached by another name or address is another destination, and an os talk and a host talk to one server are two destinations"
   - "M7.5 E2: several cycles inside one round's interval count as one (each act round counts once per destination), so an os source that sees a fast agent's every turn still counts at most one cycle per round"

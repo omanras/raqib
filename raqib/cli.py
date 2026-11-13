@@ -188,7 +188,7 @@ no command, raqib prints its usage and exits 2.
       tree whose working directory was read also gets `raqib watch`'s hooks
       in that project (the trace outside it); the hook settings are the
       only file ever written into a project, and only with this flag.
-      RHYTHM (M7.4, anchor, medium): K talk-then-act cycles to one
+      RHYTHM (M7.4, anchor, high): K talk-then-act cycles to one
       destination in R rounds (K=3, W=30 s, R=10 in HOST-RHYTHM.yaml). --suspect
       BACKEND (ollama[:MODEL], anthropic[:MODEL], fake:FILE; off by default):
       every N rounds (--suspect-every N, default 10) each unknown tree's host record (hashes and names) goes
