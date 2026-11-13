@@ -657,8 +657,9 @@ def _parser():
     fw.add_argument("--batch", type=int, default=100, metavar="N", help="at most N lines to a request, 1 to 100"
                                                                         " (default 100; and at most 512 KiB)")
     fw.add_argument("--status", nargs="?", const="", default=None, metavar="NAME",
-                    help="say a forwarder's state (every one without NAME): exit 0 taken, 1 failing or behind, 3"
-                         " silent or unreadable")
+                    help="say a forwarder's state (every one without NAME): exit 0 only where nothing is failing"
+                         " and no whole line has waited longer than a beat, 1 failing (refusing too) or behind, 3"
+                         " no state, unreadable, or written more than two beats ago or in the future (silent)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p

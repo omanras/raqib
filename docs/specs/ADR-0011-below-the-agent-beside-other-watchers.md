@@ -674,3 +674,53 @@ largest finding is the Table's own ruling, J-4.
 The Table accepts, as built and said: the cursor held to the line that ends at it; a line over 512 KiB
 refused locally; status 0 while sends are taken and the file grows faster than a beat's worth (K-2).
 
+## Amendment M (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3-redo.md (7244740)
+The packet: the cursor loses no line the watch wrote, and a collector that refuses everything is no longer OK;
+REDO for documents that say more than the code, a test that can hang the job, an assertion that cannot fail;
+and four things for the Table. Two of them are holes left by L-1, the Table's own ruling.
+- M-1 (L-1's cap must not hide the line that would be taken). As built, a hundred lines in question end the
+  try, and the line after them is never sent: a collector that refuses one kind of line (a heartbeat every
+  minute through a quiet night) stops the finding that follows. Now a try is still bounded (at most 100 sends
+  of a line alone), but what a try has already asked is not asked again while the forwarder runs: the next
+  try goes on from where the last one reached, a batch first. When a line is taken, every line in question
+  before it is settled (M-2). While nothing is taken, the forwarder is `refusing`, and each try also asks the
+  first line in question again, alone: a collector put right is seen at once, and that line is then taken,
+  not refused. The lines in question are not kept one by one: a reach and a count. FOR: a refusal by kind.
+  MUST NOT TOUCH: the cursor stays before the first line in question until a later line is taken; a restart
+  asks again from the cursor.
+- M-2 (a line is refused only when asked twice with a take between). When a later line is taken, each line in
+  question before it is sent alone once more; refused again, it is counted and passed; taken now, it is taken
+  (and has then arrived after the line that proved the collector: said in the documents - the order at the
+  collector is the file's order except for such a line, an answer that came late, and a send that was
+  abandoned and still arrived; `n` orders within a run). FOR: a node behind a balancer that answers 404, a 400
+  that would not come twice. MUST NOT TOUCH: a line refused twice is passed as before.
+- M-3 (a line too long is never read whole). A line over 512 KiB is passed without being read into memory: its
+  end is found piece by piece, it is counted refused, and it is named by its offset where its id was not
+  read. HANDOFF E6's "sent when its newline comes" was the Table's slip: K-2 stands.
+- M-4 (the state every beat, whatever the forwarder is doing). During a send, a try of many lines and a walk
+  over lines that are not events, the state is written at least once a beat and Stop is looked at at least
+  every 2 s. A link too slow for a batch within the bound sends half as many lines at the next try, down to
+  one.
+- M-5 (abandoned sends are bounded). At most four sends abandoned and not yet ended; while four are out no
+  new send starts and the forwarder is failing with the word `stuck`. An abandoned send's socket is shut
+  down and left to its thread: no descriptor is closed under a thread that may still use it.
+- M-6 (no traceback, no false calm). An error of the system at the start (the directory, the pid file) is a
+  usage error with its reason. `--status` reads any state that is not what the forwarder writes - a beat not
+  above 0, a `failing` that is no object, a cursor above 0 with no hash - as unreadable, 3. A forwarder that
+  starts again carries the `failing` its state held until its first try has an answer.
+- M-7 (one name, to the end). A forwarder that finds, when it writes its state, that the pid file of its name
+  no longer holds its own pid stops, with the reason: two that both took a dead forwarder's name do not both
+  run on.
+- M-8 (what the start refuses, more). A port 0, a control character in the URL: usage errors. The file read
+  further inside a try is the file the try began with (the same check as at each pass).
+- M-9 (the tests). No thread of a test outlives it (a run that must be stopped is a daemon and is ended in a
+  finally); the pid-file test asserts what the second start read; a bound in a test is the proof of a
+  mechanism, with a margin a slow machine keeps (Stop ends a wait of minutes within a few seconds - not
+  "under 2.0 s" on a shared runner).
+- M-10 (the documents say what the code does): the packet's R1, each line; the order at the collector (M-2);
+  the bound on sending the request; what `--status` says of a state with nothing ever taken.
+- By the Table: `raqib forward --help` says the status rule in the code's words (raqib/cli.py).
+Recorded: the rig's table is still lost where the watch's own step failed before it (the check's other
+inputs); the forwarder's worst case on the rig against the job's limit; a second forwarder of one name on a
+real machine.
+
