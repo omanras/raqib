@@ -24,11 +24,15 @@ Lost events are a hole (BL-4): at each counts() the session is asked what it
 lost (events and real-time buffers); the counts of a turn with a loss are
 unknown, not smaller.
 
-Ended on every way out (BL-2): stop() stops the session and ends the
+Ended on every way out (BL-2, BM-1): stop() stops the session and ends the
 consumer, and a second stop() does nothing; the Reader is a context manager;
-a start that fails at any step leaves no session. leftovers(alive) stops
-the sessions named raqib-net-<n> whose n is no live pid (a watch that was
-killed) and names them; a session of any other name is never touched.
+a start that fails at any step leaves no session, and one interrupted after
+the session began undoes it before the interrupt goes up; a reader that was
+started and never stopped is stopped at the interpreter's exit (atexit, which
+stop() unregisters). leftovers(live_pids) stops the sessions named
+raqib-net-<n> whose n is no live pid (a watch that was killed) and names them,
+reading the live pids (a callable) only after the sessions are listed (BM-3);
+a session of any other name is never touched.
 
 No rights, no asking (BL-3): a start the system refuses returns its reason
 in this module's own words and raises nothing; no elevation is asked and no
@@ -44,9 +48,11 @@ start() refuses with its reason.
 """
 from __future__ import annotations
 
+import atexit
 import ctypes
 import datetime
 import ipaddress
+import os
 import re
 import struct
 import threading
@@ -58,8 +64,11 @@ KEYWORDS = 0x30                                           # 0x10 IPv4, 0x20 IPv6
 SESSION_PREFIX = "raqib-net-"
 LEFTOVER = re.compile(r"raqib-net-([0-9]+)\Z")            # exactly the reader's name: nothing else is touched
 SENT, RECEIVED = "sent", "received"
-# event id -> (direction, bytes of one address): the measured shape (BL, the probe branch)
+# event id -> (direction, bytes of one address): the measured shape (BL, the probe branch), version 0 only (BM-4)
 EVENTS = {10: (SENT, 4), 11: (RECEIVED, 4), 26: (SENT, 16), 27: (RECEIVED, 16)}
+EVENT_VERSION = 0                                        # the measured version of the four ids (BM-4)
+# the tracing's own lost-event provider; its notices to the consumer are a loss (BM-6). Field-checked (questions E).
+LOST_EVENT_PROVIDER = "6A399AE0-4BC6-4DE9-870B-3657F8947E7E"
 
 WNODE_FLAG_TRACED_GUID = 0x00020000
 EVENT_TRACE_REAL_TIME_MODE = 0x00000100
@@ -81,6 +90,7 @@ BUFFER_KB = 64             # EVENT_TRACE_PROPERTIES.BufferSize, in KB
 FLUSH_SECONDS = 1          # EVENT_TRACE_PROPERTIES.FlushTimer: a real-time buffer is handed on within a second
 SESSIONS_MAX = 64          # QueryAllTracesW's array
 JOIN_SECONDS = 10          # how long stop() waits for the consumer to end
+CONNECTIONS_MAX = 65536    # the most connections the map keeps; a new one beyond it is counted `beyond` (BM-7)
 POINTER_BYTES = ctypes.sizeof(ctypes.c_void_p)
 
 API = ("advapi32 StartTraceW (real-time, no log file), EnableTraceEx2(%s, level %d, keywords 0x%x), OpenTraceW,"
@@ -358,15 +368,20 @@ class Reader:
     at start); now: the text of the session's start; thread: the thread
     class of the consumer."""
 
-    def __init__(self, pid, api=None, now=None, thread=None):
+    def __init__(self, pid, api=None, now=None, thread=None, at_exit=None, ownpid=None):
         self.pid = int(pid)
         self.name = session_name(self.pid)
         self.refused = None
         self.ended = None            # why the consumer ended before stop (a hole), or None
         self.stop_problems = []
         self._api, self._now, self._thread_class = api, now or now_text, thread or threading.Thread
+        self._atexit = atexit if at_exit is None else at_exit   # a test passes its own registry
+        self._ownpid = os.getpid() if ownpid is None else int(ownpid)
+        self._atexit_registered = False
         self._lock = threading.Lock()
-        self._connections, self._unread, self._other = {}, {}, 0
+        self._connections, self._unread, self._other, self._other_ids = {}, {}, 0, {}
+        self._events, self._beyond, self._lost_notices = 0, 0, 0
+        self._said = []              # what the start had to say of itself (a found leftover of its own, BM-2)
         self._since, self._session, self._trace, self._thread = None, None, None, None
         self._callback = None        # kept for the reader's life: the system holds its address
         self._logfile, self._name_units, self._final_lost = None, None, None
@@ -388,13 +403,31 @@ class Reader:
             why = self._start()
         except Exception as exc:
             why = "the bytes are not read: the reader failed while starting: %s" % _flat(exc)
+        except BaseException:
+            # an interrupt or an exit raised after the session began (KeyboardInterrupt,
+            # SystemExit, anything not an Exception): undo the session, then let it go up (BM-1).
+            self._undo()
+            self._state = "refused"
+            raise
         if why:
             undone = self._undo()
             why += "".join("; %s" % u for u in undone)
             self.refused, self._state = why, "refused"
             return why
         self._state = "running"
+        self._atexit.register(self._stop_at_exit)   # a started reader is stopped at the exit; stop() unregisters (BM-1)
+        self._atexit_registered = True
         return None
+
+    def _stop_at_exit(self):
+        """Registered with atexit for a running reader: at the interpreter's exit a
+        reader that was never stopped stops its session (BM-1). stop() unregisters
+        this, so a reader stopped by hand leaves nothing to run at the exit."""
+        self.stop()
+
+    def _say(self, text):
+        with self._lock:
+            self._said.append(text)
 
     def _start(self):
         if POINTER_BYTES != 8:
@@ -408,6 +441,17 @@ class Reader:
         api = self._api
         handle = u64(0)
         rc = api.StartTraceW(api.byref(handle), self.name, properties(start=True))
+        if rc == ERROR_ALREADY_EXISTS and self.pid == self._ownpid:
+            # raqib-net-<own pid> is there and its number is this very process's: nobody
+            # else's, so it is a leftover of a killed reader. Stop it and try the start once
+            # more; it is said (BM-2). For any other pid, 183 stays a refusal below.
+            self._say("a session named %s was already there and its number is this process's own:"
+                      " a leftover of a killed reader, stopped and the start tried once more" % self.name)
+            try:
+                api.ControlTraceW(0, self.name, properties(), EVENT_TRACE_CONTROL_STOP)
+            except Exception as exc:
+                self._say("stopping the leftover %s failed (%s)" % (self.name, _flat(exc)))
+            rc = api.StartTraceW(api.byref(handle), self.name, properties(start=True))
         if rc != ERROR_SUCCESS:
             return refusal("StartTraceW", rc, self.name)
         self._session = handle.value
@@ -484,24 +528,39 @@ class Reader:
             return
         record = EVENT_RECORD.from_address(address)
         head = record.EventHeader
-        if guid_text(head.ProviderId) != PROVIDER:
+        provider = guid_text(head.ProviderId)
+        if provider == LOST_EVENT_PROVIDER:
             with self._lock:
-                self._other += 1        # not the provider's: the trace's own header event among them
+                self._lost_notices += 1    # the tracing's own word that events were lost (BM-6)
             return
-        event_id = int(head.EventDescriptor.Id)
-        if event_id not in EVENTS:
-            self._count_unread("id %d" % event_id)
+        if provider != PROVIDER:
+            with self._lock:
+                self._other += 1           # another provider: the trace's own header event among them
             return
+        descriptor = head.EventDescriptor
+        event_id, version = int(descriptor.Id), int(descriptor.Version)
         length = int(record.UserDataLength)
         data = ctypes.string_at(record.UserData, length) if record.UserData and length else b""
-        got = parse(event_id, data)
-        if got is None:
-            self._count_unread("id %d shorter than %d bytes" % (event_id, shape_bytes(event_id)))
-            return
-        direction, pid, size, local, remote = got
+        got = parse(event_id, data) if (event_id in EVENTS and version == EVENT_VERSION) else None
         when = filetime(head.TimeStamp)
-        key = (pid, local[0], local[1], remote[0], remote[1])
         with self._lock:
+            self._events += 1            # every event of the provider seen (BM-5)
+            if event_id not in EVENTS:
+                self._other_ids[event_id] = self._other_ids.get(event_id, 0) + 1   # not the four (BM-5)
+                return
+            if version != EVENT_VERSION:
+                why = "id %d version %d" % (event_id, version)   # not the measured version: unread (BM-4)
+                self._unread[why] = self._unread.get(why, 0) + 1
+                return
+            if got is None:
+                why = "id %d shorter than %d bytes" % (event_id, shape_bytes(event_id))
+                self._unread[why] = self._unread.get(why, 0) + 1
+                return
+            direction, pid, size, local, remote = got
+            key = (pid, local[0], local[1], remote[0], remote[1])
+            if key not in self._connections and len(self._connections) >= CONNECTIONS_MAX:
+                self._beyond += 1        # the map is bounded: a new connection beyond it is counted (BM-7)
+                return
             entry = self._connections.setdefault(key, {SENT: 0, RECEIVED: 0, "last": ""})
             entry[direction] += size
             entry["last"] = when
@@ -525,16 +584,23 @@ class Reader:
     def counts(self):
         """A copy: {"connections": {(pid, local addr, local port, remote
         addr, remote port): {"sent", "received", "last"}}, "since" (the
-        session's start, None without one), "unread" and "unread_why",
-        "other" (events of another provider), "lost" ({"events", "buffers",
-        "why"}: asked of the session now; None and why where not known),
-        "ended", "refused", "session"}."""
+        session's start, None without one), "events" (every event of the
+        provider seen), "unread" and "unread_why" (only the four ids not
+        read: another version, or shorter than the shape), "other_ids"
+        ({id: n} of the provider's events that are not the four), "other"
+        (events of another provider), "beyond" (new connections past the
+        cap), "lost" ({"events", "buffers", "notices", "why"}: asked of the
+        session now, plus the tracing's own loss notices; None and why where
+        not known), "ended", "refused", "said" (BM-2), "session"."""
         lost = self._ask_lost()
         with self._lock:
+            lost["notices"] = self._lost_notices
             return {"session": self.name, "since": self._since,
                     "connections": {k: dict(v) for k, v in self._connections.items()},
-                    "unread": sum(self._unread.values()), "unread_why": dict(self._unread), "other": self._other,
-                    "lost": lost, "ended": self.ended, "refused": self.refused}
+                    "events": self._events,
+                    "unread": sum(self._unread.values()), "unread_why": dict(self._unread),
+                    "other": self._other, "other_ids": dict(self._other_ids), "beyond": self._beyond,
+                    "lost": lost, "ended": self.ended, "refused": self.refused, "said": list(self._said)}
 
     def stop(self):
         """Stop the session (its last losses kept), close the consumer's
@@ -543,6 +609,9 @@ class Reader:
         if self._state != "running":
             return []
         self._state = "stopping"
+        if self._atexit_registered:
+            self._atexit.unregister(self._stop_at_exit)   # stopped by hand: leave nothing for the exit (BM-1)
+            self._atexit_registered = False
         with self._lock:
             self._stopping = True
         problems, api, buf = [], self._api, properties()
@@ -599,21 +668,28 @@ def sessions(api):
     return names, "; ".join(why) or None
 
 
-def leftovers(alive, api=None, problems=None):
-    """Stop the sessions named raqib-net-<n> whose n is not in `alive` (the
-    live pids; None: not known, and nothing is stopped) and return their
-    names. A session of any other name is never touched. What went wrong
-    is appended to `problems` (a list); nothing is raised."""
+def leftovers(live_pids, api=None, problems=None):
+    """Stop the sessions named raqib-net-<n> whose n is no live pid (a watch
+    that was killed) and return their names. `live_pids` is a callable that
+    returns (the live pids or None, why or None); it is called only after the
+    sessions have been listed, so a watch that started between the two has its
+    pid among them and its session is not taken for a leftover (BM-3). When the
+    pids are not known nothing is stopped. A session of any other name is never
+    touched. What went wrong is appended to `problems` (a list); nothing is
+    raised."""
     problems = [] if problems is None else problems
-    if alive is None:
-        problems.append("leftovers not looked for: the live pids are not known")
-        return []
     stopped = []
     try:
         api = api or Api()
         names, why = sessions(api)
         if why:
             problems.append(why)
+        alive, pid_why = live_pids()        # the pids are read now, after the list (BM-3)
+        if pid_why:
+            problems.append(pid_why)
+        if alive is None:
+            problems.append("leftovers not looked for: the live pids are not known")
+            return stopped
         for name in names:
             match = LEFTOVER.match(name)
             if not match or int(match.group(1)) in alive:

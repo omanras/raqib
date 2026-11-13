@@ -2788,3 +2788,36 @@ loopback traffic is said at all.
   documents. The reader imports nothing of the network and is not the capture path's dependency: a watch
   without it is today's watch.
 
+## Amendment BM (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.21a.md (e40849e): the reader, REDO
+The field first (a Windows runner): the reader as built read real traffic - a fetch's bytes over https, http
+and loopback (both ends of it: BL's open question is closed, loopback is said), the pids and times right; the
+structures' sizes are the module's; no session after a clean end; a killed reader's session was found and
+stopped by the next run. The packet: REDO for a test that fails on Windows and a way out with no undo, and
+questions for the Table. Each ruling names what it is FOR.
+- BM-1 (every way out, whole). A start interrupted by anything (not only an error: an interrupt, an exit)
+  undoes the session before it goes on up. A reader started and never stopped is stopped at the
+  interpreter's exit. FOR: BL-2 - only a kill leaves a session.
+- BM-2 (a session with the watch's own number is a leftover). A watch that was given a killed watch's pid
+  finds `raqib-net-<its own pid>` there: it is nobody else's (the number is this process's), so it is
+  stopped and the start tried once more, and that is said. FOR: a watch refused for its whole life by its
+  predecessor's leftover. MUST NOT TOUCH: a session of another number or name.
+- BM-3 (leftovers: the sessions are listed before the pids are read). A session seen in the list was
+  started before the pids were read, so a live watch's pid is among them. FOR: a watch starting between
+  the two, whose session would be taken for a leftover.
+- BM-4 (what is not the measured shape is not read). Measured: version 0 of ids 10 and 11. An event of the
+  four ids with another version, or shorter than the shape, is unread with its reason; the IPv6 ids are
+  read by the manifest's shape, version 0, until the field shows one. FOR: BL-5.
+- BM-5 (unread stays an alarm). Events of the provider that are not the four ids (connects, ends, udp) are
+  counted apart, by id, as `other_ids`; `unread` is only the four ids not read. And the reader says how many
+  of the provider's events it saw at all (`events`): a session that hears nothing is told from a quiet
+  machine by the caller (M7.21b: no event at all while connections talk is a hole).
+- BM-6 (the kernel's own word of a loss). The tracing's lost-event notices delivered to the consumer are
+  counted as `lost` notices, with what the session says; either makes the turn's counts unknown.
+- BM-7 (the map is bounded). At most 65536 connections are kept; an event of a connection beyond that is
+  counted (`beyond`), never dropped unseen, and M7.21b says it as a hole. Sums and the last event's time a
+  connection are what is kept (not each event): accepted, and BL-5 means that.
+- BM-8 (recorded for M7.21b, not built here): udp bytes (ids 42, 43 and their IPv6 pair carry sizes: QUIC is
+  otherwise unseen) ; the delivery's lag (up to the flush timer: a turn's counts are of a moment earlier);
+  sums that outlive the connection, where Linux's end with the socket; more than 64 sessions on a machine.
+E1's "nothing of raqib but what hostwin imports" means raqib's modules: `threading` is the standard library's.
+
