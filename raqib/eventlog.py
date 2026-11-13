@@ -14,9 +14,11 @@ list apart and names nothing by guessing from what an entry holds: its trees
 ("tree:<word>"), findings ("finding:i"), source findings ("source-finding:i"),
 its own holes ("hole:i"), the notifier's ("notifier-hole:i"), blind spots
 ("blind:i"), its own notes ("note:i"), the note of the words a terminal lost
-("note:lost-words") and the knock rows ("knock:i"). A blind spot's count and
-the lost-words note change every round or every lost word: once said, they
-are said again only with a beat (F-3).
+("note:lost-words") and the knock rows ("knock:i"). The lost-words note is
+said again only with a beat (F-3); a tree's evidence and a blind spot's count
+only at the finish (G-2). Between beats a pass looks only at what is new and
+what can still change (G-6 c); nothing it calls can end it (G-6 a); a line
+is never glued to a torn one (G-6 b).
 
 What cannot be said is said (F-4): a builder that raises is returned as a
 problem, once per thing, naming the thing and the key (the watch makes it a
@@ -73,6 +75,13 @@ class EventLog:
         self.write_error = None    # why the first line was not written (said once)
         self.next_beat = None      # the monotonic time the next beat is due
         self.ended = False
+        self.whole = False         # G-6 (b): the file is known to end in a newline (after a line written here)
+        self.mended = 0            # G-6 (b): torn lines ended with a newline before the next line
+        self.marks = {}            # G-6 (c): list -> how many of its first entries are said (or cannot be built)
+        self.open = {}             # G-6 (c): list -> the places of entries said that can still change
+        self.folded = set()        # G-1: the places of source findings said as one act with another
+        self.builds = 0            # G-6 (c): the builder calls (what a pass cost)
+        self.longest = 0.0         # G-6 (c): the longest pass, in seconds (the watch measures it)
 
     @property
     def not_built(self):
@@ -82,28 +91,33 @@ class EventLog:
         """F-7: the numbers the report's EVENTS line and the state carry."""
         return {"file": self.path, "written": self.written, "heartbeats": self.heartbeats,
                 "not_built": self.not_built, "not_written": self.not_written, "beat_seconds": self.beat,
-                "host": self.facts.get("host"), "last_n": self.n, "write_error": self.write_error}
+                "host": self.facts.get("host"), "last_n": self.n, "write_error": self.write_error,
+                "longest_pass_seconds": round(self.longest, 3), "mended": self.mended}
 
     def say(self, about, build, again=True, force=False, core=None):
-        """One thing: build(n, rev) -> its event. again=False: a thing already said is not said again now (F-3: a
-        blind spot's count, the lost-words note, between two beats); with core (event -> its part that is said at
-        once when it changes), only what is outside core waits for the beat (a tree's record line, which moves every
-        round). force: written though nothing changed (a heartbeat, the end). Returns (what, detail): ("written", event), ("same", None), ("held", None),
-        ("not built", why or None when said before), ("not written", why or None when said before)."""
+        """One thing: build(n, rev) -> its event. again=False: a thing already said is not said again now (G-2: a
+        tree's evidence and a blind spot's count until the finish; F-3: the lost-words note until a beat); with core
+        (event -> its part that is said at once when it changes), only what is outside core waits (a tree's record
+        line, which moves every round). force: written though nothing changed (a heartbeat, the end). G-6 (a):
+        nothing in it can raise; a line that cannot be made is a thing not built. Returns (what, detail):
+        ("written", event), ("same", None), ("held", None), ("not built", why or None when said before),
+        ("not written", why or None when said before)."""
         last = self.said.get(about)
         if last is not None and not again and not force and core is None:
             return "held", None
         rev = 1 if last is None else last[0] + 1
         try:
+            self.builds += 1
             ev = build(self.n + 1, rev)
+            said = {k: v for k, v in ev.items() if k not in VARY}
+            what = event.line(said)
+            kernel = event.line(core(said)) if core is not None else None
+            data = (event.line(ev) + "\n").encode("ascii")
         except Exception as exc:   # C-10: an entry that lacks what its kind requires; never a half event
             first = about not in self.unbuilt
             self.unbuilt.setdefault(about, "%s" % exc)
             return "not built", ("%s: %s" % (about, exc)) if first else None
         self.unbuilt.pop(about, None)
-        said = {k: v for k, v in ev.items() if k not in VARY}
-        what = event.line(said)
-        kernel = event.line(core(said)) if core is not None else None
         if last is not None and not force:
             if last[1] == what:
                 return "same", None
@@ -111,16 +125,26 @@ class EventLog:
                 return "held", None
         self.n += 1   # used even when the line is not written: a collector sees the gap (rule 4)
         try:
-            with open(self.path, "a", encoding="ascii", newline="\n") as f:
-                f.write(event.line(ev) + "\n")
+            with open(self.path, "a+b") as f:
+                if not self.whole:   # G-6 (b): a line is never glued to a torn one (as the record's own writer)
+                    f.seek(0, 2)
+                    if f.tell():
+                        f.seek(-1, 2)
+                        if f.read(1) != b"\n":
+                            f.seek(0, 2)
+                            f.write(b"\n")
+                            self.mended += 1
+                f.write(data)
                 f.flush()
         except (OSError, ValueError) as exc:
+            self.whole = False   # what landed of it, if anything, is torn: the next line begins on a line of its own
             self.not_written += 1
             if self.write_error is None:
                 self.write_error = "cannot append to %s: %s" % (self.path, getattr(exc, "strerror", None) or exc)
                 return "not written", self.write_error
             return "not written", None
-        self.said[about] = (rev, what, kernel)
+        self.whole = True
+        self.said[about] = (rev, what, kernel)   # G-6 (b): only a line written is said
         self.written += 1
         if ev.get("kind") == "heartbeat":
             self.heartbeats += 1
@@ -137,62 +161,126 @@ class EventLog:
         return self.next_beat is not None and not self.ended and now >= self.next_beat
 
     def heartbeat(self, state, time, now):
-        """F-3: the watch's beat ("watch", the next rev), written though nothing else changed."""
+        """F-3: the watch's beat ("watch", the next rev), written though nothing else changed. The beat is counted
+        on before the state is read (state: the state or a function giving it), so a state that cannot be read is
+        a beat not built, said once, and never a beat tried again at every tick (G-6 a)."""
         while self.next_beat is not None and self.next_beat <= now:
             self.next_beat += self.beat
-        return self.say("watch", lambda n, rev: event.heartbeat(state, self.facts, time, n, rev=rev), force=True)
+        return self.say("watch", lambda n, rev: event.heartbeat(state() if callable(state) else state, self.facts,
+                                                                time, n, rev=rev), force=True)
 
-    def end(self, state, time, exit):
-        """F-2: the last event, the watch's end with the report's exit (said again, the next rev, if the report's
-        exit is found to differ)."""
+    def end(self, state, time, exit, word=None, suppressed=None):
+        """F-2, G-4, G-10: the last event, once: the watch's end with the exit and the word the watch gives (the
+        report's own: CLEAN, ALARM, INCOMPLETE or NONE-SEEN) and the findings its overlay suppressed."""
         self.ended = True
-        return self.say("watch", lambda n, rev: event.watch_end(state, self.facts, time, n, exit, rev=rev),
-                        force=True)
+        return self.say("watch", lambda n, rev: event.watch_end(state() if callable(state) else state, self.facts,
+                                                                time, n, exit, rev=rev, word=word,
+                                                                suppressed=suppressed), force=True)
 
     def ledgers(self, time, trees=(), findings=(), source_findings=(), holes=(), notifier_holes=(), blind=(),
-                notes=(), dark_notes=(), lost=None, knocks=(), record=None, beat=False):
-        """F-2: one pass over the watch's lists, each named from the list it is in. An entry's own time ("at", a
-        tree's first_seen) where it is a real instant, else the time given. holes is iterated as it grows (a hole
-        the caller appends while the pass runs is said in it). Returns the problems said for the first time:
-        [(what, detail)] with what "not built" or "not written"."""
+                notes=(), dark_notes=(), lost=None, knocks=(), record=None, beat=False, final=False, same=None):
+        """F-2: one pass over the watch's lists, each named from the list it is in. beat: a heartbeat is due (the
+        lost-words note is said again); final: the finish (G-2: a tree's evidence and a blind spot's count are said
+        once, their last). G-6 (c): at a beat and at the finish every entry is looked at; between beats only what is
+        new in each list (from the first entry not yet said) and what can still change: the trees, the notifier's
+        holes (they count), the source findings not yet settled and the knocks not yet decided (each said open the
+        last time it was looked at) and those `same` names. same: {place of a source finding: the about of the
+        entry it is one with} (G-1: said with alarm false and evidence.same_as). G-3: an entry's own time ("at", a
+        tree's first_seen, where it is a real instant, else the time given) at rev 1, the pass's time at a later
+        rev. G-6 (a): each list and each entry in its own guard, its naming too. holes is iterated as it grows (a
+        hole the caller appends while the pass runs is said in it). A knock row's "for" is kept only when it names
+        a thing said in this file (G-9). Returns the problems said for the first time: [(what, detail)] with what
+        "not built" or "not written"."""
         problems = []
-        rules = self.rules
+        rules, facts, full = self.rules, self.facts, bool(beat or final)
+        same = same if isinstance(same, dict) else {}
 
-        def own(entry, key="at"):
-            return entry[key] if isinstance(entry, dict) and event.instant(entry.get(key)) else time
+        def at(e, rev, key="at"):
+            return e[key] if rev == 1 and isinstance(e, dict) and event.instant(e.get(key)) else time
 
         def one(about, build, again=True, core=None):
-            what, detail = self.say(about, build, again=again, core=core)
+            try:
+                what, detail = self.say(about, build, again=again, core=core)
+            except Exception as exc:   # never: say guards itself; the pass goes on all the same
+                what, detail = "not built", "%s: %s: %s" % (about, type(exc).__name__, exc)
             if what in ("not built", "not written") and detail:
                 problems.append((what, detail))
+            return what
 
-        for row in trees:
-            word = event.tree_word(row["key"]) if isinstance(row, dict) and isinstance(
-                row.get("key"), (list, tuple)) and len(row["key"]) == 3 else "?"
-            one("tree:%s" % word, lambda n, rev, r=row, a="tree:%s" % word: event.tree(
-                r, self.facts, own(r, "first_seen"), n, a, rev, record=record), again=beat, core=TREE_CORE)
-        for i, e in enumerate(findings, 1):
-            one("finding:%d" % i, lambda n, rev, e=e, a="finding:%d" % i: event.finding(
-                e, self.facts, own(e), n, a, rev, rule=rules.get(e.get("rule_id")), record=record))
-        for i, e in enumerate(source_findings, 1):
-            one("source-finding:%d" % i, lambda n, rev, e=e, a="source-finding:%d" % i: event.source_finding(
-                e, self.facts, own(e), n, a, rev, rule=rules.get(e.get("rule_id"))))
-        for whose, ledger in (("hole", holes), ("notifier-hole", notifier_holes)):
-            i = 0
-            while i < len(ledger):
-                e, i = ledger[i], i + 1
-                one("%s:%d" % (whose, i), lambda n, rev, e=e, a="%s:%d" % (whose, i): event.hole(
-                    e, self.facts, own(e), n, a, rev))
-        for i, e in enumerate(blind, 1):
-            one("blind:%d" % i, lambda n, rev, e=e, a="blind:%d" % i: event.hole(e, self.facts, own(e), n, a, rev),
-                again=beat)
-        dark = {d.get("text"): d for d in dark_notes if isinstance(d, dict)}
-        for i, text in enumerate(notes, 1):
-            e = dark.get(text, text)
-            one("note:%d" % i, lambda n, rev, e=e, a="note:%d" % i: event.note(e, self.facts, own(e), n, a, rev,
-                                                                              record=record))
+        def each(prefix, entries, make, again=True, changes=None, extra=()):
+            try:
+                open_ = self.open.setdefault(prefix, set())
+                start = 0 if full or changes == "all" else self.marks.get(prefix, 0)
+                look = sorted(j for j in open_.union(extra) if j <= start) if start else []
+                i = start
+                while i < len(entries) or look:
+                    if look:
+                        j = look.pop(0)
+                    else:
+                        i, j = i + 1, i + 1
+                    if j > len(entries):
+                        continue
+                    e, about = entries[j - 1], "%s:%d" % (prefix, j)
+                    what = one(about, lambda n, rev, e=e, j=j, a=about: make(e, j, n, a, rev), again=again)
+                    if callable(changes) and what in ("written", "same", "held"):
+                        try:
+                            (open_.add if changes(e) else open_.discard)(j)
+                        except Exception:
+                            open_.add(j)
+                m = self.marks.get(prefix, 0)
+                while m < len(entries) and ("%s:%d" % (prefix, m + 1) in self.said
+                                            or "%s:%d" % (prefix, m + 1) in self.unbuilt):
+                    m += 1
+                self.marks[prefix] = m
+            except Exception as exc:   # G-6 (a): a list that cannot be read stops neither the next nor the beat
+                problems.append(("not built", "%s: the list was not said: %s: %s" % (prefix, type(exc).__name__,
+                                                                                    exc)))
+        try:
+            for row in list(trees):
+                try:
+                    about = "tree:%s" % event.tree_word(row["key"])
+                except Exception:
+                    about = "tree:?"
+                one(about, lambda n, rev, r=row, a=about: event.tree(r, facts, at(r, rev, "first_seen"), n, a, rev,
+                                                                     record=record), again=final, core=TREE_CORE)
+        except Exception as exc:
+            problems.append(("not built", "tree: the list was not said: %s: %s" % (type(exc).__name__, exc)))
+        each("finding", findings, lambda e, j, n, a, rev: event.finding(
+            e, facts, at(e, rev), n, a, rev, rule=rules.get(e.get("rule_id")), record=record))
+        each("source-finding", source_findings, lambda e, j, n, a, rev: event.source_finding(
+            e, facts, at(e, rev), n, a, rev, rule=rules.get(e.get("rule_id")), same_as=same.get(j)),
+            changes=lambda e: not e.get("settled") or bool(e.get("pending")), extra=set(same) | self.folded)
+        self.folded = set(same)
+        each("hole", holes, lambda e, j, n, a, rev: event.hole(e, facts, at(e, rev), n, a, rev))
+        each("notifier-hole", notifier_holes, lambda e, j, n, a, rev: event.hole(e, facts, at(e, rev), n, a, rev),
+             changes="all")
+        each("blind", blind, lambda e, j, n, a, rev: event.hole(e, facts, at(e, rev), n, a, rev), again=final)
+        try:
+            dark = {d.get("text"): d for d in dark_notes if isinstance(d, dict)}
+        except Exception:
+            dark = {}
+        each("note", notes, lambda e, j, n, a, rev: event.note(dark.get(e, e), facts, at(dark.get(e, e), rev), n, a,
+                                                               rev, record=record))
         if isinstance(lost, str) and lost:
-            one(event.LOST, lambda n, rev: event.note(lost, self.facts, time, n, event.LOST, rev), again=beat)
-        for i, row in enumerate(knocks, 1):
-            one("knock:%d" % i, lambda n, rev, r=row, a="knock:%d" % i: event.knock(r, self.facts, own(r), n, a, rev))
+            one(event.LOST, lambda n, rev: event.note(lost, facts, time, n, event.LOST, rev), again=full)
+
+        def knock(r, j, n, a, rev):
+            r = dict(r)
+            if r.get("for") not in self.said:   # G-9: only a thing said in this file
+                r.pop("for", None)
+            return event.knock(r, facts, at(r, rev), n, a, rev)
+        each("knock", knocks, knock, changes=lambda r: r.get("status") == "folded" or r.get("called") == "folded")
         return problems
+
+
+class Lazy:
+    """A list read on demand (G-6 c): the pass reads only the entries it looks at (the knock rows)."""
+
+    def __init__(self, size, get):
+        self.size, self.get = size, get
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, i):
+        return self.get(i)

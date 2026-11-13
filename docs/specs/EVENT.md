@@ -47,14 +47,20 @@ The watch does not write events yet (M10.2).
   "CAPTURE FAILED", "READER LATE", "HOST READER FAILED", "FINISHED" ("SILENT for 12 s" is SILENT). These are
   all the words a band has; a word outside them is refused: the builder raises ValueError naming `state`.
 - `evidence.lines` counts the trace's lines from 1 (the first line of the file is 1). `subject.by` is how a tree
-  became a candidate, as its row says (ADR-0011 F-5): "sample" (a sample of the OS showed it one) or "channel"
-  (only the channel's events made it one); a tree that never became a candidate has none.
+  became a candidate, as the watch holds it (ADR-0011 F-5, G-8; the state's tree row does not carry it): "sample"
+  (a sample of the OS showed it one) or "channel" (only the channel's events made it one); a tree that never
+  became a candidate has none.
 - A cite left out because it lacked its src or its line is counted on the event, `evidence.cites_left_out`
   (F-4); an event never holds an empty list of cites: an entry whose every cite was left out says only their
   number.
 - A knock names the thing it knocked for, `knocked.for`: that thing's `about` (a finding, a source finding, a
-  hole of the watch or of the notifier, a tree), where the watch knows it (F-5). An act's knock names its copy
-  on the tree it was knocked on.
+  hole of the watch or of the notifier, a tree), only a thing said in the same file (F-5, G-9). An act's knock
+  names its copy on the tree it was knocked on; a knock for a thing that was not built, or for a suspicion (no
+  kind yet), has none.
+- One act, one alarm (G-1): a pair the report's listing takes for one act (one image, starts within 1 s; the
+  host's sample and the os follow both saw it) is one alarm. The entry the listing folds is said with `alarm`
+  false and `evidence.same_as`, the `about` of the entry it is one with; a pair found after both were said is
+  the folded one's next rev.
 
 ## The events file
 
@@ -65,16 +71,29 @@ anywhere; a collector's own agent may tail the file.
 - One pass over the watch's own lists at the end of every round and at the finish (F-2): the trees, the
   findings, the source findings, the watch's holes ("hole:i"), the notifier's ("notifier-hole:i"), the blind
   spots ("blind:i"), the watch's notes ("note:i"), the note of the words a terminal lost ("note:lost-words") and
-  the knock rows ("knock:i"). The watch names each from the list it is in. An event's `time` is its entry's own
-  (a tree's first-seen time) where it has one, else the time of the pass.
-- The first event is the watch's start ("watch" rev 1), the last its end with the report's exit and its word.
-  On a fixed beat (`--beat S`, 60 s by default, never shorter than a round) a heartbeat is written though
-  nothing else changed: "watch", the next rev. A blind spot's count and the lost-words note, which change every
-  round or every lost word, are said again only with a beat (and at the end).
+  the knock rows ("knock:i"). The watch names each from the list it is in. An event's `time` is when it is said
+  (G-3): at rev 1 its entry's own (a tree's first-seen time) where it has one, else the time of the pass; at a
+  later rev the time of the pass that says it.
+- The first event is the watch's start ("watch" rev 1), the last its end, said once (G-10): the result is
+  computed, the end is written, then the report's EVENTS line and the state are made, so they count it. The
+  end's `result.word` is the report's own (CLEAN, ALARM, INCOMPLETE or NONE-SEEN; G-4) and `result.suppressed`
+  the findings the overlay suppressed. On a fixed beat (`--beat S`, 60 s by default, never shorter than a round)
+  a heartbeat is written though nothing else changed: "watch", the next rev.
+- A thing is said again when what a consumer acts on changed (G-2): a tree knocked, made benign or history, or
+  named at once; its latest record line and cites, and a blind spot's count, are not that: their last is said
+  once, at the finish. The lost-words note is said again only with a beat. Between beats a pass looks at what is
+  new in each list and at what can still change (the trees, the source findings not yet settled, the knocks not
+  yet decided, the notifier's holes); at a beat and at the finish at everything (G-6). The longest pass is on
+  the report's EVENTS line and in the state.
+- A watch that was killed (G-7): a run with a start and no end, whose last line is older than two beats, was
+  stopped or killed; that silence is the collector's alarm. A last line that is not whole JSON is a torn write;
+  the next line a watch appends begins on a line of its own (the file gets a newline first, G-6), and a line
+  that failed is never counted as written.
 - What cannot be said is said (F-4): an entry that makes a builder raise is a hole of the watch, one per thing,
   naming the thing and the key ("event-not-built"); a line that cannot be written is counted and is one hole
   ("events-unwritable"). Its number is used all the same, so a collector sees the gap in `n`. The report's
-  EVENTS line and the state's `events` carry the numbers: written, heartbeats, not built, not written, the file.
+  EVENTS line and the state's `events` carry the numbers: written, heartbeats, not built, not written (the
+  attempts), the longest pass, the file. Nothing the pass calls can end it, or the watch (G-6).
 - `watch.host` is the system's own name, read once at the start without a network call, or `--event-host NAME`;
   a system that gives none: the watch says so at its start and the events say "unnamed" (F-6).
 - `raqib events FILE` checks every line with `event.check`, prints the count per kind and each problem with its
@@ -133,6 +152,7 @@ field (see Mapping), else the namespace.
 | `evidence.lines` | `ints` | the line numbers cited in the trace (its lines counted from 1) | source-finding | `unmapped.raqib.evidence.lines` | `raqib.evidence.lines` |
 | `evidence.cites` | `cites` | the record lines cited: each {src, line} and {round, seq} where the cite holds them (a cite without its src or its line is left out whole); never its text | finding, note, tree | `unmapped.raqib.evidence.cites` | `raqib.evidence.cites` |
 | `evidence.cites_left_out` | `pos` | how many of the entry's cites were left out (each lacked its src or its line, F-4) | finding, note, tree | `unmapped.raqib.evidence.cites_left_out` | `raqib.evidence.cites_left_out` |
+| `evidence.same_as` | `str` | the `about` of the source finding the report's listing takes this one to be one act with (its own join: one image, starts within 1 s); this one is then said with `alarm` false (G-1) | source-finding | `unmapped.raqib.evidence.same_as` | `raqib.evidence.same_as` |
 | `hole` | `object` | the hole or the blind spot | hole | `unmapped.raqib.hole` | `raqib.hole` |
 | `hole.kind` | `str` | the hole's own kind (reader-failed, notify-failed, bytes ...) | hole | `finding_info.title` (a hole) | `raqib.hole.kind` |
 | `hole.class` | `str` | "hole", "blind spot" | hole | `unmapped.raqib.hole.class` | `raqib.hole.class` |
@@ -144,11 +164,12 @@ field (see Mapping), else the namespace.
 | `knocked.title` | `str` | the knock's title | knock | `unmapped.raqib.knocked.title` | `raqib.knocked.title` |
 | `knocked.limit_id` | `str` | the knock's rate-limit id | knock | `unmapped.raqib.knocked.limit_id` | `raqib.knocked.limit_id` |
 | `knocked.called` | `str` | what the notifier said at the call | knock | `unmapped.raqib.knocked.called` | `raqib.knocked.called` |
-| `knocked.for` | `str` | the `about` of the thing the knock knocked for, where the watch knows it (F-5) | knock | `unmapped.raqib.knocked.for` | `raqib.knocked.for` |
+| `knocked.for` | `str` | the `about` of the thing the knock knocked for, only a thing said in this file (F-5, G-9); a knock for a thing not built, or for a suspicion, has none | knock | `unmapped.raqib.knocked.for` | `raqib.knocked.for` |
 | `state` | `str` | "judged on another tree", "history", "pending at exit", "noted", "not settled", "settled" (a source finding: C-4's word, in the report's order); "start", "end" (a watch); "WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "READER LATE", "HOST READER FAILED", "FINISHED" (a heartbeat: the band's word without its number) | source-finding, heartbeat, watch | `unmapped.raqib.state` | `raqib.state` |
 | `result` | `object` | the exit and its word | heartbeat, watch end | `unmapped.raqib.result` | `raqib.result` |
-| `result.word` | `str` | "CLEAN" (exit 0), "ALARM" (exit 1), "INCOMPLETE" (exit 3); another exit has no word | heartbeat, watch end | `unmapped.raqib.result.word` | `raqib.result.word` |
+| `result.word` | `str` | a heartbeat: the word of its exit, "CLEAN" (exit 0), "ALARM" (exit 1), "INCOMPLETE" (exit 3), another exit has none (C-5); a watch end: the report's own word, one of four, the three and "NONE-SEEN" (exit 0: no tree seen, not a clearance), given by the watch (G-4) | heartbeat, watch end | `unmapped.raqib.result.word` | `raqib.result.word` |
 | `result.exit` | `int` | a heartbeat: the exit the watch would end with now (the state's code so far); a watch end: the exit the caller gives | heartbeat, watch end | `unmapped.raqib.result.exit` | `raqib.result.exit` |
+| `result.suppressed` | `pos` | a watch end with CLEAN or NONE-SEEN: how many findings the person's overlay suppressed (the report's "N findings suppressed by the overlay"); absent when none (G-4) | watch end | `unmapped.raqib.result.suppressed` | `raqib.result.suppressed` |
 | `counts` | `object` | what the ledger holds so far | heartbeat, watch end | `unmapped.raqib.counts` | `raqib.counts` |
 | `counts.rounds` | `count` | rounds attempted | heartbeat, watch end | `unmapped.raqib.counts.rounds` | `raqib.counts.rounds` |
 | `counts.findings` | `count` | findings of the rounds | heartbeat, watch end | `unmapped.raqib.counts.findings` | `raqib.counts.findings` |
@@ -213,7 +234,7 @@ every problem of an event, each beginning with its key; every event the module b
 | knock | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `summary`, `knocked`, `knocked.status` |
 | heartbeat | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state`, `result`, `result.exit`, `counts` |
 | watch | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state` |
-| watch end | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state`, `result`, `result.exit`, `counts` |
+| watch end | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state`, `result`, `result.word`, `result.exit`, `counts` |
 
 ## Examples
 

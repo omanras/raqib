@@ -161,7 +161,12 @@ item F7 of the M1.2 review packet or questions file.
     one per event in a run and the heartbeat is on a fixed beat, so a gap or
     a silence is visible to whoever reads it; the report and the state say
     how many events were written, not built and not written. A line that
-    cannot be written is a hole of the watch, never a silence.
+    cannot be written is a hole of the watch, never a silence; a line is
+    never appended to a torn one (the file gets a newline first).
+  - A watch that was stopped or killed writes no end: a run with a start
+    and no end, whose last line is older than two beats, was stopped or
+    killed, and that silence is the collector's alarm. A last line that is
+    not whole JSON is a torn write.
 
 ## 5. What Raqib cannot see (known gaps)
 

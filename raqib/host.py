@@ -1523,6 +1523,8 @@ class HostWatch:
         self.events_path = os.path.join(self.dir, eventlog.NAME)
         self.event_host, self.event_host_from = eventlog.host_name(event_host)
         self.events_round = 0        # F-2: the rounds done when the last pass ran
+        self.tree_by = {}            # ADR-0011 F-5, G-8: tree key -> how it became a candidate (not on the state)
+        self.events_pairs_error = None   # G-1: why the pairs could not be found (said once)
         self.events_error = None     # F-4: why a pass itself failed (said once, a hole)
         self.events = self._event_log(rules, eventlog.BEAT_DEFAULT if beat is None else beat)
         self.rounds = 0              # rounds started
@@ -1834,48 +1836,48 @@ class HostWatch:
                             "called": status, "ref": (container, key), "tree": tree})
         return status
 
-    def knock_rows(self, newest=None):
+    def knock_rows(self, newest=None, fors=False):
         """The KNOCKS ledger as shown (report, state): each knock with its
         status now (a folded one says what became of the fold). newest: only
-        the last N (N-5: the state; the report prints them all)."""
-        rows = []
-        for k in (self.knocks if newest is None else self.knocks[-newest:]):
-            container, key = k["ref"]
-            now = container.get(key) if isinstance(container, dict) else None
-            row = dict({x: v for x, v in k.items() if x not in ("ref", "tree")},
-                       status=now if isinstance(now, str) and now else k["called"])
-            thing = self._about_of(container, k.get("tree"))   # ADR-0011 F-5: knocked.for
-            if thing:
-                row["for"] = thing
-            if isinstance(container, dict) and "copies" in container and container["copies"]:   # V-1: read from the act
-                shown = self._standing(container)
-                row.update(shown_on="tree pid %s" % shown[0], knocked_on="tree pid %s" % (
-                    container["knocked_on"][0] if container.get("knocked_on") else "-"))
-            rows.append(row)
-        return rows
+        the last N (N-5: the state; the report prints them all). fors: each
+        with the about of the thing it was for, where the watch holds it
+        (ADR-0011 F-5, G-9; by one table, _things): event.snapshot's rows."""
+        table = self._things() if fors else None
+        return [dict(self._knock_row(k), **({"for": self._knocked_for(k, table)} if fors else {}))
+                for k in (self.knocks if newest is None else self.knocks[-newest:])]
 
-    def _about_of(self, container, tree=None):
-        """ADR-0011 F-5: the `about` of the thing a knock was for, named from the list it is in (a finding, a source
-        finding, a hole of the watch or of the notifier, a tree; an act: its copy on the tree it was knocked on);
-        None where the watch does not know it."""
-        try:
-            if isinstance(container, dict) and container.get("copies"):
-                on = container.get("knocked_on")
-                tree = on if on is not None else tree
-                container = container["copies"].get(on, container) if on is not None else container
-            for whose, ledger in (("finding", self.findings), ("source-finding", self.source_findings),
-                                  ("hole", self.holes), ("notifier-hole", self.notifier.holes)):
-                for i, e in enumerate(ledger, 1):
-                    if e is container:
-                        return "%s:%d" % (whose, i)
-            for key, e in self.trees.items():
-                if e is container:
-                    return "tree:%s" % tree_word(key)
-            if tree is not None and tuple(tree) in self.trees:
-                return "tree:%s" % tree_word(tuple(tree))
-        except (TypeError, AttributeError):
-            return None
-        return None
+    def _knock_row(self, k):
+        container, key = k["ref"]
+        now = container.get(key) if isinstance(container, dict) else None
+        row = dict({x: v for x, v in k.items() if x not in ("ref", "tree")},
+                   status=now if isinstance(now, str) and now else k["called"])
+        if isinstance(container, dict) and "copies" in container and container["copies"]:   # V-1: read from the act
+            shown = self._standing(container)
+            row.update(shown_on="tree pid %s" % shown[0], knocked_on="tree pid %s" % (
+                container["knocked_on"][0] if container.get("knocked_on") else "-"))
+        return row
+
+    def _things(self):
+        """ADR-0011 G-6 (c): one table a pass, {id(entry): its about}, of the lists a knock can be for (a finding, a
+        source finding, a hole of the watch or of the notifier, a tree), each named from the list it is in."""
+        table = {}
+        for whose, ledger in (("finding", self.findings), ("source-finding", self.source_findings),
+                              ("hole", self.holes), ("notifier-hole", self.notifier.holes)):
+            for i, e in enumerate(ledger, 1):
+                table[id(e)] = "%s:%d" % (whose, i)
+        for key, e in self.trees.items():
+            table[id(e)] = "tree:%s" % tree_word(key)
+        return table
+
+    def _knocked_for(self, k, table):
+        """ADR-0011 F-5, G-9: the about of the thing a knock was for, by the pass's table (an act: its copy on the
+        tree it was knocked on); None where the thing is in none of its lists (a suspicion: no kind yet)."""
+        container = k["ref"][0]
+        if isinstance(container, dict) and container.get("copies"):
+            on = container.get("knocked_on")
+            container = container["copies"].get(tuple(on) if isinstance(on, list) else on, container) \
+                if on is not None else container
+        return table.get(id(container))
 
     # --- the events (ADR-0011 Amendment F) -------------------------------------------
 
@@ -1893,59 +1895,99 @@ class HostWatch:
         for what, detail in problems:
             self._hole(now, "event-not-built" if what == "not built" else "events-unwritable", detail)
 
-    def _events_pass(self, now, beat=False):
-        """F-2: one pass over the watch's own ledgers, each entry named from the list it is in (eventlog.ledgers)."""
+    def _events_pass(self, now, beat=False, final=False):
+        """F-2: one pass over the watch's own ledgers, each entry named from the list it is in (eventlog.ledgers).
+        G-1: the pairs the report's listing takes for one act, found by its own function once a pass; G-6 (c): the
+        knock rows read only where the pass looks, their things by one table made once a pass; G-8: a tree's "by"
+        from where the watch holds it; the pass's time kept (the longest, in the state and on the EVENTS line)."""
         from raqib import watch
+        log = self.events
+        began = time.perf_counter()
+        same = {}
+        try:
+            pairs = told_twice(self.source_findings, self.sources) if self.source_findings else {}
+            if pairs:
+                place = {id(f): i for i, f in enumerate(self.source_findings, 1)}
+                same = {place[o]: "source-finding:%d" % place[id(h)] for o, h in pairs.items()
+                        if o in place and id(h) in place}
+        except Exception as exc:   # G-6 (a): the pass goes on; the pairs are then said as two
+            if self.events_pairs_error is None:
+                self.events_pairs_error = "the pairs taken for one act were not found: %s: %s" % (
+                    type(exc).__name__, _safe(exc))
+                self._hole(now, "events-failed", self.events_pairs_error)
+        made = {}
+
+        def row(i):
+            k = self.knocks[i]
+            if "t" not in made:
+                made["t"] = self._things()
+            return dict(self._knock_row(k), **{"for": self._knocked_for(k, made["t"])})
+        trees = [dict(e, candidate_by=self.tree_by[key]) if key in self.tree_by else e
+                 for key, e in self.trees.items()]
         for _ in range(2):   # a hole the pass made is said in a second pass
-            problems = self.events.ledgers(
-                iso(self.wall()), trees=list(self.trees.values()), findings=self.findings,
+            problems = log.ledgers(
+                iso(self.wall()), trees=trees, findings=self.findings,
                 source_findings=self.source_findings, holes=self.holes, notifier_holes=self.notifier.holes,
                 blind=self.blind, notes=self.notes, dark_notes=self.dark_notes, lost=watch.lost_note(self.out),
-                knocks=self.knock_rows(), record=self.rounds_path, beat=beat)
+                knocks=eventlog.Lazy(len(self.knocks), row), record=self.rounds_path, beat=beat, final=final,
+                same=same)
             self._events_problems(now, problems)
             if not problems:
                 break
+        log.longest = max(log.longest, time.perf_counter() - began)
+
+    def _events_guard(self, now, step):
+        """F-1, G-6 (a): one step of the events in its own guard: one that fails is one hole, and the next goes on."""
+        try:
+            step()
+        except Exception as exc:
+            if self.events_error is None:
+                self.events_error = "the events were not said: %s: %s" % (type(exc).__name__, _safe(exc))
+                self._hole(now, "events-failed", self.events_error)
+
+    @staticmethod
+    def _first(said):
+        what, detail = said
+        return [(what, detail)] if what.startswith("not") and detail else []
 
     def _events_tick(self, now, end=False):
         """F-2, F-3: the start at the first tick; a pass at the end of every round (and at the finish); a heartbeat
-        at each beat. Nothing here judges: a pass that fails is one hole and the watch goes on (F-1)."""
+        at each beat. Nothing here judges: each step in its own guard (G-6 a), a pass that failed is tried again at
+        the next round, not at the next tick, and a due beat is written all the same."""
         log = self.events
         if log is None or log.ended:
             return
-        try:
-            if log.next_beat is None:
-                what, detail = log.start(self.at(self.t0), now)
-                self._events_problems(now, [(what, detail)] if what.startswith("not") and detail else [])
-            done = self.rounds - (1 if self.worker is not None else 0)
-            beat = log.due(now) and not end
-            if end or beat or done != self.events_round:
-                self.events_round = done
-                self._events_pass(now, beat=beat or end)
-            if beat:
-                what, detail = log.heartbeat(self.state(now), iso(self.wall()), now)
-                self._events_problems(now, [(what, detail)] if what.startswith("not") and detail else [])
-        except Exception as exc:
-            if self.events_error is None:
-                self.events_error = "the events were not said: %s: %s" % (type(exc).__name__, _safe(exc))
-                self._hole(now, "events-failed", self.events_error)
+        if log.next_beat is None:
+            self._events_guard(now, lambda: self._events_problems(now, self._first(log.start(self.at(self.t0), now))))
+        done = self.rounds - (1 if self.worker is not None else 0)
+        beat = log.due(now) and not end
+        if end or beat or done != self.events_round:
+            self.events_round = done
+            self._events_guard(now, lambda: self._events_pass(now, beat=beat or end, final=end))
+        if beat:
+            self._events_guard(now, lambda: self._events_problems(now, self._first(
+                log.heartbeat(lambda: self.state(now), iso(self.wall()), now))))
 
-    def _events_end(self, now, exit):
-        """F-2: the watch's end, its last event, with the exit the report gives."""
-        try:
-            what, detail = self.events.end(self.state(now), iso(self.wall()), exit)
-            self._events_problems(now, [(what, detail)] if what.startswith("not") and detail else [])
-        except Exception as exc:
-            if self.events_error is None:
-                self.events_error = "the events were not said: %s: %s" % (type(exc).__name__, _safe(exc))
-                self._hole(now, "events-failed", self.events_error)
+    def _events_end(self, now):
+        """F-2, G-4, G-10: the watch's end, its last event, said once: the result computed now, its word the
+        report's own (CLEAN, ALARM, INCOMPLETE or NONE-SEEN), the findings the overlay suppressed with a clean
+        word; the state and the report are made after it, and count it."""
+        def end():
+            self._refresh()
+            result, _ = self.result()
+            suppressed = overlay.suppressed(self.all_not_judged()) if result in ("clean", "none-seen") else 0
+            self._events_problems(now, self._first(self.events.end(
+                lambda: self.state(now), iso(self.wall()), EXIT[result], result.upper(), suppressed)))
+        self._events_guard(now, end)
 
     def events_text(self):
-        """F-7: the report's EVENTS line."""
+        """F-7: the report's EVENTS line (G-10: made after the end; G-6 c: the longest pass)."""
         c = self.events.counts()
-        return ("EVENTS: written %d (heartbeats %d, one every %g s), not built %d, not written %d; file %s"
-                " (raqib-event/1, appended; host %s; nothing is sent)%s" % (
+        return ("EVENTS: written %d (heartbeats %d, one every %g s), not built %d, not written %d (attempts);"
+                " longest pass %.3f s; file %s (raqib-event/1, appended; host %s; nothing is sent)%s" % (
                     c["written"], c["heartbeats"], c["beat_seconds"], c["not_built"], c["not_written"],
-                    _safe(c["file"]), c["host"], "; %s" % c["write_error"] if c["write_error"] else ""))
+                    c["longest_pass_seconds"], _safe(c["file"]), c["host"],
+                    "; %s" % c["write_error"] if c["write_error"] else ""))
 
     # --- one tick ---------------------------------------------------------------
 
@@ -2156,11 +2198,12 @@ class HostWatch:
             if channel_now and entry["candidate_round"] is None and not history:
                 line["input_meta"].update(by_channel=True, candidate_by="channel")
                 if entry.get("by_channel_round") is None:
-                    entry.update(by_channel=True, by_channel_round=n, by_channel_at=ts, candidate_by="channel")
+                    entry.update(by_channel=True, by_channel_round=n, by_channel_at=ts)
+                    self.tree_by[key] = "channel"   # ADR-0011 G-8: held apart, never on the state's row (AD-4)
                     by_channel_now.append(tree_word(key))
             if t["class"] == "candidate" and entry["candidate_round"] is None and not channel_now:
                 entry["candidate_round"] = n
-                entry["candidate_by"] = t.get("candidate_by") or "sample"   # F-5: how it became one (subject.by)
+                self.tree_by[key] = t.get("candidate_by") or "sample"   # F-5, G-8: how it became one (subject.by)
                 for k in ("by_channel", "by_channel_round", "by_channel_at"):   # AB-1: knocked, never tagged
                     entry.pop(k, None)
             if not candidate_before and t["class"] == "candidate" and not history and not channel_now:
@@ -4104,11 +4147,9 @@ class HostWatch:
             self.finished = self.at(now)
             self.beat = now
             self.beat_wall = self.wall_clock()
-            ended = self.events is not None and not self.events.ended
-            if ended:   # ADR-0011 F-2: the last pass, then the end with the exit the report will give
+            if self.events is not None and not self.events.ended:   # ADR-0011 F-2, G-10: the last pass, the end
                 self._events_tick(now, end=True)
-                exit_now = self.code_so_far()
-                self._events_end(now, exit_now)
+                self._events_end(now)
             try:
                 self._write_state(now)
             except Exception as exc:
@@ -4118,8 +4159,6 @@ class HostWatch:
             except Exception as exc:
                 self.final_text, self.final_exit = "raqib watch --host: no final report (%s: %s)\n" % (
                     type(exc).__name__, _safe(exc)), 1
-            if ended and self.final_exit != exit_now:   # C-1: the end is said again, the report's exit
-                self._events_end(now, self.final_exit)
         return self.final_text, self.final_exit
 
     def result(self):
@@ -4450,16 +4489,17 @@ class HostWatch:
         out += ["  - %s: %s; %d round(s)" % (b["kind"], b["detail"], len(b["rounds"])) for b in self.blind]
         rows = self.knock_rows()   # M7.5 E3: every knock, its title, its rate-limit id and what became of it
         out.append("KNOCKS: %d (each: round, event, title / body, rate-limit id: status)" % len(rows))
-        if self.events is not None:   # ADR-0011 F-7 (printed after the knocks' lines)
-            events_line = self.events_text()
         out += ["  round %s at %s: %s, \"%s\" / \"%s\", id %s: %s%s%s" % (
             k["round"], k["at"], k["event"], k["title"], k["body"], k["limit_id"], k["status"],
             " (at the call: %s)" % k["called"] if k["called"] != k["status"] else "",
             "; the finding is shown on %s, knocked on %s (V-1)" % (k["shown_on"], k["knocked_on"])
             if k.get("shown_on") and k.get("shown_on") != k.get("knocked_on") else "")
                 for k in rows]
-        if self.events is not None:
-            out.append(events_line)
+        if self.events is not None:   # ADR-0011 F-7, G-10: after the knocks' lines, of the file with its end
+            try:
+                out.append(self.events_text())
+            except Exception as exc:
+                out.append("EVENTS: not counted (%s: %s)" % (type(exc).__name__, _safe(exc)))
         n = self.notifier.state()
         counts = n["counts"]
         out.append("NOTIFICATIONS: %s; sent %d, terminal %d, failed %d, folded %d (%d still waiting), off %d" % (

@@ -37,10 +37,11 @@ KEYS = ("schema", "id", "n", "time", "kind", "about", "rev", "severity", "alarm"
 PARTS = {
     "rule": ("id", "class", "kind", "fp_budget", "attack"),
     "subject": ("tree", "pid", "image", "started", "named", "agent", "path", "benign", "history", "by"),
-    "evidence": ("run", "round", "rounds", "record", "source", "trace", "seqs", "lines", "cites", "cites_left_out"),
+    "evidence": ("run", "round", "rounds", "record", "source", "trace", "seqs", "lines", "cites", "cites_left_out",
+                 "same_as"),   # G-1: same_as, the about of the source finding this one is one act with
     "hole": ("kind", "class", "count", "last"),
     "knocked": ("status", "event", "title", "limit_id", "called", "for"),   # F-5: for, the thing knocked for
-    "result": ("word", "exit"),
+    "result": ("word", "exit", "suppressed"),   # G-4: suppressed, on a watch's end only
     "counts": ("rounds", "findings", "source_findings", "holes", "blind", "notes", "trees", "knocks"),
     "watch": ("run", "mode", "platform", "version", "host"),
 }
@@ -57,7 +58,7 @@ REQUIRED = {   # C-10: per kind, beside BASE (a dotted name: a key of that part)
     "heartbeat": ("state", "result", "result.exit", "counts"),
     "watch": ("state",),
 }
-REQUIRED_END = ("result", "result.exit", "counts")   # C-10: a watch's end, beside REQUIRED["watch"]
+REQUIRED_END = ("result", "result.word", "result.exit", "counts")   # C-10, G-4: a watch's end, beside REQUIRED["watch"]
 ALLOWED = {   # per kind, the keys it may hold
     "finding": BASE + ("alarm", "summary", "rule", "subject", "evidence", "knocked"),
     "source-finding": BASE + ("alarm", "summary", "rule", "subject", "evidence", "knocked", "state"),
@@ -81,7 +82,10 @@ LOST = "note:lost-words"   # D-1: the note of the words a terminal lost (always 
 HOLE = "hole"
 BLIND = "blind spot"
 HOLE_CLASSES = (HOLE, BLIND)   # C-6
-WORDS = {0: "CLEAN", 1: "ALARM", 3: "INCOMPLETE"}   # C-5: the fixed three; another code has no word
+WORDS = {0: "CLEAN", 1: "ALARM", 3: "INCOMPLETE"}   # C-5: the fixed three; another code has no word (a heartbeat)
+# G-4: a watch's end says the report's own word, one of four, and the exit each has; the watch gives it
+END_WORDS = {"CLEAN": 0, "ALARM": 1, "INCOMPLETE": 3, "NONE-SEEN": 0}
+SUPPRESSING = ("CLEAN", "NONE-SEEN")   # G-4: the words with which the overlay's suppressed findings are counted
 NAMED = {"named": True, "unknown": False}   # C-7: the report's two words of a finding's named
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z\Z")
 ATTACK_ID = re.compile(r"T\d{4}(?:\.\d{3})?\Z")
@@ -105,11 +109,11 @@ TYPES = {
     "subject.history": "bool", "subject.by": "str",
     "evidence.run": "str", "evidence.round": "count", "evidence.rounds": "ints", "evidence.record": "str",
     "evidence.source": "str", "evidence.trace": "str", "evidence.seqs": "ints", "evidence.lines": "ints",
-    "evidence.cites": "cites", "evidence.cites_left_out": "pos",
+    "evidence.cites": "cites", "evidence.cites_left_out": "pos", "evidence.same_as": "str",
     "hole.kind": "str", "hole.class": "str", "hole.count": "count", "hole.last": "str",
     "knocked.status": "str", "knocked.event": "str", "knocked.title": "str", "knocked.limit_id": "str",
     "knocked.called": "str", "knocked.for": "str",
-    "result.word": "str", "result.exit": "int",
+    "result.word": "str", "result.exit": "int", "result.suppressed": "pos",
     "watch.run": "str", "watch.mode": "str", "watch.platform": "str", "watch.version": "str", "watch.host": "str",
 }
 TYPES.update({"counts.%s" % k: "count" for k in PARTS["counts"]})
@@ -255,14 +259,18 @@ def source_state(entry):
     return "settled"
 
 
-def source_finding(entry, facts_, time, n, about, rev=1, rule=None):
-    """A finding of a tree's source file (HostWatch.source_findings)."""
+def source_finding(entry, facts_, time, n, about, rev=1, rule=None, same_as=None):
+    """A finding of a tree's source file (HostWatch.source_findings). G-1: same_as, the about of the entry the
+    report's listing takes it to be one act with (host.told_twice): it is said with alarm false and
+    evidence.same_as, so that one act is one alarm."""
     subject = _held(entry, (("tree", "tree"), ("pid", "pid"), ("image", "image")))
     evidence = _held(entry, (("run", "run"), ("source", "source"), ("trace", "trace"), ("seqs", "cited_seq"),
                              ("lines", "lines")))
     state = source_state(entry)
+    if same_as is not None:
+        evidence["same_as"] = same_as
     return _finish(_base("source-finding", entry.get("severity"), facts_, time, n, about, rev), facts_,
-                   alarm=state in ALARM_STATES, summary=entry.get("summary"), rule=_rule(entry, rule),
+                   alarm=state in ALARM_STATES and same_as is None, summary=entry.get("summary"), rule=_rule(entry, rule),
                    subject=subject, evidence=evidence, knocked=_knocked(entry.get("notice")), state=state)
 
 
@@ -362,16 +370,22 @@ def watch_start(state, facts_, time, n=1, about="watch", rev=1):
     return _finish(_base("watch", "info", facts_, time, n, about, rev), facts_, state="start")
 
 
-def watch_end(state, facts_, time, n, exit, about="watch", rev=1):
-    """C-5: the watch's end: the exit the caller gives and its word; its counts."""
-    return _finish(_base("watch", "info", facts_, time, n, about, rev), facts_, state="end", result=_result(exit),
+def watch_end(state, facts_, time, n, exit, about="watch", rev=1, word=None, suppressed=None):
+    """G-4: the watch's end: the exit and the word the watch gives (the report's own, one of END_WORDS; the module
+    does not derive it from the exit: without a word the end is refused), and suppressed, the findings the
+    person's overlay suppressed (a number from 1, with CLEAN or NONE-SEEN); its counts."""
+    result = dict({"word": word} if word is not None else {}, **({"exit": exit} if exit is not None else {}))
+    if suppressed:
+        result["suppressed"] = suppressed
+    return _finish(_base("watch", "info", facts_, time, n, about, rev), facts_, state="end", result=result,
                    counts=_counts(state))
 
 
-def snapshot(state, facts_, time, knocks, rules, end=False, exit=None, lost=None):
+def snapshot(state, facts_, time, knocks, rules, end=False, exit=None, lost=None, word=None, suppressed=None):
     """C-1: the events of one state in one call, n from 1, rev 1, in one order: the watch's start, its trees
     ("tree:<word>"), findings ("finding:i"), source findings ("source-finding:i"), holes, blind spots ("blind:i"),
-    notes, knocks ("knock:i") and a heartbeat (or, end=True, the watch's end with the exit given), each about
+    notes, knocks ("knock:i") and a heartbeat (or, end=True, the watch's end with the exit, word and suppressed
+    given, G-4), each about
     "watch". D-1: a name is a place in a list that only grows: a hole of the watch is "hole:i" and a hole of the
     notifier (the entry that holds a count) "notifier-hole:i", each counted in its own list; a note is "note:i"
     over the watch's own notes (a dark note's text as its dark note), and the note of the words a terminal lost
@@ -418,7 +432,7 @@ def snapshot(state, facts_, time, knocks, rules, end=False, exit=None, lost=None
     for i, row in enumerate(knocks, 1):
         out.append(knock(row, facts_, at(row), len(out) + 1, "knock:%d" % i))
     if end:
-        out.append(watch_end(state, facts_, time, len(out) + 1, exit))
+        out.append(watch_end(state, facts_, time, len(out) + 1, exit, word=word, suppressed=suppressed))
     else:
         out.append(heartbeat(state, facts_, time, len(out) + 1))
     return out
@@ -530,6 +544,7 @@ def check(obj):
         elif (about or "").startswith("hole:") and has_count:
             out.append("hole.count: not a key of a watch's hole (a hole that holds a count is the notifier's)")
     knocked = obj.get("knocked") if isinstance(obj.get("knocked"), dict) else {}
+    evidence_ = obj.get("evidence") if isinstance(obj.get("evidence"), dict) else {}
     if "for" in knocked and not (kind == "knock" and isinstance(knocked["for"], str) and ABOUT.match(knocked["for"])
                                  and knocked["for"] != "watch"):
         out.append("knocked.for: the about of the thing a knock knocked for, on a knock event only (F-5)")
@@ -539,8 +554,13 @@ def check(obj):
     if kind == "source-finding" and "state" in obj:
         if state not in SOURCE_STATES:
             out.append("state: must be one of %s" % "|".join(SOURCE_STATES))
-        elif "alarm" in obj and obj["alarm"] is not (state in ALARM_STATES):
-            out.append("alarm: true for a source finding %s, false otherwise" % ", ".join(ALARM_STATES))
+        elif "alarm" in obj and obj["alarm"] is not (state in ALARM_STATES and "same_as" not in evidence_):
+            out.append("alarm: true for a source finding %s and not one act with another (evidence.same_as),"
+                       " false otherwise" % ", ".join(ALARM_STATES))
+    if "same_as" in evidence_ and not (kind == "source-finding" and isinstance(evidence_["same_as"], str)
+                                       and re.match(r"source-finding:[1-9][0-9]*\Z", evidence_["same_as"])
+                                       and evidence_["same_as"] != obj.get("about")):
+        out.append("evidence.same_as: the about of another source finding, on a source finding only (G-1)")
     if kind == "heartbeat" and "state" in obj and state not in BEAT_STATES:
         out.append("state: must be one of %s for a heartbeat (D-4)" % "|".join(BEAT_STATES))
     if kind == "watch":
@@ -549,11 +569,21 @@ def check(obj):
         elif state == "start":
             out += ["%s: not a key of a watch start" % k for k in ("result", "counts") if k in obj]
     result = obj.get("result") if isinstance(obj.get("result"), dict) else {}
-    if "word" in result and (result["word"] not in WORDS.values() or result["word"] != WORDS.get(result.get("exit"))):
-        out.append("result.word: must be the word of result.exit (%s)" % ", ".join(
-            "%d %s" % kv for kv in sorted(WORDS.items())))
-    if _int(result.get("exit")) and result["exit"] in WORDS and "word" not in result:
-        out.append("result.word: missing (exit %d has a word)" % result["exit"])
+    if kind == "watch" and state == "end":   # G-4: the report's own word, one of four, and its exit
+        if "word" in result and (result["word"] not in END_WORDS or END_WORDS[result["word"]] != result.get("exit")):
+            out.append("result.word: must be one of %s, of its exit (%s)" % (", ".join(END_WORDS), ", ".join(
+                "%s %d" % kv for kv in END_WORDS.items())))
+        if "suppressed" in result and result.get("word") not in SUPPRESSING:
+            out.append("result.suppressed: only with %s (G-4)" % " or ".join(SUPPRESSING))
+    else:
+        if "word" in result and (result["word"] not in WORDS.values()
+                                 or result["word"] != WORDS.get(result.get("exit"))):
+            out.append("result.word: must be the word of result.exit (%s)" % ", ".join(
+                "%d %s" % kv for kv in sorted(WORDS.items())))
+        if _int(result.get("exit")) and result["exit"] in WORDS and "word" not in result:
+            out.append("result.word: missing (exit %d has a word)" % result["exit"])
+        if "suppressed" in result:
+            out.append("result.suppressed: on a watch's end only (G-4)")
     if isinstance(obj.get("counts"), dict):
         out += ["counts.%s: missing" % k for k in PARTS["counts"] if k not in obj["counts"]]
     try:

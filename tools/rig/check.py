@@ -96,12 +96,44 @@ def read_events(events, lines, code):
                 MET if ok else MISSED, "start %s, end %s (exit %s; the report's %s), %d heartbeat(s)" % (
                     "yes" if start else "no", "yes" if end else "no", (end or {}).get("result", {}).get("exit"),
                     code, beats)))
-    want = {"finding": number(r"(?m)^FINDINGS: (\d+)", "\n".join(lines), 0),
-            "source-finding": number(r"(?m)^SOURCE FINDINGS: (\d+)", "\n".join(lines), 0)}
-    have = {k: len({e["about"] for e in evs if e.get("kind") == k}) for k in want}
-    out.append(("X18 an event for each finding the report lists", MET if have == want else MISSED,
-                "findings %d of %d, source findings %d of %d" % (have["finding"], want["finding"],
-                                                                 have["source-finding"], want["source-finding"])))
+    # X18 (G-1): things, not counts. Of the report's run only, the events that are alarms' own things (a finding;
+    # a source finding not folded as one act with another, evidence.same_as), each by its last rev: every finding
+    # and every listed source finding has its event, and no event of the run is a listed thing the report lacks
+    text = "\n".join(lines)
+    run = re.search(r"(?m)^run: (\S+) \(seqs", text)
+    last = {}
+    for e in evs:
+        if e.get("kind") in ("finding", "source-finding") and (run is None or (e.get("watch") or {}).get(
+                "run") == run.group(1)):
+            last[((e.get("watch") or {}).get("run"), e.get("about"))] = e   # its last rev, of its run
+
+    def listed(head):
+        out_, on = [], False
+        for ln in lines:
+            if ln.startswith(head):
+                on = True
+            elif on and ln.startswith("  ["):
+                out_.append(ln)
+            elif on and not ln.startswith("  "):
+                on = False
+        return out_
+    rule_of = re.compile(r"^  \[[a-z]+\] (\S+)")
+    thing_of = re.compile(r"^  \[[a-z]+\] (\S+) on .* pid (\d+|\?) via ")
+    want_f = sorted(rule_of.match(ln).group(1) for ln in listed("FINDINGS: ") if rule_of.match(ln))
+    want_s = sorted((m.group(1), m.group(2)) for m in (thing_of.match(ln) for ln in listed("SOURCE FINDINGS: ")
+                                                         + listed("ON BENIGN TREES")) if m)
+    have_f = sorted(str((e.get("rule") or {}).get("id")) for e in last.values() if e.get("kind") == "finding")
+    folded = [e for e in last.values() if e.get("kind") == "source-finding" and "same_as" in (e.get("evidence") or {})]
+    have_s = sorted((str((e.get("rule") or {}).get("id")), str((e.get("subject") or {}).get("pid", "?")))
+                    for e in last.values() if e.get("kind") == "source-finding" and e not in folded)
+    n_f = number(r"(?m)^FINDINGS: (\d+)", text, 0)
+    n_s = number(r"(?m)^SOURCE FINDINGS: (\d+)", text, 0)
+    ok = have_f == want_f and have_s == want_s and len(want_f) == n_f and len(want_s) == n_s
+    out.append(("X18 an event for each finding the report lists", MET if ok else MISSED,
+                "findings %d of %d, source findings %d of %d (%d said as one act with another), run %s%s" % (
+                    len(have_f), n_f, len(have_s), n_s, len(folded), run.group(1) if run else "-",
+                    "" if ok else "; not alike: %s" % "; ".join(sorted(
+                        {"%s pid %s" % t for t in set(have_s) ^ set(want_s)} | set(set(have_f) ^ set(want_f))))[:200])))
     return out
 
 

@@ -167,7 +167,8 @@ def made_up_events(code=1, beats=0):
     for k in range(beats):
         out.append(event.heartbeat({"band": "WATCHING", "code_so_far": 1, "host": {"rounds": k}}, facts, t,
                                    len(out) + 1, rev=k + 2))
-    out.append(event.watch_end({"host": {"rounds": 16}}, facts, t, len(out) + 1, code, rev=beats + 2))
+    out.append(event.watch_end({"host": {"rounds": 16}}, facts, t, len(out) + 1, code, rev=beats + 2,
+                               word={0: "CLEAN", 1: "ALARM", 3: "INCOMPLETE"}[code]))
     return "".join(event.line(e) + "\n" for e in out)
 
 
@@ -207,3 +208,22 @@ def test_main_reads_the_events_file_and_a_missing_one_is_missed(tmp_path, capsys
     assert "RIG: 15 met, 0 missed, 0 open" in capsys.readouterr().out
     assert check.main(base + ["--events", str(tmp_path / "none.jsonl"), "--strict"]) == 1
     assert "::warning title=rig MISSED::X16" in capsys.readouterr().out
+
+
+def test_x18_compares_things_of_the_report_s_run_a_pair_said_as_one_act():
+    import json
+    good = made_up_events()
+    lines = good.splitlines()
+    one = json.loads(lines[2])
+    twin = dict(one, about="source-finding:3", n=9, id="rig-run:9", alarm=False,
+                evidence=dict(one["evidence"], source="os", same_as="source-finding:1"))
+    paired = "\n".join(lines[:-1] + [json.dumps(twin, sort_keys=True), lines[-1]]) + "\n"
+    report = REPORT.replace("FINDINGS: 1\n", "FINDINGS: 1\n", 1)
+    ran = report.replace("\nFINDINGS: 1", "\nrun: rig-run (seqs 1..9 of the record)\nFINDINGS: 1", 1)
+    assert x(report=ran, events=paired)["X18"][0] == check.MET                                    # a pair: one act
+    gone = "\n".join(lines[:2] + lines[3:-1] + [json.dumps(twin, sort_keys=True), lines[-1]]) + "\n"
+    assert x(report=ran, events=gone)["X18"][0] == check.MISSED   # a pair and one event missing: not hidden
+    other = dict(json.loads(lines[1]), id="other-run:2", watch=dict(one["watch"], run="other-run"))
+    two_runs = json.dumps(other, sort_keys=True) + "\n" + paired
+    assert x(report=ran, events=two_runs)["X18"][0] == check.MET      # another run's events are not this report's
+    assert x(report=report, events=two_runs)["X18"][0] == check.MISSED   # without the run line: every event counts

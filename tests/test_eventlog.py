@@ -183,9 +183,8 @@ def test_e2_every_line_is_an_event_the_first_the_start_the_last_the_end_with_the
         assert (end["kind"], end["state"]) == ("watch", "end"), name
         word = re.search(r"^RESULT: ([A-Z-]+) \(exit (\d+):", r["report"], re.M)
         assert end["result"]["exit"] == r["code"] == int(word.group(2)), name
-        assert end["result"]["word"] == event.WORDS[r["code"]], name
-        if word.group(1) in ("ALARM", "INCOMPLETE", "CLEAN"):
-            assert end["result"]["word"] == word.group(1), name
+        assert end["result"]["word"] == word.group(1) == r["word"], name   # G-4: the report's own word, always
+        assert end["result"].get("suppressed", 0) == r["suppressed"], name
         assert [e["n"] for e in got] == list(range(1, len(got) + 1)) and len({e["id"] for e in got}) == len(got)
         assert sum(e["kind"] == "watch" for e in got) == 2, name   # one start, one end
 
@@ -294,17 +293,17 @@ def test_e3_a_heartbeat_at_each_beat_and_none_between_and_a_quiet_round_writes_n
 
 
 def test_e3_a_blind_spot_s_count_and_the_lost_words_are_said_again_only_with_a_beat(runs):
-    for name, about in (("B-nobeat", "blind:1"), ("L-nobeat", event.LOST)):
+    for name, about in (("B-nobeat", "blind:1"), ("L-nobeat", event.LOST), ("B-beat", "blind:1")):
         evs = [e for e in runs[name]["lines"] if e["about"] == about]
-        assert 1 <= len(evs) <= 2, (name, len(evs))   # rev 1 when new, and at most once more: at the end
-        assert not any(e["kind"] == "heartbeat" for e in runs[name]["lines"])
+        assert 1 <= len(evs) <= 2, (name, len(evs))   # rev 1 when new, and at most once more: at the end (G-2)
+    assert not any(e["kind"] == "heartbeat" for e in runs["B-nobeat"]["lines"] + runs["L-nobeat"]["lines"])
     lost = [m["lost"] for m in runs["L-nobeat"]["moments"] if m["lost"]]
     assert len(set(lost)) > 2   # the words changed in more rounds than the file says them
     blind = [len(m["state"]["host"]["blind"][0]["rounds"]) for m in runs["B-nobeat"]["moments"]
              if m["state"]["host"]["blind"]]
     assert len(set(blind)) >= 2
     beat = [e for e in runs["B-beat"]["lines"] if e["about"] == "blind:1"]
-    assert len(beat) >= len([e for e in runs["B-nobeat"]["lines"] if e["about"] == "blind:1"])
+    assert len(beat) == len([e for e in runs["B-nobeat"]["lines"] if e["about"] == "blind:1"])   # G-2: not at a beat
 
 
 def test_e3_beat_is_never_shorter_than_a_round_less_is_a_usage_error(tmp_path, monkeypatch, capsys):
@@ -338,7 +337,7 @@ def test_e4_a_file_that_cannot_be_written_is_one_hole_counted_in_the_report_and_
     assert len(holes) == 1 and "cannot append to" in holes[0]["detail"]
     ev = r["state"]["events"]
     assert ev["written"] == 0 and ev["not_written"] > 0
-    assert re.search(r"^EVENTS: written 0 \(heartbeats 0, .*\), not built 0, not written %d; " % ev["not_written"],
+    assert re.search(r"^EVENTS: written 0 \(heartbeats 0, .*\), not built 0, not written %d \(attempts\); " % ev["not_written"],
                      r["report"], re.M)
     assert re.search(r"^RESULT: ", r["report"], re.M) and r["code"] in (1, 3)
 
@@ -382,11 +381,13 @@ def test_e5_every_knock_names_the_thing_it_knocked_for(runs):
 def test_e5_a_tree_says_how_it_became_a_candidate_from_its_row(runs):
     said = 0
     for name in MAIN:
-        rows = {"tree:%s" % host.tree_word(k): t for k, t in runs[name]["w"].trees.items()}
+        w = runs[name]["w"]
+        held = {"tree:%s" % host.tree_word(k): w.tree_by.get(k) for k in w.trees}   # G-8: held apart by the watch
+        state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+        assert state["host"]["trees"] and not any("candidate_by" in t for t in state["host"]["trees"])   # AD-4
         for e in last_by_about(runs[name]["lines"]).values():
             if e["kind"] == "tree":
-                row = rows[e["about"]]
-                assert e["subject"].get("by") == row.get("candidate_by"), (name, e["about"])
+                assert e["subject"].get("by") == held[e["about"]], (name, e["about"])
                 said += "by" in e["subject"]
     assert said >= 2
 
@@ -421,14 +422,15 @@ def test_e6_the_report_s_events_line_and_the_state_carry_the_same_numbers_as_the
         r = runs[name]
         ev = r["state"]["events"]
         m = re.search(r"^EVENTS: written (\d+) \(heartbeats (\d+), one every (\S+) s\), not built (\d+), not"
-                      r" written (\d+); file (.+) \(raqib-event/1, appended; host (\S+); nothing is sent\)$",
+                      r" written (\d+) \(attempts\); longest pass ([\d.]+) s; file (.+) \(raqib-event/1, appended; host (\S+); nothing is sent\)$",
                       r["report"], re.M)
         assert m, name
         assert (int(m.group(1)), int(m.group(2)), int(m.group(4)), int(m.group(5))) == (
             ev["written"], ev["heartbeats"], ev["not_built"], ev["not_written"]), name
         assert ev["written"] == len(r["lines"]) and ev["heartbeats"] == sum(e["kind"] == "heartbeat"
                                                                             for e in r["lines"])
-        assert m.group(6) == r["file"] and m.group(7) == HOST and float(m.group(3)) == ev["beat_seconds"]
+        assert m.group(7) == r["file"] and m.group(8) == HOST and float(m.group(3)) == ev["beat_seconds"]
+        assert float(m.group(6)) == ev["longest_pass_seconds"] >= 0   # G-6 (c): the longest pass, said
         assert r["report"].index("\nKNOCKS: ") < r["report"].index("\nEVENTS: ")
 
 
@@ -483,3 +485,139 @@ def test_ascii():
     for name in ("raqib/eventlog.py", "raqib/event.py", "raqib/host.py", "raqib/cli.py", "tests/test_eventlog.py",
                  "tools/rig/check.py"):
         (ROOT / name).read_bytes().decode("ascii")
+
+
+# --- M10.2 REDO (ADR-0011 Amendment G) --------------------------------------------------------------------------
+
+def test_redo_g6b_a_torn_file_gets_a_newline_first_and_a_failed_write_is_not_said(tmp_path):
+    path = tmp_path / "events.jsonl"
+    path.write_bytes(b'{"schema":"raqib-ev')   # a line left torn by a watch that was killed mid-write
+    log = eventlog.EventLog(str(path), FACTS, {})
+    assert log.say("note:1", note_builder("first words"))[0] == "written"
+    raw = path.read_text(encoding="ascii").split("\n")
+    assert raw[0] == '{"schema":"raqib-ev' and json.loads(raw[1])["about"] == "note:1" and raw[2] == ""
+    assert log.mended == 1 and log.say("note:2", lambda n, rev: event.note("x", FACTS, T0, n, "note:2", rev))[0] \
+        == "written" and log.mended == 1   # a file this writer ended whole is not looked at again
+    bad = eventlog.EventLog(str(tmp_path / "dir"), FACTS, {})
+    (tmp_path / "dir").mkdir()
+    assert bad.say("note:1", note_builder("w"))[0] == "not written" and "note:1" not in bad.said
+    (tmp_path / "dir").rmdir()
+    (tmp_path / "dir").write_bytes(b"torn")
+    what, ev = bad.say("note:1", note_builder("w"))
+    assert what == "written" and ev["rev"] == 1 and ev["n"] == 2   # never said: rev 1; its number used anew
+    assert (tmp_path / "dir").read_text(encoding="ascii").split("\n")[0] == "torn"
+
+
+def test_redo_g6a_a_list_that_raises_stops_neither_the_next_list_nor_the_beat(tmp_path, monkeypatch):
+    class Broken(list):
+        def __getitem__(self, i):
+            raise RuntimeError("cannot name it (test)")
+    log = eventlog.EventLog(str(tmp_path / "e.jsonl"), FACTS, {})
+    problems = log.ledgers(T0, findings=Broken([{"rule_id": "X"}]), notes=["a note"])
+    assert [p[0] for p in problems] == ["not built"] and "finding" in problems[0][1] and "note:1" in log.said
+    calls = []
+    real = eventlog.EventLog.ledgers
+
+    def failing(self, *a, **k):
+        calls.append(1)
+        raise RuntimeError("the pass fails (test)")
+    monkeypatch.setattr(eventlog.EventLog, "ledgers", failing)
+    w, counts, got = steady(tmp_path / "w", monkeypatch, 30, 10)
+    assert sum(e["kind"] == "heartbeat" for e in got) == 3 and got[-1]["state"] == "end"   # every due beat
+    assert [h["kind"] for h in w.holes].count("events-failed") == 1
+    assert len(calls) <= 10 + 1   # once a round and at the finish, never again at every tick
+    monkeypatch.setattr(eventlog.EventLog, "ledgers", real)
+
+
+def test_redo_g6c_between_beats_an_unchanged_note_is_not_built(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(eventlog._platform, "node", lambda: HOST)
+    monkeypatch.setattr(eventlog, "BEAT_DEFAULT", 1e6)
+    w, clock = th.make_host(tmp_path, ["windows"] * 4)
+    th.run_rounds(w, clock, 1)
+    w.notes.extend("note %d (test)" % i for i in range(2000))
+    th.run_rounds(w, clock, 1)
+    built = []
+    note = event.note
+    monkeypatch.setattr(event, "note", lambda e, *a, **k: (built.append(e), note(e, *a, **k))[1])
+    th.run_rounds(w, clock, 1)   # a pass between beats: nothing new among the notes
+    assert built == [] and w.state(clock())["events"]["longest_pass_seconds"] >= 0
+    w.notes.append("one more (test)")
+    th.run_rounds(w, clock, 1)
+    assert built == ["one more (test)"]   # only what is new
+    w.finish()
+    assert len(built) > 2000   # at the finish, everything is looked at
+
+
+def test_redo_g2_g3_a_tree_that_only_gained_record_lines_is_said_twice_its_first_and_the_finish_s(tmp_path,
+                                                                                                    monkeypatch):
+    w, counts, got = steady(tmp_path, monkeypatch, 30, 10)
+    assert sum(e["kind"] == "heartbeat" for e in got) == 3   # several beats
+    end = got[-1]
+    quiet = 0
+    for about in {e["about"] for e in got if e["kind"] == "tree"}:
+        evs = [e for e in got if e["about"] == about]
+        if len({event.line(eventlog.TREE_CORE(without(e))) for e in evs}) == 1:   # it only gained record lines
+            assert [e["rev"] for e in evs] == [1, 2] and evs[1]["time"] == end["time"], about   # G-3: the pass's
+            quiet += 1
+    assert quiet >= 1
+
+
+def test_redo_g4_g12_a_none_seen_watch_s_end_its_suppressed_and_an_unwritable_file_is_3(tmp_path, monkeypatch):
+    from raqib import overlay
+    monkeypatch.setattr(eventlog._platform, "node", lambda: HOST)
+    empty = dict(th.inv("benign/windows-desktop"), candidates=[], act_roots=[], result="none-seen")
+    w, clock = th.make_host(tmp_path / "a", [empty])
+    th.run_rounds(w, clock, 1)
+    text, code = w.finish()
+    end = lines_of(w.events_path)[-1]
+    assert code == 0 and "RESULT: NONE-SEEN (exit 0" in text and end["result"] == {"word": "NONE-SEEN", "exit": 0}
+    monkeypatch.setattr(overlay, "suppressed", lambda counts: 2)   # the overlay's count, as the report reads it
+    w, clock = th.make_host(tmp_path / "b", [empty])
+    th.run_rounds(w, clock, 1)
+    text, code = w.finish()
+    assert "RESULT: NONE-SEEN (2 findings suppressed by the overlay) (exit 0" in text
+    assert lines_of(w.events_path)[-1]["result"] == {"word": "NONE-SEEN", "exit": 0, "suppressed": 2}
+    monkeypatch.setattr(overlay, "suppressed", lambda counts: 0)
+    w, clock = th.make_host(tmp_path / "c", [empty])
+    Path(w.events_path).mkdir(parents=True)   # G-5, G-12: no finding, an events file that cannot be written
+    th.run_rounds(w, clock, 1)
+    text, code = w.finish()
+    assert code == 3 and not w.findings and "RESULT: INCOMPLETE (exit 3" in text
+    built = event.watch_end({"host": {"rounds": 1}}, FACTS, T0, 2, 0, word="CLEAN", suppressed=1)
+    assert event.check(built) == [] and event.check(dict(built, result={"word": "ALARM", "exit": 1, "suppressed": 1}))
+    with pytest.raises(ValueError, match=r"result\.word"):
+        event.watch_end({"host": {"rounds": 1}}, FACTS, T0, 2, 0)   # the module does not derive the word from the exit
+
+
+def test_redo_g1_a_pair_taken_for_one_act_is_one_alarm_in_the_file_and_x18_is_met(tmp_path, monkeypatch):
+    import test_host_follow_returns as tf
+    sys.path.insert(0, str(ROOT / "tools" / "rig"))
+    import check
+    monkeypatch.setattr(eventlog._platform, "node", lambda: HOST)
+    follow = tf.Follow(unread=0, then=[tf.CURL_BORN, tf.CURL_TALK], go=True)
+    w, _, _, _ = tf.against_without(tmp_path, monkeypatch, "both", tf.rounds(tmp_path, 3), follow,
+                                    tf.rounds(tmp_path / "w", 3))
+    pairs = host.told_twice(w.source_findings, w.sources)
+    assert len(pairs) == 1
+    place = {id(f): i for i, f in enumerate(w.source_findings, 1)}
+    (o_id, h), = pairs.items()
+    got = lines_of(w.events_path)
+    last = last_by_about(got)
+    folded, kept = last["source-finding:%d" % place[o_id]], last["source-finding:%d" % place[id(h)]]
+    assert folded["alarm"] is False and folded["evidence"]["same_as"] == kept["about"] and kept["alarm"] is True
+    act = [e for e in last.values() if e["kind"] == "source-finding" and e["alarm"]
+           and e["evidence"].get("source") in ("host", "os") and e["subject"].get("pid") == kept["subject"]["pid"]
+           and e["rule"]["id"] == kept["rule"]["id"] and e["summary"] == kept["summary"]]
+    assert act == [kept]   # one alarm for the act
+    x18 = [r for r in check.read_events("".join(event.line(e) + "\n" for e in got), w.final_text.splitlines(),
+                                        w.final_exit) if r[0].startswith("X18")]
+    assert x18[0][1] == check.MET, x18
+
+
+def test_redo_g9_a_knock_names_only_a_thing_said_in_the_file(runs):
+    lines = runs["B-unbuilt"]["lines"]
+    said = {e["about"] for e in lines if e["kind"] != "knock"}
+    knocks = [e for e in lines if e["kind"] == "knock"]
+    assert knocks and all(e["knocked"].get("for", "finding:1") in said | {"finding:1"} for e in knocks)
+    assert "finding:1" not in said and not any(e["knocked"].get("for") == "finding:1" for e in knocks)
