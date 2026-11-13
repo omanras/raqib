@@ -1,20 +1,21 @@
-# HANDOFF — M7.21a  (ADR-0007 Amendments BK, BL: the tracing reader alone)
+# HANDOFF — M7.21a REDO  (ADR-0007 Amendment BM: the tracing reader, every way out)
 
-Task: a module that reads, on Windows, the bytes each TCP connection sent and received from the kernel's tracing (ETW), by a real-time session of its own. The watch is not joined yet (M7.21b).
+Task: on claude/M7.21a, build what Amendment BM rules on the review docs/review/2026-11-13-M7.21a.md. The reader read real traffic in the field as built: its structures, calls and parsing stand - change none of them.
 
 Scope:
-  raqib/etwnet.py (new), tests/test_etwnet.py (new), tools/rig/etw_read.py (new), docs/review/2026-11-13-M7.21a-questions.md
+  raqib/etwnet.py, tests/test_etwnet.py, tools/rig/etw_read.py, docs/review/2026-11-13-M7.21a-redo-questions.md
 
 Exit criteria:
-- E1 `raqib/etwnet.py`: ctypes only, standard library only, importable on every system (nothing of Windows is loaded at import); the system's calls go through one object a test replaces, as raqib/hostwin.py's `Api(loader)` does. It imports nothing of raqib but what hostwin itself imports, no socket, no network.
-- E2 (BL-1) `Reader(pid)`: start() begins a real-time session named `raqib-net-<pid>` (no log file), enables Microsoft-Windows-Kernel-Network {7DD42A49-5329-4832-8DFD-43D979153A88} at level 4 with keywords 0x30, and consumes it on a thread of its own. Events 10 and 26 are bytes sent, 11 and 27 received; the event's data begins PID u32, size u32, then daddr, saddr (4 bytes each for 10 and 11, 16 each for 26 and 27), dport u16, sport u16 (ports in network order). saddr:sport is this host's side.
-- E3 (BL-5) `counts()` returns, at any time and from any thread, a copy: for each (pid, local addr, local port, remote addr, remote port) the bytes sent, received and the time of the last event; with `since` (the session's start), `unread` (events whose data is shorter than the shape or of another id of ours: counted, never guessed) and `lost`.
-- E4 (BL-4) `lost` is what the session says it lost (events and real-time buffers), asked of the system at each counts(); a test where the fake system reports a loss.
-- E5 (BL-2) stop() ends the consumer and stops the session, twice is harmless, and it runs on every way out (a context manager; a failed start leaves no session: a test for each step failing). `leftovers(alive)` lists sessions named `raqib-net-<n>` whose n is no live pid and stops them, returning their names; it never touches a session of another name (a test with other sessions present).
-- E6 (BL-3) A start refused by the system returns a reason in the module's own words (no rights, the limit of sessions, a name already there, another error with its number) and raises nothing; no elevation is asked, no other source of counts is used (no GetPerTcpConnectionEStats: a test reads the module's source for it).
-- E7 `tools/rig/etw_read.py SECONDS`: starts the reader, waits, prints one line per connection (pid, the four, sent, received) and a last line `since`, `unread`, `lost`, the leftovers stopped, or the refusal's reason; exit 0 read, 3 refused. On a system that is not Windows it says so and exits 3.
-- E8 Tests run on Linux by the fake system (records built from bytes as the kernel lays them, v4 and v6); positive and negative for each criterion. Gate green in the foreground; ASCII; documentation addresses only.
-Not in scope: raqib/host.py, raqib/hostwin.py, raqib/cli.py, the documents, .github/workflows/, tests/test_rhythm.py. The field check on a Windows runner is the Table's.
-If an exit criterion needs a file outside Scope: STOP and say which. What you do not know of the system's structures for certain, say in the questions file: the Table checks it in the field.
-Commit: `landed: M7.21a the tracing reader alone` or `STOP: M7.21a <reason>`.
+- E1 (the packet's R1) No test reads the real system: every test of the tool gives its live pids (or their failure) by injection; `test_e7_a_loss_not_known_and_live_pids_not_known_are_said` passes on Windows as on Linux for that reason. Say in the questions file which tests you checked for it.
+- E2 (BM-1) Reader.start(): anything raised after the session began (KeyboardInterrupt, SystemExit, any BaseException, at each step) stops the session and is raised again; tests for each step. A reader started and not stopped is stopped at the interpreter's exit (atexit; unregistered by stop(); a test calls the registered function, and one shows stop() then leaves nothing registered).
+- E3 (BM-2) start() for the process's own pid that is refused because the name is there (183): the session of that name is stopped, the start tried once more, and the reader says it (a `said` list in counts(), and the tool prints it). For a `pid` that is not this process's, 183 stays a refusal. Tests for both, and for the second start failing too.
+- E4 (BM-3) leftovers takes a callable for the live pids and calls it only after the sessions were listed (a test holds the order); the tool passes its snapshot that way.
+- E5 (BM-4) An event of ids 10, 11, 26, 27 whose version is not 0 is unread ("version N"), never parsed; tests.
+- E6 (BM-5) counts(): `events` (all events of the provider seen), `other_ids` {id: n} for ids that are not the four, `unread` only for the four not read (its reasons kept). The tool's last line gains `events=N other=N`, and it prints no `said: unread` line for other ids. Tests.
+- E7 (BM-6) Events of the tracing's own lost-event provider ({6A399AE0-4BC6-4DE9-870B-3657F8947E7E}) are counted in `lost` as `notices`; a test. If you are not certain of that GUID, say so in the questions file: the Table checks it.
+- E8 (BM-7) At most 65536 connections (a constant a test lowers); an event of a new connection beyond it is counted in `beyond`, existing connections still count; tests.
+- E9 The stop()'s failure branches the packet names have tests (the stop refused or raising, the close failing, the consumer not ended in time: each said, none raising). Gate green in the foreground; ASCII; documentation addresses only.
+Not in scope: the structures, constants and calls the field proved; raqib/host.py, raqib/hostwin.py, raqib/cli.py, the documents, .github/workflows/, tests/test_rhythm.py.
+If an exit criterion needs a file outside Scope: STOP and say which. Do not change a guard test to pass.
+Commit: `landed: M7.21a REDO the tracing reader, every way out` or `STOP: M7.21a REDO <reason>`.
 Read HANDOFF.md and do only the task it specifies.
