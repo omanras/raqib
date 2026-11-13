@@ -2776,6 +2776,15 @@ class Net:
                 if net.gate is not None:
                     assert net.gate.wait(RUN_S)
 
+            def sendall(self, data, *flags):
+                # Windows takes one send whole, however small the buffer: only the next one waits. So a
+                # write under `sndbuf` goes piece by piece, and blocks on both systems once nothing reads.
+                if not net.sndbuf:
+                    return socket.socket.sendall(self, data, *flags)
+                view = memoryview(data)
+                while view:
+                    view = view[socket.socket.send(self, view[:net.sndbuf], *flags):]
+
         self.socket, self.gate, self.sndbuf = Sock, gate, sndbuf
 
     def __getattr__(self, name):
