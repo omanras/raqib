@@ -606,6 +606,32 @@ is amended by T-2, T-1 restated by V-1).
   one, and says it again), so there one server named on some events and
   not on others is two destinations, and such a line and a line with the
   server's hash to one server are two destinations too.
+- **A process under a tree the watch holds is that tree's (ADR-0007
+  Amendment AY).** The inventory's anchor is that every process goes to
+  its nearest talking ancestor. It has one exception in the watch: a
+  process whose path from that ancestor down to it (itself included)
+  passes through the root of a tree the watch already holds as quiet or
+  kept - the same tree by its key, its root in the round's process
+  sample - is that tree's, and no ancestor's (the held root nearest it).
+  The watch decides it in one place, before any line of the round is
+  written or counted. The tree has the process in its own host record
+  (a HostChild line, judged there by the rules that judge a tree's
+  children), as an act beat of its ring, and a line of the round by the
+  road of a tree not in the round; it stays quiet, and no arrival is said
+  again. So an agent whose connection to its model is closed at the
+  sample no longer gives its commands to a talking ancestor (a CI
+  runner's worker that talks to its server all the time), whose cycles
+  they made: a false HOST-RHYTHM at high on the wrong tree, and the
+  agent's commands judged on it. An ancestor left with no act by this is
+  no candidate, as a talker with no child is not; while its root is in
+  the sample it is held quiet, though it talks. What is not covered: the
+  agent's acts with no talk seen make no cycle, so where no source sees a
+  connection that opens and closes between two samples (Linux) the agent
+  is still not found by rhythm - it is found as an arrival, and its
+  commands are judged on its own tree; a tree whose root is not in the
+  sample is gone and its orphans go to the nearest talking ancestor as
+  before; a round with no process sample decides nothing; a file write
+  carries no path in the inventory and stays the talking ancestor's.
 - **A beat is judged in the round that reads it (ADR-0007 Amendments AP
   to AS).** A tree that is not in the round - quiet at the sample, or
   kept by a round whose connections were not read, or gone from the
