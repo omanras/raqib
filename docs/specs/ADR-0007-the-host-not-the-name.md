@@ -2316,3 +2316,33 @@ and wrong about whose talks they were. Both an unnamed tree's arrival (NEW-AGENT
 - The ledger. A measure that passes is read to the line that made it pass before it is called a pass: the
   destination in a finding is evidence, and the Table had the hash in front of it twice.
 
+## Amendment AW (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.20.md: REDO, and AU-3 withdrawn
+The packet: STOP, on three things. The Table accepted the builder's Q3 (AU-7) on a description the watch does
+not follow; one connection that both sources see can be two talks in two rounds, so one turn can count two
+cycles, in a rule that is now high; and the field check was owed. The field check is Amendment AV: it showed
+that the case AU-3 was FOR (the sample sees the first turn, the os source the later ones) is not where the
+hole is - the later turns make no new connection at all.
+- AW-1 (AU-3 is withdrawn, and AU-7 with it). A host talk and an os talk stay two destinations, as before AU:
+  `server_of` and `one_server` are taken out, the ring is not renamed, the split-sources fixtures and their
+  scenario go. FOR: one turn is never two cycles because two sources saw its one connection (M1). The hole
+  says again that an os talk and a host talk to one server are two destinations. M2, M3, M4, S2 and S3 fall
+  with it. MUST NOT TOUCH: AU-1 and AU-2 (one server is one os destination, whatever Sysmon named).
+- AW-2 (section 5: what the key reveals, and where it is written). The key is written only where the caller
+  asks for it: the host watch's follow asks; `raqib os-sysmon` on its own and every other caller do not. So
+  the other rules' fixtures and the CROSS logs are byte for byte what main has, their generators untouched, and
+  the every-fixture test is main's again. Under the host watch nothing more is revealed than lies beside it:
+  the host's own record of the tree, in the same directory, holds each remote address in clear. THREAT_MODEL
+  says both things plainly: that the server hash has no salt and, the port being in clear on the line, an IPv4
+  address can be found by trying them all; and that the host's record already holds it. "A connection's line
+  holds hashes only" is corrected.
+- AW-3 (E2, M5, S1, section 6: the note). Said once per source object, as the note of a process line without
+  an image is, with its count; its words are true of both causes (a line written before the key, or one whose
+  address, port or protocol did not parse); it says an old line and a new one to one server are two
+  destinations.
+- AW-4 (tests). The self-comparison in tests/test_os_sysmon.py and the parameter that adds nothing are
+  replaced; a test through rounds holds AW-1's FOR case: one connection seen by the sample in one round and by
+  the os source in the round before is one cycle on each destination, never two on one.
+- AW-5 (the field check, the Table's). A scripted model that closes the connection after every turn makes the
+  two real agents open one for each turn: on Windows with Sysmon HOST-RHYTHM must then fire on the model
+  server's own hash. Not merged on a run where it does not.
+
