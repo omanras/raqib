@@ -2,6 +2,8 @@
 id: LANDED-NO-GATE
 title: A landed commit with no gate run on it or before it
 class: DRIFT
+attack: []
+attack_note: "a rule about the agent's own work or the watch's own sight, not a technique"
 # ADR-0002: a demand. The finding is the absence of evidence (an ok gate run);
 # knowing the rule helps the agent only by running the gate. A demand lists
 # no evasion; its known holes are listed here (rulings G-5, G-6).

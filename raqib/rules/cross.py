@@ -91,6 +91,7 @@ from raqib.rules.trace import is_record, parse_ts, source_of
 
 RULE_ID = "CROSS-SOURCE"
 RULE_KINDS = {RULE_ID: "anchor"}  # ADR-0002: rule id -> kind; read by the gate (C-1)
+ATTACK = {RULE_ID: ("T1562",)}   # ADR-0011 B-5 (M10.1): what its finding is consistent with: impaired defenses
 CLASS = "CROSS"
 SEVERITY = "high"
 TITLE = ("a shell call with no os process of its programs within 10 s, or an os process below the agent's"

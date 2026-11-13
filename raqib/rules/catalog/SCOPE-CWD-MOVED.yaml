@@ -2,6 +2,8 @@
 id: SCOPE-CWD-MOVED
 title: The working directory of a session changes
 class: SCOPE
+attack: []
+attack_note: "a rule about the agent's own work or the watch's own sight, not a technique"
 # ADR-0002: measured against the cwd as the hook captured it.
 kind: anchor
 severity: medium

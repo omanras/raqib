@@ -45,21 +45,25 @@ LINE_TEXT_MAX = 240
 
 
 def rule_table(rules):
-    """[{id, class, kind, severity, fp_budget, status, title}] for the silence
+    """[{id, class, kind, severity, fp_budget, status, title, attack}] for the silence
     rules (Python, no declared budget yet; kind from silence.RULE_KINDS, None
     if it declares none), the cross-source rule (Python, class CROSS, its
     budget and kind from raqib/rules/cross.py), the two tree anchors (Python,
     class DRIFT, their budgets and kinds from raqib/rules/tree.py, M4.3 J-1)
-    and the catalog rules."""
+    and the catalog rules. attack (M10.1, ADR-0011 B-5): the ATT&CK ids each
+    declares, a list (empty: none; a user's own rule without the key: empty)."""
     table = [{"id": rid, "class": "SILENCE", "kind": silence.RULE_KINDS.get(rid), "severity": "high",
-              "fp_budget": None, "status": "active", "title": title} for rid, title in SILENCE_RULES]
+              "fp_budget": None, "status": "active", "title": title,
+              "attack": list(silence.ATTACK.get(rid, ()))} for rid, title in SILENCE_RULES]
     table += [{"id": rid, "class": cross.CLASS, "kind": cross.RULE_KINDS.get(rid), "severity": cross.SEVERITY,
-               "fp_budget": cross.FP_BUDGET, "status": cross.STATUS, "title": title} for rid, title in CROSS_RULES]
+               "fp_budget": cross.FP_BUDGET, "status": cross.STATUS, "title": title,
+               "attack": list(cross.ATTACK.get(rid, ()))} for rid, title in CROSS_RULES]
     table += [{"id": rid, "class": tree.CLASS, "kind": tree.RULE_KINDS.get(rid), "severity": tree.SEVERITY,
-               "fp_budget": tree.FP_BUDGET.get(rid), "status": tree.STATUS.get(rid), "title": title}
+               "fp_budget": tree.FP_BUDGET.get(rid), "status": tree.STATUS.get(rid), "title": title,
+               "attack": list(tree.ATTACK.get(rid, ()))}
               for rid, title in TREE_RULES]
     table += [{"id": r.id, "class": r.cls, "kind": r.kind, "severity": r.severity, "fp_budget": r.fp_budget,
-               "status": r.status, "title": r.title} for r in rules]
+               "status": r.status, "title": r.title, "attack": list(getattr(r, "attack", ()))} for r in rules]
     return table
 
 

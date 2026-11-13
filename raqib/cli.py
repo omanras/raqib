@@ -922,6 +922,11 @@ def cmd_check_rules(args, out):
         raise UsageError("no rule fixtures in %s: check-rules measures each rule on the fixtures of a Raqib"
                          " checkout, which an installed raqib does not carry; pass --fixtures-root CHECKOUT"
                          % os.path.join(root, "tests", "fixtures"))
+    # M10.1 (ADR-0011 B-5): a catalog rule declares its ATT&CK ids (attack:), or attack: [] and attack_note: why
+    undeclared = ["%s (%s)" % (r.id, r.source) for r in rules if "attack" not in r.doc]
+    if undeclared:
+        raise UsageError("a catalog rule must declare attack: (its ATT&CK technique ids), or attack: [] with"
+                         " attack_note: saying why (ADR-0011 B-5); none in: %s" % ", ".join(undeclared))
     try:
         reports = fixtures.check_catalog(rules, root, benign_default(root))
         # M5.3 ruling D-11: the cross-source code rule is measured on its fixtures too.

@@ -2,6 +2,7 @@
 id: DESTRUCT-CMD
 title: Destructive shell command
 class: DESTRUCT
+attack: [T1485]
 # ADR-0002: the shape of a bad act (a program name), so it lists its evasions.
 kind: signature
 evasion:

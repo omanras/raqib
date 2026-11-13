@@ -3,6 +3,8 @@ id: AGENT-DARK-LIVE
 title: An agent footprint has no live tree for three rounds
 # M7.2 REDO C-13: class HOST (engine.CLASSES), the rules of raqib watch --host.
 class: HOST
+attack: []
+attack_note: "a rule about the agent's own work or the watch's own sight, not a technique"
 # ADR-0002: measured against the host's own record: the footprint listing
 # and the process tree of each round (raqib/discover.py, AGENT-DARK).
 kind: anchor

@@ -3,6 +3,7 @@ id: HOST-RHYTHM
 title: A tree talks to one destination and then starts a child, again and again
 # HOST: the rules of raqib watch --host (engine.CLASSES), over rounds.jsonl's HostTree lines.
 class: HOST
+attack: [T1059, T1071]
 # ADR-0002: measured against the host's own record of each round (the
 # process tree and its children's start times, the TCP table and, on
 # Linux, the sockets' byte counts), which the agent does not write.
