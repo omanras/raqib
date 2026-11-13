@@ -313,7 +313,9 @@ class Script:
 
 
 # ADR-0007 AW-2: and server_hash (the host watch asks its os follow for the server's own hash on net lines)
-KW = ["after_record", "err", "every", "helpers", "on_pass", "out", "restart", "server_hash", "since", "tree"]
+# ADR-0007 BC-2 (M7.24): and mark_under (the roots of the other trees under its root whose follow lives)
+KW = ["after_record", "err", "every", "helpers", "mark_under", "on_pass", "out", "restart", "server_hash", "since",
+      "tree"]
 
 
 def settled_follows(monkeypatch, truncate=None):
