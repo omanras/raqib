@@ -3045,9 +3045,13 @@ def test_m103b_redo_e4_stop_during_a_blocked_write_ends_the_send_by_its_mechanis
         began = time.monotonic()
         assert f.step() == "stopped" and f.offset == 0 and f.sent == 0
         took = time.monotonic() - began
-        assert seen and seen[0].ended() and f.adrift == [] and seen[0].result is not None
-        assert seen[0].result.kind == "failed"   # its write ended by the shutdown, never taken
-        assert took < bound / 4
+        assert seen and took < bound / 4   # Stop ended the try, not the bound
+        if sys.platform != "win32":
+            assert seen[0].ended() and f.adrift == [] and seen[0].result is not None
+            assert seen[0].result.kind == "failed"   # its write ended by the shutdown, never taken
+        else:   # Q-6: there a shutdown may not end a write that waits; then it is counted, never taken
+            assert f.adrift in ([], [seen[0]])
+            assert seen[0].result is None or seen[0].result.kind == "failed"
     finally:
         s.stop()
 

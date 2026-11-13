@@ -849,6 +849,11 @@ and built the two that are small; what cannot be closed is said.
 - Q-5 (the builder's questions). Q1 as built (an older state takes the start's facility and framing, once).
   Q3 as Q-1 rules, now with its test. Q4: no new error word; over syslog `tls` also says an alert or an end
   with no close. The words of a carried failure over syslog speak of no answer.
+- Q-6 (Stop during a write that waits, on Windows). CI showed it: there the shutdown of an abandoned send's
+  socket does not end a write that waits for room; its thread ends at its own bound. Stop is not held (the
+  try ended at once), nothing is taken, the send is counted with the abandoned ones (M-5: `stuck` at four),
+  and the thread dies with the process. The test says so for Windows and holds the shutdown's effect
+  elsewhere. FORWARD.md says it.
 Recorded, not built: the header's fallback counts nothing (a defect there would dull every header unseen);
 a collector that never ends its side at the half-close makes every batch late, said failing; what real
 collectors do at the end of a connection is not checked on the rig (rsyslog and syslog-ng: a later task).

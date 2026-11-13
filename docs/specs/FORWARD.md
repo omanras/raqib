@@ -171,7 +171,9 @@ not step:
 
 A send abandoned (Stop, or a bound passed) has its sockets shut down - which ends a blocked connect, send or
 read - and left to its own thread, which alone closes them: no descriptor is closed under a thread that may
-still use it, and each socket call has its own timeout besides. Name resolution is the system's (getaddrinfo)
+still use it, and each socket call has its own timeout besides. On Windows the shutdown does not end a write
+that waits for room (a collector that reads nothing): that send ends at its own timeout, counted with the
+abandoned ones until then; Stop is not held by it and nothing of it is taken (Q-6). Name resolution is the system's (getaddrinfo)
 and cannot be bounded from Python: where the system's resolver does not return, the try is abandoned at 10 s
 while the resolver's own thread waits for it, holding that send's body (at most 512 KiB) and headers. At most
 four sends abandoned and not yet ended are out (M-5): while four are, no send starts and the forwarder is
