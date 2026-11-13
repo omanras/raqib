@@ -2531,3 +2531,38 @@ members stay in the tree, as built. Q3: the sample decides "under this tree's ro
 follow's own parents decide which events; where the sample cannot tell, the root is not told, as built. Q6:
 the clause stays, with BC-5's.
 
+## Amendment BE (the Table, 2026-11-13) - a reused pid is not a parent: the watch that saw nothing
+The field, 2026-11-13, the real-agents probe on Windows with Sysmon (run 43376636008, the code of main): a
+watch read 1645 Sysmon events in 30 rounds while a real agent ran seven commands under it, and saw no tree at
+all - not the agent, not the machine's own services that every other watch lists from its first round. It
+ended NONE-SEEN, exit 0. The same code saw everything on the same machine two minutes later and in every
+other run. The watch's own pid in that run was 732.
+The cause, read in the code (raqib/discover.py, `_acts_core`): the watch leaves out its own tree - its pid, its
+launchers, and every process under them by the sample's parent pids. Windows keeps a dead parent's pid in its
+children for as long as they live. The system's first processes are such orphans, and the whole machine hangs
+under them. A watch that is given the pid their dead parent had becomes, by pid alone, the parent of
+everything, and leaves everything out. Nothing said so: a silence that looked like an empty host (rule 4).
+- BE-1 (a parent link carries a date). A process is the child of the process that holds its parent pid only
+  where that process did not start after it. Where it did, the pid was reused: the link is broken, and the
+  child has no parent in the round, as one whose parent is not in the sample. Both starts read from one
+  source: any later start breaks it. Read from two (the sample and the channel's event 1): only a
+  difference above GUID_SAME_SECONDS does. A link whose two starts are not both read stays, as before
+  (BE-3 counts it). FOR: every walk of parents - the watch's own tree and line, a child's nearest talking
+  ancestor, an act's path, the act roots. MUST NOT TOUCH: any inventory of a host where no pid is reused (every
+  existing fixture gives, byte for byte, what it gave); Linux, where the kernel gives every orphan a living
+  parent (the rule breaks nothing there, tested on the Linux fixtures).
+- BE-2 (the watch's own tree is proven, never assumed). Beyond BE-1: a process is under the watch only by
+  links whose two starts were both read. One whose start, or whose parent's start, was not read is not the
+  watch's and is judged as any other. FOR: the run above. MUST NOT TOUCH: the watch's real children (the
+  helpers it starts: their starts are read, they stay out of every tree).
+- BE-3 (said, in the inventory's holes). The links BE-1 broke, counted, with the pids (the reader named where
+  the younger process is the reader itself or its launcher); and the links kept with a start unread, counted.
+  The hole "reparented acts" says what is now true.
+- BE-4 (the measure). The field shape as records: a Windows sample in which the reader's pid is the parent
+  pid of an old chain under which a talker with a child lives. Before: no candidate (shown on main's code).
+  After: the talker is a candidate, and the reader's own child is still nobody's act.
+The Table's part: the hole "on Windows a dead parent's pid can be reused" stood in the inventory since the
+first reader, written about a child's attribution; nobody asked what it does to the watch's own tree. Found
+only because a twin of a field run was read to its last line instead of being taken as the twin it was run
+for.
+

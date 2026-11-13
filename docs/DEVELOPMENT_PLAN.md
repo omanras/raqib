@@ -96,6 +96,7 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.23 recorded: the server's hash salted with a secret of the running watch (ADR-0007 AX-1)
 - M7.24 an os follow does not hold what is under another tree's root (ADR-0007 AZ-5, Amendment BB): the ancestor's rhythm and source findings read a nested tree's commands from its own os file - AX-4's case on Windows
 - M7.25 recorded (ADR-0007 BA-2): a source of process and connection events on Linux, so that what happens between two samples is seen (an agent no sample saw talking; a connection for each turn)
+- M7.26 in build: a reused pid is not a parent (ADR-0007 Amendment BE): on Windows a watch given the pid of a dead parent of the system's first processes took the whole machine for its own tree and saw nothing, NONE-SEEN (the field, 2026-11-13); a parent link holds only where the parent did not start after the child
 - M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (landed 2026-11-11; ADR-0009 Amendments E-H, decisions 4-5 accepted): `raqib rules --new / --remove`, the form with its Test and "on your records", class USER, Remove by the row's own place, checks first
 - M8.3 the window's notes after M8.2 (ADR-0009 H): a log of what the catch-alls caught, the orphan overlay entry's words, a real watch under the form's "running" test, a way for the person to name a program benign
