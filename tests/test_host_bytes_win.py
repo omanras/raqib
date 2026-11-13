@@ -5,6 +5,7 @@ import copy
 import io
 import os
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -175,11 +176,18 @@ def test_e2_leftovers_first_then_one_start_and_the_normal_end_stops_it(home):
 
 @pytest.mark.parametrize("way", ["stop", "crash", "interrupt"])
 def test_e2_every_way_out_of_a_watch_stops_the_reader(home, monkeypatch, way):
-    log = []
+    log, started = [], threading.Event()
+
+    class Started(FakeTracing):
+        def start(self):
+            got = FakeTracing.start(self)
+            started.set()
+            return got
+
     monkeypatch.setattr(host, "_sleep", lambda s: None)
     running = host.start(CATALOG, RULES, every=10, no_open=True, no_notify=True, port=0, out=io.StringIO(),
                          err=io.StringIO(), environ={}, home=str(home), reader=live(win_rounds(3) * 50),
-                         platform="win32", sysmon=NO_SYSMON, tracing=lambda: FakeTracing(log, [counts()]))
+                         platform="win32", sysmon=NO_SYSMON, tracing=lambda: Started(log, [counts()]))
     stop = None
     if way == "stop":
         stop = watch.Stop()
@@ -192,6 +200,7 @@ def test_e2_every_way_out_of_a_watch_stops_the_reader(home, monkeypatch, way):
         def tick(*a, **k):
             ticks.append(1)
             if len(ticks) > 1:
+                assert started.wait(60)   # the interrupt comes once the first round's reader was started
                 raise KeyboardInterrupt
             return real(*a, **k)
         monkeypatch.setattr(running.watcher, "tick", tick)
@@ -291,13 +300,63 @@ def test_e4_without_a_loss_round_three_would_have_been_a_bytes_talk(home):
 # --- E5 (BO-5): a session that hears nothing -------------------------------------------------------------------
 
 def test_e5_no_event_since_the_start_while_the_tables_connections_moved_is_the_readers_hole(home):
-    invs = win_rounds(2)
-    invs[1]["candidates"][0]["talks"].append(dict(invs[1]["candidates"][0]["talks"][0], remote="198.51.100.9:443"))
+    invs = win_rounds(3)
+    for inv in invs[1:]:
+        inv["candidates"][0]["talks"].append(dict(inv["candidates"][0]["talks"][0],
+                                                  remote="198.51.100.%d:443" % (9 + invs.index(inv))))
     w, clock, log = make(home, invs, [counts(events=0)])
     run(w, clock, 2)
+    assert bytes_blind(w) == []   # BP-4: not in the session's first two rounds (what the kernel says comes late)
+    run(w, clock, 1)
     cb = w.last_inventory["conn_bytes"]
-    assert cb["by"] is None and "heard no event at all since its start" in cb["hole"] and "1 new, 0 closed" in cb["hole"]
-    assert bytes_blind(w)[0]["rounds"] == [2]
+    assert cb["by"] is None and "heard no event at all since its start" in cb["hole"] and "1 new, 1 closed" in cb["hole"]
+    assert bytes_blind(w)[0]["rounds"] == [3] and cb["causes"] == ["deaf"]
+
+
+def test_bp1_byte_events_the_reader_could_not_read_make_the_round_a_hole_not_a_zero(home):
+    c = (PID, "192.0.2.10", 443)
+    script = [counts([c + (100, 500)]), dict(counts([c + (100, 500)]), unread=2), dict(counts([c + (100, 500)]), unread=2)]
+    w, clock, log = make(home, win_rounds(3), script)
+    run(w, clock, 2)
+    cb = w.last_inventory["conn_bytes"]
+    assert cb["by"] is None and "2 tcp byte event(s) the reader could not read since the round before" in cb["hole"]
+    run(w, clock, 1)   # no more of them: the round is read again
+    assert w.last_inventory["conn_bytes"]["hole"] is None and bytes_blind(w)[0]["rounds"] == [2]
+
+
+def test_bp3_each_kind_of_cause_is_said_once_though_the_blind_spot_keeps_its_first_words(home):
+    c = (PID, "192.0.2.10", 443)
+    script = [counts([c + (1, 1)]), counts([c + (2, 2)], lost=(3, 0, 0)), counts([c + (3, 3)], lost=(3, 0, 0), beyond=4),
+              counts([c + (4, 4)], lost=(9, 0, 0), beyond=4), counts([c + (5, 5)], lost=(9, 0, 0), beyond=4)]
+    w, clock, log = make(home, win_rounds(5), script)
+    run(w, clock, 5)
+    (b,) = bytes_blind(w)
+    assert b["rounds"] == [2, 3, 4] and "event(s) lost by the session" in b["detail"] and "beyond" not in b["detail"]
+    said = [n for n in w.notes if n.startswith("the tracing, round ")]
+    assert len(said) == 2 and said[0].startswith("the tracing, round 2: ") and "lost by the session" in said[0]
+    assert said[1].startswith("the tracing, round 3: ") and "beyond the reader's cap" in said[1]
+
+
+def test_bp5_a_reader_that_raises_at_its_start_is_a_refusal_with_its_reason_never_a_failed_round(home):
+    class Raising(FakeTracing):
+        def start(self):
+            raise OSError("no such thing")
+    log = []
+    w, clock, _ = make(home, win_rounds(2))
+    w.tracing_factory = lambda: Raising(log)
+    run(w, clock, 2)
+    (b,) = bytes_blind(w)
+    assert b["detail"].startswith(host.WIN_BYTES_HOLE + "; ") and "failed while starting (OSError: no such thing)" in \
+        b["detail"] and b["rounds"] == [1, 2]
+    assert not [h for h in w.holes if "reader" in str(h.get("kind", ""))]
+
+
+def test_bp2_an_ipv4_remote_said_in_ipv6s_form_is_summed_under_its_ipv4_spelling():
+    got = etwnet.sums({(7, "2001:db8::10", 1, "::ffff:198.51.100.7", 443): {"sent": 5, "received": 6, "last": ""},
+                       (7, "192.0.2.10", 2, "198.51.100.7", 443): {"sent": 1, "received": 2, "last": ""},
+                       (7, "2001:db8::10", 3, "2001:db8::7", 443): {"sent": 9, "received": 9, "last": ""}})
+    assert got == {(7, "198.51.100.7:443"): {"sent": 6, "received": 8, "sockets": 2},
+                   (7, "2001:db8::7:443"): {"sent": 9, "received": 9, "sockets": 1}}
 
 
 def test_e5_a_quiet_machine_with_no_connection_change_says_nothing(home):

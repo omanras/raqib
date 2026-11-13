@@ -568,28 +568,37 @@ def tracing_bytes(state, counts, inv):
     label = TRACING_FROM % (counts.get("session"), counts.get("since"))
     lost = counts.get("lost") or {}
     now = {"events": lost.get("events"), "buffers": lost.get("buffers"), "notices": lost.get("notices"),
-           "beyond": counts.get("beyond")}
-    base = state.get("base") or {"events": 0, "buffers": 0, "notices": 0, "beyond": 0}
-    why = []
+           "beyond": counts.get("beyond"), "unread": counts.get("unread")}
+    base = state.get("base") or {"events": 0, "buffers": 0, "notices": 0, "beyond": 0, "unread": 0}
+    why, causes = [], []   # causes: the kinds of this round's hole (BP-3: each kind is said once a run)
+    state["rounds"] = state.get("rounds", 0) + 1
     if counts.get("ended"):
         why.append("the tracing's %s" % counts["ended"])
+        causes.append("ended")
     if now["events"] is None or now["buffers"] is None:
         why.append("what the tracing session lost is not known (%s)" % lost.get("why"))
+        causes.append("unknown")
     for k, word in (("events", "event(s) lost by the session"), ("buffers", "real-time buffer(s) lost by the session"),
                     ("notices", "lost-event notice(s) of the tracing"),
-                    ("beyond", "event(s) of connections beyond the reader's cap of %d" % etwnet.CONNECTIONS_MAX)):
+                    ("beyond", "event(s) of connections beyond the reader's cap of %d" % etwnet.CONNECTIONS_MAX),
+                    # BP-1: bytes the reader could not read may be any connection's: its zero is then no zero
+                    ("unread", "tcp byte event(s) the reader could not read")):
         if now[k] is not None and base.get(k) is not None and now[k] > base[k]:
             why.append("%d %s since the round before" % (now[k] - base[k], word))
+            causes.append(k)
     state["base"] = {k: now[k] if now[k] is not None else base.get(k) for k in now}
     talks = {"%s %s" % (t.get("pid"), talk["remote"]) for group in ("candidates", "act_roots")
              for t in inv.get(group) or () for talk in t.get("talks") or () if talk.get("remote")}
     before, state["talks"] = state.get("talks"), talks
-    if not why and not counts.get("events") and before is not None and talks != before:
+    # BP-4: not before the third round of the session: what the kernel says comes about a second late
+    if not why and not counts.get("events") and before is not None and talks != before and state["rounds"] >= 3:
+        causes.append("deaf")
         why.append("the tracing heard no event at all since its start (%s) while the trees' connections moved in the"
                    " table (%d new, %d closed): the session hears nothing, not zero bytes" % (
                        counts.get("since"), len(talks - before), len(before - talks)))
     if why:
-        return {"from": label, "hole": "the bytes of this round are not read: %s" % "; ".join(why), "by": None}
+        return {"from": label, "hole": "the bytes of this round are not read: %s" % "; ".join(why), "by": None,
+                "causes": causes}
     summed = {"%s %s" % k: v for k, v in etwnet.sums(counts.get("connections")).items()}
     by = {}
     for key in sorted(talks):
@@ -2271,7 +2280,11 @@ class HostWatch:
             st["said"].append(TRACING_LEFTOVER % name)
         st["said"] += ["the tracing's leftovers (not a failure): %s" % p for p in problems]
         self.tracing = reader
-        return reader.start()
+        try:
+            return reader.start()
+        except Exception as exc:   # BP-5: a reader that raises is a refusal with its reason, never a failed round
+            return "the bytes are not read: the tracing reader failed while starting (%s: %s)" % (
+                type(exc).__name__, exc)
 
     def tracing_stop(self):
         """M7.21b (BO-2): stop the tracing reader; every way out of the watch
@@ -2921,7 +2934,10 @@ class HostWatch:
         elif st["refused"]:
             self._blind(now, "bytes", "%s; %s" % (WIN_BYTES_HOLE, st["refused"]), n)
         elif not isinstance(cb, dict) or cb.get("hole"):
-            self._blind(now, "bytes", "bytes: %s" % ((cb or {}).get("hole") or "no tracing counts"), n)
+            hole = (cb or {}).get("hole") or "no tracing counts"
+            self._blind(now, "bytes", "bytes: %s" % hole, n)
+            for cause in (cb or {}).get("causes") or ():   # BP-3: the blind spot keeps its first words; each kind
+                self._note_once(("tracing-hole", cause), "the tracing, round %s: %s" % (n, hole))   # is said once
             for state in self.conn_state.values():
                 state["bytes"].clear()
             for src in self.sources.values():
