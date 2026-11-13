@@ -111,7 +111,7 @@ jobs:
           $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
           "RIG_URL=http://${ip}:8790/v1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RIG_MODEL=$env:GITHUB_WORKSPACE\tools\rig\model.py" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - name: the watch, many times (ADR-0007 BE-4: a watch given a reused pid must still see the machine)
+      - name: the watch, many times (ADR-0007 BE-4, a watch given a reused pid must still see the machine)
         shell: pwsh
         continue-on-error: true
         run: |
