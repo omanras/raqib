@@ -79,43 +79,55 @@ jobs:
           echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-opencode.out
 
   etw:
-    name: what the kernel's tracing gives (M7.21, ADR-0007 BK)
+    name: the tracing reader in the field (M7.21a, ADR-0007 BL)
     runs-on: windows-latest
     timeout-minutes: 10
+    env:
+      PYTHONUTF8: "1"
     steps:
-      - name: who runs, and the sessions already there
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the structures' sizes as this system's ctypes lays them
         shell: pwsh
         run: |
-          whoami /groups | Select-String "Administrators|Performance Log|Mandatory Label"
-          logman query -ets
-      - name: the provider's manifest (events and their fields)
+          python -c "import ctypes; from raqib import etwnet as e; print({n: ctypes.sizeof(getattr(e, n)) for n in dir(e) if isinstance(getattr(e, n), type) and issubclass(getattr(e, n), ctypes.Structure) and getattr(e, n) is not ctypes.Structure})"
+          python -m pytest tests/test_etwnet.py -q -p no:cacheprovider
+      - name: the reader over real traffic (remote and loopback)
         shell: pwsh
         run: |
-          wevtutil gp Microsoft-Windows-Kernel-Network /ge:true /gm:true | Out-File -Encoding utf8 manifest.txt
-          Get-Content manifest.txt | Select-Object -First 400
-      - name: a session of our own, one fetch, what the events hold
+          $srv = Start-Process python -ArgumentList "-m","http.server","8765","--bind","127.0.0.1" -PassThru -WindowStyle Hidden
+          $job = Start-Process python -ArgumentList "tools/rig/etw_read.py","14" -PassThru -NoNewWindow -RedirectStandardOutput read.txt -RedirectStandardError read.err
+          Start-Sleep -Seconds 4
+          logman query -ets | Select-String "raqib"
+          curl.exe -s -o NUL -w "remote https: sent %{size_request} got %{size_download} from %{local_ip}:%{local_port} to %{remote_ip}:%{remote_port}\n" https://example.com/
+          curl.exe -s -o NUL -w "remote http: sent %{size_request} got %{size_download} from %{local_ip}:%{local_port} to %{remote_ip}:%{remote_port}\n" http://example.com/
+          curl.exe -s -o NUL -w "loopback: sent %{size_request} got %{size_download} from %{local_ip}:%{local_port} to %{remote_ip}:%{remote_port}\n" http://127.0.0.1:8765/
+          "utc now: " + [DateTime]::UtcNow.ToString("o")
+          $job.WaitForExit()
+          "exit: " + $job.ExitCode
+          Get-Content read.txt
+          Get-Content read.err
+          Stop-Process -Id $srv.Id -Force
+          "sessions of ours after the end:"
+          logman query -ets | Select-String "raqib"
+      - name: a reader killed, and the next start finds its leftover
         shell: pwsh
         run: |
-          logman start raqib-probe -p Microsoft-Windows-Kernel-Network 0x30 0x4 -o probe.etl -ets
-          logman query raqib-probe -ets
-          curl.exe -s -o NUL https://example.com/
-          curl.exe -s -o NUL http://example.com/
+          $job = Start-Process python -ArgumentList "tools/rig/etw_read.py","60" -PassThru -NoNewWindow -RedirectStandardOutput k.txt -RedirectStandardError k.err
+          Start-Sleep -Seconds 5
+          Stop-Process -Id $job.Id -Force
           Start-Sleep -Seconds 2
-          logman stop raqib-probe -ets
-          tracerpt probe.etl -o probe.xml -of XML -y | Select-Object -Last 6
-          [xml]$x = Get-Content probe.xml
-          $ev = $x.Events.Event
-          "events: " + $ev.Count
-          $ev | Group-Object { $_.System.EventID.'#text' ?? $_.System.EventID } | Sort-Object Name | ForEach-Object { "id " + $_.Name + ": " + $_.Count }
-          foreach ($id in "10","11","12","13","15","26","27") {
-            $one = $ev | Where-Object { ($_.System.EventID.'#text' ?? $_.System.EventID) -eq $id } | Select-Object -First 2
-            foreach ($e in $one) { "--- id $id"; $e.System.OuterXml; $e.EventData.OuterXml }
-          }
-      - name: a session started with no rights to it (what a plain user is told)
-        shell: pwsh
-        run: |
-          logman query providers Microsoft-Windows-Kernel-Network
-          logman query providers Microsoft-Windows-TCPIP | Select-Object -First 30
+          "after the kill:"
+          logman query -ets | Select-String "raqib"
+          python tools/rig/etw_read.py 2
+          "exit: $LASTEXITCODE"
+          "after the next run:"
+          logman query -ets | Select-String "raqib"
   windows:
     name: agents (windows, Sysmon)
     runs-on: windows-latest
