@@ -1132,7 +1132,7 @@ def test_m718_e1_the_level_is_high_and_the_match_thresholds_budget_and_streak_ar
     assert "a high finding, not a verdict" in ide and "still owed" in ide and "medium" not in ide
     assert len(RULE.holes) == 16
     text = (ROOT / "raqib" / "rules" / "catalog" / "HOST-RHYTHM.yaml").read_text(encoding="ascii")
-    assert "7 of 8 agent trees" in text and "none of the\n# runners' own; three short turns: none" in text   # AT-1, AT-7
+    assert "on Linux 2 of 2 agent trees fired" in text and "Windows 0 of 2" in text   # AT-1 as AV corrects it
 
 
 def test_m718_e2_check_rules_gives_the_same_counts():

@@ -2271,3 +2271,34 @@ others. A second split stands beside it and was stated long ago (M7.5 E2): a tal
 - AU-5 (the field check is the Table's). The two real agents are run again on the built code; the task is not
   merged on a run in which an agent that made seven turns to one server is not found.
 
+## Amendment AV (the Table, 2026-11-13) - what the real agents showed, corrected
+AT and AT-7 stated numbers the Table measured wrongly, and they are in the tree: this amendment corrects them.
+The scripted model gave the two agents, in each turn, a curl to one site. On Windows the cycles that fired were
+those: the curl's connection (a process of the tree talks to one server), then the next turn's shell (a child
+within W). The proof is the destination itself: the hash named in the findings is the hash of the site's
+address and port, not of the model server's. The agents' own talk to the model was one connection, opened once
+and kept: on Windows, where no byte counts are read, that is one talk.
+The measure again, with commands that talk to no one (seven turns, five longer than a round):
+- Linux: both agents fired, at high, on the model server (its connection's byte counts moved in each turn).
+- Windows with Sysmon: neither fired. One cycle at most on the model server (the connection's first round).
+So, as built: on Linux HOST-RHYTHM sees an unnamed agent's own cycle. On Windows it sees it only for an agent
+that opens a new connection for each turn (many small home-made agents do; the two public ones tested do not),
+or whose commands themselves talk to one server again and again. That is the rule's stated hole ("repeated
+talks on one long connection are unseen without bytes"), and the Table had read it as a corner; on Windows it
+is the main case. AT-7's reading of the miss was right that one server was split in two (Sysmon's host name),
+and wrong about whose talks they were. Both an unnamed tree's arrival (NEW-AGENT-UNKNOWN) and its commands
+(NET-TOOL, DESTRUCT-CMD) were found in every run, on both systems.
+- AV-1 (the numbers). HOST-RHYTHM.yaml's comment says the corrected measure (done with this amendment). AT-1
+  stands: the level is right where the rule sees.
+- AV-2 (the hole is the next thing to close on Windows, and how is the commander's). A connection's byte
+  counts on Windows can be read two ways, both needing an administrator: (a) the kernel's own tracing of the
+  network (ETW), which only listens; (b) GetPerTcpConnectionEStats, which first switches on the system's own
+  counting for a connection. (b) is a small reader and (a) a larger one that ADR-0011's service needs anyway
+  for file reads. Whether (b) is "touching the watched" (A4) is his to say: it changes what the system counts
+  about a connection, not the process and not its traffic. Until his word the Table plans (a), M7.21, and the
+  rule's blind spot on Windows is said at the start of every watch, as it is now.
+- AV-3 (the rig's real agents, M11.2). The scripted commands talk to no one. Expected and stated: on Linux,
+  HOST-RHYTHM on the agent's tree, on the model server; on Windows, OPEN until M7.21.
+- The ledger. A measure that passes is read to the line that made it pass before it is called a pass: the
+  destination in a finding is evidence, and the Table had the hash in front of it twice.
+
