@@ -1,4 +1,4 @@
-"""raqib forward: the events leave the host (ADR-0011 Amendments J, K, L and M; docs/specs/FORWARD.md).
+"""raqib forward: the events leave the host (ADR-0011 Amendments J to N; docs/specs/FORWARD.md).
 
 A process of its own (J-1). It reads one events file - the watch's ~/.raqib/host/events.jsonl, as
 docs/specs/EVENT.md "For a reader of the file" says a reader may - and sends every whole line to one HTTP
@@ -6,19 +6,33 @@ collector, at least once (J-3). The file is the buffer: it is opened for reading
 locked; the forwarder keeps nothing of it but the lines in flight. Its cursor is a byte offset at the end of
 the last whole line it passed, kept with the sha256 of that line (J-5).
 
-The cursor and the lines in question (L-1, M-1, M-2). What a run holds, and what a try does with it:
+The cursor and the lines in question (L-1, M-1, M-2, N-3, N-5). What a run holds, and what a try does with it:
 
+- the head (`head`, in the state): the sha256 of the file's first bytes, at most HEAD_MAX, and how many (N-3).
 - the cursor (`offset`, with `line_sha`): on the disk, in the state, and the only thing a restart has (a
   restart asks again from the cursor). Every line before it is passed: taken (a 2xx answer, in the hec shape
   with the code 0: `acknowledged`), not sent (not an event: skipped; longer than one request may be: refused
-  locally), or refused alone twice with a take of a later line between the two refusals (M-2).
-- the reach (`reach`, in memory only): how far this run has asked lines alone. Between the cursor and the reach
-  lie only lines in question and lines that are not sent; the line at the cursor is then the first in question.
-  With nothing in question, the reach is the cursor.
-- the count in question (`question`, in memory only): the event lines between the cursor and the reach that
-  were refused alone in this run and wait. They are not kept one by one: a reach and a count.
+  locally), or refused alone twice with a take of a later line between the two refusals (M-2). `sent` counts
+  a taken line when the cursor passes it (N-5).
+- the reach (`reach`, in memory only, kept with `reach_sha`, the sha256 of the line that ends at it): how far
+  this run has asked lines alone. Between the cursor and the reach lie only lines in question and lines that
+  are not sent; the line at the cursor is then the first in question. With nothing in question, the reach is
+  the cursor.
+- the count in question (`question`, in memory only; the state says it, with since when, as `in_question`):
+  the event lines between the cursor and the reach that were refused alone in this run and wait. They are not
+  kept one by one: a reach and a count.
 - the proof (`proof`, in memory only): where a send taken after the lines in question lies (its first byte, its
-  end, the sha256 of its last line), until the lines in question before it are settled.
+  end, the sha256 of its last line, how many lines), until the lines in question before it are settled.
+- the tail's mark (`scanned`, in memory only): how far a line with no newline yet was looked through (L-8).
+
+The same file (J-5, M-8, N-3), looked at before each try and at each read inside it: the file is the one read
+where its first bytes are the head (a head hashed while the file was shorter than HEAD_MAX is hashed again,
+longer, once its bytes are found the same), it is not shorter than the cursor, and the line that ends at the
+cursor is the line passed. Otherwise it is another: read again from its start, a restart counted, the head
+hashed anew. The run's memory after the cursor - the reach, the count, the proof, the tail's mark - is held to
+the file too: where the file is shorter than any of them, or the line that ends at the reach is not what it
+was, it is given up back to the cursor (said, no restart counted), and the lines after the cursor are asked
+as new ones. At a read inside a try either ends the try ("again"); the next try's look does it.
 
 A try (one `step`) sends at most ALONE_MAX lines alone:
 - a proof: each line in question before it is asked alone once more (M-2). Refused again, it is counted and
@@ -38,6 +52,12 @@ A try (one `step`) sends at most ALONE_MAX lines alone:
 The cursor never passes a line that was neither taken, nor not sent, nor refused twice with a take between.
 A kill at any point leaves on the disk only a state written whole, whose cursor is before every line it had
 not passed: a restart sends again (the collector may get a line twice), it never skips.
+A try moved (N-2) where it took a line, passed a line or carried the reach further: the next try follows with
+no wait, and --once goes on, until a try moves nothing; a try that moved nothing and failed waits 1, 2, 4 ...
+60 s (J-10). While lines are in question, a take does not end the `refusing` the state says: it ends when no
+line is in question (N-2).
+Batches (J-11, N-1): a send `late` in its request or in its answer halves the next batch, down to one line; a
+taken send doubles it, up to --batch.
 
 What it is not (J-1, J-2, A-1): the watch does not know it runs. raqib/host.py, raqib/eventlog.py,
 raqib/event.py and raqib/hooks/ import nothing of this module (a test reads the imports). It sends; of the
@@ -49,15 +69,22 @@ The secret (J-7): the token is read from --token-file at every try; never an arg
 state, an output line or an error's text. The wire (J-8, L-4, L-5, M-4, M-5): https is verified against the
 system's authorities or --ca; nothing turns verification off and SSLKEYLOGFILE is not honoured. One send is
 bounded whole: connecting (name resolution and the handshake included) 10 s from its start, sending the request
-30 s, the answer 30 s from the request's last byte. A request late while being sent halves the next batch,
-down to one line. A send abandoned (Stop, a bound) has its sockets shut down and is left to its own thread,
-which alone closes them; while four abandoned sends have not ended, no send starts (`stuck`). Plain http only
-to a loopback address unless --plain.
+30 s, the answer 30 s from the request's last byte. A send abandoned (Stop, a bound) has its sockets shut down
+and is left to its own thread, which alone closes them; while four abandoned sends have not ended, no send
+starts (`stuck`). Plain http only to a loopback address unless --plain.
 
-Its own silence is said (J-9, L-3, M-4): after every batch, every failure, at least once a beat whatever it is
-doing (a send, a try of many lines, a walk over lines that are not events) and before whatever ends the run,
-the state is written whole (beside, flushed, then renamed) to ~/.raqib/forward/<name>.json; `raqib forward
---status` reads it. Stop is looked at within SLICE_S everywhere it waits or walks.
+Its own silence is said (J-9, L-3, M-4, N-8): after every batch, every failure, at least once a beat whatever it
+is doing (a send, a try of many lines, a walk over lines that are not events, a walk through one long line or
+tail - looking for its end, hashing it, looking back for its start) and before whatever ends the run, the state
+is written whole (beside, flushed, then renamed) to ~/.raqib/forward/<name>.json; `raqib forward --status` reads
+it. Stop is looked at within SLICE_S everywhere it waits, and at every line and every piece where it walks.
+`behind` looks back at most BEHIND_LOOK bytes from the file's end (beyond that, the furthest line end the run
+knows), so a state write never walks a long tail.
+
+The name (J-13, L-7, M-7, N-4): at each state write the pid file is read. Gone, or holding a pid no process
+has: written again, and said. Unreadable at this write: read again at the next. The pid of another process that
+lives (or whose life cannot be told): the run ends with 1 and the reason said once, and nothing is written over
+the state, which is the other's now.
 """
 from __future__ import annotations
 
@@ -105,6 +132,8 @@ POLL_S = 1.0                               # how often a forwarder with nothing 
 SLICE_S = 0.25                             # L-4, M-4: no wait is longer than this without looking for Stop
 JOIN_S = 0.5                               # an abandoned send's thread is given this long to end (M-5: never closed)
 SCAN_READ = 64 * 1024                      # L-8, M-3: a line too long is looked through in pieces this long
+HEAD_MAX = 4096                            # N-3: the file's first bytes hashed, at most this many
+BEHIND_LOOK = 16 * SCAN_READ               # N-8: `behind` looks back from the file's end at most this far
 ANSWER_READ = 64 * 1024                    # of an answer's body, only the hec code is read
 TOKEN_READ = 64 * 1024
 TOKEN = re.compile(rb"[\x21-\x7e]+\Z")     # one token: printable ASCII, no space (never a header's CR or LF)
@@ -134,7 +163,9 @@ ERRORS = {
     "unforeseen": "an error the forwarder did not foresee ended the run",
 }
 KEYS = ("schema", "name", "pid", "written", "destination", "shape", "delivery", "plain", "file", "cursor", "from",
-        "beat", "sent", "skipped", "refused", "restarts", "last_id", "last_ok", "behind", "failing")
+        "beat", "sent", "skipped", "refused", "restarts", "last_id", "last_ok", "behind", "failing", "head",
+        "in_question")
+LATER = ("head", "in_question")            # N-3, N-5: a state written before them is read without them
 # L-2: the status's rule, said by FORWARD.md and the guide in these words (a test holds the three together)
 STATUS_RULE = ("exit 0 only where nothing is failing and no whole line has waited longer than a beat; 1 where it"
                " is failing (`refusing` too) or behind; 3 where there is no state, it cannot be read, or it was"
@@ -143,6 +174,15 @@ STATUS_RULE = ("exit 0 only where nothing is failing and no whole line has waite
 
 class UsageError(Exception):
     """Exit 2 with the reason (J-10: a usage error ends the forwarder)."""
+
+
+class Stopped(Exception):
+    """N-8: Stop seen in a walk through a line or a tail; the try ends where it is (nothing moved since the last
+    pass)."""
+
+
+class NameLost(Exception):
+    """N-4: the pid file holds another live process's pid; the run ends with 1, the reason said once."""
 
 
 def forward_dir(home=None):
@@ -349,10 +389,13 @@ class Line:
         return ident if isinstance(ident, str) else "offset %d" % self.start
 
 
-def _rfind_newline(f, before, floor=0):
-    """The offset just past the last newline before `before` and at or after `floor` (floor where none)."""
+def _rfind_newline(f, before, floor=0, look=None):
+    """The offset just past the last newline before `before` and at or after `floor` (floor where none). N-8:
+    `look` is called at each piece (Stop and the beat)."""
     pos = before
     while pos > floor:
+        if look is not None:
+            look()
         size = min(SCAN_READ, pos - floor)
         f.seek(pos - size)
         block = f.read(size)
@@ -363,11 +406,15 @@ def _rfind_newline(f, before, floor=0):
     return floor
 
 
-def sha_range(f, start, end):
-    """The sha256 of the bytes [start, end), read in pieces of SCAN_READ (M-3); None where the file is shorter."""
+def sha_range(f, start, end, look=None):
+    """The sha256 of the bytes [start, end), read in pieces of SCAN_READ (M-3); None where the file is shorter.
+    N-8: `look` is called at each piece."""
     h, pos = hashlib.sha256(), start
     f.seek(start)
     while pos < end:
+        if look is not None:
+            look()
+        f.seek(pos)   # `look` may have written the state; the file's place is its own again
         block = f.read(min(SCAN_READ, end - pos))
         if not block:
             return None
@@ -376,7 +423,7 @@ def sha_range(f, start, end):
     return h.hexdigest()
 
 
-def sha_before(f, offset):
+def sha_before(f, offset, look=None):
     """The sha256 of the line that ends at offset (its newline included), read in pieces; None where offset is
     not a line's end."""
     if offset <= 0:
@@ -384,7 +431,14 @@ def sha_before(f, offset):
     f.seek(offset - 1)
     if f.read(1) != b"\n":
         return None
-    return sha_range(f, _rfind_newline(f, offset - 1), offset)
+    return sha_range(f, _rfind_newline(f, offset - 1, 0, look), offset, look)
+
+
+def head_of(f, length):
+    """N-3: {length, sha256} of the file's first `length` bytes (at most HEAD_MAX: one read, never more)."""
+    f.seek(0)
+    data = f.read(min(length, HEAD_MAX))
+    return {"length": len(data), "sha256": _sha(data)}
 
 
 def _count(v):
@@ -402,11 +456,18 @@ def _instant(v):
 
 
 def state_problem(old):
-    """L-6, M-6: why a JSON state is not what the forwarder writes (None where it is). The run refuses to go on
-    from such a state, and --status reads it as unreadable (3)."""
+    """L-6, M-6, N-6: why a JSON state is not what the forwarder writes (None where it is). The run refuses to go
+    on from such a state, and --status reads it as unreadable (3). It never raises, whatever the JSON holds."""
+    try:
+        return _state_problem(old)
+    except Exception:   # N-6: a value of a type no check foresaw is no state of the forwarder's
+        return "a value the forwarder never writes"
+
+
+def _state_problem(old):
     if not isinstance(old, dict) or old.get("schema") != SCHEMA:
         return "not a %s state" % SCHEMA
-    missing = [k for k in KEYS if k not in old]
+    missing = [k for k in KEYS if k not in old and k not in LATER]
     if missing:
         return "no %s" % ", ".join(missing)
     if not isinstance(old["name"], str) or not NAME.match(old["name"]) or not _count(old["pid"]):
@@ -440,6 +501,8 @@ def state_problem(old):
     refused = old["refused"]
     if not isinstance(refused, dict) or not _count(refused.get("count")) or not isinstance(refused.get("ids"), list):
         return "refused is not {count, ids}"
+    if not all(isinstance(i, str) for i in refused["ids"]):
+        return "refused.ids are not texts"
     if old["last_id"] is not None and not isinstance(old["last_id"], str):
         return "last_id is not a text"
     if old["last_ok"] is not None and not _instant(old["last_ok"]):
@@ -448,11 +511,21 @@ def state_problem(old):
     if failing is not None:
         if not isinstance(failing, dict) or not _instant(failing.get("since")) or not _count(failing.get("tries")):
             return "failing is not {since, tries, error, status}"
-        if failing.get("error") not in ERRORS:
+        error = failing.get("error")
+        if not isinstance(error, str) or error not in ERRORS:   # N-6: a list is no word (and no key of a dict)
             return "failing.error is not one of the forwarder's words"
         st = failing.get("status")
         if st is not None and not _count(st):
             return "failing.status is not a status"
+    head = old.get("head")
+    if head is not None and not (isinstance(head, dict) and _count(head.get("length")) and
+                                 head["length"] <= HEAD_MAX and isinstance(head.get("sha256"), str) and
+                                 SHA.match(head["sha256"])):
+        return "head is not {length, sha256}"
+    inq = old.get("in_question", {"count": 0, "since": None})
+    if not (isinstance(inq, dict) and _count(inq.get("count")) and
+            (inq.get("since") is None or _instant(inq.get("since")))):
+        return "in_question is not {count, since}"
     return None
 
 
@@ -677,6 +750,8 @@ class Forwarder:
         self.refused, self.refused_ids, self.last_id, self.last_ok, self.failing = 0, [], None, None, None
         self.refused_now = 0
         self.reach, self.question, self.proof, self.refusal, self.alone = 0, 0, None, None, 0   # M-1, M-2
+        self.reach_sha, self.since, self.known_end, self.head = None, None, 0, None   # N-3, N-5, N-8
+        self.takes, self.moved, self.pid_doubt = 0, False, False   # N-2; N-4: the pid file unreadable, said
         self.adrift = []   # M-5: the sends abandoned that have not ended
         self.carried, self.lost = False, None   # M-6: a failing carried from the state; M-7: the name lost
         self.start_from = {"start": start, "offset": 0}
@@ -684,14 +759,35 @@ class Forwarder:
 
     # --- the state (J-9) -------------------------------------------------------------------------------------
     def behind(self):
+        """J-9: bytes of whole lines after the cursor not yet passed. N-8: it looks back from the file's end at
+        most BEHIND_LOOK bytes (and never below what the run already knows: the reach, the furthest line end it
+        read, the tail's mark), so a state write never walks a long line or tail; where no newline is in that
+        window, it reads once forward from what the run knows (at most MAX_BYTES + 1), and the last newline it
+        saw - or what the run knows - is the last line end: a lower bound, never more than what waits."""
         try:
             with self.opener(self.path) as f:
                 size = os.fstat(f.fileno()).st_size
                 if size <= self.offset:
                     return 0
-                floor = self.scanned[1] if self.scanned and self.scanned[0] == self.offset else self.offset
-                last = _rfind_newline(f, size, min(floor, size))
-                return last - self.offset if last > floor or (floor == self.offset and last > self.offset) else 0
+                known = min(size, max(self.offset, self.reach, self.known_end,
+                                      self.scanned[0] if self.scanned else 0))
+                floor = known
+                if self.scanned and self.scanned[0] == known:   # no newline there up to the mark
+                    floor = min(size, max(floor, self.scanned[1]))
+                pos, last = size, None
+                low = max(floor, size - BEHIND_LOOK)
+                while pos > low and last is None:
+                    n = min(SCAN_READ, pos - low)
+                    f.seek(pos - n)
+                    i = f.read(n).rfind(b"\n")
+                    if i >= 0:
+                        last = pos - n + i + 1
+                    pos -= n
+                if last is None and low > floor:   # a long tail: one read forward from what the run knows
+                    f.seek(known)
+                    i = f.read(min(MAX_BYTES + 1, low - known)).rfind(b"\n")
+                    last = known + i + 1 if i >= 0 else None
+                return max(0, (known if last is None else last) - self.offset)
         except OSError:
             return 0
 
@@ -702,23 +798,57 @@ class Forwarder:
                 "from": dict(self.start_from), "beat": self.beat, "sent": self.sent, "skipped": self.skipped,
                 "refused": {"count": self.refused, "ids": list(self.refused_ids)}, "restarts": self.restarts,
                 "last_id": self.last_id, "last_ok": self.last_ok, "behind": self.behind(),
-                "failing": dict(self.failing) if self.failing else None}
+                "failing": dict(self.failing) if self.failing else None,
+                "head": dict(self.head) if self.head else None,
+                "in_question": {"count": self.question, "since": self.since if self.question else None}}
+
+    def own_name(self):
+        """M-7, N-4: the pid file, read at each state write. Gone, or holding a pid no process has: written again
+        and said. Unreadable now: read again at the next write. Another live pid (or one whose life cannot be
+        told): NameLost - nothing is written over the state, which is the other forwarder's now."""
+        other = self.holder()
+        if other == self.pid:
+            self.pid_doubt = False
+            return
+        if other is False:
+            if not self.pid_doubt:
+                self.say("the pid file %s cannot be read at this state write: it is read again at the next"
+                         % self.lock_file)
+            self.pid_doubt = True
+            return
+        self.pid_doubt = False
+        if other is not None and self.alive(other) is not False:
+            self.lost = ("the pid file %s holds pid %d, a process that lives, not this forwarder's pid %d: another"
+                         " forwarder took the name %s, so this one ends (exit 1) and leaves the name's state to it"
+                         % (self.lock_file, other, self.pid, self.name))
+            self.say(self.lost)
+            raise NameLost(self.lost)
+        self.say("the pid file %s %s: it is written again with pid %d" % (
+            self.lock_file, "was gone" if other is None else "held pid %d, a process that is gone" % other, self.pid))
+        try:
+            if other is not None:
+                os.remove(self.lock_file)
+            temp = self._pid_temp()
+            try:
+                self.publish(temp)
+            except FileExistsError:   # another made it between: it is read at the next write
+                pass
+            finally:
+                try:
+                    os.remove(temp)   # off Windows the link's other name; on Windows already renamed
+                except OSError:
+                    pass
+        except OSError as exc:
+            self.say("the pid file %s cannot be written again now (%s): tried at the next write"
+                     % (self.lock_file, exc.strerror or type(exc).__name__))
 
     def write_state(self):
         """Whole: written beside, flushed to the disk, then renamed over (J-9, L-6). A state that cannot be
-        written is said once. M-7: where the pid file of the name no longer holds this forwarder's pid, another
-        took the name: nothing is written over its state, and the run stops with the reason."""
+        written is said once. M-7, N-4: the pid file is read first (own_name)."""
         if self.lost:
             return
         if self.locked:
-            other = self.holder()
-            if other != self.pid:
-                self.lost = ("the pid file %s no longer holds this forwarder's pid %d (it holds %s): another"
-                             " forwarder took the name %s, so this one stops and leaves the name's state to it"
-                             % (self.lock_file, self.pid, "nothing" if other is None else "no pid that can be"
-                                " read" if other is False else "pid %d" % other, self.name))
-                self.say(self.lost)
-                raise UsageError(self.lost)
+            self.own_name()
         text = json.dumps(self.state(), indent=2, sort_keys=True, ensure_ascii=True, allow_nan=False) + "\n"
         temp = "%s.%d.tmp" % (self.state_file, self.pid)
         self.written_at = self.mono()
@@ -746,6 +876,13 @@ class Forwarder:
         """M-4: the state at least once a beat, whatever the forwarder is doing (a send, a try, a walk)."""
         if self.written_at is None or self.mono() - self.written_at >= self.beat:
             self.write_state()
+
+    def look(self):
+        """N-8: at each piece of a walk through one line or a tail (looking for its end, hashing it, looking back
+        for its start): Stop ends the try (Stopped), and the state is written once a beat."""
+        if self.stopped():
+            raise Stopped()
+        self.tick()
 
     def say(self, text):
         try:
@@ -784,13 +921,18 @@ class Forwarder:
             raise UsageError("the name %s cannot be taken: %s: %s" % (
                 self.name, exc.filename or self.lock_file, exc.strerror or type(exc).__name__))
 
-    def _lock(self):
+    def _pid_temp(self):
+        """The pid file's content, whole, beside it (published by a link or a rename)."""
         os.makedirs(forward_dir(self.home), exist_ok=True)
         temp = "%s.%d.%s.tmp" % (self.lock_file, self.pid, binascii.hexlify(os.urandom(4)).decode("ascii"))
         fd = os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         with os.fdopen(fd, "w") as f:
             f.write("%d\n" % self.pid)
             f.flush()
+        return temp
+
+    def _lock(self):
+        temp = self._pid_temp()
         try:
             for _ in range(3):
                 self.between()
@@ -844,9 +986,9 @@ class Forwarder:
         if text is not None:
             try:
                 old = json.loads(text.decode("ascii"))
-            except (ValueError, UnicodeDecodeError):
+            except Exception:   # N-6: not JSON, not ASCII, nested past what the reader takes (RecursionError)
                 old = None
-            why = state_problem(old) if old is not None else "not JSON"
+            why = state_problem(old) if old is not None else "not JSON that can be read"
             if why:
                 raise UsageError("the state %s is damaged (%s): it is never taken for a first run; move it away to"
                                  " start this name again" % (self.state_file, why))
@@ -856,7 +998,8 @@ class Forwarder:
                                                            old.get("shape")))
             cur = old["cursor"]
             self.offset, self.line_sha = cur["offset"], cur.get("line_sha256")
-            self.reach = self.offset
+            self.reach, self.reach_sha, self.known_end = self.offset, self.line_sha, self.offset
+            self.head = dict(old["head"]) if old.get("head") else None   # N-3: an older state has none
             self.sent, self.skipped, self.restarts = old["sent"], old["skipped"], old["restarts"]
             self.refused, self.refused_ids = old["refused"]["count"], list(old["refused"]["ids"])[-IDS_KEPT:]
             self.last_id, self.last_ok = old.get("last_id"), old.get("last_ok")
@@ -873,7 +1016,7 @@ class Forwarder:
                     self.line_sha = sha_before(f, self.offset) if self.offset else None
             except OSError:
                 self.offset = 0
-            self.reach = self.offset
+            self.reach, self.reach_sha, self.known_end = self.offset, self.line_sha, self.offset
             self.start_from["offset"] = self.offset
             return "a first run, from the file's end (offset %d)" % self.offset
         return "a first run, from the file's start"
@@ -934,13 +1077,15 @@ class Forwarder:
         except (OSError, UsageError):   # L-3: while it runs, a failed try; read again at the next
             return Result("failed", "token-file")
         r = self.post(b"".join(piece(self.shape, ln.raw, ln.obj) for ln in lines), token)
-        if r.kind == "taken" and self.size != self.batch:
-            self.say("a batch was taken: batches are %d lines again" % self.batch)
-            self.size = self.batch
-        elif r.kind == "failed" and r.error == "late" and r.phase == "send" and len(lines) > 1:
-            self.size = max(1, len(lines) // 2)   # M-4: a link too slow for the batch within the bound
-            self.say("a request of %d lines was not sent within %g s: the next batch is %d" % (
-                len(lines), self.answer_s, self.size))
+        if r.kind == "taken" and self.size < self.batch:   # N-1: a taken send doubles it, up to --batch
+            self.size = min(self.batch, self.size * 2)
+            self.say("a send was taken: the next batch is %d line(s)" % self.size)
+        elif r.kind == "failed" and r.error == "late" and r.phase in ("send", "answer"):
+            size = max(1, len(lines) // 2)   # M-4, N-1: late in its request or its answer, halved down to one
+            if size < self.size:
+                self.size = size
+                self.say("a send of %d line(s) was late (%s): the next batch is %d" % (
+                    len(lines), "its request not sent" if r.phase == "send" else "no whole answer", self.size))
         return r
 
     # --- the cursor (J-3, J-4, J-5, L-1, M-1, M-2, M-3) ------------------------------------------------------
@@ -948,10 +1093,35 @@ class Forwarder:
         """J-5, K-2, M-3: a line that is not sent - not an event, or longer than one request may be."""
         return ln.long or ln.obj is None or piece_len(self.shape, ln.raw, ln.obj) > MAX_BYTES
 
-    def pass_line(self, ln):
+    def pass_line(self, ln, sent=0):
+        """The cursor passes the line (N-5: `sent` counts the taken lines it passes, here and nowhere else)."""
         self.offset, self.line_sha = ln.end, ln.sha()
-        if self.reach < self.offset:
-            self.reach = self.offset
+        self.sent += sent
+        if self.reach <= self.offset:
+            self.reach, self.reach_sha = self.offset, self.line_sha
+
+    def reach_to(self, ln):
+        """The reach is carried past the line (N-3: with the sha256 of the line that ends at it)."""
+        self.reach, self.reach_sha = ln.end, ln.sha()
+
+    def question_up(self, status):
+        """A line refused alone is in question (N-5: since when the first now in question was)."""
+        if not self.question:
+            self.since = iso(self.clock())
+        self.question += 1
+        self.refusal = status
+
+    def question_down(self):
+        self.question = max(0, self.question - 1)
+        if not self.question:
+            self.none_in_question()
+
+    def none_in_question(self):
+        """N-2: `refusing` is said while lines are in question, and ends when none is."""
+        self.question, self.since = 0, None
+        if self.failing and self.failing.get("error") == "refusing":
+            self.say("no line is in question now: refusing is over")
+            self.failing = None
 
     def pass_unsent(self, ln):
         if ln.obj is None and not ln.long:
@@ -961,9 +1131,14 @@ class Forwarder:
         self.pass_line(ln)
 
     def taken(self, lines):
-        """J-3: the collector took them (counted now; the cursor passes them where nothing waits before them)."""
-        self.sent += len(lines)
+        """J-3: the collector took them (`sent` counts them when the cursor passes them, N-5). N-2: while lines
+        are in question the failing is `refusing` still, and ends when none is."""
+        self.takes += 1
         self.last_id, self.last_ok = lines[-1].id(), iso(self.clock())
+        if self.question:
+            if self.failing and self.failing.get("error") != "refusing":
+                self.failing.update(error="refusing", status=self.refusal)
+            return
         if self.failing:
             self.say("taken again after %d failed tr%s" % (self.failing["tries"], "y" if self.failing["tries"] == 1
                                                            else "ies"))
@@ -982,11 +1157,11 @@ class Forwarder:
             self.failing = {"since": now, "tries": 0, "error": r.error, "status": r.status}
         self.failing.update(tries=self.failing["tries"] + 1, error=r.error, status=r.status)
         if self.failing["tries"] == 1 or self.failing["tries"] % 10 == 0:
-            more = ""
+            more = "nothing moves"
             if r.error == "refusing":
-                more = ("; %d line(s) in question from offset %d (asked alone as far as offset %d) wait for a later"
-                        " line taken" % (self.question, self.offset, self.reach))
-            self.say("failing: %s (%s%s); %d tr%s; nothing moves%s" % (
+                more = ("the cursor stays before them; %d line(s) in question from offset %d (asked alone as far as"
+                        " offset %d) wait for a later line taken" % (self.question, self.offset, self.reach))
+            self.say("failing: %s (%s%s); %d tr%s; %s" % (
                 r.error, ERRORS.get(r.error, r.error), "" if r.status is None else ", status %d" % r.status,
                 self.failing["tries"], "y" if self.failing["tries"] == 1 else "ies", more))
 
@@ -996,24 +1171,70 @@ class Forwarder:
         return "failed"
 
     def same_file(self, f):
-        """J-5: the file is the one read where it is not shorter than the cursor and the line that ends at the
-        cursor is the line that was passed."""
+        """J-5, N-3: the file is the one read where its first bytes are the head, it is not shorter than the
+        cursor, and the line that ends at the cursor is the line that was passed - the cursor at 0 included.
+        The head covers the first HEAD_MAX bytes at most, and of them only what the cursor has passed once it
+        has passed any (at 0: what the file holds): a change after the cursor is not the file's identity but
+        the run's memory (memory_problem). A head hashed shorter is hashed again, longer, as the cursor passes
+        more (at 0: as the file grows), once its bytes are found the same; a head that still reaches past the
+        cursor (hashed at 0, the cursor moved since) is no proof either way: the cursor's line decides, and the
+        head is hashed again. A head never hashed (a first run, an older state) is hashed at the first look."""
         size = os.fstat(f.fileno()).st_size
+        want = min(HEAD_MAX, self.offset if self.offset else size)
+        if self.head is not None and self.head["length"]:
+            n = self.head["length"]
+            short = size < n
+            if not short:
+                f.seek(0)
+                changed = _sha(f.read(n)) != self.head["sha256"]
+            if (short or changed) and (self.offset == 0 or n <= self.offset):
+                return ("shorter than its first %d bytes hashed" if short else "its first %d bytes changed") % n
         if size < self.offset:
             return "shorter than the cursor"
         if self.offset and self.line_sha is not None:
-            if sha_before(f, self.offset) != self.line_sha:
+            if sha_before(f, self.offset, self.look) != self.line_sha:
                 return "the last line passed changed"
+        if self.head is None or self.head["length"] != want:
+            self.head = head_of(f, want)
         return None
+
+    def memory_problem(self, f):
+        """N-3: why what the run holds after the cursor - the reach, the proof, the tail's mark - is not held by
+        the file (None where it is): the file is shorter than it, or the line that ends at the reach is not what
+        it was."""
+        size = os.fstat(f.fileno()).st_size
+        if self.reach > self.offset:
+            if size < self.reach:
+                return "shorter than this run asked (offset %d)" % self.reach
+            if sha_before(f, self.reach, self.look) != self.reach_sha:
+                return "the line at offset %d, as far as this run asked, changed" % self.reach
+        if self.proof is not None and size < self.proof[1]:
+            return "shorter than the line taken after those in question"
+        if self.scanned and size < self.scanned[1]:
+            return "shorter than its tail was looked through (offset %d)" % self.scanned[1]
+        return None
+
+    def give_up(self, why):
+        """N-3: what the run held after the cursor is given up, back to the cursor; the lines after it are asked
+        again as new ones. No restart: the cursor's own line is the one passed."""
+        held = (self.question, self.reach)
+        self.reach, self.reach_sha, self.proof, self.scanned, self.known_end = (
+            self.offset, self.line_sha, None, None, self.offset)
+        self.none_in_question()
+        self.say("the file after the cursor is not what this run read (%s): what it asked after offset %d (%d"
+                 " line(s) in question, as far as offset %d) is asked again from the cursor" % (
+                     why, self.offset, held[0], held[1]))
 
     def scan_newline(self, f, offset, start):
         """L-8: the end of the first line at offset, looked for from `start` in pieces never kept; None where no
-        newline is there yet (what was looked through is remembered for the next look)."""
+        newline is there yet (what was looked through is remembered for the next look). N-8: Stop and the beat
+        at each piece."""
         if self.scanned and self.scanned[0] == offset:
             start = max(start, self.scanned[1])
-        f.seek(start)
         pos = start
         while True:
+            self.look()
+            f.seek(pos)
             block = f.read(SCAN_READ)
             if not block:
                 self.scanned = (offset, pos)
@@ -1041,21 +1262,23 @@ class Forwarder:
             if end is None:
                 return TAIL
             del data
-            return [Line(offset, end, None, None, sha_range(f, offset, end))]
+            self.known_end = max(self.known_end, end)
+            return [Line(offset, end, None, None, sha_range(f, offset, end, self.look))]
         out, at = [], offset
         for body in data[:cut + 1].split(b"\n")[:-1]:   # only a newline ends a line
             raw = body + b"\n"
             out.append(Line(at, at + len(raw), raw, classify(raw)))
             at += len(raw)
+        self.known_end = max(self.known_end, at)
         return out
 
     def read_at(self, at):
-        """M-8: the whole lines from `at` in the file the try began with - the same check as at each pass: where
-        the file is another, OTHER (the try ends; the next pass counts the restart). None where it cannot be
-        read."""
+        """M-8, N-3: the whole lines from `at` in the file the try began with - the same checks as at each pass:
+        where the file is another, or no longer holds what the run read after the cursor, OTHER (the try ends;
+        the next pass counts the restart or gives that up). None where it cannot be read."""
         try:
             with self.opener(self.path) as f:
-                if self.same_file(f):
+                if self.same_file(f) or self.memory_problem(f):
                     return OTHER
                 return self.read_lines(f, at)
         except OSError:
@@ -1077,20 +1300,29 @@ class Forwarder:
         try:
             with self.opener(self.path) as f:
                 other = self.same_file(f)
+                lost = None if other else self.memory_problem(f)
         except OSError:
             return self.failed(Result("failed", "file"))
         if other:
             self.restarts += 1
-            self.offset, self.line_sha, self.scanned = 0, None, None
-            self.reach, self.question, self.proof = 0, 0, None
+            self.offset, self.line_sha, self.scanned, self.head = 0, None, None, None
+            self.reach, self.reach_sha, self.proof, self.known_end = 0, None, None, 0
+            self.none_in_question()
             self.say("the file is another (%s): read again from its start, restart %d (the collector gets lines"
                      " twice: watch.host and id tell)" % (other, self.restarts))
+        elif lost:
+            self.give_up(lost)
         return None
 
     def step(self):
         """One try: "idle" (nothing whole to send), "moved", "failed", "stopped", or "again" (the file was replaced
-        during the try: the next pass counts the restart)."""
-        r = self.attempt()
+        during the try: the next pass counts the restart). N-2: `moved` says whether the try took a line, passed
+        a line or carried the reach further, whatever its word."""
+        self.moved = False
+        try:
+            r = self.attempt()
+        except Stopped:   # N-8: Stop in a walk through one line or a tail
+            r = "stopped"
         if r == "idle" and self.carried:   # M-6: the file read and nothing waits: the failing carried is over
             self.failing = None
         if r != "stopped":
@@ -1102,6 +1334,13 @@ class Forwarder:
         r = self.check_file()
         if r:
             return r
+        mark = (self.offset, self.reach, self.takes)
+        try:
+            return self._attempt()
+        finally:
+            self.moved = (self.offset, self.reach, self.takes) != mark
+
+    def _attempt(self):
         if self.proof is not None:
             r = self.settle()
             if r != "settled":
@@ -1143,9 +1382,9 @@ class Forwarder:
                 return "on"
             if r.kind != "taken":
                 return self.failed(r)
-            self.taken([ln])
-            self.pass_line(ln)
-            self.question -= 1
+            self.taken([ln])   # an earlier line's take: never the proof of a line after it (N-7)
+            self.pass_line(ln, sent=1)
+            self.question_down()
             r = self.walk_to_question()
             if r:
                 return r
@@ -1195,7 +1434,7 @@ class Forwarder:
                 if walked and self.stopped():
                     return "stopped"
                 if self.question:
-                    self.reach = ln.end   # behind a line in question: passed when the cursor gets there
+                    self.reach_to(ln)   # behind a line in question: passed when the cursor gets there
                 else:
                     self.pass_unsent(ln)
                 walked += 1
@@ -1221,8 +1460,8 @@ class Forwarder:
                 return self.failed(r)
             self.refusal = r.status
             if alone:
-                self.question += 1
-                self.reach = batch[0].end
+                self.question_up(r.status)
+                self.reach_to(batch[0])
                 continue
             w = self.split(batch)
             if w == "plain":
@@ -1244,10 +1483,10 @@ class Forwarder:
         the lines in question before it are settled (M-2). None where the try goes on."""
         self.taken(lines)
         if not self.question:
-            self.pass_line(lines[-1])
+            self.pass_line(lines[-1], sent=len(lines))
             return None
-        self.proof = (lines[0].start, lines[-1].end, lines[-1].sha())
-        self.reach = lines[-1].end
+        self.proof = (lines[0].start, lines[-1].end, lines[-1].sha(), len(lines))
+        self.reach_to(lines[-1])
         self.write_state()
         r = self.settle()
         return None if r == "settled" else r
@@ -1273,9 +1512,8 @@ class Forwarder:
                 continue
             if r.kind != "refused":
                 return self.failed(r)
-            self.refusal = r.status
-            self.question += 1
-            self.reach = ln.end
+            self.question_up(r.status)
+            self.reach_to(ln)
         return "on" if self.question else "plain"
 
     def settle(self):
@@ -1283,7 +1521,7 @@ class Forwarder:
         more. Refused again, it is counted and passed; taken now, it is taken. The lines not sent are passed on
         the way, and the cursor then passes the proof. "settled", or the word that ends the try ("moved" at
         ALONE_MAX sends alone: the next try goes on settling)."""
-        start, end, sha = self.proof
+        start, end, sha, count = self.proof
         while self.offset < start:
             if self.stopped():
                 return "stopped"
@@ -1314,11 +1552,14 @@ class Forwarder:
                     self.count_refused(ln, "alone twice (status %d), a later line taken between (M-2)" % r.status)
                 else:
                     return self.failed(r)
-                self.pass_line(ln)
-                self.question = max(0, self.question - 1)
+                self.pass_line(ln, sent=1 if r.kind == "taken" else 0)
+                self.question_down()
                 self.write_state()
-        self.offset, self.line_sha = end, sha
-        self.reach, self.question, self.proof = max(self.reach, end), 0, None
+        self.offset, self.line_sha, self.sent = end, sha, self.sent + count   # N-5: the proof counted as passed
+        if end >= self.reach:
+            self.reach, self.reach_sha = end, sha
+        self.proof = None
+        self.none_in_question()
         return "settled"
 
     # --- the run (J-10, L-3, L-4) ----------------------------------------------------------------------------
@@ -1367,6 +1608,10 @@ class Forwarder:
             r = self.step()
             if r == "stopped":
                 break
+            if self.moved:   # N-2: a try that moved is followed by the next with no wait; --once goes on
+                tries = 0
+                self.tick()
+                continue
             if r == "failed":
                 if once:
                     break
@@ -1387,8 +1632,8 @@ class Forwarder:
     def run(self, once=False):
         """J-10: for as long as it runs; --once: what the file holds, then 0 all taken, 1 not all. Whatever ends
         the run after its start - Stop, a usage error, an error it did not foresee - the state is written first
-        (L-3; M-7: unless another forwarder took the name); an unforeseen error is said by the word
-        `unforeseen`, never by its text."""
+        (L-3; M-7, N-4: unless another live forwarder took the name: then 1, the reason said once); an unforeseen
+        error is said by the word `unforeseen`, never by its text."""
         self.lock()
         try:
             how = self.resume()
@@ -1404,6 +1649,8 @@ class Forwarder:
             self.loop(once)
         except UsageError:
             raise
+        except NameLost:   # N-4: said once by own_name; nothing is written over the other's state
+            ended = "lost"
         except Exception as exc:
             ended = type(exc).__name__
             self.fail(Result("failed", "unforeseen"))
@@ -1414,7 +1661,7 @@ class Forwarder:
                 self.unlock()
         behind = self.behind()
         ok = ended is None and self.failing is None and self.refused_now == 0 and behind == 0
-        if ended:
+        if ended and ended != "lost":
             self.say("ended by an error it did not foresee (%s): the state is written, failing: unforeseen" % ended)
         self.say("%s: sent %d, skipped %d, refused %d, restarts %d, behind %d byte(s)%s" % (
             "stopped" if self.stopped() else "ended" if ended else "done", self.sent, self.skipped, self.refused,
@@ -1424,14 +1671,16 @@ class Forwarder:
 
 # --- --status (J-9, L-2, M-6) --------------------------------------------------------------------------------
 def judge(state, now):
-    """(exit, word, lines) of one state, by STATUS_RULE. M-6: a state that is not what the forwarder writes is
-    unreadable (3), never read as calm."""
-    why = state_problem(state)
-    if why:
-        return 3, "UNREADABLE", ["not what a forwarder writes: %s" % why]
+    """(exit, word, lines) of one state, by STATUS_RULE. M-6, N-6: a state that is not what the forwarder writes
+    is unreadable (3), never read as calm, and never a traceback. N-5: a line in question longer than a beat is a
+    whole line that waited (1), settling included."""
     try:
+        why = state_problem(state)
+        if why:
+            return 3, "UNREADABLE", ["not what a forwarder writes: %s" % why]
         written, beat = seconds_of(state["written"]), float(state["beat"])
         dest, cursor, refused, failing = state["destination"], state["cursor"], state["refused"], state["failing"]
+        inq = state.get("in_question") or {"count": 0, "since": None}
         lines = ["to %s (shape %s, delivery %s%s)" % (where(dest), state["shape"], state["delivery"],
                                                      ", plain: not encrypted" if state["plain"] else ""),
                  "file %s, cursor %d (from the %s, offset %d)" % (state["file"], cursor["offset"],
@@ -1440,10 +1689,12 @@ def judge(state, now):
                      state["sent"], state["skipped"], refused["count"],
                      " (latest: %s)" % ", ".join(str(i) for i in refused["ids"][-3:]) if refused["ids"] else "",
                      state["restarts"]),
-                 "last taken: %s at %s; behind %d byte(s)" % (state["last_id"] or "none", state["last_ok"] or "never",
-                                                               state["behind"]),
+                 "last taken: %s at %s; behind %d byte(s); in question %d%s" % (
+                     state["last_id"] or "none", state["last_ok"] or "never", state["behind"], inq["count"],
+                     " since %s" % inq["since"] if inq["count"] and inq.get("since") else ""),
                  "written %s by pid %d (a beat of %g s)" % (state["written"], state["pid"], beat)]
         last_ok = seconds_of(state["last_ok"]) if state["last_ok"] else None
+        asked = seconds_of(inq["since"]) if inq["count"] and inq.get("since") else None
     except Exception:   # state_problem read every key; this is the last guard against a traceback
         return 3, "UNREADABLE", ["a %s state that cannot be read" % SCHEMA]
     age = now - written
@@ -1458,6 +1709,9 @@ def judge(state, now):
             failing["since"], failing["error"], ERRORS[failing["error"]], failing["tries"],
             "y" if failing["tries"] == 1 else "ies",
             "" if failing.get("status") is None else ", status %d" % failing["status"])]
+    if inq["count"] and (asked is None or written - asked > beat):
+        return 1, "BEHIND", lines + ["%d line(s) in question since %s, longer than a beat: they wait (settling"
+                                     " included)" % (inq["count"], inq.get("since") or "a time not said")]
     if state["behind"] and (last_ok is None or written - last_ok > beat):
         return 1, "BEHIND", lines + ["%d byte(s) of whole lines wait longer than a beat%s" % (
             state["behind"], " (no send of this name was ever taken)" if last_ok is None else "")]
@@ -1486,13 +1740,13 @@ def status(name=None, home=None, out=None, clock=time.time):
                 state = json.loads(f.read().decode("ascii"))
         except FileNotFoundError:
             code, word, lines = 3, "SILENT", ["no state: %s (it never ran, or not here)" % state_path(n, home)]
-        except (OSError, ValueError, UnicodeDecodeError):
+        except Exception:   # N-6: OSError, not JSON, not ASCII, nested past what the reader takes, anything else
             code, word, lines = 3, "UNREADABLE", ["the state %s cannot be read" % state_path(n, home)]
         else:
             code, word, lines = judge(state, now)
             try:
-                refused = "%d" % state["refused"]["count"]
-            except (KeyError, TypeError, ValueError):
+                refused = "%d" % state["refused"]["count"] if code != 3 or word != "UNREADABLE" else "unknown"
+            except Exception:
                 pass
         out.write("raqib forward %s: %s (exit %d); refused %s\n" % (n, word, code, refused))
         for line in lines:

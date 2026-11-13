@@ -1,11 +1,12 @@
-"""ADR-0011 Amendments J, K, L and M: `raqib forward`, the forwarder over HTTP. Every collector here is the rig's
-stand-in (tools/rig/collector.py) on loopback, on a port it bound itself, stopped and joined by the fixture; a
-collector that is down holds its port bound and listens on nothing, and a test that needs a port it never
-connects to takes one of those. Every clock and wait the forwarder has is injected where a test needs time to
-pass; where a test waits for another thread or process, it waits for the collector's or the state's own facts,
-never for a time to pass. A bound on real time is the proof of a mechanism, at least five times the mechanism's
-own. No thread of the forwarder outlives its test (a fixture fails the test that leaves one). The tokens are
-made-up strings."""
+"""ADR-0011 Amendments J to N: `raqib forward`, the forwarder over HTTP. Every collector here is the rig's stand-in
+(tools/rig/collector.py) on loopback, on a port it bound itself, stopped and joined by the fixture; a collector
+that is down holds its port bound and listens on nothing, and a test that needs a port it never connects to takes
+one of those. Every clock and wait the forwarder has is injected where a test needs time to pass; where a test
+waits for another thread or process, it waits for the collector's or the state's own facts, never for a time to
+pass. A bound on real time is the proof of a mechanism, at least five times the mechanism's own. No thread of the
+forwarder outlives its test (a fixture fails the test that leaves one, and only that test), and no forwarder's
+run is on a test's own thread (N-7: every run is on a thread of its own, bounded, stopped at its bound). The
+tokens are made-up strings."""
 import ast
 import importlib.util
 import inspect
@@ -79,17 +80,56 @@ class Clock:
         return bool(self.then and self.then(self))
 
 
+THREADS = "raqib-forward"
+LEFT_S = 60.0    # an abandoned send's own socket calls are bounded (30 s at most): the margin is twice that
+RUN_S = 120.0    # N-7: a forwarder's run on its own thread is failed and stopped past this
+REAL_RUN = forward.Forwarder.run
+
+
+def left_behind(before, budget=LEFT_S, clock=time.monotonic):
+    """N-7: the forwarder's threads alive now that were not alive at the test's start, each joined within one
+    budget for them all; the names of those still alive. A thread an earlier test left is in `before`: it was
+    that test's failure, and it is neither waited for nor counted again here."""
+    new = [t for t in threading.enumerate() if t.name.startswith(THREADS) and t not in before]
+    end = clock() + budget
+    for t in new:
+        t.join(max(0.0, end - clock()))
+    return [t.name for t in new if t.is_alive()]
+
+
+def bounded_run(self, once=False, bound=None):
+    """N-7: Forwarder.run as every test here calls it - directly, or through cli.main - on a thread of its own
+    (named raqib-forward-run, a daemon), joined within RUN_S; past it, the run is stopped and the test fails.
+    A run already on such a thread (run_thread) is the run itself."""
+    if threading.current_thread().name.startswith(THREADS + "-run"):
+        return REAL_RUN(self, once)
+    box = {}
+
+    def body():
+        try:
+            box["code"] = REAL_RUN(self, once)
+        except BaseException as exc:   # handed to the test's thread
+            box["error"] = exc
+    t = run_thread(body)
+    t.join(RUN_S if bound is None else bound)
+    if t.is_alive():
+        self.stop()
+        t.join(30)
+        pytest.fail("the forwarder's run did not end within %g s: stopped" % (RUN_S if bound is None else bound))
+    if "error" in box:
+        raise box["error"]
+    return box["code"]
+
+
 @pytest.fixture(autouse=True)
-def no_forwarder_thread_left_behind():
-    """L-4, M-9: every thread of the forwarder - a send's (an abandoned one included), and a run a test started on
-    a thread of its own (named raqib-forward-run, a daemon, ended in a finally) - has ended when the test ends:
-    a test that leaves one alive fails here. An abandoned send's own socket calls are bounded (30 s at most): the
-    margin is twice that, and a thread that has ended is joined at once."""
+def no_forwarder_thread_left_behind(monkeypatch):
+    """L-4, M-9, N-7: every thread of the forwarder - a send's (an abandoned one included), and a run (each on a
+    thread of its own, named raqib-forward-run, a daemon) - has ended when the test ends: the test that leaves
+    one alive fails here, and no later test waits for it or fails for it."""
+    before = {t for t in threading.enumerate() if t.name.startswith(THREADS)}
+    monkeypatch.setattr(forward.Forwarder, "run", bounded_run)
     yield
-    left = [t for t in threading.enumerate() if t.name.startswith("raqib-forward")]
-    for t in left:
-        t.join(60)
-    assert not [t.name for t in left if t.is_alive()]
+    assert not left_behind(before)
 
 
 def run_thread(target):
@@ -202,9 +242,9 @@ def order_held(rows, requests):
 
 
 def cursor_held(rows, requests, snaps):
-    """M-2: at every cursor seen - (n, offset): read when n requests had been answered - each line before it was
-    taken (in a request answered 200), or refused alone twice with a request answered 200 between the two, or is
-    not an event (never sent)."""
+    """M-2, N-7: at every cursor seen - (n, offset): read when n requests had been answered - each line before it
+    was taken (in a request answered 200), or refused alone twice with a request answered 200 that holds a LATER
+    line between the two, or is not an event (never sent)."""
     at = {r: i for i, r in enumerate(rows)}
     sent = [[at[x + b"\n"] for x in req["body"].split(b"\n")[:-1]] for req in requests]
     end = 0
@@ -217,7 +257,8 @@ def cursor_held(rows, requests, snaps):
             if forward.classify(row) is None or any(st == 200 and i in idx for idx, st in done):
                 continue
             no = [k for k, (idx, st) in enumerate(done) if idx == [i] and st not in (200, None)]
-            assert len(no) >= 2 and any(done[k][1] == 200 for k in range(no[0] + 1, no[-1])), (i, n, offset)
+            later = [k for k in range(no[0] + 1, no[-1]) if done[k][1] == 200 and max(done[k][0]) > i] if no else []
+            assert len(no) >= 2 and later, (i, n, offset)   # N-7: the take of a LATER line between
 
 
 # --- E1 (J-1, J-2) ---------------------------------------------------------------------------------------------
@@ -1451,19 +1492,27 @@ def test_redo2_e4_during_a_walk_over_50000_lines_that_are_not_events_the_state_o
     assert 0 < f.skipped < 50000 and f.offset == len(b"".join(rows[:f.skipped]))   # the walk ended where it was
 
 
-def test_redo2_e4_a_request_late_while_being_sent_halves_the_next_batch_down_to_one(tmp_path, collectors):
-    sizes, script = [], ["send"] * 8 + ["taken", "answer", "taken"]
+def test_redo3_e1_a_late_send_halves_the_next_batch_down_to_one_and_a_taken_one_doubles_it_up_to_batch(tmp_path,
+                                                                                                       collectors):
+    """N-1: late in its request or in its answer, halved (100, 50, 25, 12, 6, 3, 1, and one stays one); taken,
+    doubled (1, 2, 4 ... 64, then 100, no more than --batch). No batch is sent again at the size it was late at
+    (but one line)."""
+    sizes, firsts, script = [], [], ["answer"] * 4 + ["send"] * 4 + ["taken"] * 8 + ["send", "taken"]
 
     def post(body, token):
         sizes.append(body.count(b"\n"))
+        firsts.append(json.loads(body.split(b"\n")[0])["n"])
         how = script.pop(0)
         return forward.Result("taken", status=200) if how == "taken" else forward.Result("failed", "late", phase=how)
-    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(300)), collectors(down=True).port)
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(400)), collectors(down=True).port)
     f.post = post
-    for _ in range(8):
-        assert f.step() == "failed" and f.failing["error"] == "late"
-    assert f.step() == "moved" and f.step() == "failed" and f.step() == "moved"
-    assert sizes == [100, 50, 25, 12, 6, 3, 1, 1, 1, 100, 100]   # late in the answer: the size stays
+    words = [f.step() for _ in range(18)]
+    assert words == ["failed"] * 8 + ["moved"] * 8 + ["failed", "moved"]
+    assert sizes == [100, 50, 25, 12, 6, 3, 1, 1, 1, 2, 4, 8, 16, 32, 64, 100, 100, 50]
+    for k, word in enumerate(words[:-1]):
+        if word == "failed":   # the same first line next, at a smaller size (one line stays one)
+            assert firsts[k + 1] == firsts[k] and (sizes[k + 1] < sizes[k] or sizes[k] == 1), k
+    assert f.size == 100 and f.offset == len(b"".join(lines(277)))
 
 
 def test_redo2_e4_a_send_whose_request_is_not_sent_within_the_bound_is_late_while_being_sent(tmp_path, collectors,
@@ -1574,26 +1623,6 @@ def test_redo2_e6_a_restarted_forwarder_says_the_refusing_its_state_held_until_i
     assert state(tmp_path)["failing"] is None and len(c.events) == 3
 
 
-def test_redo2_e6_a_forwarder_whose_pid_file_another_took_stops_at_its_next_state_write(tmp_path, collectors):
-    clock = Clock()
-    c = collectors(shape="raqib")
-    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(2)), c.port, clock=clock, beat=5, poll_s=1.0)
-    before = {}
-
-    def then(clk):
-        if len(clk.waits) == 3:   # another forwarder of the name took the pid file
-            before["state"] = Path(f.state_file).read_text(encoding="ascii")
-            Path(f.lock_file).write_text("999999\n", encoding="ascii")
-        return len(clk.waits) > 50   # a guard only: the forwarder must have stopped long before
-    clock.then = then
-    with pytest.raises(forward.UsageError, match="no longer holds this forwarder's pid"):
-        f.run()
-    assert 3 < len(clock.waits) <= 3 + 5   # at its next state write, within a beat of waits
-    assert Path(f.state_file).read_text(encoding="ascii") == before["state"]   # the other's to write now
-    assert Path(f.lock_file).read_text(encoding="ascii") == "999999\n"
-    assert "another forwarder took the name t" in f.out.getvalue()
-
-
 def test_redo2_e6_the_file_replaced_during_a_try_ends_the_try_and_the_next_pass_counts_a_restart(tmp_path,
                                                                                                 collectors):
     rows, other = lines(4), lines(4, start=10, text="other")
@@ -1626,3 +1655,478 @@ def test_redo2_e8_forward_md_lists_the_codes_failing_words_and_says_what_m_rules
     section = threat[threat.index("### The forwarder (`raqib forward`"):threat.index("## 6. Attacks on the watcher")]
     for said in ("`stuck`", "order at the collector", "no traceback"):
         assert said in section, said
+
+
+# --- REDO 3 E1 (N-1): a slow collector is not sent the same batch for ever --------------------------------------
+
+def test_redo3_e1_a_collector_late_for_100_lines_and_in_time_for_50_is_sent_50_then_100_again(tmp_path, collectors):
+    """N-1 with the real send: the bound injected (0.3 s); the collector answers a request of more than 50 lines
+    only at its own stop, and one of 50 at once. The next try after a late 100 sends 50, taken; a taken send
+    doubles (100), a late one halves (50): never the same 100 again."""
+    rows, arrived = lines(300), []
+    c = None
+
+    def on_request(n, headers, body):
+        arrived.append((json.loads(body.split(b"\n")[0])["n"], body.count(b"\n")))
+        if body.count(b"\n") > 50:
+            c.quit.wait(60)   # its answer comes after the bound; this handler ends at the collector's stop
+    c = collectors(shape="raqib", on_request=on_request)
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port, answer_s=0.3)
+    words = [f.step() for _ in range(4)]
+    assert words == ["failed", "moved", "failed", "moved"] and f.failing is None
+    assert arrived == [(1, 100), (1, 50), (51, 100), (51, 50)]   # (the first line's n, how many)
+    assert f.offset == len(b"".join(rows[:100])) and f.sent == 100 and f.size == 100
+    assert "was late (no whole answer): the next batch is 50" in f.out.getvalue()
+
+
+# --- REDO 3 E2 (N-2): a try that moved is not a failed try --------------------------------------------------------
+
+def test_redo3_e2_once_over_r1_to_r101_with_r100_refused_sends_r101_and_no_wait_follows_a_try_that_moved(
+        tmp_path, collectors):
+    """The packet's finding 4: a try at the cap with a line in question has moved (99 lines taken); the next try
+    follows with no wait, and --once goes on: r101 arrives, r100 is refused twice around its take and counted,
+    and --once is 1 for that line alone. `refusing` is in every state written while a line is in question."""
+    rows = lines(101)
+    clock = Clock()
+    c = collectors(shape="raqib", refuse={"r1:100"})
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port, clock=clock)
+    written = []
+    real = f.write_state
+    f.write_state = lambda: (real(), written.append(state(tmp_path)))[0]
+    assert f.run(once=True) == 1
+    assert clock.waits == []   # no wait at all: each try moved, but the last, which ended --once
+    assert c.events == [r.decode("ascii")[:-1] for r in rows[:99] + rows[100:]]
+    s = state(tmp_path)
+    assert s["refused"] == {"count": 1, "ids": ["r1:100"]} and s["failing"] is None and s["sent"] == 100
+    assert s["in_question"] == {"count": 0, "since": None} and s["cursor"]["offset"] == len(b"".join(rows))
+    said = [w for w in written if w["in_question"]["count"]]
+    first = next(k for k, w in enumerate(said) if w["failing"])
+    assert len(said) - first >= 2   # the end of the first try, and the take of r101 (the proof)
+    assert all(w["failing"]["error"] == "refusing" for w in said[first:]), said[first:]
+
+
+def test_redo3_e2_a_try_that_moved_nothing_waits_1_2_4_and_one_that_moved_waits_nothing(tmp_path, collectors):
+    rows = lines(101)
+    clock = Clock()
+    c = collectors(shape="raqib", refuse={"*"})
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port, clock=clock)
+    at_wait = []
+    clock.then = lambda clk: (at_wait.append(len(c.requests)), len(clk.waits) >= 3)[1]
+    assert f.run() == 1 and f.failing["error"] == "refusing"
+    # try 1: the batch and 100 alone (the reach carried); try 2: r1 again and r101 (carried); then nothing moves
+    assert clock.waits == [1, 2, 4] and at_wait == [104, 105, 106]
+
+
+# --- REDO 3 E3 (N-3): the same file from its first byte; the run's memory held to it -----------------------------
+
+def test_redo3_e3_a_file_replaced_at_cursor_0_after_a_long_tail_counts_a_restart_and_loses_no_line(tmp_path,
+                                                                                                    collectors):
+    """The first build's case: the cursor at 0, a tail of 700 KiB with no newline looked through; the file is
+    replaced by another, shorter than what was looked through. The head says it: a restart, every line sent."""
+    c = collectors(shape="raqib")
+    path = write(tmp_path / "e.jsonl", [b"x" * (700 * 1024)])
+    f = fwd(tmp_path, path, c.port)
+    assert f.step() == "failed" and f.failing["error"] == "file" and f.scanned == (0, 700 * 1024)
+    assert state(tmp_path)["head"] == {"length": 4096, "sha256": forward._sha(b"x" * 4096)}
+    rows = lines(3)
+    os.replace(write(tmp_path / "new.jsonl", rows), path)
+    assert f.step() == "moved" and f.restarts == 1 and f.refused == 0
+    assert c.events == [r.decode("ascii")[:-1] for r in rows]
+    whole = b"".join(rows)
+    assert state(tmp_path)["head"] == {"length": len(whole), "sha256": forward._sha(whole)}
+    write(path, lines(30, start=4), mode="ab")   # the cursor passes 4096: the head is hashed again, longer
+    assert f.step() == "moved" and f.step() == "idle" and f.restarts == 0 + 1 and f.head["length"] == 4096
+    assert f.head["sha256"] == forward._sha(Path(path).read_bytes()[:4096])
+
+
+def test_redo3_e3_a_tail_mark_past_the_end_of_a_file_with_the_same_head_is_given_up(tmp_path, collectors):
+    """N-3: the same first 4096 bytes and the same line at the cursor, but the file is shorter than its tail
+    was looked through: the mark is given up (no restart), and the new lines are read and sent."""
+    c = collectors(shape="raqib")
+    head = lines(20)
+    assert len(b"".join(head)) > 4096
+    path = write(tmp_path / "e.jsonl", head + [b"x" * (700 * 1024)])
+    f = fwd(tmp_path, path, c.port)
+    assert f.step() == "moved" and f.step() == "failed" and f.scanned[0] == f.offset == len(b"".join(head))
+    os.replace(write(tmp_path / "new.jsonl", head + lines(3, start=21)), path)
+    assert f.step() == "moved" and f.restarts == 0 and f.refused == 0 and f.failing is None
+    assert c.events == [r.decode("ascii")[:-1] for r in head + lines(3, start=21)]
+    assert "shorter than its tail was looked through" in f.out.getvalue()
+
+
+@pytest.mark.parametrize("how", ["cut", "replaced", "proof"])
+def test_redo3_e3_after_the_cursor_changed_while_lines_are_in_question_the_memory_goes_back_to_the_cursor(
+        tmp_path, collectors, how):
+    """N-3: the file cut to the cursor, or replaced by one with the same lines up to the cursor, while lines are
+    in question (and, "proof", while a take after them waits to be settled): the reach, the count and the proof
+    go back to the cursor, and no line of the new part is counted refused after one refusal of its own."""
+    rows = lines(4)
+    c = collectors(shape="raqib", refuse={"r1:2", "r1:3", "r1:4"} if how != "proof" else {"r1:2"})
+    if how == "proof":   # b alone, asked again after c's take, fails: the proof is held to the next try
+        c.on_request = lambda n, h, b: setattr(c, "fail", 1) if n == 3 else None
+    path = write(tmp_path / "e.jsonl", rows if how != "proof" else rows[:3])
+    f = fwd(tmp_path, path, c.port)
+    assert f.step() == "failed" and f.offset == len(rows[0]) and f.question >= 1
+    assert (f.proof is not None) == (how == "proof") and f.reach > f.offset
+    new = lines(4, start=10)
+    if how == "cut":
+        with open(path, "r+b") as fh:
+            fh.truncate(len(rows[0]))
+        assert f.step() == "idle"   # nothing after the cursor: what was asked after it is given up
+        write(path, new, mode="ab")
+    else:
+        os.replace(write(tmp_path / "new.jsonl", rows[:1] + new), path)
+    assert f.reach > f.offset or how == "cut"
+    c.refuse, c.on_request, c.fail = {"r1:10", "r1:11"}, None, 0
+    begun = len(c.requests)
+    for _ in range(4):
+        f.step()
+    assert "is asked again from the cursor" in f.out.getvalue() and f.restarts == 0
+    assert f.offset == len(rows[0] + b"".join(new)) and f.refused == 2 and f.refused_ids == ["r1:10", "r1:11"]
+    assert c.events[-2:] == [new[2].decode("ascii")[:-1], new[3].decode("ascii")[:-1]]
+    tail = rows[:1] + new
+    cursor_held(tail, [{"body": rows[0], "status": 200}] + c.requests[begun:],
+                [(1 + len(c.requests) - begun, f.offset)])
+
+
+def test_redo3_e3_a_file_that_only_grew_gives_nothing_up(tmp_path, collectors):
+    rows = lines(4)
+    c = collectors(shape="raqib", refuse={"r1:2", "r1:3"})
+    path = write(tmp_path / "e.jsonl", rows[:3])
+    f = fwd(tmp_path, path, c.port)
+    assert f.step() == "failed" and f.question == 2 and len(c.requests) == 4
+    write(path, rows[3:], mode="ab")
+    assert f.step() == "moved" and f.refused == 2 and f.offset == len(b"".join(rows))
+    assert [alone_index(rows, r) for r in c.requests[4:]] == [1, 3, 1, 2]   # no extra request: b, d, b, c
+    assert "asked again from the cursor" not in f.out.getvalue()
+
+
+# --- REDO 3 E4 (N-4): the name is lost only to another live forwarder ---------------------------------------------
+
+def test_redo3_e4_the_pid_file_removed_is_written_again_unreadable_once_goes_on_another_live_pid_ends_with_1(
+        tmp_path, collectors):
+    clock = Clock()
+    c = collectors(shape="raqib")
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(2)), c.port, clock=clock, beat=5, poll_s=1.0,
+            alive=lambda pid: pid == 4321)
+    lock, seen = Path(f.lock_file), {}
+    real_holder = f.holder
+
+    def unreadable_once():
+        f.holder = real_holder
+        return False
+
+    def then(clk):
+        n = len(clk.waits)
+        if n == 3:
+            lock.unlink()   # removed while it runs
+        elif n == 12:
+            seen["again"] = lock.read_text(encoding="ascii")
+            f.holder = unreadable_once   # the next state write cannot read it, once
+        elif n == 25:
+            seen["state"] = Path(f.state_file).read_text(encoding="ascii")
+            lock.write_text("4321\n", encoding="ascii")   # another forwarder, alive, took the name
+        return n > 60   # a guard only: the forwarder must end long before
+    clock.then = then
+    assert f.run() == 1
+    out = f.out.getvalue()
+    assert seen["again"] == "%d\n" % f.pid and out.count("was gone: it is written again") == 1
+    assert out.count("cannot be read at this state write") == 1
+    assert 25 <= len(clock.waits) <= 25 + 6 and out.count("holds pid 4321, a process that lives") == 1
+    assert Path(f.state_file).read_text(encoding="ascii") == seen["state"]   # the other's to write now
+    assert lock.read_text(encoding="ascii") == "4321\n"
+
+
+# --- REDO 3 E5 (N-5): lines in question are lines that wait; `sent` when the cursor passes -----------------------
+
+def test_redo3_e5_in_question_is_in_the_state_and_the_status_is_1_while_it_waits_settling_included(tmp_path,
+                                                                                                   collectors):
+    home = str(tmp_path / "home")
+    clock = Clock()
+    rows = lines(4)
+    c = collectors(shape="raqib", refuse={"r1:2", "r1:3"})
+    path = write(tmp_path / "e.jsonl", rows[:3])
+    f = fwd(tmp_path, path, c.port, clock=clock, beat=10)
+    assert f.step() == "failed"
+    s = state(tmp_path)
+    assert s["in_question"] == {"count": 2, "since": forward.iso(clock.t)}
+    clock.t += 25   # more than a beat: the lines in question have waited
+    settling = []
+    c.on_request = lambda n, h, b: settling.append(read_state(home, "t")) if n >= 6 else None
+    write(path, rows[3:], mode="ab")
+    assert f.step() == "moved"
+    mid = settling[0]   # written when d was taken, before b and c were asked again
+    assert mid["in_question"]["count"] == 2 and mid["in_question"]["since"] == s["in_question"]["since"]
+    assert forward.judge(mid, forward.seconds_of(mid["written"]))[:2] == (1, "FAILING")
+    calm = dict(mid, failing=None)   # N-5 alone: a line in question longer than a beat waits
+    assert forward.judge(calm, forward.seconds_of(mid["written"]))[:2] == (1, "BEHIND")
+    end = state(tmp_path)
+    assert end["in_question"] == {"count": 0, "since": None}
+    assert forward.judge(end, forward.seconds_of(end["written"]))[:2] == (0, "OK")   # settled
+
+
+def test_redo3_e5_status_judges_in_question_by_its_since_and_reads_a_state_without_it(tmp_path):
+    home, now = str(tmp_path / "home"), 1_800_000_000.0
+    for name, change, want in (("long", {"in_question": {"count": 2, "since": forward.iso(now - 11)}}, 1),
+                               ("short", {"in_question": {"count": 2, "since": forward.iso(now - 5)}}, 0),
+                               ("none", {"in_question": {"count": 0, "since": None}}, 0),
+                               ("older", {}, 0),
+                               ("bad", {"in_question": {"count": -1, "since": None}}, 3),
+                               ("head", {"head": {"length": 4097, "sha256": "a" * 64}}, 3)):
+        write_state(home, name, now, **change)
+        out = io.StringIO()
+        assert forward.status(name, home=home, out=out, clock=Clock(now)) == want, (name, out.getvalue())
+        if name == "long":
+            assert "2 line(s) in question since" in out.getvalue() and "BEHIND" in out.getvalue()
+
+
+def test_redo3_e5_sent_is_not_counted_twice_for_a_proof_across_a_restart(tmp_path, collectors):
+    """The packet's finding 1: [a, b], a refused. 400, 400, 200 (b: the proof), Stop while a is asked again;
+    the restart: 400, 400, 200 (b again), 400 (a counted). `sent` is 1: b, once, when the cursor passed it."""
+    rows = lines(2)
+    f = None
+
+    def on_request(n, headers, body):
+        if n == 3:
+            f.stop()   # while a is asked again, after b's take
+    c = collectors(shape="raqib", refuse={"r1:1"}, on_request=on_request)
+    path = write(tmp_path / "e.jsonl", rows)
+    f = fwd(tmp_path, path, c.port)
+    assert f.run(once=True) == 1
+    assert state(tmp_path)["sent"] == 0 and state(tmp_path)["cursor"]["offset"] == 0
+    again = fwd(tmp_path, path, c.port)
+    assert again.run(once=True) == 1   # a refused: --once is 1
+    assert [r["status"] for r in c.requests] == [400, 400, 200, 400, 400, 400, 200, 400]
+    s = state(tmp_path)
+    assert s["sent"] == 1 and s["refused"] == {"count": 1, "ids": ["r1:1"]}
+    assert s["cursor"]["offset"] == len(b"".join(rows))
+
+
+# --- REDO 3 E6 (N-6): no state of any shape is a traceback ---------------------------------------------------------
+
+def test_redo3_e6_a_failing_error_that_is_a_list_or_json_nested_100000_deep_is_3_and_a_start_2(tmp_path, collectors,
+                                                                                                capsys, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    c = collectors(shape="raqib")
+    path = write(tmp_path / "e.jsonl", lines(1))
+    now = time.time()
+    write_state(str(home), "list", now, failing={"since": forward.iso(now), "tries": 1, "error": ["server"],
+                                                 "status": None})
+    write_state(str(home), "dict", now, failing={"since": forward.iso(now), "tries": 1, "error": {"a": 1},
+                                                 "status": None})
+    Path(forward.state_path("deep", str(home))).write_text(
+        '{"schema": "raqib-forward/1", "x": ' + "[" * 100000 + "]" * 100000 + "}", encoding="ascii")
+    for name in ("list", "dict", "deep"):
+        out = io.StringIO()
+        assert cli.main(["forward", "--status", name], out=out) == 3, name
+        assert "UNREADABLE" in out.getvalue(), name
+        argv = ["forward", path, "--to", "http://127.0.0.1:%d/" % c.port, "--name", name, "--once"]
+        out = io.StringIO()
+        assert cli.main(argv, out=out) == 2, name
+        said = out.getvalue() + "".join(capsys.readouterr())
+        assert "is damaged" in said and "Traceback" not in said, (name, said)
+    out = io.StringIO()
+    assert cli.main(["forward", "--status"], out=out) == 3 and "Traceback" not in out.getvalue()
+    assert c.requests == []
+
+
+# --- REDO 3 E7 (N-7): the fixture, no run on a test's thread, the take of a LATER line ---------------------------
+
+def test_redo3_e7_a_thread_left_behind_fails_the_test_that_left_it_and_no_later_test_waits_for_it():
+    gate, joins = threading.Event(), []
+
+    class StandIn(threading.Thread):
+        def join(self, timeout=None):
+            joins.append(timeout)
+            threading.Thread.join(self, min(timeout or 0.0, 0.01))
+    before = {t for t in threading.enumerate() if t.name.startswith(THREADS)}
+    t = StandIn(target=gate.wait, args=(60,), name="raqib-forward-standin", daemon=True)
+    t.start()
+    try:
+        assert left_behind(before, budget=0.05) == ["raqib-forward-standin"]   # the test that left it fails
+        assert len(joins) == 1 and joins[0] <= 0.05
+        later = {x for x in threading.enumerate() if x.name.startswith(THREADS)}   # a later test's start
+        assert t in later and left_behind(later) == [] and len(joins) == 1   # not waited for, not counted
+    finally:
+        gate.set()
+        threading.Thread.join(t, 30)
+    assert not t.is_alive()
+
+
+def test_redo3_e7_no_run_is_on_a_tests_own_thread_and_a_run_that_never_ends_is_stopped_and_failed(
+        tmp_path, collectors, monkeypatch, capsys):
+    assert forward.Forwarder.run is bounded_run   # f.run() and cli.main alike
+    where = []
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(1)), collectors(down=True).port)
+    f.loop = lambda once: (where.append(threading.current_thread().name), f._stop.wait(600))
+    with pytest.raises(pytest.fail.Exception, match="did not end within"):
+        bounded_run(f, bound=0.2)
+    assert where == ["raqib-forward-run"] and f.stopped()
+    monkeypatch.setattr(forward.Forwarder, "loop", lambda self, once: where.append(threading.current_thread().name))
+    monkeypatch.setenv("HOME", str(tmp_path / "home2"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home2"))
+    cli.main(["forward", str(tmp_path / "e.jsonl"), "--to", "http://127.0.0.1:%d/" % collectors(down=True).port,
+              "--name", "cli", "--once"], out=io.StringIO())
+    assert where == ["raqib-forward-run", "raqib-forward-run"]
+
+
+def test_redo3_e7_the_first_line_in_question_taken_on_its_re_ask_is_no_proof_for_the_next_refused(tmp_path,
+                                                                                                    collectors):
+    rows = lines(3)
+    c = collectors(shape="raqib", refuse={"*"})
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port)
+    assert f.step() == "failed" and f.question == 3
+    c.refuse = {"r1:2", "r1:3"}   # a is taken now; b still refused
+    begun = len(c.requests)
+    assert f.step() == "failed" and f.failing["error"] == "refusing"
+    assert [(alone_index(rows, r), r["status"]) for r in c.requests[begun:]] == [(0, 200), (1, 400)]
+    assert f.offset == len(rows[0]) and f.refused == 0 and f.question == 2   # nothing passed on a's take
+    cursor_held(rows, c.requests, [(len(c.requests), f.offset)])
+
+
+def test_redo3_e7_the_cursor_helper_fails_a_trace_whose_only_take_between_two_refusals_is_an_earlier_line():
+    a, b, d = lines(3)
+    ok = [{"body": a + b + d, "status": 400}, {"body": a, "status": 200}, {"body": b, "status": 400},
+          {"body": d, "status": 200}, {"body": b, "status": 400}]
+    cursor_held([a, b, d], ok, [(5, len(a + b + d))])   # b: refused twice, d (later) taken between
+    made_up = [{"body": a + b, "status": 400}, {"body": a, "status": 400}, {"body": b, "status": 400},
+               {"body": a, "status": 200}, {"body": b, "status": 400}]
+    with pytest.raises(AssertionError):
+        cursor_held([a, b], made_up, [(5, len(a + b))])   # b passed: the only take between is a's, earlier
+
+
+# --- REDO 3 E8 (N-8): the state every beat and Stop inside one long line --------------------------------------------
+
+@pytest.mark.parametrize("phase", ["end", "hash", "start"])
+def test_redo3_e8_a_line_of_64_mib_the_state_each_beat_and_stop_in_its_end_its_hash_and_its_start(
+        tmp_path, collectors, monkeypatch, phase):
+    """A sparse file: one event, then a line of 64 MiB (zeros, then its newline). The forwarder's clock moves a
+    hundredth of a second at each look; Stop comes 5 s of it into the walk named: looking for the line's end,
+    hashing it, or looking back for its start (the cursor's line, after it is passed)."""
+    big = 64 * 1024 * 1024
+    a = lines(1)[0]
+    path = tmp_path / "e.jsonl"
+    with open(str(path), "wb") as fh:
+        fh.write(a)
+        fh.seek(len(a) + big - 1)
+        fh.write(b"\n")
+    t, marks, writes, stop_at, reads = [5000.0], {}, [], [], []
+    f = None
+
+    def mono():
+        t[0] += 0.01
+        if f is not None and phase in marks and not stop_at and t[0] >= marks[phase] + 5:
+            stop_at.append(t[0])
+            f.stop()
+        return t[0]
+    real_scan, real_sha, real_back = forward.Forwarder.scan_newline, forward.sha_range, forward._rfind_newline
+
+    def scan(self, fh, offset, start):
+        marks.setdefault("end", t[0])
+        return real_scan(self, fh, offset, start)
+
+    def sha(fh, start, end, look=None):
+        if end - start > forward.MAX_BYTES:
+            marks.setdefault("hash", t[0])
+        return real_sha(fh, start, end, look)
+
+    def back(fh, before, floor=0, look=None):
+        if before - floor > forward.MAX_BYTES:
+            marks.setdefault("start", t[0])
+        return real_back(fh, before, floor, look)
+    monkeypatch.setattr(forward.Forwarder, "scan_newline", scan)
+    monkeypatch.setattr(forward, "sha_range", sha)
+    monkeypatch.setattr(forward, "_rfind_newline", back)
+    f = fwd(tmp_path, str(path), collectors(shape="raqib").port, mono=mono, beat=1,
+            opener=lambda p: Counted(p, reads))
+    assert f.step() == "moved" and f.sent == 1   # the event; the long line is the next try's
+    real = f.write_state
+    f.write_state = lambda: (writes.append(t[0]), real())[1]
+    del reads[:]
+    assert f.step() == "stopped" and stop_at, marks
+    during = [w for w in writes if w >= marks[phase]]
+    assert len(during) >= 4 and max(b - a for a, b in zip(writes, writes[1:])) <= f.beat + 0.05, writes
+    assert t[0] - stop_at[0] <= 2.0   # Stop seen within the bound, in the walk named
+    assert max(reads) <= forward.MAX_BYTES + 1
+    assert sum(reads) < {"end": big, "hash": 2 * big, "start": 3 * big}[phase]   # the walk ended where it was
+    assert f.offset == (len(a) + big if phase == "start" else len(a))
+
+
+def test_redo3_e8_behind_never_walks_a_long_tail(tmp_path, collectors):
+    """N-8: a tail of 64 MiB with no newline at the file's end: `behind` looks back at most BEHIND_LOOK, then
+    reads once forward from what the run knows; it counts the whole line before the tail, and a state write
+    never walks the tail (nor does it with Stop come)."""
+    big = 64 * 1024 * 1024
+    a = lines(1)[0]
+    path = tmp_path / "e.jsonl"
+    with open(str(path), "wb") as fh:
+        fh.write(a)
+        fh.truncate(len(a) + big)   # sparse: zeros, no newline
+    reads = []
+    f = fwd(tmp_path, str(path), collectors(down=True).port, opener=lambda p: Counted(p, reads))
+    assert f.behind() == len(a)
+    assert sum(reads) <= forward.BEHIND_LOOK + forward.MAX_BYTES + 1 and len(reads) <= 17
+    del reads[:]
+    f.stop()
+    f.write_state()
+    assert state(tmp_path)["behind"] == len(a) and sum(reads) <= forward.BEHIND_LOOK + forward.MAX_BYTES + 1
+
+
+# --- REDO 3 E9 (N-9): the documents ------------------------------------------------------------------------------
+
+def table(text, head):
+    part = text[text.index(head):]
+    part = part[:part.index("\n\n")]
+    return [[cell.strip() for cell in row.strip("|").split("|")] for row in part.splitlines()[2:]]
+
+
+def test_redo3_e9_forward_md_s_table_of_what_status_says_in_each_state_is_judges_own(tmp_path):
+    """Each row of FORWARD.md's table names a state of the machine (its first cell's word in backticks) and what
+    `--status` says of it (the exit and the word): built here as the forwarder writes it, and judged."""
+    spec_text = (ROOT / "docs" / "specs" / "FORWARD.md").read_text(encoding="utf-8")
+    rows = table(spec_text, "| the forwarder's state | exit | word |")
+    now = 1_800_000_000.0
+    fail = lambda word, status=None: {"since": forward.iso(now - 30), "tries": 2, "error": word, "status": status}
+    cases = {"nothing waits": {}, "growing": {"behind": 900, "last_ok": forward.iso(now - 5)},
+             "behind": {"behind": 900, "last_ok": forward.iso(now - 11)},
+             "never taken": {"behind": 900, "last_ok": None, "last_id": None},
+             "refusing": {"failing": fail("refusing", 404), "in_question": {"count": 3, "since": forward.iso(now - 30)}},
+             "settling": {"failing": fail("refusing", 404), "in_question": {"count": 1, "since": forward.iso(now - 30)},
+                          "last_ok": forward.iso(now)},
+             "in question": {"in_question": {"count": 1, "since": forward.iso(now - 11)}},
+             "failed send": {"failing": fail("late")}, "stuck": {"failing": fail("stuck")},
+             "silent": {"written": forward.iso(now - 21)}, "future": {"written": forward.iso(now + 1)},
+             "damaged": {"failing": fail(["late"])}}
+    seen = []
+    home = str(tmp_path / "home")
+    for cells in rows:
+        key = cells[0].split("`")[1]
+        seen.append(key)
+        want = (int(cells[1]), cells[2].strip("`"))
+        if key == "no state":
+            out = io.StringIO()
+            got = forward.status("none", home=home, out=out, clock=Clock(now)), out.getvalue().split(": ")[1].split()[0]
+        else:
+            write_state(home, "s", now, **cases[key])
+            with open(forward.state_path("s", home), "rb") as fh:
+                got = forward.judge(json.loads(fh.read().decode("ascii")), now)[:2]
+        assert got == want, (key, got, want)
+    assert sorted(seen) == sorted(list(cases) + ["no state"])
+
+
+def test_redo3_e9_forward_md_and_the_threat_model_say_what_n_rules():
+    flat = " ".join((ROOT / "docs" / "specs" / "FORWARD.md").read_text(encoding="utf-8").split())
+    for said in ("at most 201 requests", "sent again smaller", "doubles it", "no wait", "`in_question`", "`head`",
+                 "4096", "given up", "written again", "exit 1", "A writer of the events file", "A writer of the state",
+                 "A writer of the pid file", "`sent` counts a line when the cursor passes it"):
+        assert said in flat, said
+    assert "A batch that failed is sent again whole" not in flat and "at most 101 requests" not in flat
+    threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
+    section = threat[threat.index("### The forwarder (`raqib forward`"):threat.index("## 6. Attacks on the watcher")]
+    for said in ("two sends a line", "removed", "first 4096 bytes", "a process that lives", "nested",
+                 "the latest 50"):
+        assert said in section, said
+    import re
+    assert not re.search(r"\bM\d+\.\d+", section)

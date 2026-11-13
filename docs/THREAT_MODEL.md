@@ -1077,7 +1077,7 @@ is amended by T-2, T-1 restated by V-1).
   an `ss` that has not returned in 30 s). The only writes are under `~/.raqib`, and the hook settings of a
   project only with `--attach-hooks`.
 
-### The forwarder (`raqib forward`; ADR-0011 Amendments J, K, L and M)
+### The forwarder (`raqib forward`; ADR-0011 Amendments J to N)
 A forwarder is a process of its own that reads the watch's events file and
 sends every whole line to one HTTP collector (docs/specs/FORWARD.md). The
 watch does not know it runs: nothing of the capture path imports it, and a
@@ -1091,8 +1091,10 @@ collector that is slow, down or refusing never delays or loses a capture
   error never quotes the collector's answer. An error of the system at the
   start (the directory or the pid file cannot be made) is a usage error
   with its reason, an error it did not foresee is said by one word, and a
-  state it does not write is read by the status as unreadable: no
-  traceback is printed by the forwarder or its status. Off Windows a
+  state it does not write - whatever its JSON holds: a value of a type it
+  never writes, JSON nested past what the reader takes - is read by the
+  status as unreadable and refused at a start: no traceback is printed by
+  the forwarder or its status. Off Windows a
   token file that others can read is refused; on Windows its access is not
   checked. Anyone who can read that file as the person can send to the
   collector as Raqib: a forged event at the collector is as good as the
@@ -1113,10 +1115,13 @@ collector that is slow, down or refusing never delays or loses a capture
   resolution and the handshake included; 30 s to send the request; 30 s
   for the whole answer from the request's last byte): a collector that
   trickles its answer, or reads the request slowly, cannot hold the
-  forwarder, and a link too slow for a batch gets half as many lines at
-  the next try. The state is written at least once a beat whatever the
-  forwarder is doing, so its status says what it does, not what it did
-  before a long send. Name resolution is the system's: a resolver that
+  forwarder, and a send that is late (its request or its answer) makes
+  the next batch half as many lines, down to one, while a send taken
+  doubles it again: a slow collector is not sent the same batch for ever.
+  The state is written at least once a beat whatever the forwarder is
+  doing - a long send, a long try, a walk through one line or tail of any
+  length, looked at in pieces with Stop at each - so its status says what
+  it does, not what it did before. Name resolution is the system's: a resolver that
   never returns keeps the thread of that send (its body and headers, the
   token among them) until it does; at most four such sends are out, and
   then no send starts and the forwarder is failing `stuck` - an alarm, not
@@ -1153,10 +1158,19 @@ collector that is slow, down or refusing never delays or loses a capture
   which is the one search the guide gives a SOC. Write to the events file:
   a line that is not an event is skipped and counted, but a well-formed
   forged event is sent as any other (the forwarder checks the shape, not
-  the truth); a file replaced or cut short is read again from its start and
-  counted as a restart. Change only lines before the last one passed: the
-  forwarder checks the length and the last line passed, not every byte
-  before it, and does not see that.
+  the truth). Well-formed events of a kind the collector refuses each cost
+  two sends a line (asked alone, then again after a later take), keep the
+  forwarder `refusing` while they wait, and fill the latest 50 refused ids
+  with theirs; the lines after them still go, with no wait between tries
+  that move. A file whose first 4096 bytes (of them, what the cursor has
+  passed), length or last line passed changed is another file: read again
+  from its start and counted as a restart, the cursor at 0 included. A file
+  cut to the cursor, or changed only after it, has what the forwarder held
+  after the cursor given up: those lines are asked again as new ones, none
+  counted refused on another file's answers. Change only lines between the
+  first 4096 bytes and the last one passed: the forwarder checks the head,
+  the length and the last line passed, not every byte, and does not see
+  that.
 - **The watched account.** Where the forwarder runs as the watched account
   (as it does until it runs as a service), that account can write its
   files in `~/.raqib/forward/`. The cursor: a forged offset with the
@@ -1165,8 +1179,11 @@ collector that is slow, down or refusing never delays or loses a capture
   offset above 0 with no hash is refused as a damaged state). The
   state: a fresh time keeps `--status` at 0 for a forwarder that is not
   there. The pid file: a live pid written in it keeps the name from ever
-  starting, and written over a running forwarder's it stops that
-  forwarder at its next state write. A line far longer than a request is
+  starting, and the pid of a process that lives, written over a running
+  forwarder's, ends that forwarder (exit 1) at its next state write. A pid
+  file removed, or holding a pid no process has, is only written again
+  (and said); one that cannot be read for a moment is read again at the
+  next write. A line far longer than a request is
   never read whole, so a writer of the file cannot fill the forwarder's
   memory with one line. The answers are the search on the collector's side - which is
   judged by the collector's own clock of arrival, never by the event's
