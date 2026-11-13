@@ -78,6 +78,44 @@ jobs:
           echo "=== rhythm"; python "$GITHUB_WORKSPACE/tools/rig/rhythm_read.py" node qwen opencode bun curl || true
           echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-opencode.out
 
+  etw:
+    name: what the kernel's tracing gives (M7.21, ADR-0007 BK)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: who runs, and the sessions already there
+        shell: pwsh
+        run: |
+          whoami /groups | Select-String "Administrators|Performance Log|Mandatory Label"
+          logman query -ets
+      - name: the provider's manifest (events and their fields)
+        shell: pwsh
+        run: |
+          wevtutil gp Microsoft-Windows-Kernel-Network /ge:true /gm:true | Out-File -Encoding utf8 manifest.txt
+          Get-Content manifest.txt | Select-Object -First 400
+      - name: a session of our own, one fetch, what the events hold
+        shell: pwsh
+        run: |
+          logman start raqib-probe -p Microsoft-Windows-Kernel-Network 0x30 0x4 -o probe.etl -ets
+          logman query raqib-probe -ets
+          curl.exe -s -o NUL https://example.com/
+          curl.exe -s -o NUL http://example.com/
+          Start-Sleep -Seconds 2
+          logman stop raqib-probe -ets
+          tracerpt probe.etl -o probe.xml -of XML -y | Select-Object -Last 6
+          [xml]$x = Get-Content probe.xml
+          $ev = $x.Events.Event
+          "events: " + $ev.Count
+          $ev | Group-Object { $_.System.EventID.'#text' ?? $_.System.EventID } | Sort-Object Name | ForEach-Object { "id " + $_.Name + ": " + $_.Count }
+          foreach ($id in "10","11","12","13","15","26","27") {
+            $one = $ev | Where-Object { ($_.System.EventID.'#text' ?? $_.System.EventID) -eq $id } | Select-Object -First 2
+            foreach ($e in $one) { "--- id $id"; $e.System.OuterXml; $e.EventData.OuterXml }
+          }
+      - name: a session started with no rights to it (what a plain user is told)
+        shell: pwsh
+        run: |
+          logman query providers Microsoft-Windows-Kernel-Network
+          logman query providers Microsoft-Windows-TCPIP | Select-Object -First 30
   windows:
     name: agents (windows, Sysmon)
     runs-on: windows-latest
