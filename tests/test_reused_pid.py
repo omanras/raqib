@@ -166,9 +166,10 @@ def test_e2_the_reader_given_an_old_chains_parent_pid_still_sees_the_talker():
     assert trees(inv) == [(2400, [2400, 2410])]                    # the talker with its child: a candidate
     assert [a["pid"] for a in inv["candidates"][0]["acts"]] == [2410]
     assert 7400 not in acted(inv)                                  # the reader's own child: nobody's act, no tree
-    assert link_holes(inv) == ["1 " + BROKEN + ": the process that holds the parent pid started after the child, so"
-                               " the pid was taken again; the child has no parent in this round (its acts go to no"
-                               " ancestor through it): pid 700 under parent pid 732 (the reader's own pid)"]
+    assert link_holes(inv) == ["1 " + BROKEN + ": the holder of the parent pid started after the child (a pid taken"
+                               " again, or a clock set back between the two; BH-5); the child has no parent in this"
+                               " round (its acts go to no ancestor through it): pid 700 under parent pid 732 (the"
+                               " reader's own pid)"]   # M7.27: the words BH-5 rules (what was read, not a cause)
     assert discover.ALWAYS_HOLES[2] in inv["holes"]
 
 
