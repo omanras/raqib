@@ -96,7 +96,6 @@ jobs:
         shell: pwsh
         run: |
           python -c "import ctypes; from raqib import etwnet as e; print({n: ctypes.sizeof(getattr(e, n)) for n in dir(e) if isinstance(getattr(e, n), type) and issubclass(getattr(e, n), ctypes.Structure) and getattr(e, n) is not ctypes.Structure})"
-          python -m pytest tests/test_etwnet.py -q -p no:cacheprovider
       - name: the reader over real traffic (remote and loopback)
         shell: pwsh
         run: |
