@@ -1607,6 +1607,10 @@ class HostWatch:
         self.file_seq = {}           # a host source file -> its last seq (a re-attach continues it)
         self.source_findings = []    # the findings of the sources, each on its tree
         self.follow_restart = FollowRestart()   # AJ-4 (R-3): the round's restarts, consulted by every os follow
+        # ADR-0007 BC-2, BD-2: ((a tree's key, its root pid, its ProcessGuid), ...) of every tree with an os source
+        # and a ProcessGuid (_nested_roots); a new tuple each round, never changed after: the follows' threads read
+        # it whole, and each entry is told only while that tree's os follow lives, read at the asking (_told)
+        self.os_nested = ()
         self.source_keys = set()
         self.source_grows = {r.id for r in self.src_rules if r.aggregate is not None} | set(GROWS)   # I-6
         self.pending_end = []        # SILENCE-OPEN / -HALF of the sources at the end: listed, not knocked
@@ -2309,6 +2313,7 @@ class HostWatch:
         self.prev_class = prev
         tree_seq = {tuple(self.trees[k]["key"]): self.trees[k]["line_seq"] for k in set(current) | set(held_now)}
         self._host_lines(now, n, ts, sample, current, tree_seq, gone_keys, held_now)
+        self.os_nested = self._nested_roots(inv)   # BC-2: after the round's attaches and its ended follows
 
         # Footprints: dark, linked, or unjudged in this round. ADR-0007 AD-1: in a round that reads the channel they
         # are discover's footprints of the same round built WITHOUT the channel's records (each link names the tree
@@ -3127,6 +3132,11 @@ class HostWatch:
                 if at is None or (rec.get("source") == "os" and at < self.start_eff):
                     continue   # REDO R-2: an os event from before the watch's start is history, never a beat
                 meta = rec.get("input_meta") if isinstance(rec.get("input_meta"), dict) else {}
+                if rec.get("source") == "os" and "under_root" in meta:
+                    # ADR-0007 BC-3: at or under another tree's root: no act, no talk, no destination here. BD-1: on
+                    # an os line only - the follow's own mark; a hooks trace is the watched side's to write, and
+                    # the key there silences nothing
+                    continue
                 where = os.path.basename(feed.path)
                 cite = {"src": where, "line": ln, "text": "%s %s seq %s at %s" % (
                     rec.get("source") or "hooks", rec.get("tool"), rec.get("seq"), rec.get("ts"))}
@@ -3691,8 +3701,9 @@ class HostWatch:
         # AI-1: the follow asks a bounded question, the first pass since the watch's start; AJ-4: it is given the
         # tree an earlier follow found (R-1) and the round's restarts (R-3: its bound restarts with the round's read)
         # ADR-0007 AW-2: and it asks for the server's own hash on its net lines (input_meta.dest_sha256)
+        # ADR-0007 BC-2: and, at every pass, the roots of the other trees under its root whose own follow lives
         more = follow_kw(follow, since=self.start_eff, tree=src.os_tree, restart=self.follow_restart.get,
-                         server_hash=True)
+                         server_hash=True, mark_under=lambda: self._told(key))
 
         def run():
             try:
@@ -3707,6 +3718,40 @@ class HostWatch:
         src.thread = threading.Thread(target=run, name="raqib-host-os-%s" % t.get("pid"), daemon=True)
         src.thread.start()
         return src
+
+    def _nested_roots(self, inv=None):
+        """ADR-0007 BC-2 as BD-2 corrected it: ((tree key, pid, ProcessGuid), ...) of every tree the watch holds with
+        an os source and a ProcessGuid (a root whose ProcessGuid the watch does not hold is not told: F1). Which of
+        them is under a follow's root is that follow's own reading of the channel (its members' parents by
+        ProcessGuid: a root that is no member of its tree marks nothing there), not the round's process sample -
+        the sample names no parent (discover's "processes": pid, image, started), so the first build, which asked
+        it, told nothing on a real host. Whether a follow lives is read at the asking (_told). A new tuple each
+        round, never changed after: the follows' threads read it whole."""
+        out = []
+        for key in sorted((k for k, src in self.sources.items() if src.kind == "os"),
+                          key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
+            guid = (self.trees.get(key) or {}).get("guid")
+            if isinstance(guid, str) and guid.strip():
+                out.append((key, key[0], guid))
+        return tuple(out)
+
+    def _told(self, key):
+        """ADR-0007 BC-2, BD-2: what tree key's os follow is told when it asks (in its own thread): the (pid,
+        ProcessGuid) of every other tree with an os source and a ProcessGuid (os_nested, the round's) whose os follow
+        lives at this asking - its thread alive, no error, not ended, not stopped - so a follow that raised,
+        returned or was stopped after the round is not told at the asking that follows, whether or not a round has
+        been applied since (F3, F7)."""
+        out = []
+        for other, pid, guid in self.os_nested:
+            if other == key or pid == key[0]:
+                continue
+            src = self.sources.get(other)
+            thread, stop = getattr(src, "thread", None), getattr(src, "stop", None)
+            if (src is not None and src.kind == "os" and thread is not None and thread.is_alive()
+                    and getattr(src, "error", None) is None and not getattr(src, "ended", None)
+                    and not (stop is not None and stop.is_set())):
+                out.append((pid, guid))
+        return out
 
     def _append(self, path, lines):
         from raqib.hooks import os_sysmon

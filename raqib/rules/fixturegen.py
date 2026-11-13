@@ -270,6 +270,9 @@ def held_inventory(k, net_round=None, every=EVERY, talks_from=2, sampled_agent=T
                           proc(sub_kid["pid"], HELD_SUB_PID, "bash", child_start)]
     if side:
         processes.append(proc(5300 + k, worker, "python", child_start))
+    # ADR-0007 BD-3 (the Table): the round's sample names no parent (discover._last_sample: pid, image, started);
+    # a fixture that gave one let a build pass its tests and tell nothing on a real host
+    processes = [{key: v for key, v in p.items() if key != "ppid"} for p in processes]
     return {"records": 20, "holes": [], "incomplete": [], "alarms": [], "problems": [], "result": "alarm",
             "sources": [], "footprints": [], "agent_dark": [], "system_drive": SYSTEM_DRIVE, "live": False,
             "candidates": cands, "act_roots": [], "processes": processes,
