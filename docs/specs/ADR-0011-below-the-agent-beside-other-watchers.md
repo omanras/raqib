@@ -337,3 +337,44 @@ line in any line. And the six CI jobs are green on eabca24, Windows among them.
   list); a snapshot of a watch whose reader failed; examples of a notifier's hole and the lost-words note; the
   counts beside the split names; the tests the packet shows to be weak (section 5).
 
+## Amendment F (the Table, 2026-11-13) - the watch writes its events (M10.2)
+The shape is in the tree (M10.1). This is the writer: the host watch says, as events in a file beside its
+record, everything it judged, while it runs. Nothing is sent anywhere yet (M10.3); the file is what a
+collector's own agent can already tail.
+- F-1 (one writer, outside the judging). `raqib/eventlog.py`: it is given the file, the watch's facts and the
+  rule table; it keeps the run's count (n) and, for each thing by its `about`, the revision last said and
+  what was said. `say` builds the event with raqib/event.py, and writes one line - appended, flushed - when
+  the thing is new (rev 1) or what would be said of it changed (the next rev); the same again is not written.
+  FOR: C-1. MUST NOT TOUCH: how anything is judged, knocked or reported; a rule's result never waits for it.
+- F-2 (when). One pass of the watch over its own ledgers at the end of every round and at the finish: the
+  trees, the findings, the source findings, the watch's holes ("hole:i"), the notifier's ("notifier-hole:i"),
+  the blind spots ("blind:i"), the notes ("note:i"), the knock rows ("knock:i"). The watch names each from the
+  list it is in; it does not guess from what an entry holds. The first event of a watch is its start, the last
+  its end, with the report's own result and exit.
+- F-3 (the heartbeat). On a fixed beat (`--beat S`, 60 s by default, never shorter than a round): a heartbeat
+  event with the watch's state and counts. The watch is one thing ("watch"): its start is rev 1 and each beat
+  and its end the next rev. Two things change every round or every lost word and would otherwise be said each
+  time: a blind spot's count and the lost-words note ("note:lost-words"); they are said again only with a
+  beat. FOR: a collector alarms on Raqib's own silence. A beat is written even when nothing else changed.
+- F-4 (what cannot be said is said). A builder that raises (an entry lacking what its kind requires) becomes a
+  hole of the watch, one per thing, naming the thing and the key; the pass goes on to the next entry. A line
+  that cannot be written (the file, the disk) is a hole said once, and the count of events not written is in
+  the report and the state; the watch goes on. A cite left out because it lacked its source or its line is
+  counted on the event (`evidence.cites_left_out`), and an event never holds an empty list of cites.
+- F-5 (the knock and its thing; the tree's road). A knock event names the thing it knocked for
+  (`knocked.for`: that thing's `about`), which the writer knows. A tree's row carries how it became a
+  candidate, so `subject.by` is said. Both are additions to `raqib-event/1`, made before anything reads it;
+  EVENT.md, check and the tests follow.
+- F-6 (the host's name). Read once at the start from the system (no network call); `--event-host NAME`
+  replaces it; a system that gives none: the watch says so at its start and uses "unnamed".
+- F-7 (said to the person). The watch's first lines name the events file and the beat; the report has a line
+  EVENTS (written, heartbeats, not built, not written, the file); the state carries the same numbers.
+- F-8 (a tool for whoever connects a collector). `raqib events FILE`: checks every line with `event.check`,
+  prints the count per kind and each problem with its line number; exit 0 when every line is an event, 1
+  when not, 2 when the file cannot be read. It reads; it sends nothing.
+- F-9 (the rig). The rig's check reads the events file of its watch: every line is an event; a start and an
+  end; an event for each finding the report lists; heartbeats where the watch outlasted a beat.
+- Not in M10.2, named: sending (M10.3); the window's panel (M10.4); a kind for the model layer's suspicions
+  and events for the watch's own errors (recorded for M10.3's handoff); `raqib watch PROJ` (the session
+  watch) writing events: after the host watch has proven the road.
+
