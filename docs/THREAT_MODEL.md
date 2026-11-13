@@ -678,16 +678,26 @@ is amended by T-2, T-1 restated by V-1).
   the time) as that ancestor's cycles: a false HOST-RHYTHM at high on
   the wrong tree, and the agent's commands judged on it. What is not
   covered: where the ancestor has an os source, its follow is rooted at
-  the ancestor; it leaves out the events under the root of another tree
-  the watch holds with an os follow of its own while that follow runs
-  (the root's own creation stays the ancestor's, and its record says once
-  from which record it leaves that subtree out), but it still holds, and
-  the ancestor's rhythm and its os findings still read, the agent's
-  commands before the agent's tree is known (an event written then stays),
-  after the agent's follow has ended, and where the agent's tree has no os
-  follow of its own, or the round's process sample does not show the
-  agent's root under the ancestor's (on Windows with Sysmon, the same
-  false cycles there); the agent's acts with no talk seen make no cycle, so
+  the ancestor and writes every event of its tree, the agent's too; it
+  marks (`input_meta.under_root`, the root's pid) each event at or under
+  the root of another tree the watch holds with an os follow of its own,
+  the root told and matched by its ProcessGuid, while that follow lives
+  (read when the ancestor's follow asks) and the round's process sample
+  shows that root under the ancestor's. The root's own creation is not
+  marked and stays the ancestor's act; a marked line gives the ancestor
+  no act, no talk and no destination, and is judged by the other rules
+  as before (one act, judged once). What the mark costs: a marked line
+  whose twin the other tree's file does not hold - the other follow's
+  last interval before it stopped, a follow that died, a member the other
+  follow never knew - gives no beat to either tree, so the rhythm of an
+  agent's last seconds can be missed (its commands are still judged where
+  they are written); a process born under the root before the root was
+  told is marked from then on (the follow's own parents tell); a root with
+  no ProcessGuid is not told, and the ancestor then counts its child's
+  commands as before (on Windows with Sysmon, the same false cycles
+  there); every os follow under the host watch keeps one more map, each
+  member's parent by ProcessGuid, for the life of the follow. The
+  agent's acts with no talk seen make no cycle, so
   where no source sees a connection that opens and closes between two
   samples (Linux) the agent is still not found by rhythm - where a
   sample saw it talk it is found as an arrival, and its commands are
