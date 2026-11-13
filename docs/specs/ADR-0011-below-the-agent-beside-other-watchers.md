@@ -511,3 +511,350 @@ true. None of it is a build: the Table made the changes itself (CLAUDE.md rule 8
   before the writer compares (cost, measured by the longest pass); a file written by an earlier build has no
   `watch.beat` and reads as not events.
 
+## Amendment J (the Table, 2026-11-13) - the forwarder: the events leave the host (M10.3)
+The watch writes what it judged to a file (F to I). Nothing reads that file yet. This amendment rules the first
+reader: a process of its own that sends each line to one collector. Each ruling names the case it is FOR and what
+it MUST NOT TOUCH.
+- J-1 (a process of its own). `raqib forward` reads an events file and sends every whole line to one destination.
+  FOR: a SOC that wants Raqib's events in its SIEM. MUST NOT TOUCH: the watch. raqib/host.py, raqib/eventlog.py
+  and the capture path import nothing of the forwarder and do not know one runs (CLAUDE.md rule 5; a test reads
+  the imports); no result, report or finding of a watch depends on a forwarder.
+- J-2 (one way). It sends. Of the collector it reads only the answer to its own send; it takes no command, follows
+  no redirect (a redirect is a failed send, said) and uses no proxy from the environment. FOR: Amendment A-1,
+  Raqib is passive toward other systems. MUST NOT TOUCH: anything on the collector.
+- J-3 (at least once, in order, nothing dropped). The file is the buffer; the forwarder keeps none of its own
+  beyond the batch in flight. Its cursor (EVENT.md, "For a reader of the file": a byte offset at the end of the
+  last whole line sent) moves only past lines the destination took. What "took" means is said per transport, in
+  the state (J-9), by one word: `acknowledged` (HTTP: a 2xx answer; in the hec shape also the body's code 0),
+  `written` (syslog over tcp or tls: the bytes were handed to the system with no error - not received),
+  `sent` (syslog over udp: nothing is known). FOR: a reader who must know what a green link means. MUST NOT
+  TOUCH: the file (opened for reading only; never written, moved or locked).
+- J-4 (a line the collector refuses). A 4xx answer other than 401, 403, 408 and 429 to a batch: its lines are
+  sent again one by one; a line refused alone is counted, its `id` kept in the state (the latest 50), and the
+  cursor passes it - one bad line must not stop the lines after it. 401 and 403 are the token's: nothing moves,
+  the state says so, the token file is read again at every try. Every other failure (no answer, 408, 429, 5xx,
+  a redirect, a TLS error) is a failed send: nothing moves, and it is tried again (J-10).
+- J-5 (lines that are not events; the file's identity). A line that is not JSON or not an event is skipped and
+  counted, never sent; a last line with no newline waits. The cursor is kept with the sha256 of the last line
+  sent; where the file is shorter than the cursor or that line's bytes are not what they were, the file is
+  another: the forwarder starts it again from its beginning, counts a restart and says so (the collector then
+  gets lines twice: `watch.host` and `id` tell).
+- J-6 (shapes). `--shape raqib`: the line as the watch wrote it, one per line (HTTP: application/x-ndjson).
+  `--shape hec`: the envelope an HTTP event collector in Splunk's shape takes - {"time": the event's time as
+  seconds, "host": watch.host, "source": "raqib", "sourcetype": "raqib:event", "event": the event} - with
+  `Authorization: Splunk <token>`. Syslog (`syslog+udp://`, `syslog+tcp://`, `syslog+tls://`): RFC 5424, the
+  app name raqib, the message id the event's kind, the message the line; the severity from the event's
+  (high 2, medium 4, low 5, none and info 6, a hole 4), the facility 13 (log audit) unless `--facility N`;
+  over tcp and tls framed by octet count (RFC 6587), `--framing newline` for a collector that wants lines. A
+  line too long for a datagram (over 65000 bytes) is refused locally as J-4's refused line is: counted, named,
+  passed - never cut. FOR: the collectors a home lab and a SOC have. MUST NOT TOUCH: the event (raqib/event.py
+  and EVENT.md's keys: a shape wraps the line, it never rewrites it). OCSF and ECS documents built by Raqib
+  are not here (recorded; the mapping in EVENT.md is the collector's to apply).
+- J-7 (the secret). The token is read from a file (`--token-file`) at every connection: never an argument,
+  never the environment, never printed, never in the state, in an error's text or in a log line - an error is
+  the forwarder's own words and a status number, never the collector's body. Off Windows a token file that
+  others can read (mode & 0o077) is refused with exit 2 and the reason; on Windows that is not checked, and
+  the guide says so.
+- J-8 (the wire). https is verified against the system's authorities or `--ca FILE`; no switch turns the
+  verification off, for http or for syslog over tls. Plain http and plain tcp or udp are taken only to a
+  loopback address unless `--plain` is given, and then the state and every status say "plain". Connect within
+  10 s, an answer within 30 s.
+- J-9 (its own silence is said). After every batch and every failure, and at least once a beat (its own:
+  `--beat S`, 60 s unless given), the forwarder
+  writes its state whole (written beside and renamed over): `~/.raqib/forward/<name>.json`, schema
+  `raqib-forward/1`: name, pid, written (time), destination (scheme, host, port, path - no query, no user
+  info), shape, delivery (J-3's word), plain, file, cursor {offset, line_sha256}, sent, skipped, refused
+  {count, ids}, restarts, last_id, last_ok (time), behind (bytes of whole lines not yet taken), failing
+  {since, tries, error (one of the forwarder's own class words), status}. `raqib forward --status [NAME]`
+  reads it and says it in a few lines: exit 0 where the last send was taken and nothing waits longer than a
+  beat, 1 where it is failing or behind, 3 where the state cannot be read or was written more than two beats
+  ago (the forwarder is silent: CLAUDE.md rule 4). FOR: M10.4's panel and a person at the host. On the
+  collector's side the heartbeats are the proof of the whole path: the guide says the one search a SOC must
+  make - no heartbeat of a host for more than two beats.
+- J-10 (it does not give up). After a failed send it waits 1, 2, 4 ... 60 s and tries again, for as long as
+  it runs; a collector that is down never ends it. It ends at Stop (the batch in flight is finished or
+  abandoned unmoved, the state written) or at a usage error. `--once` sends what the file holds and ends:
+  0 all taken, 1 not all, 2 usage.
+- J-11 (batches). At most 100 lines or 512 KiB to one HTTP request; one request at a time; the file's order.
+- J-12 (where a first run starts). At the file's beginning: Raqib sends everything it judged (A-2).
+  `--from end` starts at the file's end and the state says from which offset.
+- J-13 (one destination each). Two collectors are two forwarders with two names and two cursors; a name is
+  [a-z0-9-]{1,32}; a second forwarder of one name is refused while the first one's pid lives.
+- J-14 (the rig). Stand-in collectors on the runner, loopback only: an HTTP one in the hec shape that checks
+  the token and can be told to refuse, to fail and to be late; a syslog one over tcp and udp. X19: every
+  whole line of the events file arrived, in order, each id at least once. X20: with the collector down from
+  the start the state says failing and nothing is lost when it comes up. X21: a forwarder killed between two
+  batches and started again leaves no gap. X22: the token is in no output, state or error of the forwarder.
+Built in two tasks: M10.3, the HTTP transport (both shapes) and everything that does not depend on the
+transport (the cursor, the state, the status, the secret, the rig's X19 to X22 over HTTP); M10.3b, syslog over
+udp, tcp and tls with its stand-in collector on the rig. Until M10.3b a syslog destination is a usage error
+that says so.
+Not here, recorded: the forwarder as a service (with the watch's, later); the local sinks (the Windows event
+log, the journal); OCSF and ECS documents; a real Splunk on the rig (it needs the commander's word on its
+licence); more than one file.
+
+## Amendment K (the Table, 2026-11-13) - the builder's STOP on M10.3 (297f843) and its questions
+The build stopped, rightly, on a guard the Table had not opened before writing the HANDOFF: the network guard
+(tests/test_rhythm.py, K-11 of ADR-0007's REDO) lets four modules import the network, and the forwarder is a
+fifth. The Table's error: J-1 called for "a test that reads the imports" without looking for the one that was
+there.
+- K-1 (the guard gains the forwarder, and says more than before). raqib/forward.py may import http.client,
+  socket, ssl and urllib.parse; inside raqib it is imported by cli.py alone, inside `cmd_forward`. FOR: rule 5
+  held by the guard that already holds it. MUST NOT TOUCH: the four modules the guard already names.
+- K-2 (the questions, each as built). The state's two more keys, `from` and `beat`, stay (Q3). The cursor is
+  held to the line that ends at it; a change to earlier bytes is not seen, and the documents say so (Q4).
+  `--batch N` stays (Q5). The raqib shape with a token file sends `Authorization: Bearer` (Q6). A line over
+  512 KiB is refused locally, counted, named and passed, never cut (Q7). `--once` is one try for each batch,
+  and a refused line makes it 1 (Q8). User information in the URL is a usage error; a query is sent and
+  never stored or printed (Q9). `plain` is said for every http destination, loopback too (Q10). `--status`
+  with no name says every state and ends with the worst (Q11). One name is held by a pid file made
+  exclusively; a state of another file, destination or shape is a usage error (Q12). A missing events file
+  is a failing forwarder that tries again (Q13).
+- K-3 (recorded for the next task of the forwarder). The guide's own section "Forward the events" (the guard
+  on the guide's headings is the Table's to open, Q1); `forward` in cli.py's opening words (Q14).
+
+## Amendment L (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3.md (f6e7459)
+The packet: no line is dropped by the cursor's own logic; REDO for a status that says OK where nothing was
+taken, a failure that writes no state, a rig that loses its whole table, a check that cannot see a leak. The
+largest finding is the Table's own ruling, J-4.
+- L-1 (J-4 corrected: a refusal is the line's only where the collector shows it takes lines). J-4 let any
+  refusing answer pass a line; a collector with a wrong path then refuses everything, the whole file is
+  counted as refused and passed, and the status says OK. Now: a batch refused is sent line by line, and a
+  line refused alone is held in question; it is counted and passed only when a later line of the file has
+  been taken by the same collector. While the lines in question have no taken line after them, the cursor
+  stays before the first of them, the forwarder is failing with the word `refusing` and the collector's
+  status, and it tries again as J-10 says. FOR: a wrong path, a missing channel, a collector that takes
+  nothing - a misconfiguration is not the lines' fault. MUST NOT TOUCH: the order (a taken line is never sent
+  before a line that is neither taken nor in question before it), 401 and 403 (the token's, as before).
+- L-2 (the status says what J-9 says). Exit 0 only where nothing is failing and no whole line has waited
+  longer than a beat; `refusing` is failing. The lines refused are said on every status. An age below zero (a
+  state written in the future) is not fresh: exit 3 and the reason. FORWARD.md and the guide say one thing.
+- L-3 (every failure writes the state; nothing ends the run without it). A token file that fails its checks
+  while the forwarder runs is a failed try (`token-file`): nothing moves, the state says so, it is read again
+  at the next try; at the start it is the usage error it was. Whatever ends the run - Stop, a usage error
+  after the start, an error the forwarder did not foresee - the state is written first, and an unforeseen
+  error is said in it with the forwarder's own word, never a traceback's text.
+- L-4 (one send is bounded whatever the collector does). Connecting, the handshake included, within 10 s; the
+  whole answer within 30 s from the request's last byte, not each read; a collector that trickles is `late`.
+  Name resolution is the system's: where it cannot be bounded the documents say so and the status's SILENT
+  covers it. Stop is honoured within 2 s during a send, between the lines of a refused batch and in a wait.
+  The waits and "once a beat" run on a clock that does not step (monotonic); only the state's times are the
+  wall's.
+- L-5 (the wire's environment). The forwarder never writes TLS secrets: SSLKEYLOGFILE is not honoured. The
+  documents say that without `--ca` the authorities are the system's as the forwarder's own environment
+  names them (SSL_CERT_FILE, SSL_CERT_DIR), and that a credential must never be put in the URL's query (it
+  is on the process list).
+- L-6 (what is refused at the start, not disguised as a failed send). A URL whose path is not ASCII or holds
+  a space, a host that is no valid name, a `--beat` that is not a finite number of at least 1, a state file
+  that is JSON and not this schema's (never taken for a first run: `--from end` must not skip a file because
+  its state was damaged). The state is flushed to the disk before it is renamed.
+- L-7 (one name, one forwarder, without the window). The pid file appears with its pid already in it; a pid
+  file that is empty or cannot be read is a life that cannot be told, and the name is refused (K-2), never
+  taken.
+- L-8 (a tail with no newline is bounded). More than 512 KiB after the last newline is not read into memory:
+  the forwarder is failing with the word `file` until a newline comes.
+- L-9 (said in the threat model). Where the forwarder runs as the watched account, that account can write the
+  cursor (a forged offset with the hash of a later line skips lines with no restart counted), the state (a
+  fresh time) and the pid file (the name never starts); the search on the collector's side and a forwarder
+  under another account (the service, later) are the answers. The collector's search for silence is by the
+  collector's own clock of arrival, never the event's `time` (EVENT.md says the same of any reader).
+- L-10 (the rig reports whatever happens). tools/rig/forward_run.py never raises: each of its cases is its
+  own, and a missing events file is a fact it writes; the rig's check step runs always. X21 is MISSED where
+  a line of the batch taken before the kill arrives again after the restart (a forwarder that ignores its
+  cursor), and its kill is by the collector's count of requests, not by a window of time. X22 looks for both
+  tokens, the right one and the refused one, and reads the argument list from the system's own process
+  list.
+- L-11 (the evidence the packet found missing). Stop by the system's signal on a real process, on both
+  platforms, writes the state. The token is looked for in the outputs of the paths that could print it: a
+  token file that fails its checks while running, a failed handshake, 401, 403, an unforeseen error. A
+  collector that trickles is tested as late. Tests that wait on the wall clock or on a port another process
+  can take are rebuilt on the collector's own events and on a port the collector itself bound.
+- L-12 (the guard, by the Table). The network guard now refuses the forwarder by any spelling (relative,
+  importlib, __import__) outside cli.cmd_forward, and refuses the capture path importing cli.
+The Table accepts, as built and said: the cursor held to the line that ends at it; a line over 512 KiB
+refused locally; status 0 while sends are taken and the file grows faster than a beat's worth (K-2).
+
+## Amendment M (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3-redo.md (7244740)
+The packet: the cursor loses no line the watch wrote, and a collector that refuses everything is no longer OK;
+REDO for documents that say more than the code, a test that can hang the job, an assertion that cannot fail;
+and four things for the Table. Two of them are holes left by L-1, the Table's own ruling.
+- M-1 (L-1's cap must not hide the line that would be taken). As built, a hundred lines in question end the
+  try, and the line after them is never sent: a collector that refuses one kind of line (a heartbeat every
+  minute through a quiet night) stops the finding that follows. Now a try is still bounded (at most 100 sends
+  of a line alone), but what a try has already asked is not asked again while the forwarder runs: the next
+  try goes on from where the last one reached, a batch first. When a line is taken, every line in question
+  before it is settled (M-2). While nothing is taken, the forwarder is `refusing`, and each try also asks the
+  first line in question again, alone: a collector put right is seen at once, and that line is then taken,
+  not refused. The lines in question are not kept one by one: a reach and a count. FOR: a refusal by kind.
+  MUST NOT TOUCH: the cursor stays before the first line in question until a later line is taken; a restart
+  asks again from the cursor.
+- M-2 (a line is refused only when asked twice with a take between). When a later line is taken, each line in
+  question before it is sent alone once more; refused again, it is counted and passed; taken now, it is taken
+  (and has then arrived after the line that proved the collector: said in the documents - the order at the
+  collector is the file's order except for such a line, an answer that came late, and a send that was
+  abandoned and still arrived; `n` orders within a run). FOR: a node behind a balancer that answers 404, a 400
+  that would not come twice. MUST NOT TOUCH: a line refused twice is passed as before.
+- M-3 (a line too long is never read whole). A line over 512 KiB is passed without being read into memory: its
+  end is found piece by piece, it is counted refused, and it is named by its offset where its id was not
+  read. HANDOFF E6's "sent when its newline comes" was the Table's slip: K-2 stands.
+- M-4 (the state every beat, whatever the forwarder is doing). During a send, a try of many lines and a walk
+  over lines that are not events, the state is written at least once a beat and Stop is looked at at least
+  every 2 s. A link too slow for a batch within the bound sends half as many lines at the next try, down to
+  one.
+- M-5 (abandoned sends are bounded). At most four sends abandoned and not yet ended; while four are out no
+  new send starts and the forwarder is failing with the word `stuck`. An abandoned send's socket is shut
+  down and left to its thread: no descriptor is closed under a thread that may still use it.
+- M-6 (no traceback, no false calm). An error of the system at the start (the directory, the pid file) is a
+  usage error with its reason. `--status` reads any state that is not what the forwarder writes - a beat not
+  above 0, a `failing` that is no object, a cursor above 0 with no hash - as unreadable, 3. A forwarder that
+  starts again carries the `failing` its state held until its first try has an answer.
+- M-7 (one name, to the end). A forwarder that finds, when it writes its state, that the pid file of its name
+  no longer holds its own pid stops, with the reason: two that both took a dead forwarder's name do not both
+  run on.
+- M-8 (what the start refuses, more). A port 0, a control character in the URL: usage errors. The file read
+  further inside a try is the file the try began with (the same check as at each pass).
+- M-9 (the tests). No thread of a test outlives it (a run that must be stopped is a daemon and is ended in a
+  finally); the pid-file test asserts what the second start read; a bound in a test is the proof of a
+  mechanism, with a margin a slow machine keeps (Stop ends a wait of minutes within a few seconds - not
+  "under 2.0 s" on a shared runner).
+- M-10 (the documents say what the code does): the packet's R1, each line; the order at the collector (M-2);
+  the bound on sending the request; what `--status` says of a state with nothing ever taken.
+- By the Table: `raqib forward --help` says the status rule in the code's words (raqib/cli.py).
+Recorded: the rig's table is still lost where the watch's own step failed before it (the check's other
+inputs); the forwarder's worst case on the rig against the job's limit; a second forwarder of one name on a
+real machine.
+
+## Amendment N (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3-redo2.md (230b2c2)
+The packet: in a file that is only appended to, the machine holds - no line passed without two refusals of
+its own around the take of a later line, none skipped, none counted twice. REDO for a traceback M-6 forbade,
+a test fixture that can outlast the job, documents that say more than the code; and five matters for the
+Table, each at the machine's edge.
+- N-1 (a slow collector is not sent the same batch for ever). A send that is `late`, in its request or in its
+  answer, halves the next batch, down to one line; a taken send doubles it, up to `--batch`. FOR: a collector
+  that answers a full batch after the bound took it each time and was sent it again at every try. MUST NOT
+  TOUCH: the bounds themselves.
+- N-2 (a try that moved is not a failed try). Where a try took a line, passed a line or carried the reach
+  further, the next try follows with no wait, and `--once` goes on, until a try moves nothing; `refusing`
+  stays said for as long as lines are in question. FOR: a file with a refused kind drained at a hundred
+  sends a minute, and `--once` ending before the line that would be taken.
+- N-3 (the file is the same file from its first byte, and the run's memory is held to it). The state keeps
+  the sha256 of the file's first bytes (at most 4096, and how many); the same-file check compares them, so a
+  cursor at 0 is checked too. What the run remembers after the cursor - the reach, the count in question,
+  the proof, how far a tail was looked through - is given up, back to the cursor, wherever the file is
+  shorter than it or the line that ended at the reach is not what it was. FOR: a file replaced where the
+  cursor's own line could not tell (the packet's finding 6: lines lost, and lines counted refused after one
+  refusal). MUST NOT TOUCH: a file that only grew.
+- N-4 (the name is lost only to another live forwarder). A pid file that is gone is written again and said;
+  one that cannot be read at this write is tried at the next; the forwarder ends - with 1, not the code of
+  a usage error, the reason said once - only where the file holds the pid of another process that lives.
+- N-5 (lines in question are lines that wait). The state says how many are in question and since when
+  (`in_question`); `--status` is 1 while any has waited longer than a beat, settling included. `sent` counts
+  a line when the cursor passes it.
+- N-6 (the packet's R1). Any state that is not the forwarder's - a `failing.error` that is no text among
+  them, JSON nested past what the reader takes - is unreadable: 3 from `--status`, 2 at a start, never a
+  traceback.
+- N-7 (the packet's R2, and its findings 19 and 20). The fixture that finds a thread left behind fails the
+  test that left it, once, and does not wait again for the same thread; no test runs the forwarder's loop on
+  its own thread. A test holds that the take of an earlier line is never the proof of a later one, and the
+  helper that checks the cursor's rule asks for the take of a LATER line.
+- N-8 (the state every beat and Stop within 2 s, also inside one long line): the walks that look through or
+  hash a line or a tail in pieces look at Stop and the beat at each piece.
+- N-9 (the documents, the packet's R3 and finding 23): how many requests a try may make and why; a failed
+  batch may be sent again smaller; what `--status` says in each state of the machine; what a writer of the
+  events file, the state and the pid file can make the forwarder do.
+Accepted as built: the reach and the count kept in memory only (a restart asks again); a line asked again
+alone for each line in question when a collector is put right (Q1: stricter than M-2); a resolver that never
+returns holds its place for the process's life, four of them `stuck` until a restart (said).
+
+## Amendment O (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3-redo3.md (56847d8): M10.3 lands
+The fourth review of the forwarder found no machine defect and every ruling of N met by a test that fails when
+its behaviour is removed. Two flags, neither a REDO:
+- O-1 (the scope flag closed by the Table). The reviewer's sandbox had no git and read the cumulative branch
+  diff, so it could not attribute files to the landing commit. `git show --stat 56847d8` shows only
+  forward.py, tests/test_forward.py, docs/specs/FORWARD.md, docs/THREAT_MODEL.md and the questions file: all in
+  Scope. The out-of-scope paths it listed (cli.py, tests/test_rhythm.py, rig.yml, tools/rig/collector.py) are
+  earlier commits' - the forwarder's foundation and the Table's guard - not this round's.
+- O-2 (Q4, accept as built: `in_question` is the signal, `refusing` is the last send's word). The HANDOFF's
+  one line "`refusing` is in the state while a line is in question" was looser than the true behaviour, which
+  FORWARD.md's status table already states exactly: a line in question before any send was refused reads
+  BEHIND (status 1) by `in_question.since`, and `refusing` (status 1, FAILING) is the word only once a send
+  was refused, and then it stays through the settling. Both give exit 1 while a line waits, which is what
+  matters; `in_question`, made authoritative in N-5, is the count and the age, and `refusing` says a collector
+  is refusing now. Forcing `refusing` onto a settle path where the last send was taken would be less true, not
+  more. The code, the table and judge agree (a test holds the table to judge); the E2 shorthand is withdrawn
+  in favour of the table.
+- O-3 (recorded, not fixed): a carried `failing` word is not cleared on the one "again" edge of a restart's
+  first try (redo2's finding 15, N did not rule); `in_question` and `behind` still drive the exit code. A
+  later pass may clear it. The per-try request bound is 201 (safe, bounded; latency only); whether to count
+  batches toward the cap is left open.
+M10.3 lands: `raqib forward` sends the watch's events to one HTTP collector, at least once and in order, says
+its own silence, keeps the token off every output, and never lets the collector or a writer of its files turn
+its verification off or make it skip a line. Syslog (J-6) is the next task (M10.3b).
+
+## Amendment P (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3b.md (1935c41): syslog, REDO
+The packet: the HTTP path did not move; the syslog header is RFC 5424; REDO for an event that kills the
+forwarder, failure paths with no test, and a `written` that loses lines. CI agreed with the last before the
+packet came: on both Windows jobs the forwarder said `written` over tls and its listener held nothing.
+- P-1 (no event ends the forwarder). The time's shape is held to ASCII digits; whatever of an event cannot be
+  a header field is `-`; building a message never raises, whatever the line holds (the packet's finding 3: a
+  year in other digits passed the contract and ended every start). FOR: one line by a writer of the file
+  must not stop the forwarding. MUST NOT TOUCH: the MSG, which is the line as written.
+- P-2 (`written` is a connection ended in order). After the batch is written, over tcp the forwarder ends its
+  side (a half-close) and reads to the collector's own end; over tls it reads what the collector sent,
+  sends its close and reads to the collector's - each within the answer's bound. Only then is the batch
+  taken. A reset, an alert, an error or no end within the bound is a failed send: nothing passes, the batch
+  is sent again. FOR: the forwarder's own close that threw away what it had just written (findings 4 and
+  6, the Windows jobs), a collector that accepts and closes, a TLS 1.3 collector that refuses the client
+  after the handshake (finding 5). MUST NOT TOUCH: udp (`sent`: nothing is known, and said so).
+- P-3 (the destination is whole). syslog+tcp needs its port in the URL (514 over tcp is another service's:
+  no default); udp 514 and tls 6514 stay. The state keeps the facility and the framing; a start with another
+  is a usage error, as another shape is.
+- P-4 (the failures are tested). Over tcp, each with a test that fails if the send were counted taken: an
+  error in the middle of a batch (nothing passes; all of it arrives when sent again); a collector that never
+  reads (`late` within the bound, the next batch halved); Stop during a blocked write (within 2 s by the
+  mechanism, not a wall bound); a collector that accepts and closes at once; a collector that resets after
+  reading. Over tls: a collector that refuses after the handshake. The kill test compares what each
+  connection carried, not the order two threads recorded them in.
+- P-5 (the documents say what each word cannot promise): over udp to a collector that is down every line is
+  `sent` and the status is OK - only the collector's own search for silence tells; `written` after P-2 is an
+  orderly end, not a stored event; a message may be cut by a collector at its own limit; with `--framing
+  newline` a line that holds a bare CR may be split by a collector that breaks on it. The advice of client
+  certificates goes (the forwarder presents none). The words said of a syslog send fit it (no "answer").
+- P-6 (scope, recorded). `--facility` and `--framing` in raqib/cli.py were allowed by the Table in the
+  builder's launch, in those words; it is now written here. The two help strings are the Table's.
+Accepted as built: one connection a batch; no BOM; udp unconnected; a state from before this task that holds
+the word `write` is unreadable to an older raqib.
+
+## Amendment Q (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3b-redo.md (b0e19a2): the limit of `written`
+The packet: E1 to E7 met; REDO, narrow, for three things. The Table tried each on this machine before ruling
+and built the two that are small; what cannot be closed is said.
+- Q-1 (over tls, an end with no close of the collector's is a failed send). The syslog context turns off the
+  option by which some Pythons take such an end as a close; the HTTP context keeps its Python's default (its
+  answers are framed by their own length). Tried here: with the option on, the send was taken; off, it failed.
+  FOR: an end somebody else made (a cut path) must not count as the collector's. Cost, accepted: a collector
+  that read everything and ended without its close gets the batch again, and is said failing, never silent.
+- Q-2 (over tls, a close of the collector's before the forwarder's own is a failed send), as over tcp: before
+  its close the forwarder reads what already waits (thrown away, as all the collector sends is); a close among
+  it is no end in answer to the batch. FOR: the packet's 3b - a collector that closes once the handshake
+  ended, its reset still on its way. A test holds the order by the collector's own word and shows the send
+  taken with the look off.
+- Q-3 (what `written` cannot tell, said and not hidden). An end that reaches the forwarder before the reset
+  to a batch's unread tail is taken: a collector that died or closed in the middle (the packet's 3a, the
+  builder's Q2). No look closes it without an answer, and syslog has none. FORWARD.md, the threat model and
+  the guide say it, and that HTTP's `acknowledged` is the delivery to choose where one lost line matters.
+  MUST NOT TOUCH: the word - no new delivery word, no claim beyond an orderly end as the forwarder saw it.
+- Q-4 (the two Windows tests). Winsock takes one send whole whatever the buffer, so no write blocked there
+  and the lateness came at the end, not at the write. The tests' small buffer now writes piece by piece;
+  the forwarder did not move. A fixture that leans on one system's buffering is a claim about that system.
+- Q-5 (the builder's questions). Q1 as built (an older state takes the start's facility and framing, once).
+  Q3 as Q-1 rules, now with its test. Q4: no new error word; over syslog `tls` also says an alert or an end
+  with no close. The words of a carried failure over syslog speak of no answer.
+- Q-6 (Stop during a write that waits, on Windows). CI showed it: there the shutdown of an abandoned send's
+  socket does not end a write that waits for room; its thread ends at its own bound. Stop is not held (the
+  try ended at once), nothing is taken, the send is counted with the abandoned ones (M-5: `stuck` at four),
+  and the thread dies with the process. The test says so for Windows and holds the shutdown's effect
+  elsewhere. FORWARD.md says it.
+Recorded, not built: the header's fallback counts nothing (a defect there would dull every header unseen);
+a collector that never ends its side at the half-close makes every batch late, said failing; what real
+collectors do at the end of a connection is not checked on the rig (rsyslog and syslog-ng: a later task).
+

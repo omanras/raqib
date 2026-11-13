@@ -930,11 +930,14 @@ is amended by T-2, T-1 restated by V-1).
   a clock set back by more than the watch's age, an old orphan of a dead
   holder of the watch's pid were all left out unseen. How it is proven
   now: the watch records every program it starts (the channel's reader,
-  the notifier) by its pid and the time, in the statement that starts it
-  (a test reads the code for a start without the record); the live
-  readers write the recorded pids alive in their sample beside the
-  reader's own pid (a pid the sample holds with a start outside its
-  record's time is another process and is not written). The watch's own
+  the notifier) by its pid, the time and its image (the basename of the
+  launcher's args[0]), in the statement that starts it (a test reads the
+  code for a start without the record); the live readers write the
+  recorded pids alive in their sample beside the reader's own pid (a pid
+  the sample holds with a start outside its record's time, or under an
+  image that is not the one recorded, is another process and is not
+  written - the identity is pid, time and image, not pid alone; ADR-0007
+  BI-2). The watch's own
   tree is then the reader's pid; each launcher the reader names, proven by
   the dated links up from it, itself only; each recorded helper whose start
   was read and is not before the reader's; and what those helpers started,
@@ -950,7 +953,19 @@ is amended by T-2, T-1 restated by V-1).
   again does not know the helpers of the one before (one still running is
   judged as any other); a program started by a helper is taken for the
   watch's by its dates, so a process that names a helper as its parent and
-  starts after it is left out with it; ss (the Linux connection reader of
+  starts after it is left out with it; a pid freed by a dead helper and
+  taken again within the two seconds after the record AND under the very
+  image the watch started is still taken for the watch's own (identity is
+  pid, time and image, not more, until a start the watch can bind to the
+  child it created; ADR-0007 BI-2) - a reuse under any other image, or
+  outside that window, is judged as any other and named; past the record's
+  bound (256 entries) the oldest recorded pid is forgotten even if it is
+  still alive, so a long-lived helper evicted by many newer starts would be
+  judged as any other - the recorded helpers are short-lived, so this is a
+  backstop, not a path seen in practice (ADR-0007 BI-4); the record and the
+  snapshot line are forward-only, so an older build cannot read a newer
+  snapshot line and loses that sample's reader and launchers (cross-build
+  mixing is unsupported; BI-4); ss (the Linux connection reader of
   last resort and the byte counter) is started without the record, because
   the call that starts it gives no pid: it runs and ends inside that call,
   in the thread that takes the sample, and one seen running under the
@@ -1179,6 +1194,167 @@ is amended by T-2, T-1 restated by V-1).
   helpers (a `wevtutil` past its timeout and every one still out at Stop;
   an `ss` that has not returned in 30 s). The only writes are under `~/.raqib`, and the hook settings of a
   project only with `--attach-hooks`.
+
+### The forwarder (`raqib forward`; ADR-0011 Amendments J to N)
+A forwarder is a process of its own that reads the watch's events file and
+sends every whole line to one collector, over HTTP or over syslog
+(docs/specs/FORWARD.md). The
+watch does not know it runs: nothing of the capture path imports it, and a
+collector that is slow, down or refusing never delays or loses a capture
+(the lines wait in the file). What it adds to this model:
+
+- **The token.** The collector's token is a secret on the host, in a file
+  the person names (`--token-file`), read at every try. It is never
+  an argument (so it is not in the process list), never read from the
+  environment, never in the forwarder's state, output or errors, and an
+  error never quotes the collector's answer. An error of the system at the
+  start (the directory or the pid file cannot be made) is a usage error
+  with its reason, an error it did not foresee is said by one word, and a
+  state it does not write - whatever its JSON holds: a value of a type it
+  never writes, JSON nested past what the reader takes - is read by the
+  status as unreadable and refused at a start: no traceback is printed by
+  the forwarder or its status. Off Windows a
+  token file that others can read is refused; on Windows its access is not
+  checked. Anyone who can read that file as the person can send to the
+  collector as Raqib: a forged event at the collector is as good as the
+  file's protection. The URL is an argument, and arguments are on the
+  process list: a credential must never be put in the URL's query.
+- **The wire.** https is verified - the certificate and the host name -
+  against the system's authorities or the `--ca` file, and no switch turns
+  that off. Without `--ca`, the system's authorities are the ones the
+  forwarder's own environment names: OpenSSL reads SSL_CERT_FILE and
+  SSL_CERT_DIR, so whoever sets that environment chooses whom the
+  forwarder trusts. The forwarder never writes TLS secrets: SSLKEYLOGFILE
+  is not honoured, so no key log written beside it can decrypt the
+  Authorization header from a capture. The environment's proxies are not
+  used and a redirect is a failed send, never followed. Plain http is taken
+  only to a loopback address unless `--plain` is given, and then the state
+  and the status say plain: every event crosses that network in clear
+  text. One send is bounded whole (10 s from its start to connect, name
+  resolution and the handshake included; 30 s to send the request; 30 s
+  for the whole answer from the request's last byte): a collector that
+  trickles its answer, or reads the request slowly, cannot hold the
+  forwarder, and a send that is late (its request or its answer) makes
+  the next batch half as many lines, down to one, while a send taken
+  doubles it again: a slow collector is not sent the same batch for ever.
+  The state is written at least once a beat whatever the forwarder is
+  doing - a long send, a long try, a walk through one line or tail of any
+  length, looked at in pieces with Stop at each - so its status says what
+  it does, not what it did before. Name resolution is the system's: a resolver that
+  never returns keeps the thread of that send (its body and headers, the
+  token among them) until it does; at most four such sends are out, and
+  then no send starts and the forwarder is failing `stuck` - an alarm, not
+  a growth without end. An abandoned send's sockets are shut down and left
+  to its own thread, never closed under it.
+- **Syslog.** Over `syslog+udp://` and `syslog+tcp://` every event is
+  clear text over udp and tcp: any host on the path reads it whole, and can
+  change it or drop it, and over udp can send datagrams with the host's
+  address as their source; nothing in a message proves where it came from.
+  The forwarder therefore takes them only to a loopback address unless
+  `--plain` is given (a collector on the same host, or a relay there), and
+  then the state and every status say "plain: not encrypted". Over
+  `syslog+tls://` the wire is verified exactly as https is (the certificate
+  and the host name, the system's authorities or `--ca`, no switch to turn
+  it off, no key log). Syslog carries no token: a syslog collector cannot
+  tell Raqib's messages from anyone's, so anyone who can reach its port -
+  any process on its host for a loopback collector - can send forged
+  messages in Raqib's shape; the collector's own access rules (who may
+  reach its port) are the only answer - the forwarder presents no
+  certificate of its own, so a collector that asks one refuses it, and that
+  refusal is a failed send - and the forwarder sends no token there, so
+  none can leak. Syslog answers nothing, and each delivery word says only
+  what it can: over udp a batch counts as taken when its datagrams were
+  sent (`sent`): over udp to a collector that is down every line is `sent`
+  and the status is OK - only the collector's own search for silence tells.
+  Over tcp and tls a batch counts as taken only when its connection ended
+  in order (`written`): the forwarder ends its side and reads to the
+  collector's end (over tls it sends its close and reads the collector's);
+  a reset, an alert, an error or no end within the bound is a failed send,
+  and the batch is sent again. `written` is an orderly end, not a stored
+  event: a collector that read the batch and then lost it, or ended in
+  order without keeping it, loses lines the forwarder counts as taken. An
+  end is an end as the forwarder saw it: a collector that died or closed
+  while a batch's last bytes were still on their way, and whose end reached
+  the forwarder before its reset did, is taken with lines it never read
+  (over tls an end with no close of the collector's, and a close that came
+  before the forwarder's own, are failed sends); syslog has no answer to
+  close that gap, HTTP has. A
+  message may be cut by a collector at its own limit, and with `--framing
+  newline` a line that holds a bare CR may be split by a collector that
+  breaks on it. The heartbeat search on the collector's side is what tells
+  it. A line longer than a datagram is refused locally, never cut. The
+  forwarder cuts no message; a send that fails in the middle may leave
+  part of a message at the collector, and the batch is sent again whole. No line ends the
+  forwarder: a field of an event that cannot be a header field (a time in
+  other digits than ASCII, a host or kind too long or with a space) is `-`,
+  and the line is still the message whole.
+- **What the collector learns.** Everything the events say (A-4: the whole
+  judgement, not only what knocked): the host's name, each run, the trees
+  with their images, pids and paths, each finding with its rule and
+  evidence, the holes and blind spots, and a heartbeat a beat; nothing the
+  trace does not already hold, and nothing of the token but the header it
+  checks (a syslog collector: no token at all; besides the event, each
+  message's header repeats its severity, time, host name and kind, and the
+  facility the forwarder was given). It learns when the host watches and
+  when it stops. Of the
+  collector the forwarder reads only the status of its own send (and, in
+  the hec shape, the answer's code; over syslog nothing: what a collector
+  sends before its end is read and thrown away): no command, query or configuration
+  comes back.
+- **What a delivery is.** "Taken" is the collector's word: a 2xx (and in
+  the hec shape the code 0) moves the cursor. A collector that answers 2xx
+  and drops the lines loses them, and the forwarder cannot see it. A line
+  the collector refuses alone is passed only when it is refused alone
+  twice with a later line taken between: a collector that refuses
+  everything (a wrong path, a missing channel) moves nothing, and the
+  forwarder is failing `refusing`; a refusal that would not come twice (a
+  node behind a balancer, a 400 of a moment) passes nothing; a collector
+  that refuses one kind of line does not stop the lines of another kind
+  after them. Delivery is at least once: after a restart, a refused batch,
+  an answer that came too late or a file that changed under the cursor,
+  the collector gets lines twice (`watch.host` and `id` tell them apart).
+  The order at the collector is the file's except for a line in question
+  taken when asked again (it arrives after the later line that proved the
+  collector), a send answered too late and sent again, and a send
+  abandoned that still arrives: `n` orders the lines of a run.
+- **What an attacker on the host can do.** Stop or kill the forwarder: its
+  state is then older than two beats (`raqib forward --status` exits 3) and
+  the collector sees no heartbeat of the host for more than two beats,
+  which is the one search the guide gives a SOC. Write to the events file:
+  a line that is not an event is skipped and counted, but a well-formed
+  forged event is sent as any other (the forwarder checks the shape, not
+  the truth). Well-formed events of a kind the collector refuses each cost
+  two sends a line (asked alone, then again after a later take), keep the
+  forwarder `refusing` while they wait, and fill the latest 50 refused ids
+  with theirs; the lines after them still go, with no wait between tries
+  that move. A file whose first 4096 bytes (of them, what the cursor has
+  passed), length or last line passed changed is another file: read again
+  from its start and counted as a restart, the cursor at 0 included. A file
+  cut to the cursor, or changed only after it, has what the forwarder held
+  after the cursor given up: those lines are asked again as new ones, none
+  counted refused on another file's answers. Change only lines between the
+  first 4096 bytes and the last one passed: the forwarder checks the head,
+  the length and the last line passed, not every byte, and does not see
+  that.
+- **The watched account.** Where the forwarder runs as the watched account
+  (as it does until it runs as a service), that account can write its
+  files in `~/.raqib/forward/`. The cursor: a forged offset with the
+  sha256 of a later line (the account can read the events file) makes a
+  restarted forwarder skip the lines between, with no restart counted (an
+  offset above 0 with no hash is refused as a damaged state). The
+  state: a fresh time keeps `--status` at 0 for a forwarder that is not
+  there. The pid file: a live pid written in it keeps the name from ever
+  starting, and the pid of a process that lives, written over a running
+  forwarder's, ends that forwarder (exit 1) at its next state write. A pid
+  file removed, or holding a pid no process has, is only written again
+  (and said); one that cannot be read for a moment is read again at the
+  next write. A line far longer than a request is
+  never read whole, so a writer of the file cannot fill the forwarder's
+  memory with one line. The answers are the search on the collector's side - which is
+  judged by the collector's own clock of arrival, never by the event's
+  `time`, the host's clock that the same account may set (EVENT.md says
+  the same of any reader) - and a forwarder under another account (the
+  service, later).
 
 ## 6. Attacks on the watcher itself
 

@@ -3,10 +3,13 @@ what the stand-in says it did, and states each expectation as MET, MISSED or OPE
 its task). Every expectation names the field run that taught it. Stdlib only; it reads text and writes text.
 
     python tools/rig/check.py --report WATCH.out --workload WORKLOAD.out [--sources DIR] [--exit-code N]
-                              [--platform win32|linux] [--sysmon] [--events FILE] [--summary FILE] [--strict]
+                              [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
+                              [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
+--forward: what tools/rig/forward_run.py saw `raqib forward` do with that file (ADR-0011 J-14): X19 to X22
+over HTTP, X23 to X25 over syslog (J-6).
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
@@ -248,6 +251,173 @@ def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=
     return out
 
 
+def _whole_events(events):
+    """The whole lines of the events file that are events (a reader's view, EVENT.md), in the file's order."""
+    check, out = _checker(), []
+    for raw in (events or "").split("\n")[:-1]:
+        try:
+            e = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(e, dict) and not check(e):
+            out.append(json.dumps(e, sort_keys=True, separators=(",", ":")))
+    return out
+
+
+def _first_arrivals(got):
+    seen, out = set(), []
+    for x in got or ():
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def read_forward(facts, events):
+    """X19-X22 (ADR-0011 J-14, L-10): what tools/rig/forward_run.py saw `raqib forward` do with the watch's events
+    file. facts None: the run left nothing (silence is a finding: all four MISSED). A case whose run failed is
+    MISSED with its error; no events file is n/a for all four (X16 says the watch wrote none)."""
+    names = ("X19 every whole line of the events file arrived, in order, each id at least once",
+             "X20 a collector down from the start: the state says failing, and nothing is lost when it comes up",
+             "X21 a forwarder killed between two batches and started again leaves no gap and sends no taken line"
+             " again",
+             "X22 neither token is in any output, state, error or process list of the forwarder")
+    if not isinstance(facts, dict):
+        return [(n, MISSED, "the forwarder's run left no facts (silence is a finding)") for n in names]
+    if facts.get("events_missing"):
+        return [(n, SKIP, "the watch wrote no events file: nothing to forward (X16 says so)") for n in names]
+    if facts.get("error"):
+        return [(n, MISSED, "the forwarder's run failed: %s" % facts["error"]) for n in names]
+    want = _whole_events(events)
+
+    def arrived(part):
+        got = _first_arrivals((facts.get(part) or {}).get("events"))
+        if not want:
+            return False, "the events file holds no whole event to forward"
+        lost = [x for x in want if x not in set(got)]
+        return got == want, "%d of %d line(s) arrived%s%s" % (len(want) - len(lost), len(want), ", in the file's order"
+                                                               if got == want else ", not in the file's order"
+                                                               if not lost else "", "; %d lost" % len(lost) if lost
+                                                               else "")
+
+    def part(key):
+        got = facts.get(key)
+        return got if isinstance(got, dict) else {}
+    out = []
+    for i, key in enumerate(("x19", "x20", "x21")):
+        if part(key).get("error"):
+            out.append((names[i], MISSED, "the rig's run of it failed: %s" % part(key)["error"]))
+            continue
+        ok, words = arrived(key)
+        if key == "x19":
+            x = part(key)
+            out.append((names[0], MET if ok and x.get("exit") == 0 else MISSED,
+                        "%s; %s request(s); --once exit %s" % (words, x.get("requests"), x.get("exit"))))
+        elif key == "x20":
+            x = part(key)
+            failing, final = x.get("failing") or {}, x.get("final") or {}
+            ok = ok and bool(failing) and bool(final) and final.get("failing") is None and final.get("behind") == 0
+            out.append((names[1], MET if ok else MISSED, "the state said failing: %s (%s); then %s; %s" % (
+                "yes" if failing else "no", failing.get("error"), "taken, behind 0" if final else "never all taken",
+                words)))
+        else:
+            x = part(key)
+            killed = (x.get("killed") or {}).get("offset") or 0
+            between = 0 < killed < (x.get("size") or 0)
+            got, before = x.get("events") or [], x.get("before") or 0
+            taken = set(got[:before])
+            again = [e for e in got[before:] if e in taken]
+            ok = ok and between and before > 0 and not again and x.get("exit") == 0
+            out.append((names[2], MET if ok else MISSED,
+                        "killed at the collector's request %s, %d line(s) taken before, at offset %s of %s (%s);"
+                        " started again: exit %s, %d line(s) taken before the kill came again; %s" % (
+                            x.get("requests_at_kill"), before, killed, x.get("size"),
+                            "between two batches" if between else "not between two batches", x.get("exit"),
+                            len(again), words)))
+    x22 = part("x22")
+    tokens, unread = [], []
+    for key in ("token_file", "wrong_file"):
+        try:
+            with open(facts.get(key) or "", "rb") as f:
+                tokens.append(f.read().strip().decode("ascii"))
+        except (OSError, UnicodeDecodeError):
+            unread.append(key)
+    tokens = [t for t in tokens if t]
+    texts, argvs, listed = x22.get("texts") or [], x22.get("argv") or [], x22.get("listed") or []
+    found = [t.get("where") for t in texts for tok in tokens if tok in (t.get("text") or "")]
+    found += ["an argument list" for a in argvs for tok in tokens if any(tok in str(x) for x in a)]
+    found += ["the process list (%s)" % p.get("how") for p in listed for tok in tokens if tok in (p.get("text") or "")]
+    seen = [p for p in listed if "--token-file" in (p.get("text") or "")]
+    if x22.get("error"):
+        ok, why = False, "the rig's run of it failed: %s" % x22["error"]
+    elif unread or len(tokens) != 2:
+        ok, why = False, "no token to look for (%s cannot be read)" % ", ".join(unread or ["a token file"])
+    elif not texts:
+        ok, why = False, "no output or state to read"
+    elif not seen:
+        ok, why = False, "the system's process list of a running forwarder was not read"
+    elif found:
+        ok, why = False, "a token is in " + ", ".join(found[:3])
+    else:
+        ok, why = True, "neither token is in any"
+    out.append((names[3], MET if ok else MISSED, "%d output(s) and state(s), %d argument list(s), %d process"
+                " list(s) read for 2 tokens: %s" % (len(texts), len(argvs), len(seen), why)))
+    return out
+
+
+def read_syslog(facts, events):
+    """X23-X25 (ADR-0011 J-6, J-14): what tools/rig/forward_run.py saw `raqib forward` do over syslog with the
+    watch's events file, against the stand-in syslog collector on loopback. It never raises: facts None (the
+    run left nothing) or a case the run has no facts of is MISSED (silence is a finding); a case whose run
+    failed is MISSED with its error; no events file is n/a for all three (X16 says the watch wrote none)."""
+    cases = (("x23", "X23 over syslog+tcp (octet counting) every whole line of the events file arrived, in order,"
+                     " each an RFC 5424 message in raqib's shape", "written", ["octet"]),
+             ("x24", "X24 over syslog+udp every line sent arrived on loopback, in order, each an RFC 5424"
+                     " message in raqib's shape", "sent", ["datagram"]),
+             ("x25", "X25 over syslog+tcp with --framing newline every whole line arrived, in order, each an RFC"
+                     " 5424 message in raqib's shape", "written", ["newline"]))
+    try:
+        if not isinstance(facts, dict):
+            return [(n, MISSED, "the forwarder's run left no facts (silence is a finding)") for _, n, _, _ in cases]
+        if facts.get("events_missing"):
+            return [(n, SKIP, "the watch wrote no events file: nothing to forward (X16 says so)")
+                    for _, n, _, _ in cases]
+        if facts.get("error"):
+            return [(n, MISSED, "the forwarder's run failed: %s" % facts["error"]) for _, n, _, _ in cases]
+        want = _whole_events(events)
+    except Exception as exc:   # never raises: what cannot be read is a fact
+        return [(n, MISSED, "the facts cannot be read (%s)" % type(exc).__name__) for _, n, _, _ in cases]
+    out = []
+    for key, name, delivery, framing in cases:
+        try:
+            x = facts.get(key)
+            if not isinstance(x, dict):
+                out.append((name, MISSED, "the rig did not run it: no facts of %s" % key))
+                continue
+            if x.get("error"):
+                out.append((name, MISSED, "the rig's run of it failed: %s" % x["error"]))
+                continue
+            got = _first_arrivals(x.get("events"))
+            lost = [e for e in want if e not in set(got)]
+            problems = x.get("problems") or []
+            ok = bool(want) and got == want and x.get("exit") == 0 and not problems and \
+                x.get("delivery") == delivery and x.get("framings") == framing and x.get("refused") == 0
+            words = ("the events file holds no whole event to forward" if not want else
+                     "%d of %d line(s) arrived%s%s" % (len(want) - len(lost), len(want),
+                                                       ", in the file's order" if got == want else
+                                                       ", not in the file's order" if not lost else "",
+                                                       "; %d lost" % len(lost) if lost else ""))
+            out.append((name, MET if ok else MISSED,
+                        "%s; %s message(s) on %s connection(s), framed %s; %d not in raqib's RFC 5424 shape%s;"
+                        " delivery %s, refused %s; --once exit %s" % (
+                            words, x.get("messages"), x.get("connections"), "/".join(x.get("framings") or [])
+                            or "never", len(problems), " (%s)" % problems[0] if problems else "",
+                            x.get("delivery"), x.get("refused"), x.get("exit"))))
+        except Exception as exc:   # never raises: a case whose facts cannot be read is MISSED
+            out.append((name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__))
+    return out
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -265,6 +435,7 @@ def main(argv=None):
     p.add_argument("--platform", default=sys.platform)
     p.add_argument("--sysmon", action="store_true")
     p.add_argument("--events")
+    p.add_argument("--forward")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -282,6 +453,13 @@ def main(argv=None):
     if a.events:   # given and missing: the watch wrote none, which X16 says (not n/a)
         events = text(a.events) if os.path.isfile(a.events) else ""
     rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon, events)
+    if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
+        try:
+            facts = json.loads(text(a.forward))
+        except (OSError, ValueError):
+            facts = None
+        rows += read_forward(facts, events)
+        rows += read_syslog(facts, events)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

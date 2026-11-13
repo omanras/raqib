@@ -75,7 +75,38 @@ NEW_ROWS = ["| `raqib app [PROJECT]` | open Raqib as a desktop window: the host 
             "| `raqib --version` | print raqib <version> and exit 0 |"]
 # ADR-0011 G-11 (the Table): a row of the guide's table only (the README names the command in "the rest")
 GUIDE_ROWS = ["| `raqib events FILE` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a"
-              " `raqib-event/1` event; exit 0, 1 or 2 |"]
+              " `raqib-event/1` event; exit 0, 1 or 2 |",
+              # ADR-0011 J (M10.3) and L (its REDO): the forwarder, rows of the guide only (G-11)
+              "| `raqib forward [FILE] --to URL --name NAME [--shape raqib\\|hec] [--token-file FILE] [--ca "
+              "FILE] [--plain] [--facility N] [--framing octet\\|newline] [--once]` | send every whole line of "
+              "a watch's events file (default `~/.raqib/host/events.jsonl`, read only) to one collector, at "
+              "least once and in the file's order (but for a line refused once and taken when asked again): "
+              "over HTTP (`http://`, `https://`: taken is `acknowledged`, a 2xx) or over syslog "
+              "(`syslog+udp://`, `syslog+tcp://`, `syslog+tls://`: one RFC 5424 message a line, the line as "
+              "its message, app raqib, the message id the event's kind, the facility 13 unless `--facility N`, "
+              "the severity high 2, medium 4, low 5, a hole 4, none and info 6; over tcp and tls framed by "
+              "octet count, or --framing newline for a collector that wants lines, and taken is `written`, the "
+              "connection ended in order after the batch - not a stored event; `syslog+tcp://` needs its port "
+              "written; over udp one datagram a message, taken is `sent`, nothing is known, "
+              "and a message over 65000 bytes is refused, counted and passed, never cut; no token); a line "
+              "that is not an event is skipped and counted, never sent; a line the collector refuses alone is "
+              "counted and passed only when it is refused alone again after a later line was taken (until then "
+              "it is failing `refusing` and the cursor waits); its cursor and state are "
+              "`~/.raqib/forward/NAME.json`; https and syslog+tls are verified by the system's authorities or "
+              "`--ca`, and plain http, udp and tcp go only to a loopback address unless `--plain`; the token "
+              "only from `--token-file` (HTTP only), never printed (off Windows a file others can read is exit "
+              "2; on Windows it is not checked); `--once` exit 0 all taken, 1 not all, 2 usage |",
+              "| `raqib forward --status [NAME]` | say a forwarder's state and the lines it refused (`--beat S`: "
+              "it writes one at least every S seconds, default 60, at least 1): exit 0 only where nothing is "
+              "failing and no whole line has waited longer than a beat; 1 where it is failing (`refusing` too) "
+              "or behind; 3 where there is no state, it cannot be read, or it was written more than two beats "
+              "ago or in the future (the forwarder is silent) |",
+              "| `raqib forward FILE --to URL --name NAME --shape hec --token-file FILE` | one envelope per line "
+              "in the shape of Splunk's HTTP event collector (`time` in seconds, `host` the event's "
+              "`watch.host`, `source` raqib, `sourcetype` raqib:event, `event` the line unchanged) with "
+              "`Authorization: Splunk <token>`; on the collector, the one search for silence: no heartbeat of a "
+              "host for more than two beats by the collector's own time of arrival, never the event's `time` "
+              "(`kind` heartbeat by `watch.host`; `watch.beat` is the beat) |"]
 # The pieces of the guide that are not the old README's (E-6): its title, E-7's lines, E-3's rows (and CHANGED).
 # ADR-0007 AG-7: the paragraph "Watch the host" gained after "Every tree gets a source that only reads, by
 # itself" (the channel that is there and not read, AF and AG), its sentences as cut() makes them.
