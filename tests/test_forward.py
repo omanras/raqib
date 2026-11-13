@@ -13,6 +13,7 @@ import inspect
 import io
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -825,8 +826,8 @@ def test_e6_the_waits_are_1_2_4_up_to_60_and_it_does_not_give_up(tmp_path, colle
     assert state(tmp_path)["failing"]["error"] == "connect"
 
 
-def test_e6_once_exits_0_all_taken_1_not_all_2_usage_and_syslog_is_a_usage_error_that_says_so(tmp_path, collectors,
-                                                                                              capsys, monkeypatch):
+def test_e6_once_exits_0_all_taken_1_not_all_2_usage_and_a_syslog_usage_error_says_so(tmp_path, collectors, capsys,
+                                                                                     monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
     ok, down = collectors(shape="raqib"), collectors(shape="raqib", fail=10)
@@ -838,15 +839,17 @@ def test_e6_once_exits_0_all_taken_1_not_all_2_usage_and_syslog_is_a_usage_error
     assert run("--to", "http://127.0.0.1:%d/" % ok.port, "--name", "a", "--once") == 0
     assert run("--to", "http://127.0.0.1:%d/" % down.port, "--name", "b", "--once") == 1
     capsys.readouterr()
-    for argv in (("--to", "syslog+udp://127.0.0.1:514", "--name", "c", "--once"),
-                 ("--to", "syslog+tls://127.0.0.1:6514", "--name", "c", "--once"),
+    token = secret(tmp_path / "token.txt")   # M10.3b: syslog is built; what it refuses is said (J-6, J-7, J-8)
+    for argv in (("--to", "syslog+udp://127.0.0.1:514", "--name", "c", "--token-file", token, "--once"),
+                 ("--to", "syslog+tcp://192.0.2.10:514", "--name", "c", "--once"),
                  ("--to", nobody, "--name", "Bad_Name", "--once"),
                  ("--to", nobody, "--once"), ("--name", "c", "--once"),
                  ("--to", nobody, "--name", "c", "--batch", "101", "--once"),
                  ("--to", "ftp://127.0.0.1/", "--name", "c", "--once")):
         assert run(*argv) == 2, argv
     err = capsys.readouterr().err
-    assert err.count("a syslog destination is not built yet") == 2 and "[a-z0-9-]{1,32}" in err
+    assert "syslog carries no token" in err and "plain syslog (udp, tcp) is taken only to a loopback address" in err
+    assert "[a-z0-9-]{1,32}" in err and TOKEN not in err
 
 
 def test_e6_stop_writes_the_state(tmp_path, collectors):
@@ -2132,3 +2135,445 @@ def test_redo3_e9_forward_md_and_the_threat_model_say_what_n_rules():
         assert said in section, said
     import re
     assert not re.search(r"\bM\d+\.\d+", section)
+
+
+# --- M10.3b (ADR-0011 J-6, J-14): the forwarder over syslog ----------------------------------------------------
+# Every syslog collector here is the rig's stand-in (tools/rig/syslog_collector.py) on loopback, on ports it bound
+# itself, stopped and joined by the fixture (it drains what was sent before its Stop), or a TLS listener the test
+# bound on port 0. No verdict waits for a time to pass: the collector's own counts and the states say it.
+
+sspec = importlib.util.spec_from_file_location("rig_syslog_collector", ROOT / "tools" / "rig" / "syslog_collector.py")
+syslog_collector = importlib.util.module_from_spec(sspec)
+sspec.loader.exec_module(syslog_collector)
+RFC5424 = re.compile(rb"<(\d{1,3})>1 (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z) ([\x21-\x7e]{1,255})"
+                     rb" ([\x21-\x7e]{1,48}) ([\x21-\x7e]{1,128}) ([\x21-\x7e]{1,32}) (-) (.*)\Z", re.S)
+
+
+@pytest.fixture
+def syslogs():
+    started = []
+
+    def make(**kw):
+        c = syslog_collector.SyslogCollector(**kw)
+        c.start()
+        started.append(c)
+        return c
+    yield make
+    for c in started:
+        c.stop()
+
+
+def sfwd(tmp_path, path, url, clock=None, **kw):
+    kw.setdefault("name", "s")
+    clock = clock or Clock()
+    kw.setdefault("mono", clock)
+    return forward.Forwarder(kw.pop("name"), path, url, home=str(tmp_path / "home"), out=io.StringIO(), clock=clock,
+                             wait=clock.wait, **kw)
+
+
+def tcp_url(c, scheme="syslog+tcp"):
+    return "%s://127.0.0.1:%d" % (scheme, c.tcp_port)
+
+
+def udp_url(c):
+    return "syslog+udp://127.0.0.1:%d" % c.udp_port
+
+
+def drained(c):
+    """The stand-in's facts once it has taken all that was sent (its Stop drains, then joins)."""
+    c.stop()
+    return c
+
+
+def sorted_line(row):
+    return json.dumps(json.loads(row.decode("ascii")), sort_keys=True, separators=(",", ":"))
+
+
+def severities():
+    """One event line of each severity the event contract has: high, medium, low (findings), hole, info (a
+    blind spot, a note)."""
+    t, out = "2026-11-03T07:51:21.000Z", []
+    for i, sev in enumerate(("high", "medium", "low"), 1):
+        out.append(event.finding({"rule_id": "R-%d" % i, "severity": sev, "summary": "s", "class": "HOST",
+                                  "kind": "anchor", "run": "r1", "round": 1}, FACTS, t, i, "finding:%d" % i,
+                                 rule={"attack": ["T1059"]}))
+    out.append(event.hole({"kind": "reader-failed", "detail": "d", "round": 2}, FACTS, t, 4, "hole:1"))
+    out.append(event.hole({"kind": "seen", "detail": "d", "class": "blind spot", "rounds": [1]}, FACTS, t, 5,
+                          "blind:1"))
+    out.append(event.note({"text": "a note"}, FACTS, t, 6, "note:1"))
+    return [(event.line(e) + "\n").encode("ascii") for e in out]
+
+
+def test_m103b_e1_a_built_line_is_rfc_5424_with_each_severity_the_facility_and_the_line_as_its_msg(tmp_path,
+                                                                                                   syslogs):
+    """E1 (J-6): <PRI>1 TIMESTAMP HOSTNAME raqib - MSGID - MSG; PRI = facility * 8 + severity (13 unless
+    --facility N; high 2, medium 4, low 5, a hole 4, none and info 6); the event's time, watch.host, kind; the
+    line as written as the MSG. Built, and as a collector got it over tcp."""
+    rows = severities()
+    want = {"high": 2, "medium": 4, "low": 5, "hole": 4, "info": 6}
+    seen = set()
+    for raw in rows:
+        obj = forward.classify(raw)
+        assert obj is not None
+        m = RFC5424.match(forward.syslog_message(raw, obj))
+        assert m, raw
+        pri, stamp, host, app, procid, msgid, sd, msg = m.groups()
+        assert int(pri) == 13 * 8 + want[obj["severity"]] and int(pri) // 8 == 13
+        assert stamp.decode() == obj["time"] and host.decode() == obj["watch"]["host"] == "host.example"
+        assert (app, procid, msgid.decode(), sd) == (b"raqib", b"-", obj["kind"], b"-")
+        assert msg == raw[:-1] and b"\n" not in msg   # the line as written, without its newline
+        assert int(RFC5424.match(forward.syslog_message(raw, obj, 4)).group(1)) == 4 * 8 + want[obj["severity"]]
+        seen.add(obj["severity"])
+    assert seen == set(want)
+    assert forward.severity_of({"severity": "none"}) == 6 and forward.severity_of({"severity": "info"}) == 6
+    assert forward.severity_of({"severity": "no-such"}) == 4 and forward.severity_of({}) == 4
+    odd = dict(forward.classify(rows[-1]), watch=dict(FACTS, host="a host with spaces"), kind="k" * 33, time="x")
+    assert forward.syslog_head(odd) == b"<110>1 - - raqib - - - "   # "-" where RFC 5424 does not take the value
+    c = syslogs(facility=4)
+    path = write(tmp_path / "e.jsonl", rows)
+    f = sfwd(tmp_path, path, tcp_url(c), facility=4)
+    assert f.step() == "moved" and f.offset == os.path.getsize(path)
+    drained(c)
+    assert c.events["tcp"] == [sorted_line(r) for r in rows] and c.problems == [] and c.framings == {"octet"}
+    for bad in ("24", "-1", "x", "1.5", "\u0661"):
+        with pytest.raises(forward.UsageError, match="--facility: a syslog facility"):
+            sfwd(tmp_path, path, tcp_url(c), facility=bad)
+    assert sfwd(tmp_path, path, tcp_url(c), facility="0").facility == 0
+    assert sfwd(tmp_path, path, tcp_url(c)).facility == forward.FACILITY == 13
+
+
+def test_m103b_e2_the_three_forms_their_ports_and_plain_udp_and_tcp_only_to_loopback_unless_plain(tmp_path):
+    """E2 (J-6, J-8): syslog+udp://, syslog+tcp://, syslog+tls://host[:port]; no path, query or fragment; plain
+    udp and tcp only to a loopback address unless --plain, and then the state and the status say plain."""
+    d = forward.destination
+    assert d("syslog+udp://127.0.0.1") == ({"scheme": "syslog+udp", "host": "127.0.0.1", "port": 514, "path": ""},
+                                          None)
+    assert d("syslog+tcp://127.0.0.1:1514")[0]["port"] == 1514 and d("syslog+tcp://[::1]")[0]["port"] == 514
+    assert d("SYSLOG+TLS://collector.example")[0] == {"scheme": "syslog+tls", "host": "collector.example",
+                                                      "port": 6514, "path": ""}
+    for url in ("syslog+udp://127.0.0.1:514/x", "syslog+tcp://127.0.0.1:514?a=b", "syslog+tls://collector.example#f",
+                "syslog+tcp://127.0.0.1:514?"):
+        with pytest.raises(forward.UsageError, match="host\\[:port\\] only"):
+            d(url)
+    for url in ("syslog+udp://192.0.2.10", "syslog+tcp://collector.example:514"):
+        with pytest.raises(forward.UsageError, match="plain syslog \\(udp, tcp\\) is taken only to a loopback"):
+            d(url)
+        assert d(url, plain=True)[0]["host"] in ("192.0.2.10", "collector.example")
+    assert d("syslog+tls://192.0.2.10:6514")[0]["port"] == 6514   # verified: no --plain needed
+    with pytest.raises(forward.UsageError, match="user information"):
+        d("syslog+tls://user@collector.example")
+    with pytest.raises(forward.UsageError, match="port 0"):
+        d("syslog+udp://127.0.0.1:0")
+    path = write(tmp_path / "e.jsonl", lines(1))
+    for url, plain in (("syslog+udp://192.0.2.10:514", True), ("syslog+tcp://192.0.2.10:514", True),
+                       ("syslog+tls://192.0.2.10:6514", False)):
+        name = url.split(":")[0].split("+")[1]
+        f = sfwd(tmp_path, path, url, name=name, plain=True)
+        assert f.plain is plain and f.target is None
+        f.write_state()
+        out = io.StringIO()
+        assert forward.status(name, home=str(tmp_path / "home"), out=out, clock=Clock()) in (0, 1)
+        assert ("plain: not encrypted" in out.getvalue()) is plain and url.split("//")[0] in out.getvalue()
+
+
+def test_m103b_e2_over_tcp_octet_counting_and_framing_newline_over_udp_one_datagram_a_message(tmp_path, syslogs,
+                                                                                            capsys, monkeypatch):
+    """E2 (J-6, RFC 6587): over tcp "<length> <message>", or with --framing newline the message and a newline;
+    over udp the message is the datagram. The framing the stand-in found is the one asked; its length is the one
+    computed without building it."""
+    raw = lines(1)[0]
+    obj = forward.classify(raw)
+    msg = forward.syslog_message(raw, obj)
+    assert forward.syslog_frame(msg, "syslog+tcp") == b"%d " % len(msg) + msg
+    assert forward.syslog_frame(msg, "syslog+tls", "newline") == msg + b"\n"
+    assert forward.syslog_frame(msg, "syslog+udp") == msg
+    for scheme in forward.SYSLOG:
+        for framing in forward.FRAMINGS:
+            assert forward.syslog_len(raw, obj, scheme, 13, framing) == len(
+                forward.syslog_frame(msg, scheme, framing))
+    rows = lines(30)
+    path = write(tmp_path / "e.jsonl", rows)
+    for framing in ("octet", "newline"):
+        c = syslogs(framing=framing)   # the stand-in reads only this framing: another is a problem
+        f = sfwd(tmp_path, path, tcp_url(c), name=framing, framing=None if framing == "octet" else framing)
+        assert f.step() == "moved"
+        drained(c)
+        assert c.events["tcp"] == [sorted_line(r) for r in rows] and c.problems == [] and c.framings == {framing}
+    c = syslogs()
+    f = sfwd(tmp_path, path, udp_url(c), name="udp")
+    assert f.step() == "moved"
+    drained(c)
+    assert c.events["udp"] == [sorted_line(r) for r in rows] and c.framings == {"datagram"} and c.messages == 30
+    with pytest.raises(forward.UsageError, match="a datagram is one message, never framed"):
+        sfwd(tmp_path, path, udp_url(c), name="u2", framing="newline")
+    with pytest.raises(forward.UsageError, match="--framing: octet"):
+        sfwd(tmp_path, path, tcp_url(c), name="t2", framing="lines")
+    with pytest.raises(forward.UsageError, match="--facility and --framing are syslog's"):
+        sfwd(tmp_path, path, "http://127.0.0.1:9/x", name="h2", framing="newline")
+    with pytest.raises(forward.UsageError, match="--facility and --framing are syslog's"):
+        sfwd(tmp_path, path, "http://127.0.0.1:9/x", name="h3", facility=13)
+    monkeypatch.setenv("HOME", str(tmp_path / "cli"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "cli"))
+    c = syslogs()
+    assert cli.main(["forward", path, "--to", tcp_url(c), "--name", "cli", "--framing", "newline", "--facility", "4",
+                     "--once"], out=io.StringIO()) == 0
+    assert cli.main(["forward", path, "--to", udp_url(c), "--name", "cli2", "--framing", "octet", "--once"],
+                    out=io.StringIO()) == 2
+    drained(c)
+    assert c.framings == {"newline"} and len(c.events["tcp"]) == 30 and c.problems == ["tcp: PRI of r1:%d not as J-6"
+                                                                                       " rules" % n for n in
+                                                                                       range(1, 31)]
+    assert "a datagram is one message" in capsys.readouterr().err
+
+
+class TlsListener:
+    """A syslog collector over TLS the test bound on port 0 (the test's own certificate): it reads each connection
+    to its end, and keeps the bytes and how many handshakes failed."""
+
+    def __init__(self, cert, key):
+        self.ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.ctx.load_cert_chain(cert, key)
+        self.sock = socket.socket()
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(8)
+        self.sock.settimeout(0.05)
+        self.port = self.sock.getsockname()[1]
+        self.data, self.failed, self.quit = [], 0, threading.Event()
+        self.thread = threading.Thread(target=self.serve, name="raqib-test-tls", daemon=True)
+        self.thread.start()
+
+    def serve(self):
+        while True:   # Stop drains: it ends only at an accept with nothing waiting after Stop
+            try:
+                conn, _ = self.sock.accept()
+            except OSError:
+                if self.quit.is_set():
+                    break
+                continue
+            conn.settimeout(10)
+            try:
+                tls = self.ctx.wrap_socket(conn, server_side=True)
+            except (OSError, ssl.SSLError):
+                self.failed += 1
+                conn.close()
+                continue
+            got = b""
+            try:
+                while True:
+                    block = tls.recv(65536)
+                    if not block:
+                        break
+                    got += block
+            except (OSError, ssl.SSLError):
+                pass
+            finally:
+                tls.close()
+            self.data.append(got)
+
+    def stop(self):
+        self.quit.set()
+        self.thread.join()
+        self.sock.close()
+
+
+def test_m103b_e2_tls_is_verified_as_https_is_and_ca_adds_an_authority(tmp_path, monkeypatch):
+    """E2 (J-8, L-5): syslog over tls is verified by the same context as https - the certificate and the host
+    name, by the system's authorities or by --ca; nothing turns it off; no key log is written."""
+    ca, cert, key = certificates(tmp_path)
+    for name in ("SSL_CERT_FILE", "SSL_CERT_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    keys = tmp_path / "keys.log"
+    monkeypatch.setenv("SSLKEYLOGFILE", str(keys))
+    t = TlsListener(cert, key)
+    try:
+        rows = lines(3)
+        path = write(tmp_path / "e.jsonl", rows)
+        url = "syslog+tls://127.0.0.1:%d" % t.port
+        f = sfwd(tmp_path, path, url)
+        assert f.context.verify_mode == ssl.CERT_REQUIRED and f.context.check_hostname and not f.plain
+        assert f.step() == "failed" and f.failing["error"] == "tls" and f.offset == 0   # the system's: refused
+        g = sfwd(tmp_path, path, url, name="ca", ca=ca)
+        assert g.step() == "moved" and g.offset == os.path.getsize(path) and g.delivery == "written"
+    finally:
+        t.stop()
+    frames = b"".join(t.data)
+    msgs = []
+    while frames:
+        n, _, rest = frames.partition(b" ")
+        msgs.append(rest[:int(n)])
+        frames = rest[int(n):]
+    assert [m.split(b" - ", 2)[-1] + b"\n" for m in msgs] == rows and t.failed >= 1
+    assert not keys.exists()
+
+
+def test_m103b_e2_a_message_over_65000_bytes_over_udp_is_refused_locally_counted_named_passed_never_cut(tmp_path,
+                                                                                                      syslogs):
+    """E2 (J-6): over udp a message longer than a datagram may be is never sent and never cut: counted refused,
+    named by its id, passed; the line after it is sent. Over tcp the same line is sent whole."""
+    small, big, after = lines(1, 1), lines(1, 2, size=forward.DATAGRAM_MAX), lines(1, 3)
+    rows = small + big + after
+    obj = forward.classify(big[0])
+    assert forward.syslog_len(big[0], obj, "syslog+udp") > forward.DATAGRAM_MAX > len(small[0])
+    assert len(big[0]) < forward.MAX_BYTES
+    path = write(tmp_path / "e.jsonl", rows)
+    c = syslogs()
+    f = sfwd(tmp_path, path, udp_url(c))
+    for _ in range(4):
+        if f.step() == "idle":
+            break
+    drained(c)
+    assert c.events["udp"] == [sorted_line(small[0]), sorted_line(after[0])] and c.messages == 2
+    assert f.refused == 1 and f.refused_ids == ["r1:2"] and f.offset == os.path.getsize(path) and f.sent == 2
+    assert "longer than one datagram may be (over 65000 bytes" in f.out.getvalue()
+    c = syslogs()
+    g = sfwd(tmp_path, path, tcp_url(c), name="tcp")
+    assert g.step() == "moved" and g.refused == 0
+    drained(c)
+    assert c.events["tcp"] == [sorted_line(r) for r in rows] and c.problems == []   # whole, never cut
+
+
+def test_m103b_e3_written_over_tcp_and_tls_sent_over_udp_and_every_line_arrives_in_order(tmp_path, syslogs):
+    """E3 (J-3): the same cursor machine; a batch passed when the transport took it, and the state's delivery
+    says what took means: written (tcp, tls), sent (udp). 250 lines, three batches each, in the file's order."""
+    assert forward.DELIVERY_OF == {"http": "acknowledged", "https": "acknowledged", "syslog+udp": "sent",
+                                   "syslog+tcp": "written", "syslog+tls": "written"}
+    rows = lines(250)
+    path = write(tmp_path / "e.jsonl", rows)
+    for transport, word in (("tcp", "written"), ("udp", "sent")):
+        c = syslogs()
+        f = sfwd(tmp_path, path, tcp_url(c) if transport == "tcp" else udp_url(c), name=transport)
+        assert [f.step() for _ in range(4)] == ["moved", "moved", "moved", "idle"]
+        f.write_state()
+        s = state(tmp_path, transport)
+        assert s["delivery"] == word and s["sent"] == 250 and s["behind"] == 0 and s["failing"] is None
+        assert s["destination"]["path"] == "" and forward.state_problem(s) is None
+        drained(c)
+        assert c.events[transport] == [sorted_line(r) for r in rows] and c.problems == []
+        assert c.connections == (3 if transport == "tcp" else 0)   # one connection a batch
+        out = io.StringIO()
+        assert forward.status(transport, home=str(tmp_path / "home"), out=out, clock=Clock()) == 0
+        assert "delivery %s" % word in out.getvalue()
+    bad = dict(s, delivery="acknowledged")
+    assert "syslog destination" in forward.state_problem(bad)   # a delivery the forwarder never writes for udp
+
+
+def test_m103b_e3_a_collector_down_is_a_failed_send_nothing_moves_and_every_line_arrives_when_it_is_up(tmp_path,
+                                                                                                     syslogs):
+    """E3 (J-3, J-10): over tcp nothing listening is `connect`: nothing moves, and when it comes up every line
+    arrives, in order, once."""
+    rows = lines(7)
+    path = write(tmp_path / "e.jsonl", rows)
+    c = syslogs(down=True)   # its tcp port bound by it, nothing listening
+    f = sfwd(tmp_path, path, tcp_url(c))
+    assert f.step() == "failed" and f.failing["error"] == "connect" and f.offset == 0 and state(tmp_path, "s")["failing"]
+    c.up()
+    assert f.step() == "moved" and f.failing is None and f.offset == os.path.getsize(path)
+    drained(c)
+    assert c.events["tcp"] == [sorted_line(r) for r in rows]
+
+
+KILL_CHILD = r"""
+import os, socket, sys
+sys.path.insert(0, sys.argv[5])
+from raqib import forward
+how, path, url, home = sys.argv[1:5]
+calls = []
+def lookup(*a):
+    calls.append(1)
+    if how == "before" and len(calls) == 2:   # between batch 1 (taken, its state written) and batch 2
+        os._exit(9)
+    return socket.getaddrinfo(*a)
+f = forward.Forwarder("k", path, url, home=home, batch=5, lookup=lookup)
+real = f.write_state
+def write_state():
+    if how == "after" and f.takes == 2:   # batch 2's bytes written, the state not yet
+        os._exit(9)
+    real()
+f.write_state = write_state
+f.run(once=True)
+os._exit(0)
+"""
+
+
+@pytest.mark.parametrize("how", ["before", "after"])
+def test_m103b_e3_a_forwarder_killed_between_two_batches_and_started_again_leaves_no_gap_over_tcp(tmp_path, syslogs,
+                                                                                                how):
+    """E3 (J-3, J-14's X21 over syslog): a real process killed (os._exit: no finally, no state written) between
+    two batches - before the second's connection, or after its bytes were written and before its state - and
+    started again: every line arrives; no line taken before the kill comes again, but the batch whose state was
+    never written (at least once)."""
+    rows = lines(17)
+    path = write(tmp_path / "e.jsonl", rows)
+    home = str(tmp_path / "home")
+    c = syslogs()
+    p = subprocess.run([sys.executable, "-c", KILL_CHILD, how, path, tcp_url(c), home, str(ROOT)], cwd=str(ROOT),
+                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+    assert p.returncode == 9, p.stdout
+    killed = read_state(home, "k")
+    assert killed["cursor"]["offset"] == sum(len(r) for r in rows[:5]) and killed["delivery"] == "written"
+    g = forward.Forwarder("k", path, tcp_url(c), home=home, batch=5, out=io.StringIO())
+    assert g.run(once=True) == 0 and "resumed at offset %d" % killed["cursor"]["offset"] in g.out.getvalue()
+    drained(c)
+    want = [sorted_line(r) for r in rows]
+    assert c.events["tcp"] == (want[:10] + want[5:10] + want[10:] if how == "after" else want)
+    assert read_state(home, "k")["sent"] == 17 and read_state(home, "k")["behind"] == 0
+
+
+def test_m103b_e4_a_token_file_with_a_syslog_destination_is_a_usage_error_and_no_secret_is_anywhere(tmp_path,
+                                                                                                  syslogs, capsys,
+                                                                                                  monkeypatch):
+    """E4 (J-7): syslog carries no Authorization: --token-file with a syslog destination is a usage error that
+    says so, before the file is read (a file others can read is refused for that reason, not for its mode); no
+    secret is in any output, state or error; --shape hec is HTTP's."""
+    token = secret(tmp_path / "token.txt")
+    if sys.platform != "win32":
+        os.chmod(token, 0o644)   # were it read, its mode would be the reason
+    path = write(tmp_path / "e.jsonl", lines(3))
+    c = syslogs()
+    for url in (tcp_url(c), udp_url(c), tcp_url(c, "syslog+tls")):
+        with pytest.raises(forward.UsageError, match="syslog carries no token") as exc:
+            sfwd(tmp_path, path, url, token_file=token)
+        assert TOKEN not in str(exc.value) and "mode" not in str(exc.value)
+        with pytest.raises(forward.UsageError, match="--shape hec is HTTP's"):
+            sfwd(tmp_path, path, url, shape="hec")
+    monkeypatch.setenv("HOME", str(tmp_path / "cli"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "cli"))
+    capsys.readouterr()
+    assert cli.main(["forward", path, "--to", tcp_url(c), "--name", "k", "--token-file", token, "--once"]) == 2
+    assert cli.main(["forward", path, "--to", tcp_url(c), "--name", "k", "--once"]) == 0
+    out, err = capsys.readouterr()
+    assert "syslog carries no token (no Authorization header" in err
+    drained(c)
+    texts = [out, err, json.dumps(read_state(str(tmp_path / "cli"), "k"))] + c.events["tcp"]
+    assert not [t for t in texts if TOKEN in t or "Authorization:" in t or "Bearer" in t]
+
+
+def test_m103b_e6_forward_md_the_guide_and_the_threat_model_say_syslog():
+    """E6: the three forms, the framing, the severity map, what took means per transport; the threat model says
+    syslog is cleartext over udp and tcp unless tls, and what a collector learns (no milestone token)."""
+    flat = " ".join((ROOT / "docs" / "specs" / "FORWARD.md").read_text(encoding="utf-8").split())
+    for said in ("`syslog+udp://`", "`syslog+tcp://`", "`syslog+tls://`", "RFC 5424", "RFC 6587", "`--framing newline`",
+                 "`--facility N`", "high 2, medium 4, low 5, a hole 4, none and info 6", "`written`", "`sent`",
+                 "65000 bytes", "no Authorization", "`write`"):
+        assert said in flat, said
+    assert "until then a `syslog+udp://`" not in flat and "(the next task)" not in flat
+    guide = " ".join(r for r in (ROOT / "docs" / "GUIDE.md").read_text(encoding="utf-8").splitlines()
+                     if r.startswith("| `raqib forward"))
+    for said in ("`syslog+udp://`", "`syslog+tcp://`", "`syslog+tls://`", "--framing newline", "octet count",
+                 "high 2, medium 4, low 5, a hole 4, none and info 6", "`written`", "`sent`", "`acknowledged`"):
+        assert said in guide, said
+    assert "not built yet" not in guide
+    threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
+    section = threat[threat.index("### The forwarder (`raqib forward`"):threat.index("## 6. Attacks on the watcher")]
+    for said in ("syslog", "clear text over udp and tcp", "syslog+tls", "no token", "any host on the path",
+                 "forged"):
+        assert said in section, said
+    assert not re.search(r"\bM\d+\.\d+", section)
+
+
+def test_m103b_e7_the_syslog_stand_in_is_ascii_and_names_only_loopback_and_documentation_addresses():
+    for p in (ROOT / "tools" / "rig" / "syslog_collector.py",):
+        text = p.read_bytes().decode("ascii")
+        for ip in re.findall(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text):
+            assert ip.startswith(("127.", "192.0.2.", "198.51.100.", "203.0.113.")), (p.name, ip)
+        assert "import requests" not in text and "from raqib" not in text and "import raqib" not in text

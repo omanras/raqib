@@ -8,7 +8,8 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
---forward: what tools/rig/forward_run.py saw `raqib forward` do with that file (ADR-0011 J-14): X19 to X22.
+--forward: what tools/rig/forward_run.py saw `raqib forward` do with that file (ADR-0011 J-14): X19 to X22
+over HTTP, X23 to X25 over syslog (J-6).
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
@@ -364,6 +365,59 @@ def read_forward(facts, events):
     return out
 
 
+def read_syslog(facts, events):
+    """X23-X25 (ADR-0011 J-6, J-14): what tools/rig/forward_run.py saw `raqib forward` do over syslog with the
+    watch's events file, against the stand-in syslog collector on loopback. It never raises: facts None (the
+    run left nothing) or a case the run has no facts of is MISSED (silence is a finding); a case whose run
+    failed is MISSED with its error; no events file is n/a for all three (X16 says the watch wrote none)."""
+    cases = (("x23", "X23 over syslog+tcp (octet counting) every whole line of the events file arrived, in order,"
+                     " each an RFC 5424 message in raqib's shape", "written", ["octet"]),
+             ("x24", "X24 over syslog+udp every line sent arrived on loopback, in order, each an RFC 5424"
+                     " message in raqib's shape", "sent", ["datagram"]),
+             ("x25", "X25 over syslog+tcp with --framing newline every whole line arrived, in order, each an RFC"
+                     " 5424 message in raqib's shape", "written", ["newline"]))
+    try:
+        if not isinstance(facts, dict):
+            return [(n, MISSED, "the forwarder's run left no facts (silence is a finding)") for _, n, _, _ in cases]
+        if facts.get("events_missing"):
+            return [(n, SKIP, "the watch wrote no events file: nothing to forward (X16 says so)")
+                    for _, n, _, _ in cases]
+        if facts.get("error"):
+            return [(n, MISSED, "the forwarder's run failed: %s" % facts["error"]) for _, n, _, _ in cases]
+        want = _whole_events(events)
+    except Exception as exc:   # never raises: what cannot be read is a fact
+        return [(n, MISSED, "the facts cannot be read (%s)" % type(exc).__name__) for _, n, _, _ in cases]
+    out = []
+    for key, name, delivery, framing in cases:
+        try:
+            x = facts.get(key)
+            if not isinstance(x, dict):
+                out.append((name, MISSED, "the rig did not run it: no facts of %s" % key))
+                continue
+            if x.get("error"):
+                out.append((name, MISSED, "the rig's run of it failed: %s" % x["error"]))
+                continue
+            got = _first_arrivals(x.get("events"))
+            lost = [e for e in want if e not in set(got)]
+            problems = x.get("problems") or []
+            ok = bool(want) and got == want and x.get("exit") == 0 and not problems and \
+                x.get("delivery") == delivery and x.get("framings") == framing and x.get("refused") == 0
+            words = ("the events file holds no whole event to forward" if not want else
+                     "%d of %d line(s) arrived%s%s" % (len(want) - len(lost), len(want),
+                                                       ", in the file's order" if got == want else
+                                                       ", not in the file's order" if not lost else "",
+                                                       "; %d lost" % len(lost) if lost else ""))
+            out.append((name, MET if ok else MISSED,
+                        "%s; %s message(s) on %s connection(s), framed %s; %d not in raqib's RFC 5424 shape%s;"
+                        " delivery %s, refused %s; --once exit %s" % (
+                            words, x.get("messages"), x.get("connections"), "/".join(x.get("framings") or [])
+                            or "never", len(problems), " (%s)" % problems[0] if problems else "",
+                            x.get("delivery"), x.get("refused"), x.get("exit"))))
+        except Exception as exc:   # never raises: a case whose facts cannot be read is MISSED
+            out.append((name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__))
+    return out
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -405,6 +459,7 @@ def main(argv=None):
         except (OSError, ValueError):
             facts = None
         rows += read_forward(facts, events)
+        rows += read_syslog(facts, events)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

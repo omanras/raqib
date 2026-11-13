@@ -3,8 +3,9 @@
 # states each expectation as MET, MISSED or OPEN; the job reports and does not fail on a MISSED one (the gate is
 # what decides a merge). It needs no secret; it downloads Sysmon from Microsoft and talks to two public hosts.
 # The forwarder (ADR-0011 J-14) sends the watch's events file to a stand-in collector on loopback, with a
-# made-up token that tools/rig/forward_run.py makes for the run. It and the check step run always (ADR-0011
-# L-10): whatever the watch or the forwarder did, the table is written.
+# made-up token that tools/rig/forward_run.py makes for the run (X19 to X22), and over syslog to a stand-in
+# syslog collector on loopback, over tcp and udp (tools/rig/syslog_collector.py; X23 to X25, J-6). It and the
+# check step run always (ADR-0011 L-10): whatever the watch or the forwarder did, the table is written.
 name: rig
 
 on:
@@ -51,7 +52,7 @@ jobs:
           "code=$($w.ExitCode)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "=== the watch's report"; Get-Content $out
           "=== the watch's stderr"; Get-Content $err
-      - name: forward the watch's events to a stand-in collector on loopback (X19 to X22)
+      - name: forward the watch's events to stand-in collectors on loopback, HTTP and syslog (X19 to X25)
         if: always()
         shell: pwsh
         run: python tools\rig\forward_run.py --events $HOME\.raqib\host\events.jsonl --out $env:RUNNER_TEMP\forward.json
@@ -98,7 +99,7 @@ jobs:
           echo "code=$code" >> "$GITHUB_ENV"
           echo "=== the watch's report"; cat "$RUNNER_TEMP/watch.out"
           echo "=== the watch's stderr"; cat "$RUNNER_TEMP/watch.err"
-      - name: forward the watch's events to a stand-in collector on loopback (X19 to X22)
+      - name: forward the watch's events to stand-in collectors on loopback, HTTP and syslog (X19 to X25)
         if: always()
         run: python tools/rig/forward_run.py --events "$HOME/.raqib/host/events.jsonl" --out "$RUNNER_TEMP/forward.json"
       - name: read the report against what the stand-in did

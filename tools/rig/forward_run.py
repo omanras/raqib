@@ -12,6 +12,12 @@ argument list, and the argument list of a running forwarder as the system's own 
 made-up tokens (the right one and the refused one). The forwarders run with HOME (and USERPROFILE) set to
 --home (default: a new directory), so their states are the rig's own.
 
+Over syslog (ADR-0011 J-6, J-14), against the stand-in syslog collector (tools/rig/syslog_collector.py,
+loopback only, udp and tcp): X23 the whole file over tcp, octet counting, --once; X24 the whole file over udp,
+--once (on loopback every datagram sent arrives); X25 the whole file over tcp with --framing newline, --once.
+For each, what arrived, the collector's problems with the messages' RFC 5424 shape, how it framed them, and
+the forwarder's state.
+
 It never raises (L-10): each case is its own, an error in one is a fact of that case, and a missing events file
 is a fact; it writes its facts and exits 0 whatever happened (2 only for its own usage). Stdlib only.
 """
@@ -28,10 +34,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import collector  # noqa: E402  (the stand-in beside this file)
+import syslog_collector  # noqa: E402  (the syslog stand-in beside this file)
 
 PATH = "/services/collector/event"
 FORWARD = [sys.executable, "-m", "raqib", "forward"]   # the forwarder (a test names one that cannot start)
 CASES = ("x19", "x20", "x21", "x22")
+SYSLOG_CASES = ("x23", "x24", "x25")   # J-6: over tcp, over udp, over tcp with --framing newline
 
 
 class Run:
@@ -225,6 +233,37 @@ def x22(r):
     return {}
 
 
+def over_syslog(r, name, transport, more=()):
+    """One forwarder over syslog, --once, against a stand-in of its own: what arrived and what the stand-in
+    found of each message's shape (J-6)."""
+    c = syslog_collector.SyslogCollector()
+    tcp, udp = c.start()
+    try:
+        url = "syslog+%s://127.0.0.1:%d" % (transport, tcp if transport == "tcp" else udp)
+        code = r.run(name, FORWARD + [r.events, "--to", url, "--name", "rig-" + name, "--beat", "1", "--once"] +
+                     list(more))
+        s = r.state("rig-" + name) or {}
+    finally:
+        c.stop()
+    r.run(name + " status", FORWARD + ["--status", "rig-" + name])
+    return {"exit": code, "events": list(c.events[transport]), "messages": c.messages,
+            "connections": c.connections, "problems": c.problems[:20], "framings": sorted(c.framings),
+            "delivery": s.get("delivery"), "sent": s.get("sent"), "refused": (s.get("refused") or {}).get("count"),
+            "behind": s.get("behind"), "failing": s.get("failing")}
+
+
+def x23(r):
+    return over_syslog(r, "x23", "tcp")
+
+
+def x24(r):
+    return over_syslog(r, "x24", "udp", ("--batch", "10"))
+
+
+def x25(r):
+    return over_syslog(r, "x25", "tcp", ("--framing", "newline"))
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="tools/rig/forward_run.py")
     p.add_argument("--events", required=True)
@@ -240,7 +279,7 @@ def main(argv=None):
         if not os.path.isfile(r.events):
             facts["events_missing"] = True   # the watch wrote none: X16 says it; nothing is forwarded
         else:
-            for name, case in zip(CASES, (x19, x20, x21, x22)):
+            for name, case in zip(CASES + SYSLOG_CASES, (x19, x20, x21, x22, x23, x24, x25)):
                 try:
                     facts[name] = case(r)
                 except Exception as exc:   # one case's error is that case's fact

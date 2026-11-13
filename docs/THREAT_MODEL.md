@@ -1197,7 +1197,8 @@ is amended by T-2, T-1 restated by V-1).
 
 ### The forwarder (`raqib forward`; ADR-0011 Amendments J to N)
 A forwarder is a process of its own that reads the watch's events file and
-sends every whole line to one HTTP collector (docs/specs/FORWARD.md). The
+sends every whole line to one collector, over HTTP or over syslog
+(docs/specs/FORWARD.md). The
 watch does not know it runs: nothing of the capture path imports it, and a
 collector that is slow, down or refusing never delays or loses a capture
 (the lines wait in the file). What it adds to this model:
@@ -1245,12 +1246,37 @@ collector that is slow, down or refusing never delays or loses a capture
   then no send starts and the forwarder is failing `stuck` - an alarm, not
   a growth without end. An abandoned send's sockets are shut down and left
   to its own thread, never closed under it.
+- **Syslog.** Over `syslog+udp://` and `syslog+tcp://` every event is
+  clear text over udp and tcp: any host on the path reads it whole, and can
+  change it or drop it, and over udp can send datagrams with the host's
+  address as their source; nothing in a message proves where it came from.
+  The forwarder therefore takes them only to a loopback address unless
+  `--plain` is given (a collector on the same host, or a relay there), and
+  then the state and every status say "plain: not encrypted". Over
+  `syslog+tls://` the wire is verified exactly as https is (the certificate
+  and the host name, the system's authorities or `--ca`, no switch to turn
+  it off, no key log). Syslog carries no token: a syslog collector cannot
+  tell Raqib's messages from anyone's, so anyone who can reach its port -
+  any process on its host for a loopback collector - can send forged
+  messages in Raqib's shape; the collector's own access rules (who may
+  reach the port, TLS with client certificates on its side) are the only
+  answer, and the forwarder sends no token there, so none can leak. Syslog
+  answers nothing: over tcp and tls a batch counts as taken when its bytes
+  were handed to the system (`written`), over udp when its datagrams were
+  sent (`sent`); a collector that is down over udp, or that closes its end
+  while bytes are on their way, loses lines the forwarder counts as sent.
+  The heartbeat search on the collector's side is what tells it. A line
+  longer than a datagram is refused locally, never cut, so no message is
+  half an event.
 - **What the collector learns.** Everything the events say (A-4: the whole
   judgement, not only what knocked): the host's name, each run, the trees
   with their images, pids and paths, each finding with its rule and
   evidence, the holes and blind spots, and a heartbeat a beat; nothing the
   trace does not already hold, and nothing of the token but the header it
-  checks. It learns when the host watches and when it stops. Of the
+  checks (a syslog collector: no token at all; besides the event, each
+  message's header repeats its severity, time, host name and kind, and the
+  facility the forwarder was given). It learns when the host watches and
+  when it stops. Of the
   collector the forwarder reads only the status of its own send (and, in
   the hec shape, the answer's code): no command, query or configuration
   comes back.

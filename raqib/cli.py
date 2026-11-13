@@ -647,6 +647,11 @@ def _parser():
                                                  " system's; nothing turns verification off")
     fw.add_argument("--plain", action="store_true", help="let --to be plain http:// to an address that is not"
                                                          " loopback (the state and the status say plain)")
+    fw.add_argument("--facility", metavar="N", help="syslog only: the RFC 5424 facility, 0 to 23 (default 13, log"
+                                                    " audit)")
+    fw.add_argument("--framing", choices=("octet", "newline"), default=None,
+                    help="syslog over tcp and tls only: octet counting (RFC 6587, the default) or a newline after"
+                         " each message")
     fw.add_argument("--beat", type=float, default=None, metavar="S",
                     help="write the state at least every S seconds (default 60); a state older than two beats is"
                          " a silent forwarder")

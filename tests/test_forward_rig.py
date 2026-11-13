@@ -252,3 +252,121 @@ def test_redo_e7_forward_run_with_a_forwarder_that_cannot_start_exits_0_and_chec
     assert check.main(["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--exit-code", "1",
                        "--platform", "linux", "--events", str(events), "--forward", str(out)]) == 0
     assert re.search(r"^MET +X1 ", capsys.readouterr().out, re.M)
+
+
+# --- M10.3b E5 (ADR-0011 J-6, J-14): the syslog stand-in and X23 to X25 ----------------------------------------
+syslog_collector = load("rig_syslog_collector", ROOT / "tools" / "rig" / "syslog_collector.py")
+
+
+def syslog_states(facts, events):
+    return {r[0].split(" ", 1)[0]: (r[1], r[2]) for r in check.read_syslog(facts, events.read_text(encoding="ascii"))}
+
+
+def test_m103b_e5_the_syslog_stand_in_is_loopback_over_udp_and_tcp_and_holds_each_message_to_j6(tmp_path):
+    """The stand-in reads octet-counted and newline frames over tcp and one message a datagram over udp, keeps
+    the event lines in order per transport, and a problem for each message that is not J-6's shape (it takes the
+    severity map as J-6 writes it, not from raqib); it can be down on a port it bound, then up."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import event, forward
+    raw = made_up_file(tmp_path, count=3).read_bytes().splitlines(True)
+    objs = [json.loads(r) for r in raw]
+    msgs = [forward.syslog_message(r, o) for r, o in zip(raw, objs)]
+    c = syslog_collector.SyslogCollector(down=True)
+    tcp, udp = c.start()
+    try:
+        assert c.tcp.getsockname()[0] == c.udp.getsockname()[0] == "127.0.0.1" == syslog_collector.HOST
+        probe = socket.socket()
+        with pytest.raises(OSError):   # bound, and nothing listening: refused
+            probe.connect(("127.0.0.1", tcp))
+        probe.close()
+        c.up()
+        s = socket.create_connection(("127.0.0.1", tcp), timeout=10)
+        s.sendall(b"".join(forward.syslog_frame(m, "syslog+tcp") for m in msgs[:2]) +
+                  b"".join(forward.syslog_frame(m, "syslog+tcp", "newline") for m in msgs[2:]))
+        s.sendall(b"<13>1 - - x - - - not json\n" +   # then a facility 0 where the stand-in takes 13
+                  forward.syslog_frame(forward.syslog_message(raw[0], objs[0], 0), "syslog+tcp"))
+        s.close()
+        u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for m in msgs:
+            u.sendto(m, ("127.0.0.1", udp))
+        u.close()
+    finally:
+        c.stop()   # drains what was sent before it
+    want = [json.dumps(o, sort_keys=True, separators=(",", ":")) for o in objs]
+    assert c.events["tcp"] == want + want[:1] and c.events["udp"] == want
+    assert c.framings == {"octet", "newline", "datagram"} and c.connections == 1 and c.messages == 2 * len(msgs) + 2
+    assert len(c.problems) == 2 and "the MSG is not one JSON line" in c.problems[0] and "PRI of" in c.problems[1]
+    assert event.check(objs[0]) == []
+
+
+def test_m103b_e5_x23_to_x25_are_met_by_the_forwarder_over_syslog_over_a_made_up_events_file(ran):
+    events, facts = ran
+    got = syslog_states(facts, events)
+    assert {k: s for k, (s, _) in got.items()} == {"X23": check.MET, "X24": check.MET, "X25": check.MET}, got
+    assert facts["x23"]["framings"] == ["octet"] and facts["x25"]["framings"] == ["newline"]
+    assert facts["x24"]["framings"] == ["datagram"] and facts["x24"]["connections"] == 0
+    assert facts["x23"]["delivery"] == facts["x25"]["delivery"] == "written" and facts["x24"]["delivery"] == "sent"
+    whole = len(events.read_bytes().splitlines())
+    assert all(facts[k]["messages"] == whole == len(facts[k]["events"]) for k in ("x23", "x24", "x25"))
+
+
+def test_m103b_e5_each_of_x23_to_x25_is_missed_when_its_part_is_broken_and_the_check_never_raises(ran):
+    events, facts = ran
+
+    def broken(change):
+        f = json.loads(json.dumps(facts))
+        change(f)
+        return {k: s for k, (s, _) in syslog_states(f, events).items()}
+    for key, ident in (("x23", "X23"), ("x24", "X24"), ("x25", "X25")):
+        assert broken(lambda f: f[key]["events"].pop(3))[ident] == check.MISSED                  # a line lost
+        assert broken(lambda f: f[key]["events"].reverse())[ident] == check.MISSED               # not in order
+        assert broken(lambda f: f[key].update(exit=1))[ident] == check.MISSED
+        assert broken(lambda f: f[key]["problems"].append("tcp: PRI of r1:1"))[ident] == check.MISSED
+        assert broken(lambda f: f[key].update(delivery="acknowledged"))[ident] == check.MISSED
+        assert broken(lambda f: f[key].update(framings=["octet", "newline"]))[ident] == check.MISSED
+        assert broken(lambda f: f[key].update(refused=1))[ident] == check.MISSED
+        assert broken(lambda f: f.pop(key))[ident] == check.MISSED                               # never ran
+        assert broken(lambda f: f.update({key: {"error": "OSError: x"}}))[ident] == check.MISSED
+        assert broken(lambda f: f[key].update(events=5))[ident] == check.MISSED                 # never raises
+    assert set(v[0] for v in syslog_states(None, events).values()) == {check.MISSED}
+    assert set(v[0] for v in syslog_states({"error": "boom"}, events).values()) == {check.MISSED}
+    assert [r[1] for r in check.read_syslog({"events_missing": True}, "")] == [check.SKIP] * 3
+    assert [r[1] for r in check.read_syslog(facts, None)] == [check.MISSED] * 3   # no events: nothing to compare
+
+
+def test_m103b_e5_check_main_says_x23_to_x25_and_rig_yml_runs_them_on_both_machines(ran, tmp_path, capsys):
+    events, facts = ran
+    (tmp_path / "w.out").write_text(rig.REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(rig.WORKLOAD, encoding="utf-8")
+    (tmp_path / "f.json").write_text(json.dumps(facts), encoding="ascii")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--exit-code", "1",
+            "--platform", "linux"]
+    assert check.main(base + ["--events", str(events), "--forward", str(tmp_path / "f.json")]) == 0
+    out = capsys.readouterr().out
+    assert all(re.search(r"^MET +X%d " % i, out, re.M) for i in (23, 24, 25)), out
+    assert check.main(base + ["--events", str(tmp_path / "none.jsonl"), "--forward", str(tmp_path / "f.json")]) == 0
+    out = capsys.readouterr().out   # facts of lines, and no events file to hold them to: nothing is MET
+    assert all(re.search(r"^MISSED +X%d .*holds no whole event" % i, out, re.M) for i in (23, 24, 25)), out
+    gone = tmp_path / "g.json"
+    gone.write_text(json.dumps({"events_missing": True}), encoding="ascii")
+    check.main(base + ["--events", str(tmp_path / "none.jsonl"), "--forward", str(gone)])
+    table = capsys.readouterr().out
+    assert all(re.search(r"^n/a +X%d .*no events file" % i, table, re.M) for i in (23, 24, 25)), table
+    assert forward_run.SYSLOG_CASES == ("x23", "x24", "x25") and all(k in facts for k in forward_run.SYSLOG_CASES)
+    text = (ROOT / ".github" / "workflows" / "rig.yml").read_text(encoding="ascii")
+    jobs = text.split("\n  linux:\n")
+    for job in jobs:
+        lines = job.splitlines()
+        run = next(i for i, line in enumerate(lines) if "run: python tools/rig/forward_run.py" in line.replace("\\", "/"))
+        assert "syslog" in lines[run - 2] + lines[run - 3] and "X25" in lines[run - 2] + lines[run - 3]
+        assert any("if: always()" in x for x in lines[run - 2:run])
+    assert "tools/rig/syslog_collector.py" in text
+
+
+def test_m103b_e5_the_syslog_stand_in_and_the_new_rig_code_are_ascii_stdlib_and_no_part_of_raqib():
+    text = (ROOT / "tools" / "rig" / "syslog_collector.py").read_bytes().decode("ascii")
+    assert "import requests" not in text and "raqib import" not in text and "import raqib" not in text
+    for name in ("forward_run.py", "check.py"):
+        (ROOT / "tools" / "rig" / name).read_bytes().decode("ascii")
+    assert not [p for p in (ROOT / "raqib").rglob("*.py") if "syslog_collector" in p.read_text(encoding="utf-8")]
