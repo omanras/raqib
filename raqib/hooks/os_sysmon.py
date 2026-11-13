@@ -281,7 +281,8 @@ def _same_guid(a, b):
     return a is not None and b is not None and _gkey(a) == _gkey(b)
 
 
-def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=None, tree=None, server_hash=False):
+def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=None, tree=None, server_hash=False,
+          leave_out=None, out_said=None):
     """(trace lines, silence details) for an export's text. Pure.
     API (M7.2b): after_record, when given, keeps only the tree's events
     whose EventRecordID is above it (an event with none was written by the
@@ -296,7 +297,18 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     info also receives "last_record", the highest EventRecordID of the
     export, and "events", its number of events (the cut).
     server_hash (ADR-0007 AW-2): a net line carries input_meta.dest_sha256
-    only when it is True; without it the lines are what they were."""
+    only when it is True; without it the lines are what they were.
+    leave_out (ADR-0007 BB-1), when given, the roots [(pid, ProcessGuid or
+    None)] of other trees whose subtrees are not written: an event of a
+    process at or under such a root is left out, the root's own event 1 is
+    kept (_under); the tree still knows their members (they join it as
+    before, with their parents kept in it: links), so an event of the
+    subtree after the root is no longer given is the tree's again (BB-2).
+    BB-3: the session_start of the block that first leaves out a root's
+    events carries "left_out" (the root, the record of its first event left
+    out), once per root for out_said (a set the caller keeps); a pass that
+    only leaves out writes that block with no event. None or empty: the
+    lines are what they were, byte for byte."""
     silences = []
     problems = []
     events = []
@@ -342,18 +354,74 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     silences += said
     if not found:
         return [], silences
-    kept = _tree(events, root, root_guid, tree)
-    if info is not None:
+    links = None if leave_out is None else (tree if tree is not None else {})   # BB-1: the members' parents
+    kept = _tree(events, root, root_guid, tree, links)
+    if info is not None:   # BB-1: over every member's event, left out or not (none is read twice)
         ids = [e["record_id"] for e, _, _ in kept if e["record_id"] is not None]
         info["top_record"] = max(ids) if ids else None
     if after_record is not None:
         kept = [k for k in kept if k[0]["record_id"] is not None and k[0]["record_id"] > after_record]
-    if not kept:
+    notes = []
+    if leave_out:   # BB-1: the events at or under another tree's root are not written; BB-3: said once per root
+        held, first = [], {}
+        for k in kept:
+            r = _under(k[0], leave_out, links)
+            if r is None:
+                held.append(k)
+            else:
+                first.setdefault(r, k[0])
+        kept, said = held, (set() if out_said is None else out_said)
+        for r in leave_out:
+            if r in first and r not in said:
+                said.add(r)
+                notes.append(({"root_pid": r[0], "root_guid": r[1], "from_record": first[r]["record_id"]},
+                              first[r]["ts"]))
+    if not kept and not notes:
         return [], silences
     if cwd is None:   # D-4: else no cwd at all, never os-sysmon's own
         starts = [e["data"].get("CurrentDirectory") for e, depth, _ in kept if e["event"] == 1 and depth == 0]
         cwd = next((c for c in starts if c), None)
-    return _lines(kept, root, cwd, start_seq, missing, server_hash), silences
+    return _lines(kept, root, cwd, start_seq, missing, server_hash, notes), silences
+
+
+def roots_of(given, root, guid):
+    """ADR-0007 BB-1: the roots a follow's leave_out() returned, as [(pid, ProcessGuid text or None)], in order,
+    once each: an entry is a pid or a (pid, guid) pair; one that is not a pid >= 0, or that names the follow's
+    own root, is not a root to leave out."""
+    out = []
+    for r in given or ():
+        pid, g = (r, None) if not isinstance(r, (tuple, list)) else (tuple(r) + (None, None))[:2]
+        pid = pid if isinstance(pid, int) and not isinstance(pid, bool) else _int(pid)
+        g = safe(g) if isinstance(g, str) and g.strip() else None
+        if pid is None or pid < 0 or (pid == root and (g is None or guid is None or _same_guid(g, guid))):
+            continue
+        if (pid, g) not in out:
+            out.append((pid, g))
+    return out
+
+
+def _ident(e, links):
+    """BB-1: a process's identity as the tree keys it (its ProcessGuid, else the pid's latest member, else the pid)."""
+    if e["guid"] is not None:
+        return _gkey(e["guid"])
+    return links.get("ident_of_pid", {}).get(e["pid"], ("pid", e["pid"]))
+
+
+def _under(e, roots, links):
+    """BB-1: the root of `roots` whose subtree holds the process of event e, by the parents the tree kept, else
+    None. The root's own event 1 is not under it (the ancestor started it: AZ-1's reading); its other events are."""
+    parent_of, pid_of = links.get("parent_of", {}), links.get("pid_of", {})
+    cur, seen, own = _ident(e, links), set(), True
+    while cur is not None and cur not in seen:
+        seen.add(cur)
+        for r in roots:
+            if (_gkey(r[1]) == cur if r[1] is not None else pid_of.get(cur, cur[1] if isinstance(cur, tuple)
+                                                                        else None) == r[0]):
+                if not (own and e["event"] == 1):
+                    return r
+        own = False
+        cur = parent_of.get(cur)
+    return None
 
 
 def _root(events, root, guid):
@@ -394,7 +462,7 @@ def _root(events, root, guid):
     return True, latest, said
 
 
-def _tree(events, root, root_guid, tree=None):
+def _tree(events, root, root_guid, tree=None, links=None):
     """[(event, depth, parent)] of the events of the tree under root, in
     order; parent is the identity (ProcessGuid, else ("pid", pid)) of an
     event 1's parent, None otherwise. tree (AI-1): the members an earlier
@@ -406,7 +474,18 @@ def _tree(events, root, root_guid, tree=None):
     fixed point): by the end of the pass it joins if that guid is in the
     tree. The kept events are still returned in time order (the order of
     `events`). Events keyed by a pid alone are placed in the one walk, as
-    before (a pid is only somebody's at a time)."""
+    before (a pid is only somebody's at a time).
+    links (ADR-0007 BB-1), a dict, receives each member's parent identity
+    (parent_of), its pid (pid_of) and a pid's latest member (ident_of_pid):
+    flat dicts, kept in `tree` by build when a follow leaves out; the
+    members and the events returned are what they are without it."""
+    def link(e, parent):
+        if links is not None:
+            ident = _gkey(e["guid"]) if e["guid"] is not None else ("pid", e["pid"])
+            links.setdefault("parent_of", {})[ident] = parent
+            links.setdefault("pid_of", {})[ident] = e["pid"]
+            links.setdefault("ident_of_pid", {})[e["pid"]] = ident
+
     by_guid = {_gkey(root_guid): 0} if root_guid else {}   # AJ-4 (R-2): keyed by _gkey, as _same_guid compares
     by_pid = {root: 0}   # for events that carry no ProcessGuid
     if tree is not None:
@@ -439,6 +518,7 @@ def _tree(events, root, root_guid, tree=None):
                 by_guid[_gkey(e["guid"])] = depth
             by_pid[e["pid"]] = depth
             pid_at[e["pid"]] = i
+            link(e, parent)
         else:
             depth = by_guid.get(_gkey(e["guid"])) if e["guid"] is not None else by_pid.get(e["pid"])
             if depth is None:
@@ -460,6 +540,7 @@ def _tree(events, root, root_guid, tree=None):
                     by_guid[_gkey(e["guid"])] = depth
                 if pid_at.get(e["pid"], -1) <= i:   # a pid a later event of the walk placed stays that event's
                     by_pid[e["pid"]], pid_at[e["pid"]] = depth, i
+                link(e, parent)
             kept.append((i, e, depth, parent))
             joined = True
         aside = left
@@ -498,7 +579,7 @@ def _event_fields(e, depth, server_hash=False):
     return common.canonical_sha256({"destination": destination}), meta
 
 
-def _lines(kept, root, cwd, start_seq, missing, server_hash=False):
+def _lines(kept, root, cwd, start_seq, missing, server_hash=False, notes=()):
     sid = session_id(root)
     seq = start_seq
     out = []
@@ -511,10 +592,13 @@ def _lines(kept, root, cwd, start_seq, missing, server_hash=False):
         out.append(json.dumps(rec, separators=(",", ":"), ensure_ascii=True))
 
     seq += 1
-    start = {"ts": discover.iso(kept[0][0]["ts"]), "seq": seq, "session_id": sid, "phase": "session_start",
+    first_ts = kept[0][0]["ts"] if kept else notes[0][1]   # BB-3: a block that only says what it left out
+    start = {"ts": discover.iso(first_ts), "seq": seq, "session_id": sid, "phase": "session_start",
              "tool": SESSION_TOOL}
     if missing:
         start["missing_events"] = missing
+    if notes:   # BB-3: the roots whose subtrees this follow begins to leave out (no key otherwise: as before)
+        start["left_out"] = [dict(n) for n, _ in notes]
     emit(start)
     for e, depth, parent in kept:
         seq += 1
@@ -535,8 +619,8 @@ def _lines(kept, root, cwd, start_seq, missing, server_hash=False):
         emit(dict(base, phase="post", tool=tool, input_sha256=digest, input_meta=dict(meta), output_meta={},
                   ok=True))
     seq += 1
-    emit({"ts": discover.iso(kept[-1][0]["ts"]), "seq": seq, "session_id": sid, "phase": "session_end",
-          "tool": SESSION_TOOL})
+    emit({"ts": discover.iso(kept[-1][0]["ts"] if kept else first_ts), "seq": seq, "session_id": sid,
+          "phase": "session_end", "tool": SESSION_TOOL})
     return out
 
 
@@ -735,7 +819,7 @@ FOLLOW_CUT = ("the follow's pass read %d events, the cap (/c:%d): the records af
 
 def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, live=None, nt=None, on_pass=None,
            after_record=None, helpers=None, timeout=FOLLOW_TIMEOUT, since=None, cap=None, on_read=None, reader=None,
-           tree=None, restart=None, server_hash=False):
+           tree=None, restart=None, server_hash=False, leave_out=None):
     """API (M7.2b): the os source followed live until stop is set (see the
     module docstring). Returns the number of passes. Raises UsageError as
     run() does (a bad root or cwd, off Windows without a `live` reader, a
@@ -779,7 +863,11 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     time (the events since then; the tree is kept); a follow whose tree has
     met none starts at the latest restart's time instead of `since`.
     ADR-0007 AW-2: server_hash is build's (True: a net line carries
-    input_meta.dest_sha256; the host watch's follow asks, nothing else)."""
+    input_meta.dest_sha256; the host watch's follow asks, nothing else).
+    ADR-0007 BB-1: leave_out(), when given, is read before each pass's build
+    (in this thread): the roots of the other trees whose subtrees this follow
+    does not write (roots_of; build's leave_out); BB-2: a root no longer
+    returned is the tree's again; BB-3: said once per root (build)."""
     out = sys.stdout if out is None else out
     err = sys.stderr if err is None else err
     nt = (os.name == "nt") if nt is None else nt
@@ -796,7 +884,7 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
         except (AttributeError, TypeError, ValueError) as exc:
             raise UsageError("a follow's start must be an aware time: %s" % exc)
     tree = ({} if tree is None else tree) if bounded else None   # AI-1: the tree found; AJ-4 (R-1): an earlier one's
-    top, said, passes = after_record, set(), 0
+    top, said, passes, out_said = after_record, set(), 0, set()
     if bounded and restart is not None and "restart" not in tree:
         tree["restart"] = restart()   # AJ-4 (R-3): the round's restart this follow's bound belongs to
         if tree["restart"] is not None and top is None:
@@ -819,8 +907,10 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
             lines, silences = [], [failed]
         else:
             info = {}
+            roots = None if leave_out is None else roots_of(leave_out(), pid, guid)   # BB-1: read at every pass
             lines, silences = build(text, pid, guid=guid, cwd=cwd, start_seq=last_seq(log, session_id(pid)),
-                                    after_record=top, info=info, tree=tree, server_hash=server_hash)
+                                    after_record=top, info=info, tree=tree, server_hash=server_hash,
+                                    leave_out=roots, out_said=out_said)
             if info.get("top_record") is not None:
                 top = info["top_record"] if top is None else max(top, info["top_record"])
             if bounded and info.get("last_record") is not None:   # the records after the highest read, next
