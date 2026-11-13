@@ -2531,3 +2531,36 @@ members stay in the tree, as built. Q3: the sample decides "under this tree's ro
 follow's own parents decide which events; where the sample cannot tell, the root is not told, as built. Q6:
 the clause stays, with BC-5's.
 
+## Amendment BD (the Table, 2026-11-13) - the second review of M7.24 (2fc11f2), and what the field found after it
+The packet (docs/review/2026-11-13-M7.24-redo.md): NEXT; nothing but the mark changes; one suspicion (Q1). The
+gate, six CI jobs and the rig were green. Then BC-7's field run, and it did not hold.
+- The field, first run (Windows with Sysmon; a real agent started by an unknown program that then talks by
+  itself, so that the watch holds two trees, one under the other): the ancestor's os file held 823 events, the
+  agent's commands among them; none was marked; HOST-RHYTHM fired at high on the ancestor as on main (the twin
+  run on main's code gave the same false finding). The cause: BC-2 as built asked the round's process sample
+  which root is under which, and the sample names no parent (discover's `processes`: pid, image, started).
+  Only the tests' fixture carried a parent pid; on a real host the watch told nothing to any follow. Every
+  test, both reviews and CI passed over it.
+- BD-1 (Q1: the mark is the os follow's own). A line gives no beat for carrying `under_root` only where it is
+  an os line. A hooks trace is written on the watched side; an agent that wrote the key into its own lines
+  would have silenced its own rhythm with no rule seeing it. FOR: that agent. MUST NOT TOUCH: os lines.
+- BD-2 (BC-2 corrected: the follow's own reading decides, the sample is not asked). The watch tells each os
+  follow the root (pid and ProcessGuid) of every other tree it holds with an os follow that lives, read at the
+  asking. What is under a told root is the follow's own reading of the channel, its members' parents by
+  ProcessGuid: a told root that is no member of the follow's tree marks nothing there. FOR: the field shape
+  above. MUST NOT TOUCH: BC-1 (every event written, byte for byte but for the mark), the liveness reading.
+- BD-3 (a fixture holds what the reader holds). The fixture's process sample lost its parent pid, and a test
+  holds its keys to what `discover._last_sample` gives. Recorded as a lesson of the loop: a through-rounds
+  test proves the code against the fixture's shape, and the fixture's shape is itself a claim about the
+  reader that must be pinned to the reader.
+- BD-4 (the holes say two more cases, from the packet): a process whose creation the ancestor's follow did
+  not read, or whose parent the event names by pid alone, is not marked - the ancestor counts it as before.
+- The field, second run, on BD's code: the ancestor's file 823 events, 529 marked with the agent's root
+  (79 of its 84 process events); the agent's own file 530 events, none marked; the ancestor made no cycle in
+  any round and no HOST-RHYTHM; the agent made 6 and was found at high on the model server's own hash.
+- The builder's other questions, as built: a live follow told through failed rounds (Q2: the cost is BC-5's);
+  two told roots on one path (Q3); the per-pass copy of the parents map (Q5); a tree told again on its new
+  follow (Q7).
+- Not from this task, found by reading the twin run to its end: a watch that saw no tree at all. It is
+  Amendment BE's.
+
