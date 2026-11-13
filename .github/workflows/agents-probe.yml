@@ -215,6 +215,7 @@ jobs:
           "=== report"; $t = Get-Content ..\watch-kept.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
           "=== sessions of ours after the watch"; logman query -ets | Select-String "raqib"
           "=== bytes"; ($t | Select-String -Pattern "bytes|tracing|blind").Line | Select-Object -First 40
+          "=== connections"; python "$env:GITHUB_WORKSPACE\tools\rig\conn_read.py"
           "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl python
           "=== marks"; python "$env:GITHUB_WORKSPACE\tools\rig\marks_read.py"
           "=== reader"; python "$env:GITHUB_WORKSPACE\tools\rig\inv_read.py"
