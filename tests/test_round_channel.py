@@ -1576,11 +1576,19 @@ def act_root_sample(tmp_path, name, children=True):
     """quiet/quiet with the .kimi footprint and B3's tree (SYNTHETIC): agentx under AppData, its parent the sampled
     powershell (a listed shell), with a sampled cmd.exe that has kimi.exe below it; it never talks at a sample."""
     d = footprint_dir(tmp_path, name)
+    # ADR-0007 BF-1 as BG-3 corrected it (the Table): the sample is made true by its shell, not by its agent. The
+    # fixture's powershell starts at 07:50:00, after the agent this sample hangs under it (07:49:00): in this
+    # sample's own copy the shell starts a minute before it. The agent's rows and its channel times are what they
+    # were, so round 1 still joins the channel's talk (07:49:30) to the sampled agentx.
+    rows = (d / "win-process-1.csv").read_text(encoding="ascii")
+    assert rows.count('.exe"","2026-11-10T07:50:00.000Z"') == 1
+    (d / "win-process-1.csv").write_text(rows.replace(
+        '.exe"","2026-11-10T07:50:00.000Z"', '.exe"","2026-11-10T07:48:00.000Z"', 1), encoding="ascii", newline="\n")
     with open(d / "win-process-1.csv", "a", encoding="ascii", newline="\n") as f:
-        f.write('"9216","5888","agentx.exe","%s","agentx","2026-11-10T07:50:30.000Z"\n' % AGENTX)
+        f.write('"9216","5888","agentx.exe","%s","agentx","2026-11-10T07:49:00.000Z"\n' % AGENTX)
         if children:
-            f.write('"9330","9216","cmd.exe","C:\\Windows\\System32\\cmd.exe","cmd","2026-11-10T07:50:31.000Z"\n')
-            f.write('"9340","9330","kimi.exe","%s","kimi","2026-11-10T07:50:32.000Z"\n' % KIMI)
+            f.write('"9330","9216","cmd.exe","C:\\Windows\\System32\\cmd.exe","cmd","2026-11-10T07:49:01.000Z"\n')
+            f.write('"9340","9330","kimi.exe","%s","kimi","2026-11-10T07:49:02.000Z"\n' % KIMI)
     return d
 
 

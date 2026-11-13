@@ -312,6 +312,52 @@ def test_e6_no_existing_fixture_breaks_a_link_or_says_a_new_hole_but_quiet_unrea
     assert seen == [("host/quiet/quiet-unread", ["2 " + UNREAD])]   # BF-3: a live round with starts unread
 
 
+def linux_texts(ticks, extra=()):
+    """tests/fixtures/discover/linux-agent's snapshot (the reader is pid 1540, python3 under a bash), each process
+    given the start ticks ticks(pid) returns (None: none), and the rows of `extra` (pid, ppid, name, ticks)."""
+    import json
+    texts_, holes = discover.read_dir(str(ROOT / "tests" / "fixtures" / "discover" / "linux-agent"))
+    label, text, err = texts_["proc"]
+    lines, shape = [], None
+    for line in text.splitlines(True):
+        if line.startswith("{") and '"pid"' in line:
+            rec = json.loads(line)
+            shape = shape or rec
+            if ticks(rec["pid"]) is not None:
+                rec["start_ticks"] = ticks(rec["pid"])
+            line = json.dumps(rec) + "\n"
+        lines.append(line)
+    for pid, ppid, name, start in extra:
+        rec = dict(shape, pid=pid, ppid=ppid, name=name, argv=[name], exe=None, sockets=None)
+        rec.pop("start_ticks", None)
+        if start is not None:
+            rec["start_ticks"] = start
+        lines.append(json.dumps(rec) + "\n")
+    texts_["proc"] = (label, "".join(lines), err)
+    return texts_, holes
+
+
+def test_bg2_linux_through_the_parser_the_readers_helper_stays_out_and_a_tick_dates_a_link():
+    """ADR-0007 BG-2 (the Table, the packet's R1): the only tie between parse_proc's key ("boot+N") and the walks
+    that read it. If the two stopped agreeing, every Linux link would turn unread: the reader's helper would leave
+    its tree and no link would ever break - and no other test would see it."""
+    plain = discover.run(*linux_texts(lambda pid: None)[:1], CATALOG, processes=True)
+    helper, orphan = (1700, 1540, "ss", 3000), (1650, 1540, "sleep", 1200)   # after the reader; long before it
+    texts_, holes = linux_texts(lambda pid: 1000 + pid, extra=(helper, orphan))
+    inv = discover.run(texts_, CATALOG, holes=holes, processes=True)
+    listed = lambda i: sorted(t["pid"] for t in i["candidates"] + i["act_roots"])
+    assert listed(inv) == listed(plain) and listed(inv)   # no true link of the fixture breaks: the same trees
+    acts = {a["pid"] for t in inv["candidates"] + inv["act_roots"] for a in t.get("acts") or ()}
+    assert 1700 not in acts and 1700 not in listed(inv)   # the helper: the reader's own, in no tree
+    (broken,) = [h for h in inv["holes"] if BROKEN in h]
+    assert broken.startswith("1 ") and "pid 1650 under parent pid 1540 (the reader's own pid)" in broken
+    assert not [h for h in inv["holes"] if UNREAD in h]   # every link dated: nothing under the reader undated
+    # the helper's own start unread: not proven the reader's, and said by name (BE-2, BF-3)
+    texts_, holes = linux_texts(lambda pid: 1000 + pid, extra=((1700, 1540, "ss", None),))
+    (unread,) = [h for h in discover.run(texts_, CATALOG, holes=holes, processes=True)["holes"] if UNREAD in h]
+    assert "pid 1700" in unread and "the reader's own pid" in unread
+
+
 # --- E7: through the host watch -----------------------------------------------------------------------------------
 
 def test_e7_the_host_watch_over_the_field_shape_lists_the_talkers_tree_not_none_seen(tmp_path):
