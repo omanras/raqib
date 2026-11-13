@@ -2690,9 +2690,9 @@ class HostWatch:
                     keep.append(a)
                     if why is not None and held[root] not in self.not_given_said:
                         self.not_given_said.add(held[root])
-                        self._hole(now, "held-not-given", "round %d: tree %s: a process under its root (pid %s) is"
-                                   " left where the inventory put it (tree %s) and judged there, as is every such"
-                                   " process while this lasts: %s; said once for this tree" % (
+                        self._hole(now, "held-not-given", "round %d: tree %s: the processes under its root that it"
+                                   " was not given (the first: pid %s) are left where the inventory puts them (tree"
+                                   " %s) and judged there while this lasts: %s; said once for this tree" % (
                                        n, tree_word(held[root]), a.get("pid"), tree_word(inv_key(c)), why), round_=n)
                     continue
                 self.given.setdefault(held[root], []).append(a)
@@ -2723,6 +2723,12 @@ class HostWatch:
         if brief or not (self.trees.get(key) or {}).get("sampled", True):
             return "the round's sample does not hold it (known from the channel only)"
         return None
+
+    @staticmethod
+    def unwritten_children(lines):
+        """The pids of the children in the HostChild lines of a write that failed (ADR-0007 BA-1)."""
+        return {c.get("pid") for line in lines if isinstance(line, dict) and line.get("tool") == "HostChild"
+                for c in (line.get("input_meta") or {}).get("children") or () if isinstance(c, dict)}
 
     def _given_elsewhere(self, key, c):
         """ADR-0007 AZ-3: a child once given to a held tree (marked by
@@ -3657,10 +3663,16 @@ class HostWatch:
                     continue
                 src.host_error = why
                 src.error = src.error or src.host_error
+                # ADR-0007 BA-1: a child whose line was not written was not given: its mark is taken back, so the
+                # next round finds it where the inventory puts it, new there, and judges it there
+                lost = [m for m, v in self.given_marks.items() if v[0] == key and m[0] in self.unwritten_children(out)]
+                for m in lost:
+                    del self.given_marks[m]
                 self._hole(now, "source-unwritable", "round %d: tree %s: %s; the source is attached again in the"
-                           " next round the tree is in (a tree held quiet or kept is not, and no child is given to it"
-                           " while it is held: its children are judged where the inventory puts them)"
-                           % (n, tree_word(key), src.host_error), round_=n)
+                           " next round the tree is in (a tree held quiet or kept is not: no child is given to it"
+                           " while it is held, and the %d it was given in this round are given back - from the next"
+                           " round they are judged where the inventory puts them)"
+                           % (n, tree_word(key), src.host_error, len(lost)), round_=n)
                 continue
             entry = self.trees.get(key)
             if entry is not None and entry.get("first_round") == self.history_round == n:

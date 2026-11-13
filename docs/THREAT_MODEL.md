@@ -619,18 +619,24 @@ is amended by T-2, T-1 restated by V-1).
   The watch decides it in one place, before any line of the round is
   written or counted from the sample; the beats of the os and hooks
   sources are not decided there. A process is given only where the held
-  tree's own host record can be written in the round (a source that
-  keeps one, whose write has not failed, that did not end with a hole,
-  of a tree the sample holds). There it is in that record (a HostChild
+  tree's own host record could be written when the round began (a source
+  that keeps one, whose write has not failed, that did not end with a
+  hole - an os follow's host record is tried again every round, so its
+  failed write does not stop the giving - of a tree the sample holds);
+  a process given in a round whose write then fails is given back, and
+  from the next round is judged where the inventory puts it. There it is in that record (a HostChild
   line that names the tree the inventory had it under, judged there by
   the rules that judge a tree's children), an act beat of its ring, and
   in a line of the round by the road of a tree not in the round; the
   tree stays quiet, and no arrival is said again. Where the record
   cannot be written, the process stays where the inventory put it and is
   judged there, and the watch says so once for the tree. A process once
-  given is new on no other tree while it lives: when its tree's root
-  ends and the system gives it a new parent under the ancestor, it is
-  not judged there again. So an agent whose connection to its model is
+  given is new on no other tree while its pid is in the samples: when
+  its tree's root ends and the system gives it a new parent under the
+  ancestor, it is not judged there again (a round with an empty sample
+  ends that, and where a start time was not read, another process that
+  took the pid is taken for it). So an agent the watch already holds -
+  one a sample has seen talking - whose connection to its model is
   closed at the sample no longer gives the children the sample shows to
   a talking ancestor (a CI runner's worker that talks to its server all
   the time) as that ancestor's cycles: a false HOST-RHYTHM at high on
@@ -641,8 +647,12 @@ is amended by T-2, T-1 restated by V-1).
   commands from its own os record (on Windows with Sysmon, the same
   false cycles); the agent's acts with no talk seen make no cycle, so
   where no source sees a connection that opens and closes between two
-  samples (Linux) the agent is still not found by rhythm - it is found
-  as an arrival, and its commands are judged on its own tree; a tree
+  samples (Linux) the agent is still not found by rhythm - where a
+  sample saw it talk it is found as an arrival, and its commands are
+  judged on its own tree; an agent no sample ever saw talking is no tree
+  at all, is not held, and its commands stay the talking ancestor's, with
+  the false cycles they make there, as before; an agent that is started
+  anew for each job gives the ancestor one act for each new root; a tree
   whose root is not in the sample is gone, and its orphans that were
   never given go to the nearest talking ancestor as before; a round with
   no process sample decides nothing; a file write carries no path in the

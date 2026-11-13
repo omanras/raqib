@@ -2432,3 +2432,28 @@ loss the build made.
   Recorded for the tree ledger: a path's pids are the system's own, so two instances of one pid in one
   inventory are not told apart on a path.
 
+## Amendment BA (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.22-redo.md (d840e1e), and the field check
+The packet: AZ-1 to AZ-6 are built as ruled; REDO for one act that could be judged nowhere and for words that
+said more than the code. The Table made the changes itself (CLAUDE.md rule 8). The field check, twice now on
+the built code: the two real agents on Linux with a connection for each turn, and no HOST-RHYTHM on the
+runner's worker in either run; on Windows with Sysmon both agents found at high, as before.
+- BA-1 (R2: an act judged nowhere). A child given to a held tree in a round whose write of that tree's record
+  then failed was marked as given, so the next round it was "not new" on the ancestor either: in no line, read
+  by no rule, under two holes that said it was judged. Now the mark of a child whose line was not written is
+  taken back: from the next round it is where the inventory puts it, new there, judged there; the hole says how
+  many were given back. Tested; the test fails with the change taken out.
+- BA-2 (what M7.22 does not do, said in the rule's holes and THREAT_MODEL). It moves the children of a tree
+  the watch holds. An agent no sample ever saw talking is no tree and is not held: its commands stay its
+  talking ancestor's, with the cycles they make there - AX-4's case unchanged, wherever the agent's every
+  connection opens and closes between two samples from its first. And an agent that is started anew for each
+  job gives the ancestor one act for each new root, which the ancestor's own talks can make cycles of. Both
+  are the same lack: on Linux no source sees what happens between two samples. It is recorded as the task
+  that answers it, M7.25: a source of process and connection events on Linux (ADR-0011 decision 2 (c)).
+- BA-3 (words). The hole for a tree that cannot be given to no longer says its named process "is judged
+  there" where that process was given earlier; THREAT_MODEL says "could be written when the round began", says
+  the os follow's exception, says how long a given process is "not new" (while its pid is in the samples; an
+  empty sample ends it; a pid taken by another process whose start was not read is taken for it).
+- Recorded for the tree ledger: R3 (the held-not-given hole is said once for a tree's life: a recurrence is
+  unsaid); the AP-2 road's own check that a given child is not new has no test of its own; a candidate's
+  HostTree line still counts an orphan that was judged on its first tree.
+
