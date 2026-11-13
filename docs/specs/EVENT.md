@@ -43,9 +43,9 @@ The watch does not write events yet (M10.2).
   tree": the report prints "judged on another tree"; "history": the report prints "history"; "pending at exit":
   the report prints "pending at exit"; "noted": the report prints "noted (benign)"; "not settled": the report
   prints "not settled"; "settled": the report prints the rule's severity (high, medium or low).
-- A heartbeat's `state` is the band's word without its number (D-4): "WATCHING", "SILENT", "AGENT GONE",
-  "CAPTURE FAILED", "FINISHED" ("SILENT for 12 s" is SILENT). A band outside them (the host watch's "HOST
-  READER FAILED" and "READER LATE") is refused: the builder raises ValueError naming `state`.
+- A heartbeat's `state` is the band's word without its number (D-4, E-1): "WATCHING", "SILENT", "AGENT GONE",
+  "CAPTURE FAILED", "READER LATE", "HOST READER FAILED", "FINISHED" ("SILENT for 12 s" is SILENT). These are
+  all the words a band has; a word outside them is refused: the builder raises ValueError naming `state`.
 - `evidence.lines` counts the trace's lines from 1 (the first line of the file is 1). `subject.by` is carried by
   no event yet: no row of the watch says how a tree became a candidate (M10.2).
 - A technique id in `rule.attack` says what a finding is consistent with, never that it happened (B-5).
@@ -111,7 +111,7 @@ field (see Mapping), else the namespace.
 | `knocked.title` | `str` | the knock's title | knock | `unmapped.raqib.knocked.title` | `raqib.knocked.title` |
 | `knocked.limit_id` | `str` | the knock's rate-limit id | knock | `unmapped.raqib.knocked.limit_id` | `raqib.knocked.limit_id` |
 | `knocked.called` | `str` | what the notifier said at the call | knock | `unmapped.raqib.knocked.called` | `raqib.knocked.called` |
-| `state` | `str` | "judged on another tree", "history", "pending at exit", "noted", "not settled", "settled" (a source finding: C-4's word, in the report's order); "start", "end" (a watch); "WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "FINISHED" (a heartbeat: the band's word without its number) | source-finding, heartbeat, watch | `unmapped.raqib.state` | `raqib.state` |
+| `state` | `str` | "judged on another tree", "history", "pending at exit", "noted", "not settled", "settled" (a source finding: C-4's word, in the report's order); "start", "end" (a watch); "WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "READER LATE", "HOST READER FAILED", "FINISHED" (a heartbeat: the band's word without its number) | source-finding, heartbeat, watch | `unmapped.raqib.state` | `raqib.state` |
 | `result` | `object` | the exit and its word | heartbeat, watch end | `unmapped.raqib.result` | `raqib.result` |
 | `result.word` | `str` | "CLEAN" (exit 0), "ALARM" (exit 1), "INCOMPLETE" (exit 3); another exit has no word | heartbeat, watch end | `unmapped.raqib.result.word` | `raqib.result.word` |
 | `result.exit` | `int` | a heartbeat: the exit the watch would end with now (the state's code so far); a watch end: the exit the caller gives | heartbeat, watch end | `unmapped.raqib.result.exit` | `raqib.result.exit` |

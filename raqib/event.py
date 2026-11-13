@@ -74,7 +74,8 @@ SOURCE_STATES = ("judged on another tree", "history", "pending at exit", "noted"
 ALARM_STATES = ("pending at exit", "not settled", "settled")   # C-4: the report's ALARMS (source_alarms)
 WATCH_STATES = ("start", "end")
 # D-4: a heartbeat's state, the band's word (ui.status) without its number ("SILENT for 12 s" is SILENT)
-BEAT_STATES = ("WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "FINISHED")
+# D-4 as E-1 completes it: every word a band can be (raqib/ui.py status), the host watch's two among them
+BEAT_STATES = ("WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "READER LATE", "HOST READER FAILED", "FINISHED")
 BAND_NUMBER = re.compile(r" for \d+ s\Z")
 LOST = "note:lost-words"   # D-1: the note of the words a terminal lost (always last, its text changes)
 HOLE = "hole"

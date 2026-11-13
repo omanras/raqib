@@ -62,7 +62,7 @@ B5 = {"NEW-AGENT": ["T1059"], "NEW-AGENT-UNKNOWN": ["T1059"], "HOST-RHYTHM": ["T
 C4_STATES = ["judged on another tree", "history", "noted", "pending at exit", "not settled", "settled"]
 C5_WORDS = {0: "CLEAN", 1: "ALARM", 3: "INCOMPLETE"}
 # D-4, held here as the ruling's words: a heartbeat's state, the band's word without its number
-D4_STATES = ["WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "FINISHED"]
+D4_STATES = ["WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "READER LATE", "HOST READER FAILED", "FINISHED"]
 LOST = "note:lost-words"   # D-1
 # C-11 as D-2 replaces its pairs for id and about (and names hole.kind); every other key maps to the namespace
 C11 = {
@@ -767,7 +767,7 @@ CHANGES = [
     ("finding", "evidence.cites", [{"src": "win-process-1", "line": 8, "round": -2}]),
     ("finding", "evidence.cites", [{"src": "win-process-1"}]), ("finding", "evidence.cites", [{"line": 8}]),
     ("source-finding", "evidence.lines", [-1]),
-    ("heartbeat", "state", "SILENT for 6 s"), ("heartbeat", "state", "HOST READER FAILED"),
+    ("heartbeat", "state", "SILENT for 6 s"), ("heartbeat", "state", "HOST READER BROKEN"),
     ("hole", "hole.count", 1),
     ("source-finding", "state", "pending"), ("source-finding", "state", KeyError), ("source-finding", "alarm", False),
     ("source-finding", "evidence.lines", "8"),
@@ -822,13 +822,22 @@ def test_d4_a_heartbeat_s_state_is_the_band_s_word_without_its_number(runs, tmp_
         assert event.heartbeat(st, facts(st), st["updated"], 13)["state"] == word
 
 
-def test_d4_a_band_outside_the_list_is_refused_the_host_reader_failed(runs):
-    """The question of the REDO 2 file: a round whose reader failed gives the band HOST READER FAILED, which is
-    not one of D-4's words; the heartbeat is refused (ValueError naming state), never a half event."""
+def test_e1_a_watch_whose_reader_failed_still_beats_and_every_word_of_a_band_is_a_state(runs):
+    """ADR-0011 E-1 (the builder's Q15): a round whose reader failed gives the band HOST READER FAILED; the
+    heartbeat says it (a watch that cannot read is the beat a collector most needs). Every word raqib/ui.py's
+    status can return is in the list; a word that is none of them is still refused, never a half event."""
     st = runs["H"]["failed"]
     assert st["band"] == "HOST READER FAILED"
+    hb = event.heartbeat(st, facts(st), st["updated"], 9)
+    assert hb["state"] == "HOST READER FAILED" and event.check(hb) == []
+    source = (ROOT / "raqib" / "ui.py").read_text(encoding="utf-8")
+    body = source[source.index("def status(state):"):source.index("\ndef ", source.index("def status(state):") + 1)]
+    words = {re.sub(r" for %d s$", "", w) for w in re.findall(r'return "([A-Z][A-Z ]+(?: for %d s)?)"', body)}
+    assert words and words == set(event.BEAT_STATES)
+    bad = copy.deepcopy(st)
+    bad["band"] = "HOST READER BROKEN"
     with pytest.raises(ValueError, match=r"state: must be one of WATCHING\|SILENT"):
-        event.heartbeat(st, facts(st), st["updated"], 9)
+        event.heartbeat(bad, facts(bad), bad["updated"], 9)
 
 
 def test_d5_a_cite_without_src_or_line_is_left_out_whole_and_an_empty_string_is_not_held(runs):

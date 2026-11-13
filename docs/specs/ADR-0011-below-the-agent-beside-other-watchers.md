@@ -314,3 +314,16 @@ line in any line. And the six CI jobs are green on eabca24, Windows among them.
   makes a builder raise becomes a hole, one entry, never a whole pass; that a snapshot's events and a running
   watch's are never sent as one stream.
 
+## Amendment E (the Table, 2026-11-13) - on the second REDO of M10.1 (9e8cecd) and its questions
+- E-1 (Q15: D-4's list was short, and the Table completed it itself, CLAUDE.md rule 8). D-4 named five words;
+  a host watch's band has two more, READER LATE and HOST READER FAILED, and the build, following D-4, refused a
+  heartbeat in exactly the state a collector most needs to hear of: a watch that cannot read. The list is every
+  word a band can be, and a test reads the band's own code so that a word added there and not here fails.
+  FOR: a watch whose reader failed still beats. MUST NOT TOUCH: a word that is none of them is still refused.
+- E-2 (Q14). D-6 said the report prints no cite's text; a footprint's cite is its path, and the report prints
+  the path. The test as built is the one meant: every cite's text and every sample's row is replaced by a
+  marker before the events are built, and no marker is in any line and no line changed.
+- E-3 (Q16). `hole.last` and `evidence.record` are values of the entry and the state that the report's line
+  for the entry does not hold; allowed by name, as built. "The rest in the namespace" means every key D-2 and
+  C-11 do not name: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`, for every kind.
+
