@@ -180,9 +180,11 @@ def gone_inventory(k, gone, pid=RHYTHM_PID, image="relay-bot"):
 
 HELD_ANCESTOR_PID = 5100   # ADR-0007 AX-4, AY: the runner's worker, which talks to its server every round
 HELD_PID = 5200            # the agent under it: a candidate in round 1, quiet after it
+HELD_SUB_PID = 5250        # ADR-0007 AZ-6: a second held tree under the agent (sub=True)
 
 
-def held_inventory(k, net_round=None, every=EVERY, talks_from=2, sampled_agent=True, side=False):
+def held_inventory(k, net_round=None, every=EVERY, talks_from=2, sampled_agent=True, side=False, fresh=False,
+                   worker_from=1, talks_again=None, keep=False, sub=False, destruct_round=None):
     """ADR-0007 AX-4, AY-1 (SYNTHETIC): round k of the field case, in
     discover's inventory shape. An unknown ancestor (pid 5100,
     "runner-worker") talks to one server every round, its bytes moving (a
@@ -196,9 +198,16 @@ def held_inventory(k, net_round=None, every=EVERY, talks_from=2, sampled_agent=T
     candidate nested in a candidate in every round). sampled_agent False:
     from round 2 the agent's root is not in the sample (gone). side: the
     ancestor also has a child of its own each round (pid 5300 + k), no held
-    root on its path."""
+    root on its path. ADR-0007 AZ-6: fresh, both trees start at the watch's
+    start (not history); worker_from, the ancestor talks from that round
+    on (before it, it is no candidate); talks_again, the agent talks again
+    from that round on (a candidate again); keep, each child stays alive
+    (in the sample and among the acts) to the last round; sub, a second
+    talker under the agent (pid 5250, a candidate in round 1 and quiet
+    after it), whose own child (pid 5260 + k) is new each round;
+    destruct_round, the round whose new child is rm."""
     at, worker, agent = (k - 1) * every, HELD_ANCESTOR_PID, HELD_PID
-    w_start, a_start = _iso_at(-7200), _iso_at(-3600)
+    w_start, a_start = (_iso_at(0), _iso_at(0)) if fresh else (_iso_at(-7200), _iso_at(-3600))
     w_remote, a_remote = "192.0.2.20:443", "192.0.2.30:443"
 
     def proc(pid, ppid, image, started):
@@ -215,25 +224,50 @@ def held_inventory(k, net_round=None, every=EVERY, talks_from=2, sampled_agent=T
                  "endpoint": [], "cites": [{"src": "proc-net", "line": 2, "text": "fake connection of pid %d to %s"
                                             " (fixturegen)" % (pid, remote)}]}]
 
+    talking = k < talks_from or (talks_again is not None and k >= talks_again)
+
+    def image_of(j):
+        return "curl" if j == net_round else "rm" if j == destruct_round else "bash"
+
+    def start_of(j):
+        return _iso_at((j - 2) * every + HOST_GAP if j > 1 else (0 if fresh else -60))
+
     child_pid = agent + k
-    child_start = _iso_at((k - 2) * every + HOST_GAP if k > 1 else -60)
-    child = act(child_pid, "curl" if k == net_round else "bash", child_start, [] if k < talks_from else [agent])
+    child_start = start_of(k)
+    kids = [act(agent + j, image_of(j), start_of(j), [] if talking else [agent])
+            for j in (range(1, k + 1) if keep else (k,))]
+    child = kids[-1]
+    sub_start = start_of(1)
+    sub_kid = act(HELD_SUB_PID + 10 + k, "bash", child_start, [] if k == 1 else [agent, HELD_SUB_PID])
     tree = {"exe_from": "record", "cwd": None, "talks": []}
-    w_acts = [act(agent, "node", a_start, [])] + ([] if k < talks_from else [child])
+    w_acts = [act(agent, "node", a_start, [])] + ([] if talking else kids)
+    if sub and k > 1:
+        w_acts += [act(HELD_SUB_PID, "python3", sub_start, [agent]), sub_kid]
     if side:
         w_acts.append(act(5300 + k, "python", child_start, []))
     cands = [dict(tree, pid=worker, image="runner-worker", exe="/opt/runner/bin/runner-worker", started=w_start,
                   cites=proc(worker, 1, "runner-worker", w_start)["cites"], acts=w_acts, id="C1",
-                  talks=talk(worker, w_remote))]
-    by = {"%d %s" % (worker, w_remote): {"bytes_sent": 1000 * k, "bytes_received": 5000 * k, "sockets": 1}}
-    if k < talks_from:
+                  talks=talk(worker, w_remote))] if k >= worker_from else []
+    by = {"%d %s" % (worker, w_remote): {"bytes_sent": 1000 * k, "bytes_received": 5000 * k, "sockets": 1}
+          } if k >= worker_from else {}
+    if talking:
+        a_acts = kids + ([act(HELD_SUB_PID, "python3", sub_start, [])] if sub and k == 1 else [])
         cands.append(dict(tree, pid=agent, image="node", exe="/usr/bin/node", started=a_start,
-                          cites=proc(agent, worker, "node", a_start)["cites"], acts=[child], id="C2",
+                          cites=proc(agent, worker, "node", a_start)["cites"], acts=a_acts, id="C2",
                           talks=talk(agent, a_remote)))
         by["%d %s" % (agent, a_remote)] = {"bytes_sent": 300 * k, "bytes_received": 900 * k, "sockets": 1}
+    if sub and k == 1:
+        cands.append(dict(tree, pid=HELD_SUB_PID, image="python3", exe="/usr/bin/python3", started=sub_start,
+                          cites=proc(HELD_SUB_PID, agent, "python3", sub_start)["cites"], acts=[sub_kid], id="C3",
+                          talks=talk(HELD_SUB_PID, "192.0.2.40:443")))
+        by["%d 192.0.2.40:443" % HELD_SUB_PID] = {"bytes_sent": 100, "bytes_received": 400, "sockets": 1}
     processes = [proc(worker, 1, "runner-worker", w_start)]
     if sampled_agent or k == 1:
-        processes += [proc(agent, worker, "node", a_start), proc(child_pid, agent, child["image"], child_start)]
+        processes += [proc(agent, worker, "node", a_start)] + [proc(c["pid"], agent, c["image"], c["started"])
+                                                               for c in kids]
+        if sub:
+            processes += [proc(HELD_SUB_PID, agent, "python3", sub_start),
+                          proc(sub_kid["pid"], HELD_SUB_PID, "bash", child_start)]
     if side:
         processes.append(proc(5300 + k, worker, "python", child_start))
     return {"records": 20, "holes": [], "incomplete": [], "alarms": [], "problems": [], "result": "alarm",
