@@ -101,8 +101,14 @@ What is written (C-5), one session per run, `os-<PID>`:
   redacted by common.redact}. For a connection {"dest_port": N,
   "dest_private": true|false} (null when unreadable), private meaning
   10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, 100.64/10, ::1, fc00::/7
-  or fe80::/10; a documentation address is not private. UDP connections
-  are written like TCP ones (the protocol is in the hash only);
+  or fe80::/10; a documentation address is not private, and (ADR-0007
+  AU-1, AW-2) "dest_sha256": dest_sha256() of the address, the port and
+  the protocol alone (no host name: one server is one hash whether or not
+  Sysmon named it; the line's input_sha256 is unchanged), only where the
+  caller asks for it (build's and follow's server_hash, which the host
+  watch's follow gives): it is absent when it is not asked for, and when
+  the address, the port or the protocol does not parse. UDP connections
+  are written like TCP ones (the protocol is in the hashes only);
 - session_end at the last kept event's time;
 - cwd on every line: --cwd DIR (an absolute directory, Windows or POSIX:
   the export may be read on another host), else the CurrentDirectory of
@@ -215,6 +221,25 @@ def _int(value):
         return None
 
 
+def dest_sha256(ip, port, protocol):
+    """ADR-0007 AU-1: the hash of one server (common.canonical_sha256 of the
+    address in the ipaddress module's canonical form, an IPv4-mapped IPv6
+    address as its IPv4; the port as an integer; the protocol in lower
+    case), whether or not Sysmon named the host. None when the address, the
+    port or the protocol does not parse: never a guess."""
+    try:
+        addr = ipaddress.ip_address(str(ip if ip is not None else "").strip())
+    except ValueError:
+        return None
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    number = port if isinstance(port, int) and not isinstance(port, bool) else _int(port)
+    proto = protocol.strip().lower() if isinstance(protocol, str) else ""
+    if number is None or not 0 <= number <= 65535 or not proto:
+        return None
+    return common.canonical_sha256({"server": {"ip": str(addr), "port": number, "protocol": proto}})
+
+
 def _guid(value):
     value = (value or "").strip()
     return value or None
@@ -256,7 +281,7 @@ def _same_guid(a, b):
     return a is not None and b is not None and _gkey(a) == _gkey(b)
 
 
-def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=None, tree=None):
+def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=None, tree=None, server_hash=False):
     """(trace lines, silence details) for an export's text. Pure.
     API (M7.2b): after_record, when given, keeps only the tree's events
     whose EventRecordID is above it (an event with none was written by the
@@ -269,7 +294,9 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     the tree's; a pass's window that holds no event of the root, or no event
     of a kind, is not a silence (a window of seconds, not the channel);
     info also receives "last_record", the highest EventRecordID of the
-    export, and "events", its number of events (the cut)."""
+    export, and "events", its number of events (the cut).
+    server_hash (ADR-0007 AW-2): a net line carries input_meta.dest_sha256
+    only when it is True; without it the lines are what they were."""
     silences = []
     problems = []
     events = []
@@ -326,7 +353,7 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     if cwd is None:   # D-4: else no cwd at all, never os-sysmon's own
         starts = [e["data"].get("CurrentDirectory") for e, depth, _ in kept if e["event"] == 1 and depth == 0]
         cwd = next((c for c in starts if c), None)
-    return _lines(kept, root, cwd, start_seq, missing), silences
+    return _lines(kept, root, cwd, start_seq, missing, server_hash), silences
 
 
 def _root(events, root, guid):
@@ -446,7 +473,7 @@ def _image(image):
     return discover.image_name(image) or None
 
 
-def _event_fields(e, depth):
+def _event_fields(e, depth, server_hash=False):
     d = e["data"]
     if e["event"] == 1:
         name = program_name(d.get("Image"))
@@ -464,11 +491,14 @@ def _event_fields(e, depth):
         return common.canonical_sha256({"path": path}), ({"path": common.redact(path)} if path else {})
     destination = {"hostname": d.get("DestinationHostname"), "ip": d.get("DestinationIp"),
                    "port": d.get("DestinationPort"), "protocol": d.get("Protocol")}
-    return (common.canonical_sha256({"destination": destination}),
-            {"dest_port": _int(d.get("DestinationPort")), "dest_private": dest_private(d.get("DestinationIp"))})
+    meta = {"dest_port": _int(d.get("DestinationPort")), "dest_private": dest_private(d.get("DestinationIp"))}
+    server = dest_sha256(d.get("DestinationIp"), d.get("DestinationPort"), d.get("Protocol")) if server_hash else None
+    if server is not None:   # AU-1, AW-2: the server alone (no host name), where asked; input_sha256 is what it was
+        meta["dest_sha256"] = server
+    return common.canonical_sha256({"destination": destination}), meta
 
 
-def _lines(kept, root, cwd, start_seq, missing):
+def _lines(kept, root, cwd, start_seq, missing, server_hash=False):
     sid = session_id(root)
     seq = start_seq
     out = []
@@ -488,7 +518,7 @@ def _lines(kept, root, cwd, start_seq, missing):
     emit(start)
     for e, depth, parent in kept:
         seq += 1
-        digest, meta = _event_fields(e, depth)
+        digest, meta = _event_fields(e, depth, server_hash)
         if e.get("time_from") is not None:   # AM-1: a line timed from the log says so (else no key: as before)
             meta["time_from"] = e["time_from"]
             if e["time_skew_s"] is not None:   # AN-1: none where the UtcTime was not read
@@ -705,7 +735,7 @@ FOLLOW_CUT = ("the follow's pass read %d events, the cap (/c:%d): the records af
 
 def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, live=None, nt=None, on_pass=None,
            after_record=None, helpers=None, timeout=FOLLOW_TIMEOUT, since=None, cap=None, on_read=None, reader=None,
-           tree=None, restart=None):
+           tree=None, restart=None, server_hash=False):
     """API (M7.2b): the os source followed live until stop is set (see the
     module docstring). Returns the number of passes. Raises UsageError as
     run() does (a bad root or cwd, off Windows without a `live` reader, a
@@ -747,7 +777,9 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     (number, aware time) or None, consulted before each pass (R-3): at a
     restart the follow has not met, its bound starts again at the restart's
     time (the events since then; the tree is kept); a follow whose tree has
-    met none starts at the latest restart's time instead of `since`."""
+    met none starts at the latest restart's time instead of `since`.
+    ADR-0007 AW-2: server_hash is build's (True: a net line carries
+    input_meta.dest_sha256; the host watch's follow asks, nothing else)."""
     out = sys.stdout if out is None else out
     err = sys.stderr if err is None else err
     nt = (os.name == "nt") if nt is None else nt
@@ -788,7 +820,7 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
         else:
             info = {}
             lines, silences = build(text, pid, guid=guid, cwd=cwd, start_seq=last_seq(log, session_id(pid)),
-                                    after_record=top, info=info, tree=tree)
+                                    after_record=top, info=info, tree=tree, server_hash=server_hash)
             if info.get("top_record") is not None:
                 top = info["top_record"] if top is None else max(top, info["top_record"])
             if bounded and info.get("last_record") is not None:   # the records after the highest read, next

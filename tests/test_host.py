@@ -548,8 +548,9 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
     # M7.6c REDO E-2: AGENT-DARK-LIVE and HOST-RHYTHM gain their edge negatives (M7.6c questions file)
     # M7.8 (ADR-0007 P-1, A6 re-measured): NET-TOOL and DESTRUCT-CMD gain their os-line negative (M7.8 questions file)
     # ADR-0007 AP-3 (re-measured): HOST-RHYTHM gains its two quiet negatives (7 -> 9 measured); AR-2: its gone negative (9 -> 10)
+    # ADR-0007 AU-4 (re-measured): HOST-RHYTHM gains AU-1's negative (10 -> 11; AW-1 took AU-3's out)
     assert got == {"AGENT-DARK-LIVE": (3, 10), "DESTRUCT-CMD": (12, 0), "DRIFT-FILES": (4, 7), "EDIT-NO-TEST": (9, 0),
-                   "HOST-RHYTHM": (10, 8), "HOST-UNWATCHED": (4, 8),
+                   "HOST-RHYTHM": (11, 8), "HOST-UNWATCHED": (4, 8),
                    "LANDED-NO-GATE": (8, 2), "NET-TOOL": (12, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
                    "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
                    "SECRET-OUTPUT": (7, 2)}

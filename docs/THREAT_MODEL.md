@@ -565,6 +565,47 @@ is amended by T-2, T-1 restated by V-1).
   were not read either), and says so once. A round whose process list was
   not read has an empty sample: every tree absent from it is gone, its
   source is stopped and attached again when it is next seen.
+- **One server is one os destination (ADR-0007 Amendments AU and AW).**
+  The os source keeps no address or host name of a connection in clear,
+  but its line is not hashes only: the port and whether the address is
+  private are in clear beside the connection's own identity, a hash of
+  the host name Sysmon gave, the address, the port and the protocol.
+  Under the host watch the line also holds the server's hash (the address
+  in canonical form, the port and the protocol alone): it is written only
+  where its caller asks for it, and the host watch's os follow asks;
+  `raqib os-sysmon` on its own and every other caller do not. The
+  server's hash has no salt and, the port being in clear on the same
+  line, an IPv4 address can be found from it by trying them all (2^32
+  hashes for each protocol, far fewer for a private one; one hash
+  confirms a known server); an IPv6 address can only be guessed. For a
+  connection the host's sample saw, that reveals nothing more than lies
+  beside it: the host's own record of the tree, in the same directory,
+  holds that remote address in clear. For a connection that opened and
+  closed between two samples, or one read from before the tree was
+  attached, the os line is the only record, and its address, which was
+  bound to the name Sysmon gave it, can now be found this way: a reader
+  of the watch's own files on the watched machine learns an address that
+  machine connected to. A salt kept only in the running watch's memory
+  would end that and is recorded as a task of its own.
+  The rhythm counts the server's hash, so one server is one os
+  destination whether or not Sysmon named the host on an event (it names
+  it on some events of one server and not on others). A connection the
+  host's sample saw to an address and port and the os source's
+  connection to that server are two destinations: one connection both
+  sources saw is one talk on each, never two cycles on one. What is not
+  covered: another address of one server (an address pool, DNS round
+  robin, the IPv4 and IPv6 of one name) is another destination, and so
+  is another protocol to it (tcp and udp on one port are two); two
+  servers behind one address and port (an edge of a content network, a
+  forward proxy) are one destination, as they always were for the
+  sample's talks; a
+  connection line without the server's hash (written before it was
+  recorded, by a caller that did not ask for it, or whose address, port
+  or protocol did not parse) keeps the destination of its own identity,
+  said once per source with its count (a source attached again is a new
+  one, and says it again), so there one server named on some events and
+  not on others is two destinations, and such a line and a line with the
+  server's hash to one server are two destinations too.
 - **A beat is judged in the round that reads it (ADR-0007 Amendments AP
   to AS).** A tree that is not in the round - quiet at the sample, or
   kept by a round whose connections were not read, or gone from the

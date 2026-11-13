@@ -251,7 +251,7 @@ From run B.
 From run B.
 
 ```json
-{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:11","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":11,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:12","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: heartbeat
@@ -259,7 +259,7 @@ From run B.
 From run B (at its last round, before its end).
 
 ```json
-{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":3,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:13","kind":"heartbeat","n":13,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"WATCHING","time":"2026-11-03T10:00:20.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"heartbeat","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"WATCHING","time":"2026-11-03T10:00:20.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: watch start
@@ -275,7 +275,7 @@ From run B.
 From run B (after its end, exit 1).
 
 ```json
-{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":3,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:13","kind":"watch","n":13,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"end","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"watch","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"end","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: settled

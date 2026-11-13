@@ -178,10 +178,19 @@ def test_e1_hashes_of_command_line_path_and_destination_never_the_text():
     api = rows[("net", "2026-11-03T09:00:01.000Z")]
     assert api["input_sha256"] == common.canonical_sha256(
         {"destination": {"hostname": "api.example.com", "ip": "203.0.113.7", "port": "443", "protocol": "tcp"}})
-    assert api["input_meta"] == {"dest_port": 443, "dest_private": False}
+    assert api["input_meta"] == {"dest_port": 443, "dest_private": False}   # ADR-0007 AW-2: no key unasked
     udp = rows[("net", "2026-11-03T09:00:01.500Z")]
     assert udp["input_sha256"] == common.canonical_sha256(
         {"destination": {"hostname": "-", "ip": "203.0.113.9", "port": "443", "protocol": "udp"}})
+    # ADR-0007 AU-1, AW-2: asked for, the server's own hash (the address, the port and the protocol; no host name),
+    # held to literal hashes (AW-4: never compared with dest_sha256 itself); the line's identity is what it was
+    asked = {(r["tool"], r["ts"]): r for r in pres(built(cwd=CWD, server_hash=True)[0])}
+    assert asked[("net", "2026-11-03T09:00:01.000Z")]["input_meta"] == {
+        "dest_port": 443, "dest_private": False,
+        "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"}
+    assert asked[("net", "2026-11-03T09:00:01.500Z")]["input_meta"]["dest_sha256"] == \
+        "93a39da482d470fdafb521acb8b524ce0b98034a4c3fdb237cda490f0dc0347a"
+    assert all(asked[k]["input_sha256"] == rows[k]["input_sha256"] for k in rows)
     flat = "\n".join(lines)
     for text in ("-la", "grep src", "--files", "https://", "198.51.100.20", "203.0.113", "api.example.com",
                  "host\\\\user", "Program Files", "AppData", "ParentCommandLine"):
