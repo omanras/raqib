@@ -2285,3 +2285,64 @@ others. A second split stands beside it and was stated long ago (M7.5 E2): a tal
   said under. Accepted: the count is the ruling, the name is the best one known when the line is written. Q4's
   four points are accepted as built and are in the hole.
 
+## Amendment AV (the Table, 2026-11-13) - what the real agents showed, corrected
+AT and AT-7 stated numbers the Table measured wrongly, and they are in the tree: this amendment corrects them.
+The scripted model gave the two agents, in each turn, a curl to one site. On Windows the cycles that fired were
+those: the curl's connection (a process of the tree talks to one server), then the next turn's shell (a child
+within W). The proof is the destination itself: the hash named in the findings is the hash of the site's
+address and port, not of the model server's. The agents' own talk to the model was one connection, opened once
+and kept: on Windows, where no byte counts are read, that is one talk.
+The measure again, with commands that talk to no one (seven turns, five longer than a round):
+- Linux: both agents fired, at high, on the model server (its connection's byte counts moved in each turn).
+- Windows with Sysmon: neither fired. One cycle at most on the model server (the connection's first round).
+So, as built: on Linux HOST-RHYTHM sees an unnamed agent's own cycle. On Windows it sees it only for an agent
+that opens a new connection for each turn (many small home-made agents do; the two public ones tested do not),
+or whose commands themselves talk to one server again and again. That is the rule's stated hole ("repeated
+talks on one long connection are unseen without bytes"), and the Table had read it as a corner; on Windows it
+is the main case. AT-7's reading of the miss was right that one server was split in two (Sysmon's host name),
+and wrong about whose talks they were. Both an unnamed tree's arrival (NEW-AGENT-UNKNOWN) and its commands
+(NET-TOOL, DESTRUCT-CMD) were found in every run, on both systems.
+- AV-1 (the numbers). HOST-RHYTHM.yaml's comment says the corrected measure (done with this amendment). AT-1
+  stands: the level is right where the rule sees.
+- AV-2 (the hole is the next thing to close on Windows, and how is the commander's). A connection's byte
+  counts on Windows can be read two ways, both needing an administrator: (a) the kernel's own tracing of the
+  network (ETW), which only listens; (b) GetPerTcpConnectionEStats, which first switches on the system's own
+  counting for a connection. (b) is a small reader and (a) a larger one that ADR-0011's service needs anyway
+  for file reads. Whether (b) is "touching the watched" (A4) is his to say: it changes what the system counts
+  about a connection, not the process and not its traffic. Until his word the Table plans (a), M7.21, and the
+  rule's blind spot on Windows is said at the start of every watch, as it is now.
+- AV-3 (the rig's real agents, M11.2). The scripted commands talk to no one. Expected and stated: on Linux,
+  HOST-RHYTHM on the agent's tree, on the model server; on Windows, OPEN until M7.21.
+- The ledger. A measure that passes is read to the line that made it pass before it is called a pass: the
+  destination in a finding is evidence, and the Table had the hash in front of it twice.
+
+## Amendment AW (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.20.md: REDO, and AU-3 withdrawn
+The packet: STOP, on three things. The Table accepted the builder's Q3 (AU-7) on a description the watch does
+not follow; one connection that both sources see can be two talks in two rounds, so one turn can count two
+cycles, in a rule that is now high; and the field check was owed. The field check is Amendment AV: it showed
+that the case AU-3 was FOR (the sample sees the first turn, the os source the later ones) is not where the
+hole is - the later turns make no new connection at all.
+- AW-1 (AU-3 is withdrawn, and AU-7 with it). A host talk and an os talk stay two destinations, as before AU:
+  `server_of` and `one_server` are taken out, the ring is not renamed, the split-sources fixtures and their
+  scenario go. FOR: one turn is never two cycles because two sources saw its one connection (M1). The hole
+  says again that an os talk and a host talk to one server are two destinations. M2, M3, M4, S2 and S3 fall
+  with it. MUST NOT TOUCH: AU-1 and AU-2 (one server is one os destination, whatever Sysmon named).
+- AW-2 (section 5: what the key reveals, and where it is written). The key is written only where the caller
+  asks for it: the host watch's follow asks; `raqib os-sysmon` on its own and every other caller do not. So
+  the other rules' fixtures and the CROSS logs are byte for byte what main has, their generators untouched, and
+  the every-fixture test is main's again. Under the host watch nothing more is revealed than lies beside it:
+  the host's own record of the tree, in the same directory, holds each remote address in clear. THREAT_MODEL
+  says both things plainly: that the server hash has no salt and, the port being in clear on the line, an IPv4
+  address can be found by trying them all; and that the host's record already holds it. "A connection's line
+  holds hashes only" is corrected.
+- AW-3 (E2, M5, S1, section 6: the note). Said once per source object, as the note of a process line without
+  an image is, with its count; its words are true of both causes (a line written before the key, or one whose
+  address, port or protocol did not parse); it says an old line and a new one to one server are two
+  destinations.
+- AW-4 (tests). The self-comparison in tests/test_os_sysmon.py and the parameter that adds nothing are
+  replaced; a test through rounds holds AW-1's FOR case: one connection seen by the sample in one round and by
+  the os source in the round before is one cycle on each destination, never two on one.
+- AW-5 (the field check, the Table's). A scripted model that closes the connection after every turn makes the
+  two real agents open one for each turn: on Windows with Sysmon HOST-RHYTHM must then fire on the model
+  server's own hash. Not merged on a run where it does not.
+
