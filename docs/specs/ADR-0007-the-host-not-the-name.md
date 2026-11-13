@@ -2246,3 +2246,28 @@ each given seven turns (five of them a command that outlasts a round), on Window
   is what Sysmon does. MUST be built next, as its own task (M7.20): one server is one destination, whichever
   events name it. Until then the rule's level is right and its reach on Windows is less than Linux's; said.
 
+## Amendment AU (the Table, 2026-11-13) - one server, one destination (AT-7's task, M7.20)
+The case: a real agent on Windows with Sysmon, seven turns to one model server, K is three, no finding. Its
+os talks were counted under two destinations because an os talk's destination is the hash of the host name,
+the address, the port and the protocol, and Sysmon names the host on some events of one server and not on
+others. A second split stands beside it and was stated long ago (M7.5 E2): a talk the host's sample saw
+("address:port") and a talk the os source saw ("os:" and a hash) to one server are two destinations.
+- AU-1 (the os line says which server, without saying more). An os net line's input_meta gains `dest_sha256`:
+  the hash of the address, the port and the protocol alone (the address in its canonical form). Its
+  input_sha256 is unchanged: the line's identity stays what it is. FOR: one server is one hash whether or not
+  the host's name was resolved. MUST NOT TOUCH: what the trace reveals (a hash, as before; no address is
+  written by the os source that it did not write).
+- AU-2 (the rhythm's destination for an os talk). Where the line has `dest_sha256`, the talk's destination is
+  made from it; a line written before this has none and keeps the destination it had (said once per source,
+  as an old line's missing image is).
+- AU-3 (the two sources, one destination). A host talk to address:port is the same destination as an os talk
+  whose `dest_sha256` is the hash of that address, that port and tcp: their cycles are counted together, under
+  one destination, named as the host's sample names it where the sample saw it. FOR: an agent whose first
+  turn the sample saw and whose later turns only the os source saw. MUST NOT TOUCH: K, W, R, once per streak;
+  a destination only one source saw is named as before.
+- AU-4 (the measure). The rule's negatives and positives are measured again (the budget stays what the
+  measure gives); a positive and a negative are added for AU-1 (one server named on some events and not on
+  others: K cycles fire; K-1 do not) and for AU-3 (cycles split between the two sources).
+- AU-5 (the field check is the Table's). The two real agents are run again on the built code; the task is not
+  merged on a run in which an agent that made seven turns to one server is not found.
+
