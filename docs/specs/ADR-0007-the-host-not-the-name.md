@@ -2788,3 +2788,85 @@ loopback traffic is said at all.
   documents. The reader imports nothing of the network and is not the capture path's dependency: a watch
   without it is today's watch.
 
+## Amendment BM (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.21a.md (e40849e): the reader, REDO
+The field first (a Windows runner): the reader as built read real traffic - a fetch's bytes over https, http
+and loopback (both ends of it: BL's open question is closed, loopback is said), the pids and times right; the
+structures' sizes are the module's; no session after a clean end; a killed reader's session was found and
+stopped by the next run. The packet: REDO for a test that fails on Windows and a way out with no undo, and
+questions for the Table. Each ruling names what it is FOR.
+- BM-1 (every way out, whole). A start interrupted by anything (not only an error: an interrupt, an exit)
+  undoes the session before it goes on up. A reader started and never stopped is stopped at the
+  interpreter's exit. FOR: BL-2 - only a kill leaves a session.
+- BM-2 (a session with the watch's own number is a leftover). A watch that was given a killed watch's pid
+  finds `raqib-net-<its own pid>` there: it is nobody else's (the number is this process's), so it is
+  stopped and the start tried once more, and that is said. FOR: a watch refused for its whole life by its
+  predecessor's leftover. MUST NOT TOUCH: a session of another number or name.
+- BM-3 (leftovers: the sessions are listed before the pids are read). A session seen in the list was
+  started before the pids were read, so a live watch's pid is among them. FOR: a watch starting between
+  the two, whose session would be taken for a leftover.
+- BM-4 (what is not the measured shape is not read). Measured: version 0 of ids 10 and 11. An event of the
+  four ids with another version, or shorter than the shape, is unread with its reason; the IPv6 ids are
+  read by the manifest's shape, version 0, until the field shows one. FOR: BL-5.
+- BM-5 (unread stays an alarm). Events of the provider that are not the four ids (connects, ends, udp) are
+  counted apart, by id, as `other_ids`; `unread` is only the four ids not read. And the reader says how many
+  of the provider's events it saw at all (`events`): a session that hears nothing is told from a quiet
+  machine by the caller (M7.21b: no event at all while connections talk is a hole).
+- BM-6 (the kernel's own word of a loss). The tracing's lost-event notices delivered to the consumer are
+  counted as `lost` notices, with what the session says; either makes the turn's counts unknown.
+- BM-7 (the map is bounded). At most 65536 connections are kept; an event of a connection beyond that is
+  counted (`beyond`), never dropped unseen, and M7.21b says it as a hole. Sums and the last event's time a
+  connection are what is kept (not each event): accepted, and BL-5 means that.
+- BM-8 (recorded for M7.21b, not built here): udp bytes (ids 42, 43 and their IPv6 pair carry sizes: QUIC is
+  otherwise unseen) ; the delivery's lag (up to the flush timer: a turn's counts are of a moment earlier);
+  sums that outlive the connection, where Linux's end with the socket; more than 64 sessions on a machine.
+E1's "nothing of raqib but what hostwin imports" means raqib's modules: `threading` is the standard library's.
+
+## Amendment BN (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.21a-redo.md (4e15480): the last ways out
+The packet: no structure or call the field proved was changed; REDO for two windows where an interrupt
+leaves a session, and for things said that were not so. Small, and built by the Table.
+- BN-1 (an interrupt at the start's own return). The session may have begun with its handle not yet kept:
+  a session of this process's own number is then stopped by name (BM-2: it is nobody else's). For a
+  reader given another number nothing is stopped by name - it could be another's - and that limit is said
+  here: the watch reads under its own pid.
+- BN-2 (the exit's hook goes last). stop() takes the hook away only after the session was stopped; a stop
+  interrupted, or whose session may still run, leaves the hook, and the exit stops the session once more.
+- BN-3 (live pids that may not be whole stop nothing). leftovers acts only on a list given with no doubt.
+- BN-4 (what is said is what was done). The own-number leftover is said with what the stop returned; the
+  lost-event provider's number is "not measured in the field yet" until it is; the tool shows the notices in
+  its last line, prints the other ids as one plain line (not as something said wrong), and its tests use no
+  real exit registry. The undo's problems after an interrupt are kept on the reader.
+Accepted as built: `os` and `atexit` in the module (E1 means raqib's modules; the import guard names them);
+os.getpid() as the reader's default; both messages where the pids are not known; `unread` also holds a
+record that could not be read at all. Recorded for M7.21b: the callback now reads every event of the
+provider (its cost on a busy machine is the loss counters' to show); IPv6 traffic in the field for ids 26
+and 27; a notice of a loss makes the turn's counts unknown in the watch.
+
+## Amendment BO (the Table, 2026-11-13) - the watch takes the tracing's counts (M7.21b)
+The reader stands alone and read real traffic on a Windows runner three times (BL, BM, BN). This rules how
+the watch takes its counts. Each ruling names what it is FOR and what it MUST NOT TOUCH.
+- BO-1 (the same door as Linux). On Windows the round's inventory carries `conn_bytes` in the shape Linux's
+  has ({"from", "hole", "by": {"PID REMOTE": {"bytes_sent", "bytes_received", "sockets"}}}), built from
+  the reader's counts summed a pid and a remote; REMOTE is named exactly as the inventory's talks name it,
+  IPv6 too. FOR: K-5 and the rhythm read Windows as they read Linux, with no rule of their own. MUST NOT
+  TOUCH: the rules, the rhythm, the events' shape.
+- BO-2 (one reader a watch, under the watch's own pid). Started once when a live watch on Windows starts,
+  after the leftovers were stopped (the sessions listed first, BM-3); stopped on every way out of the
+  watch. A watch that reads exports, a `--once` inventory and any other system start none.
+- BO-3 (where it cannot be read, today's blind spot, with the reason). A refused start (no administrator, a
+  policy, the limit) leaves the blind spot `bytes` as it is said today, the reason after it, once a run;
+  the watch's result does not change and nothing else is tried (BK-1, BL-3).
+- BO-4 (a loss is not a quiet turn). In a round where the reader says events, buffers or notices were lost
+  since the round before, or connections were beyond its cap, or its consumer ended, the counts of that
+  round are not read: the blind spot `bytes` is said with that reason and its rounds, and no connection
+  is judged unchanged on them. A consumer that ended is said once and the rounds after it are not read.
+- BO-5 (a session that hears nothing). A round in which the tree holds connections whose table state moved
+  (new or closed) while the reader saw no event of the provider at all since its start is said as the
+  reader's hole, not as zero bytes.
+- BO-6 (what the counts are, said). They are sums since the watch began, not since the connection did; a
+  connection older than the watch shows only what it carried since. They lag the kernel by about a
+  second. UDP carries no counts yet (QUIC is unseen here). The threat model and the guide say so, and
+  that reading them needs an administrator and starts one tracing session named for the watch, which a
+  killed watch leaves until the next start.
+- BO-7 (the leftovers found are said). Sessions of killed watches stopped at the start are a note of the
+  run, by name.
+
