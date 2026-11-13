@@ -1576,6 +1576,14 @@ def act_root_sample(tmp_path, name, children=True):
     """quiet/quiet with the .kimi footprint and B3's tree (SYNTHETIC): agentx under AppData, its parent the sampled
     powershell (a listed shell), with a sampled cmd.exe that has kimi.exe below it; it never talks at a sample."""
     d = footprint_dir(tmp_path, name)
+    # ADR-0007 BF-1 as BG-3 corrected it (the Table): the sample is made true by its shell, not by its agent. The
+    # fixture's powershell starts at 07:50:00, after the agent this sample hangs under it (07:49:00): in this
+    # sample's own copy the shell starts a minute before it. The agent's rows and its channel times are what they
+    # were, so round 1 still joins the channel's talk (07:49:30) to the sampled agentx.
+    rows = (d / "win-process-1.csv").read_text(encoding="ascii")
+    assert rows.count('.exe"","2026-11-10T07:50:00.000Z"') == 1
+    (d / "win-process-1.csv").write_text(rows.replace(
+        '.exe"","2026-11-10T07:50:00.000Z"', '.exe"","2026-11-10T07:48:00.000Z"', 1), encoding="ascii", newline="\n")
     with open(d / "win-process-1.csv", "a", encoding="ascii", newline="\n") as f:
         f.write('"9216","5888","agentx.exe","%s","agentx","2026-11-10T07:49:00.000Z"\n' % AGENTX)
         if children:
@@ -1753,8 +1761,9 @@ def test_ae1_ad2_does_not_reach_a_guid_tree_whose_own_start_the_round_read(tmp_p
     shutil.copytree(str(HOSTFIX / "quiet" / "talking"), str(later))
     rows = (later / "win-process-1.csv").read_text(encoding="ascii")
     assert rows.count('.exe"","2026-11-10T07:50:00.000Z"') == 1
-    (later / "win-process-1.csv").write_text(rows.replace(
-        '.exe"","2026-11-10T07:50:00.000Z"', '.exe"","2026-11-10T08:00:05.000Z"', 1), encoding="ascii")
+    (later / "win-process-1.csv").write_text(rows.replace(   # BF-1: the new shell's child starts after it
+        '.exe"","2026-11-10T07:50:00.000Z"', '.exe"","2026-11-10T08:00:05.000Z"', 1) + '"5896","5888","conhost.exe",'
+        '"C:\\Windows\\System32\\conhost.exe","conhost.exe 0x4","2026-11-10T08:00:05.100Z"\n', encoding="ascii")
     w, _, rounds = look_watch(tmp_path / "w", monkeypatch, [talking_unread(tmp_path, "t"), later, later],
                               [began, "", ""])
     guid_keys = [k for k in w.trees if k[0] == 5888 and w.trees[k].get("guid") == G_SHELL]
