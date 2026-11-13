@@ -6,6 +6,7 @@ reader's callback EVENT_RECORDs built from bytes as the kernel lays them (IPv4 a
 layouts are checked against a statement of them made apart. The real system is the Table's field check
 (docs/review/2026-11-13-M7.21a-questions.md). Addresses are documentation addresses only."""
 import ast
+import atexit
 import ctypes
 import datetime
 import gc
@@ -69,14 +70,15 @@ def kernel_data(event_id, pid, size, local, remote):
     return out + struct.pack("<IQ", 78, 0xFFFF800012340000)
 
 
-def record_bytes(provider, event_id, header_pid, when, data_at, length):
+def record_bytes(provider, event_id, header_pid, when, data_at, length, version=0):
     """An EVENT_RECORD of 64-bit Windows, 112 bytes, laid out by hand (evntcons.h, evntprov.h): EVENT_HEADER
     (Size, HeaderType, Flags, EventProperty, ThreadId, ProcessId, TimeStamp at 16, ProviderId at 24,
     EVENT_DESCRIPTOR at 40: Id, Version, Channel, Level, Opcode, Task, Keyword at 48; ProcessorTime at 56,
     ActivityId at 64), ETW_BUFFER_CONTEXT at 80, ExtendedDataCount at 84, UserDataLength at 86, ExtendedData
     at 88, UserData at 96, UserContext at 104."""
     head = struct.pack("<HHHHII", 80, 0, 0x0040, 0, 3131, header_pid) + struct.pack("<q", when)
-    head += uuid.UUID(provider).bytes_le + struct.pack("<HBBBBHQ", event_id, 0, 0x10, 4, 0, 0, 0x8000000000000010)
+    head += uuid.UUID(provider).bytes_le + struct.pack("<HBBBBHQ", event_id, version, 0x10, 4, 0, 0,
+                                                        0x8000000000000010)
     head += struct.pack("<Q", 0) + bytes(16)
     rest = struct.pack("<BBHHH", 1, 0, 7, 0, length) + struct.pack("<QQQ", 0, data_at, 0)
     out = head + rest
@@ -84,9 +86,9 @@ def record_bytes(provider, event_id, header_pid, when, data_at, length):
     return out
 
 
-def ev(event_id, local, remote, size, when=T1, pid=PID, header_pid=0, provider=PROVIDER, cut=None):
+def ev(event_id, local, remote, size, when=T1, pid=PID, header_pid=0, provider=PROVIDER, cut=None, version=0):
     data = kernel_data(event_id, pid, size, local, remote)
-    return provider, event_id, header_pid, stamp(when), data if cut is None else data[:cut]
+    return provider, event_id, header_pid, stamp(when), data if cut is None else data[:cut], version
 
 
 def units_at(address):
@@ -110,7 +112,7 @@ class FakeEtw:
     def __init__(self, others=OTHERS):
         self.sessions = {n: {"handle": 0, "mine": False} for n in others}
         self.next = 0x5000
-        self.start_rc = self.enable_rc = self.query_rc = self.listing_rc = 0
+        self.start_rc = self.enable_rc = self.query_rc = self.listing_rc = self.close_rc = 0
         self.open_error = None     # an error number: OpenTraceW fails with it
         self.process_rc = None     # a number: ProcessTrace returns it at once
         self.raises = {}           # function name -> the exception it raises
@@ -189,7 +191,7 @@ class FakeEtw:
         self._call("CloseTrace")
         self.closed.append(trace)
         self.traces[trace]["inbox"].put(None)
-        return 0
+        return self.close_rc
 
     def ControlTraceW(self, handle, name, buf, code):
         self._call("ControlTraceW")
@@ -230,10 +232,10 @@ class FakeEtw:
         """Hand each event to the consumer's callback, on the consumer's thread, and wait until it was taken."""
         inbox = self.traces[max(self.traces)]["inbox"]
         items = []
-        for provider, event_id, header_pid, when, data in events:
+        for provider, event_id, header_pid, when, data, version in events:
             data_buf = ctypes.create_string_buffer(data, len(data)) if data else None
             rec = ctypes.create_string_buffer(record_bytes(provider, event_id, header_pid, when, ctypes.addressof(
-                data_buf) if data_buf is not None else 0, len(data)), 112)
+                data_buf) if data_buf is not None else 0, len(data), version), 112)
             self.kept += [data_buf, rec]
             items.append(Delivery(ctypes.addressof(rec)))
         if null:
@@ -243,12 +245,55 @@ class FakeEtw:
         assert all(item.done.wait(30) for item in items)
 
 
+class FakeAtexit:
+    """A stand-in for the atexit module: it records what a reader registers so a test can
+    run the hook and see nothing is left behind, without touching the real registry (which
+    would run at pytest's exit)."""
+
+    def __init__(self):
+        self.registered = []
+
+    def register(self, fn):
+        self.registered.append(fn)
+
+    def unregister(self, fn):
+        self.registered = [f for f in self.registered if f != fn]
+
+
+class StuckThread:
+    """A consumer thread that never runs and never ends: start() does nothing, join()
+    returns at once and is_alive() stays True (the join-timeout branch of stop(), no sleep)."""
+
+    def __init__(self, **kw):
+        pass
+
+    def start(self):
+        pass
+
+    def join(self, timeout=None):
+        pass
+
+    def is_alive(self):
+        return True
+
+
+def pids_of(*members):
+    """The live-pids callable leftovers() takes: (the set, None)."""
+    return lambda: (set(members), None)
+
+
+def no_pids(why="the live pids were not read (fake)"):
+    return lambda: (None, why)
+
+
 def reader(fake, pid=PID, **kw):
+    kw.setdefault("at_exit", FakeAtexit())   # never the real registry in a test
+    kw.setdefault("ownpid", 0)               # 0 is no pid: the own-pid retry only when a test asks for it
     return etwnet.Reader(pid, fake, now=lambda: SINCE, **kw)
 
 
-def started(fake, pid=PID):
-    r = reader(fake, pid)
+def started(fake, pid=PID, **kw):
+    r = reader(fake, pid, **kw)
     assert r.start() is None
     return r
 
@@ -272,7 +317,7 @@ def test_e1_stdlib_only_nothing_of_raqib_no_network_and_nothing_of_windows_at_im
     assert tops - {"__future__"} <= set(sys.stdlib_module_names) and not any(m.startswith(".") for m in mods)
     assert "raqib" not in tops and not tops & {"socket", "ssl", "http", "urllib", "subprocess", "asyncio",
                                                  "socketserver", "select", "selectors"}
-    assert tops == {"__future__", "ctypes", "datetime", "ipaddress", "re", "struct", "threading"}
+    assert tops == {"__future__", "atexit", "ctypes", "datetime", "ipaddress", "os", "re", "struct", "threading"}
     # at import (the module's own statements and its classes' bodies), nothing of Windows is touched
     top = [n for n in tree.body if not isinstance(n, (ast.FunctionDef, ast.ClassDef))]
     top += [s for c in tree.body if isinstance(c, ast.ClassDef) for s in c.body if not isinstance(s, ast.FunctionDef)]
@@ -366,13 +411,13 @@ def test_e2_sent_and_received_over_v4_and_v6_this_hosts_side_is_saddr_sport_and_
     r.stop()
 
 
-def test_e2_a_connect_or_a_disconnect_adds_no_bytes():
+def test_e2_a_connect_or_a_disconnect_adds_no_bytes_and_is_not_unread():
     fake = FakeEtw()
     r = started(fake)
     fake.deliver(ev(12, L4, R4, 0), ev(13, L4, R4, 0), ev(28, L6, R6, 0))
     got = r.counts()
-    assert got["connections"] == {} and got["unread"] == 3
-    assert got["unread_why"] == {"id 12": 1, "id 13": 1, "id 28": 1}
+    assert got["connections"] == {} and got["unread"] == 0 and got["unread_why"] == {}
+    assert got["other_ids"] == {12: 1, 13: 1, 28: 1} and got["events"] == 3   # not the four ids: counted apart (BM-5)
     r.stop()
 
 
@@ -426,14 +471,14 @@ def test_e4_lost_is_asked_of_the_session_at_each_counts_and_a_loss_is_reported()
     fake = FakeEtw()
     r = started(fake)
     queries = lambda: sum(1 for c in fake.controls if c[2] == etwnet.EVENT_TRACE_CONTROL_QUERY)   # noqa: E731
-    assert r.counts()["lost"] == {"events": 0, "buffers": 0, "why": None} and queries() == 1
+    assert r.counts()["lost"] == {"events": 0, "buffers": 0, "notices": 0, "why": None} and queries() == 1
     fake.lost = (3, 2)
-    assert r.counts()["lost"] == {"events": 3, "buffers": 2, "why": None} and queries() == 2
+    assert r.counts()["lost"] == {"events": 3, "buffers": 2, "notices": 0, "why": None} and queries() == 2
     assert fake.controls[-1] == (fake.sessions[r.name]["handle"], r.name, etwnet.EVENT_TRACE_CONTROL_QUERY)
     fake.lost = (5, 4)
     assert r.stop() == []
     after = r.counts()
-    assert after["lost"] == {"events": 5, "buffers": 4, "why": None} and queries() == 2   # the stop's last word
+    assert after["lost"] == {"events": 5, "buffers": 4, "notices": 0, "why": None} and queries() == 2   # the stop's last word
 
 
 def test_e4_a_query_that_fails_is_a_loss_not_known_never_zero():
@@ -444,7 +489,7 @@ def test_e4_a_query_that_fails_is_a_loss_not_known_never_zero():
     assert lost["events"] is None and lost["buffers"] is None and "returned 87" in lost["why"]
     assert "not known" in lost["why"]
     fake.query_rc = 0
-    assert r.counts()["lost"] == {"events": 0, "buffers": 0, "why": None}
+    assert r.counts()["lost"] == {"events": 0, "buffers": 0, "notices": 0, "why": None}
     r.stop()
 
 
@@ -526,33 +571,49 @@ LEFT = ("raqib-net-111", "raqib-net-222", "raqib-net-", "raqib-net-12x", "xraqib
 def test_e5_leftovers_stops_raqib_sessions_of_no_live_pid_and_never_another():
     fake = FakeEtw(LEFT)
     problems = []
-    assert etwnet.leftovers({222, 4242}, fake, problems) == ["raqib-net-111"] and problems == []
+    assert etwnet.leftovers(pids_of(222, 4242), fake, problems) == ["raqib-net-111"] and problems == []
     assert list(fake.sessions) == [n for n in LEFT if n != "raqib-net-111"]
     assert [c for c in fake.controls] == [(0, "raqib-net-111", etwnet.EVENT_TRACE_CONTROL_STOP)]
     # negative: with every raqib pid alive, nothing is stopped
     fake = FakeEtw(LEFT)
-    assert etwnet.leftovers({111, 222}, fake) == [] and fake.controls == []
+    assert etwnet.leftovers(pids_of(111, 222), fake) == [] and fake.controls == []
+
+
+def test_e4_leftovers_reads_the_live_pids_only_after_the_sessions_are_listed():
+    fake = FakeEtw(("raqib-net-111", "raqib-net-222") + OTHERS)
+
+    def pids():
+        assert fake.calls == ["QueryAllTracesW"]     # the sessions were listed before the pids are read (BM-3)
+        return ({222}, None)
+    problems = []
+    assert etwnet.leftovers(pids, fake, problems) == ["raqib-net-111"] and problems == []
+    assert fake.calls == ["QueryAllTracesW", "ControlTraceW"]
 
 
 def test_e5_leftovers_that_cannot_be_looked_for_or_stopped_are_said():
+    # the live pids are not known: the sessions are still listed, but nothing is stopped
     fake = FakeEtw(LEFT)
     problems = []
-    assert etwnet.leftovers(None, fake, problems) == [] and fake.calls == []
-    assert problems == ["leftovers not looked for: the live pids are not known"]
+    assert etwnet.leftovers(no_pids(), fake, problems) == [] and fake.calls == ["QueryAllTracesW"]
+    assert "the live pids were not read" in " ".join(problems)
+    assert "leftovers not looked for: the live pids are not known" in problems
+    assert list(fake.sessions) == list(LEFT)         # nothing of the reader's was stopped
+    fake = FakeEtw(LEFT)
     fake.listing_rc, problems = 5, []
-    assert etwnet.leftovers(set(), fake, problems) == [] and "QueryAllTracesW returned 5" in problems[0]
-    fake.listing_rc, fake.stop_rc, problems = 0, {"raqib-net-111": 5}, []
-    assert etwnet.leftovers({222}, fake, problems) == [] and "raqib-net-111" in fake.sessions
+    assert etwnet.leftovers(pids_of(), fake, problems) == [] and "QueryAllTracesW returned 5" in problems[0]
+    fake = FakeEtw(LEFT)
+    fake.stop_rc, problems = {"raqib-net-111": 5}, []
+    assert etwnet.leftovers(pids_of(222), fake, problems) == [] and "raqib-net-111" in fake.sessions
     assert problems == ["raqib-net-111: a leftover not stopped (ControlTraceW(stop) returned 5)"]
     many = FakeEtw(["Other-%d" % i for i in range(70)] + ["raqib-net-9"])
     problems = []
-    assert etwnet.leftovers(set(), many, problems) == [] and "71 sessions, 64 listed" in problems[0]
+    assert etwnet.leftovers(pids_of(), many, problems) == [] and "71 sessions, 64 listed" in problems[0]
     first = FakeEtw(["raqib-net-9"] + ["Other-%d" % i for i in range(70)])
-    assert etwnet.leftovers(set(), first, []) == ["raqib-net-9"]
+    assert etwnet.leftovers(pids_of(), first, []) == ["raqib-net-9"]
     fake = FakeEtw(LEFT)
     fake.raises["QueryAllTracesW"] = OSError("fake")
     problems = []
-    assert etwnet.leftovers(set(), fake, problems) == [] and problems == ["leftovers: OSError: fake"]
+    assert etwnet.leftovers(pids_of(), fake, problems) == [] and problems == ["leftovers: OSError: fake"]
 
 
 # --- E6 (BL-3): a refusal in the module's words, nothing raised, no elevation, no other source ------------------
@@ -606,9 +667,9 @@ def test_e6_no_other_source_of_counts_and_no_elevation_in_the_source():
 
 # --- E7: the field tool -------------------------------------------------------------------------------------
 
-def run_tool(fake, wait=None, alive=frozenset({PID}), argv=("5",), platform="win32"):
+def run_tool(fake, wait=None, alive=frozenset({PID}), argv=("5",), platform="win32", pids=None):
     out = io.StringIO()
-    code = etw_read.main(list(argv), platform=platform, api=fake, alive=alive, wait=wait, out=out, pid=PID)
+    code = etw_read.main(list(argv), platform=platform, api=fake, alive=alive, wait=wait, out=out, pid=PID, pids=pids)
     return code, out.getvalue().splitlines()
 
 
@@ -623,9 +684,10 @@ def test_e7_the_tool_stops_leftovers_reads_and_prints_one_line_per_connection():
     assert code == 0 and waited == [5.0]
     assert lines[0] == "pid=4242 local=192.0.2.10:50123 remote=198.51.100.7:443 sent=100 received=4000 last=%s" % T2
     assert lines[1] == "pid=4242 local=[2001:db8::10]:50124 remote=[2001:db8::7]:443 sent=0 received=70 last=%s" % T1
-    assert lines[2] == "said: unread: 1 event(s): id 12"
-    assert lines[-1] == "since=%s unread=1 lost=events:0,buffers:0 leftovers=raqib-net-111" % lines[-1].split(
-        "since=")[1].split(" ")[0]
+    assert lines[2] == "said: other: 1 event(s) of id 12"      # id 12 is the provider's, not one of the four (BM-5)
+    since_val = lines[-1].split("since=")[1].split(" ")[0]
+    assert lines[-1] == ("since=%s events=4 unread=0 other=1 lost=events:0,buffers:0 leftovers=raqib-net-111"
+                         % since_val)
     assert set(fake.sessions) == set(OTHERS)           # the leftover and its own session are gone, the rest stay
 
 
@@ -647,13 +709,184 @@ def test_e7_not_windows_says_so_and_exits_3_and_its_usage_is_2(capsys):
 
 
 def test_e7_a_loss_not_known_and_live_pids_not_known_are_said():
+    # the live pids are given (here: their failure) by injection, so this test does not read the
+    # real process table and passes on Windows as on Linux (R1): nothing reaches hostwin.Api().
     fake = FakeEtw(OTHERS + ("raqib-net-111",))
     fake.query_rc = 87
-    code, lines = run_tool(fake, wait=lambda s: None, alive=None)
+    code, lines = run_tool(fake, wait=lambda s: None, alive=None, pids=no_pids("the live pids were not read (fake)"))
     assert code == 0 and "raqib-net-111" in fake.sessions          # not stopped: the live pids are not known
     assert lines[-1].endswith("lost=unknown leftovers=none")
     assert any(line.startswith("said: lost: ControlTraceW(query) returned 87") for line in lines)
     assert any("live pids" in line for line in lines if line.startswith("said: "))
+
+
+# --- M7.21a REDO: every way out of start, the own-pid leftover, versions, the counters, the cap, the stop -------
+# (ADR-0007 Amendment BM, BM-1..BM-7, and the packet's stop() failure branches).
+
+
+class BaseThread:
+    """A consumer whose start() raises a BaseException (not an Exception): the interrupt case of
+    the last step of start()."""
+
+    def __init__(self, **kw):
+        pass
+
+    def start(self):
+        raise KeyboardInterrupt("interrupted at thread start")
+
+
+@pytest.mark.parametrize("step,exc", [("StartTraceW", KeyboardInterrupt), ("EnableTraceEx2", SystemExit),
+                                      ("OpenTraceW", KeyboardInterrupt), ("thread", KeyboardInterrupt)])
+def test_bm1_a_baseexception_after_the_session_began_undoes_it_and_is_raised(step, exc):
+    fake = FakeEtw()
+    kw = {}
+    if step == "thread":
+        kw["thread"] = BaseThread
+    else:
+        fake.raises[step] = exc("interrupted")
+    r = reader(fake, **kw)
+    with pytest.raises(exc):
+        r.start()
+    assert set(fake.sessions) == set(OTHERS)           # the session, if it began, was undone (BM-1)
+    assert sorted(fake.closed) == sorted(fake.traces)  # every trace that was opened is closed
+    assert r._atexit.registered == []                  # a start that did not finish leaves nothing for the exit
+    assert r.stop() == []                              # already undone: a later stop does nothing
+
+
+def test_bm1_a_started_reader_is_stopped_at_the_interpreter_exit():
+    fake = FakeEtw()
+    r = started(fake)
+    assert len(r._atexit.registered) == 1 and r.name in fake.sessions   # registered once for the started reader
+    r._atexit.registered[0]()                          # what the interpreter would run at its exit (BM-1)
+    assert r.name not in fake.sessions and r._atexit.registered == []
+
+
+def test_bm1_stop_unregisters_the_exit_hook_and_leaves_nothing():
+    fake = FakeEtw()
+    r = started(fake)
+    assert len(r._atexit.registered) == 1
+    assert r.stop() == [] and r._atexit.registered == []   # stopped by hand: nothing is left to run at the exit
+    assert reader(fake)._atexit.registered == []           # a reader that never started registers nothing
+
+
+def test_bm1_the_default_atexit_is_the_real_module():
+    assert etwnet.Reader(PID)._atexit is atexit        # the real registry by default; no start, so nothing registered
+
+
+def test_bm2_own_pid_leftover_is_stopped_the_start_retried_and_said():
+    fake = FakeEtw(OTHERS + ("raqib-net-4242",))       # a leftover whose number is this process's own
+    r = reader(fake, pid=PID, ownpid=PID)
+    assert r.start() is None                           # stopped and retried, then started
+    assert fake.sessions["raqib-net-4242"]["mine"]     # the retry's own session
+    said = r.counts()["said"]
+    assert len(said) == 1 and "leftover of a killed reader" in said[0] and "raqib-net-4242" in said[0]
+    assert fake.calls[:3] == ["StartTraceW", "ControlTraceW", "StartTraceW"]
+    assert fake.controls[0] == (0, "raqib-net-4242", etwnet.EVENT_TRACE_CONTROL_STOP)
+    r.stop()
+
+
+def test_bm2_a_pid_that_is_not_this_process_keeps_183_a_refusal():
+    fake = FakeEtw(OTHERS + ("raqib-net-4242",))
+    r = reader(fake, pid=PID, ownpid=9999)             # the session's number is not this process's
+    why = r.start()
+    assert "a session named raqib-net-4242 is already there" in why and "StartTraceW returned 183" in why
+    assert "raqib-net-4242" in fake.sessions and fake.calls == ["StartTraceW"] and r.counts()["said"] == []
+
+
+def test_bm2_the_second_start_failing_too_is_a_refusal():
+    fake = FakeEtw(OTHERS + ("raqib-net-4242",))
+    fake.start_rc = 183                                # every StartTraceW refuses with 183
+    r = reader(fake, pid=PID, ownpid=PID)
+    why = r.start()
+    assert why == r.refused and "already there" in why and "StartTraceW returned 183" in why
+    said = r.counts()["said"]
+    assert len(said) == 1 and "leftover of a killed reader" in said[0]
+    assert fake.calls == ["StartTraceW", "ControlTraceW", "StartTraceW"] and r.stop() == []
+
+
+def test_bm4_an_event_of_another_version_is_unread_never_parsed():
+    fake = FakeEtw()
+    r = started(fake)
+    fake.deliver(ev(10, L4, R4, 100, version=1), ev(27, L6, R6, 70, version=2))
+    got = r.counts()
+    assert got["connections"] == {} and got["events"] == 2
+    assert got["unread_why"] == {"id 10 version 1": 1, "id 27 version 2": 1} and got["unread"] == 2
+    # negative: version 0 of the same id is read
+    fake.deliver(ev(10, L4, R4, 55, version=0))
+    again = r.counts()
+    assert again["connections"][(PID, "192.0.2.10", 50123, "198.51.100.7", 443)]["sent"] == 55
+    assert again["unread"] == 2                        # unchanged: the version-0 event was read
+    r.stop()
+
+
+def test_bm5_events_other_ids_and_unread_are_each_apart():
+    fake = FakeEtw()
+    r = started(fake)
+    fake.deliver(ev(10, L4, R4, 100), ev(12, L4, R4, 0), ev(13, L4, R4, 0), ev(10, L4, R4, 5, cut=19),
+                 ev(10, L4, R4, 0, provider=EVENT_TRACE_GUID))
+    got = r.counts()
+    assert got["events"] == 4                          # four of the provider; the EVENT_TRACE_GUID one is another
+    assert got["other"] == 1                           # another provider: the trace's own header
+    assert got["other_ids"] == {12: 1, 13: 1}          # the provider's ids that are not the four (BM-5)
+    assert got["unread"] == 1 and got["unread_why"] == {"id 10 shorter than 20 bytes": 1}   # only the four, failing
+    assert got["connections"][(PID, "192.0.2.10", 50123, "198.51.100.7", 443)]["sent"] == 100
+    r.stop()
+
+
+def test_bm6_lost_event_notices_are_counted_as_lost():
+    fake = FakeEtw()
+    r = started(fake)
+    fake.deliver(ev(10, L4, R4, 100), ev(32, L4, R4, 0, provider=etwnet.LOST_EVENT_PROVIDER))
+    got = r.counts()
+    assert got["lost"]["notices"] == 1                 # the tracing's own word that events were lost (BM-6)
+    assert got["events"] == 1 and got["other"] == 0 and got["other_ids"] == {}
+    assert got["connections"][(PID, "192.0.2.10", 50123, "198.51.100.7", 443)]["sent"] == 100
+    r.stop()
+
+
+def test_bm7_connections_beyond_the_cap_are_counted_beyond(monkeypatch):
+    monkeypatch.setattr(etwnet, "CONNECTIONS_MAX", 2)
+    fake = FakeEtw()
+    r = started(fake)
+    fake.deliver(ev(10, L4, R4, 10), ev(10, ("192.0.2.11", 1), R4, 20))   # two connections fill the bounded map
+    fake.deliver(ev(10, ("192.0.2.12", 2), R4, 30))                       # a third new one is beyond (BM-7)
+    fake.deliver(ev(11, L4, R4, 7))                                       # an existing one still counts
+    got = r.counts()
+    assert len(got["connections"]) == 2 and got["beyond"] == 1
+    assert got["connections"][(PID, "192.0.2.10", 50123, "198.51.100.7", 443)] == {
+        "sent": 10, "received": 7, "last": T1}
+    r.stop()
+
+
+def test_e9_stop_failure_branches_are_said_and_none_raise():
+    # ControlTraceW(stop) returns non-zero: the session may still run, said, no raise; CloseTrace ends the consumer
+    fake = FakeEtw()
+    r = started(fake)
+    fake.stop_rc = {r.name: 87}
+    problems = r.stop()
+    assert any("ControlTraceW(stop) returned 87" in p and "may still run" in p for p in problems)
+    assert not r._thread.is_alive()
+    # ControlTraceW(stop) raises
+    fake = FakeEtw()
+    r = started(fake)
+    fake.raises["ControlTraceW"] = OSError("boom")
+    problems = r.stop()
+    assert any("ControlTraceW(stop) failed" in p and "may still run" in p for p in problems)
+    assert not r._thread.is_alive()
+    # CloseTrace returns non-zero
+    fake = FakeEtw()
+    r = started(fake)
+    fake.close_rc = 6
+    assert any("CloseTrace returned 6" in p for p in r.stop())
+    # CloseTrace raises
+    fake = FakeEtw()
+    r = started(fake)
+    fake.raises["CloseTrace"] = OSError("boom")
+    assert any("CloseTrace failed" in p for p in r.stop())
+    # the consumer does not end within the join: a fake thread that never ends (no sleep, no float time)
+    fake = FakeEtw()
+    r = started(fake, thread=StuckThread)
+    assert r.stop() == ["the consumer did not end within %d seconds of the stop" % etwnet.JOIN_SECONDS]
 
 
 # --- E8: the structures as 64-bit Windows lays them; ASCII; documentation addresses only ------------------------
