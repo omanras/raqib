@@ -1028,8 +1028,11 @@ def test_redo_k11_the_network_guard_covers_every_module(monkeypatch):
     """AST guard: urllib, http.client, socket and ssl are imported only by the modules that own them
     (suspect/backends.py: the one allowed network caller, reached only from host.SuspectCall's thread;
     hooks/proxy.py: the proxy source, ADR-0003; ui.py: the local page's http.server/socketserver; hooks/common.py:
-    urllib.parse, no I/O); subprocess never runs curl or wget in any module."""
+    urllib.parse, no I/O; forward.py: the forwarder, a process of its own that sends the events file's lines to one
+    collector - ADR-0011 J-1, K-1 (the Table): inside raqib only cli.cmd_forward imports it, so no watch and no
+    capture script can reach its network); subprocess never runs curl or wget in any module."""
     allowed = {"raqib/suspect/backends.py": {"urllib.error", "urllib.parse", "urllib.request"},
+               "raqib/forward.py": {"http.client", "socket", "ssl", "urllib.parse"},
                "raqib/hooks/proxy.py": {"http.client", "http.server", "socket", "socketserver", "ssl",
                                         "urllib.parse"},
                "raqib/ui.py": {"http.server", "socketserver"},
@@ -1053,6 +1056,22 @@ def test_redo_k11_the_network_guard_covers_every_module(monkeypatch):
                                                                                         "call", "check_call")):
                 text = ast.unparse(n).lower()
                 assert "curl" not in text and "wget" not in text, (rel, ast.unparse(n)[:120])
+    # K-1: the forwarder is imported, inside raqib, by cli.py alone, and there only inside cmd_forward
+    for path in sorted((ROOT / "raqib").rglob("*.py")):
+        rel = path.relative_to(ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        inside = {id(n) for fn in ast.walk(tree) if isinstance(fn, ast.FunctionDef) and fn.name == "cmd_forward"
+                  for n in ast.walk(fn)}
+        for n in ast.walk(tree):
+            names = ([a.name for a in n.names] if isinstance(n, ast.Import) else
+                     ["%s.%s" % (n.module, a.name) for a in n.names] + [n.module]
+                     if isinstance(n, ast.ImportFrom) and n.module else [])
+            if any(x == "raqib.forward" or x.startswith("raqib.forward.") for x in names):
+                assert rel == "raqib/cli.py" and id(n) in inside, (rel, ast.unparse(n))
+        if rel != "raqib/forward.py":
+            assert "import_module" not in path.read_text(encoding="utf-8") or "forward" not in "".join(
+                ast.unparse(n) for n in ast.walk(tree) if isinstance(n, ast.Call)
+                and "import_module" in ast.unparse(n.func)), rel
     # the backends module is imported by host.py only inside suspect_backend, and judge is reached only
     # through core.run in SuspectCall._run (the suspect thread)
     tree = ast.parse((ROOT / "raqib" / "host.py").read_text(encoding="utf-8"))

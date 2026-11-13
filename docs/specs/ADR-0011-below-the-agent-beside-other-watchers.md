@@ -592,3 +592,24 @@ that says so.
 Not here, recorded: the forwarder as a service (with the watch's, later); the local sinks (the Windows event
 log, the journal); OCSF and ECS documents; a real Splunk on the rig (it needs the commander's word on its
 licence); more than one file.
+
+## Amendment K (the Table, 2026-11-13) - the builder's STOP on M10.3 (297f843) and its questions
+The build stopped, rightly, on a guard the Table had not opened before writing the HANDOFF: the network guard
+(tests/test_rhythm.py, K-11 of ADR-0007's REDO) lets four modules import the network, and the forwarder is a
+fifth. The Table's error: J-1 called for "a test that reads the imports" without looking for the one that was
+there.
+- K-1 (the guard gains the forwarder, and says more than before). raqib/forward.py may import http.client,
+  socket, ssl and urllib.parse; inside raqib it is imported by cli.py alone, inside `cmd_forward`. FOR: rule 5
+  held by the guard that already holds it. MUST NOT TOUCH: the four modules the guard already names.
+- K-2 (the questions, each as built). The state's two more keys, `from` and `beat`, stay (Q3). The cursor is
+  held to the line that ends at it; a change to earlier bytes is not seen, and the documents say so (Q4).
+  `--batch N` stays (Q5). The raqib shape with a token file sends `Authorization: Bearer` (Q6). A line over
+  512 KiB is refused locally, counted, named and passed, never cut (Q7). `--once` is one try for each batch,
+  and a refused line makes it 1 (Q8). User information in the URL is a usage error; a query is sent and
+  never stored or printed (Q9). `plain` is said for every http destination, loopback too (Q10). `--status`
+  with no name says every state and ends with the worst (Q11). One name is held by a pid file made
+  exclusively; a state of another file, destination or shape is a usage error (Q12). A missing events file
+  is a failing forwarder that tries again (Q13).
+- K-3 (recorded for the next task of the forwarder). The guide's own section "Forward the events" (the guard
+  on the guide's headings is the Table's to open, Q1); `forward` in cli.py's opening words (Q14).
+
