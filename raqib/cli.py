@@ -629,12 +629,13 @@ def _parser():
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
     ev = sub.add_parser("events", help="check an events file: every line a raqib-event/1 event (M10.2, ADR-0011 F-8)")
     ev.add_argument("file", metavar="FILE", help="the events file (watch --host: ~/.raqib/host/events.jsonl)")
-    fw = sub.add_parser("forward", help="send a watch's events file to one HTTP collector, every whole line, at least"
-                                        " once and in order (M10.3, ADR-0011 J)")
+    fw = sub.add_parser("forward", help="send a watch's events file to one collector (HTTP or syslog), every whole"
+                                        " line, at least once and in order (M10.3, ADR-0011 J)")
     fw.add_argument("file", nargs="?", default=None, metavar="FILE",
                     help="the events file, read only (default: ~/.raqib/host/events.jsonl)")
     fw.add_argument("--to", metavar="URL", help="the collector, https://host[:port]/path (http:// only to a loopback"
-                                                " address unless --plain; syslog is not built yet)")
+                                                " address unless --plain), or syslog+udp://, syslog+tcp://,"
+                                                " syslog+tls://host[:port]")
     fw.add_argument("--name", metavar="NAME", help="the forwarder's name, [a-z0-9-]{1,32}: its cursor and state are"
                                                    " ~/.raqib/forward/NAME.json; one destination each")
     fw.add_argument("--shape", choices=("raqib", "hec"), default="raqib",
