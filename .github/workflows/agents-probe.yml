@@ -129,6 +129,7 @@ jobs:
           "=== model log"; Get-Content $env:RUNNER_TEMP\model-qwen.log
           "=== report"; $t = Get-Content ..\watch-qwen.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
           "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl
+          "=== marks"; python "$env:GITHUB_WORKSPACE\tools\rig\marks_read.py"
       - name: opencode under the watch
         shell: pwsh
         continue-on-error: true
@@ -148,4 +149,5 @@ jobs:
           "=== model log"; Get-Content $env:RUNNER_TEMP\model-opencode.log
           "=== report"; $t = Get-Content ..\watch-opencode.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
           "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl
+          "=== marks"; python "$env:GITHUB_WORKSPACE\tools\rig\marks_read.py"
 
