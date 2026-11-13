@@ -141,6 +141,27 @@ item F7 of the M1.2 review packet or questions file.
   the agent's working tree. The installer suggests `--log` outside the
   project (M0.3 O2). Either way the agent runs as the same user and can read
   the file.
+- **The events file of the host watch** (`~/.raqib/host/events.jsonl`,
+  beside its record; ADR-0011 Amendment F): one `raqib-event/1` line for
+  each thing the watch judged that is new or changed (a tree, a finding, a
+  source finding, a hole, a blind spot, a note, a knock), the watch's start
+  and end, and a heartbeat on a fixed beat (`--beat S`, 60 s by default).
+  `docs/specs/EVENT.md` is the contract: an event holds only what its entry
+  holds and the report prints, plus the rule's own ids and the watch's facts
+  (its run, platform, version and the host's name, read once from the system
+  without a network call, or given with `--event-host`). It never holds a
+  command line, a file's content, a row of a sample or a cite's text; it
+  does hold paths as the report says them, so the account's name where the
+  machine's path holds it.
+  - It is local and appended (flushed line by line); nothing is sent
+    anywhere. A collector's own agent may tail it; that agent, not Raqib,
+    is then the sender, and the file is what it may read.
+  - It lives under the same user as the agent, as the record does: an agent
+    can read it, and can truncate or rewrite it. The numbers `n` rise by
+    one per event in a run and the heartbeat is on a fixed beat, so a gap or
+    a silence is visible to whoever reads it; the report and the state say
+    how many events were written, not built and not written. A line that
+    cannot be written is a hole of the watch, never a silence.
 
 ## 5. What Raqib cannot see (known gaps)
 

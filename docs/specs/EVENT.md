@@ -46,8 +46,40 @@ The watch does not write events yet (M10.2).
 - A heartbeat's `state` is the band's word without its number (D-4, E-1): "WATCHING", "SILENT", "AGENT GONE",
   "CAPTURE FAILED", "READER LATE", "HOST READER FAILED", "FINISHED" ("SILENT for 12 s" is SILENT). These are
   all the words a band has; a word outside them is refused: the builder raises ValueError naming `state`.
-- `evidence.lines` counts the trace's lines from 1 (the first line of the file is 1). `subject.by` is carried by
-  no event yet: no row of the watch says how a tree became a candidate (M10.2).
+- `evidence.lines` counts the trace's lines from 1 (the first line of the file is 1). `subject.by` is how a tree
+  became a candidate, as its row says (ADR-0011 F-5): "sample" (a sample of the OS showed it one) or "channel"
+  (only the channel's events made it one); a tree that never became a candidate has none.
+- A cite left out because it lacked its src or its line is counted on the event, `evidence.cites_left_out`
+  (F-4); an event never holds an empty list of cites: an entry whose every cite was left out says only their
+  number.
+- A knock names the thing it knocked for, `knocked.for`: that thing's `about` (a finding, a source finding, a
+  hole of the watch or of the notifier, a tree), where the watch knows it (F-5). An act's knock names its copy
+  on the tree it was knocked on.
+
+## The events file
+
+The host watch (`raqib watch --host`) writes its events while it runs, to `events.jsonl` beside its record
+(`~/.raqib/host/events.jsonl`; ADR-0011 Amendment F). It is local and appended: one line for each thing new
+(rev 1) or changed (the next rev), flushed as it is written; the same again is not written. Nothing is sent
+anywhere; a collector's own agent may tail the file.
+- One pass over the watch's own lists at the end of every round and at the finish (F-2): the trees, the
+  findings, the source findings, the watch's holes ("hole:i"), the notifier's ("notifier-hole:i"), the blind
+  spots ("blind:i"), the watch's notes ("note:i"), the note of the words a terminal lost ("note:lost-words") and
+  the knock rows ("knock:i"). The watch names each from the list it is in. An event's `time` is its entry's own
+  (a tree's first-seen time) where it has one, else the time of the pass.
+- The first event is the watch's start ("watch" rev 1), the last its end with the report's exit and its word.
+  On a fixed beat (`--beat S`, 60 s by default, never shorter than a round) a heartbeat is written though
+  nothing else changed: "watch", the next rev. A blind spot's count and the lost-words note, which change every
+  round or every lost word, are said again only with a beat (and at the end).
+- What cannot be said is said (F-4): an entry that makes a builder raise is a hole of the watch, one per thing,
+  naming the thing and the key ("event-not-built"); a line that cannot be written is counted and is one hole
+  ("events-unwritable"). Its number is used all the same, so a collector sees the gap in `n`. The report's
+  EVENTS line and the state's `events` carry the numbers: written, heartbeats, not built, not written, the file.
+- `watch.host` is the system's own name, read once at the start without a network call, or `--event-host NAME`;
+  a system that gives none: the watch says so at its start and the events say "unnamed" (F-6).
+- `raqib events FILE` checks every line with `event.check`, prints the count per kind and each problem with its
+  line number: exit 0 when every line is an event, 1 when one is not (or the file holds none), 2 when the file
+  cannot be read. It reads; it sends nothing (F-8).
 - A technique id in `rule.attack` says what a finding is consistent with, never that it happened (B-5).
 
 ## Keys
@@ -89,7 +121,7 @@ field (see Mapping), else the namespace.
 | `subject.path` | `str` | the footprint's path (the machine's: it holds the account's name where the machine's does) | finding, note | `unmapped.raqib.subject.path` | `raqib.subject.path` |
 | `subject.benign` | `bool` | whether the tree is benign (its acts are noted, not knocked) | tree | `unmapped.raqib.subject.benign` | `raqib.subject.benign` |
 | `subject.history` | `bool` | whether the tree was there at the start | tree | `unmapped.raqib.subject.history` | `raqib.subject.history` |
-| `subject.by` | `str` | how the tree became a candidate, where the row says (carried by no event yet) | tree | `unmapped.raqib.subject.by` | `raqib.subject.by` |
+| `subject.by` | `str` | how the tree became a candidate, where the row says: "sample" or "channel" (F-5) | tree | `unmapped.raqib.subject.by` | `raqib.subject.by` |
 | `evidence` | `object` | where a person or a system can check it (A5); absent keys as for subject | finding, source-finding, note, tree, hole, knock | `unmapped.raqib.evidence` | `raqib.evidence` |
 | `evidence.run` | `str` | the run the cited lines are of | finding, source-finding, note | `unmapped.raqib.evidence.run` | `raqib.evidence.run` |
 | `evidence.round` | `count` | the round of the watch (from 0) | finding, note, hole, knock | `unmapped.raqib.evidence.round` | `raqib.evidence.round` |
@@ -100,6 +132,7 @@ field (see Mapping), else the namespace.
 | `evidence.seqs` | `ints` | the seqs cited (a tree: its HostTree line's) | finding, source-finding, note, tree | `unmapped.raqib.evidence.seqs` | `raqib.evidence.seqs` |
 | `evidence.lines` | `ints` | the line numbers cited in the trace (its lines counted from 1) | source-finding | `unmapped.raqib.evidence.lines` | `raqib.evidence.lines` |
 | `evidence.cites` | `cites` | the record lines cited: each {src, line} and {round, seq} where the cite holds them (a cite without its src or its line is left out whole); never its text | finding, note, tree | `unmapped.raqib.evidence.cites` | `raqib.evidence.cites` |
+| `evidence.cites_left_out` | `pos` | how many of the entry's cites were left out (each lacked its src or its line, F-4) | finding, note, tree | `unmapped.raqib.evidence.cites_left_out` | `raqib.evidence.cites_left_out` |
 | `hole` | `object` | the hole or the blind spot | hole | `unmapped.raqib.hole` | `raqib.hole` |
 | `hole.kind` | `str` | the hole's own kind (reader-failed, notify-failed, bytes ...) | hole | `finding_info.title` (a hole) | `raqib.hole.kind` |
 | `hole.class` | `str` | "hole", "blind spot" | hole | `unmapped.raqib.hole.class` | `raqib.hole.class` |
@@ -111,6 +144,7 @@ field (see Mapping), else the namespace.
 | `knocked.title` | `str` | the knock's title | knock | `unmapped.raqib.knocked.title` | `raqib.knocked.title` |
 | `knocked.limit_id` | `str` | the knock's rate-limit id | knock | `unmapped.raqib.knocked.limit_id` | `raqib.knocked.limit_id` |
 | `knocked.called` | `str` | what the notifier said at the call | knock | `unmapped.raqib.knocked.called` | `raqib.knocked.called` |
+| `knocked.for` | `str` | the `about` of the thing the knock knocked for, where the watch knows it (F-5) | knock | `unmapped.raqib.knocked.for` | `raqib.knocked.for` |
 | `state` | `str` | "judged on another tree", "history", "pending at exit", "noted", "not settled", "settled" (a source finding: C-4's word, in the report's order); "start", "end" (a watch); "WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "READER LATE", "HOST READER FAILED", "FINISHED" (a heartbeat: the band's word without its number) | source-finding, heartbeat, watch | `unmapped.raqib.state` | `raqib.state` |
 | `result` | `object` | the exit and its word | heartbeat, watch end | `unmapped.raqib.result` | `raqib.result` |
 | `result.word` | `str` | "CLEAN" (exit 0), "ALARM" (exit 1), "INCOMPLETE" (exit 3); another exit has no word | heartbeat, watch end | `unmapped.raqib.result.word` | `raqib.result.word` |
@@ -192,7 +226,8 @@ path (see above). Run A: the field run of `tests/test_field_run.py` (run `field-
 fails in round 2, as in `tests/test_host.py` (run `hole-run`). Run D: a person's and an agent's processes under
 explorer, `tests/test_acts_judged.py` (run `fixture-run`). Run N: run B with a decision that raises. Run P: a
 hooks source silent at stop, `tests/test_host_sources.py` (run `pending-run`). Run R: the rhythm cycle of
-`tests/test_rhythm.py` with a notifier that fails (run `rhythm-run`).
+`tests/test_rhythm.py` with a notifier that fails (run `rhythm-run`). Run L: the field run whose terminal is
+gone (run `lost-run`).
 Run D's source findings are read by two os follows, and which of them the watch lists first varies from
 run to run: its examples' `id`, `n` and `about` are those of one run (the test compares the rest).
 The heartbeat's and the watch end's examples are the last event of two snapshots of one watch (run B at its
@@ -227,7 +262,7 @@ From run A (the dark note).
 From run B.
 
 ```json
-{"about":"tree:5888:powershell:2026-11-10T07:50:00.000Z","evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","seqs":[2]},"id":"fixture-run:2","kind":"tree","knocked":{"status":"off"},"n":2,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"benign":false,"history":false,"image":"powershell","named":false,"pid":5888,"started":"2026-11-10T07:50:00.000Z","tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"tree:5888:powershell:2026-11-10T07:50:00.000Z","evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","seqs":[2]},"id":"fixture-run:2","kind":"tree","knocked":{"status":"off"},"n":2,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"benign":false,"by":"sample","history":false,"image":"powershell","named":false,"pid":5888,"started":"2026-11-10T07:50:00.000Z","tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: hole
@@ -246,12 +281,28 @@ From run B.
 {"about":"blind:1","alarm":false,"evidence":{"round":1},"hole":{"class":"blind spot","count":3,"kind":"bytes"},"id":"fixture-run:7","kind":"hole","n":7,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"bytes: the reader gave no byte counts for the connections (no byte reader on fixture): bytes not read (does not change the result)","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
+### example: hole: notifier's hole
+
+From run R: the notifier failed; its hole holds its count and last time (D-1).
+
+```json
+{"about":"notifier-hole:1","alarm":true,"hole":{"class":"hole","count":1,"kind":"notify-failed","last":"2026-11-03T10:00:30.000Z"},"id":"rhythm-run:4","kind":"hole","n":4,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"notify-failed: notify-send: boom","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.1.0"}}
+```
+
+### example: note: lost-words
+
+From run L: the note of the words a terminal lost (D-1), said again only with a beat (F-3).
+
+```json
+{"about":"note:lost-words","id":"lost-run:12","kind":"note","n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"19 writes to the terminal were lost since 2026-11-03T10:00:00Z: stdout: ValueError: I/O operation on closed file","time":"2026-11-03T10:02:10.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"lost-run","version":"0.1.0"}}
+```
+
 ### example: knock
 
 From run B.
 
 ```json
-{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:11","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":11,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:11","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","for":"finding:1","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":11,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: heartbeat
@@ -291,7 +342,7 @@ From run B.
 From run D.
 
 ```json
-{"about":"source-finding:4","alarm":false,"evidence":{"lines":[1],"run":"fixture-run","seqs":[1],"source":"host","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0-host.jsonl"},"id":"fixture-run:8","kind":"source-finding","knocked":{"status":"history: not knocked"},"n":8,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"history","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"HostChild may reach the network at seq 1 (host -, program ssh, curl, programs [\"cmd\", \"ssh\", \"curl\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:1","alarm":false,"evidence":{"lines":[1],"run":"fixture-run","seqs":[1],"source":"host","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0-host.jsonl"},"id":"fixture-run:5","kind":"source-finding","knocked":{"status":"history: not knocked"},"n":5,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"history","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"HostChild may reach the network at seq 1 (host -, program ssh, curl, programs [\"cmd\", \"ssh\", \"curl\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: judged on another tree
@@ -299,7 +350,7 @@ From run D.
 From run D.
 
 ```json
-{"about":"source-finding:3","alarm":false,"evidence":{"lines":[14,15],"run":"fixture-run","seqs":[8],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:7","kind":"source-finding","knocked":{"status":"judged on another tree: judged on tree pid 6100 (one act, one finding)"},"n":7,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"judged on another tree","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 8 (host -, program curl, programs [\"curl.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:4","alarm":false,"evidence":{"lines":[14,15],"run":"fixture-run","seqs":[8],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:8","kind":"source-finding","knocked":{"status":"judged on another tree: judged on tree pid 6100 (one act, one finding)"},"n":8,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"judged on another tree","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 8 (host -, program curl, programs [\"curl.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: noted
@@ -307,7 +358,7 @@ From run D.
 From run D.
 
 ```json
-{"about":"source-finding:1","alarm":false,"evidence":{"lines":[6,7],"run":"fixture-run","seqs":[4],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:5","kind":"source-finding","knocked":{"status":"noted on a benign tree, not knocked (c:/windows/*)"},"n":5,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"noted","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 4 (host -, program ssh, programs [\"ssh.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:2","alarm":false,"evidence":{"lines":[6,7],"run":"fixture-run","seqs":[4],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:6","kind":"source-finding","knocked":{"status":"noted on a benign tree, not knocked (c:/windows/*)"},"n":6,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"noted","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 4 (host -, program ssh, programs [\"ssh.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: pending at exit
@@ -328,7 +379,6 @@ From run N.
 
 ## Not here
 
-The watch writing events, the heartbeat's beat and a changed thing said again (M10.2); which finding a knock
-was for (M10.2: the writer knows both); a kind for the model layer's suspicions and events for the watch's own
-errors (M10.2); the forwarders, the local sinks and the stand-in collectors (M10.3); the window's panel
+A kind for the model layer's suspicions and events for the watch's own errors (recorded for M10.3); the session
+watch (`raqib watch PROJ`) writing events; sending anything: the forwarders, the local sinks and the stand-in collectors (M10.3); the window's panel
 (M10.4). A time that does not parse is replaced by the caller's, unsaid (recorded, F12).

@@ -137,7 +137,7 @@ no command, raqib prints its usage and exits 2.
       ~/.raqib/host/rounds.jsonl (one line per round). Another matter is
       a terminal that stops reading (Ctrl-S, a full pipe): the stop waits
       until it drains, and then says its words.
-  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-open] [--no-notify] [--port N]
+  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--beat S] [--event-host NAME] [--no-open] [--no-notify] [--port N]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
       of it; Windows one sample of the OS API and, where Sysmon is, the
@@ -254,6 +254,16 @@ no command, raqib prints its usage and exits 2.
       else 0. Read-only; the only
       program it runs is `claude --version`, by absolute path.
 
+  events FILE
+      Check an events file (M10.2, ADR-0011 F-8; docs/specs/EVENT.md):
+      the watch --host writes ~/.raqib/host/events.jsonl beside its record,
+      one raqib-event/1 line for each thing new or changed and a heartbeat
+      every --beat S seconds (default 60); nothing is sent anywhere. Every
+      line is checked; the count per kind and each problem with its line
+      number are printed. Exit 0 when every line is an event, 1 when one
+      is not (or the file holds none), 2 when the file cannot be read. It
+      reads; it sends nothing.
+
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
 not run), 2 usage or unreadable input.
@@ -271,6 +281,7 @@ import threading
 from raqib import app as window_app
 from raqib import discover
 from raqib import doctor
+from raqib import eventlog
 from raqib import host
 from raqib import overlay
 from raqib import eval as evaluation
@@ -562,6 +573,12 @@ def _parser():
     w.add_argument("--window", type=float, default=None, metavar="S",
                    help="--host on Linux: each round reads S seconds of /proc snapshots, 1 s apart (default 0: one)")
     w.add_argument("--rounds", type=int, default=None, metavar="N", help="--host: end after N rounds (tests, CI)")
+    # M10.2 (ADR-0011 Amendment F): the events file beside the record
+    w.add_argument("--beat", type=float, default=None, metavar="S",
+                   help="--host: a heartbeat event every S seconds in the events file (default %g, never shorter"
+                        " than a round)" % eventlog.BEAT_DEFAULT)
+    w.add_argument("--event-host", default=None, metavar="NAME",
+                   help="--host: the host's name the events say (default: the system's own name, read once)")
     w.add_argument("--attach-hooks", action="store_true",
                    help="--host: also install raqib watch's hooks into the project a Claude Code tree works in (the"
                         " only write into a project; off by default, ADR-0007 H-1)")
@@ -610,6 +627,8 @@ def _parser():
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
     a.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
+    ev = sub.add_parser("events", help="check an events file: every line a raqib-event/1 event (M10.2, ADR-0011 F-8)")
+    ev.add_argument("file", metavar="FILE", help="the events file (watch --host: ~/.raqib/host/events.jsonl)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -1272,8 +1291,10 @@ def _watch(args, out, stops):
     if args.host:
         return _watch_host(args, out, stops)
     if (args.every is not None or args.window is not None or args.rounds is not None or args.attach_hooks
-            or args.suspect is not None or args.suspect_threshold is not None or args.suspect_every is not None):
-        raise UsageError("--every, --window, --rounds, --attach-hooks and --suspect apply to watch --host only")
+            or args.suspect is not None or args.suspect_threshold is not None or args.suspect_every is not None
+            or args.beat is not None or args.event_host is not None):
+        raise UsageError("--every, --window, --rounds, --attach-hooks and --suspect apply to watch --host only"
+                         " (and --beat, --event-host)")
     rules, gap, evaluator = _watch_setup()
     try:
         return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
@@ -1298,6 +1319,14 @@ def _watch_host(args, out, stops=None):
         raise UsageError("--window S applies to Linux; on %s a round reads one sample" % sys.platform)
     if args.rounds is not None and not 1 <= args.rounds <= 1000000:
         raise UsageError("--rounds must be a whole number from 1 to 1000000")
+    # ADR-0011 F-3: the heartbeat's beat, never shorter than a round (the default: 60 s, or the round's interval)
+    beat = max(eventlog.BEAT_DEFAULT, every) if args.beat is None else args.beat
+    if not (beat == beat and every <= beat <= 86400):
+        raise UsageError("--beat must be a number of seconds from the round's interval (--every, %g s) to 86400"
+                         % every)
+    if args.event_host is not None and not (args.event_host.strip() and args.event_host.isascii()
+                                            and args.event_host.isprintable()):
+        raise UsageError("--event-host must be a name of printable ASCII characters")
     try:
         catalog = discover.load_catalog(discover.CATALOG)
     except discover.CatalogError as exc:
@@ -1326,7 +1355,7 @@ def _watch_host(args, out, stops=None):
                             no_notify=args.no_notify, port=args.port, out=out, refresh=args.refresh,
                             attach_hooks=args.attach_hooks, suspect=backend,
                             suspect_threshold=args.suspect_threshold, suspect_every=args.suspect_every,
-                            stops=stops)
+                            stops=stops, beat=beat, event_host=args.event_host)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 
@@ -1346,6 +1375,54 @@ def cmd_app(args, out):
         return window_app.run(args.project, options, out=out)
     except window_app.AppError as exc:
         raise UsageError(str(exc))
+
+
+def cmd_events(args, out):
+    """M10.2 (ADR-0011 F-8): every line of FILE checked with event.check; the count per kind and each problem with
+    its line number. Exit 0 when every line is an event, 1 when not (a file that holds no event is not a watch's
+    events: rule 4), 2 when the file cannot be read. It reads; it sends nothing."""
+    from raqib import event
+    try:
+        with open(args.file, "rb") as f:
+            data = f.read()
+    except OSError as exc:
+        sys.stderr.write("raqib events: cannot read %s: %s\n" % (args.file, exc.strerror or exc))
+        return 2
+    rows = data.split(b"\n")
+    if rows and rows[-1] == b"":
+        rows.pop()   # the last line's own newline
+    kinds, problems, ids = {}, [], {}
+    for i, raw in enumerate(rows, 1):
+        try:
+            obj = json.loads(raw.decode("ascii"))
+        except (UnicodeDecodeError, ValueError) as exc:
+            problems.append("line %d: not an event: %s" % (i, "not ASCII" if isinstance(
+                exc, UnicodeDecodeError) else "not JSON (%s)" % exc))
+            continue
+        found = event.check(obj)
+        key = (obj.get("watch") or {}).get("host") if isinstance(obj, dict) and isinstance(
+            obj.get("watch"), dict) else None, obj.get("id") if isinstance(obj, dict) else None
+        if key[1] is not None and isinstance(key[1], str):
+            if key in ids:
+                found.append("id: %s said twice in the file (line %d)" % (key[1], ids[key]))
+            ids.setdefault(key, i)
+        problems += ["line %d: %s" % (i, p) for p in found]
+        if not found:
+            kinds[obj["kind"]] = kinds.get(obj["kind"], 0) + 1
+    good = sum(kinds.values())
+    out.write("raqib events: %s: %d line(s), %d event(s)\n" % (args.file, len(rows), good))
+    for kind in event.KINDS:
+        if kind in kinds:
+            out.write("  %s: %d\n" % (kind, kinds[kind]))
+    for p in problems:
+        out.write("  %s\n" % p)
+    if not rows:
+        problems.append("no event")
+        out.write("  the file holds no event: not a watch's events (silence is a finding)\n")
+    bad = len({p.split(":", 1)[0] for p in problems})
+    out.write("RESULT: %s\n" % ("every line is an event" if not problems else
+                                "%d line(s) not an event" % bad if rows else "no event"))
+    return 0 if not problems else 1
 
 
 def cmd_doctor(args, out):
@@ -1384,7 +1461,7 @@ def main(argv=None, out=None):
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
                    "discover": cmd_discover, "watch": cmd_watch, "app": cmd_app, "doctor": cmd_doctor,
-                   "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon}[args.command]
+                   "events": cmd_events, "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)

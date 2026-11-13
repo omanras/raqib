@@ -419,8 +419,11 @@ C2 = ["schema", "id", "n", "time", "kind", "about", "rev", "severity", "alarm", 
       "evidence", "hole", "knocked", "state", "result", "counts", "watch"]
 C2_PARTS = {"rule": ["id", "class", "kind", "fp_budget", "attack"],
             "subject": ["tree", "pid", "image", "started", "named", "agent", "path", "benign", "history", "by"],
-            "evidence": ["run", "round", "rounds", "record", "source", "trace", "seqs", "lines", "cites"],
-            "hole": ["kind", "class", "count", "last"], "knocked": ["status", "event", "title", "limit_id", "called"],
+            # ADR-0011 F-4 and F-5 (M10.2): evidence.cites_left_out and knocked.for, added before anything reads them
+            "evidence": ["run", "round", "rounds", "record", "source", "trace", "seqs", "lines", "cites",
+                         "cites_left_out"],
+            "hole": ["kind", "class", "count", "last"],
+            "knocked": ["status", "event", "title", "limit_id", "called", "for"],
             "result": ["word", "exit"],
             "counts": ["rounds", "findings", "source_findings", "holes", "blind", "notes", "trees", "knocks"],
             "watch": ["run", "mode", "platform", "version", "host"]}
@@ -566,8 +569,11 @@ def test_e3_nothing_new_is_said_every_string_is_the_report_s_the_rule_s_or_the_w
         # C-6: a notifier's hole says its last time, which its report line does not (it prints the first)
         ruled = {("subject.started", t["key"][2]) for t in trees} | {
             ("evidence.cites[].src", c["src"]) for c in cites_of(m["state"]["host"])} | {
-            ("hole.last", e["last"]) for e in m["state"]["holes"] if "last" in e}
+            ("hole.last", e["last"]) for e in m["state"]["holes"] if "last" in e} | {
+            ("subject.by", t["candidate_by"]) for t in trees if t.get("candidate_by")}   # F-5: the row's own word
         mine = entry_lines(r["report"], ev)
+        # ADR-0011 F-5: a knock names the thing it knocked for by that thing's about, an event of the same moment
+        ruled |= {("knocked.for", e["about"]) for e in m["events"] if e["kind"] != "knock"}
         if ev["kind"] not in ("watch", "heartbeat") and ev["about"] != LOST:
             assert mine, (name, ev["about"])   # every entry has its line in the report
         for where, s in leaves(ev):
@@ -718,8 +724,10 @@ def test_e5_a_knock_says_its_title_limit_id_and_what_the_notifier_said_at_the_ca
         evs = [e for e in r["events"] if e["kind"] == "knock"]
         assert len(evs) == len(r["knocks"]), name
         for ev, row in zip(evs, r["knocks"]):
-            assert ev["knocked"] == {"status": row["status"], "event": row["event"], "title": row["title"],
-                                     "limit_id": row["limit_id"], "called": row["called"]}
+            assert ev["knocked"] == dict({"status": row["status"], "event": row["event"], "title": row["title"],
+                                          "limit_id": row["limit_id"], "called": row["called"]},
+                                         **({"for": row["for"]} if "for" in row else {}))   # ADR-0011 F-5
+    assert any("for" in e["knocked"] for r in runs.values() for e in r["events"] if e["kind"] == "knock")
     folded = [e for e in runs["F"]["events"] if e["kind"] == "knock" and e["knocked"]["status"].startswith("folded")]
     assert folded and folded[0]["knocked"]["called"] == "sent"
     assert any(e["knocked"]["status"] == "failed" for e in runs["R"]["events"] if e["kind"] == "knock")
@@ -939,6 +947,9 @@ def examples(runs):
            "tree": first("B", lambda e: e["kind"] == "tree"),
            "hole": first("C", lambda e: e["kind"] == "hole" and e["about"].startswith("hole:")),
            "hole: blind spot": first("B", lambda e: e["about"] == "blind:1"),
+           # E-4 (M10.2): a notifier's hole and the lost-words note
+           "hole: notifier's hole": first("R", lambda e: e["about"].startswith("notifier-hole:")),
+           "note: lost-words": first("L", lambda e: e["about"] == LOST),
            "knock": first("B", lambda e: e["kind"] == "knock"),
            "heartbeat": (next(e for e in runs["B"]["moments"][-1]["events"] if e["kind"] == "heartbeat"),
                          runs["B"]["home"]),
@@ -980,7 +991,7 @@ def test_e7_the_document_says_paths_ids_and_what_snapshot_is_not():
                   "`watch.host` is required on every event",
                   # D-5: the document's statements
                   "a source finding's `state` is c-4's word", "`evidence.lines` counts the trace's lines from 1",
-                  "`subject.by` is carried by no event yet",
+                  "`subject.by` is how a tree became a candidate",   # F-5 (M10.2): carried
                   "the heartbeat's and the watch end's examples are the last event of two snapshots of one watch"):
         assert words in text, words
     printed = {"judged on another tree": host.JUDGED_ELSEWHERE, "history": "history",

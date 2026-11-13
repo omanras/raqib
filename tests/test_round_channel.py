@@ -1502,8 +1502,11 @@ def test_ac6_state_fields_are_current_and_the_counts_time_is_first_listed(tmp_pa
                                  ["", shell_events(rec=500), ""])
     (key,) = [k for k in w.trees if k[0] == 5888]
     # AD-4 (B8; rewritten): a tree's `candidate_by` in the state (written, never read, wrong for an act-root) is gone;
-    # the line's key stays (AB-5: the rule reads input_meta.by_channel, and the line says candidate_by "channel")
-    assert all("candidate_by" not in t for t in w.trees.values())
+    # the line's key stays (AB-5: the rule reads input_meta.by_channel, and the line says candidate_by "channel").
+    # ADR-0011 F-5 (M10.2) brings it back as how the tree became a candidate, set once when it became one, and read
+    # (the tree event's subject.by): only on a tree that became a candidate, "sample" or "channel"
+    assert all(("candidate_by" in t) == (t.get("candidate_round") is not None or t.get("by_channel_round") is not None)
+               and t.get("candidate_by") in (None, "sample", "channel") for t in w.trees.values())
     state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
     assert "candidate_by" not in json.dumps(state.get("trees"))
     (line,) = [x for x in rounds[1]["lines"] if x["tool"] == host.TREE_TOOL and x["input_meta"]["pid"] == 5888]

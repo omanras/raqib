@@ -14,8 +14,8 @@ An event is a thing said once (C-1): `id` ("<run>:<n>") names the saying;
 `about` names the ledger entry it is about, by its place in a list that only
 grows (D-1), a name within one run (D-2), and `rev` how many times it has
 been said. snapshot() is the events of one state in one call, n from 1 and
-rev 1: it is not how a running watch says events (M10.2 keeps the count and
-says a changed thing again).
+rev 1: it is not how a running watch says events (raqib/eventlog.py, M10.2,
+keeps the count and says a changed thing again).
 
 check(obj) returns the problems of an event (an empty list: none); every
 event this module builds has none, and a builder that would build one with a
@@ -37,9 +37,9 @@ KEYS = ("schema", "id", "n", "time", "kind", "about", "rev", "severity", "alarm"
 PARTS = {
     "rule": ("id", "class", "kind", "fp_budget", "attack"),
     "subject": ("tree", "pid", "image", "started", "named", "agent", "path", "benign", "history", "by"),
-    "evidence": ("run", "round", "rounds", "record", "source", "trace", "seqs", "lines", "cites"),
+    "evidence": ("run", "round", "rounds", "record", "source", "trace", "seqs", "lines", "cites", "cites_left_out"),
     "hole": ("kind", "class", "count", "last"),
-    "knocked": ("status", "event", "title", "limit_id", "called"),
+    "knocked": ("status", "event", "title", "limit_id", "called", "for"),   # F-5: for, the thing knocked for
     "result": ("word", "exit"),
     "counts": ("rounds", "findings", "source_findings", "holes", "blind", "notes", "trees", "knocks"),
     "watch": ("run", "mode", "platform", "version", "host"),
@@ -105,10 +105,10 @@ TYPES = {
     "subject.history": "bool", "subject.by": "str",
     "evidence.run": "str", "evidence.round": "count", "evidence.rounds": "ints", "evidence.record": "str",
     "evidence.source": "str", "evidence.trace": "str", "evidence.seqs": "ints", "evidence.lines": "ints",
-    "evidence.cites": "cites",
+    "evidence.cites": "cites", "evidence.cites_left_out": "pos",
     "hole.kind": "str", "hole.class": "str", "hole.count": "count", "hole.last": "str",
     "knocked.status": "str", "knocked.event": "str", "knocked.title": "str", "knocked.limit_id": "str",
-    "knocked.called": "str",
+    "knocked.called": "str", "knocked.for": "str",
     "result.word": "str", "result.exit": "int",
     "watch.run": "str", "watch.mode": "str", "watch.platform": "str", "watch.version": "str", "watch.host": "str",
 }
@@ -162,6 +162,18 @@ def _cites(cites):
         if isinstance(c, dict) and isinstance(c.get("src"), str) and c["src"] and _int(c.get("line")):
             out.append({k: c[k] for k in CITE if c.get(k) is not None and c.get(k) != ""})
     return out
+
+
+def _cited(evidence, cites):
+    """F-4: the cites an event may hold, and how many were left out (evidence.cites_left_out); never an empty
+    list of cites (an entry whose every cite was left out says only their number)."""
+    if cites:
+        kept = _cites(cites)
+        if kept:
+            evidence["cites"] = kept
+        if len(kept) < len(cites):
+            evidence["cites_left_out"] = len(cites) - len(kept)
+    return evidence
 
 
 def _named(value):
@@ -220,8 +232,7 @@ def finding(entry, facts_, time, n, about, rev=1, rule=None, record=None):
     evidence = _held(entry, (("run", "run"), ("round", "round"), ("rounds", "cycle_rounds"), ("seqs", "cited_seq")))
     if record is not None and "seqs" in evidence:
         evidence["record"] = record
-    if entry.get("cites"):
-        evidence["cites"] = _cites(entry["cites"])
+    _cited(evidence, entry.get("cites"))
     return _finish(_base("finding", entry.get("severity"), facts_, time, n, about, rev), facts_, alarm=True,
                    summary=entry.get("summary"), rule=_rule(entry, rule), subject=subject, evidence=evidence,
                    knocked=_knocked(entry.get("notice")))
@@ -263,8 +274,7 @@ def note(entry, facts_, time, n, about, rev=1, record=None):
     evidence = _held(entry, (("run", "run"), ("round", "round"), ("seqs", "cited_seq")))
     if record is not None and "seqs" in evidence:
         evidence["record"] = record
-    if entry.get("cites"):
-        evidence["cites"] = _cites(entry["cites"])
+    _cited(evidence, entry.get("cites"))
     return _finish(_base("note", "info", facts_, time, n, about, rev), facts_, summary=entry.get("text"),
                    subject=subject, evidence=evidence)
 
@@ -289,8 +299,7 @@ def tree(row, facts_, time, n, about, rev=1, record=None):
         evidence["seqs"] = [row["line_seq"]]
         if record is not None:
             evidence["record"] = record
-    if row.get("cites"):
-        evidence["cites"] = _cites(row["cites"])
+    _cited(evidence, row.get("cites"))
     return _finish(_base("tree", "info", facts_, time, n, about, rev), facts_, subject=subject, evidence=evidence,
                    knocked=_knocked(row.get("knocked")))
 
@@ -312,11 +321,12 @@ def hole(entry, facts_, time, n, about, rev=1):
 
 def knock(row, facts_, time, n, about, rev=1):
     """A knock row of HostWatch.knock_rows() (C-8): its body; its status now, event, title, rate-limit id and what
-    the notifier said at the call."""
+    the notifier said at the call; F-5: the `about` of the thing it knocked for, where the row says (its "for")."""
     return _finish(_base("knock", "info", facts_, time, n, about, rev), facts_, summary=row.get("body"),
                    evidence=_held(row, (("round", "round"),)),
                    knocked=_knocked(row.get("status") or row.get("called"), event=row.get("event"),
-                                    title=row.get("title"), limit_id=row.get("limit_id"), called=row.get("called")))
+                                    title=row.get("title"), limit_id=row.get("limit_id"), called=row.get("called"),
+                                    **{"for": row.get("for")}))
 
 
 def _counts(state):
@@ -447,8 +457,8 @@ def _typed(kind_of, v):
     if kind_of == "ids":
         return isinstance(v, list) and all(isinstance(a, str) and ATTACK_ID.match(a) for a in v) and len(
             set(v)) == len(v)
-    if kind_of == "cites":
-        return isinstance(v, list) and all(
+    if kind_of == "cites":   # F-4: never an empty list
+        return isinstance(v, list) and bool(v) and all(
             isinstance(c, dict) and set(c) <= set(CITE) and isinstance(c.get("src"), str) and c["src"]
             and all(_int(c[k]) and c[k] >= 0 for k in ("line", "round", "seq") if k in c) and "line" in c
             for c in v)
@@ -519,6 +529,10 @@ def check(obj):
             out.append("hole.count: missing (a notifier's hole holds its count, D-1)")
         elif (about or "").startswith("hole:") and has_count:
             out.append("hole.count: not a key of a watch's hole (a hole that holds a count is the notifier's)")
+    knocked = obj.get("knocked") if isinstance(obj.get("knocked"), dict) else {}
+    if "for" in knocked and not (kind == "knock" and isinstance(knocked["for"], str) and ABOUT.match(knocked["for"])
+                                 and knocked["for"] != "watch"):
+        out.append("knocked.for: the about of the thing a knock knocked for, on a knock event only (F-5)")
     if kind == "finding" and obj.get("alarm") is not True:
         out.append("alarm: true for a finding of the rounds")
     state = obj.get("state")
