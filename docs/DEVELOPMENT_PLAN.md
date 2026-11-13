@@ -117,7 +117,7 @@ the host watch and PROXY-BYPASS; file reads, measured first.
 - M10.1 the event (landed; ADR-0011 Amendments B to E): `raqib-event/1` as a shape, the one pure module that builds it, the rules' ATT&CK ids, docs/specs/EVENT.md with its mapping to OCSF and ECS
 - M10.2 landed: the watch writes its events to a file beside its record, and a heartbeat on a fixed beat; it keeps each event's number and says a changed thing again (ADR-0011 F, G, H, I); `raqib events FILE` checks a file; the rig holds it (X16 to X18)
 - M10.3 landed: `raqib forward`, a process of its own, sends the events file's lines to one HTTP collector (the line as written, or the Splunk-HEC envelope), at least once and in order, with its own state and `--status`, the token off every output, certificate verification that nothing turns off, and no line skipped however a collector or a writer of its files behaves (ADR-0011 Amendments J, K, L, M, N, O)
-- M10.3b recorded: syslog over udp, tcp and tls (J-6), with its stand-in collector on the rig
+- M10.3b in build: the forwarder over syslog (udp, tcp, tls), RFC 5424 with octet-count framing, the same cursor machine as HTTP, the token never sent over syslog (J-6, J-14); a stand-in collector on the rig
 - M10.3c recorded: the local sinks (the Windows event log, the journal); OCSF and ECS documents built by Raqib; a real Splunk on the rig (needs the commander's word on its licence); the forwarder as a service
 - M10.4 recorded: the window's panel for the link
 
