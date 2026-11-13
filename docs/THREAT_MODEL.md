@@ -884,11 +884,23 @@ is amended by T-2, T-1 restated by V-1).
   orphan's acts. It is counted in the holes on a round whose reader dated
   at least one link (a live round), and a process that hangs under the
   watch's own pid by such a link is named there; an export whose
-  CreationDate is a local text dates no link and says nothing new; a
-  Sysmon export read by `raqib discover` (the channel not read) dates no
-  link by its event 1 times. On Linux the kernel gives every orphan a
-  living parent, and the start ticks date the links (nothing is broken
-  there in the fixtures).
+  CreationDate is a local text dates no link, and says nothing of them
+  unless a process hangs under the pid its snapshot line names as the
+  reader's; a Sysmon export read by `raqib discover` (the channel not
+  read) dates no link by its event 1 times. On Linux the kernel gives
+  every orphan a living parent, and the start ticks date the links where
+  the snapshot carries them. Also left, and not yet answered: a start is
+  the system's wall time on Windows, so a clock set back between a
+  parent's creation and its child's breaks a true link (said in the same
+  hole, in the words of a reused pid), and a clock set back by more than
+  the watch's own age after boot can make a stale orphan read as younger
+  than the watch again; some of the system's first processes carry a
+  start earlier than their parent's and are broken from it on every
+  round (they neither talk nor act); a process that is truly started by
+  the watch's launcher chain, or that names the watch as its parent on
+  purpose when it creates its children, is still taken for the watch's
+  own by its dates - the watch's own tree is not yet held to what the
+  watch itself starts.
 - **Where the channel's watch and the watch without it still differ on
   a footprint (ADR-0007 AE; each is a knock more, never one fewer).**
   The footprints are judged from the round built without the channel's

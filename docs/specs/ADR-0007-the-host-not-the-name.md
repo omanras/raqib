@@ -2598,3 +2598,36 @@ candidate - the blind run, reproduced from ten process rows. Its questions, rule
   quiet-unread gives, in its channel, a conhost 262 ms before the powershell it hangs under; the link now
   breaks there and no pinned value moved; the fixture's times are for a later task to make true.
 
+## Amendment BG (the Table, 2026-11-13) - the review of M7.26 (9547d86), the field, and what is left for M7.27
+The packet (docs/review/2026-11-13-M7.26.md): the field's shape is closed, by BE-1 alone and by BE-2 alone; no
+true link of Linux breaks; REDO for a Linux test that could not fail and two sentences of the threat model; and
+five matters for the Table. Gate and six CI jobs green, the rig green.
+- BG-1 (the field, Windows with Sysmon, on this code). Thirty-six watches in a row: none blind - and none
+  blind on main's code either that time, so that run proves nothing. Then a run made to hit: forty orphans
+  whose parents had just died, the watch started after them. The watch's launcher was given pid 6168, the
+  dead parent of orphan 8896. The watch held that orphan as a candidate tree from its second round, and the
+  inventory said "pid 8896 under parent pid 6168 (the reader's own pid)". On main the same orphan is the
+  watch's own tree and is left out (the two blind runs; the ten rows of BF).
+  Seen there too, on every round of every real machine: pid 92 and pid 132 under pid 4 broken - the system's
+  first processes carry a start earlier than their parent's. They neither talk nor act; the hole says them.
+- BG-2 (the packet's R1, by the Table). A Linux test through the parser: the reader's helper stays out of every
+  tree, a link breaks by its ticks, a helper with no start is named. It fails if parse_proc's key and the
+  walks ever stop agreeing.
+- BG-3 (BF-1 corrected: the sample is made true by its shell). Moving the agent after its shell moved its
+  channel talk 60 s before its own start, and round 1 then tested another join (the packet's T3). The agent's
+  rows are what they were; in that sample's own copy the shell starts before the agent.
+- BG-4 (the packet's T1) quiet-unread's rounds now say BF-3's hole and the recorded break: accepted; the test
+  that lists which fixtures say a link hole pins it.
+- BG-5 (the builder's questions) Q1: the launcher walk without any start is reached by one test only; M7.27
+  ends it. Q3, Q4: as built.
+- BG-6 (what is left, each a way the watch can still take for its own what is not, or lose what is: M7.27).
+  (a) The watch's own tree is what the watch starts, not what stands under it: a parent whose image is python
+  or raqib is a launcher by its name; a process may name the watch as its parent when it creates its
+  children (the parent is a field the creator fills); a clock set back by more than the watch's age makes a
+  stale orphan read younger than the watch. All three end where the watch's tree is held to its launchers
+  proven and the helpers it runs. (b) No walk of parents passes through the watch's own tree: a process that
+  reaches it by a link not dated has no ancestor through it, and no member of the watch's tree owns an act.
+  (c) The hole says a cause it cannot know ("the pid was taken again"): it says what was read. The reader as
+  the child of a broken link is marked too. (d) Tests through the live reader's own rows (a start "" for a
+  process it could not open) and through the channel's path; the act roots' two walks held by tests.
+
