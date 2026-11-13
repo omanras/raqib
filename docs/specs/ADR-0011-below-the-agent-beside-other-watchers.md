@@ -724,3 +724,45 @@ Recorded: the rig's table is still lost where the watch's own step failed before
 inputs); the forwarder's worst case on the rig against the job's limit; a second forwarder of one name on a
 real machine.
 
+## Amendment N (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3-redo2.md (230b2c2)
+The packet: in a file that is only appended to, the machine holds - no line passed without two refusals of
+its own around the take of a later line, none skipped, none counted twice. REDO for a traceback M-6 forbade,
+a test fixture that can outlast the job, documents that say more than the code; and five matters for the
+Table, each at the machine's edge.
+- N-1 (a slow collector is not sent the same batch for ever). A send that is `late`, in its request or in its
+  answer, halves the next batch, down to one line; a taken send doubles it, up to `--batch`. FOR: a collector
+  that answers a full batch after the bound took it each time and was sent it again at every try. MUST NOT
+  TOUCH: the bounds themselves.
+- N-2 (a try that moved is not a failed try). Where a try took a line, passed a line or carried the reach
+  further, the next try follows with no wait, and `--once` goes on, until a try moves nothing; `refusing`
+  stays said for as long as lines are in question. FOR: a file with a refused kind drained at a hundred
+  sends a minute, and `--once` ending before the line that would be taken.
+- N-3 (the file is the same file from its first byte, and the run's memory is held to it). The state keeps
+  the sha256 of the file's first bytes (at most 4096, and how many); the same-file check compares them, so a
+  cursor at 0 is checked too. What the run remembers after the cursor - the reach, the count in question,
+  the proof, how far a tail was looked through - is given up, back to the cursor, wherever the file is
+  shorter than it or the line that ended at the reach is not what it was. FOR: a file replaced where the
+  cursor's own line could not tell (the packet's finding 6: lines lost, and lines counted refused after one
+  refusal). MUST NOT TOUCH: a file that only grew.
+- N-4 (the name is lost only to another live forwarder). A pid file that is gone is written again and said;
+  one that cannot be read at this write is tried at the next; the forwarder ends - with 1, not the code of
+  a usage error, the reason said once - only where the file holds the pid of another process that lives.
+- N-5 (lines in question are lines that wait). The state says how many are in question and since when
+  (`in_question`); `--status` is 1 while any has waited longer than a beat, settling included. `sent` counts
+  a line when the cursor passes it.
+- N-6 (the packet's R1). Any state that is not the forwarder's - a `failing.error` that is no text among
+  them, JSON nested past what the reader takes - is unreadable: 3 from `--status`, 2 at a start, never a
+  traceback.
+- N-7 (the packet's R2, and its findings 19 and 20). The fixture that finds a thread left behind fails the
+  test that left it, once, and does not wait again for the same thread; no test runs the forwarder's loop on
+  its own thread. A test holds that the take of an earlier line is never the proof of a later one, and the
+  helper that checks the cursor's rule asks for the take of a LATER line.
+- N-8 (the state every beat and Stop within 2 s, also inside one long line): the walks that look through or
+  hash a line or a tail in pieces look at Stop and the beat at each piece.
+- N-9 (the documents, the packet's R3 and finding 23): how many requests a try may make and why; a failed
+  batch may be sent again smaller; what `--status` says in each state of the machine; what a writer of the
+  events file, the state and the pid file can make the forwarder do.
+Accepted as built: the reach and the count kept in memory only (a restart asks again); a line asked again
+alone for each line in question when a collector is put right (Q1: stricter than M-2); a resolver that never
+returns holds its place for the process's life, four of them `stuck` until a restart (said).
+
