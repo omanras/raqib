@@ -511,3 +511,84 @@ true. None of it is a build: the Table made the changes itself (CLAUDE.md rule 8
   before the writer compares (cost, measured by the longest pass); a file written by an earlier build has no
   `watch.beat` and reads as not events.
 
+## Amendment J (the Table, 2026-11-13) - the forwarder: the events leave the host (M10.3)
+The watch writes what it judged to a file (F to I). Nothing reads that file yet. This amendment rules the first
+reader: a process of its own that sends each line to one collector. Each ruling names the case it is FOR and what
+it MUST NOT TOUCH.
+- J-1 (a process of its own). `raqib forward` reads an events file and sends every whole line to one destination.
+  FOR: a SOC that wants Raqib's events in its SIEM. MUST NOT TOUCH: the watch. raqib/host.py, raqib/eventlog.py
+  and the capture path import nothing of the forwarder and do not know one runs (CLAUDE.md rule 5; a test reads
+  the imports); no result, report or finding of a watch depends on a forwarder.
+- J-2 (one way). It sends. Of the collector it reads only the answer to its own send; it takes no command, follows
+  no redirect (a redirect is a failed send, said) and uses no proxy from the environment. FOR: Amendment A-1,
+  Raqib is passive toward other systems. MUST NOT TOUCH: anything on the collector.
+- J-3 (at least once, in order, nothing dropped). The file is the buffer; the forwarder keeps none of its own
+  beyond the batch in flight. Its cursor (EVENT.md, "For a reader of the file": a byte offset at the end of the
+  last whole line sent) moves only past lines the destination took. What "took" means is said per transport, in
+  the state (J-9), by one word: `acknowledged` (HTTP: a 2xx answer; in the hec shape also the body's code 0),
+  `written` (syslog over tcp or tls: the bytes were handed to the system with no error - not received),
+  `sent` (syslog over udp: nothing is known). FOR: a reader who must know what a green link means. MUST NOT
+  TOUCH: the file (opened for reading only; never written, moved or locked).
+- J-4 (a line the collector refuses). A 4xx answer other than 401, 403, 408 and 429 to a batch: its lines are
+  sent again one by one; a line refused alone is counted, its `id` kept in the state (the latest 50), and the
+  cursor passes it - one bad line must not stop the lines after it. 401 and 403 are the token's: nothing moves,
+  the state says so, the token file is read again at every try. Every other failure (no answer, 408, 429, 5xx,
+  a redirect, a TLS error) is a failed send: nothing moves, and it is tried again (J-10).
+- J-5 (lines that are not events; the file's identity). A line that is not JSON or not an event is skipped and
+  counted, never sent; a last line with no newline waits. The cursor is kept with the sha256 of the last line
+  sent; where the file is shorter than the cursor or that line's bytes are not what they were, the file is
+  another: the forwarder starts it again from its beginning, counts a restart and says so (the collector then
+  gets lines twice: `watch.host` and `id` tell).
+- J-6 (shapes). `--shape raqib`: the line as the watch wrote it, one per line (HTTP: application/x-ndjson).
+  `--shape hec`: the envelope an HTTP event collector in Splunk's shape takes - {"time": the event's time as
+  seconds, "host": watch.host, "source": "raqib", "sourcetype": "raqib:event", "event": the event} - with
+  `Authorization: Splunk <token>`. Syslog (`syslog+udp://`, `syslog+tcp://`, `syslog+tls://`): RFC 5424, the
+  app name raqib, the message id the event's kind, the message the line; the severity from the event's
+  (high 2, medium 4, low 5, none and info 6, a hole 4), the facility 13 (log audit) unless `--facility N`;
+  over tcp and tls framed by octet count (RFC 6587), `--framing newline` for a collector that wants lines. A
+  line too long for a datagram (over 65000 bytes) is refused locally as J-4's refused line is: counted, named,
+  passed - never cut. FOR: the collectors a home lab and a SOC have. MUST NOT TOUCH: the event (raqib/event.py
+  and EVENT.md's keys: a shape wraps the line, it never rewrites it). OCSF and ECS documents built by Raqib
+  are not here (recorded; the mapping in EVENT.md is the collector's to apply).
+- J-7 (the secret). The token is read from a file (`--token-file`) at every connection: never an argument,
+  never the environment, never printed, never in the state, in an error's text or in a log line - an error is
+  the forwarder's own words and a status number, never the collector's body. Off Windows a token file that
+  others can read (mode & 0o077) is refused with exit 2 and the reason; on Windows that is not checked, and
+  the guide says so.
+- J-8 (the wire). https is verified against the system's authorities or `--ca FILE`; no switch turns the
+  verification off, for http or for syslog over tls. Plain http and plain tcp or udp are taken only to a
+  loopback address unless `--plain` is given, and then the state and every status say "plain". Connect within
+  10 s, an answer within 30 s.
+- J-9 (its own silence is said). After every batch and every failure, and at least once a beat (its own:
+  `--beat S`, 60 s unless given), the forwarder
+  writes its state whole (written beside and renamed over): `~/.raqib/forward/<name>.json`, schema
+  `raqib-forward/1`: name, pid, written (time), destination (scheme, host, port, path - no query, no user
+  info), shape, delivery (J-3's word), plain, file, cursor {offset, line_sha256}, sent, skipped, refused
+  {count, ids}, restarts, last_id, last_ok (time), behind (bytes of whole lines not yet taken), failing
+  {since, tries, error (one of the forwarder's own class words), status}. `raqib forward --status [NAME]`
+  reads it and says it in a few lines: exit 0 where the last send was taken and nothing waits longer than a
+  beat, 1 where it is failing or behind, 3 where the state cannot be read or was written more than two beats
+  ago (the forwarder is silent: CLAUDE.md rule 4). FOR: M10.4's panel and a person at the host. On the
+  collector's side the heartbeats are the proof of the whole path: the guide says the one search a SOC must
+  make - no heartbeat of a host for more than two beats.
+- J-10 (it does not give up). After a failed send it waits 1, 2, 4 ... 60 s and tries again, for as long as
+  it runs; a collector that is down never ends it. It ends at Stop (the batch in flight is finished or
+  abandoned unmoved, the state written) or at a usage error. `--once` sends what the file holds and ends:
+  0 all taken, 1 not all, 2 usage.
+- J-11 (batches). At most 100 lines or 512 KiB to one HTTP request; one request at a time; the file's order.
+- J-12 (where a first run starts). At the file's beginning: Raqib sends everything it judged (A-2).
+  `--from end` starts at the file's end and the state says from which offset.
+- J-13 (one destination each). Two collectors are two forwarders with two names and two cursors; a name is
+  [a-z0-9-]{1,32}; a second forwarder of one name is refused while the first one's pid lives.
+- J-14 (the rig). Stand-in collectors on the runner, loopback only: an HTTP one in the hec shape that checks
+  the token and can be told to refuse, to fail and to be late; a syslog one over tcp and udp. X19: every
+  whole line of the events file arrived, in order, each id at least once. X20: with the collector down from
+  the start the state says failing and nothing is lost when it comes up. X21: a forwarder killed between two
+  batches and started again leaves no gap. X22: the token is in no output, state or error of the forwarder.
+Built in two tasks: M10.3, the HTTP transport (both shapes) and everything that does not depend on the
+transport (the cursor, the state, the status, the secret, the rig's X19 to X22 over HTTP); M10.3b, syslog over
+udp, tcp and tls with its stand-in collector on the rig. Until M10.3b a syslog destination is a usage error
+that says so.
+Not here, recorded: the forwarder as a service (with the watch's, later); the local sinks (the Windows event
+log, the journal); OCSF and ECS documents; a real Splunk on the rig (it needs the commander's word on its
+licence); more than one file.
