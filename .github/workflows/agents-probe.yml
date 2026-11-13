@@ -111,6 +111,24 @@ jobs:
           $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } | Select-Object -First 1).IPAddress
           "RIG_URL=http://${ip}:8790/v1" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RIG_MODEL=$env:GITHUB_WORKSPACE\tools\rig\model.py" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: the watch, many times (ADR-0007 BE-4: a watch given a reused pid must still see the machine)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $blind = 0
+          1..36 | ForEach-Object {
+            $o = "$env:RUNNER_TEMP\many-$_.out"
+            $p = Start-Process raqib -ArgumentList "watch","--host","--rounds","2","--every","4","--no-open" -RedirectStandardOutput $o -RedirectStandardError "$o.err" -PassThru -NoNewWindow
+            $p.WaitForExit(90000) | Out-Null
+            $t = Get-Content $o
+            $run = ($t | Select-String -Pattern "^run: " | Select-Object -First 1).Line
+            $seen = ($t | Select-String -Pattern "^TREES SEEN" | Select-Object -First 1).Line
+            $res = ($t | Select-String -Pattern "^RESULT" | Select-Object -First 1).Line
+            $hole = python "$env:GITHUB_WORKSPACE\tools\rig\link_holes.py"
+            "MANY $_ | $run | $seen | $res | $hole"
+            if ($res -match "NONE-SEEN") { $blind++ }
+          }
+          "BLIND WATCHES: $blind of 36"
       - name: qwen under the watch
         shell: pwsh
         continue-on-error: true
