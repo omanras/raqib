@@ -2195,3 +2195,32 @@ says no test holds; the run found one thing the reading did not (AS-6).
   no test held found the loss at the seam. A packet that says "not
   tested" names the next run to make, before the merge, not after.
 
+
+## Amendment AT (the Table, 2026-11-13) - the commander's word: an unknown tree with an agent's rhythm is high
+His words: an agent nobody has named is the one that matters (an agent written for one group's own use has no
+name in any catalog), so the catalog can only be a label; what a tree does must be enough to knock.
+The measure (the probe branch claude/rig-probe, never merged; GitHub's own runners; a scripted model on the
+runner, no key and no outside model): two public agents the catalog does not name, Qwen Code and opencode,
+each given seven turns (five of them a command that outlasts a round), on Windows with Sysmon and on Linux.
+- With M7.17's code: HOST-RHYTHM fired on all four trees (Windows: rounds 8 and 9; Linux: round 7, twice), and
+  on none of the runners' own long-lived trees in those four watches, nor in any run of the rig.
+- With three short turns: on none. The turns fell in fewer than K rounds. That is the rule's stated shape (K
+  cycles in K rounds), not a fault, and it is why the measure had to be made again.
+- Before M7.17's code, on Windows: none, with six to seven beats left for the final poll.
+- AT-1 (the rule's level). HOST-RHYTHM is severity high. FOR: an agent with no name, by what it does.
+  MUST NOT TOUCH: K, W, R, the match, once per streak, the named tree (NEW-AGENT's), the budget's measure
+  (the same negatives; 0 fire) - the measure's words gain the runs above as its first field numbers on real
+  agents. The hole that an IDE or an updater has the same rhythm stands and now says "a high finding, not a
+  verdict"; the commander's field measure on such a program is still owed, and is said so.
+- AT-2 (the catalog is a label). NEW-AGENT-UNKNOWN stays medium: an unknown tree that talks and acts once is
+  not yet an agent by its rhythm. No rule gains a condition on a name by this amendment.
+- AT-3 (said, from the same runs; not built here). (a) A long-lived program of the runner, there before the
+  watch and not a candidate in round 1, was knocked as NEW-AGENT-UNKNOWN in round 5 with the words "was
+  absent": it was not absent, it was not yet a candidate. Recorded for the tree ledger (M7.12): the words, and
+  whether a tree older than the watch that becomes a candidate late is an arrival. (b) The scripted model
+  takes a new connection for each turn; a real model endpoint may keep one. On Windows a kept connection is
+  one talk (no byte counts without rights): the rule's own stated hole, and a reason for the service
+  (ADR-0011), which can read them.
+- AT-4 (M11.2). The two real agents become a job of the rig, with their expectations stated (the agent's tree
+  is a finding; HOST-RHYTHM on it and on no other tree; its commands' NET-TOOL). It reports and does not
+  fail, as the rig does. Third-party agents are installed only on the runner, never in the tree.

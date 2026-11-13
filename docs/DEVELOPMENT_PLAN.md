@@ -88,7 +88,7 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.15 recorded: a process of another account whose start time the reader does not read though the system lists it
 - M7.16 an event's time is when it was logged (landed 2026-11-13; ADR-0007 Amendments AM, AN, AO; docs/review/2026-11-13-the-elevated-watch.md): Sysmon's network events stamped weeks behind are no longer history; the lag is a note; a rule's not-judged note is one note
 - M7.17 the rhythm of a tree that is not in the round (landed; ADR-0007 AP to AS): a beat is judged in the round that reads it, for a quiet, a kept and a gone tree, by the one code that writes a candidate's line; the ring has every round; the rig's X12
-- M7.18 recorded: an unknown tree with an agent's rhythm is high and knocks (the commander's word, 2026-11-13); the catalog is a label, never a condition; begun by the measure on real agents under the rig's scripted model
+- M7.18 an unknown tree with an agent's rhythm is high (ADR-0007 Amendment AT; the commander's word, 2026-11-13): measured on two real agents the catalog does not name, on Windows with Sysmon and on Linux; the catalog is a label, never a condition
 - M7.19 recorded: the seams of a source's life (ADR-0007 AS-5, AS-6): a follow's last pass at its stop; the beats carried over an attach; a quiet tree gone by an empty sample; a hooks source read per session; the sources of gone trees bounded on a long watch
 - M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (landed 2026-11-11; ADR-0009 Amendments E-H, decisions 4-5 accepted): `raqib rules --new / --remove`, the form with its Test and "on your records", class USER, Remove by the row's own place, checks first
@@ -109,6 +109,6 @@ the host watch and PROXY-BYPASS; file reads, measured first.
 
 ## Phase 11 — The rig (ADR-0012; the commander's order, 2026-11-13)
 - M11.1 the rig (landed with ADR-0012): a workflow of its own; a real Windows with Sysmon and Linux; a stand-in agent whose acts are known; tools/rig/check.py states each expectation MET, MISSED or OPEN; reports, does not fail
-- M11.2 recorded: real agents under a scripted model server on the runner (no key, no cost), more than one
+- M11.2 real agents in the rig (ADR-0007 AT-4): Qwen Code and opencode under a scripted model on the runner (no key, no outside model), their expectations stated; proven on the probe branch first
 - M11.3 recorded: a watch that is not elevated on the rig; the window's opening time (with M8.5)
 

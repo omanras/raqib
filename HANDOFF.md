@@ -1,17 +1,19 @@
-# HANDOFF — M7.17 REDO  (ADR-0007 Amendment AR on review 2026-11-13-M7.17.md)
+# HANDOFF — M7.18  (ADR-0007 Amendment AT: an unknown tree with an agent's rhythm is high)
 
-Task: the REDO of M7.17 (1a3ef49). AP-2's one road (`_tree_line`), AQ-2 and AQ-3 stand as built. Rulings AR-1 to AR-5.
+Task: HOST-RHYTHM's severity becomes high (AT-1). Nothing else of the rule changes.
 
 Scope:
-  raqib/host.py, raqib/rules/fixturegen.py, raqib/rules/catalog/HOST-RHYTHM.yaml, tests/ (the rule's fixtures and tests/fixtures/host/make.py included), tools/rig/check.py, docs/THREAT_MODEL.md, docs/review/2026-11-13-M7.17-questions.md
+  raqib/rules/catalog/HOST-RHYTHM.yaml, tests/ (the rule's fixtures included), tools/gate.py, docs/GUIDE.md, docs/THREAT_MODEL.md, docs/review/2026-11-13-M7.18-questions.md
 
 Exit criteria:
-- E1 (AR-1) A tree's ring has one entry for every round of the watch from its first line on (an empty entry, with that round's own interval, for a round with no line); `_bin` and `rhythm_of` are otherwise unchanged. Tested through rounds and the report with the packet's case (a candidate in round 1, no beat in rounds 2-11, one cycle in each of intervals 11, 12, 13): HOST-RHYTHM fires in round 14, as on a tree that is a candidate every round, and each cycle cites the round of its beats. The test of AQ-4's merge (two cycles count once) now shows two. Not touched, tested: a tree with a line in every round has the ring it had; every generated fixture is byte for byte what it is, or the questions file names the one that changed and why.
-- E2 (AR-2) A gone tree whose source gained a beat gets its line (class gone) in the round that reads it, by `_tree_line`; HOST-RHYTHM's match takes class gone; a tree that makes K cycles in its last intervals and exits fires. A gone tree with no new beat has no line. NEW-AGENT, NEW-AGENT-UNKNOWN and HOST-UNWATCHED make nothing of a gone line (through rounds).
-- E3 (AR-3) A line for a tree not in the round has empty acts, endpoints and cites of the sample; its input_meta.rhythm names the beats this round read from its sources (count and cites). A candidate's line is unchanged.
-- E4 (AR-4) tools/rig/check.py X12 is n/a without --sysmon; tests/test_rig_check.py follows.
-- E5 (AR-5) Through rounds: a tree that arrived in the watch, goes quiet and has beats makes no NEW-AGENT(-UNKNOWN) finding; a quiet line's finding equals a candidate's of the same beats by value (rounds, cites); a gone tree's waiting beats are in the report where no round read them.
-- E6 The rule's holes and description, and THREAT_MODEL (no milestone tokens), say AR-1 and AR-2 and no longer the loss; fp_budget measured again with a gone positive and a gone negative. Gate green; ASCII; no new test reads docs/review.
-Not in scope: raqib/discover.py, raqib/app.py, the clipboard, new rules, W-4, W-5.
-Commit: `landed: M7.17 REDO the rhythm of a quiet tree` or `STOP: M7.17 REDO <reason>`.
+- E1 `severity: high` in HOST-RHYTHM.yaml. K, W, R, the match, fp_budget, bounds, once per streak: unchanged, and a test says so (the rule's match and thresholds equal what main has).
+- E2 The fixtures of the rule are generated again only where a severity is written in them; `raqib check-rules` gives the same counts (8 positive, 10 measured, fp 0). Every other rule's fixtures are byte for byte what they are (tested or shown by `git diff --stat`).
+- E3 Through rounds (tests/test_rhythm.py, tests/test_host_quiet_rhythm.py): the finding is `[high]`; it knocks by the path it already knocks by; the report's and the window's lines say high; a named tree is still not judged by rhythm; NEW-AGENT-UNKNOWN is still medium.
+- E4 tools/gate.py's own count of HOST-RHYTHM lines reads the new level (and the test that pins that line follows).
+- E5 The rule's comment on its budget gains AT's measure in two lines (four real agent trees fired, none of the runners' own; three short turns: none). The hole "a benign program that polls one server and spawns helpers" says "a high finding, not a verdict" and that the field measure on an IDE is still owed.
+- E6 docs/GUIDE.md and docs/THREAT_MODEL.md say high where they say medium of this rule (THREAT_MODEL: no milestone tokens; the guide's pinned sentences in tests/test_readme_top.py follow by the test's own rule).
+- E7 Gate green; ASCII; no new test reads docs/review.
+Not in scope: raqib/host.py, raqib/app.py, raqib/ui.py, any other rule, README.md, the catalog of agents.
+If a file outside Scope must change for an exit criterion: STOP and say which (the questions file).
+Commit: `landed: M7.18 an unknown tree with an agent's rhythm is high` or `STOP: M7.18 <reason>`.
 Read HANDOFF.md and do only the task it specifies.
