@@ -213,12 +213,14 @@ def test_e2_the_rule_is_a_catalog_anchor_with_fixtures_from_make_py_and_a_measur
     # M7.5 E2: and the os source's two cycles
     # M7.6c REDO E-2: and the edge negatives of W and R (an act at W+1 s; a first cycle out of the last R rounds)
     # ADR-0007 AP-3: and the two quiet negatives (talks with no act; a few beats, k-1 cycles); AR-2: and the gone one
-    assert len(measured) == 10 and not any(n["fired"] for n in measured)
+    # ADR-0007 AU-4: and AU-1's and AU-3's negatives (one server named on some events; cycles split between the
+    # sources; k-1 cycles each)
+    assert len(measured) == 12 and not any(n["fired"] for n in measured)
     assert sorted(Path(n["path"]).name for n in measured) == [
         "negative-acts-between-rounds.json", "negative-changing-destination.json", "negative-gone-few-beats.json",
-        "negative-no-talk.json",
+        "negative-no-talk.json", "negative-os-named-some.json",
         "negative-os-two-cycles.json", "negative-quiet-few-beats.json", "negative-quiet-no-cycle.json",
-        "negative-r-edge.json", "negative-two-cycles.json", "negative-w-edge.json"]
+        "negative-r-edge.json", "negative-split-sources.json", "negative-two-cycles.json", "negative-w-edge.json"]
     assert RULE.fixtures["negative"] == ["tests/fixtures/rules/" + n for n in list(host_fixtures.RHYTHM_SCENARIOS)
                                          + list(host_fixtures.OS_SCENARIOS)
                                          + list(host_fixtures.EDGE_SCENARIOS)   # M7.6c REDO E-2
@@ -1127,19 +1129,20 @@ def test_m718_e1_the_level_is_high_and_the_match_thresholds_budget_and_streak_ar
     assert doc["match"] == MAIN_MATCH and doc["bounds"] == MAIN_BOUNDS
     assert (doc["kind"], doc["class"], doc["fp_budget"]) == ("anchor", "HOST", 0.0)
     assert host.rhythm_params(RULE) == (3, 30, 10) == (host.RHYTHM_K, host.RHYTHM_W, host.RHYTHM_R)
-    assert len(doc["fixtures"]["positive"]) == 8 and len(doc["fixtures"]["negative"]) == 10
+    assert len(doc["fixtures"]["positive"]) == 10 and len(doc["fixtures"]["negative"]) == 12   # AU-4: + two pairs
     (ide,) = [h for h in RULE.holes if h.startswith("a benign program that polls one server and spawns helpers")]
     assert "a high finding, not a verdict" in ide and "still owed" in ide and "medium" not in ide
     assert len(RULE.holes) == 16
     text = (ROOT / "raqib" / "rules" / "catalog" / "HOST-RHYTHM.yaml").read_text(encoding="ascii")
-    assert "4 of 4 agent trees fired, none of the runners' own; three short turns: none" in text   # AT-1's measure
+    assert "7 of 8 agent trees" in text and "none of the\n# runners' own; three short turns: none" in text   # AT-1, AT-7
 
 
 def test_m718_e2_check_rules_gives_the_same_counts():
     out = io.StringIO()
     assert cli.main(["check-rules"], out=out) == 0
     (line,) = [l for l in out.getvalue().splitlines() if l.startswith("HOST-RHYTHM ")]
-    assert re.match(r"^HOST-RHYTHM +ok +0\.000 +0 +8 positive; negatives incl\. benign: 10 measured, ", line), line
+    # ADR-0007 AU-4: two positives and two negatives added (AU-1's pair, AU-3's pair)
+    assert re.match(r"^HOST-RHYTHM +ok +0\.000 +0 +10 positive; negatives incl\. benign: 12 measured, ", line), line
 
 
 def test_m718_e3_through_rounds_the_finding_is_high_and_knocks_by_its_path_the_arrival_is_still_medium(home):
@@ -1154,6 +1157,15 @@ def test_m718_e3_through_rounds_the_finding_is_high_and_knocks_by_its_path_the_a
     view = app.host_watch_view(json.loads(json.dumps(w.state(clock()))))
     assert [x.split(":", 1)[0] for x in view["findings"]] == ["NEW-AGENT-UNKNOWN [medium] round 2",
                                                              "HOST-RHYTHM [high] round 5"]
+    # AT-6: the list the window draws (host_finding_items) sorts by level: the rhythm's row is now first, its pill
+    # "high", above the arrival's (medium) though the arrival came three rounds earlier
+    items = app.host_finding_items(json.loads(json.dumps(w.state(clock()))))
+    assert [(pill, rule) for pill, _, rule, _, _ in items if rule in ("HOST-RHYTHM", "NEW-AGENT-UNKNOWN")] == [
+        ("high", "HOST-RHYTHM"), ("medium", "NEW-AGENT-UNKNOWN")]
+    # AT-6: the help of `raqib watch --host` names the rule's level as the rule file does
+    assert "RHYTHM (M7.4, anchor, high)" in cli.__doc__ and "anchor, medium" not in cli.__doc__
+    # once per streak, said: six rounds of cycles, one finding
+    assert len(rhythm_findings(w)) == 1 and w.trees[next(iter(w.trees))]["rhythm_rounds"] == [5]
     text, code = w.finish()
     said = [l for l in text.splitlines() if re.match(r"^  \[[a-z]+\] (HOST-RHYTHM|NEW-AGENT-UNKNOWN) ", l)]
     assert [l.split(" (", 1)[0] for l in said] == ["  [medium] NEW-AGENT-UNKNOWN round 2", "  [high] HOST-RHYTHM round 5"]

@@ -2229,4 +2229,59 @@ each given seven turns (five of them a command that outlasts a round), on Window
   leave a count that could never be anything but 0. The workflow is in Scope, and the count matches the rule at
   any level (`^  \[[a-z]+\] HOST-RHYTHM `), so no later change of level can silence it. The ledger: a HANDOFF
   names a file only after the Table has opened it.
+- AT-6 (review 2026-11-13-M7.18.md on d68b4ce: REDO, narrow; the Table made the fixes, CLAUDE.md rule 8).
+  The level changes one thing a person sees beyond the word: the window's list sorts by level, so the rhythm's
+  row now stands above an arrival's; tested on the function the window draws from. The help of `raqib watch
+  --host` said medium (a file the HANDOFF left out of Scope and the builder's survey missed): corrected, and
+  pinned. The named quiet tree's test now shows the tree did cycle. The questions file's status line said
+  nothing had landed: corrected. No judgement went silent by the change: the knock, the exit code, the band, the
+  tray and the suspect layer do not read the level.
+- AT-7 (the Table's own run, after the landing, and what it corrects). The two real agents were run again on
+  d68b4ce's code: three of the four fired at high; opencode on Windows did not. Its seven turns were all to one
+  model server, and its cycles were counted under two destinations (two cycles each, K is three): an os talk's
+  destination is a hash of the host name, the address, the port and the protocol, and Sysmon gives a host name
+  on some events of one server and none on others. The first run's "4 of 4" was partly luck: its record shows
+  the same split, with three cycles falling on one side. So the measure is 7 of 8 over the two runs, and the
+  hole "the same server reached by another name is another destination" (M7.5 E2) is not rare on Windows: it
+  is what Sysmon does. MUST be built next, as its own task (M7.20): one server is one destination, whichever
+  events name it. Until then the rule's level is right and its reach on Windows is less than Linux's; said.
+
+## Amendment AU (the Table, 2026-11-13) - one server, one destination (AT-7's task, M7.20)
+The case: a real agent on Windows with Sysmon, seven turns to one model server, K is three, no finding. Its
+os talks were counted under two destinations because an os talk's destination is the hash of the host name,
+the address, the port and the protocol, and Sysmon names the host on some events of one server and not on
+others. A second split stands beside it and was stated long ago (M7.5 E2): a talk the host's sample saw
+("address:port") and a talk the os source saw ("os:" and a hash) to one server are two destinations.
+- AU-1 (the os line says which server, without saying more). An os net line's input_meta gains `dest_sha256`:
+  the hash of the address, the port and the protocol alone (the address in its canonical form). Its
+  input_sha256 is unchanged: the line's identity stays what it is. FOR: one server is one hash whether or not
+  the host's name was resolved. MUST NOT TOUCH: what the trace reveals (a hash, as before; no address is
+  written by the os source that it did not write).
+- AU-2 (the rhythm's destination for an os talk). Where the line has `dest_sha256`, the talk's destination is
+  made from it; a line written before this has none and keeps the destination it had (said once per source,
+  as an old line's missing image is).
+- AU-3 (the two sources, one destination). A host talk to address:port is the same destination as an os talk
+  whose `dest_sha256` is the hash of that address, that port and tcp: their cycles are counted together, under
+  one destination, named as the host's sample names it where the sample saw it. FOR: an agent whose first
+  turn the sample saw and whose later turns only the os source saw. MUST NOT TOUCH: K, W, R, once per streak;
+  a destination only one source saw is named as before.
+- AU-4 (the measure). The rule's negatives and positives are measured again (the budget stays what the
+  measure gives); a positive and a negative are added for AU-1 (one server named on some events and not on
+  others: K cycles fire; K-1 do not) and for AU-3 (cycles split between the two sources).
+- AU-5 (the field check is the Table's). The two real agents are run again on the built code; the task is not
+  merged on a run in which an agent that made seven turns to one server is not found.
+- AU-6 (the builder's STOP, 09c1eb5: built whole, stopped on two of the Table's own contradictions; the Table
+  answered both and made the changes, CLAUDE.md rule 8). (Q1) The HANDOFF said a test that pins the rule's
+  fixture counts would pass untouched, and AU-4 adds four fixtures: the amendment's word stands, the count is
+  10 and 12. (Q2) The launching message said no other rule's fixture may change, and AU-1 puts the key on
+  every os net line: the fixtures the generators write from os_sysmon's own output are generated again
+  (NET-TOOL's and DESTRUCT-CMD's two os fixtures, the four CROSS logs), and the test that holds every fixture's
+  lines to the byte now holds two things: with the new key taken out, every line is what it was (the old
+  hash, kept); with it, the lines are the new ones. The ledger, a second time today: a HANDOFF's "untouched"
+  is checked against the amendment's own "added" before it is written.
+- AU-7 (Q3: the name of a destination within a streak). As built: the count is one from the first cycle; the
+  destination is named by the sample's address:port while the ring holds the sample's talk to that server, and
+  by the os talk's hash otherwise, so a name can change within a streak and a finding keeps the name it was
+  said under. Accepted: the count is the ruling, the name is the best one known when the line is written. Q4's
+  four points are accepted as built and are in the hole.
 

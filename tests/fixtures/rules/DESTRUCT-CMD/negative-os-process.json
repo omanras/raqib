@@ -1269,7 +1269,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "phase": "pre",
@@ -1283,7 +1284,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "ok": true,
@@ -1299,7 +1301,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "93a39da482d470fdafb521acb8b524ce0b98034a4c3fdb237cda490f0dc0347a"
    },
    "input_sha256": "f9eb80e3e920d765a9c231fd2c9b62ea980c208d49ab6bec60cbd504ffee4aaf",
    "phase": "pre",
@@ -1313,7 +1316,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "93a39da482d470fdafb521acb8b524ce0b98034a4c3fdb237cda490f0dc0347a"
    },
    "input_sha256": "f9eb80e3e920d765a9c231fd2c9b62ea980c208d49ab6bec60cbd504ffee4aaf",
    "ok": true,
@@ -1609,7 +1613,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "e7d8cab912f4e5830ff0a0bcb2f4a72564dcfeb0c2dcfe8c5efae1c498c26d2c"
    },
    "input_sha256": "edab6deb69f359b9c6c52c08e043427f45a55694eb208787e950bdc020ac477d",
    "phase": "pre",
@@ -1623,7 +1628,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "e7d8cab912f4e5830ff0a0bcb2f4a72564dcfeb0c2dcfe8c5efae1c498c26d2c"
    },
    "input_sha256": "edab6deb69f359b9c6c52c08e043427f45a55694eb208787e950bdc020ac477d",
    "ok": true,
@@ -1697,7 +1703,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "phase": "pre",
@@ -1711,7 +1718,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "ok": true,
@@ -2026,7 +2034,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "phase": "pre",
@@ -2040,7 +2049,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "ok": true,

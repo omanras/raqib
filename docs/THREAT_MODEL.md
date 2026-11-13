@@ -565,6 +565,27 @@ is amended by T-2, T-1 restated by V-1).
   were not read either), and says so once. A round whose process list was
   not read has an empty sample: every tree absent from it is gone, its
   source is stopped and attached again when it is next seen.
+- **One server is one destination (ADR-0007 Amendment AU).** The os
+  source keeps no remote in clear: a connection's line holds hashes only,
+  its own identity (the host name Sysmon gave, the address, the port and
+  the protocol) and the server's (the address in canonical form, the port
+  and the protocol alone). The rhythm counts the server's, so one server
+  is one destination whether or not Sysmon named the host on an event (it
+  names it on some events of one server and not on others), and a
+  connection the host's sample saw to an address and port is the same
+  destination as the os source's connections to that server over TCP:
+  their cycles are counted together, named by the address and port where
+  the tree's ring holds the sample's talk to it, else by the os source's
+  hash. What is not covered: another address of one server (an address
+  pool, DNS round robin, the IPv4 and IPv6 of one name) is another
+  destination; a connection line written before the server's hash was
+  recorded keeps the destination of its own identity (said once per
+  source), so there one server named on some events and not on others is
+  two destinations, and none is one with a host talk; a protocol the
+  sample does not see (an os connection over UDP) is never one with a
+  host talk. The name of a destination can change while a streak lasts
+  (the os talks first, by their hash; then the sample's address and port),
+  never its count.
 - **A beat is judged in the round that reads it (ADR-0007 Amendments AP
   to AS).** A tree that is not in the round - quiet at the sample, or
   kept by a round whose connections were not read, or gone from the
