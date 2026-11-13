@@ -8,7 +8,7 @@ The watch does not write events yet (M10.2).
 - An event is a thing said once (C-1). `id` ("<run>:<n>", n one more for each event the run says) names the
   saying and is never used twice in a run; a run id is not known to be unique across hosts, so an id is unique
   within a host, and a collector keys by `watch.host` and `id` and drops what it has seen. What the event is
-  about is named apart: `about` (the ledger and the entry's place in it, or the tree's word, or the watch) and
+  about is named apart: `about` (a name within one run: its forms are listed below) and
   `rev` (1 the first time; one more each time it is said again because it changed: a finding that grew, a knock
   whose fold was decided, a tree that was knocked). Both are given by the caller.
 - A name is a place in a list that only grows (D-1). The state shows the watch's holes followed by the
@@ -23,7 +23,7 @@ The watch does not write events yet (M10.2).
   "<watch.run>/<about>" (see Mapping).
 - `watch.host` is required on every event (D-3): `check` refuses an event without it and `event.facts` refuses
   to be called without it (ValueError); a collector keys by it.
-- `event.snapshot(state, facts, time, knocks, rules, lost=None)` gives the events of one state of a watch in one call, n
+- `event.snapshot(state, facts, time, knocks, rules, end=False, exit=None, lost=None)` gives the events of one state of a watch in one call, n
   from 1 and rev 1. It is not how a running watch says events: a running watch (M10.2) keeps the count of its
   events and says a changed thing again with the next rev. `snapshot` must be given every knock row
   (`knock_rows()`: the state keeps only the newest) and the rule table (a finding needs its rule's `attack`).
@@ -156,7 +156,9 @@ named field or to the namespace: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`.
 - `kind` -> ECS `event.action`. `knocked.status` -> `status_detail`.
 - For a hole, `hole.kind` -> `finding_info.title`.
 - For the kinds that are Base Event (note, tree, knock, heartbeat, watch): `id` -> `metadata.uid`, `summary` ->
-  `message`, the rest in the namespace.
+  `message`, the rest in the namespace. "The rest", for every kind, is every key this list does not name:
+  OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>` (for a Base Event kind that includes `about`, which has no
+  finding to be the uid of).
 - The whole line -> OCSF `raw_data`; ECS `event.original`.
 
 ## Required keys

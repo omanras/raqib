@@ -326,4 +326,14 @@ line in any line. And the six CI jobs are green on eabca24, Windows among them.
 - E-3 (Q16). `hole.last` and `evidence.record` are values of the entry and the state that the report's line
   for the entry does not hold; allowed by name, as built. "The rest in the namespace" means every key D-2 and
   C-11 do not name: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`, for every kind.
+- E-4 (review 2026-11-13-M10.1-redo2.md: NEXT; the gate and the six CI jobs green on 00069ed). The document
+  now gives `snapshot`'s arguments in the module's order, says what `about` is in D-1's words, and holds E-3's
+  sentence. Everything else the packet raises is the writer's, and is M10.2's HANDOFF, not a third REDO: how a
+  running watch tells the lost-words note and a notifier's hole without `snapshot` (the watch knows which
+  list an entry is in; the module's "the one that holds a count" is for a state read back from a file); which
+  changes are said again (a finding that grew, a knock decided, a tree knocked, a hole's count: yes; a blind
+  spot's rounds and a new lost-words text: at the heartbeat's beat, not at each); what a builder that raised
+  becomes; a finding whose every cite was left out (said, with their number; never an event with an empty
+  list); a snapshot of a watch whose reader failed; examples of a notifier's hole and the lost-words note; the
+  counts beside the split names; the tests the packet shows to be weak (section 5).
 
