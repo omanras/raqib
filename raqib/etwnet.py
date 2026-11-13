@@ -67,7 +67,7 @@ SENT, RECEIVED = "sent", "received"
 # event id -> (direction, bytes of one address): the measured shape (BL, the probe branch), version 0 only (BM-4)
 EVENTS = {10: (SENT, 4), 11: (RECEIVED, 4), 26: (SENT, 16), 27: (RECEIVED, 16)}
 EVENT_VERSION = 0                                        # the measured version of the four ids (BM-4)
-# the tracing's own lost-event provider; its notices to the consumer are a loss (BM-6). Field-checked (questions E).
+# the tracing's own lost-event provider; its notices to the consumer are a loss (BM-6). Not measured in the field yet.
 LOST_EVENT_PROVIDER = "6A399AE0-4BC6-4DE9-870B-3657F8947E7E"
 
 WNODE_FLAG_TRACED_GUID = 0x00020000
@@ -406,7 +406,15 @@ class Reader:
         except BaseException:
             # an interrupt or an exit raised after the session began (KeyboardInterrupt,
             # SystemExit, anything not an Exception): undo the session, then let it go up (BM-1).
-            self._undo()
+            # BN-1: the interrupt may have come at StartTraceW's own return, the session begun and its handle
+            # not yet kept. A session of this process's own number is nobody else's: it is stopped by name.
+            began = self._session is not None
+            self.stop_problems = self._undo()
+            if not began and self.pid == self._ownpid and self._api is not None:
+                try:
+                    self._api.ControlTraceW(0, self.name, properties(), EVENT_TRACE_CONTROL_STOP)
+                except Exception as exc:
+                    self.stop_problems.append("the session %s could not be stopped (%s)" % (self.name, _flat(exc)))
             self._state = "refused"
             raise
         if why:
@@ -422,8 +430,16 @@ class Reader:
     def _stop_at_exit(self):
         """Registered with atexit for a running reader: at the interpreter's exit a
         reader that was never stopped stops its session (BM-1). stop() unregisters
-        this, so a reader stopped by hand leaves nothing to run at the exit."""
-        self.stop()
+        this, so a reader stopped by hand leaves nothing to run at the exit. A stop
+        that was interrupted, or whose session may still run, left this registered:
+        the session is then stopped here once more (BN-2)."""
+        if self._state == "running":
+            self.stop()
+        elif self._session is not None:
+            try:
+                self._api.ControlTraceW(self._session, self.name, properties(), EVENT_TRACE_CONTROL_STOP)
+            except Exception:
+                pass
 
     def _say(self, text):
         with self._lock:
@@ -445,12 +461,13 @@ class Reader:
             # raqib-net-<own pid> is there and its number is this very process's: nobody
             # else's, so it is a leftover of a killed reader. Stop it and try the start once
             # more; it is said (BM-2). For any other pid, 183 stays a refusal below.
-            self._say("a session named %s was already there and its number is this process's own:"
-                      " a leftover of a killed reader, stopped and the start tried once more" % self.name)
             try:
-                api.ControlTraceW(0, self.name, properties(), EVENT_TRACE_CONTROL_STOP)
+                stop_rc = api.ControlTraceW(0, self.name, properties(), EVENT_TRACE_CONTROL_STOP)
+                done = "stopped" if stop_rc == ERROR_SUCCESS else "not stopped (ControlTraceW returned %d)" % stop_rc
             except Exception as exc:
-                self._say("stopping the leftover %s failed (%s)" % (self.name, _flat(exc)))
+                done = "not stopped (%s)" % _flat(exc)
+            self._say("a session named %s was already there and its number is this process's own: a leftover"
+                      " of a killed reader, %s; the start tried once more" % (self.name, done))
             rc = api.StartTraceW(api.byref(handle), self.name, properties(start=True))
         if rc != ERROR_SUCCESS:
             return refusal("StartTraceW", rc, self.name)
@@ -609,9 +626,6 @@ class Reader:
         if self._state != "running":
             return []
         self._state = "stopping"
-        if self._atexit_registered:
-            self._atexit.unregister(self._stop_at_exit)   # stopped by hand: leave nothing for the exit (BM-1)
-            self._atexit_registered = False
         with self._lock:
             self._stopping = True
         problems, api, buf = [], self._api, properties()
@@ -635,7 +649,12 @@ class Reader:
                 problems.append("the consumer did not end within %d seconds of the stop" % JOIN_SECONDS)
         if self._final_lost is None:
             self._final_lost = unknown_lost("the session's last losses were not read at its stop")
-        self._session = self._trace = None
+        if not any("may still run" in p for p in problems):
+            self._session = None
+            if self._atexit_registered:   # the session is ended: nothing is left for the exit (BM-1, BN-2)
+                self._atexit.unregister(self._stop_at_exit)
+                self._atexit_registered = False
+        self._trace = None
         self._state = "stopped"
         self.stop_problems = problems
         return problems
@@ -687,7 +706,7 @@ def leftovers(live_pids, api=None, problems=None):
         alive, pid_why = live_pids()        # the pids are read now, after the list (BM-3)
         if pid_why:
             problems.append(pid_why)
-        if alive is None:
+        if alive is None or pid_why:   # BN-3: a list that may not be whole is not used
             problems.append("leftovers not looked for: the live pids are not known")
             return stopped
         for name in names:
