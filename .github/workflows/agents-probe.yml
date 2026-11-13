@@ -5,7 +5,7 @@
 name: agents-probe
 on:
   push:
-    branches: [claude/rig-probe]
+    branches: [claude/rig-probe, claude/rig-probe-before]
 permissions:
   contents: read
 env:
