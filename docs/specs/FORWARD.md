@@ -35,9 +35,13 @@ raqib/forward.py, and no result, report or finding of a watch depends on a forwa
   `written` over tcp and tls - a batch is taken only when its connection ended in order: the batch written,
   the forwarder ends its side (over tcp a half-close; over tls it sends its close, reading what the collector
   sent before it) and reads to the collector's end, within the bound; a reset, an alert, an error, an end of
-  the collector's before the forwarder's own, or no end within the bound is a failed send. `written` is an
+  the collector's before the forwarder's own, an end over tls with no close of the collector's, or no end
+  within the bound is a failed send. `written` is an
   orderly end, not a stored event: a collector that read the batch and ended in order without keeping it
-  loses it unseen - and `sent` over udp - a batch is taken when each of its datagrams was sent with no error:
+  loses it unseen. And it is an end as the forwarder saw it (Q-3): a collector that died or closed while the
+  batch's last bytes were still on their way, and whose end reached the forwarder before its reset did, is
+  taken with lines it never read. Syslog has no answer to close that gap; where one lost line matters, send
+  over HTTP (`acknowledged`) - and `sent` over udp - a batch is taken when each of its datagrams was sent with no error:
   nothing is known of their arrival. Over udp to a collector that is down every line is `sent` and the status
   is OK - only the collector's own search for silence tells. The cursor rules are the same:
   nothing moves before the transport took the batch, a failed send moves nothing and is tried again, and a

@@ -825,3 +825,31 @@ packet came: on both Windows jobs the forwarder said `written` over tls and its 
 Accepted as built: one connection a batch; no BOM; udp unconnected; a state from before this task that holds
 the word `write` is unreadable to an older raqib.
 
+## Amendment Q (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3b-redo.md (b0e19a2): the limit of `written`
+The packet: E1 to E7 met; REDO, narrow, for three things. The Table tried each on this machine before ruling
+and built the two that are small; what cannot be closed is said.
+- Q-1 (over tls, an end with no close of the collector's is a failed send). The syslog context turns off the
+  option by which some Pythons take such an end as a close; the HTTP context keeps its Python's default (its
+  answers are framed by their own length). Tried here: with the option on, the send was taken; off, it failed.
+  FOR: an end somebody else made (a cut path) must not count as the collector's. Cost, accepted: a collector
+  that read everything and ended without its close gets the batch again, and is said failing, never silent.
+- Q-2 (over tls, a close of the collector's before the forwarder's own is a failed send), as over tcp: before
+  its close the forwarder reads what already waits (thrown away, as all the collector sends is); a close among
+  it is no end in answer to the batch. FOR: the packet's 3b - a collector that closes once the handshake
+  ended, its reset still on its way. A test holds the order by the collector's own word and shows the send
+  taken with the look off.
+- Q-3 (what `written` cannot tell, said and not hidden). An end that reaches the forwarder before the reset
+  to a batch's unread tail is taken: a collector that died or closed in the middle (the packet's 3a, the
+  builder's Q2). No look closes it without an answer, and syslog has none. FORWARD.md, the threat model and
+  the guide say it, and that HTTP's `acknowledged` is the delivery to choose where one lost line matters.
+  MUST NOT TOUCH: the word - no new delivery word, no claim beyond an orderly end as the forwarder saw it.
+- Q-4 (the two Windows tests). Winsock takes one send whole whatever the buffer, so no write blocked there
+  and the lateness came at the end, not at the write. The tests' small buffer now writes piece by piece;
+  the forwarder did not move. A fixture that leans on one system's buffering is a claim about that system.
+- Q-5 (the builder's questions). Q1 as built (an older state takes the start's facility and framing, once).
+  Q3 as Q-1 rules, now with its test. Q4: no new error word; over syslog `tls` also says an alert or an end
+  with no close. The words of a carried failure over syslog speak of no answer.
+Recorded, not built: the header's fallback counts nothing (a defect there would dull every header unseen);
+a collector that never ends its side at the half-close makes every batch late, said failing; what real
+collectors do at the end of a connection is not checked on the rig (rsyslog and syslog-ng: a later task).
+

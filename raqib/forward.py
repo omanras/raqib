@@ -15,7 +15,7 @@ HOSTNAME its watch.host, MSGID its kind (each "-" where the event's value is not
 MSG the line as written, without its newline. Over tcp and tls the messages of a batch are written on one
 connection, framed by octet count (RFC 6587: "<length> <message>"), or with --framing newline each followed by
 a newline; over udp each message is one datagram. Syslog has no answer: over tcp and tls a batch is taken when
-its bytes were handed to the system with no error (`written`: not that they were received), over udp when its
+its connection ended in order after it (`written`, P-2: not that it was stored), over udp when its
 datagrams were sent (`sent`: nothing is known). So a syslog collector never refuses a line, and the paths of
 the lines in question never arise there. A line whose message is longer than a datagram may be (over 65000
 bytes, over udp) is refused locally as a line longer than one request is: counted, named, passed, never cut.
@@ -88,7 +88,7 @@ bounded whole: connecting (name resolution and the handshake included) 10 s from
 and is left to its own thread, which alone closes them; while four abandoned sends have not ended, no send
 starts (`stuck`). Plain http only to a loopback address unless --plain. Syslog over tls is verified by the same
 context; syslog over udp or tcp is plain, taken only to a loopback address unless --plain. A syslog send is
-bounded as an HTTP one: connecting and the handshake 10 s, writing the batch 30 s (there is no answer).
+bounded as an HTTP one: connecting and the handshake 10 s, the batch and the connection's end 30 s (no answer).
 
 Its own silence is said (J-9, L-3, M-4, N-8): after every batch, every failure, at least once a beat whatever it
 is doing (a send, a try of many lines, a walk over lines that are not events, a walk through one long line or
@@ -199,7 +199,9 @@ ERRORS = {
 }
 # P-5: the words said of a syslog send, which has no answer (an orderly end is what is waited for)
 SYSLOG_ERRORS = dict(ERRORS, late="the batch was not written, or the connection not ended in order, within the"
-                                  " bound")
+                                  " bound",
+                     tls="the TLS handshake or the certificate failed, or the collector ended the session with an"
+                         " alert or with no close")
 KEYS = ("schema", "name", "pid", "written", "destination", "shape", "delivery", "plain", "file", "cursor", "from",
         "beat", "sent", "skipped", "refused", "restarts", "last_id", "last_ok", "behind", "failing", "head",
         "in_question")
@@ -333,11 +335,15 @@ def where(dest):
     return "%s://%s:%d%s" % (dest["scheme"], host, dest["port"], dest["path"])
 
 
-def tls_context(ca=None):
+def tls_context(ca=None, whole_end=False):
     """J-8, L-5: what ssl.create_default_context builds for a client - certificate and host name verified, the
     flags of this Python's default - by the system's authorities or by --ca alone, and never a key log: the
-    environment's SSLKEYLOGFILE is not read (create_default_context would open that file and write to it)."""
+    environment's SSLKEYLOGFILE is not read (create_default_context would open that file and write to it).
+    `whole_end` (Q-1, syslog over tls): an end of the connection with no close of the collector's is an error,
+    whatever this Python's default says of it (some set OP_IGNORE_UNEXPECTED_EOF, some do not)."""
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    if whole_end:
+        ctx.options &= ~getattr(ssl, "OP_IGNORE_UNEXPECTED_EOF", 0)
     ctx.verify_mode, ctx.check_hostname = ssl.CERT_REQUIRED, True
     if sys.version_info >= (3, 13):   # the flags create_default_context gained in 3.13
         ctx.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN | ssl.VERIFY_X509_STRICT
@@ -853,11 +859,11 @@ class SyslogSend(Send):
         within what is left of the bound. A reset, an alert, an error, a socket error left after the end, or no
         end within the bound is a failed send: nothing passes, and the batch is sent again."""
         try:
+            if self.ended_first(sock, self.context is not None):
+                return Result("failed", "write", phase="answer")
             if self.context is not None:
                 sock.settimeout(self.left())
                 sock.unwrap()   # the close sent and the collector's read; the socket is plain from here
-            elif self.ended_first(sock):
-                return Result("failed", "write", phase="answer")
             socket.socket.shutdown(sock, socket.SHUT_WR)
             while True:
                 sock.settimeout(self.left())
@@ -874,13 +880,19 @@ class SyslogSend(Send):
         return Result("taken")
 
     @staticmethod
-    def ended_first(sock):
-        """P-2: whether the collector's end is already there before the forwarder's own (a look, no wait: a peek
-        that takes nothing)."""
+    def ended_first(sock, tls=False):
+        """P-2, Q-2: whether the collector's end is already there before the forwarder's own (a look, no wait).
+        Over tcp a peek that takes nothing. Over tls what the collector already sent is read and thrown away
+        (session tickets, data: the forwarder keeps none of it anyway) up to where nothing waits; its close
+        among it is its end."""
         sock.settimeout(0.0)
         try:
-            return socket.socket.recv(sock, 1, socket.MSG_PEEK) == b""
-        except (BlockingIOError, InterruptedError):
+            if not tls:
+                return socket.socket.recv(sock, 1, socket.MSG_PEEK) == b""
+            while sock.recv(ANSWER_READ):
+                pass
+            return True
+        except (ssl.SSLWantReadError, ssl.SSLWantWriteError, BlockingIOError, InterruptedError):
             return False
 
     def datagrams(self):
@@ -948,7 +960,7 @@ class Forwarder:
             raise UsageError("--ca: no such file: %s" % ca)
         if scheme in ("https", "syslog+tls"):
             try:   # J-8, L-5: verified, by the system's authorities or by --ca; nothing turns it off; no key log
-                self.context = tls_context(ca)
+                self.context = tls_context(ca, whole_end=scheme == "syslog+tls")
             except (OSError, ssl.SSLError):
                 raise UsageError("--ca: the file holds no certificate that can be read")
         else:
@@ -1271,8 +1283,9 @@ class Forwarder:
             self.start_from = dict(old["from"])
             if old["failing"]:
                 self.failing, self.carried = dict(old["failing"]), True
-            return "resumed at offset %d%s%s" % (self.offset, "; failing %s, as the state said, until a try has an"
-                                                 " answer" % self.failing["error"] if self.carried else "", kept)
+            return "resumed at offset %d%s%s" % (self.offset, "; failing %s, as the state said, until a try %s" % (
+                self.failing["error"], "ends in order" if self.syslog else "has an answer") if self.carried else "",
+                                                 kept)
         if self.start_from["start"] == "end":
             try:
                 with self.opener(self.path) as f:

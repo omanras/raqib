@@ -14,6 +14,7 @@ import io
 import json
 import os
 import re
+import select
 import shutil
 import signal
 import socket
@@ -2332,11 +2333,17 @@ class TlsListener:
     connection to the forwarder's close, keeps the bytes, then ends in order (P-2: its own close, unwrap, then
     the socket closed) - so what it holds is kept before the forwarder can say `written`. `require` (a CA file):
     it asks a client certificate, and a client with none is refused after the handshake by an alert (TLS 1.3's
-    certificate_required, P-2 finding 5). It keeps how many handshakes failed."""
+    certificate_required, P-2 finding 5). It keeps how many handshakes failed. `how` (Q-1, Q-2): "ragged" reads
+    to the forwarder's close and ends with no close of its own; "early" sends its close as soon as the handshake
+    ended (no session tickets: its close is the first thing it sends) and ends its side, sets `closed`, and
+    reads nothing: it holds the connection until `release`, as a collector whose reset is still on its way."""
 
-    def __init__(self, cert, key, require=None):
+    def __init__(self, cert, key, require=None, how="order"):
+        self.how, self.closed, self.release = how, threading.Event(), threading.Event()
         self.ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+        if how == "early":
+            self.ctx.num_tickets = 0
         self.ctx.load_cert_chain(cert, key)
         if require:
             self.ctx.verify_mode = ssl.CERT_REQUIRED
@@ -2366,6 +2373,21 @@ class TlsListener:
                 conn.close()
                 continue
             got, whole = b"", False
+            if self.how == "early":
+                tls.settimeout(0.0)
+                try:
+                    tls.unwrap()   # its close is sent; the forwarder's is not there yet
+                except (OSError, ssl.SSLError):
+                    pass
+                try:
+                    socket.socket.shutdown(tls, socket.SHUT_WR)   # and its end; what comes is never read
+                except OSError:
+                    pass
+                self.closed.set()
+                self.release.wait(10)   # held, unread, until the forwarder judged: the reset comes after
+                self.data.append(b"")
+                tls.close()
+                continue
             try:
                 while True:
                     block = tls.recv(65536)
@@ -2377,7 +2399,7 @@ class TlsListener:
                 pass
             self.data.append(got)   # kept before its close: the forwarder's `written` waits for that close
             try:
-                if whole:
+                if whole and self.how == "order":
                     tls.unwrap()
             except (OSError, ssl.SSLError):
                 pass
@@ -2386,6 +2408,7 @@ class TlsListener:
 
     def stop(self):
         self.quit.set()
+        self.release.set()
         self.thread.join()
         self.sock.close()
 
@@ -2847,6 +2870,64 @@ def test_m103b_redo_e2_over_tls_an_alert_after_the_handshake_is_a_failed_send_an
     finally:
         t.stop()
     assert t.failed == 2 and t.data == []
+
+
+def test_m103b_q1_over_tls_an_end_with_no_close_of_the_collectors_is_a_failed_send(tmp_path, monkeypatch):
+    """Q-1: a tls collector that read the whole batch and ended the connection with no close of its own: a
+    failed send (`tls`), nothing passes - whatever this Python's default says of such an end. The option that
+    would take it is off in the syslog context alone; the HTTP context keeps this Python's default."""
+    ca, cert, key = certificates(tmp_path)
+    for name in ("SSL_CERT_FILE", "SSL_CERT_DIR", "SSLKEYLOGFILE"):
+        monkeypatch.delenv(name, raising=False)
+    flag = getattr(ssl, "OP_IGNORE_UNEXPECTED_EOF", 0)
+    assert not forward.tls_context(ca, whole_end=True).options & flag
+    assert forward.tls_context(ca).options & flag == ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).options & flag
+    rows = lines(3)
+    path = write(tmp_path / "e.jsonl", rows)
+    t = TlsListener(cert, key, how="ragged")
+    try:
+        f = sfwd(tmp_path, path, "syslog+tls://127.0.0.1:%d" % t.port, ca=ca)
+        assert not f.context.options & flag
+        assert f.step() == "failed" and f.offset == 0 and f.sent == 0 and f.failing["error"] == "tls"
+        assert "with no close" in f.out.getvalue()
+    finally:
+        t.stop()
+    assert octets(t.data[0]) == rows   # it read them all: sent again, they arrive twice (at least once)
+
+
+def test_m103b_q2_over_tls_a_close_of_the_collectors_before_the_forwarders_own_is_a_failed_send(tmp_path,
+                                                                                                 monkeypatch):
+    """Q-2: a tls collector that sends its close before the batch reached it (it closes once the handshake
+    ended): its close is there before the forwarder's own, which is no end in answer to it - a failed send
+    (`write`), as over tcp. The order is definite: the forwarder looks only after the collector said its close
+    was sent and the socket holds it. Without the look the send would be taken (shown once, the look off)."""
+    ca, cert, key = certificates(tmp_path)
+    for name in ("SSL_CERT_FILE", "SSL_CERT_DIR", "SSLKEYLOGFILE"):
+        monkeypatch.delenv(name, raising=False)
+    rows = lines(3)
+    path = write(tmp_path / "e.jsonl", rows)
+    mark = forward.SyslogSend.mark
+
+    def marked(job, phase):
+        if phase == "answer":   # the batch is written; the collector's close is on its way or there
+            assert t.closed.wait(RUN_S)
+            assert select.select([job.socks[-1]], [], [], RUN_S)[0]
+        return mark(job, phase)
+
+    monkeypatch.setattr(forward.SyslogSend, "mark", marked)
+    for look, want in ((False, "moved"), (True, "failed")):
+        t = TlsListener(cert, key, how="early")
+        with monkeypatch.context() as m:
+            if not look:
+                m.setattr(forward.SyslogSend, "ended_first", staticmethod(lambda sock, tls=False: False))
+            try:
+                f = sfwd(tmp_path, path, "syslog+tls://127.0.0.1:%d" % t.port, ca=ca, name="q%d" % look)
+                assert f.step() == want, (look, f.failing)
+                assert not t.data   # judged while the collector had read nothing
+                if look:
+                    assert f.offset == 0 and f.sent == 0 and f.failing["error"] == "write"
+            finally:
+                t.stop()
 
 
 def test_m103b_redo_e3_syslog_tcp_needs_its_port_and_the_state_keeps_facility_and_framing(tmp_path, syslogs,

@@ -1272,12 +1272,19 @@ collector that is slow, down or refusing never delays or loses a capture
   a reset, an alert, an error or no end within the bound is a failed send,
   and the batch is sent again. `written` is an orderly end, not a stored
   event: a collector that read the batch and then lost it, or ended in
-  order without keeping it, loses lines the forwarder counts as taken. A
+  order without keeping it, loses lines the forwarder counts as taken. An
+  end is an end as the forwarder saw it: a collector that died or closed
+  while a batch's last bytes were still on their way, and whose end reached
+  the forwarder before its reset did, is taken with lines it never read
+  (over tls an end with no close of the collector's, and a close that came
+  before the forwarder's own, are failed sends); syslog has no answer to
+  close that gap, HTTP has. A
   message may be cut by a collector at its own limit, and with `--framing
   newline` a line that holds a bare CR may be split by a collector that
   breaks on it. The heartbeat search on the collector's side is what tells
-  it. A line longer than a datagram is refused locally, never cut, so the
-  forwarder sends no message that is half an event. No line ends the
+  it. A line longer than a datagram is refused locally, never cut. The
+  forwarder cuts no message; a send that fails in the middle may leave
+  part of a message at the collector, and the batch is sent again whole. No line ends the
   forwarder: a field of an event that cannot be a header field (a time in
   other digits than ASCII, a host or kind too long or with a space) is `-`,
   and the line is still the message whole.
@@ -1291,7 +1298,8 @@ collector that is slow, down or refusing never delays or loses a capture
   facility the forwarder was given). It learns when the host watches and
   when it stops. Of the
   collector the forwarder reads only the status of its own send (and, in
-  the hec shape, the answer's code): no command, query or configuration
+  the hec shape, the answer's code; over syslog nothing: what a collector
+  sends before its end is read and thrown away): no command, query or configuration
   comes back.
 - **What a delivery is.** "Taken" is the collector's word: a 2xx (and in
   the hec shape the code 0) moves the cursor. A collector that answers 2xx
