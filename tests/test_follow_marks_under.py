@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from raqib import host, notify  # noqa: E402
+from raqib import discover, host, notify  # noqa: E402
 from raqib.hooks import os_sysmon  # noqa: E402
 from raqib.rules import fixturegen, trace  # noqa: E402
 from hostthreads import raqib_threads_end  # noqa: E402,F401  (every HostWatch ended, no thread leaked)
@@ -139,6 +139,29 @@ def test_e1_bc1_a_told_root_marks_its_subtree_and_the_follow_writes_every_line_i
     # with a root told the lines that are not under it are byte for byte main's
     keep = [json.dumps(r, separators=(",", ":")) for r in recs if "under_root" not in r.get("input_meta", {})]
     assert set(keep) <= set((tmp_path / "main.jsonl").read_text().splitlines())
+
+
+def test_bd2_a_told_root_that_is_no_member_of_the_follows_tree_marks_nothing(tmp_path):
+    """ADR-0007 BD-2: the watch tells every other tree's root; what is under this follow's root is the follow's own
+    reading. A root the channel never showed under it, and a root above it, mark nothing: the bytes are main's."""
+    main, _ = follow(tmp_path, None, name="main.jsonl")
+    stranger = (64999, "{11111111-2222-3333-4444-555555555555}")
+    recs, calls = follow(tmp_path, told_at(1, 2, 3, roots=(stranger,)), name="stranger.jsonl")
+    assert calls == [1, 2, 3] and not marked(recs)
+    assert (tmp_path / "main.jsonl").read_bytes() == (tmp_path / "stranger.jsonl").read_bytes()
+    both, _ = follow(tmp_path, told_at(1, 2, 3, roots=(stranger, NESTED)), name="both.jsonl")
+    assert records_marked(both) == sorted(UNDER_A) and set(marked(both).values()) == {A}
+
+
+def test_bd3_the_fixtures_process_sample_holds_what_the_real_sample_holds():
+    """ADR-0007 BD-3: discover's sample of a round is {pid, image, started} for each process. The first build asked
+    the sample for a parent, which only the fixture gave, and told nothing on a real host."""
+    real = discover._last_sample([{"kind": "proc", "src": "win-process-1", "line": 2, "pid": 7, "image": "x",
+                                   "started": None}], {})
+    assert real and set(real[0]) == {"pid", "image", "started"}
+    for k in (1, 3):
+        for p in fixturegen.held_inventory(k, sub=True, side=True)["processes"]:
+            assert set(p) - {"cites"} == set(real[0]), p   # cites: the fixture's own
 
 
 def test_e1_bc1_with_no_root_told_the_bytes_are_mains(tmp_path, monkeypatch):
@@ -403,7 +426,7 @@ def test_e2_bc2_through_rounds_a_root_is_told_with_its_processguid_and_never_wit
     watch, follow = field_run(tmp_path / "g", [with_guid(i) for i in json.loads(json.dumps(invs))])
     assert watch.sources[key_of(watch, ANC)].kind == "os" and watch.sources[key_of(watch, AG)].kind == "os"
     assert told_of(follow) == told_of(follow, what="asked") == {k: TOLD for k in range(2, 5)}   # at every pass
-    assert told_of(follow, AG) == {k: [] for k in range(2, 5)}   # the ancestor is not under the agent
+    assert told_of(follow, AG) == {k: [] for k in range(2, 5)}   # the watch holds no ProcessGuid of the ancestor
     watch, follow = field_run(tmp_path / "n", invs)   # the watch does not hold the agent's ProcessGuid
     assert not watch.trees[key_of(watch, AG)].get("guid")
     assert told_of(follow, what="asked") == {k: [] for k in range(2, 5)}   # not told (F1): the watch tells nothing
@@ -416,7 +439,7 @@ def test_e3_bc2_a_follow_that_ended_is_not_told_at_the_asking_that_follows_its_r
             watch.sources[key_of(watch, AG)].stop.set()   # stopped (its thread may still be in a pass)
         else:
             follow.end(watch, AG, how)
-        before[0] = watch.os_nested.get(key_of(watch, ANC))
+        before[0] = [r for r in watch.os_nested if r[0] == key_of(watch, AG)]
     before = [None]
     invs = [with_guid(fixturegen.held_inventory(k, talks_from=99)) for k in range(1, 6)]
     watch, follow = field_run(tmp_path, invs, at_round={4: end})
@@ -439,7 +462,7 @@ def test_e3_bc2_a_round_that_failed_does_not_keep_a_dead_follow_told(tmp_path):
         with_guid(fixturegen.held_inventory(k, talks_from=99)) for k in range(5, 7)]
     watch, follow = field_run(tmp_path, invs, at_round={4: end})
     assert sum(1 for h in watch.holes if h.get("kind") == "reader-failed") == 2
-    assert snap[0][key_of(watch, ANC)][0][1:] == TOLD[0]   # the stale snapshot still names the agent
+    assert [r[1:] for r in snap[0] if r[0] == key_of(watch, AG)] == [TOLD[0]]   # the stale snapshot still names it
     asked = told_of(follow, what="asked")
     assert asked[2] == asked[3] == TOLD   # alive through the failed round 3: still told
     assert asked[4] == asked[5] == []   # dead after the failed rounds, no round applied: not told at the asking

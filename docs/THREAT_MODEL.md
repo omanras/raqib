@@ -682,8 +682,10 @@ is amended by T-2, T-1 restated by V-1).
   marks (`input_meta.under_root`, the root's pid) each event at or under
   the root of another tree the watch holds with an os follow of its own,
   the root told and matched by its ProcessGuid, while that follow lives
-  (read when the ancestor's follow asks) and the round's process sample
-  shows that root under the ancestor's. The root's own creation is not
+  (read when the ancestor's follow asks); which events are under that
+  root is the ancestor's follow's own reading of the channel, each
+  member's parent by ProcessGuid (the round's process sample names no
+  parent). The root's own creation is not
   marked and stays the ancestor's act; a marked line gives the ancestor
   no act, no talk and no destination, and is judged by the other rules
   as before (one act, judged once). What the mark costs: a marked line
@@ -695,8 +697,13 @@ is amended by T-2, T-1 restated by V-1).
   told is marked from then on (the follow's own parents tell); a root with
   no ProcessGuid is not told, and the ancestor then counts its child's
   commands as before (on Windows with Sysmon, the same false cycles
-  there); every os follow under the host watch keeps one more map, each
-  member's parent by ProcessGuid, for the life of the follow. The
+  there), as it does those of a process whose creation its follow did
+  not read or whose parent the event names by pid alone (the chain of
+  parents breaks there, and nothing under it is marked); every os follow
+  under the host watch keeps one more map, each member's parent by
+  ProcessGuid, for the life of the follow. The mark is the os follow's
+  own: the key on a line of any other source silences nothing (a hooks
+  trace is the watched side's to write). The
   agent's acts with no talk seen make no cycle, so
   where no source sees a connection that opens and closes between two
   samples (Linux) the agent is still not found by rhythm - where a

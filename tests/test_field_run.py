@@ -317,6 +317,25 @@ def test_e2_act_beats_reads_os_process_lines_and_hooks_bash_calls_with_their_own
     assert [(a["image"], a["basis"]) for a in acts] == [("Bash", "hooks")]
 
 
+def test_bd1_the_mark_silences_an_os_line_only_a_hooks_line_that_carries_it_still_beats(tmp_path):
+    """ADR-0007 BC-3, BD-1 (the Table): under_root is the os follow's mark. A hooks trace is written on the watched
+    side: a Bash line there that carries the key is an act as any other."""
+    os_recs = [{"ts": "2026-11-03T10:00:05.000Z", "seq": 2, "session_id": "os-1", "phase": "pre", "tool": "process",
+                "source": "os", "input_meta": {"command_head": "pwsh", "depth": 2, "under_root": 4242}},
+               {"ts": "2026-11-03T10:00:06.000Z", "seq": 3, "session_id": "os-1", "phase": "pre", "tool": "net",
+                "source": "os", "input_sha256": "ab" * 32, "input_meta": {"dest_port": 443, "under_root": 4242}},
+               {"ts": "2026-11-03T10:00:07.000Z", "seq": 4, "session_id": "os-1", "phase": "pre", "tool": "process",
+                "source": "os", "input_meta": {"command_head": "cmd", "depth": 1}}]
+    w, key = _watch_with_feed(tmp_path, "os", os_recs)
+    assert [(k, b.get("image")) for k, b in w._source_beats(key)] == [("act", "cmd")]
+    hooks = [{"ts": "2026-11-03T10:00:07.000Z", "seq": 1, "session_id": "s", "phase": "pre", "tool": "Bash",
+              "input_meta": {"under_root": 4242}},
+             {"ts": "2026-11-03T10:00:08.000Z", "seq": 2, "session_id": "s", "phase": "pre", "tool": "Bash",
+              "source": "hooks", "input_meta": {"under_root": 4242}}]
+    w2, key2 = _watch_with_feed(tmp_path / "h", "hooks", hooks)
+    assert [(k, b["image"], b["basis"]) for k, b in w2._source_beats(key2)] == [("act", "Bash", "hooks")] * 2
+
+
 def test_e2_history_lines_of_a_source_are_not_beats(tmp_path):
     recs = [{"ts": "2026-11-03T10:00:05.000Z", "seq": 2, "session_id": "os-1", "phase": "pre", "tool": "process",
              "source": "os", "input_meta": {"command_head": "pwsh", "depth": 1}}]
