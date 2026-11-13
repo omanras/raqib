@@ -43,6 +43,17 @@ CHANGED = {
     " and files one issue.":
     "The last exit criterion of the plan (M3.3) is still open: one person outside the project runs the quickstart"
     " in the README ([Install and watch](README.md#install-and-watch)) and files one issue.",
+    # M7.18 (ADR-0007 AT-1): HOST-RHYTHM's level is high; the sentence and the table row say so, nothing else.
+    "HOST-RHYTHM (medium) when it talks to one destination and then starts a child within 30 s, 3 times in the last"
+    " 10 rounds (the thresholds are in its YAML; on Linux the bytes per connection are recorded from `ss -tinp`, on"
+    " Windows they are not read, a hole said once).":
+    "HOST-RHYTHM (high) when it talks to one destination and then starts a child within 30 s, 3 times in the last"
+    " 10 rounds (the thresholds are in its YAML; on Linux the bytes per connection are recorded from `ss -tinp`, on"
+    " Windows they are not read, a hole said once).",
+    "| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child"
+    " within 30 s, 3 times in the last 10 rounds (the think-act cycle; medium; once per streak) |":
+    "| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child"
+    " within 30 s, 3 times in the last 10 rounds (the think-act cycle; high; once per streak) |",
 }
 # The README's own two sentences that "Where it runs" keeps from the old Install and watch (ADR-0010 E-5: the
 # Windows install line is in "Where it runs"); the old split rule cuts the first at its colon.

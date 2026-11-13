@@ -102,7 +102,7 @@ def test_e2_k_cycles_to_one_destination_fire_once_citing_each_beat(home):
     w, clock = make_host(home, scenario("cycle", 4), runner=runner)
     rounds(w, clock, 4)
     (f,) = rhythm_findings(w)
-    assert f["round"] == 4 and f["severity"] == "medium" and f["kind"] == "anchor" and f["destination"] == "192.0.2.10:443"
+    assert f["round"] == 4 and f["severity"] == "high" and f["kind"] == "anchor" and f["destination"] == "192.0.2.10:443"
     assert f["cycle_rounds"] == [2, 3, 4] and len(f["beats"]) == 3
     for b in f["beats"]:   # A5: the rounds and the records of each beat
         assert b["run"] == w.run and b["talk_round"] <= b["round"] and b["talk_cites"] and b["acts"]
@@ -201,7 +201,7 @@ def test_e2_a_yaml_with_other_thresholds_drives_the_watch(home):
 
 
 def test_e2_the_rule_is_a_catalog_anchor_with_fixtures_from_make_py_and_a_measured_budget():
-    assert RULE.kind == "anchor" and RULE.cls == "HOST" and RULE.severity == "medium" and RULE.fp_budget == 0.0
+    assert RULE.kind == "anchor" and RULE.cls == "HOST" and RULE.severity == "high" and RULE.fp_budget == 0.0
     assert RULE.evasion == () and len(RULE.holes) >= 4
     for word in ("relay or proxy", "acts between rounds", "changes each turn", "reparented"):
         assert any(word in h for h in RULE.holes), word
@@ -557,7 +557,7 @@ def test_e4_report_page_and_window_show_rhythm_and_suspicion(home):
     assert "HOST-RHYTHM round(s) 4" in page and "suspicion 0.70" in page and "<h3>Suspicion (1)</h3>" in page
     assert "rhythm: 1" in page and "suspicion: 1" in page
     view = app.host_watch_view(json.loads(json.dumps(state)))
-    assert any(f.startswith("HOST-RHYTHM [medium] round 4") for f in view["findings"])
+    assert any(f.startswith("HOST-RHYTHM [high] round 4") for f in view["findings"])   # M7.18 (AT-1): high
     assert any(f.startswith("SUSPECT [suspicion 0.70] round 10") for f in view["findings"])
     assert any("HOST-RHYTHM round(s) 4" in " ".join(r) for r in view["rows"])
     text, code = w.finish()
@@ -578,7 +578,8 @@ def test_e4_exit_codes_as_c10(home):
 
 def test_e5_ci_counts_rhythm_zero_on_the_runners():
     gate = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
-    assert "M7.4" in gate and 'rhythm = len(re.findall(r"^  \\[medium\\] HOST-RHYTHM ", text, re.M))' in gate
+    # M7.18 (ADR-0007 AT-5): the count matches the rule at any level (test_m718_e4_* runs the pattern)
+    assert "M7.4" in gate and 'rhythm = len(re.findall(r"^  \\[[a-z]+\\] HOST-RHYTHM ", text, re.M))' in gate
     assert "assert rhythm == 0" in gate
 
 
@@ -1092,3 +1093,119 @@ def test_redo_k1_a_failing_backend_is_not_retried_every_tick(home):
             w.suspect_call.thread.join(5)
         w.tick(wait=0)
     assert len(calls) == 1 and w.suspect_call is None
+
+
+# --- M7.18 (ADR-0007 Amendment AT): HOST-RHYTHM is high (AT-1); nothing else of the rule changes -----------------
+
+# The rule's match, bounds and budget as main had them before AT-1 (git show main:raqib/rules/catalog/HOST-RHYTHM.yaml,
+# read by raqib/rules/yamlite.py), pinned here: only the level and the IDE hole's words may differ.
+MAIN_MATCH = {"all": [
+    {"field": "tool", "exists": True}, {"field": "tool", "eq": "HostTree"}, {"field": "source", "eq": "os"},
+    {"field": "input_meta.class", "in": ["candidate", "quiet", "kept", "gone"]},
+    {"field": "input_meta.named", "eq": False}, {"field": "input_meta.rhythm.fires", "eq": True},
+    {"field": "input_meta.rhythm.k", "eq": 3}, {"field": "input_meta.rhythm.w", "eq": 30},
+    {"field": "input_meta.rhythm.r", "eq": 10}]}
+MAIN_BOUNDS = {"k": {"min": 1, "max": 100}, "w": {"min": 1, "max": 3600}, "r": {"min": 1, "max": 200},
+               "relations": ["k <= r"]}
+ARRIVAL_KNOCKS = ["Raqib: NEW-AGENT-UNKNOWN relay-bot\nhost, relay-bot pid 4400 (unknown)\n",
+                  "Raqib: HOST-RHYTHM\nhost, relay-bot pid 4400, 3 cycles to one destination in 10 rounds (round 5)\n"]
+
+
+def arrival(n, **kw):
+    """Round 1 with no tree; the tree arrives in round 2 (an arrival: NEW-AGENT's or NEW-AGENT-UNKNOWN's) and makes
+    a cycle to one destination in each round after (rhythm_inventory "cycle", SYNTHETIC)."""
+    first = rin("cycle", 1, **kw)
+    first["candidates"] = []
+    first.pop("conn_bytes", None)
+    return [first] + [rin("cycle", k, **kw) for k in range(2, n + 1)]
+
+
+def test_m718_e1_the_level_is_high_and_the_match_thresholds_budget_and_streak_are_mains():
+    from raqib.rules import yamlite
+    doc = yamlite.loads((ROOT / "raqib" / "rules" / "catalog" / "HOST-RHYTHM.yaml").read_text(encoding="ascii"))
+    assert doc["severity"] == RULE.severity == "high" and doc == RULE.doc
+    assert doc["match"] == MAIN_MATCH and doc["bounds"] == MAIN_BOUNDS
+    assert (doc["kind"], doc["class"], doc["fp_budget"]) == ("anchor", "HOST", 0.0)
+    assert host.rhythm_params(RULE) == (3, 30, 10) == (host.RHYTHM_K, host.RHYTHM_W, host.RHYTHM_R)
+    assert len(doc["fixtures"]["positive"]) == 8 and len(doc["fixtures"]["negative"]) == 10
+    (ide,) = [h for h in RULE.holes if h.startswith("a benign program that polls one server and spawns helpers")]
+    assert "a high finding, not a verdict" in ide and "still owed" in ide and "medium" not in ide
+    assert len(RULE.holes) == 16
+    text = (ROOT / "raqib" / "rules" / "catalog" / "HOST-RHYTHM.yaml").read_text(encoding="ascii")
+    assert "4 of 4 agent trees fired, none of the runners' own; three short turns: none" in text   # AT-1's measure
+
+
+def test_m718_e2_check_rules_gives_the_same_counts():
+    out = io.StringIO()
+    assert cli.main(["check-rules"], out=out) == 0
+    (line,) = [l for l in out.getvalue().splitlines() if l.startswith("HOST-RHYTHM ")]
+    assert re.match(r"^HOST-RHYTHM +ok +0\.000 +0 +8 positive; negatives incl\. benign: 10 measured, ", line), line
+
+
+def test_m718_e3_through_rounds_the_finding_is_high_and_knocks_by_its_path_the_arrival_is_still_medium(home):
+    runner = FakeRunner()
+    w, clock = make_host(home, arrival(6), runner=runner)
+    rounds(w, clock, 6)
+    got = [(f["rule_id"], f["round"], f["severity"], f["notice"]) for f in w.findings]
+    assert got == [("NEW-AGENT-UNKNOWN", 2, "medium", "sent"), ("HOST-RHYTHM", 5, "high", "sent")]   # AT-2: medium
+    assert [c["text"] for c in runner.calls] == ARRIVAL_KNOCKS   # the rule's own knock, as at medium (by its id)
+    (f,) = rhythm_findings(w)
+    assert app.host_finding_line(f).startswith("HOST-RHYTHM [high] round 5: ")
+    view = app.host_watch_view(json.loads(json.dumps(w.state(clock()))))
+    assert [x.split(":", 1)[0] for x in view["findings"]] == ["NEW-AGENT-UNKNOWN [medium] round 2",
+                                                             "HOST-RHYTHM [high] round 5"]
+    text, code = w.finish()
+    said = [l for l in text.splitlines() if re.match(r"^  \[[a-z]+\] (HOST-RHYTHM|NEW-AGENT-UNKNOWN) ", l)]
+    assert [l.split(" (", 1)[0] for l in said] == ["  [medium] NEW-AGENT-UNKNOWN round 2", "  [high] HOST-RHYTHM round 5"]
+    assert code == 1
+
+
+def test_m718_e3_a_tree_there_at_the_start_is_high_too_and_a_named_tree_is_still_not_judged_by_rhythm(home):
+    runner = FakeRunner()
+    w, clock = make_host(home, scenario("cycle", 4), runner=runner)
+    rounds(w, clock, 4)
+    (f,) = rhythm_findings(w)
+    assert (f["severity"], f["notice"], f["round"]) == ("high", "sent", 4) and [x["rule_id"] for x in w.findings] == [
+        "HOST-RHYTHM"]
+    assert [c["text"] for c in runner.calls] == [
+        "Raqib: HOST-RHYTHM\nhost, relay-bot pid 4400, 3 cycles to one destination in 10 rounds (round 4)\n"]
+    text, _ = w.finish()
+    assert [l for l in text.splitlines() if l.startswith("  [high] HOST-RHYTHM round 4 ")]
+    # a named tree that arrives with the same rhythm: NEW-AGENT's (high), never HOST-RHYTHM's
+    (home / "named").mkdir()
+    w2, clock2 = make_host(home / "named", arrival(6, image="claude"))
+    rounds(w2, clock2, 6)
+    assert tree_lines(w2)[-1]["input_meta"]["named"] is True and tree_lines(w2)[-1]["input_meta"]["rhythm"]["cycles"] >= 3
+    assert [(x["rule_id"], x["severity"]) for x in w2.findings] == [("NEW-AGENT", "high")]
+    assert "HOST-RHYTHM" not in w2.finish()[0].split("FINDINGS:", 1)[1].split("SUSPICION", 1)[0]
+
+
+def gate_rhythm_pattern():
+    """The pattern of the CI count of HOST-RHYTHM lines on the runner's own watch (.github/workflows/gate.yml)."""
+    gate = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
+    (pattern,) = re.findall(r'^ *rhythm = len\(re\.findall\(r"(.*)", text, re\.M\)\)$', gate, re.M)
+    return pattern
+
+
+def test_m718_e4_the_ci_count_matches_the_rule_at_any_level_and_no_other_rule(home):
+    pattern = gate_rhythm_pattern()
+    assert pattern == r"^  \[[a-z]+\] HOST-RHYTHM "   # ADR-0007 AT-5
+    report = "\n".join([
+        "FINDINGS: 5",
+        "  [high] HOST-RHYTHM round 4 (window a .. b; Windows sample(s) 4): unknown tree x pid 1: 3 cycles; sent",
+        "  [medium] HOST-RHYTHM round 9 (window a .. b; Windows sample(s) 9): unknown tree y pid 2: 3 cycles; sent",
+        "  [high] HOST-UNWATCHED round 2 (window a .. b): HOST-RHYTHM is not this rule",
+        "  [medium] NEW-AGENT-UNKNOWN round 2 (window a .. b): unknown tree x pid 1",
+        "  [high] NEW-AGENT round 3 (window a .. b): HOST-RHYTHM x",
+        "HOST-RHYTHM in round(s) 4, 9",
+        "    [high] HOST-RHYTHM round 4 (not a finding line: indented under another)"])
+    assert len(re.findall(pattern, report, re.M)) == 2
+    assert [m.group(0) for m in re.finditer(pattern, report, re.M)] == ["  [high] HOST-RHYTHM ", "  [medium] HOST-RHYTHM "]
+    # and on the watch's own report, through rounds: its one HOST-RHYTHM line (high) is counted; with no cycle, none
+    w, clock = make_host(home, scenario("cycle", 4))
+    rounds(w, clock, 4)
+    assert len(re.findall(pattern, w.finish()[0], re.M)) == 1
+    (home / "two").mkdir()
+    w2, clock2 = make_host(home / "two", scenario("cycle", 2))
+    rounds(w2, clock2, 2)
+    assert len(re.findall(pattern, w2.finish()[0], re.M)) == 0

@@ -2,7 +2,11 @@
 
 Raqib is an external watcher for AI agents. It records what an agent does,
 judges it with deterministic rules first, and lets a model raise suspicion —
-never acquit. It is a public project. Nothing from the private Haris tree is
+never acquit. AI agents are what Raqib is for, and what every rule is written
+against. Because it judges what a process does and not what it is called, an
+agent nobody has named, or one built in private, is judged as any other; and a
+process that behaves as an agent does is judged by the same rules (ADR-0011
+Amendment A). It is a public project. Nothing from the private Haris tree is
 ever copied here; only the doctrine.
 
 ## Non-negotiable rules

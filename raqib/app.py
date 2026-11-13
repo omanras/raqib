@@ -1051,9 +1051,7 @@ def host_finding_items(state, view=None):
     for f in sorted((x for x in h.get("findings") or [] if isinstance(x, dict)),
                     key=lambda x: SEVERITY_RANK.index(x.get("severity")) if x.get("severity") in SEVERITY_RANK
                     else len(SEVERITY_RANK)):
-        beats = ["talk round %s seq %s, act round %s seq %s" % (b.get("talk_round"), b.get("talk_seq"), b.get("round"),
-                                                                b.get("seq")) for b in f.get("beats") or ()
-                 if isinstance(b, dict)]
+        beats = [beat_text(b) for b in f.get("beats") or () if isinstance(b, dict)]
         out.append((_safe(f.get("severity")), "alarm", _safe(f.get("rule_id")), sentence(_safe(f.get("summary"))),
                     _where("round %s" % f.get("round") if f.get("round") is not None else None,
                            tree_name(f.get("tree")) if f.get("tree") else f.get("path"),
@@ -1930,13 +1928,21 @@ def probe_view(inv, catalog, at, seconds=None, late=False, deadline=None):
             "dark": len(dark), "records": records, "unread": unread}
 
 
+def beat_text(b):
+    """K-7 (A5): a rhythm beat's talk and act, each with its round and seq.
+    ADR-0007 AR-1, AS-3: a beat of a round in which the tree had no line
+    has no seq: the round alone is said (never "seq None")."""
+    def at(round_, seq):
+        return "round %s" % round_ if seq is None else "round %s seq %s" % (round_, seq)
+    return "talk %s, act %s" % (at(b.get("talk_round"), b.get("talk_seq")), at(b.get("round"), b.get("seq")))
+
+
 def host_finding_line(f):
     """F-4 (A5): a host finding cites (run, seq) as finding_line cites seqs."""
     where = f.get("tree") or f.get("path")
     seqs = f.get("cited_seq") or []
-    beats = "".join("; talk round %s seq %s, act round %s seq %s" % (
-        b.get("talk_round"), b.get("talk_seq"), b.get("round"), b.get("seq"))
-        for b in f.get("beats") or () if isinstance(b, dict))   # K-7: rhythm beats carry round and seq
+    beats = "".join("; " + beat_text(b)
+                    for b in f.get("beats") or () if isinstance(b, dict))   # K-7: rhythm beats carry round and seq
     return _safe("%s [%s] round %s: %s: %s [%s] cites run %s %s%s" % (
         f.get("rule_id"), f.get("severity"), f.get("round"), where, f.get("summary"), f.get("notice"),
         f.get("run"), watch.seq_text(list(seqs)), beats))

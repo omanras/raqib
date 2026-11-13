@@ -2,6 +2,13 @@
 
 Raqib watches agents. It does not become one.
 
+Its subject is the AI agent: the one a vendor ships and names, the one nobody
+has named, the one somebody built for himself. It judges what a process does,
+never what it is called; so whatever on a host behaves as an agent does is
+judged as one, and what Raqib learns of any other suspicious movement by the
+same records it reports (ADR-0011 Amendment A). The agent stays what Raqib is
+for.
+
 ## Articles
 - **A1 Deterministic first.** Every judgement that can be made by a rule is made
   by a rule. The model layer never overrides a rule; it only adds suspicion.

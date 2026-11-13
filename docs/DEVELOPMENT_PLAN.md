@@ -87,7 +87,9 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.14 a follow that returns (landed 2026-11-12; ADR-0007 Amendments AI, AJ, AK, AL; the watches of 2026-11-12): a tree's os follow asks the channel a bounded question; a tree whose follow reads nothing is judged by the host's own record too
 - M7.15 recorded: a process of another account whose start time the reader does not read though the system lists it
 - M7.16 an event's time is when it was logged (landed 2026-11-13; ADR-0007 Amendments AM, AN, AO; docs/review/2026-11-13-the-elevated-watch.md): Sysmon's network events stamped weeks behind are no longer history; the lag is a note; a rule's not-judged note is one note
-- M7.17 the rhythm and a tree that is quiet at the sample (ADR-0007 AO-2; the rig reproduces it): begun by a test that confirms or refutes that a quiet tree's source beats wait for the final poll; with what AO-3 records
+- M7.17 the rhythm of a tree that is not in the round (landed; ADR-0007 AP to AS): a beat is judged in the round that reads it, for a quiet, a kept and a gone tree, by the one code that writes a candidate's line; the ring has every round; the rig's X12
+- M7.18 an unknown tree with an agent's rhythm is high (ADR-0007 Amendment AT; the commander's word, 2026-11-13): measured on two real agents the catalog does not name, on Windows with Sysmon and on Linux; the catalog is a label, never a condition
+- M7.19 recorded: the seams of a source's life (ADR-0007 AS-5, AS-6): a follow's last pass at its stop; the beats carried over an attach; a quiet tree gone by an empty sample; a hooks source read per session; the sources of gone trees bounded on a long watch
 - M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (landed 2026-11-11; ADR-0009 Amendments E-H, decisions 4-5 accepted): `raqib rules --new / --remove`, the form with its Test and "on your records", class USER, Remove by the row's own place, checks first
 - M8.3 the window's notes after M8.2 (ADR-0009 H): a log of what the catch-alls caught, the orphan overlay entry's words, a real watch under the form's "running" test, a way for the person to name a program benign
@@ -100,13 +102,13 @@ point. Phase 6 runs before the rest of Phase 5.
 - M9.3 a LICENSE and the `license` field (landed 2026-11-11; ADR-0010 Amendment A): CC0 1.0 Universal, the commander's word
 - M9.4 the terminal's knock and its page (ADR-0010 C-6, D-3): a bell rung on a terminal that is gone is a failed knock (notify.py); the page shows the lost-words note; the record written once more after the report; signals after the first said; `raqib watch P >&-`
 
-## Phase 10 — Below the agent, beside other watchers (ADR-0011, proposed; the commander's words, 2026-11-12)
-Nothing is built until he judges the ADR. Its order: the event (`raqib-event/1`, technique ids, a heartbeat); the
+## Phase 10 — Below the agent, beside other watchers (ADR-0011, accepted 2026-11-13 with Amendment A)
+Amendment A (his ruling): Raqib is passive toward other systems and may itself send its events, one way; it sends everything it judged; a finding stands with or without an agent's tree. Its order: the event (`raqib-event/1`, technique ids, a heartbeat); the
 sinks (Event Log, syslog); the service; accounts, logons, tasks, services and a tree's reach; the proxy joined to
 the host watch and PROXY-BYPASS; file reads, measured first.
 
 ## Phase 11 — The rig (ADR-0012; the commander's order, 2026-11-13)
 - M11.1 the rig (landed with ADR-0012): a workflow of its own; a real Windows with Sysmon and Linux; a stand-in agent whose acts are known; tools/rig/check.py states each expectation MET, MISSED or OPEN; reports, does not fail
-- M11.2 recorded: real agents under a scripted model server on the runner (no key, no cost), more than one
+- M11.2 real agents in the rig (ADR-0007 AT-4): Qwen Code and opencode under a scripted model on the runner (no key, no outside model), their expectations stated; proven on the probe branch first
 - M11.3 recorded: a watch that is not elevated on the rig; the window's opening time (with M8.5)
 
