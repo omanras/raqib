@@ -791,3 +791,37 @@ M10.3 lands: `raqib forward` sends the watch's events to one HTTP collector, at 
 its own silence, keeps the token off every output, and never lets the collector or a writer of its files turn
 its verification off or make it skip a line. Syslog (J-6) is the next task (M10.3b).
 
+## Amendment P (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3b.md (1935c41): syslog, REDO
+The packet: the HTTP path did not move; the syslog header is RFC 5424; REDO for an event that kills the
+forwarder, failure paths with no test, and a `written` that loses lines. CI agreed with the last before the
+packet came: on both Windows jobs the forwarder said `written` over tls and its listener held nothing.
+- P-1 (no event ends the forwarder). The time's shape is held to ASCII digits; whatever of an event cannot be
+  a header field is `-`; building a message never raises, whatever the line holds (the packet's finding 3: a
+  year in other digits passed the contract and ended every start). FOR: one line by a writer of the file
+  must not stop the forwarding. MUST NOT TOUCH: the MSG, which is the line as written.
+- P-2 (`written` is a connection ended in order). After the batch is written, over tcp the forwarder ends its
+  side (a half-close) and reads to the collector's own end; over tls it reads what the collector sent,
+  sends its close and reads to the collector's - each within the answer's bound. Only then is the batch
+  taken. A reset, an alert, an error or no end within the bound is a failed send: nothing passes, the batch
+  is sent again. FOR: the forwarder's own close that threw away what it had just written (findings 4 and
+  6, the Windows jobs), a collector that accepts and closes, a TLS 1.3 collector that refuses the client
+  after the handshake (finding 5). MUST NOT TOUCH: udp (`sent`: nothing is known, and said so).
+- P-3 (the destination is whole). syslog+tcp needs its port in the URL (514 over tcp is another service's:
+  no default); udp 514 and tls 6514 stay. The state keeps the facility and the framing; a start with another
+  is a usage error, as another shape is.
+- P-4 (the failures are tested). Over tcp, each with a test that fails if the send were counted taken: an
+  error in the middle of a batch (nothing passes; all of it arrives when sent again); a collector that never
+  reads (`late` within the bound, the next batch halved); Stop during a blocked write (within 2 s by the
+  mechanism, not a wall bound); a collector that accepts and closes at once; a collector that resets after
+  reading. Over tls: a collector that refuses after the handshake. The kill test compares what each
+  connection carried, not the order two threads recorded them in.
+- P-5 (the documents say what each word cannot promise): over udp to a collector that is down every line is
+  `sent` and the status is OK - only the collector's own search for silence tells; `written` after P-2 is an
+  orderly end, not a stored event; a message may be cut by a collector at its own limit; with `--framing
+  newline` a line that holds a bare CR may be split by a collector that breaks on it. The advice of client
+  certificates goes (the forwarder presents none). The words said of a syslog send fit it (no "answer").
+- P-6 (scope, recorded). `--facility` and `--framing` in raqib/cli.py were allowed by the Table in the
+  builder's launch, in those words; it is now written here. The two help strings are the Table's.
+Accepted as built: one connection a batch; no BOM; udp unconnected; a state from before this task that holds
+the word `write` is unreadable to an older raqib.
+
