@@ -132,3 +132,52 @@ accounts, logons, tasks, services and reach, as findings with or without a tree;
 PROXY-BYPASS; file reads, measured first. Questions Q-1 to Q-4 are answered by his words: the service is accepted;
 the link comes first; Windows first. Q-3 (which collector is shown end to end first) is still his to name.
 
+## Amendment B (the Table, 2026-11-13) - the event, ruled before it is built
+The first step of the order above, cut in two so that each can be read whole: the event as a shape and the one
+module that builds it (this amendment, M10.1); the watch writing it to its file on a beat (M10.2). The commander
+named no first collector; the Table takes the two shapes that reach most of them - an HTTP collector that takes a
+JSON event (Splunk's HEC is one) and syslog - and proves the link first against stand-ins on the rig, then
+against a real Splunk. An event is built once, in Raqib's own shape; a collector's shape is a mapping of it.
+- B-1 (one module, pure). `raqib/event.py` is the only code that builds an event. Its functions take a ledger
+  entry of the watch (a finding, a source finding, a hole, a note, a knock row, a tree row, the watch's state)
+  and the watch's facts, and return a dict. No clock, no file, no network, no environment: the caller gives the
+  time and the host's name. `event.check(obj)` returns the problems of an event; every event the module builds
+  has none. FOR: one shape for every consumer. MUST NOT TOUCH: raqib/host.py, raqib/watch.py, the report.
+- B-2 (the shape, `raqib-event/1`). Keys, in this order where a kind has them:
+  schema ("raqib-event/1"); id ("<run>:<n>"); n (the event's number in its run, from 1); time (UTC, ISO 8601,
+  milliseconds, Z: when Raqib said it); kind (finding | source-finding | note | tree | hole | knock | heartbeat |
+  watch); severity (the rule's high | medium | low for a finding and a source finding; "hole" for a hole; "info"
+  for the rest); summary (one sentence, the report's own); rule ({id, class, kind, fp_budget, attack}: finding
+  and source-finding only); subject ({tree, pid, image, named, agent, path}: a key is absent where the entry
+  does not hold it, never null-filled or guessed); evidence ({run, round, record, source, trace, seqs, lines,
+  cites}: A5, where a person or a system can check it; absent keys as for subject); knocked ({status, event}:
+  whether Raqib knocked a person for it and what became of the knock); state (a source finding: settled |
+  history | judged on another tree | noted; a watch event: start | end); result ({word, exit}: a watch end and a
+  heartbeat); counts ({rounds, findings, source_findings, holes, notes, trees}: a heartbeat and a watch end);
+  watch ({run, mode, platform, version, host}: on every event).
+- B-3 (the same in, the same out). An event is one line: JSON, keys sorted, compact, ASCII (non-ASCII
+  escaped). The same ledger gives the same lines byte for byte. A collector that is sent an event twice drops it
+  by id.
+- B-4 (nothing new is said). An event holds only what its ledger entry holds and the report already prints:
+  no command line, no file content, no destination the report does not print, no secret (A9). A text is the
+  report's sentence, not a new one.
+- B-5 (ATT&CK ids are declared, not guessed at run time). A catalog rule declares `attack:` (a list of
+  technique ids, `T` and four digits, a sub-technique's three after a dot); an empty list needs `attack_note:`
+  saying why. `raqib check-rules` refuses a catalog rule without it. The rules written in code declare theirs
+  beside their kind (silence.py, cross.py, tree.py), and the rule table carries the column. A user's own rule
+  with no `attack` loads as before (empty). The table, the Table's and the commander's to correct:
+  NEW-AGENT, NEW-AGENT-UNKNOWN: T1059. HOST-RHYTHM: T1059, T1071. NET-TOOL: T1105, T1048. DESTRUCT-CMD: T1485.
+  SECRET-OUTPUT: T1552. SCOPE-PATH: T1005. The five SILENCE rules and CROSS-SOURCE: T1562.
+  Empty, with the note "a rule about the agent's own work or the watch's own sight, not a technique":
+  AGENT-DARK-LIVE, HOST-UNWATCHED, SCOPE-CWD-ROOT, SCOPE-CWD-MOVED, DRIFT-FILES, EDIT-NO-TEST, LANDED-NO-GATE and
+  the two tree anchors. A technique id says what a finding is consistent with, never that it happened.
+- B-6 (the contract is a document). `docs/specs/EVENT.md` states every key, per kind which are required, one
+  example line per kind (made by the module, checked by a test against it), and the mapping of each key to
+  OCSF (Detection Finding) and to ECS names. A test reads the document: a key the module can emit and the
+  document does not name, or the reverse, fails.
+- B-7 (tested on the watch's own entries). The entries the tests feed the module are made by the watch on
+  fixtures (a fixture run's findings, source findings, holes, notes, knocks, trees, state), not written by hand:
+  a shape the watch does not make proves nothing.
+- Not in M10.1, named: the watch writing events and the heartbeat's beat (M10.2); the forwarders, the local
+  sinks and the stand-in collectors on the rig (M10.3); the window's panel (M10.4).
+
