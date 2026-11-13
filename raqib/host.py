@@ -1607,10 +1607,10 @@ class HostWatch:
         self.file_seq = {}           # a host source file -> its last seq (a re-attach continues it)
         self.source_findings = []    # the findings of the sources, each on its tree
         self.follow_restart = FollowRestart()   # AJ-4 (R-3): the round's restarts, consulted by every os follow
-        # ADR-0007 BC-2: tree key -> ((the other tree's key, its root pid, its ProcessGuid), ...) under its root by
-        # the round's sample (_nested_roots); a new dict each round, never changed after: the follows' threads read
-        # it whole, and each entry is told only while that other tree's os follow lives, read at the asking (_told)
-        self.os_nested = {}
+        # ADR-0007 BC-2, BD-2: ((a tree's key, its root pid, its ProcessGuid), ...) of every tree with an os source
+        # and a ProcessGuid (_nested_roots); a new tuple each round, never changed after: the follows' threads read
+        # it whole, and each entry is told only while that tree's os follow lives, read at the asking (_told)
+        self.os_nested = ()
         self.source_keys = set()
         self.source_grows = {r.id for r in self.src_rules if r.aggregate is not None} | set(GROWS)   # I-6
         self.pending_end = []        # SILENCE-OPEN / -HALF of the sources at the end: listed, not knocked
@@ -3132,8 +3132,11 @@ class HostWatch:
                 if at is None or (rec.get("source") == "os" and at < self.start_eff):
                     continue   # REDO R-2: an os event from before the watch's start is history, never a beat
                 meta = rec.get("input_meta") if isinstance(rec.get("input_meta"), dict) else {}
-                if "under_root" in meta:
-                    continue   # ADR-0007 BC-3: at or under another tree's root: no act, no talk, no destination here
+                if rec.get("source") == "os" and "under_root" in meta:
+                    # ADR-0007 BC-3: at or under another tree's root: no act, no talk, no destination here. BD-1: on
+                    # an os line only - the follow's own mark; a hooks trace is the watched side's to write, and
+                    # the key there silences nothing
+                    continue
                 where = os.path.basename(feed.path)
                 cite = {"src": where, "line": ln, "text": "%s %s seq %s at %s" % (
                     rec.get("source") or "hooks", rec.get("tool"), rec.get("seq"), rec.get("ts"))}
@@ -3716,43 +3719,32 @@ class HostWatch:
         src.thread.start()
         return src
 
-    def _nested_roots(self, inv):
-        """ADR-0007 BC-2: {tree key: ((other key, pid, ProcessGuid), ...)}: for each tree with an os source, the other
-        trees the watch holds with an os source and a ProcessGuid (a root whose ProcessGuid the watch does not hold
-        is not told: F1) whose root is under this tree's root by the round's process sample (the parent chain, each
-        pid's ppid as sampled). A root the sample does not hold, or whose chain the sample breaks before this tree's
-        root, is under none (the follow then marks nothing of it). Whether the other follow lives is not read here
-        but at the asking (_told). Read only by the follows (mark_under)."""
-        parent = {}
-        for p in (inv or {}).get("processes") or []:
-            if isinstance(p, dict) and isinstance(p.get("pid"), int) and not isinstance(p.get("pid"), bool):
-                parent.setdefault(p["pid"], p.get("ppid"))
-        order = sorted((k for k, src in self.sources.items() if src.kind == "os"),
-                       key=lambda k: (str(k[0]), str(k[1]), str(k[2])))
-        out = {}
-        for key in order:
-            roots = []
-            for other in order:
-                guid = (self.trees.get(other) or {}).get("guid")
-                if other == key or other[0] == key[0] or not isinstance(guid, str) or not guid.strip():
-                    continue
-                pid, seen = parent.get(other[0]), set()
-                while pid is not None and pid != key[0] and pid not in seen:
-                    seen.add(pid)
-                    pid = parent.get(pid)
-                if pid is not None and pid == key[0]:
-                    roots.append((other, other[0], guid))
-            if roots:
-                out[key] = tuple(roots)
-        return out
+    def _nested_roots(self, inv=None):
+        """ADR-0007 BC-2 as BD-2 corrected it: ((tree key, pid, ProcessGuid), ...) of every tree the watch holds with
+        an os source and a ProcessGuid (a root whose ProcessGuid the watch does not hold is not told: F1). Which of
+        them is under a follow's root is that follow's own reading of the channel (its members' parents by
+        ProcessGuid: a root that is no member of its tree marks nothing there), not the round's process sample -
+        the sample names no parent (discover's "processes": pid, image, started), so the first build, which asked
+        it, told nothing on a real host. Whether a follow lives is read at the asking (_told). A new tuple each
+        round, never changed after: the follows' threads read it whole."""
+        out = []
+        for key in sorted((k for k, src in self.sources.items() if src.kind == "os"),
+                          key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
+            guid = (self.trees.get(key) or {}).get("guid")
+            if isinstance(guid, str) and guid.strip():
+                out.append((key, key[0], guid))
+        return tuple(out)
 
     def _told(self, key):
-        """ADR-0007 BC-2: what tree key's os follow is told when it asks (in its own thread): the (pid, ProcessGuid)
-        of each root the round's sample put under it (os_nested) whose tree's os follow lives at this asking - its
-        thread alive, no error, not ended, not stopped - so a follow that raised, returned or was stopped after the
-        round is not told at the asking that follows, whether or not a round has been applied since (F3, F7)."""
+        """ADR-0007 BC-2, BD-2: what tree key's os follow is told when it asks (in its own thread): the (pid,
+        ProcessGuid) of every other tree with an os source and a ProcessGuid (os_nested, the round's) whose os follow
+        lives at this asking - its thread alive, no error, not ended, not stopped - so a follow that raised,
+        returned or was stopped after the round is not told at the asking that follows, whether or not a round has
+        been applied since (F3, F7)."""
         out = []
-        for other, pid, guid in self.os_nested.get(key, ()):
+        for other, pid, guid in self.os_nested:
+            if other == key or pid == key[0]:
+                continue
             src = self.sources.get(other)
             thread, stop = getattr(src, "thread", None), getattr(src, "stop", None)
             if (src is not None and src.kind == "os" and thread is not None and thread.is_alive()
