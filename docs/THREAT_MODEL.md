@@ -930,11 +930,14 @@ is amended by T-2, T-1 restated by V-1).
   a clock set back by more than the watch's age, an old orphan of a dead
   holder of the watch's pid were all left out unseen. How it is proven
   now: the watch records every program it starts (the channel's reader,
-  the notifier) by its pid and the time, in the statement that starts it
-  (a test reads the code for a start without the record); the live
-  readers write the recorded pids alive in their sample beside the
-  reader's own pid (a pid the sample holds with a start outside its
-  record's time is another process and is not written). The watch's own
+  the notifier) by its pid, the time and its image (the basename of the
+  launcher's args[0]), in the statement that starts it (a test reads the
+  code for a start without the record); the live readers write the
+  recorded pids alive in their sample beside the reader's own pid (a pid
+  the sample holds with a start outside its record's time, or under an
+  image that is not the one recorded, is another process and is not
+  written - the identity is pid, time and image, not pid alone; ADR-0007
+  BI-2). The watch's own
   tree is then the reader's pid; each launcher the reader names, proven by
   the dated links up from it, itself only; each recorded helper whose start
   was read and is not before the reader's; and what those helpers started,
@@ -950,7 +953,19 @@ is amended by T-2, T-1 restated by V-1).
   again does not know the helpers of the one before (one still running is
   judged as any other); a program started by a helper is taken for the
   watch's by its dates, so a process that names a helper as its parent and
-  starts after it is left out with it; ss (the Linux connection reader of
+  starts after it is left out with it; a pid freed by a dead helper and
+  taken again within the two seconds after the record AND under the very
+  image the watch started is still taken for the watch's own (identity is
+  pid, time and image, not more, until a start the watch can bind to the
+  child it created; ADR-0007 BI-2) - a reuse under any other image, or
+  outside that window, is judged as any other and named; past the record's
+  bound (256 entries) the oldest recorded pid is forgotten even if it is
+  still alive, so a long-lived helper evicted by many newer starts would be
+  judged as any other - the recorded helpers are short-lived, so this is a
+  backstop, not a path seen in practice (ADR-0007 BI-4); the record and the
+  snapshot line are forward-only, so an older build cannot read a newer
+  snapshot line and loses that sample's reader and launchers (cross-build
+  mixing is unsupported; BI-4); ss (the Linux connection reader of
   last resort and the byte counter) is started without the record, because
   the call that starts it gives no pid: it runs and ends inside that call,
   in the thread that takes the sample, and one seen running under the

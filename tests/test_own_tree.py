@@ -192,12 +192,12 @@ def test_e1_the_record_is_thread_safe_bounded_and_forgets_what_a_sample_shows_en
     for pid in (10, 11, 12, 13):
         rec.add(pid, at=1000.0)
     starts = {10: 999.5, 11: None, 12: 1000.0 + own.STARTED_AFTER + 1.0, 3: 50.0}   # 12: another process; 13 ended
-    assert rec.alive(starts, since=None) == [10, 11]
+    assert rec.alive(starts, {}, since=None) == [10, 11]       # no image recorded: pid and time alone
     assert set(rec.kept()) == {10, 11, 12, 13}          # a sample that may not list every process forgets nothing
-    assert rec.alive(starts, since=1001.0) == [10, 11] and set(rec.kept()) == {10, 11}
-    assert rec.alive({10: 1000.0 - own.STARTED_BEFORE - 1.0}, since=None) == []   # started long before its record
+    assert rec.alive(starts, {}, since=1001.0) == [10, 11] and set(rec.kept()) == {10, 11}
+    assert rec.alive({10: 1000.0 - own.STARTED_BEFORE - 1.0}, {}, since=None) == []   # started long before its record
     rec.add(14, at=1002.0)
-    assert rec.alive({}, since=1001.0) == [] and 14 in rec.kept()   # recorded after the sample began: kept
+    assert rec.alive({}, {}, since=1001.0) == [] and 14 in rec.kept()   # recorded after the sample began: kept
     p = FakeProc(15)
     assert rec.started(p) is p and 15 in rec.kept() and rec.started(object()) is not None
 
@@ -465,3 +465,120 @@ def test_e7_the_act_roots_children_walk_does_not_cross_a_broken_link():
 def test_e7_the_act_roots_shell_parent_walk_does_not_cross_a_broken_link():
     inv = build(act_root_rows(agentx="09:31:30.000", ping="09:31:31.000"), self_=None, talk=LISTEN)   # agentx after cmd
     assert inv["act_roots"] == [] and said(inv, rp.BROKEN)[0].endswith(": pid 2410 under parent pid 2400")
+
+
+# --- E1 (BI-1): the Linux forget rule is the Windows one - `since` only on a whole sample ----------------------
+
+def _proc_dir(root, pid, ppid, name, argv=None):
+    """A minimal /proc/<pid> with a status (ppid None: no PPid line, so the
+    reader counts it unreadable and drops it) and a cmdline (argv, for the
+    image a sample reads)."""
+    d = root / str(pid)
+    d.mkdir()
+    status = "Name:\t%s\n" % name + ("PPid:\t%d\n" % ppid if ppid is not None else "")
+    (d / "status").write_text(status)
+    (d / "cmdline").write_bytes((name if argv is None else argv).encode("ascii") + b"\0")
+    (d / "environ").write_bytes(b"")
+
+
+def test_e1_bi1_the_linux_forget_rule_keeps_a_helper_only_unreadable_and_forgets_one_gone(tmp_path):
+    rec = own.Record(clock=lambda: 1000.0)
+    rec.add(1700, at=995.0)          # the notifier, recorded before this sample; no image: pid+time (BI-2 fallback)
+    rec.add(1710, at=990.0)          # a second recorded helper
+    a = tmp_path / "a"
+    a.mkdir()
+    _proc_dir(a, 1540, 1, "python3")
+    _proc_dir(a, 1700, None, "notify-send")   # status with no PPid: unreadable, dropped - the sample is not whole
+    meta_a = json.loads(discover.snapshot_proc(str(a), AT, 1540, record=rec).splitlines()[0])
+    assert meta_a["unreadable"] == 1 and meta_a["helpers"] == []
+    assert {1700, 1710} <= set(rec.kept())    # not whole (unreadable != 0): since=None, no recorded pid is forgotten
+    b = tmp_path / "b"
+    b.mkdir()
+    _proc_dir(b, 1540, 1, "python3")
+    _proc_dir(b, 1700, 1540, "notify-send")   # readable now
+    meta_b = json.loads(discover.snapshot_proc(str(b), AT, 1540, record=rec).splitlines()[0])
+    assert meta_b["unreadable"] == 0 and meta_b["helpers"] == [1700]   # kept through the unreadable sample, proven now
+    assert 1700 in rec.kept() and 1710 not in rec.kept()   # the whole sample forgets 1710 (gone), as the Windows path
+
+
+# --- E2 (BI-2): the record proves by image, not pid alone ------------------------------------------------------
+
+def test_e2_bi2_the_record_is_the_watchs_only_where_the_samples_image_matches():
+    rec = own.Record(clock=lambda: 1000.0)
+    rec.add(7400, at=1000.0, image="C:\\Windows\\System32\\wevtutil.exe")   # recorded with its image
+    rec.add(8000, at=1000.0)                                                # no image: proven by pid and time alone
+    starts = {7400: 999.5, 8000: 999.5}
+    assert rec.alive(starts, {7400: "wevtutil.exe", 8000: "node.exe"}, since=None) == [7400, 8000]   # image, any case
+    assert rec.alive(starts, {7400: "AGENTX.EXE", 8000: "node.exe"}, since=1001.0) == [8000]   # pid taken by another
+    assert 7400 not in rec.kept()                                           # taken by another image: forgotten
+    rec.add(7400, at=1000.0, image="/usr/bin/wevtutil")
+    assert rec.alive({7400: 999.5}, {7400: None}, since=1001.0) == [] and 7400 in rec.kept()   # image not read: kept
+
+
+def test_e2_bi2_windows_a_reused_pid_of_another_image_is_judged_the_real_helper_is_the_watchs():
+    host = th.FakeHost([(0, 0, "System Idle Process", None, 0),
+                        (3000, 2990, "explorer.exe", "C:\\Windows\\explorer.exe", filetime("07:41:00.000")),
+                        (5100, 3000, "powershell.exe", PS, filetime("09:59:00.000")),
+                        (732, 5100, "python.exe", PYTHON, filetime("10:00:00.000")),
+                        (7400, 732, "agentx.exe", AGENTX, filetime("10:00:21.000")),   # the helper pid, another image
+                        (7420, 7400, "cmd.exe", W + "cmd.exe", filetime("10:00:22.000")),   # its child: an act
+                        (7410, 732, "wevtutil.exe", W + "wevtutil.exe", filetime("10:00:20.000"))],  # the real helper
+                       [(5, "192.0.2.10", 50500, "203.0.113.40", 443, 7400),   # the process at the reused pid talks
+                        (5, "192.0.2.10", 50600, "203.0.113.40", 443, 732)], {})
+    rec = own.Record(clock=lambda: epoch("10:00:30.000"))
+    rec.add(7400, at=epoch("10:00:20.300"), image=W + "wevtutil.exe")   # the watch started wevtutil at these pids
+    rec.add(7410, at=epoch("10:00:20.300"), image=W + "wevtutil.exe")
+    entry, _, _, mine = hostwin.process_text(host, 1, 732, AT, rec)
+    assert entry[1].splitlines()[0].endswith(hostwin.SNAPSHOT_HELPERS % "7410")   # only the real helper, by image
+    assert mine == [732] and 7400 not in rec.kept()        # the reused pid is forgotten; the real one stays
+    inv = discover.run({"win-process-1": entry, "win-tcp-1": hostwin.tcp_text(host, 1, AT)[0]}, CATALOG, live=True,
+                       processes=True)
+    assert trees(inv) == [(7400, [7400, 7420])] and 7410 not in acted(inv)   # the agent is judged; the real helper not
+    assert said(inv, STRANGERS)[0].endswith(": pid 7400 under parent pid 732 (the reader's own pid)")
+
+
+def test_e2_bi2_linux_snapshot_proves_a_helper_by_image(tmp_path):
+    rec = own.Record(clock=lambda: 1000.0)
+    rec.add(1700, at=999.0, image="/usr/bin/notify-send")   # the real notifier
+    rec.add(1710, at=999.0, image="/usr/bin/notify-send")   # a pid now held by another image
+    root = tmp_path / "proc"
+    root.mkdir()
+    _proc_dir(root, 1540, 1, "python3")
+    _proc_dir(root, 1700, 1540, "notify-send")
+    _proc_dir(root, 1710, 1540, "python3")                  # reused by python3: not the notifier
+    meta = json.loads(discover.snapshot_proc(str(root), AT, 1540, record=rec).splitlines()[0])
+    assert meta["unreadable"] == 0 and meta["helpers"] == [1700]   # only the image that matches is the watch's
+
+
+# --- E3 (BI-3): the act-roots walks that exclude the watch's tree are held by a test ---------------------------
+
+def bi3_rows():
+    """A reader (732, self_tree) with a recorded helper (wevtutil 7400, conhost 7410), a second act-root (A2=agentx
+    2500) and a talker (node 2550) ABOVE it, and the first act-root (R=agentx 2400) BELOW it. R's only path to the
+    talker and to A2 runs through the reader - a member of the watch's tree (BH-4)."""
+    return [row(3000, 2990, "explorer.exe", "C:\\Windows\\explorer.exe", "07:41:00.000"),
+            row(5100, 3000, "powershell.exe", PS, "09:29:00.000"),
+            row(2500, 5100, "agentx.exe", AGENTX, "09:30:00.000"),            # A2: act-root above the reader
+            row(2510, 2500, "cmd.exe", W + "cmd.exe", "09:30:30.000"),
+            row(2520, 2510, "PING.EXE", W + "PING.EXE", "09:30:40.000"),
+            row(2550, 2500, "node.exe", "C:\\Program Files\\nodejs\\node.exe", "09:45:00.000"),   # a talker above
+            row(732, 2550, "python.exe", PYTHON, "10:00:00.000"),            # the reader (self_tree member)
+            row(7400, 732, "wevtutil.exe", W + "wevtutil.exe", "10:00:20.000"),
+            row(7410, 7400, "conhost.exe", W + "conhost.exe", "10:00:20.100"),
+            row(2600, 732, "cmd.exe", W + "cmd.exe", "10:00:05.000"),         # R's shell launcher, under the reader
+            row(2400, 2600, "agentx.exe", AGENTX, "10:00:10.000"),           # R: act-root below the reader
+            row(2410, 2400, "cmd.exe", W + "cmd.exe", "10:00:11.000"),
+            row(2420, 2410, "PING.EXE", W + "PING.EXE", "10:00:12.000")]
+
+
+def test_e3_bi3_the_act_roots_walks_do_not_cross_the_watchs_tree():
+    inv = build(bi3_rows(), self_="732", helpers="7400", talk=[tcp(2550, 50700)])
+    assert inv["self"] == [732]                                   # self_tree non-empty: {732, 7400, 7410}
+    roots = {r["pid"]: r for r in inv["act_roots"]}
+    assert set(roots) == {2400, 2500}                             # both act-roots stand (R reached only through 732)
+    members = {732, 7400, 7410}
+    r = roots[2400]
+    assert r["inside"] is None                                    # walk at _act_roots ~3005: no act-root ancestor through 732
+    assert r["talking_ancestor"] is None and r["attributed_to"] is None   # walk ~2984: no talking ancestor through 732
+    assert not any(set(a["via"]) & members for a in r["acts"])    # walk ~2975: no member on an act's path
+    assert roots[2500]["id"] == "A2"                              # the second act-root is in the index 3005 walks

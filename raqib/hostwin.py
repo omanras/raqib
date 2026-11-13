@@ -532,8 +532,10 @@ def process_text(api, k, self_pid, at, record=None):
     first = SNAPSHOT_LINE % (at, ",".join(map(str, mine)), k)
     if record is not None:   # BH-2; a sample that may not list every process (an error, the cap) forgets no pid
         whole = error is None and len(procs) < PROCESSES_MAX
+        # BI-2: the sample's image for each pid (the snapshot's szExeFile, taken atomically) proves the record.
         first += SNAPSHOT_HELPERS % ",".join(map(str, record.alive(
-            {pid: _epoch(started[pid]) for pid, _, _ in procs}, since if whole else None)))
+            {pid: _epoch(started[pid]) for pid, _, _ in procs},
+            {pid: exe_name for pid, _, exe_name in procs}, since if whole else None)))
     return (_label(API_PROCESSES, k, at), _csv(PROCESS_COLUMNS, rows, first), error), denied, reused, mine
 
 

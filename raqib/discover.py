@@ -1271,8 +1271,21 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None, record=N
     if note:
         meta["note"] = note
     if record is not None:   # BH-2: a start read by its ticks and btime, the time a pid's record is checked against
-        meta["helpers"] = record.alive({p["pid"]: _epoch(p.get("started")) for p in procs}, since)
+        # BI-1: `since` (the forget rule) only on a whole sample - every process listed (unreadable == 0); a `gone`
+        # (FileNotFound) pid genuinely ended and is still forgotten, an unreadable one may be alive and is not.
+        # BI-2: the sample's image for each pid (its exe link, else argv[0], else the status Name) proves it.
+        meta["helpers"] = record.alive({p["pid"]: _epoch(p.get("started")) for p in procs},
+                                       {p["pid"]: _proc_image(p) for p in procs},
+                                       since if unreadable == 0 else None)
     return "".join(json.dumps(x, sort_keys=True, ensure_ascii=True) + "\n" for x in [meta] + procs)
+
+
+def _proc_image(p):
+    """The image a /proc sample reads for a process, for the record's proof
+    (ADR-0007 BI-2): its exe link where read, else argv[0], else the status
+    Name; own._base takes the basename. None where the sample read none."""
+    argv = p.get("argv") or ()
+    return p.get("exe") or (argv[0] if argv else None) or p.get("name")
 
 
 def _epoch(text):
@@ -2972,7 +2985,8 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
                           "cites": _cites(procs[s]["recs"], 1)})
             for q in [s] + under:
                 qp, via = procs[q], []
-                for anc in ancestors(procs, q, self_tree):   # BH-4
+                # BH-4: redundant here - below() already drops self_tree; kept defensively, no isolating test (ADR-0007 BI-3)
+                for anc in ancestors(procs, q, self_tree):
                     if anc == pid:
                         break
                     via.append(anc)
