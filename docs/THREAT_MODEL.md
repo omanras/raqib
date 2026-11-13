@@ -1077,6 +1077,53 @@ is amended by T-2, T-1 restated by V-1).
   an `ss` that has not returned in 30 s). The only writes are under `~/.raqib`, and the hook settings of a
   project only with `--attach-hooks`.
 
+### The forwarder (`raqib forward`; ADR-0011 Amendment J)
+A forwarder is a process of its own that reads the watch's events file and
+sends every whole line to one HTTP collector (docs/specs/FORWARD.md). The
+watch does not know it runs: nothing of the capture path imports it, and a
+collector that is slow, down or refusing never delays or loses a capture
+(the lines wait in the file). What it adds to this model:
+
+- **The token.** The collector's token is a secret on the host, in a file
+  the person names (`--token-file`), read at every connection. It is never
+  an argument (so it is not in the process list), never read from the
+  environment, never in the forwarder's state, output or errors, and an
+  error never quotes the collector's answer. Off Windows a token file that
+  others can read is refused; on Windows its access is not checked. Anyone
+  who can read that file as the person can send to the collector as Raqib:
+  a forged event at the collector is as good as the file's protection.
+- **The wire.** https is verified against the system's authorities or the
+  `--ca` file; no switch and no variable of the environment turns that
+  off, the environment's proxies are not used and a redirect is a failed
+  send, never followed. Plain http is taken only to a loopback address
+  unless `--plain` is given, and then the state and the status say plain:
+  every event crosses that network in clear text.
+- **What the collector learns.** Everything the events say (A-4: the whole
+  judgement, not only what knocked): the host's name, each run, the trees
+  with their images, pids and paths, each finding with its rule and
+  evidence, the holes and blind spots, and a heartbeat a beat; nothing the
+  trace does not already hold, and nothing of the token but the header it
+  checks. It learns when the host watches and when it stops. Of the
+  collector the forwarder reads only the status of its own send (and, in
+  the hec shape, the answer's code): no command, query or configuration
+  comes back.
+- **What a delivery is.** "Taken" is the collector's word: a 2xx (and in
+  the hec shape the code 0) moves the cursor. A collector that answers 2xx
+  and drops the lines loses them, and the forwarder cannot see it. Delivery
+  is at least once: after a restart, a refused batch or a file that changed
+  under the cursor, the collector gets lines twice (`watch.host` and `id`
+  tell them apart).
+- **What an attacker on the host can do.** Stop or kill the forwarder: its
+  state is then older than two beats (`raqib forward --status` exits 3) and
+  the collector sees no heartbeat of the host for more than two beats,
+  which is the one search the guide gives a SOC. Write to the events file:
+  a line that is not an event is skipped and counted, but a well-formed
+  forged event is sent as any other (the forwarder checks the shape, not
+  the truth); a file replaced or cut short is read again from its start and
+  counted as a restart. Change only lines before the last one passed: the
+  forwarder checks the length and the last line passed, not every byte
+  before it, and does not see that.
+
 ## 6. Attacks on the watcher itself
 
 - **A rule a person adds (ADR-0009 Amendments E-H).** A rule made

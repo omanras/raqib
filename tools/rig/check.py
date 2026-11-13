@@ -3,10 +3,12 @@ what the stand-in says it did, and states each expectation as MET, MISSED or OPE
 its task). Every expectation names the field run that taught it. Stdlib only; it reads text and writes text.
 
     python tools/rig/check.py --report WATCH.out --workload WORKLOAD.out [--sources DIR] [--exit-code N]
-                              [--platform win32|linux] [--sysmon] [--events FILE] [--summary FILE] [--strict]
+                              [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
+                              [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
+--forward: what tools/rig/forward_run.py saw `raqib forward` do with that file (ADR-0011 J-14): X19 to X22.
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
@@ -248,6 +250,84 @@ def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=
     return out
 
 
+def _whole_events(events):
+    """The whole lines of the events file that are events (a reader's view, EVENT.md), in the file's order."""
+    check, out = _checker(), []
+    for raw in (events or "").split("\n")[:-1]:
+        try:
+            e = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(e, dict) and not check(e):
+            out.append(json.dumps(e, sort_keys=True, separators=(",", ":")))
+    return out
+
+
+def _first_arrivals(got):
+    seen, out = set(), []
+    for x in got or ():
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def read_forward(facts, events):
+    """X19-X22 (ADR-0011 J-14): what tools/rig/forward_run.py saw `raqib forward` do with the watch's events file.
+    facts None: the run left nothing (silence is a finding: all four MISSED)."""
+    names = ("X19 every whole line of the events file arrived, in order, each id at least once",
+             "X20 a collector down from the start: the state says failing, and nothing is lost when it comes up",
+             "X21 a forwarder killed between two batches and started again leaves no gap",
+             "X22 the token is in no output, state or error of the forwarder")
+    if not isinstance(facts, dict):
+        return [(n, MISSED, "the forwarder's run left no facts (silence is a finding)") for n in names]
+    want = _whole_events(events)
+
+    def arrived(part):
+        got = _first_arrivals((facts.get(part) or {}).get("events"))
+        if not want:
+            return False, "the events file holds no whole event to forward"
+        lost = [x for x in want if x not in set(got)]
+        return got == want, "%d of %d line(s) arrived%s%s" % (len(want) - len(lost), len(want), ", in the file's order"
+                                                               if got == want else ", not in the file's order"
+                                                               if not lost else "", "; %d lost" % len(lost) if lost
+                                                               else "")
+    out = []
+    x19 = facts.get("x19") or {}
+    ok, words = arrived("x19")
+    out.append((names[0], MET if ok and x19.get("exit") == 0 else MISSED,
+                "%s; %s request(s); --once exit %s" % (words, x19.get("requests"), x19.get("exit"))))
+    x20 = facts.get("x20") or {}
+    ok, words = arrived("x20")
+    failing = x20.get("failing") or {}
+    final = x20.get("final") or {}
+    ok = ok and bool(failing) and bool(final) and final.get("failing") is None and final.get("behind") == 0
+    out.append((names[1], MET if ok else MISSED, "the state said failing: %s (%s); then %s; %s" % (
+        "yes" if failing else "no", failing.get("error"), "taken, behind 0" if final else "never all taken", words)))
+    x21 = facts.get("x21") or {}
+    ok, words = arrived("x21")
+    killed = (x21.get("killed") or {}).get("offset") or 0
+    between = 0 < killed < (x21.get("size") or 0)
+    out.append((names[2], MET if ok and between and x21.get("exit") == 0 else MISSED,
+                "killed at offset %s of %s (%s); started again: exit %s; %s" % (
+                    killed, x21.get("size"), "between two batches" if between else "not between two batches",
+                    x21.get("exit"), words)))
+    x22 = facts.get("x22") or {}
+    try:
+        with open(facts.get("token_file") or "", "rb") as f:
+            token = f.read().strip().decode("ascii")
+    except (OSError, UnicodeDecodeError):
+        token = ""
+    texts, argvs = x22.get("texts") or [], x22.get("argv") or []
+    found = [t.get("where") for t in texts if token and token in (t.get("text") or "")]
+    found += ["an argument list" for a in argvs if token and any(token in str(x) for x in a)]
+    ok = bool(token) and bool(texts) and not found
+    out.append((names[3], MET if ok else MISSED, "%d output(s) and state(s), %d argument list(s) read: %s" % (
+        len(texts), len(argvs), "the token is in none" if ok else "no token to look for" if not token else
+        "the token is in " + ", ".join(found[:3]))))
+    return out
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -265,6 +345,7 @@ def main(argv=None):
     p.add_argument("--platform", default=sys.platform)
     p.add_argument("--sysmon", action="store_true")
     p.add_argument("--events")
+    p.add_argument("--forward")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -282,6 +363,12 @@ def main(argv=None):
     if a.events:   # given and missing: the watch wrote none, which X16 says (not n/a)
         events = text(a.events) if os.path.isfile(a.events) else ""
     rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon, events)
+    if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
+        try:
+            facts = json.loads(text(a.forward))
+        except (OSError, ValueError):
+            facts = None
+        rows += read_forward(facts, events)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

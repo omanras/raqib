@@ -75,7 +75,25 @@ NEW_ROWS = ["| `raqib app [PROJECT]` | open Raqib as a desktop window: the host 
             "| `raqib --version` | print raqib <version> and exit 0 |"]
 # ADR-0011 G-11 (the Table): a row of the guide's table only (the README names the command in "the rest")
 GUIDE_ROWS = ["| `raqib events FILE` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a"
-              " `raqib-event/1` event; exit 0, 1 or 2 |"]
+              " `raqib-event/1` event; exit 0, 1 or 2 |",
+              # ADR-0011 J (M10.3): the forwarder, rows of the guide only (G-11)
+              "| `raqib forward [FILE] --to URL --name NAME [--shape raqib\\|hec] [--token-file FILE] [--ca FILE] "
+              "[--plain] [--once]` | send every whole line of a watch's events file (default "
+              "`~/.raqib/host/events.jsonl`, read only) to one HTTP collector, at least once and in the file's "
+              "order; a line that is not an event is skipped and counted, never sent; its cursor and state are "
+              "`~/.raqib/forward/NAME.json`; https is verified by the system's authorities or `--ca`, and plain "
+              "http goes only to a loopback address unless `--plain`; the token only from `--token-file`, never "
+              "printed (off Windows a file others can read is exit 2; on Windows it is not checked); `--once` exit "
+              "0 all taken, 1 not all, 2 usage; a syslog destination is not built yet (exit 2) |",
+              "| `raqib forward --status [NAME]` | say a forwarder's state (`--beat S`: it writes one at least "
+              "every S seconds, default 60): exit 0 the last send taken and nothing waits longer than a beat, 1 "
+              "failing or behind, 3 no state, a state that cannot be read, or one not written for more than two "
+              "beats (the forwarder is silent) |",
+              "| `raqib forward FILE --to URL --name NAME --shape hec --token-file FILE` | one envelope per line "
+              "in the shape of Splunk's HTTP event collector (`time` in seconds, `host` the event's `watch.host`, "
+              "`source` raqib, `sourcetype` raqib:event, `event` the line unchanged) with `Authorization: Splunk "
+              "<token>`; on the collector, the one search for silence: no heartbeat of a host for more than two "
+              "beats (`kind` heartbeat by `watch.host`; `watch.beat` is the beat) |"]
 # The pieces of the guide that are not the old README's (E-6): its title, E-7's lines, E-3's rows (and CHANGED).
 # ADR-0007 AG-7: the paragraph "Watch the host" gained after "Every tree gets a source that only reads, by
 # itself" (the channel that is there and not read, AF and AG), its sentences as cut() makes them.
