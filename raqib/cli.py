@@ -629,6 +629,37 @@ def _parser():
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
     ev = sub.add_parser("events", help="check an events file: every line a raqib-event/1 event (M10.2, ADR-0011 F-8)")
     ev.add_argument("file", metavar="FILE", help="the events file (watch --host: ~/.raqib/host/events.jsonl)")
+    fw = sub.add_parser("forward", help="send a watch's events file to one HTTP collector, every whole line, at least"
+                                        " once and in order (M10.3, ADR-0011 J)")
+    fw.add_argument("file", nargs="?", default=None, metavar="FILE",
+                    help="the events file, read only (default: ~/.raqib/host/events.jsonl)")
+    fw.add_argument("--to", metavar="URL", help="the collector, https://host[:port]/path (http:// only to a loopback"
+                                                " address unless --plain; syslog is not built yet)")
+    fw.add_argument("--name", metavar="NAME", help="the forwarder's name, [a-z0-9-]{1,32}: its cursor and state are"
+                                                   " ~/.raqib/forward/NAME.json; one destination each")
+    fw.add_argument("--shape", choices=("raqib", "hec"), default="raqib",
+                    help="raqib: the lines as the file holds them (application/x-ndjson, the default); hec: one"
+                         " envelope per line, Authorization: Splunk <token>")
+    fw.add_argument("--token-file", metavar="FILE", help="the collector's token, read at every connection (never an"
+                                                         " argument or the environment); off Windows a file others"
+                                                         " can read is refused")
+    fw.add_argument("--ca", metavar="FILE", help="verify https against the authorities in FILE instead of the"
+                                                 " system's; nothing turns verification off")
+    fw.add_argument("--plain", action="store_true", help="let --to be plain http:// to an address that is not"
+                                                         " loopback (the state and the status say plain)")
+    fw.add_argument("--beat", type=float, default=None, metavar="S",
+                    help="write the state at least every S seconds (default 60); a state older than two beats is"
+                         " a silent forwarder")
+    fw.add_argument("--once", action="store_true", help="send what the file holds and end: exit 0 all taken, 1 not"
+                                                        " all, 2 usage")
+    fw.add_argument("--from", dest="start", choices=("start", "end"), default="start",
+                    help="where a first run starts: the file's start (the default: everything judged) or its end")
+    fw.add_argument("--batch", type=int, default=100, metavar="N", help="at most N lines to a request, 1 to 100"
+                                                                        " (default 100; and at most 512 KiB)")
+    fw.add_argument("--status", nargs="?", const="", default=None, metavar="NAME",
+                    help="say a forwarder's state (every one without NAME): exit 0 only where nothing is failing"
+                         " and no whole line has waited longer than a beat, 1 failing (refusing too) or behind, 3"
+                         " no state, unreadable, or written more than two beats ago or in the future (silent)")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -1425,6 +1456,15 @@ def cmd_events(args, out):
     return 0 if not problems else 1
 
 
+def cmd_forward(args, out):
+    """M10.3 (ADR-0011 J): raqib/forward.py, a process of its own; the watch does not know it runs."""
+    from raqib import forward
+    try:
+        return forward.cli_run(args, out)
+    except forward.UsageError as exc:
+        raise UsageError(str(exc))
+
+
 def cmd_doctor(args, out):
     return doctor.run(args.project, out)
 
@@ -1461,7 +1501,7 @@ def main(argv=None, out=None):
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
                    "discover": cmd_discover, "watch": cmd_watch, "app": cmd_app, "doctor": cmd_doctor,
-                   "events": cmd_events, "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon}[args.command]
+                   "events": cmd_events, "forward": cmd_forward, "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)

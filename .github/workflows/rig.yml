@@ -2,6 +2,9 @@
 # Windows with a real Sysmon (installed here, all events of the kinds Raqib reads), and Linux. tools/rig/check.py
 # states each expectation as MET, MISSED or OPEN; the job reports and does not fail on a MISSED one (the gate is
 # what decides a merge). It needs no secret; it downloads Sysmon from Microsoft and talks to two public hosts.
+# The forwarder (ADR-0011 J-14) sends the watch's events file to a stand-in collector on loopback, with a
+# made-up token that tools/rig/forward_run.py makes for the run. It and the check step run always (ADR-0011
+# L-10): whatever the watch or the forwarder did, the table is written.
 name: rig
 
 on:
@@ -48,9 +51,14 @@ jobs:
           "code=$($w.ExitCode)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "=== the watch's report"; Get-Content $out
           "=== the watch's stderr"; Get-Content $err
-      - name: read the report against what the stand-in did
+      - name: forward the watch's events to a stand-in collector on loopback (X19 to X22)
+        if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\forward_run.py --events $HOME\.raqib\host\events.jsonl --out $env:RUNNER_TEMP\forward.json
+      - name: read the report against what the stand-in did
+        if: always()
+        shell: pwsh
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -59,6 +67,7 @@ jobs:
           Copy-Item $env:RUNNER_TEMP\watch.out, $env:RUNNER_TEMP\watch.err, $env:RUNNER_TEMP\workload.out rig-out -ErrorAction SilentlyContinue
           Copy-Item $HOME\.raqib\host\sources rig-out\sources -Recurse -ErrorAction SilentlyContinue
           Copy-Item $HOME\.raqib\host\events.jsonl rig-out -ErrorAction SilentlyContinue
+          Copy-Item $env:RUNNER_TEMP\forward.json rig-out -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -89,8 +98,12 @@ jobs:
           echo "code=$code" >> "$GITHUB_ENV"
           echo "=== the watch's report"; cat "$RUNNER_TEMP/watch.out"
           echo "=== the watch's stderr"; cat "$RUNNER_TEMP/watch.err"
+      - name: forward the watch's events to a stand-in collector on loopback (X19 to X22)
+        if: always()
+        run: python tools/rig/forward_run.py --events "$HOME/.raqib/host/events.jsonl" --out "$RUNNER_TEMP/forward.json"
       - name: read the report against what the stand-in did
-        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --summary "$GITHUB_STEP_SUMMARY"
+        if: always()
+        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --summary "$GITHUB_STEP_SUMMARY"
       - name: gather what the watch wrote
         if: always()
         run: |
@@ -98,6 +111,7 @@ jobs:
           cp "$RUNNER_TEMP/watch.out" "$RUNNER_TEMP/watch.err" "$RUNNER_TEMP/workload.out" rig-out/ 2>/dev/null || true
           cp -r "$HOME/.raqib/host/sources" rig-out/sources 2>/dev/null || true
           cp "$HOME/.raqib/host/events.jsonl" rig-out/ 2>/dev/null || true
+          cp "$RUNNER_TEMP/forward.json" rig-out/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
