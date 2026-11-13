@@ -265,3 +265,52 @@ what matters more: B made an event's number its identity, and a number is a posi
 - The ledger. The Table wrote a shape before asking how a thing that changes is said twice; a contract's
   first question is identity, and it was the reviewer who asked it.
 
+## Amendment D (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.1-redo.md (eabca24): REDO, narrow
+The packet's verdict is STOP, because the fix changes words C-1 wrote: so it is the Table's, and here it is.
+C-1 gave a thing a name by "the ledger and the entry's place in it" and did not ask whether every list the
+state shows is one ledger: the state shows the watch's holes followed by the notifier's, and the notes followed
+by one note that is always last. A place in a joined list moves. The Table also ran the module on a real watch
+of this machine (two trees, a blind spot, three notes): eight events, none refused by check, no row or command
+line in any line. And the six CI jobs are green on eabca24, Windows among them.
+- D-1 (C-1 completed: a name is a place in a list that only grows). A hole of the watch is "hole:i"; a hole of
+  the notifier is "notifier-hole:i" (each counted in its own list; the notifier's entry is the one that holds
+  a count). A note is "note:i" over the watch's own notes; the note of the words a terminal lost, which is
+  always last and whose text changes, is "note:lost-words" (snapshot is told its text by an argument; without
+  it the note is numbered as any other, and snapshot's document says so). FOR: a hole made after a failed
+  knock never takes the failed knock's name. MUST NOT TOUCH: findings, source findings, blind spots, knocks,
+  trees (their lists only grow; the packet checked each).
+- D-2 (what a thing is called outside its run). `about` is a name within one run. EVENT.md says so, and its
+  mapping uses the run and the name together: "<watch.run>/<about>" -> OCSF `finding_info.uid` and
+  `metadata.correlation_uid`; ECS `event.id` stays the event's id. The event's own id -> OCSF `metadata.uid`
+  (it was `finding_info.uid`: then every time a finding was said again it would have been a new finding).
+  C-11's two pairs for id and about are replaced by these; `activity_id` and `type_uid` from rev, and
+  `class_uid` and `category_uid` from kind, are C-11's own words and stay in the table. For a hole,
+  hole.kind -> `finding_info.title`. For the kinds that are Base Event: id -> `metadata.uid`, summary ->
+  `message`, the rest in the namespace.
+- D-3 (the host is not optional). `watch.host` is required on every event: check refuses an event without it,
+  and `facts` refuses to be called without it. A collector keys by it.
+- D-4 (a heartbeat's state is a closed word). WATCHING, SILENT, AGENT GONE, CAPTURE FAILED, FINISHED: the
+  band's word without its number ("SILENT for 12 s" is SILENT). check knows the list.
+- D-5 (small, each as the packet names it). A cite that lacks its src or its line is left out whole, never
+  half. A value that is an empty string is not held. check refuses a negative round, pid, seq, line or n, and a
+  technique id twice. A blind spot's `hole.count` is the number of rounds it was seen in. The document says:
+  that a source finding's state is C-4's word and what the report prints for each of the six; the base of
+  `evidence.lines`; that `subject.by` is carried by no event yet; that the heartbeat's and the watch-end's
+  examples are the last event of two snapshots of one watch (so they share a number, and are never both in
+  one stream).
+- D-6 (the tests the packet shows to be weak). No cite text of any ledger is in any line, with no exception
+  for texts the report prints (a report prints no cite's text). A hole's alarm is compared with the watch's
+  result (INCOMPLETE and the report's HOLES), not with the event's own class. A value is "in the report" when
+  it is in the report's line for that entry, not anywhere in the report. Two new cases through fixture
+  watches: a watch's hole made after a notifier's hole (their names do not move between two snapshots), and a
+  note made after the lost-words note is given.
+- Accepted as built, said: Q7 (the report's order), Q8 (C-4's words), Q10 (a cite's src and a tree's start are
+  the entry's own), Q11 (a name is stable within a run; two runs of one input may number source findings
+  differently), Q13 (the folded knock is made by a second call of the notifier on the watch's own finding: no
+  fixture watch folds by itself).
+- Recorded for M10.2, where raqib/host.py is in Scope: the tree row's `candidate_by` (so `subject.by` is
+  carried); a tree's benign word and its HOST-UNWATCHED and HOST-RHYTHM knocks; a source finding's growth; a
+  knock's shown-on and knocked-on; the watch's own errors (code_error, state_error) as events; an entry that
+  makes a builder raise becomes a hole, one entry, never a whole pass; that a snapshot's events and a running
+  watch's are never sent as one stream.
+
