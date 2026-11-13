@@ -2841,3 +2841,32 @@ record that could not be read at all. Recorded for M7.21b: the callback now read
 provider (its cost on a busy machine is the loss counters' to show); IPv6 traffic in the field for ids 26
 and 27; a notice of a loss makes the turn's counts unknown in the watch.
 
+## Amendment BO (the Table, 2026-11-13) - the watch takes the tracing's counts (M7.21b)
+The reader stands alone and read real traffic on a Windows runner three times (BL, BM, BN). This rules how
+the watch takes its counts. Each ruling names what it is FOR and what it MUST NOT TOUCH.
+- BO-1 (the same door as Linux). On Windows the round's inventory carries `conn_bytes` in the shape Linux's
+  has ({"from", "hole", "by": {"PID REMOTE": {"bytes_sent", "bytes_received", "sockets"}}}), built from
+  the reader's counts summed a pid and a remote; REMOTE is named exactly as the inventory's talks name it,
+  IPv6 too. FOR: K-5 and the rhythm read Windows as they read Linux, with no rule of their own. MUST NOT
+  TOUCH: the rules, the rhythm, the events' shape.
+- BO-2 (one reader a watch, under the watch's own pid). Started once when a live watch on Windows starts,
+  after the leftovers were stopped (the sessions listed first, BM-3); stopped on every way out of the
+  watch. A watch that reads exports, a `--once` inventory and any other system start none.
+- BO-3 (where it cannot be read, today's blind spot, with the reason). A refused start (no administrator, a
+  policy, the limit) leaves the blind spot `bytes` as it is said today, the reason after it, once a run;
+  the watch's result does not change and nothing else is tried (BK-1, BL-3).
+- BO-4 (a loss is not a quiet turn). In a round where the reader says events, buffers or notices were lost
+  since the round before, or connections were beyond its cap, or its consumer ended, the counts of that
+  round are not read: the blind spot `bytes` is said with that reason and its rounds, and no connection
+  is judged unchanged on them. A consumer that ended is said once and the rounds after it are not read.
+- BO-5 (a session that hears nothing). A round in which the tree holds connections whose table state moved
+  (new or closed) while the reader saw no event of the provider at all since its start is said as the
+  reader's hole, not as zero bytes.
+- BO-6 (what the counts are, said). They are sums since the watch began, not since the connection did; a
+  connection older than the watch shows only what it carried since. They lag the kernel by about a
+  second. UDP carries no counts yet (QUIC is unseen here). The threat model and the guide say so, and
+  that reading them needs an administrator and starts one tracing session named for the watch, which a
+  killed watch leaves until the next start.
+- BO-7 (the leftovers found are said). Sessions of killed watches stopped at the start are a note of the
+  run, by name.
+

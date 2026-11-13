@@ -486,6 +486,26 @@ Rulings: ADR-0003 Amendments C and D.
     only);
   - the live output's encoding (read as UTF-8, or UTF-16 with a BOM or NUL
     bytes) is checked on fixtures, not on a real host.
+- **The bytes of a connection on Windows (the host watch, ADR-0007
+  Amendments BK to BO):**
+  - a live watch reads them from the kernel's own tracing
+    (Microsoft-Windows-Kernel-Network), listening only: nothing is switched
+    on for a watched connection or process;
+  - reading them needs an administrator and starts one tracing session
+    named for the watch (`raqib-net-PID`, in memory only); a killed watch
+    leaves it until the next start, which stops it and says so as a note;
+  - where the session cannot be started (no administrator, a policy, the
+    limit of sessions) the bytes are not read: the blind spot `bytes` is
+    said as before, with the reason, and nothing else is tried;
+  - the counts are sums since the watch began, not since the connection
+    did: a connection older than the watch shows only what it carried
+    since; they lag the kernel by about a second;
+  - UDP carries no counts yet: QUIC is unseen here;
+  - a round after which the tracing lost events, buffers or notices, went
+    beyond its cap of connections, or whose consumer ended, is not read:
+    the blind spot `bytes` says why and in which rounds, and no connection
+    is judged unchanged on it; a session that heard no event at all while
+    the trees' connections moved is said the same way, not as zero bytes.
 - **What CROSS-SOURCE does not judge, by ruling:**
   - C-2, both directions: a trace with no os line (Linux, macOS, or
     os-sysmon not run) gets no finding and no note, and the report's
