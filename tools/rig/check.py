@@ -125,15 +125,16 @@ def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=
     # ADR-0007 Amendment AP (AP-1, AP-4): a beat is judged in the round that reads it, quiet tree or not: a beat
     # left for the final poll is in no round and no rule judged it, so X12 can be MISSED (it was OPEN)
     # ADR-0007 AR-4: without Sysmon no tree can have a source with beats here (the rig attaches no hooks): a 0 there
-    # measured nothing, so X12 is n/a, as X11 is
-    if sysmon:
+    # measured nothing, so X12 is n/a, as X11 is. AS-2: a count that is not 0 is a measure wherever it is read (a
+    # beat did wait, so a tree did have such a source): MISSED with or without Sysmon; so is a line that is not there
+    if sysmon or beats != 0:
         say("X12 no beat waits for the final poll unjudged", MET if beats == 0 else MISSED,
             "%s beat(s) read by the final poll, in no round (ADR-0007 Amendment AP: a beat is judged in the round"
             " that reads it)" % beats)
     else:
         say("X12 no beat waits for the final poll unjudged", SKIP,
-            "%s beat(s) read by the final poll: not judged on this machine (no Sysmon: no tree can have a source"
-            " with beats here; ADR-0007 AR-4)" % beats)
+            "0 beat(s) read by the final poll: not judged on this machine (no Sysmon: no tree had a source"
+            " with beats here, so the 0 measured nothing; ADR-0007 AR-4, AS-2)")
 
     text = "\n".join(t for _, t in sources)
     if sources and platform == "win32" and sysmon:

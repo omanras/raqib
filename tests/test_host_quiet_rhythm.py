@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from raqib import discover, host, notify  # noqa: E402
+from raqib import app, discover, host, notify, ui  # noqa: E402
 from raqib.rules import engine, fixturegen  # noqa: E402
 from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 
@@ -307,7 +307,7 @@ def test_e3_ar3_a_line_of_a_tree_not_in_the_round_says_what_its_round_read(home)
         assert set(meta) == set(first) and set(meta["rhythm"]) == set(first["rhythm"]) | {
             "read_talks", "read_acts", "read_cites"}
         rh = meta["rhythm"]
-        assert (rh["read_talks"], rh["read_acts"], rh["talks"], rh["acts"]) == (1, 1, [], 0)   # put in an older entry
+        assert (rh["read_talks"], rh["read_acts"], rh["talks"], rh["acts"]) == (1, 1, [], 0)   # in the round before's entry (its interval)
         assert [c["text"].split(" seq ")[0] for c in rh["read_cites"]] == ["os net", "os process"]
         assert all(c["src"].endswith(".jsonl") and isinstance(c["line"], int) for c in rh["read_cites"])
 
@@ -401,3 +401,49 @@ def test_e1_ar1_two_cycles_of_two_intervals_read_in_one_round_count_twice(home):
     ring = watch.rings[key_of(watch)]
     assert [(e["round"], len(e["acts"]), e["seq"] is None) for e in ring] == [
         (1, 0, False), (2, 1, True), (3, 1, True), (4, 0, True), (5, 0, False)]
+
+
+# --- ADR-0007 Amendment AS (the Table's, after the REDO's review) -----------------------------------------------
+
+AS_CYCLES = {2: [(2, "oscycle")], 7: [(7, "oscycle")], 8: [(8, "oscycle")]}   # one cycle, a gap, two more
+
+
+def test_as4_a_gap_and_a_return_cycles_on_both_sides_of_rounds_with_no_line_count_as_a_candidates_do(home):
+    # a candidate in round 1, quiet with one cycle (interval 2, read in round 3), no beat and no line in rounds
+    # 4..6, a candidate again from round 7 with two more cycles: the ring has every round, so the three cycles are
+    # in the last R rounds and the finding is, by value, that of the tree a candidate in every round
+    watch, rounds, text = run(home, quiet(6) + cand(9)[6:], AS_CYCLES)
+    assert [len(tree_lines(r)) for r in rounds] == [1, 0, 1, 0, 0, 0, 1, 1, 1]
+    metas = [tree_lines(r)[0]["input_meta"] for r in rounds if tree_lines(r)]
+    assert [(m["round"], m["class"], m["was"]) for m in metas] == [
+        (1, "candidate", "absent"), (3, host.QUIET, host.QUIET), (7, "candidate", host.QUIET),
+        (8, "candidate", "candidate"), (9, "candidate", "candidate")]
+    assert [m["rhythm"]["rounds"] for m in metas] == [[], [2], [2], [2, 7], [2, 7, 8]]
+    assert [(e["round"], e["seq"] is None) for e in watch.rings[key_of(watch)]] == [
+        (1, False), (2, True), (3, False), (4, True), (5, True), (6, True), (7, False), (8, False), (9, False)]
+    (f,) = watch.findings
+    assert (f["rule_id"], f["round"], f["cycle_rounds"]) == ("HOST-RHYTHM", 9, [2, 7, 8])
+    cwatch, _, ctext = run(home / "candidate", cand(9), AS_CYCLES)
+    (cf,) = cwatch.findings
+    assert by_value(f) == by_value(cf)
+    assert beats_line(text) == beats_line(ctext) and beats_line(text).startswith(
+        "RHYTHM BEATS: beats after the last round: 0 (")
+
+
+def test_as3_a_beat_of_a_round_with_no_line_is_said_by_its_round_alone_in_the_window_and_the_page(home):
+    watch, rounds, text = run(home, quiet(6) + cand(9)[6:], AS_CYCLES)
+    (f,) = watch.findings
+    assert [(b["talk_round"], b["talk_seq"], b["round"], b["seq"]) for b in f["beats"]][0] == (2, None, 2, None)
+    line = app.host_finding_line(f)
+    assert "; talk round 2, act round 2; talk round 7 seq " in line and "None" not in line and "null" not in line
+    assert app.beat_text({"talk_round": 4, "talk_seq": 11, "round": 5, "seq": 12}) == (
+        "talk round 4 seq 11, act round 5 seq 12")
+    assert app.beat_text({"talk_round": 4, "talk_seq": None, "round": 5, "seq": 12}) == "talk round 4, act round 5 seq 12"
+    said = ui._cites_text(f["cites"])
+    assert "round 2 " in said and "seq null" not in said and "seq None" not in said and " seq " in said
+    assert ui._cites_text([{"round": 4, "seq": None, "src": "a.jsonl", "line": 2},
+                           {"round": 5, "seq": 9, "src": "a.jsonl", "line": 3}, {"src": "b", "line": 1}]) == (
+        "round 4 a.jsonl:2 round 5 seq 9 a.jsonl:3 b:1")
+    state = json.loads(json.dumps(watch.state(fixturegen.WALL0)))
+    page = ui.host_page(state)
+    assert "seq null" not in page and "seq None" not in page

@@ -2134,3 +2134,64 @@ own AP-1.
   panel's count of lines a disabled rule would have judged), the
   builder's Q4 and Q5.
 
+## Amendment AS (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.17-redo.md (467d3ab), the rig's run on it, and the Table's own run
+The rig on 467d3ab: Windows with Sysmon 14 met, 0 missed, 1 open (the
+clipboard); no beat left for the final poll; no HOST-RHYTHM finding on
+the runner's own trees. The packet: NEXT, with no silence found in the
+watcher's code by reading. Its findings are sorted by direction, as the
+ledger says: what is silent is fixed or named as a hole with the task
+that ends it; what is said too often is said and left. The Table made
+the small fixes itself (CLAUDE.md rule 8) and ran the case the packet
+says no test holds; the run found one thing the reading did not (AS-6).
+- AS-1 (S-3, W-1, W-6, QR-3; the ring's two edges, said). A round that
+  ended before its sample has no entry; its beats are in the entry of
+  the next round that reached its sample, whose interval holds them
+  (the code's reading, confirmed; the questions file said otherwise).
+  A beat older than the ring's oldest interval is put into the oldest
+  entry and counted in the window. Both are in the rule's holes and in
+  THREAT_MODEL. Not changed: `_bin`.
+- AS-2 (S-2, QR-2; AR-4 corrected). The rig's X12 is n/a only where
+  there is no Sysmon AND the count is 0. A count that is not 0 is a
+  measure wherever it is read: MISSED. FOR: a rig run without --sysmon
+  whose report still counts waiting beats. MUST NOT TOUCH: the run
+  with Sysmon (MET only at 0).
+- AS-3 (W-2, QR-1). A beat or a cite of a round in which the tree had
+  no line says its round alone, in the window (raqib/app.py beat_text)
+  and on the page (raqib/ui.py), as the report already does. Never
+  "seq None" or "seq null".
+- AS-4 (S-4). Tested through rounds: a candidate, then quiet with one
+  cycle, then rounds with no line, then a candidate again with two
+  more cycles. The finding equals, by value, that of the same tree a
+  candidate in every round. Recorded for the tree ledger, not built:
+  the other three gaps S-4 names (a round with no times, the vacuous
+  halves of two asserts, a gone tree on a hooks source).
+- AS-5 (S-1, W-4, Q1; said, and why it is not fixed here). The hooks
+  source is the project's trace, not the tree's: every tree attached
+  to it reads every session's Bash calls in that project. That is so
+  for a candidate since the hooks source was built, for a quiet tree
+  since AP-2 and for a gone tree since AR-2; ending only the gone
+  tree's reading would leave the same fault on the other two and call
+  it fixed. It is MORE SAID, never silence (each line is cited
+  exactly, by the session that made it). The fix is the source's: a
+  tree reads the sessions that are its own. Named as a hole now; the
+  task is M7.19.
+- AS-6 (Q4, Q6, and the Table's run; the seams of a source's life,
+  said). Three losses at the edges of a source, each bounded, each
+  older than this task, none stated before: (a) an os follow that is
+  stopped makes no last pass: the events between its last pass and its
+  stop are in no source (Q6); (b) a tree attached again loses the beats
+  its earlier source held that no round had read, one round's at most
+  (found by running a tree gone for three rounds and back: the cycle
+  written before its return was in no ring); (c) a quiet tree that a
+  round with an empty process sample calls gone is attached again only
+  when it is next a candidate. And one cost: the sources of gone trees
+  are never dropped, and each round passes over all of them (Q4); a
+  watch that runs for days (ADR-0011, the service) must bound it. All
+  four are holes in the rule's file and THREAT_MODEL now, and are one
+  task, M7.19, with AS-5. MUST NOT be read as fixed.
+- Recorded, not built: W-9 (`was` "absent" on a line of a tree gone
+  before the round: true, judged by nothing).
+- The ledger. Reading found what each path can do; one run of the case
+  no test held found the loss at the seam. A packet that says "not
+  tested" names the next run to make, before the merge, not after.
+

@@ -110,13 +110,19 @@ def test_no_report_at_all_is_one_missed_line_and_linux_skips_what_needs_sysmon()
     assert [(i.split(" ", 1)[0], s) for i, s, _ in check.read("raqib watch --host: started\n", WORKLOAD)] == [("X1", check.MISSED)]
     got = states(platform="linux", sysmon=False, sources=[])
     assert got["X3"] == got["X4"] == got["X5"] == got["X11"] == check.SKIP and "X13" not in got and got["X7"] == check.MET
-    # ADR-0007 AR-4: no Sysmon, no tree with a source with beats: X12 measured nothing there, so n/a (MET or MISSED)
-    for left in ("0", "9"):
-        report = REPORT.replace("beats after the last round: 0", "beats after the last round: %s" % left)
-        assert states(report=report, platform="linux", sysmon=False, sources=[])["X12"] == check.SKIP
-        assert states(report=report, platform="win32", sysmon=False)["X12"] == check.SKIP
+    # ADR-0007 AR-4: no Sysmon, no tree with a source with beats: a 0 measured nothing there, so n/a
+    assert states(platform="linux", sysmon=False, sources=[])["X12"] == check.SKIP
+    assert states(platform="win32", sysmon=False)["X12"] == check.SKIP
     (said,) = [w for i, s, w in check.read(REPORT, WORKLOAD, platform="linux", sysmon=False) if i.startswith("X12")]
-    assert "no Sysmon: no tree can have a source with beats here" in said and "AR-4" in said
+    assert "no Sysmon: no tree had a source with beats here" in said and "AR-4" in said and "AS-2" in said
+    # AS-2: a count that is not 0 is a measure wherever it is read (a beat did wait): MISSED, never n/a; and a
+    # report whose RHYTHM BEATS line is not there is MISSED too
+    report = REPORT.replace("beats after the last round: 0", "beats after the last round: 9")
+    assert report != REPORT
+    for kw in ({"platform": "linux", "sysmon": False, "sources": []}, {"platform": "win32", "sysmon": False}):
+        assert states(report=report, **kw)["X12"] == check.MISSED
+        (said,) = [w for i, s, w in check.read(report, WORKLOAD, **kw) if i.startswith("X12")]
+        assert said.startswith("9 beat(s) read by the final poll, in no round")
 
 
 def test_main_prints_the_table_exits_0_and_1_only_when_strict_and_missed(tmp_path, capsys):
