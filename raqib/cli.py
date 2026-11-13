@@ -629,12 +629,14 @@ def _parser():
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
     ev = sub.add_parser("events", help="check an events file: every line a raqib-event/1 event (M10.2, ADR-0011 F-8)")
     ev.add_argument("file", metavar="FILE", help="the events file (watch --host: ~/.raqib/host/events.jsonl)")
-    fw = sub.add_parser("forward", help="send a watch's events file to one HTTP collector, every whole line, at least"
-                                        " once and in order (M10.3, ADR-0011 J)")
+    fw = sub.add_parser("forward", help="send a watch's events file to one collector (HTTP or syslog), every whole"
+                                        " line, at least once and in order (M10.3, ADR-0011 J)")
     fw.add_argument("file", nargs="?", default=None, metavar="FILE",
                     help="the events file, read only (default: ~/.raqib/host/events.jsonl)")
     fw.add_argument("--to", metavar="URL", help="the collector, https://host[:port]/path (http:// only to a loopback"
-                                                " address unless --plain; syslog is not built yet)")
+                                                " address unless --plain), or syslog+udp://host[:port] (514),"
+                                                " syslog+tcp://host:port (its port written: no default),"
+                                                " syslog+tls://host[:port] (6514)")
     fw.add_argument("--name", metavar="NAME", help="the forwarder's name, [a-z0-9-]{1,32}: its cursor and state are"
                                                    " ~/.raqib/forward/NAME.json; one destination each")
     fw.add_argument("--shape", choices=("raqib", "hec"), default="raqib",
@@ -647,6 +649,11 @@ def _parser():
                                                  " system's; nothing turns verification off")
     fw.add_argument("--plain", action="store_true", help="let --to be plain http:// to an address that is not"
                                                          " loopback (the state and the status say plain)")
+    fw.add_argument("--facility", metavar="N", help="syslog only: the RFC 5424 facility, 0 to 23 (default 13, log"
+                                                    " audit)")
+    fw.add_argument("--framing", choices=("octet", "newline"), default=None,
+                    help="syslog over tcp and tls only: octet counting (RFC 6587, the default) or a newline after"
+                         " each message")
     fw.add_argument("--beat", type=float, default=None, metavar="S",
                     help="write the state at least every S seconds (default 60); a state older than two beats is"
                          " a silent forwarder")

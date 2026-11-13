@@ -791,3 +791,70 @@ M10.3 lands: `raqib forward` sends the watch's events to one HTTP collector, at 
 its own silence, keeps the token off every output, and never lets the collector or a writer of its files turn
 its verification off or make it skip a line. Syslog (J-6) is the next task (M10.3b).
 
+## Amendment P (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3b.md (1935c41): syslog, REDO
+The packet: the HTTP path did not move; the syslog header is RFC 5424; REDO for an event that kills the
+forwarder, failure paths with no test, and a `written` that loses lines. CI agreed with the last before the
+packet came: on both Windows jobs the forwarder said `written` over tls and its listener held nothing.
+- P-1 (no event ends the forwarder). The time's shape is held to ASCII digits; whatever of an event cannot be
+  a header field is `-`; building a message never raises, whatever the line holds (the packet's finding 3: a
+  year in other digits passed the contract and ended every start). FOR: one line by a writer of the file
+  must not stop the forwarding. MUST NOT TOUCH: the MSG, which is the line as written.
+- P-2 (`written` is a connection ended in order). After the batch is written, over tcp the forwarder ends its
+  side (a half-close) and reads to the collector's own end; over tls it reads what the collector sent,
+  sends its close and reads to the collector's - each within the answer's bound. Only then is the batch
+  taken. A reset, an alert, an error or no end within the bound is a failed send: nothing passes, the batch
+  is sent again. FOR: the forwarder's own close that threw away what it had just written (findings 4 and
+  6, the Windows jobs), a collector that accepts and closes, a TLS 1.3 collector that refuses the client
+  after the handshake (finding 5). MUST NOT TOUCH: udp (`sent`: nothing is known, and said so).
+- P-3 (the destination is whole). syslog+tcp needs its port in the URL (514 over tcp is another service's:
+  no default); udp 514 and tls 6514 stay. The state keeps the facility and the framing; a start with another
+  is a usage error, as another shape is.
+- P-4 (the failures are tested). Over tcp, each with a test that fails if the send were counted taken: an
+  error in the middle of a batch (nothing passes; all of it arrives when sent again); a collector that never
+  reads (`late` within the bound, the next batch halved); Stop during a blocked write (within 2 s by the
+  mechanism, not a wall bound); a collector that accepts and closes at once; a collector that resets after
+  reading. Over tls: a collector that refuses after the handshake. The kill test compares what each
+  connection carried, not the order two threads recorded them in.
+- P-5 (the documents say what each word cannot promise): over udp to a collector that is down every line is
+  `sent` and the status is OK - only the collector's own search for silence tells; `written` after P-2 is an
+  orderly end, not a stored event; a message may be cut by a collector at its own limit; with `--framing
+  newline` a line that holds a bare CR may be split by a collector that breaks on it. The advice of client
+  certificates goes (the forwarder presents none). The words said of a syslog send fit it (no "answer").
+- P-6 (scope, recorded). `--facility` and `--framing` in raqib/cli.py were allowed by the Table in the
+  builder's launch, in those words; it is now written here. The two help strings are the Table's.
+Accepted as built: one connection a batch; no BOM; udp unconnected; a state from before this task that holds
+the word `write` is unreadable to an older raqib.
+
+## Amendment Q (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3b-redo.md (b0e19a2): the limit of `written`
+The packet: E1 to E7 met; REDO, narrow, for three things. The Table tried each on this machine before ruling
+and built the two that are small; what cannot be closed is said.
+- Q-1 (over tls, an end with no close of the collector's is a failed send). The syslog context turns off the
+  option by which some Pythons take such an end as a close; the HTTP context keeps its Python's default (its
+  answers are framed by their own length). Tried here: with the option on, the send was taken; off, it failed.
+  FOR: an end somebody else made (a cut path) must not count as the collector's. Cost, accepted: a collector
+  that read everything and ended without its close gets the batch again, and is said failing, never silent.
+- Q-2 (over tls, a close of the collector's before the forwarder's own is a failed send), as over tcp: before
+  its close the forwarder reads what already waits (thrown away, as all the collector sends is); a close among
+  it is no end in answer to the batch. FOR: the packet's 3b - a collector that closes once the handshake
+  ended, its reset still on its way. A test holds the order by the collector's own word and shows the send
+  taken with the look off.
+- Q-3 (what `written` cannot tell, said and not hidden). An end that reaches the forwarder before the reset
+  to a batch's unread tail is taken: a collector that died or closed in the middle (the packet's 3a, the
+  builder's Q2). No look closes it without an answer, and syslog has none. FORWARD.md, the threat model and
+  the guide say it, and that HTTP's `acknowledged` is the delivery to choose where one lost line matters.
+  MUST NOT TOUCH: the word - no new delivery word, no claim beyond an orderly end as the forwarder saw it.
+- Q-4 (the two Windows tests). Winsock takes one send whole whatever the buffer, so no write blocked there
+  and the lateness came at the end, not at the write. The tests' small buffer now writes piece by piece;
+  the forwarder did not move. A fixture that leans on one system's buffering is a claim about that system.
+- Q-5 (the builder's questions). Q1 as built (an older state takes the start's facility and framing, once).
+  Q3 as Q-1 rules, now with its test. Q4: no new error word; over syslog `tls` also says an alert or an end
+  with no close. The words of a carried failure over syslog speak of no answer.
+- Q-6 (Stop during a write that waits, on Windows). CI showed it: there the shutdown of an abandoned send's
+  socket does not end a write that waits for room; its thread ends at its own bound. Stop is not held (the
+  try ended at once), nothing is taken, the send is counted with the abandoned ones (M-5: `stuck` at four),
+  and the thread dies with the process. The test says so for Windows and holds the shutdown's effect
+  elsewhere. FORWARD.md says it.
+Recorded, not built: the header's fallback counts nothing (a defect there would dull every header unseen);
+a collector that never ends its side at the half-close makes every batch late, said failing; what real
+collectors do at the end of a connection is not checked on the rig (rsyslog and syslog-ng: a later task).
+

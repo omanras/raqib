@@ -2,13 +2,17 @@
 
 `raqib forward` is a process of its own (J-1). It reads one events file - the watch's
 `~/.raqib/host/events.jsonl`, as docs/specs/EVENT.md "For a reader of the file" says a reader may - and sends
-every whole line to one destination: an HTTP collector (this task; syslog is the next, and until then a
-`syslog+udp://`, `syslog+tcp://` or `syslog+tls://` destination is a usage error that says so). The watch does
+every whole line to one destination: an HTTP collector, or a syslog collector over `syslog+udp://`,
+`syslog+tcp://` or `syslog+tls://` (J-6; "Syslog" below). Syslog is another way to send, not another machine:
+the cursor, the lines in question, the state and the status are one for both. The watch does
 not know it runs: raqib/host.py, raqib/eventlog.py, raqib/event.py and raqib/hooks/ import nothing of
 raqib/forward.py, and no result, report or finding of a watch depends on a forwarder. The standard library only.
 
     raqib forward [FILE] --to URL --name NAME [--shape raqib|hec] [--token-file FILE] [--ca FILE] [--plain]
                   [--beat S] [--from start|end] [--batch N] [--once]
+    raqib forward [FILE] --to syslog+udp|syslog+tcp|syslog+tls://HOST[:PORT] --name NAME [--facility N]
+                  [--framing octet|newline] [--ca FILE] [--plain] [--beat S] [--from start|end] [--batch N]
+                  [--once]
     raqib forward --status [NAME]
 
 ## What it sends, and what acknowledged means
@@ -27,6 +31,21 @@ raqib/forward.py, and no result, report or finding of a watch depends on a forwa
 - `acknowledged` is HTTP's delivery word (J-3), and the state says it in `delivery`: a batch is taken when the
   answer is a 2xx and, in the hec shape, the answer's body is JSON whose `code` is 0. A 200 with another code is
   not taken. Taken is the collector's word: a collector that answers 2xx and drops the lines loses them.
+- Over syslog there is no answer (J-3, J-6), and the delivery word says what took means there (P-2, P-5):
+  `written` over tcp and tls - a batch is taken only when its connection ended in order: the batch written,
+  the forwarder ends its side (over tcp a half-close; over tls it sends its close, reading what the collector
+  sent before it) and reads to the collector's end, within the bound; a reset, an alert, an error, an end of
+  the collector's before the forwarder's own, an end over tls with no close of the collector's, or no end
+  within the bound is a failed send. `written` is an
+  orderly end, not a stored event: a collector that read the batch and ended in order without keeping it
+  loses it unseen. And it is an end as the forwarder saw it (Q-3): a collector that died or closed while the
+  batch's last bytes were still on their way, and whose end reached the forwarder before its reset did, is
+  taken with lines it never read. Syslog has no answer to close that gap; where one lost line matters, send
+  over HTTP (`acknowledged`) - and `sent` over udp - a batch is taken when each of its datagrams was sent with no error:
+  nothing is known of their arrival. Over udp to a collector that is down every line is `sent` and the status
+  is OK - only the collector's own search for silence tells. The cursor rules are the same:
+  nothing moves before the transport took the batch, a failed send moves nothing and is tried again, and a
+  restart sends again from the cursor.
 - At least once (J-3, J-11): one request at a time, the file's order, at most 100 lines and at most 512 KiB to
   a request (`--batch N` lowers the count, 1 to 100). A batch that failed is sent again, and nothing after it
   is sent before it; it may be sent again smaller (N-1): a send that was `late` - its request not sent, or no
@@ -117,10 +136,10 @@ the collector's body:
 
 | word | the failure |
 |---|---|
-| `connect` | no connection to the collector within 10 s of the send's start (name resolution included) |
+| `connect` | no connection to the collector within 10 s of the send's start (name resolution included; over udp, a name that does not resolve) |
 | `tls` | the TLS handshake or the certificate failed |
 | `no-answer` | the connection ended with no answer |
-| `late` | the TLS handshake not ended within 10 s of the send's start, the request not sent within 30 s of its start, or no whole answer within 30 s of the request's last byte |
+| `late` | the TLS handshake not ended within 10 s of the send's start, the request not sent within 30 s of its start, or no whole answer within 30 s of the request's last byte; over syslog the status says "the batch was not written, or the connection not ended in order, within the bound": the batch not written within 30 s of its start, or the connection not ended in order within 30 s of the batch's last byte |
 | `redirect` | a 3xx answer (a redirect is never followed) |
 | `busy` | 408 or 429 |
 | `server` | a 5xx answer |
@@ -128,6 +147,7 @@ the collector's body:
 | `refusing` | the lines sent alone were refused (a 4xx) and no later line was taken: they are in question |
 | `token` | 401 or 403 |
 | `token-file` | the token file cannot be read, or fails its checks, at a try |
+| `write` | syslog: the system did not take the batch's bytes or a datagram, or the connection did not end in order after them (a reset, the collector's end before the forwarder's, no route) |
 | `file` | the events file cannot be read, or more than 512 KiB follow its last newline |
 | `stuck` | four sends abandoned have not ended (a name that never resolves, a connect that never returns): no send starts until one ends |
 | `unforeseen` | an error the forwarder did not foresee ended the run (the state written first) |
@@ -151,7 +171,9 @@ not step:
 
 A send abandoned (Stop, or a bound passed) has its sockets shut down - which ends a blocked connect, send or
 read - and left to its own thread, which alone closes them: no descriptor is closed under a thread that may
-still use it, and each socket call has its own timeout besides. Name resolution is the system's (getaddrinfo)
+still use it, and each socket call has its own timeout besides. On Windows the shutdown does not end a write
+that waits for room (a collector that reads nothing): that send ends at its own timeout, counted with the
+abandoned ones until then; Stop is not held by it and nothing of it is taken (Q-6). Name resolution is the system's (getaddrinfo)
 and cannot be bounded from Python: where the system's resolver does not return, the try is abandoned at 10 s
 while the resolver's own thread waits for it, holding that send's body (at most 512 KiB) and headers. At most
 four sends abandoned and not yet ended are out (M-5): while four are, no send starts and the forwarder is
@@ -170,6 +192,56 @@ wall clock set back or ahead delays nothing and hurries nothing. Only the state'
   "host": the event's watch.host, "source": "raqib", "sourcetype": "raqib:event", "event": the event}`. The
   event's bytes are put in the envelope unchanged. The header is `Authorization: Splunk <token>`, and
   `--token-file` is required. A shape wraps the line; it never rewrites it.
+
+## Syslog (J-6)
+
+- The forms: `syslog+udp://HOST[:PORT]` (514 unless written), `syslog+tcp://HOST:PORT` (its port written:
+  RFC 6587 names no port, and 514 over tcp is another service's, so there is no default - a `syslog+tcp://`
+  URL with no port is exit 2 with the reason; P-3), `syslog+tls://HOST[:PORT]` (6514, RFC 5425, unless
+  written). A syslog destination is a host and a port only: a path, a query or a fragment is
+  a usage error. The state's `destination` has the path "" (empty).
+- One line is one message, RFC 5424: `<PRI>1 TIMESTAMP HOSTNAME raqib - MSGID - MSG`. PRI is the facility
+  times 8 plus the severity: the facility 13 (log audit) unless `--facility N` (0 to 23); the severity the
+  event's - high 2, medium 4, low 5, a hole 4, none and info 6 (2 critical, 4 warning, 5 notice, 6
+  informational; a severity the event contract does not have would be 4, never calm). VERSION 1; TIMESTAMP the
+  event's `time` as written (UTC, milliseconds, Z); HOSTNAME the event's `watch.host`; APP-NAME `raqib`;
+  PROCID `-`; MSGID the event's `kind`; STRUCTURED-DATA `-`; the MSG the line as written, without its newline
+  (the raqib shape: the event is never rewritten). Where the event's `time`, `watch.host` or `kind` is not
+  what RFC 5424 takes in that field (a time in other digits than ASCII - the event contract takes some, written
+  as JSON escapes -, a host name with a space, a character outside printable US-ASCII, longer than 255, a kind
+  longer than 32), that field is `-`; the event in the MSG still says it. Building a message never raises,
+  whatever the line holds (P-1): no line ends the forwarder.
+- Framing: over tcp and tls, octet counting (RFC 6587): each message is sent as its length in bytes, a space,
+  then the message (`<length> <message>`). `--framing newline` sends each message followed by a newline
+  instead, for a collector that wants lines (a line holds no newline: it is one line of the file; with
+  `--framing newline` a line that holds a bare CR may be split by a collector that breaks on it). Over udp
+  each message is one datagram, never framed; `--framing` with udp is a usage error. A message may be cut by
+  a collector at its own limit (its longest message): the forwarder never cuts one, and cannot see a cut.
+- A batch is the same batch as over HTTP (at most `--batch` lines and 512 KiB, the file's order): over tcp and
+  tls its messages are written on one connection, opened for the batch and ended in order after it (above:
+  over tls with the forwarder's close_notify and the collector's); over udp they are sent one datagram each,
+  in order. One send is bounded as an HTTP one is: connecting - name resolution and the TLS handshake
+  included - within 10 s of its start, writing the batch within 30 s, and the orderly end within 30 s of the
+  batch's last byte; a send `late` in its writing or its end halves the next batch, down to one line.
+- A line whose message is longer than a datagram may be - over 65000 bytes, over udp - is refused locally as a
+  line longer than one request is (K-2, M-3): never sent and never cut, counted in `refused`, named by its id
+  in `ids`, passed, and said; the line after it is sent. Over tcp and tls such a line is sent whole; a line
+  over 512 KiB is refused locally on every transport.
+- Syslog has no refusal: a syslog collector answers nothing, so no line is ever in question, `refusing`,
+  `token`, `redirect`, `busy`, `server`, `answer` and `no-answer` never arise, and `in_question` stays 0. A
+  failed syslog send is `connect` (no connection, or name resolution failed), `tls` (the handshake or the
+  certificate, or an alert after it - a collector that asks a client certificate refuses the forwarder, which
+  presents none), `late` (not written, or not ended in order, within the bound) or `write` (the system did not
+  take the bytes or a datagram, or the connection did not end in order: a reset, the collector's end before the
+  forwarder's, no route); `failing.status` is null. The status says each of these in a syslog send's own words
+  (it never speaks of an answer there).
+- No token: syslog carries no Authorization, and `--token-file` with a syslog destination is a usage error
+  that says so (the file is not read). `--shape hec` is HTTP's and a usage error over syslog; `--facility` and
+  `--framing` are syslog's and a usage error with an http:// or https:// destination.
+- The wire: `syslog+tls://` is verified by the same TLS context as https (below): the certificate and the host
+  name, by the system's authorities or `--ca FILE`; nothing turns it off, and it needs no `--plain`.
+  `syslog+udp://` and `syslog+tcp://` are plain: taken only to a loopback address unless `--plain` is given,
+  and then the state's `plain` and every status say "plain: not encrypted" (said for loopback too).
 
 ## The secret and the wire (J-7, J-8, L-5)
 
@@ -199,7 +271,8 @@ Each of these is exit 2 with its reason, before anything is sent - never a faile
   script is written in its `xn--` form);
 - a `--beat` that is not a finite number of at least 1 (s);
 - a state that is not what the forwarder writes - not JSON, not ASCII, JSON nested past what the reader takes,
-  empty, another schema, a key missing (`head` and `in_question` may be missing: a state written before them),
+  empty, another schema, a key missing (`head` and `in_question` may be missing: a state written before them; so may a syslog state's
+  `facility` and `framing`, both or neither; an HTTP state never holds them),
   or a key the checks find of another type or value: the name, the pid, `written`, the destination, the
   shape, the delivery word, `plain`, `file`, a cursor of whole bytes with a sha256 or null (and not null above
   0), `from`, a beat above 0, the counts, `refused` with texts in `ids`, `last_id`, `last_ok`, `failing` (an
@@ -237,10 +310,12 @@ Windows, where a rename never replaces a file that is there). The keys:
 | `name` | str | the forwarder's name |
 | `pid` | int | the forwarder's process id |
 | `written` | instant | when this state was written (UTC, milliseconds, Z; the wall's clock) |
-| `destination` | object | `scheme`, `host`, `port`, `path`: no query, no user information |
-| `shape` | str | `raqib` or `hec` |
-| `delivery` | str | what taken means: `acknowledged` (HTTP) |
-| `plain` | bool | true where the wire is plain http |
+| `destination` | object | `scheme` (`http`, `https`, `syslog+udp`, `syslog+tcp`, `syslog+tls`), `host`, `port`, `path` (over syslog ""): no query, no user information |
+| `shape` | str | `raqib` or `hec` (over syslog always `raqib`) |
+| `delivery` | str | what taken means: `acknowledged` (HTTP), `written` (syslog over tcp and tls: the connection ended in order), `sent` (syslog over udp) |
+| `facility` | int | syslog only (P-3): the facility the messages carry (0 to 23); a start with another is exit 2, as another shape is |
+| `framing` | str or null | syslog only (P-3): `octet` or `newline` over tcp and tls, null over udp; a start with another is exit 2. A syslog state written before the two were kept has neither: it is read, and the start's facility and framing are kept from then on (said at the start) |
+| `plain` | bool | true where the wire is plain: http, syslog over udp or tcp |
 | `file` | str | the events file, absolute |
 | `cursor` | object | `offset` (bytes) and `line_sha256` (of the line that ends at the offset; null at 0) |
 | `from` | object | `start` (`start` or `end`) and `offset`: where the first run of the name started (J-12) |
@@ -327,5 +402,5 @@ search is the answer the collector holds.
 
 ## Not here
 
-Syslog over udp, tcp and tls (the next task); the forwarder as a service, under an account of its own; the
-local sinks; OCSF and ECS documents built by Raqib; more than one file.
+The forwarder as a service, under an account of its own; the local sinks; OCSF and ECS documents built by
+Raqib; more than one file; a syslog connection kept open across batches; RFC 5424 STRUCTURED-DATA.
