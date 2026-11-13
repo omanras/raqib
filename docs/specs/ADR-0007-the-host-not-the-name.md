@@ -2759,3 +2759,32 @@ system's counting on for the watched connection)? The commander: ETW.
   GetPerTcpConnectionEStats is not used, not as a fallback either; where the tracing cannot be read the blind
   spot `bytes` stays said as it is today.
 
+## Amendment BL (the Table, 2026-11-13) - the tracing reader, measured first (M7.21)
+Measured on a Windows runner before ruling (the probe branch, never merged). The provider
+Microsoft-Windows-Kernel-Network, keywords 0x30, gives for each TCP send (ids 10, 26 over IPv6) and receive
+(11, 27): PID, size, daddr, saddr, dport, sport - the pid in the event's own data (the header's is often 0).
+None of the thirty sessions a stock machine already runs carries that provider: there is nothing to listen to
+until a session of Raqib's own asks for it. Starting one needed an administrator. Not measured yet: whether
+loopback traffic is said at all.
+- BL-1 (a session of its own, in memory only). A real-time session named for the watch's pid, that provider,
+  those keywords; no file is written. FOR: BK-1 - it listens to the whole system's counting and switches
+  nothing on a watched connection or process. MUST NOT TOUCH: any session that is not Raqib's; the system's
+  own kernel logger.
+- BL-2 (it is ended, and a leftover is said). The session is stopped on every way out of the watch. At a
+  start, a session of Raqib's name whose pid is no live process is a watch that was killed: it is stopped
+  and said. FOR: Raqib leaves nothing running on the machine it watched. What a killed watch leaves until
+  the next start (a session with nobody reading) is said in the threat model.
+- BL-3 (no rights, no asking). Where the session cannot be started (no administrator, a policy, the limit
+  of sessions) the blind spot `bytes` stays as today, with the reason; Raqib asks for no elevation and
+  falls back to nothing (BK-1).
+- BL-4 (lost events are a hole). Where the session says events or buffers were lost, the counts of that
+  turn are unknown, not smaller: said, and no rhythm is judged quiet on them (CLAUDE.md rule 4).
+- BL-5 (what is kept). Of an event: pid, size, the four of the connection, direction, the time. Sums a
+  connection, from the session's start: a connection older than the session has counts since then only,
+  and that is said with them. An event's data that is not the measured shape is counted as unread, never
+  guessed.
+- BL-6 (two tasks). M7.21a: the reader alone (a module, a fake system in its tests, a tool that prints what
+  it read for the field check). M7.21b: the watch takes its counts where Linux's are taken, and the
+  documents. The reader imports nothing of the network and is not the capture path's dependency: a watch
+  without it is today's watch.
+
