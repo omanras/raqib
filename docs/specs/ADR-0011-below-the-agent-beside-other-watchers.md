@@ -432,4 +432,9 @@ at every beat with nothing new. An event said again carried the time of the firs
 - Accepted as built: Q3 (a number is used once; "not written" counts attempts - the report says "attempts"),
   Q5, Q7, Q8 with G-9, Q9 (and X17 wants at least one heartbeat for each two whole beats the watch ran),
   Q10, Q12.
+- G-13 (the REDO's STOP, c1e7919: the builder stopped rather than change a guard, and was right to; the Table
+  answered, CLAUDE.md rule 8). The guide's Commands table has the row of `raqib events`; the guard's list of
+  the guide's own rows names it (a row of the guide only: the README names the command among "the rest").
+  QR2 recorded: `result.suppressed` is tested with the overlay's count replaced, since no rule of the host
+  fires on the clean fixture watch; a watch with a real overlay that suppresses a finding is M10.3's to add.
 

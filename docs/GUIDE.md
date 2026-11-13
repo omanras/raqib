@@ -449,6 +449,7 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events: a checkout's tests/fixtures/eval/events.json or --events FILE (an installed raqib has none and exits 2) |
 | `raqib proxy --listen 127.0.0.1:PORT --upstream URL --log TRACE [--cwd DIR]` | relay another agent's model API calls and record its tool calls (below) |
 | `raqib os-sysmon --root PID[:GUID] --log TRACE [--from FILE.xml] [--cwd DIR]` | record what Sysmon saw the agent's process tree do (below); exit 1 when it wrote a `RAQIB-SILENCE:` line, 2 off Windows without `--from` |
+| `raqib events FILE` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a `raqib-event/1` event; exit 0, 1 or 2 |
 | `raqib discover` | find AI agents on a host by what they do |
 | `raqib --version` | print raqib <version> and exit 0 |
 

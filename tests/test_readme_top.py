@@ -73,6 +73,9 @@ NEW_ROWS = ["| `raqib app [PROJECT]` | open Raqib as a desktop window: the host 
             " `--remove NAME` |",
             "| `raqib discover` | find AI agents on a host by what they do |",
             "| `raqib --version` | print raqib <version> and exit 0 |"]
+# ADR-0011 G-11 (the Table): a row of the guide's table only (the README names the command in "the rest")
+GUIDE_ROWS = ["| `raqib events FILE` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a"
+              " `raqib-event/1` event; exit 0, 1 or 2 |"]
 # The pieces of the guide that are not the old README's (E-6): its title, E-7's lines, E-3's rows (and CHANGED).
 # ADR-0007 AG-7: the paragraph "Watch the host" gained after "Every tree gets a source that only reads, by
 # itself" (the channel that is there and not read, AF and AG), its sentences as cut() makes them.
@@ -124,7 +127,7 @@ HOST_UNREAD = [
     "In the third field run the watched read the watcher's record: the agent read the watch's own files "
      "under the home ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)).",
 ]
-GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + HOST_UNREAD
+GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + GUIDE_ROWS + HOST_UNREAD
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")
