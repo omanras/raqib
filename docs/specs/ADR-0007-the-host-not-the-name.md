@@ -2870,3 +2870,30 @@ the watch takes its counts. Each ruling names what it is FOR and what it MUST NO
 - BO-7 (the leftovers found are said). Sessions of killed watches stopped at the start are a note of the
   run, by name.
 
+## Amendment BP (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.21b.md (cf99b84): a zero that is no zero
+The field first: on a Windows runner a live watch read the bytes by the tracing (no blind spot `bytes`), the
+rhythm fired on a real agent, and no session was left after the watch. The packet: REDO, narrow. Small, and
+built by the Table.
+- BP-1 (bytes the reader could not read). A round after which the reader's unread byte events grew is a
+  hole, as a loss is: they may be any connection's, and its zero would be no zero. FOR: BM-5, unread
+  stays an alarm - in the watch too.
+- BP-2 (one spelling of a remote). An IPv4 remote the tracing says in IPv6's form is summed under its IPv4
+  spelling, as the table's talks are spelled. FOR: a talk that would meet no count and read as zero.
+- BP-3 (each kind of cause is said). The blind spot `bytes` keeps its first words and counts the rounds;
+  each further kind of cause is a note, once a run, with its round.
+- BP-4 (a session is not deaf in its first breath). The check of a session that hears nothing is made from
+  its third round on: what the kernel says comes about a second late. FOR: a false "hears nothing" on a
+  watch of one-second rounds.
+- BP-5 (a reader that raises at its start is a refusal), with its reason; never a failed round.
+- BP-6 (the zero is kept, and its limits said). A talk the tracing heard nothing of since the watch began
+  is given zero, so the first bytes of an idle connection are a change. It is true only while the session
+  hears: said in the threat model with what would break it (a session switched off from outside after its
+  first event; a sender whose pid in the tracing is not the table's owner).
+Accepted as built: the reader starts at the first live round; the default factory only from start(); `by`
+holds the trees' talks only; a loss not known is a hole; stop problems are notes. Recorded, not built: a
+connection closed and reopened to one remote with no payload between two rounds is no talk here; the map
+that never shrinks goes dark past its cap on a host with heavy port churn (said by the blind spot's rounds:
+pruning by the provider's end events is a later task); the rhythm rule's own sentence of holes still names
+Windows as without byte counts (true where the tracing is not read; its wording is the rule's next change);
+IPv6 and mapped addresses in the field; a non-administrator's run in the field (the leftovers' note).
+

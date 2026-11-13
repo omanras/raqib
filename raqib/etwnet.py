@@ -667,6 +667,12 @@ def sums(connections):
     text and the port; IPv6 unbracketed), sockets the local ends summed."""
     out = {}
     for (pid, _laddr, _lport, raddr, rport), c in (connections or {}).items():
+        if ":" in raddr:   # BP-2: an IPv4 remote said in IPv6's form is spelled as IPv4, as discover spells a talk's
+            try:
+                mapped = ipaddress.IPv6Address(raddr).ipv4_mapped
+            except ValueError:
+                mapped = None
+            raddr = str(mapped) if mapped is not None else raddr
         e = out.setdefault((pid, "%s:%s" % (raddr, rport)), {SENT: 0, RECEIVED: 0, "sockets": 0})
         e[SENT] += c.get(SENT) or 0
         e[RECEIVED] += c.get(RECEIVED) or 0
