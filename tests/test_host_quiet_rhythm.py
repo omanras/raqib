@@ -447,3 +447,26 @@ def test_as3_a_beat_of_a_round_with_no_line_is_said_by_its_round_alone_in_the_wi
     state = json.loads(json.dumps(watch.state(fixturegen.WALL0)))
     page = ui.host_page(state)
     assert "seq null" not in page and "seq None" not in page
+
+
+# --- M7.18 (ADR-0007 Amendment AT, AT-1): HOST-RHYTHM is high, on a line of a tree not in the round too -------------
+
+def test_m718_a_quiet_or_gone_trees_finding_is_high_as_a_candidates_and_a_named_one_is_still_not_judged(home):
+    cwatch, _, ctext = run(home / "candidate", cand(5), CYCLES)
+    (cf,) = cwatch.findings
+    for name, invs in (("quiet", quiet(5)), ("gone", gone_from(quiet(5), 4))):
+        watch, rounds, text = run(home / name, invs, CYCLES)
+        (f,) = watch.findings
+        assert (f["rule_id"], f["round"], f["severity"]) == ("HOST-RHYTHM", 5, "high"), name
+        assert (cf["severity"], cf["notice"]) == (f["severity"], f["notice"]) and by_value(cf) == by_value(f), name
+        assert app.host_finding_line(f).startswith("HOST-RHYTHM [high] round 5: "), name
+        view = app.host_watch_view(json.loads(json.dumps(watch.state(fixturegen.WALL0))))
+        assert [x.split(":", 1)[0] for x in view["findings"]] == ["HOST-RHYTHM [high] round 5"], name
+        said = [x for x in text.splitlines() if x.startswith("  [") and " HOST-RHYTHM " in x]
+        assert [x.split(" (", 1)[0] for x in said] == ["  [high] HOST-RHYTHM round 5"], name
+    assert [x.split(" (", 1)[0] for x in ctext.splitlines() if x.startswith("  [high] HOST-RHYTHM ")] == [
+        "  [high] HOST-RHYTHM round 5"]
+    # a named quiet tree with the same rhythm: still not HOST-RHYTHM's
+    named, nrounds, _ = run(home / "named", retype(quiet(5), "claude",
+                                                   "C:\\Users\\user\\AppData\\Local\\claude\\claude.exe"), CYCLES)
+    assert tree_lines(nrounds[4])[0]["input_meta"]["named"] is True and named.findings == []
