@@ -518,13 +518,8 @@ def pres_of(lines):
     return [x for x in map(json.loads, lines) if x.get("phase") == "pre"]
 
 
-DEST_KEY = re.compile(r',"dest_sha256":"[0-9a-f]{64}"|"dest_sha256":"[0-9a-f]{64}",')
-
-
-def every_fixture_build(without_dest=False):
-    """os_sysmon.build of every Sysmon fixture for every pid it names, whole and as a follow's pass (tree).
-    without_dest: each line with its input_meta.dest_sha256 taken out (ADR-0007 AU-1 added that key and nothing
-    else), so the lines can be held to what they were before it."""
+def every_fixture_build():
+    """os_sysmon.build of every Sysmon fixture for every pid it names, whole and as a follow's pass (tree)."""
     out = []
     for p in sorted((ROOT / "tests" / "fixtures").rglob("*.xml"), key=lambda p: p.relative_to(ROOT).as_posix()):
         text = p.read_text(encoding="utf-8", errors="replace")
@@ -532,23 +527,14 @@ def every_fixture_build(without_dest=False):
             for tree in (None, {}):
                 lines, silences = os_sysmon.build(text, pid, tree=tree, info={} if tree is not None else None)
                 out += ["== %s %d %s" % (p.relative_to(ROOT).as_posix(), pid, tree is not None)] + lines + silences
-    if without_dest:
-        out = [DEST_KEY.sub("", x) for x in out]
     return hashlib.sha256("\n".join(out).encode("utf-8")).hexdigest(), len(out)
 
 
 FIXTURES_BUILT = ("c3d84456c2d1d899b64eb9bc20fa72e300f5b5bafcd274acc27b12468a94dca2", 2179)   # the parent commit's code (b713bd2) gave these, to the byte
 
 
-# ADR-0007 AU-1 (the Table, on the builder's STOP 09c1eb5): a net line gained input_meta.dest_sha256; with that key
-# taken out every line is still what b713bd2's code gave, to the byte; with it, the lines are these
-FIXTURES_BUILT_AU = ("2615a98b45383dde1cd53af80426d0d14cba9714399fb2cd3b5808112d2bdcf9", 2179)
-
-
 def test_e2_an2_not_touched_every_fixture_gives_the_lines_it_gave_to_the_byte():
-    assert every_fixture_build(without_dest=True) == FIXTURES_BUILT
-    assert every_fixture_build() == FIXTURES_BUILT_AU
-    assert sum(1 for _ in DEST_KEY.finditer('{"a":1,"dest_sha256":"%s"}' % ("0" * 64))) == 1   # the pattern does match
+    assert every_fixture_build() == FIXTURES_BUILT
 
 
 def test_e5_an3_an_event_1_logged_more_than_60_s_late_is_two_processes_said_never_one_unsaid():

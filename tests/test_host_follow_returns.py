@@ -312,7 +312,8 @@ class Script:
         return os_sysmon.follow(root, log, stop, reader=reader, nt=True, **kw)
 
 
-KW = ["after_record", "err", "every", "helpers", "on_pass", "out", "restart", "since", "tree"]
+# ADR-0007 AW-2: and server_hash (the host watch asks its os follow for the server's own hash on net lines)
+KW = ["after_record", "err", "every", "helpers", "on_pass", "out", "restart", "server_hash", "since", "tree"]
 
 
 def settled_follows(monkeypatch, truncate=None):

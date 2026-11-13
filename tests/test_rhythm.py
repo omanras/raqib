@@ -213,14 +213,14 @@ def test_e2_the_rule_is_a_catalog_anchor_with_fixtures_from_make_py_and_a_measur
     # M7.5 E2: and the os source's two cycles
     # M7.6c REDO E-2: and the edge negatives of W and R (an act at W+1 s; a first cycle out of the last R rounds)
     # ADR-0007 AP-3: and the two quiet negatives (talks with no act; a few beats, k-1 cycles); AR-2: and the gone one
-    # ADR-0007 AU-4: and AU-1's and AU-3's negatives (one server named on some events; cycles split between the
-    # sources; k-1 cycles each)
-    assert len(measured) == 12 and not any(n["fired"] for n in measured)
+    # ADR-0007 AU-4: and AU-1's negative (one server named on some events and not on others; k-1 cycles); AW-1
+    # took AU-3's out
+    assert len(measured) == 11 and not any(n["fired"] for n in measured)
     assert sorted(Path(n["path"]).name for n in measured) == [
         "negative-acts-between-rounds.json", "negative-changing-destination.json", "negative-gone-few-beats.json",
         "negative-no-talk.json", "negative-os-named-some.json",
         "negative-os-two-cycles.json", "negative-quiet-few-beats.json", "negative-quiet-no-cycle.json",
-        "negative-r-edge.json", "negative-split-sources.json", "negative-two-cycles.json", "negative-w-edge.json"]
+        "negative-r-edge.json", "negative-two-cycles.json", "negative-w-edge.json"]
     assert RULE.fixtures["negative"] == ["tests/fixtures/rules/" + n for n in list(host_fixtures.RHYTHM_SCENARIOS)
                                          + list(host_fixtures.OS_SCENARIOS)
                                          + list(host_fixtures.EDGE_SCENARIOS)   # M7.6c REDO E-2
@@ -1129,7 +1129,7 @@ def test_m718_e1_the_level_is_high_and_the_match_thresholds_budget_and_streak_ar
     assert doc["match"] == MAIN_MATCH and doc["bounds"] == MAIN_BOUNDS
     assert (doc["kind"], doc["class"], doc["fp_budget"]) == ("anchor", "HOST", 0.0)
     assert host.rhythm_params(RULE) == (3, 30, 10) == (host.RHYTHM_K, host.RHYTHM_W, host.RHYTHM_R)
-    assert len(doc["fixtures"]["positive"]) == 10 and len(doc["fixtures"]["negative"]) == 12   # AU-4: + two pairs
+    assert len(doc["fixtures"]["positive"]) == 9 and len(doc["fixtures"]["negative"]) == 11   # AU-4, AW-1: + one pair
     (ide,) = [h for h in RULE.holes if h.startswith("a benign program that polls one server and spawns helpers")]
     assert "a high finding, not a verdict" in ide and "still owed" in ide and "medium" not in ide
     assert len(RULE.holes) == 16
@@ -1141,8 +1141,8 @@ def test_m718_e2_check_rules_gives_the_same_counts():
     out = io.StringIO()
     assert cli.main(["check-rules"], out=out) == 0
     (line,) = [l for l in out.getvalue().splitlines() if l.startswith("HOST-RHYTHM ")]
-    # ADR-0007 AU-4: two positives and two negatives added (AU-1's pair, AU-3's pair)
-    assert re.match(r"^HOST-RHYTHM +ok +0\.000 +0 +10 positive; negatives incl\. benign: 12 measured, ", line), line
+    # ADR-0007 AU-4: a positive and a negative added (AU-1's pair; AW-1 took AU-3's out)
+    assert re.match(r"^HOST-RHYTHM +ok +0\.000 +0 +9 positive; negatives incl\. benign: 11 measured, ", line), line
 
 
 def test_m718_e3_through_rounds_the_finding_is_high_and_knocks_by_its_path_the_arrival_is_still_medium(home):

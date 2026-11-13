@@ -302,6 +302,14 @@ LOGGED_EVENT = {"process": 1, "file": 11, "net": 3}   # AM-2: an os line's tool 
 NO_SAMPLE_NOTE = ("the round's inventory carries no process sample (an export read as rounds, or a reader before"
                   " M7.8): a tree not in the round is called gone, never quiet (ADR-0007 P-2), or kept when the"
                   " round's connections were not read either (R-4)")
+# ADR-0007 AU-2, AW-3: an os net line without input_meta.dest_sha256 keeps the destination it had (said once per
+# source object, with its count, as PRE_M78_NOTE is)
+PRE_DEST_NOTE = ("%d os net line(s) carry no input_meta.dest_sha256, the server's own hash (a line written before"
+                 " the key, or by a caller that did not ask for it, or one whose address, port or protocol did not"
+                 " parse): HOST-RHYTHM names such a line's destination by its input_sha256, the hash of the"
+                 " host name, the address, the port and the protocol, so one server named on some of them and not on"
+                 " others is two destinations, and such a line and a line with the key to one server are two"
+                 " destinations too")
 PRE_M78_NOTE = ("%d os process line(s) carry no input_meta.image (written before M7.8): NET-TOOL and DESTRUCT-CMD"
                 " could not judge them by name, and no rule guesses it from command_head (ADR-0007 P-1); HOST-RHYTHM's"
                 " act beat takes such a line's name from command_head, for N-9's twin match only")
@@ -1128,6 +1136,7 @@ class TreeSource:
         self.helpers_said = 0        # I-5: how many of its records are holes already
         self.not_run_said = False    # I-6: the rules that cannot run on it were listed once
         self.pre_m78_said = False    # M7.8 (P-1): its os process lines without input_meta.image were said once
+        self.pre_dest_said = False   # ADR-0007 AW-3: its os net lines without input_meta.dest_sha256 were said once
         self.os_tree = None          # AJ-4 (R-1): the tree its os follow found (the root, ProcessGuid and pid -> depth)
         self.os_published = None     # AK-5: a copy of it the follow published at the end of its last finished pass
 
@@ -1280,7 +1289,7 @@ def rhythm_of(ring, k, w, r, n):
     "rounds": its act rounds, "any": act rounds with a cycle to any
     destination, "beats": the cycles of that destination (talk round and
     seq, act round and seq, the acts, the cites)}."""
-    ring = one_server([e for e in ring if e["round"] > n - r])   # ADR-0007 AU-3
+    ring = [e for e in ring if e["round"] > n - r]
     window = datetime.timedelta(seconds=w)
     dests = sorted({d for e in ring for d in e["talks"]})
     per = {}
@@ -1310,70 +1319,6 @@ def rhythm_of(ring, k, w, r, n):
     dest = sorted(per, key=lambda d: (-len(per[d]), d))[0]
     return {"cycles": len(per[dest]), "destination": dest, "rounds": [c["round"] for c in per[dest]],
             "any": any_rounds, "beats": per[dest][-BEATS_KEPT:]}
-
-
-# ADR-0007 AU-2: an os net line written before AU-1 has no dest_sha256: its destination is the hash of the name too
-PRE_DEST_NOTE = ("its net lines written before the server's own hash (input_meta.dest_sha256) were read: their "
-                 "destination is the hash of the host name, the address, the port and the protocol, so one server "
-                 "named on some of them and not on others is two destinations, and none is one with a host talk")
-
-
-def server_of(dest):
-    """ADR-0007 AU-3: the os name ("os:" and the first 12 hex of
-    os_sysmon.dest_sha256 of the address, the port and tcp) of a host
-    talk's destination "address:port" (an IPv6 address bracketed or not),
-    or None for any other destination (an os one, or one that does not
-    parse: never a guess)."""
-    if not isinstance(dest, str) or dest.startswith("os:") or ":" not in dest:
-        return None
-    addr, port = dest.rsplit(":", 1)
-    if addr.startswith("[") and addr.endswith("]"):
-        addr = addr[1:-1]
-    from raqib.hooks import os_sysmon
-    server = os_sysmon.dest_sha256(addr, port, "tcp")
-    return None if server is None else "os:%s" % server[:12]
-
-
-def one_server(ring):
-    """ADR-0007 AU-3 (pure): the ring with each os destination whose server
-    a host talk in the ring names put under the host talk's name (its
-    cites joined, its own times kept; a host talk of a round that also
-    has the os talk keeps the round's time). A destination only one
-    source saw is named as before. The entries are new dicts where a name
-    changed, the same ones elsewhere."""
-    host = {}
-    for e in ring:
-        for d in e["talks"]:
-            s = server_of(d)
-            if s is not None and (s not in host or d < host[s]):
-                host[s] = d   # two host names of one server (never seen): the least, so the ring is stable
-    names = {s: d for s, d in host.items() if any(s in e["talks"] for e in ring)}
-    if not names:
-        return list(ring)
-    out = []
-    for e in ring:
-        if not any(d in names for d in e["talks"]):
-            out.append(e)
-            continue
-        talks, talk_at = {}, {}
-        for d, cites in e["talks"].items():
-            name = names.get(d, d)
-            talks.setdefault(name, []).extend(cites)
-        for name in talks:
-            parts = [d for d in e["talks"] if names.get(d, d) == name]
-            if len(parts) == 1:
-                if parts[0] in (e.get("talk_at") or {}):
-                    talk_at[name] = list(e["talk_at"][parts[0]])
-                continue
-            times = []
-            for d in parts:   # a part with no times of its own is the host's: at the round's time
-                times += (e.get("talk_at") or {}).get(d) or ([e["at"]] if e["at"] is not None else [])
-            talk_at[name] = sorted(times)
-        for d, times in (e.get("talk_at") or {}).items():
-            if d not in e["talks"]:
-                talk_at.setdefault(names.get(d, d), []).extend(times)
-        out.append(dict(e, talks=talks, talk_at=talk_at))
-    return out
 
 
 SOURCE_BASES = ("os", "hooks")     # M7.5 E2: the act bases of a source's own record, with their own times
@@ -2725,7 +2670,6 @@ class HostWatch:
             e["talks"].setdefault(beat["dest"], []).extend(beat["cites"])
             if beat["at"] is not None:
                 e["talk_at"].setdefault(beat["dest"], []).append(beat["at"])
-        ring[:] = one_server(ring)   # ADR-0007 AU-3: a host talk and an os talk to one server, one destination
         got = rhythm_of(ring, k, w, r, n)
         st = self.rhythm_state.setdefault(key, {"fired": False, "last_cycle": None})
         if got["any"]:   # M7.5 E2: a cycle a late source beat completed in an earlier round counts from there
@@ -2839,10 +2783,10 @@ class HostWatch:
         moved; at the round's time) and os (each Sysmon event 3 the tree's os
         source gained, at its UtcTime; its destination is "os:" and the first
         12 hex of the line's dest_sha256, the hash of the server alone
-        (ADR-0007 AU-2; a line written before it has none: the first 12 of
-        its input_sha256, said once per source), since the os source keeps no
-        remote in clear: ADR-0007 I-7; AU-3: one_server makes a host talk and
-        an os talk to one server one destination in the ring).
+        (ADR-0007 AU-2; a line without it: the first 12 of its input_sha256,
+        said once per source with its count, PRE_DEST_NOTE), since the os
+        source keeps no remote in clear: ADR-0007 I-7; a host talk and an os
+        talk to one server are two destinations, AW-1).
         [{"dest", "cites", "at" (None: the round's time)}]."""
         out = [{"dest": remote, "cites": cites, "at": None} for remote, cites in sorted(self._talks(key, t).items())]
         return out + [beat for kind, beat in (self._source_beats(key) if fresh is None else fresh) if kind == "talk"]
@@ -2882,12 +2826,9 @@ class HostWatch:
                     digest = rec.get("input_sha256")
                     server = meta.get("dest_sha256")   # ADR-0007 AU-2: the server alone, whichever events name it
                     if isinstance(server, str) and server:
-                        digest = server
+                        digest = server   # (a line without it keeps the destination it had: PRE_DEST_NOTE)
                     elif not isinstance(digest, str) or not digest:
                         continue
-                    else:   # a line written before AU-1: the destination it had, said once per source
-                        self._note_once(("pre-dest", key),
-                                        "tree %s, its os source: %s" % (tree_word(key), PRE_DEST_NOTE))
                     out.append(("talk", {"dest": "os:%s" % digest[:12], "at": at, "cites": [cite]}))
                 elif rec.get("source") in (None, "hooks") and rec.get("tool") == "Bash":
                     out.append(("act", {"pid": None, "image": "Bash", "started": rec["ts"], "at": at,
@@ -3433,7 +3374,9 @@ class HostWatch:
 
         # AI-1: the follow asks a bounded question, the first pass since the watch's start; AJ-4: it is given the
         # tree an earlier follow found (R-1) and the round's restarts (R-3: its bound restarts with the round's read)
-        more = follow_kw(follow, since=self.start_eff, tree=src.os_tree, restart=self.follow_restart.get)
+        # ADR-0007 AW-2: and it asks for the server's own hash on its net lines (input_meta.dest_sha256)
+        more = follow_kw(follow, since=self.start_eff, tree=src.os_tree, restart=self.follow_restart.get,
+                         server_hash=True)
 
         def run():
             try:
@@ -3642,6 +3585,18 @@ class HostWatch:
             if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
                 # M8.2 REDO 2 F-6: only the notes of the rules PRE_M78_NOTE names; a person's rule keeps its own
                 notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
+        if src.kind == "os":   # ADR-0007 AW-3: os net lines without the server's hash: said once per source object
+            old = sum(1 for _, rec in feed.numbered if isinstance(rec, dict) and rec.get("source") == "os"
+                      and rec.get("tool") == "net" and rec.get("phase") == "pre"
+                      and isinstance(rec.get("input_meta"), dict) and "dest_sha256" not in rec["input_meta"])
+            if old:   # its count kept the latest, as PRE_M78_NOTE's
+                text = "tree %s, its os source: %s" % (tree_word(key), PRE_DEST_NOTE % old)
+                if not src.pre_dest_said:
+                    src.pre_dest_said = True
+                    src.pre_dest_index = len(self.notes)
+                    self.notes.append(text)
+                else:
+                    self.notes[src.pre_dest_index] = text
         if src.kind == "os":   # AM-2: a follow's line timed from the log: said once per event kind per watch
             skews, records = {}, {}
             for _, rec in feed.numbered:
