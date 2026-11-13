@@ -880,6 +880,38 @@ is amended by T-2, T-1 restated by V-1).
   program that repeats as brief runs is judged only by its acts: each run
   is its own tree, so HOST-RHYTHM and HOST-UNWATCHED never see the
   repetition; the count by path is its only trace.
+- **A reused pid is not a parent (ADR-0007 Amendments BE and BF).** What a
+  reused pid could do: Windows keeps a dead parent's pid in its children
+  for as long as they live, and gives that pid to a later process. The
+  watch leaves out its own tree (its pid, its launchers and every process
+  under them), so a watch given the pid that the dead parent of the
+  system's first processes had became, by pid alone, the parent of the
+  whole machine: it saw no tree, said nothing, and ended NONE-SEEN, exit 0
+  (two field runs). The same pid, taken by any process, made it the
+  parent of an older orphan, so that orphan's acts went to it. What is now
+  proven by dates: a process is the child of the holder of its parent pid
+  only where that holder did not start after it (both starts read from one
+  source: any later start breaks the link; from the sample and the
+  channel's event 1: only a difference above 2 s does); a broken link
+  leaves the child with no parent in the round, for every walk of parents
+  (the watch's own tree and line, a child's nearest talking ancestor, an
+  act's path, the act roots). The watch's own tree is made only of links
+  whose two starts were read, and the Windows reader names as its
+  launcher only a process whose start and whose child's start were read
+  and in order: a process under the watch's pid whose start, or whose
+  parent's start, was not read is judged as any other. The links broken
+  are said in the inventory's holes, each as the child's pid under the
+  parent pid ("the reader's own pid" where the younger holder is the
+  watch or its launcher). What is left: a link whose two starts are not
+  both read is kept as before, so a reused pid there still takes an
+  orphan's acts. It is counted in the holes on a round whose reader dated
+  at least one link (a live round), and a process that hangs under the
+  watch's own pid by such a link is named there; an export whose
+  CreationDate is a local text dates no link and says nothing new; a
+  Sysmon export read by `raqib discover` (the channel not read) dates no
+  link by its event 1 times. On Linux the kernel gives every orphan a
+  living parent, and the start ticks date the links (nothing is broken
+  there in the fixtures).
 - **Where the channel's watch and the watch without it still differ on
   a footprint (ADR-0007 AE; each is a knock more, never one fewer).**
   The footprints are judged from the round built without the channel's

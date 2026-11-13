@@ -1819,20 +1819,129 @@ def _merge_procs(records):
     return procs
 
 
+BOOT_START = re.compile(r"boot\+([0-9]+)\Z")   # the Linux key parse_proc makes of the kernel's start ticks
+
+
+def _start_key(text):
+    """ADR-0007 BE-1: a start as the module reads it, or None where it cannot
+    be compared: a Linux key ("boot+N", the kernel's ticks since boot) as
+    ("boot", N); an ISO UTC time (the live reader's CreationDate, a Sysmon 1
+    UtcTime, a Linux "started" of the first REDO) as ("utc", _ts of it). An
+    export's local CreationDate ("11/1/2026 9:14:30 AM") is not a UTC time
+    and is not guessed (as raqib/host.py's utc_time)."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    m = BOOT_START.match(text.strip())
+    if m:
+        return ("boot", int(m.group(1)))
+    t = _ts(text) if "T" in text else None
+    return ("utc", t) if t is not None else None
+
+
+def _starts(p, channel):
+    """BE-1: (the start the sample gave, the start the channel's event 1 gave) of a process, each a _start_key or
+    None. The channel's is read in a channel round only (as an act's "started", X-6)."""
+    return (_start_key(started_of(p)), _start_key(_channel_fields(p)["channel_started"]) if channel else None)
+
+
+def _link_verdict(child, parent, channel):
+    """ADR-0007 BE-1: the link from a process to the process that holds its
+    parent pid: "broken" where the parent started after the child (the pid
+    was reused), "kept" where it did not, both starts read, and "unread"
+    where the two starts are not both read (kept, as before; BE-3 counts it).
+    Both starts from one source (the sample, or the channel): any later
+    start breaks it; from two (the sample's and the channel's event 1): only
+    a difference above GUID_SAME_SECONDS does."""
+    cs, cc = _starts(child, channel)
+    ps, pc = _starts(parent, channel)
+    for a, b, slack in ((cs, ps, 0.0), (cc, pc, 0.0), (cs, pc, GUID_SAME_SECONDS), (cc, ps, GUID_SAME_SECONDS)):
+        if a is None or b is None or a[0] != b[0]:
+            continue
+        later = (b[1] - a[1]).total_seconds() if a[0] == "utc" else b[1] - a[1]
+        return "broken" if later > slack else "kept"
+    return "unread"
+
+
+def _date_links(procs, channel=False):
+    """BE-1: every process whose parent pid a process of the round holds
+    carries its link's verdict (p["link"]: _link_verdict); the walks of
+    parents read it (_parent)."""
+    for p in procs.values():
+        q = procs.get(p["ppid"]) if p["ppid"] is not None and p["ppid"] != p["pid"] else None
+        if q is not None:
+            p["link"] = _link_verdict(p, q, channel)
+    return procs
+
+
+def _parent(p):
+    """BE-1: the parent pid of a process in the round, or None: none was
+    read, or the process that holds it started after this one (the link is
+    broken: the child has no parent in the round, as one whose parent is not
+    in the sample)."""
+    if p is None or p["ppid"] is None or p.get("link") == "broken":
+        return None
+    return p["ppid"]
+
+
+LINKS_SHOWN = 20   # BF-6: at most this many links are named in a hole; the count is whole
+
+
+def _link_holes(procs, self_pids, self_tree):
+    """ADR-0007 BE-3, BF-2, BF-3, BF-6: the holes of the parent links a date
+    decided (_date_links). The links BE-1 broke, each as the child's pid
+    under the parent pid, "the reader's own pid" where the younger holder
+    is the reader or its launcher, sorted by parent pid then child, at most
+    LINKS_SHOWN, the count whole. The links kept with a start unread,
+    counted, only on a round whose reader dated at least one link (an
+    export whose starts are local texts dates none and says nothing new),
+    or where a process hangs under the reader's tree by such a link (BE-2:
+    it was not taken for the reader's): those are named. Neither hole
+    where there is no such link."""
+    def os_pid(pid):
+        return pid % REUSE
+
+    def named(links):
+        shown = ", ".join("pid %d under %s" % (os_pid(c), (
+            "parent pid %d (the reader's own pid)" % os_pid(q) if q in self_pids else
+            "parent pid %d (in the reader's tree)" % os_pid(q) if q in self_tree else "parent pid %d" % os_pid(q)))
+            for q, c in links[:LINKS_SHOWN])
+        return shown + (" and %d more" % (len(links) - LINKS_SHOWN) if len(links) > LINKS_SHOWN else "")
+    order = (lambda qc: (os_pid(qc[0]), os_pid(qc[1]), qc))
+    broken = sorted(((p["ppid"], p["pid"]) for p in procs.values() if p.get("link") == "broken"), key=order)
+    unread = sorted(((p["ppid"], p["pid"]) for p in procs.values() if p.get("link") == "unread"), key=order)
+    dated = any(p.get("link") in ("kept", "broken") for p in procs.values())
+    under = [(q, c) for q, c in unread if q in self_tree]
+    holes = []
+    if broken:
+        holes.append("%d parent link(s) broken by their starts (ADR-0007 BE-1): the process that holds the parent pid"
+                     " started after the child, so the pid was taken again; the child has no parent in this round"
+                     " (its acts go to no ancestor through it): %s" % (len(broken), named(broken)))
+    if unread and (dated or under):
+        holes.append("%d parent link(s) kept with a start unread, the child's or its parent's (ADR-0007 BE-3): a pid"
+                     " taken again cannot be told there, so the child is taken for a child of the pid's present holder"
+                     " and \"reparented acts\" above does not hold for it%s" % (len(unread), (
+                         "; not taken for the reader's (BE-2), judged as any other process: %s" % named(under))
+                         if under else ""))
+    return holes
+
+
 def ancestors(procs, pid):
-    """Parent pids from the nearest up; stops at a missing parent or a loop."""
+    """Parent pids from the nearest up; stops at a missing parent, a link
+    BE-1 broke (nothing above it is an ancestor), or a loop."""
     seen = {pid}
     p = procs.get(pid)
-    while p is not None and p["ppid"] is not None and p["ppid"] not in seen:
+    while _parent(p) is not None and p["ppid"] not in seen:
         seen.add(p["ppid"])
         yield p["ppid"]
         p = procs.get(p["ppid"])
 
 
-def _descendants(procs, pid):
+def _descendants(procs, pid, proven=False):
+    """The pids under a process by the links BE-1 keeps; proven (BE-2, the
+    reader's own tree only): by links whose two starts were both read."""
     children = {}
     for q in procs.values():
-        if q["ppid"] is not None:
+        if _parent(q) is not None and (not proven or q.get("link") == "kept"):
             children.setdefault(q["ppid"], []).append(q["pid"])
     out, todo = set(), [pid]
     while todo:
@@ -2137,7 +2246,7 @@ def _acts_core(records, catalog, channel=False):
     snapshots = [r for r in records if r["kind"] == "snapshot"]
     self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
     self_pids |= {p for r in snapshots for p in r.get("launchers") or ()}     # ADR-0007 A-7
-    procs = _merge_procs(records)
+    procs = _date_links(_merge_procs(records), channel)   # BE-1: every link of a parent carries a date
     records = _join_sockets(records, procs)
     conns = [r for r in records if r["kind"] == "conn"]
     talkers = {}
@@ -2145,8 +2254,8 @@ def _acts_core(records, catalog, channel=False):
         if talks(c):
             talkers.setdefault(c["pid"], []).append(c)
     self_tree = set()
-    for s in self_pids:
-        self_tree |= {s} | _descendants(procs, s)
+    for s in self_pids:   # BE-2: under the watch only by links whose two starts were both read
+        self_tree |= {s} | _descendants(procs, s, proven=True)
     self_line = set()
     for s in self_pids:
         self_line |= set(ancestors(procs, s))
@@ -2380,6 +2489,7 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     incomplete = []
     holes += _holes(records, procs, conns, read)
     holes += reuse_holes
+    holes += _link_holes(procs, self_pids, self_tree)   # ADR-0007 BE-3
     if catalog["act_root"]["status"] != "ok":
         holes.append("act-root not judged: act_root has status %s in %s (G-8, A6)"
                      % (catalog["act_root"]["status"], catalog["path"]))
@@ -2708,8 +2818,8 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     shells, never = set(spec["shells"]), set(spec["not_images"])
     parents = shells | set(spec["launchers"])
     children = {}
-    for q in procs.values():
-        if q["ppid"] is not None and q["ppid"] != q["pid"]:
+    for q in procs.values():   # BE-1: by the links a date does not break
+        if _parent(q) is not None and q["ppid"] != q["pid"]:
             children.setdefault(q["ppid"], []).append(q["pid"])
 
     def below(pid):
@@ -2732,7 +2842,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     chains = {}
     for pid in sorted(procs):
         s = procs[pid]
-        if pid in self_tree or not shell(s) or _helper(s) or s["ppid"] not in procs or s["ppid"] == pid:
+        if pid in self_tree or not shell(s) or _helper(s) or _parent(s) not in procs or s["ppid"] == pid:
             continue
         parent = procs[s["ppid"]]
         if parent["pid"] in self_tree or shell(parent):
@@ -2744,7 +2854,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     for pid in sorted(chains):
         p = procs[pid]
         place = _user_dir(p["exe"], spec["user_dirs"])
-        up = procs.get(p["ppid"]) if p["ppid"] is not None else None
+        up = procs.get(_parent(p)) if _parent(p) is not None else None
         if pid in talkers or any(i in never for i in p["images"]) or place is None or _helper(p) \
                 or up is None or not any(i in parents for i in up["images"]):
             continue

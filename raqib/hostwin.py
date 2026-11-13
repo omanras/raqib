@@ -473,9 +473,14 @@ def self_tree(procs, self_pid, started=None):
     """The reader's own pids (A-7): its pid, then the unbroken chain of
     ancestors whose image is raqib*.exe, python*.exe or pythonw*.exe (the
     console script and the venv redirector), nearest first. procs: [(pid,
-    ppid, image name)]. started {pid: CreationDate text}: a parent created
-    after its child is not its parent (the ppid was reused) and ends the
-    chain."""
+    ppid, image name)]. started {pid: CreationDate text, "" where it was not
+    read}, as process_text gives it: a parent created after its child is
+    not its parent (the ppid was reused) and ends the chain; so does a link
+    whose two starts were not both read (ADR-0007 BF-7: a launcher is named
+    only where proven). The texts are the reader's own (filetime), one
+    format, so their order is the time order. started None (no start asked
+    for): the chain by images only."""
+    dated = started is not None
     started = started or {}
     by_pid = {pid: (ppid, name) for pid, ppid, name in procs}
     out, pid = [self_pid], self_pid
@@ -483,6 +488,8 @@ def self_tree(procs, self_pid, started=None):
         ppid = by_pid[pid][0]
         if ppid in out or ppid not in by_pid or not LAUNCHER.match(by_pid[ppid][1] or ""):
             break
+        if dated and not (started.get(ppid) and started.get(pid)):
+            break   # BF-7: a start not read proves no launcher
         if started.get(ppid) and started.get(pid) and started[ppid] > started[pid]:
             break
         out.append(ppid)

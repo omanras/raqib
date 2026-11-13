@@ -1577,10 +1577,10 @@ def act_root_sample(tmp_path, name, children=True):
     powershell (a listed shell), with a sampled cmd.exe that has kimi.exe below it; it never talks at a sample."""
     d = footprint_dir(tmp_path, name)
     with open(d / "win-process-1.csv", "a", encoding="ascii", newline="\n") as f:
-        f.write('"9216","5888","agentx.exe","%s","agentx","2026-11-10T07:49:00.000Z"\n' % AGENTX)
+        f.write('"9216","5888","agentx.exe","%s","agentx","2026-11-10T07:50:30.000Z"\n' % AGENTX)
         if children:
-            f.write('"9330","9216","cmd.exe","C:\\Windows\\System32\\cmd.exe","cmd","2026-11-10T07:49:01.000Z"\n')
-            f.write('"9340","9330","kimi.exe","%s","kimi","2026-11-10T07:49:02.000Z"\n' % KIMI)
+            f.write('"9330","9216","cmd.exe","C:\\Windows\\System32\\cmd.exe","cmd","2026-11-10T07:50:31.000Z"\n')
+            f.write('"9340","9330","kimi.exe","%s","kimi","2026-11-10T07:50:32.000Z"\n' % KIMI)
     return d
 
 
@@ -1753,8 +1753,9 @@ def test_ae1_ad2_does_not_reach_a_guid_tree_whose_own_start_the_round_read(tmp_p
     shutil.copytree(str(HOSTFIX / "quiet" / "talking"), str(later))
     rows = (later / "win-process-1.csv").read_text(encoding="ascii")
     assert rows.count('.exe"","2026-11-10T07:50:00.000Z"') == 1
-    (later / "win-process-1.csv").write_text(rows.replace(
-        '.exe"","2026-11-10T07:50:00.000Z"', '.exe"","2026-11-10T08:00:05.000Z"', 1), encoding="ascii")
+    (later / "win-process-1.csv").write_text(rows.replace(   # BF-1: the new shell's child starts after it
+        '.exe"","2026-11-10T07:50:00.000Z"', '.exe"","2026-11-10T08:00:05.000Z"', 1) + '"5896","5888","conhost.exe",'
+        '"C:\\Windows\\System32\\conhost.exe","conhost.exe 0x4","2026-11-10T08:00:05.100Z"\n', encoding="ascii")
     w, _, rounds = look_watch(tmp_path / "w", monkeypatch, [talking_unread(tmp_path, "t"), later, later],
                               [began, "", ""])
     guid_keys = [k for k in w.trees if k[0] == 5888 and w.trees[k].get("guid") == G_SHELL]

@@ -2531,3 +2531,70 @@ members stay in the tree, as built. Q3: the sample decides "under this tree's ro
 follow's own parents decide which events; where the sample cannot tell, the root is not told, as built. Q6:
 the clause stays, with BC-5's.
 
+## Amendment BE (the Table, 2026-11-13) - a reused pid is not a parent: the watch that saw nothing
+The field, 2026-11-13, the real-agents probe on Windows with Sysmon (run 43376636008, the code of main): a
+watch read 1645 Sysmon events in 30 rounds while a real agent ran seven commands under it, and saw no tree at
+all - not the agent, not the machine's own services that every other watch lists from its first round. It
+ended NONE-SEEN, exit 0. The same code saw everything on the same machine two minutes later. The watch's own
+pid in that run was 732. It happened again within the hour (run 43379002838, another machine, the watch's pid
+720; the inventory: every source read, 145 processes, no candidate): two of twelve watches on fresh machines.
+The cause, read in the code (raqib/discover.py, `_acts_core`): the watch leaves out its own tree - its pid, its
+launchers, and every process under them by the sample's parent pids. Windows keeps a dead parent's pid in its
+children for as long as they live. The system's first processes are such orphans, and the whole machine hangs
+under them. A watch that is given the pid their dead parent had becomes, by pid alone, the parent of
+everything, and leaves everything out. Nothing said so: a silence that looked like an empty host (rule 4).
+- BE-1 (a parent link carries a date). A process is the child of the process that holds its parent pid only
+  where that process did not start after it. Where it did, the pid was reused: the link is broken, and the
+  child has no parent in the round, as one whose parent is not in the sample. Both starts read from one
+  source: any later start breaks it. Read from two (the sample and the channel's event 1): only a
+  difference above GUID_SAME_SECONDS does. A link whose two starts are not both read stays, as before
+  (BE-3 counts it). FOR: every walk of parents - the watch's own tree and line, a child's nearest talking
+  ancestor, an act's path, the act roots. MUST NOT TOUCH: any inventory of a host where no pid is reused (every
+  existing fixture gives, byte for byte, what it gave); Linux, where the kernel gives every orphan a living
+  parent (the rule breaks nothing there, tested on the Linux fixtures).
+- BE-2 (the watch's own tree is proven, never assumed). Beyond BE-1: a process is under the watch only by
+  links whose two starts were both read. One whose start, or whose parent's start, was not read is not the
+  watch's and is judged as any other. FOR: the run above. MUST NOT TOUCH: the watch's real children (the
+  helpers it starts: their starts are read, they stay out of every tree).
+- BE-3 (said, in the inventory's holes). The links BE-1 broke, counted, with the pids (the reader named where
+  the younger process is the reader itself or its launcher); and the links kept with a start unread, counted.
+  The hole "reparented acts" says what is now true.
+- BE-4 (the measure). The field shape as records: a Windows sample in which the reader's pid is the parent
+  pid of an old chain under which a talker with a child lives. Before: no candidate (shown on main's code).
+  After: the talker is a candidate, and the reader's own child is still nobody's act.
+The Table's part: the hole "on Windows a dead parent's pid can be reused" stood in the inventory since the
+first reader, written about a child's attribution; nobody asked what it does to the watch's own tree. Found
+only because a twin of a field run was read to its last line instead of being taken as the twin it was run
+for.
+
+## Amendment BF (the Table, 2026-11-13) - the builder's STOP on M7.26 (3c62ffc) and its questions
+The builder wrote BE-1 and BE-2, ran the whole suite, and stopped where E6 told it to: four pinned tests of
+tests/test_round_channel.py changed. It also ran the field's shape on main's code: none-seen, exit 0, no
+candidate - the blind run, reproduced from ten process rows. Its questions, ruled:
+- BF-1 (Q1: the two samples are wrong, not the rule). Both rows are a child older than the process whose pid
+  it names as its parent - by BE's own words a reused pid, written by a test that meant a child. They are
+  corrected in tests/test_round_channel.py and nowhere else: the act-root's agentx starts after its shell; in
+  AE-1's sample, where the shell's pid is taken again, the new shell gets a child that starts after it, and
+  the old conhost row stays beside it (an orphan of the pid's earlier holder: the case itself). What each of
+  the four tests pins does not change. FOR: fixtures that say what a host says (BD-3). MUST NOT TOUCH: any
+  other row, any pinned inventory, tests/fixtures/host/make.py's outputs.
+- BF-2 (Q2: the always-hole keeps its words). "reparented acts ... is not attributed" stays as it is pinned
+  (it is true wherever both starts are read, and now proven there). What is not true of it is said only on a
+  round that has such a link, in BE-3's hole. HANDOFF E5's last sentence is withdrawn.
+- BF-3 (Q3: the links not dated are counted only where the reader dates). The hole that counts links kept
+  with a start unread is said only on a round whose reader dated at least one link (a live reader's round);
+  an export whose starts are local texts dates none and says nothing new. On any round, a process that
+  hangs under the reader's own pid by a link not dated is named in it: it was not taken for the reader's.
+- BF-4 (Q4) The Linux key "boot+N" is read as its ticks: the module's own key, not a second parser.
+- BF-5 (Q5) The channel's event 1 dates a link only in a round that reads the channel, as it dates an act
+  there. A Sysmon export read by `raqib discover` dates none: recorded.
+- BF-6 (Q6) The hole of the links broken names each as the child's pid under the parent pid, with "the
+  reader's own pid" where the younger holder is the reader or its launcher; sorted by parent pid, then
+  child; at most 20 links, the count whole.
+- BF-7 (Q7: the reader's own identity is proven too). raqib/hostwin.py already ends its walk at a younger
+  holder. It also ends it at a link whose two starts were not both read: a launcher is named only where
+  proven, as BE-2 rules the reader's tree. A process not named a launcher is an ordinary process.
+- Kept as ruled: one source, any later start breaks the link (BE-1). Recorded: tests/fixtures/host's
+  quiet-unread gives, in its channel, a conhost 262 ms before the powershell it hangs under; the link now
+  breaks there and no pinned value moved; the fixture's times are for a later task to make true.
+
