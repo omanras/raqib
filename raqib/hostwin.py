@@ -76,6 +76,7 @@ PROCESS_COLUMNS = ("ProcessId", "ParentProcessId", "Name", "ExecutablePath", "Co
 TCP_COLUMNS = ("LocalAddress", "LocalPort", "RemoteAddress", "RemotePort", "State", "OwningProcess", "CreationTime")
 DNS_COLUMNS = ("Entry", "RecordName", "RecordType", "Status", "Section", "TimeToLive", "DataLength", "Data")
 SNAPSHOT_LINE = "# raqib-snapshot at=%s self=%s sample=%d"   # discover.WIN_SNAPSHOT_LINE (a test keeps them equal)
+SNAPSHOT_HELPERS = " helpers=%s"   # discover.WIN_SNAPSHOT_HELPERS (ADR-0007 BH-2; a test keeps them equal)
 # ADR-0007 A-7: the reader's launchers. The reader's own tree is its pid and
 # the unbroken chain of ancestors whose image is one of these (the console
 # script raqib.exe, the venv redirector python.exe): none is evidence.
@@ -469,39 +470,51 @@ def _label(api_text, k, at):
     return "live: %s; sample %d at %s" % (api_text, k, at)
 
 
-def self_tree(procs, self_pid, started=None):
+def self_tree(procs, self_pid, started):
     """The reader's own pids (A-7): its pid, then the unbroken chain of
     ancestors whose image is raqib*.exe, python*.exe or pythonw*.exe (the
     console script and the venv redirector), nearest first. procs: [(pid,
     ppid, image name)]. started {pid: CreationDate text, "" where it was not
-    read}, as process_text gives it: a parent created after its child is
-    not its parent (the ppid was reused) and ends the chain; so does a link
-    whose two starts were not both read (ADR-0007 BF-7: a launcher is named
-    only where proven). The texts are the reader's own (filetime), one
-    format, so their order is the time order. started None (no start asked
-    for): the chain by images only."""
-    dated = started is not None
-    started = started or {}
+    read}, as process_text gives it, required (ADR-0007 BG-5: no walk by
+    images alone): a parent created after its child is not its parent (the
+    ppid was reused) and ends the chain; so does a link whose two starts
+    were not both read (BF-7: a launcher is named only where proven). The
+    texts are the reader's own (filetime), one format, so their order is
+    the time order. A launcher is itself only: what else it started is not
+    the reader's (BH-3, in discover)."""
     by_pid = {pid: (ppid, name) for pid, ppid, name in procs}
     out, pid = [self_pid], self_pid
     while pid in by_pid:
         ppid = by_pid[pid][0]
         if ppid in out or ppid not in by_pid or not LAUNCHER.match(by_pid[ppid][1] or ""):
             break
-        if dated and not (started.get(ppid) and started.get(pid)):
+        if not (started.get(ppid) and started.get(pid)):
             break   # BF-7: a start not read proves no launcher
-        if started.get(ppid) and started.get(pid) and started[ppid] > started[pid]:
+        if started[ppid] > started[pid]:
             break
         out.append(ppid)
         pid = ppid
     return out
 
 
-def process_text(api, k, self_pid, at):
+def _epoch(text):
+    """Seconds since the epoch of a CreationDate text as filetime() writes it, or None ("" or another text)."""
+    try:
+        return datetime.datetime.strptime(text, "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def process_text(api, k, self_pid, at, record=None):
     """(win-process-<k> entry, pids whose image path was not read, pids
     reused in the gap (A-8), the reader's own pids (A-7)). The first line
-    names the reader's own pids (E3, A-7). HostError when the snapshot
-    fails."""
+    names the reader's own pids (E3, A-7) and, where the watch's record of
+    what it started is given (record: raqib/own.py's Record; ADR-0007
+    BH-2), ends with " helpers=" and the recorded pids alive in this sample
+    (a pid the sample holds with a start outside its record's window is
+    another process: not written). HostError when the snapshot fails."""
+    since = record.clock() if record is not None else None
     procs, error = read_processes(api)
     rows, denied, reused, started = [], [], [], {}
     for pid, ppid, exe_name in procs:
@@ -517,6 +530,12 @@ def process_text(api, k, self_pid, at):
         reused.append(CAPPED)      # A-1: the cap is a hole too, beside the source's error
     mine = self_tree(procs, self_pid, started)
     first = SNAPSHOT_LINE % (at, ",".join(map(str, mine)), k)
+    if record is not None:   # BH-2; a sample that may not list every process (an error, the cap) forgets no pid
+        whole = error is None and len(procs) < PROCESSES_MAX
+        # BI-2: the sample's image for each pid (the snapshot's szExeFile, taken atomically) proves the record.
+        first += SNAPSHOT_HELPERS % ",".join(map(str, record.alive(
+            {pid: _epoch(started[pid]) for pid, _, _ in procs},
+            {pid: exe_name for pid, _, exe_name in procs}, since if whole else None)))
     return (_label(API_PROCESSES, k, at), _csv(PROCESS_COLUMNS, rows, first), error), denied, reused, mine
 
 
@@ -594,7 +613,7 @@ def system_drive(system_root):
     return drive[0].lower() if re.match(r"[A-Za-z]:\Z", drive) else None
 
 
-def collect(api, samples, every, self_pid, sleep, now=now_text, clock=time.monotonic, system_root=None):
+def collect(api, samples, every, self_pid, sleep, now=now_text, clock=time.monotonic, system_root=None, record=None):
     """A live run: `samples` samples `every` seconds apart start to start
     (A-11: the sleep is `every` minus the sample's own duration, never
     negative), each read as win-process-<k>, win-tcp-<k> and (when the
@@ -605,7 +624,9 @@ def collect(api, samples, every, self_pid, sleep, now=now_text, clock=time.monot
     later sample that sample's process source is not read (an error: the
     run is incomplete, A3) and its TCP and DNS kinds are still read. Any
     other exception inside the reader is ReaderFailed (A-6). Every cap,
-    skip and truncation is a hole with its count (A-1)."""
+    skip and truncation is a hole with its count (A-1). record (ADR-0007
+    BH-2): the watch's record of what it started, handed to each sample
+    (process_text); None: no record, the line as before."""
     texts, holes, times = {}, [NOT_READ], []
     denied, reused, dns_why, v6_why, unanswered, dns_read = {}, {}, {}, {}, 0, 0
     mine, seen, capped = [], {}, []
@@ -615,7 +636,7 @@ def collect(api, samples, every, self_pid, sleep, now=now_text, clock=time.monot
         times.append(at)
         try:
             texts["win-process-%d" % k], gone, again, own = _step("processes in sample %d" % k,
-                                                                         process_text, api, k, self_pid, at)
+                                                                         process_text, api, k, self_pid, at, record)
         except HostError as exc:
             if k == 1:
                 raise

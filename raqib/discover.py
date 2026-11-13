@@ -96,6 +96,7 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 
+from raqib import own
 from raqib.rules import yamlite
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -698,8 +699,13 @@ def parse_proc(text, src="proc"):
             counts = {k: obj[k] for k in ("gone_while_read", "unreadable", "kernel_threads", "start_unread")
                       if isinstance(obj.get(k), int) and not isinstance(obj.get(k), bool)}
             self_pid = obj.get("self") if isinstance(obj.get("self"), int) else None
+            # ADR-0007 BH-2: the recorded pids alive in the snapshot, where the reader was handed the record
+            helpers = obj.get("helpers")
+            helpers = helpers if isinstance(helpers, list) and all(
+                isinstance(h, int) and not isinstance(h, bool) for h in helpers) else None
             records.append(_rec("snapshot", src, number, raw, ts=at, self=self_pid, counts=counts,
-                                kernel_parent=obj.get("kernel_parent")))
+                                kernel_parent=obj.get("kernel_parent"),
+                                **({"helpers": helpers} if helpers is not None else {})))
             continue
         pid, ppid, argv, env = obj.get("pid"), obj.get("ppid"), obj.get("argv"), obj.get("env_keys")
         sockets = obj.get("sockets")
@@ -885,9 +891,15 @@ def _col(row, *names):
 # reader's own pid, as proc.txt's snapshot line does, so its tree is never
 # evidence (E3); --save keeps it, so a replay knows it too.
 WIN_SNAPSHOT_LINE = "# raqib-snapshot at=%s self=%s sample=%d"
+# ADR-0007 BH-2: where the live reader was handed the watch's record of what it
+# started (raqib/own.py), the line ends with " helpers=" and the recorded pids
+# alive in the sample (none: nothing after "="). A line without it (an export,
+# a text written before the record) reads as before: no record.
+WIN_SNAPSHOT_HELPERS = " helpers=%s"
 # ADR-0007 A-7: self= is the reader's pid, then its launchers (raqib*.exe,
 # python*.exe) nearest first, comma-separated: all of them are the reader.
-WIN_SNAPSHOT = re.compile(r"# raqib-snapshot at=(\S+) self=([0-9]+(?:,[0-9]+)*) sample=([0-9]+)\Z")
+WIN_SNAPSHOT = re.compile(r"# raqib-snapshot at=(\S+) self=([0-9]+(?:,[0-9]+)*) sample=([0-9]+)"
+                          r"(?P<record> helpers=(?P<helpers>[0-9]+(?:,[0-9]+)*)?)?\Z")
 
 
 def parse_win_process(text, src="win-process"):
@@ -901,8 +913,10 @@ def parse_win_process(text, src="win-process"):
         m = WIN_SNAPSHOT.match(raw.strip())
         if m:
             pids = [int(x) for x in m.group(2).split(",")]
+            helpers = [int(x) for x in (m.group("helpers") or "").split(",") if x] if m.group("record") else None
             records.append(_rec("snapshot", src, number, raw, ts=_ts(m.group(1)), self=pids[0], counts={},
-                                kernel_parent=None, launchers=pids[1:]))
+                                kernel_parent=None, launchers=pids[1:],
+                                **({"helpers": helpers} if helpers is not None else {})))   # BH-2
     for number, raw, row in _csv_rows(text, src, "Win32_Process",
                                       ("ProcessId", "ParentProcessId", "Name"), problems):
         pid, ppid = _int(row["ProcessId"]), _int(row["ParentProcessId"])
@@ -1180,15 +1194,19 @@ def _sockets(fd_dir, own=False):
     return sorted(inodes)
 
 
-def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
+def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None, record=None):
     """A proc.txt snapshot of every process: JSON lines, ASCII. Reads status,
     cmdline, environ (names kept, values dropped at once), the cwd link, the
     socket inodes among the fd links and the exe link (G-2: `exe`, null and
     listed in `unread` when it cannot be read); writes nothing to /proc and
     touches no process (A4). Kernel threads are left out only when pid 2's
     status Name is kthreadd (B-3); a process that ended while read and one
-    whose status could not be read are counted apart."""
+    whose status could not be read are counted apart. record (ADR-0007 BH-2: raqib/own.py's Record, the
+    watch's record of what it started): its pids alive in the snapshot are
+    written as "helpers" on the first line; None (no record): no "helpers",
+    as before."""
     at = at or iso(datetime.datetime.now(datetime.timezone.utc))
+    since = record.clock() if record is not None else None
     try:
         names = [n for n in os.listdir(proc_root) if n.isdigit()]
     except OSError as exc:
@@ -1252,7 +1270,28 @@ def snapshot_proc(proc_root="/proc", at=None, self_pid=None, note=None):
             "start_unread": sum(1 for p in procs if p["pid"] not in ticks)}   # T-8: counted, said by build()
     if note:
         meta["note"] = note
+    if record is not None:   # BH-2: a start read by its ticks and btime, the time a pid's record is checked against
+        # BI-1: `since` (the forget rule) only on a whole sample - every process listed (unreadable == 0); a `gone`
+        # (FileNotFound) pid genuinely ended and is still forgotten, an unreadable one may be alive and is not.
+        # BI-2: the sample's image for each pid (its exe link, else argv[0], else the status Name) proves it.
+        meta["helpers"] = record.alive({p["pid"]: _epoch(p.get("started")) for p in procs},
+                                       {p["pid"]: _proc_image(p) for p in procs},
+                                       since if unreadable == 0 else None)
     return "".join(json.dumps(x, sort_keys=True, ensure_ascii=True) + "\n" for x in [meta] + procs)
+
+
+def _proc_image(p):
+    """The image a /proc sample reads for a process, for the record's proof
+    (ADR-0007 BI-2): its exe link where read, else argv[0], else the status
+    Name; own._base takes the basename. None where the sample read none."""
+    argv = p.get("argv") or ()
+    return p.get("exe") or (argv[0] if argv else None) or p.get("name")
+
+
+def _epoch(text):
+    """Seconds since the epoch of an ISO UTC time text, or None."""
+    t = _ts(text) if isinstance(text, str) and text else None
+    return t.timestamp() if t is not None else None
 
 
 def read_proc_net(proc_root="/proc", at=None):
@@ -1536,7 +1575,7 @@ def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/pro
             samples += 1
             at = iso(datetime.datetime.fromtimestamp(clock(), datetime.timezone.utc))
             try:
-                parts["proc"].append(snapshot_proc(proc_root, at, os.getpid()))
+                parts["proc"].append(snapshot_proc(proc_root, at, os.getpid(), record=own.RECORD))   # BH-2
             except OSError as exc:
                 errors["proc"].append(str(exc))
             text, error = read_proc_net(proc_root, at)
@@ -1581,7 +1620,8 @@ def collect_live(catalog, window=0.0, homes=None, platform=None, proc_root="/pro
         from raqib import notify
         system_root, _ = notify.windows_root(os.environ)   # D-3: run.json records its drive
         try:
-            got, more, info = hostwin.collect(api, win_samples, win_every, os.getpid(), sleep, system_root=system_root)
+            got, more, info = hostwin.collect(api, win_samples, win_every, os.getpid(), sleep, system_root=system_root,
+                                              record=own.RECORD)   # ADR-0007 BH-2: the watch's record of what it started
         except hostwin.HostError as exc:
             raise LiveRefused("Windows live discovery: %s" % exc)
         except hostwin.ReaderFailed as exc:
@@ -1886,7 +1926,7 @@ def _parent(p):
 LINKS_SHOWN = 20   # BF-6: at most this many links are named in a hole; the count is whole
 
 
-def _link_holes(procs, self_pids, self_tree):
+def _link_holes(procs, self_pids, self_tree, watch=None):
     """ADR-0007 BE-3, BF-2, BF-3, BF-6: the holes of the parent links a date
     decided (_date_links). The links BE-1 broke, each as the child's pid
     under the parent pid, "the reader's own pid" where the younger holder
@@ -1896,12 +1936,15 @@ def _link_holes(procs, self_pids, self_tree):
     export whose starts are local texts dates none and says nothing new),
     or where a process hangs under the reader's tree by such a link (BE-2:
     it was not taken for the reader's): those are named. Neither hole
-    where there is no such link."""
+    where there is no such link. BH-5: the reader (or its launcher) is
+    marked where it is the child of a link as well as where it is the
+    parent. watch (_watch_tree): the holes of the watch's own tree (BH-3).
+    Each hole says what was read, never a cause it cannot know."""
     def os_pid(pid):
         return pid % REUSE
 
     def named(links):
-        shown = ", ".join("pid %d under %s" % (os_pid(c), (
+        shown = ", ".join("pid %d%s under %s" % (os_pid(c), " (the reader's own pid)" if c in self_pids else "", (
             "parent pid %d (the reader's own pid)" % os_pid(q) if q in self_pids else
             "parent pid %d (in the reader's tree)" % os_pid(q) if q in self_tree else "parent pid %d" % os_pid(q)))
             for q, c in links[:LINKS_SHOWN])
@@ -1913,32 +1956,104 @@ def _link_holes(procs, self_pids, self_tree):
     under = [(q, c) for q, c in unread if q in self_tree]
     holes = []
     if broken:
-        holes.append("%d parent link(s) broken by their starts (ADR-0007 BE-1): the process that holds the parent pid"
-                     " started after the child, so the pid was taken again; the child has no parent in this round"
-                     " (its acts go to no ancestor through it): %s" % (len(broken), named(broken)))
+        holes.append("%d parent link(s) broken by their starts (ADR-0007 BE-1): the holder of the parent pid started"
+                     " after the child (a pid taken again, or a clock set back between the two; BH-5); the child has"
+                     " no parent in this round (its acts go to no ancestor through it): %s" % (len(broken), named(broken)))
     if unread and (dated or under):
         holes.append("%d parent link(s) kept with a start unread, the child's or its parent's (ADR-0007 BE-3): a pid"
                      " taken again cannot be told there, so the child is taken for a child of the pid's present holder"
                      " and \"reparented acts\" above does not hold for it%s" % (len(unread), (
                          "; not taken for the reader's (BE-2), judged as any other process: %s" % named(under))
                          if under else ""))
+    watch = watch or {}
+    strangers = sorted(watch.get("strangers") or (), key=order)
+    if strangers:
+        holes.append("%d process(es) under the reader's pid or a launcher's that the watch did not start (ADR-0007"
+                     " BH-3: not in its record of what it started, whatever the image or the dates), judged as any"
+                     " other process: %s" % (len(strangers), named(strangers)))
+    unproven = sorted(watch.get("unproven") or (), key=os_pid)
+    if unproven:
+        holes.append("%d pid(s) the watch recorded as started by it whose start in the sample was not read, or is"
+                     " before the reader's (ADR-0007 BH-3): not taken for the watch's, judged as any other process:"
+                     " pid %s%s" % (len(unproven), ", ".join(str(os_pid(h)) for h in unproven[:LINKS_SHOWN]),
+                                    " and %d more" % (len(unproven) - LINKS_SHOWN) if len(unproven) > LINKS_SHOWN
+                                    else ""))
+    taken = sorted(watch.get("taken") or (), key=order)
+    if taken:
+        holes.append("%d process(es) under the reader's pid or its launchers taken for the watch's own by their dated"
+                     " links alone (ADR-0007 BE-2): the sample carries no record of what the watch started (an"
+                     " export, or a text written before the record; BH-3), so what another program started there is"
+                     " not told from the watch's: %s" % (len(taken), named(taken)))
     return holes
 
 
-def ancestors(procs, pid):
+def _watch_tree(procs, snapshots, channel=False):
+    """ADR-0007 BH-3: the watch's own tree, its three sets kept apart - the
+    reader's pid; each launcher the snapshot names, proven by the dated
+    links up from the reader (BF-7), itself only; each helper the watch
+    recorded as started (BH-2: the snapshot's "helpers") whose start was
+    read and is not before the reader's (_link_verdict "kept"), and what
+    those helpers started by dated links. Anything else under the reader's
+    pid or a launcher's is not the watch's, whatever its image or dates.
+    A sample with no record at all (no snapshot carries "helpers": an
+    export, a text written before the record): BE-2's tree, as M7.26 left
+    it (every pid the snapshot names and what stands under them by dated
+    links), and the hole says so. {"tree", "record", "readers",
+    "launchers", "helpers", "started", "strangers": [(ppid, pid)] under the
+    reader or a launcher by a dated link and not the watch's, "unproven":
+    recorded pids not proven, "taken": [(ppid, pid)] taken by dates alone
+    where there is no record}."""
+    readers = {r["self"] for r in snapshots if r.get("self") is not None}
+    declared = {p for r in snapshots for p in r.get("launchers") or ()}
+    recorded = [r["helpers"] for r in snapshots if r.get("helpers") is not None]
+    out = {"record": bool(recorded), "readers": readers, "launchers": set(), "helpers": set(), "started": set(),
+           "strangers": [], "unproven": [], "taken": []}
+    if not recorded:
+        tree = set()
+        for s in readers | declared:
+            tree |= {s} | _descendants(procs, s, proven=True)
+        out["launchers"], out["tree"] = declared, tree
+        out["taken"] = [(procs[c]["ppid"], c) for c in sorted(tree - readers - declared) if c in procs]
+        return out
+    for s in readers:                     # (2) the launchers: proven up from the reader, each itself only
+        p, seen = procs.get(s), {s}
+        while p is not None and p.get("link") == "kept" and p["ppid"] in declared and p["ppid"] not in seen:
+            seen.add(p["ppid"])
+            out["launchers"].add(p["ppid"])
+            p = procs.get(p["ppid"])
+    for h in sorted({h for hs in recorded for h in hs} - readers):   # (3) the helpers, proven by their dates
+        p = procs.get(h)
+        if p is not None and any(r in procs and _link_verdict(p, procs[r], channel) == "kept" for r in readers):
+            out["helpers"].add(h)
+        elif p is not None:
+            out["unproven"].append(h)
+    for h in out["helpers"]:              # and what they started, by dated links
+        out["started"] |= _descendants(procs, h, proven=True)
+    out["tree"] = readers | out["launchers"] | out["helpers"] | out["started"]
+    holders = readers | out["launchers"]
+    out["strangers"] = [(q["ppid"], q["pid"]) for q in procs.values()
+                        if q.get("link") == "kept" and q["ppid"] in holders and q["pid"] not in out["tree"]]
+    return out
+
+
+def ancestors(procs, pid, own=()):
     """Parent pids from the nearest up; stops at a missing parent, a link
-    BE-1 broke (nothing above it is an ancestor), or a loop."""
+    BE-1 broke (nothing above it is an ancestor), a loop, or a member of
+    own, the watch's own tree (ADR-0007 BH-4: a process that hangs under it
+    has no ancestor through it, and no member of it is anyone's
+    ancestor)."""
     seen = {pid}
     p = procs.get(pid)
-    while _parent(p) is not None and p["ppid"] not in seen:
+    while _parent(p) is not None and p["ppid"] not in seen and p["ppid"] not in own:
         seen.add(p["ppid"])
         yield p["ppid"]
         p = procs.get(p["ppid"])
 
 
-def _descendants(procs, pid, proven=False):
+def _descendants(procs, pid, proven=False, own=()):
     """The pids under a process by the links BE-1 keeps; proven (BE-2, the
-    reader's own tree only): by links whose two starts were both read."""
+    reader's own tree only): by links whose two starts were both read; own
+    (ADR-0007 BH-4): the watch's own tree, never walked through."""
     children = {}
     for q in procs.values():
         if _parent(q) is not None and (not proven or q.get("link") == "kept"):
@@ -1946,7 +2061,7 @@ def _descendants(procs, pid, proven=False):
     out, todo = set(), [pid]
     while todo:
         for c in children.get(todo.pop(), []):
-            if c not in out and c != pid:
+            if c not in out and c != pid and c not in own:
                 out.add(c)
                 todo.append(c)
     return out
@@ -2088,6 +2203,9 @@ def _instances(records):
     out = []
     for r in records:
         sample = _process_sample(r["src"])
+        if r["kind"] == "snapshot" and sample is not None and r.get("helpers"):   # BH-2: as its sample keys it
+            out.append(dict(r, helpers=[key(h, sample) for h in r["helpers"]]))
+            continue
         if sample is None or r.get("pid") is None:
             out.append(r)
             continue
@@ -2242,7 +2360,9 @@ def _acts_core(records, catalog, channel=False):
     """The anchor of build() (B-6), apart so that a round can be built
     again without its channel's records (M7.9 REDO 4, ADR-0007 AB-6):
     (records joined to their sockets, procs, conns, talkers, snapshots,
-    self_pids, self_tree, self_line, acts). A talker with an act is a candidate."""
+    self_pids, self_tree, self_line, acts, watch). A talker with an act is a
+    candidate. ADR-0007 BH-4: no walk of parents passes through the watch's
+    own tree (self_tree), and no member of it owns an act or a file write."""
     snapshots = [r for r in records if r["kind"] == "snapshot"]
     self_pids = {r["self"] for r in snapshots if r.get("self") is not None}
     self_pids |= {p for r in snapshots for p in r.get("launchers") or ()}     # ADR-0007 A-7
@@ -2253,9 +2373,8 @@ def _acts_core(records, catalog, channel=False):
     for c in conns:
         if talks(c):
             talkers.setdefault(c["pid"], []).append(c)
-    self_tree = set()
-    for s in self_pids:   # BE-2: under the watch only by links whose two starts were both read
-        self_tree |= {s} | _descendants(procs, s, proven=True)
+    watch = _watch_tree(procs, snapshots, channel)   # ADR-0007 BH-3 (no record: BE-2's tree)
+    self_tree = watch["tree"]
     self_line = set()
     for s in self_pids:
         self_line |= set(ancestors(procs, s))
@@ -2270,7 +2389,7 @@ def _acts_core(records, catalog, channel=False):
         if pid in self_tree:
             continue
         chain = []
-        for anc in ancestors(procs, pid):
+        for anc in ancestors(procs, pid, self_tree):
             if anc in talkers:
                 label = next((i for i in p["images"] if _listed(i, catalog)), None)
                 acts.setdefault(anc, []).append({
@@ -2286,12 +2405,12 @@ def _acts_core(records, catalog, channel=False):
         if f["pid"] in self_tree or _config_write(f["path"], writer["exe"] if writer else None):
             continue
         owner = f["pid"] if f["pid"] in talkers else next(
-            (a for a in ancestors(procs, f["pid"]) if a in talkers), None)
+            (a for a in ancestors(procs, f["pid"], self_tree) if a in talkers), None)
         if owner is not None:
             acts.setdefault(owner, []).append({
                 "how": "file-write", "pid": f["pid"], "image": writer["image"] if writer else None,
                 "listed": False, "path": f["path"], "via": [], "reader_ancestor": False, "cites": [cite(f)]})
-    return records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts
+    return records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts, watch
 
 
 NO_HOLDER = "pid %d (the tree that links it without the channel is no tree of this round: ADR-0007 AD-1)"
@@ -2308,10 +2427,11 @@ def _without_channel(records, parsed, catalog, candidates, act_roots):
     the field of the class it has without the channel."""
     records = [r for r in records if (split_name(r["src"]) or (None,))[0] != "sysmon"]
     parsed = [s for s in parsed if s["kind"] != "sysmon"]
-    records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts = _acts_core(records, catalog)
+    records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts, _ = _acts_core(records, catalog)
     ids = {pid: "C%d" % i for i, pid in enumerate(sorted(acts), start=1)}
     cands = [{"pid": pid, "id": ids[pid], "tree": [pid] + [a["pid"] for a in acts[pid] if a["how"] == "process"],
-              "talking_ancestors": [{"pid": a} for a in ancestors(procs, pid) if a in talkers]} for pid in sorted(acts)]
+              "talking_ancestors": [{"pid": a} for a in ancestors(procs, pid, self_tree) if a in talkers]}
+             for pid in sorted(acts)]
 
     def held(role, kinds):
         return [s["name"] for s in parsed if s["text_read"] and s["kind"] in kinds
@@ -2368,7 +2488,7 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
         records, guid_holes = _guid_instances(records)
         reuse_holes += guid_holes
     unjoined = records   # AB-6: the round's records before the anchor, for the round built without the channel
-    records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts = _acts_core(
+    records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts, watch = _acts_core(
         records, catalog, channel)
     unowned = [c for c in conns if c["pid"] is None and c["direction"] == "out"
                and c["state"] in TALK_STATES and not _wildcard(c["raddr"])]
@@ -2421,13 +2541,13 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
                  "talks": talk, "cites": _cites(p["recs"]) if p else []}
         if pid not in acts:
             if any(t["endpoint"] for t in talk):
-                above = [ids[a] for a in _descendant_candidates(procs, pid, acts)]
+                above = [ids[a] for a in _descendant_candidates(procs, pid, acts, self_tree)]
                 endpoint_talkers.append(dict(entry, above=above))
             continue
         tree = [pid] + [a["pid"] for a in acts[pid] if a["how"] == "process"]
         talking_up = [{"pid": a, "image": procs[a]["image"] if a in procs else None,
-                       "cites": _cites(talkers[a], 1)} for a in ancestors(procs, pid) if a in talkers]
-        inside = next((ids[a] for a in ancestors(procs, pid) if a in ids), None)
+                       "cites": _cites(talkers[a], 1)} for a in ancestors(procs, pid, self_tree) if a in talkers]
+        inside = next((ids[a] for a in ancestors(procs, pid, self_tree) if a in ids), None)
         env = sorted({k for k in ((p or {}).get("env_keys") or [])
                       if any(fnmatch.fnmatchcase(k, g) for g in catalog["env"])})
         times = [r["ts"] for r in ((p["recs"] if p else []) + talkers[pid]) if r.get("ts")]
@@ -2489,7 +2609,7 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     incomplete = []
     holes += _holes(records, procs, conns, read)
     holes += reuse_holes
-    holes += _link_holes(procs, self_pids, self_tree)   # ADR-0007 BE-3
+    holes += _link_holes(procs, self_pids, self_tree, watch)   # ADR-0007 BE-3, BH-3, BH-5
     if catalog["act_root"]["status"] != "ok":
         holes.append("act-root not judged: act_root has status %s in %s (G-8, A6)"
                      % (catalog["act_root"]["status"], catalog["path"]))
@@ -2725,9 +2845,9 @@ def _shown_start(p):
     return {"started_at": at} if at else {}
 
 
-def _descendant_candidates(procs, pid, acts):
+def _descendant_candidates(procs, pid, acts, own=()):
     """Candidates below a talker that is not one itself."""
-    return [q for q in sorted(_descendants(procs, pid)) if q in acts]
+    return [q for q in sorted(_descendants(procs, pid, own=own)) if q in acts]
 
 
 def _recent_talk(conns, records, talkers, names_for, catalog):
@@ -2865,7 +2985,8 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
                           "cites": _cites(procs[s]["recs"], 1)})
             for q in [s] + under:
                 qp, via = procs[q], []
-                for anc in ancestors(procs, q):
+                # BH-4: redundant here - below() already drops self_tree; kept defensively, no isolating test (ADR-0007 BI-3)
+                for anc in ancestors(procs, q, self_tree):
                     if anc == pid:
                         break
                     via.append(anc)
@@ -2874,7 +2995,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
                              "path": None, "via": list(reversed(via)), "reader_ancestor": False,
                              "started": started_of(qp),   # M7.4 E1 (API)
                              "cites": _cites(qp["recs"])})
-        owner = next((a for a in ancestors(procs, pid) if a in talkers), None)
+        owner = next((a for a in ancestors(procs, pid, self_tree) if a in talkers), None)   # BH-4
         times = [r["ts"] for q in [pid] + [a["pid"] for a in acts] for r in procs[q]["recs"] if r.get("ts")]
         first = heads[0]
         roots.append({
@@ -2895,7 +3016,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     index = {r["pid"]: "A%d" % i for i, r in enumerate(roots, start=1)}
     for r in roots:
         r["id"] = index[r["pid"]]
-        r["inside"] = next((index[a] for a in ancestors(procs, r["pid"]) if a in index), None)
+        r["inside"] = next((index[a] for a in ancestors(procs, r["pid"], self_tree) if a in index), None)
     return roots
 
 

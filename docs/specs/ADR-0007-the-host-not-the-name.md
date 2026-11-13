@@ -2692,3 +2692,60 @@ clock set back, an orphan of a dead holder of the watch's pid.
 - BH-6 (the measures). Each shape of BH-3 through the live reader's own rows (a process it could not open
   has a start "", pid 0 has none); the channel's path; the act roots' walks each held by a test of its own.
 
+## Amendment BI (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.27.md (506a9a6)
+The packet: no scope breach, the fixtures hold, BH-3 proven in the field; REDO for a Linux forget rule harsher
+than the Windows one, an act-roots guard that cannot fail, and - the Table's own addition - a silent way the
+watch is still made blind. A watcher blind with no trace is the worst failure (rule 4): the third is a fix,
+not a note.
+- BI-1 (the Linux forget rule is the Windows one). snapshot_proc passes `since` to the record only on a whole
+  sample - one that lists every process (`unreadable` is 0; a `gone` pid genuinely ended and is forgotten as
+  before). A helper alive but unreadable in one sample is not forgotten and does not become an agent at the
+  next. FOR: the Linux notifier, the watch's own recorded helper (finding 1). MUST NOT TOUCH: a gone helper
+  is still forgotten; the Windows path is already right.
+- BI-2 (the record proves by image, not pid alone: the silent blindness closed as far as image). The record
+  keeps, with each pid and time, the image of what the watch started (the basename the launcher gave: Popen's
+  args[0]). A recorded pid is the watch's own only where the sample's image for it is that image too. So a
+  pid freed by a dead helper and taken within the two-second window by a process of another image - an agent
+  - is not proven, is judged as any other, and is named. FOR: finding 3, a tree pulled in silently. MUST NOT
+  TOUCH: a helper whose image the sample could not read is not proven (named, not hidden); the -60 s side,
+  already safe. Left, and said in the threat model: an agent that reuses the pid within two seconds AND runs
+  under the very image the watch started is still taken - identity by pid, time and image, not more, until a
+  start the watch can bind to the child it created (recorded for a later task).
+- BI-3 (the act-roots exclusion is held by a test). A test where a member of the watch's tree stands on an
+  act-root's path - its children walk, its shell's parent, its launcher - and the act-root is reached only
+  through that member: with BH-4 the act-root is not found through it; reverting any one of the three
+  `self_tree` walks in `_act_roots` fails it (finding 2: today none does).
+- BI-4 (said, not fixed, in the threat model): a recorded helper still alive but evicted past the 256 bound
+  is judged as any other (finding 6; the recorded helpers are short-lived, so it is a backstop); an older
+  Raqib cannot read a newer snapshot line and loses that sample's reader (finding 8, cross-build only).
+The import lines in os_sysmon.py and notify.py (Q8) stand: the start line needs them. Q1 (ss by
+subprocess.run, not recorded) stands as built: ss makes no connection, so a stranger line at most. Q3, Q4,
+Q6, Q7 as built.
+
+## Amendment BJ (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.27-redo.md (363e3b4): M7.27 lands
+BI-1 and BI-2 are sound and close the review's findings 1 and 3 with no new watch-blind path. The one REDO was
+a spec-honesty mismatch, the Table's to settle, not the builder's.
+- BJ-1 (BI-3 corrected: two walks are rules, the third is armor). `_act_roots` walks the parents three times;
+  the reviewer verified, from the code, that no member of the watch's tree can sit between an act and its
+  act-root (below() already drops the watch's tree and the shell's parent is the act-root itself), so the
+  self_tree argument on the via walk (discover.py ~2989) is inert and can have no isolating test. BI-3's words
+  "reverting any one of the three fails a test" were wrong: two of the three (the talking-ancestor walk and the
+  inside walk) are rules and each has a test that fails when it is reverted; the third is kept, with its
+  comment, as armor that stays correct if below() or the chain is ever refactored. A guard with no possible
+  failing test is armor, not a rule, and is named as such - it is not dressed as a tested rule (CLAUDE.md:
+  deterministic first; every rule has a test). E3 is met by the two rules' tests.
+- BJ-2 (BI-2 recorded caution, not a blocker). own.started records the basename of the Popen's args[0], and a
+  recorded pid is the watch's own only where the sample's image basename equals it. For the two helpers the
+  watch starts today (wevtutil by an absolute path; the notifier, guarded isabs) the recorded basename and the
+  sample's basename agree, so none is wrongly forgotten. It errs toward naming (noise), never toward hiding.
+  Left for the next recorded start to honour: its argv must be a list, or an absolute path with no space (the
+  string-split in own._arg0 takes the first whitespace token), and its image as a sample reads it must equal
+  its args[0] basename, or the record must take the image from the kernel's own exe. Recorded; the two real
+  helpers meet it.
+- BJ-3 (the scope flag closed by the Table). `git show --stat 363e3b4`: only own.py, discover.py, hostwin.py,
+  tests/test_own_tree.py, docs/THREAT_MODEL.md and the questions file. No out-of-scope path.
+M7.27 lands: the watch's own tree is what the watch started - its pid, its launchers proven and themselves
+only, the helpers it recorded (by pid, time and image) and what those started - never what merely stands
+under them; a reused pid, a spoofed parent and a clock set back no longer make it count its own as an agent or
+an agent as its own, as far as pid, time and image can tell, and what is left is said in the holes.
+
