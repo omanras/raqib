@@ -122,13 +122,16 @@ jobs:
           $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","30","--every","5","--no-open" -RedirectStandardOutput ..\watch-qwen.out -RedirectStandardError ..\watch-qwen.err -PassThru -NoNewWindow
           Start-Sleep 7
           $env:OPENAI_API_KEY = "rig"; $env:OPENAI_BASE_URL = $env:RIG_URL; $env:OPENAI_MODEL = "rig-model"
-          $a = Start-Process cmd -ArgumentList "/c","qwen -p `"Do the task.`" --yolo > ..\agent-qwen.out 2>&1" -PassThru -NoNewWindow
-          if (-not $a.WaitForExit(110000)) { taskkill /T /F /PID $a.Id | Out-Null; "qwen: stopped at its time" }
+          # BC-7: the agent is started by an unknown program that then talks by itself (two trees, one under the other)
+          $env:RIG_CMD = 'qwen -p "Do the task." --yolo > ..\agent-qwen.out 2>&1'
+          $a = Start-Process python -ArgumentList "$env:GITHUB_WORKSPACE\tools\rig\launcher.py","10","$env:RIG_URL/models" -RedirectStandardOutput ..\launcher-qwen.out -PassThru -NoNewWindow
+          if (-not $a.WaitForExit(130000)) { taskkill /T /F /PID $a.Id | Out-Null; "launcher: stopped at its time" }
+          Get-Content ..\launcher-qwen.out
           $w.WaitForExit(200000) | Out-Null
           "=== agent"; Get-Content ..\agent-qwen.out -Tail 20
           "=== model log"; Get-Content $env:RUNNER_TEMP\model-qwen.log
           "=== report"; $t = Get-Content ..\watch-qwen.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
-          "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl
+          "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl python
           "=== marks"; python "$env:GITHUB_WORKSPACE\tools\rig\marks_read.py"
       - name: opencode under the watch
         shell: pwsh
@@ -148,6 +151,6 @@ jobs:
           "=== agent"; Get-Content ..\agent-opencode.out -Tail 20
           "=== model log"; Get-Content $env:RUNNER_TEMP\model-opencode.log
           "=== report"; $t = Get-Content ..\watch-opencode.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
-          "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl
+          "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl python
           "=== marks"; python "$env:GITHUB_WORKSPACE\tools\rig\marks_read.py"
 
