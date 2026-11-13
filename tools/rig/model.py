@@ -12,10 +12,12 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-SLOW = "curl -s --max-time 7 --limit-rate 300 --output rig.bin https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe"
-# five turns that each outlast a round of 5 s (so each model call and the command after it fall in a round of their
-# own: the rhythm rule's K cycles need K rounds), then the two short ones
-SCRIPT = [SLOW, SLOW, SLOW, SLOW, SLOW, "curl -s --max-time 10 https://example.com/", "whoami"]
+# Seven turns whose commands talk to no one: five that each outlast a round of 5 s (so each model call and the
+# command after it fall in a round of their own), then two short ones. The only destination the tree can talk to
+# again and again is then the model server itself: a cycle counted here is the agent's own think-act cycle, not
+# its workload's (the earlier script's curl to one site made a cycle of its own on Windows; ADR-0007 AU-8).
+SLOW = 'python -c "import time; time.sleep(7)"'
+SCRIPT = [SLOW, SLOW, SLOW, SLOW, SLOW, "hostname", "whoami"]
 SHELL = re.compile(r"shell|bash|command|terminal|exec", re.I)
 LOCK = threading.Lock()
 LOG = None
