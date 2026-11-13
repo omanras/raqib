@@ -565,6 +565,59 @@ is amended by T-2, T-1 restated by V-1).
   were not read either), and says so once. A round whose process list was
   not read has an empty sample: every tree absent from it is gone, its
   source is stopped and attached again when it is next seen.
+- **A beat is judged in the round that reads it (ADR-0007 Amendments AP
+  to AS).** A tree that is not in the round - quiet at the sample, or
+  kept by a round whose connections were not read, or gone from the
+  sample - and whose own source (its os follow or its hooks trace) gained
+  a beat since the last round gets its HostTree line of that round,
+  written by the same code as a candidate's, its class its own state
+  (`quiet`, `kept`, `gone`) and its rhythm from the same ring with the
+  same K, W and R. HOST-RHYTHM judges it, so an unnamed tree whose
+  talk-then-act cycles all fall between two samples, or in its last
+  intervals before it exits, is judged in the round that reads them.
+  The tree's ring has one entry for every round from its first line on
+  that reached its sample: a round in which it had no line has an empty
+  entry with that round's own interval, so a beat is put into the round
+  whose interval holds its time and a cycle cites the round of its beats
+  (with no seq where that round had no line). A round that ended before
+  its sample has no entry: its beats are in the next round's entry, whose
+  interval holds them, so R rounds can be fewer than R entries. A beat
+  older than the ring's oldest interval (a follow that is late, or
+  attached again) is put into the oldest entry and counted in the
+  window. A line of a tree that is
+  not in the round says what its round read: no acts, endpoints or
+  cites of an earlier sample, and the count and cites of the beats it
+  read from its sources. Such a line is not an
+  arrival: NEW-AGENT, NEW-AGENT-UNKNOWN and HOST-UNWATCHED read a
+  candidate's line only, and the tree's history, first round and
+  candidate state do not change. It takes the sources' beats only: the
+  tree's connections and children as the last sample knew them are not
+  read again or reset, so when the tree is next in a round a connection
+  or child is new or old exactly as before. A named tree's rhythm is
+  still not HOST-RHYTHM's; a benign tree's is judged. What is not
+  covered: a quiet or gone tree with no source of its own (the host
+  source only) has no beat between samples and no line; a source's beats
+  are counted one round late, so those the final poll reads after the
+  last round (of a tree alive at the end, of one whose os follow was
+  stopped in the last round or two, or of a gone tree on a hooks trace
+  that another session still writes) are counted and said in the report,
+  not judged; several cycles inside one round's interval still count as
+  one. The hooks source is the project's trace, not the tree's: every
+  tree attached to it reads every session's Bash calls in that project
+  as its own acts, a candidate, a quiet and a gone tree alike, so a gone
+  tree goes on having lines while another session in the project runs a
+  command; each is cited exactly, by the line of the session that made
+  it. The seams of a source's life are not covered either: an os follow
+  that is stopped because its tree is gone makes no last pass, so the
+  events between its last pass and its stop are in no source; a tree
+  that is attached again (gone for one round and back, or after a follow
+  that ended) loses the beats its earlier source held that no round had
+  read, one round's at most; and a quiet tree that a round with an empty
+  process sample calls gone is attached again only when it is next a
+  candidate. The rig's X12 reads a beat left for the final poll as
+  missed, on any machine; where the machine has no Sysmon and the count
+  is 0 it is not judged (n/a): no tree had a source with beats there, so
+  the 0 measured nothing.
 - **The start time decides, where it was read.** A tree is keyed by its
   root's pid, image and start time (Windows: the process's creation time;
   Linux: the start in clock ticks since boot that `/proc/PID/stat` gives,

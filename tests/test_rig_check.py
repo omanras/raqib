@@ -57,6 +57,7 @@ def test_the_made_up_report_is_all_met_but_the_clipboard_which_is_open():
     got = states()
     assert got.pop("X15") == check.OPEN                                   # no rule for the clipboard yet: recorded
     assert set(got.values()) == {check.MET} and sorted(got, key=lambda x: int(x[1:])) == ["X%d" % i for i in range(1, 15)]
+    assert got["X12"] == check.MET   # ADR-0007 AR-4: with Sysmon X12 is judged (MET here), n/a only without it
 
 
 BROKEN = [
@@ -94,8 +95,13 @@ def test_x5_the_sysmon_line_beside_no_read_kept_is_the_third_field_runs_lie():
     assert states(report=true)["X5"] == check.MET
 
 
-def test_x12_beats_left_for_the_final_poll_are_open_not_missed_and_x13_x14_read_the_sources():
-    assert states(report=REPORT.replace("beats after the last round: 0", "beats after the last round: 9"))["X12"] == check.OPEN
+def test_x12_beats_left_for_the_final_poll_are_missed_and_x13_x14_read_the_sources():
+    # ADR-0007 AP-4: X12 is an expectation that can be MISSED (no longer OPEN); none left is MET
+    assert states(report=REPORT.replace("beats after the last round: 0", "beats after the last round: 9"))["X12"] == check.MISSED
+    assert states()["X12"] == check.MET
+    said = [w for i, s, w in check.read(REPORT.replace("beats after the last round: 0", "beats after the last round: 9"),
+                                        WORKLOAD, platform="win32", sysmon=True) if i.startswith("X12")]
+    assert said and "Amendment AP" in said[0] and "9 beat(s)" in said[0]
     got = states(sources=[("run-9828-aa.jsonl", "{}")])
     assert got["X13"] == got["X14"] == check.MISSED
 
@@ -104,6 +110,19 @@ def test_no_report_at_all_is_one_missed_line_and_linux_skips_what_needs_sysmon()
     assert [(i.split(" ", 1)[0], s) for i, s, _ in check.read("raqib watch --host: started\n", WORKLOAD)] == [("X1", check.MISSED)]
     got = states(platform="linux", sysmon=False, sources=[])
     assert got["X3"] == got["X4"] == got["X5"] == got["X11"] == check.SKIP and "X13" not in got and got["X7"] == check.MET
+    # ADR-0007 AR-4: no Sysmon, no tree with a source with beats: a 0 measured nothing there, so n/a
+    assert states(platform="linux", sysmon=False, sources=[])["X12"] == check.SKIP
+    assert states(platform="win32", sysmon=False)["X12"] == check.SKIP
+    (said,) = [w for i, s, w in check.read(REPORT, WORKLOAD, platform="linux", sysmon=False) if i.startswith("X12")]
+    assert "no Sysmon: no tree had a source with beats here" in said and "AR-4" in said and "AS-2" in said
+    # AS-2: a count that is not 0 is a measure wherever it is read (a beat did wait): MISSED, never n/a; and a
+    # report whose RHYTHM BEATS line is not there is MISSED too
+    report = REPORT.replace("beats after the last round: 0", "beats after the last round: 9")
+    assert report != REPORT
+    for kw in ({"platform": "linux", "sysmon": False, "sources": []}, {"platform": "win32", "sysmon": False}):
+        assert states(report=report, **kw)["X12"] == check.MISSED
+        (said,) = [w for i, s, w in check.read(report, WORKLOAD, **kw) if i.startswith("X12")]
+        assert said.startswith("9 beat(s) read by the final poll, in no round")
 
 
 def test_main_prints_the_table_exits_0_and_1_only_when_strict_and_missed(tmp_path, capsys):

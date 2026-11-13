@@ -212,10 +212,13 @@ def test_e2_the_rule_is_a_catalog_anchor_with_fixtures_from_make_py_and_a_measur
     # K-9: the four synthetic cases only; the arrivals (one round each, no cycle possible) are not listed;
     # M7.5 E2: and the os source's two cycles
     # M7.6c REDO E-2: and the edge negatives of W and R (an act at W+1 s; a first cycle out of the last R rounds)
-    assert len(measured) == 7 and not any(n["fired"] for n in measured)
+    # ADR-0007 AP-3: and the two quiet negatives (talks with no act; a few beats, k-1 cycles); AR-2: and the gone one
+    assert len(measured) == 10 and not any(n["fired"] for n in measured)
     assert sorted(Path(n["path"]).name for n in measured) == [
-        "negative-acts-between-rounds.json", "negative-changing-destination.json", "negative-no-talk.json",
-        "negative-os-two-cycles.json", "negative-r-edge.json", "negative-two-cycles.json", "negative-w-edge.json"]
+        "negative-acts-between-rounds.json", "negative-changing-destination.json", "negative-gone-few-beats.json",
+        "negative-no-talk.json",
+        "negative-os-two-cycles.json", "negative-quiet-few-beats.json", "negative-quiet-no-cycle.json",
+        "negative-r-edge.json", "negative-two-cycles.json", "negative-w-edge.json"]
     assert RULE.fixtures["negative"] == ["tests/fixtures/rules/" + n for n in list(host_fixtures.RHYTHM_SCENARIOS)
                                          + list(host_fixtures.OS_SCENARIOS)
                                          + list(host_fixtures.EDGE_SCENARIOS)   # M7.6c REDO E-2

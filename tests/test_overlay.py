@@ -146,7 +146,9 @@ def test_e1_a_malformed_overlay_is_one_hole_and_nothing_is_applied(home, text, w
     ("AGENT-DARK-LIVE:\n    thresholds: {live_window: 2}", "below its streak (3)"),
     ("AGENT-DARK-LIVE:\n    thresholds: {streak: 10}", "above its live_window (9)"),
     ("HOST-RHYTHM:\n    thresholds: {tool: 5}", "not a declared threshold"),           # an eq of the gate
-    ("HOST-RHYTHM:\n    thresholds: {class: 5}", "not a declared threshold"),
+    # ADR-0007 AQ-2: HOST-RHYTHM's class is an `in` of its match now (candidate, quiet, kept), not an eq
+    ("HOST-RHYTHM:\n    thresholds: {class: 5}", "not an eq value"),
+    ("HOST-RHYTHM:\n    thresholds: {named: 5}", "not a declared threshold"),        # an eq that is no number
     ("NET-TOOL:\n    thresholds: {command_head: 5}", "not an eq value"),
     ("NET-TOOL:\n    thresholds: {source: 5}", "not a declared threshold"),
     ("SCOPE-PATH:\n    thresholds: {path: 5}", "not an eq value"),                    # a non-eq field

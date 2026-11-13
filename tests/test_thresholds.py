@@ -207,7 +207,8 @@ def test_e5_k_5_is_accepted_and_measured(home):
     said = overlay.set_threshold("HOST-RHYTHM", "k", "5", str(home))
     assert "HOST-RHYTHM k = 5" in said and "measured at k=5 on fixtures generated at it (sensitive:" in said
     assert "positive-three-cycles stops firing at k=6; negative-two-cycles fires at k=4" in said
-    assert "6 of 6 positives fire; 0 of 7 measured negatives fire; the 2 synthetic desktops do not fire" in said
+    # ADR-0007 AP-3: with the quiet positive and the two quiet negatives
+    assert "8 of 8 positives fire; 0 of 10 measured negatives fire; the 2 synthetic desktops do not fire" in said
     overlay._MEASURED.clear()   # at load it is measured again (here: not from this process's memory)
     rules = overlay.load(str(home))
     info = overlay.describe(rules)
@@ -313,7 +314,7 @@ def test_e5_the_panels_threshold_edit_shows_the_measurement(home):
     p.threshold("HOST-RHYTHM", "w", "60")
     assert p.level == "clean" and p.message.startswith("threshold ok (measured): HOST-RHYTHM w = 60")
     assert "measured at w=60 on fixtures generated at it (sensitive: positive-w-edge stops firing at w=59;" \
-           " negative-w-edge fires at w=61): 6 of 6 positives fire" in p.message
+           " negative-w-edge fires at w=61): 8 of 8 positives fire" in p.message
     assert p.measuring == ["measuring the overlay's thresholds..."]   # E-7: on set, once; not again on reload
     p.threshold("HOST-RHYTHM", "k", "1")
     assert p.level == "alarm" and p.message.startswith("REFUSED: threshold refused: HOST-RHYTHM: k=1, w=60:")

@@ -950,10 +950,17 @@ def _watches_section(state, own, info):
 
 def _cites_text(cites):
     """Cites as src:line; M7.4 REDO K-7 (A5): a cite that carries its round
-    and seq (a HOST-RHYTHM beat) says them first ("round 4 seq 12 win-tcp:2")."""
-    return " ".join("%s%s:%s" % ("round %s seq %s " % (_text(_dict(c).get("round")), _text(_dict(c).get("seq")))
-                                 if _dict(c).get("round") is not None else "",
-                                 _text(_dict(c).get("src")), _text(_dict(c).get("line"))) for c in _list(cites))
+    and seq (a HOST-RHYTHM beat) says them first ("round 4 seq 12 win-tcp:2").
+    ADR-0007 AR-1, AS-3: a cite of a round in which the tree had no line
+    has no seq: the round alone is said ("round 4 win-tcp:2")."""
+    def head(c):
+        if c.get("round") is None:
+            return ""
+        if c.get("seq") is None:
+            return "round %s " % _text(c.get("round"))
+        return "round %s seq %s " % (_text(c.get("round")), _text(c.get("seq")))
+    return " ".join("%s%s:%s" % (head(_dict(c)), _text(_dict(c).get("src")), _text(_dict(c).get("line")))
+                    for c in _list(cites))
 
 
 def _discover_body(info, heading):
