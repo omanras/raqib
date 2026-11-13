@@ -660,6 +660,26 @@ class Reader:
         return problems
 
 
+def sums(connections):
+    """M7.21b (ADR-0007 BO-1): counts()'s connections summed a pid and a
+    remote: {(pid, "RADDR:RPORT"): {"sent", "received", "sockets"}}, the
+    remote spelled as discover spells a talk's ("%s:%s" of the address's
+    text and the port; IPv6 unbracketed), sockets the local ends summed."""
+    out = {}
+    for (pid, _laddr, _lport, raddr, rport), c in (connections or {}).items():
+        if ":" in raddr:   # BP-2: an IPv4 remote said in IPv6's form is spelled as IPv4, as discover spells a talk's
+            try:
+                mapped = ipaddress.IPv6Address(raddr).ipv4_mapped
+            except ValueError:
+                mapped = None
+            raddr = str(mapped) if mapped is not None else raddr
+        e = out.setdefault((pid, "%s:%s" % (raddr, rport)), {SENT: 0, RECEIVED: 0, "sockets": 0})
+        e[SENT] += c.get(SENT) or 0
+        e[RECEIVED] += c.get(RECEIVED) or 0
+        e["sockets"] += 1
+    return out
+
+
 # --- leftovers ----------------------------------------------------------------------------
 
 def sessions(api):

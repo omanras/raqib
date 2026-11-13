@@ -486,6 +486,33 @@ Rulings: ADR-0003 Amendments C and D.
     only);
   - the live output's encoding (read as UTF-8, or UTF-16 with a BOM or NUL
     bytes) is checked on fixtures, not on a real host.
+- **The bytes of a connection on Windows (the host watch, ADR-0007
+  Amendments BK to BO):**
+  - a live watch reads them from the kernel's own tracing
+    (Microsoft-Windows-Kernel-Network), listening only: nothing is switched
+    on for a watched connection or process;
+  - reading them needs an administrator and starts one tracing session
+    named for the watch (`raqib-net-PID`, in memory only); a killed watch
+    leaves it until the next start, which stops it and says so as a note;
+  - where the session cannot be started (no administrator, a policy, the
+    limit of sessions) the bytes are not read: the blind spot `bytes` is
+    said as before, with the reason, and nothing else is tried;
+  - the counts are sums since the watch began, not since the connection
+    did: a connection older than the watch shows only what it carried
+    since; they lag the kernel by about a second;
+  - UDP carries no counts yet: QUIC is unseen here;
+  - a round after which the tracing lost events, buffers or notices, went
+    beyond its cap of connections, could not read a byte event, or whose
+    consumer ended, is not read: the blind spot `bytes` says the first
+    cause and the rounds, each further kind of cause is a note once, and
+    no connection is judged unchanged on such a round; a session that
+    heard no event at all while the trees' connections moved (from its
+    third round on) is said the same way, not as zero bytes;
+  - a connection the tracing heard nothing of shows zero since the watch
+    began: true only while the session hears; a session switched off from
+    outside after it heard its first event freezes the counts unseen, and
+    a sender whose pid in the tracing is not the connection's owner in
+    the table (an inherited socket) is not matched.
 - **What CROSS-SOURCE does not judge, by ruling:**
   - C-2, both directions: a trace with no os line (Linux, macOS, or
     os-sysmon not run) gets no finding and no note, and the report's
@@ -582,7 +609,9 @@ is amended by T-2, T-1 restated by V-1).
 - **What a round sees.** One sample, and on Windows with Sysmon the
   channel's events since the previous round (ADR-0007 P-4, below): on
   Windows one read of the OS API
-  (processes and their parents, TCP connections with their owner), on
+  (processes and their parents, TCP connections with their owner) and,
+  where an administrator runs a live watch, the kernel's tracing of each
+  connection's bytes, on
   Linux one `/proc` snapshot (or `--window S` seconds of them, whose last
   snapshot is the round's process sample). A tree is in the round when its
   root talks at that instant and has a child (a candidate) or a
@@ -1192,7 +1221,10 @@ is amended by T-2, T-1 restated by V-1).
   the os source's `wevtutil` on Windows, `ss -tinp` on Linux every round
   (the bytes of each socket), and the notifier; Raqib ends only its own
   helpers (a `wevtutil` past its timeout and every one still out at Stop;
-  an `ss` that has not returned in 30 s). The only writes are under `~/.raqib`, and the hook settings of a
+  an `ss` that has not returned in 30 s). On Windows a live watch run by
+  an administrator starts one tracing session of its own and stops it at
+  its end, and stops the sessions killed watches of Raqib left; no other
+  session is touched. The only writes are under `~/.raqib`, and the hook settings of a
   project only with `--attach-hooks`.
 
 ### The forwarder (`raqib forward`; ADR-0011 Amendments J to N)

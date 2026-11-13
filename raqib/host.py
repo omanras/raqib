@@ -194,6 +194,15 @@ BEATS_KEPT = 6                     # beats (cycles) cited on a HostTree line
 WIN_BYTES_HOLE = ("Windows: GetExtendedTcpTable gives each connection's state and owner but no byte counts:"
                   " the bytes of the connections are not read (GetPerTcpConnectionEStats is not used)")
 NO_BYTES_HOLE = "the reader gave no byte counts for the connections (%s): bytes not read"
+# M7.21b (ADR-0007 BO): on Windows a live watch reads the bytes from the kernel's tracing (raqib/etwnet.py), into
+# conn_bytes as Linux's are; where it cannot, WIN_BYTES_HOLE stays said as it was, with the reason after it (BO-3)
+TRACING_NOT_LIVE = "the kernel's tracing is not read: the rounds are not the live reader's (an export or a stand-in)"
+TRACING_NONE = "the kernel's tracing is not read: this watch was given no tracing reader"
+# live_reader says on this thread-local that it read a Windows round; only a watch's reader thread asks (BO-2)
+LIVE_ROUND = threading.local()
+TRACING_OFF = "the kernel's tracing is read on Windows only (this Python runs on %s): no session was started"
+TRACING_FROM = "the kernel's tracing (session %s, Microsoft-Windows-Kernel-Network): sums since %s, the watch's start"
+TRACING_LEFTOVER = "the tracing: a session of a killed watch, %s, was stopped at the start (ADR-0007 BL-2, BO-7)"
 LINUX_STARTED_HOLE = ("Linux: a child's start time could not be read from /proc/PID/stat (starttime) and /proc/stat"
                       " (btime): its act time is the round in which it is first seen, so W is as coarse as the round"
                       " interval for it, and a child already there in its tree's first round is not an act")
@@ -426,8 +435,9 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
     (discover.read_conn_bytes: ss by absolute path, a minimal environment,
     read-only), kept as inv["conn_bytes"] = {"from", "hole", "by"}; a
     missing ss or an ss without -i byte counts is that hole, never zero.
-    Windows gives no bytes (GetExtendedTcpTable): said once per run by the
-    watch. K-5: on Linux each child's start time is read from /proc/PID/stat
+    Windows gives no bytes (GetExtendedTcpTable); M7.21b: a live watch adds
+    them from the kernel's tracing after the round (HostWatch._owned_read,
+    ADR-0007 BO), never a single look outside a watch. K-5: on Linux each child's start time is read from /proc/PID/stat
     (starttime) and /proc/stat (btime), discover.proc_start_times, read-only,
     kept as inv["child_started"] = {"from", "hole", "by": {pid: ISO UTC}}.
     No network call is made here, ever (the suspect call is not in
@@ -495,6 +505,8 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
                                   events_total=channel.events, kinds_read=sorted(channel.kinds))
         elif platform_ == "win32":
             inv["channel"] = {"off": own["why"] or "no Sysmon channel"}
+        if platform_ == "win32":   # M7.21b (BO-2): a live Windows round; a watch adds the tracing's counts
+            LIVE_ROUND.win32 = True
         if platform_.startswith("linux"):
             got, label, hole = discover.read_conn_bytes(ss_paths or discover.SS_PATHS)
             inv["conn_bytes"] = {"from": label, "hole": hole, "by": got}
@@ -507,6 +519,92 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
         return inv
     read.close = close
     return read
+
+
+def tracing_reader():
+    """M7.21b (ADR-0007 BO-2): the default factory of a live Windows watch's
+    tracing reader: etwnet.Reader under this process's own pid (BN-1). A
+    test gives HostWatch its own factory (tracing=)."""
+    from raqib import etwnet
+    return etwnet.Reader(os.getpid())
+
+
+class OffTracing:
+    """M7.21b: start()'s tracing off Windows: refused with its reason, nothing loaded."""
+    _api = False
+
+    def start(self):
+        return TRACING_OFF % sys.platform
+
+    def stop(self):
+        return []
+
+
+def tracing_live_pids():
+    """(the live pids of one process snapshot, None) or (None, why), read by
+    etwnet.leftovers after it has listed the sessions (BM-3); a list that
+    may be partial is not used (BN-3). Windows only; tests replace it."""
+    try:
+        from raqib import hostwin
+        rows, error = hostwin.read_processes(hostwin.Api())
+    except Exception as exc:
+        return None, "the live pids were not read (%s: %s)" % (type(exc).__name__, exc)
+    if error:
+        return None, "the live pids were not all read (%s)" % error
+    return {pid for pid, _, _ in rows}, None
+
+
+def tracing_bytes(state, counts, inv):
+    """BO-1, BO-4, BO-5: one round's conn_bytes {"from", "hole", "by"} of
+    the tracing's counts. by: {"PID REMOTE": {"bytes_sent",
+    "bytes_received", "sockets"}} for each talk of the round's trees, the
+    remote as the talk spells it, 0 where the tracing saw none of it. A
+    round after which events, buffers or notices were lost, connections
+    went beyond the cap, the loss is not known, or the consumer ended, is
+    a hole with no counts; so is a round whose trees' connections moved in
+    the table while the reader heard no event at all since its start.
+    state (the watch's) keeps the last round's losses and talks."""
+    from raqib import etwnet
+    label = TRACING_FROM % (counts.get("session"), counts.get("since"))
+    lost = counts.get("lost") or {}
+    now = {"events": lost.get("events"), "buffers": lost.get("buffers"), "notices": lost.get("notices"),
+           "beyond": counts.get("beyond"), "unread": counts.get("unread")}
+    base = state.get("base") or {"events": 0, "buffers": 0, "notices": 0, "beyond": 0, "unread": 0}
+    why, causes = [], []   # causes: the kinds of this round's hole (BP-3: each kind is said once a run)
+    state["rounds"] = state.get("rounds", 0) + 1
+    if counts.get("ended"):
+        why.append("the tracing's %s" % counts["ended"])
+        causes.append("ended")
+    if now["events"] is None or now["buffers"] is None:
+        why.append("what the tracing session lost is not known (%s)" % lost.get("why"))
+        causes.append("unknown")
+    for k, word in (("events", "event(s) lost by the session"), ("buffers", "real-time buffer(s) lost by the session"),
+                    ("notices", "lost-event notice(s) of the tracing"),
+                    ("beyond", "event(s) of connections beyond the reader's cap of %d" % etwnet.CONNECTIONS_MAX),
+                    # BP-1: bytes the reader could not read may be any connection's: its zero is then no zero
+                    ("unread", "tcp byte event(s) the reader could not read")):
+        if now[k] is not None and base.get(k) is not None and now[k] > base[k]:
+            why.append("%d %s since the round before" % (now[k] - base[k], word))
+            causes.append(k)
+    state["base"] = {k: now[k] if now[k] is not None else base.get(k) for k in now}
+    talks = {"%s %s" % (t.get("pid"), talk["remote"]) for group in ("candidates", "act_roots")
+             for t in inv.get(group) or () for talk in t.get("talks") or () if talk.get("remote")}
+    before, state["talks"] = state.get("talks"), talks
+    # BP-4: not before the third round of the session: what the kernel says comes about a second late
+    if not why and not counts.get("events") and before is not None and talks != before and state["rounds"] >= 3:
+        causes.append("deaf")
+        why.append("the tracing heard no event at all since its start (%s) while the trees' connections moved in the"
+                   " table (%d new, %d closed): the session hears nothing, not zero bytes" % (
+                       counts.get("since"), len(talks - before), len(before - talks)))
+    if why:
+        return {"from": label, "hole": "the bytes of this round are not read: %s" % "; ".join(why), "by": None,
+                "causes": causes}
+    summed = {"%s %s" % k: v for k, v in etwnet.sums(counts.get("connections")).items()}
+    by = {}
+    for key in sorted(talks):
+        e = summed.get(key) or {"sent": 0, "received": 0, "sockets": 0}
+        by[key] = {"bytes_sent": e["sent"], "bytes_received": e["received"], "sockets": e["sockets"]}
+    return {"from": label, "hole": None, "by": by}
 
 
 class Worker:
@@ -1504,8 +1602,10 @@ class HostWatch:
                  out=None, err=None, clock=None, wall=None, home=None, platform=None, deadline=None, run=None,
                  attach_hooks=False, sysmon=None, installer=None, os_follow=None, source_every=None, suspect=None,
                  suspect_threshold=None, suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None, beat=None,
-                 event_host=None):
-        """M7.9 REDO X-1: what the round's channel read travels with the
+                 event_host=None, tracing=None):
+        """M7.21b (ADR-0007 BO-2): tracing is the factory of a live Windows
+        watch's tracing reader (default tracing_reader, on Windows only).
+        M7.9 REDO X-1: what the round's channel read travels with the
         round's inventory (inv["channel"]); nothing is passed here. M7.2b: attach_hooks is the person's word for this watch
         (--attach-hooks, or the window's checkbox; False by default, H-1):
         without it no file is written into any project. sysmon() -> (ok,
@@ -1692,6 +1792,12 @@ class HostWatch:
         self.not_judged_at = {}      # AM-3: (tree, file, rule) -> the index in notes of its "could not judge" note
         self.blind = []              # K-8: the blind spots of the run (bytes, start times): counted apart
         self.conn_state = {}         # K-5: tree key -> {"open": remotes of its last round, "bytes": last read}
+        # M7.21b (BO-2): the tracing reader of a live Windows watch, started at its first live round, stopped on
+        # every way out (tracing_stop); its state is the reader's thread's under tracing_lock
+        self.tracing_factory = tracing   # start() gives tracing_reader on Windows; None: no tracing (TRACING_NONE)
+        self.tracing = None
+        self.tracing_lock = threading.Lock()
+        self.tracing_state = {"tried": False, "closed": False, "refused": None, "base": None, "talks": None, "said": []}
         self.notes.append(RHYTHM_HOLES_NOTE)
         # M7.4 E3: the suspect layer (off unless the person turns it on)
         self.suspect = suspect
@@ -2125,10 +2231,76 @@ class HostWatch:
         """AB-9: the reader runs as this watch's, so a channel its live reader opens is this watch's to close."""
         from raqib.hooks import os_sysmon
         os_sysmon.OWNER.owner = self.channel_owner
+        LIVE_ROUND.win32 = False
         try:
-            return self.reader()
+            inv = self.reader()
+            if self.platform == "win32" and LIVE_ROUND.win32 and isinstance(inv, dict) and inv.get("live") is True:
+                inv["conn_bytes"] = self._tracing_round(inv)   # M7.21b (BO-1): after the round's sample
+            return inv
         finally:
             os_sysmon.OWNER.owner = None
+
+    def _tracing_round(self, inv):
+        """M7.21b (ADR-0007 BO-1, BO-2, BO-7), on the reader's thread: at
+        the first live round the leftovers of killed watches are stopped
+        (the sessions listed before the pids are read) and then the reader
+        is started, once; each round its counts become the round's
+        conn_bytes (tracing_bytes). Raises nothing."""
+        st = self.tracing_state
+        with self.tracing_lock:
+            if st["closed"]:
+                return {"from": "the kernel's tracing", "hole": "the watch is ending: the tracing is stopped", "by": None}
+            if not st["tried"]:
+                st["tried"] = True
+                st["refused"] = self._tracing_start(st)
+            if st["refused"]:
+                return {"from": "the kernel's tracing", "hole": st["refused"], "by": None}
+            try:
+                counts = self.tracing.counts()
+                st["said"] += [t for t in ("the tracing: %s" % s for s in counts.get("said") or ()) if t not in st["said"]]
+                return tracing_bytes(st, counts, inv)
+            except Exception as exc:
+                return {"from": "the kernel's tracing", "hole": "the bytes of this round are not read: the tracing's"
+                        " counts could not be read (%s: %s)" % (type(exc).__name__, exc), "by": None}
+
+    def _tracing_start(self, st):
+        """None, or the reason no counts are read in this run (BO-3: nothing else is tried)."""
+        if self.tracing_factory is None:
+            return TRACING_NONE
+        from raqib import etwnet
+        try:
+            reader = self.tracing_factory()
+        except Exception as exc:
+            return "the bytes are not read: the tracing reader was not made (%s: %s)" % (type(exc).__name__, exc)
+        problems = []
+        if getattr(reader, "_api", None) is False:   # OffTracing: nothing of Windows is asked
+            self.tracing = reader
+            return reader.start()
+        for name in etwnet.leftovers(tracing_live_pids, getattr(reader, "_api", None), problems):
+            st["said"].append(TRACING_LEFTOVER % name)
+        st["said"] += ["the tracing's leftovers (not a failure): %s" % p for p in problems]
+        self.tracing = reader
+        try:
+            return reader.start()
+        except Exception as exc:   # BP-5: a reader that raises is a refusal with its reason, never a failed round
+            return "the bytes are not read: the tracing reader failed while starting (%s: %s)" % (
+                type(exc).__name__, exc)
+
+    def tracing_stop(self):
+        """M7.21b (BO-2): stop the tracing reader; every way out of the watch
+        calls it (finish, close), and the second call does nothing. What the
+        stop says is a note of the run."""
+        with self.tracing_lock:
+            self.tracing_state["closed"] = True
+            reader, self.tracing = self.tracing, None
+        if reader is None:
+            return
+        try:
+            problems = reader.stop() or []
+        except Exception as exc:
+            problems = ["%s: %s" % (type(exc).__name__, exc)]
+        for p in problems:
+            self.notes.append("the tracing's stop: %s" % p)
 
     def _failed(self, now, n, error, seconds):
         hole = self._hole(now, "reader-failed", "round %d: the reader failed: %s" % (n, error),
@@ -2739,7 +2911,7 @@ class HostWatch:
         changes each round is not a new blind spot)."""
         cb = inv.get("conn_bytes")
         if self.platform == "win32":
-            self._blind(now, "bytes", WIN_BYTES_HOLE, n)
+            self._win_bytes_note(now, n, cb)
         elif isinstance(cb, dict) and cb.get("hole"):
             self._blind(now, "bytes", "bytes: %s" % cb["hole"], n)
         elif not isinstance(cb, dict):
@@ -2747,6 +2919,29 @@ class HostWatch:
         cs = inv.get("child_started")
         if isinstance(cs, dict) and cs.get("hole"):
             self._blind(now, "started", "start times: %s" % cs["hole"], n)
+
+    def _win_bytes_note(self, now, n, cb):
+        """M7.21b (ADR-0007 BO-3, BO-4, BO-7): no tracing (not live, not
+        Windows, refused) is WIN_BYTES_HOLE as it was, the reason after it;
+        a round of the tracing with a hole is the blind spot `bytes` with
+        that reason, and every last-read count is forgotten, so the round
+        after it compares with nothing older than it (K-5, K-6 unchanged)."""
+        st = self.tracing_state
+        for text in list(st["said"]):
+            self._note_once(("tracing", text), text)
+        if not st["tried"]:
+            self._blind(now, "bytes", "%s; %s" % (WIN_BYTES_HOLE, TRACING_NOT_LIVE), n)
+        elif st["refused"]:
+            self._blind(now, "bytes", "%s; %s" % (WIN_BYTES_HOLE, st["refused"]), n)
+        elif not isinstance(cb, dict) or cb.get("hole"):
+            hole = (cb or {}).get("hole") or "no tracing counts"
+            self._blind(now, "bytes", "bytes: %s" % hole, n)
+            for cause in (cb or {}).get("causes") or ():   # BP-3: the blind spot keeps its first words; each kind
+                self._note_once(("tracing-hole", cause), "the tracing, round %s: %s" % (n, hole))   # is said once
+            for state in self.conn_state.values():
+                state["bytes"].clear()
+            for src in self.sources.values():
+                src.last_bytes.clear()
 
     def _talks(self, key, t):
         """K-5: this round's talk beats of one tree: {remote: cites}. A talk
@@ -4358,6 +4553,7 @@ class HostWatch:
                 self._hole(now, "reader-out", "round %d: the reader was still out at the end (%.1f s after it"
                            " started, deadline %g s); what it would have read is not seen" % (
                                self.worker_round, now - self.worker_began, self.deadline_seconds), round_=self.worker_round)
+            self.tracing_stop()   # M7.21b (BO-2): the tracing reader is stopped on every way out
             self.stop_sources(now)
             if self.suspect_call is not None:   # E3: the call out at the end has SUSPECT_JOIN_SECONDS, then a hole
                 self.suspect_call.thread.join(SUSPECT_JOIN_SECONDS)
@@ -4934,7 +5130,7 @@ class Running:
 def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
           out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
           sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None,
-          suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None, beat=None, event_host=None):
+          suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None, beat=None, event_host=None, tracing=None):
     """Everything before the loop: the notifier, the HostWatch, the page
     server and the registry row (raqib/watch.py's, reused). attach_hooks:
     the person's --attach-hooks (or the window's checkbox), False by
@@ -4946,6 +5142,10 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
     refresh = ui.REFRESH_DEFAULT if refresh is None else ui.check_refresh(refresh)
     platform = platform or sys.platform
     reader = reader or live_reader(catalog, window, platform)
+    if tracing is None and sys.platform == "win32":   # M7.21b (BO-2): never Windows' API off Windows
+        tracing = tracing_reader
+    elif tracing is None:
+        tracing = lambda: OffTracing()   # noqa: E731
     notifier = notify.Notifier(HOST, enabled=not no_notify, reason="--no-notify" if no_notify else None,
                                environ=environ, stderr=err, host=True,
                                tmp_root=os.path.join(home, ".raqib", "tmp") if home else None)
@@ -4954,7 +5154,7 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
                             out=out, err=err, home=home, platform=platform, attach_hooks=attach_hooks,
                             sysmon=sysmon, installer=installer, os_follow=os_follow, suspect=suspect,
                             suspect_threshold=suspect_threshold, suspect_timeout=suspect_timeout,
-                            suspect_every=suspect_every, beat=beat, event_host=event_host)
+                            suspect_every=suspect_every, beat=beat, event_host=event_host, tracing=tracing)
     except HostError as exc:
         notifier.close()
         raise watch.WatchError(str(exc))
@@ -5095,10 +5295,15 @@ def conclude(running, crash):
 
 def close(running):
     try:
-        running.server.shutdown()
-        running.server.server_close()
+        stop = getattr(running.watcher, "tracing_stop", None)   # M7.21b (BO-2): every way out; twice is harmless
+        if stop is not None:
+            stop()
     finally:
-        running.notifier.close()
+        try:
+            running.server.shutdown()
+            running.server.server_close()
+        finally:
+            running.notifier.close()
 
 
 # --- the fixtures' rounds (M7.6c REDO E-8, ADR-0008 Amendment E) --------------------------------------------
@@ -5185,7 +5390,7 @@ def fixture_builder(catalog=None):
 def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
             out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
             sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None,
-            stops=None, beat=None, event_host=None):
+            stops=None, beat=None, event_host=None, tracing=None):
     """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code.
     stops (M9.1): the terminal's stops (raqib/cli.py), waited on between ticks; None: Ctrl-C only.
     out and err are written through a watch.Speech (M9.1 REDO B-1, REDO 2 C-1): every word at once; a terminal
@@ -5196,7 +5401,7 @@ def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_ope
     running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, speech.out, speech.err,
                     environ, home, refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon,
                     installer=installer, os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
-                    suspect_every=suspect_every, beat=beat, event_host=event_host)
+                    suspect_every=suspect_every, beat=beat, event_host=event_host, tracing=tracing)
     try:
         crash = loop(running, stops=stops)
         text, code = conclude(running, crash)
