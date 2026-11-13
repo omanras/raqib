@@ -1946,7 +1946,9 @@ def test_redo3_e7_a_thread_left_behind_fails_the_test_that_left_it_and_no_later_
     t.start()
     try:
         assert left_behind(before, budget=0.05) == ["raqib-forward-standin"]   # the test that left it fails
-        assert len(joins) == 1 and joins[0] <= 0.05
+        # (the Table, 2026-11-13, CI run on 8bc1a8b, both windows jobs: (clock + 0.05) - clock is 0.05000000000001137
+        # where the clock did not move between the two reads; the budget is held to a rounding's width)
+        assert len(joins) == 1 and joins[0] <= 0.05 + 1e-9
         later = {x for x in threading.enumerate() if x.name.startswith(THREADS)}   # a later test's start
         assert t in later and left_behind(later) == [] and len(joins) == 1   # not waited for, not counted
     finally:
