@@ -2346,3 +2346,35 @@ hole is - the later turns make no new connection at all.
   two real agents open one for each turn: on Windows with Sysmon HOST-RHYTHM must then fire on the model
   server's own hash. Not merged on a run where it does not.
 
+## Amendment AX (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.20-redo.md, and the field check
+The packet: STOP, with no defect found in what was built; the stops are the Table's own words. The Table made
+the changes itself (CLAUDE.md rule 8). The field check AW-5 is met and was read to the destination this time:
+with a model that ends the connection after every answer, both real agents on Windows with Sysmon were found
+at high in rounds 7 and 8, and the destination named in both findings is the hash of the model server's own
+address and port (computed from the run's address and compared). On Linux, the same agents with a connection
+for each turn were not found by rhythm: no source there sees a connection that opens and closes between two
+samples (the stated hole), and in one run the rule fired on the runner's own tree instead (AX-4).
+- AX-1 (AW-2's sentence was false, and is corrected). "The host's own record holds each remote address in
+  clear" is true only of a connection a sample saw. For one that opened and closed between two samples - the
+  very case AW-5 measures - the os line is the only record, and its address can now be found from the server's
+  hash by trying every IPv4 address. THREAT_MODEL says exactly that. It is accepted for this task: what learns
+  it is a reader of the watch's own files on the watched machine. A salt kept only in the running watch's
+  memory ends it without changing the rhythm; recorded as M7.23.
+- AX-2 (Q5; the note where the first build said it and the REDO did not). The note is said for a hooks source
+  too: a project's trace can hold net lines `raqib os-sysmon` wrote on its own, which never carry the key, and
+  the rhythm reads them as talks. A source attached again says the note again with the whole trace's count, as
+  the note of a process line without an image does: accepted, and said in the hole.
+- AX-3 (two things the holes did not say). Another protocol to one server is another destination (tcp and udp
+  on one port). Two servers behind one address and port are one destination: for the os source that is new
+  (Sysmon's name used to part them when it gave one), for the sample's talks it was always so.
+- AX-4 (the first false finding at high, and its cause; the next task, M7.22). On Linux, with a connection for
+  each turn, the agent's tree was quiet at every sample after its first (no connection open at the sample),
+  and its children - the commands of each turn - were given to the nearest talking ancestor, the runner's own
+  worker, which talks to its server all the time: three talk-then-act cycles, HOST-RHYTHM at high, on the wrong
+  tree. The anchor rule ("every process goes to its nearest talking ancestor") does not know the trees the
+  watch already holds. M7.22: a process under the root of a tree the watch holds, quiet or kept, is that
+  tree's and no ancestor's.
+- Recorded: the measure counts a pair of fixtures whose shipped lines equal an older pair's (the new scenario
+  differs only before the watch's own lines are made); no test goes from the watch through the real follow to
+  the rhythm in one piece.
+

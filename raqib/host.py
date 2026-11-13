@@ -306,7 +306,7 @@ NO_SAMPLE_NOTE = ("the round's inventory carries no process sample (an export re
 # source object, with its count, as PRE_M78_NOTE is)
 PRE_DEST_NOTE = ("%d os net line(s) carry no input_meta.dest_sha256, the server's own hash (a line written before"
                  " the key, or by a caller that did not ask for it, or one whose address, port or protocol did not"
-                 " parse): HOST-RHYTHM names such a line's destination by its input_sha256, the hash of the"
+                 " parse): where HOST-RHYTHM reads such a line as a talk it names its destination by its input_sha256, the hash of the"
                  " host name, the address, the port and the protocol, so one server named on some of them and not on"
                  " others is two destinations, and such a line and a line with the key to one server are two"
                  " destinations too")
@@ -3585,12 +3585,15 @@ class HostWatch:
             if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
                 # M8.2 REDO 2 F-6: only the notes of the rules PRE_M78_NOTE names; a person's rule keeps its own
                 notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
-        if src.kind == "os":   # ADR-0007 AW-3: os net lines without the server's hash: said once per source object
+        # ADR-0007 AW-3: os net lines without the server's hash: said once per source object. AX-2: of a hooks source
+        # too (a project's trace can hold lines `raqib os-sysmon` wrote on its own, which never carry the key, and the
+        # rhythm reads them as talks)
+        if src.kind in ("os", "hooks"):
             old = sum(1 for _, rec in feed.numbered if isinstance(rec, dict) and rec.get("source") == "os"
                       and rec.get("tool") == "net" and rec.get("phase") == "pre"
                       and isinstance(rec.get("input_meta"), dict) and "dest_sha256" not in rec["input_meta"])
             if old:   # its count kept the latest, as PRE_M78_NOTE's
-                text = "tree %s, its os source: %s" % (tree_word(key), PRE_DEST_NOTE % old)
+                text = "tree %s, its %s source: %s" % (tree_word(key), src.kind, PRE_DEST_NOTE % old)
                 if not src.pre_dest_said:
                     src.pre_dest_said = True
                     src.pre_dest_index = len(self.notes)
