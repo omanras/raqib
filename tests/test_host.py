@@ -423,8 +423,8 @@ def test_e5_watch_host_from_the_cli_registers_a_host_row_and_serves(tmp_path, mo
     # A4: nothing written outside ~/.raqib
     assert sorted(p.name for p in _home.iterdir()) == [".raqib"]
     assert sorted(p.name for p in (_home / ".raqib").iterdir()) == ["host", "watches.json"]
-    assert sorted(p.name for p in (_home / ".raqib" / "host").iterdir()) == [
-        "inventory.json", "rounds.jsonl", "rounds.jsonl.watch.json", "sources"]   # M7.2b: the per-tree sources
+    assert sorted(p.name for p in (_home / ".raqib" / "host").iterdir()) == [   # M10.2: the events beside the record
+        "events.jsonl", "inventory.json", "rounds.jsonl", "rounds.jsonl.watch.json", "sources"]   # M7.2b: the sources
 
 
 def test_e5_a_host_row_on_another_watch_page_is_judged_like_any_row(tmp_path, _home):

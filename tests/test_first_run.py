@@ -930,6 +930,9 @@ FIRST_LINES = {
     "--host": ["raqib watch --host: the host, not a name (ADR-N); nothing is installed, no project is touched (no"
                " --attach-hooks)", "raqib watch --host: record BASE/home/.raqib/host/rounds.jsonl",
                "raqib watch --host: state BASE/home/.raqib/host/rounds.jsonl.watch.json",
+               # M10.2 (ADR-0011 F-6, F-7): the events file and its beat; the host's name
+               "raqib watch --host: events BASE/home/.raqib/host/events.jsonl (raqib-event/1, one line appended for"
+               " each thing new or changed; a heartbeat every N s; nothing is sent)",
                "raqib watch --host: notifications: off (--no-notify)",
                "raqib watch --host: suspect: off (no --suspect): no model is asked, nothing leaves the machine",
                "raqib watch --host: rules overlay BASE/home/.raqib/rules.yaml: none (every rule as its YAML declares"

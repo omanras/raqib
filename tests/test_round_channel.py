@@ -1505,7 +1505,11 @@ def test_ac6_state_fields_are_current_and_the_counts_time_is_first_listed(tmp_pa
     # the line's key stays (AB-5: the rule reads input_meta.by_channel, and the line says candidate_by "channel")
     assert all("candidate_by" not in t for t in w.trees.values())
     state = json.loads(Path(w.state_path).read_text(encoding="ascii"))
-    assert "candidate_by" not in json.dumps(state.get("trees"))
+    # ADR-0011 G-8: the state's trees are under host (the tree event's subject.by is held apart by the watch)
+    assert state["host"]["trees"] and "candidate_by" not in json.dumps(state["host"]["trees"])
+    told = [json.loads(x) for x in Path(w.events_path).read_text(encoding="ascii").splitlines()]
+    said = [e for e in told if e["kind"] == "tree" and e["subject"].get("pid") == 5888]   # G-12: by the channel
+    assert any(e["subject"].get("by") == "channel" for e in said) and said[-1]["subject"].get("by") == w.tree_by[key]
     (line,) = [x for x in rounds[1]["lines"] if x["tool"] == host.TREE_TOOL and x["input_meta"]["pid"] == 5888]
     assert line["input_meta"]["candidate_by"] == "channel" and line["input_meta"]["by_channel"] is True
     w2, _, _ = channel_watch(tmp_path / "b", monkeypatch, ["quiet/quiet"] * 2, ["", agentx_events()])

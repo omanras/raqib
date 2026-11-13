@@ -113,7 +113,7 @@ Amendment A (his ruling): Raqib is passive toward other systems and may itself s
 sinks (Event Log, syslog); the service; accounts, logons, tasks, services and a tree's reach; the proxy joined to
 the host watch and PROXY-BYPASS; file reads, measured first.
 - M10.1 the event (landed; ADR-0011 Amendments B to E): `raqib-event/1` as a shape, the one pure module that builds it, the rules' ATT&CK ids, docs/specs/EVENT.md with its mapping to OCSF and ECS
-- M10.2 recorded: the watch writes its events to a file beside its record, and a heartbeat on a fixed beat; it keeps each event's number and says a changed thing again (ADR-0011 E-4 lists what the writer must settle)
+- M10.2 landed: the watch writes its events to a file beside its record, and a heartbeat on a fixed beat; it keeps each event's number and says a changed thing again (ADR-0011 F, G, H, I); `raqib events FILE` checks a file; the rig holds it (X16 to X18)
 - M10.3 recorded: the forwarders (an HTTP collector that takes JSON, syslog) and the local sinks, outside the capture path; stand-in collectors on the rig, then a real Splunk
 - M10.4 recorded: the window's panel for the link
 
