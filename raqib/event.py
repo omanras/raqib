@@ -1,4 +1,4 @@
-"""The event, raqib-event/1 (ADR-0011 Amendment B, as Amendment C rules it; M10.1 REDO).
+"""The event, raqib-event/1 (ADR-0011 Amendment B, as Amendments C and D rule it; M10.1 REDO 2).
 
 The one module that builds an event (B-1). Each function takes a ledger
 entry of raqib/host.py's HostWatch as the watch keeps it (a finding, a
@@ -11,7 +11,8 @@ given it does not say (B-4). A key the entry does not hold is absent, never
 filled with null or guessed (C-2).
 
 An event is a thing said once (C-1): `id` ("<run>:<n>") names the saying;
-`about` names the ledger entry it is about and `rev` how many times it has
+`about` names the ledger entry it is about, by its place in a list that only
+grows (D-1), a name within one run (D-2), and `rev` how many times it has
 been said. snapshot() is the events of one state in one call, n from 1 and
 rev 1: it is not how a running watch says events (M10.2 keeps the count and
 says a changed thing again).
@@ -45,6 +46,7 @@ PARTS = {
 }
 CITE = ("src", "line", "round", "seq")   # C-3: a cite, never its text
 BASE = ("schema", "id", "n", "time", "kind", "about", "rev", "severity", "watch")
+BASE_PARTS = ("watch.run", "watch.host")   # D-3: required in every event beside BASE (a collector keys by the host)
 REQUIRED = {   # C-10: per kind, beside BASE (a dotted name: a key of that part)
     "finding": ("alarm", "summary", "rule", "rule.id", "rule.attack", "evidence"),
     "source-finding": ("alarm", "summary", "rule", "rule.id", "rule.attack", "subject", "evidence", "state"),
@@ -71,6 +73,10 @@ SEVERITIES = ("high", "medium", "low")
 SOURCE_STATES = ("judged on another tree", "history", "pending at exit", "noted", "not settled", "settled")
 ALARM_STATES = ("pending at exit", "not settled", "settled")   # C-4: the report's ALARMS (source_alarms)
 WATCH_STATES = ("start", "end")
+# D-4: a heartbeat's state, the band's word (ui.status) without its number ("SILENT for 12 s" is SILENT)
+BEAT_STATES = ("WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "FINISHED")
+BAND_NUMBER = re.compile(r" for \d+ s\Z")
+LOST = "note:lost-words"   # D-1: the note of the words a terminal lost (always last, its text changes)
 HOLE = "hole"
 BLIND = "blind spot"
 HOLE_CLASSES = (HOLE, BLIND)   # C-6
@@ -79,21 +85,24 @@ NAMED = {"named": True, "unknown": False}   # C-7: the report's two words of a f
 TIME = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z\Z")
 ATTACK_ID = re.compile(r"T\d{4}(?:\.\d{3})?\Z")
 ID = re.compile(r"(.+):([1-9][0-9]*)\Z")
-ABOUT = re.compile(r"(finding|source-finding|hole|blind|note|knock):[1-9][0-9]*\Z|tree:.+\Z|watch\Z")
+ABOUT = re.compile(r"(finding|source-finding|hole|notifier-hole|blind|note|knock):[1-9][0-9]*\Z|note:lost-words\Z"
+                   r"|tree:.+\Z|watch\Z")
 ABOUT_OF = {"finding": ("finding",), "source-finding": ("source-finding",), "note": ("note",), "tree": ("tree",),
-            "hole": ("hole", "blind"), "knock": ("knock",), "heartbeat": ("watch",), "watch": ("watch",)}
+            "hole": ("hole", "notifier-hole", "blind"), "knock": ("knock",), "heartbeat": ("watch",),
+            "watch": ("watch",)}
 # C-10: the type of each key ("instant": a string that is a real UTC instant; "count": an integer from 0;
-# "number": an integer or a float; "ints": a list of integers; "ids": a list of technique ids)
+# "number": an integer or a float; "ints": a list of integers from 0; "ids": a list of technique ids, none twice;
+# D-5: a round, a pid, a seq, a line and n are never negative)
 TYPES = {
     "schema": "str", "id": "str", "n": "pos", "time": "instant", "kind": "str", "about": "str", "rev": "pos",
     "severity": "str", "alarm": "bool", "summary": "str", "state": "str",
     "rule": "object", "subject": "object", "evidence": "object", "hole": "object", "knocked": "object",
     "result": "object", "counts": "object", "watch": "object",
     "rule.id": "str", "rule.class": "str", "rule.kind": "str", "rule.fp_budget": "number", "rule.attack": "ids",
-    "subject.tree": "str", "subject.pid": "int", "subject.image": "str", "subject.started": "str",
+    "subject.tree": "str", "subject.pid": "count", "subject.image": "str", "subject.started": "str",
     "subject.named": "bool", "subject.agent": "str", "subject.path": "str", "subject.benign": "bool",
     "subject.history": "bool", "subject.by": "str",
-    "evidence.run": "str", "evidence.round": "int", "evidence.rounds": "ints", "evidence.record": "str",
+    "evidence.run": "str", "evidence.round": "count", "evidence.rounds": "ints", "evidence.record": "str",
     "evidence.source": "str", "evidence.trace": "str", "evidence.seqs": "ints", "evidence.lines": "ints",
     "evidence.cites": "cites",
     "hole.kind": "str", "hole.class": "str", "hole.count": "count", "hole.last": "str",
@@ -108,10 +117,13 @@ TYPES.update({"counts.%s" % k: "count" for k in PARTS["counts"]})
 # --- the parts ------------------------------------------------------------------------------------------------
 
 def facts(state, host=None, version=__version__):
-    """The watch's facts (C-2 watch) from its state() and the host's name the caller gives (None: absent)."""
+    """The watch's facts (C-2 watch) from its state() and the host's name the caller gives: required (D-3, a
+    collector keys by it); without it, ValueError."""
+    if not (isinstance(host, str) and host):
+        raise ValueError("watch.host: facts must be given the host's name (D-3: required on every event)")
     out = {"run": state.get("run"), "mode": state.get("mode"), "platform": state.get("platform"),
            "version": version, "host": host}
-    return {k: v for k, v in out.items() if v is not None}
+    return {k: v for k, v in out.items() if v is not None and v != ""}
 
 
 def tree_word(key):
@@ -132,22 +144,23 @@ def instant(text):
 
 
 def _held(entry, pairs):
-    """{event key: entry value} for each (event key, entry key) the entry holds (not None)."""
+    """{event key: entry value} for each (event key, entry key) the entry holds (not None, D-5: not "")."""
     out = {}
     for key, src in pairs:
-        if isinstance(entry, dict) and entry.get(src) is not None:
+        if isinstance(entry, dict) and entry.get(src) is not None and entry.get(src) != "":
             v = entry[src]
             out[key] = list(v) if isinstance(v, tuple) else v
     return out
 
 
 def _cites(cites):
-    """C-3: a cite is {src, line} and {round, seq} where the entry's cite holds them: never its text."""
+    """C-3: a cite is {src, line} and {round, seq} where the entry's cite holds them: never its text. D-5: a cite
+    that lacks its src or its line is left out whole, never half."""
     out = []
     for c in cites or ():
-        if isinstance(c, dict):
-            out.append({k: c[k] for k in CITE if c.get(k) is not None})
-    return [c for c in out if c]
+        if isinstance(c, dict) and isinstance(c.get("src"), str) and c["src"] and _int(c.get("line")):
+            out.append({k: c[k] for k in CITE if c.get(k) is not None and c.get(k) != ""})
+    return out
 
 
 def _named(value):
@@ -283,10 +296,13 @@ def tree(row, facts_, time, n, about, rev=1, record=None):
 
 def hole(entry, facts_, time, n, about, rev=1):
     """A hole (state()'s holes: the watch's and the notifier's) or a blind spot (state()'s host.blind, C-6): the
-    report's line of it, "kind: detail"; its kind and class, and count and last where it holds them."""
+    report's line of it, "kind: detail"; its kind and class, and count and last where it holds them (a notifier's
+    hole); a blind spot's count is the number of rounds it was seen in (D-5)."""
     blind = entry.get("class") == BLIND
     part = dict(_held(entry, (("kind", "kind"),)), **{"class": BLIND if blind else HOLE})
     part.update(_held(entry, (("count", "count"), ("last", "last"))))
+    if blind and isinstance(entry.get("rounds"), list):
+        part["count"] = len(entry["rounds"])
     summary = "%s: %s" % (entry.get("kind"), entry.get("detail"))
     return _finish(_base("hole", "info" if blind else HOLE, facts_, time, n, about, rev), facts_, alarm=not blind,
                    summary=summary, evidence=_held(entry, (("round", "round"),)), hole=part,
@@ -318,11 +334,17 @@ def _result(code):
     return dict({"word": WORDS[code]} if code in WORDS else {}, exit=code)
 
 
+def beat_word(band):
+    """D-4: the band's word without its number ("SILENT for 12 s" is SILENT); another value as it is."""
+    return BAND_NUMBER.sub("", band) if isinstance(band, str) else band
+
+
 def heartbeat(state, facts_, time, n, about="watch", rev=1):
-    """C-5: the watch's beat: its state is the band's word (alive, silent or failed); its result is the exit it
-    would end with now (the state's code so far) and that code's word; its counts."""
-    return _finish(_base("heartbeat", "info", facts_, time, n, about, rev), facts_, state=state.get("band"),
-                   result=_result(state.get("code_so_far")), counts=_counts(state))
+    """C-5, D-4: the watch's beat: its state is the band's word without its number, one of BEAT_STATES (a band
+    outside them is refused: ValueError); its result is the exit it would end with now (the state's code so far)
+    and that code's word; its counts."""
+    return _finish(_base("heartbeat", "info", facts_, time, n, about, rev), facts_,
+                   state=beat_word(state.get("band")), result=_result(state.get("code_so_far")), counts=_counts(state))
 
 
 def watch_start(state, facts_, time, n=1, about="watch", rev=1):
@@ -335,11 +357,15 @@ def watch_end(state, facts_, time, n, exit, about="watch", rev=1):
                    counts=_counts(state))
 
 
-def snapshot(state, facts_, time, knocks, rules, end=False, exit=None):
+def snapshot(state, facts_, time, knocks, rules, end=False, exit=None, lost=None):
     """C-1: the events of one state in one call, n from 1, rev 1, in one order: the watch's start, its trees
-    ("tree:<word>"), findings ("finding:i"), source findings ("source-finding:i"), holes ("hole:i"), blind spots
-    ("blind:i"), notes ("note:i"; a dark note's text as its dark note), knocks ("knock:i") and a heartbeat (or,
-    end=True, the watch's end with the exit given), each about "watch". Not how a running watch says events:
+    ("tree:<word>"), findings ("finding:i"), source findings ("source-finding:i"), holes, blind spots ("blind:i"),
+    notes, knocks ("knock:i") and a heartbeat (or, end=True, the watch's end with the exit given), each about
+    "watch". D-1: a name is a place in a list that only grows: a hole of the watch is "hole:i" and a hole of the
+    notifier (the entry that holds a count) "notifier-hole:i", each counted in its own list; a note is "note:i"
+    over the watch's own notes (a dark note's text as its dark note), and the note of the words a terminal lost
+    (always last, its text changes) is "note:lost-words" when its text is given as lost (watch.lost_note of the
+    watch's out); without lost that note is numbered as any other. Not how a running watch says events:
     M10.2 keeps the count and says a changed thing again. knocks: knock_rows(), all of them (C-8: the state
     keeps only the newest), required. rules: {rule id: row of report.rule_table}, required (C-10: a finding
     needs its rule's attack). time: of the heartbeat or the end; the start's is the state's started, a tree's
@@ -363,14 +389,21 @@ def snapshot(state, facts_, time, knocks, rules, end=False, exit=None):
     for i, e in enumerate(h.get("source_findings") or (), 1):
         out.append(source_finding(e, facts_, at(e), len(out) + 1, "source-finding:%d" % i,
                                   rule=rules.get(e.get("rule_id"))))
-    for i, e in enumerate(state.get("holes") or (), 1):
-        out.append(hole(e, facts_, at(e), len(out) + 1, "hole:%d" % i))
+    places = {"hole": 0, "notifier-hole": 0}
+    for e in state.get("holes") or ():
+        whose = "notifier-hole" if isinstance(e, dict) and "count" in e else "hole"
+        places[whose] += 1
+        out.append(hole(e, facts_, at(e), len(out) + 1, "%s:%d" % (whose, places[whose])))
     for i, e in enumerate(h.get("blind") or (), 1):
         out.append(hole(e, facts_, at(e), len(out) + 1, "blind:%d" % i))
     dark = {d.get("text"): d for d in h.get("dark_notes") or () if isinstance(d, dict)}
-    for i, text in enumerate(h.get("notes") or (), 1):
+    notes = list(h.get("notes") or ())
+    last = notes.pop() if isinstance(lost, str) and lost and notes and notes[-1] == lost else None
+    for i, text in enumerate(notes, 1):
         e = dark.get(text, text)
         out.append(note(e, facts_, at(e), len(out) + 1, "note:%d" % i, record=record))
+    if last is not None:
+        out.append(note(last, facts_, time, len(out) + 1, LOST))
     for i, row in enumerate(knocks, 1):
         out.append(knock(row, facts_, at(row), len(out) + 1, "knock:%d" % i))
     if end:
@@ -409,13 +442,15 @@ def _typed(kind_of, v):
     if kind_of == "object":
         return isinstance(v, dict) and bool(v)
     if kind_of == "ints":
-        return isinstance(v, list) and all(_int(x) for x in v)
+        return isinstance(v, list) and all(_int(x) and x >= 0 for x in v)
     if kind_of == "ids":
-        return isinstance(v, list) and all(isinstance(a, str) and ATTACK_ID.match(a) for a in v)
+        return isinstance(v, list) and all(isinstance(a, str) and ATTACK_ID.match(a) for a in v) and len(
+            set(v)) == len(v)
     if kind_of == "cites":
         return isinstance(v, list) and all(
             isinstance(c, dict) and set(c) <= set(CITE) and isinstance(c.get("src"), str) and c["src"]
-            and _int(c.get("line")) and all(_int(c[k]) for k in ("round", "seq") if k in c) for c in v)
+            and all(_int(c[k]) and c[k] >= 0 for k in ("line", "round", "seq") if k in c) and "line" in c
+            for c in v)
     return False
 
 
@@ -442,7 +477,8 @@ def check(obj):
     for key in obj:
         if key not in ALLOWED[kind]:
             out.append("%s: not a key of a %s event" % (key, kind))
-    need = BASE + REQUIRED[kind] + (REQUIRED_END if kind == "watch" and obj.get("state") == "end" else ())
+    end = kind == "watch" and obj.get("state") == "end"
+    need = BASE + BASE_PARTS + REQUIRED[kind] + (REQUIRED_END if end else ())
     for key in need:
         if not _get(obj, key)[0]:
             out.append("%s: missing (required in a %s event)" % (key, kind))
@@ -477,6 +513,11 @@ def check(obj):
             out.append("about: blind:<i> names a blind spot, hole:<i> a hole")
         if "alarm" in obj and obj["alarm"] is not (hole_class == HOLE):
             out.append("alarm: true for a hole, false for a blind spot")
+        has_count = isinstance(obj.get("hole"), dict) and "count" in obj["hole"]
+        if (about or "").startswith("notifier-hole:") and not has_count:
+            out.append("hole.count: missing (a notifier's hole holds its count, D-1)")
+        elif (about or "").startswith("hole:") and has_count:
+            out.append("hole.count: not a key of a watch's hole (a hole that holds a count is the notifier's)")
     if kind == "finding" and obj.get("alarm") is not True:
         out.append("alarm: true for a finding of the rounds")
     state = obj.get("state")
@@ -485,6 +526,8 @@ def check(obj):
             out.append("state: must be one of %s" % "|".join(SOURCE_STATES))
         elif "alarm" in obj and obj["alarm"] is not (state in ALARM_STATES):
             out.append("alarm: true for a source finding %s, false otherwise" % ", ".join(ALARM_STATES))
+    if kind == "heartbeat" and "state" in obj and state not in BEAT_STATES:
+        out.append("state: must be one of %s for a heartbeat (D-4)" % "|".join(BEAT_STATES))
     if kind == "watch":
         if state not in WATCH_STATES:
             out.append("state: must be start or end")
@@ -498,8 +541,6 @@ def check(obj):
         out.append("result.word: missing (exit %d has a word)" % result["exit"])
     if isinstance(obj.get("counts"), dict):
         out += ["counts.%s: missing" % k for k in PARTS["counts"] if k not in obj["counts"]]
-    if "run" not in w:
-        out.append("watch.run: missing")
     try:
         line(obj)
     except (TypeError, ValueError) as exc:

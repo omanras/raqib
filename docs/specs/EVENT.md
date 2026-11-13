@@ -1,4 +1,4 @@
-# EVENT - the event, raqib-event/1 (ADR-0011 Amendment B, as Amendment C rules it; M10.1 REDO)
+# EVENT - the event, raqib-event/1 (ADR-0011 Amendment B, as Amendments C and D rule it; M10.1 REDO 2)
 
 An event is one line Raqib says about what its watch holds: a finding, a source finding, a note, a tree, a
 hole or a blind spot, a knock, a heartbeat, or the watch's start and end. It is built once, in Raqib's own
@@ -11,7 +11,19 @@ The watch does not write events yet (M10.2).
   about is named apart: `about` (the ledger and the entry's place in it, or the tree's word, or the watch) and
   `rev` (1 the first time; one more each time it is said again because it changed: a finding that grew, a knock
   whose fold was decided, a tree that was knocked). Both are given by the caller.
-- `event.snapshot(state, facts, time, knocks, rules)` gives the events of one state of a watch in one call, n
+- A name is a place in a list that only grows (D-1). The state shows the watch's holes followed by the
+  notifier's, and the notes followed by one note that is always last: a place in a joined list moves, so each is
+  named in its own list. A hole of the watch is "hole:i"; a hole of the notifier (the entry that holds a count)
+  is "notifier-hole:i". A note is "note:i" over the watch's own notes; the note of the words a terminal lost
+  (always last, and its text changes) is "note:lost-words" when `snapshot` is told its text (`lost`: the
+  watch's `watch.lost_note` of its out); without it the note is numbered as any other. Findings, source
+  findings, blind spots, knocks and trees are named as before: their lists only grow.
+- `about` is a name within one run (D-2): two runs of one input may number the same thing differently, and two
+  hosts may share a run's name. Outside its run a thing is called by the run and the name together,
+  "<watch.run>/<about>" (see Mapping).
+- `watch.host` is required on every event (D-3): `check` refuses an event without it and `event.facts` refuses
+  to be called without it (ValueError); a collector keys by it.
+- `event.snapshot(state, facts, time, knocks, rules, lost=None)` gives the events of one state of a watch in one call, n
   from 1 and rev 1. It is not how a running watch says events: a running watch (M10.2) keeps the count of its
   events and says a changed thing again with the next rev. `snapshot` must be given every knock row
   (`knock_rows()`: the state keeps only the newest) and the rule table (a finding needs its rule's `attack`).
@@ -24,8 +36,18 @@ The watch does not write events yet (M10.2).
   declares none: a catalog rule's file says why (its `attack_note`), and a person's own rule may declare none.
 - A path is the machine's: a path (`evidence.record`, `evidence.trace`, `subject.path`) is said as the report
   says it, absolute, with the machine's separators; it holds the account's name where the machine's path does.
-- A key the entry does not hold is absent: never null, never guessed (C-2). A builder that would build an event
-  without what its kind requires raises ValueError naming the key instead (C-10).
+- A key the entry does not hold is absent: never null, never guessed (C-2); a value that is an empty string is
+  not held (D-5), and a cite that lacks its src or its line is left out whole, never half. A builder that would
+  build an event without what its kind requires raises ValueError naming the key instead (C-10).
+- A source finding's `state` is C-4's word (D-5), and the report prints, for each of the six: "judged on another
+  tree": the report prints "judged on another tree"; "history": the report prints "history"; "pending at exit":
+  the report prints "pending at exit"; "noted": the report prints "noted (benign)"; "not settled": the report
+  prints "not settled"; "settled": the report prints the rule's severity (high, medium or low).
+- A heartbeat's `state` is the band's word without its number (D-4): "WATCHING", "SILENT", "AGENT GONE",
+  "CAPTURE FAILED", "FINISHED" ("SILENT for 12 s" is SILENT). A band outside them (the host watch's "HOST
+  READER FAILED" and "READER LATE") is refused: the builder raises ValueError naming `state`.
+- `evidence.lines` counts the trace's lines from 1 (the first line of the file is 1). `subject.by` is carried by
+  no event yet: no row of the watch says how a tree became a candidate (M10.2).
 - A technique id in `rule.attack` says what a finding is consistent with, never that it happened (B-5).
 
 ## Keys
@@ -33,19 +55,20 @@ The watch does not write events yet (M10.2).
 In C-2's order (a line sorts them). A dotted name is a key of the object named before the dot. Types:
 `str` a non-empty string; `int` an integer; `pos` an integer from 1; `count` an integer from 0; `bool` true
 or false; `number` an integer or a decimal; `instant` a string, UTC ISO 8601 with milliseconds and Z, that is
-a real instant; `object` a non-empty object; `ints` a list of integers; `ids` a list of technique ids (T and
-four digits, a sub-technique's three after a dot); `cites` a list of cites, each {src: str, line: int} and,
-where the cite holds them, {round: int, seq: int}. A closed list's values are quoted. OCSF and ECS: the named
+a real instant; `object` a non-empty object; `ints` a list of integers from 0; `ids` a list of technique ids (T
+and four digits, a sub-technique's three after a dot), none twice; `cites` a list of cites, each {src: str,
+line: count} and, where the cite holds them, {round: count, seq: count}. A round, a pid, a seq, a line and n
+are never negative (D-5). A closed list's values are quoted. OCSF and ECS: the named
 field (see Mapping), else the namespace.
 
 | key | type | values and meaning | kinds | OCSF | ECS |
 |---|---|---|---|---|---|
 | `schema` | `str` | raqib-event/1, the shape's name and version | all | `unmapped.raqib.schema` | `raqib.schema` |
-| `id` | `str` | <run>:<n>: names the saying; never used twice in a run; a collector keys by watch.host and id | all | `finding_info.uid` | `event.id` |
+| `id` | `str` | <run>:<n>: names the saying; never used twice in a run; a collector keys by watch.host and id | all | `metadata.uid` | `event.id` |
 | `n` | `pos` | the event's number in its run: one more for each event the run says | all | `unmapped.raqib.n` | `raqib.n` |
 | `time` | `instant` | when Raqib said it: UTC, ISO 8601, milliseconds, Z; a real instant | all | `time` (epoch milliseconds), `time_dt` (as given) | `@timestamp` |
 | `kind` | `str` | "finding", "source-finding", "note", "tree", "hole", "knock", "heartbeat", "watch" | all | `class_uid`, `category_uid` (the class: see Mapping) | `event.action` |
-| `about` | `str` | what the event is about: finding:i, source-finding:i, hole:i, blind:i, note:i, knock:i (the ledger and the entry's place in it, from 1); tree:<the tree's word>; watch | all | `metadata.correlation_uid` | `raqib.about` |
+| `about` | `str` | what the event is about, a name within one run (D-2): finding:i, source-finding:i, hole:i (the watch's), notifier-hole:i (the notifier's), blind:i, note:i, knock:i (a place in a list that only grows, from 1, D-1); note:lost-words (the words a terminal lost); tree:<the tree's word>; watch | all | `finding_info.uid`, `metadata.correlation_uid` (each as "<watch.run>/<about>") | `raqib.about` |
 | `rev` | `pos` | 1 the first time it is said; one more each time it is said again because it changed | all | `activity_id`, `type_uid` (see Mapping) | `raqib.rev` |
 | `severity` | `str` | "high", "medium", "low" (the rule's: a finding and a source finding); "hole" (a hole); "info" (a blind spot and every other kind) | all | `severity_id` (high 4, medium 3, low 2, info 1, hole 3) | `event.severity` (the same number) |
 | `alarm` | `bool` | true, false: whether the report counts it under ALARMS or INCOMPLETE (C-4) | finding, source-finding, hole | `is_alert` | `event.kind` (alert when true, else event) |
@@ -58,7 +81,7 @@ field (see Mapping), else the namespace.
 | `rule.attack` | `ids` | the ATT&CK technique ids the rule declares (B-5): what a finding is consistent with, never that it happened; empty: the rule declares none | finding, source-finding | `finding_info.attacks[].technique.uid` | `threat.technique.id` |
 | `subject` | `object` | what the event is about; a key the entry does not hold is absent | finding, source-finding, note, tree | `unmapped.raqib.subject` | `raqib.subject` |
 | `subject.tree` | `str` | the tree's word as the report says it, pid:image:started | finding, source-finding, note, tree | `unmapped.raqib.subject.tree` | `raqib.subject.tree` |
-| `subject.pid` | `int` | the tree's root pid | finding, source-finding, tree | `evidences[].process.pid` | `process.pid` |
+| `subject.pid` | `count` | the tree's root pid (from 0) | finding, source-finding, tree | `evidences[].process.pid` | `process.pid` |
 | `subject.image` | `str` | the root's image name (discover's normalised form) | finding, source-finding, tree | `evidences[].process.name` | `process.name` |
 | `subject.started` | `str` | the tree's start, the third part of its key, as the machine gave it | tree | `unmapped.raqib.subject.started` | `raqib.subject.started` |
 | `subject.named` | `bool` | whether the tree is named (a finding's word named or unknown as the boolean it means) | finding, tree | `unmapped.raqib.subject.named` | `raqib.subject.named` |
@@ -66,21 +89,21 @@ field (see Mapping), else the namespace.
 | `subject.path` | `str` | the footprint's path (the machine's: it holds the account's name where the machine's does) | finding, note | `unmapped.raqib.subject.path` | `raqib.subject.path` |
 | `subject.benign` | `bool` | whether the tree is benign (its acts are noted, not knocked) | tree | `unmapped.raqib.subject.benign` | `raqib.subject.benign` |
 | `subject.history` | `bool` | whether the tree was there at the start | tree | `unmapped.raqib.subject.history` | `raqib.subject.history` |
-| `subject.by` | `str` | how the tree became a candidate, where the row says (no row of the watch says it yet) | tree | `unmapped.raqib.subject.by` | `raqib.subject.by` |
+| `subject.by` | `str` | how the tree became a candidate, where the row says (carried by no event yet) | tree | `unmapped.raqib.subject.by` | `raqib.subject.by` |
 | `evidence` | `object` | where a person or a system can check it (A5); absent keys as for subject | finding, source-finding, note, tree, hole, knock | `unmapped.raqib.evidence` | `raqib.evidence` |
 | `evidence.run` | `str` | the run the cited lines are of | finding, source-finding, note | `unmapped.raqib.evidence.run` | `raqib.evidence.run` |
-| `evidence.round` | `int` | the round of the watch | finding, note, hole, knock | `unmapped.raqib.evidence.round` | `raqib.evidence.round` |
+| `evidence.round` | `count` | the round of the watch (from 0) | finding, note, hole, knock | `unmapped.raqib.evidence.round` | `raqib.evidence.round` |
 | `evidence.rounds` | `ints` | a rhythm finding's cycle rounds | finding | `unmapped.raqib.evidence.rounds` | `raqib.evidence.rounds` |
 | `evidence.record` | `str` | the file the seqs are in (the state's trace, the report's record) | finding, note, tree | `unmapped.raqib.evidence.record` | `raqib.evidence.record` |
 | `evidence.source` | `str` | the source the cited lines are of (os, hooks, host) | source-finding | `unmapped.raqib.evidence.source` | `raqib.evidence.source` |
 | `evidence.trace` | `str` | the source finding's own file the cited lines are in | source-finding | `unmapped.raqib.evidence.trace` | `raqib.evidence.trace` |
 | `evidence.seqs` | `ints` | the seqs cited (a tree: its HostTree line's) | finding, source-finding, note, tree | `unmapped.raqib.evidence.seqs` | `raqib.evidence.seqs` |
-| `evidence.lines` | `ints` | the line numbers cited in the trace | source-finding | `unmapped.raqib.evidence.lines` | `raqib.evidence.lines` |
-| `evidence.cites` | `cites` | the record lines cited: each {src, line} and {round, seq} where the cite holds them; never its text | finding, note, tree | `unmapped.raqib.evidence.cites` | `raqib.evidence.cites` |
+| `evidence.lines` | `ints` | the line numbers cited in the trace (its lines counted from 1) | source-finding | `unmapped.raqib.evidence.lines` | `raqib.evidence.lines` |
+| `evidence.cites` | `cites` | the record lines cited: each {src, line} and {round, seq} where the cite holds them (a cite without its src or its line is left out whole); never its text | finding, note, tree | `unmapped.raqib.evidence.cites` | `raqib.evidence.cites` |
 | `hole` | `object` | the hole or the blind spot | hole | `unmapped.raqib.hole` | `raqib.hole` |
-| `hole.kind` | `str` | the hole's own kind (reader-failed, notify-failed, bytes ...) | hole | `unmapped.raqib.hole.kind` | `raqib.hole.kind` |
+| `hole.kind` | `str` | the hole's own kind (reader-failed, notify-failed, bytes ...) | hole | `finding_info.title` (a hole) | `raqib.hole.kind` |
 | `hole.class` | `str` | "hole", "blind spot" | hole | `unmapped.raqib.hole.class` | `raqib.hole.class` |
-| `hole.count` | `count` | how many times the notifier's hole happened | hole | `unmapped.raqib.hole.count` | `raqib.hole.count` |
+| `hole.count` | `count` | a notifier's hole: how many times it happened; a blind spot: the number of rounds it was seen in | hole | `unmapped.raqib.hole.count` | `raqib.hole.count` |
 | `hole.last` | `str` | when the notifier's hole last happened | hole | `unmapped.raqib.hole.last` | `raqib.hole.last` |
 | `knocked` | `object` | whether Raqib knocked a person for it and what became of the knock | finding, source-finding, tree, hole, knock | `unmapped.raqib.knocked` | `raqib.knocked` |
 | `knocked.status` | `str` | the knock's status now (sent, off, failed, not notified: ..., a fold's outcome) | finding, source-finding, tree, hole, knock | `status_detail` | `raqib.knocked.status` |
@@ -88,7 +111,7 @@ field (see Mapping), else the namespace.
 | `knocked.title` | `str` | the knock's title | knock | `unmapped.raqib.knocked.title` | `raqib.knocked.title` |
 | `knocked.limit_id` | `str` | the knock's rate-limit id | knock | `unmapped.raqib.knocked.limit_id` | `raqib.knocked.limit_id` |
 | `knocked.called` | `str` | what the notifier said at the call | knock | `unmapped.raqib.knocked.called` | `raqib.knocked.called` |
-| `state` | `str` | "judged on another tree", "history", "pending at exit", "noted", "not settled", "settled" (a source finding: the report's word, in its order); "start", "end" (a watch); a heartbeat: the band's word, open (the watch is alive, silent or failed) | source-finding, heartbeat, watch | `unmapped.raqib.state` | `raqib.state` |
+| `state` | `str` | "judged on another tree", "history", "pending at exit", "noted", "not settled", "settled" (a source finding: C-4's word, in the report's order); "start", "end" (a watch); "WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "FINISHED" (a heartbeat: the band's word without its number) | source-finding, heartbeat, watch | `unmapped.raqib.state` | `raqib.state` |
 | `result` | `object` | the exit and its word | heartbeat, watch end | `unmapped.raqib.result` | `raqib.result` |
 | `result.word` | `str` | "CLEAN" (exit 0), "ALARM" (exit 1), "INCOMPLETE" (exit 3); another exit has no word | heartbeat, watch end | `unmapped.raqib.result.word` | `raqib.result.word` |
 | `result.exit` | `int` | a heartbeat: the exit the watch would end with now (the state's code so far); a watch end: the exit the caller gives | heartbeat, watch end | `unmapped.raqib.result.exit` | `raqib.result.exit` |
@@ -102,11 +125,11 @@ field (see Mapping), else the namespace.
 | `counts.trees` | `count` | trees seen | heartbeat, watch end | `unmapped.raqib.counts.trees` | `raqib.counts.trees` |
 | `counts.knocks` | `count` | knocks, all of them | heartbeat, watch end | `unmapped.raqib.counts.knocks` | `raqib.counts.knocks` |
 | `watch` | `object` | the watch's facts, on every event | all | `unmapped.raqib.watch` | `raqib.watch` |
-| `watch.run` | `str` | the watch's run | all | `unmapped.raqib.watch.run` | `raqib.watch.run` |
+| `watch.run` | `str` | the watch's run; required on every event | all | `unmapped.raqib.watch.run` | `raqib.watch.run` |
 | `watch.mode` | `str` | the watch's mode (host) | all | `unmapped.raqib.watch.mode` | `raqib.watch.mode` |
 | `watch.platform` | `str` | the platform the watch runs on | all | `unmapped.raqib.watch.platform` | `raqib.watch.platform` |
 | `watch.version` | `str` | Raqib's version | all | `metadata.product.version` (`metadata.product.name` Raqib) | `observer.version` (`observer.product` Raqib) |
-| `watch.host` | `str` | the host's name, as the caller gives it | all | `device.hostname` | `host.name` |
+| `watch.host` | `str` | the host's name, as the caller gives it; required on every event (D-3) | all | `device.hostname` | `host.name` |
 
 ## Mapping
 
@@ -119,7 +142,9 @@ named field or to the namespace: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`.
 - `time` -> `time` as epoch milliseconds and `time_dt` as given; ECS `@timestamp`.
 - `severity` -> `severity_id` high 4, medium 3, low 2, info 1, hole 3; ECS `event.severity` the same number.
 - `alarm` -> `is_alert`; ECS `event.kind` "alert" when true, else "event".
-- `id` -> `finding_info.uid`; ECS `event.id`. `about` -> `metadata.correlation_uid`.
+- `about` is a name within one run: "<watch.run>/<about>" (the run and the name together) ->
+  `finding_info.uid` and `metadata.correlation_uid`; ECS `event.id` stays the event's `id`.
+- `id` -> `metadata.uid`; ECS `event.id`.
 - `summary` -> `message` and `finding_info.desc`; ECS `message`.
 - `rule.id` -> `finding_info.analytic.uid` and `finding_info.title`; ECS `rule.id`. `rule.class` -> ECS
   `rule.category`. `rule.attack` -> `finding_info.attacks[].technique.uid`; ECS `threat.technique.id`.
@@ -129,26 +154,30 @@ named field or to the namespace: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`.
 - `watch.version` -> `metadata.product.version` (`metadata.product.name` is "Raqib"); ECS `observer.version`
   (`observer.product` "Raqib").
 - `kind` -> ECS `event.action`. `knocked.status` -> `status_detail`.
+- For a hole, `hole.kind` -> `finding_info.title`.
+- For the kinds that are Base Event (note, tree, knock, heartbeat, watch): `id` -> `metadata.uid`, `summary` ->
+  `message`, the rest in the namespace.
 - The whole line -> OCSF `raw_data`; ECS `event.original`.
 
 ## Required keys
 
-Every event holds the base keys (`schema` to `severity`, and `watch`); each kind adds its own; a dotted name is
+Every event holds the base keys (`schema` to `severity`, and `watch` with `watch.run` and `watch.host`); each
+kind adds its own; a dotted name is
 required inside its part. A watch end (`state` end) holds `result` with `exit`, and `counts`; a watch start
 holds neither. Any other key of the table is held only where the entry holds it. `event.check(obj)` names
 every problem of an event, each beginning with its key; every event the module builds has none.
 
 | kind | required keys |
 |---|---|
-| finding | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `alarm`, `summary`, `rule`, `rule.id`, `rule.attack`, `evidence` |
-| source-finding | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `alarm`, `summary`, `rule`, `rule.id`, `rule.attack`, `subject`, `evidence`, `state` |
-| note | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `summary` |
-| tree | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `subject`, `subject.tree` |
-| hole | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `alarm`, `summary`, `hole`, `hole.kind`, `hole.class` |
-| knock | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `summary`, `knocked`, `knocked.status` |
-| heartbeat | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `state`, `result`, `result.exit`, `counts` |
-| watch | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `state` |
-| watch end | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `state`, `result`, `result.exit`, `counts` |
+| finding | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `alarm`, `summary`, `rule`, `rule.id`, `rule.attack`, `evidence` |
+| source-finding | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `alarm`, `summary`, `rule`, `rule.id`, `rule.attack`, `subject`, `evidence`, `state` |
+| note | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `summary` |
+| tree | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `subject`, `subject.tree` |
+| hole | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `alarm`, `summary`, `hole`, `hole.kind`, `hole.class` |
+| knock | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `summary`, `knocked`, `knocked.status` |
+| heartbeat | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state`, `result`, `result.exit`, `counts` |
+| watch | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state` |
+| watch end | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state`, `result`, `result.exit`, `counts` |
 
 ## Examples
 
@@ -164,6 +193,8 @@ hooks source silent at stop, `tests/test_host_sources.py` (run `pending-run`). R
 `tests/test_rhythm.py` with a notifier that fails (run `rhythm-run`).
 Run D's source findings are read by two os follows, and which of them the watch lists first varies from
 run to run: its examples' `id`, `n` and `about` are those of one run (the test compares the rest).
+The heartbeat's and the watch end's examples are the last event of two snapshots of one watch (run B at its
+last round, and after its end), so they share a number, and are never both in one stream.
 
 ### example: finding
 
@@ -178,7 +209,7 @@ From run B.
 From run R.
 
 ```json
-{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":2,"round":1,"seq":1,"src":"win-tcp"},{"line":4,"round":2,"seq":2,"src":"win-process"},{"line":2,"round":2,"seq":2,"src":"win-tcp"},{"line":5,"round":3,"seq":3,"src":"win-process"},{"line":2,"round":3,"seq":3,"src":"win-tcp"},{"line":6,"round":4,"seq":4,"src":"win-process"}],"record":"~/.raqib/host/rounds.jsonl","round":4,"rounds":[2,3,4],"run":"rhythm-run","seqs":[4]},"id":"rhythm-run:3","kind":"finding","knocked":{"status":"failed"},"n":3,"rev":1,"rule":{"attack":["T1059","T1071"],"class":"HOST","fp_budget":0.0,"id":"HOST-RHYTHM","kind":"anchor"},"schema":"raqib-event/1","severity":"medium","subject":{"image":"relay-bot","named":false,"pid":4400,"tree":"4400:relay-bot:2026-11-03T09:00:00.000000Z"},"summary":"unknown tree relay-bot pid 4400: 3 talk-then-act cycles to 192.0.2.10:443 in the last 10 rounds (round 4)","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.1.0"}}
+{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":2,"round":1,"seq":1,"src":"win-tcp"},{"line":4,"round":2,"seq":2,"src":"win-process"},{"line":2,"round":2,"seq":2,"src":"win-tcp"},{"line":5,"round":3,"seq":3,"src":"win-process"},{"line":2,"round":3,"seq":3,"src":"win-tcp"},{"line":6,"round":4,"seq":4,"src":"win-process"}],"record":"~/.raqib/host/rounds.jsonl","round":4,"rounds":[2,3,4],"run":"rhythm-run","seqs":[4]},"id":"rhythm-run:3","kind":"finding","knocked":{"status":"failed"},"n":3,"rev":1,"rule":{"attack":["T1059","T1071"],"class":"HOST","fp_budget":0.0,"id":"HOST-RHYTHM","kind":"anchor"},"schema":"raqib-event/1","severity":"high","subject":{"image":"relay-bot","named":false,"pid":4400,"tree":"4400:relay-bot:2026-11-03T09:00:00.000000Z"},"summary":"unknown tree relay-bot pid 4400: 3 talk-then-act cycles to 192.0.2.10:443 in the last 10 rounds (round 4)","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.1.0"}}
 ```
 
 ### example: note
@@ -210,7 +241,7 @@ From run C.
 From run B.
 
 ```json
-{"about":"blind:1","alarm":false,"evidence":{"round":1},"hole":{"class":"blind spot","kind":"bytes"},"id":"fixture-run:7","kind":"hole","n":7,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"bytes: the reader gave no byte counts for the connections (no byte reader on fixture): bytes not read (does not change the result)","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"blind:1","alarm":false,"evidence":{"round":1},"hole":{"class":"blind spot","count":3,"kind":"bytes"},"id":"fixture-run:7","kind":"hole","n":7,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"bytes: the reader gave no byte counts for the connections (no byte reader on fixture): bytes not read (does not change the result)","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: knock

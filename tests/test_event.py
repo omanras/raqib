@@ -1,4 +1,5 @@
-"""M10.1 REDO (ADR-0011 Amendment B, as Amendment C rules it): the event, raqib-event/1, and the rules' ATT&CK ids.
+"""M10.1 REDO 2 (ADR-0011 Amendment B, as Amendments C and D rule it): the event, raqib-event/1, and the rules'
+ATT&CK ids.
 
 Every entry fed to raqib/event.py here is made by a fixture HostWatch (B-7,
 C-12), never written by hand; a broken event for check() is a built event
@@ -13,10 +14,15 @@ with one value changed. The runs (each in its own temporary home):
   P  tests/test_host_sources.py's hooks source silent at stop: pending at exit
   R  tests/test_rhythm.py's cycle with a notifier that fails: HOST-RHYTHM, a notifier's hole, a tree there at the start
   F  tests/test_host.py's fold (redo c5): a knock whose fold was decided
+  H  tests/test_host.py's new tree (as F) with a notifier that fails, then a round whose reader fails: a notifier's
+     hole, then a watch's hole after it (D-1); a snapshot after rounds 2 and 4
+  L  the field run (as A) whose terminal is gone (watch.Speech over a closed stream, as tests/test_first_run.py's
+     C-3 case): the lost-words note, and notes made after it (D-1); a snapshot after each round
 A path is the machine's; a comparison across homes or platforms is of the
 event with each path under the run's home written ~/ and posix (pathless).
 """
 import copy
+import io
 import json
 import re
 import sys
@@ -28,10 +34,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from raqib import __version__, cli, event, host, overlay, report  # noqa: E402
+from raqib import __version__, cli, event, host, overlay, report, ui, watch  # noqa: E402
 from raqib.rules import cross, engine, silence, tree  # noqa: E402
 from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 import test_acts_judged as aj  # noqa: E402
+import test_dashboard as td  # noqa: E402
 import test_field_run as fr  # noqa: E402
 import test_host as th  # noqa: E402
 import test_host_sources as hs  # noqa: E402
@@ -54,15 +61,19 @@ B5 = {"NEW-AGENT": ["T1059"], "NEW-AGENT-UNKNOWN": ["T1059"], "HOST-RHYTHM": ["T
 # C-4 and C-5, held here as the ruling's words (not read from the module)
 C4_STATES = ["judged on another tree", "history", "noted", "pending at exit", "not settled", "settled"]
 C5_WORDS = {0: "CLEAN", 1: "ALARM", 3: "INCOMPLETE"}
-# C-11: the named pairs, as the ruling gives them; every other key maps to the namespace
+# D-4, held here as the ruling's words: a heartbeat's state, the band's word without its number
+D4_STATES = ["WATCHING", "SILENT", "AGENT GONE", "CAPTURE FAILED", "FINISHED"]
+LOST = "note:lost-words"   # D-1
+# C-11 as D-2 replaces its pairs for id and about (and names hole.kind); every other key maps to the namespace
 C11 = {
     "kind": ({"class_uid", "category_uid"}, {"event.action"}),
     "rev": ({"activity_id", "type_uid"}, {"raqib.rev"}),
     "time": ({"time", "time_dt"}, {"@timestamp"}),
     "severity": ({"severity_id"}, {"event.severity"}),
     "alarm": ({"is_alert"}, {"event.kind"}),
-    "id": ({"finding_info.uid"}, {"event.id"}),
-    "about": ({"metadata.correlation_uid"}, {"raqib.about"}),
+    "id": ({"metadata.uid"}, {"event.id"}),
+    "about": ({"finding_info.uid", "metadata.correlation_uid"}, {"raqib.about"}),
+    "hole.kind": ({"finding_info.title"}, {"raqib.hole.kind"}),
     "summary": ({"message", "finding_info.desc"}, {"message"}),
     "rule.id": ({"finding_info.analytic.uid", "finding_info.title"}, {"rule.id"}),
     "rule.class": ({"unmapped.raqib.rule.class"}, {"rule.category"}),
@@ -83,6 +94,13 @@ C11_SENTENCES = [
     "`watch.version` -> `metadata.product.version` (`metadata.product.name` is \"Raqib\"); ECS `observer.version`"
     " (`observer.product` \"Raqib\").",
     "The whole line -> OCSF `raw_data`; ECS `event.original`.",
+    # D-2
+    "`about` is a name within one run: \"<watch.run>/<about>\" (the run and the name together) ->"
+    " `finding_info.uid` and `metadata.correlation_uid`; ECS `event.id` stays the event's `id`.",
+    "`id` -> `metadata.uid`; ECS `event.id`.",
+    "For a hole, `hole.kind` -> `finding_info.title`.",
+    "For the kinds that are Base Event (note, tree, knock, heartbeat, watch): `id` -> `metadata.uid`, `summary`"
+    " -> `message`, the rest in the namespace.",
 ]
 
 
@@ -93,11 +111,13 @@ def facts(state):
 
 
 def take(w, end=False, exit=None):
-    """One moment of a watch: its state and its knock rows read together, and the snapshot of them."""
+    """One moment of a watch: its state, its knock rows and the words its terminal lost (D-1: watch.lost_note of
+    its out, None for a fixture's) read together, and the snapshot of them."""
     st = json.loads(json.dumps(w.state(w.clock())))
     knocks = json.loads(json.dumps(w.knock_rows()))
-    return {"state": st, "knocks": knocks,
-            "events": event.snapshot(st, facts(st), st["updated"], knocks, TABLE, end=end, exit=exit)}
+    lost = watch.lost_note(w.out)
+    return {"state": st, "knocks": knocks, "lost": lost,
+            "events": event.snapshot(st, facts(st), st["updated"], knocks, TABLE, end=end, exit=exit, lost=lost)}
 
 
 def ended(w, home, **more):
@@ -176,6 +196,45 @@ def run_f(tmp):
     return ended(w, tmp / "home")
 
 
+def failing(*feed):
+    """A reader that gives these inventories in order and raises where one is None (as run C's)."""
+    seq = iter(feed)
+
+    def reader():
+        got = next(seq)
+        if got is None:
+            raise OSError("snapshot failed")
+        return got
+    return reader
+
+
+def run_h(tmp):
+    four = json.loads(json.dumps(th.inv("windows")))
+    four["candidates"] = [c for c in four["candidates"] if c["image"] != "msedge"]
+    w, clock = th.make_host(tmp, reader=failing(th.inv("benign/linux-desktop:before"), four, None, four),
+                            runner=tw.FakeRunner(result=(1, "boom")))
+    moments, failed = [], None
+    for k in range(1, 5):
+        th.run_rounds(w, clock, 1)
+        if k == 3:   # the round whose reader failed: its band is not one of D-4's words (see test_d4)
+            failed = json.loads(json.dumps(w.state(w.clock())))
+        else:
+            moments.append(take(w))
+    return ended(w, tmp / "home", moments=moments, failed=failed)
+
+
+def run_l(tmp):
+    w, clock = fr.make_host(tmp, fr.FIELD, runner=fr.FakeRunner(), run="lost-run")
+    gone = io.StringIO()
+    gone.close()   # a terminal that is gone: every word the watch says to it is lost, and counted
+    w.out = watch.Speech(gone, io.StringIO(), wall=lambda: 1793700000.0).out
+    moments = []
+    for _ in fr.FIELD:
+        fr.run_rounds(w, clock, 1)
+        moments.append(take(w))
+    return ended(w, tmp / "home", moments=moments)
+
+
 @pytest.fixture(scope="module")
 def runs(tmp_path_factory):
     out = {}
@@ -184,7 +243,7 @@ def runs(tmp_path_factory):
         mp.setenv("HOME", str(home))
         mp.setenv("USERPROFILE", str(home))
         for name, fn in (("A", run_a), ("B", run_b), ("C", run_c), ("D", run_d), ("P", run_p), ("R", run_r),
-                         ("F", run_f)):
+                         ("F", run_f), ("H", run_h), ("L", run_l)):
             out[name] = fn(tmp_path_factory.mktemp("event-" + name.lower()))
         mp.setattr(host.HostWatch, "_decide", lambda self, now, act: (_ for _ in ()).throw(
             RuntimeError("cannot decide (test)")))
@@ -270,12 +329,16 @@ def test_e1_a_snapshot_names_each_entry_by_its_ledger_and_place_n_from_1_rev_1(r
     for name, r in runs.items():
         for m in [r] + r.get("moments", []):
             st, h, evs = m["state"], m["state"]["host"], m["events"]
+            mine = [e for e in st["holes"] if "count" not in e]   # D-1: the watch's holes, then the notifier's
+            assert st["holes"][:len(mine)] == mine
+            lost = bool(m["lost"]) and h["notes"][-1] == m["lost"]
             want = (["watch"] + ["tree:%s" % host.tree_word(tuple(t["key"])) for t in h["trees"]]
                     + ["finding:%d" % i for i in range(1, len(h["findings"]) + 1)]
                     + ["source-finding:%d" % i for i in range(1, len(h["source_findings"]) + 1)]
-                    + ["hole:%d" % i for i in range(1, len(st["holes"]) + 1)]
+                    + ["hole:%d" % i for i in range(1, len(mine) + 1)]
+                    + ["notifier-hole:%d" % i for i in range(1, len(st["holes"]) - len(mine) + 1)]
                     + ["blind:%d" % i for i in range(1, len(h["blind"]) + 1)]
-                    + ["note:%d" % i for i in range(1, len(h["notes"]) + 1)]
+                    + ["note:%d" % i for i in range(1, len(h["notes"]) - lost + 1)] + [LOST] * lost
                     + ["knock:%d" % i for i in range(1, len(m["knocks"]) + 1)] + ["watch"])
             assert [e["about"] for e in evs] == want, name
             assert [e["n"] for e in evs] == list(range(1, len(want) + 1)) and {e["rev"] for e in evs} == {1}
@@ -291,12 +354,55 @@ def test_e1_two_moments_of_one_watch_give_the_same_about_to_the_same_entry_thoug
     moved = 0
     for about, e in one.items():
         f = two[about]
-        assert (f["kind"], f.get("summary"), f.get("subject"), f.get("hole")) == (
-            e["kind"], e.get("summary"), e.get("subject"), e.get("hole")), about
+        assert same_entry(e, f) and f.get("summary") == e.get("summary"), about   # a blind spot's count grows
         moved += f["n"] != e["n"]
     assert moved == len(one)   # every entry of the first moment sits after the tree and the finding that arrived
     new = set(two) - set(one)
     assert {"tree:%s" % aj.SHELL, "finding:1"} <= new
+
+
+def same_entry(e, f):
+    return (f["kind"], f.get("subject"), f.get("hole", {}).get("kind"), f.get("hole", {}).get("class")) == (
+        e["kind"], e.get("subject"), e.get("hole", {}).get("kind"), e.get("hole", {}).get("class"))
+
+
+def test_d1_a_watch_s_hole_made_after_a_notifier_s_hole_takes_no_name_and_moves_none(runs):
+    """D-1 FOR: a hole made after a failed knock never takes the failed knock's name (the state shows the
+    watch's holes followed by the notifier's, so a place in the joined list moves)."""
+    first, second = runs["H"]["moments"][1], runs["H"]["moments"][2]   # after round 2; after round 4
+    assert [(e["kind"], "count" in e) for e in first["state"]["holes"]] == [("notify-failed", True)]
+    joined = [(e["kind"], "count" in e) for e in second["state"]["holes"]]
+    assert joined[0] == ("reader-failed", False) and ("notify-failed", True) in joined[1:]   # it moved in the list
+    one = {e["about"]: e for e in first["events"] if e["kind"] == "hole" and e["hole"]["class"] == "hole"}
+    two = {e["about"]: e for e in second["events"] if e["kind"] == "hole" and e["hole"]["class"] == "hole"}
+    assert list(one) == ["notifier-hole:1"] and list(two)[0] == "hole:1"
+    assert two["hole:1"]["hole"]["kind"] == "reader-failed" and "count" not in two["hole:1"]["hole"]
+    for about, e in one.items():   # no name moves
+        assert same_entry(e, two[about]) and e["summary"] == two[about]["summary"], about
+    assert two["notifier-hole:1"]["hole"]["count"] >= one["notifier-hole:1"]["hole"]["count"]
+    for a, b in zip(runs["H"]["moments"], runs["H"]["moments"][1:] + [runs["H"]]):   # none is reused, every moment
+        x, y = by_about(a["events"]), by_about(b["events"])
+        assert all(same_entry(x[k], y[k]) for k in set(x) & set(y)) and set(x) <= set(y)
+
+
+def test_d1_a_note_made_after_the_lost_words_note_takes_no_name_and_moves_none(runs):
+    """D-1: the note of the words a terminal lost is always last and its text changes: "note:lost-words" when
+    snapshot is given its text; a note the watch makes after it is the next "note:i"; without the text the
+    note is numbered as any other, and then a name is reused."""
+    ms = [m for m in runs["L"]["moments"] + [runs["L"]] if m["lost"]]
+    pairs = [(a, b) for a, b in zip(ms, ms[1:]) if len(b["state"]["host"]["notes"]) > len(a["state"]["host"]["notes"])]
+    assert pairs   # a note made after the lost-words note was there
+    for a, b in pairs:
+        na = {e["about"]: e for e in a["events"] if e["kind"] == "note"}
+        nb = {e["about"]: e for e in b["events"] if e["kind"] == "note"}
+        assert list(na)[-1] == LOST == list(nb)[-1] and a["state"]["host"]["notes"][-1] == a["lost"]
+        assert (na[LOST]["summary"], nb[LOST]["summary"]) == (a["lost"], b["lost"]) and a["lost"] != b["lost"]
+        assert all(nb[k]["summary"] == e["summary"] for k, e in na.items() if k != LOST), "a name moved"
+        assert set(nb) - set(na) == {"note:%d" % i for i in range(len(na), len(nb))}
+        plain = event.snapshot(a["state"], facts(a["state"]), a["state"]["updated"], a["knocks"], TABLE)
+        (last,) = [e for e in plain if e["kind"] == "note" and e["summary"] == a["lost"]]
+        assert last["about"] == "note:%d" % len(na) and last["about"] in nb and nb[last["about"]]["summary"] != a[
+            "lost"]   # numbered as any other, its name is the next note's
 
 
 def test_e1_snapshot_must_be_given_the_knock_rows_and_the_rule_table(runs):
@@ -368,23 +474,42 @@ def cites_of(value):
     return [c for v in value for c in cites_of(v)] if isinstance(value, list) else []
 
 
-def test_e3_no_event_holds_a_cite_s_text_or_a_sample_row(runs):
-    everything = set()
+def marked(value, seen):
+    """The value with every cite text and sample row (cite_texts) replaced by a marker of its own."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if k in ("cites", "talk_cites") and isinstance(v, list):
+                out[k] = [dict(c, text="CITE-TEXT-%d" % len(seen)) if isinstance(c, dict) and isinstance(
+                    c.get("text"), str) and c["text"] and not seen.append(c["text"]) else marked(c, seen) for c in v]
+            elif k == "sample" and isinstance(v, str) and v:
+                seen.append(v)
+                out[k] = "CITE-TEXT-%d" % (len(seen) - 1)
+            else:
+                out[k] = marked(v, seen)
+        return out
+    return [marked(v, seen) for v in value] if isinstance(value, list) else value
+
+
+def test_e3_no_cite_text_of_any_ledger_is_in_any_line(runs):
+    """D-6: with no exception. Every cite text and sample row of every ledger of the state (and of the knock rows)
+    is replaced by a marker and the moment built again: no marker is in any line, and every line is the line
+    built from the real texts, so no cite's text is in any line (a footprint's cite text is its path, which the
+    entry also holds as its path: the line says the path, never the cite)."""
+    seen = []
     for name, r in runs.items():
-        st = r["state"]
-        held = cite_texts(st["host"]["trees"]) | cite_texts(st["host"]["findings"]) | cite_texts(
-            st["host"]["dark_notes"]) | cite_texts(st["host"]["source_findings"])
-        everything.update(held)
         for m in [r] + r.get("moments", []):
+            end = m["events"][-1]["kind"] == "watch"
+            again = event.snapshot(marked(m["state"], seen), facts(m["state"]), m["state"]["updated"],
+                                   marked(m["knocks"], seen), TABLE, end=end, exit=r["code"] if end else None,
+                                   lost=m["lost"])
+            lines = [event.line(e) for e in again]
+            assert not [ln for ln in lines if "CITE-TEXT-" in ln], name
+            assert lines == [event.line(e) for e in m["events"]], name
             for ev in m["events"]:
-                said = strings(ev)
                 for c in (ev.get("evidence") or {}).get("cites", []):
                     assert set(c) <= {"src", "line", "round", "seq"} and "text" not in c, c
-                for text in held:
-                    if text in r["report"]:   # a value the report prints itself (a footprint's path) may be said
-                        continue
-                    assert not any(text in s for s in said), (name, text, ev)
-    assert len(everything) > 10   # the runs' entries hold cite texts and sample rows to look for
+    assert len(set(seen)) > 10   # the runs' entries hold cite texts and sample rows to look for
 
 
 def test_e3_a_rhythm_finding_says_its_cycle_rounds_and_each_cite_s_round_and_seq(runs):
@@ -411,21 +536,43 @@ def test_e3_the_record_of_a_finding_a_tree_and_a_dark_note_is_the_state_s_trace(
     assert seen == {"finding", "tree", "note"}
 
 
+def entry_lines(report, ev):
+    """D-6: the report's lines for the entry an event is about: the lines that hold its sentence (a tree: its
+    line under TREES SEEN, the one with its pid and image, and the lines under it)."""
+    lines = report.split("\n")
+    if ev["kind"] == "tree":
+        trees = lines[next(i for i, ln in enumerate(lines) if ln.startswith("TREES SEEN: ")) + 1:]
+        out, on = [], False
+        for ln in trees:
+            if not ln.startswith("  "):
+                break
+            on = ("pid %s %s " % (ev["subject"]["pid"], ev["subject"]["image"]) in ln) if ln.startswith("  [") else on
+            out += [ln] if on else []
+        return out
+    return [ln for ln in lines if ev.get("summary") and ev["summary"] in ln]
+
+
 def test_e3_nothing_new_is_said_every_string_is_the_report_s_the_rule_s_or_the_watch_s(runs):
-    closed = (set(event.KINDS) | set(C4_STATES) | set(C5_WORDS.values()) | {event.SCHEMA, "info", "hole",
+    closed = (set(event.KINDS) | set(C4_STATES) | set(C5_WORDS.values()) | set(D4_STATES) | {event.SCHEMA, "info", "hole",
               "blind spot", "start", "end"} | set(event.SEVERITIES))
     unsaid = set()
     for name, r, m, ev in all_events(runs):
         rule = TABLE.get((ev.get("rule") or {}).get("id")) or {}
-        own = {ev["id"], ev["time"], ev["about"], m["state"]["band"]} | strings(facts(m["state"]))
+        own = {ev["id"], ev["time"], ev["about"], m["state"]["trace"]} | strings(facts(m["state"])) | (
+            {m["lost"]} if m["lost"] else set())   # the watch's: its state's record; the words its terminal lost
         trees = m["state"]["host"]["trees"]
         words = {host.tree_word(tuple(t["key"])) for t in trees}   # the watch's tree word (C-1's about)
         # C-7, C-3: a tree's start is the third part of its key; a cite's src is the entry's own pointer (A5)
+        # C-6: a notifier's hole says its last time, which its report line does not (it prints the first)
         ruled = {("subject.started", t["key"][2]) for t in trees} | {
-            ("evidence.cites[].src", c["src"]) for c in cites_of(m["state"]["host"])}
+            ("evidence.cites[].src", c["src"]) for c in cites_of(m["state"]["host"])} | {
+            ("hole.last", e["last"]) for e in m["state"]["holes"] if "last" in e}
+        mine = entry_lines(r["report"], ev)
+        if ev["kind"] not in ("watch", "heartbeat") and ev["about"] != LOST:
+            assert mine, (name, ev["about"])   # every entry has its line in the report
         for where, s in leaves(ev):
             if not (s in closed or s in own or s in strings(rule) or s in words or (where, s) in ruled
-                    or s in r["report"]):
+                    or any(s in ln for ln in mine)):
                 unsaid.add((name, ev["kind"], where, s[:80]))
     assert sorted(unsaid) == [], "\n".join(map(repr, sorted(unsaid)))
 
@@ -457,25 +604,63 @@ def test_e4_each_of_the_six_states_is_the_report_s_word_for_the_same_entry(runs)
     assert reached == set(C4_STATES)
 
 
+def alarm_items(text):
+    """The report's ALARMS line as its two lists: the rules of the findings, the "rule on pid N" of the source
+    findings."""
+    line = re.search(r"^ALARMS: (.*)$", text, re.M).group(1)
+    got = dict(re.findall(r"\d+ (finding|source finding)\(s\): ([^;]+)", line))
+    return [x.strip() for x in got.get("finding", "").split(",") if x.strip()], [
+        x.strip() for x in got.get("source finding", "").split(",") if x.strip()]
+
+
 def test_e4_alarm_is_what_the_report_counts_under_alarms_or_incomplete(runs):
     for name, r in runs.items():
         w, text = r["w"], r["report"]
-        alarms = text[text.index("\nALARMS: "):].split("\n")[1]
+        rules, sources = alarm_items(text)
         live = w.source_alarms()
         for ev in r["events"]:
             if ev["kind"] == "finding":
-                assert ev["alarm"] is True and ev["rule"]["id"] in alarms, (name, ev["about"])
+                assert ev["alarm"] is True and ev["rule"]["id"] in rules, (name, ev["about"])
             elif ev["kind"] == "source-finding":
                 entry = w.source_findings[int(ev["about"].split(":")[1]) - 1]
                 assert ev["alarm"] is any(entry is x for x in live), (name, ev["about"])
-                if ev["alarm"]:
-                    assert "%s on pid %s" % (entry["rule_id"], entry["pid"]) in alarms
-            elif ev["kind"] == "hole":
-                assert ev["alarm"] is (ev["hole"]["class"] == "hole")
-                assert (ev["severity"], ev["hole"]["class"]) in (("hole", "hole"), ("info", "blind spot"))
-            else:
+                item = r"%s on pid %s( \(.*\))?" % (re.escape(entry["rule_id"]), entry["pid"])
+                assert any(re.fullmatch(item, x) for x in sources) is (ev["alarm"] or any(
+                    x["rule_id"] == entry["rule_id"] and x["pid"] == entry["pid"] for x in live)), (name, ev["about"])
+            elif ev["kind"] != "hole":
                 assert "alarm" not in ev
     assert any(e["alarm"] is False for e in runs["D"]["events"] if e["kind"] == "source-finding")
+
+
+def test_e4_a_hole_s_alarm_is_the_watch_s_result_and_the_report_s_holes(runs):
+    """D-6: a hole's alarm is held against the watch's result and the report's HOLES, not the event's class: an
+    alarm is a line under HOLES and a result that is not clean (INCOMPLETE, exit 3, where no finding outranks
+    it); a blind spot is a line under BLIND SPOTS, said not to change the result, with its rounds (D-5)."""
+    reached = set()
+    for name, r in runs.items():
+        text = r["report"]
+        holes = section(text, "\nHOLES (A3): ", "\nBLIND SPOTS (")
+        blind = section(text, "\nBLIND SPOTS (", "\nKNOCKS: ")
+        rules, sources = alarm_items(text)
+        result = re.search(r"^RESULT: (\w+) \(exit (\d+)", text, re.M).groups()
+        for ev in r["events"]:
+            if ev["kind"] != "hole":
+                continue
+            (mine,) = [ln for ln in text.split("\n") if ln.startswith("  - " + ev["summary"])]
+            if ev["alarm"]:
+                assert mine in holes and mine not in blind and r["code"] != 0, (name, ev["about"])
+                want = ("ALARM", "1") if rules or sources else ("INCOMPLETE", "3")
+                assert result == want and r["code"] == int(want[1]), (name, ev["about"])
+                if want[0] == "INCOMPLETE":
+                    assert re.search(r"^INCOMPLETE: (.*)$", text, re.M).group(1) != "none"
+                reached.add(want[0])
+            else:
+                assert mine in blind and mine not in holes and "(does not change the result)" in mine
+                assert mine.endswith("; %d round(s)" % ev["hole"]["count"]), mine   # D-5: the rounds it was seen in
+                entry = r["state"]["host"]["blind"][int(ev["about"].split(":")[1]) - 1]
+                assert ev["hole"]["count"] == len(entry["rounds"]) and ev["hole"]["count"] >= 1
+                reached.add("blind")
+    assert reached == {"INCOMPLETE", "ALARM", "blind"}
 
 
 # --- E5 (C-5 to C-8): the watch's word, holes and blind spots, trees, knocks ----------------------------------
@@ -485,7 +670,8 @@ def test_e5_the_heartbeat_says_the_band_and_the_code_so_far_and_the_end_the_exit
         for m in r.get("moments", []):
             (hb,) = [e for e in m["events"] if e["kind"] == "heartbeat"]
             code = m["state"]["code_so_far"]
-            assert hb["state"] == m["state"]["band"] and hb["result"] == {"word": C5_WORDS[code], "exit": code}
+            assert hb["state"] in D4_STATES and m["state"]["band"].startswith(hb["state"])
+            assert hb["result"] == {"word": C5_WORDS[code], "exit": code}
         (end,) = [e for e in r["events"] if e["kind"] == "watch" and e["state"] == "end"]
         word, code = re.search(r"^RESULT: (\w+) \(exit (\d+)", r["report"], re.M).groups()
         assert end["result"] == {"word": C5_WORDS[r["code"]], "exit": r["code"]} and int(code) == r["code"]
@@ -498,11 +684,13 @@ def test_e5_holes_blind_spots_and_the_counts(runs):
     (c,) = [e for e in runs["C"]["events"] if e["about"].startswith("hole:")]
     assert c["hole"] == {"kind": "reader-failed", "class": "hole"} and c["knocked"] == {"status": "sent"}
     assert c["severity"] == "hole" and c["evidence"] == {"round": 2}
-    (nf,) = [e for e in runs["R"]["events"] if e["about"].startswith("hole:")]
+    assert not [e for e in runs["R"]["events"] if e["about"].startswith("hole:")]
+    (nf,) = [e for e in runs["R"]["events"] if e["about"].startswith("notifier-hole:")]
     entry = runs["R"]["w"].notifier.holes[0]
     assert nf["hole"] == {"kind": "notify-failed", "class": "hole", "count": entry["count"], "last": entry["last"]}
     blind = [e for _, _, _, e in all_events(runs) if e["about"].startswith("blind:")]
-    assert blind and all(e["hole"]["class"] == "blind spot" and e["severity"] == "info" for e in blind)
+    assert blind and all(e["hole"]["class"] == "blind spot" and e["severity"] == "info" and set(e["hole"]) == {
+        "kind", "class", "count"} for e in blind)
     for name, r, m, ev in all_events(runs):
         if "counts" in ev:
             st = m["state"]
@@ -569,11 +757,22 @@ CHANGES = [
     ("finding", "kind", "other"), ("finding", "extra", 1), ("finding", "summary", None), ("finding", "summary", ""),
     ("finding", "schema", "raqib-event/0"), ("finding", "n", 0), ("finding", "id", "x:9"),
     ("finding", "watch", KeyError),
-    ("finding", "rule.fp_budget", "0.4"), ("finding", "watch.host", ""),
+    ("finding", "rule.fp_budget", "0.4"), ("finding", "watch.host", ""), ("finding", "watch.host", KeyError),
+    ("finding", "watch.run", KeyError),
+    # D-5: never negative; a technique id once; a cite whole
+    ("finding", "subject.pid", -1), ("finding", "evidence.round", -1), ("finding", "evidence.seqs", [-1]),
+    ("finding", "n", -1), ("finding", "rule.attack", ["T1059", "T1059"]),
+    ("finding", "evidence.cites", [{"src": "win-process-1", "line": -8}]),
+    ("finding", "evidence.cites", [{"src": "win-process-1", "line": 8, "seq": -1}]),
+    ("finding", "evidence.cites", [{"src": "win-process-1", "line": 8, "round": -2}]),
+    ("finding", "evidence.cites", [{"src": "win-process-1"}]), ("finding", "evidence.cites", [{"line": 8}]),
+    ("source-finding", "evidence.lines", [-1]),
+    ("heartbeat", "state", "SILENT for 6 s"), ("heartbeat", "state", "HOST READER FAILED"),
+    ("hole", "hole.count", 1),
     ("source-finding", "state", "pending"), ("source-finding", "state", KeyError), ("source-finding", "alarm", False),
     ("source-finding", "evidence.lines", "8"),
     ("hole", "hole.class", "other"), ("hole", "hole.kind", KeyError), ("hole", "severity", "info"),
-    ("hole", "alarm", False), ("hole", "about", "blind:1"),
+    ("hole", "alarm", False), ("hole", "about", "blind:1"), ("hole", "about", "notifier-hole:1"),
     ("watch", "result.exit", KeyError), ("watch", "result.word", "FINISHED"), ("watch", "counts.blind", KeyError),
     ("heartbeat", "counts.knocks", -1), ("heartbeat", "result.word", "SILENT"), ("heartbeat", "state", 1),
     ("knock", "knocked.status", KeyError), ("knock", "knocked.title", 3), ("tree", "subject.benign", "yes"),
@@ -587,7 +786,74 @@ def test_e6_check_names_the_key_of_a_built_event_with_one_value_changed(runs, ki
     ev = pick(runs, run, kind, state="end") if kind == "watch" else pick(runs, run, kind)
     assert event.check(ev) == []
     setin(path, value)(ev)
-    assert any(p.startswith(path + ":") for p in event.check(ev)), event.check(ev)
+    want = "hole.count" if path == "about" and value == "notifier-hole:1" else path
+    assert any(p.startswith(want + ":") for p in event.check(ev)), event.check(ev)
+
+
+def test_d3_the_host_is_required_facts_refuses_to_be_called_without_it(runs):
+    st = runs["B"]["state"]
+    for no in (None, ""):
+        with pytest.raises(ValueError, match=r"watch\.host"):
+            event.facts(st, no)
+    with pytest.raises(ValueError, match=r"watch\.host"):
+        event.facts(st)
+    assert event.facts(st, HOST)["host"] == HOST and "watch.host" in event.BASE_PARTS
+
+
+def test_d4_a_heartbeat_s_state_is_the_band_s_word_without_its_number(runs, tmp_path):
+    """D-4 on a band "SILENT for N s" a watch made (tests/test_dashboard.py's: a session open, no line for 6 s, a
+    gap of 5 s): the heartbeat says SILENT. No host watch's band is SILENT (it is a project watch's), so the
+    host watch's last state of run B carries that watch's band."""
+    assert list(event.BEAT_STATES) == D4_STATES
+    w, path, clock = td.make_watch(tmp_path, gap=5)
+    td.append(path, [td.rec(1, "session_start", 0, tool="-")])
+    w.step()
+    clock.t += 6
+    w.step()
+    made = json.loads(Path(w.state_path).read_text(encoding="ascii"))
+    band = ui.status(made)[0]
+    assert re.fullmatch(r"SILENT for \d+ s", band) and made["band"] == band
+    st = copy.deepcopy(runs["B"]["moments"][-1]["state"])
+    st["band"] = band
+    hb = event.heartbeat(st, facts(st), st["updated"], 13)
+    assert hb["state"] == "SILENT" and event.check(hb) == []
+    for word in D4_STATES:
+        st["band"] = word
+        assert event.heartbeat(st, facts(st), st["updated"], 13)["state"] == word
+
+
+def test_d4_a_band_outside_the_list_is_refused_the_host_reader_failed(runs):
+    """The question of the REDO 2 file: a round whose reader failed gives the band HOST READER FAILED, which is
+    not one of D-4's words; the heartbeat is refused (ValueError naming state), never a half event."""
+    st = runs["H"]["failed"]
+    assert st["band"] == "HOST READER FAILED"
+    with pytest.raises(ValueError, match=r"state: must be one of WATCHING\|SILENT"):
+        event.heartbeat(st, facts(st), st["updated"], 9)
+
+
+def test_d5_a_cite_without_src_or_line_is_left_out_whole_and_an_empty_string_is_not_held(runs):
+    b = runs["B"]
+    st, f = b["state"], facts(b["state"])
+    entry = json.loads(json.dumps(b["w"].findings[0]))
+    rule, at = TABLE[entry["rule_id"]], "2026-11-03T10:00:10.000Z"
+    full = event.finding(entry, f, at, 3, "finding:1", rule=rule, record=st["trace"])
+    assert len(full["evidence"]["cites"]) >= 2
+    for key in ("src", "line"):
+        e = copy.deepcopy(entry)
+        e["cites"][0].pop(key)
+        assert event.finding(e, f, at, 3, "finding:1", rule=rule, record=st["trace"])["evidence"]["cites"] == full[
+            "evidence"]["cites"][1:], key
+    e = copy.deepcopy(entry)
+    e["image"], e["cites"][0]["src"] = "", ""
+    ev = event.finding(e, f, at, 3, "finding:1", rule=rule, record=st["trace"])
+    assert "image" not in ev["subject"] and ev["evidence"]["cites"] == full["evidence"]["cites"][1:]
+    assert event.check(ev) == [] and '""' not in event.line(ev)
+    row = json.loads(json.dumps(b["w"].trees[next(iter(b["w"].trees))]))
+    row["image"] = ""
+    t = event.tree(row, f, at, 2, "tree:x")
+    assert "image" not in t["subject"] and '""' not in event.line(t)
+    for _, _, _, ev in all_events(runs):
+        assert '""' not in event.line(ev), ev
 
 
 def test_e6_a_builder_raises_value_error_naming_the_key_rather_than_build_a_half_event(runs):
@@ -621,7 +887,7 @@ def test_e7_the_document_names_every_key_its_type_and_its_closed_values(runs):
     rows = key_rows(DOC.read_text(encoding="utf-8"))
     assert set(rows) == set(C2) | {"%s.%s" % (p, k) for p, ks in C2_PARTS.items() for k in ks}
     closed = {"kind": list(event.KINDS), "severity": list(event.SEVERITIES) + ["hole", "info"],
-              "state": C4_STATES + ["start", "end"], "hole.class": ["hole", "blind spot"],
+              "state": C4_STATES + ["start", "end"] + D4_STATES, "hole.class": ["hole", "blind spot"],
               "result.word": list(C5_WORDS.values()), "alarm": ["true", "false"]}
     for key, cells in rows.items():
         assert len(cells) == 5, (key, cells)   # key | type | values | kinds | OCSF | ECS
@@ -647,8 +913,8 @@ def test_e7_the_required_keys_of_each_kind(runs):
     req = section(DOC.read_text(encoding="utf-8"), "## Required keys", "## Examples")
     for kind in list(event.KINDS) + ["watch end"]:
         (row,) = re.findall(r"^\| %s \| (.*) \|$" % re.escape(kind), req, re.M)
-        want = event.BASE + (event.REQUIRED["watch"] + event.REQUIRED_END if kind == "watch end"
-                             else event.REQUIRED[kind])
+        want = event.BASE + event.BASE_PARTS + (event.REQUIRED["watch"] + event.REQUIRED_END if kind == "watch end"
+                                                else event.REQUIRED[kind])
         assert sorted(re.findall(r"`([a-z_.]+)`", row)) == sorted(want), kind
     assert set(event.REQUIRED["finding"]) >= {"rule.attack", "alarm"} and "about" in event.BASE
 
@@ -698,8 +964,22 @@ def test_e7_each_example_is_what_the_module_builds_from_its_named_run(runs):
 def test_e7_the_document_says_paths_ids_and_what_snapshot_is_not():
     text = " ".join(DOC.read_text(encoding="utf-8").split()).lower()
     for words in ("a path is the machine's", "unique within a host", "is not how a running watch says events",
-                  "a catalog rule's file says why", "may declare none"):
+                  "a catalog rule's file says why", "may declare none",
+                  # D-1, D-2, D-3
+                  "a name is a place in a list that only grows", "`about` is a name within one run",
+                  "\"notifier-hole:i\"", "\"note:lost-words\"", "without it the note is numbered as any other",
+                  "`watch.host` is required on every event",
+                  # D-5: the document's statements
+                  "a source finding's `state` is c-4's word", "`evidence.lines` counts the trace's lines from 1",
+                  "`subject.by` is carried by no event yet",
+                  "the heartbeat's and the watch end's examples are the last event of two snapshots of one watch"):
         assert words in text, words
+    printed = {"judged on another tree": host.JUDGED_ELSEWHERE, "history": "history",
+               "pending at exit": host.PENDING_EXIT, "noted": host.BENIGN_COUNT, "not settled": "not settled",
+               "settled": "the rule's severity"}
+    for state in C4_STATES:   # what the report prints for each of the six (host.py HostWatch._word)
+        assert ('"%s": the report prints "%s"' % (state, printed[state]) if state != "settled" else
+                '"settled": the report prints the rule\'s severity') in text, state
 
 
 def test_e7_no_real_host_user_or_address_in_the_document():
