@@ -1129,7 +1129,7 @@ def test_m718_e1_the_level_is_high_and_the_match_thresholds_budget_and_streak_ar
     assert doc["match"] == MAIN_MATCH and doc["bounds"] == MAIN_BOUNDS
     assert (doc["kind"], doc["class"], doc["fp_budget"]) == ("anchor", "HOST", 0.0)
     assert host.rhythm_params(RULE) == (3, 30, 10) == (host.RHYTHM_K, host.RHYTHM_W, host.RHYTHM_R)
-    assert len(doc["fixtures"]["positive"]) == 8 and len(doc["fixtures"]["negative"]) == 10
+    assert len(doc["fixtures"]["positive"]) == 10 and len(doc["fixtures"]["negative"]) == 12   # AU-4: + two pairs
     (ide,) = [h for h in RULE.holes if h.startswith("a benign program that polls one server and spawns helpers")]
     assert "a high finding, not a verdict" in ide and "still owed" in ide and "medium" not in ide
     assert len(RULE.holes) == 16

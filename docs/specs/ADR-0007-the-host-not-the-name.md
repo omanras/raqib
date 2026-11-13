@@ -2270,4 +2270,18 @@ others. A second split stands beside it and was stated long ago (M7.5 E2): a tal
   others: K cycles fire; K-1 do not) and for AU-3 (cycles split between the two sources).
 - AU-5 (the field check is the Table's). The two real agents are run again on the built code; the task is not
   merged on a run in which an agent that made seven turns to one server is not found.
+- AU-6 (the builder's STOP, 09c1eb5: built whole, stopped on two of the Table's own contradictions; the Table
+  answered both and made the changes, CLAUDE.md rule 8). (Q1) The HANDOFF said a test that pins the rule's
+  fixture counts would pass untouched, and AU-4 adds four fixtures: the amendment's word stands, the count is
+  10 and 12. (Q2) The launching message said no other rule's fixture may change, and AU-1 puts the key on
+  every os net line: the fixtures the generators write from os_sysmon's own output are generated again
+  (NET-TOOL's and DESTRUCT-CMD's two os fixtures, the four CROSS logs), and the test that holds every fixture's
+  lines to the byte now holds two things: with the new key taken out, every line is what it was (the old
+  hash, kept); with it, the lines are the new ones. The ledger, a second time today: a HANDOFF's "untouched"
+  is checked against the amendment's own "added" before it is written.
+- AU-7 (Q3: the name of a destination within a streak). As built: the count is one from the first cycle; the
+  destination is named by the sample's address:port while the ring holds the sample's talk to that server, and
+  by the os talk's hash otherwise, so a name can change within a streak and a finding keeps the name it was
+  said under. Accepted: the count is the ruling, the name is the best one known when the line is written. Q4's
+  four points are accepted as built and are in the hole.
 

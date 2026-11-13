@@ -57,7 +57,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "phase": "pre",
@@ -71,7 +72,8 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "ok": true,
