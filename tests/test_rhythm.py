@@ -1132,7 +1132,7 @@ def test_m718_e1_the_level_is_high_and_the_match_thresholds_budget_and_streak_ar
     assert len(doc["fixtures"]["positive"]) == 9 and len(doc["fixtures"]["negative"]) == 11   # AU-4, AW-1: + one pair
     (ide,) = [h for h in RULE.holes if h.startswith("a benign program that polls one server and spawns helpers")]
     assert "a high finding, not a verdict" in ide and "still owed" in ide and "medium" not in ide
-    assert len(RULE.holes) == 16
+    assert len(RULE.holes) == 18   # ADR-0007 AY-1 (what the held tree's rule leaves) and AY-3: two holes added
     text = (ROOT / "raqib" / "rules" / "catalog" / "HOST-RHYTHM.yaml").read_text(encoding="ascii")
     assert "on Linux 2 of 2 agent trees fired" in text and "Windows 0 of 2" in text   # AT-1 as AV corrects it
 
