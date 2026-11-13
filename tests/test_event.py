@@ -110,19 +110,39 @@ def facts(state):
     return event.facts(state, host=HOST)
 
 
-def take(w, end=False, exit=None):
+def take(w, end=False, exit=None, word=None, suppressed=None):
     """One moment of a watch: its state, its knock rows and the words its terminal lost (D-1: watch.lost_note of
     its out, None for a fixture's) read together, and the snapshot of them."""
     st = json.loads(json.dumps(w.state(w.clock())))
-    knocks = json.loads(json.dumps(w.knock_rows()))
+    for t in st["host"]["trees"]:   # ADR-0011 G-8: how a tree became a candidate, held apart from the state's row
+        if tuple(t["key"]) in getattr(w, "tree_by", {}):
+            t["candidate_by"] = w.tree_by[tuple(t["key"])]
+    knocks = json.loads(json.dumps(w.knock_rows(fors=True)))   # G-9: the thing each knock was for
     lost = watch.lost_note(w.out)
-    return {"state": st, "knocks": knocks, "lost": lost,
-            "events": event.snapshot(st, facts(st), st["updated"], knocks, TABLE, end=end, exit=exit, lost=lost)}
+    same = pairs_of(w)   # ADR-0011 H-7: the pairs the report takes for one act, as the watch's pass finds them
+    return {"state": st, "knocks": knocks, "lost": lost, "same": same,
+            "events": event.snapshot(st, facts(st), st["updated"], knocks, TABLE, end=end, exit=exit, lost=lost,
+                                     word=word, suppressed=suppressed, same=same)}
+
+
+def pairs_of(w):
+    """{place of a source finding: the about of the one it is one act with}, by host.told_twice (G-1, H-7)."""
+    pairs = host.told_twice(w.source_findings, w.sources) if w.source_findings else {}
+    place = {id(f): i for i, f in enumerate(w.source_findings, 1)}
+    return {place[o]: "source-finding:%d" % place[id(h)] for o, h in pairs.items() if o in place and id(h) in place}
 
 
 def ended(w, home, **more):
     text, code = w.finish()
-    return dict(take(w, end=True, exit=code), w=w, home=home, report=text, code=code, **more)
+    word, suppressed = said_result(text)
+    return dict(take(w, end=True, exit=code, word=word, suppressed=suppressed), w=w, home=home, report=text, code=code,
+                word=word, suppressed=suppressed, **more)
+
+
+def said_result(text):
+    """ADR-0011 G-4: the report's own RESULT word (one of four) and the findings its overlay suppressed (0: none)."""
+    m = re.search(r"(?m)^RESULT: ([A-Z-]+)(?: \((\d+) findings? suppressed)?", text)
+    return m.group(1), int(m.group(2) or 0)
 
 
 def run_a(tmp):
@@ -419,11 +439,16 @@ C2 = ["schema", "id", "n", "time", "kind", "about", "rev", "severity", "alarm", 
       "evidence", "hole", "knocked", "state", "result", "counts", "watch"]
 C2_PARTS = {"rule": ["id", "class", "kind", "fp_budget", "attack"],
             "subject": ["tree", "pid", "image", "started", "named", "agent", "path", "benign", "history", "by"],
-            "evidence": ["run", "round", "rounds", "record", "source", "trace", "seqs", "lines", "cites"],
-            "hole": ["kind", "class", "count", "last"], "knocked": ["status", "event", "title", "limit_id", "called"],
-            "result": ["word", "exit"],
+            # ADR-0011 F-4 and F-5 (M10.2): evidence.cites_left_out and knocked.for, added before anything reads them;
+            # G-1 and G-4 (M10.2 REDO): evidence.same_as and result.suppressed, the same
+            "evidence": ["run", "round", "rounds", "record", "source", "trace", "seqs", "lines", "cites",
+                         "cites_left_out", "same_as"],
+            "hole": ["kind", "class", "count", "last"],
+            "knocked": ["status", "event", "title", "limit_id", "called", "for"],
+            "result": ["word", "exit", "suppressed"],
             "counts": ["rounds", "findings", "source_findings", "holes", "blind", "notes", "trees", "knocks"],
-            "watch": ["run", "mode", "platform", "version", "host"]}
+            # ADR-0011 H-6 (M10.2 REDO 2): watch.beat, the heartbeat's interval, on every event
+            "watch": ["run", "mode", "platform", "version", "host", "beat"]}
 
 
 def test_e2_every_event_of_every_run_has_no_problem_and_c2_s_order(runs):
@@ -502,7 +527,8 @@ def test_e3_no_cite_text_of_any_ledger_is_in_any_line(runs):
             end = m["events"][-1]["kind"] == "watch"
             again = event.snapshot(marked(m["state"], seen), facts(m["state"]), m["state"]["updated"],
                                    marked(m["knocks"], seen), TABLE, end=end, exit=r["code"] if end else None,
-                                   lost=m["lost"])
+                                   lost=m["lost"], word=r.get("word") if end else None,
+                                   suppressed=r.get("suppressed") if end else None)
             lines = [event.line(e) for e in again]
             assert not [ln for ln in lines if "CITE-TEXT-" in ln], name
             assert lines == [event.line(e) for e in m["events"]], name
@@ -566,8 +592,11 @@ def test_e3_nothing_new_is_said_every_string_is_the_report_s_the_rule_s_or_the_w
         # C-6: a notifier's hole says its last time, which its report line does not (it prints the first)
         ruled = {("subject.started", t["key"][2]) for t in trees} | {
             ("evidence.cites[].src", c["src"]) for c in cites_of(m["state"]["host"])} | {
-            ("hole.last", e["last"]) for e in m["state"]["holes"] if "last" in e}
+            ("hole.last", e["last"]) for e in m["state"]["holes"] if "last" in e} | {
+            ("subject.by", t["candidate_by"]) for t in trees if t.get("candidate_by")}   # F-5: the row's own word
         mine = entry_lines(r["report"], ev)
+        # ADR-0011 F-5: a knock names the thing it knocked for by that thing's about, an event of the same moment
+        ruled |= {("knocked.for", e["about"]) for e in m["events"] if e["kind"] != "knock"}
         if ev["kind"] not in ("watch", "heartbeat") and ev["about"] != LOST:
             assert mine, (name, ev["about"])   # every entry has its line in the report
         for where, s in leaves(ev):
@@ -718,8 +747,10 @@ def test_e5_a_knock_says_its_title_limit_id_and_what_the_notifier_said_at_the_ca
         evs = [e for e in r["events"] if e["kind"] == "knock"]
         assert len(evs) == len(r["knocks"]), name
         for ev, row in zip(evs, r["knocks"]):
-            assert ev["knocked"] == {"status": row["status"], "event": row["event"], "title": row["title"],
-                                     "limit_id": row["limit_id"], "called": row["called"]}
+            assert ev["knocked"] == dict({"status": row["status"], "event": row["event"], "title": row["title"],
+                                          "limit_id": row["limit_id"], "called": row["called"]},
+                                         **({"for": row["for"]} if "for" in row else {}))   # ADR-0011 F-5
+    assert any("for" in e["knocked"] for r in runs.values() for e in r["events"] if e["kind"] == "knock")
     folded = [e for e in runs["F"]["events"] if e["kind"] == "knock" and e["knocked"]["status"].startswith("folded")]
     assert folded and folded[0]["knocked"]["called"] == "sent"
     assert any(e["knocked"]["status"] == "failed" for e in runs["R"]["events"] if e["kind"] == "knock")
@@ -897,7 +928,7 @@ def test_e7_the_document_names_every_key_its_type_and_its_closed_values(runs):
     assert set(rows) == set(C2) | {"%s.%s" % (p, k) for p, ks in C2_PARTS.items() for k in ks}
     closed = {"kind": list(event.KINDS), "severity": list(event.SEVERITIES) + ["hole", "info"],
               "state": C4_STATES + ["start", "end"] + D4_STATES, "hole.class": ["hole", "blind spot"],
-              "result.word": list(C5_WORDS.values()), "alarm": ["true", "false"]}
+              "result.word": list(C5_WORDS.values()) + ["NONE-SEEN"], "alarm": ["true", "false"]}
     for key, cells in rows.items():
         assert len(cells) == 5, (key, cells)   # key | type | values | kinds | OCSF | ECS
         assert cells[0] == "`%s`" % event.TYPES[key], key
@@ -939,6 +970,9 @@ def examples(runs):
            "tree": first("B", lambda e: e["kind"] == "tree"),
            "hole": first("C", lambda e: e["kind"] == "hole" and e["about"].startswith("hole:")),
            "hole: blind spot": first("B", lambda e: e["about"] == "blind:1"),
+           # E-4 (M10.2): a notifier's hole and the lost-words note
+           "hole: notifier's hole": first("R", lambda e: e["about"].startswith("notifier-hole:")),
+           "note: lost-words": first("L", lambda e: e["about"] == LOST),
            "knock": first("B", lambda e: e["kind"] == "knock"),
            "heartbeat": (next(e for e in runs["B"]["moments"][-1]["events"] if e["kind"] == "heartbeat"),
                          runs["B"]["home"]),
@@ -980,7 +1014,7 @@ def test_e7_the_document_says_paths_ids_and_what_snapshot_is_not():
                   "`watch.host` is required on every event",
                   # D-5: the document's statements
                   "a source finding's `state` is c-4's word", "`evidence.lines` counts the trace's lines from 1",
-                  "`subject.by` is carried by no event yet",
+                  "`subject.by` is how a tree became a candidate",   # F-5 (M10.2): carried
                   "the heartbeat's and the watch end's examples are the last event of two snapshots of one watch"):
         assert words in text, words
     printed = {"judged on another tree": host.JUDGED_ELSEWHERE, "history": "history",
@@ -1004,7 +1038,8 @@ def test_e7_no_real_host_user_or_address_in_the_document():
 def test_e8_the_same_entries_give_the_same_lines_and_another_home_the_same_values(runs, tmp_path):
     b = runs["B"]
     again = event.snapshot(json.loads(json.dumps(b["state"])), facts(b["state"]), b["state"]["updated"],
-                           json.loads(json.dumps(b["knocks"])), TABLE, end=True, exit=b["code"])
+                           json.loads(json.dumps(b["knocks"])), TABLE, end=True, exit=b["code"],
+                           word=b["word"], suppressed=b["suppressed"])
     assert [event.line(e) for e in again] == [event.line(e) for e in b["events"]]   # byte for byte
     for e in b["events"]:
         ln = event.line(e)

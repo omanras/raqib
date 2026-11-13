@@ -141,6 +141,42 @@ item F7 of the M1.2 review packet or questions file.
   the agent's working tree. The installer suggests `--log` outside the
   project (M0.3 O2). Either way the agent runs as the same user and can read
   the file.
+- **The events file of the host watch** (`~/.raqib/host/events.jsonl`,
+  beside its record; ADR-0011 Amendment F): one `raqib-event/1` line for
+  each thing the watch judged that is new or changed (a tree, a finding, a
+  source finding, a hole, a blind spot, a note, a knock), the watch's start
+  and end, and a heartbeat on a fixed beat (`--beat S`, 60 s by default).
+  `docs/specs/EVENT.md` is the contract: an event holds only what its entry
+  holds and the report prints, plus the rule's own ids and the watch's facts
+  (its run, platform, version and the host's name, read once from the system
+  without a network call, or given with `--event-host`). It never holds a
+  command line, a file's content, a row of a sample or a cite's text; it
+  does hold paths as the report says them, so the account's name where the
+  machine's path holds it.
+  - It is local and appended (flushed line by line); nothing is sent
+    anywhere. A collector's own agent may tail it; that agent, not Raqib,
+    is then the sender, and the file is what it may read.
+  - It lives under the same user as the agent, as the record does: an agent
+    can read it, and can truncate or rewrite it. The numbers `n` rise by
+    one per event in a run and the heartbeat is on a fixed beat, so a gap or
+    a silence is visible to whoever reads it; the report and the state say
+    how many events were written, not built and not written. A line that
+    cannot be written is a hole of the watch, never a silence, and what it
+    left unsaid is said at the next pass; a line is never appended to a
+    fragment, whoever left it (the file's end is looked at before every
+    line, and a file that does not end in a newline gets one first). Raqib
+    itself never rewrites, rotates or truncates the file.
+  - A watch that was stopped or killed writes no end: a run with a start
+    and no end, whose last line is older than two beats, was stopped or
+    killed, and that silence is the collector's alarm. Every event carries
+    its beat (`watch.beat`), so the file alone says how long two beats are.
+    A last line with no newline may still be being written; a line in the
+    middle that is not whole JSON is a torn write, skipped and counted.
+  - Every pass of the watch looks at every entry that can change, so a
+    changed thing (an act's standing moved to another tree, a fold decided,
+    a finding that grew) is said in the pass after the change, not a beat
+    later; an alarm taken back is a later rev of the same thing (`alarm`
+    false), and an act whose other half has no line keeps its alarm.
 
 ## 5. What Raqib cannot see (known gaps)
 

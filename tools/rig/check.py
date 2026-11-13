@@ -3,10 +3,14 @@ what the stand-in says it did, and states each expectation as MET, MISSED or OPE
 its task). Every expectation names the field run that taught it. Stdlib only; it reads text and writes text.
 
     python tools/rig/check.py --report WATCH.out --workload WORKLOAD.out [--sources DIR] [--exit-code N]
-                              [--platform win32|linux] [--sysmon] [--summary FILE] [--strict]
+                              [--platform win32|linux] [--sysmon] [--events FILE] [--summary FILE] [--strict]
+
+--events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
+raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
+import json
 import os
 import re
 import sys
@@ -37,8 +41,105 @@ def number(pattern, text, default=None):
     return int(m.group(1)) if m else default
 
 
-def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=False):
-    """[(id, state, words)] for one watch. `sources`: (name, text) of the files the watch kept."""
+def _checker():
+    """raqib's event.check (the contract, docs/specs/EVENT.md) where raqib can be imported; else the shape."""
+    try:
+        from raqib import event
+        return event.check
+    except ImportError:
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        sys.path.insert(0, root)
+        try:
+            from raqib import event
+            return event.check
+        except ImportError:
+            return lambda e: [] if isinstance(e, dict) and e.get("schema") == "raqib-event/1" and isinstance(
+                e.get("kind"), str) and isinstance(e.get("n"), int) else ["event: not a raqib-event/1 event"]
+
+
+def read_events(events, lines, code):
+    """X16-X18 (ADR-0011 F-9): the watch's events file beside its report."""
+    out = []
+    if events is None:
+        why = "the rig gave no events file"
+        return [("X16 every line of the events file is an event", SKIP, why),
+                ("X17 the events have a start and an end (and a heartbeat where the watch outlasted a beat)", SKIP, why),
+                ("X18 an event for each finding the report lists", SKIP, why)]
+    check = _checker()
+    evs, bad = [], []
+    for i, raw in enumerate(events.splitlines(), 1):
+        try:
+            e = json.loads(raw)
+        except ValueError:
+            bad.append("line %d: not JSON" % i)
+            continue
+        problems = check(e)
+        if problems:
+            bad.append("line %d: %s" % (i, problems[0]))
+        else:
+            evs.append(e)
+    out.append(("X16 every line of the events file is an event", MET if evs and not bad else MISSED,
+                "%d event(s)%s" % (len(evs), "; " + "; ".join(bad[:3]) if bad else "" if evs else
+                                   ": the file is missing or empty (silence is a finding)")))
+    start = evs[0] if evs and evs[0].get("kind") == "watch" and evs[0].get("state") == "start" else None
+    end = evs[-1] if evs and evs[-1].get("kind") == "watch" and evs[-1].get("state") == "end" else None
+    beats = sum(1 for e in evs if e.get("kind") == "heartbeat")
+    every = re.search(r"^EVENTS: .*one every ([\d.]+) s", "\n".join(lines), re.M)
+    outlasted = False
+    if start and end and every:
+        import datetime
+        t = [datetime.datetime.strptime(e["time"][:-1], "%Y-%m-%dT%H:%M:%S.%f") for e in (start, end)]
+        outlasted = (t[1] - t[0]).total_seconds() > 2 * float(every.group(1))
+    ok = bool(start and end and (code is None or (end.get("result") or {}).get("exit") == code)
+              and (beats or not outlasted))
+    out.append(("X17 the events have a start and an end (and a heartbeat where the watch outlasted a beat)",
+                MET if ok else MISSED, "start %s, end %s (exit %s; the report's %s), %d heartbeat(s)" % (
+                    "yes" if start else "no", "yes" if end else "no", (end or {}).get("result", {}).get("exit"),
+                    code, beats)))
+    # X18 (G-1): things, not counts. Of the report's run only, the events that are alarms' own things (a finding;
+    # a source finding not folded as one act with another, evidence.same_as), each by its last rev: every finding
+    # and every listed source finding has its event, and no event of the run is a listed thing the report lacks
+    text = "\n".join(lines)
+    run = re.search(r"(?m)^run: (\S+) \(seqs", text)
+    last = {}
+    for e in evs:
+        if e.get("kind") in ("finding", "source-finding") and (run is None or (e.get("watch") or {}).get(
+                "run") == run.group(1)):
+            last[((e.get("watch") or {}).get("run"), e.get("about"))] = e   # its last rev, of its run
+
+    def listed(head):
+        out_, on = [], False
+        for ln in lines:
+            if ln.startswith(head):
+                on = True
+            elif on and ln.startswith("  ["):
+                out_.append(ln)
+            elif on and not ln.startswith("  "):
+                on = False
+        return out_
+    rule_of = re.compile(r"^  \[[a-z]+\] (\S+)")
+    thing_of = re.compile(r"^  \[[a-z]+\] (\S+) on .* pid (\d+|\?) via ")
+    want_f = sorted(rule_of.match(ln).group(1) for ln in listed("FINDINGS: ") if rule_of.match(ln))
+    want_s = sorted((m.group(1), m.group(2)) for m in (thing_of.match(ln) for ln in listed("SOURCE FINDINGS: ")
+                                                         + listed("ON BENIGN TREES")) if m)
+    have_f = sorted(str((e.get("rule") or {}).get("id")) for e in last.values() if e.get("kind") == "finding")
+    folded = [e for e in last.values() if e.get("kind") == "source-finding" and "same_as" in (e.get("evidence") or {})]
+    have_s = sorted((str((e.get("rule") or {}).get("id")), str((e.get("subject") or {}).get("pid", "?")))
+                    for e in last.values() if e.get("kind") == "source-finding" and e not in folded)
+    n_f = number(r"(?m)^FINDINGS: (\d+)", text, 0)
+    n_s = number(r"(?m)^SOURCE FINDINGS: (\d+)", text, 0)
+    ok = have_f == want_f and have_s == want_s and len(want_f) == n_f and len(want_s) == n_s
+    out.append(("X18 an event for each finding the report lists", MET if ok else MISSED,
+                "findings %d of %d, source findings %d of %d (%d said as one act with another), run %s%s" % (
+                    len(have_f), n_f, len(have_s), n_s, len(folded), run.group(1) if run else "-",
+                    "" if ok else "; not alike: %s" % "; ".join(sorted(
+                        {"%s pid %s" % t for t in set(have_s) ^ set(want_s)} | set(set(have_f) ^ set(want_f))))[:200])))
+    return out
+
+
+def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=False, events=None):
+    """[(id, state, words)] for one watch. `sources`: (name, text) of the files the watch kept. `events`: the text
+    of its events file (None: the rig gave none, and X16-X18 are n/a)."""
     full = report.splitlines()
     at = next((i for i, x in enumerate(full) if x.startswith("Raqib watch --host")), None)
     lines = full[at:] if at is not None else []
@@ -143,6 +244,7 @@ def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=
             say(ident, MET if needle in text else MISSED, why)
         clip = [f for f in listed + findings if "CLIPBOARD" in f.upper()]
         say("X15 writing the clipboard is a finding", MET if clip else OPEN, "no rule for it yet (M7.10, recorded)")
+    out += read_events(events, lines, code)
     return out
 
 
@@ -162,6 +264,7 @@ def main(argv=None):
     p.add_argument("--exit-code", type=int)
     p.add_argument("--platform", default=sys.platform)
     p.add_argument("--sysmon", action="store_true")
+    p.add_argument("--events")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -175,7 +278,10 @@ def main(argv=None):
     sources = []
     if a.sources and os.path.isdir(a.sources):
         sources = [(name, text(os.path.join(a.sources, name))) for name in sorted(os.listdir(a.sources))]
-    rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon)
+    events = None
+    if a.events:   # given and missing: the watch wrote none, which X16 says (not n/a)
+        events = text(a.events) if os.path.isfile(a.events) else ""
+    rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon, events)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

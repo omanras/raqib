@@ -337,3 +337,177 @@ line in any line. And the six CI jobs are green on eabca24, Windows among them.
   list); a snapshot of a watch whose reader failed; examples of a notifier's hole and the lost-words note; the
   counts beside the split names; the tests the packet shows to be weak (section 5).
 
+## Amendment F (the Table, 2026-11-13) - the watch writes its events (M10.2)
+The shape is in the tree (M10.1). This is the writer: the host watch says, as events in a file beside its
+record, everything it judged, while it runs. Nothing is sent anywhere yet (M10.3); the file is what a
+collector's own agent can already tail.
+- F-1 (one writer, outside the judging). `raqib/eventlog.py`: it is given the file, the watch's facts and the
+  rule table; it keeps the run's count (n) and, for each thing by its `about`, the revision last said and
+  what was said. `say` builds the event with raqib/event.py, and writes one line - appended, flushed - when
+  the thing is new (rev 1) or what would be said of it changed (the next rev); the same again is not written.
+  FOR: C-1. MUST NOT TOUCH: how anything is judged, knocked or reported; a rule's result never waits for it.
+- F-2 (when). One pass of the watch over its own ledgers at the end of every round and at the finish: the
+  trees, the findings, the source findings, the watch's holes ("hole:i"), the notifier's ("notifier-hole:i"),
+  the blind spots ("blind:i"), the notes ("note:i"), the knock rows ("knock:i"). The watch names each from the
+  list it is in; it does not guess from what an entry holds. The first event of a watch is its start, the last
+  its end, with the report's own result and exit.
+- F-3 (the heartbeat). On a fixed beat (`--beat S`, 60 s by default, never shorter than a round): a heartbeat
+  event with the watch's state and counts. The watch is one thing ("watch"): its start is rev 1 and each beat
+  and its end the next rev. Two things change every round or every lost word and would otherwise be said each
+  time: a blind spot's count and the lost-words note ("note:lost-words"); they are said again only with a
+  beat. FOR: a collector alarms on Raqib's own silence. A beat is written even when nothing else changed.
+- F-4 (what cannot be said is said). A builder that raises (an entry lacking what its kind requires) becomes a
+  hole of the watch, one per thing, naming the thing and the key; the pass goes on to the next entry. A line
+  that cannot be written (the file, the disk) is a hole said once, and the count of events not written is in
+  the report and the state; the watch goes on. A cite left out because it lacked its source or its line is
+  counted on the event (`evidence.cites_left_out`), and an event never holds an empty list of cites.
+- F-5 (the knock and its thing; the tree's road). A knock event names the thing it knocked for
+  (`knocked.for`: that thing's `about`), which the writer knows. A tree's row carries how it became a
+  candidate, so `subject.by` is said. Both are additions to `raqib-event/1`, made before anything reads it;
+  EVENT.md, check and the tests follow.
+- F-6 (the host's name). Read once at the start from the system (no network call); `--event-host NAME`
+  replaces it; a system that gives none: the watch says so at its start and uses "unnamed".
+- F-7 (said to the person). The watch's first lines name the events file and the beat; the report has a line
+  EVENTS (written, heartbeats, not built, not written, the file); the state carries the same numbers.
+- F-8 (a tool for whoever connects a collector). `raqib events FILE`: checks every line with `event.check`,
+  prints the count per kind and each problem with its line number; exit 0 when every line is an event, 1
+  when not, 2 when the file cannot be read. It reads; it sends nothing.
+- F-9 (the rig). The rig's check reads the events file of its watch: every line is an event; a start and an
+  end; an event for each finding the report lists; heartbeats where the watch outlasted a beat.
+- Not in M10.2, named: sending (M10.3); the window's panel (M10.4); a kind for the model layer's suspicions
+  and events for the watch's own errors (recorded for M10.3's handoff); `raqib watch PROJ` (the session
+  watch) writing events: after the host watch has proven the road.
+
+## Amendment G (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.2.md (a9667eb), the rig, and a real watch: REDO
+The writer works: a real watch here, and the rig's two machines, wrote files in which every line is an event,
+with a start, an end and heartbeats. Three things showed only by running. The rig's own X18 was MISSED on
+Windows: four source-finding events where the report lists two - an act that the host's sample and Sysmon both
+saw is one line of the report and was two alarms in the file. Every tree and every blind spot was said again
+at every beat with nothing new. An event said again carried the time of the first saying.
+- G-1 (one act, one alarm). A pair the report takes for one act (its listing's own join) is one alarm in the
+  file: the entry the listing folds is said with `alarm` false and `evidence.same_as`, the `about` of the entry
+  it is one with. The pass finds the pairs by the function the report uses, once a pass. A pair found after
+  both were said makes the folded one's next rev. X18 compares things: of the report's run only, the events
+  that are alarms' own things - every finding and every listed source finding has its event, and no event of
+  the run is a listed thing the report does not hold.
+- G-2 (what is said again). A thing is said again when what a consumer acts on changed. A tree's latest record
+  line and cites, and a blind spot's count, are not that: they are not said again at a beat. The last state
+  of each is said once, at the finish, so that the file read back still equals the snapshot. A tree knocked,
+  made benign or history, or named: at once, as built. The lost-words note: at a beat, as built.
+- G-3 (time). `time` is when the event is said: the entry's own time at rev 1, the time of the pass that
+  says it at any later rev.
+- G-4 (the end's word). `result.word` is the report's own word: CLEAN, ALARM, INCOMPLETE or NONE-SEEN (a
+  closed list of four, in check and in EVENT.md); a clean result with findings suppressed by the person's
+  overlay says CLEAN and `result.suppressed`, their number. The watch gives the word; the module does not
+  derive it from the exit. A heartbeat's result keeps C-5's three words from the code so far.
+- G-5 (Q4: a hole is a hole). An events file that cannot be written, and an entry that cannot be built, are
+  holes of the watch, and a watch with a hole is INCOMPLETE: as built. It is not F-1's "judging": nothing
+  judged waits for it.
+- G-6 (the writer cannot harm the watch; section 4). (a) Nothing the pass calls can end it: each entry is
+  built, lined and written inside its own guard, the watch's own naming too; a pass that failed for one
+  ledger goes on to the next and still writes a due beat; a failing pass is not tried again at every tick.
+  (b) A line is never glued to a torn one: before a line is appended, a file that does not end in a newline
+  gets one (as the record's own writer does); a write that failed is never counted as said. (c) Its cost is
+  bounded and said: between beats the pass looks at what is new in each list and at what can still change
+  (the trees, the source findings not yet settled, the knocks not yet decided, the notifier's holes); at a
+  beat and at the finish it looks at everything; what a knock was for is found by one table made once a pass,
+  not by a search for each knock; the longest pass is in the state and on the report's EVENTS line.
+- G-7 (a watch that was killed). EVENT.md and THREAT_MODEL say what a start with no end means: a run whose
+  last line is older than two beats was stopped or killed, and that silence is the collector's alarm; a last
+  line that is not whole JSON is a torn write.
+- G-8 (ADR-0007 AD-4 stands). The state's tree does not carry `candidate_by` again. The pass takes "by" from
+  where the watch holds it without putting it on the state's row; the test that claimed its absence looks
+  where the trees are.
+- G-9 (`knocked.for`). It names only a thing said in this file. A knock for a thing that was not built, or
+  for a suspicion (no kind yet), has none.
+- G-10 (the end is said once, last, and the report counts it). The result is computed, the end is written,
+  then the EVENTS line is made: the report and the state say what the file holds. No second end.
+- G-11 (Q11: the builder should have stopped; the Table should have put the files in Scope). README.md and
+  docs/GUIDE.md name `events` in their Commands tables, by the test's own rule; the exception in
+  tests/test_readme_top.py is taken out.
+- G-12 (tests the packet shows to be weak). `subject.by` "channel" on a tree that became a candidate by the
+  channel; the exit of a watch with no finding and an unwritable events file (3); a NONE-SEEN watch's end; a
+  torn file; a pass in which one ledger raises; a told-twice pair through the watch and through X18; the
+  host-name line among the first lines.
+- Accepted as built: Q3 (a number is used once; "not written" counts attempts - the report says "attempts"),
+  Q5, Q7, Q8 with G-9, Q9 (and X17 wants at least one heartbeat for each two whole beats the watch ran),
+  Q10, Q12.
+- G-13 (the REDO's STOP, c1e7919: the builder stopped rather than change a guard, and was right to; the Table
+  answered, CLAUDE.md rule 8). The guide's Commands table has the row of `raqib events`; the guard's list of
+  the guide's own rows names it (a row of the guide only: the README names the command among "the rest").
+  QR2 recorded: `result.suppressed` is tested with the overlay's count replaced, since no rule of the host
+  fires on the clean fixture watch; a watch with a real overlay that suppresses a finding is M10.3's to add.
+
+## Amendment H (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.2-redo.md (bc57cc9): REDO, narrow
+The REDO did what G said, and the rig now meets X18 on Windows: one act, one alarm. The packet's main finding
+is against the Table's own G-6 (c). To bound the pass, G-6 (c) had it look between beats only at "what can
+still change", and the build took that to mean an entry not yet settled. A settled entry still changes: an
+act's standing moves to a nearer tree, a fold is decided, a finding grows. So a change could wait a whole beat:
+two alarms for one act for up to a minute, or one alarm on the wrong tree. The Table bought cost with silence,
+which the ledger says never to do; a bound must be on the work for an entry that did not change, not on which
+entries are looked at.
+- H-1 (G-6 (c) replaced). Every pass looks at every entry of every ledger that can change: the findings, the
+  source findings, the watch's holes, the notifier's holes, the knock rows, the trees; and at the notes that
+  are new or that the watch replaced in place since the last pass (the watch tells the writer which: it knows
+  the three places it does that). The bound is this: for each entry the writer keeps the values the event is
+  built from; where they are what they were, nothing is built. A test holds, for each kind, that a change of
+  any value the builder reads changes what is kept (so no change can hide), and that a pass over a watch with
+  thousands of unchanged entries builds nothing. FOR: a changed thing is said in the pass that follows the
+  change. The longest pass stays in the state and the report.
+- H-2 (G-1, said for the collector). Where the os source tells an act before the host's sample does, the os
+  entry is said as an alarm and is folded by its next rev. That is G-1 as ruled; what was missing is the
+  sentence in EVENT.md: an alarm can be taken back by a later rev of the same thing (`alarm` false, with
+  `evidence.same_as`), so a collector keys an alert by the run and the thing's name and takes its latest rev.
+  Where the kept half was not built or not written, the folded half is not folded: an act always has an alarm.
+- H-3 (G-6 (a) completed). The read of an entry is inside the entry's own guard too (a knock row that raises
+  when it is read stops that row, not the rows after it); a failure of a whole list is said once, not at every
+  pass.
+- H-4 (G-6 (b) completed). The file's end is checked before every line, not only the first: a line is never
+  appended to a fragment, whoever left it. What a failed write leaves to be said is said at the next pass,
+  whatever it was: a first saying, a later rev, the start. A watch whose start could not be written writes it
+  before anything else when the file can be written again. A heartbeat is a new rev each time, never a number
+  used before.
+- H-5 (the end's word is the report's, also when the watch's own files fail). The watch writes its state
+  before it computes the result that the end says; what fails after the end (the report itself, the last
+  write of the state) is in the report alone, and EVENT.md says that the end cannot hold it.
+- H-6 (the beat is in the file). `watch.beat`, the heartbeat's interval in seconds, is on every event: a
+  reader of the file alone can tell a run that went silent for more than two beats.
+- H-7 (the snapshot knows a pair). `snapshot` is given the pairs, so the file read back equals it for a watch
+  with a pair too; tested on one.
+- H-8 (EVENT.md, a section for whoever reads the file). The file holds many runs; Raqib only appends to it and
+  never rewrites, rotates or truncates it; a last line with no newline is still being written; a line in the
+  middle that is not JSON is a torn write, to be skipped and counted; within a run n rises in the file's order,
+  with gaps; one thing at one rev can be under two ids after a failed write; `time` is when the thing was said
+  and does not rise from line to line (a first saying carries the entry's own time); a run with a start and no
+  end has not said its trees' last evidence. The sentence that the watch does not write events yet is gone, and
+  `snapshot` is given as the module has it.
+- H-9 (tests). The host-name line in what the watch really prints at its start; the tests the packet's section
+  10 shows to be weak, each made able to fail (a pair in every order of arrival; a per-entry failure among
+  good entries; a pass with a beat due; an entry changed after it settled).
+- Recorded, not built: a tree's event does not carry its HOST-RHYTHM and HOST-UNWATCHED knocks (their findings
+  do); a write whose bytes landed and whose close failed is said twice (two ids, one rev).
+
+## Amendment I (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.2-redo2.md (0341ea3)
+The packet: H is built, no key was found whose change goes unsaid; REDO for two tests that could not fail, for
+a sentence of EVENT.md that contradicted its new section, and for two statements there the code does not make
+true. None of it is a build: the Table made the changes itself (CLAUDE.md rule 8).
+- I-1 (a small loss, closed). The watch forgot which notes it had replaced before the pass that was to look
+  at them had run; a pass that failed before it began lost them until the next beat. They are forgotten only
+  once a pass was given them.
+- I-2 (the tests). "A list's failure is said once" is now counted (the assertion's own precedence had made
+  it always true). "The file's end is looked at before every line" has a test with no failed write between
+  the fragment and the next line, which the earlier build would fail. Every key of a tree's core - what a
+  consumer acts on - is driven from the core's own list: a change of any one is said in the next pass, and
+  the record line alone is not.
+- I-3 (EVENT.md says only what is true). A last line with no newline is not whole: it is being written, or
+  it is the torn end of a watch that was stopped, and then no newline comes until another watch appends. A
+  cursor is a byte offset; a file shorter than the cursor is another file. The start is tried first at every
+  pass, and a line can stand before it where only the start's own write failed. A run is silent by the
+  reader's own clock since the file last grew with its line, never by `time`. A run whose end could not be
+  written reads as stopped. The end's result and the report's can differ in both directions where the watch's
+  own state file failed around the end.
+- Recorded for M10.3, the first reader of the file: no test drives the three places that replace a note, nor
+  the host's own code changing a settled entry, through a running watch; the pass builds every knock row
+  before the writer compares (cost, measured by the longest pass); a file written by an earlier build has no
+  `watch.beat` and reads as not events.
+
