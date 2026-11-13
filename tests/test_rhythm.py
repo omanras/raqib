@@ -879,7 +879,10 @@ def test_redo_k4_no_pid_leaves_and_hashes_are_salted_with_the_run(home):
     (user,) = spy.users
     (key,) = list(w.trees)
     own = [json.loads(x) for x in Path(w._source_path(key)).read_text(encoding="ascii").splitlines()]
-    assert "4400" not in user and "host-4400" not in user and w.run not in user and '"session_id": "t1"' in user
+    # (the Table, 2026-11-13, CI run 43367542505: the twin of test_e3's flake above, missed on 2026-11-11 - a salted
+    # hash held "4400" by chance on one windows job; the pid is looked for outside the hashes)
+    sent = re.sub(r"[0-9a-f]{64}", "", user)
+    assert "4400" not in sent and "host-4400" not in user and w.run not in user and '"session_id": "t1"' in user
     for line in own:
         if line.get("input_sha256"):
             assert line["input_sha256"] not in user                    # unsalted: never sent
