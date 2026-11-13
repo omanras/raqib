@@ -139,7 +139,8 @@ DELIVERIES = ("acknowledged", "written", "sent")
 DELIVERY_OF = {"http": DELIVERY, "https": DELIVERY, "syslog+udp": "sent", "syslog+tcp": "written",
                "syslog+tls": "written"}    # J-3: what taken means, per transport
 PLAIN = ("http", "syslog+udp", "syslog+tcp")   # J-8: the wires that are not encrypted
-PORT_OF = {"http": 80, "https": 443, "syslog+udp": 514, "syslog+tcp": 514, "syslog+tls": 6514}
+PORT_OF = {"http": 80, "https": 443, "syslog+udp": 514, "syslog+tls": 6514}   # P-3: syslog+tcp has none
+SYSLOG_KEYS = ("facility", "framing")      # P-3: written in a syslog destination's state only
 FACILITY = 13                              # J-6: log audit, unless --facility N
 FACILITIES = range(0, 24)                  # RFC 5424 6.2.1: the facilities are 0 to 23
 FRAMINGS = ("octet", "newline")            # J-6: RFC 6587 octet counting (the default) or a newline after each
@@ -148,7 +149,8 @@ DATAGRAM_MAX = 65000                       # J-6: a message longer than this is 
 SEVERITY = {"high": 2, "medium": 4, "low": 5, "hole": 4, "none": 6, "info": 6}
 SEVERITY_ELSE = 4                          # a severity the event contract does not have: a warning, never calm
 PRINTUS = re.compile(r"[\x21-\x7e]+\Z")    # RFC 5424 PRINTUSASCII: a HOSTNAME (255 at most), a MSGID (32)
-STAMP = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,6})?Z\Z")   # an RFC 5424 TIMESTAMP in UTC
+# P-1: an RFC 5424 TIMESTAMP in UTC, of ASCII digits only (re.ASCII: a str pattern's \d is every script's digit)
+STAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?Z\Z", re.ASCII)
 BEAT_DEFAULT = 60.0                        # J-9
 BEAT_MIN = 1.0                             # L-6
 MAX_LINES = 100                            # J-11
@@ -188,12 +190,16 @@ ERRORS = {
                 " question",
     "token": "the collector refused the token (401 or 403)",
     "token-file": "the token file cannot be read or fails its checks",
-    "write": "the system did not take the batch's bytes or datagrams (syslog: the connection ended, no route)",
+    "write": "the system did not take the batch's bytes or datagrams, or the connection did not end in order after"
+             " them (syslog: a reset, the collector's end before the forwarder's, no route)",
     "file": "the events file cannot be read, or more than 512 KiB follow its last newline",
     "stuck": "four sends abandoned have not ended (a name that never resolves, a connect that never returns): no"
              " send starts until one ends",
     "unforeseen": "an error the forwarder did not foresee ended the run",
 }
+# P-5: the words said of a syslog send, which has no answer (an orderly end is what is waited for)
+SYSLOG_ERRORS = dict(ERRORS, late="the batch was not written, or the connection not ended in order, within the"
+                                  " bound")
 KEYS = ("schema", "name", "pid", "written", "destination", "shape", "delivery", "plain", "file", "cursor", "from",
         "beat", "sent", "skipped", "refused", "restarts", "last_id", "last_ok", "behind", "failing", "head",
         "in_question")
@@ -275,7 +281,8 @@ def valid_host(host):
 def destination(url, plain=False):
     """J-8, J-9, L-6, M-8: --to as {scheme, host, port, path} (no query, no user info) and the request's target.
     J-6: a syslog destination - syslog+udp://, syslog+tcp://, syslog+tls://host[:port] - has no path, query or
-    fragment (its path is "" and its target None); its port is 514 (udp, tcp) or 6514 (tls) unless written."""
+    fragment (its path is "" and its target None); its port is 514 (udp) or 6514 (tls) unless written. P-3:
+    syslog+tcp:// needs its port written (514 over tcp is another service's: no default)."""
     if not isinstance(url, str) or CONTROL.search(url):   # urlsplit would drop a tab or a newline unsaid
         raise UsageError("--to: the URL holds a control character (a tab, a newline, ...): it is refused, never"
                          " taken without it")
@@ -303,6 +310,10 @@ def destination(url, plain=False):
         if parts.path not in ("", "/") or "?" in url or "#" in url:
             raise UsageError("--to %s://: a syslog destination is host[:port] only (no path, query or fragment)"
                              % scheme)
+        if scheme == "syslog+tcp" and port is None:
+            raise UsageError("--to syslog+tcp://%s: write the collector's port (syslog+tcp://host:port): syslog over"
+                             " tcp has no port of its own - 514 over tcp is another service's (rsh), so there is no"
+                             " default; syslog+udp:// is 514 and syslog+tls:// 6514 unless written (P-3)" % ("[%s]" % host if ":" in host else host))
         if scheme != "syslog+tls" and not loopback(host) and not plain:
             raise UsageError("--to %s://%s: plain syslog (udp, tcp) is taken only to a loopback address (127.0.0.0/8,"
                              " ::1) unless --plain is given; syslog+tls:// is verified (J-8)" % (scheme, host))
@@ -412,11 +423,18 @@ def _field(value, most):
 def syslog_head(obj, facility=FACILITY):
     """J-6: the RFC 5424 header and its empty STRUCTURED-DATA, up to the MSG: <PRI>1 TIMESTAMP HOSTNAME raqib -
     MSGID - (and the space before the MSG). Each field is "-" where the event's value is not what RFC 5424
-    takes there; the event itself is in the MSG, unchanged."""
-    watch = obj.get("watch") if isinstance(obj.get("watch"), dict) else {}
-    stamp = obj.get("time") if isinstance(obj.get("time"), str) and STAMP.match(obj.get("time")) else "-"
-    return ("<%d>1 %s %s raqib - %s - " % (facility * 8 + severity_of(obj), stamp, _field(watch.get("host"), 255),
-                                          _field(obj.get("kind"), 32))).encode("ascii")
+    takes there (P-1: a time of other digits than ASCII, a host or kind too long or with a space); the event
+    itself is in the MSG, unchanged. P-1: it never raises, whatever the line holds - every field is printable
+    ASCII by its own check, and a value no check foresaw is "-" in every field the event gives."""
+    try:
+        obj = obj if isinstance(obj, dict) else {}
+        watch = obj.get("watch") if isinstance(obj.get("watch"), dict) else {}
+        stamp = obj.get("time") if isinstance(obj.get("time"), str) and STAMP.match(obj.get("time")) else "-"
+        return ("<%d>1 %s %s raqib - %s - " % (facility * 8 + severity_of(obj), stamp,
+                                              _field(watch.get("host"), 255),
+                                              _field(obj.get("kind"), 32))).encode("ascii")
+    except Exception:   # P-1: no event ends the forwarder; the MSG still carries the line as written
+        return b"<%d>1 - - raqib - - - " % (facility * 8 + SEVERITY_ELSE)
 
 
 def syslog_message(raw, obj, facility=FACILITY):
@@ -566,6 +584,16 @@ def _state_problem(old):
     if d["scheme"] in SYSLOG and (old["shape"] != "raqib" or old["delivery"] != DELIVERY_OF[d["scheme"]] or
                                   d["path"] != ""):
         return "a syslog destination with a shape, delivery or path the forwarder never writes for it"
+    if d["scheme"] in SYSLOG:   # P-3: a state written before the two were kept has neither, and is read
+        if "facility" in old and (not _count(old["facility"]) or old["facility"] not in FACILITIES):
+            return "facility is not a syslog facility (0 to 23)"
+        if "framing" in old and not (old["framing"] is None if d["scheme"] == "syslog+udp" else
+                                     isinstance(old["framing"], str) and old["framing"] in FRAMINGS):
+            return "framing is not one the forwarder writes for the destination (none over udp)"
+        if ("facility" in old) != ("framing" in old):
+            return "a syslog state holds both facility and framing, or neither"
+    elif any(k in old for k in SYSLOG_KEYS):
+        return "facility or framing in the state of an HTTP destination"
     if not isinstance(old["file"], str):
         return "file is not a text"
     cur = old["cursor"]
@@ -789,8 +817,9 @@ class SyslogSend(Send):
     """J-3, J-6: one batch to a syslog collector, on a thread of its own and bounded as an HTTP send is (L-4, M-4,
     M-5: connecting and the handshake within connect_s, writing within answer_s; abandoned by shutting its
     sockets down; closed by its own thread alone). There is no answer. Over tcp and tls the batch's framed
-    messages are written on one connection: taken when sendall returned with no error (`written`). Over udp each
-    message is one datagram: taken when every sendto returned with no error (`sent`)."""
+    messages are written on one connection, and the batch is taken only when that connection ended in order
+    (P-2, `written`): see end(). Over udp each message is one datagram: taken when every sendto returned with no
+    error (`sent`: nothing is known)."""
 
     def __init__(self, fwd, messages):
         Send.__init__(self, fwd, messages, None)
@@ -812,7 +841,47 @@ class SyslogSend(Send):
             return Result("failed", "tls", phase="send")
         except (OSError, ValueError):
             return Result("failed", "write", phase="send")
+        self.mark("answer")   # P-2: the orderly end, within the answer's bound from the batch's last byte
+        return self.end(sock)
+
+    def end(self, sock):
+        """P-2: `written` is a connection ended in order. Over tcp: an end of the collector's that came before the
+        forwarder's own is no end in answer to it (a collector that accepts and closes); the forwarder half-closes
+        (shutdown SHUT_WR) and reads to the collector's end, what it sends thrown away. Over tls: the close is sent
+        and the collector's read (unwrap: what the collector sent before it - session tickets, data - is read and
+        thrown away; an alert is an error), then the same half-close and read to the end below it. Each read
+        within what is left of the bound. A reset, an alert, an error, a socket error left after the end, or no
+        end within the bound is a failed send: nothing passes, and the batch is sent again."""
+        try:
+            if self.context is not None:
+                sock.settimeout(self.left())
+                sock.unwrap()   # the close sent and the collector's read; the socket is plain from here
+            elif self.ended_first(sock):
+                return Result("failed", "write", phase="answer")
+            socket.socket.shutdown(sock, socket.SHUT_WR)
+            while True:
+                sock.settimeout(self.left())
+                if not socket.socket.recv(sock, ANSWER_READ):
+                    break
+            if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR):
+                return Result("failed", "write", phase="answer")
+        except socket.timeout:
+            return Result("failed", "late", phase="answer")
+        except ssl.SSLError:
+            return Result("failed", "tls", phase="answer")
+        except (OSError, ValueError):
+            return Result("failed", "write", phase="answer")
         return Result("taken")
+
+    @staticmethod
+    def ended_first(sock):
+        """P-2: whether the collector's end is already there before the forwarder's own (a look, no wait: a peek
+        that takes nothing)."""
+        sock.settimeout(0.0)
+        try:
+            return socket.socket.recv(sock, 1, socket.MSG_PEEK) == b""
+        except (BlockingIOError, InterruptedError):
+            return False
 
     def datagrams(self):
         d = self.dest
@@ -971,7 +1040,7 @@ class Forwarder:
             return 0
 
     def state(self):
-        return {"schema": SCHEMA, "name": self.name, "pid": self.pid, "written": iso(self.clock()),
+        s = {"schema": SCHEMA, "name": self.name, "pid": self.pid, "written": iso(self.clock()),
                 "destination": dict(self.dest), "shape": self.shape, "delivery": self.delivery, "plain": self.plain,
                 "file": self.path, "cursor": {"offset": self.offset, "line_sha256": self.line_sha},
                 "from": dict(self.start_from), "beat": self.beat, "sent": self.sent, "skipped": self.skipped,
@@ -980,6 +1049,13 @@ class Forwarder:
                 "failing": dict(self.failing) if self.failing else None,
                 "head": dict(self.head) if self.head else None,
                 "in_question": {"count": self.question, "since": self.since if self.question else None}}
+        if self.syslog:   # P-3: the facility and the framing are the destination's, kept as the shape is
+            s.update(facility=self.facility, framing=self.state_framing())
+        return s
+
+    def state_framing(self):
+        """P-3: the framing the state says: octet or newline over tcp and tls; none (null) over udp."""
+        return None if self.dest["scheme"] == "syslog+udp" else self.framing
 
     def own_name(self):
         """M-7, N-4: the pid file, read at each state write. Gone, or holding a pid no process has: written again
@@ -1175,6 +1251,16 @@ class Forwarder:
                 raise UsageError("the name %s forwards %s to %s (shape %s): another file, destination or shape is"
                                  " another name (J-13)" % (self.name, old.get("file"), where(old["destination"]),
                                                            old.get("shape")))
+            kept = ""
+            if self.syslog and "facility" in old:   # P-3: another facility or framing is another name
+                if old["facility"] != self.facility or old["framing"] != self.state_framing():
+                    raise UsageError("the name %s forwards with facility %d, framing %s: another facility or"
+                                     " framing is another name, as another shape is (P-3)" % (
+                                         self.name, old["facility"], old["framing"] or "none"))
+            elif self.syslog:   # P-3: a state written before the two were kept: this start's are kept from now
+                kept = ("; the state held no facility or framing (written before they were kept): this start's,"
+                        " facility %d, framing %s, are kept from now" % (self.facility,
+                                                                        self.state_framing() or "none"))
             cur = old["cursor"]
             self.offset, self.line_sha = cur["offset"], cur.get("line_sha256")
             self.reach, self.reach_sha, self.known_end = self.offset, self.line_sha, self.offset
@@ -1185,8 +1271,8 @@ class Forwarder:
             self.start_from = dict(old["from"])
             if old["failing"]:
                 self.failing, self.carried = dict(old["failing"]), True
-            return "resumed at offset %d%s" % (self.offset, "; failing %s, as the state said, until a try has an"
-                                               " answer" % self.failing["error"] if self.carried else "")
+            return "resumed at offset %d%s%s" % (self.offset, "; failing %s, as the state said, until a try has an"
+                                                 " answer" % self.failing["error"] if self.carried else "", kept)
         if self.start_from["start"] == "end":
             try:
                 with self.opener(self.path) as f:
@@ -1273,7 +1359,9 @@ class Forwarder:
             if size < self.size:
                 self.size = size
                 self.say("a send of %d line(s) was late (%s): the next batch is %d" % (
-                    len(lines), "its request not sent" if r.phase == "send" else "no whole answer", self.size))
+                    len(lines), ("its bytes not written" if r.phase == "send" else "no orderly end of the connection")
+                    if self.syslog else "its request not sent" if r.phase == "send" else "no whole answer",
+                    self.size))
         return r
 
     def wire(self, ln):
@@ -1370,7 +1458,7 @@ class Forwarder:
                 more = ("the cursor stays before them; %d line(s) in question from offset %d (asked alone as far as"
                         " offset %d) wait for a later line taken" % (self.question, self.offset, self.reach))
             self.say("failing: %s (%s%s); %d tr%s; %s" % (
-                r.error, ERRORS.get(r.error, r.error), "" if r.status is None else ", status %d" % r.status,
+                r.error, (SYSLOG_ERRORS if self.syslog else ERRORS).get(r.error, r.error), "" if r.status is None else ", status %d" % r.status,
                 self.failing["tries"], "y" if self.failing["tries"] == 1 else "ies", more))
 
     def failed(self, r):
@@ -1891,8 +1979,11 @@ def judge(state, now):
         written, beat = seconds_of(state["written"]), float(state["beat"])
         dest, cursor, refused, failing = state["destination"], state["cursor"], state["refused"], state["failing"]
         inq = state.get("in_question") or {"count": 0, "since": None}
-        lines = ["to %s (shape %s, delivery %s%s)" % (where(dest), state["shape"], state["delivery"],
-                                                     ", plain: not encrypted" if state["plain"] else ""),
+        lines = ["to %s (shape %s, delivery %s%s%s)" % (
+                     where(dest), state["shape"], state["delivery"],
+                     "" if "facility" not in state else ", facility %d, framing %s" % (
+                         state["facility"], state.get("framing") or "none: one datagram a message"),
+                     ", plain: not encrypted" if state["plain"] else ""),
                  "file %s, cursor %d (from the %s, offset %d)" % (state["file"], cursor["offset"],
                                                                    state["from"]["start"], state["from"]["offset"]),
                  "sent %d, skipped %d, refused %d%s, restarts %d" % (
@@ -1916,7 +2007,8 @@ def judge(state, now):
                                      " (stopped, killed or stuck)" % age]
     if failing:
         return 1, "FAILING", lines + ["failing since %s: %s (%s), %d tr%s%s" % (
-            failing["since"], failing["error"], ERRORS[failing["error"]], failing["tries"],
+            failing["since"], failing["error"], (SYSLOG_ERRORS if dest["scheme"] in SYSLOG else
+                                                 ERRORS)[failing["error"]], failing["tries"],
             "y" if failing["tries"] == 1 else "ies",
             "" if failing.get("status") is None else ", status %d" % failing["status"])]
     if inq["count"] and (asked is None or written - asked > beat):

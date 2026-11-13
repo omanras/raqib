@@ -1259,15 +1259,28 @@ collector that is slow, down or refusing never delays or loses a capture
   tell Raqib's messages from anyone's, so anyone who can reach its port -
   any process on its host for a loopback collector - can send forged
   messages in Raqib's shape; the collector's own access rules (who may
-  reach the port, TLS with client certificates on its side) are the only
-  answer, and the forwarder sends no token there, so none can leak. Syslog
-  answers nothing: over tcp and tls a batch counts as taken when its bytes
-  were handed to the system (`written`), over udp when its datagrams were
-  sent (`sent`); a collector that is down over udp, or that closes its end
-  while bytes are on their way, loses lines the forwarder counts as sent.
-  The heartbeat search on the collector's side is what tells it. A line
-  longer than a datagram is refused locally, never cut, so no message is
-  half an event.
+  reach its port) are the only answer - the forwarder presents no
+  certificate of its own, so a collector that asks one refuses it, and that
+  refusal is a failed send - and the forwarder sends no token there, so
+  none can leak. Syslog answers nothing, and each delivery word says only
+  what it can: over udp a batch counts as taken when its datagrams were
+  sent (`sent`): over udp to a collector that is down every line is `sent`
+  and the status is OK - only the collector's own search for silence tells.
+  Over tcp and tls a batch counts as taken only when its connection ended
+  in order (`written`): the forwarder ends its side and reads to the
+  collector's end (over tls it sends its close and reads the collector's);
+  a reset, an alert, an error or no end within the bound is a failed send,
+  and the batch is sent again. `written` is an orderly end, not a stored
+  event: a collector that read the batch and then lost it, or ended in
+  order without keeping it, loses lines the forwarder counts as taken. A
+  message may be cut by a collector at its own limit, and with `--framing
+  newline` a line that holds a bare CR may be split by a collector that
+  breaks on it. The heartbeat search on the collector's side is what tells
+  it. A line longer than a datagram is refused locally, never cut, so the
+  forwarder sends no message that is half an event. No line ends the
+  forwarder: a field of an event that cannot be a header field (a time in
+  other digits than ASCII, a host or kind too long or with a space) is `-`,
+  and the line is still the message whole.
 - **What the collector learns.** Everything the events say (A-4: the whole
   judgement, not only what knocked): the host's name, each run, the trees
   with their images, pids and paths, each finding with its rule and

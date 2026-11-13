@@ -18,6 +18,7 @@ import shutil
 import signal
 import socket
 import ssl
+import struct
 import subprocess
 import sys
 import threading
@@ -2248,7 +2249,7 @@ def test_m103b_e2_the_three_forms_their_ports_and_plain_udp_and_tcp_only_to_loop
     d = forward.destination
     assert d("syslog+udp://127.0.0.1") == ({"scheme": "syslog+udp", "host": "127.0.0.1", "port": 514, "path": ""},
                                           None)
-    assert d("syslog+tcp://127.0.0.1:1514")[0]["port"] == 1514 and d("syslog+tcp://[::1]")[0]["port"] == 514
+    assert d("syslog+tcp://127.0.0.1:1514")[0]["port"] == 1514 and d("syslog+tcp://[::1]:1514")[0]["port"] == 1514
     assert d("SYSLOG+TLS://collector.example")[0] == {"scheme": "syslog+tls", "host": "collector.example",
                                                       "port": 6514, "path": ""}
     for url in ("syslog+udp://127.0.0.1:514/x", "syslog+tcp://127.0.0.1:514?a=b", "syslog+tls://collector.example#f",
@@ -2327,12 +2328,19 @@ def test_m103b_e2_over_tcp_octet_counting_and_framing_newline_over_udp_one_datag
 
 
 class TlsListener:
-    """A syslog collector over TLS the test bound on port 0 (the test's own certificate): it reads each connection
-    to its end, and keeps the bytes and how many handshakes failed."""
+    """A syslog collector over TLS the test bound on port 0 (the test's own certificate), TLS 1.3: it reads each
+    connection to the forwarder's close, keeps the bytes, then ends in order (P-2: its own close, unwrap, then
+    the socket closed) - so what it holds is kept before the forwarder can say `written`. `require` (a CA file):
+    it asks a client certificate, and a client with none is refused after the handshake by an alert (TLS 1.3's
+    certificate_required, P-2 finding 5). It keeps how many handshakes failed."""
 
-    def __init__(self, cert, key):
+    def __init__(self, cert, key, require=None):
         self.ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self.ctx.minimum_version = ssl.TLSVersion.TLSv1_3
         self.ctx.load_cert_chain(cert, key)
+        if require:
+            self.ctx.verify_mode = ssl.CERT_REQUIRED
+            self.ctx.load_verify_locations(require)
         self.sock = socket.socket()
         self.sock.bind(("127.0.0.1", 0))
         self.sock.listen(8)
@@ -2357,18 +2365,24 @@ class TlsListener:
                 self.failed += 1
                 conn.close()
                 continue
-            got = b""
+            got, whole = b"", False
             try:
                 while True:
                     block = tls.recv(65536)
                     if not block:
+                        whole = True
                         break
                     got += block
             except (OSError, ssl.SSLError):
                 pass
+            self.data.append(got)   # kept before its close: the forwarder's `written` waits for that close
+            try:
+                if whole:
+                    tls.unwrap()
+            except (OSError, ssl.SSLError):
+                pass
             finally:
                 tls.close()
-            self.data.append(got)
 
     def stop(self):
         self.quit.set()
@@ -2394,9 +2408,9 @@ def test_m103b_e2_tls_is_verified_as_https_is_and_ca_adds_an_authority(tmp_path,
         assert f.step() == "failed" and f.failing["error"] == "tls" and f.offset == 0   # the system's: refused
         g = sfwd(tmp_path, path, url, name="ca", ca=ca)
         assert g.step() == "moved" and g.offset == os.path.getsize(path) and g.delivery == "written"
+        frames = b"".join(t.data)   # P-2, E2: read when the forwarder returned, before the listener's Stop
     finally:
         t.stop()
-    frames = b"".join(t.data)
     msgs = []
     while frames:
         n, _, rest = frames.partition(b" ")
@@ -2515,7 +2529,11 @@ def test_m103b_e3_a_forwarder_killed_between_two_batches_and_started_again_leave
     assert g.run(once=True) == 0 and "resumed at offset %d" % killed["cursor"]["offset"] in g.out.getvalue()
     drained(c)
     want = [sorted_line(r) for r in rows]
-    assert c.events["tcp"] == (want[:10] + want[5:10] + want[10:] if how == "after" else want)
+    # P-4: what each connection carried (the stand-in keeps each one's messages apart, in accept order: the
+    # forwarder opens the next connection only after the last one ended in order), not the order two threads
+    # recorded them in
+    batches = [want[0:5], want[5:10]] + ([want[5:10]] if how == "after" else []) + [want[10:15], want[15:17]]
+    assert c.sessions == batches and sorted(c.events["tcp"]) == sorted(sum(batches, []))
     assert read_state(home, "k")["sent"] == 17 and read_state(home, "k")["behind"] == 0
 
 
@@ -2577,3 +2595,390 @@ def test_m103b_e7_the_syslog_stand_in_is_ascii_and_names_only_loopback_and_docum
         for ip in re.findall(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text):
             assert ip.startswith(("127.", "192.0.2.", "198.51.100.", "203.0.113.")), (p.name, ip)
         assert "import requests" not in text and "from raqib" not in text and "import raqib" not in text
+
+
+# --- M10.3b REDO (ADR-0011 Amendment P): no event ends it; `written` is an orderly end; the failures tested ------
+# Every listener here is the test's own on loopback, port 0, or the rig's stand-in. No test sleeps: a bound that
+# must pass is injected small (answer_s), and every wait is on an event a listener sets or on the forwarder's own.
+
+def odd_rows():
+    """P-1: whole event lines the contract takes whose fields RFC 5424 does not take in its header: a year in
+    other digits than ASCII and a fullwidth digit (written as JSON escapes, so the line is ASCII), a host of 300
+    characters, a host with a space."""
+    out = []
+    for raw, change in zip(lines(4), (lambda o: o.update(time="\u0662\u0660\u0662\u0666-11-03T07:51:21.000Z"),
+                                      lambda o: o.update(time="\uff12026-11-03T07:51:21.000Z"),
+                                      lambda o: o["watch"].update(host="h" * 300),
+                                      lambda o: o["watch"].update(host="a host"))):
+        o = json.loads(raw.decode("ascii"))
+        change(o)
+        out.append((json.dumps(o, ensure_ascii=True, separators=(",", ":")) + "\n").encode("ascii"))
+    return out
+
+
+class Raising(dict):
+    """A made-up event no JSON line yields: every look into it raises."""
+
+    def get(self, *a):
+        raise RuntimeError("no look")
+
+
+def test_m103b_redo_e1_a_field_rfc_5424_does_not_take_is_a_dash_the_line_whole_and_no_event_ends_it(tmp_path,
+                                                                                                   syslogs):
+    """E1 (P-1): each odd line passes the contract and is sent with `-` in that field and the whole line as its
+    MSG, over tcp and udp, by a run that ends 0; made-up odd events, fed through the real send, are sent too;
+    building a message raises for none."""
+    rows = odd_rows()
+    for raw, head in zip(rows, (b"<110>1 - host.example raqib - note - ", b"<110>1 - host.example raqib - note - ",
+                                b"<110>1 2026-11-03T07:50:03.250Z - raqib - note - ",
+                                b"<110>1 2026-11-03T07:50:04.250Z - raqib - note - ")):
+        obj = forward.classify(raw)
+        assert obj is not None and raw.isascii()   # the contract takes it: the forwarder must bear it
+        assert forward.syslog_message(raw, obj) == head + raw[:-1]
+        for scheme in forward.SYSLOG:
+            assert forward.syslog_len(raw, obj, scheme) == len(forward.syslog_frame(
+                forward.syslog_message(raw, obj), scheme))
+    assert forward.STAMP.match("2026-11-03T07:51:21.000Z") and not forward.STAMP.match(
+        "\u0662\u0660\u0662\u0666-11-03T07:51:21.000Z")
+    path = write(tmp_path / "e.jsonl", rows + lines(1, 5))
+    for transport in ("tcp", "udp"):
+        c = syslogs()
+        f = sfwd(tmp_path, path, tcp_url(c) if transport == "tcp" else udp_url(c), name=transport)
+        assert f.run(once=True) == 0 and f.offset == os.path.getsize(path) and f.skipped == 0
+        drained(c)
+        assert c.events[transport] == [sorted_line(r) for r in rows + lines(1, 5)] and c.problems == []
+    base = forward.classify(lines(1)[0])
+    made = [dict(base, kind="k" * 40), dict(base, time=5), dict(base, watch="w"), dict(base, severity=["high"]),
+            dict(base, kind=None, time=None), dict(base, time="2026-11-03T07:51:21.000Z\n")]
+    for obj in made + [Raising(base), None, [], "x"]:
+        head = forward.syslog_head(obj)
+        assert head.startswith(b"<") and head.endswith(b" - ") and head.isascii()
+        assert forward.syslog_len(b"{}\n", obj, "syslog+tcp") == len(forward.syslog_frame(
+            forward.syslog_message(b"{}\n", obj), "syslog+tcp"))
+    assert forward.syslog_head(made[0]) == b"<110>1 2026-11-03T07:50:01.250Z host.example raqib - - - "
+    assert forward.syslog_head(Raising(base)) == b"<108>1 - - raqib - - - "
+    c = syslogs()
+    g = sfwd(tmp_path, path, tcp_url(c), name="made")
+    raws = [(json.dumps(o, separators=(",", ":")) + "\n").encode("ascii") for o in made]
+    at, sent = 0, []
+    for raw, obj in zip(raws, made):
+        sent.append(forward.Line(at, at + len(raw), raw, obj))
+        at += len(raw)
+    assert g.send(sent).kind == "taken"   # the real send, on its thread, to the stand-in
+    drained(c)
+    assert c.events["tcp"] == [sorted_line(r) for r in raws] and c.problems == []
+
+
+class Scripted:
+    """A tcp collector the test bound on loopback, port 0, that takes each connection as told, in turn: `ok` reads
+    to the forwarder's end, keeps the bytes, then ends its side and closes; `hold` reads to the end and keeps the
+    bytes, then holds the connection open until the test's Stop; `close` closes at once without reading; `reset`
+    reads to the end, keeps the bytes, then resets (SO_LINGER 0); `half` reads `cut` bytes, keeps them, then
+    resets in the middle of the batch; `never` never reads (its receive buffer small) until the test's Stop."""
+    RCVBUF = 4096
+
+    def __init__(self, *hows, cut=8192):
+        self.hows, self.cut, self.got, self.closed = list(hows), cut, [], threading.Event()
+        self.quit, self.threads = threading.Event(), []
+        self.sock = socket.socket()
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.RCVBUF)
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(8)
+        self.sock.settimeout(0.05)
+        self.port = self.sock.getsockname()[1]
+        self.thread = threading.Thread(target=self.serve, name="raqib-test-scripted", daemon=True)
+        self.thread.start()
+
+    def url(self):
+        return "syslog+tcp://127.0.0.1:%d" % self.port
+
+    def serve(self):
+        while not self.quit.is_set():
+            try:
+                conn, _ = self.sock.accept()
+            except OSError:
+                continue
+            how = self.hows.pop(0) if self.hows else "ok"
+            t = threading.Thread(target=self.take, args=(conn, how), name="raqib-test-scripted-conn", daemon=True)
+            self.threads.append(t)
+            t.start()
+
+    @staticmethod
+    def reset(conn):
+        conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("HH" if sys.platform == "win32" else "ii",
+                                                                         1, 0))
+        conn.close()
+
+    def take(self, conn, how):
+        conn.settimeout(RUN_S)
+        if how == "close":
+            conn.close()
+            self.closed.set()
+            return
+        if how == "never":
+            self.quit.wait(RUN_S)
+            self.reset(conn)
+            return
+        got = b""
+        try:
+            while how != "half" or len(got) < self.cut:
+                block = conn.recv(65536)
+                if not block:
+                    break
+                got += block
+        except OSError:
+            pass
+        self.got.append(got)
+        if how in ("reset", "half"):
+            self.reset(conn)
+            return
+        if how == "hold":
+            self.quit.wait(RUN_S)
+        try:
+            conn.shutdown(socket.SHUT_WR)
+        except OSError:
+            pass
+        conn.close()
+
+    def stop(self):
+        self.quit.set()
+        self.thread.join(RUN_S)
+        for t in self.threads:
+            t.join(RUN_S)
+        self.sock.close()
+
+
+def octets(data):
+    """The messages of one connection's octet-counted frames, each the line as written (its newline put back)."""
+    out = []
+    while data:
+        n, _, rest = data.partition(b" ")
+        out.append(rest[:int(n)].split(b" - ", 2)[-1] + b"\n")
+        data = rest[int(n):]
+    return out
+
+
+class Net:
+    """forward's view of the socket module, with one class changed (the module itself untouched): `gate`, an
+    Event a connect waits for after it connected; `sndbuf`, a send buffer this small (a write that blocks)."""
+
+    def __init__(self, gate=None, sndbuf=None):
+        net = self
+
+        class Sock(socket.socket):
+            def __init__(self, *a, **k):
+                socket.socket.__init__(self, *a, **k)
+                if net.sndbuf:
+                    self.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, net.sndbuf)
+
+            def connect(self, addr):
+                socket.socket.connect(self, addr)
+                if net.gate is not None:
+                    assert net.gate.wait(RUN_S)
+
+        self.socket, self.gate, self.sndbuf = Sock, gate, sndbuf
+
+    def __getattr__(self, name):
+        return getattr(socket, name)
+
+
+@pytest.mark.parametrize("how", ["hold", "close", "reset"])
+def test_m103b_redo_e2_over_tcp_a_batch_is_taken_only_after_the_collectors_orderly_end(tmp_path, monkeypatch, how):
+    """E2 (P-2): the forwarder half-closes and reads to the collector's end within the bound. A collector that
+    read everything then holds the connection open past the bound (late); one that accepts and closes at once
+    without reading (its close before the forwarder writes: the gate); one that resets after reading: each a
+    failed send, nothing passes - each would pass were the batch taken at the write. Sent again to a collector
+    that ends in order, every line arrives once."""
+    rows = lines(9)
+    path = write(tmp_path / "e.jsonl", rows)
+    s = Scripted(how, "ok")
+    if how == "close":
+        monkeypatch.setattr(forward, "socket", Net(gate=s.closed))
+    try:
+        f = sfwd(tmp_path, path, s.url(), answer_s=0.5)
+        assert f.step() == "failed" and f.offset == 0 and f.sent == 0
+        assert f.failing["error"] == ("late" if how == "hold" else "write"), f.failing
+        assert state(tmp_path, "s")["failing"]["error"] == f.failing["error"]
+        if how != "close":
+            assert octets(s.got[0]) == rows   # the collector had all of it: only its end was not in order
+        monkeypatch.setattr(forward, "socket", socket)
+        first = len(s.got)
+        for _ in range(6):   # `late` halved the batch: it doubles again as sends are taken
+            if f.step() == "idle":
+                break
+        assert f.offset == os.path.getsize(path) and f.failing is None and f.sent == len(rows)
+        # read when the forwarder returned: the collector kept each batch before its end
+        assert sum((octets(g) for g in s.got[first:]), []) == rows
+    finally:
+        s.stop()
+    if how == "hold":
+        assert "no orderly end of the connection" in f.out.getvalue()
+        out = io.StringIO()
+        f.fail(forward.Result("failed", "late", phase="answer"))
+        f.write_state()
+        assert forward.status("s", home=str(tmp_path / "home"), out=out, clock=f.clock) == 1
+        assert "not ended in order" in out.getvalue() and "answer" not in out.getvalue().split("failing since")[1]
+
+
+def test_m103b_redo_e2_over_tls_an_alert_after_the_handshake_is_a_failed_send_and_nothing_passes(tmp_path,
+                                                                                                monkeypatch):
+    """E2 (P-2, finding 5): a TLS 1.3 collector that asks a client certificate refuses the forwarder (which
+    presents none) after the handshake, by an alert: a failed send, nothing passes, the batch is sent again."""
+    ca, cert, key = certificates(tmp_path)
+    for name in ("SSL_CERT_FILE", "SSL_CERT_DIR", "SSLKEYLOGFILE"):
+        monkeypatch.delenv(name, raising=False)
+    rows = lines(3)
+    path = write(tmp_path / "e.jsonl", rows)
+    t = TlsListener(cert, key, require=ca)
+    try:
+        f = sfwd(tmp_path, path, "syslog+tls://127.0.0.1:%d" % t.port, ca=ca)
+        assert f.step() == "failed" and f.offset == 0 and f.sent == 0
+        assert f.failing["error"] in ("tls", "write") and f.failing["tries"] == 1
+        assert f.step() == "failed" and f.offset == 0 and f.failing["tries"] == 2
+    finally:
+        t.stop()
+    assert t.failed == 2 and t.data == []
+
+
+def test_m103b_redo_e3_syslog_tcp_needs_its_port_and_the_state_keeps_facility_and_framing(tmp_path, syslogs,
+                                                                                          capsys, monkeypatch):
+    """E3 (P-3): syslog+tcp:// with no port is exit 2 with the reason; udp 514 and tls 6514 stay. A syslog
+    destination's state holds facility and framing (null over udp); a start with another of either is exit 2;
+    an older syslog state without them is read, and this start's are kept from then on."""
+    d = forward.destination
+    for url in ("syslog+tcp://127.0.0.1", "syslog+tcp://[::1]", "syslog+tcp://collector.example"):
+        with pytest.raises(forward.UsageError, match="write the collector's port .*514 over tcp is another"):
+            d(url, plain=True)
+    assert d("syslog+udp://127.0.0.1")[0]["port"] == 514 and d("syslog+tls://collector.example")[0]["port"] == 6514
+    rows = lines(4)
+    path = write(tmp_path / "e.jsonl", rows)
+    monkeypatch.setenv("HOME", str(tmp_path / "cli"))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "cli"))
+    capsys.readouterr()
+    assert cli.main(["forward", path, "--to", "syslog+tcp://127.0.0.1", "--name", "p", "--once"]) == 2
+    assert "write the collector's port" in capsys.readouterr().err
+    c = syslogs()
+    home = str(tmp_path / "cli")
+    assert cli.main(["forward", path, "--to", tcp_url(c), "--name", "k", "--framing", "newline", "--facility", "4",
+                     "--once"], out=io.StringIO()) == 0
+    s = read_state(home, "k")
+    assert (s["facility"], s["framing"]) == (4, "newline") and forward.state_problem(s) is None
+    for more in ((), ("--facility", "4"), ("--framing", "newline"), ("--facility", "5", "--framing", "newline")):
+        capsys.readouterr()
+        assert cli.main(["forward", path, "--to", tcp_url(c), "--name", "k", "--once"] + list(more)) == 2, more
+        assert "another facility or framing is another name" in capsys.readouterr().err
+    assert cli.main(["forward", path, "--to", tcp_url(c), "--name", "k", "--once", "--facility", "4", "--framing",
+                     "newline"], out=io.StringIO()) == 0
+    for url, name, want in ((udp_url(c), "u", (13, None)), ("syslog+tls://127.0.0.1:%d" % c.tcp_port, "t",
+                                                            (13, "octet"))):
+        f = sfwd(tmp_path, path, url, name=name)
+        f.write_state()
+        s = state(tmp_path, name)
+        assert (s["facility"], s["framing"]) == want and forward.state_problem(s) is None
+        out = io.StringIO()
+        forward.status(name, home=str(tmp_path / "home"), out=out, clock=f.clock)
+        assert "facility 13, framing %s" % (want[1] or "none") in out.getvalue()
+    older = {k: v for k, v in s.items() if k not in forward.SYSLOG_KEYS}   # a state from before the two were kept
+    assert forward.state_problem(older) is None
+    with open(forward.state_path("t", str(tmp_path / "home")), "w", encoding="ascii") as fh:
+        json.dump(older, fh)
+    g = sfwd(tmp_path, path, "syslog+tls://127.0.0.1:%d" % c.tcp_port, name="t", facility=9)
+    assert "the state held no facility or framing" in g.resume() and "facility 9, framing octet" in g.resume()
+    g.write_state()
+    assert state(tmp_path, "t")["facility"] == 9
+    for bad in (dict(s, facility=24), dict(s, facility=True), dict(s, framing="lines"), dict(s, framing=None),
+                {k: v for k, v in s.items() if k != "framing"}):
+        assert forward.state_problem(bad), bad
+    u = state(tmp_path, "u")
+    assert forward.state_problem(dict(u, framing="octet")) and forward.state_problem(dict(u, facility=-1))
+    write_state(str(tmp_path / "h"), "h", 1_800_000_000.0)
+    h = read_state(str(tmp_path / "h"), "h")
+    assert forward.state_problem(h) is None and "facility" not in h and forward.state_problem(dict(h, facility=13))
+    drained(c)
+
+
+def test_m103b_redo_e4_an_error_in_the_middle_of_a_batch_passes_nothing_and_all_of_it_arrives_again(tmp_path,
+                                                                                                    monkeypatch):
+    """E4 (P-4): the collector reads part of the batch, then resets: nothing passes; sent again, all of it
+    arrives (what the first connection carried arrives twice: at least once)."""
+    rows = lines(60, size=1000)
+    path = write(tmp_path / "e.jsonl", rows)
+    s = Scripted("half", "ok", cut=8192)
+    monkeypatch.setattr(forward, "socket", Net(sndbuf=4096))   # the batch is still being written at the reset
+    try:
+        f = sfwd(tmp_path, path, s.url())
+        assert f.step() == "failed" and f.offset == 0 and f.failing["error"] == "write" and f.sent == 0
+        assert 0 < len(s.got[0]) < sum(len(r) for r in rows)   # the reset came in the middle
+        assert f.step() == "moved" and f.offset == os.path.getsize(path) and f.sent == 60
+        assert octets(s.got[1]) == rows
+    finally:
+        s.stop()
+
+
+def test_m103b_redo_e4_a_collector_that_never_reads_is_late_within_the_bound_and_the_next_batch_halved(tmp_path,
+                                                                                                       monkeypatch):
+    """E4 (P-4, L-4, M-4): a collector that never reads: the write blocks, `late` within the injected bound,
+    nothing passes, and the next batch is half of this one."""
+    rows = lines(40, size=4000)
+    path = write(tmp_path / "e.jsonl", rows)
+    s = Scripted("never", "never")
+    monkeypatch.setattr(forward, "socket", Net(sndbuf=4096))
+    try:
+        f = sfwd(tmp_path, path, s.url(), answer_s=0.5, batch=40)
+        assert f.step() == "failed" and f.offset == 0 and f.failing["error"] == "late" and f.size == 20
+        assert "a send of 40 line(s) was late (its bytes not written): the next batch is 20" in f.out.getvalue()
+    finally:
+        s.stop()
+
+
+def test_m103b_redo_e4_stop_during_a_blocked_write_ends_the_send_by_its_mechanism_long_before_the_bound(
+        tmp_path, monkeypatch):
+    """E4 (P-4, L-4, M-5): Stop while the write is blocked (a collector that never reads, the bound far): the
+    send is abandoned, its socket shut down, which ends the blocked write - its thread ends (nothing adrift),
+    nothing passes, and the try ends long before the bound."""
+    rows = lines(40, size=4000)
+    path = write(tmp_path / "e.jsonl", rows)
+    s = Scripted("never")
+    monkeypatch.setattr(forward, "socket", Net(sndbuf=4096))
+    seen = []
+
+    def nap(ev, seconds):
+        job = f._send
+        if job is not None and job.phase == "send" and not seen:
+            seen.append(job)   # the write is in progress and cannot end: nothing reads
+            f.stop()
+        ev.wait(seconds)
+
+    bound = 4 * RUN_S
+    try:
+        f = sfwd(tmp_path, path, s.url(), answer_s=bound, nap=nap)
+        began = time.monotonic()
+        assert f.step() == "stopped" and f.offset == 0 and f.sent == 0
+        took = time.monotonic() - began
+        assert seen and seen[0].ended() and f.adrift == [] and seen[0].result is not None
+        assert seen[0].result.kind == "failed"   # its write ended by the shutdown, never taken
+        assert took < bound / 4
+    finally:
+        s.stop()
+
+
+def test_m103b_redo_e5_forward_md_and_the_threat_model_say_what_each_syslog_word_cannot_promise():
+    """E5 (P-5): over udp to a collector that is down every line is `sent` and the status OK; `written` is an
+    orderly end, not a stored event; a collector may cut a message at its limit; a bare CR may split a line
+    under --framing newline; no advice of client certificates; tcp needs its port; the status words of a
+    syslog send speak of no answer (no milestone token in the threat model)."""
+    flat = " ".join((ROOT / "docs" / "specs" / "FORWARD.md").read_text(encoding="utf-8").split())
+    threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
+    section = threat[threat.index("### The forwarder (`raqib forward`"):threat.index("## 6. Attacks on the watcher")]
+    for text in (flat, section):
+        for said in ("over udp to a collector that is down every line is `sent` and the status is OK - only the"
+                     " collector's own search for silence tells", "`written` is an orderly end, not a stored event",
+                     "may be cut by a collector at its own limit", "with `--framing newline` a line that holds a"
+                     " bare CR may be split by a collector that breaks on it", "ends its side", "collector's end"):
+            assert said.lower() in text.lower(), said
+        assert "client certificates" not in text
+    assert "`syslog+tcp://HOST:PORT` (its port written" in flat and "no default" in flat
+    assert "the connection not ended in order, within the bound" in flat and "(no answer)" not in flat
+    assert not re.search(r"\bM\d+\.\d+", section)
+    late = forward.SYSLOG_ERRORS["late"]
+    assert "answer" not in late and late in flat and "answer" not in forward.SYSLOG_ERRORS["write"]

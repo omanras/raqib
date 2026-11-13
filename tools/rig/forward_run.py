@@ -247,7 +247,8 @@ def over_syslog(r, name, transport, more=()):
         c.stop()
     r.run(name + " status", FORWARD + ["--status", "rig-" + name])
     return {"exit": code, "events": list(c.events[transport]), "messages": c.messages,
-            "connections": c.connections, "problems": c.problems[:20], "framings": sorted(c.framings),
+            "connections": c.connections, "sessions": [len(m) for m in c.sessions],   # P-2: each one's messages
+            "problems": c.problems[:20], "framings": sorted(c.framings),
             "delivery": s.get("delivery"), "sent": s.get("sent"), "refused": (s.get("refused") or {}).get("count"),
             "behind": s.get("behind"), "failing": s.get("failing")}
 

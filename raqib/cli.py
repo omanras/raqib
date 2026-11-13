@@ -634,8 +634,9 @@ def _parser():
     fw.add_argument("file", nargs="?", default=None, metavar="FILE",
                     help="the events file, read only (default: ~/.raqib/host/events.jsonl)")
     fw.add_argument("--to", metavar="URL", help="the collector, https://host[:port]/path (http:// only to a loopback"
-                                                " address unless --plain), or syslog+udp://, syslog+tcp://,"
-                                                " syslog+tls://host[:port]")
+                                                " address unless --plain), or syslog+udp://host[:port] (514),"
+                                                " syslog+tcp://host:port (its port written: no default),"
+                                                " syslog+tls://host[:port] (6514)")
     fw.add_argument("--name", metavar="NAME", help="the forwarder's name, [a-z0-9-]{1,32}: its cursor and state are"
                                                    " ~/.raqib/forward/NAME.json; one destination each")
     fw.add_argument("--shape", choices=("raqib", "hec"), default="raqib",

@@ -370,3 +370,54 @@ def test_m103b_e5_the_syslog_stand_in_and_the_new_rig_code_are_ascii_stdlib_and_
     for name in ("forward_run.py", "check.py"):
         (ROOT / "tools" / "rig" / name).read_bytes().decode("ascii")
     assert not [p for p in (ROOT / "raqib").rglob("*.py") if "syslog_collector" in p.read_text(encoding="utf-8")]
+
+
+# --- M10.3b REDO E6 (ADR-0011 P-2): the stand-in ends each tcp connection in order -----------------------------
+def test_m103b_redo_e6_the_stand_in_reads_to_the_half_close_then_ends_its_side_with_the_messages_kept(tmp_path):
+    """The stand-in reads a connection to the sender's half-close, keeps its messages (each connection's apart),
+    then ends its own side: the sender reads the end (no reset), and what the stand-in kept is there before its
+    Stop."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from raqib import forward
+    raw = made_up_file(tmp_path, count=3).read_bytes().splitlines(True)
+    objs = [json.loads(r) for r in raw]
+    c = syslog_collector.SyslogCollector()
+    tcp, _ = c.start()
+    try:
+        for part in (raw[:2], raw[2:]):
+            s = socket.create_connection(("127.0.0.1", tcp), timeout=10)
+            s.sendall(b"".join(forward.syslog_frame(forward.syslog_message(r, json.loads(r)), "syslog+tcp")
+                               for r in part))
+            s.shutdown(socket.SHUT_WR)
+            assert s.recv(16) == b""   # its end, in order, after it read the sender's
+            s.close()
+        kept = [list(m) for m in c.sessions]   # read before the stand-in's Stop
+    finally:
+        c.stop()
+    want = [json.dumps(o, sort_keys=True, separators=(",", ":")) for o in objs]
+    assert kept == [want[:2], want[2:]] and c.problems == []
+
+
+def test_m103b_redo_e6_x23_to_x25_are_met_over_a_made_up_file_with_a_line_rfc_5424_cannot_head(tmp_path):
+    """X23 to X25 MET by forward_run's own cases over a made-up events file that holds a line whose year is
+    written in other digits than ASCII (as JSON escapes: the line is ASCII, the contract takes it) and one whose
+    host has a space: each is sent with `-` in that field, every line arrives, one connection a batch."""
+    path = made_up_file(tmp_path, count=5)
+    rows = path.read_bytes().splitlines(True)
+    odd = []
+    for raw, change in zip(rows[1:3], (lambda o: o.update(time="\u0663" + o["time"][1:]),
+                                       lambda o: o["watch"].update(host="a host"))):
+        o = json.loads(raw)
+        change(o)
+        odd.append((json.dumps(o, ensure_ascii=True, separators=(",", ":")) + "\n").encode("ascii"))
+    path.write_bytes(b"".join(rows[:1] + odd + rows[3:]))
+    home = tmp_path / "home"
+    home.mkdir()
+    r = forward_run.Run(str(path), str(home))
+    facts = {"x23": forward_run.x23(r), "x24": forward_run.x24(r), "x25": forward_run.x25(r)}
+    got = syslog_states(facts, path)
+    assert {k: s for k, (s, _) in got.items()} == {"X23": check.MET, "X24": check.MET, "X25": check.MET}, got
+    for key in ("x23", "x25"):
+        assert sum(facts[key]["sessions"]) == len(rows) and facts[key]["sessions"] == [len(rows)]
+    assert all(not facts[k]["problems"] and facts[k]["exit"] == 0 for k in facts)

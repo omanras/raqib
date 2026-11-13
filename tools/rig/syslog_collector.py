@@ -7,13 +7,16 @@ severity, high 2, medium 4, low 5, a hole 4, none and info 6; the TIMESTAMP the 
 watch.host; the MSGID its kind; the MSG one event line) and keeps a problem for each one that is not. The
 severity map is written here again, not imported: the stand-in is no part of raqib. It can be made down (its
 tcp port bound, nothing listening) and then brought up on that port. It keeps the event lines it took in the
-order they came, per transport. Stdlib only.
+order they came, per transport, and the messages of each tcp connection apart (.sessions, one list a connection
+in the order they were accepted: what each connection carried, whatever order two threads took them in). Over
+tcp it ends each connection in order (ADR-0011 P-2): it reads to the sender's half-close, then closes its own
+side, so a sender that waits for that end knows the stand-in read the whole batch. Stdlib only.
 
     python tools/rig/syslog_collector.py --out FILE [--tcp-port N] [--udp-port N] [--facility N]
                                          [--framing octet|newline] [--for S]
 
 As a module: SyslogCollector(...).start() -> (tcp port, udp port); .events["tcp"], .events["udp"] (the event
-lines, ASCII text, keys sorted); .problems; .connections; .framings; .up(); .stop().
+lines, ASCII text, keys sorted); .sessions; .problems; .connections; .framings; .up(); .stop().
 """
 import argparse
 import json
@@ -25,6 +28,7 @@ import threading
 HOST = "127.0.0.1"   # loopback only (J-14)
 HEADER = re.compile(rb"<(\d{1,3})>1 (\S+) (\S+) (\S+) (\S+) (\S+) - (.*)\Z", re.S)
 PRINTUS = re.compile(r"[\x21-\x7e]+\Z")
+STAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?Z\Z", re.ASCII)   # P-1
 SEVERITY = {"high": 2, "medium": 4, "low": 5, "hole": 4, "none": 6, "info": 6}   # J-6
 COUNT_MAX = 10   # the digits of an octet count the stand-in reads before it calls the frame broken
 RCVBUF = 8 * 1024 * 1024
@@ -38,7 +42,7 @@ class SyslogCollector:
     def __init__(self, facility=13, framing=None, tcp_port=0, udp_port=0, out=None, down=False):
         self.facility, self.framing, self.out, self.down = facility, framing, out, down
         self.tcp_port, self.udp_port = tcp_port, udp_port
-        self.events = {"tcp": [], "udp": []}
+        self.events, self.sessions = {"tcp": [], "udp": []}, []
         self.problems, self.framings, self.connections, self.messages = [], set(), 0, 0
         self.lock, self.quit = threading.Lock(), threading.Event()
         self.tcp = self.udp = None
@@ -59,28 +63,32 @@ class SyslogCollector:
         except (UnicodeDecodeError, ValueError) as exc:
             return None, "the MSG is not one JSON line (%s)" % type(exc).__name__
         watch = e.get("watch") if isinstance(e.get("watch"), dict) else {}
-        want = {"PRI": b"%d" % (self.facility * 8 + SEVERITY.get(e.get("severity"), 4)),
-                "TIMESTAMP": (e.get("time") or "-").encode("ascii", "replace"),
+        sev = e.get("severity")
+        want = {"PRI": b"%d" % (self.facility * 8 + (SEVERITY.get(sev, 4) if isinstance(sev, str) else 4)),
+                "TIMESTAMP": (e["time"] if isinstance(e.get("time"), str) and STAMP.match(e["time"]) else
+                              "-").encode("ascii"),
                 "HOSTNAME": field(watch.get("host"), 255).encode("ascii"), "APP-NAME": b"raqib", "PROCID": b"-",
                 "MSGID": field(e.get("kind"), 32).encode("ascii")}
         got = {"PRI": pri, "TIMESTAMP": stamp, "HOSTNAME": host, "APP-NAME": app, "PROCID": procid, "MSGID": msgid}
         wrong = [k for k in want if want[k] != got[k]]
         return line, ("%s of %s not as J-6 rules" % (", ".join(wrong), e.get("id")) if wrong else None)
 
-    def take(self, transport, msg, framing):
+    def take(self, transport, msg, framing, session=None):
         line, problem = self.check(msg)
         with self.lock:
             self.messages += 1
             self.framings.add(framing)
             if line is not None:
                 self.events[transport].append(line)
+                if session is not None:
+                    session.append(line)
                 if self.out:
                     with open(self.out, "a", encoding="ascii") as f:
                         f.write(line + "\n")
             if problem:
                 self.problems.append("%s: %s" % (transport, problem))
 
-    def frames(self, buf):
+    def frames(self, buf, session=None):
         """Takes every whole frame at the head of buf; returns what is left (a frame not yet whole), or None where
         the stream is broken."""
         while buf:
@@ -94,13 +102,13 @@ class SyslogCollector:
                 n = int(buf[:i])
                 if len(buf) < i + 1 + n:
                     return buf
-                self.take("tcp", buf[i + 1:i + 1 + n], "octet")
+                self.take("tcp", buf[i + 1:i + 1 + n], "octet", session)
                 buf = buf[i + 1 + n:]
             else:
                 j = buf.find(b"\n")
                 if j < 0:
                     return buf
-                self.take("tcp", buf[:j], "newline")
+                self.take("tcp", buf[:j], "newline", session)
                 buf = buf[j + 1:]
         return buf
 
@@ -115,13 +123,16 @@ class SyslogCollector:
                 if self.quit.is_set():
                     break
                 continue
+            session = []
             with self.lock:
                 self.connections += 1
-            t = threading.Thread(target=self.read, args=(conn,), name="rig-syslog-conn", daemon=True)
+                self.sessions.append(session)
+            t = threading.Thread(target=self.read, args=(conn, session), name="rig-syslog-conn", daemon=True)
             self.threads.append(t)
             t.start()
 
-    def read(self, conn):
+    def read(self, conn, session=None):
+        """One connection read to the sender's half-close (its end), then ended from this side: in order."""
         buf = b""
         conn.settimeout(0.05)
         try:
@@ -136,7 +147,7 @@ class SyslogCollector:
                     break
                 if not data:
                     break
-                buf = self.frames(buf + data)
+                buf = self.frames(buf + data, session)
                 if buf is None:
                     with self.lock:
                         self.problems.append("tcp: a frame that is neither an octet count nor a line")
@@ -145,6 +156,10 @@ class SyslogCollector:
                 with self.lock:
                     self.problems.append("tcp: a frame cut at the connection's end (%d byte(s))" % len(buf))
         finally:
+            try:
+                conn.shutdown(socket.SHUT_WR)   # its own end, after it read the sender's: the connection in order
+            except OSError:
+                pass
             conn.close()
 
     def serve_udp(self):
