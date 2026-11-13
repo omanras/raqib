@@ -56,6 +56,8 @@ import subprocess
 import sys
 import tempfile
 
+from raqib import own
+
 LIMIT_SECONDS = 60
 TIMEOUT_SECONDS = 10
 TEXT_MAX = 120
@@ -140,7 +142,7 @@ def run_program(argv, env, timeout=TIMEOUT_SECONDS, wait=True):
     if os.name == "nt":
         options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        proc = subprocess.Popen(list(argv), **options)
+        proc = own.started(subprocess.Popen(list(argv), **options))   # ADR-0007 BH-1: recorded as it starts
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return None, "%s could not be started: %s" % (argv[0], exc)
     if not wait:

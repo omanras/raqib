@@ -147,7 +147,7 @@ import subprocess
 import sys
 import threading
 
-from raqib import discover
+from raqib import discover, own
 from raqib.hooks import capture, common
 from raqib.rules import engine
 
@@ -768,7 +768,7 @@ def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Pop
     if os.name == "nt":
         options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        proc = popen([WEVTUTIL] + list(args), **options)
+        proc = own.started(popen([WEVTUTIL] + list(args), **options))   # ADR-0007 BH-1: recorded as it starts
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         return None, ("wevtutil could not be run (%s): the Sysmon channel was not read"
                       % (getattr(exc, "strerror", None) or type(exc).__name__))

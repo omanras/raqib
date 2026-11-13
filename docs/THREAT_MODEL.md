@@ -915,15 +915,51 @@ is amended by T-2, T-1 restated by V-1).
   the snapshot carries them. Also left, and not yet answered: a start is
   the system's wall time on Windows, so a clock set back between a
   parent's creation and its child's breaks a true link (said in the same
-  hole, in the words of a reused pid), and a clock set back by more than
-  the watch's own age after boot can make a stale orphan read as younger
-  than the watch again; some of the system's first processes carry a
-  start earlier than their parent's and are broken from it on every
-  round (they neither talk nor act); a process that is truly started by
-  the watch's launcher chain, or that names the watch as its parent on
-  purpose when it creates its children, is still taken for the watch's
-  own by its dates - the watch's own tree is not yet held to what the
-  watch itself starts.
+  hole, in words that say what was read: the holder of the parent pid
+  started after the child, a pid taken again or a clock set back between
+  the two; the watch is marked there as the child of such a link as well
+  as its parent); some of the system's first processes carry a start
+  earlier than their parent's and are broken from it on every round (they
+  neither talk nor act).
+- **The watch's own tree is what the watch started (ADR-0007 Amendment
+  BH).** What it took for its own before: its pid, its launchers, and
+  whatever stood under them by dated links - so the other children of a
+  launcher (a Python harness that starts the watch and an agent beside
+  it), a process whose creator named the watch as its parent (the parent
+  is a field the creator fills, and the same user may fill it), and, after
+  a clock set back by more than the watch's age, an old orphan of a dead
+  holder of the watch's pid were all left out unseen. How it is proven
+  now: the watch records every program it starts (the channel's reader,
+  the notifier) by its pid and the time, in the statement that starts it
+  (a test reads the code for a start without the record); the live
+  readers write the recorded pids alive in their sample beside the
+  reader's own pid (a pid the sample holds with a start outside its
+  record's time is another process and is not written). The watch's own
+  tree is then the reader's pid; each launcher the reader names, proven by
+  the dated links up from it, itself only; each recorded helper whose start
+  was read and is not before the reader's; and what those helpers started,
+  by dated links. Anything else under the reader's pid or a launcher's,
+  whatever its image and its dates, is judged as any other process and
+  named in the inventory's holes, as is a recorded pid whose start does not
+  prove it. No walk of parents passes through the watch's tree: a process
+  that hangs under it, by any link, has no ancestor through it, and no
+  member of it owns an act, a file write or a tree - so the watch's own
+  model call never makes it a candidate, and an orphan chain hung under its
+  pid by links not dated gives its acts to nobody above the watch. What is
+  left: the record lives in the watch's memory only, so a watch started
+  again does not know the helpers of the one before (one still running is
+  judged as any other); a program started by a helper is taken for the
+  watch's by its dates, so a process that names a helper as its parent and
+  starts after it is left out with it; ss (the Linux connection reader of
+  last resort and the byte counter) is started without the record, because
+  the call that starts it gives no pid: it runs and ends inside that call,
+  in the thread that takes the sample, and one seen running under the
+  watch's pid is judged as any other and named; a sample with no record (an
+  export, a text written before the record) keeps the tree of dated links
+  described above, and the hole says the record was not there wherever that
+  tree took a process beyond the reader and its launchers; the `raqib
+  os-sysmon` and `raqib doctor` commands start their programs without the
+  record (each is a command of its own and takes no process sample).
 - **Where the channel's watch and the watch without it still differ on
   a footprint (ADR-0007 AE; each is a knock more, never one fewer).**
   The footprints are judged from the round built without the channel's

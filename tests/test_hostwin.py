@@ -935,8 +935,10 @@ def test_a7_the_readers_launchers_are_its_tree_never_acts(tmp_path, monkeypatch)
 def test_a7_the_chain_is_unbroken_and_only_launchers():
     procs = [(1, 0, "services.exe"), (10, 1, "python.exe"), (11, 10, "cmd.exe"), (12, 11, "raqib.exe"),
              (13, 12, "pythonw3.12.exe"), (14, 13, "python.exe")]
-    assert hostwin.self_tree(procs, 14) == [14, 13, 12]               # cmd.exe breaks the chain
-    assert hostwin.self_tree(procs, 99) == [99]                       # not in the snapshot: itself only
+    # ADR-0007 BG-5 (M7.27): the starts are required; every link here dated, the parent first
+    read = {pid: "2026-11-03T09:%02d:00.000000Z" % i for i, (pid, _, _) in enumerate(procs)}
+    assert hostwin.self_tree(procs, 14, read) == [14, 13, 12]         # cmd.exe breaks the chain
+    assert hostwin.self_tree(procs, 99, read) == [99]                 # not in the snapshot: itself only
     started = {14: "2026-11-03T10:00:00Z", 13: "2026-11-03T10:00:05Z"}  # a "parent" younger than its child
     assert hostwin.self_tree(procs, 14, started) == [14]
     assert [bool(hostwin.LAUNCHER.match(n)) for n in ("RAQIB.EXE", "python3.12.exe", "pythonw.exe", "py.exe",
