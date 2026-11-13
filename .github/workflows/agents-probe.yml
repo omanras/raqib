@@ -8,6 +8,8 @@ on:
     branches: [claude/rig-probe]
 permissions:
   contents: read
+env:
+  RIG_CLOSE: "1"   # the model ends the connection with each answer: one connection per turn
 jobs:
   linux:
     name: agents (linux)

@@ -6,6 +6,7 @@ asked to do is fixed and known. It holds no key, asks no model and reaches nothi
 """
 import argparse
 import json
+import os
 import re
 import sys
 import threading
@@ -78,8 +79,16 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
+        self._close()
         self.end_headers()
         self.wfile.write(data)
+
+    def _close(self):
+        """RIG_CLOSE set: the connection ends with each answer, so the agent opens one for every turn (as a small
+        home-made agent that keeps no session does)."""
+        if os.environ.get("RIG_CLOSE"):
+            self.send_header("Connection", "close")
+            self.close_connection = True
 
     def do_GET(self):
         log({"get": self.path})
@@ -113,6 +122,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Transfer-Encoding", "chunked")
+        self._close()
         self.end_headers()
         chunks = [dict(base, object="chat.completion.chunk", choices=[{"index": 0, "delta": delta, "finish_reason": None}]),
                   dict(base, object="chat.completion.chunk", choices=[{"index": 0, "delta": {}, "finish_reason": finish}]),
