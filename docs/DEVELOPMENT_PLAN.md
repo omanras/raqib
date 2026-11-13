@@ -92,8 +92,10 @@ point. Phase 6 runs before the rest of Phase 5.
 - M7.19 recorded: the seams of a source's life (ADR-0007 AS-5, AS-6): a follow's last pass at its stop; the beats carried over an attach; a quiet tree gone by an empty sample; a hooks source read per session; the sources of gone trees bounded on a long watch
 - M7.20 one server, one os destination (landed; ADR-0007 AU, AW, AX): an os talk's destination is the hash of the server's address, port and protocol, written only where the host watch's follow asks; found on real agents on Windows; AU-3 withdrawn
 - M7.21 recorded, first on Windows (ADR-0007 Amendment AV): a kept connection's talks, by its byte counts; the road (the kernel's tracing, or the system's own per-connection counters) waits for the commander's word on A4
-- M7.22 a process under the root of a tree the watch holds is that tree's, and no ancestor's (ADR-0007 AX-4): the first false HOST-RHYTHM at high, on a runner's own tree, from a quiet agent's commands
+- M7.22 a process under the root of a tree the watch holds is that tree's, and no ancestor's (landed; ADR-0007 AX-4, AY, AZ, BA): the first false HOST-RHYTHM at high, on a runner's own tree, from a quiet agent's commands
 - M7.23 recorded: the server's hash salted with a secret of the running watch (ADR-0007 AX-1)
+- M7.24 an os follow does not hold what is under another tree's root (ADR-0007 AZ-5, Amendment BB): the ancestor's rhythm and source findings read a nested tree's commands from its own os file - AX-4's case on Windows
+- M7.25 recorded (ADR-0007 BA-2): a source of process and connection events on Linux, so that what happens between two samples is seen (an agent no sample saw talking; a connection for each turn)
 - M8.1 the look (landed 2026-11-11; ADR-0009 Amendments A-D, decisions 1-3 accepted): rail, verdict header, the round strip, switches, the watch's own code in its state, opens and fits on Windows
 - M8.2 a rule made from a form, and Remove for user rules (landed 2026-11-11; ADR-0009 Amendments E-H, decisions 4-5 accepted): `raqib rules --new / --remove`, the form with its Test and "on your records", class USER, Remove by the row's own place, checks first
 - M8.3 the window's notes after M8.2 (ADR-0009 H): a log of what the catch-alls caught, the orphan overlay entry's words, a real watch under the form's "running" test, a way for the person to name a program benign
@@ -111,7 +113,7 @@ Amendment A (his ruling): Raqib is passive toward other systems and may itself s
 sinks (Event Log, syslog); the service; accounts, logons, tasks, services and a tree's reach; the proxy joined to
 the host watch and PROXY-BYPASS; file reads, measured first.
 - M10.1 the event (landed; ADR-0011 Amendments B to E): `raqib-event/1` as a shape, the one pure module that builds it, the rules' ATT&CK ids, docs/specs/EVENT.md with its mapping to OCSF and ECS
-- M10.2 recorded: the watch writes its events to a file beside its record, and a heartbeat on a fixed beat; it keeps each event's number and says a changed thing again (ADR-0011 E-4 lists what the writer must settle)
+- M10.2 landed: the watch writes its events to a file beside its record, and a heartbeat on a fixed beat; it keeps each event's number and says a changed thing again (ADR-0011 F, G, H, I); `raqib events FILE` checks a file; the rig holds it (X16 to X18)
 - M10.3 recorded: the forwarders (an HTTP collector that takes JSON, syslog) and the local sinks, outside the capture path; stand-in collectors on the rig, then a real Splunk
 - M10.4 recorded: the window's panel for the link
 
