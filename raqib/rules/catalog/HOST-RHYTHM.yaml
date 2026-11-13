@@ -27,6 +27,11 @@ class: HOST
 # at their ts; talks are the host's connections (above) and the os source's
 # Sysmon event 3 lines at their UtcTime (destination "os:" + the first 12
 # hex of the hash of the destination: the os source keeps none in clear).
+# ADR-0007 AU-2, AU-3 (M7.20): that hash is the server's (input_meta.dest_sha256:
+# the address, the port and the protocol, without the host name Sysmon gives
+# on some events and not on others), and a host talk to address:port and an
+# os talk to that server over tcp are one destination, named address:port
+# where the ring holds the sample's talk, else as the os talk names it.
 # A source's beat is placed in the round whose interval holds its time;
 # history lines of a source are not beats. The act_basis of a line names
 # where its acts came from (started, stat, round, os, hooks).
@@ -53,7 +58,14 @@ severity: high
 # its last K-1 cycles read on gone lines) 0 of the 10 measured negatives
 # fire (`raqib check-rules`: 8 positive, 10 measured), and
 # positive-gone-three-cycles.json fires once, in its last round, on a gone
-# line; the budget is that measure, 0. The
+# line; the budget is that measure, 0. ADR-0007 AU-4 (re-measured the
+# same way, A6): with negative-os-named-some.json (one server Sysmon names
+# on some events and not on others, K-1 cycles) and
+# negative-split-sources.json (K-1 cycles split between the host's sample
+# and the os source) 0 of the 12 measured negatives fire (`raqib
+# check-rules`: 10 positive, 12 measured), and positive-os-named-some.json
+# and positive-split-sources.json fire once each, in the round that reads
+# the K-th cycle, to one destination; the budget is that measure, 0. The
 # benign desktops' arrivals are not listed: a tree seen in one round cannot
 # have a cycle. The field source - an IDE that polls one server and builds
 # for hours - is the commander's to measure (as the act-root budget); until
@@ -73,14 +85,14 @@ holes:
   - "bytes are recorded and compared, not judged by size: a talk is any change of the counts"
   - "a benign program that polls one server and spawns helpers (an IDE, an updater) has the same rhythm: a high finding, not a verdict (ADR-0007 AT-1); the commander's field measure on such a program (an IDE) is still owed"
   - "a tree the catalog names (by image or endpoint) is not judged by rhythm: an agent that takes a catalog agent's name escapes this rule (and is knocked as NEW-AGENT instead)"
-  - "M7.5 E2: the os source's destination is a hash of (hostname, ip, port, protocol): the same server reached by another name or address is another destination, and an os talk and a host talk to one server are two destinations"
+  - "M7.5 E2, ADR-0007 AU: the os source's destination is the hash of the server (address, port, protocol: input_meta.dest_sha256), so one server is one destination whether or not Sysmon named the host, and a host talk to address:port and an os talk to that server over tcp are one; still: another address of one server (an address pool, DNS round robin, IPv4 and IPv6 of one name) is another destination; an os net line written before dest_sha256 keeps the hash of (hostname, ip, port, protocol), so one server named on some of its events and not on others is two destinations there and none is one with a host talk (said once per source); a protocol the sample does not see (an os talk over udp) is never one with a host talk; and the destination's name can change within a streak (the os talks first, then the sample's address:port), never its count"
   - "M7.5 E2: several cycles inside one round's interval count as one (each act round counts once per destination), so an os source that sees a fast agent's every turn still counts at most one cycle per round"
   - "ADR-0007 AP-2, AR-1: a tree not in the round (quiet, kept or gone) has a line only in a round its source gained a beat; its ring still has one entry for every round from its first line on that reached its sample (an empty one, with that round's own interval, for a round with no line), so a beat goes to the round whose interval holds it and a cycle cites that round (no seq where it had no line); several cycles inside one round's interval still count as one. AS-1: a round that ended before its sample has no entry (its beats are in the next round's entry, whose interval holds them: R rounds can be fewer than R entries), and a beat older than the ring's oldest interval (a follow that is late or attached again) is put into the oldest entry and counted in the window"
   - "ADR-0007 AP-3: a quiet or gone tree with no source of its own (no os follow, no hooks trace: the host source only) has no beat between samples and no line: its cycles between samples, and in its last intervals, are not seen"
   - "ADR-0007 AP-3, AR-2: a source's beats are counted one round late; a gone tree's beats a round reads are judged on its gone line, but the beats the final poll reads after the last round (of a tree alive at the end, of one whose os follow was stopped in the last round or two, or of a gone tree on a hooks trace another session still writes) are in no round: counted per tree and said in the report (RHYTHM BEATS), never judged"
   - "ADR-0007 AS-5: the hooks source is the project's trace, not the tree's: every tree attached to it reads every session's Bash calls in that project as its own acts (a candidate, a quiet and a gone tree alike: a gone tree goes on having lines while another session in the project runs a command), each cited exactly, by the line of the session that made it"
   - "ADR-0007 AS-6: the seams of a source's life: an os follow that is stopped (its tree gone) makes no last pass, so the events between its last pass and its stop are in no source; a tree attached again (gone for one round and back, a follow that ended) loses the beats its earlier source held that no round had read (one round's at most); a quiet tree that a round with an empty process sample calls gone is attached again only when it is next a candidate"
-description: "A line of raqib watch --host (tool HostTree, source os) for a candidate tree, or (ADR-0007 AP-2, AQ-2, AR-2) a tree not in the round - quiet at the sample, kept by a round that could not read the connections, or gone - whose source gained a beat (its class its own state; AR-3: such a line carries no acts, endpoints or cites of an earlier sample, and its rhythm names the beats its round read: read_talks, read_acts, read_cites), whose think-act cycle reached K cycles to one destination within the last R rounds: in K rounds a child of the tree started within W seconds after the tree talked to the same remote host:port (a connection new in the round, or one whose bytes moved: input_meta.rhythm, computed by raqib/host.py from the rounds' records; K, W and R are this rule's own eq values). The sources of the beats (M7.5 E2): acts from the host's children, the os source's Sysmon event 1 (UtcTime) and the hooks source's Bash calls; talks from the host's connections and the os source's Sysmon event 3 (UtcTime). It fires once per streak (input_meta.rhythm.fires); the streak ends when R rounds pass without a cycle. Only an UNKNOWN tree is judged (ADR-0007 decision 4: input_meta.named false); a benign program is unknown to the catalog and is judged too: the rhythm is the tree's, not its name's. A tree there at the start that cycles under the watch fires: the cycle is live (K-10). The line cites the rounds and the record lines of each beat (A5): AR-1, the ring has an entry for every round from the tree's first line on, so a beat is in the round whose interval holds it, and a round with no line is cited with no seq. Out of reach: a tree with no source of its own between samples, the beats read after the last round (counted, said), and the seams of a source's life (AS-5, AS-6: holes)."
+description: "A line of raqib watch --host (tool HostTree, source os) for a candidate tree, or (ADR-0007 AP-2, AQ-2, AR-2) a tree not in the round - quiet at the sample, kept by a round that could not read the connections, or gone - whose source gained a beat (its class its own state; AR-3: such a line carries no acts, endpoints or cites of an earlier sample, and its rhythm names the beats its round read: read_talks, read_acts, read_cites), whose think-act cycle reached K cycles to one destination within the last R rounds: in K rounds a child of the tree started within W seconds after the tree talked to the same remote host:port (a connection new in the round, or one whose bytes moved: input_meta.rhythm, computed by raqib/host.py from the rounds' records; K, W and R are this rule's own eq values). The sources of the beats (M7.5 E2): acts from the host's children, the os source's Sysmon event 1 (UtcTime) and the hooks source's Bash calls; talks from the host's connections and the os source's Sysmon event 3 (UtcTime), whose destination is the server's hash (ADR-0007 AU: input_meta.dest_sha256, the address, the port and the protocol; a line written before it keeps the hash of the host name too, said once per source); a host talk to address:port and an os talk to that server over tcp are one destination, named address:port where the ring holds the sample's talk. It fires once per streak (input_meta.rhythm.fires); the streak ends when R rounds pass without a cycle. Only an UNKNOWN tree is judged (ADR-0007 decision 4: input_meta.named false); a benign program is unknown to the catalog and is judged too: the rhythm is the tree's, not its name's. A tree there at the start that cycles under the watch fires: the cycle is live (K-10). The line cites the rounds and the record lines of each beat (A5): AR-1, the ring has an entry for every round from the tree's first line on, so a beat is in the round whose interval holds it, and a round with no line is cited with no seq. Out of reach: a tree with no source of its own between samples, the beats read after the last round (counted, said), and the seams of a source's life (AS-5, AS-6: holes)."
 summary: "{input_meta.named_word} tree {input_meta.image} pid {input_meta.pid}: {input_meta.rhythm.cycles} talk-then-act cycles to {input_meta.rhythm.destination} in the last {input_meta.rhythm.r} rounds (round {input_meta.round})"
 match:
   all:
@@ -110,6 +122,10 @@ fixtures:
     - tests/fixtures/rules/HOST-RHYTHM/positive-quiet-three-cycles.json
     # ADR-0007 AR-2: the same tree gone from the sample, its k-th cycle read after it is gone (a gone line)
     - tests/fixtures/rules/HOST-RHYTHM/positive-gone-three-cycles.json
+    # ADR-0007 AU-4: AU-1, one server Sysmon names on some events and not on others (k cycles, one destination);
+    # AU-3, k cycles split between the two sources (the host's sample saw the first talk, the os source the rest)
+    - tests/fixtures/rules/HOST-RHYTHM/positive-os-named-some.json
+    - tests/fixtures/rules/HOST-RHYTHM/positive-split-sources.json
     # M7.6c REDO E-2 (ADR-0008 Amendment E): the edge pairs of W and R (raqib/rules/fixturegen.py): an act exactly
     # W s after its talk, a first cycle that is the oldest of the last R rounds
     - tests/fixtures/rules/HOST-RHYTHM/positive-w-edge.json
@@ -125,6 +141,9 @@ fixtures:
     - tests/fixtures/rules/HOST-RHYTHM/negative-quiet-few-beats.json
     # AR-2: a gone tree whose last k-1 cycles are read after it is gone
     - tests/fixtures/rules/HOST-RHYTHM/negative-gone-few-beats.json
+    # AU-4: the same two with k-1 cycles
+    - tests/fixtures/rules/HOST-RHYTHM/negative-os-named-some.json
+    - tests/fixtures/rules/HOST-RHYTHM/negative-split-sources.json
     # E-2: an act W+1 s after its talk; a first cycle one round out of the last R rounds
     - tests/fixtures/rules/HOST-RHYTHM/negative-w-edge.json
     - tests/fixtures/rules/HOST-RHYTHM/negative-r-edge.json
@@ -136,7 +155,8 @@ fixtures:
 # accepts k 2..r-2 and r >= k+2 (E-6, shown by `raqib rules`); r stops at 200: the measure's cost grows with
 # r squared (r=1000: about a minute per change), so the fence is where a change is measured in seconds. With the
 # edge negatives of W and R the measured negatives are 7, 0 of 7 fire (the synthetic desktops are not counted);
-# with AP-3's two quiet negatives they are 9, 0 of 9 fire; with AR-2's gone negative they are 10, 0 of 10 fire.
+# with AP-3's two quiet negatives they are 9, 0 of 9 fire; with AR-2's gone negative they are 10, 0 of 10 fire;
+# with AU-4's two (one server named on some events; cycles split between the sources) they are 12, 0 of 12 fire.
 bounds:
   k: {min: 1, max: 100}
   w: {min: 1, max: 3600}

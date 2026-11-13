@@ -101,8 +101,12 @@ What is written (C-5), one session per run, `os-<PID>`:
   redacted by common.redact}. For a connection {"dest_port": N,
   "dest_private": true|false} (null when unreadable), private meaning
   10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, 100.64/10, ::1, fc00::/7
-  or fe80::/10; a documentation address is not private. UDP connections
-  are written like TCP ones (the protocol is in the hash only);
+  or fe80::/10; a documentation address is not private, and (ADR-0007
+  AU-1) "dest_sha256": dest_sha256() of the address, the port and the
+  protocol alone (no host name: one server is one hash whether or not
+  Sysmon named it; absent where the address does not parse; the line's
+  input_sha256 is unchanged). UDP connections are written like TCP ones
+  (the protocol is in the hashes only);
 - session_end at the last kept event's time;
 - cwd on every line: --cwd DIR (an absolute directory, Windows or POSIX:
   the export may be read on another host), else the CurrentDirectory of
@@ -213,6 +217,25 @@ def _int(value):
         return int(str(value).strip())
     except (TypeError, ValueError):
         return None
+
+
+def dest_sha256(ip, port, protocol):
+    """ADR-0007 AU-1: the hash of one server (common.canonical_sha256 of the
+    address in the ipaddress module's canonical form, an IPv4-mapped IPv6
+    address as its IPv4; the port as an integer; the protocol in lower
+    case), whether or not Sysmon named the host. None when the address, the
+    port or the protocol does not parse: never a guess."""
+    try:
+        addr = ipaddress.ip_address(str(ip if ip is not None else "").strip())
+    except ValueError:
+        return None
+    if addr.version == 6 and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    number = port if isinstance(port, int) and not isinstance(port, bool) else _int(port)
+    proto = protocol.strip().lower() if isinstance(protocol, str) else ""
+    if number is None or not 0 <= number <= 65535 or not proto:
+        return None
+    return common.canonical_sha256({"server": {"ip": str(addr), "port": number, "protocol": proto}})
 
 
 def _guid(value):
@@ -464,8 +487,11 @@ def _event_fields(e, depth):
         return common.canonical_sha256({"path": path}), ({"path": common.redact(path)} if path else {})
     destination = {"hostname": d.get("DestinationHostname"), "ip": d.get("DestinationIp"),
                    "port": d.get("DestinationPort"), "protocol": d.get("Protocol")}
-    return (common.canonical_sha256({"destination": destination}),
-            {"dest_port": _int(d.get("DestinationPort")), "dest_private": dest_private(d.get("DestinationIp"))})
+    meta = {"dest_port": _int(d.get("DestinationPort")), "dest_private": dest_private(d.get("DestinationIp"))}
+    server = dest_sha256(d.get("DestinationIp"), d.get("DestinationPort"), d.get("Protocol"))
+    if server is not None:   # AU-1: the server alone (no host name); the line's input_sha256 is what it was
+        meta["dest_sha256"] = server
+    return common.canonical_sha256({"destination": destination}), meta
 
 
 def _lines(kept, root, cwd, start_seq, missing):

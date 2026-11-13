@@ -178,7 +178,9 @@ def test_e1_hashes_of_command_line_path_and_destination_never_the_text():
     api = rows[("net", "2026-11-03T09:00:01.000Z")]
     assert api["input_sha256"] == common.canonical_sha256(
         {"destination": {"hostname": "api.example.com", "ip": "203.0.113.7", "port": "443", "protocol": "tcp"}})
-    assert api["input_meta"] == {"dest_port": 443, "dest_private": False}
+    # ADR-0007 AU-1: and the server's own hash (the address, the port and the protocol; no host name)
+    assert api["input_meta"] == {"dest_port": 443, "dest_private": False,
+                                 "dest_sha256": os_sysmon.dest_sha256("203.0.113.7", 443, "tcp")}
     udp = rows[("net", "2026-11-03T09:00:01.500Z")]
     assert udp["input_sha256"] == common.canonical_sha256(
         {"destination": {"hostname": "-", "ip": "203.0.113.9", "port": "443", "protocol": "udp"}})

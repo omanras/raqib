@@ -1280,7 +1280,7 @@ def rhythm_of(ring, k, w, r, n):
     "rounds": its act rounds, "any": act rounds with a cycle to any
     destination, "beats": the cycles of that destination (talk round and
     seq, act round and seq, the acts, the cites)}."""
-    ring = [e for e in ring if e["round"] > n - r]
+    ring = one_server([e for e in ring if e["round"] > n - r])   # ADR-0007 AU-3
     window = datetime.timedelta(seconds=w)
     dests = sorted({d for e in ring for d in e["talks"]})
     per = {}
@@ -1310,6 +1310,70 @@ def rhythm_of(ring, k, w, r, n):
     dest = sorted(per, key=lambda d: (-len(per[d]), d))[0]
     return {"cycles": len(per[dest]), "destination": dest, "rounds": [c["round"] for c in per[dest]],
             "any": any_rounds, "beats": per[dest][-BEATS_KEPT:]}
+
+
+# ADR-0007 AU-2: an os net line written before AU-1 has no dest_sha256: its destination is the hash of the name too
+PRE_DEST_NOTE = ("its net lines written before the server's own hash (input_meta.dest_sha256) were read: their "
+                 "destination is the hash of the host name, the address, the port and the protocol, so one server "
+                 "named on some of them and not on others is two destinations, and none is one with a host talk")
+
+
+def server_of(dest):
+    """ADR-0007 AU-3: the os name ("os:" and the first 12 hex of
+    os_sysmon.dest_sha256 of the address, the port and tcp) of a host
+    talk's destination "address:port" (an IPv6 address bracketed or not),
+    or None for any other destination (an os one, or one that does not
+    parse: never a guess)."""
+    if not isinstance(dest, str) or dest.startswith("os:") or ":" not in dest:
+        return None
+    addr, port = dest.rsplit(":", 1)
+    if addr.startswith("[") and addr.endswith("]"):
+        addr = addr[1:-1]
+    from raqib.hooks import os_sysmon
+    server = os_sysmon.dest_sha256(addr, port, "tcp")
+    return None if server is None else "os:%s" % server[:12]
+
+
+def one_server(ring):
+    """ADR-0007 AU-3 (pure): the ring with each os destination whose server
+    a host talk in the ring names put under the host talk's name (its
+    cites joined, its own times kept; a host talk of a round that also
+    has the os talk keeps the round's time). A destination only one
+    source saw is named as before. The entries are new dicts where a name
+    changed, the same ones elsewhere."""
+    host = {}
+    for e in ring:
+        for d in e["talks"]:
+            s = server_of(d)
+            if s is not None and (s not in host or d < host[s]):
+                host[s] = d   # two host names of one server (never seen): the least, so the ring is stable
+    names = {s: d for s, d in host.items() if any(s in e["talks"] for e in ring)}
+    if not names:
+        return list(ring)
+    out = []
+    for e in ring:
+        if not any(d in names for d in e["talks"]):
+            out.append(e)
+            continue
+        talks, talk_at = {}, {}
+        for d, cites in e["talks"].items():
+            name = names.get(d, d)
+            talks.setdefault(name, []).extend(cites)
+        for name in talks:
+            parts = [d for d in e["talks"] if names.get(d, d) == name]
+            if len(parts) == 1:
+                if parts[0] in (e.get("talk_at") or {}):
+                    talk_at[name] = list(e["talk_at"][parts[0]])
+                continue
+            times = []
+            for d in parts:   # a part with no times of its own is the host's: at the round's time
+                times += (e.get("talk_at") or {}).get(d) or ([e["at"]] if e["at"] is not None else [])
+            talk_at[name] = sorted(times)
+        for d, times in (e.get("talk_at") or {}).items():
+            if d not in e["talks"]:
+                talk_at.setdefault(names.get(d, d), []).extend(times)
+        out.append(dict(e, talks=talks, talk_at=talk_at))
+    return out
 
 
 SOURCE_BASES = ("os", "hooks")     # M7.5 E2: the act bases of a source's own record, with their own times
@@ -2661,6 +2725,7 @@ class HostWatch:
             e["talks"].setdefault(beat["dest"], []).extend(beat["cites"])
             if beat["at"] is not None:
                 e["talk_at"].setdefault(beat["dest"], []).append(beat["at"])
+        ring[:] = one_server(ring)   # ADR-0007 AU-3: a host talk and an os talk to one server, one destination
         got = rhythm_of(ring, k, w, r, n)
         st = self.rhythm_state.setdefault(key, {"fired": False, "last_cycle": None})
         if got["any"]:   # M7.5 E2: a cycle a late source beat completed in an earlier round counts from there
@@ -2773,8 +2838,11 @@ class HostWatch:
         source: host (K-5: a connection new in the round, or one whose bytes
         moved; at the round's time) and os (each Sysmon event 3 the tree's os
         source gained, at its UtcTime; its destination is "os:" and the first
-        12 hex of the line's input_sha256, the hash of the destination, since
-        the os source keeps no remote in clear: ADR-0007 I-7).
+        12 hex of the line's dest_sha256, the hash of the server alone
+        (ADR-0007 AU-2; a line written before it has none: the first 12 of
+        its input_sha256, said once per source), since the os source keeps no
+        remote in clear: ADR-0007 I-7; AU-3: one_server makes a host talk and
+        an os talk to one server one destination in the ring).
         [{"dest", "cites", "at" (None: the round's time)}]."""
         out = [{"dest": remote, "cites": cites, "at": None} for remote, cites in sorted(self._talks(key, t).items())]
         return out + [beat for kind, beat in (self._source_beats(key) if fresh is None else fresh) if kind == "talk"]
@@ -2812,8 +2880,14 @@ class HostWatch:
                                         "at": at, "basis": "os", "cites": [cite]}))
                 elif rec.get("source") == "os" and rec.get("tool") == "net":
                     digest = rec.get("input_sha256")
-                    if not isinstance(digest, str) or not digest:
+                    server = meta.get("dest_sha256")   # ADR-0007 AU-2: the server alone, whichever events name it
+                    if isinstance(server, str) and server:
+                        digest = server
+                    elif not isinstance(digest, str) or not digest:
                         continue
+                    else:   # a line written before AU-1: the destination it had, said once per source
+                        self._note_once(("pre-dest", key),
+                                        "tree %s, its os source: %s" % (tree_word(key), PRE_DEST_NOTE))
                     out.append(("talk", {"dest": "os:%s" % digest[:12], "at": at, "cites": [cite]}))
                 elif rec.get("source") in (None, "hooks") and rec.get("tool") == "Bash":
                     out.append(("act", {"pid": None, "image": "Bash", "started": rec["ts"], "at": at,
