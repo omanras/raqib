@@ -2,6 +2,8 @@
 id: DRIFT-FILES
 title: Edits spread outside the declared scope
 class: DRIFT
+attack: []
+attack_note: "a rule about the agent's own work or the watch's own sight, not a technique"
 # ADR-0002: measured against the Scope: of HANDOFF.md (context scope). Its hole,
 # writes through Bash, is in the description: an anchor has no evasion field.
 kind: anchor

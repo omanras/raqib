@@ -72,6 +72,10 @@ RULE_KINDS = {  # ADR-0002: rule id -> kind; a rule not listed here cannot emit
     "SILENCE-ORDER": "demand",
     "SILENCE-EMPTY": "demand",
 }
+# ADR-0011 B-5 (M10.1): the ATT&CK techniques each rule's finding is consistent with (never that it happened):
+# a trace that stops, opens, halves, reorders or is empty is consistent with impaired defenses
+ATTACK = {"SILENCE-GAP": ("T1562",), "SILENCE-OPEN": ("T1562",), "SILENCE-HALF": ("T1562",),
+          "SILENCE-ORDER": ("T1562",), "SILENCE-EMPTY": ("T1562",)}
 WORK = ("pre", "post", "stop")  # SILENCE-EMPTY: lines that show a session did something
 OS_SOURCE = "os"  # sessions of this source only are not judged by GAP and ORDER (M5.3 C-5)
 HOST_SOURCE = "host"  # lines of this source are not judged by any silence rule (M7.2b, ADR-0007 H-2)

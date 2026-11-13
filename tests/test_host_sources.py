@@ -1116,3 +1116,25 @@ def test_redo_i10_stop_leaves_the_hooks_in_place_and_the_report_says_so_per_proj
     w2, clock2 = make_host(tmp_path / "h2", ["linux"])
     rounds(w2, clock2, 1)
     assert "HOOKS LEFT IN PLACE" not in w2.finish()[0]
+
+
+def test_ax2_an_os_net_line_without_the_servers_hash_in_a_hooks_trace_is_said(home, tmp_path):
+    # ADR-0007 AX-2: `raqib os-sysmon` run on its own into a project's trace writes net lines without
+    # input_meta.dest_sha256 (it is not asked for there); the rhythm reads them as talks, so the hooks source
+    # says it, once, with the count, as an os source does
+    project = tmp_path / "proj"
+    project.mkdir()
+    w, clock = make_host(home, [moved("linux", project, pid=95)] * 3, attach_hooks=True)
+    rounds(w, clock, 1)
+    key = next(k for k in w.sources if k[0] == 95)
+    src = w.sources[key]
+    assert src.kind == "hooks"
+    net = {"ts": "2026-11-04T10:00:01.000Z", "seq": 1, "session_id": "os-95", "source": "os", "phase": "pre",
+           "tool": "net", "cwd": str(project), "input_sha256": "ab" * 32,
+           "input_meta": {"dest_port": 443, "dest_private": False}}
+    with open(src.feeds[0].path, "a", encoding="ascii") as f:
+        f.write(json.dumps(net) + "\n" + json.dumps(dict(net, seq=2, phase="post", output_meta={}, ok=True)) + "\n")
+    rounds(w, clock, 2)
+    said = [n for n in w.notes if "input_meta.dest_sha256" in n]
+    assert said == ["tree %s, its hooks source: %s" % (host.tree_word(key), host.PRE_DEST_NOTE % 1)]
+

@@ -67,6 +67,9 @@ RULE_HEAD = "HEAD-UNMOVED"
 RULE_INDEX = "INDEX-UNTOUCHED"
 RULES = (RULE_HEAD, RULE_INDEX)
 RULE_KINDS = {RULE_HEAD: "anchor", RULE_INDEX: "anchor"}   # ADR-0002: rule id -> kind; read by the gate (J-1)
+# ADR-0011 B-5 (M10.1): no technique: the anchors are about the agent's own work, and the note says why
+ATTACK = {RULE_HEAD: (), RULE_INDEX: ()}
+ATTACK_NOTE = {rid: "a rule about the agent's own work or the watch's own sight, not a technique" for rid in RULES}
 CLASS = "DRIFT"
 SEVERITY = "medium"
 TITLES = {

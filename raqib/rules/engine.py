@@ -128,7 +128,10 @@ SEVERITIES = ("low", "medium", "high")
 STATUSES = ("active", "disabled")
 KINDS = ("signature", "demand", "anchor")  # ADR-0002
 REQUIRED = ("id", "title", "class", "severity", "fp_budget", "match", "fixtures")
-OPTIONAL = ("status", "description", "summary", "aggregate", "require", "bounds")   # bounds: M7.6c
+OPTIONAL = ("status", "description", "summary", "aggregate", "require", "bounds",   # bounds: M7.6c
+            "attack", "attack_note")   # M10.1 (ADR-0011 B-5): the ATT&CK ids it declares, or why none
+# ADR-0011 B-5: a technique id, T and four digits, a sub-technique's three after a dot
+ATTACK_ID = re.compile(r"T[0-9]{4}(?:\.[0-9]{3})?\Z")
 # kind is required and evasion required iff kind is signature (ADR-0002);
 # both are checked after the id, so their errors can name the rule.
 KIND_FIELDS = ("kind", "evasion", "holes")   # holes: M4.2b G-6
@@ -175,6 +178,10 @@ class Rule:
         self.kind = doc["kind"]
         self.evasion = tuple(doc.get("evasion", ()))
         self.holes = tuple(doc.get("holes", ()))
+        # M10.1 (ADR-0011 B-5): what a finding of it is consistent with, never that it happened; a rule
+        # without the key (a user's own) has none (empty)
+        self.attack = tuple(doc.get("attack", ()))
+        self.attack_note = doc.get("attack_note")
         self.severity = doc["severity"]
         self.fp_budget = doc["fp_budget"]
         self.status = doc.get("status", "active")
@@ -271,6 +278,7 @@ def compile_rule(doc, source="<rule>"):
     if not (isinstance(doc["id"], str) and RULE_ID.match(doc["id"])):
         bad("id", "must look like NET-TOOL ([A-Z][A-Z0-9]*(-[A-Z0-9]+)+)")
     check_kind(doc, source)
+    check_attack(doc, source)
     for key in ("title", "description", "summary"):
         if key in doc and not (isinstance(doc[key], str) and doc[key].strip()):
             bad(key, "must be a non-empty string")
@@ -471,6 +479,33 @@ def fixture_path_problem(path):
     if all(p in ("", ".") for p in parts):
         return "no file name (it is the directory itself)"
     return None
+
+
+def check_attack(doc, source="<rule>"):
+    """ADR-0011 B-5 (M10.1): attack, when present, is a list of technique ids (T1059, T1059.001); an empty
+    list needs attack_note, a non-empty one-line string saying why; attack_note is about the list, so it
+    needs attack. Both are optional here (a user's own rule loads without them); raqib check-rules
+    refuses a catalog rule with neither."""
+    def bad(field, msg):
+        raise RuleError("%s: rule %s: %s: %s" % (source, doc["id"], field, msg))
+
+    if "attack_note" in doc:
+        note = doc["attack_note"]
+        if not (isinstance(note, str) and note.strip() and "\n" not in note):
+            bad("attack_note", "must be a non-empty one-line string")
+        if "attack" not in doc:
+            bad("attack_note", "says why attack is empty; declare attack: [] beside it (ADR-0011 B-5)")
+    if "attack" in doc:
+        ids = doc["attack"]
+        if not isinstance(ids, list):
+            bad("attack", "must be a list of ATT&CK technique ids, e.g. [T1059, T1071]")
+        for t in ids:
+            if not (isinstance(t, str) and ATTACK_ID.match(t)):
+                bad("attack", "%r is not a technique id (T and four digits, a sub-technique's three after a dot)" % (t,))
+        if len(set(ids)) != len(ids):
+            bad("attack", "lists a technique twice")
+        if not ids and "attack_note" not in doc:
+            bad("attack", "is empty; an empty list needs attack_note saying why (ADR-0011 B-5)")
 
 
 def check_kind(doc, source="<rule>"):

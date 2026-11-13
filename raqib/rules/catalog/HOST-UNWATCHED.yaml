@@ -3,6 +3,8 @@ id: HOST-UNWATCHED
 title: A discovered agent tree has no source
 # HOST: the rules of raqib watch --host (engine.CLASSES), over rounds.jsonl's host lines.
 class: HOST
+attack: []
+attack_note: "a rule about the agent's own work or the watch's own sight, not a technique"
 # ADR-0002: measured against the host watch's own record of which source it
 # attached to each tree (rounds.jsonl, HostTree lines), which the agent does
 # not write.

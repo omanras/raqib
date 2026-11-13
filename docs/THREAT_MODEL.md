@@ -575,11 +575,18 @@ is amended by T-2, T-1 restated by V-1).
   where its caller asks for it, and the host watch's os follow asks;
   `raqib os-sysmon` on its own and every other caller do not. The
   server's hash has no salt and, the port being in clear on the same
-  line, an IPv4 address can be found from it by trying them all (at most
-  2^32 hashes, far fewer for a private one; one hash confirms a known
-  server); an IPv6 address can only be guessed. Under the host watch
-  that reveals nothing more than lies beside it: the host's own record of
-  the tree, in the same directory, holds each remote address in clear.
+  line, an IPv4 address can be found from it by trying them all (2^32
+  hashes for each protocol, far fewer for a private one; one hash
+  confirms a known server); an IPv6 address can only be guessed. For a
+  connection the host's sample saw, that reveals nothing more than lies
+  beside it: the host's own record of the tree, in the same directory,
+  holds that remote address in clear. For a connection that opened and
+  closed between two samples, or one read from before the tree was
+  attached, the os line is the only record, and its address, which was
+  bound to the name Sysmon gave it, can now be found this way: a reader
+  of the watch's own files on the watched machine learns an address that
+  machine connected to. A salt kept only in the running watch's memory
+  would end that and is recorded as a task of its own.
   The rhythm counts the server's hash, so one server is one os
   destination whether or not Sysmon named the host on an event (it names
   it on some events of one server and not on others). A connection the
@@ -587,7 +594,11 @@ is amended by T-2, T-1 restated by V-1).
   connection to that server are two destinations: one connection both
   sources saw is one talk on each, never two cycles on one. What is not
   covered: another address of one server (an address pool, DNS round
-  robin, the IPv4 and IPv6 of one name) is another destination; a
+  robin, the IPv4 and IPv6 of one name) is another destination, and so
+  is another protocol to it (tcp and udp on one port are two); two
+  servers behind one address and port (an edge of a content network, a
+  forward proxy) are one destination, as they always were for the
+  sample's talks; a
   connection line without the server's hash (written before it was
   recorded, by a caller that did not ask for it, or whose address, port
   or protocol did not parse) keeps the destination of its own identity,
@@ -595,6 +606,32 @@ is amended by T-2, T-1 restated by V-1).
   one, and says it again), so there one server named on some events and
   not on others is two destinations, and such a line and a line with the
   server's hash to one server are two destinations too.
+- **A process under a tree the watch holds is that tree's (ADR-0007
+  Amendment AY).** The inventory's anchor is that every process goes to
+  its nearest talking ancestor. It has one exception in the watch: a
+  process whose path from that ancestor down to it (itself included)
+  passes through the root of a tree the watch already holds as quiet or
+  kept - the same tree by its key, its root in the round's process
+  sample - is that tree's, and no ancestor's (the held root nearest it).
+  The watch decides it in one place, before any line of the round is
+  written or counted. The tree has the process in its own host record
+  (a HostChild line, judged there by the rules that judge a tree's
+  children), as an act beat of its ring, and a line of the round by the
+  road of a tree not in the round; it stays quiet, and no arrival is said
+  again. So an agent whose connection to its model is closed at the
+  sample no longer gives its commands to a talking ancestor (a CI
+  runner's worker that talks to its server all the time), whose cycles
+  they made: a false HOST-RHYTHM at high on the wrong tree, and the
+  agent's commands judged on it. An ancestor left with no act by this is
+  no candidate, as a talker with no child is not; while its root is in
+  the sample it is held quiet, though it talks. What is not covered: the
+  agent's acts with no talk seen make no cycle, so where no source sees a
+  connection that opens and closes between two samples (Linux) the agent
+  is still not found by rhythm - it is found as an arrival, and its
+  commands are judged on its own tree; a tree whose root is not in the
+  sample is gone and its orphans go to the nearest talking ancestor as
+  before; a round with no process sample decides nothing; a file write
+  carries no path in the inventory and stays the talking ancestor's.
 - **A beat is judged in the round that reads it (ADR-0007 Amendments AP
   to AS).** A tree that is not in the round - quiet at the sample, or
   kept by a round whose connections were not read, or gone from the

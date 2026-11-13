@@ -534,7 +534,7 @@ def test_m42_e5_report_ids_and_the_rules_table_row():
     assert [rid for rid, _ in report.SILENCE_RULES][-1] == "SILENCE-EMPTY"
     (row,) = [r for r in report.rule_table([]) if r["id"] == "SILENCE-EMPTY"]
     assert row == {"id": "SILENCE-EMPTY", "class": "SILENCE", "kind": "demand", "severity": "high",
-                   "fp_budget": None, "status": "active", "title": row["title"]}
+                   "fp_budget": None, "status": "active", "title": row["title"], "attack": ["T1562"]}   # M10.1 B-5
     text = raqib("report", QUICKSTART)[1]
     assert "  SILENCE-EMPTY   SILENCE   demand    high    -         active" in text.splitlines()
 

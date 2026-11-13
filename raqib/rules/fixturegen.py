@@ -178,6 +178,71 @@ def gone_inventory(k, gone, pid=RHYTHM_PID, image="relay-bot"):
     return inv
 
 
+HELD_ANCESTOR_PID = 5100   # ADR-0007 AX-4, AY: the runner's worker, which talks to its server every round
+HELD_PID = 5200            # the agent under it: a candidate in round 1, quiet after it
+
+
+def held_inventory(k, net_round=None, every=EVERY, talks_from=2, sampled_agent=True, side=False):
+    """ADR-0007 AX-4, AY-1 (SYNTHETIC): round k of the field case, in
+    discover's inventory shape. An unknown ancestor (pid 5100,
+    "runner-worker") talks to one server every round, its bytes moving (a
+    talk beat each round); an unknown tree under it (pid 5200, "node")
+    talks to its model in round 1 only (a candidate there, quiet after it
+    while its root is in the sample). Each round a new child of the agent
+    starts HOST_GAP s after the round before (pid 5200 + k; "bash", "curl"
+    in round net_round). As discover's anchor has it (B-6), from round 2 the
+    agent and its child are acts of the ancestor (the child via [5200]).
+    talks_from: the agent talks in every round below it (a large value: a
+    candidate nested in a candidate in every round). sampled_agent False:
+    from round 2 the agent's root is not in the sample (gone). side: the
+    ancestor also has a child of its own each round (pid 5300 + k), no held
+    root on its path."""
+    at, worker, agent = (k - 1) * every, HELD_ANCESTOR_PID, HELD_PID
+    w_start, a_start = _iso_at(-7200), _iso_at(-3600)
+    w_remote, a_remote = "192.0.2.20:443", "192.0.2.30:443"
+
+    def proc(pid, ppid, image, started):
+        return {"pid": pid, "ppid": ppid, "image": image, "started": started,
+                "cites": [{"src": "proc", "line": 2, "text": "fake process row of pid %d (fixturegen)" % pid}]}
+
+    def act(pid, image, started, via):
+        return {"how": "process", "pid": pid, "image": image, "listed": image in ("bash", "curl"), "path": None,
+                "via": list(via), "reader_ancestor": False, "started": started,
+                "cites": [{"src": "proc", "line": 2, "text": "fake child row of pid %d (fixturegen)" % pid}]}
+
+    def talk(pid, remote):
+        return [{"remote": remote, "state": "ESTABLISHED", "basis": "ports", "lines": 1, "names": [],
+                 "endpoint": [], "cites": [{"src": "proc-net", "line": 2, "text": "fake connection of pid %d to %s"
+                                            " (fixturegen)" % (pid, remote)}]}]
+
+    child_pid = agent + k
+    child_start = _iso_at((k - 2) * every + HOST_GAP if k > 1 else -60)
+    child = act(child_pid, "curl" if k == net_round else "bash", child_start, [] if k < talks_from else [agent])
+    tree = {"exe_from": "record", "cwd": None, "talks": []}
+    w_acts = [act(agent, "node", a_start, [])] + ([] if k < talks_from else [child])
+    if side:
+        w_acts.append(act(5300 + k, "python", child_start, []))
+    cands = [dict(tree, pid=worker, image="runner-worker", exe="/opt/runner/bin/runner-worker", started=w_start,
+                  cites=proc(worker, 1, "runner-worker", w_start)["cites"], acts=w_acts, id="C1",
+                  talks=talk(worker, w_remote))]
+    by = {"%d %s" % (worker, w_remote): {"bytes_sent": 1000 * k, "bytes_received": 5000 * k, "sockets": 1}}
+    if k < talks_from:
+        cands.append(dict(tree, pid=agent, image="node", exe="/usr/bin/node", started=a_start,
+                          cites=proc(agent, worker, "node", a_start)["cites"], acts=[child], id="C2",
+                          talks=talk(agent, a_remote)))
+        by["%d %s" % (agent, a_remote)] = {"bytes_sent": 300 * k, "bytes_received": 900 * k, "sockets": 1}
+    processes = [proc(worker, 1, "runner-worker", w_start)]
+    if sampled_agent or k == 1:
+        processes += [proc(agent, worker, "node", a_start), proc(child_pid, agent, child["image"], child_start)]
+    if side:
+        processes.append(proc(5300 + k, worker, "python", child_start))
+    return {"records": 20, "holes": [], "incomplete": [], "alarms": [], "problems": [], "result": "alarm",
+            "sources": [], "footprints": [], "agent_dark": [], "system_drive": SYSTEM_DRIVE, "live": False,
+            "candidates": cands, "act_roots": [], "processes": processes,
+            "conn_bytes": {"from": "fake ss -tinp (fixturegen)", "hole": None, "by": by},
+            "window": {"start": _iso_at(at), "end": _iso_at(at), "snapshots": 0, "samples_read": [k]}}
+
+
 def os_lines(k, scenario, seq, sid="os-%d" % RHYTHM_PID, w=None):
     """M7.5 E2 (SYNTHETIC): the lines os_sysmon writes (its _lines shape:
     a pre and a post per event, tool net / process, source os, the hash of
