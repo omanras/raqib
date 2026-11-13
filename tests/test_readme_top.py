@@ -49,7 +49,8 @@ CHANGED = {
     " Windows they are not read, a hole said once).":
     "HOST-RHYTHM (high) when it talks to one destination and then starts a child within 30 s, 3 times in the last"
     " 10 rounds (the thresholds are in its YAML; on Linux the bytes per connection are recorded from `ss -tinp`, on"
-    " Windows they are not read, a hole said once).",
+    " Windows a live watch reads them from the kernel's tracing, and where it cannot they are not read, a hole said"
+    " once with the reason).",
     "| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child"
     " within 30 s, 3 times in the last 10 rounds (the think-act cycle; medium; once per streak) |":
     "| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child"
@@ -158,7 +159,15 @@ HOST_UNREAD = [
     "In the third field run the watched read the watcher's record: the agent read the watch's own files "
      "under the home ([docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)).",
 ]
-GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + GUIDE_ROWS + HOST_UNREAD
+# M7.21b (ADR-0007 BO-6): what the Windows byte counts are, said in the guide
+BYTES_WIN = [
+    "On Windows the counts are sums since the watch began, not since the connection did: a connection older than"
+    " the watch shows only what it carried since; they lag the kernel by about a second, and UDP carries no counts"
+    " yet (QUIC is unseen here).",
+    "Reading them needs an administrator and starts one tracing session named for the watch (`raqib-net-PID`, in"
+    " memory only); a killed watch leaves it until the next start, which stops it and says so.",
+]
+GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + GUIDE_ROWS + HOST_UNREAD + BYTES_WIN
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")

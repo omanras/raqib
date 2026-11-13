@@ -135,8 +135,14 @@ A tree with no source at all for two rounds is HOST-UNWATCHED (high).
 
 An unknown tree is also judged by its rhythm: HOST-RHYTHM (high) when it talks to one destination
 and then starts a child within 30 s, 3 times in the last 10 rounds (the thresholds are in its YAML;
-on Linux the bytes per connection are recorded from `ss -tinp`, on Windows they are not read, a hole
-said once).
+on Linux the bytes per connection are recorded from `ss -tinp`, on Windows a live watch reads them
+from the kernel's tracing, and where it cannot they are not read, a hole said once with the reason).
+On Windows the counts are sums since the watch began, not since the connection did: a connection
+older than the watch shows only what it carried since; they lag the kernel by about a second, and
+UDP carries no counts yet (QUIC is unseen here).
+Reading them needs an administrator and starts one tracing session named for the watch
+(`raqib-net-PID`, in memory only); a killed watch leaves it until the next start, which stops it and
+says so.
 
 `--suspect BACKEND` (ollama[:MODEL], anthropic[:MODEL]; the window: "suspect unknown trees", empty
 by default) hands each unknown tree's host record to the suspect layer every 10 rounds: it may raise
