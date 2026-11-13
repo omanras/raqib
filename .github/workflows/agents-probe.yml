@@ -192,6 +192,32 @@ jobs:
           "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl python
           "=== marks"; python "$env:GITHUB_WORKSPACE\tools\rig\marks_read.py"
           "=== reader"; python "$env:GITHUB_WORKSPACE\tools\rig\inv_read.py"
+      - name: qwen under the watch, its connection kept (ADR-0007 BO, the bytes by the tracing)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\w-kept | Out-Null; Set-Location $env:RUNNER_TEMP\w-kept
+          # a process started in an earlier step is ended with that step on a Windows runner: the model starts here
+          $env:RIG_CLOSE = ""    # unset: the model keeps the connection: one connection, many turns
+          Start-Process python -ArgumentList $env:RIG_MODEL,"--port","8790","--log","$env:RUNNER_TEMP\model-kept.log" -NoNewWindow
+          Start-Sleep 3
+          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","30","--every","5","--no-open" -RedirectStandardOutput ..\watch-kept.out -RedirectStandardError ..\watch-kept.err -PassThru -NoNewWindow
+          Start-Sleep 7
+          $env:OPENAI_API_KEY = "rig"; $env:OPENAI_BASE_URL = $env:RIG_URL; $env:OPENAI_MODEL = "rig-model"
+          # BC-7: the agent is started by an unknown program that then talks by itself (two trees, one under the other)
+          $env:RIG_CMD = 'qwen -p "Do the task." --yolo > ..\agent-kept.out 2>&1'
+          $a = Start-Process python -ArgumentList "$env:GITHUB_WORKSPACE\tools\rig\launcher.py","10","$env:RIG_URL/models" -RedirectStandardOutput ..\launcher-kept.out -PassThru -NoNewWindow
+          if (-not $a.WaitForExit(130000)) { taskkill /T /F /PID $a.Id | Out-Null; "launcher: stopped at its time" }
+          Get-Content ..\launcher-kept.out
+          $w.WaitForExit(200000) | Out-Null
+          "=== agent"; Get-Content ..\agent-kept.out -Tail 20
+          "=== model log"; Get-Content $env:RUNNER_TEMP\model-kept.log
+          "=== report"; $t = Get-Content ..\watch-kept.out; $i = ($t | Select-String -Pattern "^Raqib watch --host" | Select-Object -First 1).LineNumber; $t[($i-1)..($t.Count-1)]
+          "=== sessions of ours after the watch"; logman query -ets | Select-String "raqib"
+          "=== bytes"; ($t | Select-String -Pattern "bytes|tracing|blind").Line | Select-Object -First 40
+          "=== rhythm"; python "$env:GITHUB_WORKSPACE\tools\rig\rhythm_read.py" node qwen opencode bun curl python
+          "=== marks"; python "$env:GITHUB_WORKSPACE\tools\rig\marks_read.py"
+          "=== reader"; python "$env:GITHUB_WORKSPACE\tools\rig\inv_read.py"
       - name: opencode under the watch
         shell: pwsh
         continue-on-error: true
