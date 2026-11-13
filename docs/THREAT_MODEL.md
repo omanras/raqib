@@ -607,31 +607,48 @@ is amended by T-2, T-1 restated by V-1).
   not on others is two destinations, and such a line and a line with the
   server's hash to one server are two destinations too.
 - **A process under a tree the watch holds is that tree's (ADR-0007
-  Amendment AY).** The inventory's anchor is that every process goes to
-  its nearest talking ancestor. It has one exception in the watch: a
-  process whose path from that ancestor down to it (itself included)
-  passes through the root of a tree the watch already holds as quiet or
-  kept - the same tree by its key, its root in the round's process
-  sample - is that tree's, and no ancestor's (the held root nearest it).
+  Amendments AY and AZ).** The inventory's anchor is that every process
+  goes to its nearest talking ancestor. It has one exception in the
+  watch, for the children the round's process sample shows: a process
+  with the root of a tree the watch already holds as quiet or kept - the
+  same tree by its key, its root in the round's process sample -
+  strictly above it on its path is that tree's, and no ancestor's (the
+  held root nearest it). The held root itself stays its parent's child:
+  the ancestor keeps that act and is the tree the inventory made it - a
+  candidate that talks and, where it is new, an arrival like any other.
   The watch decides it in one place, before any line of the round is
-  written or counted. The tree has the process in its own host record
-  (a HostChild line, judged there by the rules that judge a tree's
-  children), as an act beat of its ring, and a line of the round by the
-  road of a tree not in the round; it stays quiet, and no arrival is said
-  again. So an agent whose connection to its model is closed at the
-  sample no longer gives its commands to a talking ancestor (a CI
-  runner's worker that talks to its server all the time), whose cycles
-  they made: a false HOST-RHYTHM at high on the wrong tree, and the
-  agent's commands judged on it. An ancestor left with no act by this is
-  no candidate, as a talker with no child is not; while its root is in
-  the sample it is held quiet, though it talks. What is not covered: the
-  agent's acts with no talk seen make no cycle, so where no source sees a
-  connection that opens and closes between two samples (Linux) the agent
-  is still not found by rhythm - it is found as an arrival, and its
-  commands are judged on its own tree; a tree whose root is not in the
-  sample is gone and its orphans go to the nearest talking ancestor as
-  before; a round with no process sample decides nothing; a file write
-  carries no path in the inventory and stays the talking ancestor's.
+  written or counted from the sample; the beats of the os and hooks
+  sources are not decided there. A process is given only where the held
+  tree's own host record can be written in the round (a source that
+  keeps one, whose write has not failed, that did not end with a hole,
+  of a tree the sample holds). There it is in that record (a HostChild
+  line that names the tree the inventory had it under, judged there by
+  the rules that judge a tree's children), an act beat of its ring, and
+  in a line of the round by the road of a tree not in the round; the
+  tree stays quiet, and no arrival is said again. Where the record
+  cannot be written, the process stays where the inventory put it and is
+  judged there, and the watch says so once for the tree. A process once
+  given is new on no other tree while it lives: when its tree's root
+  ends and the system gives it a new parent under the ancestor, it is
+  not judged there again. So an agent whose connection to its model is
+  closed at the sample no longer gives the children the sample shows to
+  a talking ancestor (a CI runner's worker that talks to its server all
+  the time) as that ancestor's cycles: a false HOST-RHYTHM at high on
+  the wrong tree, and the agent's commands judged on it. What is not
+  covered: where the ancestor has an os source, its follow is rooted at
+  the ancestor and holds every descendant's events, the held tree's too,
+  so the ancestor's rhythm and its os findings still read the agent's
+  commands from its own os record (on Windows with Sysmon, the same
+  false cycles); the agent's acts with no talk seen make no cycle, so
+  where no source sees a connection that opens and closes between two
+  samples (Linux) the agent is still not found by rhythm - it is found
+  as an arrival, and its commands are judged on its own tree; a tree
+  whose root is not in the sample is gone, and its orphans that were
+  never given go to the nearest talking ancestor as before; a round with
+  no process sample decides nothing; a file write carries no path in the
+  inventory and stays the talking ancestor's; two held trees of one root
+  pid are given nothing; and a path holds the system's own pids, so two
+  processes of one pid in one inventory are not told apart on it.
 - **A beat is judged in the round that reads it (ADR-0007 Amendments AP
   to AS).** A tree that is not in the round - quiet at the sample, or
   kept by a round whose connections were not read, or gone from the

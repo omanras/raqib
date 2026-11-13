@@ -6,7 +6,10 @@ process goes to its nearest talking ancestor") gives its commands to the
 runner's worker above it, which talks all the time. AY-1: such a child is
 the held tree's (one function, before any line of the round); AY-2: it is
 in that tree's own host record, judged there, and an act beat of its ring;
-the tree stays quiet. Every run here is synthetic (fixturegen.held_inventory),
+the tree stays quiet. Amendment AZ: the held root itself stays its parent's
+act (AZ-1); nothing is given to a tree whose host record cannot be written
+(AZ-2); a child is judged as one tree's child once (AZ-3); its line names the
+tree the inventory had it under (AZ-4). Every run here is synthetic (fixturegen.held_inventory),
 on a fake clock.
 """
 import copy
@@ -42,21 +45,25 @@ def home(tmp_path, monkeypatch):
     return path
 
 
-def run(home, invs):
-    """The HostWatch fed invs (one per round) with a fake os follow: (watch, round records)."""
+def run(home, invs, between=None, os_source=True):
+    """The HostWatch fed invs (one per round) with a fake os follow (os_source False: none, each tree's source
+    the host's record): (watch, round records). between(watch, k) runs after round k."""
     feed = iter(invs)
     clock = host.FixtureClock()
     notifier = notify.Notifier(host.HOST, enabled=False, reason="test", host=True)
+    sysmon = (True, "test: a synthetic os source") if os_source else (False, "test: no os source")
     watch = host.HostWatch(lambda: next(feed), CATALOG, RULES, notifier, every=fixturegen.EVERY, out=None,
                            err=io.StringIO(), clock=clock, wall=lambda: fixturegen.WALL0 + clock.t, home=str(home),
-                           platform="fixture", run="test-run", sysmon=lambda: (True, "test: a synthetic os source"),
+                           platform="fixture", run="test-run", sysmon=lambda: sysmon,
                            os_follow=host.FixtureFollow())
     seen = []
-    for _ in invs:
+    for k, _ in enumerate(invs, 1):
         before = watch.round_lines[-1] if watch.round_lines else None
         watch.tick(wait=30)
         if watch.round_lines and watch.round_lines[-1] is not before:
             seen.append(watch.round_lines[-1])
+        if between:
+            between(watch, k)
         clock.t += watch.every
     watch.finish()
     return watch, seen
@@ -79,8 +86,8 @@ def tree_lines(seen, pid=None):
 def record(watch, pid):
     """The lines of the host's own record of one tree (its host_path)."""
     src = watch.sources[key_of(watch, pid)]
-    path = Path(src.host_path)
-    return [json.loads(x) for x in path.read_text(encoding="ascii").splitlines()] if path.exists() else []
+    path = Path(src.host_path) if src.host_path else None
+    return [json.loads(x) for x in path.read_text(encoding="ascii").splitlines()] if path and path.exists() else []
 
 
 def programs(watch, pid):
@@ -89,6 +96,11 @@ def programs(watch, pid):
 
 def child_pids(watch, pid):
     return [c["pid"] for l in record(watch, pid) if l["tool"] == "HostChild" for c in l["input_meta"]["children"]]
+
+
+def news(watch):
+    """The arrivals said: (rule, pid), one per finding."""
+    return sorted((f["rule_id"], f.get("pid")) for f in watch.findings if f["rule_id"] in host.NEW_RULES)
 
 
 def found(watch, rule_id, pid):
@@ -107,12 +119,16 @@ def shape(watch, seen):
 @pytest.fixture
 def main_code(monkeypatch):
     """The watch as main has it: the inventory's anchor alone decides whose a child is."""
-    monkeypatch.setattr(host.HostWatch, "_give_held", lambda self, inv: inv)
+    monkeypatch.setattr(host.HostWatch, "_give_held", lambda self, inv, *a: inv)
 
 
-def test_e3_the_field_case_no_rhythm_on_the_ancestor_the_children_are_the_quiet_trees(home):
+def test_e3_the_field_case_no_rhythm_on_the_ancestor_the_children_are_the_quiet_trees(home, monkeypatch):
+    calls, real = [], host.HostWatch._give_held
+    monkeypatch.setattr(host.HostWatch, "_give_held", lambda self, inv, now, n: calls.append(n) or real(
+        self, inv, now, n))
     watch, seen = run(home, field())
-    assert not found(watch, "HOST-RHYTHM", WORKER)   # AX-4: main's code fires it here (the questions file)
+    assert calls == list(range(1, N + 1))   # one call per round
+    assert not found(watch, "HOST-RHYTHM", WORKER)   # AX-4: main's code fires it here (the twin below)
     assert child_pids(watch, AGENT) == [AGENT + k for k in range(1, N + 1)]   # round 1's as a candidate, then held
     assert "curl" in programs(watch, AGENT) and "curl" not in programs(watch, WORKER)
     assert [f["rule_id"] for f in found(watch, "NET-TOOL", AGENT)] == ["NET-TOOL"]
@@ -123,8 +139,11 @@ def test_e3_the_field_case_no_rhythm_on_the_ancestor_the_children_are_the_quiet_
     # AY-3: only round 1's talk (to its model) and round 2's act make a cycle; the later acts with no talk none
     assert [m["rhythm"]["cycles"] for m in agent] == [0] + [1] * (N - 1) and not any(m["rhythm"]["fires"] for m in agent)
     assert key_of(watch, AGENT) in watch.quiet
-    news = [f for f in watch.findings if f["rule_id"] in host.NEW_RULES and f.get("round", 1) > 1]
-    assert not news   # AY-2: no arrival is said again
+    assert news(watch) == []   # both trees are history here; the arrival is AZ-6's test below
+    # AZ-4: the line of a given child names the candidate the inventory had it under; no other line has the key
+    under = [l["input_meta"].get("inventory_tree") for l in record(watch, AGENT) if l["tool"] == "HostChild"]
+    assert under == [None] + [host.tree_word(key_of(watch, WORKER))] * (N - 1)
+    assert not [l for l in record(watch, WORKER) if "inventory_tree" in l["input_meta"]]
 
 
 def test_e3_on_mains_code_the_same_rounds_fire_rhythm_on_the_ancestor(home, main_code):
@@ -133,23 +152,101 @@ def test_e3_on_mains_code_the_same_rounds_fire_rhythm_on_the_ancestor(home, main
     assert child_pids(watch, AGENT) == [AGENT + 1] and "curl" in programs(watch, WORKER)
 
 
-def test_e1_a_candidate_left_with_no_act_is_no_candidate_and_is_held_quiet(home):
+def test_az1_the_held_root_stays_its_parents_act_so_the_ancestor_stays_a_candidate(home):
     watch, seen = run(home, field())
-    assert [m["round"] for m in tree_lines(seen, WORKER)] == [1]   # not in the round's trees from round 2
-    assert key_of(watch, WORKER) in watch.quiet and watch.trees[key_of(watch, WORKER)]["quiet"]
-    assert child_pids(watch, WORKER) == [AGENT]   # its round-1 act; the agent's root is given to no tree after
+    worker = tree_lines(seen, WORKER)
+    assert [(m["round"], m["class"], m["acts"]) for m in worker] == [(n, "candidate", 1) for n in range(1, N + 1)]
+    assert child_pids(watch, WORKER) == [AGENT]   # the agent's root, once; nothing under it
+    assert key_of(watch, WORKER) in watch.present
 
 
 def test_e1_one_function_inv_itself_when_nothing_is_taken_and_never_changed(home):
     watch, _ = run(home, field(2))
     inv = fixturegen.held_inventory(3, net_round=NET)
     before = copy.deepcopy(inv)
-    got = watch._give_held(inv)
+    got = watch._give_held(inv, 0.0, 3)
     assert inv == before and got is not inv
-    assert [len(c["acts"]) for c in got["candidates"]] == [] and [a["pid"] for a in watch.given[key_of(
-        watch, AGENT)]] == [AGENT + 3]
+    assert [[a["pid"] for a in c["acts"]] for c in got["candidates"]] == [[AGENT]]   # AZ-1: the root stays
+    assert [a["pid"] for a in watch.given[key_of(watch, AGENT)]] == [AGENT + 3]
     other = fixturegen.held_inventory(3, net_round=NET, talks_from=99)   # the agent a candidate: nothing taken
-    assert watch._give_held(other) is other and watch.given == {}
+    assert watch._give_held(other, 0.0, 3) is other and watch.given == {}
+
+
+def test_az1_a_new_talking_ancestor_above_a_held_tree_arrives_and_the_held_tree_does_not_again(home):
+    # the trees are not history (both start at the watch's start); the worker first talks in round 2
+    watch, seen = run(home, field(fresh=True, worker_from=2))
+    assert not watch.trees[key_of(watch, AGENT)]["history"] and not watch.trees[key_of(watch, WORKER)]["history"]
+    assert news(watch) == sorted([("NEW-AGENT-UNKNOWN", AGENT), ("NEW-AGENT-UNKNOWN", WORKER)])   # once each
+    worker = tree_lines(seen, WORKER)
+    assert [(m["round"], m["class"], m["acts"]) for m in worker] == [(n, "candidate", 1) for n in range(2, N + 1)]
+    assert child_pids(watch, WORKER) == [AGENT]   # one act, the held root; none of the children under it
+    assert child_pids(watch, AGENT) == [AGENT + k for k in range(1, N + 1)]
+    assert not found(watch, "NET-TOOL", WORKER) and found(watch, "NET-TOOL", AGENT)
+
+
+def test_az6_destruct_cmd_is_judged_on_the_held_tree(home):
+    watch, _ = run(home, field(destruct_round=NET + 1))
+    assert [f["rule_id"] for f in found(watch, "DESTRUCT-CMD", AGENT)] == ["DESTRUCT-CMD"]
+    assert not found(watch, "DESTRUCT-CMD", WORKER) and "rm" not in programs(watch, WORKER)
+
+
+def test_az6_two_held_roots_on_one_path_the_nearest_has_the_child(home):
+    sub = fixturegen.HELD_SUB_PID
+    watch, _ = run(home, field(sub=True))
+    assert child_pids(watch, sub) == [sub + 10 + k for k in range(1, N + 1)]
+    assert child_pids(watch, AGENT) == [AGENT + 1, sub] + [AGENT + k for k in range(2, N + 1)]   # sub: not new
+    assert child_pids(watch, WORKER) == [AGENT]
+    assert not found(watch, "HOST-RHYTHM", WORKER)
+
+
+def test_az6_a_held_tree_that_is_a_candidate_again_its_given_children_are_not_new(home):
+    again = NET + 2
+    watch, seen = run(home, field(keep=True, talks_again=again))   # every child lives to the last round
+    assert child_pids(watch, AGENT) == [AGENT + k for k in range(1, N + 1)]   # each once
+    assert [f["rule_id"] for f in found(watch, "NET-TOOL", AGENT)] == ["NET-TOOL"]
+    agent = tree_lines(seen, AGENT)
+    assert [(m["round"], m["class"]) for m in agent] == [(1, "candidate")] + [
+        (n, host.QUIET) for n in range(2, again)] + [(n, "candidate") for n in range(again, N + 1)]
+    assert [m["rhythm"]["acts"] for m in agent] == [0] + [1] * (N - 1)   # only the round's new child is a beat
+    assert child_pids(watch, WORKER) == [AGENT] and not found(watch, "NET-TOOL", WORKER)
+
+
+@pytest.mark.parametrize("case", ["none", "ended"])
+def test_az2_no_child_is_given_to_a_tree_whose_host_record_cannot_be_written(home, case):
+    def between(watch, k):
+        if k != 1:
+            return
+        key = key_of(watch, AGENT)
+        if case == "none":   # no host record: nothing could be attached
+            watch.sources[key] = host.TreeSource("none", "none (test: nothing could be attached)")
+            watch.sources[key].error = "test: nothing could be attached"
+        else:                # its host source ended with a hole
+            watch.sources[key].error = "test: the source ended"
+    watch, seen = run(home, field(), between=between, os_source=False)
+    assert [p for p in child_pids(watch, WORKER) if p > AGENT] == [AGENT + k for k in range(2, N + 1)]   # as main
+    assert found(watch, "NET-TOOL", WORKER) and not found(watch, "NET-TOOL", AGENT)
+    assert [m["round"] for m in tree_lines(seen, AGENT)] == [1] and watch.given == {}
+    (note,) = [h for h in watch.holes if h["kind"] == "held-not-given"]   # once for the tree
+    assert note["round"] == 2 and host.tree_word(key_of(watch, AGENT)) in note["detail"]
+
+
+def test_az3_a_child_once_given_is_not_new_on_the_ancestor_when_its_tree_is_gone(home):
+    invs = field(NET)   # the curl of round NET is given to the agent
+    given = copy.deepcopy(invs[-1]["candidates"][0]["acts"][1])
+    assert given["image"] == "curl" and given["via"] == [AGENT]
+    inv = fixturegen.held_inventory(NET + 1, net_round=NET, sampled_agent=False)   # the agent's root has ended
+    stranger = dict(copy.deepcopy(given), pid=5399, image="bash", started=inv["candidates"][0]["acts"][1]["started"])
+    orphan = dict(given, via=[])   # the system gave the still-living child a new parent: the worker
+    inv["candidates"][0]["acts"] = [orphan, stranger]
+    worker_row = inv["processes"][0]
+    inv["processes"] = [worker_row] + [dict(worker_row, pid=a["pid"], ppid=WORKER, image=a["image"],
+                                            started=a["started"]) for a in (orphan, stranger)]
+    watch, seen = run(home, invs + [inv])
+    assert AGENT + NET in child_pids(watch, AGENT)
+    assert AGENT + NET not in child_pids(watch, WORKER) and 5399 in child_pids(watch, WORKER)   # a new one is new
+    assert not found(watch, "NET-TOOL", WORKER) and found(watch, "NET-TOOL", AGENT)
+    last = [m for m in tree_lines(seen, WORKER) if m["round"] == NET + 1]
+    assert [m["rhythm"]["acts"] for m in last] == [1]   # the stranger's beat only
 
 
 def test_e4_a_child_with_no_held_root_on_its_path_stays_its_ancestors(home):
@@ -174,7 +271,7 @@ def test_e4_not_touched_the_same_as_mains_code(home, monkeypatch, case):
     (home / "on").mkdir()
     (home / "off").mkdir()
     on = shape(*run(home / "on", copy.deepcopy(invs)))
-    monkeypatch.setattr(host.HostWatch, "_give_held", lambda self, inv: inv)
+    monkeypatch.setattr(host.HostWatch, "_give_held", lambda self, inv, *a: inv)
     off = shape(*run(home / "off", copy.deepcopy(invs)))
     assert on == off
     lines, _, kids = on

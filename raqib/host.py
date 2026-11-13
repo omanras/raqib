@@ -572,6 +572,14 @@ def named(tree, catalog):
     return False, None
 
 
+def inv_key(t):
+    """The key of a tree of the inventory (a candidate or an act-root):
+    (pid, image, started); M7.9: a brief tree's start is its Sysmon 1
+    time; without one, its ProcessGuid stands for it."""
+    return (t.get("pid"), t.get("image"), t.get("started") or t.get("channel_started")
+            or ("guid %s" % t["guid"] if t.get("guid") else None))
+
+
 def trees_of(inv, catalog, no_drive=None):
     """{key: tree} of an inventory: its candidates and its act-roots, keyed
     by (pid, image, started). no_drive (a list): the trees whose benign
@@ -581,8 +589,7 @@ def trees_of(inv, catalog, no_drive=None):
     for cls, group in (("candidate", inv.get("candidates") or []), ("act-root", inv.get("act_roots") or [])):
         for t in group:
             # M7.9: a brief tree's start is its Sysmon 1 time; without one, its ProcessGuid stands for it
-            key = (t.get("pid"), t.get("image"), t.get("started") or t.get("channel_started")
-                   or ("guid %s" % t["guid"] if t.get("guid") else None))
+            key = inv_key(t)
             if key in out:     # a pid both: the candidate stands
                 continue
             ok, why = named(t, catalog)
@@ -1162,14 +1169,19 @@ def hashed_cites(cites):
             for c in cites if isinstance(c, dict)][:CITES_KEPT]
 
 
-def host_child_line(sid, seq, ts, n, run, sample, tree_seq, pid, programs, children, cites):
+def host_child_line(sid, seq, ts, n, run, sample, tree_seq, pid, programs, children, cites, inventory_tree=None):
     """A HostChild line (M7.2b E2): the new children's image names in
     command_programs, the field NET-TOOL and DESTRUCT-CMD read. Never tool
-    Bash, never a command line."""
-    return {"ts": ts, "seq": seq, "session_id": sid, "phase": "pre", "tool": CHILD_TOOL, "cwd": CWD,
+    Bash, never a command line. ADR-0007 AZ-4: inventory_tree, the word of
+    the candidate the inventory had the children under, only on the line of
+    a held tree's given children (input_meta.inventory_tree)."""
+    line = {"ts": ts, "seq": seq, "session_id": sid, "phase": "pre", "tool": CHILD_TOOL, "cwd": CWD,
             "source": HOST_SOURCE, "input_sha256": common.canonical_sha256({"programs": programs}),
             "input_meta": {"command_programs": programs, "children": children, "pid": pid, "round": n, "run": run,
                            "sample": sample, "tree_seq": tree_seq, "cites": hashed_cites(cites)}}
+    if inventory_tree is not None:
+        line["input_meta"]["inventory_tree"] = inventory_tree
+    return line
 
 
 def host_connection_line(sid, seq, ts, n, run, sample, tree_seq, pid, remote, cites, new=True, bytes_=None,
@@ -1651,6 +1663,9 @@ class HostWatch:
         self.round_times = {}        # ADR-0007 AR-1: round -> (at, from), the last R rounds' own intervals
         self.kids = {}               # tree key -> the (child pid, started) seen in its rounds
         self.given = {}              # ADR-0007 AY-1: held tree key -> the acts of this round given to it
+        self.given_marks = {}        # AZ-3, AZ-4: (child pid, started) -> (the held key it was given to, the word
+        #                              of the candidate the inventory had it under), while its pid is in the sample
+        self.not_given_said = set()  # AZ-2: held trees whose children were left where the inventory put them (said)
         self.act_seen = {}           # M7.5 REDO N-9: tree key -> the acts counted, across sources
         self.act_twins = 0           # N-9: acts not counted again (a second source's report of one child)
         self.late_beats = {}         # M7.5 REDO N-4: tree word -> source beats read by the final poll (no round)
@@ -1994,7 +2009,7 @@ class HostWatch:
                             if isinstance(p, dict)}   # Z-5
         round_at = self.round_at_now = self.started + datetime.timedelta(seconds=now - self.t0)   # AB-7
         # ADR-0007 AY-1: whose a child is, decided once, before any line of the round (a held tree's are its own)
-        current = self._one_key(trees_of(self._give_held(inv), self.catalog, no_drive))   # M7.9 E2: guid keys
+        current = self._one_key(trees_of(self._give_held(inv, now, n), self.catalog, no_drive))   # M7.9 E2
         for text in self.holes_owed:
             self._hole(now, "tree-key", "round %d: %s" % (n, text), round_=n)
         self._channel_holes(now, n, inv)
@@ -2112,7 +2127,8 @@ class HostWatch:
             fresh = self._source_beats(key)   # read once: no beat, no line (the beats are not lost: none)
             given = self.given.get(key) if key in quiet_keys or key in kept else None
             kids = children_of(given, key[0]) if given else []
-            gained = [c for c in kids if (c.get("pid"), c.get("started")) not in self.kids.get(key, ())]
+            gained = [c for c in kids if (c.get("pid"), c.get("started")) not in self.kids.get(key, ())
+                      and not self._given_elsewhere(key, c)]   # AZ-3
             if src is None or not (fresh or gained):
                 continue
             t = dict(entry, brief=False, children=(), remotes=())
@@ -2612,27 +2628,40 @@ class HostWatch:
         self._blind(now, "started", LINUX_STARTED_HOLE if self.platform.startswith("linux") else STARTED_UNREAD, n)
         return None, "round"
 
-    def _give_held(self, inv):
-        """ADR-0007 AY-1 (M7.22): the one place that decides whose a child
-        is, called once per round before any line of it is made. The
-        inventory gives every process to its nearest talking ancestor (B-6);
-        that anchor does not know the trees the watch holds. A process act
-        of a candidate whose path (its via pids and its own pid) holds the
-        root pid of a tree the watch holds - in its last round's trees or
-        quiet, not a tree of this round, its key's root in this round's
+    def _give_held(self, inv, now, n):
+        """ADR-0007 AY-1 as AZ-1 corrected it (M7.22): the one place that
+        decides whose a child of the round's inventory is, called once per
+        round before any line of it is made. The inventory gives every
+        process to its nearest talking ancestor (B-6); that anchor does not
+        know the trees the watch holds. A process act of a candidate whose
+        via (the pids strictly above it, the candidate's own excluded) holds
+        the root pid of a tree the watch holds - in its last round's trees
+        or quiet, not a tree of this round, its key's root in this round's
         process sample (so quiet or kept in this round) - is taken from the
-        candidate; the held root nearest the child has it. self.given: {held
-        key: the acts given} (the held root's own process is taken and given
-        to no tree: a tree is not its own child). Returns what trees_of
-        reads: inv itself when nothing is taken (every round with no held
-        root on a path is as before), else a copy whose candidates lost
-        those acts; a candidate left with no act is no candidate, as
-        discover makes a talker with no act (B-6). Not touched: a path with
-        no held root, a held root not in the sample (gone), a tree of this
+        candidate and given to that tree, the held root nearest the child.
+        The act that IS a held root stays its candidate's (AZ-1: it is its
+        parent's child), so a candidate keeps at least that act and is the
+        tree the inventory made it. AZ-2: an act is given only where the
+        held tree's host record can be written in this round (the test
+        _host_lines writes by, _host_unwritable); else it stays where the
+        inventory put it, is judged there, and the watch says so once for
+        that tree (a hole, held-not-given). AZ-3, AZ-4: each child given is
+        marked (pid, started) with its held tree and the word of the
+        candidate it was taken from, while its pid is in the sample: a child
+        given once is new on no other tree, and the held tree's HostChild
+        line names that candidate. self.given: {held key: the acts given}.
+        Returns what trees_of reads: inv itself when nothing is taken, else
+        a copy whose candidates lost those acts. Not touched: a path with no
+        held root, a held root not in the sample (gone), a tree of this
         round (a candidate nested in a candidate), a file-write act (the
-        inventory gives it no path), a round with no process sample."""
+        inventory gives it no path), two held trees of one root pid, a round
+        with no process sample; and the os and hooks sources' beats (an
+        ancestor's os follow holds the held tree's events: AZ-5)."""
         self.given = {}
         sampled, holding = inv.get("processes"), self.present | self.quiet
+        if isinstance(sampled, list):   # AZ-3: a mark lives while its process is in the sample
+            pids = {p.get("pid") for p in sampled if isinstance(p, dict)}
+            self.given_marks = {m: v for m, v in self.given_marks.items() if m[0] in pids}
         if not isinstance(sampled, list) or not holding:
             return inv
         alive = {(p.get("pid"), p.get("image"), p.get("started") or None) for p in sampled if isinstance(p, dict)}
@@ -2654,20 +2683,53 @@ class HostWatch:
                 continue
             keep = []
             for a in acts:
-                path = (list(a.get("via") or ()) + [a.get("pid")]) if isinstance(a, dict) and a.get(
-                    "how") == "process" else []
-                root = next((p for p in reversed(path) if p in held), None)
-                if root is None:
+                via = list(a.get("via") or ()) if isinstance(a, dict) and a.get("how") == "process" else []
+                root = next((p for p in reversed(via) if p in held), None)   # AZ-1: strictly above the child
+                why = self._host_unwritable(held[root]) if root is not None else None
+                if root is None or why is not None:
                     keep.append(a)
-                elif a.get("pid") != root:
-                    self.given.setdefault(held[root], []).append(a)
+                    if why is not None and held[root] not in self.not_given_said:
+                        self.not_given_said.add(held[root])
+                        self._hole(now, "held-not-given", "round %d: tree %s: a process under its root (pid %s) is"
+                                   " left where the inventory put it (tree %s) and judged there, as is every such"
+                                   " process while this lasts: %s; said once for this tree" % (
+                                       n, tree_word(held[root]), a.get("pid"), tree_word(inv_key(c)), why), round_=n)
+                    continue
+                self.given.setdefault(held[root], []).append(a)
+                self.given_marks.setdefault((a.get("pid"), a.get("started")), (held[root], tree_word(inv_key(c))))
             if len(keep) == len(acts):
                 cands.append(c)
                 continue
             taken = True
-            if keep:
-                cands.append(dict(c, acts=keep))
+            cands.append(dict(c, acts=keep))   # AZ-1: never left with no act (its held root's act stays)
         return dict(inv, candidates=cands) if taken else inv
+
+    def _host_unwritable(self, key, brief=False):
+        """Why the host's own record of a tree cannot be written in this
+        round, or None where it can: the conditions _host_lines writes under
+        (AK-1: a source that keeps a host record, with its path, whose own
+        write has not failed and, unless it is an os follow, that did not
+        end with a hole; AK-3: a tree the round's sample holds, not brief).
+        One test, read by _host_lines and by _give_held (ADR-0007 AZ-2)."""
+        src = self.sources.get(key)
+        if src is None:
+            return "no source is attached to it"
+        if not src.writes_host() or not src.host_path:
+            return "its source (%s) keeps no host record" % src.kind
+        if src.host_error is not None:
+            return "its host record cannot be written: %s" % src.host_error
+        if src.kind != "os" and src.error is not None:
+            return "its %s source ended with a hole: %s" % (src.kind, src.error)
+        if brief or not (self.trees.get(key) or {}).get("sampled", True):
+            return "the round's sample does not hold it (known from the channel only)"
+        return None
+
+    def _given_elsewhere(self, key, c):
+        """ADR-0007 AZ-3: a child once given to a held tree (marked by
+        _give_held, while its pid is in the sample) is not new on another
+        tree: no HostChild line, no act beat, no finding there."""
+        got = self.given_marks.get((c.get("pid"), c.get("started")))
+        return got is not None and got[0] != key
 
     def _tree_line(self, now, n, key, t, entry, src, was, history, candidate_before, ts, sample, interval, inv,
                    lines, fresh=None):
@@ -2805,7 +2867,7 @@ class HostWatch:
         acts = []
         for c in t.get("children") or ():
             mark = (c.get("pid"), c.get("started"))
-            if mark in seen:
+            if mark in seen or self._given_elsewhere(key, c):   # ADR-0007 AZ-3: judged as one tree's child once
                 continue
             seen.add(mark)
             if first:
@@ -3502,10 +3564,13 @@ class HostWatch:
         child whose name is not a plain program name is a recorded hole, not
         a line. AK-2: only that file's own write failure stops the lines (an
         os follow's error, end or pass never does); AK-3: a tree the round's
-        sample does not hold (brief) has none. ADR-0007 AY-2: held, a quiet
-        or kept tree given children of the round (AY-1): their HostChild
-        line in its own record; its connections are not read (no
-        HostConnection line, its open set kept)."""
+        sample does not hold (brief) has none (the three in _host_unwritable,
+        which _give_held reads too: ADR-0007 AZ-2). AY-2: held, a quiet or
+        kept tree given children of the round (AY-1, AZ-1): their HostChild
+        line in its own record, naming the candidate the inventory had them
+        under (AZ-4); its connections are not read (no HostConnection line,
+        its open set kept). AZ-3: a child given to another held tree is not
+        new here."""
         held = held or {}
         for key in sorted(set(current) | set(gone_keys) | set(held), key=lambda k: (str(k[0]), str(k[1]), str(k[2]))):
             src = self.sources.get(key)
@@ -3515,12 +3580,8 @@ class HostWatch:
                 if src.stop is not None:   # the os follow of a tree that is gone ends
                     src.stop.set()
                     src.ended = src.ended or "the tree is gone (round %d)" % n
-            if not src.writes_host() or not src.host_path or src.host_error is not None or (
-                    src.kind != "os" and src.error is not None):
-                continue
-            if not (self.trees.get(key) or {}).get("sampled", True) or (
-                    key not in gone_keys and (held.get(key) or current[key]).get("brief")):
-                continue   # AK-3: known from the channel only: no sample of it, no line of the host's record
+            if self._host_unwritable(key, key not in gone_keys and (held.get(key) or current[key]).get("brief")):
+                continue   # AK-1 to AK-3 (one test with _give_held, ADR-0007 AZ-2)
             pid = key[0]
             sid = "host-%s" % pid
             seq = self.file_seq.get(src.host_path, 0)
@@ -3530,7 +3591,8 @@ class HostWatch:
                 out.append(host_gone_line(sid, seq, ts, n, self.run, sample, pid))
             else:
                 t = held.get(key) or current[key]
-                fresh = [c for c in t.get("children") or () if c.get("pid") not in src.children]
+                fresh = [c for c in t.get("children") or () if c.get("pid") not in src.children
+                         and not self._given_elsewhere(key, c)]   # ADR-0007 AZ-3
                 programs, children, cites, unfit = [], [], [], []
                 for c in fresh:
                     name = plain_program(c.get("image"))
@@ -3550,8 +3612,11 @@ class HostWatch:
                                round_=n)
                 if programs:
                     seq += 1
+                    # ADR-0007 AZ-4: a held tree's line says under which tree the inventory had its children
+                    under = sorted({self.given_marks[m][1] for m in ((c["pid"], c["started"]) for c in children)
+                                    if key in held and self.given_marks.get(m, (None,))[0] == key})
                     out.append(host_child_line(sid, seq, ts, n, self.run, sample, tree_seq.get(key), pid, programs,
-                                               children, cites))
+                                               children, cites, inventory_tree=", ".join(under) or None))
                 now_remotes = {}
                 for r in t.get("remotes") or ():
                     if r.get("remote"):
@@ -3592,7 +3657,9 @@ class HostWatch:
                     continue
                 src.host_error = why
                 src.error = src.error or src.host_error
-                self._hole(now, "source-unwritable", "round %d: tree %s: %s; the source is attached again next round"
+                self._hole(now, "source-unwritable", "round %d: tree %s: %s; the source is attached again in the"
+                           " next round the tree is in (a tree held quiet or kept is not, and no child is given to it"
+                           " while it is held: its children are judged where the inventory puts them)"
                            % (n, tree_word(key), src.host_error), round_=n)
                 continue
             entry = self.trees.get(key)
