@@ -613,3 +613,64 @@ there.
 - K-3 (recorded for the next task of the forwarder). The guide's own section "Forward the events" (the guard
   on the guide's headings is the Table's to open, Q1); `forward` in cli.py's opening words (Q14).
 
+## Amendment L (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3.md (f6e7459)
+The packet: no line is dropped by the cursor's own logic; REDO for a status that says OK where nothing was
+taken, a failure that writes no state, a rig that loses its whole table, a check that cannot see a leak. The
+largest finding is the Table's own ruling, J-4.
+- L-1 (J-4 corrected: a refusal is the line's only where the collector shows it takes lines). J-4 let any
+  refusing answer pass a line; a collector with a wrong path then refuses everything, the whole file is
+  counted as refused and passed, and the status says OK. Now: a batch refused is sent line by line, and a
+  line refused alone is held in question; it is counted and passed only when a later line of the file has
+  been taken by the same collector. While the lines in question have no taken line after them, the cursor
+  stays before the first of them, the forwarder is failing with the word `refusing` and the collector's
+  status, and it tries again as J-10 says. FOR: a wrong path, a missing channel, a collector that takes
+  nothing - a misconfiguration is not the lines' fault. MUST NOT TOUCH: the order (a taken line is never sent
+  before a line that is neither taken nor in question before it), 401 and 403 (the token's, as before).
+- L-2 (the status says what J-9 says). Exit 0 only where nothing is failing and no whole line has waited
+  longer than a beat; `refusing` is failing. The lines refused are said on every status. An age below zero (a
+  state written in the future) is not fresh: exit 3 and the reason. FORWARD.md and the guide say one thing.
+- L-3 (every failure writes the state; nothing ends the run without it). A token file that fails its checks
+  while the forwarder runs is a failed try (`token-file`): nothing moves, the state says so, it is read again
+  at the next try; at the start it is the usage error it was. Whatever ends the run - Stop, a usage error
+  after the start, an error the forwarder did not foresee - the state is written first, and an unforeseen
+  error is said in it with the forwarder's own word, never a traceback's text.
+- L-4 (one send is bounded whatever the collector does). Connecting, the handshake included, within 10 s; the
+  whole answer within 30 s from the request's last byte, not each read; a collector that trickles is `late`.
+  Name resolution is the system's: where it cannot be bounded the documents say so and the status's SILENT
+  covers it. Stop is honoured within 2 s during a send, between the lines of a refused batch and in a wait.
+  The waits and "once a beat" run on a clock that does not step (monotonic); only the state's times are the
+  wall's.
+- L-5 (the wire's environment). The forwarder never writes TLS secrets: SSLKEYLOGFILE is not honoured. The
+  documents say that without `--ca` the authorities are the system's as the forwarder's own environment
+  names them (SSL_CERT_FILE, SSL_CERT_DIR), and that a credential must never be put in the URL's query (it
+  is on the process list).
+- L-6 (what is refused at the start, not disguised as a failed send). A URL whose path is not ASCII or holds
+  a space, a host that is no valid name, a `--beat` that is not a finite number of at least 1, a state file
+  that is JSON and not this schema's (never taken for a first run: `--from end` must not skip a file because
+  its state was damaged). The state is flushed to the disk before it is renamed.
+- L-7 (one name, one forwarder, without the window). The pid file appears with its pid already in it; a pid
+  file that is empty or cannot be read is a life that cannot be told, and the name is refused (K-2), never
+  taken.
+- L-8 (a tail with no newline is bounded). More than 512 KiB after the last newline is not read into memory:
+  the forwarder is failing with the word `file` until a newline comes.
+- L-9 (said in the threat model). Where the forwarder runs as the watched account, that account can write the
+  cursor (a forged offset with the hash of a later line skips lines with no restart counted), the state (a
+  fresh time) and the pid file (the name never starts); the search on the collector's side and a forwarder
+  under another account (the service, later) are the answers. The collector's search for silence is by the
+  collector's own clock of arrival, never the event's `time` (EVENT.md says the same of any reader).
+- L-10 (the rig reports whatever happens). tools/rig/forward_run.py never raises: each of its cases is its
+  own, and a missing events file is a fact it writes; the rig's check step runs always. X21 is MISSED where
+  a line of the batch taken before the kill arrives again after the restart (a forwarder that ignores its
+  cursor), and its kill is by the collector's count of requests, not by a window of time. X22 looks for both
+  tokens, the right one and the refused one, and reads the argument list from the system's own process
+  list.
+- L-11 (the evidence the packet found missing). Stop by the system's signal on a real process, on both
+  platforms, writes the state. The token is looked for in the outputs of the paths that could print it: a
+  token file that fails its checks while running, a failed handshake, 401, 403, an unforeseen error. A
+  collector that trickles is tested as late. Tests that wait on the wall clock or on a port another process
+  can take are rebuilt on the collector's own events and on a port the collector itself bound.
+- L-12 (the guard, by the Table). The network guard now refuses the forwarder by any spelling (relative,
+  importlib, __import__) outside cli.cmd_forward, and refuses the capture path importing cli.
+The Table accepts, as built and said: the cursor held to the line that ends at it; a line over 512 KiB
+refused locally; status 0 while sends are taken and the file grows faster than a beat's worth (K-2).
+
