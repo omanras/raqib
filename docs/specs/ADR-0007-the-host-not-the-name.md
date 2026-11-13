@@ -2821,3 +2821,23 @@ questions for the Table. Each ruling names what it is FOR.
   sums that outlive the connection, where Linux's end with the socket; more than 64 sessions on a machine.
 E1's "nothing of raqib but what hostwin imports" means raqib's modules: `threading` is the standard library's.
 
+## Amendment BN (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.21a-redo.md (4e15480): the last ways out
+The packet: no structure or call the field proved was changed; REDO for two windows where an interrupt
+leaves a session, and for things said that were not so. Small, and built by the Table.
+- BN-1 (an interrupt at the start's own return). The session may have begun with its handle not yet kept:
+  a session of this process's own number is then stopped by name (BM-2: it is nobody else's). For a
+  reader given another number nothing is stopped by name - it could be another's - and that limit is said
+  here: the watch reads under its own pid.
+- BN-2 (the exit's hook goes last). stop() takes the hook away only after the session was stopped; a stop
+  interrupted, or whose session may still run, leaves the hook, and the exit stops the session once more.
+- BN-3 (live pids that may not be whole stop nothing). leftovers acts only on a list given with no doubt.
+- BN-4 (what is said is what was done). The own-number leftover is said with what the stop returned; the
+  lost-event provider's number is "not measured in the field yet" until it is; the tool shows the notices in
+  its last line, prints the other ids as one plain line (not as something said wrong), and its tests use no
+  real exit registry. The undo's problems after an interrupt are kept on the reader.
+Accepted as built: `os` and `atexit` in the module (E1 means raqib's modules; the import guard names them);
+os.getpid() as the reader's default; both messages where the pids are not known; `unread` also holds a
+record that could not be read at all. Recorded for M7.21b: the callback now reads every event of the
+provider (its cost on a busy machine is the loss counters' to show); IPv6 traffic in the field for ids 26
+and 27; a notice of a loss makes the turn's counts unknown in the watch.
+

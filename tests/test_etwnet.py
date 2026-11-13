@@ -288,7 +288,7 @@ def no_pids(why="the live pids were not read (fake)"):
 
 def reader(fake, pid=PID, **kw):
     kw.setdefault("at_exit", FakeAtexit())   # never the real registry in a test
-    kw.setdefault("ownpid", 0)               # 0 is no pid: the own-pid retry only when a test asks for it
+    kw.setdefault("ownpid", -1)              # no process's number: the own-pid retry only when a test asks for it
     return etwnet.Reader(pid, fake, now=lambda: SINCE, **kw)
 
 
@@ -667,9 +667,11 @@ def test_e6_no_other_source_of_counts_and_no_elevation_in_the_source():
 
 # --- E7: the field tool -------------------------------------------------------------------------------------
 
-def run_tool(fake, wait=None, alive=frozenset({PID}), argv=("5",), platform="win32", pids=None):
-    out = io.StringIO()
-    code = etw_read.main(list(argv), platform=platform, api=fake, alive=alive, wait=wait, out=out, pid=PID, pids=pids)
+def run_tool(fake, wait=None, alive=frozenset({PID}), argv=("5",), platform="win32", pids=None, pid=PID):
+    out, registry = io.StringIO(), FakeAtexit()   # never the real registry in a test
+    code = etw_read.main(list(argv), platform=platform, api=fake, alive=alive, wait=wait, out=out, pid=pid, pids=pids,
+                         at_exit=registry)
+    assert registry.registered == []
     return code, out.getvalue().splitlines()
 
 
@@ -684,9 +686,9 @@ def test_e7_the_tool_stops_leftovers_reads_and_prints_one_line_per_connection():
     assert code == 0 and waited == [5.0]
     assert lines[0] == "pid=4242 local=192.0.2.10:50123 remote=198.51.100.7:443 sent=100 received=4000 last=%s" % T2
     assert lines[1] == "pid=4242 local=[2001:db8::10]:50124 remote=[2001:db8::7]:443 sent=0 received=70 last=%s" % T1
-    assert lines[2] == "said: other: 1 event(s) of id 12"      # id 12 is the provider's, not one of the four (BM-5)
+    assert lines[2] == "other ids (the provider's events that carry no tcp bytes): 12:1"   # no alarm line (BM-5)
     since_val = lines[-1].split("since=")[1].split(" ")[0]
-    assert lines[-1] == ("since=%s events=4 unread=0 other=1 lost=events:0,buffers:0 leftovers=raqib-net-111"
+    assert lines[-1] == ("since=%s events=4 unread=0 other=1 lost=events:0,buffers:0,notices:0 leftovers=raqib-net-111"
                          % since_val)
     assert set(fake.sessions) == set(OTHERS)           # the leftover and its own session are gone, the rest stay
 
@@ -751,6 +753,72 @@ def test_bm1_a_baseexception_after_the_session_began_undoes_it_and_is_raised(ste
     assert sorted(fake.closed) == sorted(fake.traces)  # every trace that was opened is closed
     assert r._atexit.registered == []                  # a start that did not finish leaves nothing for the exit
     assert r.stop() == []                              # already undone: a later stop does nothing
+
+
+class BegunThenInterrupted(FakeEtw):
+    """StartTraceW begins the session, and the interrupt is raised at its return: the reader never held the
+    handle (the review's R1)."""
+
+    def StartTraceW(self, handle, name, buf):
+        FakeEtw.StartTraceW(self, handle, name, buf)
+        raise KeyboardInterrupt("at the call's return")
+
+
+def test_bn1_an_interrupt_at_the_starts_own_return_leaves_no_session_of_this_process():
+    fake = BegunThenInterrupted()
+    r = reader(fake, ownpid=PID)
+    with pytest.raises(KeyboardInterrupt):
+        r.start()
+    assert set(fake.sessions) == set(OTHERS) and r._atexit.registered == []
+    other = BegunThenInterrupted()            # a number that is not this process's: not ours to stop by name
+    q = reader(other)
+    with pytest.raises(KeyboardInterrupt):
+        q.start()
+    assert q.name in other.sessions
+
+
+def test_bn2_a_stop_whose_session_may_still_run_leaves_the_exit_hook_and_the_exit_stops_it():
+    fake = FakeEtw()
+    r = started(fake)
+    fake.stop_rc[r.name] = 5
+    assert any("may still run" in p for p in r.stop())
+    assert len(r._atexit.registered) == 1 and r.name in fake.sessions
+    del fake.stop_rc[r.name]
+    r._atexit.registered[0]()                 # the interpreter's exit: the session is stopped once more
+    assert r.name not in fake.sessions
+
+
+def test_bn2_the_hook_goes_only_after_the_session_was_stopped():
+    fake, seen = FakeEtw(), []
+    r = started(fake)
+    control = fake.ControlTraceW
+
+    def watching(*args):
+        seen.append(len(r._atexit.registered))   # still registered while the stop is asked
+        return control(*args)
+
+    fake.ControlTraceW = watching
+    assert r.stop() == [] and seen and seen[0] == 1 and r._atexit.registered == []
+
+
+def test_bn3_live_pids_that_may_not_be_whole_stop_nothing():
+    fake, problems = FakeEtw(OTHERS + ("raqib-net-111",)), []
+    assert etwnet.leftovers(lambda: ({PID}, "the snapshot ended early"), fake, problems) == []
+    assert "raqib-net-111" in fake.sessions and "the snapshot ended early" in problems
+
+
+def test_bm2_the_tool_prints_what_the_reader_said_of_its_own_leftover():
+    own = os.getpid()
+    fake = FakeEtw(OTHERS + ("raqib-net-%d" % own,))
+    code, lines = run_tool(fake, alive=frozenset({own}), pid=own)
+    assert code == 0 and any(line.startswith("said: a session named raqib-net-%d was already there" % own)
+                             and "stopped; the start tried once more" in line for line in lines)
+
+
+def test_bm6_the_tool_shows_the_notices_in_its_last_line():
+    fake = FakeEtw()
+    code, lines = run_tool(fake, lambda s: fake.deliver(ev(32, L4, R4, 0, provider=etwnet.LOST_EVENT_PROVIDER)))
+    assert code == 0 and "notices:1 " in lines[-1] and any(l.startswith("said: lost: 1 notice") for l in lines)
 
 
 def test_bm1_a_started_reader_is_stopped_at_the_interpreter_exit():

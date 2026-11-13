@@ -46,7 +46,7 @@ def names(stopped):
     return ",".join(stopped) or "none"
 
 
-def main(argv=None, platform=None, api=None, alive=None, wait=None, out=None, pid=None, pids=None):
+def main(argv=None, platform=None, api=None, alive=None, wait=None, out=None, pid=None, pids=None, at_exit=None):
     argv = sys.argv[1:] if argv is None else argv
     out = out or sys.stdout
     platform = sys.platform if platform is None else platform
@@ -73,7 +73,7 @@ def main(argv=None, platform=None, api=None, alive=None, wait=None, out=None, pi
     if pids is None:
         pids = live_pids if alive is None else (lambda: (alive, None))
     stopped = etwnet.leftovers(pids, api, problems)
-    reader = etwnet.Reader(os.getpid() if pid is None else pid, api)
+    reader = etwnet.Reader(os.getpid() if pid is None else pid, api, at_exit=at_exit)
     with reader:
         if reader.refused:
             for p in problems + list(reader.counts()["said"]):
@@ -98,15 +98,17 @@ def main(argv=None, platform=None, api=None, alive=None, wait=None, out=None, pi
         problems.append(got["ended"])
     for why, n in sorted(got["unread_why"].items()):
         problems.append("unread: %d event(s): %s" % (n, why))
-    for event_id, n in sorted(got["other_ids"].items()):
-        problems.append("other: %d event(s) of id %d" % (n, event_id))
     if got["beyond"]:
         problems.append("%d event(s) of a new connection beyond the %d kept" % (got["beyond"], etwnet.CONNECTIONS_MAX))
     if got["other"]:
         problems.append("%d event(s) of another provider (the trace's own header among them)" % got["other"])
     for p in problems:
         out.write("said: %s\n" % p)
-    shown = "unknown" if lost["why"] else "events:%d,buffers:%d" % (lost["events"], lost["buffers"])
+    ids = ",".join("%d:%d" % pair for pair in sorted(got["other_ids"].items()))
+    if ids:
+        out.write("other ids (the provider's events that carry no tcp bytes): %s\n" % ids)
+    shown = "unknown" if lost["why"] else "events:%d,buffers:%d,notices:%d" % (lost["events"], lost["buffers"],
+                                                                              lost["notices"])
     out.write("since=%s events=%d unread=%d other=%d lost=%s leftovers=%s\n"
               % (got["since"], got["events"], got["unread"], sum(got["other_ids"].values()), shown, names(stopped)))
     return 0
