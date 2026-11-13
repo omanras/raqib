@@ -2749,3 +2749,13 @@ only, the helpers it recorded (by pid, time and image) and what those started - 
 under them; a reused pid, a spoofed parent and a clock set back no longer make it count its own as an agent or
 an agent as its own, as far as pid, time and image can tell, and what is left is said in the holes.
 
+## Amendment BK (the commander's word, 2026-11-13) - the bytes of a connection on Windows are read by listening (A4)
+The Table asked (A4): on Windows the watch reads no byte counts, so a connection an agent keeps open is one talk
+and its rhythm is not seen (AV); read them by the kernel's own tracing (ETW: listening only, a larger reader,
+needed by the service anyway) or by GetPerTcpConnectionEStats (a small reader that must first switch the
+system's counting on for the watched connection)? The commander: ETW.
+- BK-1 The watch does not switch anything on for a watched connection: Raqib stays passive toward what it
+  watches (ADR-0011 A-1). The bytes are read from what the kernel already says. FOR: M7.21. MUST NOT TOUCH:
+  GetPerTcpConnectionEStats is not used, not as a fallback either; where the tracing cannot be read the blind
+  spot `bytes` stays said as it is today.
+
