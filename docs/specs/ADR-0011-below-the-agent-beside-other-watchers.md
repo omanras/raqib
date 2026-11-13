@@ -766,3 +766,28 @@ Accepted as built: the reach and the count kept in memory only (a restart asks a
 alone for each line in question when a collector is put right (Q1: stricter than M-2); a resolver that never
 returns holds its place for the process's life, four of them `stuck` until a restart (said).
 
+## Amendment O (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.3-redo3.md (56847d8): M10.3 lands
+The fourth review of the forwarder found no machine defect and every ruling of N met by a test that fails when
+its behaviour is removed. Two flags, neither a REDO:
+- O-1 (the scope flag closed by the Table). The reviewer's sandbox had no git and read the cumulative branch
+  diff, so it could not attribute files to the landing commit. `git show --stat 56847d8` shows only
+  forward.py, tests/test_forward.py, docs/specs/FORWARD.md, docs/THREAT_MODEL.md and the questions file: all in
+  Scope. The out-of-scope paths it listed (cli.py, tests/test_rhythm.py, rig.yml, tools/rig/collector.py) are
+  earlier commits' - the forwarder's foundation and the Table's guard - not this round's.
+- O-2 (Q4, accept as built: `in_question` is the signal, `refusing` is the last send's word). The HANDOFF's
+  one line "`refusing` is in the state while a line is in question" was looser than the true behaviour, which
+  FORWARD.md's status table already states exactly: a line in question before any send was refused reads
+  BEHIND (status 1) by `in_question.since`, and `refusing` (status 1, FAILING) is the word only once a send
+  was refused, and then it stays through the settling. Both give exit 1 while a line waits, which is what
+  matters; `in_question`, made authoritative in N-5, is the count and the age, and `refusing` says a collector
+  is refusing now. Forcing `refusing` onto a settle path where the last send was taken would be less true, not
+  more. The code, the table and judge agree (a test holds the table to judge); the E2 shorthand is withdrawn
+  in favour of the table.
+- O-3 (recorded, not fixed): a carried `failing` word is not cleared on the one "again" edge of a restart's
+  first try (redo2's finding 15, N did not rule); `in_question` and `behind` still drive the exit code. A
+  later pass may clear it. The per-try request bound is 201 (safe, bounded; latency only); whether to count
+  batches toward the cap is left open.
+M10.3 lands: `raqib forward` sends the watch's events to one HTTP collector, at least once and in order, says
+its own silence, keeps the token off every output, and never lets the collector or a writer of its files turn
+its verification off or make it skip a line. Syslog (J-6) is the next task (M10.3b).
+
