@@ -1077,7 +1077,7 @@ is amended by T-2, T-1 restated by V-1).
   an `ss` that has not returned in 30 s). The only writes are under `~/.raqib`, and the hook settings of a
   project only with `--attach-hooks`.
 
-### The forwarder (`raqib forward`; ADR-0011 Amendments J, K and L)
+### The forwarder (`raqib forward`; ADR-0011 Amendments J, K, L and M)
 A forwarder is a process of its own that reads the watch's events file and
 sends every whole line to one HTTP collector (docs/specs/FORWARD.md). The
 watch does not know it runs: nothing of the capture path imports it, and a
@@ -1088,7 +1088,11 @@ collector that is slow, down or refusing never delays or loses a capture
   the person names (`--token-file`), read at every try. It is never
   an argument (so it is not in the process list), never read from the
   environment, never in the forwarder's state, output or errors, and an
-  error never quotes the collector's answer nor a traceback. Off Windows a
+  error never quotes the collector's answer. An error of the system at the
+  start (the directory or the pid file cannot be made) is a usage error
+  with its reason, an error it did not foresee is said by one word, and a
+  state it does not write is read by the status as unreadable: no
+  traceback is printed by the forwarder or its status. Off Windows a
   token file that others can read is refused; on Windows its access is not
   checked. Anyone who can read that file as the person can send to the
   collector as Raqib: a forged event at the collector is as good as the
@@ -1105,10 +1109,19 @@ collector that is slow, down or refusing never delays or loses a capture
   used and a redirect is a failed send, never followed. Plain http is taken
   only to a loopback address unless `--plain` is given, and then the state
   and the status say plain: every event crosses that network in clear
-  text. One send is bounded whole (10 s to connect with its handshake, 30 s
-  for the whole answer): a collector that trickles its answer cannot hold
-  the forwarder; name resolution is the system's, and a forwarder held
-  longer than two beats is SILENT in its status.
+  text. One send is bounded whole (10 s from its start to connect, name
+  resolution and the handshake included; 30 s to send the request; 30 s
+  for the whole answer from the request's last byte): a collector that
+  trickles its answer, or reads the request slowly, cannot hold the
+  forwarder, and a link too slow for a batch gets half as many lines at
+  the next try. The state is written at least once a beat whatever the
+  forwarder is doing, so its status says what it does, not what it did
+  before a long send. Name resolution is the system's: a resolver that
+  never returns keeps the thread of that send (its body and headers, the
+  token among them) until it does; at most four such sends are out, and
+  then no send starts and the forwarder is failing `stuck` - an alarm, not
+  a growth without end. An abandoned send's sockets are shut down and left
+  to its own thread, never closed under it.
 - **What the collector learns.** Everything the events say (A-4: the whole
   judgement, not only what knocked): the host's name, each run, the trees
   with their images, pids and paths, each finding with its rule and
@@ -1121,12 +1134,19 @@ collector that is slow, down or refusing never delays or loses a capture
 - **What a delivery is.** "Taken" is the collector's word: a 2xx (and in
   the hec shape the code 0) moves the cursor. A collector that answers 2xx
   and drops the lines loses them, and the forwarder cannot see it. A line
-  the collector refuses alone is passed only once a later line is taken: a
-  collector that refuses everything (a wrong path, a missing channel)
-  moves nothing, and the forwarder is failing `refusing`. Delivery is at
-  least once: after a restart, a refused batch or a file that changed
-  under the cursor, the collector gets lines twice (`watch.host` and `id`
-  tell them apart).
+  the collector refuses alone is passed only when it is refused alone
+  twice with a later line taken between: a collector that refuses
+  everything (a wrong path, a missing channel) moves nothing, and the
+  forwarder is failing `refusing`; a refusal that would not come twice (a
+  node behind a balancer, a 400 of a moment) passes nothing; a collector
+  that refuses one kind of line does not stop the lines of another kind
+  after them. Delivery is at least once: after a restart, a refused batch,
+  an answer that came too late or a file that changed under the cursor,
+  the collector gets lines twice (`watch.host` and `id` tell them apart).
+  The order at the collector is the file's except for a line in question
+  taken when asked again (it arrives after the later line that proved the
+  collector), a send answered too late and sent again, and a send
+  abandoned that still arrives: `n` orders the lines of a run.
 - **What an attacker on the host can do.** Stop or kill the forwarder: its
   state is then older than two beats (`raqib forward --status` exits 3) and
   the collector sees no heartbeat of the host for more than two beats,
@@ -1141,10 +1161,14 @@ collector that is slow, down or refusing never delays or loses a capture
   (as it does until it runs as a service), that account can write its
   files in `~/.raqib/forward/`. The cursor: a forged offset with the
   sha256 of a later line (the account can read the events file) makes a
-  restarted forwarder skip the lines between, with no restart counted. The
+  restarted forwarder skip the lines between, with no restart counted (an
+  offset above 0 with no hash is refused as a damaged state). The
   state: a fresh time keeps `--status` at 0 for a forwarder that is not
   there. The pid file: a live pid written in it keeps the name from ever
-  starting. The answers are the search on the collector's side - which is
+  starting, and written over a running forwarder's it stops that
+  forwarder at its next state write. A line far longer than a request is
+  never read whole, so a writer of the file cannot fill the forwarder's
+  memory with one line. The answers are the search on the collector's side - which is
   judged by the collector's own clock of arrival, never by the event's
   `time`, the host's clock that the same account may set (EVENT.md says
   the same of any reader) - and a forwarder under another account (the

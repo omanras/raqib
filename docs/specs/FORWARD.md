@@ -1,4 +1,4 @@
-# FORWARD - the forwarder, raqib-forward/1 (ADR-0011 Amendments J, K and L)
+# FORWARD - the forwarder, raqib-forward/1 (ADR-0011 Amendments J, K, L and M)
 
 `raqib forward` is a process of its own (J-1). It reads one events file - the watch's
 `~/.raqib/host/events.jsonl`, as docs/specs/EVENT.md "For a reader of the file" says a reader may - and sends
@@ -18,15 +18,26 @@ raqib/forward.py, and no result, report or finding of a watch depends on a forwa
 - The cursor is a byte offset at the end of the last whole line passed, kept with the sha256 of that line's
   bytes (its newline included). A line is passed when the collector took it; when it was skipped (not an
   event); when it was refused locally (longer than one request may be); or when the collector refused it alone
-  and then took a later line of the file (L-1, below). A line refused alone with no taken line after it is
-  not passed: it is in question, and the cursor stays before it.
+  twice with a take of a later line between the two refusals (L-1, M-2, below). A line refused alone and not
+  yet asked again after a later take is not passed: it is in question, and the cursor stays before it. The
+  cursor never passes any other line, and a kill at any point leaves only a state written whole: a restart
+  sends again from the cursor, it never skips.
 - `acknowledged` is HTTP's delivery word (J-3), and the state says it in `delivery`: a batch is taken when the
   answer is a 2xx and, in the hec shape, the answer's body is JSON whose `code` is 0. A 200 with another code is
   not taken. Taken is the collector's word: a collector that answers 2xx and drops the lines loses them.
-- At least once, in order (J-3, J-11): one request at a time, the file's order, at most 100 lines and at most
-  512 KiB to a request (`--batch N` lowers the count, 1 to 100). A batch that failed is sent again whole, and
-  nothing after it is sent before it. A line whose piece of the body alone is over 512 KiB is refused locally:
-  counted, its id kept, passed - never cut (K-2); such a line is read once, whole, to be named.
+- At least once (J-3, J-11): one request at a time, the file's order, at most 100 lines and at most 512 KiB to
+  a request (`--batch N` lowers the count, 1 to 100). A batch that failed is sent again whole, and nothing
+  after it is sent before it. A request that was not sent within its bound (the link too slow for the batch)
+  makes the next batch half as many lines, down to one; a batch taken gives back the whole count (M-4).
+- The order at the collector is the file's order, except for three things (M-2), and `n` orders the lines
+  within a run (EVENT.md): a line in question that is taken when it is asked again arrives after the later line
+  that was taken first; a send whose answer came too late, or was lost, may have been taken and is sent again
+  with the lines after it; a send abandoned (Stop, a bound) may still reach the collector after the lines sent
+  again.
+- A line whose piece of the body alone is over 512 KiB is refused locally: counted and passed - never cut
+  (K-2). A line longer than 512 KiB in the file is never read whole (M-3): its end is found and its sha256 made
+  piece by piece; its id is not read, and it is named by its offset (in `ids`, `offset N`, N its first byte).
+  A line of at most 512 KiB whose envelope is over it (hec) is read and named by its id.
 - A line that is not JSON or not an event (`event.check`) is skipped and counted (`skipped`), never sent; a last
   line with no newline is not whole and waits for its newline (J-5, EVENT.md). More than 512 KiB after the
   last newline is not read into memory: it is looked through in pieces for its newline, and until one comes
@@ -43,15 +54,21 @@ raqib/forward.py, and no result, report or finding of a watch depends on a forwa
 ## A refused line, a refused token, a failed send (J-4, L-1, J-10)
 
 - A 4xx answer other than 401, 403, 408 and 429 to a batch: its lines are sent again one by one. A line refused
-  alone is in question. It is counted in `refused`, its `id` kept in `ids` (the latest 50), and passed only when
-  a later line of the file has been taken by the same collector - one bad line does not stop the lines after
-  it, and a collector that refuses everything (a wrong path, a missing channel) does not empty the file into
-  `refused`. Past the batch, the lines after those in question are sent (as a batch, then one by one where that
-  batch is refused) until one is taken. While the lines in question have no taken line after them - the file
-  has no more, or 100 lines are in question in one try - the cursor stays before the first of them, the
-  forwarder is failing with the word `refusing` and the collector's status, and it tries again as below. A
-  restarted forwarder starts at its cursor and sends the lines in question again. A taken line is never sent
-  before a line that is neither taken nor in question before it.
+  alone is in question. A try sends at most 100 lines alone (M-1); what it has asked is not asked again while
+  the forwarder runs: the run holds the lines in question as a reach and a count (how far it has asked lines
+  alone, and how many wait there), never one by one. The next try goes on from the reach, a batch first, and also asks the first line in
+  question again, alone, once a try: a collector put right is seen at once, the line is then taken, not
+  refused, and so is the line in question after it while each is taken. A collector that refuses one kind of
+  line (a heartbeat a minute through a quiet night) does not stop the line of another kind after them.
+- When a later line is taken, each line in question before it is asked alone once more (M-2): refused again,
+  it is counted in `refused`, its id kept in `ids` (the latest 50), and passed; taken now, it is taken. A
+  refusal that would not come twice (a node behind a balancer that answers 404, a 400 of a moment) does not
+  pass a line. The settling is bounded as a try is: at most 100 lines alone in a try, the next goes on.
+- While the lines in question have no taken line after them - the file has no more whole lines, or the try has
+  sent 100 lines alone - the cursor stays before the first of them, the forwarder is failing with the word
+  `refusing` and the collector's status, and it tries again as below. A collector that refuses everything (a
+  wrong path, a missing channel) moves nothing and empties nothing into `refused`; a try then makes at most 101
+  requests. A restarted forwarder starts at its cursor and asks the lines in question again from there.
 - 401 and 403 are the token's: nothing moves, `failing` says `token`, and the token file is read again at every
   try (a file corrected between two tries is used at the next). A token file that fails its checks while the
   forwarder runs (others can read it, it is emptied, it cannot be read) is a failed try, `token-file`: nothing
@@ -72,10 +89,10 @@ the collector's body:
 
 | word | the failure |
 |---|---|
-| `connect` | no connection to the collector (within 10 s) |
+| `connect` | no connection to the collector within 10 s of the send's start (name resolution included) |
 | `tls` | the TLS handshake or the certificate failed |
 | `no-answer` | the connection ended with no answer |
-| `late` | no handshake within 10 s of connecting, or no whole answer within 30 s of the request's last byte |
+| `late` | the TLS handshake not ended within 10 s of the send's start, the request not sent within 30 s of its start, or no whole answer within 30 s of the request's last byte |
 | `redirect` | a 3xx answer (a redirect is never followed) |
 | `busy` | 408 or 429 |
 | `server` | a 5xx answer |
@@ -84,23 +101,30 @@ the collector's body:
 | `token` | 401 or 403 |
 | `token-file` | the token file cannot be read, or fails its checks, at a try |
 | `file` | the events file cannot be read, or more than 512 KiB follow its last newline |
+| `stuck` | four sends abandoned have not ended (a name that never resolves, a connect that never returns): no send starts until one ends |
 | `unforeseen` | an error the forwarder did not foresee ended the run (the state written first) |
 
-## One send, bounded (L-4)
+## One send, bounded (L-4, M-4, M-5)
 
-A send runs on a thread of its own, and the forwarder waits for it on a clock that does not step:
+A send runs on a thread of its own, and the forwarder waits for it in slices of 0.25 s on a clock that does
+not step:
 
-- connecting, the TLS handshake included, within 10 s (`connect` where no connection came, `late` where the
-  handshake did not end);
+- connecting - name resolution and the TLS handshake included - within 10 s of the send's start (`connect`
+  where no connection came, `late` where the handshake did not end);
+- sending the request: within 30 s of its start (`late`; the next batch is then half as many lines);
 - the whole answer within 30 s from the request's last byte - not each read: a collector that answers one byte
   at a time is `late` at 30 s;
-- Stop is honoured within 2 s during a send (it is abandoned unmoved: its sockets are shut down and closed),
-  between the lines of a refused batch and in a wait.
+- at each slice the forwarder looks for Stop and writes its state where a beat has passed since the last.
+  Stop is honoured within 2 s during a send (it is abandoned unmoved), between the lines of a refused batch,
+  in a walk over lines that are not events, and in a wait.
 
-Name resolution is the system's (getaddrinfo) and cannot be bounded from Python: it runs within the 10 s of
-connecting, and where the system's resolver does not return, the try is abandoned at 10 s while the
-resolver's own thread waits for it. A forwarder held in any way for more than two beats writes no state, and
-`--status` then says SILENT (exit 3).
+A send abandoned (Stop, or a bound passed) has its sockets shut down - which ends a blocked connect, send or
+read - and left to its own thread, which alone closes them: no descriptor is closed under a thread that may
+still use it, and each socket call has its own timeout besides. Name resolution is the system's (getaddrinfo)
+and cannot be bounded from Python: where the system's resolver does not return, the try is abandoned at 10 s
+while the resolver's own thread waits for it, holding that send's body (at most 512 KiB) and headers. At most
+four sends abandoned and not yet ended are out (M-5): while four are, no send starts and the forwarder is
+failing with the word `stuck`; when one ends, sending goes on.
 
 The waits (1, 2, 4 ... 60 s, the poll for new lines) and "at least once a beat" run on the monotonic clock: a
 wall clock set back or ahead delays nothing and hurries nothing. Only the state's times (`written`, `last_ok`,
@@ -138,20 +162,32 @@ wall clock set back or ahead delays nothing and hurries nothing. Only the state'
 
 Each of these is exit 2 with its reason, before anything is sent - never a failed send that is tried again:
 
-- a URL whose path or query is not printable ASCII or holds a space (write a space as `%20`);
+- a URL that holds a control character anywhere (a tab or a newline would be dropped from it unsaid), a port 0,
+  or a path or query that is not printable ASCII or holds a space (write a space as `%20`);
 - a host that is no valid name or address (a name of ASCII letters, digits and inner hyphens; a name in another
   script is written in its `xn--` form);
 - a `--beat` that is not a finite number of at least 1 (s);
-- a state that is not one of this schema - not JSON, empty, another schema, or a key of the wrong type. It is
-  never taken for a first run: `--from end` must not skip a file because its state was damaged. Move it away
-  to start the name again;
+- a state that is not what the forwarder writes - not JSON, empty, another schema, a key missing, or a key of
+  another type or value than the forwarder writes (among them a beat not above 0, a `failing` that is no
+  object or holds a word not listed above, a cursor above 0 with no `line_sha256`). It is never taken for a
+  first run: `--from end` must not skip a file because its state was damaged. Move it away to start the name
+  again;
 - a second forwarder of one name while the first one's pid lives, and a pid file that is empty or cannot be
-  read (whether a forwarder runs cannot be told, so the name is refused, never taken).
+  read (whether a forwarder runs cannot be told, so the name is refused, never taken);
+- an error of the system while the name is taken - the directory `~/.raqib/forward/` or the pid file cannot be
+  made (M-6): exit 2 with the system's reason, never a traceback.
+
+While it runs (M-7, M-8): a forwarder that finds, when it writes its state, that the pid file of its name no
+longer holds its own pid stops with the reason (exit 2), writes nothing over the state and leaves the pid file
+to the forwarder that took the name. Each read of the file inside a try makes the same check as each pass (the
+length and the last line passed): where the file was replaced during the try, the try ends, and the next pass
+reads it again from its start and counts a restart.
 
 ## The state (J-9)
 
-After every batch, every failure, at least once a beat (`--beat S`, 60 s unless given) and before whatever ends
-the run, the forwarder writes its state whole - written beside, flushed to the disk, then renamed over - to
+After every batch, every failure, at least once a beat (`--beat S`, 60 s unless given) whatever it is doing -
+waiting, in a send, in a try of many lines, in a walk over lines that are not events (M-4) - and before
+whatever ends the run, the forwarder writes its state whole - written beside, flushed to the disk, then renamed over - to
 `~/.raqib/forward/<name>.json` (ASCII JSON, keys sorted). A name is `[a-z0-9-]{1,32}`; a second forwarder of
 one name is refused while the first one's pid lives: `~/.raqib/forward/<name>.pid` holds the pid while it
 runs, and it appears with its pid already in it (written beside, then linked into place, or renamed on
@@ -173,12 +209,12 @@ Windows, where a rename never replaces a file that is there). The keys:
 | `beat` | number | the forwarder's beat in seconds: the status judges its silence by it |
 | `sent` | count | event lines the collector took |
 | `skipped` | count | lines passed that are not JSON or not an event |
-| `refused` | object | `count` and `ids`, the latest 50 ids of lines refused and passed (alone, with a later line taken; or locally); a line in question is not counted |
+| `refused` | object | `count` and `ids`, the latest 50 ids of lines refused and passed (alone twice, a later line taken between; or locally; `offset N` where the id was not read); a line in question is not counted |
 | `restarts` | count | how many times the file was another and was read again from its start |
 | `last_id` | str or null | the id of the last line taken |
 | `last_ok` | instant or null | when a send was last taken |
 | `behind` | count | bytes of whole lines after the cursor, not yet passed (lines in question among them) |
-| `failing` | object or null | `since` (instant), `tries` (count), `error` (a word above), `status` (the HTTP status or null) |
+| `failing` | object or null | `since` (instant), `tries` (count), `error` (a word above), `status` (the HTTP status or null); a restarted forwarder carries the `failing` its state held until its first try has an answer (M-6), or until it finds nothing waiting |
 
 `from` and `beat` are not in J-9's list; they are what J-12 ("the state says from which offset") and J-9's
 status ("more than two beats") need (K-2).
@@ -191,8 +227,10 @@ failing and no whole line has waited longer than a beat; 1 where it is failing (
 where there is no state, it cannot be read, or it was written more than two beats ago or in the future (the
 forwarder is silent). Behind is `behind` above 0 while the last taken send is more than a beat older than the
 state; a forwarder whose sends are taken while the file grows faster than a beat's worth is 0 (K-2). A state
-written in the future of the reader's clock has an age that cannot be told: it is not fresh. Of several
-states, the worst: 3, then 1.
+with `behind` above 0 and `last_ok` null - no send of this name was ever taken - is BEHIND (1) at once, and the
+status says so. A state written in the future of the reader's clock has an age that cannot be told: it is not
+fresh. A state that is not what the forwarder writes (the list above, "What is refused at the start") is
+UNREADABLE (3), never read as calm (M-6). Of several states, the worst: 3, then 1.
 
 ## On the collector's side: the one search for silence
 

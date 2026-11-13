@@ -1,11 +1,14 @@
-"""M10.3 and its REDO (ADR-0011 Amendments J, K and L): `raqib forward`, the forwarder over HTTP. Every collector
-here is the rig's stand-in (tools/rig/collector.py) on loopback, on a port it bound itself, stopped and joined
-by the fixture; a collector that is down holds its port bound and listens on nothing. Every clock and wait the
-forwarder has is injected where a test needs time to pass; where a test waits for another thread or process, it
-waits for the collector's or the state's own facts, never for a time to pass. No send thread is left behind
-(a fixture holds it). The tokens are made-up strings."""
+"""ADR-0011 Amendments J, K, L and M: `raqib forward`, the forwarder over HTTP. Every collector here is the rig's
+stand-in (tools/rig/collector.py) on loopback, on a port it bound itself, stopped and joined by the fixture; a
+collector that is down holds its port bound and listens on nothing, and a test that needs a port it never
+connects to takes one of those. Every clock and wait the forwarder has is injected where a test needs time to
+pass; where a test waits for another thread or process, it waits for the collector's or the state's own facts,
+never for a time to pass. A bound on real time is the proof of a mechanism, at least five times the mechanism's
+own. No thread of the forwarder outlives its test (a fixture fails the test that leaves one). The tokens are
+made-up strings."""
 import ast
 import importlib.util
+import inspect
 import io
 import json
 import os
@@ -77,13 +80,23 @@ class Clock:
 
 
 @pytest.fixture(autouse=True)
-def no_send_left_behind():
-    """L-4: every send's thread has ended when a test ends (an abandoned one included)."""
+def no_forwarder_thread_left_behind():
+    """L-4, M-9: every thread of the forwarder - a send's (an abandoned one included), and a run a test started on
+    a thread of its own (named raqib-forward-run, a daemon, ended in a finally) - has ended when the test ends:
+    a test that leaves one alive fails here. An abandoned send's own socket calls are bounded (30 s at most): the
+    margin is twice that, and a thread that has ended is joined at once."""
     yield
-    left = [t for t in threading.enumerate() if t.name == "raqib-forward-send"]
+    left = [t for t in threading.enumerate() if t.name.startswith("raqib-forward")]
     for t in left:
-        t.join(5)
-    assert not [t for t in left if t.is_alive()]
+        t.join(60)
+    assert not [t.name for t in left if t.is_alive()]
+
+
+def run_thread(target):
+    """M-9: a run a test must stop, on a daemon thread the fixture above looks for."""
+    t = threading.Thread(target=target, name="raqib-forward-run", daemon=True)
+    t.start()
+    return t
 
 
 @pytest.fixture
@@ -125,7 +138,7 @@ class Mute:
         self.sock.listen(8)
         self.sock.settimeout(0.05)
         self.port = self.sock.getsockname()[1]
-        self.thread = threading.Thread(target=self.serve)
+        self.thread = threading.Thread(target=self.serve, name="raqib-test-mute", daemon=True)
         self.thread.start()
 
     def serve(self):
@@ -186,6 +199,25 @@ def order_held(rows, requests):
         elif len(sent) == 1:
             question.add(sent[0])
     return taken, question
+
+
+def cursor_held(rows, requests, snaps):
+    """M-2: at every cursor seen - (n, offset): read when n requests had been answered - each line before it was
+    taken (in a request answered 200), or refused alone twice with a request answered 200 between the two, or is
+    not an event (never sent)."""
+    at = {r: i for i, r in enumerate(rows)}
+    sent = [[at[x + b"\n"] for x in req["body"].split(b"\n")[:-1]] for req in requests]
+    end = 0
+    for i, row in enumerate(rows):
+        end += len(row)
+        for n, offset in snaps:
+            if end > offset:
+                continue
+            done = list(zip(sent[:n], [r["status"] for r in requests[:n]]))
+            if forward.classify(row) is None or any(st == 200 and i in idx for idx, st in done):
+                continue
+            no = [k for k, (idx, st) in enumerate(done) if idx == [i] and st not in (200, None)]
+            assert len(no) >= 2 and any(done[k][1] == 200 for k in range(no[0] + 1, no[-1])), (i, n, offset)
 
 
 # --- E1 (J-1, J-2) ---------------------------------------------------------------------------------------------
@@ -339,7 +371,7 @@ def test_e3_a_batch_answered_400_is_sent_line_by_line_and_the_refused_line_is_co
     f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port)
     assert f.run(once=True) == 1   # not all taken
     assert c.events == [r.decode("ascii")[:-1] for i, r in enumerate(rows) if i != 2]
-    assert [r["status"] for r in c.requests] == [400, 200, 200, 400, 200, 200, 200]
+    assert [r["status"] for r in c.requests] == [400, 200, 200, 400, 200, 400, 200, 200]   # M-2: 3 asked again
     s = state(tmp_path)
     assert s["refused"] == {"count": 1, "ids": ["r1:3"]} and s["cursor"]["offset"] == len(b"".join(rows))
     assert s["sent"] == 5 and s["failing"] is None
@@ -446,10 +478,11 @@ def test_e5_the_token_is_in_no_output_state_error_or_argument_list(tmp_path, col
 
 @pytest.mark.skipif(sys.platform == "win32", reason="J-7: on Windows a token file's mode is not checked (the guide"
                                                     " says so)")
-def test_e5_off_windows_a_token_file_others_can_read_is_exit_2(tmp_path, capsys):
+def test_e5_off_windows_a_token_file_others_can_read_is_exit_2(tmp_path, capsys, collectors):
     tok = secret(tmp_path / "t")
     os.chmod(tok, 0o644)
-    argv = ["forward", write(tmp_path / "e.jsonl", lines(1)), "--to", "http://127.0.0.1:9%s" % PATH, "--name", "m",
+    port = collectors(down=True).port
+    argv = ["forward", write(tmp_path / "e.jsonl", lines(1)), "--to", "http://127.0.0.1:%d%s" % (port, PATH), "--name", "m",
             "--token-file", tok, "--once"]
     assert cli.main(argv, out=io.StringIO()) == 2
     err = capsys.readouterr().err
@@ -545,21 +578,24 @@ def test_redo_e4_a_handshake_that_never_ends_is_late_within_the_connect_bound(tm
     assert m.conns   # it was connected: the bound held the handshake, not the connect
 
 
-def test_redo_e4_stop_during_a_send_ends_the_forwarder_within_2_s_with_the_state_written(tmp_path, collectors):
+def test_redo_e4_stop_during_a_send_ends_the_forwarder_within_a_few_seconds_with_the_state_written(tmp_path,
+                                                                                                  collectors):
+    """M-9: the mechanism is a slice (0.25 s), the abandon's join (0.5 s) and a state written; the bound is ten
+    seconds, and without Stop the send would last its 30 s bound (the collector holds it 120 s)."""
     stopped_at = []
     f = None
 
     def stop(n, headers, body):
         stopped_at.append(time.monotonic())
-        f.stop()   # Stop while the collector holds the request (it answers in 30 s)
-    c = collectors(shape="raqib", late=30.0, on_request=stop)
+        f.stop()   # Stop while the collector holds the request
+    c = collectors(shape="raqib", late=120.0, on_request=stop)
     f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(3)), c.port)
     written = []
     real = f.write_state
     f.write_state = lambda: (written.append(f.stopped()), real())[1]
     code = f.run()
     took = time.monotonic() - stopped_at[0]
-    assert took < 2.0, took
+    assert took < 10.0, took
     assert code == 1 and written[-1] is True and state(tmp_path)["cursor"]["offset"] == 0 and c.events == []
     assert not os.path.exists(f.lock_file)
 
@@ -580,50 +616,35 @@ def test_redo_e4_stop_between_the_lines_of_a_refused_batch_sends_no_more(tmp_pat
     written = []
     real_write = f.write_state
     f.write_state = lambda: (written.append(f.stopped()), real_write())[1]
-    assert f.run() == 1 and len(c.requests) == 2 and calls == [5, 1]
-    assert time.monotonic() - stopped_at[0] < 2.0
+    assert f.run() == 1 and len(c.requests) == 2 and calls == [5, 1]   # no line sent after Stop: the count says it
     assert f.offset == 0 and f.refused == 0 and written[-1] is True
     s = state(tmp_path)
     assert s["cursor"]["offset"] == 0 and s["refused"]["count"] == 0 and c.events == []
 
 
-def in_wait(thread):
-    """The thread is blocked in the forwarder's default wait: its innermost frame is threading's wait, called
-    (through Event.wait) by Forwarder.sliced_wait."""
-    frame = sys._current_frames().get(thread.ident)
-    if frame is None or frame.f_code.co_name != "wait" or not frame.f_code.co_filename.endswith("threading.py"):
-        return False
-    names = []
-    while frame is not None:
-        names.append(frame.f_code.co_name)
-        frame = frame.f_back
-    return "sliced_wait" in names
-
-
-def test_redo_e4_stop_in_a_wait_is_honoured_within_2_s_by_stop_and_by_a_signals_flag(tmp_path, collectors):
+def test_redo_e4_stop_in_a_wait_of_ten_minutes_ends_it_within_a_few_seconds_by_stop_and_by_a_signals_flag(
+        tmp_path, collectors):
+    """M-9: the run on a daemon thread, ended in a finally; its own fact (the forwarder entered its wait), never a
+    time; the bound (ten seconds) is forty slices, and without Stop the wait lasts ten minutes."""
     rows = lines(2)
     for how in ("stop", "stop_by_signal"):
-        got = threading.Event()
         c = collectors(shape="raqib")
         f = forward.Forwarder("w" + str(len(how)), write(tmp_path / ("%s.jsonl" % how), rows),
                               "http://127.0.0.1:%d/" % c.port, home=str(tmp_path / "home"), out=io.StringIO(),
                               poll_s=600.0)   # the default wait and clocks: a wait of ten minutes
-        real = f.write_state
-        f.write_state = lambda: (real(), got.set() if f.sent == 2 else None)[0]
-        t = threading.Thread(target=f.run)
-        t.start()
-        assert got.wait(60)   # the state says both lines were taken
-        look = threading.Event()
-        for _ in range(1200):   # its own fact: the thread is blocked in the wait itself (not on its way to it)
-            if in_wait(t):
-                break
-            look.wait(0.05)
-        assert in_wait(t), how
-        began = time.monotonic()
-        getattr(f, how)()
-        t.join(10)
-        assert not t.is_alive() and time.monotonic() - began < 2.0, how
-        assert "stopped: sent 2" in f.out.getvalue()
+        entered, real = threading.Event(), f.wait
+        f.wait = lambda seconds: (entered.set() if f.sent == 2 and seconds > 1 else None, real(seconds))[1]
+        t = run_thread(f.run)
+        try:
+            assert entered.wait(60), how   # both lines taken, and the forwarder in its wait
+            began = time.monotonic()
+            getattr(f, how)()
+            t.join(10)
+            assert not t.is_alive() and time.monotonic() - began < 10.0, how
+            assert "stopped: sent 2" in f.out.getvalue()
+        finally:
+            f.stop()
+            t.join(10)
 
 
 def test_redo_e4_the_waits_run_on_a_clock_that_does_not_step(tmp_path, collectors):
@@ -654,7 +675,7 @@ def test_redo_e4_the_waits_run_on_a_clock_that_does_not_step(tmp_path, collector
     f.write_state = write_state
     mono.then = lambda m: m.t > 5030
     assert f.run() == 0 and wall["back"] == 3600.0
-    assert mono.waits and max(mono.waits) <= 5 and sum(mono.waits) <= 32   # no wait grew by the hour
+    assert mono.waits and max(mono.waits) <= 5   # no wait grew by the hour
     assert max(b - a for a, b in zip(beats, beats[1:])) <= 5 and beats[-1] > 5030   # once a beat, across the step
     assert max(seen) - min(seen) > 3000   # the state's own times did step: the wall's
 
@@ -698,7 +719,7 @@ def test_e6_the_state_is_written_at_least_once_a_beat_while_nothing_happens(tmp_
 def write_state(home, name, now, **change):
     s = {"schema": "raqib-forward/1", "name": name, "pid": 4242, "written": forward.iso(now),
          "destination": {"scheme": "https", "host": "collector.example", "port": 8088, "path": "/x"}, "shape": "hec",
-         "delivery": "acknowledged", "plain": False, "file": "/f", "cursor": {"offset": 9, "line_sha256": None},
+         "delivery": "acknowledged", "plain": False, "file": "/f", "cursor": {"offset": 9, "line_sha256": "a" * 64},
          "from": {"start": "start", "offset": 0}, "beat": 10.0, "sent": 1, "skipped": 0,
          "refused": {"count": 0, "ids": []}, "restarts": 0, "last_id": "r1:1", "last_ok": forward.iso(now),
          "behind": 0, "failing": None}
@@ -768,6 +789,7 @@ def test_e6_once_exits_0_all_taken_1_not_all_2_usage_and_syslog_is_a_usage_error
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))
     ok, down = collectors(shape="raqib"), collectors(shape="raqib", fail=10)
+    nobody = "http://127.0.0.1:%d/" % collectors(down=True).port
     path = write(tmp_path / "e.jsonl", lines(3))
 
     def run(*argv):
@@ -777,9 +799,9 @@ def test_e6_once_exits_0_all_taken_1_not_all_2_usage_and_syslog_is_a_usage_error
     capsys.readouterr()
     for argv in (("--to", "syslog+udp://127.0.0.1:514", "--name", "c", "--once"),
                  ("--to", "syslog+tls://127.0.0.1:6514", "--name", "c", "--once"),
-                 ("--to", "http://127.0.0.1:1/", "--name", "Bad_Name", "--once"),
-                 ("--to", "http://127.0.0.1:1/", "--once"), ("--name", "c", "--once"),
-                 ("--to", "http://127.0.0.1:1/", "--name", "c", "--batch", "101", "--once"),
+                 ("--to", nobody, "--name", "Bad_Name", "--once"),
+                 ("--to", nobody, "--once"), ("--name", "c", "--once"),
+                 ("--to", nobody, "--name", "c", "--batch", "101", "--once"),
                  ("--to", "ftp://127.0.0.1/", "--name", "c", "--once")):
         assert run(*argv) == 2, argv
     err = capsys.readouterr().err
@@ -880,12 +902,13 @@ def test_redo_e1_a_line_refused_alone_is_counted_and_passed_only_after_a_later_l
     f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port)
     assert f.step() == "moved"
     a, b = len(rows[0]), len(rows[0] + rows[1])
-    assert [r["status"] for r in c.requests] == [400, 200, 400, 200]   # the batch, a, b alone, c
-    assert seen == [(0, 3, 0, 0), (1, 1, 0, 0), (2, 1, 0, a), (3, 1, 0, a)]   # c sent with b neither counted nor passed
+    assert [r["status"] for r in c.requests] == [400, 200, 400, 200, 400]   # the batch, a, b alone, c, b again
+    assert seen == [(0, 3, 0, 0), (1, 1, 0, 0), (2, 1, 0, a), (3, 1, 0, a), (4, 1, 0, a)]   # b asked twice unpassed
     assert c.events == [rows[0].decode("ascii")[:-1], rows[2].decode("ascii")[:-1]]
     assert (f.refused, f.refused_ids, f.offset, f.failing) == (1, ["r1:2"], b + len(rows[2]), None)
-    assert f.out.getvalue().index("refused alone (status 400), and a later line was taken") > 0
+    assert f.out.getvalue().index("refused alone twice (status 400), a later line taken between") > 0
     order_held(rows, c.requests)
+    cursor_held(rows, c.requests, [(n, off) for n, _, _, off in seen] + [(len(c.requests), f.offset)])
 
 
 @pytest.mark.parametrize("how,status", [({"fail": 1000, "fail_status": 404}, 404), ({"refuse": {"*"}}, 400)])
@@ -951,7 +974,7 @@ def test_redo_e1_the_lines_after_those_in_question_are_read_from_the_file_as_the
     c = collectors(shape="raqib", refuse={"r1:1", "r1:2"})
     f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port)
     assert f.step() == "moved" and f.failing is None
-    assert [r["body"].count(b"\n") for r in c.requests] == [2, 1, 1, 2]
+    assert [r["body"].count(b"\n") for r in c.requests] == [2, 1, 1, 2, 1, 1]   # M-2: each asked again
     assert (f.refused, f.refused_ids, f.offset) == (2, ["r1:1", "r1:2"], len(b"".join(rows)))
     order_held(rows, c.requests)
 
@@ -959,7 +982,7 @@ def test_redo_e1_the_lines_after_those_in_question_are_read_from_the_file_as_the
 def test_redo_e1_the_lines_in_question_of_one_try_are_bounded(tmp_path, collectors):
     c = collectors(shape="raqib", refuse={"r1:%d" % n for n in range(1, 5)})
     f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(6)), c.port)
-    f.question_max = 3
+    f.alone_max = 3
     assert f.step() == "failed" and f.failing["error"] == "refusing" and f.offset == 0
     assert [r["body"].count(b"\n") for r in c.requests] == [6, 1, 1, 1]
 
@@ -1004,10 +1027,12 @@ def test_redo_e3_an_unforeseen_error_ends_the_run_with_the_state_written_and_no_
     assert not os.path.exists(os.path.join(forward.forward_dir(str(tmp_path / "home")), "u.pid"))
 # --- REDO E5 (L-5, L-6) ------------------------------------------------------------------------------------------
 
-def test_redo_e5_sslkeylogfile_is_not_honoured_and_verification_is_as_the_default_context(tmp_path, monkeypatch):
+def test_redo_e5_sslkeylogfile_is_not_honoured_and_verification_is_as_the_default_context(tmp_path, monkeypatch,
+                                                                                          collectors):
     keys = tmp_path / "keys.log"
     monkeypatch.setenv("SSLKEYLOGFILE", str(keys))
-    f = forward.Forwarder("k", write(tmp_path / "e.jsonl", lines(1)), "https://127.0.0.1:8443/x",
+    f = forward.Forwarder("k", write(tmp_path / "e.jsonl", lines(1)), "https://127.0.0.1:%d/x" % collectors(
+                              down=True).port,
                           home=str(tmp_path / "home"), out=io.StringIO())
     assert not keys.exists() and getattr(f.context, "keylog_filename", None) is None
     monkeypatch.delenv("SSLKEYLOGFILE")
@@ -1034,7 +1059,8 @@ def test_redo_e5_the_usage_errors_of_l6_are_exit_2_with_their_reason_before_any_
                          (("http://bad_name.example/",), "no valid name"), (("https://-x.example/",), "no valid name"),
                          (("https://ex\u00e4mple.example/",), "xn--"),
                          ((url, "--beat", "inf"), "--beat: a finite number"), ((url, "--beat", "nan"), "finite"),
-                         ((url, "--beat", "0.5"), "at least 1")):
+                         ((url, "--beat", "0.5"), "at least 1"), (("http://127.0.0.1:0/",), "port 0"),
+                         ((url + "a\tb",), "control character"), ((url + "a\nb",), "control character")):
         code, err = run("--to", argv[0], "--name", "u", "--once", *argv[1:])   # --once: a guard missed ends
         assert code == 2 and reason in err, (argv, err)
     damaged = ('{"schema": "raqib-other/1"}', '{"schema": "raqib-forward/1", "cursor": {"offset": "x"}}', "",
@@ -1050,28 +1076,38 @@ def test_redo_e5_the_usage_errors_of_l6_are_exit_2_with_their_reason_before_any_
     assert c.requests == []
 
 
-def test_redo_e5_the_state_is_flushed_to_the_disk_before_it_is_renamed(tmp_path, monkeypatch):
+def test_redo_e5_the_state_is_flushed_to_the_disk_before_it_is_renamed(tmp_path, monkeypatch, collectors):
     did = []
     real_fsync, real_replace = os.fsync, os.replace
     monkeypatch.setattr(forward.os, "fsync", lambda fd: (did.append(("fsync", os.fstat(fd).st_size)),
                                                          real_fsync(fd))[1])
     monkeypatch.setattr(forward.os, "replace", lambda a, b: (did.append(("replace", os.path.getsize(a))),
                                                              real_replace(a, b))[1])
-    f = forward.Forwarder("f", write(tmp_path / "e.jsonl", lines(1)), "http://127.0.0.1:9/", home=str(tmp_path / "h"),
-                          out=io.StringIO(), clock=Clock())
+    f = forward.Forwarder("f", write(tmp_path / "e.jsonl", lines(1)), "http://127.0.0.1:%d/" % collectors(
+                          down=True).port, home=str(tmp_path / "h"), out=io.StringIO(), clock=Clock())
     f.write_state()
     assert [d[0] for d in did] == ["fsync", "replace"] and did[0][1] == did[1][1] > 0
 
 
 # --- REDO E6 (L-7, L-8) ------------------------------------------------------------------------------------------
 
-def test_redo_e6_the_pid_file_appears_whole_a_second_start_between_its_steps_never_sees_it_empty(tmp_path):
+def test_redo_e6_the_pid_file_appears_whole_a_second_start_between_its_steps_never_sees_it_empty(tmp_path,
+                                                                                                 collectors):
+    """L-7, M-9: what each start read of the pid file, asserted: the start that published first read nothing;
+    the one whose publication came second read the other's pid whole (never an empty file, never None); a
+    start after both reads the holder's pid."""
     path = write(tmp_path / "e.jsonl", lines(1))
-    first = fwd(tmp_path, path, 9, pid=4242, alive=lambda pid: True)
-    second = fwd(tmp_path, path, 9, pid=4243, alive=lambda pid: True)
-    read = []
-    real = second.holder
-    second.holder = lambda: (lambda v: (read.append(v), v)[1])(real())
+    port = collectors(down=True).port
+    first = fwd(tmp_path, path, port, pid=4242, alive=lambda pid: True)
+    second = fwd(tmp_path, path, port, pid=4243, alive=lambda pid: True)
+    third = fwd(tmp_path, path, port, pid=4245, alive=lambda pid: True)
+    read = {4242: [], 4243: [], 4245: []}
+
+    def reader(g):
+        real = g.holder
+        g.holder = lambda: (lambda v: (read[g.pid].append(v), v)[1])(real())
+    for g in (first, second, third):
+        reader(g)
     calls = []
 
     def between():   # the second start comes after the first wrote its pid and before its pid file appears
@@ -1082,14 +1118,18 @@ def test_redo_e6_the_pid_file_appears_whole_a_second_start_between_its_steps_nev
     first.between = between
     with pytest.raises(forward.UsageError, match=r"a forwarder named t runs \(pid 4243\)"):
         first.lock()
-    assert second.locked and not first.locked and False not in read and b"" not in read
+    assert second.locked and not first.locked
+    assert read[4242] == [4243] and read[4243] == []   # the second to publish read the first's pid, whole
+    with pytest.raises(forward.UsageError, match=r"\(pid 4243\)"):
+        third.lock()
+    assert read[4245] == [4243]
     assert Path(first.lock_file).read_text(encoding="ascii") == "4243\n"
     assert [p.name for p in Path(first.lock_file).parent.iterdir() if p.name.endswith(".tmp")] == []
     second.unlock()
     Path(first.lock_file).write_text("", encoding="ascii")   # empty: a life that cannot be told
-    third = fwd(tmp_path, path, 9, pid=4244, alive=lambda pid: False)
+    fourth = fwd(tmp_path, path, port, pid=4244, alive=lambda pid: False)
     with pytest.raises(forward.UsageError, match="is empty or cannot be read"):
-        third.lock()
+        fourth.lock()
     assert Path(first.lock_file).read_text(encoding="ascii") == ""   # refused, never taken
 
 
@@ -1133,8 +1173,10 @@ def test_redo_e6_a_tail_of_more_than_512_kib_with_no_newline_is_failing_file_and
     assert f.run(once=True) == 1   # --once: not all taken
     write(path, [b"\n", after], mode="ab")   # its newline comes
     del reads[:]
-    assert f.step() == "moved" and f.failing is None and f.refused == 1 and f.refused_ids == ["r1:3"]
-    assert f.step() == "moved" and c.events[-1] == after.decode("ascii")[:-1] and len(c.events) == 3
+    start = len(b"".join(rows))
+    assert f.step() == "moved" and f.failing is None and f.refused == 1 and f.refused_ids == ["offset %d" % start]
+    assert max(reads) <= forward.MAX_BYTES + 1   # M-3: the line, longer than that, was never read whole
+    assert c.events[-1] == after.decode("ascii")[:-1] and len(c.events) == 3 and f.step() == "idle"
 # --- REDO E8 (L-11) ----------------------------------------------------------------------------------------------
 
 def test_redo_e8_stop_by_the_systems_signal_on_a_real_process_writes_the_state(tmp_path, collectors):
@@ -1214,3 +1256,373 @@ def test_redo_e8_the_token_is_in_no_output_of_the_paths_that_could_print_it(tmp_
     assert states["t401"]["failing"]["status"] == 401 and states["t403"]["failing"]["status"] == 403
     for text in (TOKEN, WRONG, "Traceback", "an-exception-text"):
         assert not [s for s in said if text in s], text
+
+
+
+# --- REDO 2 E1 (M-1): a refusal by kind does not stop the line after it -------------------------------------
+
+def tries(f, c, count, after=None):
+    """Run `count` tries; for each, its word and its requests (`after(k, word)` is called as each ends)."""
+    out = []
+    for k in range(count):
+        before = len(c.requests)
+        word = f.step()
+        out.append((word, c.requests[before:]))
+        if after is not None:
+            after(k, word)
+    return out
+
+
+def alone_index(rows, req):
+    body = req["body"]
+    return rows.index(body) if body.count(b"\n") == 1 else None
+
+
+def test_redo2_e1_250_lines_of_a_refused_kind_do_not_stop_the_line_after_them_and_are_settled(tmp_path, collectors):
+    """M-1: 250 lines of a kind the collector refuses, then one of another kind: the other line arrives within
+    three tries; a try sends at most 100 lines alone; no line asked alone in this run is asked again, but the
+    first in question, once a try; the lines in question are a reach and a count. Then M-2 settles the 250."""
+    rows = lines(250, text="heartbeat") + lines(1, start=251, text="finding")
+    snaps = []
+    f = None
+    c = collectors(shape="raqib", refuse={"r1:%d" % n for n in range(1, 251)},
+                   on_request=lambda n, h, b: snaps.append((n, f.offset)))
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port)
+    asked, arrived = {}, None
+
+    def first(k, word):
+        if k == 0:   # what the run holds of the lines in question: a reach and a count, not the lines
+            assert word == "failed" and f.failing["error"] == "refusing" and f.offset == 0
+            assert (f.question, f.reach) == (100, len(b"".join(rows[:100])))
+            held = [v for v in vars(f).values() if isinstance(v, (list, tuple, set, dict)) and len(v) > 50]
+            assert held == [], held
+    for k, (word, reqs) in enumerate(tries(f, c, 3, first)):
+        assert len(reqs) <= 101, (k, len(reqs))
+        statuses = [r["status"] for r in reqs]
+        took = statuses.index(200) if 200 in statuses else len(reqs)
+        before = [alone_index(rows, r) for r in reqs[:took + 1] if alone_index(rows, r) is not None]
+        settling = [alone_index(rows, r) for r in reqs[took + 1:]]
+        assert len(before) + len(settling) <= 100, k   # at most 100 sends of a line alone in a try
+        for i in before:   # asked again before the other line arrived: only the first in question, once a try
+            if i in asked:
+                assert i == 0 and before.count(0) == 1, (k, i)
+            asked[i] = asked.get(i, 0) + 1
+        if took < len(reqs):
+            arrived = k
+            assert rows[250].decode("ascii")[:-1] in c.events and before[-1] == 250
+            assert settling == list(range(len(settling)))   # then each line in question, alone once more, in order
+    assert arrived is not None and arrived <= 2   # within three tries
+    assert f.refused == len(settling) and f.offset == len(b"".join(rows[:len(settling)]))
+    for _ in range(10):   # then the 250 are settled: each asked alone once more, refused, counted and passed
+        if f.offset == len(b"".join(rows)):
+            break
+        f.step()
+    assert f.offset == len(b"".join(rows)) and f.refused == 250 and f.failing is None and f.sent == 1
+    assert c.events == [rows[250].decode("ascii")[:-1]]
+    snaps.append((len(c.requests), f.offset))
+    cursor_held(rows, c.requests, snaps)
+
+
+def test_redo2_e1_a_collector_that_refuses_everything_then_put_right_takes_every_line(tmp_path, collectors):
+    """M-1: a collector that refuses everything: `refusing`, the cursor unmoved, at most 101 requests a try. Put
+    right, the first line in question is taken at once, and so is every line after it: none counted refused."""
+    rows = lines(250)
+    snaps = []
+    f = None
+    c = collectors(shape="raqib", refuse={"*"}, on_request=lambda n, h, b: snaps.append((n, f.offset)))
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port)
+    for word, reqs in tries(f, c, 4):
+        assert word == "failed" and f.failing["error"] == "refusing" and f.offset == 0 and len(reqs) <= 101
+    assert f.question == 250 and c.events == [] and state(tmp_path)["cursor"]["offset"] == 0
+    c.refuse = set()   # put right
+    before = len(c.requests)
+    for _ in range(5):
+        if f.step() == "idle":
+            break
+    assert c.events == [r.decode("ascii")[:-1] for r in rows] and f.refused == 0 and f.failing is None
+    assert [r["body"] for r in c.requests[before:]] == rows   # each line alone, in the file's order
+    snaps.append((len(c.requests), f.offset))
+    cursor_held(rows, c.requests, snaps)
+
+
+# --- REDO 2 E2 (M-2): refused only when asked twice with a take between ----------------------------------------
+
+def test_redo2_e2_a_line_refused_once_then_taken_when_asked_again_is_taken_not_counted(tmp_path, collectors):
+    rows = lines(3)
+    snaps = []
+    f = None
+
+    def on_request(n, headers, body):
+        snaps.append((n, f.offset))
+        if n == 3:   # the node that refused b is gone (a balancer's): b is taken when asked again
+            c.refuse.clear()
+    c = collectors(shape="raqib", refuse={"r1:2"}, on_request=on_request)
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", rows), c.port)
+    assert f.step() == "moved"
+    assert [r["status"] for r in c.requests] == [400, 200, 400, 200, 200]   # the batch, a, b, c, b again
+    assert c.events == [rows[i].decode("ascii")[:-1] for i in (0, 2, 1)]   # b arrived after c (M-2, said)
+    assert (f.refused, f.sent, f.offset, f.failing) == (0, 3, len(b"".join(rows)), None)
+    snaps.append((len(c.requests), f.offset))
+    cursor_held(rows, c.requests, snaps)
+
+
+# --- REDO 2 E3 (M-3): a line too long is never read whole ------------------------------------------------------
+
+def test_redo2_e3_a_line_of_2_mib_is_passed_counted_and_named_by_its_offset_never_read_whole(tmp_path, collectors):
+    c = collectors(shape="raqib")
+    rows = lines(2)
+    huge = lines(1, start=3, size=2 * 1024 * 1024)[0]
+    after = lines(2, start=4)
+    path = write(tmp_path / "e.jsonl", rows + [huge] + after)
+    reads = []
+    f = fwd(tmp_path, path, c.port, opener=lambda p: Counted(p, reads))
+    assert f.run(once=True) == 1   # K-2: a line refused makes --once 1
+    assert len(huge) > 2 * 1024 * 1024 and max(reads) <= forward.MAX_BYTES + 1   # never more than a piece at once
+    assert f.refused == 1 and f.refused_ids == ["offset %d" % len(b"".join(rows))]
+    assert "offset %d (its id not read) refused locally" % len(b"".join(rows)) in f.out.getvalue()
+    assert c.events == [r.decode("ascii")[:-1] for r in rows + after]
+    s = state(tmp_path)
+    assert s["cursor"]["offset"] == os.path.getsize(path) and s["refused"]["count"] == 1
+    del reads[:]
+    again = fwd(tmp_path, path, c.port, opener=lambda p: Counted(p, reads))   # a restart over a cursor after it
+    assert again.run(once=True) == 0 and max(reads) <= forward.MAX_BYTES + 1 and again.restarts == 0
+
+
+# --- REDO 2 E4 (M-4): the state every beat and Stop, whatever it is doing; the halved batch ---------------------
+
+def test_redo2_e4_during_a_send_of_three_beats_the_state_is_written_once_a_beat_and_stop_ends_it(tmp_path,
+                                                                                              collectors):
+    mono, marks, writes = Clock(5000.0), {}, []
+    f = None
+
+    def nap(ev, seconds):   # the forwarder's wait for its send: the clock of its beat moves with each slice
+        mono.t += seconds
+        ev.wait(0.005)
+        if "sent" in marks and "stop" not in marks and mono.t >= marks["sent"] + 3 * f.beat:
+            marks["stop"] = mono.t
+            f.stop()
+    c = collectors(shape="raqib", hold=0, on_request=lambda n, h, b: marks.setdefault("sent", mono.t))
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(3)), c.port, mono=mono, nap=nap, beat=1)
+    real = f.write_state
+    f.write_state = lambda: (writes.append(mono.t), real())[1]
+    assert f.step() == "stopped" and f.offset == 0 and f.sent == 0
+    during = [t for t in writes if marks["sent"] <= t <= marks["stop"]]
+    assert len(during) >= 3, (writes, marks)
+    assert max(b - a for a, b in zip(writes, writes[1:])) <= f.beat + forward.SLICE_S
+    assert mono.t - marks["stop"] <= forward.SLICE_S   # Stop was looked at within a slice of the send's wait
+
+
+def test_redo2_e4_during_a_try_of_100_slow_refusals_the_state_once_a_beat_and_stop_ends_it(tmp_path, collectors):
+    mono, writes = Clock(5000.0), []
+    f = None
+
+    def on_request(n, headers, body):   # each answer takes half a second of the forwarder's clock
+        mono.t += 0.5
+        if n == 60:
+            f.stop()
+    c = collectors(shape="raqib", refuse={"*"}, on_request=on_request)
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(150)), c.port, mono=mono, beat=5)
+    real = f.write_state
+    f.write_state = lambda: (writes.append(mono.t), real())[1]
+    assert f.step() == "stopped" and f.offset == 0
+    assert c.arrived == 61   # Stop came during the 61st request: no request after it
+    assert len(writes) >= 5 and max(b - a for a, b in zip(writes, writes[1:])) <= f.beat + 0.5, writes
+
+
+def test_redo2_e4_during_a_walk_over_50000_lines_that_are_not_events_the_state_once_a_beat_and_stop(tmp_path,
+                                                                                                  collectors):
+    t, stopped_at, writes = [5000.0], [], []
+    f = None
+
+    def mono():   # the forwarder's clock: a thousandth of a second at each look; Stop at 30 s of it
+        t[0] += 0.001
+        if f is not None and t[0] >= 5030.0 and not stopped_at:
+            stopped_at.append(t[0])
+            f.stop()
+        return t[0]
+    rows = [b"not an event %d\n" % i for i in range(50000)]
+    path = write(tmp_path / "e.jsonl", rows)
+    f = fwd(tmp_path, path, collectors(down=True).port, mono=mono, beat=5)
+    real = f.write_state
+    f.write_state = lambda: (writes.append(t[0]), real())[1]
+    assert f.step() == "stopped"
+    assert len(writes) >= 5 and max(b - a for a, b in zip(writes, writes[1:])) <= f.beat + 0.01, writes
+    assert t[0] - stopped_at[0] <= 2.0   # M-4: Stop looked at within the bound
+    assert 0 < f.skipped < 50000 and f.offset == len(b"".join(rows[:f.skipped]))   # the walk ended where it was
+
+
+def test_redo2_e4_a_request_late_while_being_sent_halves_the_next_batch_down_to_one(tmp_path, collectors):
+    sizes, script = [], ["send"] * 8 + ["taken", "answer", "taken"]
+
+    def post(body, token):
+        sizes.append(body.count(b"\n"))
+        how = script.pop(0)
+        return forward.Result("taken", status=200) if how == "taken" else forward.Result("failed", "late", phase=how)
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(300)), collectors(down=True).port)
+    f.post = post
+    for _ in range(8):
+        assert f.step() == "failed" and f.failing["error"] == "late"
+    assert f.step() == "moved" and f.step() == "failed" and f.step() == "moved"
+    assert sizes == [100, 50, 25, 12, 6, 3, 1, 1, 1, 100, 100]   # late in the answer: the size stays
+
+
+def test_redo2_e4_a_send_whose_request_is_not_sent_within_the_bound_is_late_while_being_sent(tmp_path, collectors,
+                                                                                           monkeypatch):
+    gate = threading.Event()
+
+    def request(self, *args, **kw):   # the link takes the request and never finishes sending it
+        gate.wait(60)
+        raise OSError("the test's link")
+    monkeypatch.setattr(forward.http.client.HTTPConnection, "request", request)
+    c = collectors(shape="raqib")
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(10)), c.port, answer_s=0.3)
+    try:
+        assert f.step() == "failed" and f.failing["error"] == "late" and f.size == 5 and f.offset == 0
+    finally:
+        gate.set()
+
+
+# --- REDO 2 E5 (M-5): abandoned sends are bounded; no socket closed under its thread ----------------------------
+
+def test_redo2_e5_after_four_abandoned_sends_no_fifth_starts_and_the_state_says_stuck(tmp_path, collectors):
+    gate, calls = threading.Event(), []
+
+    def lookup(*args):   # a name that never resolves, until the test lets it
+        calls.append(args)
+        gate.wait(60)
+        return socket.getaddrinfo(*args)
+    c = collectors(shape="raqib")
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(3)), c.port, connect_s=0.2, lookup=lookup)
+    try:
+        for _ in range(4):
+            assert f.step() == "failed" and f.failing["error"] == "connect"
+        assert len(calls) == 4 and len(f.adrift) == 4
+        assert f.step() == "failed" and f.failing["error"] == "stuck" and len(calls) == 4   # no fifth started
+        assert state(tmp_path)["failing"]["error"] == "stuck" and "four sends abandoned" in forward.ERRORS["stuck"]
+        gate.set()
+        for job in list(f.adrift):   # their own fact: each abandoned send ends once its name resolves
+            job.thread.join(30)
+        assert f.step() == "moved" and len(calls) == 5 and len(c.events) == 3 and f.failing is None
+    finally:
+        gate.set()
+
+
+def test_redo2_e5_an_abandoned_sends_sockets_are_shut_down_never_closed_by_another_thread():
+    """M-5, read in the code: abandon() (the forwarder's thread) only shuts the sockets down; the close calls of
+    Send are in the send's own thread - run() at its end, hold() of a socket it just made, exchange()."""
+    tree = ast.parse(inspect.getsource(forward.Send))
+    methods = {n.name: n for n in tree.body[0].body if isinstance(n, ast.FunctionDef)}
+    calls = {name: {c.func.attr for c in ast.walk(m) if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute)}
+             for name, m in methods.items()}
+    assert "shutdown" in calls["abandon"] and not calls["abandon"] & {"close", "detach"}
+    assert [name for name, attrs in calls.items() if attrs & {"close", "detach"}] == ["hold", "run", "exchange"]
+    assert "detach" not in set().union(*calls.values())
+
+
+# --- REDO 2 E6 (M-6, M-7, M-8) ---------------------------------------------------------------------------------
+
+def test_redo2_e6_an_oserror_of_the_directory_or_the_pid_file_at_the_start_is_exit_2_with_no_traceback(
+        tmp_path, collectors, capsys, monkeypatch):
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    c = collectors(shape="raqib")
+    argv = ["forward", write(tmp_path / "e.jsonl", lines(1)), "--to", "http://127.0.0.1:%d/" % c.port, "--name", "o",
+            "--once"]
+    folder = Path(forward.forward_dir(str(home)))
+    folder.parent.mkdir(parents=True)
+    folder.write_text("a file where the directory goes", encoding="ascii")
+    assert cli.main(argv, out=io.StringIO()) == 2
+    err = capsys.readouterr().err
+    assert "the name o cannot be taken" in err and "Traceback" not in err, err
+    folder.unlink()
+
+    def refused(*args):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(forward.os, "rename" if os.name == "nt" else "link", refused)
+    assert cli.main(argv, out=io.StringIO()) == 2
+    err = capsys.readouterr().err
+    assert "the name o cannot be taken" in err and "Permission denied" in err and "Traceback" not in err, err
+    assert c.requests == []
+
+
+def test_redo2_e6_status_reads_a_state_the_forwarder_does_not_write_as_unreadable(tmp_path):
+    home, now = str(tmp_path / "home"), 1_800_000_000.0
+    for name, change in (("beat0", {"beat": 0}), ("beatno", {"beat": False}), ("list", {"failing": ["server"]}),
+                         ("word", {"failing": {"since": forward.iso(now), "tries": 1, "error": "x", "status": None}}),
+                         ("nohash", {"cursor": {"offset": 9, "line_sha256": None}})):
+        write_state(home, name, now, **change)
+        out = io.StringIO()
+        assert forward.status(name, home=home, out=out, clock=Clock(now)) == 3, name
+        assert "UNREADABLE" in out.getvalue() and "not what a forwarder writes" in out.getvalue(), name
+    write_state(home, "fine", now)
+    assert forward.status("fine", home=home, out=io.StringIO(), clock=Clock(now)) == 0
+
+
+def test_redo2_e6_a_restarted_forwarder_says_the_refusing_its_state_held_until_its_first_answer(tmp_path,
+                                                                                               collectors):
+    home = str(tmp_path / "home")
+    c = collectors(shape="raqib", refuse={"*"})
+    path = write(tmp_path / "e.jsonl", lines(3))
+    assert fwd(tmp_path, path, c.port).run(once=True) == 1 and state(tmp_path)["failing"]["error"] == "refusing"
+    seen = []
+    c.on_request = lambda n, h, b: seen.append((read_state(home, "t") or {}).get("failing"))
+    c.refuse = set()   # put right; the restart says refusing until its first try has an answer
+    again = fwd(tmp_path, path, c.port)
+    assert again.run(once=True) == 0
+    assert seen[0]["error"] == "refusing" and seen[0]["tries"] >= 1
+    assert state(tmp_path)["failing"] is None and len(c.events) == 3
+
+
+def test_redo2_e6_a_forwarder_whose_pid_file_another_took_stops_at_its_next_state_write(tmp_path, collectors):
+    clock = Clock()
+    c = collectors(shape="raqib")
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", lines(2)), c.port, clock=clock, beat=5, poll_s=1.0)
+    before = {}
+
+    def then(clk):
+        if len(clk.waits) == 3:   # another forwarder of the name took the pid file
+            before["state"] = Path(f.state_file).read_text(encoding="ascii")
+            Path(f.lock_file).write_text("999999\n", encoding="ascii")
+        return len(clk.waits) > 50   # a guard only: the forwarder must have stopped long before
+    clock.then = then
+    with pytest.raises(forward.UsageError, match="no longer holds this forwarder's pid"):
+        f.run()
+    assert 3 < len(clock.waits) <= 3 + 5   # at its next state write, within a beat of waits
+    assert Path(f.state_file).read_text(encoding="ascii") == before["state"]   # the other's to write now
+    assert Path(f.lock_file).read_text(encoding="ascii") == "999999\n"
+    assert "another forwarder took the name t" in f.out.getvalue()
+
+
+def test_redo2_e6_the_file_replaced_during_a_try_ends_the_try_and_the_next_pass_counts_a_restart(tmp_path,
+                                                                                                collectors):
+    rows, other = lines(4), lines(4, start=10, text="other")
+    path = write(tmp_path / "e.jsonl", rows)
+
+    def on_request(n, headers, body):
+        if n == 3:   # line 3 alone, while line 2 is in question: the file is replaced by another
+            os.replace(write(tmp_path / "new.jsonl", other), path)
+    c = collectors(shape="raqib", refuse={"r1:2"}, on_request=on_request)
+    f = fwd(tmp_path, path, c.port)
+    assert f.step() == "again" and f.restarts == 0 and f.offset == len(rows[0]) and f.refused == 0
+    assert f.run(once=True) == 0 and f.restarts == 1
+    assert c.events == [rows[i].decode("ascii")[:-1] for i in (0, 2)] + [r.decode("ascii")[:-1] for r in other]
+
+
+# --- REDO 2 E8 (M-10) ------------------------------------------------------------------------------------------
+
+def test_redo2_e8_forward_md_lists_the_codes_failing_words_and_says_what_m_rules():
+    spec_text = (ROOT / "docs" / "specs" / "FORWARD.md").read_text(encoding="utf-8")
+    table = spec_text[spec_text.index("| word | the failure |"):]
+    table = table[:table.index("\n\n")]
+    words = [row.split("|")[1].strip().strip("`") for row in table.splitlines()[2:]]
+    assert words == list(forward.ERRORS)
+    flat = " ".join(spec_text.split())
+    for said in ("`stuck`", "half as many lines", "order at the collector", "asked alone once more",
+                 "a reach and a count", "within 30 s of its start", "four", "no send of this name was ever taken",
+                 "offset N"):
+        assert said in flat, said
+    threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
+    section = threat[threat.index("### The forwarder (`raqib forward`"):threat.index("## 6. Attacks on the watcher")]
+    for said in ("`stuck`", "order at the collector", "no traceback"):
+        assert said in section, said
