@@ -254,7 +254,7 @@ def test_e5_rule_rows_switch_title_pills_steppers_and_the_filter(home):
     panel = app.RulesPanel(home=str(home))
     items = {i["id"]: i for i in app.rule_items(panel.rows, panel.titles)}
     rhythm = items["HOST-RHYTHM"]
-    assert rhythm["on"] and rhythm["pills"] == ["anchor", "medium", "package"] and rhythm["title"]
+    assert rhythm["on"] and rhythm["pills"] == ["anchor", "high", "package"] and rhythm["title"]   # M7.18: high
     k = next(t for t in rhythm["steppers"] if t["name"] == "k")
     assert k["value"] == 4 and k["low"] <= 4 <= k["high"] and "YAML 3" in k["words"] and "measured" in k["words"]
     assert items["HOST-UNWATCHED"]["fixed"] and "fixed" in items["HOST-UNWATCHED"]["fixed"][0]

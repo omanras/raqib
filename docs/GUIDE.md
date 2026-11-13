@@ -133,7 +133,7 @@ thing ever written into a project, and only with that word.
 
 A tree with no source at all for two rounds is HOST-UNWATCHED (high).
 
-An unknown tree is also judged by its rhythm: HOST-RHYTHM (medium) when it talks to one destination
+An unknown tree is also judged by its rhythm: HOST-RHYTHM (high) when it talks to one destination
 and then starts a child within 30 s, 3 times in the last 10 rounds (the thresholds are in its YAML;
 on Linux the bytes per connection are recorded from `ss -tinp`, on Windows they are not read, a hole
 said once).
@@ -396,7 +396,7 @@ design, a quiet minute is reported, not assumed harmless.
 | NEW-AGENT / -UNKNOWN | only under `raqib watch --host`: a tree that talks and acts and was not there in an earlier round, and is no listed benign program under a system directory (NEW-AGENT high when the catalog names it; NEW-AGENT-UNKNOWN medium when not) |
 | AGENT-DARK-LIVE | only under `raqib watch --host`: an agent's footprint with no live tree for 3 rounds in a row |
 | HOST-UNWATCHED | only under `raqib watch --host`: a tree that talks and acts with no source attached in two rounds in a row (not even the host's own record of it) |
-| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child within 30 s, 3 times in the last 10 rounds (the think-act cycle; medium; once per streak) |
+| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child within 30 s, 3 times in the last 10 rounds (the think-act cycle; high; once per streak) |
 | CROSS-SOURCE | only in a trace with `os` lines: a shell call with no os process of its programs (or a shell) in the 10 s after it; an os process below the agent's own children that no shell call asked for in the 10 s before it, itself or through a parent below the shell (below) |
 
 ## What it cannot see
