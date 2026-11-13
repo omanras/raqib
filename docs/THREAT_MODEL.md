@@ -1077,7 +1077,7 @@ is amended by T-2, T-1 restated by V-1).
   an `ss` that has not returned in 30 s). The only writes are under `~/.raqib`, and the hook settings of a
   project only with `--attach-hooks`.
 
-### The forwarder (`raqib forward`; ADR-0011 Amendment J)
+### The forwarder (`raqib forward`; ADR-0011 Amendments J, K and L)
 A forwarder is a process of its own that reads the watch's events file and
 sends every whole line to one HTTP collector (docs/specs/FORWARD.md). The
 watch does not know it runs: nothing of the capture path imports it, and a
@@ -1085,19 +1085,30 @@ collector that is slow, down or refusing never delays or loses a capture
 (the lines wait in the file). What it adds to this model:
 
 - **The token.** The collector's token is a secret on the host, in a file
-  the person names (`--token-file`), read at every connection. It is never
+  the person names (`--token-file`), read at every try. It is never
   an argument (so it is not in the process list), never read from the
   environment, never in the forwarder's state, output or errors, and an
-  error never quotes the collector's answer. Off Windows a token file that
-  others can read is refused; on Windows its access is not checked. Anyone
-  who can read that file as the person can send to the collector as Raqib:
-  a forged event at the collector is as good as the file's protection.
-- **The wire.** https is verified against the system's authorities or the
-  `--ca` file; no switch and no variable of the environment turns that
-  off, the environment's proxies are not used and a redirect is a failed
-  send, never followed. Plain http is taken only to a loopback address
-  unless `--plain` is given, and then the state and the status say plain:
-  every event crosses that network in clear text.
+  error never quotes the collector's answer nor a traceback. Off Windows a
+  token file that others can read is refused; on Windows its access is not
+  checked. Anyone who can read that file as the person can send to the
+  collector as Raqib: a forged event at the collector is as good as the
+  file's protection. The URL is an argument, and arguments are on the
+  process list: a credential must never be put in the URL's query.
+- **The wire.** https is verified - the certificate and the host name -
+  against the system's authorities or the `--ca` file, and no switch turns
+  that off. Without `--ca`, the system's authorities are the ones the
+  forwarder's own environment names: OpenSSL reads SSL_CERT_FILE and
+  SSL_CERT_DIR, so whoever sets that environment chooses whom the
+  forwarder trusts. The forwarder never writes TLS secrets: SSLKEYLOGFILE
+  is not honoured, so no key log written beside it can decrypt the
+  Authorization header from a capture. The environment's proxies are not
+  used and a redirect is a failed send, never followed. Plain http is taken
+  only to a loopback address unless `--plain` is given, and then the state
+  and the status say plain: every event crosses that network in clear
+  text. One send is bounded whole (10 s to connect with its handshake, 30 s
+  for the whole answer): a collector that trickles its answer cannot hold
+  the forwarder; name resolution is the system's, and a forwarder held
+  longer than two beats is SILENT in its status.
 - **What the collector learns.** Everything the events say (A-4: the whole
   judgement, not only what knocked): the host's name, each run, the trees
   with their images, pids and paths, each finding with its rule and
@@ -1109,8 +1120,11 @@ collector that is slow, down or refusing never delays or loses a capture
   comes back.
 - **What a delivery is.** "Taken" is the collector's word: a 2xx (and in
   the hec shape the code 0) moves the cursor. A collector that answers 2xx
-  and drops the lines loses them, and the forwarder cannot see it. Delivery
-  is at least once: after a restart, a refused batch or a file that changed
+  and drops the lines loses them, and the forwarder cannot see it. A line
+  the collector refuses alone is passed only once a later line is taken: a
+  collector that refuses everything (a wrong path, a missing channel)
+  moves nothing, and the forwarder is failing `refusing`. Delivery is at
+  least once: after a restart, a refused batch or a file that changed
   under the cursor, the collector gets lines twice (`watch.host` and `id`
   tell them apart).
 - **What an attacker on the host can do.** Stop or kill the forwarder: its
@@ -1123,6 +1137,18 @@ collector that is slow, down or refusing never delays or loses a capture
   counted as a restart. Change only lines before the last one passed: the
   forwarder checks the length and the last line passed, not every byte
   before it, and does not see that.
+- **The watched account.** Where the forwarder runs as the watched account
+  (as it does until it runs as a service), that account can write its
+  files in `~/.raqib/forward/`. The cursor: a forged offset with the
+  sha256 of a later line (the account can read the events file) makes a
+  restarted forwarder skip the lines between, with no restart counted. The
+  state: a fresh time keeps `--status` at 0 for a forwarder that is not
+  there. The pid file: a live pid written in it keeps the name from ever
+  starting. The answers are the search on the collector's side - which is
+  judged by the collector's own clock of arrival, never by the event's
+  `time`, the host's clock that the same account may set (EVENT.md says
+  the same of any reader) - and a forwarder under another account (the
+  service, later).
 
 ## 6. Attacks on the watcher itself
 

@@ -273,14 +273,20 @@ def _first_arrivals(got):
 
 
 def read_forward(facts, events):
-    """X19-X22 (ADR-0011 J-14): what tools/rig/forward_run.py saw `raqib forward` do with the watch's events file.
-    facts None: the run left nothing (silence is a finding: all four MISSED)."""
+    """X19-X22 (ADR-0011 J-14, L-10): what tools/rig/forward_run.py saw `raqib forward` do with the watch's events
+    file. facts None: the run left nothing (silence is a finding: all four MISSED). A case whose run failed is
+    MISSED with its error; no events file is n/a for all four (X16 says the watch wrote none)."""
     names = ("X19 every whole line of the events file arrived, in order, each id at least once",
              "X20 a collector down from the start: the state says failing, and nothing is lost when it comes up",
-             "X21 a forwarder killed between two batches and started again leaves no gap",
-             "X22 the token is in no output, state or error of the forwarder")
+             "X21 a forwarder killed between two batches and started again leaves no gap and sends no taken line"
+             " again",
+             "X22 neither token is in any output, state, error or process list of the forwarder")
     if not isinstance(facts, dict):
         return [(n, MISSED, "the forwarder's run left no facts (silence is a finding)") for n in names]
+    if facts.get("events_missing"):
+        return [(n, SKIP, "the watch wrote no events file: nothing to forward (X16 says so)") for n in names]
+    if facts.get("error"):
+        return [(n, MISSED, "the forwarder's run failed: %s" % facts["error"]) for n in names]
     want = _whole_events(events)
 
     def arrived(part):
@@ -292,39 +298,69 @@ def read_forward(facts, events):
                                                                if got == want else ", not in the file's order"
                                                                if not lost else "", "; %d lost" % len(lost) if lost
                                                                else "")
+
+    def part(key):
+        got = facts.get(key)
+        return got if isinstance(got, dict) else {}
     out = []
-    x19 = facts.get("x19") or {}
-    ok, words = arrived("x19")
-    out.append((names[0], MET if ok and x19.get("exit") == 0 else MISSED,
-                "%s; %s request(s); --once exit %s" % (words, x19.get("requests"), x19.get("exit"))))
-    x20 = facts.get("x20") or {}
-    ok, words = arrived("x20")
-    failing = x20.get("failing") or {}
-    final = x20.get("final") or {}
-    ok = ok and bool(failing) and bool(final) and final.get("failing") is None and final.get("behind") == 0
-    out.append((names[1], MET if ok else MISSED, "the state said failing: %s (%s); then %s; %s" % (
-        "yes" if failing else "no", failing.get("error"), "taken, behind 0" if final else "never all taken", words)))
-    x21 = facts.get("x21") or {}
-    ok, words = arrived("x21")
-    killed = (x21.get("killed") or {}).get("offset") or 0
-    between = 0 < killed < (x21.get("size") or 0)
-    out.append((names[2], MET if ok and between and x21.get("exit") == 0 else MISSED,
-                "killed at offset %s of %s (%s); started again: exit %s; %s" % (
-                    killed, x21.get("size"), "between two batches" if between else "not between two batches",
-                    x21.get("exit"), words)))
-    x22 = facts.get("x22") or {}
-    try:
-        with open(facts.get("token_file") or "", "rb") as f:
-            token = f.read().strip().decode("ascii")
-    except (OSError, UnicodeDecodeError):
-        token = ""
-    texts, argvs = x22.get("texts") or [], x22.get("argv") or []
-    found = [t.get("where") for t in texts if token and token in (t.get("text") or "")]
-    found += ["an argument list" for a in argvs if token and any(token in str(x) for x in a)]
-    ok = bool(token) and bool(texts) and not found
-    out.append((names[3], MET if ok else MISSED, "%d output(s) and state(s), %d argument list(s) read: %s" % (
-        len(texts), len(argvs), "the token is in none" if ok else "no token to look for" if not token else
-        "the token is in " + ", ".join(found[:3]))))
+    for i, key in enumerate(("x19", "x20", "x21")):
+        if part(key).get("error"):
+            out.append((names[i], MISSED, "the rig's run of it failed: %s" % part(key)["error"]))
+            continue
+        ok, words = arrived(key)
+        if key == "x19":
+            x = part(key)
+            out.append((names[0], MET if ok and x.get("exit") == 0 else MISSED,
+                        "%s; %s request(s); --once exit %s" % (words, x.get("requests"), x.get("exit"))))
+        elif key == "x20":
+            x = part(key)
+            failing, final = x.get("failing") or {}, x.get("final") or {}
+            ok = ok and bool(failing) and bool(final) and final.get("failing") is None and final.get("behind") == 0
+            out.append((names[1], MET if ok else MISSED, "the state said failing: %s (%s); then %s; %s" % (
+                "yes" if failing else "no", failing.get("error"), "taken, behind 0" if final else "never all taken",
+                words)))
+        else:
+            x = part(key)
+            killed = (x.get("killed") or {}).get("offset") or 0
+            between = 0 < killed < (x.get("size") or 0)
+            got, before = x.get("events") or [], x.get("before") or 0
+            taken = set(got[:before])
+            again = [e for e in got[before:] if e in taken]
+            ok = ok and between and before > 0 and not again and x.get("exit") == 0
+            out.append((names[2], MET if ok else MISSED,
+                        "killed at the collector's request %s, %d line(s) taken before, at offset %s of %s (%s);"
+                        " started again: exit %s, %d line(s) taken before the kill came again; %s" % (
+                            x.get("requests_at_kill"), before, killed, x.get("size"),
+                            "between two batches" if between else "not between two batches", x.get("exit"),
+                            len(again), words)))
+    x22 = part("x22")
+    tokens, unread = [], []
+    for key in ("token_file", "wrong_file"):
+        try:
+            with open(facts.get(key) or "", "rb") as f:
+                tokens.append(f.read().strip().decode("ascii"))
+        except (OSError, UnicodeDecodeError):
+            unread.append(key)
+    tokens = [t for t in tokens if t]
+    texts, argvs, listed = x22.get("texts") or [], x22.get("argv") or [], x22.get("listed") or []
+    found = [t.get("where") for t in texts for tok in tokens if tok in (t.get("text") or "")]
+    found += ["an argument list" for a in argvs for tok in tokens if any(tok in str(x) for x in a)]
+    found += ["the process list (%s)" % p.get("how") for p in listed for tok in tokens if tok in (p.get("text") or "")]
+    seen = [p for p in listed if "--token-file" in (p.get("text") or "")]
+    if x22.get("error"):
+        ok, why = False, "the rig's run of it failed: %s" % x22["error"]
+    elif unread or len(tokens) != 2:
+        ok, why = False, "no token to look for (%s cannot be read)" % ", ".join(unread or ["a token file"])
+    elif not texts:
+        ok, why = False, "no output or state to read"
+    elif not seen:
+        ok, why = False, "the system's process list of a running forwarder was not read"
+    elif found:
+        ok, why = False, "a token is in " + ", ".join(found[:3])
+    else:
+        ok, why = True, "neither token is in any"
+    out.append((names[3], MET if ok else MISSED, "%d output(s) and state(s), %d argument list(s), %d process"
+                " list(s) read for 2 tokens: %s" % (len(texts), len(argvs), len(seen), why)))
     return out
 
 

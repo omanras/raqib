@@ -3,13 +3,17 @@
 raqib's own shape (application/x-ndjson, the lines as the file holds them). It checks the token, read from its
 token file at every request, and can be told to refuse (400 to a batch that holds a named id, as HEC answers a
 bad event), to fail (an answer of a given status to the next N requests, or no answer at all), to redirect and
-to be late; given a certificate it answers over https. It keeps every request it took and every event in the
-order it took them. Stdlib only; no part of raqib.
+to be late, to trickle its answer a byte at a time, and to hold the request of a given count (the rig's X21
+kills the forwarder while it is held: by the collector's count, not by a window of time); it can be made bound
+and down (its port held, nothing listening) and then brought up on that port. Given a certificate it answers
+over https. It keeps every request it took and every event in the order it took them. Stdlib only; no part of
+raqib.
 
     python tools/rig/collector.py --port N --token-file FILE --out FILE [--shape hec|raqib] [--fail N]
                                   [--fail-status S] [--late S] [--refuse ID ...] [--for S]
 
-As a module: Collector(...).start() -> port; .events (the event lines it took, ASCII text); .requests; .stop().
+As a module: Collector(...).start() -> port; .events (the event lines it took, ASCII text); .requests; .up()
+(a collector made down=True); .stop(). `refuse` holds the ids it refuses, or "*" for every one.
 """
 import argparse
 import http.server
@@ -24,11 +28,14 @@ OK = {"text": "Success", "code": 0}
 
 class Collector:
     def __init__(self, token_file=None, shape="hec", refuse=(), fail=0, fail_status=503, late=0.0, code=0,
-                 redirect=False, port=0, out=None, cert=None, key=None):
+                 redirect=False, port=0, out=None, cert=None, key=None, down=False, trickle=0.0, hold=None,
+                 on_request=None):
         self.token_file, self.shape, self.refuse = token_file, shape, set(refuse)
         self.fail, self.fail_status, self.late, self.code, self.redirect = fail, fail_status, late, code, redirect
-        self.port, self.out, self.cert, self.key = port, out, cert, key
+        self.port, self.out, self.cert, self.key, self.down = port, out, cert, key, down
+        self.trickle, self.hold, self.on_request = trickle, hold, on_request
         self.events, self.requests, self.lock, self.quit = [], [], threading.Lock(), threading.Event()
+        self.arrived, self.held, self.release = 0, threading.Event(), threading.Event()
         self.server = self.thread = None
 
     def token(self):
@@ -67,7 +74,7 @@ class Collector:
         except (UnicodeDecodeError, ValueError, KeyError, TypeError, IndexError):
             return 400, {"text": "Invalid data format", "code": 6}, []
         for i, x in enumerate(lines):
-            if json.loads(x).get("id") in self.refuse:
+            if "*" in self.refuse or json.loads(x).get("id") in self.refuse:
                 return 400, {"text": "Invalid data format", "code": 6, "invalid-event-number": i}, []
         return 200, dict(OK, code=self.code), lines
 
@@ -83,9 +90,19 @@ class Collector:
             def do_POST(self):
                 body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 with owner.lock:
+                    n, owner.arrived = owner.arrived, owner.arrived + 1
                     failing = owner.fail > 0
                     if failing:
                         owner.fail -= 1
+                if owner.on_request is not None:
+                    owner.on_request(n, dict(self.headers), body)
+                if owner.hold is not None and n == owner.hold:   # held, then dropped: never taken
+                    owner.held.set()
+                    owner.release.wait()
+                    with owner.lock:
+                        owner.requests.append({"headers": dict(self.headers), "body": body, "status": None})
+                    self.close_connection = True
+                    return
                 if owner.late and owner.quit.wait(owner.late):
                     return
                 if owner.redirect:
@@ -105,6 +122,19 @@ class Collector:
                         with open(owner.out, "a", encoding="ascii") as f:
                             f.write("".join(x + "\n" for x in lines))
                 data = json.dumps(answer).encode("ascii")
+                if owner.trickle:   # the answer a byte at a time, as long as it takes
+                    whole = ("HTTP/1.1 %d X\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n"
+                             % (status, len(data))).encode("ascii") + data
+                    self.close_connection = True
+                    for i in range(len(whole)):
+                        try:
+                            self.wfile.write(whole[i:i + 1])
+                            self.wfile.flush()
+                        except OSError:
+                            return
+                        if owner.quit.wait(owner.trickle):
+                            return
+                    return
                 try:   # a sender gone before its answer (the rig's X21 kills one)
                     self.send_response(status)
                     if status == 302:
@@ -116,23 +146,34 @@ class Collector:
                 except OSError:
                     self.close_connection = True
 
-        self.server = http.server.ThreadingHTTPServer((HOST, self.port), Handler)
+        self.server = http.server.ThreadingHTTPServer((HOST, self.port), Handler, bind_and_activate=False)
         self.server.daemon_threads = True
+        self.server.server_bind()   # the port is the collector's from here: bound, and held while it is down
         if self.cert:   # https: the tests' own certificate, made where the machine has openssl
             ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             ctx.load_cert_chain(self.cert, self.key)
             self.server.socket = ctx.wrap_socket(self.server.socket, server_side=True)
-        self.port = self.server.server_port
+        self.port = self.server.server_address[1]
+        if not self.down:
+            self.up()
+        return self.port
+
+    def up(self):
+        """Listen on the port it bound, and answer."""
+        self.down = False
+        self.server.server_activate()
         self.thread = threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.05})
         self.thread.start()
-        return self.port
 
     def stop(self):
         self.quit.set()
+        self.release.set()
         if self.server is not None:
-            self.server.shutdown()
+            if self.thread is not None:
+                self.server.shutdown()
             self.server.server_close()
-            self.thread.join()
+            if self.thread is not None:
+                self.thread.join()
             self.server = None
 
 

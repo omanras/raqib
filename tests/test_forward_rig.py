@@ -1,12 +1,13 @@
-"""M10.3 E7 (ADR-0011 J-14): the rig's stand-in collector (tools/rig/collector.py), its forwarder run
-(tools/rig/forward_run.py) and X19 to X22 in tools/rig/check.py, offline: a made-up events file, loopback only."""
+"""M10.3 E7 and the REDO's E7 (ADR-0011 J-14, L-10): the rig's stand-in collector (tools/rig/collector.py), its
+forwarder run (tools/rig/forward_run.py) and X19 to X22 in tools/rig/check.py, offline: a made-up events file,
+loopback only. No verdict here waits for a time to pass: the collector's own counts and the states say it."""
 import http.client
 import importlib.util
 import json
 import os
 import re
+import socket
 import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -65,12 +66,45 @@ def test_e7_the_collector_is_loopback_checks_the_token_and_can_refuse_fail_and_b
         assert ask(port, envelope(1), TOKEN)[0] == 403
         c.fail, c.fail_status = 1, 503                                                # told to fail
         assert ask(port, envelope(1), "made-up-other")[0] == 503
-        c.late = 0.3                                                                  # told to be late
-        began = time.monotonic()
-        assert ask(port, envelope(4), "made-up-other")[0] == 200 and time.monotonic() - began >= 0.3
-        assert [json.loads(x)["id"] for x in c.events] == ["r1:1", "r1:3", "r1:4"]
+        c.late = 30.0                                                                 # told to be late
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=0.2)
+        conn.request("POST", "/services/collector/event", body=envelope(4), headers={"Authorization": "Splunk x"})
+        with pytest.raises(socket.timeout):
+            conn.getresponse()   # it holds the answer (30 s, or until it stops): no answer comes in 0.2 s
+        conn.close()
+        assert [json.loads(x)["id"] for x in c.events] == ["r1:1", "r1:3"]
     finally:
         c.stop()
+
+
+def test_redo_e7_the_collector_is_down_on_a_port_it_bound_comes_up_on_it_and_holds_a_request_by_its_count(tmp_path):
+    c = collector.Collector(secret(tmp_path / "t"), down=True, hold=1)
+    port = c.start()
+    try:
+        probe = socket.socket()
+        with pytest.raises(OSError):   # bound, and nothing listening: refused
+            probe.connect(("127.0.0.1", port))
+        probe.close()
+        c.up()
+        assert ask(port, envelope(1), TOKEN)[0] == 200
+        done = []
+        t = threading.Thread(target=_held, args=(port, done))
+        t.start()
+        assert c.held.wait(30) and c.arrived == 2 and done == []
+        c.release.set()   # the held request is dropped: never taken
+        t.join(30)
+        assert done == ["no answer"] and [json.loads(x)["id"] for x in c.events] == ["r1:1"]
+        assert ask(port, envelope(3), TOKEN)[0] == 200   # only that count is held
+    finally:
+        c.stop()
+
+
+def _held(port, done):
+    try:
+        ask(port, envelope(2), TOKEN)
+        done.append("answered")
+    except (OSError, http.client.HTTPException):
+        done.append("no answer")
 
 
 def made_up_file(tmp_path, count=23):
@@ -107,6 +141,9 @@ def test_e7_x19_to_x22_are_met_by_the_forwarder_over_a_made_up_events_file(ran):
                                                    "X22": check.MET}, got
     assert facts["x20"]["failing"]["error"] == "connect" and facts["x21"]["batch"] == 5
     assert 0 < facts["x21"]["killed"]["offset"] < facts["x21"]["size"]
+    assert facts["x21"]["held"] and facts["x21"]["before"] == 5 and facts["x21"]["requests_at_kill"] == 2
+    assert [p["how"] for p in facts["x22"]["listed"]] and all("--token-file" in p["text"]
+                                                             for p in facts["x22"]["listed"])
 
 
 def test_e7_each_of_x19_to_x22_is_missed_when_its_part_is_broken(ran):
@@ -123,9 +160,17 @@ def test_e7_each_of_x19_to_x22_is_missed_when_its_part_is_broken(ran):
     assert broken(lambda f: f["x20"]["events"].pop())["X20"] == check.MISSED                      # lost when it came up
     assert broken(lambda f: f["x21"].update(killed={"offset": 0}))["X21"] == check.MISSED         # not between batches
     assert broken(lambda f: f["x21"]["events"].pop(7))["X21"] == check.MISSED                     # a gap
+    assert broken(lambda f: f["x21"]["events"].append(f["x21"]["events"][0]))["X21"] == check.MISSED   # sent again
+    assert broken(lambda f: f["x21"].update(before=0))["X21"] == check.MISSED                     # killed too soon
     token = open(facts["token_file"], encoding="ascii").read().strip()
+    wrong = open(facts["wrong_file"], encoding="ascii").read().strip()
     assert broken(lambda f: f["x22"]["texts"].append({"where": "x", "text": "a " + token}))["X22"] == check.MISSED
+    assert broken(lambda f: f["x22"]["texts"].append({"where": "x", "text": "a " + wrong}))["X22"] == check.MISSED
     assert broken(lambda f: f["x22"]["argv"].append(["--token", token]))["X22"] == check.MISSED
+    assert broken(lambda f: f["x22"]["listed"][0].update(text="raqib --token-file f " + wrong))["X22"] == check.MISSED
+    assert broken(lambda f: f["x22"].update(listed=[]))["X22"] == check.MISSED                    # never read
+    assert broken(lambda f: f["x22"]["listed"][0].update(text=""))["X22"] == check.MISSED
+    assert broken(lambda f: f.update(wrong_file=str(Path(f["wrong_file"]).with_name("gone"))))["X22"] == check.MISSED
     assert set(states(None, events).values()) == {(check.MISSED, "the forwarder's run left no facts (silence is a"
                                                                  " finding)")}
 
@@ -157,6 +202,9 @@ def test_e7_rig_yml_runs_the_forwarder_on_both_machines_against_the_watchs_event
         reads = next(line for line in job.splitlines() if "run: python tools/rig/check.py" in line.replace("\\", "/"))
         assert "--forward " + facts in reads and job.index(run) < job.index(reads), reads
         assert job.index("watch the host while the stand-in agent works") < job.index(run)
+        for step in (run, reads):   # L-10: each runs always, whatever a step before it did
+            head = job[:job.index(step)].rstrip().splitlines()
+            assert "if: always()" in head[-1] or "if: always()" in head[-2], step
 
 
 def test_e7_the_rigs_new_files_are_ascii_stdlib_and_no_part_of_raqib():
@@ -166,3 +214,41 @@ def test_e7_the_rigs_new_files_are_ascii_stdlib_and_no_part_of_raqib():
     assert not [p for p in (ROOT / "raqib").rglob("*.py") if "collector" in p.read_text(encoding="utf-8") and
                 "tools" in p.read_text(encoding="utf-8") and "rig/collector" in p.read_text(encoding="utf-8")]
     assert threading.current_thread() is threading.main_thread()
+
+
+def test_redo_e7_forward_run_with_no_events_file_exits_0_writes_facts_and_the_table_stands(tmp_path, capsys):
+    out = tmp_path / "facts.json"
+    missing = tmp_path / "none" / "events.jsonl"
+    assert forward_run.main(["--events", str(missing), "--out", str(out), "--home", str(tmp_path / "home")]) == 0
+    facts = json.loads(out.read_text(encoding="ascii"))
+    assert facts["events_missing"] is True
+    got = check.read_forward(facts, "")
+    assert [r[1] for r in got] == [check.SKIP] * 4 and all("no events file" in r[2] for r in got)
+    (tmp_path / "w.out").write_text(rig.REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(rig.WORKLOAD, encoding="utf-8")
+    capsys.readouterr()
+    assert check.main(["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--exit-code", "1",
+                       "--platform", "linux", "--events", str(missing), "--forward", str(out)]) == 0
+    table = capsys.readouterr().out
+    assert re.search(r"^MISSED +X16 ", table, re.M) and re.search(r"^MET +X1 ", table, re.M), table
+    assert all(re.search(r"^n/a +X%d .*no events file" % i, table, re.M) for i in (19, 20, 21, 22)), table
+
+
+def test_redo_e7_forward_run_with_a_forwarder_that_cannot_start_exits_0_and_check_says_missed(tmp_path, capsys,
+                                                                                             monkeypatch):
+    events = made_up_file(tmp_path, count=5)
+    monkeypatch.setattr(forward_run, "FORWARD", [str(tmp_path / "no-such-program")])
+    out = tmp_path / "facts.json"
+    assert forward_run.main(["--events", str(events), "--out", str(out), "--home", str(tmp_path / "home")]) == 0
+    facts = json.loads(out.read_text(encoding="ascii"))
+    got = {r[0].split(" ", 1)[0]: (r[1], r[2]) for r in check.read_forward(facts, events.read_text(encoding="ascii"))}
+    assert {k: v[0] for k, v in got.items()} == {"X19": check.MISSED, "X20": check.MISSED, "X21": check.MISSED,
+                                                 "X22": check.MISSED}, got
+    assert "FileNotFoundError" in got["X20"][1] and "process list" in got["X22"][1]
+    assert [t["text"] for t in facts["x22"]["texts"] if t["where"] == "x19 start"] == ["cannot start: FileNotFoundError"]
+    (tmp_path / "w.out").write_text(rig.REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(rig.WORKLOAD, encoding="utf-8")
+    capsys.readouterr()
+    assert check.main(["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--exit-code", "1",
+                       "--platform", "linux", "--events", str(events), "--forward", str(out)]) == 0
+    assert re.search(r"^MET +X1 ", capsys.readouterr().out, re.M)
