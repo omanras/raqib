@@ -1929,7 +1929,7 @@ class HostWatch:
             return dict(self._knock_row(k), **{"for": self._knocked_for(k, made["t"])})
         trees = [dict(e, candidate_by=self.tree_by[key]) if key in self.tree_by else e
                  for key, e in self.trees.items()]
-        changed, self.notes_replaced = self.notes_replaced, set()   # H-1: the notes replaced in place
+        changed = set(self.notes_replaced)   # H-1: the notes replaced in place (I-1: forgotten only once looked at)
         for _ in range(2):   # a hole the pass made is said in a second pass
             problems = log.ledgers(
                 iso(self.wall()), trees=trees, findings=self.findings,
@@ -1937,6 +1937,7 @@ class HostWatch:
                 blind=self.blind, notes=self.notes, dark_notes=self.dark_notes, lost=watch.lost_note(self.out),
                 knocks=eventlog.Lazy(len(self.knocks), row), record=self.rounds_path, beat=beat, final=final,
                 same=same, notes_changed=changed)
+            self.notes_replaced -= changed   # the pass ran: what it was given has been looked at
             self._events_problems(now, problems)
             if not problems:
                 break

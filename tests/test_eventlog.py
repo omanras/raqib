@@ -801,8 +801,8 @@ def test_h3_a_row_that_raises_when_read_stops_only_itself_and_a_list_s_failure_i
     problems = []
     for _ in range(3):
         problems += log.ledgers(T0, knocks=eventlog.Lazy(4, get), holes=NoLength(), notes=["a note (test)"])
-    assert len(problems) == 2 and sorted(p[1][:23] for p in problems) == ["hole: the list was not s",
-                                                                          "knock:2: cannot be read"][:2] or problems
+    # ADR-0011 I-2: counted. Three passes, two problems in all: each said once for the watch's life
+    assert sorted(p[1][:23] for p in problems) == ["hole: the list was not ", "knock:2: cannot be read"], problems
     assert problems[0][1].startswith("knock:2: cannot be read: RuntimeError") or problems[1][1].startswith(
         "knock:2: cannot be read: RuntimeError")
     assert any(p[1].startswith("hole: the list was not said: RuntimeError") for p in problems)
@@ -858,6 +858,46 @@ def test_h4_a_fragment_left_between_two_lines_and_what_a_failed_write_left_is_sa
     assert [(e["about"], e["rev"]) for e in after] == [("hole:1", 2), ("watch", 3), ("watch", 4)]
     assert after[0]["knocked"]["status"] == "sent"   # the later rev, said when the file could be written again
     assert [e["rev"] for e in lines_of_whole(path) if e["about"] == "watch"] == [1, 3, 4]   # rev 2 never reused
+
+
+def test_i2_a_fragment_is_ended_before_the_very_next_line_with_no_failed_write_between(tmp_path):
+    """ADR-0011 I-2 (H-4's "before every line"): another writer leaves a fragment after this watch's own lines;
+    the next pass writes at once (no failed write in between, which the earlier build needed to look again):
+    the fragment gets its newline and the new line is whole, on a line of its own."""
+    path = tmp_path / "e.jsonl"
+    log = eventlog.EventLog(str(path), FACTS, te.TABLE)
+    assert log.start(T0, 0.0)[0] == "written" and log.ledgers(T0, notes=["first (test)"]) == []
+    with open(str(path), "ab") as f:
+        f.write(b'{"schema":"raqib-ev')
+    assert log.ledgers(T1, notes=["first (test)", "second (test)"]) == [] and log.mended == 1
+    raw = path.read_text(encoding="ascii").split("\n")
+    assert raw[2] == '{"schema":"raqib-ev' and json.loads(raw[3])["about"] == "note:2" and raw[4] == ""
+    with open(str(path), "ab") as f:
+        f.write(b'torn again')
+    assert log.ledgers(T1, notes=["first (test)", "second (test)", "third (test)"]) == [] and log.mended == 2
+    assert [e["about"] for e in lines_of_whole(path)] == ["watch", "note:1", "note:2", "note:3"]
+
+
+def test_i2_every_key_of_a_tree_s_core_is_said_at_once_and_its_evidence_waits_for_the_finish(runs, tmp_path):
+    """ADR-0011 I-2 (H-1's second, core tuple for a tree): between beats a tree whose record line alone moved is
+    not said again, and a change of any one thing a consumer acts on - each key the core holds - is said in the
+    very next pass. Driven by the core's own list of keys, so that a key taken out of it fails here."""
+    w = runs["B"]["w"]
+    key, entry = next(iter(w.trees.items()))
+    core = [k for k in eventlog.TREE_READS_CORE if k not in ("key", "pid", "image")]   # those name the tree itself
+    assert {"knocked", "benign", "history", "named", "candidate_by"} <= set(core)
+    for k in core:
+        row = dict(json.loads(json.dumps(entry)), key=list(key), candidate_by="sample")
+        log = eventlog.EventLog(str(tmp_path / ("%s.jsonl" % k)), FACTS, te.TABLE)
+        assert log.ledgers(T0, trees=[row], record="rounds.jsonl") == []
+        moved = dict(row, line_seq=(row.get("line_seq") or 0) + 7)   # its record line alone: held to the finish
+        assert log.ledgers(T1, trees=[moved], record="rounds.jsonl") == []
+        assert [e["rev"] for e in lines_of(log.path)] == [1], k
+        was = moved.get(k)
+        new = (not was) if isinstance(was, bool) or was is None and k in ("benign", "history", "named") else (
+            "channel" if k == "candidate_by" else "sent (test)")
+        assert log.ledgers(T1, trees=[dict(moved, **{k: new})], record="rounds.jsonl") == []
+        assert [e["rev"] for e in lines_of(log.path)] == [1, 2], k   # at once, with no beat and no finish
 
 
 def lines_of_whole(path):

@@ -487,3 +487,27 @@ entries are looked at.
 - Recorded, not built: a tree's event does not carry its HOST-RHYTHM and HOST-UNWATCHED knocks (their findings
   do); a write whose bytes landed and whose close failed is said twice (two ids, one rev).
 
+## Amendment I (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.2-redo2.md (0341ea3)
+The packet: H is built, no key was found whose change goes unsaid; REDO for two tests that could not fail, for
+a sentence of EVENT.md that contradicted its new section, and for two statements there the code does not make
+true. None of it is a build: the Table made the changes itself (CLAUDE.md rule 8).
+- I-1 (a small loss, closed). The watch forgot which notes it had replaced before the pass that was to look
+  at them had run; a pass that failed before it began lost them until the next beat. They are forgotten only
+  once a pass was given them.
+- I-2 (the tests). "A list's failure is said once" is now counted (the assertion's own precedence had made
+  it always true). "The file's end is looked at before every line" has a test with no failed write between
+  the fragment and the next line, which the earlier build would fail. Every key of a tree's core - what a
+  consumer acts on - is driven from the core's own list: a change of any one is said in the next pass, and
+  the record line alone is not.
+- I-3 (EVENT.md says only what is true). A last line with no newline is not whole: it is being written, or
+  it is the torn end of a watch that was stopped, and then no newline comes until another watch appends. A
+  cursor is a byte offset; a file shorter than the cursor is another file. The start is tried first at every
+  pass, and a line can stand before it where only the start's own write failed. A run is silent by the
+  reader's own clock since the file last grew with its line, never by `time`. A run whose end could not be
+  written reads as stopped. The end's result and the report's can differ in both directions where the watch's
+  own state file failed around the end.
+- Recorded for M10.3, the first reader of the file: no test drives the three places that replace a note, nor
+  the host's own code changing a settled entry, through a running watch; the pass builds every knock row
+  before the writer compares (cost, measured by the longest pass); a file written by an earlier build has no
+  `watch.beat` and reads as not events.
+

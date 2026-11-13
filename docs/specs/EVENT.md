@@ -107,8 +107,8 @@ anywhere; a collector's own agent may tail the file.
   The file's end is looked at before every line: a line is never appended to a fragment, whoever left it.
   "watch" takes a new rev at each heartbeat, never a number used before (a rev whose line failed is skipped).
 - A watch that was killed (G-7): a run with a start and no end, whose last line is older than two beats, was
-  stopped or killed; that silence is the collector's alarm. A last line that is not whole JSON is a torn write;
-  the next line a watch appends begins on a line of its own (the file gets a newline first, G-6), and a line
+  stopped or killed; that silence is the collector's alarm. A last line with no newline is not whole (see the
+  section for a reader of the file); the next line a watch appends begins on a line of its own (the file gets a newline first, G-6), and a line
   that failed is never counted as written.
 - What cannot be said is said (F-4): an entry that makes a builder raise is a hole of the watch, one per thing,
   naming the thing and the key ("event-not-built"); a line that cannot be written is counted and is one hole
@@ -129,18 +129,28 @@ What a collector's own agent, tailing `events.jsonl`, may rely on and must allow
   A run is its `watch.run`; outside its run a thing is "<watch.run>/<about>".
 - Raqib only appends to it. It never rewrites, rotates or truncates the file; a file that shrank or was replaced
   was changed by someone else.
-- A last line with no newline is still being written: wait for its newline. A line in the middle of the file
-  that is not JSON (or not an event, `event.check`) is a torn write: skip it and count it; the line after it
-  begins on a line of its own.
+- A last line with no newline is not whole: do not send it, wait for its newline. It is being written, or it is
+  the torn end of a watch that was stopped: then no newline comes until another watch appends, which first ends
+  the fragment with one. A line that is not JSON (or not an event, `event.check`), in the middle of the file or
+  ended this way, is a torn write: skip it and count it; the line after it begins on a line of its own.
+- A cursor is a byte offset into the file, at the end of the last whole line sent (the file is only appended to).
+  A file shorter than the cursor, or whose bytes before the cursor changed, is not the file that was read: start
+  it again and say so. The file is not rotated and grows for as long as it is kept.
 - Within a run, `n` rises in the file's order, with gaps (a number used for a line that was not written). One
   thing at one rev can be under two ids after a failed write (said again with a new `n`); dedup by `watch.host`
   and `id`, and take a thing's latest rev.
 - `time` is when the thing was said, not when the line was written: a first saying carries the entry's own time,
   so `time` does not rise from line to line and is not from one clock. Order by `n` within a run, not by `time`.
-- A run starts at "watch" `state` start; where that line could not be written it comes later, before anything
-  else the watch could write. A run ends at "watch" `state` end. A run with a start and no end whose last line
-  is older than two of its beats (`watch.beat`) was stopped or killed: that silence is the alarm. Such a run has
-  not said its trees' last evidence (their latest record line and cites are said once, at the finish).
+- A run starts at "watch" `state` start; where that line could not be written the watch tries it again before
+  anything else at every pass, so it comes later, and a line of the run can stand before it where only the
+  start's own write failed. A run ends at "watch" `state` end. A run with no end, to which no line has been
+  added for more than two of its beats (`watch.beat`) by the reader's own clock - not by `time`, which a first
+  saying can carry from long before - was stopped or killed, or its end could not be written: that silence is
+  the alarm. Such a run has not said its trees' last evidence (their latest record line and cites are said
+  once, at the finish).
+- The end's `result` is the watch's result when the end was written. Where the watch's own state file failed
+  before the end and was written after it, or failed only after it, the report's last word and the end's can
+  differ: the report is the watch's last word, the end is what it could say in the file.
 
 ## Keys
 
