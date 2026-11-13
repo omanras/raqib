@@ -43,11 +43,11 @@ PARTS = {
     "knocked": ("status", "event", "title", "limit_id", "called", "for"),   # F-5: for, the thing knocked for
     "result": ("word", "exit", "suppressed"),   # G-4: suppressed, on a watch's end only
     "counts": ("rounds", "findings", "source_findings", "holes", "blind", "notes", "trees", "knocks"),
-    "watch": ("run", "mode", "platform", "version", "host"),
+    "watch": ("run", "mode", "platform", "version", "host", "beat"),   # H-6: beat, the heartbeat's interval in s
 }
 CITE = ("src", "line", "round", "seq")   # C-3: a cite, never its text
 BASE = ("schema", "id", "n", "time", "kind", "about", "rev", "severity", "watch")
-BASE_PARTS = ("watch.run", "watch.host")   # D-3: required in every event beside BASE (a collector keys by the host)
+BASE_PARTS = ("watch.run", "watch.host", "watch.beat")   # D-3, H-6: required in every event beside BASE
 REQUIRED = {   # C-10: per kind, beside BASE (a dotted name: a key of that part)
     "finding": ("alarm", "summary", "rule", "rule.id", "rule.attack", "evidence"),
     "source-finding": ("alarm", "summary", "rule", "rule.id", "rule.attack", "subject", "evidence", "state"),
@@ -115,19 +115,26 @@ TYPES = {
     "knocked.called": "str", "knocked.for": "str",
     "result.word": "str", "result.exit": "int", "result.suppressed": "pos",
     "watch.run": "str", "watch.mode": "str", "watch.platform": "str", "watch.version": "str", "watch.host": "str",
+    "watch.beat": "number",
 }
 TYPES.update({"counts.%s" % k: "count" for k in PARTS["counts"]})
 
 
 # --- the parts ------------------------------------------------------------------------------------------------
 
-def facts(state, host=None, version=__version__):
+def facts(state, host=None, version=__version__, beat=None):
     """The watch's facts (C-2 watch) from its state() and the host's name the caller gives: required (D-3, a
-    collector keys by it); without it, ValueError."""
+    collector keys by it); without it, ValueError. H-6: beat, the heartbeat's interval in seconds, given or the
+    state's own (its events' beat_seconds): required (a reader of the file alone tells a run gone silent);
+    without it, ValueError."""
     if not (isinstance(host, str) and host):
         raise ValueError("watch.host: facts must be given the host's name (D-3: required on every event)")
+    if beat is None and isinstance(state.get("events"), dict):
+        beat = state["events"].get("beat_seconds")
+    if isinstance(beat, bool) or not isinstance(beat, (int, float)) or not beat > 0:
+        raise ValueError("watch.beat: facts must be given the beat in seconds (H-6: required on every event)")
     out = {"run": state.get("run"), "mode": state.get("mode"), "platform": state.get("platform"),
-           "version": version, "host": host}
+           "version": version, "host": host, "beat": beat}
     return {k: v for k, v in out.items() if v is not None and v != ""}
 
 
@@ -381,7 +388,8 @@ def watch_end(state, facts_, time, n, exit, about="watch", rev=1, word=None, sup
                    counts=_counts(state))
 
 
-def snapshot(state, facts_, time, knocks, rules, end=False, exit=None, lost=None, word=None, suppressed=None):
+def snapshot(state, facts_, time, knocks, rules, end=False, exit=None, lost=None, word=None, suppressed=None,
+             same=None):
     """C-1: the events of one state in one call, n from 1, rev 1, in one order: the watch's start, its trees
     ("tree:<word>"), findings ("finding:i"), source findings ("source-finding:i"), holes, blind spots ("blind:i"),
     notes, knocks ("knock:i") and a heartbeat (or, end=True, the watch's end with the exit, word and suppressed
@@ -390,8 +398,10 @@ def snapshot(state, facts_, time, knocks, rules, end=False, exit=None, lost=None
     notifier (the entry that holds a count) "notifier-hole:i", each counted in its own list; a note is "note:i"
     over the watch's own notes (a dark note's text as its dark note), and the note of the words a terminal lost
     (always last, its text changes) is "note:lost-words" when its text is given as lost (watch.lost_note of the
-    watch's out); without lost that note is numbered as any other. Not how a running watch says events:
-    M10.2 keeps the count and says a changed thing again. knocks: knock_rows(), all of them (C-8: the state
+    watch's out); without lost that note is numbered as any other. H-7: same, the pairs the report's listing
+    takes for one act ({place of a source finding from 1: the about of the source finding it is one with}, as
+    the watch's pass finds them with host.told_twice): each said with alarm false and evidence.same_as (G-1).
+    Not how a running watch says events: it keeps the count and says a changed thing again. knocks: knock_rows(), all of them (C-8: the state
     keeps only the newest), required. rules: {rule id: row of report.rule_table}, required (C-10: a finding
     needs its rule's attack). time: of the heartbeat or the end; the start's is the state's started, a tree's
     its first_seen, an entry's its own "at", where it is a real instant (else the time given)."""
@@ -413,7 +423,7 @@ def snapshot(state, facts_, time, knocks, rules, end=False, exit=None, lost=None
                            record=record))
     for i, e in enumerate(h.get("source_findings") or (), 1):
         out.append(source_finding(e, facts_, at(e), len(out) + 1, "source-finding:%d" % i,
-                                  rule=rules.get(e.get("rule_id"))))
+                                  rule=rules.get(e.get("rule_id")), same_as=(same or {}).get(i)))
     places = {"hole": 0, "notifier-hole": 0}
     for e in state.get("holes") or ():
         whose = "notifier-hole" if isinstance(e, dict) and "count" in e else "hole"

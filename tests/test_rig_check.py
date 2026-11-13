@@ -152,7 +152,8 @@ def made_up_events(code=1, beats=0):
     import sys
     sys.path.insert(0, str(ROOT))
     from raqib import event
-    facts = {"run": "rig-run", "mode": "host", "platform": "win32", "version": "0.1.0", "host": "host.example"}
+    facts = {"run": "rig-run", "mode": "host", "platform": "win32", "version": "0.1.0", "host": "host.example",
+             "beat": 20.0}   # ADR-0011 H-6: the beat on every event
     t = "2026-11-03T07:51:21.000Z"
     rule = {"attack": ["T1059"]}
     out = [event.watch_start({}, facts, "2026-11-03T07:50:00.000Z")]

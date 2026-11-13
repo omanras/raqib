@@ -119,9 +119,17 @@ def take(w, end=False, exit=None, word=None, suppressed=None):
             t["candidate_by"] = w.tree_by[tuple(t["key"])]
     knocks = json.loads(json.dumps(w.knock_rows(fors=True)))   # G-9: the thing each knock was for
     lost = watch.lost_note(w.out)
-    return {"state": st, "knocks": knocks, "lost": lost,
+    same = pairs_of(w)   # ADR-0011 H-7: the pairs the report takes for one act, as the watch's pass finds them
+    return {"state": st, "knocks": knocks, "lost": lost, "same": same,
             "events": event.snapshot(st, facts(st), st["updated"], knocks, TABLE, end=end, exit=exit, lost=lost,
-                                     word=word, suppressed=suppressed)}
+                                     word=word, suppressed=suppressed, same=same)}
+
+
+def pairs_of(w):
+    """{place of a source finding: the about of the one it is one act with}, by host.told_twice (G-1, H-7)."""
+    pairs = host.told_twice(w.source_findings, w.sources) if w.source_findings else {}
+    place = {id(f): i for i, f in enumerate(w.source_findings, 1)}
+    return {place[o]: "source-finding:%d" % place[id(h)] for o, h in pairs.items() if o in place and id(h) in place}
 
 
 def ended(w, home, **more):
@@ -439,7 +447,8 @@ C2_PARTS = {"rule": ["id", "class", "kind", "fp_budget", "attack"],
             "knocked": ["status", "event", "title", "limit_id", "called", "for"],
             "result": ["word", "exit", "suppressed"],
             "counts": ["rounds", "findings", "source_findings", "holes", "blind", "notes", "trees", "knocks"],
-            "watch": ["run", "mode", "platform", "version", "host"]}
+            # ADR-0011 H-6 (M10.2 REDO 2): watch.beat, the heartbeat's interval, on every event
+            "watch": ["run", "mode", "platform", "version", "host", "beat"]}
 
 
 def test_e2_every_event_of_every_run_has_no_problem_and_c2_s_order(runs):

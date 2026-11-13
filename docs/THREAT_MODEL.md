@@ -161,12 +161,22 @@ item F7 of the M1.2 review packet or questions file.
     one per event in a run and the heartbeat is on a fixed beat, so a gap or
     a silence is visible to whoever reads it; the report and the state say
     how many events were written, not built and not written. A line that
-    cannot be written is a hole of the watch, never a silence; a line is
-    never appended to a torn one (the file gets a newline first).
+    cannot be written is a hole of the watch, never a silence, and what it
+    left unsaid is said at the next pass; a line is never appended to a
+    fragment, whoever left it (the file's end is looked at before every
+    line, and a file that does not end in a newline gets one first). Raqib
+    itself never rewrites, rotates or truncates the file.
   - A watch that was stopped or killed writes no end: a run with a start
     and no end, whose last line is older than two beats, was stopped or
-    killed, and that silence is the collector's alarm. A last line that is
-    not whole JSON is a torn write.
+    killed, and that silence is the collector's alarm. Every event carries
+    its beat (`watch.beat`), so the file alone says how long two beats are.
+    A last line with no newline may still be being written; a line in the
+    middle that is not whole JSON is a torn write, skipped and counted.
+  - Every pass of the watch looks at every entry that can change, so a
+    changed thing (an act's standing moved to another tree, a fold decided,
+    a finding that grew) is said in the pass after the change, not a beat
+    later; an alarm taken back is a later rev of the same thing (`alarm`
+    false), and an act whose other half has no line keeps its alarm.
 
 ## 5. What Raqib cannot see (known gaps)
 

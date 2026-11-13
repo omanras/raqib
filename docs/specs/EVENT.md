@@ -3,7 +3,7 @@
 An event is one line Raqib says about what its watch holds: a finding, a source finding, a note, a tree, a
 hole or a blind spot, a knock, a heartbeat, or the watch's start and end. It is built once, in Raqib's own
 shape, by one module (`raqib/event.py`, B-1); a collector's shape (OCSF, ECS) is a mapping of it, given below.
-The watch does not write events yet (M10.2).
+The host watch writes them, while it runs, to a file a collector's own agent can tail (The events file, below).
 
 - An event is a thing said once (C-1). `id` ("<run>:<n>", n one more for each event the run says) names the
   saying and is never used twice in a run; a run id is not known to be unique across hosts, so an id is unique
@@ -23,9 +23,15 @@ The watch does not write events yet (M10.2).
   "<watch.run>/<about>" (see Mapping).
 - `watch.host` is required on every event (D-3): `check` refuses an event without it and `event.facts` refuses
   to be called without it (ValueError); a collector keys by it.
-- `event.snapshot(state, facts, time, knocks, rules, end=False, exit=None, lost=None)` gives the events of one state of a watch in one call, n
-  from 1 and rev 1. It is not how a running watch says events: a running watch (M10.2) keeps the count of its
-  events and says a changed thing again with the next rev. `snapshot` must be given every knock row
+- `watch.beat` is required on every event (H-6): the heartbeat's interval in seconds, so that a reader of the
+  file alone can tell a run that went silent for more than two beats. `event.facts` takes it (`beat=`) or reads
+  it from the state's `events.beat_seconds`, and refuses to be called without either (ValueError).
+- `event.snapshot(state, facts, time, knocks, rules, end=False, exit=None, lost=None, word=None,
+  suppressed=None, same=None)` gives the events of one state of a watch in one call, n from 1 and rev 1: the end
+  with `exit`, `word` and `suppressed` given where `end` is true; `same` the pairs the report's listing takes for
+  one act ({place of a source finding from 1: the `about` of the source finding it is one with}, as the watch's
+  pass finds them), each said with `alarm` false and `evidence.same_as` (H-7). It is not how a running watch says
+  events: a running watch keeps the count of its events and says a changed thing again with the next rev. `snapshot` must be given every knock row
   (`knock_rows()`: the state keeps only the newest) and the rule table (a finding needs its rule's `attack`).
 - One line: JSON, keys sorted, compact (no spaces), ASCII (non-ASCII escaped). The same entries give the same
   lines byte for byte (B-3).
@@ -61,6 +67,12 @@ The watch does not write events yet (M10.2).
   host's sample and the os follow both saw it) is one alarm. The entry the listing folds is said with `alarm`
   false and `evidence.same_as`, the `about` of the entry it is one with; a pair found after both were said is
   the folded one's next rev.
+- An alarm can be taken back by a later rev of the same thing (H-2): `alarm` false, with `evidence.same_as`
+  (where the os source tells an act before the host's sample does, the os entry is said as an alarm and is
+  folded by its next rev). So a collector keys an alert by the run and the thing's name ("<watch.run>/<about>")
+  and takes its latest rev. Where the entry an act is folded into has no line in the file (it could not be
+  built, or its line was not written), the folded one is said unfolded, an alarm as its state says, until that
+  entry is said: an act always has an alarm.
 
 ## The events file
 
@@ -74,17 +86,26 @@ anywhere; a collector's own agent may tail the file.
   the knock rows ("knock:i"). The watch names each from the list it is in. An event's `time` is when it is said
   (G-3): at rev 1 its entry's own (a tree's first-seen time) where it has one, else the time of the pass; at a
   later rev the time of the pass that says it.
-- The first event is the watch's start ("watch" rev 1), the last its end, said once (G-10): the result is
-  computed, the end is written, then the report's EVENTS line and the state are made, so they count it. The
+- The first event is the watch's start ("watch" rev 1), the last its end, said once (G-10): the state is
+  written, the result is computed (H-5: a state that cannot be written makes it INCOMPLETE, as the report's), the
+  end is written, then the state is written again and the report's EVENTS line made, so they count it. What
+  fails after the end (the report itself, that last write of the state) is in the report alone: the end cannot
+  hold it, and the report's RESULT is then the word to trust. The
   end's `result.word` is the report's own (CLEAN, ALARM, INCOMPLETE or NONE-SEEN; G-4) and `result.suppressed`
   the findings the overlay suppressed. On a fixed beat (`--beat S`, 60 s by default, never shorter than a round)
   a heartbeat is written though nothing else changed: "watch", the next rev.
 - A thing is said again when what a consumer acts on changed (G-2): a tree knocked, made benign or history, or
   named at once; its latest record line and cites, and a blind spot's count, are not that: their last is said
-  once, at the finish. The lost-words note is said again only with a beat. Between beats a pass looks at what is
-  new in each list and at what can still change (the trees, the source findings not yet settled, the knocks not
-  yet decided, the notifier's holes); at a beat and at the finish at everything (G-6). The longest pass is on
-  the report's EVENTS line and in the state.
+  once, at the finish. The lost-words note is said again only with a beat. Every pass looks at every entry of
+  every list that can change (the findings, the source findings, the watch's holes, the notifier's holes, the
+  knock rows, the trees) and at the notes that are new or that the watch replaced in place (H-1): a changed
+  thing is said in the pass that follows the change. For each thing the writer keeps the values its event is
+  built from, and where they are what they were nothing is built: that is the bound on a pass's work. The
+  longest pass is on the report's EVENTS line and in the state.
+- What a failed write left unsaid is said at the next pass (H-4): a first saying, a later rev, or the start (a
+  watch whose start could not be written writes it before anything else when the file can be written again).
+  The file's end is looked at before every line: a line is never appended to a fragment, whoever left it.
+  "watch" takes a new rev at each heartbeat, never a number used before (a rev whose line failed is skipped).
 - A watch that was killed (G-7): a run with a start and no end, whose last line is older than two beats, was
   stopped or killed; that silence is the collector's alarm. A last line that is not whole JSON is a torn write;
   the next line a watch appends begins on a line of its own (the file gets a newline first, G-6), and a line
@@ -100,6 +121,26 @@ anywhere; a collector's own agent may tail the file.
   line number: exit 0 when every line is an event, 1 when one is not (or the file holds none), 2 when the file
   cannot be read. It reads; it sends nothing (F-8).
 - A technique id in `rule.attack` says what a finding is consistent with, never that it happened (B-5).
+
+## For a reader of the file
+
+What a collector's own agent, tailing `events.jsonl`, may rely on and must allow for (H-8):
+- The file holds many runs: every host watch on the account appends to the same `~/.raqib/host/events.jsonl`.
+  A run is its `watch.run`; outside its run a thing is "<watch.run>/<about>".
+- Raqib only appends to it. It never rewrites, rotates or truncates the file; a file that shrank or was replaced
+  was changed by someone else.
+- A last line with no newline is still being written: wait for its newline. A line in the middle of the file
+  that is not JSON (or not an event, `event.check`) is a torn write: skip it and count it; the line after it
+  begins on a line of its own.
+- Within a run, `n` rises in the file's order, with gaps (a number used for a line that was not written). One
+  thing at one rev can be under two ids after a failed write (said again with a new `n`); dedup by `watch.host`
+  and `id`, and take a thing's latest rev.
+- `time` is when the thing was said, not when the line was written: a first saying carries the entry's own time,
+  so `time` does not rise from line to line and is not from one clock. Order by `n` within a run, not by `time`.
+- A run starts at "watch" `state` start; where that line could not be written it comes later, before anything
+  else the watch could write. A run ends at "watch" `state` end. A run with a start and no end whose last line
+  is older than two of its beats (`watch.beat`) was stopped or killed: that silence is the alarm. Such a run has
+  not said its trees' last evidence (their latest record line and cites are said once, at the finish).
 
 ## Keys
 
@@ -185,6 +226,7 @@ field (see Mapping), else the namespace.
 | `watch.platform` | `str` | the platform the watch runs on | all | `unmapped.raqib.watch.platform` | `raqib.watch.platform` |
 | `watch.version` | `str` | Raqib's version | all | `metadata.product.version` (`metadata.product.name` Raqib) | `observer.version` (`observer.product` Raqib) |
 | `watch.host` | `str` | the host's name, as the caller gives it; required on every event (D-3) | all | `device.hostname` | `host.name` |
+| `watch.beat` | `number` | the heartbeat's interval in seconds; required on every event (H-6) | all | `unmapped.raqib.watch.beat` | `raqib.watch.beat` |
 
 ## Mapping
 
@@ -218,7 +260,8 @@ named field or to the namespace: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`.
 
 ## Required keys
 
-Every event holds the base keys (`schema` to `severity`, and `watch` with `watch.run` and `watch.host`); each
+Every event holds the base keys (`schema` to `severity`, and `watch` with `watch.run`, `watch.host` and
+`watch.beat`); each
 kind adds its own; a dotted name is
 required inside its part. A watch end (`state` end) holds `result` with `exit`, and `counts`; a watch start
 holds neither. Any other key of the table is held only where the entry holds it. `event.check(obj)` names
@@ -226,15 +269,15 @@ every problem of an event, each beginning with its key; every event the module b
 
 | kind | required keys |
 |---|---|
-| finding | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `alarm`, `summary`, `rule`, `rule.id`, `rule.attack`, `evidence` |
-| source-finding | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `alarm`, `summary`, `rule`, `rule.id`, `rule.attack`, `subject`, `evidence`, `state` |
-| note | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `summary` |
-| tree | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `subject`, `subject.tree` |
-| hole | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `alarm`, `summary`, `hole`, `hole.kind`, `hole.class` |
-| knock | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `summary`, `knocked`, `knocked.status` |
-| heartbeat | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state`, `result`, `result.exit`, `counts` |
-| watch | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state` |
-| watch end | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `state`, `result`, `result.word`, `result.exit`, `counts` |
+| finding | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `alarm`, `summary`, `rule`, `rule.id`, `rule.attack`, `evidence` |
+| source-finding | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `alarm`, `summary`, `rule`, `rule.id`, `rule.attack`, `subject`, `evidence`, `state` |
+| note | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `summary` |
+| tree | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `subject`, `subject.tree` |
+| hole | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `alarm`, `summary`, `hole`, `hole.kind`, `hole.class` |
+| knock | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `summary`, `knocked`, `knocked.status` |
+| heartbeat | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `state`, `result`, `result.exit`, `counts` |
+| watch | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `state` |
+| watch end | `schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`, `watch.run`, `watch.host`, `watch.beat`, `state`, `result`, `result.word`, `result.exit`, `counts` |
 
 ## Examples
 
@@ -259,7 +302,7 @@ last round, and after its end), so they share a number, and are never both in on
 From run B.
 
 ```json
-{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","round":2,"run":"fixture-run","seqs":[1]},"id":"fixture-run:3","kind":"finding","knocked":{"status":"off"},"n":3,"rev":1,"rule":{"attack":["T1059"],"class":"HOST","fp_budget":0.4,"id":"NEW-AGENT-UNKNOWN","kind":"anchor"},"schema":"raqib-event/1","severity":"medium","subject":{"image":"powershell","named":false,"pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"unknown agent tree powershell pid 5888 (round 2, was absent)","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","round":2,"run":"fixture-run","seqs":[1]},"id":"fixture-run:3","kind":"finding","knocked":{"status":"off"},"n":3,"rev":1,"rule":{"attack":["T1059"],"class":"HOST","fp_budget":0.4,"id":"NEW-AGENT-UNKNOWN","kind":"anchor"},"schema":"raqib-event/1","severity":"medium","subject":{"image":"powershell","named":false,"pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"unknown agent tree powershell pid 5888 (round 2, was absent)","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: finding: HOST-RHYTHM
@@ -267,7 +310,7 @@ From run B.
 From run R.
 
 ```json
-{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":2,"round":1,"seq":1,"src":"win-tcp"},{"line":4,"round":2,"seq":2,"src":"win-process"},{"line":2,"round":2,"seq":2,"src":"win-tcp"},{"line":5,"round":3,"seq":3,"src":"win-process"},{"line":2,"round":3,"seq":3,"src":"win-tcp"},{"line":6,"round":4,"seq":4,"src":"win-process"}],"record":"~/.raqib/host/rounds.jsonl","round":4,"rounds":[2,3,4],"run":"rhythm-run","seqs":[4]},"id":"rhythm-run:3","kind":"finding","knocked":{"status":"failed"},"n":3,"rev":1,"rule":{"attack":["T1059","T1071"],"class":"HOST","fp_budget":0.0,"id":"HOST-RHYTHM","kind":"anchor"},"schema":"raqib-event/1","severity":"high","subject":{"image":"relay-bot","named":false,"pid":4400,"tree":"4400:relay-bot:2026-11-03T09:00:00.000000Z"},"summary":"unknown tree relay-bot pid 4400: 3 talk-then-act cycles to 192.0.2.10:443 in the last 10 rounds (round 4)","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.1.0"}}
+{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":2,"round":1,"seq":1,"src":"win-tcp"},{"line":4,"round":2,"seq":2,"src":"win-process"},{"line":2,"round":2,"seq":2,"src":"win-tcp"},{"line":5,"round":3,"seq":3,"src":"win-process"},{"line":2,"round":3,"seq":3,"src":"win-tcp"},{"line":6,"round":4,"seq":4,"src":"win-process"}],"record":"~/.raqib/host/rounds.jsonl","round":4,"rounds":[2,3,4],"run":"rhythm-run","seqs":[4]},"id":"rhythm-run:3","kind":"finding","knocked":{"status":"failed"},"n":3,"rev":1,"rule":{"attack":["T1059","T1071"],"class":"HOST","fp_budget":0.0,"id":"HOST-RHYTHM","kind":"anchor"},"schema":"raqib-event/1","severity":"high","subject":{"image":"relay-bot","named":false,"pid":4400,"tree":"4400:relay-bot:2026-11-03T09:00:00.000000Z"},"summary":"unknown tree relay-bot pid 4400: 3 talk-then-act cycles to 192.0.2.10:443 in the last 10 rounds (round 4)","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.1.0"}}
 ```
 
 ### example: note
@@ -275,7 +318,7 @@ From run R.
 From run A (the dark note).
 
 ```json
-{"about":"note:4","evidence":{"cites":[{"line":2,"src":"footprints"}],"record":"~/.raqib/host/rounds.jsonl","round":13,"run":"field-run","seqs":[27]},"id":"field-run:11","kind":"note","n":11,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"agent":"kimi","path":"C:\\Users\\user\\.kimi","tree":"10728:kimi:11/2/2026 10:21:05 AM"},"summary":"round 13: kimi footprint C:\\Users\\user\\.kimi: dark after a live tree (note): no live tree for 3 rounds since its tree 10728:kimi:11/2/2026 10:21:05 AM was live (round 10, within the live window of 9 rounds); not a knock, not an alarm (cites run field-run seq 27)","time":"2026-11-03T10:02:00.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"field-run","version":"0.1.0"}}
+{"about":"note:4","evidence":{"cites":[{"line":2,"src":"footprints"}],"record":"~/.raqib/host/rounds.jsonl","round":13,"run":"field-run","seqs":[27]},"id":"field-run:11","kind":"note","n":11,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"agent":"kimi","path":"C:\\Users\\user\\.kimi","tree":"10728:kimi:11/2/2026 10:21:05 AM"},"summary":"round 13: kimi footprint C:\\Users\\user\\.kimi: dark after a live tree (note): no live tree for 3 rounds since its tree 10728:kimi:11/2/2026 10:21:05 AM was live (round 10, within the live window of 9 rounds); not a knock, not an alarm (cites run field-run seq 27)","time":"2026-11-03T10:02:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"field-run","version":"0.1.0"}}
 ```
 
 ### example: tree
@@ -283,7 +326,7 @@ From run A (the dark note).
 From run B.
 
 ```json
-{"about":"tree:5888:powershell:2026-11-10T07:50:00.000Z","evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","seqs":[2]},"id":"fixture-run:2","kind":"tree","knocked":{"status":"off"},"n":2,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"benign":false,"by":"sample","history":false,"image":"powershell","named":false,"pid":5888,"started":"2026-11-10T07:50:00.000Z","tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"tree:5888:powershell:2026-11-10T07:50:00.000Z","evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","seqs":[2]},"id":"fixture-run:2","kind":"tree","knocked":{"status":"off"},"n":2,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"benign":false,"by":"sample","history":false,"image":"powershell","named":false,"pid":5888,"started":"2026-11-10T07:50:00.000Z","tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: hole
@@ -291,7 +334,7 @@ From run B.
 From run C.
 
 ```json
-{"about":"hole:1","alarm":true,"evidence":{"round":2},"hole":{"class":"hole","kind":"reader-failed"},"id":"hole-run:6","kind":"hole","knocked":{"status":"sent"},"n":6,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"reader-failed: round 2: the reader failed: OSError: snapshot failed","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"hole-run","version":"0.1.0"}}
+{"about":"hole:1","alarm":true,"evidence":{"round":2},"hole":{"class":"hole","kind":"reader-failed"},"id":"hole-run:6","kind":"hole","knocked":{"status":"sent"},"n":6,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"reader-failed: round 2: the reader failed: OSError: snapshot failed","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"hole-run","version":"0.1.0"}}
 ```
 
 ### example: hole: blind spot
@@ -299,7 +342,7 @@ From run C.
 From run B.
 
 ```json
-{"about":"blind:1","alarm":false,"evidence":{"round":1},"hole":{"class":"blind spot","count":3,"kind":"bytes"},"id":"fixture-run:7","kind":"hole","n":7,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"bytes: the reader gave no byte counts for the connections (no byte reader on fixture): bytes not read (does not change the result)","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"blind:1","alarm":false,"evidence":{"round":1},"hole":{"class":"blind spot","count":3,"kind":"bytes"},"id":"fixture-run:7","kind":"hole","n":7,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"bytes: the reader gave no byte counts for the connections (no byte reader on fixture): bytes not read (does not change the result)","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: hole: notifier's hole
@@ -307,7 +350,7 @@ From run B.
 From run R: the notifier failed; its hole holds its count and last time (D-1).
 
 ```json
-{"about":"notifier-hole:1","alarm":true,"hole":{"class":"hole","count":1,"kind":"notify-failed","last":"2026-11-03T10:00:30.000Z"},"id":"rhythm-run:4","kind":"hole","n":4,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"notify-failed: notify-send: boom","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.1.0"}}
+{"about":"notifier-hole:1","alarm":true,"hole":{"class":"hole","count":1,"kind":"notify-failed","last":"2026-11-03T10:00:30.000Z"},"id":"rhythm-run:4","kind":"hole","n":4,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"notify-failed: notify-send: boom","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.1.0"}}
 ```
 
 ### example: note: lost-words
@@ -315,7 +358,7 @@ From run R: the notifier failed; its hole holds its count and last time (D-1).
 From run L: the note of the words a terminal lost (D-1), said again only with a beat (F-3).
 
 ```json
-{"about":"note:lost-words","id":"lost-run:12","kind":"note","n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"19 writes to the terminal were lost since 2026-11-03T10:00:00Z: stdout: ValueError: I/O operation on closed file","time":"2026-11-03T10:02:10.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"lost-run","version":"0.1.0"}}
+{"about":"note:lost-words","id":"lost-run:12","kind":"note","n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"19 writes to the terminal were lost since 2026-11-03T10:00:00Z: stdout: ValueError: I/O operation on closed file","time":"2026-11-03T10:02:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"lost-run","version":"0.1.0"}}
 ```
 
 ### example: knock
@@ -323,7 +366,7 @@ From run L: the note of the words a terminal lost (D-1), said again only with a 
 From run B.
 
 ```json
-{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:12","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","for":"finding:1","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:12","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","for":"finding:1","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: heartbeat
@@ -331,7 +374,7 @@ From run B.
 From run B (at its last round, before its end).
 
 ```json
-{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"heartbeat","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"WATCHING","time":"2026-11-03T10:00:20.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"heartbeat","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"WATCHING","time":"2026-11-03T10:00:20.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: watch start
@@ -339,7 +382,7 @@ From run B (at its last round, before its end).
 From run B.
 
 ```json
-{"about":"watch","id":"fixture-run:1","kind":"watch","n":1,"rev":1,"schema":"raqib-event/1","severity":"info","state":"start","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"watch","id":"fixture-run:1","kind":"watch","n":1,"rev":1,"schema":"raqib-event/1","severity":"info","state":"start","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: watch end
@@ -347,7 +390,7 @@ From run B.
 From run B (after its end, exit 1).
 
 ```json
-{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"watch","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"end","time":"2026-11-03T10:00:30.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"watch","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"end","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: settled
@@ -355,7 +398,7 @@ From run B (after its end, exit 1).
 From run B.
 
 ```json
-{"about":"source-finding:1","alarm":true,"evidence":{"lines":[8,9],"run":"fixture-run","seqs":[5],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5888-04cd10d3a5.jsonl"},"id":"fixture-run:4","kind":"source-finding","knocked":{"status":"off (knocked on tree pid 5888)"},"n":4,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"settled","subject":{"image":"powershell","pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"process may reach the network at seq 5 (host -, program bitsadmin, programs [\"bitsadmin.exe\"])","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:1","alarm":true,"evidence":{"lines":[8,9],"run":"fixture-run","seqs":[5],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5888-04cd10d3a5.jsonl"},"id":"fixture-run:4","kind":"source-finding","knocked":{"status":"off (knocked on tree pid 5888)"},"n":4,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"settled","subject":{"image":"powershell","pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"process may reach the network at seq 5 (host -, program bitsadmin, programs [\"bitsadmin.exe\"])","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: history
@@ -363,7 +406,7 @@ From run B.
 From run D.
 
 ```json
-{"about":"source-finding:4","alarm":false,"evidence":{"lines":[1],"run":"fixture-run","seqs":[1],"source":"host","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0-host.jsonl"},"id":"fixture-run:8","kind":"source-finding","knocked":{"status":"history: not knocked"},"n":8,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"history","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"HostChild may reach the network at seq 1 (host -, program ssh, curl, programs [\"cmd\", \"ssh\", \"curl\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:4","alarm":false,"evidence":{"lines":[1],"run":"fixture-run","seqs":[1],"source":"host","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0-host.jsonl"},"id":"fixture-run:8","kind":"source-finding","knocked":{"status":"history: not knocked"},"n":8,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"history","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"HostChild may reach the network at seq 1 (host -, program ssh, curl, programs [\"cmd\", \"ssh\", \"curl\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: judged on another tree
@@ -371,7 +414,7 @@ From run D.
 From run D.
 
 ```json
-{"about":"source-finding:3","alarm":false,"evidence":{"lines":[14,15],"run":"fixture-run","seqs":[8],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:7","kind":"source-finding","knocked":{"status":"judged on another tree: judged on tree pid 6100 (one act, one finding)"},"n":7,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"judged on another tree","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 8 (host -, program curl, programs [\"curl.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:3","alarm":false,"evidence":{"lines":[14,15],"run":"fixture-run","seqs":[8],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:7","kind":"source-finding","knocked":{"status":"judged on another tree: judged on tree pid 6100 (one act, one finding)"},"n":7,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"judged on another tree","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 8 (host -, program curl, programs [\"curl.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: noted
@@ -379,7 +422,7 @@ From run D.
 From run D.
 
 ```json
-{"about":"source-finding:1","alarm":false,"evidence":{"lines":[6,7],"run":"fixture-run","seqs":[4],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:5","kind":"source-finding","knocked":{"status":"noted on a benign tree, not knocked (c:/windows/*)"},"n":5,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"noted","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 4 (host -, program ssh, programs [\"ssh.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:1","alarm":false,"evidence":{"lines":[6,7],"run":"fixture-run","seqs":[4],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:5","kind":"source-finding","knocked":{"status":"noted on a benign tree, not knocked (c:/windows/*)"},"n":5,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"noted","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 4 (host -, program ssh, programs [\"ssh.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: pending at exit
@@ -387,7 +430,7 @@ From run D.
 From run P.
 
 ```json
-{"about":"source-finding:1","alarm":true,"evidence":{"lines":[1],"run":"pending-run","seqs":[1],"source":"hooks","trace":"~/.raqib/traces/proj-HASH/raqib.log.jsonl"},"id":"pending-run:4","kind":"source-finding","knocked":{"status":"pending at exit: pending for good is silence (ADR-0005 B-1): an alarm of the tree, exit 1"},"n":4,"rev":1,"rule":{"attack":["T1562"],"class":"SILENCE","id":"SILENCE-OPEN","kind":"demand"},"schema":"raqib-event/1","severity":"high","state":"pending at exit","subject":{"image":"claude","pid":95,"tree":"95:claude:-"},"summary":"session started but its trace ends at session_start seq 1 without session_end or stop","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"test","run":"pending-run","version":"0.1.0"}}
+{"about":"source-finding:1","alarm":true,"evidence":{"lines":[1],"run":"pending-run","seqs":[1],"source":"hooks","trace":"~/.raqib/traces/proj-HASH/raqib.log.jsonl"},"id":"pending-run:4","kind":"source-finding","knocked":{"status":"pending at exit: pending for good is silence (ADR-0005 B-1): an alarm of the tree, exit 1"},"n":4,"rev":1,"rule":{"attack":["T1562"],"class":"SILENCE","id":"SILENCE-OPEN","kind":"demand"},"schema":"raqib-event/1","severity":"high","state":"pending at exit","subject":{"image":"claude","pid":95,"tree":"95:claude:-"},"summary":"session started but its trace ends at session_start seq 1 without session_end or stop","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"pending-run","version":"0.1.0"}}
 ```
 
 ### example: source-finding: not settled
@@ -395,7 +438,7 @@ From run P.
 From run N.
 
 ```json
-{"about":"source-finding:1","alarm":true,"evidence":{"lines":[8,9],"run":"fixture-run","seqs":[5],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5888-04cd10d3a5.jsonl"},"id":"fixture-run:4","kind":"source-finding","knocked":{"status":"not settled (RuntimeError: cannot decide (test))"},"n":4,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"not settled","subject":{"image":"powershell","pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"process may reach the network at seq 5 (host -, program bitsadmin, programs [\"bitsadmin.exe\"])","time":"2026-11-03T10:00:10.000Z","watch":{"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
+{"about":"source-finding:1","alarm":true,"evidence":{"lines":[8,9],"run":"fixture-run","seqs":[5],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5888-04cd10d3a5.jsonl"},"id":"fixture-run:4","kind":"source-finding","knocked":{"status":"not settled (RuntimeError: cannot decide (test))"},"n":4,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"not settled","subject":{"image":"powershell","pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"process may reach the network at seq 5 (host -, program bitsadmin, programs [\"bitsadmin.exe\"])","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.1.0"}}
 ```
 
 ## Not here

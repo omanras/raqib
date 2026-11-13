@@ -1526,6 +1526,7 @@ class HostWatch:
         self.tree_by = {}            # ADR-0011 F-5, G-8: tree key -> how it became a candidate (not on the state)
         self.events_pairs_error = None   # G-1: why the pairs could not be found (said once)
         self.events_error = None     # F-4: why a pass itself failed (said once, a hole)
+        self.notes_replaced = set()  # ADR-0011 H-1: places (from 1) of notes replaced in place since the last pass
         self.events = self._event_log(rules, eventlog.BEAT_DEFAULT if beat is None else beat)
         self.rounds = 0              # rounds started
         self.applied = 0             # rounds whose reader came back with an inventory
@@ -1883,12 +1884,14 @@ class HostWatch:
 
     def _event_log(self, rules, beat):
         from raqib import report
-        facts = eventlog.event.facts({"run": self.run, "mode": HOST, "platform": self.platform}, host=self.event_host)
+        beat = max(float(beat), self.every)
+        facts = eventlog.event.facts({"run": self.run, "mode": HOST, "platform": self.platform}, host=self.event_host,
+                                     beat=beat)   # ADR-0011 H-6: the beat on every event
         try:
             table = {r["id"]: r for r in report.rule_table(rules)}
         except Exception:   # the rule table cannot be read: a finding then cannot be built, and is a hole (F-4)
             table = {}
-        return eventlog.EventLog(self.events_path, facts, table, beat=max(float(beat), self.every))
+        return eventlog.EventLog(self.events_path, facts, table, beat=beat)
 
     def _events_problems(self, now, problems):
         """F-4: what could not be built is a hole of the watch per thing; a file that cannot be written, one hole."""
@@ -1897,9 +1900,11 @@ class HostWatch:
 
     def _events_pass(self, now, beat=False, final=False):
         """F-2: one pass over the watch's own ledgers, each entry named from the list it is in (eventlog.ledgers).
-        G-1: the pairs the report's listing takes for one act, found by its own function once a pass; G-6 (c): the
-        knock rows read only where the pass looks, their things by one table made once a pass; G-8: a tree's "by"
-        from where the watch holds it; the pass's time kept (the longest, in the state and on the EVENTS line)."""
+        G-1: the pairs the report's listing takes for one act, found by its own function once a pass; H-1: every
+        entry looked at, the notes replaced in place since the last pass named to it (notes_replaced), the knock
+        rows read one by one (H-3: each in its own guard), their things by one table made once a pass; G-8: a
+        tree's "by" from where the watch holds it; the pass's time kept (the longest, in the state and on the
+        EVENTS line)."""
         from raqib import watch
         log = self.events
         began = time.perf_counter()
@@ -1924,13 +1929,14 @@ class HostWatch:
             return dict(self._knock_row(k), **{"for": self._knocked_for(k, made["t"])})
         trees = [dict(e, candidate_by=self.tree_by[key]) if key in self.tree_by else e
                  for key, e in self.trees.items()]
+        changed, self.notes_replaced = self.notes_replaced, set()   # H-1: the notes replaced in place
         for _ in range(2):   # a hole the pass made is said in a second pass
             problems = log.ledgers(
                 iso(self.wall()), trees=trees, findings=self.findings,
                 source_findings=self.source_findings, holes=self.holes, notifier_holes=self.notifier.holes,
                 blind=self.blind, notes=self.notes, dark_notes=self.dark_notes, lost=watch.lost_note(self.out),
                 knocks=eventlog.Lazy(len(self.knocks), row), record=self.rounds_path, beat=beat, final=final,
-                same=same)
+                same=same, notes_changed=changed)
             self._events_problems(now, problems)
             if not problems:
                 break
@@ -1971,7 +1977,8 @@ class HostWatch:
     def _events_end(self, now):
         """F-2, G-4, G-10: the watch's end, its last event, said once: the result computed now, its word the
         report's own (CLEAN, ALARM, INCOMPLETE or NONE-SEEN), the findings the overlay suppressed with a clean
-        word; the state and the report are made after it, and count it."""
+        word; H-5: the state was written before it (a state that cannot be written is INCOMPLETE here too); the
+        state is written again and the report made after it, and count it."""
         def end():
             self._refresh()
             result, _ = self.result()
@@ -3734,6 +3741,7 @@ class HostWatch:
                     self.notes.append(text)
                 else:
                     self.notes[src.pre_m78_index] = text
+                    self.notes_replaced.add(src.pre_m78_index + 1)   # ADR-0011 H-1: the pass looks at it
             if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
                 # M8.2 REDO 2 F-6: only the notes of the rules PRE_M78_NOTE names; a person's rule keeps its own
                 notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
@@ -3752,6 +3760,7 @@ class HostWatch:
                     self.notes.append(text)
                 else:
                     self.notes[src.pre_dest_index] = text
+                    self.notes_replaced.add(src.pre_dest_index + 1)   # ADR-0011 H-1
         if src.kind == "os":   # AM-2: a follow's line timed from the log: said once per event kind per watch
             skews, records = {}, {}
             for _, rec in feed.numbered:
@@ -3867,6 +3876,7 @@ class HostWatch:
                 at = self.not_judged_at.get(where)
                 if at is not None:
                     self.notes[at] = text
+                    self.notes_replaced.add(at + 1)   # ADR-0011 H-1
                     continue
                 if text not in self.notes:
                     self.notes.append(text)
@@ -4149,17 +4159,21 @@ class HostWatch:
             self.beat_wall = self.wall_clock()
             if self.events is not None and not self.events.ended:   # ADR-0011 F-2, G-10: the last pass, the end
                 self._events_tick(now, end=True)
+                self._final_state(now)   # H-5: the state is written before the result the end says is computed
                 self._events_end(now)
-            try:
-                self._write_state(now)
-            except Exception as exc:
-                self.state_error = "cannot write %s: %s: %s" % (self.state_path, type(exc).__name__, exc)
+            self._final_state(now)   # G-10: the state counts the end; what fails here is in the report alone (H-5)
             try:
                 self.final_text, self.final_exit = self.summary()
             except Exception as exc:
                 self.final_text, self.final_exit = "raqib watch --host: no final report (%s: %s)\n" % (
                     type(exc).__name__, _safe(exc)), 1
         return self.final_text, self.final_exit
+
+    def _final_state(self, now):
+        try:
+            self._write_state(now)
+        except Exception as exc:
+            self.state_error = "cannot write %s: %s: %s" % (self.state_path, type(exc).__name__, exc)
 
     def result(self):
         """(result, reasons), C-10: alarm (exit 1) for a finding of a host
