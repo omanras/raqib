@@ -2224,3 +2224,9 @@ each given seven turns (five of them a command that outlasts a round), on Window
 - AT-4 (M11.2). The two real agents become a job of the rig, with their expectations stated (the agent's tree
   is a finding; HOST-RHYTHM on it and on no other tree; its commands' NET-TOOL). It reports and does not
   fail, as the rig does. Third-party agents are installed only on the runner, never in the tree.
+- AT-5 (the builder's STOP, 3eabb97; the Table's HANDOFF was wrong). The count of HOST-RHYTHM lines on the
+  runner's own watch is in .github/workflows/gate.yml, not in tools/gate.py; the builder stopped rather than
+  leave a count that could never be anything but 0. The workflow is in Scope, and the count matches the rule at
+  any level (`^  \[[a-z]+\] HOST-RHYTHM `), so no later change of level can silence it. The ledger: a HANDOFF
+  names a file only after the Table has opened it.
+
