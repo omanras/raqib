@@ -2432,3 +2432,102 @@ loss the build made.
   Recorded for the tree ledger: a path's pids are the system's own, so two instances of one pid in one
   inventory are not told apart on a path.
 
+## Amendment BA (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.22-redo.md (d840e1e), and the field check
+The packet: AZ-1 to AZ-6 are built as ruled; REDO for one act that could be judged nowhere and for words that
+said more than the code. The Table made the changes itself (CLAUDE.md rule 8). The field check, twice now on
+the built code: the two real agents on Linux with a connection for each turn, and no HOST-RHYTHM on the
+runner's worker in either run; on Windows with Sysmon both agents found at high, as before.
+- BA-1 (R2: an act judged nowhere). A child given to a held tree in a round whose write of that tree's record
+  then failed was marked as given, so the next round it was "not new" on the ancestor either: in no line, read
+  by no rule, under two holes that said it was judged. Now the mark of a child whose line was not written is
+  taken back: from the next round it is where the inventory puts it, new there, judged there; the hole says how
+  many were given back. Tested; the test fails with the change taken out.
+- BA-2 (what M7.22 does not do, said in the rule's holes and THREAT_MODEL). It moves the children of a tree
+  the watch holds. An agent no sample ever saw talking is no tree and is not held: its commands stay its
+  talking ancestor's, with the cycles they make there - AX-4's case unchanged, wherever the agent's every
+  connection opens and closes between two samples from its first. And an agent that is started anew for each
+  job gives the ancestor one act for each new root, which the ancestor's own talks can make cycles of. Both
+  are the same lack: on Linux no source sees what happens between two samples. It is recorded as the task
+  that answers it, M7.25: a source of process and connection events on Linux (ADR-0011 decision 2 (c)).
+- BA-3 (words). The hole for a tree that cannot be given to no longer says its named process "is judged
+  there" where that process was given earlier; THREAT_MODEL says "could be written when the round began", says
+  the os follow's exception, says how long a given process is "not new" (while its pid is in the samples; an
+  empty sample ends it; a pid taken by another process whose start was not read is taken for it).
+- Recorded for the tree ledger: R3 (the held-not-given hole is said once for a tree's life: a recurrence is
+  unsaid); the AP-2 road's own check that a given child is not new has no test of its own; a candidate's
+  HostTree line still counts an orphan that was judged on its first tree.
+
+## Amendment BB (the Table, 2026-11-13) - an os follow does not hold what is under another tree's root (AZ-5's task, M7.24)
+The case: AX-4's again, through the other source. A tree's os follow is rooted at the tree's root and holds the
+events of every descendant. Where another tree of the watch stands under that root - an agent under a worker,
+an agent under an editor that talks to its own servers - the agent's commands and connections are in both
+follows' files: the ancestor's rhythm counts them as its own acts and talks, and its source findings read them
+(the copy is then said "judged on another tree", after it was made). M7.22 moved the sample's children; this
+moves the os events, and at their source.
+- BB-1 (the rule). A tree's os follow does not take into its tree the processes under the root of another tree
+  that the watch holds with an os follow of its own. The watch tells each follow, at every pass, which roots
+  those are (their pid and, where known, their ProcessGuid); the follow leaves out an event whose process is
+  such a root's descendant, and keeps the event of the root itself: the ancestor did start it (AZ-1's reading,
+  for this source). FOR: the ancestor's cycles and findings made of another tree's commands, on Windows with
+  Sysmon. MUST NOT TOUCH: a follow with no other tree under its root (byte for byte what it writes); `raqib
+  os-sysmon` on its own; what a follow already wrote (an event written before the other tree was known stays,
+  and is judged as it is now).
+- BB-2 (no event is in no file). The leaving-out lasts only while the other tree's own follow runs. When that
+  follow has ended (its tree gone, its source ended with a hole) its root is no longer told, and the ancestor's
+  follow holds that subtree's later events again. An event neither follow holds is a hole of this task: the
+  tests look for the seam (the round the other follow ends; the pass in which the other tree is first known).
+- BB-3 (said in the files). The ancestor's follow says once, in its own file, that it leaves out the subtree
+  of each such root, and from which record on (a line of its own kind, as its silences are): a reader of one
+  file is not led to think nothing happened there.
+- BB-4 (the field check is the Table's). The two real agents under the runner's worker on Windows with
+  Sysmon: after the agent's tree is known, the worker's os file gains none of the agent's commands, no source
+  finding is "judged on another tree" for them, and the agent is still found. Not merged on a run that does
+  not show it.
+
+## Amendment BC (the Table, 2026-11-13) - rulings on review 2026-11-13-M7.24.md (2f4c5e0): a mark, not an omission
+The packet found five ways an event of the nested tree ends in no file (F1 to F5): a root told by pid alone,
+the nested follow's last interval before it is stopped, a round that failed while the telling stood, a restart,
+an overwritten channel. The Table found the second itself before the packet came. Each could be closed by more
+machinery (what the other follow holds, how far it has read, events kept aside and written late - and a line
+written late is a SILENCE-ORDER of its own). The error is BB-1's, the Table's: a watcher that does not write an
+event it read must prove the event is elsewhere, and BB bought a quieter ancestor with that proof left to luck.
+- BC-1 (BB-1 withdrawn as an omission; kept as a mark). An os follow writes every event of its tree, as on
+  main. An event of a process at or under the root of another tree, told as BC-2 says, is written with
+  `input_meta.under_root`: that root's pid. Nothing is left out, so nothing can be lost; both files hold the
+  subtree's events as on main, and the acts' "judged on another tree" stays what judges them once. FOR: the
+  ancestor of an agent (a shell, an editor, a runner's worker) that talks and so made HOST-RHYTHM at high from
+  its child's commands. MUST NOT TOUCH: which events a follow writes, their order, their hashes, any line of
+  a process not under a told root (byte for byte as on main), the other tree's own file.
+- BC-2 (told by ProcessGuid, and only while the other follow lives). A root is told with its ProcessGuid and
+  matched by it; a root whose ProcessGuid the watch does not hold is not told, and an event that carries no
+  ProcessGuid is not marked (F1: a pid is only somebody's at a time). "Under" is the follow's own reading of
+  the channel: the parents of its members by ProcessGuid, kept for that (one map; the pid maps go). The watch
+  tells a root while the other tree's os follow lives - its thread alive, no error, not ended, not stopped -
+  read when the follow asks, not only at the round's end (F3), and under this tree's root by the round's
+  sample (as built). The root's own event 1 is not marked (AZ-1: its parent started it); its other events are.
+- BC-3 (a marked line gives its tree no beat). Where the watch reads a source's lines into a tree's beats, a
+  line that carries `under_root` gives none: no act, no talk, no destination. FOR: the same ancestor. MUST NOT
+  TOUCH: the rhythm's own counting (K, W, R), any other finding, the findings of the marked lines themselves
+  (NET-TOOL and the others are still judged on them, and "judged on another tree" still says which twin).
+- BC-4 (BB-3 withdrawn). No key on a session_start, no block without an event (a session with a start, an
+  end and nothing between is SILENCE-EMPTY's): the mark on each line is the saying, exact to the line (F9,
+  F10). A marked line is in the shape capture writes: `trace.strict_problem` takes it (tested).
+- BC-5 (what it costs, said in the rule's holes and the threat model, and no more). A marked line whose twin
+  the other tree's file does not hold - the other follow's last interval before it stopped, a follow that died,
+  a member the other follow never knew - gives no beat to either tree: the rhythm of an agent's last seconds
+  can be missed; its commands are still judged where they are written. A process born under the root before
+  the root was told is marked from then on (the follow's own parents tell); a root with no ProcessGuid is not
+  told and the ancestor then counts its child's commands as on main. Every os follow under the host watch
+  keeps one more map for the life of the follow (F6b).
+- BC-6 (the tests the packet asked for). A follow that failed, and one that ended, while its root is still in
+  the sample: no longer told (F7: fails without the liveness reading). The clause "no source finding judged
+  on another tree" leaves E5 (F8: it could not fail, and it is no longer the aim). The twin of main is main's
+  own bytes: with no root told, every fixture's hash as on main.
+- BC-7 (the field check before the merge, on the probe branch, Windows with Sysmon): the worker's tree makes
+  no HOST-RHYTHM; both agents are still found on the model server's own hash; the worker's os file holds the
+  agents' commands marked and the agents' own files hold them unmarked.
+The builder's questions: Q1 and Q4 are answered by BC-1 and BC-4 (nothing is left out; no note). Q2: the
+members stay in the tree, as built. Q3: the sample decides "under this tree's root" for the telling, the
+follow's own parents decide which events; where the sample cannot tell, the root is not told, as built. Q6:
+the clause stays, with BC-5's.
+

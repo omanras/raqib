@@ -70,6 +70,9 @@ registry row and the notifier's temp files, as for every watch):
   its host lines), appended; it is the host watch's record, its "trace";
 - rounds.jsonl.watch.json: the state (watch.json's shape, mode "host"),
   written on every tick with a heartbeat, as every watch writes its own.
+- events.jsonl: the watch's events, raqib-event/1 (ADR-0011 Amendment F,
+  raqib/eventlog.py; docs/specs/EVENT.md): a line for each thing new or
+  changed and a heartbeat on its beat, appended; nothing is sent.
 
 Nothing here signals, attaches to or writes to a process (A4): the reader
 reads the host's records; the only programs started are the notifier's and
@@ -158,7 +161,7 @@ import threading
 import time
 import traceback
 
-from raqib import discover, notify, overlay, ui
+from raqib import discover, eventlog, notify, overlay, ui
 from raqib.hooks import common
 from raqib.rules import cross, engine, silence, trace
 
@@ -1500,7 +1503,8 @@ class HostWatch:
     def __init__(self, reader, catalog, rules, notifier, every=EVERY_DEFAULT, window=0.0, rounds_max=None,
                  out=None, err=None, clock=None, wall=None, home=None, platform=None, deadline=None, run=None,
                  attach_hooks=False, sysmon=None, installer=None, os_follow=None, source_every=None, suspect=None,
-                 suspect_threshold=None, suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None):
+                 suspect_threshold=None, suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None, beat=None,
+                 event_host=None):
         """M7.9 REDO X-1: what the round's channel read travels with the
         round's inventory (inv["channel"]); nothing is passed here. M7.2b: attach_hooks is the person's word for this watch
         (--attach-hooks, or the window's checkbox; False by default, H-1):
@@ -1534,6 +1538,16 @@ class HostWatch:
         self.inventory_path = os.path.join(self.dir, INVENTORY_NAME)
         self.rounds_path = os.path.join(self.dir, ROUNDS_NAME)
         self.state_path = self.rounds_path + STATE_SUFFIX
+        # ADR-0011 F-1, F-3, F-6: the events file beside the record, its beat (never shorter than a round), the
+        # host's name read once (no network call)
+        self.events_path = os.path.join(self.dir, eventlog.NAME)
+        self.event_host, self.event_host_from = eventlog.host_name(event_host)
+        self.events_round = 0        # F-2: the rounds done when the last pass ran
+        self.tree_by = {}            # ADR-0011 F-5, G-8: tree key -> how it became a candidate (not on the state)
+        self.events_pairs_error = None   # G-1: why the pairs could not be found (said once)
+        self.events_error = None     # F-4: why a pass itself failed (said once, a hole)
+        self.notes_replaced = set()  # ADR-0011 H-1: places (from 1) of notes replaced in place since the last pass
+        self.events = self._event_log(rules, eventlog.BEAT_DEFAULT if beat is None else beat)
         self.rounds = 0              # rounds started
         self.applied = 0             # rounds whose reader came back with an inventory
         self.round_lines = []        # the last ROUNDS_KEPT round records
@@ -1593,6 +1607,10 @@ class HostWatch:
         self.file_seq = {}           # a host source file -> its last seq (a re-attach continues it)
         self.source_findings = []    # the findings of the sources, each on its tree
         self.follow_restart = FollowRestart()   # AJ-4 (R-3): the round's restarts, consulted by every os follow
+        # ADR-0007 BC-2: tree key -> ((the other tree's key, its root pid, its ProcessGuid), ...) under its root by
+        # the round's sample (_nested_roots); a new dict each round, never changed after: the follows' threads read
+        # it whole, and each entry is told only while that other tree's os follow lives, read at the asking (_told)
+        self.os_nested = {}
         self.source_keys = set()
         self.source_grows = {r.id for r in self.src_rules if r.aggregate is not None} | set(GROWS)   # I-6
         self.pending_end = []        # SILENCE-OPEN / -HALF of the sources at the end: listed, not knocked
@@ -1847,22 +1865,165 @@ class HostWatch:
                             "called": status, "ref": (container, key), "tree": tree})
         return status
 
-    def knock_rows(self, newest=None):
+    def knock_rows(self, newest=None, fors=False):
         """The KNOCKS ledger as shown (report, state): each knock with its
         status now (a folded one says what became of the fold). newest: only
-        the last N (N-5: the state; the report prints them all)."""
-        rows = []
-        for k in (self.knocks if newest is None else self.knocks[-newest:]):
-            container, key = k["ref"]
-            now = container.get(key) if isinstance(container, dict) else None
-            row = dict({x: v for x, v in k.items() if x not in ("ref", "tree")},
-                       status=now if isinstance(now, str) and now else k["called"])
-            if isinstance(container, dict) and "copies" in container and container["copies"]:   # V-1: read from the act
-                shown = self._standing(container)
-                row.update(shown_on="tree pid %s" % shown[0], knocked_on="tree pid %s" % (
-                    container["knocked_on"][0] if container.get("knocked_on") else "-"))
-            rows.append(row)
-        return rows
+        the last N (N-5: the state; the report prints them all). fors: each
+        with the about of the thing it was for, where the watch holds it
+        (ADR-0011 F-5, G-9; by one table, _things): event.snapshot's rows."""
+        table = self._things() if fors else None
+        return [dict(self._knock_row(k), **({"for": self._knocked_for(k, table)} if fors else {}))
+                for k in (self.knocks if newest is None else self.knocks[-newest:])]
+
+    def _knock_row(self, k):
+        container, key = k["ref"]
+        now = container.get(key) if isinstance(container, dict) else None
+        row = dict({x: v for x, v in k.items() if x not in ("ref", "tree")},
+                   status=now if isinstance(now, str) and now else k["called"])
+        if isinstance(container, dict) and "copies" in container and container["copies"]:   # V-1: read from the act
+            shown = self._standing(container)
+            row.update(shown_on="tree pid %s" % shown[0], knocked_on="tree pid %s" % (
+                container["knocked_on"][0] if container.get("knocked_on") else "-"))
+        return row
+
+    def _things(self):
+        """ADR-0011 G-6 (c): one table a pass, {id(entry): its about}, of the lists a knock can be for (a finding, a
+        source finding, a hole of the watch or of the notifier, a tree), each named from the list it is in."""
+        table = {}
+        for whose, ledger in (("finding", self.findings), ("source-finding", self.source_findings),
+                              ("hole", self.holes), ("notifier-hole", self.notifier.holes)):
+            for i, e in enumerate(ledger, 1):
+                table[id(e)] = "%s:%d" % (whose, i)
+        for key, e in self.trees.items():
+            table[id(e)] = "tree:%s" % tree_word(key)
+        return table
+
+    def _knocked_for(self, k, table):
+        """ADR-0011 F-5, G-9: the about of the thing a knock was for, by the pass's table (an act: its copy on the
+        tree it was knocked on); None where the thing is in none of its lists (a suspicion: no kind yet)."""
+        container = k["ref"][0]
+        if isinstance(container, dict) and container.get("copies"):
+            on = container.get("knocked_on")
+            container = container["copies"].get(tuple(on) if isinstance(on, list) else on, container) \
+                if on is not None else container
+        return table.get(id(container))
+
+    # --- the events (ADR-0011 Amendment F) -------------------------------------------
+
+    def _event_log(self, rules, beat):
+        from raqib import report
+        beat = max(float(beat), self.every)
+        facts = eventlog.event.facts({"run": self.run, "mode": HOST, "platform": self.platform}, host=self.event_host,
+                                     beat=beat)   # ADR-0011 H-6: the beat on every event
+        try:
+            table = {r["id"]: r for r in report.rule_table(rules)}
+        except Exception:   # the rule table cannot be read: a finding then cannot be built, and is a hole (F-4)
+            table = {}
+        return eventlog.EventLog(self.events_path, facts, table, beat=beat)
+
+    def _events_problems(self, now, problems):
+        """F-4: what could not be built is a hole of the watch per thing; a file that cannot be written, one hole."""
+        for what, detail in problems:
+            self._hole(now, "event-not-built" if what == "not built" else "events-unwritable", detail)
+
+    def _events_pass(self, now, beat=False, final=False):
+        """F-2: one pass over the watch's own ledgers, each entry named from the list it is in (eventlog.ledgers).
+        G-1: the pairs the report's listing takes for one act, found by its own function once a pass; H-1: every
+        entry looked at, the notes replaced in place since the last pass named to it (notes_replaced), the knock
+        rows read one by one (H-3: each in its own guard), their things by one table made once a pass; G-8: a
+        tree's "by" from where the watch holds it; the pass's time kept (the longest, in the state and on the
+        EVENTS line)."""
+        from raqib import watch
+        log = self.events
+        began = time.perf_counter()
+        same = {}
+        try:
+            pairs = told_twice(self.source_findings, self.sources) if self.source_findings else {}
+            if pairs:
+                place = {id(f): i for i, f in enumerate(self.source_findings, 1)}
+                same = {place[o]: "source-finding:%d" % place[id(h)] for o, h in pairs.items()
+                        if o in place and id(h) in place}
+        except Exception as exc:   # G-6 (a): the pass goes on; the pairs are then said as two
+            if self.events_pairs_error is None:
+                self.events_pairs_error = "the pairs taken for one act were not found: %s: %s" % (
+                    type(exc).__name__, _safe(exc))
+                self._hole(now, "events-failed", self.events_pairs_error)
+        made = {}
+
+        def row(i):
+            k = self.knocks[i]
+            if "t" not in made:
+                made["t"] = self._things()
+            return dict(self._knock_row(k), **{"for": self._knocked_for(k, made["t"])})
+        trees = [dict(e, candidate_by=self.tree_by[key]) if key in self.tree_by else e
+                 for key, e in self.trees.items()]
+        changed = set(self.notes_replaced)   # H-1: the notes replaced in place (I-1: forgotten only once looked at)
+        for _ in range(2):   # a hole the pass made is said in a second pass
+            problems = log.ledgers(
+                iso(self.wall()), trees=trees, findings=self.findings,
+                source_findings=self.source_findings, holes=self.holes, notifier_holes=self.notifier.holes,
+                blind=self.blind, notes=self.notes, dark_notes=self.dark_notes, lost=watch.lost_note(self.out),
+                knocks=eventlog.Lazy(len(self.knocks), row), record=self.rounds_path, beat=beat, final=final,
+                same=same, notes_changed=changed)
+            self.notes_replaced -= changed   # the pass ran: what it was given has been looked at
+            self._events_problems(now, problems)
+            if not problems:
+                break
+        log.longest = max(log.longest, time.perf_counter() - began)
+
+    def _events_guard(self, now, step):
+        """F-1, G-6 (a): one step of the events in its own guard: one that fails is one hole, and the next goes on."""
+        try:
+            step()
+        except Exception as exc:
+            if self.events_error is None:
+                self.events_error = "the events were not said: %s: %s" % (type(exc).__name__, _safe(exc))
+                self._hole(now, "events-failed", self.events_error)
+
+    @staticmethod
+    def _first(said):
+        what, detail = said
+        return [(what, detail)] if what.startswith("not") and detail else []
+
+    def _events_tick(self, now, end=False):
+        """F-2, F-3: the start at the first tick; a pass at the end of every round (and at the finish); a heartbeat
+        at each beat. Nothing here judges: each step in its own guard (G-6 a), a pass that failed is tried again at
+        the next round, not at the next tick, and a due beat is written all the same."""
+        log = self.events
+        if log is None or log.ended:
+            return
+        if log.next_beat is None:
+            self._events_guard(now, lambda: self._events_problems(now, self._first(log.start(self.at(self.t0), now))))
+        done = self.rounds - (1 if self.worker is not None else 0)
+        beat = log.due(now) and not end
+        if end or beat or done != self.events_round:
+            self.events_round = done
+            self._events_guard(now, lambda: self._events_pass(now, beat=beat or end, final=end))
+        if beat:
+            self._events_guard(now, lambda: self._events_problems(now, self._first(
+                log.heartbeat(lambda: self.state(now), iso(self.wall()), now))))
+
+    def _events_end(self, now):
+        """F-2, G-4, G-10: the watch's end, its last event, said once: the result computed now, its word the
+        report's own (CLEAN, ALARM, INCOMPLETE or NONE-SEEN), the findings the overlay suppressed with a clean
+        word; H-5: the state was written before it (a state that cannot be written is INCOMPLETE here too); the
+        state is written again and the report made after it, and count it."""
+        def end():
+            self._refresh()
+            result, _ = self.result()
+            suppressed = overlay.suppressed(self.all_not_judged()) if result in ("clean", "none-seen") else 0
+            self._events_problems(now, self._first(self.events.end(
+                lambda: self.state(now), iso(self.wall()), EXIT[result], result.upper(), suppressed)))
+        self._events_guard(now, end)
+
+    def events_text(self):
+        """F-7: the report's EVENTS line (G-10: made after the end; G-6 c: the longest pass)."""
+        c = self.events.counts()
+        return ("EVENTS: written %d (heartbeats %d, one every %g s), not built %d, not written %d (attempts);"
+                " longest pass %.3f s; file %s (raqib-event/1, appended; host %s; nothing is sent)%s" % (
+                    c["written"], c["heartbeats"], c["beat_seconds"], c["not_built"], c["not_written"],
+                    c["longest_pass_seconds"], _safe(c["file"]), c["host"],
+                    "; %s" % c["write_error"] if c["write_error"] else ""))
 
     # --- one tick ---------------------------------------------------------------
 
@@ -1902,6 +2063,7 @@ class HostWatch:
             self.beat = now
             self.beat_wall = self.wall_clock()
             self.step_seconds = round(max(0.0, self.clock() - begin), 3)
+            self._events_tick(now)   # ADR-0011 F-2, F-3: after the judging; it judges nothing
             self._write_state(now)
 
     def _step(self, now, wait):
@@ -2074,9 +2236,11 @@ class HostWatch:
                 line["input_meta"].update(by_channel=True, candidate_by="channel")
                 if entry.get("by_channel_round") is None:
                     entry.update(by_channel=True, by_channel_round=n, by_channel_at=ts)
+                    self.tree_by[key] = "channel"   # ADR-0011 G-8: held apart, never on the state's row (AD-4)
                     by_channel_now.append(tree_word(key))
             if t["class"] == "candidate" and entry["candidate_round"] is None and not channel_now:
                 entry["candidate_round"] = n
+                self.tree_by[key] = t.get("candidate_by") or "sample"   # F-5, G-8: how it became one (subject.by)
                 for k in ("by_channel", "by_channel_round", "by_channel_at"):   # AB-1: knocked, never tagged
                     entry.pop(k, None)
             if not candidate_before and t["class"] == "candidate" and not history and not channel_now:
@@ -2149,6 +2313,7 @@ class HostWatch:
         self.prev_class = prev
         tree_seq = {tuple(self.trees[k]["key"]): self.trees[k]["line_seq"] for k in set(current) | set(held_now)}
         self._host_lines(now, n, ts, sample, current, tree_seq, gone_keys, held_now)
+        self.os_nested = self._nested_roots(inv)   # BC-2: after the round's attaches and its ended follows
 
         # Footprints: dark, linked, or unjudged in this round. ADR-0007 AD-1: in a round that reads the channel they
         # are discover's footprints of the same round built WITHOUT the channel's records (each link names the tree
@@ -2690,9 +2855,9 @@ class HostWatch:
                     keep.append(a)
                     if why is not None and held[root] not in self.not_given_said:
                         self.not_given_said.add(held[root])
-                        self._hole(now, "held-not-given", "round %d: tree %s: a process under its root (pid %s) is"
-                                   " left where the inventory put it (tree %s) and judged there, as is every such"
-                                   " process while this lasts: %s; said once for this tree" % (
+                        self._hole(now, "held-not-given", "round %d: tree %s: the processes under its root that it"
+                                   " was not given (the first: pid %s) are left where the inventory puts them (tree"
+                                   " %s) and judged there while this lasts: %s; said once for this tree" % (
                                        n, tree_word(held[root]), a.get("pid"), tree_word(inv_key(c)), why), round_=n)
                     continue
                 self.given.setdefault(held[root], []).append(a)
@@ -2723,6 +2888,12 @@ class HostWatch:
         if brief or not (self.trees.get(key) or {}).get("sampled", True):
             return "the round's sample does not hold it (known from the channel only)"
         return None
+
+    @staticmethod
+    def unwritten_children(lines):
+        """The pids of the children in the HostChild lines of a write that failed (ADR-0007 BA-1)."""
+        return {c.get("pid") for line in lines if isinstance(line, dict) and line.get("tool") == "HostChild"
+                for c in (line.get("input_meta") or {}).get("children") or () if isinstance(c, dict)}
 
     def _given_elsewhere(self, key, c):
         """ADR-0007 AZ-3: a child once given to a held tree (marked by
@@ -2961,6 +3132,8 @@ class HostWatch:
                 if at is None or (rec.get("source") == "os" and at < self.start_eff):
                     continue   # REDO R-2: an os event from before the watch's start is history, never a beat
                 meta = rec.get("input_meta") if isinstance(rec.get("input_meta"), dict) else {}
+                if "under_root" in meta:
+                    continue   # ADR-0007 BC-3: at or under another tree's root: no act, no talk, no destination here
                 where = os.path.basename(feed.path)
                 cite = {"src": where, "line": ln, "text": "%s %s seq %s at %s" % (
                     rec.get("source") or "hooks", rec.get("tool"), rec.get("seq"), rec.get("ts"))}
@@ -3525,8 +3698,9 @@ class HostWatch:
         # AI-1: the follow asks a bounded question, the first pass since the watch's start; AJ-4: it is given the
         # tree an earlier follow found (R-1) and the round's restarts (R-3: its bound restarts with the round's read)
         # ADR-0007 AW-2: and it asks for the server's own hash on its net lines (input_meta.dest_sha256)
+        # ADR-0007 BC-2: and, at every pass, the roots of the other trees under its root whose own follow lives
         more = follow_kw(follow, since=self.start_eff, tree=src.os_tree, restart=self.follow_restart.get,
-                         server_hash=True)
+                         server_hash=True, mark_under=lambda: self._told(key))
 
         def run():
             try:
@@ -3541,6 +3715,51 @@ class HostWatch:
         src.thread = threading.Thread(target=run, name="raqib-host-os-%s" % t.get("pid"), daemon=True)
         src.thread.start()
         return src
+
+    def _nested_roots(self, inv):
+        """ADR-0007 BC-2: {tree key: ((other key, pid, ProcessGuid), ...)}: for each tree with an os source, the other
+        trees the watch holds with an os source and a ProcessGuid (a root whose ProcessGuid the watch does not hold
+        is not told: F1) whose root is under this tree's root by the round's process sample (the parent chain, each
+        pid's ppid as sampled). A root the sample does not hold, or whose chain the sample breaks before this tree's
+        root, is under none (the follow then marks nothing of it). Whether the other follow lives is not read here
+        but at the asking (_told). Read only by the follows (mark_under)."""
+        parent = {}
+        for p in (inv or {}).get("processes") or []:
+            if isinstance(p, dict) and isinstance(p.get("pid"), int) and not isinstance(p.get("pid"), bool):
+                parent.setdefault(p["pid"], p.get("ppid"))
+        order = sorted((k for k, src in self.sources.items() if src.kind == "os"),
+                       key=lambda k: (str(k[0]), str(k[1]), str(k[2])))
+        out = {}
+        for key in order:
+            roots = []
+            for other in order:
+                guid = (self.trees.get(other) or {}).get("guid")
+                if other == key or other[0] == key[0] or not isinstance(guid, str) or not guid.strip():
+                    continue
+                pid, seen = parent.get(other[0]), set()
+                while pid is not None and pid != key[0] and pid not in seen:
+                    seen.add(pid)
+                    pid = parent.get(pid)
+                if pid is not None and pid == key[0]:
+                    roots.append((other, other[0], guid))
+            if roots:
+                out[key] = tuple(roots)
+        return out
+
+    def _told(self, key):
+        """ADR-0007 BC-2: what tree key's os follow is told when it asks (in its own thread): the (pid, ProcessGuid)
+        of each root the round's sample put under it (os_nested) whose tree's os follow lives at this asking - its
+        thread alive, no error, not ended, not stopped - so a follow that raised, returned or was stopped after the
+        round is not told at the asking that follows, whether or not a round has been applied since (F3, F7)."""
+        out = []
+        for other, pid, guid in self.os_nested.get(key, ()):
+            src = self.sources.get(other)
+            thread, stop = getattr(src, "thread", None), getattr(src, "stop", None)
+            if (src is not None and src.kind == "os" and thread is not None and thread.is_alive()
+                    and getattr(src, "error", None) is None and not getattr(src, "ended", None)
+                    and not (stop is not None and stop.is_set())):
+                out.append((pid, guid))
+        return out
 
     def _append(self, path, lines):
         from raqib.hooks import os_sysmon
@@ -3657,10 +3876,16 @@ class HostWatch:
                     continue
                 src.host_error = why
                 src.error = src.error or src.host_error
+                # ADR-0007 BA-1: a child whose line was not written was not given: its mark is taken back, so the
+                # next round finds it where the inventory puts it, new there, and judges it there
+                lost = [m for m, v in self.given_marks.items() if v[0] == key and m[0] in self.unwritten_children(out)]
+                for m in lost:
+                    del self.given_marks[m]
                 self._hole(now, "source-unwritable", "round %d: tree %s: %s; the source is attached again in the"
-                           " next round the tree is in (a tree held quiet or kept is not, and no child is given to it"
-                           " while it is held: its children are judged where the inventory puts them)"
-                           % (n, tree_word(key), src.host_error), round_=n)
+                           " next round the tree is in (a tree held quiet or kept is not: no child is given to it"
+                           " while it is held, and the %d it was given in this round are given back - from the next"
+                           " round they are judged where the inventory puts them)"
+                           % (n, tree_word(key), src.host_error, len(lost)), round_=n)
                 continue
             entry = self.trees.get(key)
             if entry is not None and entry.get("first_round") == self.history_round == n:
@@ -3742,6 +3967,7 @@ class HostWatch:
                     self.notes.append(text)
                 else:
                     self.notes[src.pre_m78_index] = text
+                    self.notes_replaced.add(src.pre_m78_index + 1)   # ADR-0011 H-1: the pass looks at it
             if src.pre_m78_said:   # the engine's "could not judge" of the two rules is that same cause: not said again
                 # M8.2 REDO 2 F-6: only the notes of the rules PRE_M78_NOTE names; a person's rule keeps its own
                 notes = [x for x in notes if not (x.get("rule_id") in HOST_LINE_RULES and x.get("status") == "partial")]
@@ -3760,6 +3986,7 @@ class HostWatch:
                     self.notes.append(text)
                 else:
                     self.notes[src.pre_dest_index] = text
+                    self.notes_replaced.add(src.pre_dest_index + 1)   # ADR-0011 H-1
         if src.kind == "os":   # AM-2: a follow's line timed from the log: said once per event kind per watch
             skews, records = {}, {}
             for _, rec in feed.numbered:
@@ -3875,6 +4102,7 @@ class HostWatch:
                 at = self.not_judged_at.get(where)
                 if at is not None:
                     self.notes[at] = text
+                    self.notes_replaced.add(at + 1)   # ADR-0011 H-1
                     continue
                 if text not in self.notes:
                     self.notes.append(text)
@@ -4155,16 +4383,23 @@ class HostWatch:
             self.finished = self.at(now)
             self.beat = now
             self.beat_wall = self.wall_clock()
-            try:
-                self._write_state(now)
-            except Exception as exc:
-                self.state_error = "cannot write %s: %s: %s" % (self.state_path, type(exc).__name__, exc)
+            if self.events is not None and not self.events.ended:   # ADR-0011 F-2, G-10: the last pass, the end
+                self._events_tick(now, end=True)
+                self._final_state(now)   # H-5: the state is written before the result the end says is computed
+                self._events_end(now)
+            self._final_state(now)   # G-10: the state counts the end; what fails here is in the report alone (H-5)
             try:
                 self.final_text, self.final_exit = self.summary()
             except Exception as exc:
                 self.final_text, self.final_exit = "raqib watch --host: no final report (%s: %s)\n" % (
                     type(exc).__name__, _safe(exc)), 1
         return self.final_text, self.final_exit
+
+    def _final_state(self, now):
+        try:
+            self._write_state(now)
+        except Exception as exc:
+            self.state_error = "cannot write %s: %s: %s" % (self.state_path, type(exc).__name__, exc)
 
     def result(self):
         """(result, reasons), C-10: alarm (exit 1) for a finding of a host
@@ -4500,6 +4735,11 @@ class HostWatch:
             "; the finding is shown on %s, knocked on %s (V-1)" % (k["shown_on"], k["knocked_on"])
             if k.get("shown_on") and k.get("shown_on") != k.get("knocked_on") else "")
                 for k in rows]
+        if self.events is not None:   # ADR-0011 F-7, G-10: after the knocks' lines, of the file with its end
+            try:
+                out.append(self.events_text())
+            except Exception as exc:
+                out.append("EVENTS: not counted (%s: %s)" % (type(exc).__name__, _safe(exc)))
         n = self.notifier.state()
         counts = n["counts"]
         out.append("NOTIFICATIONS: %s; sent %d, terminal %d, failed %d, folded %d (%d still waiting), off %d" % (
@@ -4566,6 +4806,7 @@ class HostWatch:
             "holes": self.holes + self.notifier.holes, "notifications": self.notifier.state(),
             "state_error": self.state_error, "refresh_seconds": self.refresh, "registry": self.registry_state,
             "rules_overlay": dict(self.rules_overlay, not_judged=self.all_not_judged()),   # M7.6 (ADR-0008)
+            "events": None if self.events is None else self.events.counts(),   # ADR-0011 F-7
         }
         state["band"] = ui.status(state)[0]
         state["code_so_far"] = self.code_so_far()   # M8.1 REDO B-4: the code of what has been read so far
@@ -4701,7 +4942,7 @@ class Running:
 def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
           out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
           sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None,
-          suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None):
+          suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None, beat=None, event_host=None):
     """Everything before the loop: the notifier, the HostWatch, the page
     server and the registry row (raqib/watch.py's, reused). attach_hooks:
     the person's --attach-hooks (or the window's checkbox), False by
@@ -4721,7 +4962,7 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
                             out=out, err=err, home=home, platform=platform, attach_hooks=attach_hooks,
                             sysmon=sysmon, installer=installer, os_follow=os_follow, suspect=suspect,
                             suspect_threshold=suspect_threshold, suspect_timeout=suspect_timeout,
-                            suspect_every=suspect_every)
+                            suspect_every=suspect_every, beat=beat, event_host=event_host)
     except HostError as exc:
         notifier.close()
         raise watch.WatchError(str(exc))
@@ -4745,6 +4986,8 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
         watcher.deadline_seconds, "%d round(s)" % rounds if rounds else "until Ctrl-C"))
     out.write("raqib watch --host: record %s\nraqib watch --host: state %s\n" % (
         _safe(watcher.rounds_path), _safe(watcher.state_path)))
+    for line in event_lines(watcher):   # ADR-0011 F-6, F-7
+        out.write("raqib watch --host: %s\n" % line)
     out.write("raqib watch --host: %s\n" % notifier.band()[1])
     rhythm_by = ", ".join("%s=%s" % (t["name"], t["value"]) for t in watcher.rules_overlay["thresholds"]
                           if t["rule_id"] == RHYTHM)   # M7.6: the overlay's thresholds, said
@@ -4772,6 +5015,19 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
     thread = threading.Thread(target=server.serve_forever, name="raqib-host-page", daemon=True)
     thread.start()
     return Running(watcher, server, notifier, thread, no_open, environ, out, err)
+
+
+def event_lines(watcher):
+    """ADR-0011 F-6, F-7: the first lines' words of the events file, its beat and the host's name."""
+    out = ["events %s (raqib-event/1, one line appended for each thing new or changed; a heartbeat every %g s;"
+           " nothing is sent)" % (_safe(watcher.events_path), watcher.events.beat)]
+    if watcher.event_host_from == "none":
+        out.append("events: the system gives no host name: the events say \"%s\" (--event-host NAME names it)"
+                   % eventlog.UNNAMED)
+    else:
+        out.append("events: host %s (%s)" % (_safe(watcher.event_host), "--event-host" if
+                                             watcher.event_host_from == "given" else "the system's name"))
+    return out
 
 
 _sleep = time.sleep   # the tick wait; tests replace it
@@ -4937,7 +5193,7 @@ def fixture_builder(catalog=None):
 def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
             out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
             sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None,
-            stops=None):
+            stops=None, beat=None, event_host=None):
     """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code.
     stops (M9.1): the terminal's stops (raqib/cli.py), waited on between ticks; None: Ctrl-C only.
     out and err are written through a watch.Speech (M9.1 REDO B-1, REDO 2 C-1): every word at once; a terminal
@@ -4948,7 +5204,7 @@ def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_ope
     running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, speech.out, speech.err,
                     environ, home, refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon,
                     installer=installer, os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
-                    suspect_every=suspect_every)
+                    suspect_every=suspect_every, beat=beat, event_host=event_host)
     try:
         crash = loop(running, stops=stops)
         text, code = conclude(running, crash)

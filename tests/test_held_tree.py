@@ -292,3 +292,29 @@ def test_e1_a_kept_tree_is_given_its_children_in_a_round_whose_connections_were_
     assert [(m["round"], m["class"], m["acts"]) for m in tree_lines(seen, AGENT)][1:] == [
         (n, host.KEPT, 1) for n in range(2, N + 1)]
     assert not found(watch, "HOST-RHYTHM", WORKER) and found(watch, "NET-TOOL", AGENT)
+
+
+def test_ba1_a_child_given_in_a_round_whose_write_fails_is_given_back_and_judged_on_the_ancestor(home):
+    # ADR-0007 BA-1 (R2): the agent's host record cannot be appended to in round NET (the curl's round). The curl
+    # was given to the agent in that round and its line was not written: its mark is taken back, so in the next
+    # round, still alive (keep), it is where the inventory puts it - the worker - new there, and judged there. It
+    # is never an act judged nowhere.
+    real = host.HostWatch._append
+
+    def failing(self, path, lines):
+        src = self.sources.get(key_of(self, AGENT)) if any(k[0] == AGENT for k in self.trees) else None
+        if src is not None and path == src.host_path and self.rounds == NET:
+            raise OSError(28, "No space left on device")
+        return real(self, path, lines)
+    host.HostWatch._append = failing
+    try:
+        watch, seen = run(home, field(NET + 2, keep=True), os_source=False)
+    finally:
+        host.HostWatch._append = real
+    curl = AGENT + NET
+    assert curl not in child_pids(watch, AGENT) and curl in child_pids(watch, WORKER)   # not lost: on the worker
+    assert found(watch, "NET-TOOL", WORKER) and not found(watch, "NET-TOOL", AGENT)
+    assert not any(v[0] == key_of(watch, AGENT) and m[0] == curl for m, v in watch.given_marks.items())
+    (hole,) = [h for h in watch.holes if h["kind"] == "source-unwritable"]
+    assert "are given back" in hole["detail"] and hole["round"] == NET
+

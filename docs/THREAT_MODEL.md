@@ -141,6 +141,42 @@ item F7 of the M1.2 review packet or questions file.
   the agent's working tree. The installer suggests `--log` outside the
   project (M0.3 O2). Either way the agent runs as the same user and can read
   the file.
+- **The events file of the host watch** (`~/.raqib/host/events.jsonl`,
+  beside its record; ADR-0011 Amendment F): one `raqib-event/1` line for
+  each thing the watch judged that is new or changed (a tree, a finding, a
+  source finding, a hole, a blind spot, a note, a knock), the watch's start
+  and end, and a heartbeat on a fixed beat (`--beat S`, 60 s by default).
+  `docs/specs/EVENT.md` is the contract: an event holds only what its entry
+  holds and the report prints, plus the rule's own ids and the watch's facts
+  (its run, platform, version and the host's name, read once from the system
+  without a network call, or given with `--event-host`). It never holds a
+  command line, a file's content, a row of a sample or a cite's text; it
+  does hold paths as the report says them, so the account's name where the
+  machine's path holds it.
+  - It is local and appended (flushed line by line); nothing is sent
+    anywhere. A collector's own agent may tail it; that agent, not Raqib,
+    is then the sender, and the file is what it may read.
+  - It lives under the same user as the agent, as the record does: an agent
+    can read it, and can truncate or rewrite it. The numbers `n` rise by
+    one per event in a run and the heartbeat is on a fixed beat, so a gap or
+    a silence is visible to whoever reads it; the report and the state say
+    how many events were written, not built and not written. A line that
+    cannot be written is a hole of the watch, never a silence, and what it
+    left unsaid is said at the next pass; a line is never appended to a
+    fragment, whoever left it (the file's end is looked at before every
+    line, and a file that does not end in a newline gets one first). Raqib
+    itself never rewrites, rotates or truncates the file.
+  - A watch that was stopped or killed writes no end: a run with a start
+    and no end, whose last line is older than two beats, was stopped or
+    killed, and that silence is the collector's alarm. Every event carries
+    its beat (`watch.beat`), so the file alone says how long two beats are.
+    A last line with no newline may still be being written; a line in the
+    middle that is not whole JSON is a torn write, skipped and counted.
+  - Every pass of the watch looks at every entry that can change, so a
+    changed thing (an act's standing moved to another tree, a fold decided,
+    a finding that grew) is said in the pass after the change, not a beat
+    later; an alarm taken back is a later rev of the same thing (`alarm`
+    false), and an act whose other half has no line keeps its alarm.
 
 ## 5. What Raqib cannot see (known gaps)
 
@@ -619,30 +655,56 @@ is amended by T-2, T-1 restated by V-1).
   The watch decides it in one place, before any line of the round is
   written or counted from the sample; the beats of the os and hooks
   sources are not decided there. A process is given only where the held
-  tree's own host record can be written in the round (a source that
-  keeps one, whose write has not failed, that did not end with a hole,
-  of a tree the sample holds). There it is in that record (a HostChild
+  tree's own host record could be written when the round began (a source
+  that keeps one, whose write has not failed, that did not end with a
+  hole - an os follow's host record is tried again every round, so its
+  failed write does not stop the giving - of a tree the sample holds);
+  a process given in a round whose write then fails is given back, and
+  from the next round is judged where the inventory puts it. There it is in that record (a HostChild
   line that names the tree the inventory had it under, judged there by
   the rules that judge a tree's children), an act beat of its ring, and
   in a line of the round by the road of a tree not in the round; the
   tree stays quiet, and no arrival is said again. Where the record
   cannot be written, the process stays where the inventory put it and is
   judged there, and the watch says so once for the tree. A process once
-  given is new on no other tree while it lives: when its tree's root
-  ends and the system gives it a new parent under the ancestor, it is
-  not judged there again. So an agent whose connection to its model is
+  given is new on no other tree while its pid is in the samples: when
+  its tree's root ends and the system gives it a new parent under the
+  ancestor, it is not judged there again (a round with an empty sample
+  ends that, and where a start time was not read, another process that
+  took the pid is taken for it). So an agent the watch already holds -
+  one a sample has seen talking - whose connection to its model is
   closed at the sample no longer gives the children the sample shows to
   a talking ancestor (a CI runner's worker that talks to its server all
   the time) as that ancestor's cycles: a false HOST-RHYTHM at high on
   the wrong tree, and the agent's commands judged on it. What is not
   covered: where the ancestor has an os source, its follow is rooted at
-  the ancestor and holds every descendant's events, the held tree's too,
-  so the ancestor's rhythm and its os findings still read the agent's
-  commands from its own os record (on Windows with Sysmon, the same
-  false cycles); the agent's acts with no talk seen make no cycle, so
+  the ancestor and writes every event of its tree, the agent's too; it
+  marks (`input_meta.under_root`, the root's pid) each event at or under
+  the root of another tree the watch holds with an os follow of its own,
+  the root told and matched by its ProcessGuid, while that follow lives
+  (read when the ancestor's follow asks) and the round's process sample
+  shows that root under the ancestor's. The root's own creation is not
+  marked and stays the ancestor's act; a marked line gives the ancestor
+  no act, no talk and no destination, and is judged by the other rules
+  as before (one act, judged once). What the mark costs: a marked line
+  whose twin the other tree's file does not hold - the other follow's
+  last interval before it stopped, a follow that died, a member the other
+  follow never knew - gives no beat to either tree, so the rhythm of an
+  agent's last seconds can be missed (its commands are still judged where
+  they are written); a process born under the root before the root was
+  told is marked from then on (the follow's own parents tell); a root with
+  no ProcessGuid is not told, and the ancestor then counts its child's
+  commands as before (on Windows with Sysmon, the same false cycles
+  there); every os follow under the host watch keeps one more map, each
+  member's parent by ProcessGuid, for the life of the follow. The
+  agent's acts with no talk seen make no cycle, so
   where no source sees a connection that opens and closes between two
-  samples (Linux) the agent is still not found by rhythm - it is found
-  as an arrival, and its commands are judged on its own tree; a tree
+  samples (Linux) the agent is still not found by rhythm - where a
+  sample saw it talk it is found as an arrival, and its commands are
+  judged on its own tree; an agent no sample ever saw talking is no tree
+  at all, is not held, and its commands stay the talking ancestor's, with
+  the false cycles they make there, as before; an agent that is started
+  anew for each job gives the ancestor one act for each new root; a tree
   whose root is not in the sample is gone, and its orphans that were
   never given go to the nearest talking ancestor as before; a round with
   no process sample decides nothing; a file write carries no path in the
