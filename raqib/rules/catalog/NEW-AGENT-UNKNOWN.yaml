@@ -3,6 +3,7 @@ id: NEW-AGENT-UNKNOWN
 title: An unknown agent tree appears on the host
 # M7.2 REDO C-13: class HOST (engine.CLASSES), the rules of raqib watch --host.
 class: HOST
+attack: [T1059]
 # ADR-0002: measured against the host's own record (process tree and TCP
 # table, read by raqib/discover.py), which the agent does not write.
 kind: anchor

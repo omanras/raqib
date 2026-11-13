@@ -2,6 +2,7 @@
 id: NET-TOOL
 title: Tool call reaches the network
 class: NET
+attack: [T1105, T1048]
 # ADR-0002: the shape of a bad act (a tool, a program name), so it lists its evasions.
 kind: signature
 evasion:

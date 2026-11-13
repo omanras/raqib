@@ -108,6 +108,10 @@ point. Phase 6 runs before the rest of Phase 5.
 Amendment A (his ruling): Raqib is passive toward other systems and may itself send its events, one way; it sends everything it judged; a finding stands with or without an agent's tree. Its order: the event (`raqib-event/1`, technique ids, a heartbeat); the
 sinks (Event Log, syslog); the service; accounts, logons, tasks, services and a tree's reach; the proxy joined to
 the host watch and PROXY-BYPASS; file reads, measured first.
+- M10.1 the event (landed; ADR-0011 Amendments B to E): `raqib-event/1` as a shape, the one pure module that builds it, the rules' ATT&CK ids, docs/specs/EVENT.md with its mapping to OCSF and ECS
+- M10.2 recorded: the watch writes its events to a file beside its record, and a heartbeat on a fixed beat; it keeps each event's number and says a changed thing again (ADR-0011 E-4 lists what the writer must settle)
+- M10.3 recorded: the forwarders (an HTTP collector that takes JSON, syslog) and the local sinks, outside the capture path; stand-in collectors on the rig, then a real Splunk
+- M10.4 recorded: the window's panel for the link
 
 ## Phase 11 — The rig (ADR-0012; the commander's order, 2026-11-13)
 - M11.1 the rig (landed with ADR-0012): a workflow of its own; a real Windows with Sysmon and Linux; a stand-in agent whose acts are known; tools/rig/check.py states each expectation MET, MISSED or OPEN; reports, does not fail

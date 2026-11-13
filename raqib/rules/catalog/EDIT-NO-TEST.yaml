@@ -3,6 +3,8 @@
 id: EDIT-NO-TEST
 title: Edits under raqib/ or tests/ with no test run before the next stop or session end
 class: DRIFT
+attack: []
+attack_note: "a rule about the agent's own work or the watch's own sight, not a technique"
 # ADR-0002: a demand. The finding is the absence of evidence (a test run after
 # the edit); knowing the rule helps the agent only by running the tests. A
 # demand lists no evasion; its known holes are listed here (rulings G-5, G-6).

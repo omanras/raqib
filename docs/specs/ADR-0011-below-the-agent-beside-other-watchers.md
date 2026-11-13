@@ -132,3 +132,208 @@ accounts, logons, tasks, services and reach, as findings with or without a tree;
 PROXY-BYPASS; file reads, measured first. Questions Q-1 to Q-4 are answered by his words: the service is accepted;
 the link comes first; Windows first. Q-3 (which collector is shown end to end first) is still his to name.
 
+## Amendment B (the Table, 2026-11-13) - the event, ruled before it is built
+The first step of the order above, cut in two so that each can be read whole: the event as a shape and the one
+module that builds it (this amendment, M10.1); the watch writing it to its file on a beat (M10.2). The commander
+named no first collector; the Table takes the two shapes that reach most of them - an HTTP collector that takes a
+JSON event (Splunk's HEC is one) and syslog - and proves the link first against stand-ins on the rig, then
+against a real Splunk. An event is built once, in Raqib's own shape; a collector's shape is a mapping of it.
+- B-1 (one module, pure). `raqib/event.py` is the only code that builds an event. Its functions take a ledger
+  entry of the watch (a finding, a source finding, a hole, a note, a knock row, a tree row, the watch's state)
+  and the watch's facts, and return a dict. No clock, no file, no network, no environment: the caller gives the
+  time and the host's name. `event.check(obj)` returns the problems of an event; every event the module builds
+  has none. FOR: one shape for every consumer. MUST NOT TOUCH: raqib/host.py, raqib/watch.py, the report.
+- B-2 (the shape, `raqib-event/1`). Keys, in this order where a kind has them:
+  schema ("raqib-event/1"); id ("<run>:<n>"); n (the event's number in its run, from 1); time (UTC, ISO 8601,
+  milliseconds, Z: when Raqib said it); kind (finding | source-finding | note | tree | hole | knock | heartbeat |
+  watch); severity (the rule's high | medium | low for a finding and a source finding; "hole" for a hole; "info"
+  for the rest); summary (one sentence, the report's own); rule ({id, class, kind, fp_budget, attack}: finding
+  and source-finding only); subject ({tree, pid, image, named, agent, path}: a key is absent where the entry
+  does not hold it, never null-filled or guessed); evidence ({run, round, record, source, trace, seqs, lines,
+  cites}: A5, where a person or a system can check it; absent keys as for subject); knocked ({status, event}:
+  whether Raqib knocked a person for it and what became of the knock); state (a source finding: settled |
+  history | judged on another tree | noted; a watch event: start | end); result ({word, exit}: a watch end and a
+  heartbeat); counts ({rounds, findings, source_findings, holes, notes, trees}: a heartbeat and a watch end);
+  watch ({run, mode, platform, version, host}: on every event).
+- B-3 (the same in, the same out). An event is one line: JSON, keys sorted, compact, ASCII (non-ASCII
+  escaped). The same ledger gives the same lines byte for byte. A collector that is sent an event twice drops it
+  by id.
+- B-4 (nothing new is said). An event holds only what its ledger entry holds and the report already prints:
+  no command line, no file content, no destination the report does not print, no secret (A9). A text is the
+  report's sentence, not a new one.
+- B-5 (ATT&CK ids are declared, not guessed at run time). A catalog rule declares `attack:` (a list of
+  technique ids, `T` and four digits, a sub-technique's three after a dot); an empty list needs `attack_note:`
+  saying why. `raqib check-rules` refuses a catalog rule without it. The rules written in code declare theirs
+  beside their kind (silence.py, cross.py, tree.py), and the rule table carries the column. A user's own rule
+  with no `attack` loads as before (empty). The table, the Table's and the commander's to correct:
+  NEW-AGENT, NEW-AGENT-UNKNOWN: T1059. HOST-RHYTHM: T1059, T1071. NET-TOOL: T1105, T1048. DESTRUCT-CMD: T1485.
+  SECRET-OUTPUT: T1552. SCOPE-PATH: T1005. The five SILENCE rules and CROSS-SOURCE: T1562.
+  Empty, with the note "a rule about the agent's own work or the watch's own sight, not a technique":
+  AGENT-DARK-LIVE, HOST-UNWATCHED, SCOPE-CWD-ROOT, SCOPE-CWD-MOVED, DRIFT-FILES, EDIT-NO-TEST, LANDED-NO-GATE and
+  the two tree anchors. A technique id says what a finding is consistent with, never that it happened.
+- B-6 (the contract is a document). `docs/specs/EVENT.md` states every key, per kind which are required, one
+  example line per kind (made by the module, checked by a test against it), and the mapping of each key to
+  OCSF (Detection Finding) and to ECS names. A test reads the document: a key the module can emit and the
+  document does not name, or the reverse, fails.
+- B-7 (tested on the watch's own entries). The entries the tests feed the module are made by the watch on
+  fixtures (a fixture run's findings, source findings, holes, notes, knocks, trees, state), not written by hand:
+  a shape the watch does not make proves nothing.
+- Not in M10.1, named: the watch writing events and the heartbeat's beat (M10.2); the forwarders, the local
+  sinks and the stand-in collectors on the rig (M10.3); the window's panel (M10.4).
+
+## Amendment C (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.1.md (3ff5c99): REDO
+The build did what Amendment B said; where it is wrong, B was. The Table read the examples before the packet
+came and found three things: (a) a cite was passed through whole, with the raw row of the inventory - a process
+row with its command line - which B-4 forbids and the report never prints; (b) a heartbeat and a watch's end
+took their word from the window's band (WATCHING, FINISHED), so a watch with a finding ended "FINISHED, exit
+0"; (c) the Windows gate failed on a test that compared paths of two temporary directories. The packet found
+what matters more: B made an event's number its identity, and a number is a position.
+- C-1 (F2, F14: what an event is). An event is a thing said once. `id` ("<run>:<n>", n rising by one for each
+  event the run says) names the saying and is never used twice; a collector keys by watch.host and id. What the
+  event is about is named apart: `about` ("finding:3", "source-finding:2", "hole:1", "blind:1", "note:4",
+  "knock:2": the ledger and the entry's place in it, from 1; "tree:<the tree's word>"; "watch") and `rev` (1
+  the first time it is said; one more each time it is said again because it changed: a finding that grew, a
+  knock whose fold was decided, a tree that was knocked). Both are given by the caller. The module's function
+  over a whole state is `snapshot` (it was `ledger`): the events of one finished watch in one call, n from 1,
+  rev 1; its document says it is not how a running watch says events (M10.2 keeps the count and says a changed
+  thing again). FOR: a collector that drops what it has seen never drops what it has not.
+- C-2 (the shape, replacing B-2's list; the key order as given). schema; id; n; time; kind; about; rev;
+  severity; alarm; summary; rule {id, class, kind, fp_budget, attack}; subject {tree, pid, image, started,
+  named, agent, path, benign, history, by}; evidence {run, round, rounds, record, source, trace, seqs, lines,
+  cites}; hole {kind, class, count, last}; knocked {status, event, title, limit_id, called}; state; result
+  {word, exit}; counts {rounds, findings, source_findings, holes, blind, notes, trees, knocks}; watch {run,
+  mode, platform, version, host}. The kinds are B-2's eight.
+- C-3 ((a), F7, F9, F11: evidence). A cite is {src, line} and, where the entry's cite holds them, {round, seq}:
+  never its text, under any key. `evidence.rounds` is a rhythm finding's cycle rounds. `evidence.record` is the
+  file the seqs are in (the state's trace) for a finding, a tree and a note of the rounds; `evidence.trace` and
+  `lines` stay the source finding's own. Paths are said as the report says them (they hold the account's name
+  where the machine's do; EVENT.md says so). MUST NOT be in any event: a command line, a row of a sample.
+- C-4 (F3, F4: a source finding's state, and whether it is an alarm). The state is the report's own word, in
+  the report's own order: judged on another tree; history; noted; pending at exit; not settled; settled. B-2's
+  list gains the two it lacked. `alarm` (finding and source-finding; a hole) is whether the report counts it
+  under ALARMS or INCOMPLETE: true for a finding of the rounds; true for a source finding that is settled, not
+  settled or pending at exit; false for one that is history, judged on another tree or noted; true for a hole,
+  false for a blind spot. The severity stays the rule's: the consumer is told both.
+- C-5 ((b): the watch's word). A heartbeat's `state` is the band's word (the watch is alive, silent or failed);
+  its `result` is the exit the watch would end with now (the state's code so far) and that code's word. A
+  watch's end has `result` from the exit the caller gives. The words are the fixed three: 0 CLEAN, 1 ALARM, 3
+  INCOMPLETE; another code has no word, only the exit.
+- C-6 (F1, F8: holes). A hole event has `hole` {kind: the hole's own kind; class: "hole" or "blind spot";
+  count and last where the entry holds them}. A blind spot (the state's blind) is an event of kind hole, class
+  "blind spot", severity "info"; a hole's severity is "hole". counts gains blind and knocks.
+- C-7 (F6, Q4, Q6: trees). `subject.named` is a boolean on every kind (a finding's word becomes the boolean it
+  means; a word that is neither of the report's two leaves the key out). A tree's subject gains started (the
+  third part of its key), benign, history and by (how it became a candidate, where the row says). A tree
+  event's time is the row's own first-seen time where it has one.
+- C-8 (F5, Q3: knocks). A knock event carries title, limit_id and called beside status and event. `snapshot`
+  takes the knock rows as an argument it must be given (the state keeps only the newest). Which finding a knock
+  was for is M10.2's (the writer knows both).
+- C-9 (F10: B-4 read rightly). B-4 is about what an event says of the watched machine. A rule's own class,
+  kind, budget and technique ids are the rule's, written in its file: they are in the event and need not be in
+  the printed report. An empty `attack` means the rule declares none; EVENT.md says a catalog rule's file says
+  why and a person's own rule may declare none.
+- C-10 (check). `check` knows each key's type and each closed list (kind, severity, a source finding's state,
+  hole.class, result.word); a time must be a real instant; a finding and a source finding need rule.attack (a
+  list), alarm, about and rev; a watch's end needs result.exit. What the module builds from any entry the
+  watch makes passes; an entry that lacks what a kind requires is not built into a half event: the function
+  raises ValueError naming the key (M10.2 turns that into a hole).
+- C-11 (EVENT.md, the mapping; the Table's, checked against OCSF 1.5.0's Detection Finding and Finding
+  Information). Every key has a type and, where closed, its values. A key maps to a named field or to the
+  namespace: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`. Named, and no others:
+  finding, source-finding and hole are OCSF Detection Finding (class_uid 2004, category_uid 2; activity_id 1
+  Create at rev 1, 2 Update after; type_uid 200400 + activity_id); every other kind is OCSF Base Event
+  (class_uid 0). time -> `time` as epoch milliseconds and `time_dt` as given; ECS `@timestamp`.
+  severity -> `severity_id` high 4, medium 3, low 2, info 1, hole 3; ECS `event.severity` the same number.
+  alarm -> `is_alert`; ECS `event.kind` "alert" when true, else "event". id -> `finding_info.uid`; ECS
+  `event.id`. about -> `metadata.correlation_uid`. summary -> `message` and `finding_info.desc`; ECS `message`.
+  rule.id -> `finding_info.analytic.uid` and `finding_info.title`; ECS `rule.id`. rule.class -> ECS
+  `rule.category`. rule.attack -> `finding_info.attacks[].technique.uid`; ECS `threat.technique.id`.
+  subject.pid, subject.image -> `evidences[].process.pid`, `.process.name`; ECS `process.pid`, `process.name`.
+  watch.host -> `device.hostname`; ECS `host.name`. watch.version -> `metadata.product.version`
+  (`metadata.product.name` is "Raqib"); ECS `observer.version` (`observer.product` "Raqib"). kind -> ECS
+  `event.action`. knocked.status -> `status_detail`. The whole line -> `raw_data`; ECS `event.original`.
+  A test holds this table against the document.
+- C-12 (the tests, section 9 and E2). No assertion compares a thing with itself. The entries reach, by fixture
+  watches, each state of C-4, a HOST-RHYTHM finding, a footprint finding, a hole that knocked, a notifier's
+  hole, a blind spot, a folded or rate-limited knock, a benign tree and a tree there at the start. A broken or
+  non-ASCII event for `check` is a built event with one value changed, not one written by hand. The same
+  entries give the same lines on every platform: the two runs share one home, or the comparison is of values
+  no path enters. "Nothing new is said" is tested against what the report prints and the rule declares, not
+  against the entry's own strings: no string of a cite's text, of a sample row, is in any line.
+- Recorded, not built: F12 (a time that does not parse is replaced by the caller's, unsaid); a kind for the
+  model layer's suspicions, and events for the watch's own errors (M10.2); F13 is said, not changed.
+- The ledger. The Table wrote a shape before asking how a thing that changes is said twice; a contract's
+  first question is identity, and it was the reviewer who asked it.
+
+## Amendment D (the Table, 2026-11-13) - rulings on review 2026-11-13-M10.1-redo.md (eabca24): REDO, narrow
+The packet's verdict is STOP, because the fix changes words C-1 wrote: so it is the Table's, and here it is.
+C-1 gave a thing a name by "the ledger and the entry's place in it" and did not ask whether every list the
+state shows is one ledger: the state shows the watch's holes followed by the notifier's, and the notes followed
+by one note that is always last. A place in a joined list moves. The Table also ran the module on a real watch
+of this machine (two trees, a blind spot, three notes): eight events, none refused by check, no row or command
+line in any line. And the six CI jobs are green on eabca24, Windows among them.
+- D-1 (C-1 completed: a name is a place in a list that only grows). A hole of the watch is "hole:i"; a hole of
+  the notifier is "notifier-hole:i" (each counted in its own list; the notifier's entry is the one that holds
+  a count). A note is "note:i" over the watch's own notes; the note of the words a terminal lost, which is
+  always last and whose text changes, is "note:lost-words" (snapshot is told its text by an argument; without
+  it the note is numbered as any other, and snapshot's document says so). FOR: a hole made after a failed
+  knock never takes the failed knock's name. MUST NOT TOUCH: findings, source findings, blind spots, knocks,
+  trees (their lists only grow; the packet checked each).
+- D-2 (what a thing is called outside its run). `about` is a name within one run. EVENT.md says so, and its
+  mapping uses the run and the name together: "<watch.run>/<about>" -> OCSF `finding_info.uid` and
+  `metadata.correlation_uid`; ECS `event.id` stays the event's id. The event's own id -> OCSF `metadata.uid`
+  (it was `finding_info.uid`: then every time a finding was said again it would have been a new finding).
+  C-11's two pairs for id and about are replaced by these; `activity_id` and `type_uid` from rev, and
+  `class_uid` and `category_uid` from kind, are C-11's own words and stay in the table. For a hole,
+  hole.kind -> `finding_info.title`. For the kinds that are Base Event: id -> `metadata.uid`, summary ->
+  `message`, the rest in the namespace.
+- D-3 (the host is not optional). `watch.host` is required on every event: check refuses an event without it,
+  and `facts` refuses to be called without it. A collector keys by it.
+- D-4 (a heartbeat's state is a closed word). WATCHING, SILENT, AGENT GONE, CAPTURE FAILED, FINISHED: the
+  band's word without its number ("SILENT for 12 s" is SILENT). check knows the list.
+- D-5 (small, each as the packet names it). A cite that lacks its src or its line is left out whole, never
+  half. A value that is an empty string is not held. check refuses a negative round, pid, seq, line or n, and a
+  technique id twice. A blind spot's `hole.count` is the number of rounds it was seen in. The document says:
+  that a source finding's state is C-4's word and what the report prints for each of the six; the base of
+  `evidence.lines`; that `subject.by` is carried by no event yet; that the heartbeat's and the watch-end's
+  examples are the last event of two snapshots of one watch (so they share a number, and are never both in
+  one stream).
+- D-6 (the tests the packet shows to be weak). No cite text of any ledger is in any line, with no exception
+  for texts the report prints (a report prints no cite's text). A hole's alarm is compared with the watch's
+  result (INCOMPLETE and the report's HOLES), not with the event's own class. A value is "in the report" when
+  it is in the report's line for that entry, not anywhere in the report. Two new cases through fixture
+  watches: a watch's hole made after a notifier's hole (their names do not move between two snapshots), and a
+  note made after the lost-words note is given.
+- Accepted as built, said: Q7 (the report's order), Q8 (C-4's words), Q10 (a cite's src and a tree's start are
+  the entry's own), Q11 (a name is stable within a run; two runs of one input may number source findings
+  differently), Q13 (the folded knock is made by a second call of the notifier on the watch's own finding: no
+  fixture watch folds by itself).
+- Recorded for M10.2, where raqib/host.py is in Scope: the tree row's `candidate_by` (so `subject.by` is
+  carried); a tree's benign word and its HOST-UNWATCHED and HOST-RHYTHM knocks; a source finding's growth; a
+  knock's shown-on and knocked-on; the watch's own errors (code_error, state_error) as events; an entry that
+  makes a builder raise becomes a hole, one entry, never a whole pass; that a snapshot's events and a running
+  watch's are never sent as one stream.
+
+## Amendment E (the Table, 2026-11-13) - on the second REDO of M10.1 (9e8cecd) and its questions
+- E-1 (Q15: D-4's list was short, and the Table completed it itself, CLAUDE.md rule 8). D-4 named five words;
+  a host watch's band has two more, READER LATE and HOST READER FAILED, and the build, following D-4, refused a
+  heartbeat in exactly the state a collector most needs to hear of: a watch that cannot read. The list is every
+  word a band can be, and a test reads the band's own code so that a word added there and not here fails.
+  FOR: a watch whose reader failed still beats. MUST NOT TOUCH: a word that is none of them is still refused.
+- E-2 (Q14). D-6 said the report prints no cite's text; a footprint's cite is its path, and the report prints
+  the path. The test as built is the one meant: every cite's text and every sample's row is replaced by a
+  marker before the events are built, and no marker is in any line and no line changed.
+- E-3 (Q16). `hole.last` and `evidence.record` are values of the entry and the state that the report's line
+  for the entry does not hold; allowed by name, as built. "The rest in the namespace" means every key D-2 and
+  C-11 do not name: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`, for every kind.
+- E-4 (review 2026-11-13-M10.1-redo2.md: NEXT; the gate and the six CI jobs green on 00069ed). The document
+  now gives `snapshot`'s arguments in the module's order, says what `about` is in D-1's words, and holds E-3's
+  sentence. Everything else the packet raises is the writer's, and is M10.2's HANDOFF, not a third REDO: how a
+  running watch tells the lost-words note and a notifier's hole without `snapshot` (the watch knows which
+  list an entry is in; the module's "the one that holds a count" is for a state read back from a file); which
+  changes are said again (a finding that grew, a knock decided, a tree knocked, a hole's count: yes; a blind
+  spot's rounds and a new lost-words text: at the heartbeat's beat, not at each); what a builder that raised
+  becomes; a finding whose every cite was left out (said, with their number; never an event with an empty
+  list); a snapshot of a watch whose reader failed; examples of a notifier's hole and the lost-words note; the
+  counts beside the split names; the tests the packet shows to be weak (section 5).
+

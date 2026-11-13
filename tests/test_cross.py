@@ -300,7 +300,7 @@ def test_c1_report_lists_the_rule_beside_the_silence_rules():
     assert ids[:6] == [rid for rid, _ in report.SILENCE_RULES] + ["CROSS-SOURCE"]
     row = table[5]
     assert row == {"id": "CROSS-SOURCE", "class": "CROSS", "kind": "anchor", "severity": "high", "fp_budget": 0.1,
-                   "status": "active", "title": cross.TITLE}
+                   "status": "active", "title": cross.TITLE, "attack": ["T1562"]}   # attack: M10.1 (ADR-0011 B-5)
     assert "CROSS" in engine.CLASSES and cross.RULE_KINDS == {"CROSS-SOURCE": "anchor"}
     assert (cross.WINDOW_SECONDS, cross.SEVERITY, cross.CLASS) == (10, "high", "CROSS")
 

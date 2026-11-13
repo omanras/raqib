@@ -2,6 +2,7 @@
 id: SCOPE-PATH
 title: File tool touches a path outside the project
 class: SCOPE
+attack: [T1005]
 # ADR-0002: the shape of a bad act (a file tool aimed outside), so it lists its evasions.
 kind: signature
 evasion:
