@@ -2535,8 +2535,9 @@ the clause stays, with BC-5's.
 The field, 2026-11-13, the real-agents probe on Windows with Sysmon (run 43376636008, the code of main): a
 watch read 1645 Sysmon events in 30 rounds while a real agent ran seven commands under it, and saw no tree at
 all - not the agent, not the machine's own services that every other watch lists from its first round. It
-ended NONE-SEEN, exit 0. The same code saw everything on the same machine two minutes later and in every
-other run. The watch's own pid in that run was 732.
+ended NONE-SEEN, exit 0. The same code saw everything on the same machine two minutes later. The watch's own
+pid in that run was 732. It happened again within the hour (run 43379002838, another machine, the watch's pid
+720; the inventory: every source read, 145 processes, no candidate): two of twelve watches on fresh machines.
 The cause, read in the code (raqib/discover.py, `_acts_core`): the watch leaves out its own tree - its pid, its
 launchers, and every process under them by the sample's parent pids. Windows keeps a dead parent's pid in its
 children for as long as they live. The system's first processes are such orphans, and the whole machine hangs
