@@ -1,11 +1,18 @@
-# HANDOFF — no builder task (the Table is preparing M10.4)
+# HANDOFF — M10.4a  (ADR-0011 Amendment R-1, R-4: the link's state read by a module with no network)
 
-Task: none. M7.21b landed: on Windows a live watch run by an administrator reads each connection's bytes from
-the kernel's tracing (ADR-0007 BK to BP). Next in the commander's order is M10.4, the window's panel for the
-forwarder's link (ADR-0011 J-9: it reads the state `raqib-forward/1`); the Table reads the window's code and
-rules it before this file names a task.
+Task: move what reads and judges a forwarder's state out of raqib/forward.py into a new raqib/link.py that imports no network, and give it one bounded function that reads every state. Nothing is shown yet (M10.4b). No behaviour of the forwarder changes.
 
 Scope:
-  (nothing)
+  raqib/link.py (new), raqib/forward.py (only: the moved definitions removed and taken from raqib.link; `status` built on link's reader), tests/test_link.py (new), docs/specs/FORWARD.md (one sentence: where the state's reader lives), docs/review/2026-11-17-M10.4a-questions.md
 
-A builder that reads this: STOP. Commit nothing.
+Exit criteria:
+- E1 raqib/link.py holds, moved unchanged: the schema's name and the state's keys (SCHEMA, KEYS, LATER, SYSLOG_KEYS, NAME, SYSLOG, DIR_NAME), the error words (ERRORS, SYSLOG_ERRORS), STATUS_RULE, forward_dir, state_path, seconds_of, where, state_problem (and what it needs), judge - and whatever else of forward.py those need and that touches no network. forward.py defines none of them any more: it takes each from raqib.link, and every one is the same object (`forward.judge is link.judge`, for each name: a test over the list; a test reads forward.py's source and finds no second `def judge`, `def state_problem`, no second ERRORS literal).
+- E2 raqib/link.py imports only the standard library's modules that touch no network (no socket, ssl, http, urllib) and, of raqib, nothing but what it needs for the folder (raqib.host's host_dir); it does not import raqib.forward, raqib.cli or raqib.app by any spelling (a test by ast). Importing raqib.link does not import raqib.forward (a test in a fresh interpreter: `raqib.forward` not in sys.modules).
+- E3 `link.read(home=None, now=None, name=None)` returns one row for each state file whose name is a forwarder's name, sorted by name: {"name", "path", "code", "word", "lines", "refused" (a count, or None where it is not known), "state" (the parsed state, or None)}, judged by `judge`; with `name`, that one (a missing file is SILENT with the line `status` says today). At most 64 names (LINKS_MAX) and a count of the rest; a file larger than 1 MiB (STATE_MAX) is UNREADABLE with that reason and is not read into memory whole; any failure to list or read is a row or an empty list, never raised. `link.worst(rows)` is the code `status` returns today (3 over 1 over 0; no rows is 3).
+- E4 `forward.status` is built on `link.read` and writes what it wrote: every existing test of tests/test_forward.py and tests/test_forward_rig.py passes unchanged (do not edit those files), and a new test compares status's output byte for byte with lines built from `link.read`'s rows over the same folder (OK, FAILING, BEHIND, SILENT, UNREADABLE, a missing name, no state at all).
+- E5 Tests for E3's bounds: 65 states (64 rows and 1 more, said by status as one further line - say its words in the questions file), a state of more than 1 MiB, a folder that cannot be listed, a state that is a directory, not ASCII, not JSON, JSON nested deep; none raises.
+- E6 docs/specs/FORWARD.md says in one sentence that the state's reader and its judgement are raqib/link.py's, with no network, for the command and the window. Gate green in the foreground; ASCII outside docs; tests/test_rhythm.py's guards pass unchanged.
+Not in scope: the cursor's machine, the sends, the state's shape, raqib/app.py, raqib/cli.py, raqib/host.py, tests/test_forward.py, tests/test_forward_rig.py, tests/test_rhythm.py, the rig.
+If an exit criterion needs a file outside Scope: STOP and say which. Do not change a guard test to pass.
+Commit: `landed: M10.4a the link's state read with no network` or `STOP: M10.4a <reason>`.
+Read HANDOFF.md and do only the task it specifies.

@@ -858,3 +858,32 @@ Recorded, not built: the header's fallback counts nothing (a defect there would 
 a collector that never ends its side at the half-close makes every batch late, said failing; what real
 collectors do at the end of a connection is not checked on the rig (rsyslog and syslog-ng: a later task).
 
+## Amendment R (the Table, 2026-11-17) - the link is shown: the window's panel for the forwarder (M10.4)
+J-9 wrote the state for two readers: a person at the host, and this panel. The window runs the watch in its
+own process, so it may not import the forwarder (K-1: only cli.cmd_forward does; the forwarder's module holds
+the network). This rules how the link is read and shown. Each ruling names what it is FOR and what it MUST NOT
+TOUCH.
+- R-1 (the state's reader is a module with no network). What reads and judges a state - the schema's keys,
+  the state's problems, the judgement of STATUS_RULE, where the states are - lives in raqib/link.py, which
+  imports nothing of the network and nothing of the forwarder; raqib/forward.py takes those names from it
+  (one statement of each, never two). `raqib forward --status` says what it said, byte for byte. FOR: one
+  judgement for the command and the window. MUST NOT TOUCH: the cursor's machine, the sends, the state's
+  shape (`raqib-forward/1` is not changed by this).
+- R-2 (the panel reads; it starts nothing). The window shows, for each forwarder that wrote a state in
+  ~/.raqib/forward: its name, the word of its judgement (OK, BEHIND, FAILING, SILENT, UNREADABLE), where it
+  sends and by which delivery word, plain or not, what was last taken and when, what waits, what was
+  refused, why it fails. It starts and stops no forwarder, holds and shows no token, opens no connection.
+  With no state at all it says so - nothing leaves this host by Raqib - and how one is started. FOR: a
+  person at the host who must know whether the SIEM still hears. MUST NOT TOUCH: the watch (J-1): no
+  result, exit code or finding of a watch depends on a forwarder, in the window either.
+- R-3 (silence is shown as silence). A state older than two beats, from the future, or unreadable is never
+  shown as calm: it is the worst word of the panel, and the rail's item carries the worst word of all the
+  forwarders at all times, whatever screen is open (CLAUDE.md rule 4).
+- R-4 (bounded, and never in the way). The states are read at most once a second, each at most 1 MiB (more
+  is unreadable, said), at most 64 names (the rest counted, said); a read that fails is that forwarder's
+  UNREADABLE, never the window's failure.
+- R-5 (two tasks). M10.4a: raqib/link.py and the forwarder taking its names from it, nothing shown yet.
+  M10.4b: the window's Link screen and the rail's item.
+Not here, recorded: starting a forwarder from the window (with the service, later); the link on the local
+page; the forwarder's own log in the window.
+
