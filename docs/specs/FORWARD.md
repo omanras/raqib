@@ -349,6 +349,10 @@ more than a beat older than the state, the status is 1 (BEHIND), the settling in
 says. A state that is not what the forwarder writes (the list above, "What is refused at the start") is
 UNREADABLE (3), never read as calm (M-6, N-6). Of several states, the worst: 3, then 1.
 
+The state's reader and its judgement are raqib/link.py's, which imports nothing of the network and nothing of
+the forwarder: `raqib forward --status` and the window read and judge a state by it, one judgement for both
+(ADR-0011 R-1).
+
 What `--status` says in each state of the machine (a test builds each row's state and holds it to the code):
 
 | the forwarder's state | exit | word |
