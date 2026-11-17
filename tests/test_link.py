@@ -25,7 +25,7 @@ MOVED_VALUES = ("SCHEMA", "KEYS", "LATER", "SYSLOG_KEYS", "NAME", "SYSLOG", "DIR
                 "FRAMINGS", "HEAD_MAX", "SHA")
 MOVED_FUNCTIONS = ("forward_dir", "state_path", "seconds_of", "where", "state_problem", "_state_problem", "_count",
                    "_instant", "judge")
-ROW_KEYS = {"name", "path", "code", "word", "lines", "refused", "state"}
+ROW_KEYS = {"name", "path", "code", "word", "lines", "refused", "state", "age", "to", "facts", "why"}   # T-2
 
 
 def a_state(name, written=NOW - 1, **change):
@@ -234,8 +234,9 @@ def test_e3_read_with_a_name_gives_that_one_and_a_missing_file_is_silent(tmp_pat
     assert [(r["name"], r["word"]) for r in link.read(str(home), NOW, "ok")] == [("ok", "OK")]
     gone = link.read(str(home), NOW, "gone")
     path = link.state_path("gone", str(home))
-    assert gone == [{"name": "gone", "path": path, "code": 3, "word": "SILENT",
-                     "lines": ["no state: %s (it never ran, or not here)" % path], "refused": None, "state": None}]
+    silent = ["no state: %s (it never ran, or not here)" % path]
+    assert gone == [{"name": "gone", "path": path, "code": 3, "word": "SILENT", "lines": silent, "refused": None,
+                     "state": None, "age": None, "to": None, "facts": [], "why": silent}]   # T-2
     for bad in ("../ok", "UPPER", "", "x" * 33, None, 7):   # no forwarder's name: no row, no path built
         assert link.read(str(home), NOW, bad) == ([] if bad is not None else link.read(str(home), NOW))
 
@@ -445,3 +446,32 @@ def test_e6_link_and_its_tests_are_ascii_and_name_only_loopback_and_documentatio
         text = path.read_bytes().decode("ascii")
         for ip in re.findall(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text):
             assert ip.startswith(("127.", "192.0.2.", "198.51.100.", "203.0.113.")), (path.name, ip)
+
+
+# --- T-2 (M10.4b E1): what a panel shows of a row, so that it restates nothing of judge -------------------------
+
+def test_t2_each_row_carries_its_age_where_it_sends_its_facts_and_its_why_and_lines_is_both(tmp_path):
+    home = tmp_path / "home"
+    each_word(home)
+    rows = {r["name"]: r for r in link.read(str(home), NOW)}
+    for r in rows.values():
+        assert r["lines"] == r["facts"] + r["why"], r["name"]
+    ok = rows["ok"]
+    assert len(ok["facts"]) == link.FACTS and ok["why"] == [] and ok["to"] == link.where(ok["state"]["destination"])
+    assert 0.5 < ok["age"] < 1.5 and 499.5 < rows["silent"]["age"] < 500.5
+    for name, said in (("failing", "failing since "), ("behind", " wait longer than a beat"), ("silent", "more than two beats")):
+        r = rows[name]
+        assert len(r["facts"]) == link.FACTS and len(r["why"]) == 1 and said in r["why"][0], name
+        assert r["facts"] == ok["facts"][:1] + r["facts"][1:] and r["to"] == ok["to"]   # the same first fact: where
+    for name in ("broken", "other"):   # nothing is known of it but its lines
+        r = rows[name]
+        assert (r["age"], r["to"], r["facts"]) == (None, None, []) and r["why"] == r["lines"] and r["why"]
+
+
+def test_t2_judges_lines_of_a_state_it_read_begin_with_facts_lines_whatever_the_word():
+    for change in ({}, {"behind": 9, "last_ok": None, "last_id": None}, {"written": NOW - 500}, {"written": NOW + 500},
+                   {"failing": {"since": forward.iso(NOW - 30), "tries": 1, "error": "late", "status": None}}):
+        code, word, lines = link.judge(a_state("x", **change), NOW)
+        calm = link.judge(a_state("x", **dict(change, failing=None, behind=0, written=NOW - 1)), NOW)[2]
+        assert len(lines) == link.FACTS + (0 if word == "OK" else 1), word
+        assert len(calm) == link.FACTS

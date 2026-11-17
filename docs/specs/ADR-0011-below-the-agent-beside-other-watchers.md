@@ -935,3 +935,19 @@ R ruled what the panel is. Reading the window's code and the M10.4a review added
   level `note`, with the command that would start one as text. A folder that could not be listed is not
   that (S-2): it is `incomplete`.
 
+## Amendment U (the Table, 2026-11-17) - the builder's STOP on M10.4b (36464ad), and its questions
+The builder stopped at E1, rightly: the criterion asked for new keys on the row and for two tests that list
+the row's keys to pass unchanged. The contradiction was the Table's.
+- U-1 (the row's keys are the Table's to widen). Those two tests are the registry of the row's shape; the
+  Table added the four keys to them and built T-2 in raqib/link.py itself (FACTS, `_parts`): age and to are
+  None and the facts are none for a state that is missing or unreadable, whose lines are all its why.
+- U-2 (a late read never lowers an alarm). Where a read has not returned in ten seconds the panel says for how
+  long nothing was read; its level is `incomplete`, unless the last read showed FAILING or BEHIND, which stays
+  `alarm` beside those words. FOR: T-4 must not turn a known failure amber.
+- U-3 (the rail counts each word at the worst code). "2 forwarders, 1 failing, 1 behind"; no order between
+  two words of one code is ruled or needed.
+- U-4 (a read in flight does not hold the window). The link's worker is waited for at the window's end for at
+  most two seconds and is no part of "the watch did not end"; it is a daemon thread that holds nothing.
+- U-5 (the spec's sentence). FORWARD.md already names the window as the state's second reader: E9 asks only
+  that it name the Link screen there.
+
