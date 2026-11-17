@@ -31,11 +31,12 @@ NAME = re.compile(r"[a-z0-9-]{1,32}\Z")   # J-13
 SHAPES = ("raqib", "hec")                  # J-6
 SYSLOG = ("syslog+udp", "syslog+tcp", "syslog+tls")
 JOURNAL = "journal"                        # W-1, W-2: the system's journal, by its native protocol (Linux)
-SCHEMES = ("http", "https") + SYSLOG + (JOURNAL,)
+EVENTLOG = "eventlog"                      # Y-1: the Windows event log, the Application log (Windows)
+SCHEMES = ("http", "https") + SYSLOG + (JOURNAL, EVENTLOG)
 DELIVERY = "acknowledged"                  # J-3: HTTP's word
 DELIVERIES = ("acknowledged", "written", "sent")
 DELIVERY_OF = {"http": DELIVERY, "https": DELIVERY, "syslog+udp": "sent", "syslog+tcp": "written",
-               "syslog+tls": "written", JOURNAL: "sent"}   # J-3, W-4: what taken means, per transport
+               "syslog+tls": "written", JOURNAL: "sent", EVENTLOG: "written"}   # J-3, W-4, Y-4: what taken means
 SYSLOG_KEYS = ("facility", "framing")      # P-3: written in a syslog destination's state only
 FACILITIES = range(0, 24)                  # RFC 5424 6.2.1: the facilities are 0 to 23
 FRAMINGS = ("octet", "newline")            # J-6: RFC 6587 octet counting (the default) or a newline after each
@@ -96,6 +97,8 @@ def seconds_of(text):
 def where(dest):
     if dest.get("scheme") == JOURNAL:   # W-6: the journal has no host, port or path
         return "the journal"
+    if dest.get("scheme") == EVENTLOG:   # Y-1: the Windows event log has no host, port or path
+        return "the Windows event log"
     host = "[%s]" % dest["host"] if ":" in dest["host"] else dest["host"]
     return "%s://%s:%d%s" % (dest["scheme"], host, dest["port"], dest["path"])
 
@@ -137,6 +140,9 @@ def _state_problem(old):
     if isinstance(d, dict) and d.get("scheme") == JOURNAL:   # W-6: the scheme, and nothing of a host or a port
         if d != {"scheme": JOURNAL}:
             return "a journal destination holds its scheme only (no host, port or path)"
+    elif isinstance(d, dict) and d.get("scheme") == EVENTLOG:   # Y-1: the scheme, and nothing of a host or a port
+        if d != {"scheme": EVENTLOG}:
+            return "an eventlog destination holds its scheme only (no host, port or path)"
     elif not (isinstance(d, dict) and d.get("scheme") in SCHEMES and isinstance(d.get("host"), str) and
               d["host"] and _count(d.get("port")) and 0 < d["port"] < 65536 and isinstance(d.get("path"), str)):
         return "destination is not {scheme, host, port, path}"
@@ -148,6 +154,9 @@ def _state_problem(old):
     if d["scheme"] == JOURNAL and (old["shape"] != "raqib" or old["delivery"] != DELIVERY_OF[JOURNAL] or
                                    old["plain"]):
         return "a journal destination with a shape, delivery or plain the forwarder never writes for it"
+    if d["scheme"] == EVENTLOG and (old["shape"] != "raqib" or old["delivery"] != DELIVERY_OF[EVENTLOG] or
+                                    old["plain"]):
+        return "an eventlog destination with a shape, delivery or plain the forwarder never writes for it"
     if d["scheme"] in SYSLOG:   # P-3: a state written before the two were kept has neither, and is read
         if "facility" in old and (not _count(old["facility"]) or old["facility"] not in FACILITIES):
             return "facility is not a syslog facility (0 to 23)"
@@ -161,6 +170,9 @@ def _state_problem(old):
             return "a journal state holds no facility, or one that is not a syslog facility (0 to 23)"
         if "framing" in old:
             return "framing in the state of the journal (it has none)"
+    elif d["scheme"] == EVENTLOG:   # Y-5: the Windows event log has no facility and no framing
+        if any(k in old for k in SYSLOG_KEYS):
+            return "facility or framing in the state of the Windows event log (it has neither)"
     elif any(k in old for k in SYSLOG_KEYS):
         return "facility or framing in the state of an HTTP destination"
     if not isinstance(old["file"], str):
@@ -213,14 +225,23 @@ def _state_problem(old):
 
 
 # X-3: a journal has no collector, no connection and no answer: its failing words say what it is
+LOCAL_STUCK = "sends that were given up have not ended (the system's call does not return): none starts until one ends"
 JOURNAL_ERRORS = dict(ERRORS, connect="the journal's socket is not there, or takes no entry",
                       late="the entries were not handed to the journal within the bound",
-                      write="an entry could not be handed to the journal")
+                      write="an entry could not be handed to the journal", stuck=LOCAL_STUCK)
+
+
+# Y-5: the Windows event log has no collector, no connection and no answer: its failing words say what it is
+EVENTLOG_ERRORS = dict(ERRORS, connect="the source Raqib of the Windows event log cannot be opened",
+                       late="the events were not taken by the Windows event log within the bound",
+                       write="an event was refused by the Windows event log (the status is the system's error"
+                             " number)", stuck=LOCAL_STUCK)
 
 
 def errors_of(scheme):
-    """The words of failing.error for a destination's scheme (J-9, P-5, X-3)."""
-    return SYSLOG_ERRORS if scheme in SYSLOG else JOURNAL_ERRORS if scheme == JOURNAL else ERRORS
+    """The words of failing.error for a destination's scheme (J-9, P-5, X-3, Y-5)."""
+    return (SYSLOG_ERRORS if scheme in SYSLOG else JOURNAL_ERRORS if scheme == JOURNAL else
+            EVENTLOG_ERRORS if scheme == EVENTLOG else ERRORS)
 
 
 FACTS = 5   # T-2: judge's first lines describe a state it could read; what follows them says why it is judged so

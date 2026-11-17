@@ -1091,3 +1091,30 @@ after that sentence. One string holds at most 32731 UTF-16 units; two strings to
   log under this run's process, as written and in order, a made-up long line put together from its parts
   among them; on Linux it is not run.
 
+## Amendment Z (the Table, 2026-11-17) - rulings on review 2026-11-17-M10.3c-b.md (1ab2aa2): the event log, in the field
+The field first: on the rig's Windows machine the forwarder handed the watch's events file to the real
+Application log and wevtutil read every line back, as written and in order, and a made-up line of 100000
+characters whole from its four parts (X27 MET, 62 of 62); the six CI jobs were green. The packet: the send
+is sound; REDO, narrow, in the documents - and four things for the Table. Small, and built by the Table.
+- Z-1 (Y-6 said more than was measured). The Table measured the record's process id, not its user: the
+  forwarder gives no user, and the documents now say only what was measured. An A5 of the Table's own.
+- Z-2 (the reader's rule, whole). How a reader puts a long line together is said in full: one process's
+  parts, in the log's order, a part 1 begins anew, whole at N/N with the hash of the line's ASCII bytes
+  and their count; a set that does not end or does not hash is dropped (the line comes again whole); a set
+  whole twice is the line twice. Two processes' parts are kept apart by the record's process id.
+- Z-3 (what tells of a loss in the event log). The reader's search for a host with no heartbeat for more
+  than two beats; the forwarder sees no event pushed out and no log cleared, and the watched agent can do
+  the first on purpose. Said in the threat model and the specification.
+- Z-4 (a refusal carries the system's own reason). `failing.status` holds the system's error number for the
+  call that failed, where it gave one: a full log, no right and a stopped service are told apart.
+- Z-5 (the words of `stuck`). For the journal and the event log they speak of the system's call that does
+  not return, not of a name or a connection.
+- Z-6 (the rig's long line is told by its own lines), so a process id used again cannot make X27 MISSED
+  falsely.
+Accepted as built: a severity the contract does not have is Warning (no valid event reaches it); a hole is
+a Warning as over syslog (J-6); the id in a part's head is printable ASCII with no space; the read-back's
+key is the forwarder's pid from its state on the rig's fresh home; ctypes imported at the module's top.
+Recorded: a plain user's process was not measured (Z-4's number will say what it is refused for); a send
+given up while the system's call is still out may land one event late; the guard against the real system
+is each test file's own.
+

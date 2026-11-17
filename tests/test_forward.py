@@ -1894,6 +1894,11 @@ def test_redo3_e5_sent_is_not_counted_twice_for_a_proof_across_a_restart(tmp_pat
     def on_request(n, headers, body):
         if n == 3:
             f.stop()   # while a is asked again, after b's take
+            # the answer is held until the forwarder gave this send up: an answer that came first would be
+            # used (J-10 allows both), and the test is of the one where Stop won - made definite, not timed
+            end = time.monotonic() + RUN_S
+            while f._send is not None and time.monotonic() < end:
+                time.sleep(0.002)
     c = collectors(shape="raqib", refuse={"r1:1"}, on_request=on_request)
     path = write(tmp_path / "e.jsonl", rows)
     f = fwd(tmp_path, path, c.port)
@@ -2473,7 +2478,7 @@ def test_m103b_e3_written_over_tcp_and_tls_sent_over_udp_and_every_line_arrives_
     """E3 (J-3): the same cursor machine; a batch passed when the transport took it, and the state's delivery
     says what took means: written (tcp, tls), sent (udp). 250 lines, three batches each, in the file's order."""
     assert forward.DELIVERY_OF == {"http": "acknowledged", "https": "acknowledged", "syslog+udp": "sent",
-                                   "syslog+tcp": "written", "syslog+tls": "written", "journal": "sent"}
+                                   "syslog+tcp": "written", "syslog+tls": "written", "journal": "sent", "eventlog": "written"}
     rows = lines(250)
     path = write(tmp_path / "e.jsonl", rows)
     for transport, word in (("tcp", "written"), ("udp", "sent")):

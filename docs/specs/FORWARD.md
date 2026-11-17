@@ -4,7 +4,8 @@
 `~/.raqib/host/events.jsonl`, as docs/specs/EVENT.md "For a reader of the file" says a reader may - and sends
 every whole line to one destination: an HTTP collector, or a syslog collector over `syslog+udp://`,
 `syslog+tcp://` or `syslog+tls://` (J-6; "Syslog" below), or the system's journal, `journal:` (W; "The journal"
-below). Syslog and the journal are other ways to send, not another machine: the cursor, the lines in question, the
+below), or the Windows event log, `eventlog:` (Y; "The Windows event log" below). Syslog, the journal and the
+event log are other ways to send, not another machine: the cursor, the lines in question, the
 state and the status are one for all. The watch does
 not know it runs: raqib/host.py, raqib/eventlog.py, raqib/event.py and raqib/hooks/ import nothing of
 raqib/forward.py, and no result, report or finding of a watch depends on a forwarder. The standard library only.
@@ -16,6 +17,7 @@ raqib/forward.py, and no result, report or finding of a watch depends on a forwa
                   [--once]
     raqib forward [FILE] --to journal: --name NAME [--facility N] [--beat S] [--from start|end] [--batch N]
                   [--once]
+    raqib forward [FILE] --to eventlog: --name NAME [--beat S] [--from start|end] [--batch N] [--once]
     raqib forward --status [NAME]
 
 ## What it sends, and what acknowledged means
@@ -288,6 +290,60 @@ wall clock set back or ahead delays nothing and hurries nothing. Only the state'
 - Nothing is installed, registered or switched on: `raqib forward --to journal:` writes to the journal because a
   person ran it, and the watch never does (W-0).
 
+## The Windows event log (Y)
+
+- The form: `--to eventlog:`, exactly, in any case of letters (anything after the colon is exit 2 with the
+  reason), on Windows only: on another system it is exit 2 saying so (Y-5). With it `--token-file`, `--ca`,
+  `--plain`, `--shape hec`, `--framing` and `--facility` are exit 2, each with its reason.
+- One event a line, in the Application log under the source `Raqib`, by ReportEventW, with nothing registered
+  (Y-1): no key is written and no message file installed. The system's calls (advapi32's RegisterEventSourceW,
+  ReportEventW, DeregisterEventSource) go through one object made at the first send, never at import; the
+  source is opened once a send and closed on every way out. The event's one string is the line as written
+  without its newline (Y-2). Its type is from the severity: high Error; medium and a hole Warning; low, info and
+  none Information; a severity the event contract does not have, or none, Warning. Its id is from the event's
+  kind, so that a reader filters by id: 1001 finding, 1002 source-finding, 1003 note, 1004 tree, 1005 hole,
+  1006 knock, 1007 heartbeat, 1008 watch, and 1000 for a kind that is none of them.
+- A line longer than one string (Y-3): a line of more than 30000 characters goes as several events, in order,
+  each of two strings: the part's head, `raqib-part I/N id=ID sha256=HEX chars=TOTAL` (I the part, N how many,
+  ID the event's id where it is 1 to 128 printable ASCII characters with no space, else `-`; HEX the sha256 of
+  the whole line, TOTAL its length in characters), and that part of the line, at most 30000 characters. Every
+  part carries the id 1009 and the type of its line. How a reader puts a line together (Z-2): take the events of
+  id 1009 of one process (the record's own Execution ProcessID) in the log's order; a part 1 begins a line
+  anew; add each next part's second string while I counts up to N; the line is whole when part N/N is added
+  and the sha256 of its characters as ASCII bytes (the line without its newline) and their count are the
+  head's. A set that never reaches N/N, or whose hash is not the head's, is no line: drop it - the forwarder
+  hands the line again whole (a batch handed again after a refusal, a Stop or a bound between two parts hands
+  its parts again from the first), and a set that came whole twice is one line twice (at least once). Parts
+  of two processes writing at once stand between each other in the log: keep them apart by the process. A line of exactly 30000 characters is one event. A batch
+  is taken only when every part of every line was taken: one part refused is a failed send, and nothing passes.
+  No line the forwarder reads whole (512 KiB at most, M-3) is refused for its length; a longer one is refused
+  locally, counted and named, as over every transport.
+- `written` (Y-4): the system's call returned that the log took the event; it is not a search of the log. The
+  Application log is bounded and overwrites its oldest: Raqib's events push other programs' out, and are pushed
+  out. The forwarder paces itself, at most 100 events a second, parts counted (after each batch it waits what
+  is left of the batch's share of a second; Stop ends the wait at once). What tells of a loss (Z-3): the
+  search, by whoever reads the log, for a host with no heartbeat (id 1007) for more than two beats - the
+  forwarder cannot see an event pushed out or a log cleared. A log of Raqib's own is an install's work, later.
+- No source, no rights (Y-5): a source that cannot be opened is a collector that is down: failing `connect`,
+  nothing passes, tried again (J-10); `--once` exits 1. An event refused is failing `write`: nothing passes, and
+  the next batch is half of this one, down to one line, as the journal's (X-4); when the log takes events again
+  every line arrives, none lost. It falls back to nothing. `failing.status` is the system's own error number
+  for the call that failed, where it gave one (5: no right; Z-4): it tells a full log, no right and a stopped
+  service apart.
+- What the viewer shows (Y-1): the source is registered by nobody, so the Event Viewer says, before each string,
+  that the description for the event cannot be found ("The description for Event ID 1003 from source Raqib
+  cannot be found ...") and then shows the string. wevtutil gives the strings as the event's EventData/Data
+  elements, one a string. A registered source, which would end that sentence, is an install's work, an
+  administrator's, later.
+- Who reads it, and who else can write it (Y-6): whoever reads the Application log (by default any signed-in
+  user). Any process can write events under the source `Raqib`: the record's own process id is the system's
+  word (measured), the source's name is nobody's, and the forwarder's events carry no user - an event that
+  says Raqib is a lead, not a proof (X-7).
+- The state: `destination` is `{"scheme": "eventlog"}` (nothing of a host, a port or a facility), `delivery`
+  `written`, no `facility` and no `framing`; `--status` and the window's Link screen say "to the Windows event
+  log" (`where`: "the Windows event log"). Its failing words are its own: `connect` (the source cannot be
+  opened), `write` (an event refused), `late` (not taken within the bound), with no collector in them.
+
 ## The secret and the wire (J-7, J-8, L-5)
 
 - The token is read from `--token-file` at every try: never an argument, never the environment, never
@@ -355,9 +411,9 @@ Windows, where a rename never replaces a file that is there). The keys:
 | `name` | str | the forwarder's name |
 | `pid` | int | the forwarder's process id |
 | `written` | instant | when this state was written (UTC, milliseconds, Z; the wall's clock) |
-| `destination` | object | `scheme` (`http`, `https`, `syslog+udp`, `syslog+tcp`, `syslog+tls`), `host`, `port`, `path` (over syslog ""): no query, no user information; for the journal `scheme` `journal` alone - no host, port or path. A raqib from before the journal reads such a state as UNREADABLE (it fails toward the alarm) |
+| `destination` | object | `scheme` (`http`, `https`, `syslog+udp`, `syslog+tcp`, `syslog+tls`), `host`, `port`, `path` (over syslog ""): no query, no user information; for the journal `scheme` `journal` alone, for the Windows event log `scheme` `eventlog` alone - no host, port or path. A raqib from before either reads such a state as UNREADABLE (it fails toward the alarm) |
 | `shape` | str | `raqib` or `hec` (over syslog always `raqib`) |
-| `delivery` | str | what taken means: `acknowledged` (HTTP), `written` (syslog over tcp and tls: the connection ended in order), `sent` (syslog over udp; the journal) |
+| `delivery` | str | what taken means: `acknowledged` (HTTP), `written` (syslog over tcp and tls: the connection ended in order; the Windows event log: the system's call said the log took every event), `sent` (syslog over udp; the journal) |
 | `facility` | int | syslog and the journal (P-3, W-2): the facility the messages or entries carry (0 to 23); a start with another is exit 2, as another shape is |
 | `framing` | str or null | syslog only (P-3): `octet` or `newline` over tcp and tls, null over udp; a start with another is exit 2. A syslog state written before the two were kept has neither: it is read, and the start's facility and framing are kept from then on (said at the start) |
 | `plain` | bool | true where the wire is plain: http, syslog over udp or tcp |

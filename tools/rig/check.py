@@ -9,10 +9,12 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
 --forward: what tools/rig/forward_run.py saw `raqib forward` do with that file (ADR-0011 J-14): X19 to X22
-over HTTP, X23 to X25 over syslog (J-6), X26 to the journal (W-8, Linux; not run elsewhere).
+over HTTP, X23 to X25 over syslog (J-6), X26 to the journal (W-8, Linux; not run elsewhere), X27 to the Windows
+event log (Y-7, Windows; not run elsewhere).
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -480,6 +482,112 @@ def read_journal(facts, events):
         return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
 
 
+EVENTS_NS = "{http://schemas.microsoft.com/win/2004/08/events/event}"
+PART_HEAD = re.compile(r"raqib-part ([0-9]+)/([0-9]+) id=(\S+) sha256=([0-9a-f]{64}) chars=([0-9]+)\Z")
+
+
+def eventlog_lines(text):
+    """Y-3: the lines that wevtutil's XML holds (one <Event> after another, no root element), in order: an event
+    of one string is a line; the parts of a long one (id 1009, two strings, the head first) are put together in
+    order - a part 1 begins a line anew - and the line is whole where its sha256 and its length are the head's.
+    (lines, broken): broken counts the parts that did not make a whole line. Raises on XML that cannot be read
+    (the caller says so)."""
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring("<Events>%s</Events>" % (text or ""))
+    lines, parts, broken = [], [], 0
+    for ev in root.iter(EVENTS_NS + "Event"):
+        ident = ev.findtext("%sSystem/%sEventID" % (EVENTS_NS, EVENTS_NS))
+        datas = [d.text or "" for d in ev.iter(EVENTS_NS + "Data")]
+        head = PART_HEAD.match(datas[0]) if ident == "1009" and len(datas) == 2 else None
+        if head is None:
+            broken += len(parts)
+            parts = []
+            if len(datas) == 1:
+                lines.append(datas[0])
+            continue
+        i, n = int(head.group(1)), int(head.group(2))
+        if i == 1:
+            broken += len(parts)
+            parts = []
+        if len(parts) != i - 1:   # a part out of its order
+            broken += len(parts) + 1
+            parts = []
+            continue
+        parts.append(datas[1])
+        if i == n:
+            whole = "".join(parts)
+            if hashlib.sha256(whole.encode("utf-8")).hexdigest() == head.group(4) and len(whole) == int(
+                    head.group(5)):
+                lines.append(whole)
+            else:
+                broken += len(parts)
+            parts = []
+    return lines, broken + len(parts)
+
+
+def read_eventlog(facts, events):
+    """X27 (ADR-0011 Y-7): what tools/rig/forward_run.py read back with wevtutil after `raqib forward --to
+    eventlog:` sent the watch's events file and a made-up file with a long line. MET where every whole line is in
+    the Application log under this run's process, as written and in order, and the long line came back whole
+    from its parts; MISSED (not met) with what is missing; n/a (not run) off Windows. It never raises."""
+    name = ("X27 to the Windows event log every whole line of the events file is in it, as written and in order,"
+            " and a long line came back whole from its parts, read back by wevtutil")
+    try:
+        if not isinstance(facts, dict):
+            return [(name, MISSED, "the forwarder's run left no facts (silence is a finding)")]
+        if facts.get("events_missing"):
+            return [(name, SKIP, "the watch wrote no events file: nothing to forward (X16 says so)")]
+        if facts.get("error"):
+            return [(name, MISSED, "the forwarder's run failed: %s" % facts["error"])]
+        x = facts.get("x27")
+        if not isinstance(x, dict):
+            return [(name, MISSED, "the rig did not run it: no facts of x27")]
+        if x.get("not_run"):
+            return [(name, SKIP, "not run: %s" % x["not_run"])]
+        if x.get("error"):
+            return [(name, MISSED, "the rig's run of it failed: %s" % x["error"])]
+        want = _whole_event_lines(events)
+        try:
+            read, broken = eventlog_lines(x.get("xml"))
+        except Exception as exc:
+            read, broken = [], "its XML cannot be read (%s)" % type(exc).__name__
+        got = _first_arrivals(read)
+        lost = [i for i, line in enumerate(want, 1) if line not in set(got)]
+        long = x.get("long") if isinstance(x.get("long"), dict) else {}
+        try:
+            back = eventlog_lines(long.get("xml"))[0]
+            # Z-6: only the made-up file's own lines (a process id used again brings other lines of the log)
+            mine = set(long["sha256"]) if isinstance(long.get("sha256"), list) else set()
+            back = _first_arrivals([b for b in back if hashlib.sha256(b.encode("utf-8")).hexdigest() in mine])
+        except Exception:
+            back = []
+        back = _first_arrivals(back)
+        long_ok = (long.get("exit") == 0 and isinstance(long.get("sha256"), list) and len(long["sha256"]) > 0 and
+                   [hashlib.sha256(b.encode("utf-8")).hexdigest() for b in back] == long["sha256"] and
+                   [len(b) for b in back] == long.get("lines"))
+        long_said = ("a made-up line of %s characters came back whole from its parts" % max(long["lines"])
+                     if long_ok else "the long line did NOT come back whole: %s" % (
+                         long.get("error") or "sent %s character(s), put together %s, exit %s" % (
+                             long.get("lines"), [len(b) for b in back], long.get("exit"))))
+        ok = bool(want) and got == want and x.get("exit") == 0 and x.get("delivery") == "written" and long_ok
+        words = ("the events file holds no whole event to forward" if not want else
+                 "%d of %d line(s) in the Application log%s%s" % (
+                     len(want) - len(lost), len(want), ", as written and in the file's order" if got == want else
+                     ", not in the file's order" if not lost else "",
+                     "; missing: line %s" % ", ".join(str(i) for i in lost[:5]) + (" and %d more" % (len(lost) - 5)
+                                                                                 if len(lost) > 5 else "")
+                     if lost else ""))
+        wv = x.get("wevtutil") if isinstance(x.get("wevtutil"), dict) else {}
+        return [(name, MET if ok else MISSED,
+                 "%s; %s; %s event(s) read by wevtutil for process %s (exit %s, asked %s time(s)), parts not made"
+                 " whole %s; delivery %s; --once exit %s%s" % (
+                     words, long_said, x.get("read"), x.get("pid"), wv.get("exit"), x.get("asked"), broken,
+                     x.get("delivery"), x.get("exit"),
+                     "" if ok or not wv.get("stderr") else "; wevtutil said: %s" % str(wv["stderr"])[:120]))]
+    except Exception as exc:   # never raises: facts that cannot be read are MISSED
+        return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -523,6 +631,7 @@ def main(argv=None):
         rows += read_forward(facts, events)
         rows += read_syslog(facts, events)
         rows += read_journal(facts, events)
+        rows += read_eventlog(facts, events)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

@@ -1,21 +1,12 @@
-# HANDOFF — M10.3c-b  (ADR-0011 Amendment Y: the Windows event log as a destination of the forwarder)
+# HANDOFF — no builder task (the service's posture waits for the commander's word)
 
-Task: `raqib forward --to eventlog:` hands each whole line of the events file to the Windows Application log under the source `Raqib`, by ReportEventW with nothing registered, on the forwarder's same machine. Windows only. Model it on the journal's send (raqib/forward.py JournalSend; ADR-0011 W, X).
+Task: none. M10.3c landed: the forwarder hands the events to the system's journal (`--to journal:`, Linux) and
+to the Windows event log (`--to eventlog:`), by an explicit command only (ADR-0011 W to Z). Next in the
+commander's order is the service, with the install that goes with it. Whose rights it runs with - the user's
+own, or the system's - decides what the watch sees and who can stop it: that is the commander's to say, and
+the Table has asked.
 
 Scope:
-  raqib/forward.py, raqib/link.py (only: the scheme, its delivery word, `where`, the state's check, its failing words), raqib/cli.py (help strings only), tests/test_forward_eventlog.py (new), tests/test_forward.py and tests/test_link.py and tests/test_forward_journal.py (only a line that lists every scheme or delivery word, each change named in the questions file), tools/rig/forward_run.py, tools/rig/check.py (X27 only), tests/test_forward_rig.py, docs/specs/FORWARD.md, docs/THREAT_MODEL.md, docs/GUIDE.md, tests/test_readme_top.py (only the guide's changed lines in its registry), docs/review/2026-11-17-M10.3c-b-questions.md
+  (nothing)
 
-Exit criteria:
-- E1 (Y-1, Y-5) `--to eventlog:` is a destination: exactly that URL in any case of letters; with it --token-file, --ca, --plain, --shape hec, --framing and --facility are exit 2, each with its reason; on a system that is not Windows it is exit 2 saying so (the platform injected in tests). The state holds the scheme `eventlog` and the delivery `written`, nothing of a host, a port or a facility, and `link.judge`, `--status` and the Link screen read it with words of its own (`where`: "the Windows event log"; failing words that speak of no collector).
-- E2 (Y-2) The system's calls (advapi32 RegisterEventSourceW, ReportEventW, DeregisterEventSource) go through one object a test replaces, loaded only at the first send and only on Windows (nothing of Windows at import; the module imports on Linux as today). One event a line: one string, the line as written without its newline; the type and the id as Y-2's tables say (a test over every kind and severity, and an event with neither). The source is opened once a send and closed on every way out.
-- E3 (Y-3) A line of more than 30000 characters is handed as parts, in order, each event two strings: `raqib-part I/N id=ID sha256=HEX chars=TOTAL` and the part (at most 30000 characters; the head at most 300), id 1009, the line's type. A test puts the parts back together and has the line, its sha256 and its length; a line of exactly 30000 is one event; an id that is no text of at most 128 printable characters is written as `-`. If any part is refused the send failed: nothing passes.
-- E4 (Y-4) Delivery `written`; at most 100 events a second (parts counted), by the forwarder's injected wait as the journal's pace is; Stop ends the wait at once. Tests: the waits for 500 lines; a long line's parts counted.
-- E5 (Y-5) The source cannot be opened: failing `connect`, nothing passes, tried again. An event refused: failing `write`, nothing passes, the next batch halved (X-4), and when the system takes events again every line arrives, none lost (tests with the fake system refusing by number, then taking).
-- E6 The cursor's machine, the lines in question, the HTTP, syslog and journal sends and their tests are unchanged but for E1's allowed lines. raqib/forward.py's imports stay within tests/test_rhythm.py's guard, unchanged (ctypes is no network).
-- E7 (Y-7) tools/rig/forward_run.py, on Windows, forwards the watch's events file and a made-up file with one line of 100000 characters to the event log and reads back this run's events with wevtutil (the Application log, the provider `Raqib`, the record's Execution ProcessID the forwarder's, oldest first, as XML), within a bounded wait; tools/rig/check.py X27: every whole line arrived as written and in order and the long line came back whole from its parts (MET), NOT MET with what is missing, not run on Linux. The check never raises; its tests feed it made-up XML.
-- E8 (Y-1, Y-4, Y-6) docs/THREAT_MODEL.md (no milestone token): the line of W-0 names `eventlog:` beside `journal:`; Y-4's and Y-6's limits. docs/specs/FORWARD.md: the destination, the tables of ids and types, the parts and how a reader puts them together, `written`, the pace, the viewer's sentence. docs/GUIDE.md: the forward row. A test holds the sentences that matter.
-- E9 Gate green in the foreground; ASCII outside docs; no test calls the real system (on Windows CI too: every test passes there through the fake).
-Not in scope: raqib/host.py, raqib/app.py, raqib/eventlog.py, raqib/event.py, raqib/hostwin.py, tests/test_rhythm.py, .github/workflows/, any install or registry write.
-If an exit criterion needs a file outside Scope: STOP and say which. Do not change a guard test to pass.
-Commit: `landed: M10.3c-b the Windows event log as a destination` or `STOP: M10.3c-b <reason>`.
-Read HANDOFF.md and do only the task it specifies.
+A builder that reads this: STOP. Commit nothing.
