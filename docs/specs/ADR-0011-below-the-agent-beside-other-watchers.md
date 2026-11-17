@@ -935,3 +935,48 @@ R ruled what the panel is. Reading the window's code and the M10.4a review added
   level `note`, with the command that would start one as text. A folder that could not be listed is not
   that (S-2): it is `incomplete`.
 
+## Amendment U (the Table, 2026-11-17) - the builder's STOP on M10.4b (36464ad), and its questions
+The builder stopped at E1, rightly: the criterion asked for new keys on the row and for two tests that list
+the row's keys to pass unchanged. The contradiction was the Table's.
+- U-1 (the row's keys are the Table's to widen). Those two tests are the registry of the row's shape; the
+  Table added the four keys to them and built T-2 in raqib/link.py itself (FACTS, `_parts`): age and to are
+  None and the facts are none for a state that is missing or unreadable, whose lines are all its why.
+- U-2 (a late read never lowers an alarm). Where a read has not returned in ten seconds the panel says for how
+  long nothing was read; its level is `incomplete`, unless the last read showed FAILING or BEHIND, which stays
+  `alarm` beside those words. FOR: T-4 must not turn a known failure amber.
+- U-3 (the rail counts each word at the worst code). "2 forwarders, 1 failing, 1 behind"; no order between
+  two words of one code is ruled or needed.
+- U-4 (a read in flight does not hold the window). The link's worker is waited for at the window's end for at
+  most two seconds and is no part of "the watch did not end"; it is a daemon thread that holds nothing.
+- U-5 (the spec's sentence). FORWARD.md already names the window as the state's second reader: E9 asks only
+  that it name the Link screen there.
+
+## Amendment V (the Table, 2026-11-17) - rulings on review 2026-11-17-M10.4b.md (b4348d4): nothing hidden behind a worse word
+The Table looked at the screen itself (a virtual display here) before the packet came, and saw what the packet
+then named: with five forwarders the rail said "1 unreadable, 1 silent" and no word of the one that failed.
+That was U-3, the Table's own ruling, and it was wrong. Small, and built by the Table.
+- V-1 (every word that is not OK is counted; U-3 is withdrawn). "Link: 1 failing, 1 behind, 1 silent, 1
+  unreadable". FOR: one stale or planted state must not hide every later failure from the rail. The words
+  are the rows' own; the window only orders them, what is known to fail first.
+- V-2 (a forwarder known to fail keeps the link an alarm), whatever is not known beside it: a silent or
+  unreadable state, states counted and not read, a folder not listed, a late read (U-2 was this for the late
+  read alone). Else what is not known is `incomplete`; else `note`. The command's exit code is not this: it
+  stays 3 over 1, and the screen says it. MUST NOT TOUCH: `link.worst`.
+- V-3 (the rail's line is bounded as it is made). It is built of counts and fixed words (a word that is none
+  of the five is "other"; a count past 9999 is "9999+"), so nothing of it is ever cut away; the longest there
+  can be fits the rail at 900x600 (a test draws it).
+- V-4 (what is not OK comes first) on the screen, each group in order of name.
+- V-5 (a stranger's text costs what it shows). A line is cut to its 300 characters before it is looked at,
+  never after; the view is made again only when a read returned; and the reader's next read waits four times
+  what the last one took where that is more than a second. FOR: a folder of large states - the watched agent
+  can write there - must not slow the window or starve the watch. What is not printable is shown as "?"
+  (T-3 said removed: the code's word is the true one, and the documents say it).
+- V-6 (the text stays where the reader is). Nothing that ticks stands in a forwarder's head line; a text that
+  did change is written again at the reader's place, the selection kept.
+- V-7 (the link's failure is the link's). The reader is started last in the window's making; a reader that
+  cannot be asked is "not read", and never ends the rest of a tick.
+Accepted as built: a reader that raises drops the last rows (link.read never raises); the head of the guide's
+sentence of the rail still lists four items (a test of another task holds its words; the Link paragraph says
+the fifth); E6's test of the watch's independence rests on the code reading nothing of the link - true by
+reading, thin as a test. Recorded: the folder walked whole on each read; a beat without an upper bound.
+

@@ -355,7 +355,8 @@ known of the forwarders - never "no forwarder" (ADR-0011 S).
 
 The state's reader and its judgement are raqib/link.py's, which imports nothing of the network and nothing of
 the forwarder: `raqib forward --status` and the window read and judge a state by it, one judgement for both
-(ADR-0011 R-1).
+(ADR-0011 R-1). In the window the reader is the Link screen, which shows each forwarder's name, word and lines
+and starts, stops and configures none (ADR-0011 R-2, U-5).
 
 What `--status` says in each state of the machine (a test builds each row's state and holds it to the code):
 

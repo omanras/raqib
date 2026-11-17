@@ -198,6 +198,9 @@ def _state_problem(old):
     return None
 
 
+FACTS = 5   # T-2: judge's first lines describe a state it could read; what follows them says why it is judged so
+
+
 def judge(state, now):
     """(exit, word, lines) of one state, by STATUS_RULE. M-6, N-6: a state that is not what the forwarder writes
     is unreadable (3), never read as calm, and never a traceback. N-5: a line in question longer than a beat is a
@@ -304,17 +307,17 @@ def _load(path):
 
 
 def _row(name, path, now):
-    row = {"name": name, "path": path, "code": 3, "word": "UNREADABLE",
-           "lines": ["the state %s cannot be read" % path], "refused": None, "state": None}
+    row = _parts({"name": name, "path": path, "code": 3, "word": "UNREADABLE",
+                  "lines": ["the state %s cannot be read" % path], "refused": None, "state": None}, now)
     try:
         state = _load(path)
     except FileNotFoundError:
         if not os.path.islink(path):   # S-4: a link to nothing is an unreadable file, not an absent one
             row.update(word="SILENT", lines=["no state: %s (it never ran, or not here)" % path])
-        return row
+        return _parts(row, now)
     except _TooLong:
         row["lines"] = ["the state %s cannot be read: it is longer than 1 MiB and is not read" % path]
-        return row
+        return _parts(row, now)
     except Exception:   # N-6: OSError, not JSON, not ASCII, nested past what the reader takes, anything else
         return row
     try:
@@ -329,13 +332,31 @@ def _row(name, path, now):
             pass
     row.update(code=code, word=word, lines=lines, refused=refused,
                state=state if code != 3 or word != "UNREADABLE" else None)
+    return _parts(row, now)
+
+
+def _parts(row, now):
+    """T-2: what a panel shows of a row, so that it restates nothing of `judge`: "age" (seconds from the state's
+    `written` to `now`), "to" (the destination as `where` says it), "facts" (the lines that describe the state)
+    and "why" (the lines that say why it is judged so). Of a state that is missing or unreadable nothing is
+    known but its lines: age and to are None, facts are none, and all its lines are the why. lines is always
+    facts + why."""
+    row.update(age=None, to=None, facts=[], why=list(row["lines"]))
+    state = row["state"]
+    if state is not None:
+        try:
+            row.update(age=now - seconds_of(state["written"]), to=where(state["destination"]),
+                       facts=list(row["lines"][:FACTS]), why=list(row["lines"][FACTS:]))
+        except Exception:
+            row.update(age=None, to=None, facts=[], why=list(row["lines"]))
     return row
 
 
 def read(home=None, now=None, name=None):
     """R-1, R-4: one row for each state file whose name is a forwarder's name, in order of name, each judged by
     `judge` at `now` (this clock where None): {"name", "path", "code", "word", "lines", "refused" (the count, or
-    None where it is not known), "state" (the state parsed, or None where it is unreadable)}. With `name`, that one
+    None where it is not known), "state" (the state parsed, or None where it is unreadable)} and what a panel
+    shows of it, {"age", "to", "facts", "why"} (_parts). With `name`, that one
     (no file: SILENT; a name that is not a forwarder's: no row). At most LINKS_MAX rows; `rows.rest` counts the
     states past them. No folder is no row (no forwarder ever wrote here); a folder that is there and cannot be
     listed is no row and `rows.problem` says why (S-2). Nothing raises."""

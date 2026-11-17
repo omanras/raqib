@@ -240,6 +240,24 @@ lines. The keyboard reaches every control (Tab, then Space or Enter); the colour
 dark or light setting, and on Windows the text is sharp on a scaled display and the title bar
 follows dark mode.
 
+Link, the rail's item under Log, shows the forwarders of `raqib forward` as their states in
+`~/.raqib/forward` say, read off the window's thread at most once a second by the reader and the
+judgement of `raqib forward --status`: each one's name, its word (OK, BEHIND, FAILING, SILENT,
+UNREADABLE) and its lines - where it sends and by which delivery word, plain or not, what was last
+taken and when, what waits, what was refused, why it fails; the forwarders that are not OK come
+first, and the screen has no button. The rail's Link line counts every word that is not OK on every
+screen ("Link: 1 failing, 1 behind, 1 silent"; "Link: 2 OK"; "Link: none"): none is hidden behind a
+worse one. A link that sends is no judgement of the host: an OK forwarder is a note, never green, as
+green beside a watch means its rules found nothing; FAILING and BEHIND are alarm, SILENT and
+UNREADABLE incomplete, as their exit codes are. The whole link is an alarm where one forwarder is
+known to fail, whatever is not known beside it; else incomplete where something is not known - a
+silent or unreadable state, a folder that cannot be listed, states past the 64 read, a read not back
+in 10 s; else a note. With no state at all the screen says "No forwarder: nothing leaves this host
+by Raqib", a note, and the command that starts one. A state's text is shown as text, at most 300
+characters a line, what is not printable as "?". The screen starts, stops and configures no
+forwarder, holds no token and opens no connection, and no result, exit code, finding or knock of a
+watch depends on it (ADR-0011 Amendments R, T, U and V).
+
 `raqib app [PROJECT]` (or `raqib-app`, which on Windows opens with no console) preselects PROJECT on
 the Project screen. On Windows a tray icon offers Show / Stop / Quit, its tooltip reads "Raqib: N
 trees, K new, F findings" (and "+S suspicions") while the host is watched, "Raqib: project <name>, F
