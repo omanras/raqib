@@ -887,3 +887,31 @@ TOUCH.
 Not here, recorded: starting a forwarder from the window (with the service, later); the link on the local
 page; the forwarder's own log in the window.
 
+## Amendment S (the Table, 2026-11-17) - rulings on review 2026-11-17-M10.4a.md (57fa113): what is not read is not calm
+The packet: a move line for line, the five files in scope; REDO, narrow, for an exit that went calm over
+states it did not read, and words that were not true. Small, and built by the Table.
+- S-1 (states counted and not read are exit 3). With more than 64 states the old status read them all; the
+  new one read 64 and returned their worst - 0 over a silent 65th. `worst` is 3 wherever a state was counted
+  and not read, and the further line says so. FOR: R-3 and CLAUDE.md rule 4. Cost, accepted: 65 calm
+  forwarders say 3 - a host with more than 64 is told to ask for each by name.
+- S-2 (states that could not be looked for are not "no state"). A folder that is there and cannot be listed
+  (or whose listing fails part way) is said with its reason, exit 3: nothing is known of the forwarders. No
+  folder at all stays "no forwarder has written a state". FOR: the panel's "nothing leaves this host" must
+  be read, not assumed.
+- S-3 (true words). A state longer than 1 MiB "is longer than 1 MiB and is not read" - not "more than a
+  forwarder writes": a forwarder fed long ids can write one (its state is then unreadable to its own status,
+  which errs toward the alarm). Recorded: the forwarder's state bounded by its writer.
+- S-4 (what is no regular file is not opened; a link to nothing is not absent). The type is asked before
+  the open (a device is never opened); a link to nothing is UNREADABLE, as the page's own rule says of
+  one (J-11 of ADR-0006's line), not SILENT "it never ran".
+- S-5 (accepted as built). A pipe or a device where a state should be is UNREADABLE and never waited on
+  (the old status waited for ever: a repair inside a move, kept and said). raqib/link.py's own imports hold
+  no network; that raqib.host, which it asks for the folder, loads the local page's server modules is the
+  letter of the guard and is what the window loads anyway - a second statement of the folder's rule would
+  be worse. `Rows` is a list that carries `rest` and `problem`; a copy loses them, and its doc says so.
+  The clock is asked once, always.
+Recorded for M10.4b (the panel): the row lacks the age, the destination's text and the judgement's reason
+apart from its lines - the panel must not restate `judge`; a state's text is a stranger's (escaped, never
+drawn whole); the folder is walked whole on each read. Recorded, not built: a beat without an upper bound
+(a state that says a beat of years is never silent); the E1 guard skips tuple targets.
+

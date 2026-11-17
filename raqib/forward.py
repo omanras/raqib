@@ -1822,17 +1822,20 @@ def status(name=None, home=None, out=None, clock=time.time):
     if name:
         check_name(name)
     rows = link.read(home, clock(), name or None)   # R-1: the state's reader and its judgement are link's
+    if rows.problem:   # S-2: states that could not be looked for are not "no state"
+        out.write("raqib forward --status: %s: nothing is known of the forwarders (exit 3)\n" % rows.problem)
     if not rows:
-        out.write("raqib forward --status: no forwarder has written a state in %s: silent (exit 3)\n" % folder)
+        if not rows.problem:
+            out.write("raqib forward --status: no forwarder has written a state in %s: silent (exit 3)\n" % folder)
         return 3
     for row in rows:
         out.write("raqib forward %s: %s (exit %d); refused %s\n" % (
             row["name"], row["word"], row["code"], "unknown" if row["refused"] is None else "%d" % row["refused"]))
         for line in row["lines"]:
             out.write("  %s\n" % line)
-    if rows.rest:   # R-4: at most LINKS_MAX names are read; the rest are counted and said, never judged calm
-        out.write("raqib forward --status: %d more state(s) in %s not read: at most %d are read, in order of name\n"
-                  % (rows.rest, folder, link.LINKS_MAX))
+    if rows.rest:   # R-4, S-1: at most LINKS_MAX names are read; the rest are counted, said, and are exit 3
+        out.write("raqib forward --status: %d more state(s) in %s not read: at most %d are read, in order of name;"
+                  " what is not read is not calm (exit 3)\n" % (rows.rest, folder, link.LINKS_MAX))
     return link.worst(rows)
 
 

@@ -291,9 +291,10 @@ def test_e5_64_states_are_all_read_and_65_are_64_rows_and_one_further_line(tmp_p
     rows = link.read(str(home), NOW)
     assert [r["name"] for r in rows] == ["s%02d" % i for i in range(64)] and rows.rest == 1
     code, text = said(forward.status, None, home)
-    further = ("raqib forward --status: 1 more state(s) in %s not read: at most 64 are read, in order of name\n"
-               % link.forward_dir(str(home)))
-    assert text == built(rows) + further and code == link.worst(rows) == 0
+    further = ("raqib forward --status: 1 more state(s) in %s not read: at most 64 are read, in order of name;"
+               " what is not read is not calm (exit 3)\n" % link.forward_dir(str(home)))
+    assert text == built(rows) + further and code == link.worst(rows) == 3   # S-1: as the old status said of it
+    assert said(status_before, None, home)[0] == 3 and link.worst(list(rows)) == 0   # a copy has lost the count
     assert "s64" not in text
     put(home, "a0", a_state("a0"))   # a name before the others by order: it is read, s63 and s64 are counted
     rows = link.read(str(home), NOW)
@@ -332,17 +333,18 @@ def test_e5_a_state_longer_than_1_mib_is_unreadable_said_and_never_read_whole(tm
     for name in ("long", "huge"):
         r = rows[name]
         assert (r["code"], r["word"], r["refused"], r["state"]) == (3, "UNREADABLE", None, None)
-        assert r["lines"] == ["the state %s cannot be read: it is longer than 1 MiB, more than a forwarder writes"
-                              " (it is not read whole)" % r["path"]]
+        assert r["lines"] == ["the state %s cannot be read: it is longer than 1 MiB and is not read" % r["path"]]
 
 
 def test_e5_a_folder_that_cannot_be_listed_is_no_row_and_never_raises(tmp_path, monkeypatch):
     home = tmp_path / "home"
     Path(link.forward_dir(str(home))).parent.mkdir(parents=True)
     Path(link.forward_dir(str(home))).write_bytes(b"a file where the folder is")
-    assert link.read(str(home), NOW) == []
+    rows = link.read(str(home), NOW)
+    assert rows == [] and "cannot be listed (NotADirectoryError)" in rows.problem and link.worst(rows) == 3
     code, text = said(forward.status, None, home)
-    assert code == 3 and "no forwarder has written a state in" in text
+    assert code == 3 and "cannot be listed" in text and "nothing is known of the forwarders" in text
+    assert "no forwarder has written a state" not in text   # S-2: not looked for is not "none"
     home2 = tmp_path / "home2"
     put(home2, "ok", a_state("ok"))
     assert [r["word"] for r in link.read(str(home2), NOW)] == ["OK"]   # the negative: listed, read
@@ -350,7 +352,8 @@ def test_e5_a_folder_that_cannot_be_listed_is_no_row_and_never_raises(tmp_path, 
     def refused(path):
         raise PermissionError(13, "Permission denied", path)
     monkeypatch.setattr(link.os, "scandir", refused)
-    assert link.read(str(home2), NOW) == []
+    rows = link.read(str(home2), NOW)
+    assert rows == [] and "cannot be listed (PermissionError)" in rows.problem and link.worst(rows) == 3
     assert said(forward.status, None, home2)[0] == 3
 
     class Broken:   # a listing that fails part way
@@ -367,6 +370,24 @@ def test_e5_a_folder_that_cannot_be_listed_is_no_row_and_never_raises(tmp_path, 
             raise OSError(5, "Input/output error")
     monkeypatch.setattr(link.os, "scandir", Broken)
     assert link.read(str(home2), NOW) == []
+
+
+def test_s4_a_link_to_nothing_is_unreadable_and_what_is_no_regular_file_is_never_opened(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    put(home, "ok", a_state("ok"))
+    try:
+        os.symlink(str(tmp_path / "nothing"), str(folder_of(home) / "gone.json"))
+    except (OSError, NotImplementedError):
+        pytest.skip("this system makes no symbolic link here")
+    (folder_of(home) / "dir.json").mkdir()
+    opened, real = [], os.open
+    monkeypatch.setattr(link.os, "open", lambda path, *a: opened.append(os.path.basename(path)) or real(path, *a))
+    rows = {r["name"]: r for r in link.read(str(home), NOW)}
+    assert rows["gone"]["word"] == "UNREADABLE" and rows["gone"]["lines"] == [
+        "the state %s cannot be read" % rows["gone"]["path"]]   # not "no state": something is there
+    assert rows["dir"]["word"] == "UNREADABLE" and rows["ok"]["word"] == "OK"
+    assert opened == ["ok.json"]   # the type is asked before the open
+    assert link.read(str(home), NOW, "absent")[0]["word"] == "SILENT"   # the negative: nothing there at all
 
 
 def test_e5_a_directory_not_ascii_not_json_and_json_nested_deep_are_unreadable_rows_and_none_raises(tmp_path):

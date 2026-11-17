@@ -256,8 +256,11 @@ STATE_MAX = 1024 * 1024                    # R-4: a state longer than this (1 Mi
 
 
 class Rows(list):
-    """`read`'s rows, in order of name; `rest` is how many states past LINKS_MAX were counted and not read."""
+    """`read`'s rows, in order of name; `rest` is how many states past LINKS_MAX were counted and not read, and
+    `problem` why the states could not all be looked for (None where they were). S-1: either makes `worst` 3 -
+    what was not read is not calm. A copy that is not a Rows (a slice, sorted()) has lost both: judge the Rows."""
     rest = 0
+    problem = None
 
 
 class _TooLong(Exception):
@@ -283,6 +286,8 @@ def _names(folder):
 def _load(path):
     """The state at path, parsed: a regular file only (opened without waiting: a pipe is never waited on), at most
     STATE_MAX bytes read (more is _TooLong), ASCII, JSON. Raises what it meets; `read` makes it a row."""
+    if not stat.S_ISREG(os.stat(path).st_mode):   # S-4: asked before it is opened (a device is never opened)
+        raise OSError("not a regular file")
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0))
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
@@ -304,11 +309,11 @@ def _row(name, path, now):
     try:
         state = _load(path)
     except FileNotFoundError:
-        row.update(word="SILENT", lines=["no state: %s (it never ran, or not here)" % path])
+        if not os.path.islink(path):   # S-4: a link to nothing is an unreadable file, not an absent one
+            row.update(word="SILENT", lines=["no state: %s (it never ran, or not here)" % path])
         return row
     except _TooLong:
-        row["lines"] = ["the state %s cannot be read: it is longer than 1 MiB, more than a forwarder writes (it is"
-                        " not read whole)" % path]
+        row["lines"] = ["the state %s cannot be read: it is longer than 1 MiB and is not read" % path]
         return row
     except Exception:   # N-6: OSError, not JSON, not ASCII, nested past what the reader takes, anything else
         return row
@@ -332,7 +337,8 @@ def read(home=None, now=None, name=None):
     `judge` at `now` (this clock where None): {"name", "path", "code", "word", "lines", "refused" (the count, or
     None where it is not known), "state" (the state parsed, or None where it is unreadable)}. With `name`, that one
     (no file: SILENT; a name that is not a forwarder's: no row). At most LINKS_MAX rows; `rows.rest` counts the
-    states past them. A folder that cannot be listed is no row; nothing raises."""
+    states past them. No folder is no row (no forwarder ever wrote here); a folder that is there and cannot be
+    listed is no row and `rows.problem` says why (S-2). Nothing raises."""
     rows = Rows()
     try:
         if name is not None:
@@ -340,22 +346,26 @@ def read(home=None, now=None, name=None):
                 return rows
             names = [name]
         else:
+            folder = forward_dir(home)
             try:
-                names, rows.rest = _names(forward_dir(home))
-            except OSError:
+                names, rows.rest = _names(folder)
+            except FileNotFoundError:
+                return rows
+            except OSError as exc:
+                rows.problem = "the folder %s cannot be listed (%s)" % (folder, type(exc).__name__)
                 return rows
         now = time.time() if now is None else now
         for n in names:
             rows.append(_row(n, state_path(n, home), now))
-    except Exception:   # a home or a clock no check foresaw: the rows read so far, never a traceback
-        pass
+    except Exception as exc:   # a home or a clock no check foresaw: the rows read so far, never a traceback
+        rows.problem = "the states were not all read (%s)" % type(exc).__name__
     return rows
 
 
 def worst(rows):
     """The code of several rows, as `raqib forward --status` returns it (STATUS_RULE): 3 over 1 over 0; no row is
-    3 (no state: silent)."""
-    if not rows:
+    3 (no state: silent); and 3 where states were counted and not read, or could not be looked for (S-1, S-2)."""
+    if not rows or getattr(rows, "rest", 0) or getattr(rows, "problem", None):
         return 3
     code = 0
     for row in rows:
