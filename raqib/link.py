@@ -30,11 +30,12 @@ DIR_NAME = "forward"
 NAME = re.compile(r"[a-z0-9-]{1,32}\Z")   # J-13
 SHAPES = ("raqib", "hec")                  # J-6
 SYSLOG = ("syslog+udp", "syslog+tcp", "syslog+tls")
-SCHEMES = ("http", "https") + SYSLOG
+JOURNAL = "journal"                        # W-1, W-2: the system's journal, by its native protocol (Linux)
+SCHEMES = ("http", "https") + SYSLOG + (JOURNAL,)
 DELIVERY = "acknowledged"                  # J-3: HTTP's word
 DELIVERIES = ("acknowledged", "written", "sent")
 DELIVERY_OF = {"http": DELIVERY, "https": DELIVERY, "syslog+udp": "sent", "syslog+tcp": "written",
-               "syslog+tls": "written"}    # J-3: what taken means, per transport
+               "syslog+tls": "written", JOURNAL: "sent"}   # J-3, W-4: what taken means, per transport
 SYSLOG_KEYS = ("facility", "framing")      # P-3: written in a syslog destination's state only
 FACILITIES = range(0, 24)                  # RFC 5424 6.2.1: the facilities are 0 to 23
 FRAMINGS = ("octet", "newline")            # J-6: RFC 6587 octet counting (the default) or a newline after each
@@ -93,6 +94,8 @@ def seconds_of(text):
 
 
 def where(dest):
+    if dest.get("scheme") == JOURNAL:   # W-6: the journal has no host, port or path
+        return "the journal"
     host = "[%s]" % dest["host"] if ":" in dest["host"] else dest["host"]
     return "%s://%s:%d%s" % (dest["scheme"], host, dest["port"], dest["path"])
 
@@ -131,14 +134,20 @@ def _state_problem(old):
     if not _instant(old["written"]):
         return "written is not an instant"
     d = old["destination"]
-    if not (isinstance(d, dict) and d.get("scheme") in SCHEMES and isinstance(d.get("host"), str) and
-            d["host"] and _count(d.get("port")) and 0 < d["port"] < 65536 and isinstance(d.get("path"), str)):
+    if isinstance(d, dict) and d.get("scheme") == JOURNAL:   # W-6: the scheme, and nothing of a host or a port
+        if d != {"scheme": JOURNAL}:
+            return "a journal destination holds its scheme only (no host, port or path)"
+    elif not (isinstance(d, dict) and d.get("scheme") in SCHEMES and isinstance(d.get("host"), str) and
+              d["host"] and _count(d.get("port")) and 0 < d["port"] < 65536 and isinstance(d.get("path"), str)):
         return "destination is not {scheme, host, port, path}"
     if old["shape"] not in SHAPES or old["delivery"] not in DELIVERIES or not isinstance(old["plain"], bool):
         return "shape, delivery or plain is not one the forwarder writes"
     if d["scheme"] in SYSLOG and (old["shape"] != "raqib" or old["delivery"] != DELIVERY_OF[d["scheme"]] or
                                   d["path"] != ""):
         return "a syslog destination with a shape, delivery or path the forwarder never writes for it"
+    if d["scheme"] == JOURNAL and (old["shape"] != "raqib" or old["delivery"] != DELIVERY_OF[JOURNAL] or
+                                   old["plain"]):
+        return "a journal destination with a shape, delivery or plain the forwarder never writes for it"
     if d["scheme"] in SYSLOG:   # P-3: a state written before the two were kept has neither, and is read
         if "facility" in old and (not _count(old["facility"]) or old["facility"] not in FACILITIES):
             return "facility is not a syslog facility (0 to 23)"
@@ -147,6 +156,11 @@ def _state_problem(old):
             return "framing is not one the forwarder writes for the destination (none over udp)"
         if ("facility" in old) != ("framing" in old):
             return "a syslog state holds both facility and framing, or neither"
+    elif d["scheme"] == JOURNAL:   # W-2: the facility is kept, as syslog's is; a framing is never the journal's
+        if "facility" not in old or not _count(old["facility"]) or old["facility"] not in FACILITIES:
+            return "a journal state holds no facility, or one that is not a syslog facility (0 to 23)"
+        if "framing" in old:
+            return "framing in the state of the journal (it has none)"
     elif any(k in old for k in SYSLOG_KEYS):
         return "facility or framing in the state of an HTTP destination"
     if not isinstance(old["file"], str):

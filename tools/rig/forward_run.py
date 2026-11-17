@@ -18,6 +18,14 @@ loopback only, udp and tcp): X23 the whole file over tcp, octet counting, --once
 For each, what arrived, the collector's problems with the messages' RFC 5424 shape, how it framed them, and
 the forwarder's state.
 
+To the journal (ADR-0011 W-2, W-8), on Linux with the journal's socket there: X26 the whole file, --once,
+`--to journal:`, then read back with journalctl - this run's entries alone, by the journal's trusted _PID of
+the forwarder's own process and SYSLOG_IDENTIFIER raqib (W-7: who wrote an entry is asked of the journal's
+trusted fields) - polled for at most READ_S, since the journal may need a moment after the send; what was
+read is recorded. Elsewhere (Windows, or no socket) it is not run, and the reason is the fact. A test points
+JOURNAL at a stand-in of its own: the forwarder then runs through JOURNAL_RUN, which hands it that path (the
+CLI has no option for it), and journal_read is the test's.
+
 It never raises (L-10): each case is its own, an error in one is a fact of that case, and a missing events file
 is a fact; it writes its facts and exits 0 whatever happened (2 only for its own usage). Stdlib only.
 """
@@ -25,6 +33,7 @@ import argparse
 import binascii
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -40,6 +49,14 @@ PATH = "/services/collector/event"
 FORWARD = [sys.executable, "-m", "raqib", "forward"]   # the forwarder (a test names one that cannot start)
 CASES = ("x19", "x20", "x21", "x22")
 SYSLOG_CASES = ("x23", "x24", "x25")   # J-6: over tcp, over udp, over tcp with --framing newline
+JOURNAL_CASES = ("x26",)               # W-8: to the journal, Linux only
+JOURNAL = "/run/systemd/journal/socket"   # the journal's socket, as raqib/forward.py's JOURNAL (a test: a stand-in)
+REAL_JOURNAL = JOURNAL
+PLATFORM = sys.platform
+JOURNALCTL = ["journalctl", "--no-pager", "-o", "json", "-t", "raqib"]
+READ_S = 30.0                          # journalctl is asked again for at most this long after the send
+JOURNAL_RUN = ("import sys\nfrom raqib import cli, forward\nforward.JOURNAL = sys.argv[1]\n"
+               "sys.exit(cli.main(['forward'] + sys.argv[2:]))")
 
 
 class Run:
@@ -265,6 +282,74 @@ def x25(r):
     return over_syslog(r, "x25", "tcp", ("--framing", "newline"))
 
 
+def journal_read(pid):
+    """One read of the journal: this run's entries (SYSLOG_IDENTIFIER raqib, _PID the forwarder's process), as
+    `journalctl -o json` gives them: (entries, journalctl's exit, its first words on stderr)."""
+    p = subprocess.run(JOURNALCTL + ["_PID=%d" % pid], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    entries = []
+    for row in p.stdout.decode("utf-8", "replace").splitlines():
+        if row.strip():
+            try:
+                entries.append(json.loads(row))
+            except ValueError:
+                entries.append({"unreadable": row[:200]})
+    return entries, p.returncode, p.stderr.decode("utf-8", "replace")[:500]
+
+
+def _text(value):
+    """A field as journalctl's JSON says it: text, or an array of bytes where it is not printable UTF-8."""
+    if isinstance(value, list):
+        try:
+            return bytes(value).decode("utf-8", "replace")
+        except (TypeError, ValueError):
+            return None
+    return value if isinstance(value, str) else None
+
+
+def x26(r):
+    """W-8: the whole file to the journal, --once, read back by journalctl; not run where there is no journal."""
+    if not PLATFORM.startswith("linux"):
+        return {"not_run": "not Linux (%s): the journal is Linux's (W-1)" % PLATFORM}
+    try:
+        mode = os.stat(JOURNAL).st_mode
+    except OSError as exc:
+        return {"not_run": "no journal's socket at %s (%s)" % (JOURNAL, type(exc).__name__)}
+    if not stat.S_ISSOCK(mode):
+        return {"not_run": "%s is no socket: no journal here" % JOURNAL}
+    with open(r.events, "rb") as f:
+        want = f.read().count(b"\n")
+    name = "rig-x26"
+    more = [r.events, "--to", "journal:", "--name", name, "--beat", "1", "--once"]
+    argv = FORWARD + more if JOURNAL == REAL_JOURNAL else [sys.executable, "-c", JOURNAL_RUN, JOURNAL] + more
+    proc, out = r.start("x26", argv)
+    try:
+        proc.wait(300)
+    except subprocess.TimeoutExpired:
+        pass
+    code = r.end("x26", proc, out)
+    s = r.state(name) or {}
+    got, asked, end = ([], None, None), 0, time.monotonic() + READ_S
+    while True:   # the journal may take a moment to show what it was handed
+        asked += 1
+        try:
+            got = journal_read(proc.pid)
+        except (OSError, subprocess.SubprocessError) as exc:
+            got = ([], None, "journalctl cannot be run: %s" % type(exc).__name__)
+            break
+        if len(got[0]) >= want or time.monotonic() >= end:
+            break
+        time.sleep(0.25)
+    entries = got[0]
+    r.run("x26 status", FORWARD + ["--status", name])
+    return {"exit": code, "pid": proc.pid, "socket": JOURNAL, "lines": want, "asked": asked,
+            "journalctl": {"exit": got[1], "stderr": got[2]}, "read": len(entries),
+            "messages": [_text(e.get("MESSAGE")) for e in entries],
+            "identifiers": sorted(set(str(_text(e.get("SYSLOG_IDENTIFIER"))) for e in entries)),
+            "priorities": [_text(e.get("PRIORITY")) for e in entries[:50]],
+            "delivery": s.get("delivery"), "sent": s.get("sent"), "refused": (s.get("refused") or {}).get("count"),
+            "behind": s.get("behind"), "failing": s.get("failing"), "destination": s.get("destination")}
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="tools/rig/forward_run.py")
     p.add_argument("--events", required=True)
@@ -280,7 +365,7 @@ def main(argv=None):
         if not os.path.isfile(r.events):
             facts["events_missing"] = True   # the watch wrote none: X16 says it; nothing is forwarded
         else:
-            for name, case in zip(CASES + SYSLOG_CASES, (x19, x20, x21, x22, x23, x24, x25)):
+            for name, case in zip(CASES + SYSLOG_CASES + JOURNAL_CASES, (x19, x20, x21, x22, x23, x24, x25, x26)):
                 try:
                     facts[name] = case(r)
                 except Exception as exc:   # one case's error is that case's fact
