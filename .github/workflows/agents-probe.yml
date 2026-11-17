@@ -90,6 +90,22 @@ jobs:
         run: |
           id
           python3 tools/rig/journal_probe.py
+  eventlog:
+    name: what the Windows event log takes (M10.3c, ADR-0011 W)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ReportEventW by a source nobody registered
+        shell: pwsh
+        run: python tools/rig/eventlog_probe.py
   etw:
     name: the tracing reader in the field (M7.21a, ADR-0007 BL)
     runs-on: windows-latest
