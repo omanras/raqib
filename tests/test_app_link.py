@@ -81,20 +81,24 @@ def test_e2_each_forwarder_is_one_item_levelled_by_level_of_of_its_code_and_ok_i
     view = app.link_view(rows)
     got = [(i["name"], i["word"], i["level"]) for i in view["items"]]
     assert got == [("behind", "BEHIND", "alarm"), ("broken", "UNREADABLE", "incomplete"),
-                   ("failing", "FAILING", "alarm"), ("ok", "OK", "note"), ("silent", "SILENT", "incomplete")]
-    for item, row in zip(view["items"], rows):   # the row's own lines, apart as the row gives them (T-2)
+                   ("failing", "FAILING", "alarm"), ("silent", "SILENT", "incomplete"), ("ok", "OK", "note")]   # V-4
+    by_name = {r["name"]: r for r in rows}
+    for item, row in ((i, by_name[i["name"]]) for i in view["items"]):   # the row's own lines, apart (T-2)
         assert (item["facts"], item["why"], item["lines"]) == (row["facts"], row["why"], row["lines"])
         assert item["level"] == ("note" if row["code"] == 0 else app.level_of(row["code"]))
-    # the verdict: link.worst's code (3 over 1 over 0) by level_of; the words of the worst code, counted (U-3)
-    assert view["level"] == app.level_of(link.worst(rows)) == "incomplete"
-    assert app.verdict_sentence(view["word"]) == "Link: 5 forwarders, 1 unreadable, 1 silent"
+    # V-2: a forwarder known to fail is an alarm whatever is not known beside it; V-1: every word that is not OK
+    assert view["level"] == "alarm" and app.level_of(link.worst(rows)) == "incomplete"
+    assert app.verdict_sentence(view["word"]) == "Link: 5 forwarders: 1 failing, 1 behind, 1 silent, 1 unreadable"
     heads = [(t, tag) for t, tag in view["text"] if tag == "head"]
     assert [t.split("  ")[:2] for t, _ in heads] == [[n, w] for n, w, _ in got]
-    assert "ok  OK  (state written 1 s ago)" in [t for t, _ in heads]
+    assert "ok  OK" in [t for t, _ in heads] and heads[-1][0] == "ok  OK"   # V-4: what is not OK comes first
+    assert not any("ago" in t for t, _ in heads)   # V-6: nothing that ticks stands in a head
+    unknown = link.Rows(r for r in rows if r["code"] == 3)
+    assert app.link_view(unknown)["level"] == "incomplete"   # nothing known to fail: what is not known
     why = [(t.strip(), tag) for t, tag in view["text"] if t.strip() in rows[2]["why"]]
     assert why == [(rows[2]["why"][0], "alarm")]   # a why line carries its forwarder's level
     one = app.link_view(link.read(str(home), NOW, "ok"))
-    assert one["level"] == "note" and app.verdict_sentence(one["word"]) == "Link: 1 forwarder, 1 OK"
+    assert one["level"] == "note" and app.verdict_sentence(one["word"]) == "Link: 1 forwarder, OK"
     for rows_of in (["ok"], ["failing"], ["silent"]):   # T-1: never clean, whatever the link says
         assert app.link_view(link.read(str(home), NOW, rows_of[0]))["level"] != "clean"
 
@@ -103,7 +107,7 @@ def test_e2_no_row_and_no_problem_is_no_forwarder_at_note_with_the_command_as_te
     for rows in (link.read(str(home), NOW), link.Rows()):   # no folder at all: no row, no problem (T-5)
         view = app.link_view(rows)
         assert (view["word"], view["level"], view["items"]) == ("NO FORWARDER", "note", [])
-        assert view["detail"] == "no forwarder: nothing leaves this host by Raqib"
+        assert view["detail"] == "~/.raqib/forward holds no forwarder's state"   # not the verdict said twice
         assert app.verdict_sentence(view["word"]) == "No forwarder: nothing leaves this host by Raqib"
         assert ("  " + app.LINK_START, None) in view["text"]
         assert app.rail_link(rows) == ("Link: none", "note")
@@ -122,7 +126,11 @@ def test_e2_rows_problem_or_rest_are_incomplete_and_said(home, monkeypatch):
     view = app.link_view(rows)
     assert view["level"] == "incomplete" and "3 more state(s) were counted and not read" in view["detail"]
     assert any(t.startswith("3 more state(s)") and tag == "incomplete" for t, tag in view["text"])
-    assert app.rail_link(rows) == ("Link: 1 forwarder, 1 OK; 3 not read", "incomplete")
+    assert app.rail_link(rows) == ("Link: 1 OK, 3 not read", "incomplete")
+    failing = each_word(home, ["failing"])
+    failing.rest, failing.problem = 3, "the states were not all read (OSError)"
+    assert app.link_view(failing)["level"] == "alarm"   # V-2: what is not known beside it lowers no alarm
+    assert app.rail_link(failing) == ("Link: 1 failing, 3 not read, not all read", "alarm")
     monkeypatch.setattr(link, "_names", lambda folder: (_ for _ in ()).throw(PermissionError("no")))
     rows = link.read(str(home), NOW)   # S-2: a folder there that cannot be listed
     assert rows.problem and app.link_view(rows)["level"] == "incomplete"
@@ -135,7 +143,7 @@ def test_e2_u2_a_read_late_by_more_than_10_s_is_incomplete_said_with_its_age_but
         assert app.link_view(rows, 9.5)["level"] == calm and app.link_view(rows)["level"] == calm
         late = app.link_view(rows, 12.5)
         assert late["level"] == "incomplete" and "has returned for 12 s" in late["detail"]
-        assert app.rail_link(rows, 12.5)[1] == "incomplete" and "not read for 12 s" in app.rail_link(rows, 12.5)[0]
+        assert app.rail_link(rows, 12.5)[1] == "incomplete" and "no read for 12 s" in app.rail_link(rows, 12.5)[0]
     for name in ("failing", "behind"):   # U-2: a known failure is not turned amber by a late read
         rows = link.read(str(home), NOW, name)
         late = app.link_view(rows, 12.5)
@@ -152,16 +160,25 @@ def test_e2_u2_a_read_late_by_more_than_10_s_is_incomplete_said_with_its_age_but
 def test_e2_t3_every_text_of_a_state_passes_one_function_that_removes_control_characters_and_bounds_a_line(home):
     assert app.link_line("a\x1b[31mred\x1b[0m\nb\rc\x00\u202e") == "a?[31mred?[0m?b?c??"
     long = app.link_line("x" * 10000)
-    assert len(long) == app.LINK_LINE_MAX and long.endswith("[%d characters not shown]" % (10000 - 300))
+    assert long == "x" * app.LINK_LINE_MAX + " [cut at 300 characters]"
     assert app.link_line("x" * app.LINK_LINE_MAX) == "x" * app.LINK_LINE_MAX
+
+    looked, clean = [], app._safe   # V-5: the cut comes before the cleaning: no more than the limit is looked at
+    app._safe = lambda text: looked.append(len(text)) or clean(text)
+    try:
+        assert app.link_line("y" * 100000 + "\x1b", 40) == "y" * 40 + " [cut at 40 characters]"
+    finally:
+        app._safe = clean
+    assert looked == [40]
     # a state whose texts are a stranger's: an escape in its file, a newline in its last id, a line of 10000
     put(home, "odd", a_state("odd", file="/tmp/\x1b]0;owned\x07\x1b[2J" + "f" * 10000, last_id="r1:9\nOK fake"))
     rows = link.read(str(home), NOW)
     assert rows[0]["word"] == "OK" and any("\x1b" in x for x in rows[0]["lines"])   # the row holds them as written
     view = app.link_view(rows)
     assert printable(view)
-    assert all(len(t) <= app.LINK_LINE_MAX + 2 for t, _ in view["text"])   # 2: the indent of a forwarder's line
-    assert all(len(x) <= app.LINK_LINE_MAX for x in view["items"][0]["lines"])
+    said = len(" [cut at 300 characters]")
+    assert all(len(t) <= app.LINK_LINE_MAX + said + 2 for t, _ in view["text"])   # 2: a forwarder's line's indent
+    assert all(len(x) <= app.LINK_LINE_MAX + said for x in view["items"][0]["lines"])
     assert not any(t.startswith("OK fake") for t, _ in view["text"])   # a newline in a value makes no line
     fake = [{"name": "n\x1b[1m", "word": "OK\n", "code": 0, "facts": ["a\x07"], "why": ["b" * 10000], "age": None}]
     assert printable(app.link_view(fake)) and "\n" not in app.rail_link(fake)[0]
@@ -171,15 +188,21 @@ def test_e2_t3_every_text_of_a_state_passes_one_function_that_removes_control_ch
 
 def test_e3_rail_link_counts_the_forwarders_and_each_word_at_the_worst_code(home):
     rows = each_word(home)
-    assert app.rail_link(rows) == ("Link: 5 forwarders, 1 unreadable, 1 silent", "incomplete")
+    # V-1: no word is hidden behind a worse one - a failing link is said on every screen
+    assert app.rail_link(rows) == ("Link: 1 failing, 1 behind, 1 silent, 1 unreadable", "alarm")
     failing = link.Rows(r for r in rows if r["code"] == 1)
-    assert app.rail_link(failing) == ("Link: 2 forwarders, 1 behind, 1 failing", "alarm")
+    assert app.rail_link(failing) == ("Link: 1 failing, 1 behind", "alarm")
     ok = link.Rows(r for r in rows if r["code"] == 0)
-    assert app.rail_link(ok) == ("Link: 1 forwarder, 1 OK", "note")
+    assert app.rail_link(ok) == ("Link: 1 OK", "note")
     assert app.rail_link(link.Rows()) == ("Link: none", "note") and app.rail_link(None)[0] == "Link: not read"
-    many = [{"name": "n%d" % i, "word": "W" * 500 + "\n", "code": 3} for i in range(64)]
-    text, level = app.rail_link(many, 99999.0)
-    assert len(text) <= app.LINK_RAIL_MAX and text.isprintable() and level == "incomplete"
+    # V-3: built of counts and fixed words: the longest line there can be is whole, never cut
+    worst = link.Rows({"name": "n%d" % i, "word": w, "code": c} for i in range(13) for w, c in (
+        ("FAILING", 1), ("BEHIND", 1), ("SILENT", 3), ("UNREADABLE", 3), ("W" * 500 + "\n", 3)))[:64]
+    worst = link.Rows(worst)
+    worst.rest, worst.problem = 10 ** 9, "x" * 5000
+    text, level = app.rail_link(worst, 1e12)
+    assert text == ("Link: 13 failing, 13 behind, 13 silent, 13 unreadable, 12 other, 9999+ not read, not all read;"
+                    " no read for 9999+ s") and len(text) <= app.LINK_RAIL_MAX and level == "alarm"
 
 
 # --- E5 (T-4, R-4, U-4): the worker -------------------------------------------------------------------------------
@@ -239,7 +262,7 @@ def test_e5_a_reader_that_blocks_is_never_read_twice_and_after_10_s_the_view_say
         assert "has returned for 10 s" in view["detail"] and view["level"] == "alarm"   # U-2: FAILING stays
         job.rows = link.Rows()
         assert app.link_view(job.rows, job.age())["level"] == "incomplete"
-        assert app.rail_link(job.rows, job.age()) == ("Link: none; not read for 10 s", "incomplete")
+        assert app.rail_link(job.rows, job.age()) == ("Link: none; no read for 10 s", "incomplete")
     finally:
         gate.set()
         joined(job)
@@ -398,14 +421,14 @@ def test_tk_e8_the_rails_link_item_opens_the_screen_filled_from_rows_of_each_wor
         window.tick()
         assert window.screen == "host"
         text, level = app.rail_link(rows)
-        assert window.link_note.cget("text") == text == "Link: 5 forwarders, 1 unreadable, 1 silent"   # every screen
+        assert window.link_note.cget("text") == text == "Link: 1 failing, 1 behind, 1 silent, 1 unreadable"
         assert str(window.link_note.cget("foreground")) == window.palette["rail_levels"][level]
         window.link_tab.invoke()
         window.tick()
         assert window.screen == "link" and str(window.link_tab.cget("style")) == "Current.Rail.TButton"
         view = app.link_view(rows)
         assert window.verdict.cget("text") == app.verdict_sentence(view["word"])
-        assert window.pill.cget("text") == app.level_word(view["level"]) == "incomplete"
+        assert window.pill.cget("text") == app.level_word(view["level"]) == "alarm"   # V-2
         shown = window.link_text.get("1.0", "end")
         for row in rows:
             assert "%s  %s" % (row["name"], row["word"]) in shown
@@ -441,3 +464,101 @@ def test_tk_e8_no_forwarder_is_said_as_a_note_and_the_window_leaves_no_thread_at
         else:
             root.destroy()
     assert not [t for t in threading.enumerate() if t.name == "raqib-app-link" and t.is_alive()]
+
+
+# --- V (the Table's rulings on the review of b4348d4) -----------------------------------------------------------
+
+def test_v5_the_next_read_waits_four_times_what_the_last_one_took_where_that_is_more_than_a_second(home):
+    clock = Clock()
+
+    def slow():
+        clock.t += 3.0   # a read that took three seconds (a folder of large states)
+        return link.Rows()
+    job = app.LinkJob(reader=slow, clock=clock)
+    assert job.poll() and joined(job) is None and job.took == 3.0 and job.done == 1
+    began = job.asked
+    for later, due in ((began + 3.5, False), (began + 11.9, False), (began + 12.0, True)):
+        clock.t = later
+        assert job.poll() is due, later
+    joined(job)
+    quick = app.LinkJob(reader=lambda: link.Rows(), clock=clock)   # the negative: a quick read, once a second
+    assert quick.poll() and joined(quick) is None and quick.took == 0.0
+    clock.t += 0.5
+    assert quick.poll() is False
+    clock.t += 0.5
+    assert quick.poll() is True
+    joined(quick)
+
+
+def test_v7_a_reader_that_cannot_be_asked_is_the_links_not_read_and_never_raises():
+    class Broken:
+        rows = None
+
+        def poll(self, now=None):
+            raise RuntimeError("can't start new thread")
+    c = app.Controller(None, tray=None, make_session=FakeSession)
+    c.link = Broken()
+    rows, age = c.link_now()
+    assert rows == [] and "could not be asked (RuntimeError)" in rows.problem and age is None
+    assert app.rail_link(rows, age) == ("Link: not read", "incomplete")
+
+
+def test_tk_v6_a_text_that_changes_is_written_where_the_reader_was_place_and_selection_kept(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        for i in range(12):
+            put(home, "f%02d" % i, a_state("f%02d" % i, written=NOW - 500))   # silent: its why says its age
+        box = {"rows": link.read(str(home), NOW)}
+        window, job = a_window(tkinter, root, home, lambda: box["rows"], tmp_path)
+        root.deiconify()
+        root.geometry("900x600")
+        window.show_link()
+        window.tick()
+        root.update()
+        text = window.link_text
+        assert text.yview() != (0.0, 1.0)   # more than the screen holds: there is somewhere to scroll
+        text.yview_moveto(0.4)
+        text.tag_add("sel", "30.2", "31.10")
+        root.update()
+        place, chosen = text.yview()[0], [str(i) for i in text.tag_ranges("sel")]
+        before = text.get("1.0", "end")
+        window.tick()
+        assert text.get("1.0", "end") == before and text.yview()[0] == place   # nothing changed: not written
+        box["rows"] = link.read(str(home), NOW + 7)   # a later read: each why line's age moved
+        job.rows, job.done = box["rows"], job.done + 1
+        window.tick()
+        root.update()
+        assert text.get("1.0", "end") != before
+        assert abs(text.yview()[0] - place) < 0.02 and [str(i) for i in text.tag_ranges("sel")] == chosen
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()
+
+
+def test_tk_v3_the_rails_longest_link_line_is_whole_and_the_rail_still_fits_600(home, tmp_path):
+    tkinter, root = tk_or_skip()
+    window = None
+    try:
+        rows = link.Rows({"name": "n%d" % i, "word": w, "code": c, "facts": [], "why": ["x"]} for i in range(13)
+                         for w, c in (("FAILING", 1), ("BEHIND", 1), ("SILENT", 3), ("UNREADABLE", 3), ("ODD", 3)))
+        rows = link.Rows(rows[:64])
+        rows.rest, rows.problem = 10 ** 9, "not listed"
+        window, job = a_window(tkinter, root, home, lambda: rows, tmp_path)
+        root.deiconify()
+        root.geometry("900x600")
+        for show in (window.show_host, window.show_link):
+            show()
+            window.tick()
+            root.update()
+            assert window.link_note.cget("text") == app.rail_link(rows)[0]
+            assert len(window.link_note.cget("text")) > 90   # the long line, whole
+            need = sum(w.winfo_reqheight() for w in window.rail.pack_slaves())
+            assert need <= 600 and window.rail.winfo_height() <= 600, need
+    finally:
+        if window is not None:
+            window.destroy()
+        else:
+            root.destroy()

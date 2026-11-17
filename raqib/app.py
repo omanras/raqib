@@ -960,24 +960,23 @@ def rail_rules(info, error=None, states=()):
     return text, "suppressed" if n else "incomplete" if off or refused else None
 
 
-# --- the link (ADR-0011 R-2 to R-4, S, T, U): the rows of link.read, formatted; the window judges nothing --------
+# --- the link (ADR-0011 R-2 to R-4, S, T, U, V): the rows of link.read, formatted; the window judges nothing -----
 LINK_EVERY = 1.0        # R-4, T-4: the states are read at most once a second
 LINK_LATE = 10.0        # T-4: a read not back after this many seconds: the link is not known (incomplete)
 LINK_WAIT = 2.0         # U-4: how long the window's end waits for a read in flight
 LINK_LINE_MAX = 300     # T-3: characters of one line of a state's text shown, at most
-LINK_RAIL_MAX = 60      # R-3: characters of the rail's Link line, at most
+LINK_RAIL_MAX = 120     # R-3, V-3: the rail's Link line is built of counts and fixed words: never longer than this
+LINK_COUNT_MAX = 9999   # V-3: a count or a number of seconds past this is said as "9999+"
+LINK_WORDS = ("FAILING", "BEHIND", "SILENT", "UNREADABLE")   # V-1: the words counted, what is known to fail first
 LINK_START = "raqib forward --to URL --name NAME"   # T-5: the command that starts a forwarder, said as text
 
 
 def link_line(text, limit=LINK_LINE_MAX):
-    """T-3: a text of a state (a stranger's) as the window shows it: every character that is not printable (an
-    escape, a newline inside a value, a control or format character) is "?", and the line is at most `limit`
-    characters, its cut said in them."""
-    text = _safe(text)
-    if len(text) <= limit:
-        return text
-    note = " [%d characters not shown]" % (len(text) - limit)
-    return text[:max(0, limit - len(note))] + note
+    """T-3, V-5: a text of a state (a stranger's) as the window shows it: at most `limit` characters of it, each
+    one that is not printable (an escape, a newline inside a value, a control or format character) shown as "?",
+    and a cut said after them. The cut comes first: no more than `limit` characters are ever looked at."""
+    text = text if isinstance(text, str) else str(text)
+    return _safe(text[:limit]) + (" [cut at %d characters]" % limit if len(text) > limit else "")
 
 
 def link_level(code):
@@ -987,38 +986,47 @@ def link_level(code):
     return "note" if level == "clean" else level
 
 
-def _link_rank(code):
-    return {0: 0, 1: 1}.get(code, 2) if isinstance(code, int) and not isinstance(code, bool) else 2
+def _link_n(n):
+    return "%d" % n if n <= LINK_COUNT_MAX else "%d+" % LINK_COUNT_MAX
+
+
+def link_not_ok(rows):
+    """V-1: ["1 failing", "1 behind", "1 silent", "1 unreadable"]: every word of a row that is not OK, counted -
+    none is hidden behind a worse one. The words are the rows' own; LINK_WORDS only orders them, and a word
+    that is none of them is counted as "other" (so the line is bounded as it is made)."""
+    counts = {}
+    for r in rows:
+        if r.get("code") != 0:
+            word = r.get("word") if r.get("word") in LINK_WORDS else "other"
+            counts[word] = counts.get(word, 0) + 1
+    return ["%d %s" % (counts[w], w.lower()) for w in LINK_WORDS + ("other",) if w in counts]
 
 
 def link_counts(rows):
-    """R-3, U-3: "2 forwarders, 1 failing, 1 behind": how many rows, and each word at the worst code among them
-    (3 over 1 over 0, as link.worst), counted, in the order the rows give them."""
-    top = max([_link_rank(r.get("code")) for r in rows] or [0])
-    words = {}
-    for r in rows:
-        if _link_rank(r.get("code")) == top:
-            word = link_line(r.get("word"), 16)
-            words[word] = words.get(word, 0) + 1
-    text = "%d forwarder%s" % (len(rows), "" if len(rows) == 1 else "s")
-    return text + "".join(", %d %s" % (n, w if w == "OK" else w.lower()) for w, n in words.items())
+    """R-3, V-1: "5 forwarders: 1 failing, 1 behind, 1 silent, 1 unreadable"; "2 forwarders, all OK"."""
+    n, bad = len(rows), link_not_ok(rows)
+    text = "%d forwarder%s" % (n, "" if n == 1 else "s")
+    return text + (": " + ", ".join(bad) if bad else ", OK" if n == 1 else ", all OK")
 
 
 def _link_level(rows, late):
-    """T-1, S-1, U-2: the level of the rows, from link.worst's code (OK a note); a late read is incomplete, but
-    never lowers an alarm."""
-    level = link_level(link.worst(rows)) if rows or getattr(rows, "rest", 0) or getattr(rows, "problem", None) \
-        else "note"
-    return level if level == "alarm" or not late else "incomplete"
+    """T-1, V-2: the level of the whole link, from the rows' own levels (link_level): a forwarder known to fail
+    (alarm) is an alarm whatever is not known beside it; else what is not known (a silent or unreadable state,
+    states counted and not read, a folder not listed, a late read) is incomplete; else a note."""
+    levels = {link_level(r.get("code")) for r in rows}
+    unknown = late or getattr(rows, "rest", 0) or getattr(rows, "problem", None) or levels - {"note", "alarm"}
+    return "alarm" if "alarm" in levels else "incomplete" if unknown else "note"
 
 
 def link_view(rows, age=None):
-    """R-2, T-1 to T-5, S-1, S-2, U-2: the Link screen of the rows of link.read (None: no read has returned
-    yet) and of `age`, how long the read in flight has been out (None: none is). {"word", "level", "detail",
-    "items": one a forwarder {"name", "word", "level", "facts", "why", "lines"}, "text": [(line, tag)]}. Every
-    text of a state passes through link_line; the words and codes are the rows' own."""
+    """R-2, T-1 to T-5, S-1, S-2, V: the Link screen of the rows of link.read (None: no read has returned yet)
+    and of `age`, how long the read in flight has been out (None: none is). {"word", "level", "detail", "items":
+    one a forwarder {"name", "word", "level", "facts", "why", "lines"}, "text": [(line, tag)]}. The forwarders
+    that are not OK come first, each group in the rows' order (V-4). Every text of a state passes through
+    link_line; the words and codes are the rows' own."""
     late = age is not None and age > LINK_LATE
-    said = "no read of the forwarders' states has returned for %d s: the link is not known" % age if late else ""
+    said = "no read of the forwarders' states has returned for %s s: the link is not known" % _link_n(int(age)) \
+        if late else ""
     if rows is None:
         detail = said or "the forwarders' states in ~/.raqib/forward are being read (at most once a second)"
         return {"word": "LINK NOT READ" if late else "READING LINK", "level": "incomplete", "detail": detail,
@@ -1026,30 +1034,28 @@ def link_view(rows, age=None):
     rest, problem = getattr(rows, "rest", 0), getattr(rows, "problem", None)
     level = _link_level(rows, late)
     if not rows and not rest and not problem:   # T-5: a host that sends nothing, said plainly
-        detail = "no forwarder: nothing leaves this host by Raqib" + ("; " + said if late else "")
-        return {"word": "NO FORWARDER", "level": level, "detail": detail, "items": [], "text": [
-            ("No forwarder has written a state in ~/.raqib/forward: nothing leaves this host by Raqib.", None),
-            ("A forwarder is a process of its own, started from a terminal; this screen starts none:", None),
-            ("  " + LINK_START, None)] + ([(sentence(said) + ".", "incomplete")] if late else [])}
+        return {"word": "NO FORWARDER", "level": level, "items": [],
+                "detail": said or "~/.raqib/forward holds no forwarder's state",
+                "text": [("No forwarder has written a state in ~/.raqib/forward: nothing leaves this host by Raqib.",
+                          None),
+                         ("A forwarder is a process of its own, started from a terminal; this screen starts none:",
+                          None),
+                         ("  " + LINK_START, None)] + ([(sentence(said) + ".", "incomplete")] if late else [])}
     items, text = [], []
-    for r in rows:
+    for r in [r for r in rows if r.get("code") != 0] + [r for r in rows if r.get("code") == 0]:
         facts = [link_line(x) for x in r.get("facts") or ()]
         why = [link_line(x) for x in r.get("why") or ()]
         item = {"name": link_line(r.get("name"), 64), "word": link_line(r.get("word"), 16),
                 "level": link_level(r.get("code")), "facts": facts, "why": why, "lines": facts + why}
         items.append(item)
-        age_of = r.get("age")
-        when = "" if not isinstance(age_of, (int, float)) or isinstance(age_of, bool) else (
-            "  (state written %d s ago)" % age_of if age_of >= 0 else "  (state written %d s ahead of this clock)"
-            % -age_of)
-        text.append(("%s  %s%s" % (item["name"], item["word"], when), "head"))
+        text.append(("%s  %s" % (item["name"], item["word"]), "head"))   # V-6: nothing that ticks stands here
         text += [("  " + x, None) for x in facts]
         text += [("  " + x, item["level"] if item["level"] != "note" else None) for x in why]
         text.append(("", None))
     notes = []
     if rest:   # S-1: counted and not read is not calm
-        notes.append("%d more state(s) were counted and not read (at most %d are read): ask for each by name with"
-                     " raqib forward --status NAME" % (rest, link.LINKS_MAX))
+        notes.append("%s more state(s) were counted and not read (at most %d are read): ask for each by name with"
+                     " raqib forward --status NAME" % (_link_n(rest), link.LINKS_MAX))
     if problem:   # S-2: what could not be looked for is not "no forwarder"
         notes.append(link_line(problem))
     if late:
@@ -1065,19 +1071,19 @@ def link_view(rows, age=None):
 
 
 def rail_link(rows, age=None):
-    """R-3, U-3: the rail's Link line and its level, on every screen: "Link: 2 forwarders, 1 failing, 1 behind",
-    "Link: none", "Link: not read"; one line, at most LINK_RAIL_MAX characters."""
+    """R-3, V-1, V-3: the rail's Link line and its level, on every screen: "Link: 1 failing, 1 behind",
+    "Link: 2 OK", "Link: none", "Link: not read". Built of counts and fixed words only, so it is bounded as it
+    is made (LINK_RAIL_MAX) and nothing of it is ever cut away."""
     late = age is not None and age > LINK_LATE
+    since = " for %s s" % _link_n(int(age)) if late else ""
+    wait = "; no read" + since if late else ""
     if rows is None:
-        return link_line("Link: not read" + (" for %d s" % age if late else ""), LINK_RAIL_MAX), "incomplete"
+        return "Link: not read" + since, "incomplete"
     rest, problem = getattr(rows, "rest", 0), getattr(rows, "problem", None)
-    if rows:
-        text = "Link: " + link_counts(rows) + ("; %d not read" % rest if rest else "") + (
-            "; not all read" if problem else "")
-    else:
-        text = "Link: not read" if rest or problem else "Link: none"
-    text += "; not read for %d s" % age if late else ""
-    return link_line(text, LINK_RAIL_MAX), _link_level(rows, late)
+    parts = (link_not_ok(rows) or ["%d OK" % len(rows)]) if rows else []
+    parts += ["%s not read" % _link_n(rest)] if rest else []
+    parts += ["not all read"] if problem and rows else ["not read"] if problem else []
+    return "Link: " + (", ".join(parts) or "none") + wait, _link_level(rows, late)
 
 
 def seen_lines(holes, notes, look=()):
@@ -2872,8 +2878,13 @@ class Controller:
         job = self.link
         if job is None:
             return None, None
-        job.poll(now)
-        return job.rows, job.age(now)
+        try:
+            job.poll(now)
+            return job.rows, job.age(now)
+        except Exception as exc:   # V-7: the link's own failure is the link's "not read", never the tick's
+            rows = link.Rows()
+            rows.problem = "the link's reader could not be asked (%s)" % type(exc).__name__
+            return rows, None
 
     def worker_alive(self):
         for session in self.sessions():
@@ -2986,6 +2997,8 @@ class LinkJob:
         self.rows = None
         self.asked = None    # when the last read began (the clock's)
         self.reads = 0
+        self.done = 0        # reads returned: the window draws again only when it moved (V-6)
+        self.took = 0.0      # how long the last read took: the next waits four times as long, if that is more (V-5)
         self.thread = None
         self.closed = False
 
@@ -2994,7 +3007,8 @@ class LinkJob:
 
     def poll(self, now=None):
         now = self.clock() if now is None else now
-        if self.closed or self.busy() or (self.asked is not None and now - self.asked < LINK_EVERY):
+        if self.closed or self.busy() or (self.asked is not None and
+                                          now - self.asked < max(LINK_EVERY, 4 * self.took)):
             return False
         self.asked, self.reads = now, self.reads + 1
         self.thread = threading.Thread(target=self._run, name="raqib-app-link", daemon=True)
@@ -3002,6 +3016,7 @@ class LinkJob:
         return True
 
     def _run(self):
+        began = self.clock()
         try:
             rows = self.reader()
             if not isinstance(rows, list):
@@ -3009,7 +3024,11 @@ class LinkJob:
         except Exception as exc:   # R-4: a read that fails is said, never the window's failure
             rows = link.Rows()
             rows.problem = "the read of the states failed (%s)" % type(exc).__name__
-        self.rows = rows
+        try:
+            self.took = max(0.0, float(self.clock() - began))
+        except Exception:
+            self.took = 0.0
+        self.rows, self.done = rows, self.done + 1
 
     def age(self, now=None):
         if not self.busy():
@@ -3133,9 +3152,12 @@ class Window:
         self._build(project)
         self.show_host()                  # M7.3: the first screen is the host
         controller.start_probe(probe)     # E1: one discover round at open, in a thread
-        controller.start_link(link_job if link_job is not None else LinkJob(home=home))   # ADR-0011 T-4: the link
         self.check()
         self.title_note = self._title_bar(win_api)
+        try:   # ADR-0011 T-4, V-7: the link's reader, last: nothing after it can fail and leave its thread
+            controller.start_link(link_job if link_job is not None else LinkJob(home=home))
+        except Exception:
+            pass   # link_now says "not read" for a reader that could not be started
         self.after_id = root.after(TICK_MS, self.tick)
 
     def px(self, n):
@@ -5296,7 +5318,16 @@ class Window:
         """ADR-0011 R-2, T-1 to T-5: the forwarders as link.read read and judged them (link_view), as text."""
         view = link_view(*self.c.link_now())
         self._verdict(view["word"], view["level"], view["detail"])
-        self._set(self.link_text, "link", None, view["text"])
+        widget = self.link_text
+        if self.shown.get("link") == (None, view["text"]):
+            return
+        # V-6: a text that changed is written again where the reader was: its place and its selection are kept
+        first = widget.yview()[0]
+        chosen = [str(i) for i in widget.tag_ranges("sel")]
+        self._set(widget, "link", None, view["text"])
+        widget.yview_moveto(first)
+        for a, b in zip(chosen[0::2], chosen[1::2]):
+            widget.tag_add("sel", a, b)
 
     def _tick_doctor(self):
         """The doctor's result, when it comes: the project screen's rows and

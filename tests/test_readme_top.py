@@ -168,22 +168,29 @@ BYTES_WIN = [
     " memory only); a killed watch leaves it until the next start, which stops it and says so.",
 ]
 GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + GUIDE_ROWS + HOST_UNREAD + BYTES_WIN
-# M10.4b (ADR-0011 R-2, R-3, T-1, T-5, U-2): the window's Link screen, said where the window's screens are
+# M10.4b (ADR-0011 R-2, R-3, T-1, T-5, V): the window's Link screen, said where the window's screens are
 LINK_SCREEN = [
-    "Link, the rail's item under Log, shows the forwarders of `raqib forward` as their states in `~/.raqib/forward` say, read at most once a"
-    " second by the reader and the judgement of `raqib forward --status`: each one's name, its word (OK, BEHIND,"
-    " FAILING, SILENT, UNREADABLE) and its lines - where it sends and by which delivery word, plain or not, what was"
-    " last taken and when, what waits, what was refused, why it fails.",
-    "The rail's Link line carries the worst word of them all on every screen (\"Link: 2 forwarders, 1 failing, 1"
-    " behind\").",
-    "A link that sends is no judgement of the host: an OK forwarder is a note, never green, as green beside a watch"
-    " means its rules found nothing;",
+    "Link, the rail's item under Log, shows the forwarders of `raqib forward` as their states in "
+    "`~/.raqib/forward` say, read off the window's thread at most once a second by the reader and the "
+    "judgement of `raqib forward --status`: each one's name, its word (OK, BEHIND, FAILING, SILENT, "
+    "UNREADABLE) and its lines - where it sends and by which delivery word, plain or not, what was last "
+    "taken and when, what waits, what was refused, why it fails; the forwarders that are not OK come "
+    "first, and the screen has no button.",
+    "The rail's Link line counts every word that is not OK on every screen (\"Link: 1 failing, 1 behind, 1"
+    " silent\";",
+    "\"Link: 2 OK\";",
+    "\"Link: none\"): none is hidden behind a worse one.",
+    "A link that sends is no judgement of the host: an OK forwarder is a note, never green, as green "
+    "beside a watch means its rules found nothing;",
     "FAILING and BEHIND are alarm, SILENT and UNREADABLE incomplete, as their exit codes are.",
-    "With no state at all the screen says \"No forwarder: nothing leaves this host by Raqib\", a note, and the"
-    " command that starts one; a folder that cannot be listed, states past the 64 read, or a read not back in 10 s"
-    " are incomplete (a known failure stays an alarm).",
-    "The screen starts, stops and configures no forwarder, holds no token and opens no connection, and no result,"
-    " exit code, finding or knock of a watch depends on it (ADR-0011 Amendments R, T and U).",
+    "The whole link is an alarm where one forwarder is known to fail, whatever is not known beside it; "
+    "else incomplete where something is not known - a silent or unreadable state, a folder that cannot be"
+    " listed, states past the 64 read, a read not back in 10 s; else a note.",
+    "With no state at all the screen says \"No forwarder: nothing leaves this host by Raqib\", a note, and "
+    "the command that starts one.",
+    "A state's text is shown as text, at most 300 characters a line, what is not printable as \"?\".",
+    "The screen starts, stops and configures no forwarder, holds no token and opens no connection, and no"
+    " result, exit code, finding or knock of a watch depends on it (ADR-0011 Amendments R, T, U and V).",
 ]
 GUIDE_NEW += LINK_SCREEN
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
