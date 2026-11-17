@@ -260,15 +260,18 @@ wall clock set back or ahead delays nothing and hurries nothing. Only the state'
   `RAQIB_ID`, `RAQIB_KIND`, `RAQIB_HOST` (`watch.host`) and `RAQIB_TIME` where the event holds them as text of at
   most 256 characters with no control character (else that field is left out). Building an entry never raises,
   whatever the line holds.
-- No line is too long (W-3): an entry the socket takes as one datagram is sent as one; an entry the socket
+- No line is cut (W-3, X-2): an entry the socket takes as one datagram is sent as one; an entry the socket
   refuses as too long (EMSGSIZE) is written to a sealed memory file (sealed against any write, growth, shrink or
   further seal) whose descriptor is sent with the socket's own message - the journal's own way. Nothing is cut,
   and no line the forwarder reads whole (512 KiB at most, M-3) is refused for its length: a batch to the journal
   is bounded by its lines' own bytes. Where the system has no memory file, or that send fails, it is a failed
-  send (`write`): nothing passes, and it is tried again - never a cut and never a pass.
+  send (`write`): nothing passes, and it is tried again - never a cut and never a pass; the next batch is half
+  of this one, down to one line, so that the lines before an entry the journal would not take are handed
+  again a few times and then not at every try (X-4). A line longer than the forwarder's own bound of a line
+  (512 KiB) is refused locally, counted and named, as over every transport.
 - `sent` (W-4): the journal answers nothing; a batch is taken when every entry was handed to its socket with no
   error. The journal may drop entries over its own rate limit, unseen by the forwarder (its status stays OK):
-  the forwarder paces itself, at most 250 lines a second (after each batch it waits what is left of the
+  the forwarder paces itself, at most 250 lines a second over its batches (after each batch it waits what is left of the
   batch's share of a second; Stop ends the wait at once). What tells of a loss: the journal's own line
   "Suppressed N messages", and the search for a missing heartbeat (no heartbeat of a host for more than two
   beats).
@@ -352,10 +355,10 @@ Windows, where a rename never replaces a file that is there). The keys:
 | `name` | str | the forwarder's name |
 | `pid` | int | the forwarder's process id |
 | `written` | instant | when this state was written (UTC, milliseconds, Z; the wall's clock) |
-| `destination` | object | `scheme` (`http`, `https`, `syslog+udp`, `syslog+tcp`, `syslog+tls`), `host`, `port`, `path` (over syslog ""): no query, no user information |
+| `destination` | object | `scheme` (`http`, `https`, `syslog+udp`, `syslog+tcp`, `syslog+tls`), `host`, `port`, `path` (over syslog ""): no query, no user information; for the journal `scheme` `journal` alone - no host, port or path. A raqib from before the journal reads such a state as UNREADABLE (it fails toward the alarm) |
 | `shape` | str | `raqib` or `hec` (over syslog always `raqib`) |
-| `delivery` | str | what taken means: `acknowledged` (HTTP), `written` (syslog over tcp and tls: the connection ended in order), `sent` (syslog over udp) |
-| `facility` | int | syslog only (P-3): the facility the messages carry (0 to 23); a start with another is exit 2, as another shape is |
+| `delivery` | str | what taken means: `acknowledged` (HTTP), `written` (syslog over tcp and tls: the connection ended in order), `sent` (syslog over udp; the journal) |
+| `facility` | int | syslog and the journal (P-3, W-2): the facility the messages or entries carry (0 to 23); a start with another is exit 2, as another shape is |
 | `framing` | str or null | syslog only (P-3): `octet` or `newline` over tcp and tls, null over udp; a start with another is exit 2. A syslog state written before the two were kept has neither: it is read, and the start's facility and framing are kept from then on (said at the start) |
 | `plain` | bool | true where the wire is plain: http, syslog over udp or tcp |
 | `file` | str | the events file, absolute |

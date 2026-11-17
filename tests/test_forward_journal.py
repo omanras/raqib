@@ -308,7 +308,15 @@ def test_e1_the_state_holds_journal_sent_and_facility_and_link_status_and_where_
     rows = link.read(home, clock.t)
     assert [(r["name"], r["code"], r["word"], r["to"]) for r in rows] == [("j", 0, "OK", "the journal"),
                                                                          ("k", 0, "OK", "the journal")]
-    assert rows[0]["lines"][0].startswith("to the journal (shape raqib, delivery sent, facility 13")
+    assert rows[0]["lines"][0] == "to the journal (shape raqib, delivery sent, facility 13)"   # X-3: no framing
+    assert link.errors_of("journal") is link.JOURNAL_ERRORS and link.errors_of("https") is link.ERRORS
+    assert link.errors_of("syslog+tcp") is link.SYSLOG_ERRORS and set(link.JOURNAL_ERRORS) == set(link.ERRORS)
+    failing = dict(json.loads(json.dumps(s)), failing={"since": s["written"], "tries": 2, "error": "late",
+                                                       "status": None})
+    said = link.judge(failing, clock.t)[2][-1]
+    assert "late (the entries were not handed to the journal within the bound)" in said and "answer" not in said
+    for word in ("connect", "write"):   # the journal's own words: no collector, no connection
+        assert "collector" not in link.JOURNAL_ERRORS[word] and "journal" in link.JOURNAL_ERRORS[word]
     out = io.StringIO()
     assert forward.status("j", home=home, out=out, clock=clock) == 0 and "to the journal" in out.getvalue()
     for change in (lambda d: d["destination"].update(host="127.0.0.1"), lambda d: d["destination"].update(port=1),
@@ -520,8 +528,11 @@ def test_e8_the_threat_model_forward_md_and_the_guide_say_the_journal():
     flat = " ".join(threat.split())
     assert "`raqib watch` and the window write under ~/.raqib and nowhere else" in flat
     assert "`raqib forward --to journal:` hands the events to the system's journal because a person ran it" in flat
-    assert "whoever reads the journal" in flat and "_PID, _UID, _EXE" in flat
-    assert "Any process of the user - the watched agent is one - can write entries that say raqib" in flat
+    assert "whoever reads the journal" in flat
+    # X-7: said whole - any user's process can write them, and only the pid tells the forwarder from an agent
+    assert "Any local process of any user - the watched agent is one - can write entries that say raqib" in flat
+    assert "differs from the forwarder only in `_PID`" in flat and "is a lead, not a proof" in flat
+    assert "a watched agent in the forwarder's own session may use it up" in flat
     assert "may drop entries over its own rate limit" in flat and "unseen by the forwarder" in flat
     assert "M10." not in threat
     flat = " ".join(spec.split())
@@ -539,3 +550,32 @@ def test_e9_the_new_code_is_ascii_and_the_journal_of_every_test_here_is_a_folder
         (ROOT / rel).read_bytes().decode("ascii")
     assert forward.JOURNAL.startswith(tempfile.gettempdir()) or "rqj-" in forward.JOURNAL   # the autouse fixture's
     assert sys.modules["raqib.forward"] is forward
+
+
+# --- X (the Table's rulings on the review of a3bb1bc) -----------------------------------------------------------
+@needs_dgram
+def test_x4_an_entry_the_journal_would_not_take_halves_the_batch_so_its_neighbours_are_not_handed_again(
+        tmp_path, journals, monkeypatch):
+    j = journals()
+    limit = limit_of(os.path.dirname(j.path))
+    big = tf.lines(1, 3, size=300 * 1024)[0]
+    if len(forward.journal_entry(big, obj_of(big))) <= limit:
+        pytest.skip("this system takes a datagram of %d bytes: the entry of 300 KiB is one" % limit)
+    monkeypatch.delattr(os, "memfd_create")   # the long entry cannot be handed: `write`, at every try
+    first = tf.lines(2)
+    path = tf.write(tmp_path / "e.jsonl", first + [big])
+    f = jfwd(tmp_path, path, j.path)
+    assert f.step() == "failed" and f.failing["error"] == "write" and f.size == 1   # three lines: halved to one
+    for _ in range(8):   # the two before it pass, one by one or by two as the batch grows and is halved again
+        if f.sent == 2:
+            break
+        f.step()
+    assert f.sent == 2
+    for _ in range(4):
+        assert f.step() == "failed" and f.failing["error"] == "write"   # the long one, alone, at every try
+    j.stop()
+    got = j.messages()
+    # its neighbours were handed a few times while the batch was halved, then never again (4 tries more)
+    assert 2 <= got.count(first[0][:-1]) <= 3 and 2 <= got.count(first[1][:-1]) <= 3
+    assert len(got) == got.count(first[0][:-1]) + got.count(first[1][:-1])   # and no part of the long one
+    assert f.sent == 2 and f.refused == 0                                             # and nothing passed by

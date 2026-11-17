@@ -474,13 +474,20 @@ def test_m103ca_e7_x26_is_met_by_the_forwarder_to_a_stand_in_journal_read_back_b
     assert x["messages"] == whole and x["read"] == x["lines"] == len(whole) and x["exit"] == 0
     assert x["identifiers"] == ["raqib"] and x["delivery"] == "sent" and x["destination"] == {"scheme": "journal"}
     assert x["socket"] != forward_run.REAL_JOURNAL and x["pid"] > 0 and x["failing"] is None
+    # X-5: a made-up line longer than a datagram came back whole through the forwarder (the memory file's way)
+    long = x["long"]
+    assert long["as_written"] is True and long["exit"] == 0 and long["read"] == long["lines"]
+    assert max(long["lines"]) > forward_run.LONG and long["state"]["sent"] == 3 and long["state"]["failing"] is None
+    assert "came back whole (the memory file's way)" in journal_states(facts, events)["X26"][1]
 
 
 def test_m103ca_e7_x26_is_missed_when_its_part_is_broken_not_run_without_a_journal_and_never_raises(ran):
     events, facts = ran
     whole = [line.decode("ascii") for line in events.read_bytes().splitlines()]
     good = dict(facts, x26={"exit": 0, "delivery": "sent", "messages": whole, "read": len(whole), "asked": 1,
-                            "journalctl": {"exit": 0, "stderr": ""}})
+                            "journalctl": {"exit": 0, "stderr": ""},
+                            "long": {"as_written": True, "exit": 0, "lines": [100, 307300, 100],
+                                     "read": [100, 307300, 100]}})
 
     def state(change):
         f = json.loads(json.dumps(good))
@@ -497,6 +504,10 @@ def test_m103ca_e7_x26_is_missed_when_its_part_is_broken_not_run_without_a_journ
     assert state(lambda f: f.update(x26={"error": "OSError: x"}))[0] == check.MISSED
     assert state(lambda f: f["x26"].update(messages=5))[0] == check.MISSED                      # never raises
     assert state(lambda f: f["x26"].update(journalctl=7))[0] == check.MET
+    cut = state(lambda f: f["x26"]["long"].update(as_written=False, read=[100, None, 100]))   # X-5: the long line
+    assert cut[0] == check.MISSED and "the long line did NOT come back whole" in cut[1]
+    assert state(lambda f: f["x26"].pop("long"))[0] == check.MISSED
+    assert state(lambda f: f["x26"].update(long={"error": "OSError: x"}))[0] == check.MISSED
     assert state(lambda f: f.update(x26={"not_run": "not Linux (win32)"})) == (check.SKIP,
                                                                                "not run: not Linux (win32)")
     assert check.read_journal(None, "")[0][1] == check.MISSED
@@ -511,10 +522,13 @@ def test_m103ca_e7_forward_run_does_not_run_x26_off_linux_or_where_no_socket_is(
     assert forward_run.x26(None) == {"not_run": "not Linux (win32): the journal is Linux's (W-1)"}
     monkeypatch.setattr(forward_run, "PLATFORM", "linux")
     monkeypatch.setattr(forward_run, "JOURNAL", str(tmp_path / "none"))
-    assert forward_run.x26(None)["not_run"].startswith("no journal's socket at ")
+    # X-6: on Linux a journal that is not there is the rig's finding (MISSED), not a case that does not apply
+    assert forward_run.x26(None)["error"].startswith("no journal's socket at ")
     (tmp_path / "file").write_bytes(b"")
     monkeypatch.setattr(forward_run, "JOURNAL", str(tmp_path / "file"))
-    assert forward_run.x26(None)["not_run"].endswith("is no socket: no journal here")
+    assert forward_run.x26(None)["error"].endswith("is no socket: no journal on a Linux machine")
+    assert check.read_journal({"x26": forward_run.x26(None)}, "")[0][1] == check.MISSED
+    assert "--all" in forward_run.JOURNALCTL and "-b" in forward_run.JOURNALCTL   # X-5: long fields whole
     assert forward_run.JOURNAL_CASES == ("x26",) and forward_run.REAL_JOURNAL == "/run/systemd/journal/socket"
     assert forward_run.JOURNALCTL[:1] == ["journalctl"] and "-t" in forward_run.JOURNALCTL
 

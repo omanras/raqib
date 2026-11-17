@@ -53,7 +53,7 @@ JOURNAL_CASES = ("x26",)               # W-8: to the journal, Linux only
 JOURNAL = "/run/systemd/journal/socket"   # the journal's socket, as raqib/forward.py's JOURNAL (a test: a stand-in)
 REAL_JOURNAL = JOURNAL
 PLATFORM = sys.platform
-JOURNALCTL = ["journalctl", "--no-pager", "-o", "json", "-t", "raqib"]
+JOURNALCTL = ["journalctl", "--no-pager", "--all", "-b", "-o", "json", "-t", "raqib"]   # X-5: --all: long fields whole
 READ_S = 30.0                          # journalctl is asked again for at most this long after the send
 JOURNAL_RUN = ("import sys\nfrom raqib import cli, forward\nforward.JOURNAL = sys.argv[1]\n"
                "sys.exit(cli.main(['forward'] + sys.argv[2:]))")
@@ -306,16 +306,55 @@ def _text(value):
     return value if isinstance(value, str) else None
 
 
+LONG = 300 * 1024   # X-5: a made-up line longer than the journal's socket takes as a datagram (measured: 212000)
+
+
+def journal_long(r):
+    """X-5: three made-up events, the second LONG bytes, to the journal by the forwarder: the long one goes as a
+    sealed memory file (W-3). What journalctl read back of them: each MESSAGE's length and whether it is the
+    line as written."""
+    from raqib import event
+    facts = {"run": "rig-long", "mode": "host", "platform": "linux", "version": "0.0.0", "host": "rig.example",
+             "beat": 20.0}
+    rows = []
+    for n, pad in ((1, 0), (2, LONG), (3, 0)):
+        e = event.note({"text": "rig long %d%s" % (n, "x" * pad)}, facts, "2026-11-17T07:50:0%d.250Z" % n, n,
+                       "note:%d" % n)
+        rows.append(event.line(e))
+    path = os.path.join(r.home, "long.jsonl")
+    with open(path, "wb") as f:
+        f.write(("\n".join(rows) + "\n").encode("ascii"))
+    more = [path, "--to", "journal:", "--name", "rig-x26-long", "--beat", "1", "--once"]
+    argv = FORWARD + more if JOURNAL == REAL_JOURNAL else [sys.executable, "-c", JOURNAL_RUN, JOURNAL] + more
+    proc, out = r.start("x26 long", argv)
+    try:
+        proc.wait(120)
+    except subprocess.TimeoutExpired:
+        pass
+    code = r.end("x26 long", proc, out)
+    got, end = ([], None, None), time.monotonic() + READ_S
+    while True:
+        got = journal_read(proc.pid)
+        if len(got[0]) >= len(rows) or time.monotonic() >= end:
+            break
+        time.sleep(0.25)
+    messages = [_text(e.get("MESSAGE")) for e in got[0]]
+    return {"exit": code, "lines": [len(x) for x in rows], "read": [len(m) if isinstance(m, str) else None
+                                                                    for m in messages],
+            "as_written": messages == rows, "journalctl": {"exit": got[1], "stderr": got[2]},
+            "state": {k: (r.state("rig-x26-long") or {}).get(k) for k in ("sent", "refused", "failing", "behind")}}
+
+
 def x26(r):
     """W-8: the whole file to the journal, --once, read back by journalctl; not run where there is no journal."""
     if not PLATFORM.startswith("linux"):
         return {"not_run": "not Linux (%s): the journal is Linux's (W-1)" % PLATFORM}
-    try:
+    try:   # X-6: on Linux a journal that is not there is a finding of the rig, not a case that does not apply
         mode = os.stat(JOURNAL).st_mode
     except OSError as exc:
-        return {"not_run": "no journal's socket at %s (%s)" % (JOURNAL, type(exc).__name__)}
+        return {"error": "no journal's socket at %s (%s) on a Linux machine" % (JOURNAL, type(exc).__name__)}
     if not stat.S_ISSOCK(mode):
-        return {"not_run": "%s is no socket: no journal here" % JOURNAL}
+        return {"error": "%s is no socket: no journal on a Linux machine" % JOURNAL}
     with open(r.events, "rb") as f:
         want = f.read().count(b"\n")
     name = "rig-x26"
@@ -341,7 +380,11 @@ def x26(r):
         time.sleep(0.25)
     entries = got[0]
     r.run("x26 status", FORWARD + ["--status", name])
-    return {"exit": code, "pid": proc.pid, "socket": JOURNAL, "lines": want, "asked": asked,
+    try:
+        long = journal_long(r)
+    except Exception as exc:   # the rig's own failure is said, never raised
+        long = {"error": "%s: %s" % (type(exc).__name__, exc)}
+    return {"exit": code, "pid": proc.pid, "socket": JOURNAL, "lines": want, "asked": asked, "long": long,
             "journalctl": {"exit": got[1], "stderr": got[2]}, "read": len(entries),
             "messages": [_text(e.get("MESSAGE")) for e in entries],
             "identifiers": sorted(set(str(_text(e.get("SYSLOG_IDENTIFIER"))) for e in entries)),

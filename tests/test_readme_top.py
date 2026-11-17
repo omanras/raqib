@@ -96,7 +96,7 @@ GUIDE_ROWS = ["| `raqib events FILE` | check a watch's events file (`~/.raqib/ho
               "raqib, SYSLOG_FACILITY 13 unless `--facility N`, and RAQIB_ID, RAQIB_KIND, RAQIB_HOST and "
               "RAQIB_TIME where the event holds them as text; an entry too long for a datagram is handed as a "
               "sealed memory file, never cut; taken is `sent`, nothing is known, at most 250 lines a second; no "
-              "token, `--ca`, `--plain`, `--shape` or `--framing`); a line "
+              "token, `--ca`, `--plain`, `--shape hec` or `--framing`); a line "
               "that is not an event is skipped and counted, never sent; a line the collector refuses alone is "
               "counted and passed only when it is refused alone again after a later line was taken (until then "
               "it is failing `refusing` and the cursor waits); its cursor and state are "

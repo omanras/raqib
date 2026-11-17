@@ -867,7 +867,7 @@ class JournalSend(Send):
         thread's own and closed by it."""
         fd = None
         try:
-            fd = os.memfd_create("raqib-journal", os.MFD_ALLOW_SEALING)
+            fd = os.memfd_create("raqib-journal", os.MFD_ALLOW_SEALING | getattr(os, "MFD_CLOEXEC", 0))
             view = memoryview(entry)
             while view:
                 view = view[os.write(fd, view):]
@@ -1379,12 +1379,16 @@ class Forwarder:
         if r.kind == "taken" and self.size < self.batch:   # N-1: a taken send doubles it, up to --batch
             self.size = min(self.batch, self.size * 2)
             self.say("a send was taken: the next batch is %d line(s)" % self.size)
-        elif r.kind == "failed" and r.error == "late" and r.phase in ("send", "answer"):
-            size = max(1, len(lines) // 2)   # M-4, N-1: late in its request or its answer, halved down to one
+        elif r.kind == "failed" and (r.error == "late" and r.phase in ("send", "answer") or
+                                     self.to_journal and r.error == "write"):
+            # M-4, N-1: late in its request or its answer, halved down to one. X-4: an entry the journal would
+            # not take is halved too, so the lines before it are not handed again at every try
+            size = max(1, len(lines) // 2)
             if size < self.size:
                 self.size = size
                 self.say("a send of %d line(s) was late (%s): the next batch is %d" % (
-                    len(lines), ("its bytes not written" if r.phase == "send" else "no orderly end of the connection")
+                    len(lines), ("an entry not handed" if r.error == "write" else "its bytes not written"
+                                 if r.phase == "send" else "no orderly end of the connection")
                     if self.syslog or self.to_journal else "its request not sent" if r.phase == "send" else "no whole answer",
                     self.size))
         return r
@@ -1462,6 +1466,8 @@ class Forwarder:
             self.skipped += 1
         elif not ln.long and self.dest["scheme"] == "syslog+udp" and self.wire_len(ln) <= MAX_BYTES:
             self.count_refused(ln, "locally: longer than one datagram may be (over %d bytes, J-6)" % DATAGRAM_MAX)
+        elif self.to_journal:   # X-2: the forwarder's own bound of a line, whatever carries it
+            self.count_refused(ln, "locally: longer than one batch may be (%d KiB, J-11)" % (MAX_BYTES // 1024))
         else:
             self.count_refused(ln, "locally: longer than one request may be (J-11)")
         self.pass_line(ln)
@@ -1498,7 +1504,8 @@ class Forwarder:
                 more = ("the cursor stays before them; %d line(s) in question from offset %d (asked alone as far as"
                         " offset %d) wait for a later line taken" % (self.question, self.offset, self.reach))
             self.say("failing: %s (%s%s); %d tr%s; %s" % (
-                r.error, (SYSLOG_ERRORS if self.syslog else ERRORS).get(r.error, r.error), "" if r.status is None else ", status %d" % r.status,
+                r.error, link.errors_of(self.dest["scheme"]).get(r.error, r.error),
+                "" if r.status is None else ", status %d" % r.status,
                 self.failing["tries"], "y" if self.failing["tries"] == 1 else "ies", more))
 
     def failed(self, r):

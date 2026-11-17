@@ -212,6 +212,17 @@ def _state_problem(old):
     return None
 
 
+# X-3: a journal has no collector, no connection and no answer: its failing words say what it is
+JOURNAL_ERRORS = dict(ERRORS, connect="the journal's socket is not there, or takes no entry",
+                      late="the entries were not handed to the journal within the bound",
+                      write="an entry could not be handed to the journal")
+
+
+def errors_of(scheme):
+    """The words of failing.error for a destination's scheme (J-9, P-5, X-3)."""
+    return SYSLOG_ERRORS if scheme in SYSLOG else JOURNAL_ERRORS if scheme == JOURNAL else ERRORS
+
+
 FACTS = 5   # T-2: judge's first lines describe a state it could read; what follows them says why it is judged so
 
 
@@ -228,7 +239,8 @@ def judge(state, now):
         inq = state.get("in_question") or {"count": 0, "since": None}
         lines = ["to %s (shape %s, delivery %s%s%s)" % (
                      where(dest), state["shape"], state["delivery"],
-                     "" if "facility" not in state else ", facility %d, framing %s" % (
+                     "" if "facility" not in state else ", facility %d" % state["facility"]   # X-3: no framing
+                     if dest["scheme"] == JOURNAL else ", facility %d, framing %s" % (
                          state["facility"], state.get("framing") or "none: one datagram a message"),
                      ", plain: not encrypted" if state["plain"] else ""),
                  "file %s, cursor %d (from the %s, offset %d)" % (state["file"], cursor["offset"],
@@ -254,8 +266,7 @@ def judge(state, now):
                                      " (stopped, killed or stuck)" % age]
     if failing:
         return 1, "FAILING", lines + ["failing since %s: %s (%s), %d tr%s%s" % (
-            failing["since"], failing["error"], (SYSLOG_ERRORS if dest["scheme"] in SYSLOG else
-                                                 ERRORS)[failing["error"]], failing["tries"],
+            failing["since"], failing["error"], errors_of(dest["scheme"])[failing["error"]], failing["tries"],
             "y" if failing["tries"] == 1 else "ies",
             "" if failing.get("status") is None else ", status %d" % failing["status"])]
     if inq["count"] and (asked is None or written - asked > beat):

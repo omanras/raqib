@@ -456,7 +456,13 @@ def read_journal(facts, events):
         want = _whole_event_lines(events)
         got = _first_arrivals([m for m in x.get("messages") or [] if isinstance(m, str)])
         lost = [i for i, line in enumerate(want, 1) if line not in set(got)]
-        ok = bool(want) and got == want and x.get("exit") == 0 and x.get("delivery") == "sent"
+        long = x.get("long") if isinstance(x.get("long"), dict) else {}
+        long_ok = long.get("as_written") is True and long.get("exit") == 0   # X-5: the memory file's way, shown
+        long_said = ("a made-up line of %s bytes came back whole (the memory file's way)" % max(long["lines"])
+                     if long_ok and long.get("lines") else "the long line did NOT come back whole: %s" % (
+                         long.get("error") or "sent %s, read %s, exit %s" % (
+                             long.get("lines"), long.get("read"), long.get("exit"))))
+        ok = bool(want) and got == want and x.get("exit") == 0 and x.get("delivery") == "sent" and long_ok
         words = ("the events file holds no whole event to forward" if not want else
                  "%d of %d line(s) in the journal%s%s" % (
                      len(want) - len(lost), len(want), ", as written and in the file's order" if got == want else
@@ -466,8 +472,9 @@ def read_journal(facts, events):
                      if lost else ""))
         jc = x.get("journalctl") if isinstance(x.get("journalctl"), dict) else {}
         return [(name, MET if ok else MISSED,
-                 "%s; %s entr(y/ies) read by journalctl (exit %s, asked %s time(s)); delivery %s; --once exit %s%s" % (
-                     words, x.get("read"), jc.get("exit"), x.get("asked"), x.get("delivery"), x.get("exit"),
+                 "%s; %s; %s entr(y/ies) read by journalctl (exit %s, asked %s time(s)); delivery %s; --once exit"
+                 " %s%s" % (
+                     words, long_said, x.get("read"), jc.get("exit"), x.get("asked"), x.get("delivery"), x.get("exit"),
                      "" if ok or not jc.get("stderr") else "; journalctl said: %s" % str(jc["stderr"])[:120]))]
     except Exception as exc:   # never raises: facts that cannot be read are MISSED
         return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
