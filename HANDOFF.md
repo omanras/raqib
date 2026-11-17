@@ -1,12 +1,21 @@
-# HANDOFF — no builder task (the next step waits for the commander's word)
+# HANDOFF — M10.3c-a  (ADR-0011 Amendment W: the journal as a destination of the forwarder)
 
-Task: none. M10.4 landed: the link's state is read by raqib/link.py and shown by the window's Link screen
-(ADR-0011 R to V). Next in the commander's order are the local sinks (the Windows event log, the journal) and
-the service. Both write outside ~/.raqib, which the threat model says Raqib never does: that line is the
-commander's to move, not the Table's. The Table has asked; meanwhile it works the recorded items that need no
-such word.
+Task: `raqib forward --to journal:` hands each whole line of the events file to the system's journal by the journal's native protocol, on the forwarder's same machine (cursor, state, status). Linux only. The watch is not touched.
 
 Scope:
-  (nothing)
+  raqib/forward.py, raqib/link.py (only: the scheme, its delivery word and `where` for it, the state's check), raqib/cli.py (help strings only), tests/test_forward_journal.py (new), tests/test_forward.py and tests/test_link.py (only a line that lists every scheme or delivery word, each change named in the questions file), tools/rig/forward_run.py, tools/rig/check.py (X26 only), tests/test_forward_rig.py, docs/specs/FORWARD.md, docs/THREAT_MODEL.md, docs/GUIDE.md, tests/test_readme_top.py (only the guide's new or changed lines in its registry), docs/review/2026-11-17-M10.3c-a-questions.md
 
-A builder that reads this: STOP. Commit nothing.
+Exit criteria:
+- E1 (W-1, W-6) `--to journal:` is a destination: exactly that URL (anything after the colon is exit 2 with the reason); with it --token-file, --ca, --plain, --shape and --framing are exit 2, each with its reason; --facility N is taken (0 to 23, 13 by default). The state holds the scheme `journal`, the delivery `sent`, `facility`, and nothing of a host or a port in a way `link.judge`, `--status` and the window's Link screen read without a special case of their own (tests through link.read and status; `where` says "the journal").
+- E2 (W-2) One entry a line by the native protocol (fields `KEY=value\n`; a value that holds a newline as `KEY\n`, its length as 8 bytes little-endian, the value, `\n`): MESSAGE the line as written without its newline, PRIORITY (high 2, medium 4, low 5, a hole 4, none and info 6), SYSLOG_IDENTIFIER raqib, SYSLOG_FACILITY, and RAQIB_ID, RAQIB_KIND, RAQIB_HOST, RAQIB_TIME where the event holds them as text of no more than 256 characters with no control character (else that field is left out; MESSAGE is always the line). A test's stand-in journal (a datagram socket in the test's folder) parses the entries back and compares each MESSAGE with the file's line, byte for byte, in order. No event makes building an entry raise (odd events as P-1's test feeds them).
+- E3 (W-3) An entry the socket refuses as too long (EMSGSIZE) is handed as a sealed memory file sent with the socket's own message (sendmsg with the descriptor; never socket.send_fds, which drops the address): the stand-in receives the descriptor, reads the entry whole and compares it. Where the system has no memory file (not Linux) or that send fails, it is a failed send (`write`), never a cut and never a pass. Tests: a line of 300 KiB; the threshold by the stand-in's own limit, not a constant.
+- E4 (W-4) Delivery `sent`; the forwarder sends at most 250 lines a second to the journal (one constant; the wait after a batch is asked of the forwarder's injected wait, never slept in a test; Stop ends the wait at once). Tests: the waits asked for 1000 lines; a Stop during a wait.
+- E5 (W-5) No socket at the journal's path, or a path that is no socket: failing `connect`, nothing passes, tried again (J-10), `--once` exits 1; when the socket appears the lines go, none lost (a test). On a system that is not Linux `--to journal:` is exit 2 saying so.
+- E6 The cursor's machine, the lines in question, the HTTP and syslog sends and their tests are unchanged (tests/test_forward.py passes with no change but E1's allowed lines). raqib/forward.py's imports stay within tests/test_rhythm.py's guard, unchanged.
+- E7 (W-8) tools/rig/forward_run.py, on Linux with the journal's socket there, forwards the made-up events file to the journal under an identifier of its own run and reads it back with journalctl; tools/rig/check.py X26: every whole line arrived, in order (MET), NOT MET with what is missing, or NOT RUN with the reason on a machine with no journal (Windows). The check never raises.
+- E8 (W-0, W-7) docs/THREAT_MODEL.md: the sentence that the only writes are under ~/.raqib says the line as W-0 moved it; W-7's two limits (who reads, who else can write) and W-4's (a loss unseen); no milestone token. docs/specs/FORWARD.md: the destination, its fields, `sent`, the pace, no journal. docs/GUIDE.md: the forward row. A test holds the sentences that matter.
+- E9 Gate green in the foreground; ASCII outside docs; no test needs a real journal.
+Not in scope: raqib/host.py, raqib/app.py, raqib/eventlog.py, raqib/event.py, tests/test_rhythm.py, .github/workflows/, `eventlog:`, any install.
+If an exit criterion needs a file outside Scope: STOP and say which. Do not change a guard test to pass.
+Commit: `landed: M10.3c-a the journal as a destination` or `STOP: M10.3c-a <reason>`.
+Read HANDOFF.md and do only the task it specifies.

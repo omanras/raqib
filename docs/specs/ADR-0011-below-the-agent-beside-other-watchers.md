@@ -980,3 +980,43 @@ sentence of the rail still lists four items (a test of another task holds its wo
 the fifth); E6's test of the watch's independence rests on the code reading nothing of the link - true by
 reading, thin as a test. Recorded: the folder walked whole on each read; a beat without an upper bound.
 
+## Amendment W (the commander's word, 2026-11-17, and the Table's rulings on it) - the local sinks (M10.3c)
+The Table asked: the local sinks (the journal, the Windows event log) and the service write outside ~/.raqib,
+which the threat model says Raqib never does; may that line move? The Table proposed, and the commander
+said yes to it: outside ~/.raqib Raqib writes only by an explicit command; what needs rights (an install and
+its removal) is run by an administrator; the watch never does it on its own; and the sinks come first, as
+destinations of the forwarder, so that the watch itself still writes its file only.
+- W-0 (the line, as moved). `raqib watch` and the window write under ~/.raqib and nowhere else, as before.
+  `raqib forward --to journal:` and `--to eventlog:` hand the events to the system's own log because a person
+  ran them. Nothing is installed, registered or switched on by either; an install is a command of its own
+  (later), with its removal. MUST NOT TOUCH: the watch, the capture path, the events file.
+- W-1 (a sink is a destination). The same forwarder, cursor, state, status and Link screen: `journal:` on
+  Linux (this task), `eventlog:` on Windows (the next, after its limits are measured). A destination that is
+  not this system's is a usage error.
+- W-2 (the journal, by its own protocol; measured on a Linux runner before ruling). One entry a line, by
+  the native protocol to the journal's socket, from the user's own process with no rights: MESSAGE the line
+  as written (a shape wraps the line, it never rewrites it), PRIORITY from the event's severity as syslog's
+  is (J-6), SYSLOG_IDENTIFIER raqib, SYSLOG_FACILITY 13 unless --facility, and RAQIB_ID, RAQIB_KIND,
+  RAQIB_HOST, RAQIB_TIME from the event where they are text. Measured: such entries were read back by
+  `journalctl -t`, in order.
+- W-3 (no line is too long). An entry the socket takes as a datagram is sent as one (measured: 212000 bytes
+  taken, 250000 refused); a longer one is handed as a sealed memory file, the journal's own way (measured to
+  5 MB, kept whole). Nothing is cut, and nothing is refused for its length.
+- W-4 (`sent`: nothing is known). The journal answers nothing. It may drop entries over its own rate limit,
+  unseen by the sender (measured: a burst of 40000 was kept whole on a runner; other hosts are set
+  otherwise). The forwarder paces itself, at most 250 lines a second, and the documents say what tells of a
+  loss: the journal's own line of suppressed messages, and the search for a missing heartbeat.
+- W-5 (no journal is a collector that is down). Where the socket is not there the forwarder is failing
+  (`connect`), says so, and tries again, as with any collector (J-10); it falls back to nothing.
+- W-6 (what does not apply is refused). No token, no --ca, no --plain, no --shape, no --framing with
+  `journal:`; the state says the scheme and the delivery word, and nothing of a host or a port.
+- W-7 (who reads it, and who else can write it; said). What goes to the journal is read by whoever reads the
+  journal (root, the journal's and adm's groups, the user's own), and the journal may pass it on (measured:
+  ForwardToSyslog=yes on a runner): the events then leave the host by the system's hand, not Raqib's. Any
+  process of the user - the watched agent is one - can write entries that say raqib: the journal's own
+  trusted fields (_PID, _UID, _EXE) say who wrote an entry, and a reader of the journal must ask them.
+- W-8 (the rig). X26, on the Linux machine: every whole line of the events file is in the journal, in
+  order, read back by journalctl.
+Not here, recorded: `eventlog:`; an install for it (a registered source, an administrator's, with its
+removal); the service.
+
