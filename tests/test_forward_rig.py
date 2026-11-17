@@ -1,6 +1,7 @@
 """M10.3 E7 and the REDO's E7 (ADR-0011 J-14, L-10): the rig's stand-in collector (tools/rig/collector.py), its
 forwarder run (tools/rig/forward_run.py) and X19 to X22 in tools/rig/check.py, offline: a made-up events file,
 loopback only. No verdict here waits for a time to pass: the collector's own counts and the states say it."""
+import hashlib
 import http.client
 import importlib.util
 import json
@@ -140,10 +141,28 @@ def stand_in_read(stand_in):
     return read
 
 
+def fake_eventlog_read(path):
+    """M10.3c-b: forward_run.eventlog_read over the made-up system's file (forward_run.FakeAdvapi): the events of
+    the process `pid`, as wevtutil prints them (one <Event> after another, no root element)."""
+    def read(pid):
+        try:
+            with open(path, encoding="utf-8") as f:
+                rows = f.read().splitlines()
+        except OSError:
+            rows = []
+        keep = [row for row in rows if "ProcessID='%d'" % pid in row]
+        return "".join(row + "\r\n" for row in keep), 0, ""
+    return read
+
+
 @pytest.fixture(autouse=True)
-def no_real_journal(monkeypatch):
-    """M10.3c-a: no test here reaches the journal or /run: forward_run's JOURNAL is a path where nothing is."""
+def no_real_journal(monkeypatch, tmp_path):
+    """M10.3c-a: no test here reaches the journal or /run: forward_run's JOURNAL is a path where nothing is.
+    M10.3c-b: nor the Windows event log, on any platform: X27 runs the forwarder with a made-up advapi32 writing
+    to a file of the test's own, and reads that file back."""
     monkeypatch.setattr(forward_run, "JOURNAL", os.path.join(tempfile.gettempdir(), "rqj-none", "j"))
+    monkeypatch.setattr(forward_run, "EVENTLOG_FAKE", str(tmp_path / "eventlog-fake.xml"))
+    monkeypatch.setattr(forward_run, "eventlog_read", fake_eventlog_read(str(tmp_path / "eventlog-fake.xml")))
 
 
 @pytest.fixture(scope="module")
@@ -156,6 +175,8 @@ def ran(tmp_path_factory):
     try:
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(forward_run, "JOURNAL", os.path.join(folder, "j"))
+            mp.setattr(forward_run, "EVENTLOG_FAKE", str(tmp / "eventlog-fake.xml"))   # M10.3c-b: never the system's
+            mp.setattr(forward_run, "eventlog_read", fake_eventlog_read(str(tmp / "eventlog-fake.xml")))
             if JOURNAL_HERE:
                 stand_in = journal_tests.StandIn(os.path.join(folder, "j"))
                 mp.setattr(forward_run, "journal_read", stand_in_read(stand_in))
@@ -543,3 +564,117 @@ def test_m103ca_e7_check_main_says_x26(ran, tmp_path, capsys):
                        "--strict"]) in (0, 1)
     out = capsys.readouterr().out
     assert re.search(r"^MET +X26 " if JOURNAL_HERE else r"^n/a +X26 .*not run: ", out, re.M), out
+
+
+# --- M10.3c-b (ADR-0011 Y-7): X27, the Windows event log, read back by wevtutil ---------------------------------
+NS = "http://schemas.microsoft.com/win/2004/08/events/event"
+
+
+def made_up_xml(lines, pid=4242, part=30000, ident=None):
+    """What wevtutil prints of the events of `lines` (one <Event> after another, no root element): a line of at
+    most `part` characters one event of one string; a longer one in parts (id 1009, the head, then the part)."""
+    from xml.sax.saxutils import escape
+    out = []
+
+    def one(eid, strings):
+        out.append("<Event xmlns='%s'><System><Provider Name='Raqib'/><EventID Qualifiers='0'>%d</EventID><Level>4"
+                   "</Level><Execution ProcessID='%d' ThreadID='8'/><Channel>Application</Channel></System>"
+                   "<EventData>%s</EventData></Event>\r\n" % (NS, eid, pid, "".join("<Data>%s</Data>" % escape(t)
+                                                                                    for t in strings)))
+    for line in lines:
+        if len(line) <= part:
+            one(1003, [line])
+            continue
+        n = -(-len(line) // part)
+        digest = hashlib.sha256(line.encode("utf-8")).hexdigest()
+        for i in range(n):
+            one(1009, ["raqib-part %d/%d id=%s sha256=%s chars=%d" % (i + 1, n, ident or "-", digest, len(line)),
+                       line[i * part:(i + 1) * part]])
+    return "".join(out)
+
+
+def eventlog_states(facts, events):
+    return {r[0].split(" ", 1)[0]: (r[1], r[2]) for r in check.read_eventlog(facts, events.read_text(encoding="ascii"))}
+
+
+def test_m103cb_e7_x27_is_met_by_the_forwarder_to_a_made_up_event_log_read_back_by_its_own_pid(ran):
+    events, facts = ran
+    x = facts["x27"]
+    said = eventlog_states(facts, events)["X27"]
+    assert said[0] == check.MET, said
+    whole = [line.decode("ascii") for line in events.read_bytes().splitlines()]
+    assert check.eventlog_lines(x["xml"]) == (whole, 0) and x["lines"] == len(whole) and x["exit"] == 0
+    assert x["delivery"] == "written" and x["destination"] == {"scheme": "eventlog"} and x["failing"] is None
+    assert x["pid"] > 0 and x["xml"].count("ProcessID='%d'" % x["pid"]) == x["read"] >= len(whole)
+    long = x["long"]
+    assert long["exit"] == 0 and long["lines"][1] == forward_run.LONG_EVENTLOG == 100000 and len(long["lines"]) == 3
+    assert long["xml"].count("<EventID Qualifiers='0'>1009</EventID>") == 4 and long["failing"] is None
+    assert "a made-up line of 100000 characters came back whole from its parts" in said[1]
+
+
+def test_m103cb_e7_x27_is_missed_when_its_part_is_broken_not_run_off_windows_and_never_raises(ran):
+    events, facts = ran
+    whole = [line.decode("ascii") for line in events.read_bytes().splitlines()]
+    longs = ["{\"a\":1}", "{\"b\":\"%s\"}" % ("x" * 99992), "{\"c\":3}"]
+    assert len(longs[1]) == 100000
+    good = dict(facts, x27={"exit": 0, "delivery": "written", "xml": made_up_xml(whole), "read": len(whole),
+                            "pid": 4242, "asked": 1, "wevtutil": {"exit": 0, "stderr": ""},
+                            "long": {"exit": 0, "xml": made_up_xml(longs, ident="r1:2"),
+                                     "lines": [len(t) for t in longs],
+                                     "sha256": [hashlib.sha256(t.encode("ascii")).hexdigest() for t in longs]}})
+    assert "<Events>" not in good["x27"]["xml"] and good["x27"]["xml"].startswith("<Event xmlns=")   # no root
+
+    def state(change):
+        f = json.loads(json.dumps(good))
+        change(f)
+        return eventlog_states(f, events)["X27"]
+    assert state(lambda f: None)[0] == check.MET
+    lost = state(lambda f: f["x27"].update(xml=made_up_xml(whole[:3] + whole[4:])))              # a line lost
+    assert lost[0] == check.MISSED and "missing: line 4" in lost[1]
+    assert state(lambda f: f["x27"].update(xml=made_up_xml(whole[::-1])))[0] == check.MISSED    # not in order
+    assert state(lambda f: f["x27"].update(xml=made_up_xml([whole[0] + " "] + whole[1:])))[0] == check.MISSED
+    assert state(lambda f: f["x27"].update(exit=1))[0] == check.MISSED
+    assert state(lambda f: f["x27"].update(delivery="sent"))[0] == check.MISSED
+    assert state(lambda f: f.pop("x27"))[0] == check.MISSED                                    # never ran
+    assert state(lambda f: f.update(x27={"error": "OSError: x"}))[0] == check.MISSED
+    assert state(lambda f: f["x27"].update(xml=5))[0] == check.MISSED                           # never raises
+    assert state(lambda f: f["x27"].update(xml="<Event"))[0] == check.MISSED                    # no XML
+    assert state(lambda f: f["x27"].update(wevtutil=7))[0] == check.MET
+    parts = good["x27"]["long"]["xml"].splitlines(True)
+    for broken in (parts[:2] + parts[3:],                     # a part missing
+                   parts[:1] + [parts[2], parts[1]] + parts[3:],   # parts out of order
+                   [p.replace("xxxx", "xxxy", 1) if "raqib-part 2/4" in p else p for p in parts]):   # its hash
+        cut = state(lambda f: f["x27"]["long"].update(xml="".join(broken)))
+        assert cut[0] == check.MISSED and "the long line did NOT come back whole" in cut[1], cut
+    repeated = parts[:3] + parts[1:]   # a batch handed again: its first part begins the line anew
+    assert state(lambda f: f["x27"]["long"].update(xml="".join(repeated)))[0] == check.MET
+    assert state(lambda f: f["x27"].pop("long"))[0] == check.MISSED
+    assert state(lambda f: f["x27"].update(long={"error": "OSError: x"}))[0] == check.MISSED
+    assert state(lambda f: f.update(x27={"not_run": "not Windows (linux)"})) == (check.SKIP,
+                                                                                 "not run: not Windows (linux)")
+    assert check.read_eventlog(None, "")[0][1] == check.MISSED
+    assert check.read_eventlog({"events_missing": True}, "")[0][1] == check.SKIP
+    assert check.read_eventlog(good, None)[0][1] == check.MISSED   # no events: nothing to compare
+
+
+def test_m103cb_e7_forward_run_does_not_run_x27_off_windows_and_reads_back_by_the_forwarders_own_pid(
+        monkeypatch):
+    monkeypatch.setattr(forward_run, "EVENTLOG_FAKE", None)
+    monkeypatch.setattr(forward_run, "eventlog_read", lambda pid: pytest.fail("the system was asked"))
+    for platform in ("linux", "darwin"):
+        monkeypatch.setattr(forward_run, "PLATFORM", platform)
+        assert forward_run.x27(None) == {"not_run": "not Windows (%s): the event log is Windows' (Y-5)" % platform}
+    assert check.read_eventlog({"x27": forward_run.x27(None)}, "")[0][1] == check.SKIP
+    assert forward_run.EVENTLOG_CASES == ("x27",) and forward_run.READ_S <= 60
+    assert forward_run.eventlog_count(made_up_xml(["{}", "x" * 60001])) == 4
+
+
+def test_m103cb_e7_check_main_says_x27(ran, tmp_path, capsys):
+    events, facts = ran
+    (tmp_path / "w.out").write_text(rig.REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(rig.WORKLOAD, encoding="utf-8")
+    (tmp_path / "f.json").write_text(json.dumps(facts), encoding="ascii")
+    assert check.main(["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--exit-code",
+                       "1", "--platform", "win32", "--events", str(events), "--forward", str(tmp_path / "f.json"),
+                       "--strict"]) in (0, 1)
+    assert re.search(r"^MET +X27 ", capsys.readouterr().out, re.M)

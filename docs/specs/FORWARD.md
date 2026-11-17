@@ -4,7 +4,8 @@
 `~/.raqib/host/events.jsonl`, as docs/specs/EVENT.md "For a reader of the file" says a reader may - and sends
 every whole line to one destination: an HTTP collector, or a syslog collector over `syslog+udp://`,
 `syslog+tcp://` or `syslog+tls://` (J-6; "Syslog" below), or the system's journal, `journal:` (W; "The journal"
-below). Syslog and the journal are other ways to send, not another machine: the cursor, the lines in question, the
+below), or the Windows event log, `eventlog:` (Y; "The Windows event log" below). Syslog, the journal and the
+event log are other ways to send, not another machine: the cursor, the lines in question, the
 state and the status are one for all. The watch does
 not know it runs: raqib/host.py, raqib/eventlog.py, raqib/event.py and raqib/hooks/ import nothing of
 raqib/forward.py, and no result, report or finding of a watch depends on a forwarder. The standard library only.
@@ -16,6 +17,7 @@ raqib/forward.py, and no result, report or finding of a watch depends on a forwa
                   [--once]
     raqib forward [FILE] --to journal: --name NAME [--facility N] [--beat S] [--from start|end] [--batch N]
                   [--once]
+    raqib forward [FILE] --to eventlog: --name NAME [--beat S] [--from start|end] [--batch N] [--once]
     raqib forward --status [NAME]
 
 ## What it sends, and what acknowledged means
@@ -287,6 +289,51 @@ wall clock set back or ahead delays nothing and hurries nothing. Only the state'
   words are the forwarder's own: `connect`, `write`, `late`, `stuck`, `file`, `unforeseen`.
 - Nothing is installed, registered or switched on: `raqib forward --to journal:` writes to the journal because a
   person ran it, and the watch never does (W-0).
+
+## The Windows event log (Y)
+
+- The form: `--to eventlog:`, exactly, in any case of letters (anything after the colon is exit 2 with the
+  reason), on Windows only: on another system it is exit 2 saying so (Y-5). With it `--token-file`, `--ca`,
+  `--plain`, `--shape hec`, `--framing` and `--facility` are exit 2, each with its reason.
+- One event a line, in the Application log under the source `Raqib`, by ReportEventW, with nothing registered
+  (Y-1): no key is written and no message file installed. The system's calls (advapi32's RegisterEventSourceW,
+  ReportEventW, DeregisterEventSource) go through one object made at the first send, never at import; the
+  source is opened once a send and closed on every way out. The event's one string is the line as written
+  without its newline (Y-2). Its type is from the severity: high Error; medium and a hole Warning; low, info and
+  none Information; a severity the event contract does not have, or none, Warning. Its id is from the event's
+  kind, so that a reader filters by id: 1001 finding, 1002 source-finding, 1003 note, 1004 tree, 1005 hole,
+  1006 knock, 1007 heartbeat, 1008 watch, and 1000 for a kind that is none of them.
+- A line longer than one string (Y-3): a line of more than 30000 characters goes as several events, in order,
+  each of two strings: the part's head, `raqib-part I/N id=ID sha256=HEX chars=TOTAL` (I the part, N how many,
+  ID the event's id where it is 1 to 128 printable ASCII characters with no space, else `-`; HEX the sha256 of
+  the whole line, TOTAL its length in characters), and that part of the line, at most 30000 characters. Every
+  part carries the id 1009 and the type of its line. A reader puts the parts' second strings together in order
+  and has the line; the hash and the length say it is whole. A part 1 begins a line anew: a batch handed again
+  after a refusal hands its parts again from the first. A line of exactly 30000 characters is one event. A batch
+  is taken only when every part of every line was taken: one part refused is a failed send, and nothing passes.
+  No line the forwarder reads whole (512 KiB at most, M-3) is refused for its length; a longer one is refused
+  locally, counted and named, as over every transport.
+- `written` (Y-4): the system's call returned that the log took the event; it is not a search of the log. The
+  Application log is bounded and overwrites its oldest: Raqib's events push other programs' out, and are pushed
+  out. The forwarder paces itself, at most 100 events a second, parts counted (after each batch it waits what
+  is left of the batch's share of a second; Stop ends the wait at once). A log of Raqib's own is an install's
+  work, later.
+- No source, no rights (Y-5): a source that cannot be opened is a collector that is down: failing `connect`,
+  nothing passes, tried again (J-10); `--once` exits 1. An event refused is failing `write`: nothing passes, and
+  the next batch is half of this one, down to one line, as the journal's (X-4); when the log takes events again
+  every line arrives, none lost. It falls back to nothing.
+- What the viewer shows (Y-1): the source is registered by nobody, so the Event Viewer says, before each string,
+  that the description for the event cannot be found ("The description for Event ID 1003 from source Raqib
+  cannot be found ...") and then shows the string. wevtutil gives the strings as the event's EventData/Data
+  elements, one a string. A registered source, which would end that sentence, is an install's work, an
+  administrator's, later.
+- Who reads it, and who else can write it (Y-6): whoever reads the Application log (by default any signed-in
+  user). Any process can write events under the source `Raqib`: the record's own process id and user are the
+  system's word, the source's name is nobody's - an event that says Raqib is a lead, not a proof (X-7).
+- The state: `destination` is `{"scheme": "eventlog"}` (nothing of a host, a port or a facility), `delivery`
+  `written`, no `facility` and no `framing`; `--status` and the window's Link screen say "to the Windows event
+  log" (`where`: "the Windows event log"). Its failing words are its own: `connect` (the source cannot be
+  opened), `write` (an event refused), `late` (not taken within the bound), with no collector in them.
 
 ## The secret and the wire (J-7, J-8, L-5)
 

@@ -1227,14 +1227,15 @@ is amended by T-2, T-1 restated by V-1).
   session is touched. `raqib watch` and the window write under ~/.raqib and nowhere else,
   and the hook settings of a project only with `--attach-hooks`. Outside ~/.raqib Raqib
   writes only by an explicit command: `raqib forward --to journal:` hands the events to the
-  system's journal because a person ran it. Nothing is installed, registered or switched on
-  by it, the watch never does it on its own, and the watch, the capture path and the events
-  file are not touched by it (ADR-0011 W-0).
+  system's journal because a person ran it, and `raqib forward --to eventlog:` hands them to
+  the Windows event log (the Application log) because a person ran it. Nothing is installed,
+  registered or switched on by either, the watch never does it on its own, and the watch, the
+  capture path and the events file are not touched by them (ADR-0011 W-0, Y-1).
 
 ### The forwarder (`raqib forward`; ADR-0011 Amendments J to N)
 A forwarder is a process of its own that reads the watch's events file and
 sends every whole line to one collector, over HTTP or over syslog, or
-hands it to the system's own journal
+hands it to the system's own journal or to the Windows event log
 (docs/specs/FORWARD.md). The
 watch does not know it runs: nothing of the capture path imports it, and a
 collector that is slow, down or refusing never delays or loses a capture
@@ -1308,6 +1309,24 @@ collector that is slow, down or refusing never delays or loses a capture
   journal's own line of suppressed messages and the search for a missing
   heartbeat. No journal (no socket) is a collector that is down: failing
   `connect`, tried again, nothing passes.
+- **The Windows event log.** `--to eventlog:` (Windows) hands each line,
+  as an event of the Application log under the source `Raqib`, by the
+  system's own call (ReportEventW), with nothing registered: no key is
+  written and no message file installed (ADR-0011 Y). Whoever reads the
+  Application log reads the events (by default any signed-in user). Any
+  process can write events under the source `Raqib`: the source's name is
+  nobody's, and only the record's own process id and user are the system's
+  word, so an event that says Raqib is a lead, not a proof (as an entry of
+  the journal that says raqib is); the watch's own events file and its
+  record are the proof. The Application log is bounded and overwrites its
+  oldest: Raqib's events push other programs' out, and are pushed out. The
+  forwarder paces itself, at most 100 events a second (the parts of a long
+  line counted); a log of Raqib's own is an install's work, later. Taken is
+  `written`: the system's call said the log took every event of a batch, not
+  that the event is still there. A source that cannot be opened is a
+  collector that is down: failing `connect`, tried again, nothing passes; an
+  event refused is failing `write`, nothing passes, and the next batch is
+  halved.
 - **Syslog.** Over `syslog+udp://` and `syslog+tcp://` every event is
   clear text over udp and tcp: any host on the path reads it whole, and can
   change it or drop it, and over udp can send datagrams with the host's

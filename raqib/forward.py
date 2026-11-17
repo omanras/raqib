@@ -28,6 +28,16 @@ datagram is handed as a sealed memory file (JournalSend.sealed), never cut. Take
 nothing; the forwarder paces itself to JOURNAL_PACE lines a second (pace). No socket there is `connect`, tried
 again as any collector that is down. No token, --ca, --plain, --shape or --framing.
 
+The Windows event log (ADR-0011 Y; `--to eventlog:`, Windows only): one event a line in the Application log
+under the source EVENTLOG_SOURCE, by ReportEventW with nothing registered (Y-1), its one string the line as
+written without its newline, its type from the severity and its id from the kind (eventlog_events, Y-2); a line
+of more than EVENTLOG_PART characters is handed in parts, in order, each two strings - a head that names the
+part, the whole line's sha256 and its length, and that part of the line - id EVENTLOG_PART_ID, never cut (Y-3).
+The system's calls go through one object (EventLogApi), made at the first send, never at import. Taken is
+`written`: the system's call said the log took every event of the batch (Y-4); at most EVENTLOG_PACE events a
+second, parts counted (pace). A source that cannot be opened is `connect`; an event refused is `write`, and the
+next batch is halved as the journal's is (X-4, Y-5). No token, --ca, --plain, --shape hec, --framing or --facility.
+
 The cursor and the lines in question (L-1, M-1, M-2, N-3, N-5). What a run holds, and what a try does with it:
 
 - the head (`head`, in the state): the sha256 of the file's first bytes, at most HEAD_MAX, and how many (N-3).
@@ -115,6 +125,7 @@ from __future__ import annotations
 import array
 import binascii
 import calendar
+import ctypes   # Y-2: the event log's calls (EventLogApi); nothing of Windows is loaded at import
 import datetime
 import errno
 import hashlib
@@ -142,6 +153,7 @@ from raqib import eventlog
 from raqib import host as host_watch
 from raqib import link
 from raqib import ui
+from raqib.link import EVENTLOG as EVENTLOG_SCHEME
 from raqib.link import JOURNAL as JOURNAL_SCHEME
 from raqib.link import (DELIVERIES, DELIVERY, DELIVERY_OF, DIR_NAME, ERRORS, FACILITIES, FRAMINGS, HEAD_MAX, KEYS,
                         LATER, NAME, SCHEMA, SCHEMES, SHA, SHAPES, STATUS_RULE, SYSLOG, SYSLOG_ERRORS, SYSLOG_KEYS,
@@ -156,6 +168,19 @@ JOURNAL = "/run/systemd/journal/socket"    # W-2: the journal's socket; Forwarde
 JOURNAL_PACE = 250                         # W-4: at most this many lines a second to the journal
 JOURNAL_TEXT_MAX = 256                     # W-2: a RAQIB_ field is text of at most this many characters
 JOURNAL_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")   # W-2: a RAQIB_ field holds no control character
+EVENTLOG_SOURCE = "Raqib"                  # Y-1: the source's name in the Application log; nobody registered it
+EVENTLOG_PACE = 100                        # Y-4: at most this many events a second to the event log, parts counted
+EVENTLOG_PART = 30000                      # Y-3: a line of more characters than this is handed in parts this long
+EVENTLOG_HEAD_MAX = 300                    # Y-3: a part's head is at most this many characters
+EVENTLOG_PART_ID = 1009                    # Y-3: the id of every part's event
+EVENTLOG_ID_ELSE = 1000                    # Y-2: the id of a kind that is none of EVENTLOG_IDS
+EVENTLOG_IDS = {"finding": 1001, "source-finding": 1002, "note": 1003, "tree": 1004, "hole": 1005, "knock": 1006,
+                "heartbeat": 1007, "watch": 1008}   # Y-2: the event's id by its kind, so that a reader filters by id
+EVENTLOG_ERROR, EVENTLOG_WARNING, EVENTLOG_INFORMATION = 1, 2, 4   # the event types ReportEventW takes
+EVENTLOG_TYPES = {"high": EVENTLOG_ERROR, "medium": EVENTLOG_WARNING, "hole": EVENTLOG_WARNING,
+                  "low": EVENTLOG_INFORMATION, "info": EVENTLOG_INFORMATION, "none": EVENTLOG_INFORMATION}   # Y-2
+EVENTLOG_TYPE_ELSE = EVENTLOG_WARNING      # a severity the event contract does not have, or none: never calm
+EVENTLOG_HEAD_ID = re.compile(r"[\x21-\x7e]{1,128}\Z")   # Y-3: the id in a part's head, else "-"
 # W-3: a memory file's seals (Linux's fixed values where this Python does not name them): no seal more, no shrink,
 # no growth, no write - what the journal is handed cannot change under it
 F_ADD_SEALS = getattr(fcntl, "F_ADD_SEALS", 1033)
@@ -258,15 +283,21 @@ def destination(url, plain=False):
             raise UsageError("--to journal: is the whole destination: the system's own journal, by its own socket;"
                              " nothing follows the colon (no host, port, path or option), not %r" % url)
         return {"scheme": JOURNAL_SCHEME}, None
+    if url[:len(EVENTLOG_SCHEME) + 1].lower() == EVENTLOG_SCHEME + ":":   # Y-1, Y-5: the scheme and nothing else
+        if len(url) != len(EVENTLOG_SCHEME) + 1:
+            raise UsageError("--to eventlog: is the whole destination: the Windows event log (the Application log,"
+                             " the source Raqib); nothing follows the colon (no host, port, path or option), not %r"
+                             % url)
+        return {"scheme": EVENTLOG_SCHEME}, None
     try:
         parts = urlsplit(url)
         port = parts.port
     except ValueError:
         raise UsageError("--to: not a URL with a valid port")
     scheme = parts.scheme.lower()
-    if scheme not in SCHEMES or scheme == JOURNAL_SCHEME:
+    if scheme not in SCHEMES or scheme in (JOURNAL_SCHEME, EVENTLOG_SCHEME):
         raise UsageError("--to: an http:// or https:// collector, or syslog over syslog+udp://, syslog+tcp:// or"
-                         " syslog+tls://, or journal: (Linux)")
+                         " syslog+tls://, or journal: (Linux), or eventlog: (Windows)")
     if "@" in parts.netloc:
         raise UsageError("--to: no user information in the URL (the token is read from --token-file only, J-7)")
     host = parts.hostname
@@ -472,6 +503,46 @@ def journal_entry(raw, obj, facility=FACILITY):
     return b"".join([journal_field(b"MESSAGE", line), journal_field(b"PRIORITY", b"%d" % priority),
                      journal_field(b"SYSLOG_IDENTIFIER", b"raqib"), journal_field(b"SYSLOG_FACILITY", b"%d" % facility)]
                     + more)
+
+
+def eventlog_type(obj):
+    """Y-2: the event's type from its severity: high Error; medium and a hole Warning; low, info and none
+    Information. A severity the event contract does not have, or none at all, is a Warning (never calm)."""
+    sev = obj.get("severity") if isinstance(obj, dict) else None
+    return EVENTLOG_TYPES.get(sev, EVENTLOG_TYPE_ELSE) if isinstance(sev, str) else EVENTLOG_TYPE_ELSE
+
+
+def eventlog_id(obj):
+    """Y-2: the event's id from its kind by the fixed table EVENTLOG_IDS; 1000 for a kind that is none of them."""
+    kind = obj.get("kind") if isinstance(obj, dict) else None
+    return EVENTLOG_IDS.get(kind, EVENTLOG_ID_ELSE) if isinstance(kind, str) else EVENTLOG_ID_ELSE
+
+
+def eventlog_events(raw, obj):
+    """Y-2, Y-3: one line as what the event log is handed - a list of (type, id, strings), in order. A line of at
+    most EVENTLOG_PART characters is one event, its one string the line as written without its newline. A longer
+    one is handed in parts of EVENTLOG_PART characters, in order, each an event of two strings - its head,
+    `raqib-part I/N id=ID sha256=HEX chars=TOTAL` (ID the event's id where it is 1 to 128 printable ASCII
+    characters with no space, else "-"; HEX and TOTAL the whole line's sha256 and length), then that part of the
+    line - with the id EVENTLOG_PART_ID and the line's own type: a reader puts the second strings together in
+    order and has the line. An event's line is ASCII (EVENT.md); P-1: it never raises, whatever the line holds."""
+    line = raw[:-1] if raw.endswith(b"\n") else raw
+    try:
+        text = line.decode("ascii")
+    except UnicodeDecodeError:   # never an event's line (classify reads ASCII only); said, never a traceback
+        text = line.decode("utf-8", "replace")
+    try:
+        kind, ident = eventlog_type(obj), eventlog_id(obj)
+        named = obj.get("id") if isinstance(obj, dict) else None
+        named = named if isinstance(named, str) and EVENTLOG_HEAD_ID.match(named) else "-"
+    except Exception:   # P-1: no event ends the forwarder; the string still carries the line as written
+        kind, ident, named = EVENTLOG_TYPE_ELSE, EVENTLOG_ID_ELSE, "-"
+    if len(text) <= EVENTLOG_PART:
+        return [(kind, ident, (text,))]
+    count, digest = -(-len(text) // EVENTLOG_PART), hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return [(kind, EVENTLOG_PART_ID, ("raqib-part %d/%d id=%s sha256=%s chars=%d" % (
+        i + 1, count, named, digest, len(text)), text[i * EVENTLOG_PART:(i + 1) * EVENTLOG_PART]))
+        for i in range(count)]
 
 
 def _sha(raw):
@@ -883,17 +954,94 @@ class JournalSend(Send):
                 os.close(fd)
 
 
+def eventlog_dll(name):
+    """Y-2: a DLL of the system's, as EventLogApi loads it unless given its own loader (a test replaces this)."""
+    return ctypes.WinDLL(name, use_last_error=True)
+
+
+class EventLogApi:
+    """Y-2: the three calls of advapi32 the event log's send makes, with their ctypes signatures as measured -
+    RegisterEventSourceW (a handle for the source, registered or not), ReportEventW (nonzero where the log took
+    the event), DeregisterEventSource. Every call of the system goes through this one object; `loader(name)` gives
+    the DLL (eventlog_dll unless a test gives its own). Windows only: it is made at the forwarder's first send
+    (Forwarder.eventlog_api), never at import."""
+
+    def __init__(self, loader=None):
+        dll = (loader or eventlog_dll)("advapi32")
+        handle, word, dword, boolean = ctypes.c_void_p, ctypes.c_ushort, ctypes.c_ulong, ctypes.c_long
+
+        def fn(name, restype, *argtypes):
+            f = getattr(dll, name)
+            f.restype, f.argtypes = restype, list(argtypes)
+            return f
+        self.RegisterEventSourceW = fn("RegisterEventSourceW", handle, ctypes.c_wchar_p, ctypes.c_wchar_p)
+        self.ReportEventW = fn("ReportEventW", boolean, handle, word, word, dword, ctypes.c_void_p, word, dword,
+                               ctypes.POINTER(ctypes.c_wchar_p), ctypes.c_void_p)
+        self.DeregisterEventSource = fn("DeregisterEventSource", boolean, handle)
+
+    def open(self, source):
+        """The source's handle on this machine (no server named), or None where it cannot be opened."""
+        return self.RegisterEventSourceW(None, source) or None
+
+    def report(self, handle, kind, ident, strings):
+        """One event: its type, category 0, its id, no user, its strings, no raw data. True where it was taken."""
+        texts = (ctypes.c_wchar_p * len(strings))(*strings)
+        return bool(self.ReportEventW(handle, kind, 0, ident, None, len(strings), 0, texts, None))
+
+    def close(self, handle):
+        self.DeregisterEventSource(handle)
+
+
+class EventLogSend(Send):
+    """Y-1 to Y-5: one batch to the Windows event log, on a thread of its own and bounded as the journal's send is
+    (L-4, M-4, M-5: the source opened within connect_s, the events within answer_s; abandoned, it hands no event
+    more). The source is opened once a send and closed by its own thread on every way out. A source that cannot
+    be opened is `connect`; an event the system's call refused is `write` (nothing of the batch passes). The batch
+    is taken when every event of every line, parts included, was taken (`written`, Y-4: not a search of the
+    log)."""
+
+    def __init__(self, fwd, events):
+        Send.__init__(self, fwd, events, None)
+        self.api_of = fwd.eventlog_api
+
+    def exchange(self):
+        failures = (OSError, AttributeError, ValueError, TypeError, ctypes.ArgumentError)
+        try:
+            api = self.api_of()
+            handle = api.open(EVENTLOG_SOURCE)
+        except failures:   # no advapi32, no such call, or a source the system would not open
+            return Result("failed", "connect", phase="connect")
+        if not handle:
+            return Result("failed", "connect", phase="connect")
+        self.mark("send")
+        try:
+            for kind, ident, strings in self.body:
+                if self.abandoned:   # Stop or the bound came: no event more (the source is closed below)
+                    return Result("failed", "late", phase="send")
+                if not api.report(handle, kind, ident, strings):
+                    return Result("failed", "write", phase="send")
+        except failures:
+            return Result("failed", "write", phase="send")
+        finally:
+            try:
+                api.close(handle)
+            except failures:
+                pass
+        return Result("taken")
+
+
 class Forwarder:
     """One name, one file, one destination (J-13). Every clock, wait and timeout can be given (tests): `clock`
     is the wall's and gives only the state's times; `mono` does not step and gives every wait and the beat;
     `nap(event, seconds)` is how the forwarder waits for a send in slices; `lookup` is getaddrinfo; `journal` is
-    the journal's socket (JOURNAL where None: a test's stand-in gives its own)."""
+    the journal's socket (JOURNAL where None: a test's stand-in gives its own); `loader` is the event log's DLL
+    loader (EventLogApi's: a test's fake system gives its own)."""
 
     def __init__(self, name, path, url, shape="raqib", token_file=None, ca=None, plain=False, beat=None,
                  start="start", batch=MAX_LINES, home=None, out=None, clock=time.time, mono=time.monotonic,
                  wait=None, connect_s=CONNECT_S, answer_s=ANSWER_S, poll_s=POLL_S, alive=ui.pid_alive,
                  platform=None, pid=None, opener=None, nap=None, lookup=None, facility=None, framing=None,
-                 journal=None):
+                 journal=None, loader=None):
         self.name = check_name(name)
         if shape not in SHAPES:
             raise UsageError("--shape: raqib or hec, not %r" % (shape,))
@@ -902,9 +1050,13 @@ class Forwarder:
         scheme = self.dest["scheme"]
         self.syslog, self.delivery = scheme in SYSLOG, DELIVERY_OF[scheme]
         self.to_journal, self.journal = scheme == JOURNAL_SCHEME, journal or JOURNAL
+        self.to_eventlog, self.loader, self.evapi = scheme == EVENTLOG_SCHEME, loader, None
         if self.to_journal:   # W-1, W-6
             self.facility, self.framing = self.journal_options(shape, token_file, ca, plain, facility, framing,
                                                                self.platform)
+        elif self.to_eventlog:   # Y-5
+            self.facility, self.framing = self.eventlog_options(shape, token_file, ca, plain, facility, framing,
+                                                                self.platform)
         else:
             self.facility, self.framing = self.syslog_options(scheme, shape, token_file, facility, framing)
         if shape == "hec" and not token_file:
@@ -1017,6 +1169,40 @@ class Forwarder:
             raise UsageError("--to journal: is Linux's (the system's journal, systemd-journald); this system is %s:"
                              " it has no journal to hand the events to (W-1)" % platform)
         return facility, None
+
+    @staticmethod
+    def eventlog_options(shape, token_file, ca, plain, facility, framing, platform):
+        """Y-5: the event log takes the raqib shape and nothing else - a token, --ca, --plain, --shape hec,
+        --framing and --facility are each a usage error with its reason; then a system that is not Windows."""
+        if token_file:
+            raise UsageError("--token-file: the Windows event log takes no token (an event is handed to this"
+                             " system's own call, never to a collector): eventlog: takes no token file")
+        if ca is not None:
+            raise UsageError("--ca: the Windows event log is no TLS peer (a call of this system, not a connection):"
+                             " eventlog: takes no --ca")
+        if plain:
+            raise UsageError("--plain: nothing goes on a wire to the Windows event log (it is this system's own"
+                             " call): eventlog: takes no --plain")
+        if shape != "raqib":
+            raise UsageError("--shape %s is HTTP's: to the Windows event log the event's string is the line as"
+                             " written (Y-2)" % shape)
+        if framing is not None:
+            raise UsageError("--framing: an event of the Windows event log is never framed (one event a line, a"
+                             " long line in parts): --framing is syslog over tcp's and tls's")
+        if facility is not None:
+            raise UsageError("--facility: the Windows event log has no facility (an event's type and id say what"
+                             " it is, Y-2): --facility is syslog's and the journal's")
+        if str(platform) != "win32":
+            raise UsageError("--to eventlog: is Windows' (the Application log, ReportEventW); this system is %s:"
+                             " it has no Windows event log to hand the events to (Y-5)" % platform)
+        return None, None
+
+    def eventlog_api(self):
+        """Y-2: the system's calls, made at the first send and kept for the run (EventLogApi, by self.loader).
+        Only a forwarder to eventlog: on Windows sends to it (eventlog_options), so only there is it made."""
+        if self.evapi is None:
+            self.evapi = EventLogApi(self.loader)
+        return self.evapi
 
     # --- the state (J-9) -------------------------------------------------------------------------------------
     def behind(self):
@@ -1291,7 +1477,7 @@ class Forwarder:
                 self.failing, self.carried = dict(old["failing"]), True
             return "resumed at offset %d%s%s" % (self.offset, "; failing %s, as the state said, until a try %s" % (
                 self.failing["error"], "ends in order" if self.syslog else "is handed whole" if self.to_journal
-                else "has an answer") if self.carried else "",
+                else "is taken whole" if self.to_eventlog else "has an answer") if self.carried else "",
                                                  kept)
         if self.start_from["start"] == "end":
             try:
@@ -1370,6 +1556,12 @@ class Forwarder:
             r = self.carry(lambda: JournalSend(self, [self.wire(ln) for ln in lines]))
             if r.kind == "taken":
                 self.pace(len(lines), began)
+        elif self.to_eventlog:   # Y-2, Y-3: one event a line, a long line in parts; Y-4: paced, parts counted
+            began = self.mono()
+            events = [one for ln in lines for one in self.wire(ln)]
+            r = self.carry(lambda: EventLogSend(self, events))
+            if r.kind == "taken":
+                self.pace(len(events), began)
         else:
             try:
                 token = self.token()
@@ -1380,16 +1572,19 @@ class Forwarder:
             self.size = min(self.batch, self.size * 2)
             self.say("a send was taken: the next batch is %d line(s)" % self.size)
         elif r.kind == "failed" and (r.error == "late" and r.phase in ("send", "answer") or
-                                     self.to_journal and r.error == "write"):
+                                     (self.to_journal or self.to_eventlog) and r.error == "write"):
             # M-4, N-1: late in its request or its answer, halved down to one. X-4: an entry the journal would
-            # not take is halved too, so the lines before it are not handed again at every try
+            # not take is halved too, so the lines before it are not handed again at every try; Y-5: an event
+            # the Windows event log refused, the same
             size = max(1, len(lines) // 2)
             if size < self.size:
                 self.size = size
                 self.say("a send of %d line(s) was late (%s): the next batch is %d" % (
-                    len(lines), ("an entry not handed" if r.error == "write" else "its bytes not written"
+                    len(lines), ("an event refused" if self.to_eventlog and r.error == "write" else
+                                 "an entry not handed" if r.error == "write" else "its bytes not written"
                                  if r.phase == "send" else "no orderly end of the connection")
-                    if self.syslog or self.to_journal else "its request not sent" if r.phase == "send" else "no whole answer",
+                    if self.syslog or self.to_journal or self.to_eventlog else "its request not sent"
+                    if r.phase == "send" else "no whole answer",
                     self.size))
         return r
 
@@ -1400,6 +1595,8 @@ class Forwarder:
             return syslog_frame(syslog_message(ln.raw, ln.obj, self.facility), self.dest["scheme"], self.framing)
         if self.to_journal:
             return journal_entry(ln.raw, ln.obj, self.facility)
+        if self.to_eventlog:   # Y-2, Y-3: the events of one line (more than one where it is long)
+            return eventlog_events(ln.raw, ln.obj)
         return piece(self.shape, ln.raw, ln.obj)
 
     def wire_len(self, ln):
@@ -1410,13 +1607,16 @@ class Forwarder:
             return syslog_len(ln.raw, ln.obj, self.dest["scheme"], self.facility, self.framing)
         if self.to_journal:
             return len(ln.raw)
+        if self.to_eventlog:   # Y-3: a long line goes in parts, never refused for its length within 512 KiB
+            return len(ln.raw)
         return piece_len(self.shape, ln.raw, ln.obj)
 
     def pace(self, count, began):
         """W-4: at most JOURNAL_PACE lines a second to the journal. After a batch of `count` lines taken, what is
         left of count / JOURNAL_PACE seconds from its start is waited by the forwarder's own wait (pause: the
-        injected wait, the state once a beat); Stop ends the wait at once, and the batch stays taken."""
-        left = began + count / float(JOURNAL_PACE) - self.mono()
+        injected wait, the state once a beat); Stop ends the wait at once, and the batch stays taken. Y-4: to the
+        Windows event log at most EVENTLOG_PACE events a second, `count` its events (parts counted)."""
+        left = began + count / float(EVENTLOG_PACE if self.to_eventlog else JOURNAL_PACE) - self.mono()
         if left > 0:
             self.pause(left)
 
@@ -1466,7 +1666,7 @@ class Forwarder:
             self.skipped += 1
         elif not ln.long and self.dest["scheme"] == "syslog+udp" and self.wire_len(ln) <= MAX_BYTES:
             self.count_refused(ln, "locally: longer than one datagram may be (over %d bytes, J-6)" % DATAGRAM_MAX)
-        elif self.to_journal:   # X-2: the forwarder's own bound of a line, whatever carries it
+        elif self.to_journal or self.to_eventlog:   # X-2: the forwarder's own bound of a line, whatever carries it
             self.count_refused(ln, "locally: longer than one batch may be (%d KiB, J-11)" % (MAX_BYTES // 1024))
         else:
             self.count_refused(ln, "locally: longer than one request may be (J-11)")
@@ -1989,7 +2189,9 @@ class Forwarder:
                 self.path, where(self.dest), self.shape, self.delivery,
                 ", facility %d, framing %s" % (self.facility, self.framing if self.dest["scheme"] != "syslog+udp"
                                                else "none: one datagram a message") if self.syslog else
-                ", facility %d, at most %d lines a second" % (self.facility, JOURNAL_PACE) if self.to_journal else "",
+                ", facility %d, at most %d lines a second" % (self.facility, JOURNAL_PACE) if self.to_journal else
+                ", source %s, at most %d events a second, a line over %d characters in parts" % (
+                    EVENTLOG_SOURCE, EVENTLOG_PACE, EVENTLOG_PART) if self.to_eventlog else "",
                 ", plain: not encrypted" if self.plain else "", how, self.state_file))
             self.write_state()
             self.loop(once)
