@@ -78,6 +78,18 @@ jobs:
           echo "=== rhythm"; python "$GITHUB_WORKSPACE/tools/rig/rhythm_read.py" node qwen opencode bun curl || true
           echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-opencode.out
 
+  journal:
+    name: what the journal takes (M10.3c, ADR-0011 W)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: the native protocol from a user's process
+        run: |
+          id
+          python3 tools/rig/journal_probe.py
   etw:
     name: the tracing reader in the field (M7.21a, ADR-0007 BL)
     runs-on: windows-latest
