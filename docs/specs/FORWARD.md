@@ -1,10 +1,11 @@
-# FORWARD - the forwarder, raqib-forward/1 (ADR-0011 Amendments J to N)
+# FORWARD - the forwarder, raqib-forward/1 (ADR-0011 Amendments J to N; the journal: W)
 
 `raqib forward` is a process of its own (J-1). It reads one events file - the watch's
 `~/.raqib/host/events.jsonl`, as docs/specs/EVENT.md "For a reader of the file" says a reader may - and sends
 every whole line to one destination: an HTTP collector, or a syslog collector over `syslog+udp://`,
-`syslog+tcp://` or `syslog+tls://` (J-6; "Syslog" below). Syslog is another way to send, not another machine:
-the cursor, the lines in question, the state and the status are one for both. The watch does
+`syslog+tcp://` or `syslog+tls://` (J-6; "Syslog" below), or the system's journal, `journal:` (W; "The journal"
+below). Syslog and the journal are other ways to send, not another machine: the cursor, the lines in question, the
+state and the status are one for all. The watch does
 not know it runs: raqib/host.py, raqib/eventlog.py, raqib/event.py and raqib/hooks/ import nothing of
 raqib/forward.py, and no result, report or finding of a watch depends on a forwarder. The standard library only.
 
@@ -12,6 +13,8 @@ raqib/forward.py, and no result, report or finding of a watch depends on a forwa
                   [--beat S] [--from start|end] [--batch N] [--once]
     raqib forward [FILE] --to syslog+udp|syslog+tcp|syslog+tls://HOST[:PORT] --name NAME [--facility N]
                   [--framing octet|newline] [--ca FILE] [--plain] [--beat S] [--from start|end] [--batch N]
+                  [--once]
+    raqib forward [FILE] --to journal: --name NAME [--facility N] [--beat S] [--from start|end] [--batch N]
                   [--once]
     raqib forward --status [NAME]
 
@@ -243,6 +246,48 @@ wall clock set back or ahead delays nothing and hurries nothing. Only the state'
   `syslog+udp://` and `syslog+tcp://` are plain: taken only to a loopback address unless `--plain` is given,
   and then the state's `plain` and every status say "plain: not encrypted" (said for loopback too).
 
+## The journal (W)
+
+- The form: `--to journal:`, exactly (anything after the colon is exit 2 with the reason), on Linux only: on
+  another system it is exit 2 saying so (W-1). With it `--token-file`, `--ca`, `--plain`, `--shape hec` and
+  `--framing` are exit 2, each with its reason (W-6); `--facility N` is taken (0 to 23, 13 unless given), and
+  another facility under one name is another name, as another shape is.
+- One entry a line, by the journal's native protocol, to its socket (`/run/systemd/journal/socket`), from the
+  user's own process with no rights (W-2). A field is `KEY=value` and a newline; a value that holds a newline is
+  `KEY`, a newline, its length as 8 bytes little-endian, the value and a newline. The fields: `MESSAGE` the line
+  as written without its newline (always); `PRIORITY` the event's severity as syslog's (high 2, medium 4, low 5,
+  a hole 4, none and info 6; anything else 4); `SYSLOG_IDENTIFIER` raqib; `SYSLOG_FACILITY` the facility; and
+  `RAQIB_ID`, `RAQIB_KIND`, `RAQIB_HOST` (`watch.host`) and `RAQIB_TIME` where the event holds them as text of at
+  most 256 characters with no control character (else that field is left out). Building an entry never raises,
+  whatever the line holds.
+- No line is cut (W-3, X-2): an entry the socket takes as one datagram is sent as one; an entry the socket
+  refuses as too long (EMSGSIZE) is written to a sealed memory file (sealed against any write, growth, shrink or
+  further seal) whose descriptor is sent with the socket's own message - the journal's own way. Nothing is cut,
+  and no line the forwarder reads whole (512 KiB at most, M-3) is refused for its length: a batch to the journal
+  is bounded by its lines' own bytes. Where the system has no memory file, or that send fails, it is a failed
+  send (`write`): nothing passes, and it is tried again - never a cut and never a pass; the next batch is half
+  of this one, down to one line, so that the lines before an entry the journal would not take are handed
+  again a few times and then not at every try (X-4). A line longer than the forwarder's own bound of a line
+  (512 KiB) is refused locally, counted and named, as over every transport.
+- `sent` (W-4): the journal answers nothing; a batch is taken when every entry was handed to its socket with no
+  error. The journal may drop entries over its own rate limit, unseen by the forwarder (its status stays OK):
+  the forwarder paces itself, at most 250 lines a second over its batches (after each batch it waits what is left of the
+  batch's share of a second; Stop ends the wait at once). What tells of a loss: the journal's own line
+  "Suppressed N messages", and the search for a missing heartbeat (no heartbeat of a host for more than two
+  beats).
+- No journal (W-5): no socket at its path, or a path that is no socket, is a collector that is down: failing
+  `connect`, nothing passes, tried again (J-10); `--once` exits 1. When the socket appears the lines go, none
+  lost. It falls back to nothing.
+- Who reads it, and who else can write it (W-7): whoever reads the journal (root, the journal's and adm's
+  groups, the user's own); the journal may pass it on (ForwardToSyslog), and the events then leave the host by
+  the system's hand. Any process of the user can write entries that say raqib: the journal's trusted fields
+  (`_PID`, `_UID`, `_EXE`) say who wrote an entry, and a reader of the journal must ask them.
+- The state: `destination` is `{"scheme": "journal"}` (nothing of a host or a port), `delivery` `sent`,
+  `facility` kept, no `framing`; `--status` and the window's Link screen say "to the journal". Its failing
+  words are the forwarder's own: `connect`, `write`, `late`, `stuck`, `file`, `unforeseen`.
+- Nothing is installed, registered or switched on: `raqib forward --to journal:` writes to the journal because a
+  person ran it, and the watch never does (W-0).
+
 ## The secret and the wire (J-7, J-8, L-5)
 
 - The token is read from `--token-file` at every try: never an argument, never the environment, never
@@ -310,10 +355,10 @@ Windows, where a rename never replaces a file that is there). The keys:
 | `name` | str | the forwarder's name |
 | `pid` | int | the forwarder's process id |
 | `written` | instant | when this state was written (UTC, milliseconds, Z; the wall's clock) |
-| `destination` | object | `scheme` (`http`, `https`, `syslog+udp`, `syslog+tcp`, `syslog+tls`), `host`, `port`, `path` (over syslog ""): no query, no user information |
+| `destination` | object | `scheme` (`http`, `https`, `syslog+udp`, `syslog+tcp`, `syslog+tls`), `host`, `port`, `path` (over syslog ""): no query, no user information; for the journal `scheme` `journal` alone - no host, port or path. A raqib from before the journal reads such a state as UNREADABLE (it fails toward the alarm) |
 | `shape` | str | `raqib` or `hec` (over syslog always `raqib`) |
-| `delivery` | str | what taken means: `acknowledged` (HTTP), `written` (syslog over tcp and tls: the connection ended in order), `sent` (syslog over udp) |
-| `facility` | int | syslog only (P-3): the facility the messages carry (0 to 23); a start with another is exit 2, as another shape is |
+| `delivery` | str | what taken means: `acknowledged` (HTTP), `written` (syslog over tcp and tls: the connection ended in order), `sent` (syslog over udp; the journal) |
+| `facility` | int | syslog and the journal (P-3, W-2): the facility the messages or entries carry (0 to 23); a start with another is exit 2, as another shape is |
 | `framing` | str or null | syslog only (P-3): `octet` or `newline` over tcp and tls, null over udp; a start with another is exit 2. A syslog state written before the two were kept has neither: it is read, and the start's facility and framing are kept from then on (said at the start) |
 | `plain` | bool | true where the wire is plain: http, syslog over udp or tcp |
 | `file` | str | the events file, absolute |

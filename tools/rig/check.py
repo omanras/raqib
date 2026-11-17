@@ -9,7 +9,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
 --forward: what tools/rig/forward_run.py saw `raqib forward` do with that file (ADR-0011 J-14): X19 to X22
-over HTTP, X23 to X25 over syslog (J-6).
+over HTTP, X23 to X25 over syslog (J-6), X26 to the journal (W-8, Linux; not run elsewhere).
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
@@ -418,6 +418,68 @@ def read_syslog(facts, events):
     return out
 
 
+def _whole_event_lines(events):
+    """The whole lines of the events file that are events, each as written (W-2: MESSAGE is the line)."""
+    check, out = _checker(), []
+    for raw in (events or "").split("\n")[:-1]:
+        try:
+            e = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(e, dict) and not check(e):
+            out.append(raw)
+    return out
+
+
+def read_journal(facts, events):
+    """X26 (ADR-0011 W-8): what tools/rig/forward_run.py read back with journalctl after `raqib forward --to
+    journal:` sent the watch's events file. MET where every whole line is a MESSAGE, as written, in order; MISSED
+    (not met) with what is missing; n/a (not run) with the reason where the machine has no journal (Windows, no
+    socket). It never raises: facts None or no facts of x26 is MISSED (silence is a finding); no events file is
+    n/a (X16 says the watch wrote none)."""
+    name = ("X26 to the journal every whole line of the events file is in it, as written and in order, read back"
+            " by journalctl")
+    try:
+        if not isinstance(facts, dict):
+            return [(name, MISSED, "the forwarder's run left no facts (silence is a finding)")]
+        if facts.get("events_missing"):
+            return [(name, SKIP, "the watch wrote no events file: nothing to forward (X16 says so)")]
+        if facts.get("error"):
+            return [(name, MISSED, "the forwarder's run failed: %s" % facts["error"])]
+        x = facts.get("x26")
+        if not isinstance(x, dict):
+            return [(name, MISSED, "the rig did not run it: no facts of x26")]
+        if x.get("not_run"):
+            return [(name, SKIP, "not run: %s" % x["not_run"])]
+        if x.get("error"):
+            return [(name, MISSED, "the rig's run of it failed: %s" % x["error"])]
+        want = _whole_event_lines(events)
+        got = _first_arrivals([m for m in x.get("messages") or [] if isinstance(m, str)])
+        lost = [i for i, line in enumerate(want, 1) if line not in set(got)]
+        long = x.get("long") if isinstance(x.get("long"), dict) else {}
+        long_ok = long.get("as_written") is True and long.get("exit") == 0   # X-5: the memory file's way, shown
+        long_said = ("a made-up line of %s bytes came back whole (the memory file's way)" % max(long["lines"])
+                     if long_ok and long.get("lines") else "the long line did NOT come back whole: %s" % (
+                         long.get("error") or "sent %s, read %s, exit %s" % (
+                             long.get("lines"), long.get("read"), long.get("exit"))))
+        ok = bool(want) and got == want and x.get("exit") == 0 and x.get("delivery") == "sent" and long_ok
+        words = ("the events file holds no whole event to forward" if not want else
+                 "%d of %d line(s) in the journal%s%s" % (
+                     len(want) - len(lost), len(want), ", as written and in the file's order" if got == want else
+                     ", not in the file's order" if not lost else "",
+                     "; missing: line %s" % ", ".join(str(i) for i in lost[:5]) + (" and %d more" % (len(lost) - 5)
+                                                                                 if len(lost) > 5 else "")
+                     if lost else ""))
+        jc = x.get("journalctl") if isinstance(x.get("journalctl"), dict) else {}
+        return [(name, MET if ok else MISSED,
+                 "%s; %s; %s entr(y/ies) read by journalctl (exit %s, asked %s time(s)); delivery %s; --once exit"
+                 " %s%s" % (
+                     words, long_said, x.get("read"), jc.get("exit"), x.get("asked"), x.get("delivery"), x.get("exit"),
+                     "" if ok or not jc.get("stderr") else "; journalctl said: %s" % str(jc["stderr"])[:120]))]
+    except Exception as exc:   # never raises: facts that cannot be read are MISSED
+        return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -460,6 +522,7 @@ def main(argv=None):
             facts = None
         rows += read_forward(facts, events)
         rows += read_syslog(facts, events)
+        rows += read_journal(facts, events)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

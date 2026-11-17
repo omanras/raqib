@@ -6,7 +6,10 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import socket
+import sys
+import tempfile
 import threading
 from pathlib import Path
 
@@ -121,12 +124,46 @@ def made_up_file(tmp_path, count=23):
     return path
 
 
+journal_tests = load("rig_forward_journal_tests", ROOT / "tests" / "test_forward_journal.py")
+JOURNAL_HERE = journal_tests.NO_DGRAM is None and sys.platform.startswith("linux")
+
+
+def stand_in_read(stand_in):
+    """forward_run.journal_read over a stand-in journal: the entries of the process `pid` (the stand-in's pid is
+    the sender's, by SO_PASSCRED, as the journal's trusted _PID), as journalctl -o json gives them."""
+    def read(pid):
+        out = []
+        for e in list(stand_in.entries):
+            if e["pid"] == pid:
+                out.append({k.decode("ascii"): v.decode("utf-8", "replace") for k, v in e["fields"].items()})
+        return out, 0, ""
+    return read
+
+
+@pytest.fixture(autouse=True)
+def no_real_journal(monkeypatch):
+    """M10.3c-a: no test here reaches the journal or /run: forward_run's JOURNAL is a path where nothing is."""
+    monkeypatch.setattr(forward_run, "JOURNAL", os.path.join(tempfile.gettempdir(), "rqj-none", "j"))
+
+
 @pytest.fixture(scope="module")
 def ran(tmp_path_factory):
     tmp = tmp_path_factory.mktemp("forward-rig")
     events = made_up_file(tmp)
     out = tmp / "facts.json"
-    assert forward_run.main(["--events", str(events), "--out", str(out), "--home", str(tmp / "home")]) == 0
+    folder = tempfile.mkdtemp(prefix="rqj-")   # M10.3c-a: X26 to a stand-in journal, never the system's
+    stand_in = None
+    try:
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(forward_run, "JOURNAL", os.path.join(folder, "j"))
+            if JOURNAL_HERE:
+                stand_in = journal_tests.StandIn(os.path.join(folder, "j"))
+                mp.setattr(forward_run, "journal_read", stand_in_read(stand_in))
+            assert forward_run.main(["--events", str(events), "--out", str(out), "--home", str(tmp / "home")]) == 0
+    finally:
+        if stand_in is not None:
+            stand_in.stop()
+        shutil.rmtree(folder, ignore_errors=True)
     return events, json.loads(out.read_text(encoding="ascii"))
 
 
@@ -421,3 +458,88 @@ def test_m103b_redo_e6_x23_to_x25_are_met_over_a_made_up_file_with_a_line_rfc_54
     for key in ("x23", "x25"):
         assert sum(facts[key]["sessions"]) == len(rows) and facts[key]["sessions"] == [len(rows)]
     assert all(not facts[k]["problems"] and facts[k]["exit"] == 0 for k in facts)
+
+
+# --- M10.3c-a E7 (ADR-0011 W-8): X26, the journal, read back -----------------------------------------------------
+def journal_states(facts, events):
+    return {r[0].split(" ", 1)[0]: (r[1], r[2]) for r in check.read_journal(facts, events.read_text(encoding="ascii"))}
+
+
+@pytest.mark.skipif(not JOURNAL_HERE, reason="X26 runs on Linux with AF_UNIX datagrams (elsewhere it is not run)")
+def test_m103ca_e7_x26_is_met_by_the_forwarder_to_a_stand_in_journal_read_back_by_its_own_pid(ran):
+    events, facts = ran
+    x = facts["x26"]
+    assert journal_states(facts, events) == {"X26": (check.MET, journal_states(facts, events)["X26"][1])}
+    whole = [line.decode("ascii") for line in events.read_bytes().splitlines()]
+    assert x["messages"] == whole and x["read"] == x["lines"] == len(whole) and x["exit"] == 0
+    assert x["identifiers"] == ["raqib"] and x["delivery"] == "sent" and x["destination"] == {"scheme": "journal"}
+    assert x["socket"] != forward_run.REAL_JOURNAL and x["pid"] > 0 and x["failing"] is None
+    # X-5: a made-up line longer than a datagram came back whole through the forwarder (the memory file's way)
+    long = x["long"]
+    assert long["as_written"] is True and long["exit"] == 0 and long["read"] == long["lines"]
+    assert max(long["lines"]) > forward_run.LONG and long["state"]["sent"] == 3 and long["state"]["failing"] is None
+    assert "came back whole (the memory file's way)" in journal_states(facts, events)["X26"][1]
+
+
+def test_m103ca_e7_x26_is_missed_when_its_part_is_broken_not_run_without_a_journal_and_never_raises(ran):
+    events, facts = ran
+    whole = [line.decode("ascii") for line in events.read_bytes().splitlines()]
+    good = dict(facts, x26={"exit": 0, "delivery": "sent", "messages": whole, "read": len(whole), "asked": 1,
+                            "journalctl": {"exit": 0, "stderr": ""},
+                            "long": {"as_written": True, "exit": 0, "lines": [100, 307300, 100],
+                                     "read": [100, 307300, 100]}})
+
+    def state(change):
+        f = json.loads(json.dumps(good))
+        change(f)
+        return journal_states(f, events)["X26"]
+    assert state(lambda f: None)[0] == check.MET
+    lost = state(lambda f: f["x26"]["messages"].pop(3))                                       # a line lost
+    assert lost[0] == check.MISSED and "missing: line 4" in lost[1]
+    assert state(lambda f: f["x26"]["messages"].reverse())[0] == check.MISSED                   # not in order
+    assert state(lambda f: f["x26"]["messages"].__setitem__(0, whole[0] + " "))[0] == check.MISSED   # not as written
+    assert state(lambda f: f["x26"].update(exit=1))[0] == check.MISSED
+    assert state(lambda f: f["x26"].update(delivery="acknowledged"))[0] == check.MISSED
+    assert state(lambda f: f.pop("x26"))[0] == check.MISSED                                    # never ran
+    assert state(lambda f: f.update(x26={"error": "OSError: x"}))[0] == check.MISSED
+    assert state(lambda f: f["x26"].update(messages=5))[0] == check.MISSED                      # never raises
+    assert state(lambda f: f["x26"].update(journalctl=7))[0] == check.MET
+    cut = state(lambda f: f["x26"]["long"].update(as_written=False, read=[100, None, 100]))   # X-5: the long line
+    assert cut[0] == check.MISSED and "the long line did NOT come back whole" in cut[1]
+    assert state(lambda f: f["x26"].pop("long"))[0] == check.MISSED
+    assert state(lambda f: f["x26"].update(long={"error": "OSError: x"}))[0] == check.MISSED
+    assert state(lambda f: f.update(x26={"not_run": "not Linux (win32)"})) == (check.SKIP,
+                                                                               "not run: not Linux (win32)")
+    assert check.read_journal(None, "")[0][1] == check.MISSED
+    assert check.read_journal({"events_missing": True}, "")[0][1] == check.SKIP
+    assert check.read_journal(good, None)[0][1] == check.MISSED   # no events: nothing to compare
+    if not JOURNAL_HERE:
+        assert facts["x26"]["not_run"] and journal_states(facts, events)["X26"][0] == check.SKIP
+
+
+def test_m103ca_e7_forward_run_does_not_run_x26_off_linux_or_where_no_socket_is(tmp_path, monkeypatch):
+    monkeypatch.setattr(forward_run, "PLATFORM", "win32")
+    assert forward_run.x26(None) == {"not_run": "not Linux (win32): the journal is Linux's (W-1)"}
+    monkeypatch.setattr(forward_run, "PLATFORM", "linux")
+    monkeypatch.setattr(forward_run, "JOURNAL", str(tmp_path / "none"))
+    # X-6: on Linux a journal that is not there is the rig's finding (MISSED), not a case that does not apply
+    assert forward_run.x26(None)["error"].startswith("no journal's socket at ")
+    (tmp_path / "file").write_bytes(b"")
+    monkeypatch.setattr(forward_run, "JOURNAL", str(tmp_path / "file"))
+    assert forward_run.x26(None)["error"].endswith("is no socket: no journal on a Linux machine")
+    assert check.read_journal({"x26": forward_run.x26(None)}, "")[0][1] == check.MISSED
+    assert "--all" in forward_run.JOURNALCTL and "-b" in forward_run.JOURNALCTL   # X-5: long fields whole
+    assert forward_run.JOURNAL_CASES == ("x26",) and forward_run.REAL_JOURNAL == "/run/systemd/journal/socket"
+    assert forward_run.JOURNALCTL[:1] == ["journalctl"] and "-t" in forward_run.JOURNALCTL
+
+
+def test_m103ca_e7_check_main_says_x26(ran, tmp_path, capsys):
+    events, facts = ran
+    (tmp_path / "w.out").write_text(rig.REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text(rig.WORKLOAD, encoding="utf-8")
+    (tmp_path / "f.json").write_text(json.dumps(facts), encoding="ascii")
+    assert check.main(["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--exit-code",
+                       "1", "--platform", "linux", "--events", str(events), "--forward", str(tmp_path / "f.json"),
+                       "--strict"]) in (0, 1)
+    out = capsys.readouterr().out
+    assert re.search(r"^MET +X26 " if JOURNAL_HERE else r"^n/a +X26 .*not run: ", out, re.M), out

@@ -1020,3 +1020,74 @@ destinations of the forwarder, so that the watch itself still writes its file on
 Not here, recorded: `eventlog:`; an install for it (a registered source, an administrator's, with its
 removal); the service.
 
+## Amendment X (the Table, 2026-11-17) - rulings on review 2026-11-17-M10.3c-a.md (a3bb1bc): the journal, in the field
+The field first: on the rig's Linux machine the forwarder handed the watch's events file to a real journal and
+journalctl read every line back, as written and in order (X26 MET, 20 of 20); the six CI jobs were green. The
+packet: the protocol as built cannot be made to carry a forged field or a second entry; REDO, narrow. Small,
+and built by the Table.
+- X-1 (`--shape raqib` is the journal's shape). Only `--shape hec` is refused with `journal:`; the scheme is
+  read in any case of letters, as a URL's is. The documents say so (W-6 said `--shape`: this is the ruling).
+- X-2 (W-3, held to the forwarder's own bound of a line). Nothing is cut and no line up to 512 KiB is refused
+  for its length; a longer line is refused locally, counted and named, as over every transport (M-3), in
+  words that fit ("longer than one batch may be").
+- X-3 (the journal's own words). A journal state's first line says no framing (an entry may be a memory
+  file); its failing words are the journal's - no collector, no connection, no answer.
+- X-4 (an entry the journal would not take does not make its neighbours arrive for ever). A failed `write`
+  to the journal halves the next batch, down to one line, as a late send does: the lines before it are
+  handed again a few times while the batch is halved, pass, and are not sent again at every try.
+- X-5 (the rig shows the memory file's way, and reads long fields). journalctl is asked with --all (without
+  it a field over 4096 bytes is not shown, and a long line would read as missing) and for this boot; X26
+  also sends a made-up line of 300 KiB through the forwarder and is MET only where it came back whole.
+- X-6 (on Linux a journal that is not there is the rig's finding), MISSED, not a case that does not apply.
+- X-7 (W-7, said whole). Any local process of any user can write entries that say raqib; under the same
+  user and interpreter only `_PID` differs, and the forwarder's pid is in a file the agent can rewrite: an
+  entry that says raqib is a lead, not a proof. The journal's rate limit is a unit's or a session's: a
+  watched agent beside the forwarder may use it up. A forwarder run as a unit of its own is the answer to
+  both, and comes with the service.
+Accepted as built: the socket connected before sending (shown in the field; it lets a full journal wait and
+Stop end the wait); the run's entries told by the forwarder's pid; the memory file made without the kernel's
+no-exec seal (an older journal would not take it sealed so; where a kernel refuses such a file every long
+entry is failing `write`, said); the pace an average over batches. Recorded: forward.JOURNAL is the socket's
+path and link.JOURNAL the scheme's word; `raqib watch PROJECT` installs its hooks into the project (the
+sentence of the line stands in the host watch's section).
+
+## Amendment Y (the Table, 2026-11-17) - the Windows event log as a destination (M10.3c-b), measured first
+Measured on a Windows runner (an administrator's process; a plain user's was not measured) before ruling:
+ReportEventW by a source nobody registered is taken into the Application log and read back with its string
+whole (non-ASCII too); the viewer then says the source's description cannot be found and shows the string
+after that sentence. One string holds at most 32731 UTF-16 units; two strings together no more; raw data
+61440 bytes; a record about 64 KiB in all. The record's own Execution ProcessID is the sender's. A burst of
+3000 was kept. Each ruling names what it is FOR and what it MUST NOT TOUCH.
+- Y-1 (a destination, nothing installed). `raqib forward --to eventlog:` on Windows hands each line to the
+  Application log under the source `Raqib`, by ReportEventW, with nothing registered (W-0): no key is
+  written, no message file installed. FOR: a SOC whose agents already read the Windows logs. The cost is
+  the viewer's sentence before each string, said in the documents; a registered source is an install's
+  work, an administrator's, later.
+- Y-2 (one event a line, the line as written). The event's one string is the line. Its type is from the
+  severity (high: Error; medium and a hole: Warning; low, info and none: Information). Its id is from the
+  event's kind by a fixed table, so that a reader filters by id: 1001 finding, 1002 source-finding, 1003
+  note, 1004 tree, 1005 hole, 1006 knock, 1007 heartbeat, 1008 watch, and 1000 for a kind that is none of
+  them. MUST NOT TOUCH: the line.
+- Y-3 (a line longer than one string is handed in parts, never cut away). A line of more than 30000
+  characters goes as several events in order, each with two strings: a part's head (`raqib-part I/N id=ID
+  sha256=HEX chars=TOTAL`, the id the event's where it is text, the hash and the count the whole line's)
+  and that part of the line; a reader puts the parts' second strings together in order and has the line,
+  and the hash says it is whole. Parts carry the id 1009 and the type of their line. FOR: nothing lost and
+  nothing cut unseen, within what one record holds. A batch is taken only when every part of every line
+  was taken.
+- Y-4 (`written`). The system's call returned that the log took the event; it is not a search of the log.
+  The Application log is bounded and overwrites its oldest: Raqib's events push other programs' out, and are
+  pushed out. The forwarder paces itself, at most 100 events a second, and the documents say it; a log of
+  Raqib's own is the install's work.
+- Y-5 (no source, no rights). Where the source cannot be opened the forwarder is failing (`connect`); where
+  an event is refused, failing (`write`) and the batch halved as X-4 rules; it tries again and falls back to
+  nothing. Not on Windows, `--to eventlog:` is a usage error. No token, no --ca, no --plain, no --shape
+  hec, no --framing, no --facility with it.
+- Y-6 (who reads it, who else can write it; said). Whoever reads the Application log reads the events (by
+  default any signed-in user). Any process can write events under the source `Raqib`: the record's own
+  process id and user are the system's word, the source's name is nobody's - an event that says Raqib is a
+  lead, not a proof (X-7).
+- Y-7 (the rig). X27, on the Windows machine: every whole line of the events file is in the Application
+  log under this run's process, as written and in order, a made-up long line put together from its parts
+  among them; on Linux it is not run.
+

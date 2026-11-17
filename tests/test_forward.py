@@ -2473,7 +2473,7 @@ def test_m103b_e3_written_over_tcp_and_tls_sent_over_udp_and_every_line_arrives_
     """E3 (J-3): the same cursor machine; a batch passed when the transport took it, and the state's delivery
     says what took means: written (tcp, tls), sent (udp). 250 lines, three batches each, in the file's order."""
     assert forward.DELIVERY_OF == {"http": "acknowledged", "https": "acknowledged", "syslog+udp": "sent",
-                                   "syslog+tcp": "written", "syslog+tls": "written"}
+                                   "syslog+tcp": "written", "syslog+tls": "written", "journal": "sent"}
     rows = lines(250)
     path = write(tmp_path / "e.jsonl", rows)
     for transport, word in (("tcp", "written"), ("udp", "sent")):

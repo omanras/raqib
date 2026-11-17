@@ -21,6 +21,13 @@ the lines in question never arise there. A line whose message is longer than a d
 bytes, over udp) is refused locally as a line longer than one request is: counted, named, passed, never cut.
 Syslog carries no token (no --token-file) and only the raqib shape (the MSG is the line).
 
+The journal (ADR-0011 W; `--to journal:`, Linux only): one entry a line by the journal's native protocol to its
+socket (JOURNAL), from the user's own process (journal_entry: MESSAGE the line, PRIORITY as syslog's severity,
+SYSLOG_IDENTIFIER raqib, SYSLOG_FACILITY, RAQIB_ID/KIND/HOST/TIME where they are text). An entry too long for a
+datagram is handed as a sealed memory file (JournalSend.sealed), never cut. Taken is `sent`: the journal answers
+nothing; the forwarder paces itself to JOURNAL_PACE lines a second (pace). No socket there is `connect`, tried
+again as any collector that is down. No token, --ca, --plain, --shape or --framing.
+
 The cursor and the lines in question (L-1, M-1, M-2, N-3, N-5). What a run holds, and what a try does with it:
 
 - the head (`head`, in the state): the sha256 of the file's first bytes, at most HEAD_MAX, and how many (N-3).
@@ -105,9 +112,11 @@ the state, which is the other's now.
 """
 from __future__ import annotations
 
+import array
 import binascii
 import calendar
 import datetime
+import errno
 import hashlib
 import http.client
 import ipaddress
@@ -123,11 +132,17 @@ import threading
 import time
 from urllib.parse import urlsplit
 
+try:   # W-3: the seals of a memory file (Linux); a system with none has no memory file to send
+    import fcntl
+except ImportError:
+    fcntl = None
+
 from raqib import event
 from raqib import eventlog
 from raqib import host as host_watch
 from raqib import link
 from raqib import ui
+from raqib.link import JOURNAL as JOURNAL_SCHEME
 from raqib.link import (DELIVERIES, DELIVERY, DELIVERY_OF, DIR_NAME, ERRORS, FACILITIES, FRAMINGS, HEAD_MAX, KEYS,
                         LATER, NAME, SCHEMA, SCHEMES, SHA, SHAPES, STATUS_RULE, SYSLOG, SYSLOG_ERRORS, SYSLOG_KEYS,
                         _count, _instant, _state_problem, forward_dir, judge, seconds_of, state_path, state_problem,
@@ -137,6 +152,15 @@ PLAIN = ("http", "syslog+udp", "syslog+tcp")   # J-8: the wires that are not enc
 PORT_OF = {"http": 80, "https": 443, "syslog+udp": 514, "syslog+tls": 6514}   # P-3: syslog+tcp has none
 FACILITY = 13                              # J-6: log audit, unless --facility N
 DATAGRAM_MAX = 65000                       # J-6: a message longer than this is never sent over udp
+JOURNAL = "/run/systemd/journal/socket"    # W-2: the journal's socket; Forwarder(journal=) names another
+JOURNAL_PACE = 250                         # W-4: at most this many lines a second to the journal
+JOURNAL_TEXT_MAX = 256                     # W-2: a RAQIB_ field is text of at most this many characters
+JOURNAL_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")   # W-2: a RAQIB_ field holds no control character
+# W-3: a memory file's seals (Linux's fixed values where this Python does not name them): no seal more, no shrink,
+# no growth, no write - what the journal is handed cannot change under it
+F_ADD_SEALS = getattr(fcntl, "F_ADD_SEALS", 1033)
+SEALS = (getattr(fcntl, "F_SEAL_SEAL", 1) | getattr(fcntl, "F_SEAL_SHRINK", 2) | getattr(fcntl, "F_SEAL_GROW", 4) |
+         getattr(fcntl, "F_SEAL_WRITE", 8))
 # J-6: the event's severity as RFC 5424's (2 critical, 4 warning, 5 notice, 6 informational)
 SEVERITY = {"high": 2, "medium": 4, "low": 5, "hole": 4, "none": 6, "info": 6}
 SEVERITY_ELSE = 4                          # a severity the event contract does not have: a warning, never calm
@@ -229,15 +253,20 @@ def destination(url, plain=False):
     if not isinstance(url, str) or CONTROL.search(url):   # urlsplit would drop a tab or a newline unsaid
         raise UsageError("--to: the URL holds a control character (a tab, a newline, ...): it is refused, never"
                          " taken without it")
+    if url[:len(JOURNAL_SCHEME) + 1].lower() == JOURNAL_SCHEME + ":":   # W-1, W-6: the scheme and nothing else
+        if len(url) != len(JOURNAL_SCHEME) + 1:
+            raise UsageError("--to journal: is the whole destination: the system's own journal, by its own socket;"
+                             " nothing follows the colon (no host, port, path or option), not %r" % url)
+        return {"scheme": JOURNAL_SCHEME}, None
     try:
         parts = urlsplit(url)
         port = parts.port
     except ValueError:
         raise UsageError("--to: not a URL with a valid port")
     scheme = parts.scheme.lower()
-    if scheme not in SCHEMES:
+    if scheme not in SCHEMES or scheme == JOURNAL_SCHEME:
         raise UsageError("--to: an http:// or https:// collector, or syslog over syslog+udp://, syslog+tcp:// or"
-                         " syslog+tls://")
+                         " syslog+tls://, or journal: (Linux)")
     if "@" in parts.netloc:
         raise UsageError("--to: no user information in the URL (the token is read from --token-file only, J-7)")
     host = parts.hostname
@@ -400,6 +429,49 @@ def syslog_len(raw, obj, scheme, facility=FACILITY, framing="octet"):
     if scheme == "syslog+udp":
         return n
     return n + 1 if framing == "newline" else n + len(b"%d " % n)
+
+
+def journal_field(key, value):
+    """W-2, the journal's native protocol: KEY=value and a newline; a value that holds a newline as KEY, a
+    newline, its length as 8 bytes little-endian, the value, a newline."""
+    if b"\n" in value:
+        return key + b"\n" + len(value).to_bytes(8, "little") + value + b"\n"
+    return key + b"=" + value + b"\n"
+
+
+def _journal_text(value):
+    """W-2: a RAQIB_ field's value - text of at most JOURNAL_TEXT_MAX characters with no control character, as
+    UTF-8 - or None, and the field is left out (a value no check foresaw, such as a lone surrogate, too)."""
+    try:
+        if isinstance(value, str) and len(value) <= JOURNAL_TEXT_MAX and not JOURNAL_CONTROL.search(value):
+            return value.encode("utf-8")
+    except Exception:
+        pass
+    return None
+
+
+def journal_entry(raw, obj, facility=FACILITY):
+    """W-2: one line as one entry of the journal: MESSAGE the line as written without its newline (always),
+    PRIORITY the event's severity as syslog's (J-6: high 2, medium 4, low 5, a hole 4, none and info 6; else 4),
+    SYSLOG_IDENTIFIER raqib, SYSLOG_FACILITY, then RAQIB_ID, RAQIB_KIND, RAQIB_HOST and RAQIB_TIME where the event
+    holds them as text (_journal_text). P-1: it never raises, whatever the line holds: what cannot be read of the
+    event is left out, and PRIORITY is then 4 (a warning, never calm)."""
+    line = raw[:-1] if raw.endswith(b"\n") else raw
+    more, priority = [], SEVERITY_ELSE
+    try:
+        obj = obj if isinstance(obj, dict) else {}
+        priority = severity_of(obj)
+        watch = obj.get("watch") if isinstance(obj.get("watch"), dict) else {}
+        for key, value in ((b"RAQIB_ID", obj.get("id")), (b"RAQIB_KIND", obj.get("kind")),
+                           (b"RAQIB_HOST", watch.get("host")), (b"RAQIB_TIME", obj.get("time"))):
+            text = _journal_text(value)
+            if text is not None:
+                more.append(journal_field(key, text))
+    except Exception:   # P-1: no event ends the forwarder; MESSAGE still carries the line as written
+        more, priority = [], SEVERITY_ELSE
+    return b"".join([journal_field(b"MESSAGE", line), journal_field(b"PRIORITY", b"%d" % priority),
+                     journal_field(b"SYSLOG_IDENTIFIER", b"raqib"), journal_field(b"SYSLOG_FACILITY", b"%d" % facility)]
+                    + more)
 
 
 def _sha(raw):
@@ -749,15 +821,79 @@ class SyslogSend(Send):
         return Result("taken")
 
 
+class JournalSend(Send):
+    """W-2, W-3: one batch to the journal, on a thread of its own and bounded as a syslog send is (L-4, M-4, M-5:
+    the socket within connect_s, the entries within answer_s; abandoned by shutting its socket down; closed by its
+    own thread alone). A datagram socket of the user's own, connected to the journal's socket - no socket at the
+    path, or a path that is no socket, is `connect` (W-5) - then each entry sent to that path as one datagram. An
+    entry the socket refuses as too long (EMSGSIZE) is handed as a sealed memory file, the journal's own way
+    (sealed()). The journal answers nothing: the batch is taken when every entry was handed with no error (`sent`,
+    W-4: nothing is known). A memory file that cannot be made or sent is a failed send (`write`): never a cut,
+    never a pass."""
+
+    def __init__(self, fwd, entries):
+        Send.__init__(self, fwd, entries, None)
+        self.where = fwd.journal
+
+    def exchange(self):
+        try:
+            sock = self.hold(socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM))
+            sock.settimeout(self.left())
+            sock.connect(self.where)
+        except (OSError, AttributeError, ValueError, TypeError):   # no socket there, or one that takes nothing
+            return Result("failed", "connect", phase="connect")
+        self.mark("send")
+        try:
+            sock.settimeout(self.answer_s)
+            for entry in self.body:
+                try:
+                    sock.sendto(entry, self.where)
+                except OSError as exc:
+                    if exc.errno != errno.EMSGSIZE:
+                        raise
+                    if not self.sealed(sock, entry):
+                        return Result("failed", "write", phase="send")
+        except socket.timeout:
+            return Result("failed", "late", phase="send")
+        except (OSError, ValueError):
+            return Result("failed", "write", phase="send")
+        return Result("taken")
+
+    def sealed(self, sock, entry):
+        """W-3: the entry written whole to a memory file (memfd_create, sealing allowed), sealed against any
+        change (F_ADD_SEALS: seal, shrink, grow, write), and its descriptor sent with the socket's own message to
+        the journal's path (sendmsg with SCM_RIGHTS - never socket.send_fds, which drops the address). True where
+        it was handed; False where the system has no memory file or a step failed. The descriptor is this
+        thread's own and closed by it."""
+        fd = None
+        try:
+            fd = os.memfd_create("raqib-journal", os.MFD_ALLOW_SEALING | getattr(os, "MFD_CLOEXEC", 0))
+            view = memoryview(entry)
+            while view:
+                view = view[os.write(fd, view):]
+            fcntl.fcntl(fd, F_ADD_SEALS, SEALS)
+            sock.sendmsg([b""], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [fd]))], 0, self.where)
+            return True
+        except socket.timeout:
+            raise
+        except (OSError, AttributeError, ValueError, TypeError):
+            return False
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+
 class Forwarder:
     """One name, one file, one destination (J-13). Every clock, wait and timeout can be given (tests): `clock`
     is the wall's and gives only the state's times; `mono` does not step and gives every wait and the beat;
-    `nap(event, seconds)` is how the forwarder waits for a send in slices; `lookup` is getaddrinfo."""
+    `nap(event, seconds)` is how the forwarder waits for a send in slices; `lookup` is getaddrinfo; `journal` is
+    the journal's socket (JOURNAL where None: a test's stand-in gives its own)."""
 
     def __init__(self, name, path, url, shape="raqib", token_file=None, ca=None, plain=False, beat=None,
                  start="start", batch=MAX_LINES, home=None, out=None, clock=time.time, mono=time.monotonic,
                  wait=None, connect_s=CONNECT_S, answer_s=ANSWER_S, poll_s=POLL_S, alive=ui.pid_alive,
-                 platform=None, pid=None, opener=None, nap=None, lookup=None, facility=None, framing=None):
+                 platform=None, pid=None, opener=None, nap=None, lookup=None, facility=None, framing=None,
+                 journal=None):
         self.name = check_name(name)
         if shape not in SHAPES:
             raise UsageError("--shape: raqib or hec, not %r" % (shape,))
@@ -765,7 +901,12 @@ class Forwarder:
         self.shape, self.token_file, self.platform = shape, token_file, platform or sys.platform
         scheme = self.dest["scheme"]
         self.syslog, self.delivery = scheme in SYSLOG, DELIVERY_OF[scheme]
-        self.facility, self.framing = self.syslog_options(scheme, shape, token_file, facility, framing)
+        self.to_journal, self.journal = scheme == JOURNAL_SCHEME, journal or JOURNAL
+        if self.to_journal:   # W-1, W-6
+            self.facility, self.framing = self.journal_options(shape, token_file, ca, plain, facility, framing,
+                                                               self.platform)
+        else:
+            self.facility, self.framing = self.syslog_options(scheme, shape, token_file, facility, framing)
         if shape == "hec" and not token_file:
             raise UsageError("--shape hec needs --token-file (Authorization: Splunk <token>)")
         try:
@@ -852,6 +993,31 @@ class Forwarder:
             raise UsageError("--framing: octet (RFC 6587 octet counting, the default) or newline")
         return facility, framing
 
+    @classmethod
+    def journal_options(cls, shape, token_file, ca, plain, facility, framing, platform):
+        """W-1, W-6: what the journal takes - the raqib shape, --facility 0 to 23 (13 unless given) - and what it
+        does not, each a usage error with its reason: a token, --ca, --plain, another shape, --framing; then a
+        system that is not Linux (the journal is Linux's; the Windows event log is eventlog:, a later task)."""
+        if token_file:
+            raise UsageError("--token-file: the journal takes no token (an entry is handed to the system's own"
+                             " socket, never to a collector): journal: takes no token file")
+        if ca is not None:
+            raise UsageError("--ca: the journal is no TLS peer (a socket of this system, not a connection): journal:"
+                             " takes no --ca")
+        if plain:
+            raise UsageError("--plain: nothing goes on a wire to the journal (it is this system's own socket):"
+                             " journal: takes no --plain")
+        if shape != "raqib":
+            raise UsageError("--shape %s is HTTP's: to the journal MESSAGE is the line as written (W-2)" % shape)
+        if framing is not None:
+            raise UsageError("--framing: an entry of the journal is never framed (one entry a datagram, or a sealed"
+                             " memory file): --framing is syslog over tcp's and tls's")
+        facility = cls.syslog_options("syslog+udp", "raqib", None, facility, None)[0]   # parsed as syslog's
+        if not str(platform).startswith("linux"):
+            raise UsageError("--to journal: is Linux's (the system's journal, systemd-journald); this system is %s:"
+                             " it has no journal to hand the events to (W-1)" % platform)
+        return facility, None
+
     # --- the state (J-9) -------------------------------------------------------------------------------------
     def behind(self):
         """J-9: bytes of whole lines after the cursor not yet passed. N-8: it looks back from the file's end at
@@ -898,6 +1064,8 @@ class Forwarder:
                 "in_question": {"count": self.question, "since": self.since if self.question else None}}
         if self.syslog:   # P-3: the facility and the framing are the destination's, kept as the shape is
             s.update(facility=self.facility, framing=self.state_framing())
+        elif self.to_journal:   # W-2: the journal's facility is kept as syslog's is; it has no framing
+            s.update(facility=self.facility)
         return s
 
     def state_framing(self):
@@ -1104,6 +1272,9 @@ class Forwarder:
                     raise UsageError("the name %s forwards with facility %d, framing %s: another facility or"
                                      " framing is another name, as another shape is (P-3)" % (
                                          self.name, old["facility"], old["framing"] or "none"))
+            elif self.to_journal and old.get("facility") != self.facility:   # W-2, as P-3
+                raise UsageError("the name %s forwards to the journal with facility %s: another facility is another"
+                                 " name, as another shape is (P-3)" % (self.name, old.get("facility")))
             elif self.syslog:   # P-3: a state written before the two were kept: this start's are kept from now
                 kept = ("; the state held no facility or framing (written before they were kept): this start's,"
                         " facility %d, framing %s, are kept from now" % (self.facility,
@@ -1119,7 +1290,8 @@ class Forwarder:
             if old["failing"]:
                 self.failing, self.carried = dict(old["failing"]), True
             return "resumed at offset %d%s%s" % (self.offset, "; failing %s, as the state said, until a try %s" % (
-                self.failing["error"], "ends in order" if self.syslog else "has an answer") if self.carried else "",
+                self.failing["error"], "ends in order" if self.syslog else "is handed whole" if self.to_journal
+                else "has an answer") if self.carried else "",
                                                  kept)
         if self.start_from["start"] == "end":
             try:
@@ -1193,6 +1365,11 @@ class Forwarder:
     def send(self, lines):
         if self.syslog:   # J-6: one message per line; J-7: no token
             r = self.carry(lambda: SyslogSend(self, [self.wire(ln) for ln in lines]))
+        elif self.to_journal:   # W-2: one entry per line; W-4: paced
+            began = self.mono()
+            r = self.carry(lambda: JournalSend(self, [self.wire(ln) for ln in lines]))
+            if r.kind == "taken":
+                self.pace(len(lines), began)
         else:
             try:
                 token = self.token()
@@ -1202,27 +1379,46 @@ class Forwarder:
         if r.kind == "taken" and self.size < self.batch:   # N-1: a taken send doubles it, up to --batch
             self.size = min(self.batch, self.size * 2)
             self.say("a send was taken: the next batch is %d line(s)" % self.size)
-        elif r.kind == "failed" and r.error == "late" and r.phase in ("send", "answer"):
-            size = max(1, len(lines) // 2)   # M-4, N-1: late in its request or its answer, halved down to one
+        elif r.kind == "failed" and (r.error == "late" and r.phase in ("send", "answer") or
+                                     self.to_journal and r.error == "write"):
+            # M-4, N-1: late in its request or its answer, halved down to one. X-4: an entry the journal would
+            # not take is halved too, so the lines before it are not handed again at every try
+            size = max(1, len(lines) // 2)
             if size < self.size:
                 self.size = size
                 self.say("a send of %d line(s) was late (%s): the next batch is %d" % (
-                    len(lines), ("its bytes not written" if r.phase == "send" else "no orderly end of the connection")
-                    if self.syslog else "its request not sent" if r.phase == "send" else "no whole answer",
+                    len(lines), ("an entry not handed" if r.error == "write" else "its bytes not written"
+                                 if r.phase == "send" else "no orderly end of the connection")
+                    if self.syslog or self.to_journal else "its request not sent" if r.phase == "send" else "no whole answer",
                     self.size))
         return r
 
     def wire(self, ln):
-        """J-6: what one line puts on the wire: HTTP's piece of a body, or syslog's framed message (a datagram)."""
+        """J-6: what one line puts on the wire: HTTP's piece of a body, or syslog's framed message (a datagram);
+        W-2: the journal's entry."""
         if self.syslog:
             return syslog_frame(syslog_message(ln.raw, ln.obj, self.facility), self.dest["scheme"], self.framing)
+        if self.to_journal:
+            return journal_entry(ln.raw, ln.obj, self.facility)
         return piece(self.shape, ln.raw, ln.obj)
 
     def wire_len(self, ln):
-        """M-3: the length of self.wire(ln), computed without building it."""
+        """M-3: the length of self.wire(ln), computed without building it. W-3: to the journal no entry is too
+        long (a sealed memory file carries what a datagram cannot): a batch is bounded by its lines' own bytes,
+        so every line the forwarder reads whole (at most 512 KiB, M-3) is sent, never refused for its length."""
         if self.syslog:
             return syslog_len(ln.raw, ln.obj, self.dest["scheme"], self.facility, self.framing)
+        if self.to_journal:
+            return len(ln.raw)
         return piece_len(self.shape, ln.raw, ln.obj)
+
+    def pace(self, count, began):
+        """W-4: at most JOURNAL_PACE lines a second to the journal. After a batch of `count` lines taken, what is
+        left of count / JOURNAL_PACE seconds from its start is waited by the forwarder's own wait (pause: the
+        injected wait, the state once a beat); Stop ends the wait at once, and the batch stays taken."""
+        left = began + count / float(JOURNAL_PACE) - self.mono()
+        if left > 0:
+            self.pause(left)
 
     def too_long(self, ln):
         """K-2, M-3, J-6: longer than one request may be (512 KiB), or over udp than one datagram (65000)."""
@@ -1270,6 +1466,8 @@ class Forwarder:
             self.skipped += 1
         elif not ln.long and self.dest["scheme"] == "syslog+udp" and self.wire_len(ln) <= MAX_BYTES:
             self.count_refused(ln, "locally: longer than one datagram may be (over %d bytes, J-6)" % DATAGRAM_MAX)
+        elif self.to_journal:   # X-2: the forwarder's own bound of a line, whatever carries it
+            self.count_refused(ln, "locally: longer than one batch may be (%d KiB, J-11)" % (MAX_BYTES // 1024))
         else:
             self.count_refused(ln, "locally: longer than one request may be (J-11)")
         self.pass_line(ln)
@@ -1306,7 +1504,8 @@ class Forwarder:
                 more = ("the cursor stays before them; %d line(s) in question from offset %d (asked alone as far as"
                         " offset %d) wait for a later line taken" % (self.question, self.offset, self.reach))
             self.say("failing: %s (%s%s); %d tr%s; %s" % (
-                r.error, (SYSLOG_ERRORS if self.syslog else ERRORS).get(r.error, r.error), "" if r.status is None else ", status %d" % r.status,
+                r.error, link.errors_of(self.dest["scheme"]).get(r.error, r.error),
+                "" if r.status is None else ", status %d" % r.status,
                 self.failing["tries"], "y" if self.failing["tries"] == 1 else "ies", more))
 
     def failed(self, r):
@@ -1789,7 +1988,8 @@ class Forwarder:
             self.say("%s -> %s (shape %s, delivery %s%s%s); %s; state %s" % (
                 self.path, where(self.dest), self.shape, self.delivery,
                 ", facility %d, framing %s" % (self.facility, self.framing if self.dest["scheme"] != "syslog+udp"
-                                               else "none: one datagram a message") if self.syslog else "",
+                                               else "none: one datagram a message") if self.syslog else
+                ", facility %d, at most %d lines a second" % (self.facility, JOURNAL_PACE) if self.to_journal else "",
                 ", plain: not encrypted" if self.plain else "", how, self.state_file))
             self.write_state()
             self.loop(once)

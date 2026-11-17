@@ -1224,12 +1224,17 @@ is amended by T-2, T-1 restated by V-1).
   an `ss` that has not returned in 30 s). On Windows a live watch run by
   an administrator starts one tracing session of its own and stops it at
   its end, and stops the sessions killed watches of Raqib left; no other
-  session is touched. The only writes are under `~/.raqib`, and the hook settings of a
-  project only with `--attach-hooks`.
+  session is touched. `raqib watch` and the window write under ~/.raqib and nowhere else,
+  and the hook settings of a project only with `--attach-hooks`. Outside ~/.raqib Raqib
+  writes only by an explicit command: `raqib forward --to journal:` hands the events to the
+  system's journal because a person ran it. Nothing is installed, registered or switched on
+  by it, the watch never does it on its own, and the watch, the capture path and the events
+  file are not touched by it (ADR-0011 W-0).
 
 ### The forwarder (`raqib forward`; ADR-0011 Amendments J to N)
 A forwarder is a process of its own that reads the watch's events file and
-sends every whole line to one collector, over HTTP or over syslog
+sends every whole line to one collector, over HTTP or over syslog, or
+hands it to the system's own journal
 (docs/specs/FORWARD.md). The
 watch does not know it runs: nothing of the capture path imports it, and a
 collector that is slow, down or refusing never delays or loses a capture
@@ -1278,6 +1283,31 @@ collector that is slow, down or refusing never delays or loses a capture
   then no send starts and the forwarder is failing `stuck` - an alarm, not
   a growth without end. An abandoned send's sockets are shut down and left
   to its own thread, never closed under it.
+- **The journal.** `--to journal:` (Linux) hands each line, as an entry
+  of the journal's own protocol, to the system's journal socket, from the
+  user's own process with no rights (ADR-0011 W). What goes there is read
+  by whoever reads the journal: root, the journal's and adm's groups, and
+  the user's own; and the journal may pass it on (to a syslog daemon, to
+  another host): the events then leave the host by the system's hand, not
+  Raqib's. Any local process of any user - the watched agent is one - can
+  write entries that say raqib (the journal's socket is open to all):
+  SYSLOG_IDENTIFIER and the RAQIB_ fields prove nothing. The journal's own
+  trusted fields say who wrote an entry, and a reader of the journal must
+  ask them; but an agent that runs as the same user under the same Python
+  differs from the forwarder only in `_PID`, and the forwarder's pid is
+  kept in a state file that agent can rewrite. So an entry in the journal
+  that says raqib is a lead, not a proof: the watch's own events file and
+  its record are the proof, and a forwarder run as a unit of its own (with
+  the service, later) is what will give its entries a unit nobody else
+  has. The journal
+  answers nothing (`sent`): it may drop entries over its own rate limit,
+  unseen by the forwarder, whose status stays OK; that limit is counted
+  for a unit or a session, so a watched agent in the forwarder's own
+  session may use it up and have raqib's entries dropped. The forwarder paces
+  itself (at most 250 lines a second); what tells of a loss is the
+  journal's own line of suppressed messages and the search for a missing
+  heartbeat. No journal (no socket) is a collector that is down: failing
+  `connect`, tried again, nothing passes.
 - **Syslog.** Over `syslog+udp://` and `syslog+tcp://` every event is
   clear text over udp and tcp: any host on the path reads it whole, and can
   change it or drop it, and over udp can send datagrams with the host's
