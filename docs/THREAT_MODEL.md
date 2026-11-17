@@ -1387,6 +1387,17 @@ collector that is slow, down or refusing never delays or loses a capture
   `time`, the host's clock that the same account may set (EVENT.md says
   the same of any reader) - and a forwarder under another account (the
   service, later).
+- **The window reads the states.** The window's Link screen reads the states
+  in `~/.raqib/forward/` by the reader and the judgement `raqib forward
+  --status` uses, at most once a second and off the window's thread; it
+  starts, stops and configures no forwarder, holds and shows no token and
+  opens no connection, and no result, exit code or finding of a watch
+  depends on it. A state's text is a stranger's: it is shown as text, its
+  control characters removed and each line bounded, and nothing of it is
+  drawn as markup, opened or run. A writer of the state folder can therefore
+  make the Link screen say a bounded untrue thing about a forwarder - the
+  folder is the user's own, as the forwarder's is - and never more (ADR-0011
+  Amendments R and T).
 
 ## 6. Attacks on the watcher itself
 

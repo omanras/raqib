@@ -111,7 +111,7 @@ import threading
 import time
 import traceback
 
-from raqib import host as hostmod, notify, overlay, ruleform, tray as traymod, ui, watch
+from raqib import host as hostmod, link, notify, overlay, ruleform, tray as traymod, ui, watch
 
 TITLE = "Raqib"
 TICK_MS = 500                 # how often the window reads the state (after())
@@ -373,7 +373,9 @@ SENTENCES = {
     "NEW RULE: REFUSED": "The rule was refused", "NEW RULE: ADDED": "The rule was added",
     "NEW RULE: CHANGED": "Changed since the test: test again",
     "CAPTURE FAILED": "Capture failed", "AGENT GONE": "The agent is gone",
-    "LOG": "The watch's own lines", "NO LOG": "No log yet"}
+    "LOG": "The watch's own lines", "NO LOG": "No log yet",
+    "READING LINK": "Reading the forwarders' states...", "LINK NOT READ": "The link is not known",
+    "NO FORWARDER": "No forwarder: nothing leaves this host by Raqib"}   # M10.4b: the Link screen
 STOPPING = " (stopping)"
 
 
@@ -393,6 +395,8 @@ def verdict_sentence(word):
         out = "%d %s on this host" % (n, "tree" if n == 1 else "trees")
     elif text.startswith("DOCTOR: "):
         out = "Checks: %s" % " ".join(w if w == "OK" else w.lower() for w in text[8:].split(" "))
+    elif text.startswith("LINK: "):   # ADR-0011 R-3: "LINK: 2 FORWARDERS, 2 OK" -> "Link: 2 forwarders, 2 OK"
+        out = "Link: %s" % " ".join(w if w.rstrip(",;") == "OK" else w.lower() for w in text[6:].split(" "))
     else:
         out = sentence(text.lower())
     return out + (STOPPING if stopping else "")
@@ -954,6 +958,126 @@ def rail_rules(info, error=None, states=()):
     text += "; %d finding%s suppressed" % (n, "" if n == 1 else "s") if n else ""
     text += "; rules: %d refused" % refused if refused else ""
     return text, "suppressed" if n else "incomplete" if off or refused else None
+
+
+# --- the link (ADR-0011 R-2 to R-4, S, T, U): the rows of link.read, formatted; the window judges nothing --------
+LINK_EVERY = 1.0        # R-4, T-4: the states are read at most once a second
+LINK_LATE = 10.0        # T-4: a read not back after this many seconds: the link is not known (incomplete)
+LINK_WAIT = 2.0         # U-4: how long the window's end waits for a read in flight
+LINK_LINE_MAX = 300     # T-3: characters of one line of a state's text shown, at most
+LINK_RAIL_MAX = 60      # R-3: characters of the rail's Link line, at most
+LINK_START = "raqib forward --to URL --name NAME"   # T-5: the command that starts a forwarder, said as text
+
+
+def link_line(text, limit=LINK_LINE_MAX):
+    """T-3: a text of a state (a stranger's) as the window shows it: every character that is not printable (an
+    escape, a newline inside a value, a control or format character) is "?", and the line is at most `limit`
+    characters, its cut said in them."""
+    text = _safe(text)
+    if len(text) <= limit:
+        return text
+    note = " [%d characters not shown]" % (len(text) - limit)
+    return text[:max(0, limit - len(note))] + note
+
+
+def link_level(code):
+    """T-1: a forwarder's level, from its code by level_of; OK (0) is a note, never clean: a link that sends is
+    no judgement of the host."""
+    level = level_of(code)
+    return "note" if level == "clean" else level
+
+
+def _link_rank(code):
+    return {0: 0, 1: 1}.get(code, 2) if isinstance(code, int) and not isinstance(code, bool) else 2
+
+
+def link_counts(rows):
+    """R-3, U-3: "2 forwarders, 1 failing, 1 behind": how many rows, and each word at the worst code among them
+    (3 over 1 over 0, as link.worst), counted, in the order the rows give them."""
+    top = max([_link_rank(r.get("code")) for r in rows] or [0])
+    words = {}
+    for r in rows:
+        if _link_rank(r.get("code")) == top:
+            word = link_line(r.get("word"), 16)
+            words[word] = words.get(word, 0) + 1
+    text = "%d forwarder%s" % (len(rows), "" if len(rows) == 1 else "s")
+    return text + "".join(", %d %s" % (n, w if w == "OK" else w.lower()) for w, n in words.items())
+
+
+def _link_level(rows, late):
+    """T-1, S-1, U-2: the level of the rows, from link.worst's code (OK a note); a late read is incomplete, but
+    never lowers an alarm."""
+    level = link_level(link.worst(rows)) if rows or getattr(rows, "rest", 0) or getattr(rows, "problem", None) \
+        else "note"
+    return level if level == "alarm" or not late else "incomplete"
+
+
+def link_view(rows, age=None):
+    """R-2, T-1 to T-5, S-1, S-2, U-2: the Link screen of the rows of link.read (None: no read has returned
+    yet) and of `age`, how long the read in flight has been out (None: none is). {"word", "level", "detail",
+    "items": one a forwarder {"name", "word", "level", "facts", "why", "lines"}, "text": [(line, tag)]}. Every
+    text of a state passes through link_line; the words and codes are the rows' own."""
+    late = age is not None and age > LINK_LATE
+    said = "no read of the forwarders' states has returned for %d s: the link is not known" % age if late else ""
+    if rows is None:
+        detail = said or "the forwarders' states in ~/.raqib/forward are being read (at most once a second)"
+        return {"word": "LINK NOT READ" if late else "READING LINK", "level": "incomplete", "detail": detail,
+                "items": [], "text": [(sentence(detail) + ".", "incomplete")]}
+    rest, problem = getattr(rows, "rest", 0), getattr(rows, "problem", None)
+    level = _link_level(rows, late)
+    if not rows and not rest and not problem:   # T-5: a host that sends nothing, said plainly
+        detail = "no forwarder: nothing leaves this host by Raqib" + ("; " + said if late else "")
+        return {"word": "NO FORWARDER", "level": level, "detail": detail, "items": [], "text": [
+            ("No forwarder has written a state in ~/.raqib/forward: nothing leaves this host by Raqib.", None),
+            ("A forwarder is a process of its own, started from a terminal; this screen starts none:", None),
+            ("  " + LINK_START, None)] + ([(sentence(said) + ".", "incomplete")] if late else [])}
+    items, text = [], []
+    for r in rows:
+        facts = [link_line(x) for x in r.get("facts") or ()]
+        why = [link_line(x) for x in r.get("why") or ()]
+        item = {"name": link_line(r.get("name"), 64), "word": link_line(r.get("word"), 16),
+                "level": link_level(r.get("code")), "facts": facts, "why": why, "lines": facts + why}
+        items.append(item)
+        age_of = r.get("age")
+        when = "" if not isinstance(age_of, (int, float)) or isinstance(age_of, bool) else (
+            "  (state written %d s ago)" % age_of if age_of >= 0 else "  (state written %d s ahead of this clock)"
+            % -age_of)
+        text.append(("%s  %s%s" % (item["name"], item["word"], when), "head"))
+        text += [("  " + x, None) for x in facts]
+        text += [("  " + x, item["level"] if item["level"] != "note" else None) for x in why]
+        text.append(("", None))
+    notes = []
+    if rest:   # S-1: counted and not read is not calm
+        notes.append("%d more state(s) were counted and not read (at most %d are read): ask for each by name with"
+                     " raqib forward --status NAME" % (rest, link.LINKS_MAX))
+    if problem:   # S-2: what could not be looked for is not "no forwarder"
+        notes.append(link_line(problem))
+    if late:
+        notes.append(said + " (the last read is shown)")
+    text += [(sentence(x) + ".", "incomplete") for x in notes]
+    if rows:
+        word = "LINK: " + link_counts(rows).upper()
+        detail = "; ".join(["as raqib forward --status reads and judges the states (its exit: %d)" % link.worst(rows)]
+                           + notes)
+    else:
+        word, detail = "LINK NOT READ", "; ".join(notes)
+    return {"word": word, "level": level, "detail": detail, "items": items, "text": text}
+
+
+def rail_link(rows, age=None):
+    """R-3, U-3: the rail's Link line and its level, on every screen: "Link: 2 forwarders, 1 failing, 1 behind",
+    "Link: none", "Link: not read"; one line, at most LINK_RAIL_MAX characters."""
+    late = age is not None and age > LINK_LATE
+    if rows is None:
+        return link_line("Link: not read" + (" for %d s" % age if late else ""), LINK_RAIL_MAX), "incomplete"
+    rest, problem = getattr(rows, "rest", 0), getattr(rows, "problem", None)
+    if rows:
+        text = "Link: " + link_counts(rows) + ("; %d not read" % rest if rest else "") + (
+            "; not all read" if problem else "")
+    else:
+        text = "Link: not read" if rest or problem else "Link: none"
+    text += "; not read for %d s" % age if late else ""
+    return link_line(text, LINK_RAIL_MAX), _link_level(rows, late)
 
 
 def seen_lines(holes, notes, look=()):
@@ -2411,6 +2535,7 @@ class Controller:
         self.reported = set()    # F-8: id() of the sessions whose final report was appended to the log
         self.look_logged = set() # F-3: the look's holes already written to the log
         self.holes = []   # the window's own holes: a tray that failed, a tick that failed (A-8)
+        self.link = None  # ADR-0011 R-2, T-4: the forwarders' states, read off the window's thread (LinkJob)
 
     # tray
     def start_tray(self):
@@ -2735,6 +2860,21 @@ class Controller:
             self.quitting, self.quit_at = True, self.clock()
         self.stop(reason)
 
+    def start_link(self, job=None):
+        """T-4: the link's reader, started with the window (its first read now); it starts no forwarder."""
+        self.link = job if job is not None else LinkJob()
+        self.link.poll()
+        return self.link
+
+    def link_now(self, now=None):
+        """(rows, age) of the link: the last read's rows and how long the read in flight has been out, a read
+        asked when one is due (LinkJob.poll). No result, exit or finding of a watch reads it (R-2, J-1)."""
+        job = self.link
+        if job is None:
+            return None, None
+        job.poll(now)
+        return job.rows, job.age(now)
+
     def worker_alive(self):
         for session in self.sessions():
             alive = getattr(session, "alive", None)
@@ -2769,6 +2909,8 @@ class Controller:
             if session.thread is not None:
                 session.thread.join(JOIN_SECONDS)
                 done = done and not session.thread.is_alive()
+        if self.link is not None:   # U-4: a read in flight, at most LINK_WAIT s; no part of "the watch did not end"
+            self.link.close(LINK_WAIT)
         self._tray_down()
         return done
 
@@ -2828,6 +2970,60 @@ class DoctorJob:
         return self._result
 
 
+# --- the link's reader in a thread (ADR-0011 T-4, R-4, U-4) --------------------------------------------------------
+
+class LinkJob:
+    """T-4, R-4, U-4: the forwarders' states read by link.read in a worker thread, never on the window's: poll()
+    (each tick) starts one read where none is in flight and the last began LINK_EVERY s ago or more - never two
+    at once, at most one a second; rows is the last read's (None before the first returns); age() how long the
+    read in flight has been out (None with none). A reader that raises is a read whose rows say so (incomplete),
+    never the window's failure. The thread is a daemon that holds nothing; close() waits for it at most
+    LINK_WAIT s. It starts, stops and configures no forwarder, and holds no token."""
+
+    def __init__(self, home=None, reader=None, clock=None):
+        self.reader = reader or (lambda: link.read(home))
+        self.clock = clock or time.monotonic
+        self.rows = None
+        self.asked = None    # when the last read began (the clock's)
+        self.reads = 0
+        self.thread = None
+        self.closed = False
+
+    def busy(self):
+        return self.thread is not None and self.thread.is_alive()
+
+    def poll(self, now=None):
+        now = self.clock() if now is None else now
+        if self.closed or self.busy() or (self.asked is not None and now - self.asked < LINK_EVERY):
+            return False
+        self.asked, self.reads = now, self.reads + 1
+        self.thread = threading.Thread(target=self._run, name="raqib-app-link", daemon=True)
+        self.thread.start()
+        return True
+
+    def _run(self):
+        try:
+            rows = self.reader()
+            if not isinstance(rows, list):
+                raise TypeError("the reader gave no rows")
+        except Exception as exc:   # R-4: a read that fails is said, never the window's failure
+            rows = link.Rows()
+            rows.problem = "the read of the states failed (%s)" % type(exc).__name__
+        self.rows = rows
+
+    def age(self, now=None):
+        if not self.busy():
+            return None
+        return (self.clock() if now is None else now) - self.asked
+
+    def close(self, seconds=LINK_WAIT):
+        """U-4: no read starts after it; the one in flight is waited for at most `seconds`. True when none is left."""
+        self.closed = True
+        if self.thread is not None:
+            self.thread.join(seconds)
+        return not self.busy()
+
+
 # --- the window (Tk) ----------------------------------------------------------------------
 
 def log_view(text, limit=None):
@@ -2883,10 +3079,10 @@ class Window:
     screen's cards. Its look is THEME's through ttk styles and pictures
     drawn once in _style; nothing it shows is computed here."""
 
-    SCREENS = ("host", "first", "watching", "rules", "log")
+    SCREENS = ("host", "first", "watching", "rules", "log", "link")
 
     def __init__(self, tk, root, controller, project, environ=None, home=None, doctor_job=None, probe=None,
-                 rules_panel=None, scale=None, win_api=None):
+                 rules_panel=None, scale=None, win_api=None, link_job=None):
         self.tk = tk
         from tkinter import ttk   # the themed widgets (stdlib)
         self.ttk = ttk
@@ -2937,6 +3133,7 @@ class Window:
         self._build(project)
         self.show_host()                  # M7.3: the first screen is the host
         controller.start_probe(probe)     # E1: one discover round at open, in a thread
+        controller.start_link(link_job if link_job is not None else LinkJob(home=home))   # ADR-0011 T-4: the link
         self.check()
         self.title_note = self._title_bar(win_api)
         self.after_id = root.after(TICK_MS, self.tick)
@@ -3364,6 +3561,7 @@ class Window:
         self._build_project(project)
         self._build_rules()
         self._build_log()
+        self._build_link()
         self._first_run()
 
     def _build_rail(self):
@@ -3397,7 +3595,8 @@ class Window:
         self.project_tab = ttk.Button(rail, text="Project", command=self.show_project, style="Rail.TButton")
         self.rules_tab = ttk.Button(rail, text="Rules", command=self.show_rules, style="Rail.TButton")   # M7.6
         self.log_tab = ttk.Button(rail, text="Log", command=self.show_log, style="Rail.TButton")   # A-5, F-6
-        for tab in (self.host_tab, self.project_tab, self.rules_tab, self.log_tab):
+        self.link_tab = ttk.Button(rail, text="Link", command=self.show_link, style="Rail.TButton")   # ADR-0011 R-2
+        for tab in (self.host_tab, self.project_tab, self.rules_tab, self.log_tab, self.link_tab):
             tab.pack(fill="x", padx=self.px(8), pady=(0, self.px(2)))
         self.doctrine = tk.Label(rail, text=DOCTRINE, anchor="w", justify="left", font=self.font_meta,
                                  background=p["rail"], foreground=p["rail_muted"], wraplength=wrap)
@@ -3411,6 +3610,10 @@ class Window:
         self.rules_note = tk.Label(rail, text="", anchor="w", justify="left", font=self.font_meta,
                                    background=p["rail"], foreground=p["rail_muted"], wraplength=wrap)
         self.rules_note.pack(side="bottom", fill="x", padx=pad + self.px(6), pady=(0, self.px(6)))
+        # ADR-0011 R-3: the link's worst word, on every screen, above the rules line and as it is drawn
+        self.link_note = tk.Label(rail, text="", anchor="w", justify="left", font=self.font_meta,
+                                  background=p["rail"], foreground=p["rail_muted"], wraplength=wrap)
+        self.link_note.pack(side="bottom", fill="x", padx=pad + self.px(6), pady=(0, self.px(4)))
 
     # --- the screens ---------------------------------------------------------------------------------
     def _build_host(self):
@@ -3694,6 +3897,15 @@ class Window:
         self.log_jump = ttk.Button(self.primary, text="Jump to newest", command=lambda: self.log_text.see("end"),
                                    style="Primary.TButton")
 
+    def _build_link(self):
+        """ADR-0011 R-2, T-3: the Link screen - each forwarder as raqib/link.py read and judged its state, as
+        text (selectable, read-only). No control starts, stops or configures a forwarder; no field, no token."""
+        f = self.linkf = self.ttk.Frame(self.screens)
+        outer, inner, _ = self._card(f, "Forwarders")
+        outer.pack(fill="both", expand=True)
+        frame, self.link_text = self._text(inner, 4)
+        frame.pack(fill="both", expand=True)
+
     def _table(self, parent, key, columns, height):
         """E2: a Treeview whose columns sort when their heading is clicked."""
         frame = self.ttk.Frame(parent, style="Inner.TFrame")
@@ -3716,7 +3928,7 @@ class Window:
         if name != "rules":   # M8.2 REDO E-5: leaving the Rules screen withdraws a pending Remove
             self.rule_confirm = None
         frames = {"host": self.hostf, "first": self.first, "watching": self.watching, "rules": self.rulesf,
-                  "log": self.logf, "ruleform": self.formf}
+                  "log": self.logf, "ruleform": self.formf, "link": self.linkf}
         for key, frame in frames.items():
             if key != name:
                 frame.pack_forget()
@@ -3729,8 +3941,9 @@ class Window:
         """E2: the rail's current item, its Open page; the screen's primary
         action, its strip and pills, its disclosures."""
         current = {"host": self.host_tab, "first": self.project_tab, "watching": self.project_tab,
-                   "rules": self.rules_tab, "ruleform": self.rules_tab, "log": self.log_tab}.get(self.screen)
-        for tab in (self.host_tab, self.project_tab, self.rules_tab, self.log_tab):
+                   "rules": self.rules_tab, "ruleform": self.rules_tab, "log": self.log_tab,
+                   "link": self.link_tab}.get(self.screen)
+        for tab in (self.host_tab, self.project_tab, self.rules_tab, self.log_tab, self.link_tab):
             style = "Current.Rail.TButton" if tab is current else "Rail.TButton"
             if str(tab.cget("style")) != style:
                 tab.configure(style=style)
@@ -3810,7 +4023,7 @@ class Window:
     def _sync_primary(self):
         """The one primary action of the screen, at the right of its verdict."""
         want = {"host": [self.host_button], "first": [self.start_button], "rules": [self.rules_new_button],
-                "ruleform": [self.rules_form_add_button], "log": [self.log_jump]}.get(self.screen)
+                "ruleform": [self.rules_form_add_button], "log": [self.log_jump], "link": []}.get(self.screen)
         if want is None:   # the watching screen: Stop while it runs, Back after it
             session = self.c.session
             ended = session is not None and session.snapshot()["phase"] in ("finished", "failed")
@@ -3942,6 +4155,11 @@ class Window:
         if not self._show("log") and changed:
             self._sync_frame()
         self._tick_log()
+
+    def show_link(self):
+        """ADR-0011 R-2: the Link screen, from the rail at any time: the forwarders as link.read judged them."""
+        self._show("link")
+        self._tick_link()
 
     def show_rules(self):
         """M7.6: the Rules screen, from the rail at any time (watches running)."""
@@ -4876,6 +5094,9 @@ class Window:
         text, level = rail_rules(self.rules_panel.info, self.rules_panel.error, states)
         colour = p["rail_levels"][level] if level else p["rail_muted"]
         self._put(self.rules_note, text=text, foreground=colour)
+        text, level = rail_link(*self.c.link_now())   # ADR-0011 R-3: the link's worst word, whatever is open
+        colour = p["rail_levels"][level] if level != "clean" else p["rail_muted"]   # as the watches' lines are
+        self._put(self.link_note, text=text, foreground=colour)
 
     def _tick(self):
         for action in self.c.drain():
@@ -4902,6 +5123,10 @@ class Window:
             return
         if self.screen == "log":
             self._tick_log()
+            self._seen(seen_lines(own, notes, look))
+            return
+        if self.screen == "link":   # ADR-0011 R-2: the link's states as read, nothing judged here
+            self._tick_link()
             self._seen(seen_lines(own, notes, look))
             return
         if self.screen == "host":
@@ -5066,6 +5291,12 @@ class Window:
         text = log_view(log.text())
         self._verdict("LOG", "note", "the %s's lines, %d characters; the newest at the end" % (which, len(text)))
         self._set(self.log_text, "log", text, follow=True)
+
+    def _tick_link(self):
+        """ADR-0011 R-2, T-1 to T-5: the forwarders as link.read read and judged them (link_view), as text."""
+        view = link_view(*self.c.link_now())
+        self._verdict(view["word"], view["level"], view["detail"])
+        self._set(self.link_text, "link", None, view["text"])
 
     def _tick_doctor(self):
         """The doctor's result, when it comes: the project screen's rows and
