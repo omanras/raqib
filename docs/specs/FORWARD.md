@@ -336,7 +336,8 @@ status ("more than two beats") need (K-2).
 
 ## The status (J-9, L-2)
 
-`raqib forward --status [NAME]` reads the state (every state in `~/.raqib/forward/` without NAME) and says it in
+`raqib forward --status [NAME]` reads the state (without NAME every state in `~/.raqib/forward/`, at most 64 in
+order of name: more are counted, said, and are exit 3 - what is not read is not calm) and says it in
 a few lines; the first line of each says the count of lines refused. Its rule: exit 0 only where nothing is
 failing and no whole line has waited longer than a beat; 1 where it is failing (`refusing` too) or behind; 3
 where there is no state, it cannot be read, or it was written more than two beats ago or in the future (the
@@ -347,7 +348,14 @@ status says so. A state written in the future of the reader's clock has an age t
 fresh. Lines in question are whole lines that wait (N-5): where `in_question` holds a count and its `since` is
 more than a beat older than the state, the status is 1 (BEHIND), the settling included, whatever `last_ok`
 says. A state that is not what the forwarder writes (the list above, "What is refused at the start") is
-UNREADABLE (3), never read as calm (M-6, N-6). Of several states, the worst: 3, then 1.
+UNREADABLE (3), never read as calm (M-6, N-6). Of several states, the worst: 3, then 1. A state longer than
+1 MiB, one that is no regular file (a folder, a pipe, a device, a link to nothing) is UNREADABLE and is not
+opened or read whole; a folder of states that is there and cannot be listed is exit 3 and said - nothing is
+known of the forwarders - never "no forwarder" (ADR-0011 S).
+
+The state's reader and its judgement are raqib/link.py's, which imports nothing of the network and nothing of
+the forwarder: `raqib forward --status` and the window read and judge a state by it, one judgement for both
+(ADR-0011 R-1).
 
 What `--status` says in each state of the machine (a test builds each row's state and holds it to the code):
 

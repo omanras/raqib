@@ -126,24 +126,16 @@ from urllib.parse import urlsplit
 from raqib import event
 from raqib import eventlog
 from raqib import host as host_watch
+from raqib import link
 from raqib import ui
+from raqib.link import (DELIVERIES, DELIVERY, DELIVERY_OF, DIR_NAME, ERRORS, FACILITIES, FRAMINGS, HEAD_MAX, KEYS,
+                        LATER, NAME, SCHEMA, SCHEMES, SHA, SHAPES, STATUS_RULE, SYSLOG, SYSLOG_ERRORS, SYSLOG_KEYS,
+                        _count, _instant, _state_problem, forward_dir, judge, seconds_of, state_path, state_problem,
+                        where)
 
-SCHEMA = "raqib-forward/1"
-DIR_NAME = "forward"
-NAME = re.compile(r"[a-z0-9-]{1,32}\Z")   # J-13
-SHAPES = ("raqib", "hec")                  # J-6
-SYSLOG = ("syslog+udp", "syslog+tcp", "syslog+tls")
-SCHEMES = ("http", "https") + SYSLOG
-DELIVERY = "acknowledged"                  # J-3: HTTP's word
-DELIVERIES = ("acknowledged", "written", "sent")
-DELIVERY_OF = {"http": DELIVERY, "https": DELIVERY, "syslog+udp": "sent", "syslog+tcp": "written",
-               "syslog+tls": "written"}    # J-3: what taken means, per transport
 PLAIN = ("http", "syslog+udp", "syslog+tcp")   # J-8: the wires that are not encrypted
 PORT_OF = {"http": 80, "https": 443, "syslog+udp": 514, "syslog+tls": 6514}   # P-3: syslog+tcp has none
-SYSLOG_KEYS = ("facility", "framing")      # P-3: written in a syslog destination's state only
 FACILITY = 13                              # J-6: log audit, unless --facility N
-FACILITIES = range(0, 24)                  # RFC 5424 6.2.1: the facilities are 0 to 23
-FRAMINGS = ("octet", "newline")            # J-6: RFC 6587 octet counting (the default) or a newline after each
 DATAGRAM_MAX = 65000                       # J-6: a message longer than this is never sent over udp
 # J-6: the event's severity as RFC 5424's (2 critical, 4 warning, 5 notice, 6 informational)
 SEVERITY = {"high": 2, "medium": 4, "low": 5, "hole": 4, "none": 6, "info": 6}
@@ -165,7 +157,6 @@ POLL_S = 1.0                               # how often a forwarder with nothing 
 SLICE_S = 0.25                             # L-4, M-4: no wait is longer than this without looking for Stop
 JOIN_S = 0.5                               # an abandoned send's thread is given this long to end (M-5: never closed)
 SCAN_READ = 64 * 1024                      # L-8, M-3: a line too long is looked through in pieces this long
-HEAD_MAX = 4096                            # N-3: the file's first bytes hashed, at most this many
 BEHIND_LOOK = 16 * SCAN_READ               # N-8: `behind` looks back from the file's end at most this far
 ANSWER_READ = 64 * 1024                    # of an answer's body, only the hec code is read
 TOKEN_READ = 64 * 1024
@@ -173,43 +164,8 @@ TOKEN = re.compile(rb"[\x21-\x7e]+\Z")     # one token: printable ASCII, no spac
 TARGET = re.compile(r"[\x21-\x7e]*\Z")     # L-6: a path and query of printable ASCII, no space
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")   # M-8: a control character anywhere in the URL
 LABEL = re.compile(r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\Z")
-SHA = re.compile(r"[0-9a-f]{64}\Z")
 TAIL = "tail"                              # read_lines: more than 512 KiB after the last newline (L-8)
 OTHER = "other"                            # read_at: the file is not the one the try began with (M-8)
-# J-9 failing.error: the forwarder's own words, never the collector's.
-ERRORS = {
-    "connect": "no connection to the collector",
-    "tls": "the TLS handshake or the certificate failed",
-    "no-answer": "the connection ended with no answer",
-    "late": "no answer in time",
-    "redirect": "the collector answered a redirect (never followed)",
-    "busy": "the collector said it is busy (408 or 429)",
-    "server": "the collector failed (5xx)",
-    "answer": "an answer that does not say the batch was taken",
-    "refusing": "the collector refused each line sent alone and took no line after them (a 4xx): they wait in"
-                " question",
-    "token": "the collector refused the token (401 or 403)",
-    "token-file": "the token file cannot be read or fails its checks",
-    "write": "the system did not take the batch's bytes or datagrams, or the connection did not end in order after"
-             " them (syslog: a reset, the collector's end before the forwarder's, no route)",
-    "file": "the events file cannot be read, or more than 512 KiB follow its last newline",
-    "stuck": "four sends abandoned have not ended (a name that never resolves, a connect that never returns): no"
-             " send starts until one ends",
-    "unforeseen": "an error the forwarder did not foresee ended the run",
-}
-# P-5: the words said of a syslog send, which has no answer (an orderly end is what is waited for)
-SYSLOG_ERRORS = dict(ERRORS, late="the batch was not written, or the connection not ended in order, within the"
-                                  " bound",
-                     tls="the TLS handshake or the certificate failed, or the collector ended the session with an"
-                         " alert or with no close")
-KEYS = ("schema", "name", "pid", "written", "destination", "shape", "delivery", "plain", "file", "cursor", "from",
-        "beat", "sent", "skipped", "refused", "restarts", "last_id", "last_ok", "behind", "failing", "head",
-        "in_question")
-LATER = ("head", "in_question")            # N-3, N-5: a state written before them is read without them
-# L-2: the status's rule, said by FORWARD.md and the guide in these words (a test holds the three together)
-STATUS_RULE = ("exit 0 only where nothing is failing and no whole line has waited longer than a beat; 1 where it"
-               " is failing (`refusing` too) or behind; 3 where there is no state, it cannot be read, or it was"
-               " written more than two beats ago or in the future (the forwarder is silent)")
 
 
 class UsageError(Exception):
@@ -225,28 +181,13 @@ class NameLost(Exception):
     """N-4: the pid file holds another live process's pid; the run ends with 1, the reason said once."""
 
 
-def forward_dir(home=None):
-    """~/.raqib/forward, the home resolved as the watch resolves its own (raqib/host.py host_dir)."""
-    return os.path.join(os.path.dirname(host_watch.host_dir(home)), DIR_NAME)
-
-
 def events_default(home=None):
     return os.path.join(host_watch.host_dir(home), eventlog.NAME)
-
-
-def state_path(name, home=None):
-    return os.path.join(forward_dir(home), name + ".json")
 
 
 def iso(seconds):
     d = datetime.datetime.fromtimestamp(seconds, datetime.timezone.utc)
     return d.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (d.microsecond // 1000)
-
-
-def seconds_of(text):
-    """An instant of raqib-event/1 (or of the state) as seconds since the epoch."""
-    d = datetime.datetime.strptime(text[:-1], "%Y-%m-%dT%H:%M:%S.%f")
-    return calendar.timegm(d.timetuple()) + d.microsecond / 1e6
 
 
 def hec_time(text):
@@ -328,11 +269,6 @@ def destination(url, plain=False):
         raise UsageError("--to http://%s: plain http is taken only to a loopback address (127.0.0.0/8, ::1) unless"
                          " --plain is given (J-8)" % host)
     return {"scheme": scheme, "host": host, "port": port or (443 if scheme == "https" else 80), "path": path}, target
-
-
-def where(dest):
-    host = "[%s]" % dest["host"] if ":" in dest["host"] else dest["host"]
-    return "%s://%s:%d%s" % (dest["scheme"], host, dest["port"], dest["path"])
 
 
 def tls_context(ca=None, whole_end=False):
@@ -546,107 +482,6 @@ def head_of(f, length):
     f.seek(0)
     data = f.read(min(length, HEAD_MAX))
     return {"length": len(data), "sha256": _sha(data)}
-
-
-def _count(v):
-    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
-
-
-def _instant(v):
-    if not isinstance(v, str) or not v.endswith("Z"):
-        return False
-    try:
-        seconds_of(v)
-    except ValueError:
-        return False
-    return True
-
-
-def state_problem(old):
-    """L-6, M-6, N-6: why a JSON state is not what the forwarder writes (None where it is). The run refuses to go
-    on from such a state, and --status reads it as unreadable (3). It never raises, whatever the JSON holds."""
-    try:
-        return _state_problem(old)
-    except Exception:   # N-6: a value of a type no check foresaw is no state of the forwarder's
-        return "a value the forwarder never writes"
-
-
-def _state_problem(old):
-    if not isinstance(old, dict) or old.get("schema") != SCHEMA:
-        return "not a %s state" % SCHEMA
-    missing = [k for k in KEYS if k not in old and k not in LATER]
-    if missing:
-        return "no %s" % ", ".join(missing)
-    if not isinstance(old["name"], str) or not NAME.match(old["name"]) or not _count(old["pid"]):
-        return "name or pid is not one a forwarder has"
-    if not _instant(old["written"]):
-        return "written is not an instant"
-    d = old["destination"]
-    if not (isinstance(d, dict) and d.get("scheme") in SCHEMES and isinstance(d.get("host"), str) and
-            d["host"] and _count(d.get("port")) and 0 < d["port"] < 65536 and isinstance(d.get("path"), str)):
-        return "destination is not {scheme, host, port, path}"
-    if old["shape"] not in SHAPES or old["delivery"] not in DELIVERIES or not isinstance(old["plain"], bool):
-        return "shape, delivery or plain is not one the forwarder writes"
-    if d["scheme"] in SYSLOG and (old["shape"] != "raqib" or old["delivery"] != DELIVERY_OF[d["scheme"]] or
-                                  d["path"] != ""):
-        return "a syslog destination with a shape, delivery or path the forwarder never writes for it"
-    if d["scheme"] in SYSLOG:   # P-3: a state written before the two were kept has neither, and is read
-        if "facility" in old and (not _count(old["facility"]) or old["facility"] not in FACILITIES):
-            return "facility is not a syslog facility (0 to 23)"
-        if "framing" in old and not (old["framing"] is None if d["scheme"] == "syslog+udp" else
-                                     isinstance(old["framing"], str) and old["framing"] in FRAMINGS):
-            return "framing is not one the forwarder writes for the destination (none over udp)"
-        if ("facility" in old) != ("framing" in old):
-            return "a syslog state holds both facility and framing, or neither"
-    elif any(k in old for k in SYSLOG_KEYS):
-        return "facility or framing in the state of an HTTP destination"
-    if not isinstance(old["file"], str):
-        return "file is not a text"
-    cur = old["cursor"]
-    if not isinstance(cur, dict) or not _count(cur.get("offset")):
-        return "no cursor offset of whole bytes"
-    sha = cur.get("line_sha256")
-    if not (sha is None or isinstance(sha, str) and SHA.match(sha)):
-        return "a cursor whose line_sha256 is not a sha256"
-    if cur["offset"] > 0 and sha is None:
-        return "a cursor above 0 with no line_sha256 (every line passed has its hash)"
-    start = old["from"]
-    if not isinstance(start, dict) or start.get("start") not in ("start", "end") or not _count(start.get("offset")):
-        return "from is not {start, offset}"
-    beat = old["beat"]
-    if isinstance(beat, bool) or not isinstance(beat, (int, float)) or not math.isfinite(beat) or beat <= 0:
-        return "beat is not a number of seconds above 0"
-    if not all(_count(old[k]) for k in ("sent", "skipped", "restarts", "behind")):
-        return "sent, skipped, restarts and behind are not counts"
-    refused = old["refused"]
-    if not isinstance(refused, dict) or not _count(refused.get("count")) or not isinstance(refused.get("ids"), list):
-        return "refused is not {count, ids}"
-    if not all(isinstance(i, str) for i in refused["ids"]):
-        return "refused.ids are not texts"
-    if old["last_id"] is not None and not isinstance(old["last_id"], str):
-        return "last_id is not a text"
-    if old["last_ok"] is not None and not _instant(old["last_ok"]):
-        return "last_ok is not an instant"
-    failing = old["failing"]
-    if failing is not None:
-        if not isinstance(failing, dict) or not _instant(failing.get("since")) or not _count(failing.get("tries")):
-            return "failing is not {since, tries, error, status}"
-        error = failing.get("error")
-        if not isinstance(error, str) or error not in ERRORS:   # N-6: a list is no word (and no key of a dict)
-            return "failing.error is not one of the forwarder's words"
-        st = failing.get("status")
-        if st is not None and not _count(st):
-            return "failing.status is not a status"
-    head = old.get("head")
-    if head is not None and not (isinstance(head, dict) and _count(head.get("length")) and
-                                 head["length"] <= HEAD_MAX and isinstance(head.get("sha256"), str) and
-                                 SHA.match(head["sha256"])):
-        return "head is not {length, sha256}"
-    inq = old.get("in_question", {"count": 0, "since": None})
-    if not (isinstance(inq, dict) and _count(inq.get("count")) and
-            (inq.get("since") is None or _instant(inq.get("since")))):
-        return "in_question is not {count, since}"
-    return None
 
 
 class Result:
@@ -1981,93 +1816,27 @@ class Forwarder:
 
 
 # --- --status (J-9, L-2, M-6) --------------------------------------------------------------------------------
-def judge(state, now):
-    """(exit, word, lines) of one state, by STATUS_RULE. M-6, N-6: a state that is not what the forwarder writes
-    is unreadable (3), never read as calm, and never a traceback. N-5: a line in question longer than a beat is a
-    whole line that waited (1), settling included."""
-    try:
-        why = state_problem(state)
-        if why:
-            return 3, "UNREADABLE", ["not what a forwarder writes: %s" % why]
-        written, beat = seconds_of(state["written"]), float(state["beat"])
-        dest, cursor, refused, failing = state["destination"], state["cursor"], state["refused"], state["failing"]
-        inq = state.get("in_question") or {"count": 0, "since": None}
-        lines = ["to %s (shape %s, delivery %s%s%s)" % (
-                     where(dest), state["shape"], state["delivery"],
-                     "" if "facility" not in state else ", facility %d, framing %s" % (
-                         state["facility"], state.get("framing") or "none: one datagram a message"),
-                     ", plain: not encrypted" if state["plain"] else ""),
-                 "file %s, cursor %d (from the %s, offset %d)" % (state["file"], cursor["offset"],
-                                                                   state["from"]["start"], state["from"]["offset"]),
-                 "sent %d, skipped %d, refused %d%s, restarts %d" % (
-                     state["sent"], state["skipped"], refused["count"],
-                     " (latest: %s)" % ", ".join(str(i) for i in refused["ids"][-3:]) if refused["ids"] else "",
-                     state["restarts"]),
-                 "last taken: %s at %s; behind %d byte(s); in question %d%s" % (
-                     state["last_id"] or "none", state["last_ok"] or "never", state["behind"], inq["count"],
-                     " since %s" % inq["since"] if inq["count"] and inq.get("since") else ""),
-                 "written %s by pid %d (a beat of %g s)" % (state["written"], state["pid"], beat)]
-        last_ok = seconds_of(state["last_ok"]) if state["last_ok"] else None
-        asked = seconds_of(inq["since"]) if inq["count"] and inq.get("since") else None
-    except Exception:   # state_problem read every key; this is the last guard against a traceback
-        return 3, "UNREADABLE", ["a %s state that cannot be read" % SCHEMA]
-    age = now - written
-    if age < 0:
-        return 3, "SILENT", lines + ["the state was written %.0f s in the future of this clock: its age cannot be"
-                                     " told, so it is not fresh" % -age]
-    if age > 2 * beat:
-        return 3, "SILENT", lines + ["the state was written %.0f s ago, more than two beats: the forwarder is silent"
-                                     " (stopped, killed or stuck)" % age]
-    if failing:
-        return 1, "FAILING", lines + ["failing since %s: %s (%s), %d tr%s%s" % (
-            failing["since"], failing["error"], (SYSLOG_ERRORS if dest["scheme"] in SYSLOG else
-                                                 ERRORS)[failing["error"]], failing["tries"],
-            "y" if failing["tries"] == 1 else "ies",
-            "" if failing.get("status") is None else ", status %d" % failing["status"])]
-    if inq["count"] and (asked is None or written - asked > beat):
-        return 1, "BEHIND", lines + ["%d line(s) in question since %s, longer than a beat: they wait (settling"
-                                     " included)" % (inq["count"], inq.get("since") or "a time not said")]
-    if state["behind"] and (last_ok is None or written - last_ok > beat):
-        return 1, "BEHIND", lines + ["%d byte(s) of whole lines wait longer than a beat%s" % (
-            state["behind"], " (no send of this name was ever taken)" if last_ok is None else "")]
-    return 0, "OK", lines
-
-
 def status(name=None, home=None, out=None, clock=time.time):
     out = out if out is not None else sys.stdout
     folder = forward_dir(home)
     if name:
         check_name(name)
-        names = [name]
-    else:
-        try:
-            names = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".json") and NAME.match(n[:-5]))
-        except OSError:
-            names = []
-    if not names:
-        out.write("raqib forward --status: no forwarder has written a state in %s: silent (exit 3)\n" % folder)
+    rows = link.read(home, clock(), name or None)   # R-1: the state's reader and its judgement are link's
+    if rows.problem:   # S-2: states that could not be looked for are not "no state"
+        out.write("raqib forward --status: %s: nothing is known of the forwarders (exit 3)\n" % rows.problem)
+    if not rows:
+        if not rows.problem:
+            out.write("raqib forward --status: no forwarder has written a state in %s: silent (exit 3)\n" % folder)
         return 3
-    worst, now = 0, clock()
-    for n in names:
-        refused = "unknown"
-        try:
-            with open(state_path(n, home), "rb") as f:
-                state = json.loads(f.read().decode("ascii"))
-        except FileNotFoundError:
-            code, word, lines = 3, "SILENT", ["no state: %s (it never ran, or not here)" % state_path(n, home)]
-        except Exception:   # N-6: OSError, not JSON, not ASCII, nested past what the reader takes, anything else
-            code, word, lines = 3, "UNREADABLE", ["the state %s cannot be read" % state_path(n, home)]
-        else:
-            code, word, lines = judge(state, now)
-            try:
-                refused = "%d" % state["refused"]["count"] if code != 3 or word != "UNREADABLE" else "unknown"
-            except Exception:
-                pass
-        out.write("raqib forward %s: %s (exit %d); refused %s\n" % (n, word, code, refused))
-        for line in lines:
+    for row in rows:
+        out.write("raqib forward %s: %s (exit %d); refused %s\n" % (
+            row["name"], row["word"], row["code"], "unknown" if row["refused"] is None else "%d" % row["refused"]))
+        for line in row["lines"]:
             out.write("  %s\n" % line)
-        worst = code if (code == 3 or worst != 3 and code > worst) else worst
-    return worst
+    if rows.rest:   # R-4, S-1: at most LINKS_MAX names are read; the rest are counted, said, and are exit 3
+        out.write("raqib forward --status: %d more state(s) in %s not read: at most %d are read, in order of name;"
+                  " what is not read is not calm (exit 3)\n" % (rows.rest, folder, link.LINKS_MAX))
+    return link.worst(rows)
 
 
 def cli_run(args, out):
