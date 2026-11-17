@@ -538,14 +538,19 @@ def test_e8_the_threat_model_forward_md_and_the_guide_say_the_event_log():
                  "an event that says Raqib is a lead, not a proof",
                  "The Application log is bounded and overwrites its oldest",
                  "Raqib's events push other programs' out, and are pushed out",
-                 "at most 100 events a second"):
+                 "at most 100 events a second", "the forwarder's events carry no user",
+                 "the watched agent can do it on purpose", "an administrator's process can clear it"):
         assert text in threat, text
     assert "M10." not in threat
     for text in ("--to eventlog:", "the Application log", "the source `Raqib`", "nothing registered",
                  "1001 finding", "1002 source-finding", "1003 note", "1004 tree", "1005 hole", "1006 knock",
                  "1007 heartbeat", "1008 watch", "1000", "1009", "Error", "Warning", "Information",
-                 "raqib-part I/N id=ID sha256=HEX chars=TOTAL", "30000 characters", "puts the parts' second strings"
-                 " together in order", "`written`", "not a search of the log", "at most 100 events a second",
+                 "raqib-part I/N id=ID sha256=HEX chars=TOTAL", "30000 characters",
+                 # Z-2, Z-3, Z-4: the reader's rule whole, what tells of a loss, the system's own reason
+                 "the line is whole when part N/N is added", "the sha256 of its characters as ASCII bytes",
+                 "A set that never reaches N/N, or whose hash is not the head's, is no line: drop it",
+                 "keep them apart by the process", "no heartbeat (id 1007) for more than two beats",
+                 "`failing.status` is the system's own error number", "`written`", "not a search of the log", "at most 100 events a second",
                  "parts counted", "the description for the event cannot be found", "{\"scheme\": \"eventlog\"}",
                  "\"the Windows event log\""):
         assert text in spec, text
@@ -564,3 +569,32 @@ def test_e9_the_new_code_is_ascii_and_a_forwarder_with_no_loader_of_its_own_reac
     assert f.step() == "failed" and f.failing["error"] == "connect" and f.offset == 0
     assert GUARD == ["advapi32"] and f.evapi is None   # asked of the guard; nothing kept; tried again next send
     del GUARD[:]
+
+
+# --- Z (the Table's rulings on the review of 1ab2aa2) -----------------------------------------------------------
+def test_z4_a_refusal_carries_the_systems_own_error_number_and_none_where_the_system_gave_none(tmp_path, monkeypatch):
+    path = tf.write(tmp_path / "e.jsonl", tf.lines(3))
+    monkeypatch.setattr(forward.ctypes, "get_last_error", lambda: 5, raising=False)   # access denied, made up
+    system = Fake(refuse_open=1, refuse={1})
+    f = efwd(tmp_path, path, system)
+    assert f.step() == "failed" and (f.failing["error"], f.failing["status"]) == ("connect", 5)
+    assert f.step() == "failed" and (f.failing["error"], f.failing["status"]) == ("write", 5)
+    f.write_state()
+    s = tf.state(tmp_path, "e")
+    assert link.state_problem(s) is None and s["failing"]["status"] == 5
+    said = link.judge(s, f.clock())[2][-1]
+    assert "write (an event was refused by the Windows event log (the status is the system's error number))" in said
+    assert said.endswith(", status 5")
+    monkeypatch.setattr(forward.ctypes, "get_last_error", lambda: 0, raising=False)   # no reason given: none said
+    g = efwd(tmp_path, path, Fake(refuse={1}), name="g")
+    assert g.step() == "failed" and g.failing["status"] is None
+    monkeypatch.setattr(forward.ctypes, "get_last_error", lambda: 1 / 0, raising=False)   # asking fails: none
+    h = efwd(tmp_path, path, Fake(refuse={1}), name="h")
+    assert h.step() == "failed" and h.failing["status"] is None
+
+
+def test_z5_the_words_of_stuck_speak_of_no_name_and_no_connect_for_the_journal_and_the_event_log():
+    for table in (link.EVENTLOG_ERRORS, link.JOURNAL_ERRORS):
+        assert table["stuck"] == link.LOCAL_STUCK and "resolves" not in table["stuck"] and "connect" not in table["stuck"]
+        assert set(table) == set(link.ERRORS)
+    assert "resolves" in link.ERRORS["stuck"]   # the negative: a network send's words stay

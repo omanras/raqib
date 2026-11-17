@@ -556,6 +556,9 @@ def read_eventlog(facts, events):
         long = x.get("long") if isinstance(x.get("long"), dict) else {}
         try:
             back = eventlog_lines(long.get("xml"))[0]
+            # Z-6: only the made-up file's own lines (a process id used again brings other lines of the log)
+            mine = set(long["sha256"]) if isinstance(long.get("sha256"), list) else set()
+            back = _first_arrivals([b for b in back if hashlib.sha256(b.encode("utf-8")).hexdigest() in mine])
         except Exception:
             back = []
         back = _first_arrivals(back)

@@ -449,7 +449,7 @@ def run_fake_eventlog(path, args):
 def eventlog_read(pid):
     """One read of the Application log: this run's events (provider Raqib, the record's Execution ProcessID
     `pid`), oldest first, as XML: (wevtutil's output, its exit, its first words on stderr). The command line is
-    given whole, as measured (its query quoted for wevtutil)."""
+    given whole (its query quoted for wevtutil), as the rig's Windows machine took it (X27)."""
     cmd = ('wevtutil qe Application "/q:*[System[Provider[@Name=\'Raqib\'] and Execution[@ProcessID=%d]]]" /f:xml'
            ' /rd:false' % int(pid))
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)

@@ -225,15 +225,17 @@ def _state_problem(old):
 
 
 # X-3: a journal has no collector, no connection and no answer: its failing words say what it is
+LOCAL_STUCK = "sends that were given up have not ended (the system's call does not return): none starts until one ends"
 JOURNAL_ERRORS = dict(ERRORS, connect="the journal's socket is not there, or takes no entry",
                       late="the entries were not handed to the journal within the bound",
-                      write="an entry could not be handed to the journal")
+                      write="an entry could not be handed to the journal", stuck=LOCAL_STUCK)
 
 
 # Y-5: the Windows event log has no collector, no connection and no answer: its failing words say what it is
 EVENTLOG_ERRORS = dict(ERRORS, connect="the source Raqib of the Windows event log cannot be opened",
                        late="the events were not taken by the Windows event log within the bound",
-                       write="an event was refused by the Windows event log")
+                       write="an event was refused by the Windows event log (the status is the system's error"
+                             " number)", stuck=LOCAL_STUCK)
 
 
 def errors_of(scheme):

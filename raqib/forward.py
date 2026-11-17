@@ -960,14 +960,17 @@ def eventlog_dll(name):
 
 
 class EventLogApi:
-    """Y-2: the three calls of advapi32 the event log's send makes, with their ctypes signatures as measured -
+    """Y-2: the three calls of advapi32 the event log's send makes, with the signatures the rig's Windows machine
+    took (X27) -
     RegisterEventSourceW (a handle for the source, registered or not), ReportEventW (nonzero where the log took
     the event), DeregisterEventSource. Every call of the system goes through this one object; `loader(name)` gives
     the DLL (eventlog_dll unless a test gives its own). Windows only: it is made at the forwarder's first send
     (Forwarder.eventlog_api), never at import."""
 
-    def __init__(self, loader=None):
+    def __init__(self, loader=None, last_error=None):
         dll = (loader or eventlog_dll)("advapi32")
+        # Z-4: the system's own reason for a refusal (GetLastError, kept by ctypes for this thread)
+        self.last_error = last_error or getattr(ctypes, "get_last_error", None)
         handle, word, dword, boolean = ctypes.c_void_p, ctypes.c_ushort, ctypes.c_ulong, ctypes.c_long
 
         def fn(name, restype, *argtypes):
@@ -991,6 +994,15 @@ class EventLogApi:
     def close(self, handle):
         self.DeregisterEventSource(handle)
 
+    def reason(self):
+        """Z-4: the system's error number for the call that just failed on this thread, or None where it gave
+        none: what tells a full log, no right and a stopped service apart."""
+        try:
+            code = int(self.last_error())
+        except Exception:
+            return None
+        return code if code > 0 else None
+
 
 class EventLogSend(Send):
     """Y-1 to Y-5: one batch to the Windows event log, on a thread of its own and bounded as the journal's send is
@@ -1012,14 +1024,14 @@ class EventLogSend(Send):
         except failures:   # no advapi32, no such call, or a source the system would not open
             return Result("failed", "connect", phase="connect")
         if not handle:
-            return Result("failed", "connect", phase="connect")
+            return Result("failed", "connect", status=self.why(api), phase="connect")
         self.mark("send")
         try:
             for kind, ident, strings in self.body:
                 if self.abandoned:   # Stop or the bound came: no event more (the source is closed below)
                     return Result("failed", "late", phase="send")
                 if not api.report(handle, kind, ident, strings):
-                    return Result("failed", "write", phase="send")
+                    return Result("failed", "write", status=self.why(api), phase="send")
         except failures:
             return Result("failed", "write", phase="send")
         finally:
@@ -1028,6 +1040,14 @@ class EventLogSend(Send):
             except failures:
                 pass
         return Result("taken")
+
+    @staticmethod
+    def why(api):
+        """Z-4: the system's error number, where the API object can say it (a test's stand-in may say none)."""
+        try:
+            return api.reason()
+        except Exception:
+            return None
 
 
 class Forwarder:
@@ -1149,7 +1169,7 @@ class Forwarder:
     def journal_options(cls, shape, token_file, ca, plain, facility, framing, platform):
         """W-1, W-6: what the journal takes - the raqib shape, --facility 0 to 23 (13 unless given) - and what it
         does not, each a usage error with its reason: a token, --ca, --plain, another shape, --framing; then a
-        system that is not Linux (the journal is Linux's; the Windows event log is eventlog:, a later task)."""
+        system that is not Linux (the journal is Linux's; the Windows event log is eventlog:)."""
         if token_file:
             raise UsageError("--token-file: the journal takes no token (an entry is handed to the system's own"
                              " socket, never to a collector): journal: takes no token file")

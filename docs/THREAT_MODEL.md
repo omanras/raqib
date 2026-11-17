@@ -1315,13 +1315,17 @@ collector that is slow, down or refusing never delays or loses a capture
   written and no message file installed (ADR-0011 Y). Whoever reads the
   Application log reads the events (by default any signed-in user). Any
   process can write events under the source `Raqib`: the source's name is
-  nobody's, and only the record's own process id and user are the system's
-  word, so an event that says Raqib is a lead, not a proof (as an entry of
+  nobody's, only the record's own process id is the system's word, and
+  the forwarder's events carry no user, so an event that says Raqib is a
+  lead, not a proof (as an entry of
   the journal that says raqib is); the watch's own events file and its
   record are the proof. The Application log is bounded and overwrites its
-  oldest: Raqib's events push other programs' out, and are pushed out. The
-  forwarder paces itself, at most 100 events a second (the parts of a long
-  line counted); a log of Raqib's own is an install's work, later. Taken is
+  oldest: Raqib's events push other programs' out, and are pushed out -
+  the watched agent can do it on purpose, any process writes to that log,
+  and an administrator's process can clear it. The forwarder sees neither:
+  what tells is the reader's search for a host with no heartbeat for more
+  than two beats. The forwarder paces itself, at most 100 events a second
+  over its batches (the parts of a long line counted); a log of Raqib's own is an install's work, later. Taken is
   `written`: the system's call said the log took every event of a batch, not
   that the event is still there. A source that cannot be opened is a
   collector that is down: failing `connect`, tried again, nothing passes; an

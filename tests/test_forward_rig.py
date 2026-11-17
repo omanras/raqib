@@ -646,6 +646,9 @@ def test_m103cb_e7_x27_is_missed_when_its_part_is_broken_not_run_off_windows_and
                    [p.replace("xxxx", "xxxy", 1) if "raqib-part 2/4" in p else p for p in parts]):   # its hash
         cut = state(lambda f: f["x27"]["long"].update(xml="".join(broken)))
         assert cut[0] == check.MISSED and "the long line did NOT come back whole" in cut[1], cut
+    # Z-6: a process id used again brings other lines of the log into the read: the made-up file's own lines count
+    other = made_up_xml(whole[:2])
+    assert state(lambda f: f["x27"]["long"].update(xml=other + good["x27"]["long"]["xml"]))[0] == check.MET
     repeated = parts[:3] + parts[1:]   # a batch handed again: its first part begins the line anew
     assert state(lambda f: f["x27"]["long"].update(xml="".join(repeated)))[0] == check.MET
     assert state(lambda f: f["x27"].pop("long"))[0] == check.MISSED
@@ -657,7 +660,7 @@ def test_m103cb_e7_x27_is_missed_when_its_part_is_broken_not_run_off_windows_and
     assert check.read_eventlog(good, None)[0][1] == check.MISSED   # no events: nothing to compare
 
 
-def test_m103cb_e7_forward_run_does_not_run_x27_off_windows_and_reads_back_by_the_forwarders_own_pid(
+def test_m103cb_e7_forward_run_does_not_run_x27_off_windows(
         monkeypatch):
     monkeypatch.setattr(forward_run, "EVENTLOG_FAKE", None)
     monkeypatch.setattr(forward_run, "eventlog_read", lambda pid: pytest.fail("the system was asked"))
