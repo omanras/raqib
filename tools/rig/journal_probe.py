@@ -29,14 +29,15 @@ def by_memfd(sock, data):
         os.write(fd, data)
         import fcntl
         fcntl.fcntl(fd, 1033, 0x0001 | 0x0002 | 0x0004 | 0x0008)   # F_ADD_SEALS: seal, shrink, grow, write
-        socket.send_fds(sock, [b""], [fd], address=PATH)
+        import array
+        sock.sendmsg([b""], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [fd]))], 0, PATH)
     finally:
         os.close(fd)
 
 
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
 print("sndbuf", sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF))
-sizes = [20, 1000, 60000, 130000, 200000, 250000, 600000]
+sizes = [20, 200000, 205000, 212000, 250000, 600000, 5000000]
 for n, size in enumerate(sizes):
     data = entry("x" * size, n)
     try:
@@ -52,7 +53,7 @@ for n, size in enumerate(sizes):
 sock.sendto(entry("two\nlines", 100), PATH)
 sock.sendto(entry("{\"id\":\"r:1\",\"kind\":\"note\"}", 101), PATH)
 # a burst: how many of 12000 the journal keeps
-for i in range(12000):
+for i in range(40000):
     sock.sendto(entry("burst %d" % i, 1000 + i), PATH)
 print("burst sent")
 time.sleep(3)
