@@ -4,13 +4,16 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
 
     python tools/rig/check.py --report WATCH.out --workload WORKLOAD.out [--sources DIR] [--exit-code N]
                               [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
-                              [--summary FILE] [--strict]
+                              [--service FACTS.json] [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
 --forward: what tools/rig/forward_run.py saw `raqib forward` do with that file (ADR-0011 J-14): X19 to X22
 over HTTP, X23 to X25 over syslog (J-6), X26 to the journal (W-8, Linux; not run elsewhere), X27 to the Windows
 event log (Y-7, Windows; not run elsewhere).
+--service: what tools/rig/service_run.py saw `raqib service` do as root on the Linux machine (ADR-0013 A-9): X28
+an install from a place a user can write is refused, X29 an install from root's own place gives an active unit
+that sees a second user's stand-in agent, X30 the removal leaves no unit (n/a where it was not run, AA-4).
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
@@ -588,6 +591,144 @@ def read_eventlog(facts, events):
         return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
 
 
+SERVICE_NAMES = ("X28 an install from a place a user can write is refused, the path said, and no unit is written",
+                 "X29 an install from root's own place gives an active unit that sees a second user's stand-in agent",
+                 "X30 the removal leaves no unit")
+
+
+def _service_case(facts, key):
+    x = facts.get(key)
+    if not isinstance(x, dict):
+        return None, "the rig did not run it: no facts of %s" % key
+    if x.get("error"):
+        return None, "the rig's run of it failed: %s" % x["error"]
+    return x, None
+
+
+CAP_BOUND = (1 << 2) | (1 << 19)   # AD-6: CAP_DAC_READ_SEARCH (2) and CAP_SYS_PTRACE (19), and no other: 0x80004
+
+
+def _hex(text):
+    try:
+        return int(str(text), 16)
+    except ValueError:
+        return None
+
+
+def _below(path, place):
+    return isinstance(path, str) and isinstance(place, str) and place.startswith("/") and (
+        path == place or path.startswith(place.rstrip("/") + "/"))
+
+
+def _roots_alone(uid, mode):
+    try:
+        return uid == 0 and not int(str(mode), 8) & 0o022
+    except ValueError:
+        return False
+
+
+def read_service(facts):
+    """X28-X30 (ADR-0013 A-9, AC-10): what tools/rig/service_run.py saw `raqib service` do as root on the Linux
+    machine. MET; MISSED with what is missing (facts None or without a case: silence is a finding); n/a only
+    where it was not run and the facts' platform is not Linux (AA-4): not run on Linux is MISSED. X28 is MET only
+    where the refusal names the place every user can write (mode 0777, not sticky, inside a folder root's alone)
+    or a path below it; X29 only where systemd's own word on the unit was read, its manager warned of none of the
+    unit's directives, and the main process's own word (AD-6) is a bounding set of exactly the two capabilities,
+    a seccomp filter and no new privileges; X30 only where the unit is not active, systemd does not know it and
+    the record's folder is gone. It never raises: facts that cannot be read are MISSED."""
+    try:
+        if not isinstance(facts, dict):
+            return [(n, MISSED, "the service's run left no facts (silence is a finding)") for n in SERVICE_NAMES]
+        if facts.get("not_run"):
+            if str(facts.get("platform") or "linux").startswith("linux"):
+                return [(n, MISSED, "not run on Linux: %s" % facts["not_run"]) for n in SERVICE_NAMES]
+            return [(n, SKIP, "not run: %s" % facts["not_run"]) for n in SERVICE_NAMES]
+        if facts.get("error"):
+            return [(n, MISSED, "the service's run failed: %s" % facts["error"]) for n in SERVICE_NAMES]
+        rows = []
+        x, why = _service_case(facts, "x28")
+        if x is None:
+            rows.append((SERVICE_NAMES[0], MISSED, why))
+        else:
+            said = " ".join(str(x.get("said") or "").split())
+            m = re.search(r"refused: (/\S*) is ", said)
+            place, parent = x.get("place"), x.get("parent")
+            missing = [w for w, bad in (
+                ("exit 2 (exit %s)" % x.get("exit"), x.get("exit") != 2),
+                ("a place every user can write and not sticky (mode %s)" % x.get("mode"), x.get("mode") != "0777"),
+                ("inside a folder root's alone (%s: uid %s, mode %s)" % (parent, x.get("parent_uid"),
+                                                                         x.get("parent_mode")),
+                 not (isinstance(place, str) and isinstance(parent, str) and place.startswith(parent + "/") and
+                      _roots_alone(x.get("parent_uid"), x.get("parent_mode")))),
+                ("the refusal naming %s or a path below it (it named %s)" % (place, m.group(1) if m else "none"),
+                 not (m and _below(m.group(1), place))),
+                ("no unit after it (one is there)", x.get("unit_after") is not False)) if bad]
+            rows.append((SERVICE_NAMES[0], MISSED if missing else MET,
+                         "from %s (mode %s, in %s, mode %s): %s" % (
+                             place, x.get("mode"), parent, x.get("parent_mode"),
+                             "exit 2, %s is named, no unit written" % m.group(1) if not missing else
+                             "missing: " + "; ".join(missing) + ("; it said: %s" % said[:200]))))
+        x, why = _service_case(facts, "x29")
+        if x is None:
+            rows.append((SERVICE_NAMES[1], MISSED, why))
+        else:
+            install = x.get("install") if isinstance(x.get("install"), dict) else {}
+            agent = x.get("agent") if isinstance(x.get("agent"), dict) else {}
+            mine = [f for f in x.get("mine") or [] if isinstance(f, dict)]
+            seen = [f for f in x.get("findings") or [] if isinstance(f, dict)]
+            show = x.get("show") if isinstance(x.get("show"), dict) else {}
+            journal = x.get("journal") if isinstance(x.get("journal"), dict) else {}
+            proc = x.get("proc") if isinstance(x.get("proc"), dict) else {}
+            warned = [str(w) for w in journal.get("lines") or []] if isinstance(journal.get("lines"), list) else []
+            missing = [w for w, bad in (
+                ("the install exited %s" % install.get("exit"), install.get("exit") != 0),
+                ("the unit is %s, not active" % x.get("active"), x.get("active") != "active"),
+                ("the stand-in did not start as %s (exit %s)" % ((x.get("user") or {}).get("name"), agent.get("exit")),
+                 agent.get("exit") != 0 or not isinstance(agent.get("pid"), int)),
+                ("no finding on the stand-in's tree (pid %s) in %s event(s); findings seen: %s" % (
+                    agent.get("pid"), x.get("events"), ", ".join("%s %s" % (f.get("rule"), f.get("tree"))
+                                                                 for f in seen[-5:]) or "none"), not mine),
+                ("systemd's word on the unit: its directives as systemctl show gives them (%s)" % (
+                    x.get("show_error") or "none read"), not show),
+                ("the manager's journal read (exit %s: %s)" % (journal.get("exit"), journal.get("err") or "no lines"),
+                 journal.get("exit") != 0 or not isinstance(journal.get("lines"), list) or not journal.get("read")),
+                ("no line of the manager's on the unit's directives; it said: %s" % " | ".join(warned[:3]),
+                 bool(warned)),
+                ("the main process's own word (%s)" % proc.get("error"), bool(proc.get("error")) or not proc),
+                ("its bounding set exactly CAP_DAC_READ_SEARCH and CAP_SYS_PTRACE (CapBnd %#x); it read CapBnd=%s"
+                 % (CAP_BOUND, proc.get("CapBnd")), _hex(proc.get("CapBnd")) != CAP_BOUND),
+                ("a seccomp filter (Seccomp 2); it read Seccomp=%s" % proc.get("Seccomp"), proc.get("Seccomp") != "2"),
+                ("no new privileges (NoNewPrivs 1); it read NoNewPrivs=%s" % proc.get("NoNewPrivs"),
+                 proc.get("NoNewPrivs") != "1"))
+                if bad]
+            rows.append((SERVICE_NAMES[1], MISSED if missing else MET,
+                         "missing: " + "; ".join(missing) if missing else
+                         "active; the stand-in as %s (uid %s, pid %s): %s; systemd: %d directive(s) shown, none"
+                         " warned of in %s journal line(s); the main process (pid %s): CapBnd=%s, Seccomp=2,"
+                         " NoNewPrivs=1" % (
+                             (x.get("user") or {}).get("name"), (x.get("user") or {}).get("uid"), agent.get("pid"),
+                             "; ".join("%s on %s" % (f.get("rule"), f.get("tree")) for f in mine[:3]), len(show),
+                             journal.get("read"), proc.get("pid"), proc.get("CapBnd"))))
+        x, why = _service_case(facts, "x30")
+        if x is None:
+            rows.append((SERVICE_NAMES[2], MISSED, why))
+        else:
+            missing = [w for w, bad in (("the removal exited %s" % x.get("exit"), x.get("exit") != 0),
+                                        ("the unit's file is left", x.get("unit_file") is not False),
+                                        ("systemctl says LoadState=%s" % x.get("load_state"),
+                                         x.get("load_state") != "not-found"),
+                                        ("systemctl says ActiveState=%s" % x.get("active_state"),
+                                         x.get("active_state") not in ("inactive", "failed")),
+                                        ("the record's folder is left", x.get("state_dir") is not False)) if bad]
+            rows.append((SERVICE_NAMES[2], MISSED if missing else MET,
+                         "missing: " + "; ".join(missing) if missing else
+                         "exit 0; no unit file; systemctl: LoadState=not-found, ActiveState=%s; no record's folder"
+                         % x.get("active_state")))
+        return rows
+    except Exception as exc:   # never raises: facts that cannot be read are MISSED
+        return [(n, MISSED, "its facts cannot be read (%s)" % type(exc).__name__) for n in SERVICE_NAMES]
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -606,6 +747,7 @@ def main(argv=None):
     p.add_argument("--sysmon", action="store_true")
     p.add_argument("--events")
     p.add_argument("--forward")
+    p.add_argument("--service")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -632,6 +774,12 @@ def main(argv=None):
         rows += read_syslog(facts, events)
         rows += read_journal(facts, events)
         rows += read_eventlog(facts, events)
+    if a.service:   # X28-X30 (ADR-0013 A-9): given and missing is the service run's silence, MISSED
+        try:
+            service_facts = json.loads(text(a.service))
+        except (OSError, ValueError):
+            service_facts = None
+        rows += read_service(service_facts)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

@@ -209,6 +209,39 @@ LINK_SCREEN = [
     " result, exit code, finding or knock of a watch depends on it (ADR-0011 Amendments R, T, U and V).",
 ]
 GUIDE_NEW += LINK_SCREEN
+# ADR-0013 (M12.1): the service's commands, rows of the guide's table only (as the forwarder's, G-11)
+SERVICE_ROWS = [
+    "| `raqib service install [--no-start]` | Linux, as root (it asks for no elevation): write `/etc/s"
+    "ystemd/system/raqib-watch.service` and enable and start it, the host watch as a unit of the syste"
+    "m's that serves no page, with its record under `/var/lib/raqib` (`docs/specs/SERVICE.md`); refuse"
+    "d, exit 2 and nothing written, for an interpreter run with `-S` or one reading `PYTHONHOME` or `P"
+    "YTHONPLATLIBDIR` from its environment, a raqib not directly in that interpreter's own site folder"
+    "s, or a `*.pth` file holding a byte outside printable ASCII, tab and the line ends, and unless th"
+    "e interpreter, its `pyvenv.cfg`, every file and folder under sys.path and under the paths its `*."
+    "pth` files name, the raqib package, systemctl, ss, the unit's folder and every folder above them "
+    "are root's and writable by nobody else (the first that is not is said), or where a unit of the na"
+    "me does not carry Raqib's mark, or, with no unit file, where systemd holds a unit of the name (lo"
+    "aded from any place, or running) or gives no answer; it says how many paths of which kinds it che"
+    "cked; after the reload, a unit not as installed is not started (exit 1); over Raqib's own unit it"
+    " restarts it; 3 s after the start it asks systemctl, and a unit not active or not as installed th"
+    "en is exit 1; `--no-start`: neither enabled nor started; exit 1 where systemctl failed |",
+    "| `raqib service remove [--purge]` | Linux, as root: stop, disable and remove Raqib's unit (one w"
+    "ithout Raqib's mark is not touched: exit 2), and have systemd forget a failed state of it (`syste"
+    "mctl reset-failed`, said); the record under `/var/lib/raqib` stays and its path is said, unless `"
+    "--purge` removes that folder too, and only it; with no unit file, exit 0 only where systemd holds"
+    " no unit of the name (LoadState not-found, ActiveState inactive or failed), else exit 1, nothing "
+    "touched and nothing purged |",
+    "| `raqib service status` | no rights needed: installed, enabled and active by systemctl's own wor"
+    "ds, whether it is as installed (the file's whole text the one Raqib writes, loaded from that file"
+    ", no drop-in, not changed since it was loaded), the restarts, and the last result where not activ"
+    "e; with no unit file, a unit of the name that systemd holds is said; exit 0 active as installed, "
+    "1 installed and not active, or not as installed, 3 not installed or not known, 2 not Linux |",
+]
+GUIDE_NEW += SERVICE_ROWS
+# ADR-0013 Amendment C (M12.1p, AC-1): the host watch without its page, where watch --host's options are told
+NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing listens on one, no page is opened in a"
+           " browser, and its report and its events file are unchanged (ADR-0013 Amendment C, AC-1)."]
+GUIDE_NEW += NO_PAGE
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")
@@ -431,8 +464,9 @@ def test_e1_where_it_runs_is_written_fresh_and_each_fact_is_pinned_by_the_code_o
 
 def test_e3_the_commands_table_is_cut_from_the_guides_and_in_the_ruled_order():
     """ADR-0010 E-3: `raqib app` first, then watch, watch --host, doctor, report, rules, discover, --version, and
-    one row for the rest that points at the guide. Each command row is a guide row (its command the row's or a
-    prefix of it, its words a part of the row's): the guide's table gained E-3's new rows (NEW_ROWS)."""
+    the rest in rows that point at the guide (ADR-0013 AB-1: more than one where one would pass 120). Each
+    command row is a guide row (its command the row's or a prefix of it, its words a part of the row's): the
+    guide's table gained E-3's new rows (NEW_ROWS)."""
     full = {}
     for row in table_rows(section("Commands", GUIDE)):
         command, does = cells(row)
@@ -441,7 +475,7 @@ def test_e3_the_commands_table_is_cut_from_the_guides_and_in_the_ruled_order():
     assert len(rows) >= 8 and all(len(row) <= 120 for row in rows)
     short = [row for row in rows if row.startswith("| `raqib ")]
     rest = [row for row in rows if not row.startswith("| `raqib ")]
-    assert rows == short + rest and len(rest) == 1
+    assert rows == short + rest and rest
     for row in short:
         command, does = cells(row)
         command = command.strip("`")
@@ -452,10 +486,16 @@ def test_e3_the_commands_table_is_cut_from_the_guides_and_in_the_ruled_order():
     assert keys == ["app", "watch", "watch --host", "doctor", "report", "rules", "discover", "--version"], keys
     for row in NEW_ROWS:
         assert row in rows and row in table_rows(section("Commands", GUIDE)), row
-    named = set(keys) | set(re.findall(r"`([a-z-]+)`", cells(rest[0])[0]))
+    named = set(keys) | set(re.findall(r"`([a-z-]+)`", " ".join(cells(row)[0] for row in rest)))
     for name in ("watch", "doctor", "report", "ui", "suspect", "proxy", "os-sysmon"):   # the first build's names
         assert name in named, name
-    assert cells(rest[0])[0].startswith("the rest: ") and links(rest[0]) == ["docs/GUIDE.md#commands"]
+    # ADR-0013 AB-1: the rest is cut into rows, none past 120; the first says "the rest: ", a later one "and: ",
+    # each points at the guide and names at least one command, none twice.
+    for i, row in enumerate(rest):
+        assert cells(row)[0].startswith("and: " if i else "the rest: ") and links(row) == ["docs/GUIDE.md#commands"]
+        assert re.findall(r"`([a-z-]+)`", cells(row)[0]), row
+    told = re.findall(r"`([a-z-]+)`", " ".join(cells(row)[0] for row in rest))
+    assert len(told) == len(set(told)) and not set(told) & set(keys), told
 
 
 def test_e3_every_command_in_the_table_is_the_parsers_and_parses_as_shown():
@@ -465,7 +505,7 @@ def test_e3_every_command_in_the_table_is_the_parsers_and_parses_as_shown():
     p, commands, helps = parser_parts()
     rows = table_rows(section("Commands"))
     short = [row for row in rows if row.startswith("| `raqib ")]
-    rest = cells([row for row in rows if not row.startswith("| `raqib ")][0])[0]
+    rest = " ".join(cells(row)[0] for row in rows if not row.startswith("| `raqib "))
     named = [cells(row)[0].strip("`").split()[1] for row in short]
     assert set(n for n in named if not n.startswith("-")) | set(re.findall(r"`([a-z-]+)`", rest)) == set(commands)
     for row in short:

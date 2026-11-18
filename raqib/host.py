@@ -5122,19 +5122,24 @@ class HostWatch:
 # --- the command ------------------------------------------------------------------
 
 class Running:
-    def __init__(self, watcher, server, notifier, thread, no_open, environ, out, err):
+    def __init__(self, watcher, server, notifier, thread, no_open, environ, out, err, no_page=False):
         self.watcher, self.server, self.notifier, self.thread = watcher, server, notifier, thread
         self.no_open, self.environ, self.out, self.err = no_open, environ, out, err
+        self.no_page = no_page   # M12.1p (ADR-0013 AC-1): no server, no thread, no port; server and thread None
 
 
 def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
           out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
           sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None,
-          suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None, beat=None, event_host=None, tracing=None):
+          suspect_timeout=SUSPECT_TIMEOUT, suspect_every=None, beat=None, event_host=None, tracing=None,
+          no_page=False):
     """Everything before the loop: the notifier, the HostWatch, the page
     server and the registry row (raqib/watch.py's, reused). attach_hooks:
     the person's --attach-hooks (or the window's checkbox), False by
-    default: without it nothing is written into any project (H-1, A4)."""
+    default: without it nothing is written into any project (H-1, A4).
+    no_page (M12.1p, ADR-0013 AC-1: --no-page): no page is served, no
+    socket is bound or listened on and no page thread runs; port is not
+    used, the watcher's url is None and its port record all None."""
     from raqib import watch
     out = out or sys.stdout
     err = err or sys.stderr
@@ -5194,19 +5199,27 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
         out.write("raqib watch --host: %s\n" % _safe(line))
     for note in watcher.notes:
         out.write("raqib watch --host: hole: %s\n" % _safe(note))
-    try:
-        server, watcher.port = watch._serve(watcher.page, port, routes={ui.DISCOVER_ROUTE: watcher.discover_page},
-                                            refresh=refresh)
-    except (OSError, OverflowError) as exc:
-        notifier.close()
-        raise watch.WatchError("cannot serve on 127.0.0.1:%s: %s" % (port, exc))
-    watcher.url = "http://127.0.0.1:%d/" % server.server_address[1]
+    if no_page:   # M12.1p (ADR-0013 AC-1): no listener; the state and the registry row say null, not a port
+        server = None
+        watcher.url = None
+        watcher.port = {"requested": None, "used": None, "warning": None}
+        out.write("raqib watch --host: no page is served (--no-page): no port is opened\n")
+    else:
+        try:
+            server, watcher.port = watch._serve(watcher.page, port, routes={ui.DISCOVER_ROUTE: watcher.discover_page},
+                                                refresh=refresh)
+        except (OSError, OverflowError) as exc:
+            notifier.close()
+            raise watch.WatchError("cannot serve on 127.0.0.1:%s: %s" % (port, exc))
+        watcher.url = "http://127.0.0.1:%d/" % server.server_address[1]
     hole = watcher.register(watch.Registry(watch.registry_path(home)))
     if hole:
         out.write("raqib watch --host: %s\n" % _safe(hole))
-    thread = threading.Thread(target=server.serve_forever, name="raqib-host-page", daemon=True)
-    thread.start()
-    return Running(watcher, server, notifier, thread, no_open, environ, out, err)
+    thread = None
+    if not no_page:
+        thread = threading.Thread(target=server.serve_forever, name="raqib-host-page", daemon=True)
+        thread.start()
+    return Running(watcher, server, notifier, thread, no_open, environ, out, err, no_page=no_page)
 
 
 def event_lines(watcher):
@@ -5231,18 +5244,22 @@ def loop(running, stop=None, stops=None):
     raqib/cli.py): the wait between ticks is stops.nap(), which ends as
     Ctrl-C does when a stop was asked from outside, with its name; the first
     lines say what stops it and what was left ignored (REDO B-3); the
-    "stopped" line is written at once (REDO 2 C-1)."""
+    "stopped" line is written at once (REDO 2 C-1). No page (M12.1p,
+    --no-page): no port warning is looked for, no page line, nothing opened."""
     from raqib import watch
     watcher, out = running.watcher, running.out
     crash = None
     try:
-        if watcher.port["warning"]:
+        if not running.no_page and watcher.port["warning"]:
             out.write("raqib watch --host: WARNING: %s\n" % watcher.port["warning"])
-        out.write("raqib watch --host: page %s (read-only, reloads every %d s; %s ends the watch)\n" % (
-            watcher.url, watcher.refresh, "Ctrl-C" if stop is None else "Stop"))
+        if not running.no_page:
+            out.write("raqib watch --host: page %s (read-only, reloads every %d s; %s ends the watch)\n" % (
+                watcher.url, watcher.refresh, "Ctrl-C" if stop is None else "Stop"))
         if stops is not None:   # M9.1 REDO B-3 (A3): what stops it, what was left ignored
             out.write("raqib watch --host: %s\n" % stops.line())
-        if running.no_open or running.environ.get("CI"):
+        if running.no_page:
+            pass   # M12.1p: no page, so none is opened and no "page not opened" is said
+        elif running.no_open or running.environ.get("CI"):
             out.write("raqib watch --host: page not opened (%s)\n" % ("--no-open" if running.no_open else "CI is set"))
         else:
             why = watch.open_page(watcher.url, running.environ)
@@ -5300,8 +5317,9 @@ def close(running):
             stop()
     finally:
         try:
-            running.server.shutdown()
-            running.server.server_close()
+            if not running.no_page:   # M12.1p: a watch without its page has no server to close
+                running.server.shutdown()
+                running.server.server_close()
         finally:
             running.notifier.close()
 
@@ -5390,8 +5408,9 @@ def fixture_builder(catalog=None):
 def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=False, no_notify=False, port=None,
             out=None, err=None, environ=None, home=None, refresh=None, reader=None, platform=None, attach_hooks=False,
             sysmon=None, installer=None, os_follow=None, suspect=None, suspect_threshold=None, suspect_every=None,
-            stops=None, beat=None, event_host=None, tracing=None):
-    """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]]; the final report's exit code.
+            stops=None, beat=None, event_host=None, tracing=None, no_page=False):
+    """raqib watch --host [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--no-page]; the final report's
+    exit code. no_page (M12.1p, ADR-0013 AC-1): start() serves no page and opens no port.
     stops (M9.1): the terminal's stops (raqib/cli.py), waited on between ticks; None: Ctrl-C only.
     out and err are written through a watch.Speech (M9.1 REDO B-1, REDO 2 C-1): every word at once; a terminal
     that is gone loses the words, never the record (the state finished, the registry row, the sources and channel
@@ -5401,7 +5420,8 @@ def command(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_ope
     running = start(catalog, rules, every, window, rounds, no_open, no_notify, port, speech.out, speech.err,
                     environ, home, refresh, reader, platform, attach_hooks=attach_hooks, sysmon=sysmon,
                     installer=installer, os_follow=os_follow, suspect=suspect, suspect_threshold=suspect_threshold,
-                    suspect_every=suspect_every, beat=beat, event_host=event_host, tracing=tracing)
+                    suspect_every=suspect_every, beat=beat, event_host=event_host, tracing=tracing,
+                    no_page=no_page)
     try:
         crash = loop(running, stops=stops)
         text, code = conclude(running, crash)

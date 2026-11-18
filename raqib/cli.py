@@ -137,7 +137,7 @@ no command, raqib prints its usage and exits 2.
       ~/.raqib/host/rounds.jsonl (one line per round). Another matter is
       a terminal that stops reading (Ctrl-S, a full pipe): the stop waits
       until it drains, and then says its words.
-  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--beat S] [--event-host NAME] [--no-open] [--no-notify] [--port N]
+  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--beat S] [--event-host NAME] [--no-open] [--no-notify] [--port N] [--no-page]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
       of it; Windows one sample of the OS API and, where Sysmon is, the
@@ -263,6 +263,33 @@ no command, raqib prints its usage and exits 2.
       number are printed. Exit 0 when every line is an event, 1 when one
       is not (or the file holds none), 2 when the file cannot be read. It
       reads; it sends nothing.
+
+  service install [--no-start] | remove [--purge] | status
+      M12.1 (ADR-0013): the host watch as a unit of the system's, on Linux
+      (systemd): raqib-watch.service runs `raqib watch --host --no-page` as
+      root, its record under /var/lib/raqib (docs/specs/SERVICE.md). install
+      and remove only as root (no elevation is asked). install refuses (exit
+      2, nothing written) an interpreter run with -S or reading PYTHONHOME
+      or PYTHONPLATLIBDIR, a raqib not directly in the interpreter's own
+      site folders, a *.pth file holding a byte outside printable ASCII,
+      tab and the line ends, and, with no unit file, a unit of the name that
+      systemd holds (loaded from any place, or running); and unless the
+      interpreter, its pyvenv.cfg, every file and folder under sys.path (and
+      the paths its *.pth files name), the raqib package, systemctl, ss and
+      the unit's folder, and every folder above them, are root's alone; it
+      says how many paths of which kinds it checked; then it writes the unit
+      and reloads, starts nothing not as installed (exit 1), enables and
+      starts it (over Raqib's own unit: restarts it), and after 3 s says
+      whether it is active and as installed (exit 1 where not; --no-start:
+      neither enabled nor started). remove stops, disables and removes
+      Raqib's unit, has systemd forget a failed state of it, and leaves the
+      record (--purge removes /var/lib/raqib too); with no file, a unit of
+      the name systemd holds as loaded or running is exit 1, nothing
+      touched. A unit of the name without Raqib's mark is not touched.
+      status needs no rights: exit 0 active as installed (the file's whole
+      text, where systemd loaded it from, no drop-in, not changed since), 1
+      installed and not active, or not as installed, 3 not installed (a unit
+      of the name systemd holds is said) or not known, 2 not Linux.
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -560,8 +587,13 @@ def _parser():
     w.add_argument("--no-notify", action="store_true", help="no OS notifications (also off when CI is set)")
     w.add_argument("--port", type=int, default=None, metavar="N",
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
-    w.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
+    # ADR-0013 AC-13: None when not given (the starts read it as the default's), so --no-page can refuse it
+    w.add_argument("--refresh", type=_refresh, default=None, metavar="N",
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
+    # M12.1p (ADR-0013 Amendment C, AC-1): the host watch without its page
+    w.add_argument("--no-page", action="store_true",
+                   help="--host: serve no page: no port is opened and nothing listens on one; the report and the"
+                        " events file are as without it (not with --port or --refresh)")
     # M7.2 (ADR-0007 decision 2): the host, not a name.
     w.add_argument("--host", action="store_true",
                    help="watch this host, not a project: discover in rounds; NEW-AGENT and AGENT-DARK-LIVE knock;"
@@ -672,6 +704,18 @@ def _parser():
                     help="say a forwarder's state (every one without NAME): exit 0 only where nothing is failing"
                          " and no whole line has waited longer than a beat, 1 failing (refusing too) or behind, 3"
                          " no state, unreadable, or written more than two beats ago or in the future (silent)")
+    sv = sub.add_parser("service", help="the host watch as a unit of the system's, Linux (systemd): install, remove"
+                                        " or say its status (M12.1, ADR-0013)")
+    sv.add_argument("action", choices=("install", "remove", "status"),
+                    help="install (root): write raqib-watch.service, enable and start it, and say whether it is"
+                         " active and as installed after 3 s; remove (root): stop, disable and remove it, the"
+                         " record kept; with no file, a unit of the name systemd holds is exit 1; status:"
+                         " installed, enabled, active (exit 0 active as installed, 1 not active or not as"
+                         " installed, 3 not installed or not known)")
+    sv.add_argument("--no-start", action="store_true", help="install only: write the unit; neither enabled nor"
+                                                            " started")
+    sv.add_argument("--purge", action="store_true", help="remove only: remove the service's record too,"
+                                                         " /var/lib/raqib and nothing else")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -1338,6 +1382,8 @@ def _watch(args, out, stops):
             or args.beat is not None or args.event_host is not None):
         raise UsageError("--every, --window, --rounds, --attach-hooks and --suspect apply to watch --host only"
                          " (and --beat, --event-host)")
+    if args.no_page:   # M12.1p (ADR-0013 AC-1)
+        raise UsageError("--no-page is --host's: a project watch serves its page (watch --host --no-page)")
     rules, gap, evaluator = _watch_setup()
     try:
         return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
@@ -1352,6 +1398,10 @@ def _watch_host(args, out, stops=None):
         raise UsageError("--host watches this host, not a project: give no PROJECT (watch --host, or watch PROJECT)")
     if args.log is not None:
         raise UsageError("--host keeps its record under ~/.raqib/host/: --log applies to a project watch")
+    if args.no_page and args.port is not None:   # M12.1p (ADR-0013 AC-1): no page, so no port to choose
+        raise UsageError("--no-page serves no page and opens no port: --port does not apply with it")
+    if args.no_page and args.refresh is not None:   # M12.1p, AC-13: no page, so nothing reloads (any N)
+        raise UsageError("--no-page serves no page, so nothing reloads: --refresh does not apply with it")
     every = host.EVERY_DEFAULT if args.every is None else args.every
     if not (0.1 <= every <= 86400):
         raise UsageError("--every must be a number of seconds from 0.1 to 86400")
@@ -1398,7 +1448,7 @@ def _watch_host(args, out, stops=None):
                             no_notify=args.no_notify, port=args.port, out=out, refresh=args.refresh,
                             attach_hooks=args.attach_hooks, suspect=backend,
                             suspect_threshold=args.suspect_threshold, suspect_every=args.suspect_every,
-                            stops=stops, beat=beat, event_host=args.event_host)
+                            stops=stops, beat=beat, event_host=args.event_host, no_page=args.no_page)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 
@@ -1477,6 +1527,15 @@ def cmd_forward(args, out):
         raise UsageError(str(exc))
 
 
+def cmd_service(args, out):
+    """M12.1 (ADR-0013): raqib/service.py, imported here only; the watch does not know it."""
+    from raqib import service
+    try:
+        return service.cli_run(args, out)
+    except service.Refused as exc:
+        raise UsageError(str(exc))
+
+
 def cmd_doctor(args, out):
     return doctor.run(args.project, out)
 
@@ -1513,7 +1572,8 @@ def main(argv=None, out=None):
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
                    "discover": cmd_discover, "watch": cmd_watch, "app": cmd_app, "doctor": cmd_doctor,
-                   "events": cmd_events, "forward": cmd_forward, "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon}[args.command]
+                   "events": cmd_events, "forward": cmd_forward, "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon,
+                   "service": cmd_service}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)
