@@ -266,17 +266,24 @@ no command, raqib prints its usage and exits 2.
 
   service install [--no-start] | remove [--purge] | status
       M12.1 (ADR-0013): the host watch as a unit of the system's, on Linux
-      (systemd): raqib-watch.service runs `raqib watch --host` as root, its
-      record under /var/lib/raqib (docs/specs/SERVICE.md). install and
-      remove only as root (no elevation is asked). install refuses (exit 2,
-      nothing written) unless the interpreter, pyvenv.cfg, sys.path's
-      folders and *.pth files and the raqib package, and every folder above
-      them, are root's alone; then it writes the unit and enables and starts
-      it (--no-start: neither). remove stops, disables and removes Raqib's
-      unit and leaves the record (--purge removes /var/lib/raqib too). A unit
-      of the name without Raqib's mark is not touched. status needs no
-      rights: exit 0 active, 1 installed and not active, 3 not installed or
-      systemctl cannot be run, 2 not Linux.
+      (systemd): raqib-watch.service runs `raqib watch --host --no-page` as
+      root, its record under /var/lib/raqib (docs/specs/SERVICE.md). install
+      and remove only as root (no elevation is asked). install refuses (exit
+      2, nothing written) an interpreter run with -S, a raqib that is not in
+      the interpreter's own site folders, and unless the interpreter, its
+      pyvenv.cfg, every file and folder under sys.path (and the paths its
+      *.pth files name), the raqib package, systemctl, ss and the unit's
+      folder, and every folder above them, are root's alone; it says how
+      many paths of which kinds it checked; then it writes the unit and
+      enables and starts it (over Raqib's own unit: restarts it), and after
+      3 s says whether it is active (exit 1 where not; --no-start: neither).
+      remove stops, disables and removes Raqib's unit and leaves the record
+      (--purge removes /var/lib/raqib too); with no file, a unit of the name
+      systemd still has is exit 1, nothing touched. A unit of the name
+      without Raqib's mark is not touched. status needs no rights: exit 0
+      active as installed, 1 installed and not active, or loaded from
+      another file or with drop-ins, 3 not installed or not known, 2 not
+      Linux.
 
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
@@ -694,9 +701,10 @@ def _parser():
     sv = sub.add_parser("service", help="the host watch as a unit of the system's, Linux (systemd): install, remove"
                                         " or say its status (M12.1, ADR-0013)")
     sv.add_argument("action", choices=("install", "remove", "status"),
-                    help="install (root): write raqib-watch.service, enable and start it; remove (root): stop,"
-                         " disable and remove it, the record kept; status: installed, enabled, active (exit 0"
-                         " active, 1 installed and not active, 3 not installed)")
+                    help="install (root): write raqib-watch.service, enable and start it, and say whether it is"
+                         " active after 3 s; remove (root): stop, disable and remove it, the record kept; status:"
+                         " installed, enabled, active (exit 0 active as installed, 1 not active or not as"
+                         " installed, 3 not installed or not known)")
     sv.add_argument("--no-start", action="store_true", help="install only: write the unit; neither enabled nor"
                                                             " started")
     sv.add_argument("--purge", action="store_true", help="remove only: remove the service's record too,"

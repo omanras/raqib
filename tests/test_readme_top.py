@@ -211,19 +211,25 @@ LINK_SCREEN = [
 GUIDE_NEW += LINK_SCREEN
 # ADR-0013 (M12.1): the service's commands, rows of the guide's table only (as the forwarder's, G-11)
 SERVICE_ROWS = [
-    "| `raqib service install [--no-start]` | Linux, as root (it asks for no elevation): write `/etc/"
-    "systemd/system/raqib-watch.service` and enable and start it, the host watch as a unit of the sys"
-    "tem's with its record under `/var/lib/raqib` (`docs/specs/SERVICE.md`); refused, exit 2 and noth"
-    "ing written, unless the interpreter, its `pyvenv.cfg`, every folder of sys.path and its `*.pth` "
-    "files, the raqib package and every folder above them are root's and writable by nobody else (the"
-    " first that is not is said), or where a unit of the name does not carry Raqib's mark; `--no-star"
-    "t`: neither enabled nor started; exit 1 where systemctl failed |",
-    "| `raqib service remove [--purge]` | Linux, as root: stop, disable and remove Raqib's unit (one "
-    "without Raqib's mark is not touched: exit 2); the record under `/var/lib/raqib` stays and its pa"
-    "th is said, unless `--purge` removes that folder too, and only it; no unit installed is exit 0 |",
-    "| `raqib service status` | no rights needed: installed, enabled and active by systemctl's own wo"
-    "rds, and the last result where not active; exit 0 active, 1 installed and not active, 3 not inst"
-    "alled or systemctl cannot be run, 2 not Linux |",
+    "| `raqib service install [--no-start]` | Linux, as root (it asks for no elevation): write `/etc/s"
+    "ystemd/system/raqib-watch.service` and enable and start it, the host watch as a unit of the syste"
+    "m's that serves no page, with its record under `/var/lib/raqib` (`docs/specs/SERVICE.md`); refuse"
+    "d, exit 2 and nothing written, for an interpreter run with `-S` or a raqib not in that interprete"
+    "r's own site folders, and unless the interpreter, its `pyvenv.cfg`, every file and folder under s"
+    "ys.path and under the paths its `*.pth` files name, the raqib package, systemctl, ss, the unit's "
+    "folder and every folder above them are root's and writable by nobody else (the first that is not "
+    "is said), or where a unit of the name does not carry Raqib's mark; it says how many paths of whic"
+    "h kinds it checked; over Raqib's own unit it restarts it; 3 s after the start it asks systemctl, "
+    "and a unit not active then is exit 1; `--no-start`: neither enabled nor started; exit 1 where sys"
+    "temctl failed |",
+    "| `raqib service remove [--purge]` | Linux, as root: stop, disable and remove Raqib's unit (one w"
+    "ithout Raqib's mark is not touched: exit 2); the record under `/var/lib/raqib` stays and its path"
+    " is said, unless `--purge` removes that folder too, and only it; with no unit file, exit 0 where "
+    "systemd knows no unit of the name, exit 1 and nothing touched where it still has one |",
+    "| `raqib service status` | no rights needed: installed, enabled and active by systemctl's own wor"
+    "ds, the restarts, and the last result where not active; exit 0 active as installed, 1 installed a"
+    "nd not active, or loaded from another file or with a drop-in, 3 not installed or not known, 2 not"
+    " Linux |",
 ]
 GUIDE_NEW += SERVICE_ROWS
 # ADR-0013 Amendment C (M12.1p, AC-1): the host watch without its page, where watch --host's options are told

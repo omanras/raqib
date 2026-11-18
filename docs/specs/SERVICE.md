@@ -4,18 +4,21 @@ On Linux, an administrator can run the host watch (`raqib watch --host`) as a sy
 `raqib-watch.service`. It runs with the system's rights, so the agent it watches cannot stop it, cannot write its
 record again, and cannot leave its sight by becoming another user (ADR-0013 A-1). This is stage S1: the watch's
 unit on Linux. The forwarder as a unit (S2), what a person without rights reads of the service (S3) and Windows
-(S4) come later. The watch itself is unchanged.
+(S4) come later. The watch itself is unchanged; the unit runs it with `--no-page`, so it serves no page (below).
 
 ## The three commands
 
 | Command | Does |
 |---|---|
-| `raqib service install [--no-start]` | As root only: checks that the code the unit would run is root's alone (below), writes the unit, runs `systemctl daemon-reload` and `systemctl enable --now raqib-watch.service`, and says what it did. `--no-start` writes the unit and reloads; the unit is neither enabled nor started. Exit 0 done, 1 the unit written but systemctl failed (said, left as it is), 2 refused (said, nothing written). |
-| `raqib service remove [--purge]` | As root only: runs `systemctl disable --now raqib-watch.service` (stops and disables it), removes the unit's one file if it carries Raqib's mark, and runs `systemctl daemon-reload`. The record stays and its path is said. `--purge` removes `/var/lib/raqib` too, and only that folder. No unit installed is exit 0, saying so. Exit 1 when systemctl or a removal failed (said, left as it is), 2 refused (said, nothing touched). |
-| `raqib service status` | Needs no rights: whether the unit is installed (the file with Raqib's mark), enabled and active, by systemctl's own words (`systemctl show`: UnitFileState, ActiveState, SubState), and the unit's last result (Result, ExecMainStatus) when it is not active. Exit 0 active, 1 installed and not active, 3 not installed or systemctl cannot be run (said), 2 not Linux. |
+| `raqib service install [--no-start]` | As root only: checks that the code the unit would run is root's alone (below) and says how many paths of which kinds it checked, writes the unit, runs `systemctl daemon-reload` and `systemctl enable --now raqib-watch.service` (over Raqib's own unit: `systemctl enable` and `systemctl restart`, so no watch keeps the old text), waits 3 s and asks systemctl whether the unit is active. `--no-start` writes the unit and reloads; the unit is neither enabled nor started, and where a watch of Raqib's unit is running it says that watch keeps the text it started with. Exit 0 done (and, started, active after 3 s: `RESULT: installed, enabled, active 3 s after its start`), 1 the unit written but systemctl failed, or the unit not active after 3 s (its ActiveState, Result and ExecMainStatus said; left as it is), 2 refused (said, nothing written). |
+| `raqib service remove [--purge]` | As root only: runs `systemctl disable --now raqib-watch.service` (stops and disables it), removes the unit's one file if it carries Raqib's mark, and runs `systemctl daemon-reload`. The record stays and its path is said. `--purge` removes `/var/lib/raqib` too, and only that folder. With no unit file it asks systemctl for the unit's LoadState: `not-found` is exit 0 (nothing installed, said); anything else, or no answer, is said and is exit 1, and nothing is touched. Exit 1 also when systemctl or a removal failed (said, left as it is), 2 refused (said, nothing touched). |
+| `raqib service status` | Needs no rights: whether the unit is installed (the file with Raqib's mark), enabled and active, by systemctl's own words (`systemctl show`: UnitFileState, ActiveState, SubState), from which file systemd loaded it and with which drop-ins (FragmentPath, DropInPaths), how many times it was restarted (NRestarts), and the unit's last result (Result, ExecMainStatus) when it is not active. Exit 0 active as installed, 1 installed and not active, or active but loaded from another file or with a drop-in (`RESULT: ACTIVE, NOT AS INSTALLED`), 3 not installed or not known (a unit file that cannot be read, no systemctl, or no state from it), 2 not Linux. |
 
 `install` and `remove` do nothing unless run as root, and say so; they ask for no elevation themselves (run
 them with `sudo`). Off Linux every one of the three is exit 2.
+
+A systemctl that ran and gave no answer in its time is said as "no answer in N s" (what it was asked may still be
+done); one that exited non-zero is said with its exit and what it said. Neither is said as not run.
 
 ## The unit
 
@@ -34,11 +37,11 @@ Description=Raqib: the watch of this host (raqib watch --host)
 
 [Service]
 Type=simple
-ExecStart=PYTHON -I -m raqib watch --host --no-open --no-notify
+ExecStart=PYTHON -I -m raqib watch --host --no-page --no-notify
 Environment=HOME=/var/lib/raqib
 StateDirectory=raqib
 StateDirectoryMode=0700
-Restart=on-failure
+Restart=always
 RestartSec=5
 KillSignal=SIGTERM
 TimeoutStopSec=30
@@ -57,10 +60,9 @@ MemoryDenyWriteExecute=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 RestrictNamespaces=yes
-RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
 IPAddressDeny=any
-IPAddressAllow=localhost
-CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
 SystemCallFilter=@system-service
 SystemCallArchitectures=native
 UMask=0077
@@ -71,45 +73,81 @@ WantedBy=multi-user.target
 
 The first line is Raqib's mark. A unit of this name whose first line is not the mark is not Raqib's: install
 and remove refuse it and leave it as it is, and status says it is not installed. A unit path that is a link is
-not Raqib's either.
+not Raqib's either. Status reads the unit's head without waiting and only from what is a regular file when it is
+opened.
 
 The interpreter runs in Python's isolated mode (`-I`): it reads no PYTHON* variable and no user's site folder,
 and the folder it starts in is not on its path. Its environment is systemd's, with HOME set to the service's
-own home. The hardening is the set the Table's probe ran with (ADR-0013 A-6; `systemd-analyze security`: 2.8,
-OK):
+own home. The hardening is the set the Table's probe ran with (ADR-0013 A-6), narrowed as measured (ADR-0013
+Amendment C):
 - no new privileges;
 - the system read-only and the homes read-only;
 - private temporary files and devices;
 - the kernel's tunables and modules, the control groups, the clock and the host name protected;
 - no realtime, no set-id, no new namespaces;
-- the address families unix, netlink, inet and inet6, with every address denied but the local host's (the
-  watch calls no network);
-- the capabilities to read other users' processes and sockets (CAP_SYS_PTRACE, CAP_DAC_READ_SEARCH,
-  CAP_NET_ADMIN), and no others;
-- the system calls of a service.
+- the address families unix and netlink alone, and every IP address denied: the watch serves no page and calls
+  no network;
+- the capabilities to read other users' processes and sockets (CAP_SYS_PTRACE, CAP_DAC_READ_SEARCH), and no
+  others;
+- the system calls of a service;
+- `Restart=always`, 5 s after any end but systemctl's own stop, whatever the watch's exit.
 
-A directive that a system's systemd does not know is that system's to ignore. The status does not say which yet
-(below).
+## No page
+
+The unit's watch runs with `--no-page`: it opens no listener and nothing listens on a port for it. A person's
+own watch serves its page on the local host to every user of the machine; root's watch must not, because what it
+sees (every user's trees and findings, and what /proc shows only root of other users' processes) is not every
+user's to read. So no person and no agent reads root's view over a port, root parses no user's request, and there
+is no port for anyone to take first. The record is root's alone (mode 0700). What the watch writes to its output
+goes to the system's journal, which root and the groups the system gives the journal to can read. What a person
+without rights reads of the service is stage S3's to design.
+
+## Who can stop it, and what a stop costs
+
+The watched agent, running as a person without rights, cannot stop, restart or change a unit of the system's.
+Root can, and root is also any user with sudo (a password it knows, none asked, or a ticket still valid) and any
+user a polkit rule lets manage units: an agent running as such a user can stop it. A watch made to exit comes
+back after 5 s, a gap each time; systemd counts the restarts (NRestarts) and `raqib service status` says the
+count. A watch's exit status 1 is its own ALARM at its end, or an error; the journal says which
+(`journalctl -u raqib-watch.service`).
 
 ## What install checks, and why
 
 A unit of the system's runs as root what it is told to run. If that code is a file a user can write, the unit
-gives that user the system. So before it writes anything, the install walks every path below from `/` down, as
-the system walks it. Each folder on the way and each path itself must be owned by uid 0 and writable by neither
-its group nor others. The first path that is not is said, with why, and the install is refused (exit 2, nothing
-written; ADR-0013 A-3, AB-3):
+gives that user the system. So before it writes anything, the install refuses (exit 2, nothing written;
+ADR-0013 A-3, AB-3, Amendment C) where:
+- the interpreter runs without its site (`-S`, `sys.flags.no_site`): what it would walk is not what the unit's
+  interpreter loads;
+- the raqib package it runs from is not in one of that interpreter's own site folders (`site.getsitepackages()`):
+  install raqib into this interpreter; a checkout run by `-m`, or an editable install, is not it.
+
+The unit's `-I` only takes entries away from sys.path, so what the install walks holds all the unit will load
+from. Then it walks every path below from `/` down, as the system walks it. Each folder on the way and each path
+itself must be owned by uid 0 and writable by neither its group nor others. The first path that is not is said,
+with why, and the install is refused:
 
 - the interpreter as it was started (sys.executable), walked to its end through every link;
 - `pyvenv.cfg` beside the interpreter or one folder above it, where there is one (it says where a venv's code
   is);
-- every existing entry of sys.path, made whole against the folder the install runs in, and every `*.pth` file
-  in each of those folders (`-I` does not stop a `.pth` file's lines from running);
-- every file and folder of the raqib package the install runs from.
+- under every entry of sys.path, made whole against the folder the install runs in, every file and folder,
+  whole: the standard library's files and folders, their compiled files, the extension modules, a
+  `sitecustomize.py`, and every `*.pth` file;
+- the lines of each `*.pth` file in those folders that are paths (not blank, not `#`, not `import`), each made
+  whole against the file's folder, as entries too, existing or not; a `.pth` file is read as text only once it
+  was found root's alone, and nothing is run (`-I` does not stop a `.pth` file's lines from running);
+- every file and folder of the raqib package the install runs from;
+- the systemctl it found, each of the watch's own ss paths, and the unit's folder, `/etc/systemd/system`.
 
 A symbolic link is checked as itself, by its owner (a link's mode bits say nothing). Then what it points to is
-checked whole, its folders too. A loop of links, or more than 40 links to follow for one path, is a refusal,
-never a pass. A path that cannot be read is a refusal too. These paths are found by where they are: nothing is
-read or run to find them.
+checked whole, its folders too; where it points to a folder, that folder is walked whole as well, each real
+folder once, so a loop of folder links walks nothing twice. A loop of links, or more than 40 links to follow for
+one path, is a refusal, never a pass. A walk of more than 200000 entries is refused, and the number said: a walk
+that is not whole is not a pass. A path that does not exist (an entry of sys.path, a `.pth` line, the end of a
+link) is checked as far as it exists: the folders above it, so that no user can make it later; it is not
+otherwise a refusal. A path that cannot be read is a refusal.
+
+The install says what it checked as counts: how many paths, of which kinds (folders, files, links), under how
+many entries of sys.path, how many `.pth` files it read and how many of their lines were entries.
 
 The install also refuses where:
 - the platform is not Linux;
@@ -124,9 +162,18 @@ and `DIR/bin/pip install` run as root, then `sudo DIR/bin/raqib service install`
 write (on some machines `/opt` is one) is refused. `raqib watch` as a person runs it is unchanged and needs none
 of this.
 
-The unit is written beside its place, then renamed over it, so a reader never sees half a unit. A second
-install over Raqib's own unit replaces it. A watch that is already running keeps the unit it started with
-until it is restarted (`systemctl restart raqib-watch.service`); the install says so.
+The check guards the unit's starts, not the install itself: an install run from code a user can write has
+already run that code as root before it refuses. Not checked: the shared libraries the interpreter and its
+extension modules load (libpython and the libraries they name); they are found by reading those files, not by
+where they are.
+
+The unit is written beside its place, then renamed over it, so a reader never sees half a unit.
+
+## What the two capabilities still open
+
+As the kernel's rules read, not as measured: CAP_SYS_PTRACE lets a defect in the watch reach other processes,
+root's own included, and read and change their memory; CAP_DAC_READ_SEARCH lets it read every file and list
+every folder, whatever their modes. The hardening narrows what such a defect does; it does not remove it.
 
 ## Where the record is
 
@@ -134,8 +181,9 @@ The service's home is `/var/lib/raqib`: systemd makes it root's, mode 0700 (Stat
 watch writes there as any watch writes in its home. The record and the events are in
 `/var/lib/raqib/.raqib/host/`, and the events file is `/var/lib/raqib/.raqib/host/events.jsonl`. The service's
 rules and overlay are there too. No user's `~/.raqib` is read by it, so an agent that turns a rule off in its
-user's overlay turns nothing off in the service. In this stage a person without rights cannot read the record.
-`raqib service status` says whether the service runs, and root reads the record.
+user's overlay turns nothing off in the service. `raqib service status` says whether the service runs, and root
+reads the record. ACTIVE says the unit runs, not that the watch writes: a blind or a stuck watch is still
+active, and reading what it writes is stage S3's.
 
 ## What removal leaves
 
@@ -149,10 +197,13 @@ removed.
 
 ## What it does not do yet
 
-- It does not say which of the unit's directives the system's systemd ignored (A-6 asks the status to say so;
-  that needs the system's verification tool or its journal, a later stage).
+- It does not say which of the unit's directives the system's systemd ignored. On the rig's machine the rig
+  says it: it reads systemd's own word on the installed unit (its directives as `systemctl show` gives them,
+  and the manager's journal lines that name the unit and say unknown, ignored, invalid or not supported), and
+  any such line is a finding (X29).
 - It installs no forwarder (S2) and gives a person without rights no view of the record (S3), and there is
   nothing for Windows (S4).
-- It restarts nothing on a second install. It checks the paths when it installs, not afterwards: a later change
-  that root makes to them is root's own.
+- It checks the paths when it installs, not afterwards: a later change that root makes to them is root's own.
+- An agent in a network namespace of its own holds sockets the watch, in the host's namespace, may not see: not
+  measured.
 - The service's watch and a person's own watch do not know each other. Each writes its own record.

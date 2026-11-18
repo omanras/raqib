@@ -1530,29 +1530,60 @@ collector that is slow, down or refusing never delays or loses a capture
 - **The service (`raqib service`; ADR-0013).** On Linux an administrator may
   run the host watch as a unit of the system's, `raqib-watch.service`
   (docs/specs/SERVICE.md). It changes three things.
-  - Who can stop it: the watched agent runs as a person and cannot stop,
-    restart or change a unit of the system's; only root can.
+  - Who can stop it: the watched agent, running as a person without rights,
+    cannot stop, restart or change a unit of the system's. Root can, and root
+    is also any user with sudo (a password it knows, none asked, or a ticket
+    still valid) and any user a polkit rule lets manage units: an agent
+    running as such a user can stop it.
   - Who can write its record: the service writes under /var/lib/raqib,
     root's alone (mode 0700). The agent cannot write its events or its
     record again, and turning a rule off in its user's ~/.raqib turns
     nothing off in the service, which never reads a user's ~/.raqib.
   - Who can hide: the service reads every user's processes and sockets, so
-    an agent that makes itself another user stays in its sight.
+    an agent that makes itself another user stays in its sight. An agent in
+    a network namespace of its own (a person can make one where the system
+    lets users make namespaces) holds sockets the watch, in the host's
+    namespace, may not see: not measured.
   What it costs:
   - Raqib's code runs as root where the service is installed, so a defect
     in it is the system's. The unit's hardening (no new privileges, the
-    system read-only, three capabilities, no address but the local host's)
-    bounds such a defect; it does not remove it.
+    system read-only, two capabilities, no address family but unix and
+    netlink) narrows such a defect; it does not remove it. As the kernel's
+    rules read, not as measured, the two capabilities still open this much
+    to a defect in the watch: CAP_SYS_PTRACE lets it reach other processes,
+    root's own included, and read and change their memory; CAP_DAC_READ_SEARCH
+    lets it read every file and list every folder, whatever their modes.
+  - A watch made to exit comes back: the unit restarts it 5 s after any end
+    but systemctl's own stop (Restart=always), whatever its exit. Each time
+    is a gap in what the watch sees, and systemd counts them (NRestarts,
+    which `raqib service status` says). A user who can make the watch exit
+    can make such gaps again and again.
+  - The service serves no page. Its watch runs with --no-page and opens no
+    listener; the unit allows no address family but unix and netlink, and
+    denies every IP address. So no person and no agent reads root's view of
+    the host over a port, root parses no user's request, and there is no
+    port for anyone to take first. What the watch writes to its output goes
+    to the system's journal, which root and the groups the system gives the
+    journal to can read.
   - A unit that runs a file a user can write gives that user the system.
-    So the install refuses unless the interpreter, its pyvenv.cfg, every
-    folder of sys.path and the *.pth files in them, the raqib package, and
-    every folder above each of these are root's and writable by nobody
-    else; it says which path is not. The check is made when it installs,
-    not afterwards.
+    So the install refuses an interpreter run without its site and a raqib
+    that is not in that interpreter's own site folders, and it refuses
+    unless the interpreter, its pyvenv.cfg, every file and folder under each
+    entry of sys.path and under each path its *.pth files name, the raqib
+    package, systemctl, ss and the unit's folder, and every folder above
+    each of these, are root's and writable by nobody else; it says which
+    path is not, and how many paths of which kinds it checked.
+  - Not checked: the shared libraries the interpreter and its extension
+    modules load (libpython and the libraries they name). They are found by
+    reading those files, not by where they are.
+  - The check guards the unit's starts, not the install itself: an install
+    run from code a user can write has already run that code as root before
+    it refuses. The check is made when it installs, not afterwards.
+  - ACTIVE, as `raqib service status` says it, says the unit runs, not that
+    the watch writes its record: a blind or a stuck watch is still active.
+    Reading what the watch writes is a later stage's.
   - Two watches may run on one host, the service's and a person's own. They
-    do not know each other, and each writes its own record. A person
-    without rights cannot read the service's record yet; `raqib service
-    status` says whether it runs.
+    do not know each other, and each writes its own record.
   - A watch a person runs as themselves keeps every limit this model names.
   `raqib service install` and `raqib service remove` write and remove one
   file outside ~/.raqib, the unit in /etc/systemd/system, because an
