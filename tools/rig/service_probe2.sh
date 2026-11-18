@@ -3,7 +3,7 @@
 set -u
 P=/usr/local/lib/raqib-probe
 echo "=================== the machine"
-systemd --version | head -1
+systemctl --version | head -1
 ls -ld / /usr /usr/local /usr/local/lib /etc /etc/systemd /etc/systemd/system /var/lib | awk '{print $1, $3, $4, $9}'
 sudo mkdir -m 0755 $P
 sudo cp -r "$PWD" $P/src
@@ -14,7 +14,7 @@ sudo $P/venv/bin/pip install --disable-pip-version-check -q $P/src 2>&1 | tail -
 PY="$P/venv/bin/python"
 sudo useradd -m agentuser
 IP=$(hostname -I | awk '{print $1}')
-python3 tools/rig/model.py --port 8790 --log "$RUNNER_TEMP/model-service.log" &
+RIG_CLOSE= python3 tools/rig/model.py --port 8790 --log "$RUNNER_TEMP/model-service.log" &
 sleep 2
 
 echo "=================== A. the install, and systemd's own word on the unit"
@@ -32,6 +32,7 @@ systemctl show raqib-watch -p NoNewPrivileges -p ProtectSystem -p ProtectHome -p
 echo "SystemCallFilter holds $(systemctl show raqib-watch -p SystemCallFilter --value | wc -w) names"
 systemd-analyze security raqib-watch --no-pager 2>/dev/null | tail -1
 
+if [ "${PROBE_ALL:-}" = 1 ]; then
 echo "=================== B. the page, read by another user"
 sleep 8
 sudo ss -ltnp | grep -E "python|8765" | cut -c1-200
@@ -80,6 +81,8 @@ systemctl show raqib-watch -p ActiveState -p SubState -p Result -p ExecMainStatu
 sudo journalctl -u raqib-watch --no-pager -o cat | tail -4 | cut -c1-220
 sudo tail -n 2 /var/lib/raqib/.raqib/host/events.jsonl | cut -c1-260
 sudo $PY -I -m raqib service status; echo "status exit $?"
+fi
+sudo systemctl stop raqib-watch
 
 cat > /tmp/talker.py <<'PY'
 import http.client, subprocess, sys, time
@@ -124,7 +127,14 @@ for caps in "CAP_SYS_PTRACE CAP_DAC_READ_SEARCH CAP_NET_ADMIN" "CAP_SYS_PTRACE C
     -E HOME=/var/lib/$u $PY -I -m raqib watch --host --rounds 10 --every 5 --no-open --no-notify; echo "exit $?"
   sudo journalctl -u $u --no-pager -o cat | grep -E "^RESULT|BLIND|HOLES|FINDING|could not|Permission|denied|Traceback|Error" | cut -c1-240 | head -12
   echo "--- the report's trees:"
-  sudo journalctl -u $u --no-pager -o cat | sed -n '/^TREES SEEN/,/^FINDINGS/p' | grep -v 'source:' | cut -c1-240 | head -10
-  wait
+  sudo journalctl -u $u --no-pager -o cat | sed -n '/^TREES SEEN/,/^FINDINGS/p' | grep -v 'source:' | cut -c1-300 | head -10
+  sudo python3 -c "
+import json
+inv=json.load(open('/var/lib/$u/.raqib/host/inventory.json'))
+for g in ('candidates','act_roots'):
+    for t in inv.get(g) or ():
+        print(g, t.get('pid'), t.get('image'), 'user', t.get('user'), 'talks', [(x.get('remote'), x.get('bytes_sent'), x.get('bytes_received')) for x in t.get('talks') or ()][:3], 'keys', sorted(t)[:40])
+print('conn_bytes:', json.dumps(inv.get('conn_bytes'))[:300])
+" 2>&1 | cut -c1-700
   sleep 3
 done
