@@ -17,9 +17,12 @@ checkout (pip's build leaves nothing of root's in the checkout), then `raqib ser
 for until systemctl says it is active; the rig's stand-in agent (tools/rig/workload.py, copied there, readable
 by all) run as a second user (AGENT_USER, made if missing) by systemd-run --uid, so that it is a tree of its
 own and not under this run's; its main pid; the service's events (EVENTS) read for a finding on that tree (its
-subject.tree begins with that pid), after the stand-in ended or for at most SEEN_S more; then systemd's own word
-on the unit: its directives as `systemctl show` gives them, and the manager's journal lines of this boot that
-name the unit and say unknown, ignored, invalid or not supported (JOURNAL_WORDS).
+subject.tree begins with that pid), after the stand-in ended or for at most SEEN_S more; the unit's main
+process's own word, read from PROC while the unit is active (its MainPID by systemctl): the lines CapBnd, CapEff,
+Seccomp and NoNewPrivs of its status (AD-6); then systemd's own word on the unit: its directives as `systemctl
+show` gives them, and the manager's journal lines of this boot that name the unit and say unknown, ignored,
+invalid or not support(ed) (JOURNAL_WORDS). These say what systemd warned of and what the main process holds,
+not every directive in force.
 X30: `raqib service remove --purge`: its exit and words, whether the unit's file is left, systemctl's LoadState
 and ActiveState of the unit, and whether the record's folder (STATE_DIR) is left. Then the rig cleans up after
 itself: where a unit is still there, it stops, disables and removes it by systemctl and says so (that is not
@@ -65,7 +68,9 @@ POLL_S = 2.0
 KEPT = 40                              # findings kept in the facts
 SAID = 1500                            # characters of a program's words kept
 WHOLE = 4000000                        # characters kept of what is read whole (the unit's show, the journal)
-JOURNAL_WORDS = re.compile(r"unknown|ignor|invalid|not supported", re.I)   # AC-10: systemd's warnings on a unit
+JOURNAL_WORDS = re.compile(r"unknown|ignor|invalid|not support", re.I)   # AC-10, AD-6: systemd's warnings on a unit
+PROC = "/proc"
+PROC_KEYS = ("CapBnd", "CapEff", "Seccomp", "NoNewPrivs")   # AD-6: what the main process holds, by its own word
 SLEEP = time.sleep
 CLOCK = time.monotonic
 
@@ -170,6 +175,28 @@ def systemd_word(out):
                       "err": journal["err"].strip()[:SAID]}
 
 
+def proc_facts():
+    """AD-6: the unit's main process's own word, from PROC/<MainPID>/status: its CapBnd, CapEff, Seccomp and
+    NoNewPrivs lines as written there; "error" where there is no main pid or the file cannot be read."""
+    shown = systemctl("show", "--property=MainPID", "--value", UNIT)
+    pid = shown["out"].strip()
+    out = {"pid": int(pid) if pid.isdigit() and pid != "0" else None}
+    if out["pid"] is None:
+        out["error"] = "no main pid (systemctl show: %s)" % (pid or shown["err"].strip() or shown["exit"])
+        return out
+    try:
+        with open(os.path.join(PROC, str(out["pid"]), "status"), "rb") as f:
+            lines = f.read().decode("ascii", "replace").splitlines()
+    except OSError as exc:
+        out["error"] = "%s cannot be read (%s)" % (os.path.join(PROC, str(out["pid"]), "status"), type(exc).__name__)
+        return out
+    for line in lines:
+        key, sep, value = line.partition(":")
+        if sep and key in PROC_KEYS:
+            out[key] = value.strip()
+    return out
+
+
 def wait_for(ask, done, limit):
     """ask() again every POLL_S until done(answer) or `limit` seconds: (the last answer, times asked)."""
     end, asked = CLOCK() + limit, 0
@@ -220,6 +247,7 @@ def x29(work, src, out):
     out["install"] = {"exit": got["exit"], "said": (got["out"] + got["err"]).strip()}
     answer, asked = wait_for(lambda: systemctl("is-active", UNIT), lambda a: a["out"].strip() == "active", ACTIVE_S)
     out["active"], out["active_asked"] = answer["out"].strip() or answer["err"].strip(), asked
+    out["proc"] = proc_facts()   # while the unit is active
     if run([ID, "-u", AGENT_USER])["exit"] != 0:
         made = run([USERADD, "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", AGENT_USER])
         out["useradd"] = made["exit"]

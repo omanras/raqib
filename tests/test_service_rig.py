@@ -50,7 +50,9 @@ def met_facts():
                     "mine": [{"rule": "NEW-AGENT-UNKNOWN", "tree": FINDING["subject"]["tree"], "summary": "x"}],
                     "show": {"Id": "raqib-watch.service", "CapabilityBoundingSet": "cap_dac_read_search cap_sys_ptrace",
                              "RestrictAddressFamilies": "AF_UNIX AF_NETLINK", "Restart": "always"},
-                    "journal": {"exit": 0, "read": 310, "lines": [], "err": ""}},
+                    "journal": {"exit": 0, "read": 310, "lines": [], "err": ""},
+                    "proc": {"pid": 5150, "CapBnd": "0000000000080004", "CapEff": "0000000000080004", "Seccomp": "2",
+                             "NoNewPrivs": "1"}},
             "x30": {"exit": 0, "said": "RESULT: removed", "unit_file": False, "load_state": "not-found",
                     "active_state": "inactive", "state_dir": False}}
 
@@ -66,6 +68,8 @@ def test_e6_x28_to_x30_are_met_from_the_facts_of_a_good_run():
     assert {k: v[0] for k, v in got.items()} == {"X28": "MET", "X29": "MET", "X30": "MET"}, got
     assert "%s is named" % PLACE in got["X28"][1] and "pid 4242" in got["X29"][1]
     assert "NEW-AGENT-UNKNOWN" in got["X29"][1] and "4 directive(s) shown, none warned of in 310" in got["X29"][1]
+    assert "the main process (pid 5150): CapBnd=0000000000080004, Seccomp=2, NoNewPrivs=1" in got["X29"][1]
+    assert check.CAP_BOUND == 0x80004 == (1 << 2) | (1 << 19)
     assert "ActiveState=inactive; no record's folder" in got["X30"][1]
 
 
@@ -92,6 +96,17 @@ def test_e6_x28_to_x30_are_met_from_the_facts_of_a_good_run():
     ("x29", "journal", {"exit": 1, "read": 0, "lines": [], "err": "No journal files were found."}, "X29",
      "the manager's journal read (exit 1: No journal files were found.)"),
     ("x29", "journal", {"exit": 0, "read": 0, "lines": []}, "X29", "the manager's journal read"),
+    ("x29", "proc", {"pid": 5150, "CapBnd": "000001ffffffffff", "Seccomp": "2", "NoNewPrivs": "1"}, "X29",
+     "it read CapBnd=000001ffffffffff"),
+    ("x29", "proc", {"pid": 5150, "CapBnd": "0000000000080000", "Seccomp": "2", "NoNewPrivs": "1"}, "X29",
+     "(CapBnd 0x80004); it read CapBnd=0000000000080000"),
+    ("x29", "proc", {"pid": 5150, "CapBnd": "0000000000080004", "Seccomp": "0", "NoNewPrivs": "1"}, "X29",
+     "a seccomp filter (Seccomp 2); it read Seccomp=0"),
+    ("x29", "proc", {"pid": 5150, "CapBnd": "0000000000080004", "Seccomp": "2", "NoNewPrivs": "0"}, "X29",
+     "no new privileges (NoNewPrivs 1); it read NoNewPrivs=0"),
+    ("x29", "proc", {"pid": None, "error": "no main pid (systemctl show: 0)"}, "X29",
+     "the main process's own word (no main pid (systemctl show: 0))"),
+    ("x29", "proc", {}, "X29", "it read CapBnd=None"),
     ("x30", "exit", 1, "X30", "the removal exited 1"),
     ("x30", "unit_file", True, "X30", "the unit's file is left"),
     ("x30", "load_state", "loaded", "X30", "systemctl says LoadState=loaded"),
@@ -106,6 +121,16 @@ def test_e6_each_of_x28_to_x30_is_missed_with_what_is_missing(key, part, value, 
     got = states(facts)
     assert got[ident][0] == "MISSED" and words in got[ident][1], got[ident]
     assert [v[0] for k, v in got.items() if k != ident] == ["MET", "MET"]
+
+
+def test_e6_capbnd_is_compared_as_a_number_and_the_journal_words_hold_not_support():
+    facts = met_facts()
+    facts["x29"]["proc"]["CapBnd"] = "80004"   # the same number, written short
+    assert states(facts)["X29"][0] == "MET"
+    for line in ("raqib-watch.service: unit configured to use IPAddressDeny but the system does not support"
+                 " BPF/cgroup firewalling.", WARNING, "raqib-watch.service: invalid value, made-up"):
+        assert service_run.JOURNAL_WORDS.search(line), line
+    assert not service_run.JOURNAL_WORDS.search("Started raqib-watch.service - Raqib: the watch of this host.")
 
 
 def test_e6_a_refusal_naming_a_path_below_the_place_is_met():
@@ -231,6 +256,11 @@ def machine(tmp_path, monkeypatch):
     monkeypatch.setattr(service_run, "UNIT_PATH", str(m.unit))
     monkeypatch.setattr(service_run, "EVENTS", str(m.events))
     monkeypatch.setattr(service_run, "STATE_DIR", str(m.state))
+    (tmp_path / "proc" / str(PID)).mkdir(parents=True)   # made up: the unit's main process's status as /proc has it
+    (tmp_path / "proc" / str(PID) / "status").write_text(
+        "Name:\tpython3\nNoNewPrivs:\t1\nSeccomp:\t2\nCapEff:\t0000000000080004\nCapBnd:\t0000000000080004\n",
+        encoding="ascii")
+    monkeypatch.setattr(service_run, "PROC", str(tmp_path / "proc"))
     monkeypatch.setattr(service_run, "mode_of", lambda p: (0, real_mode_of(p)[1]))   # made up: root's, as on the rig
     (tmp_path / "usrlocal").mkdir()
     monkeypatch.setattr(service_run, "ROOT_PLACE", str(tmp_path / "usrlocal"))
@@ -262,8 +292,23 @@ def test_e6_the_run_refuses_from_a_users_place_installs_from_roots_sees_the_seco
     assert all(c[0].startswith("/") for c in m.calls)   # every program by its whole path, none by PATH
     assert facts["x29"]["show"]["Restart"] == "always" and facts["x29"]["journal"]["read"] == 6000
     assert facts["x29"]["journal"]["lines"] == []   # lines naming the unit, none a warning
+    assert facts["x29"]["proc"] == {"pid": PID, "CapBnd": "0000000000080004", "CapEff": "0000000000080004",
+                                    "Seccomp": "2", "NoNewPrivs": "1"}
     assert facts["x30"]["state_dir"] is False and facts["x30"]["active_state"] == "inactive"
     assert not m.unit.exists() and facts["cleanup"] == [0]   # only the stand-in's unit stopped: nothing was left
+
+
+@pytest.mark.skipif(os.name == "nt", reason="modes as POSIX reads them")
+def test_e6_a_main_process_holding_more_than_the_two_capabilities_is_x29_missed(machine):
+    m, tmp = machine
+    status = tmp / "proc" / str(PID) / "status"
+    status.write_text(status.read_text(encoding="ascii").replace("CapBnd:\t0000000000080004",
+                                                                 "CapBnd:\t000001ffffffffff"), encoding="ascii")
+    got = states(facts_of(tmp))
+    assert got["X29"][0] == "MISSED" and "it read CapBnd=000001ffffffffff" in got["X29"][1]
+    status.unlink()
+    got = states(facts_of(tmp))
+    assert got["X29"][0] == "MISSED" and "cannot be read (FileNotFoundError)" in got["X29"][1]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="modes as POSIX reads them")

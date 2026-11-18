@@ -214,22 +214,28 @@ SERVICE_ROWS = [
     "| `raqib service install [--no-start]` | Linux, as root (it asks for no elevation): write `/etc/s"
     "ystemd/system/raqib-watch.service` and enable and start it, the host watch as a unit of the syste"
     "m's that serves no page, with its record under `/var/lib/raqib` (`docs/specs/SERVICE.md`); refuse"
-    "d, exit 2 and nothing written, for an interpreter run with `-S` or a raqib not in that interprete"
-    "r's own site folders, and unless the interpreter, its `pyvenv.cfg`, every file and folder under s"
-    "ys.path and under the paths its `*.pth` files name, the raqib package, systemctl, ss, the unit's "
-    "folder and every folder above them are root's and writable by nobody else (the first that is not "
-    "is said), or where a unit of the name does not carry Raqib's mark; it says how many paths of whic"
-    "h kinds it checked; over Raqib's own unit it restarts it; 3 s after the start it asks systemctl, "
-    "and a unit not active then is exit 1; `--no-start`: neither enabled nor started; exit 1 where sys"
-    "temctl failed |",
+    "d, exit 2 and nothing written, for an interpreter run with `-S` or one reading `PYTHONHOME` or `P"
+    "YTHONPLATLIBDIR` from its environment, a raqib not directly in that interpreter's own site folder"
+    "s, or a `*.pth` file holding a byte outside printable ASCII, tab and the line ends, and unless th"
+    "e interpreter, its `pyvenv.cfg`, every file and folder under sys.path and under the paths its `*."
+    "pth` files name, the raqib package, systemctl, ss, the unit's folder and every folder above them "
+    "are root's and writable by nobody else (the first that is not is said), or where a unit of the na"
+    "me does not carry Raqib's mark, or, with no unit file, where systemd holds a unit of the name (lo"
+    "aded from any place, or running) or gives no answer; it says how many paths of which kinds it che"
+    "cked; after the reload, a unit not as installed is not started (exit 1); over Raqib's own unit it"
+    " restarts it; 3 s after the start it asks systemctl, and a unit not active or not as installed th"
+    "en is exit 1; `--no-start`: neither enabled nor started; exit 1 where systemctl failed |",
     "| `raqib service remove [--purge]` | Linux, as root: stop, disable and remove Raqib's unit (one w"
-    "ithout Raqib's mark is not touched: exit 2); the record under `/var/lib/raqib` stays and its path"
-    " is said, unless `--purge` removes that folder too, and only it; with no unit file, exit 0 where "
-    "systemd knows no unit of the name, exit 1 and nothing touched where it still has one |",
+    "ithout Raqib's mark is not touched: exit 2), and have systemd forget a failed state of it (`syste"
+    "mctl reset-failed`, said); the record under `/var/lib/raqib` stays and its path is said, unless `"
+    "--purge` removes that folder too, and only it; with no unit file, exit 0 only where systemd holds"
+    " no unit of the name (LoadState not-found, ActiveState inactive or failed), else exit 1, nothing "
+    "touched and nothing purged |",
     "| `raqib service status` | no rights needed: installed, enabled and active by systemctl's own wor"
-    "ds, the restarts, and the last result where not active; exit 0 active as installed, 1 installed a"
-    "nd not active, or loaded from another file or with a drop-in, 3 not installed or not known, 2 not"
-    " Linux |",
+    "ds, whether it is as installed (the file's whole text the one Raqib writes, loaded from that file"
+    ", no drop-in, not changed since it was loaded), the restarts, and the last result where not activ"
+    "e; with no unit file, a unit of the name that systemd holds is said; exit 0 active as installed, "
+    "1 installed and not active, or not as installed, 3 not installed or not known, 2 not Linux |",
 ]
 GUIDE_NEW += SERVICE_ROWS
 # ADR-0013 Amendment C (M12.1p, AC-1): the host watch without its page, where watch --host's options are told

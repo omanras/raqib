@@ -7,18 +7,26 @@ it serves no page (AC-1). The watch itself is not changed: this module writes on
 undoes that, and leaves the service's record (/var/lib/raqib) unless --purge is given (A-4).
 
 A unit of the system's runs as root what it is told to run, so the install refuses unless the code it would run
-is root's alone (A-3, AB-3, AC-2 to AC-4). It refuses an interpreter that runs without its site (-S) and a raqib
-package that is not in one of that interpreter's own site folders (a checkout, an editable install), so that
-what it walks holds all the unit's `-I` will load from. Then it walks: the interpreter, to its end through every
-link; pyvenv.cfg beside it or one folder above; under every entry of sys.path, every file and folder, whole; the
-lines of each *.pth file in those folders that are paths, as entries too (a .pth file is read as text only once
-it was found root's alone; nothing is run); every file and folder of the raqib package; the systemctl found;
-each of the watch's ss paths; and the unit's folder; and every folder above each of them up to /. Each must be
-owned by uid 0 and writable by neither its group nor others. A link is checked as itself (its owner: a link's
-own mode bits say nothing) and then as what it points to, whole, its folders too; where it points to a folder,
-that folder is walked whole as well, each real folder once. A loop, or links past LINK_DEPTH for one path, is a
-refusal; so is a walk past WALK_MAX entries. A path that does not exist (an entry of sys.path, a .pth line, a
-link's end) is checked as far as it exists: the folders above it.
+is root's alone (A-3, AB-3, AC-2 to AC-4, AD-4). It refuses an interpreter that runs without its site (-S), one
+that reads PYTHONHOME or PYTHONPLATLIBDIR from its environment, and a raqib package that is not directly in one of
+that interpreter's own site folders (a checkout, an editable install, a copy deeper below), so that what it
+walks holds what the unit's `-I` will load from. Then it walks: the interpreter, to its end through every link;
+pyvenv.cfg beside it or one folder above; under every entry of sys.path, every file and folder, whole; the lines
+of each *.pth file in those folders that are paths, as entries too (a .pth file is read only once it was found
+root's alone, and refused where it holds a byte outside printable ASCII, tab, LF and CR; nothing is run); every
+file and folder of the raqib package; the systemctl found; each of the watch's ss paths; and the unit's folder;
+and every folder above each of them up to /. Each must be owned by uid 0 and writable by neither its group nor
+others. A link is checked as itself (its owner: a link's own mode bits say nothing) and then as what it points
+to, whole, its folders too; where it points to a folder, that folder is walked whole as well, each real folder
+once. A loop, or links past LINK_DEPTH for one path, is a refusal; so is a walk past WALK_MAX entries. A path
+that does not exist (an entry of sys.path, a .pth line, a link's end) is checked as far as it exists: the
+folders above it.
+
+systemd is asked before a state is said or a file written (AD-1): a unit of the name that systemd holds with no
+file at UNIT_PATH is not Raqib's to replace, remove or call absent. "As installed" (AD-2, AD-3) is: systemd
+loaded the unit from UNIT_PATH with no drop-in and has not seen the file change since, and the file's whole text
+is the text this Raqib writes for the interpreter it names; an install whose unit is not loaded so after the
+reload is not started.
 
 Refuse rather than repair: a unit of the name without Raqib's mark, a unit path or a state path that is a link,
 a systemctl that fails - each is said and left as it is. The unit's text is UNIT_TEXT with one hole, the
@@ -33,11 +41,12 @@ listing a folder, reading a file, the wait, the unit's write and removal, the re
 goes through one object, System; a test hands its own, so no test needs root or Linux, writes under /etc, or
 runs systemctl. Nothing runs at import. The standard library only; no network module.
 
-Exit codes: install 0 done (and, started, active after START_WAIT), 1 the unit written but systemctl failed or
-the unit is not active after START_WAIT (said, left as it is), 2 refused (nothing written); remove 0 done or no
-unit of the name known to systemd, 1 systemctl or a removal failed or a unit of the name is still loaded with no
-file (said, left as it is), 2 refused (nothing touched); status 0 active as installed, 1 installed and not
-active, or active not as installed, 3 not installed or not known, 2 not Linux.
+Exit codes: install 0 done (and, started, active and as installed after START_WAIT), 1 the unit written but
+systemctl failed, or not as installed (then not started), or not active or not as installed after START_WAIT
+(said, left as it is), 2 refused (nothing written); remove 0 done or no unit of the name held by systemd, 1
+systemctl or a removal failed, or a unit of the name is still held by systemd with no file (said, nothing
+touched); 2 refused (nothing touched); status 0 active as installed, 1 installed and not active, or active not
+as installed, 3 not installed (a unit of the name systemd holds is said) or not known, 2 not Linux.
 """
 from __future__ import annotations
 
@@ -67,10 +76,16 @@ SAFE_PATH = re.compile(r"/[A-Za-z0-9/._+-]*\Z")   # A-7: refused, never quoted
 LINK_DEPTH = 40                              # links followed at most for one path (the kernel's own bound)
 WALK_MAX = 200000                            # AC-2: entries walked at most; past it the install refuses
 PTH_MAX = 1 << 20                            # bytes of a .pth file read whole; a longer one is refused
+PTH_ODD = re.compile(rb"[^\x20-\x7e\t\n\r]")     # AD-4: a .pth byte site's versions read differently: refused
+UNIT_MAX = 16384                             # AD-2: bytes of the unit file status reads whole; longer is not ours
+ENV_MOVES = ("PYTHONHOME", "PYTHONPLATLIBDIR")   # AD-4: they move the install's library, not the unit's (-I)
 HEAD_MAX = 4096                              # bytes of a unit file read to find the mark
 TEXT_MAX = 2000                              # characters of systemctl's output kept
 SHOW = ("LoadState", "UnitFileState", "ActiveState", "SubState", "Result", "ExecMainStatus", "NRestarts",
-        "FragmentPath", "DropInPaths")
+        "FragmentPath", "DropInPaths", "NeedDaemonReload")
+LOADED = ("LoadState", "ActiveState", "FragmentPath", "DropInPaths", "NeedDaemonReload")   # AD-3: after the reload
+GONE = ("inactive", "failed")                # AD-1: ActiveStates of a unit nothing of which runs
+RUNNING = ("active", "activating", "reloading", "deactivating", "refreshing")
 EXEC = "-I -m raqib watch --host --no-page --no-notify"   # what ExecStart gives the interpreter (E3)
 FIX_ROOT = "run it as root (sudo raqib service ...): it asks for no elevation itself"
 JOURNAL = "journalctl -u %s" % UNIT_NAME
@@ -169,6 +184,14 @@ class System:
         """AC-3: True where this interpreter runs without its site (-S)."""
         return bool(sys.flags.no_site)
 
+    def ignores_environment(self):
+        """AD-4: True where this interpreter ignores PYTHON* variables (-E, -I)."""
+        return bool(sys.flags.ignore_environment)
+
+    def env_set(self, names):
+        """AD-4: those of `names` that are set in this process's environment (an empty value counts as set)."""
+        return [n for n in names if n in os.environ]
+
     def site_packages(self):
         """AC-3: this interpreter's own site folders (site.getsitepackages(); none where it cannot say)."""
         try:
@@ -194,19 +217,18 @@ class System:
     def listdir(self, path):
         return sorted(os.listdir(path))
 
-    def read_head(self, path):
-        """The first HEAD_MAX bytes of a file: not through a link, never waiting (O_NONBLOCK: a FIFO put there
+    def read_head(self, path, limit=HEAD_MAX):
+        """The first `limit` bytes of a file: not through a link, never waiting (O_NONBLOCK: a FIFO put there
         holds no reader), and only where fstat says the file opened is a regular one (AC-9)."""
         fd = os.open(path, _open_flags() | getattr(os, "O_NOFOLLOW", 0))
         with os.fdopen(fd, "rb") as f:
             if not statmod.S_ISREG(os.fstat(f.fileno()).st_mode):
                 raise OSError("%s is not a regular file" % path)
-            return f.read(HEAD_MAX)
+            return f.read(limit)
 
-    def read_text(self, path, limit):
-        """A .pth file's text, as site reads it (UTF-8, a BOM allowed), whole: never waiting, only from a
-        regular file, at most `limit` bytes (a longer one, or one that is not UTF-8, raises). Called only once
-        the walk found it, and what it points to, root's alone (AC-2)."""
+    def read_bytes(self, path, limit):
+        """A .pth file's bytes, whole: never waiting, only from a regular file, at most `limit` bytes (a longer
+        one raises). Called only once the walk found it, and what it points to, root's alone (AC-2)."""
         fd = os.open(path, _open_flags())
         with os.fdopen(fd, "rb") as f:
             if not statmod.S_ISREG(os.fstat(f.fileno()).st_mode):
@@ -214,7 +236,7 @@ class System:
             data = f.read(limit + 1)
         if len(data) > limit:
             raise OSError("%s is longer than %d bytes: not read whole" % (path, limit))
-        return data.decode("utf-8-sig")
+        return data
 
     def sleep(self, seconds):
         time.sleep(seconds)
@@ -411,11 +433,6 @@ def pth_entries(text, folder):
     return out
 
 
-def _inside(path, folder):
-    path, folder = posixpath.normpath(path), posixpath.normpath(folder).rstrip("/")
-    return path.startswith(folder + "/")
-
-
 def install_check(system, python, systemctl):
     """E1, E2 (A-3, AB-3, AC-2 to AC-4): (bad, counts). bad is (where, why) of the first path that is not
     root's alone, or None; counts says what was checked. Nothing is run; a .pth file is read only once found
@@ -467,11 +484,16 @@ def install_check(system, python, systemctl):
             if bad:
                 return done(bad)
             try:
-                text = system.read_text(pth, PTH_MAX)
+                data = system.read_bytes(pth, PTH_MAX)
             except (OSError, ValueError) as exc:
-                return done((pth, "cannot be read whole as site reads it (%s: %s)" % (type(exc).__name__, exc)))
+                return done((pth, "cannot be read whole (%s: %s)" % (type(exc).__name__, exc)))
+            odd = PTH_ODD.search(data)
+            if odd:   # AD-4: the versions of site split and decode such a file differently: not read into entries
+                return done((pth, "a .pth file holding byte 0x%02x at offset %d, outside printable ASCII, tab, LF"
+                                  " and CR (the versions of site split and decode such a file differently; it is"
+                                  " not read)" % (data[odd.start()], odd.start())))
             counts["pth"] += 1
-            lines = pth_entries(text, entry)
+            lines = pth_entries(data.decode("ascii"), entry)
             counts["pth_lines"] += len(lines)
             entries += lines
     for path in [system.package_dir(), systemctl, UNIT_DIR]:
@@ -497,8 +519,9 @@ def _exists(system, path):
 def checked_words(counts):
     """AC-8: what the install checked, as counts by kind (never a sentence without them)."""
     total = counts["folders"] + counts["files"] + counts["links"] + counts["other"]
-    return ("checked %d paths, each owned by root and writable by neither its group nor others: %d folders, %d"
-            " files, %d links, %d of another kind; they are the interpreter, %d pyvenv.cfg, under %d entries of"
+    return ("checked %d paths, each owned by root, and each but a link writable by neither its group nor others"
+            " (a link is checked by its owner, then what it points to): %d folders, %d files, %d links, %d of"
+            " another kind; they are the interpreter, %d pyvenv.cfg, under %d entries of"
             " sys.path every file and folder (%d entries missing: the folders above them), %d *.pth files read"
             " (%d of their lines entries), the raqib package, systemctl, %d ss, the unit's folder, and every"
             " folder above them" % (total, counts["folders"], counts["files"], counts["links"], counts["other"],
@@ -605,8 +628,19 @@ def _state_words(props):
         props.get(k) or "?" for k in ("ActiveState", "SubState", "Result", "ExecMainStatus", "NRestarts"))
 
 
+def _none_known(props):
+    """AD-1: True where systemd holds no unit of the name: LoadState not-found, and nothing of it running."""
+    return props.get("LoadState") == "not-found" and props.get("ActiveState") in GONE
+
+
+def _held_words(props):
+    return "LoadState=%s, ActiveState=%s, FragmentPath=%s" % (
+        props.get("LoadState") or "?", props.get("ActiveState") or "?", props.get("FragmentPath") or "none")
+
+
 def _not_as_installed(props):
-    """AC-9: what says systemd's unit is not the file installed: a FragmentPath other than UNIT_PATH, a drop-in."""
+    """AC-9, AD-2: what says systemd's unit is not the file installed: a FragmentPath other than UNIT_PATH, a
+    drop-in, a file changed since it was loaded (NeedDaemonReload=yes)."""
     fragment, drops = props.get("FragmentPath") or "", (props.get("DropInPaths") or "").split()
     out = []
     if fragment != UNIT_PATH:
@@ -614,12 +648,35 @@ def _not_as_installed(props):
             fragment or "no file", UNIT_PATH))
     if drops:
         out.append("NOT AS INSTALLED: drop-ins change the unit: %s (systemctl's DropInPaths)" % " ".join(drops))
+    if props.get("NeedDaemonReload") == "yes":
+        out.append("NOT AS INSTALLED: the unit's file changed since systemd loaded it (systemctl's"
+                   " NeedDaemonReload=yes)")
     return out
 
 
+def text_differs(data):
+    """AD-2: None where `data` (the unit file's bytes, read whole) is, byte for byte, the text this Raqib writes
+    for the interpreter its ExecStart names; else why not."""
+    if len(data) > UNIT_MAX:
+        return "the unit's file is longer than %d bytes (UNIT_MAX): not the text Raqib writes" % UNIT_MAX
+    try:
+        text = data.decode("ascii")
+    except UnicodeDecodeError:
+        return "the unit's file holds a byte that is not ASCII: not the text Raqib writes"
+    found = re.search(r"^ExecStart=(\S*)", text, re.M)
+    python = found.group(1) if found else None
+    if python_refused(python):
+        return "the unit's file is a different text: its ExecStart names no interpreter of the safe characters"
+    if text != UNIT_TEXT % python:
+        return ("the unit's file is a different text from the one this Raqib writes for %s (changed after the"
+                " install, or not Raqib's)" % python)
+    return None
+
+
 def install(system, out, start=True):
-    """E2, E4: refused (Refused, nothing written) or the unit written and, with start, enabled, started (over
-    Raqib's own unit: restarted) and asked after START_WAIT whether it is active."""
+    """E2, E4: refused (Refused, nothing written) or the unit written and, where systemd loaded it as installed
+    and with start, enabled, started (over Raqib's own unit: restarted) and asked after START_WAIT whether it is
+    active and still as installed."""
     _linux(system, "install")
     _root(system, "install")
     python = system.python()
@@ -630,12 +687,17 @@ def install(system, out, start=True):
         raise Refused("raqib service install: refused: this interpreter runs without its site (-S,"
                       " sys.flags.no_site), so what it would walk is not what the unit's interpreter loads (ADR-0013"
                       " AC-3); run it without -S")
+    moved = [] if system.ignores_environment() else system.env_set(ENV_MOVES)
+    if moved:
+        raise Refused("raqib service install: refused: %s is set and this interpreter reads its environment, so"
+                      " the library it would walk is not the one the unit's interpreter (-I) loads (ADR-0013"
+                      " AD-4); unset it, or run the install with -I or -E" % " and ".join(moved))
     pkg, sites = system.package_dir(), [s for s in system.site_packages() if isinstance(s, str)]
-    if not any(_inside(pkg, s) for s in sites):
-        raise Refused("raqib service install: refused: the raqib package it runs from, %s, is not in one of this"
-                      " interpreter's site folders (%s): install raqib into this interpreter (DIR/bin/pip install,"
-                      " as root); a checkout or an editable install is not it (ADR-0013 AC-3)" % (
-                          pkg, ", ".join(sites) or "none"))
+    if posixpath.normpath(posixpath.dirname(pkg)) not in [posixpath.normpath(s) for s in sites]:
+        raise Refused("raqib service install: refused: the raqib package it runs from, %s, is not directly in one"
+                      " of this interpreter's site folders (%s): install raqib into this interpreter (DIR/bin/pip"
+                      " install, as root); a checkout, an editable install or a copy deeper below a site folder"
+                      " is not it (ADR-0013 AC-3, AD-4)" % (pkg, ", ".join(sites) or "none"))
     path = _systemctl(system, "install")
     try:
         bad, counts = install_check(system, python, path)
@@ -651,6 +713,15 @@ def install(system, out, start=True):
         kind, why = "other", "%s cannot be read (%s)" % (UNIT_PATH, type(exc).__name__)
     if kind == "other":
         raise Refused("raqib service install: %s; not touched" % why)
+    if kind == "none":   # AD-1: the name, not only the path: systemd is asked before a file is written
+        held, words = _show(system, path, ("LoadState", "ActiveState", "FragmentPath"), need="LoadState")
+        if held is None:
+            raise Refused("raqib service install: no %s, and systemd gave no word on a unit of the name"
+                          " (systemctl show: %s); nothing written" % (UNIT_PATH, words))
+        if not _none_known(held):
+            raise Refused("raqib service install: refused: no %s, yet systemd holds a unit of the name (%s): it"
+                          " is not Raqib's to replace; nothing written (ADR-0013 AD-1)" % (UNIT_PATH,
+                                                                                          _held_words(held)))
     text = unit_text(python)
     try:
         system.write_unit(text)
@@ -664,25 +735,33 @@ def install(system, out, start=True):
     if not _call(system, path, ["daemon-reload"], out):
         out.write("RESULT: the unit is written; systemctl failed; left as it is\n")
         return 1
+    loaded, words = _show(system, path, LOADED, need="LoadState")   # AD-3: before anything is started
+    if loaded is None:
+        out.write("  systemctl show %s after the reload: %s\nRESULT: the unit is written; how systemd loaded it"
+                  " NOT KNOWN, not started\n" % (UNIT_NAME, words))
+        return 1
+    differ = _not_as_installed(loaded)
+    if differ:
+        for line in differ:
+            out.write("  %s\n" % line)
+        out.write("RESULT: the unit is written; NOT AS INSTALLED, not started: %s\n" % "; ".join(
+            d.split(": ", 1)[1] for d in differ))
+        return 1
     if not start:
         out.write("  --no-start: neither enabled nor started; start it with: systemctl enable --now %s\n" % UNIT_NAME)
-        if kind == "ours":
-            props, words = _show(system, path, ("ActiveState",))
-            if props is None:
-                out.write("  whether a watch of the unit's old text runs is not known: systemctl show: %s\n" % words)
-            elif props["ActiveState"] == "active":
-                out.write("  a watch is running: it keeps the text it started with until: systemctl restart %s\n"
-                          % UNIT_NAME)
+        if kind == "ours" and loaded.get("ActiveState") in RUNNING:
+            out.write("  a watch is running: it keeps the text it started with until: systemctl restart %s\n"
+                      % UNIT_NAME)
         out.write("RESULT: installed, not started\n")
         return 0
     calls = [["enable", UNIT_NAME], ["restart", UNIT_NAME]] if kind == "ours" else [["enable", "--now", UNIT_NAME]]
-    if kind == "ours":
-        out.write("  Raqib's own unit was there: it is restarted, so no watch keeps the old text\n")
     for args in calls:
         if not _call(system, path, args, out):
             out.write("RESULT: the unit is written; systemctl failed; left as it is (raqib service status says"
                       " more)\n")
             return 1
+    if kind == "ours":
+        out.write("  Raqib's own unit was there: it was restarted, so no watch keeps the old text\n")
     system.sleep(START_WAIT)
     props, words = _show(system, path)
     if props is None:
@@ -690,13 +769,20 @@ def install(system, out, start=True):
         out.write("RESULT: installed, enabled, its state %d s after its start NOT KNOWN\n" % START_WAIT)
         return 1
     out.write("  after %d s: %s (systemctl show)\n" % (START_WAIT, _state_words(props)))
-    for line in _not_as_installed(props):
-        out.write("  %s (raqib service status says it, exit 1)\n" % line)
     out.write("  the record: %s (root's alone); raqib service status says how it runs\n" % RECORD)
-    if props["ActiveState"] == "active":
+    differ = _not_as_installed(props)
+    for line in differ:
+        out.write("  %s\n" % line)
+    active = props["ActiveState"] == "active"
+    if active and not differ:
         out.write("RESULT: installed, enabled, active %d s after its start\n" % START_WAIT)
         return 0
-    out.write("RESULT: installed, enabled, NOT ACTIVE %d s after its start (%s says why)\n" % (START_WAIT, JOURNAL))
+    if active:
+        out.write("RESULT: installed, enabled, active %d s after its start, NOT AS INSTALLED: %s\n" % (
+            START_WAIT, "; ".join(d.split(": ", 1)[1] for d in differ)))
+        return 1
+    out.write("RESULT: installed, enabled, NOT ACTIVE %d s after its start%s (%s says why)\n" % (
+        START_WAIT, ", NOT AS INSTALLED" if differ else "", JOURNAL))
     return 1
 
 
@@ -720,9 +806,10 @@ def _purge_refused(system, state):
 
 
 def remove(system, out, purge=False, state=STATE_DIR):
-    """E4, E5: the unit stopped, disabled and removed (only with Raqib's mark), then reloaded; the record stays
-    and is said; with purge, the record's folder (STATE_DIR, and only it) is removed too. No file: systemd is
-    asked whether a unit of the name is still loaded (AC-9), and if one is, nothing is touched."""
+    """E4, E5: the unit stopped, disabled and removed (only with Raqib's mark), then reloaded, and a failed
+    state of it forgotten (AD-5); the record stays and is said; with purge, the record's folder (STATE_DIR, and
+    only it) is removed too. No file: systemd is asked whether it holds a unit of the name (AD-1), and if it
+    does, nothing is touched."""
     _linux(system, "remove")
     _root(system, "remove")
     purge_why = _purge_refused(system, state) if purge else None
@@ -750,20 +837,27 @@ def remove(system, out, purge=False, state=STATE_DIR):
         if not _call(system, path, ["daemon-reload"], out):
             out.write("RESULT: the unit is removed; systemctl's reload failed\n")
             return 1
+        ended, words = _show(system, path, ("ActiveState",))   # AD-5: a stop after a finding reads as failed
+        if ended is None:
+            out.write("  whether systemd holds a failed state of the removed unit is not known: systemctl show:"
+                      " %s\n" % words)
+        elif ended["ActiveState"] == "failed":
+            out.write("  systemd held the removed unit as failed (the watch's own exit at its stop); asked to"
+                      " forget it:\n")
+            _call(system, path, ["reset-failed", UNIT_NAME], out)
     else:
-        props, words = _show(system, path, ("LoadState", "ActiveState"), need="LoadState")
-        if props is None:
+        held, words = _show(system, path, ("LoadState", "ActiveState", "FragmentPath"), need="LoadState")
+        if held is None:
             out.write("  no %s; whether systemd still has a unit of the name is not known: systemctl show: %s\n"
                       "RESULT: nothing touched, not known\n" % (UNIT_PATH, words))
             return 1
-        if props["LoadState"] != "not-found":
-            out.write("  no %s, but systemd still has a unit of the name: LoadState=%s, ActiveState=%s (systemctl"
-                      " status %s says from where); nothing touched\nRESULT: nothing touched, a unit of the name"
-                      " is still loaded\n" % (UNIT_PATH, props["LoadState"], props.get("ActiveState") or "?",
-                                              UNIT_NAME))
+        if not _none_known(held):
+            out.write("  no %s, but systemd still has a unit of the name: %s (systemctl status %s says more);"
+                      " nothing touched%s\nRESULT: nothing touched, a unit of the name is still held by systemd\n"
+                      % (UNIT_PATH, _held_words(held), UNIT_NAME, ", nothing purged" if purge else ""))
             return 1
-        out.write("  no unit installed (no %s; systemd: LoadState=not-found): nothing to stop or remove\n"
-                  % UNIT_PATH)
+        out.write("  no unit installed (no %s; systemd: LoadState=not-found, ActiveState=%s): nothing to stop or"
+                  " remove\n" % (UNIT_PATH, held["ActiveState"]))
     if not purge:
         out.write("  the record stays: %s (its events: %s/events.jsonl); raqib service remove --purge removes"
                   " it\n" % (STATE_DIR, RECORD))
@@ -783,21 +877,35 @@ def remove(system, out, purge=False, state=STATE_DIR):
 
 def status(system, out):
     """E5: installed (the file with the mark), enabled and active by systemctl's own words, loaded from that file
-    alone; no rights needed. Nothing is said that was not read (AC-9)."""
+    alone, its text the one this Raqib writes, unchanged since it was loaded; no rights needed. Nothing is said
+    that was not read (AC-9). No file: systemd is asked whether it holds a unit of the name (AD-1)."""
     _linux(system, "status")
     out.write("raqib service status\n")
     try:
         kind, why = unit_state(system)
+        whole = system.read_head(UNIT_PATH, UNIT_MAX + 1) if kind == "ours" else b""
     except OSError as exc:
         out.write("  %s cannot be read (%s): whether Raqib's unit is there is not known\nRESULT: NOT KNOWN\n" % (
             UNIT_PATH, type(exc).__name__))
         return 3
+    path = system.systemctl_path()
     if kind != "ours":
         out.write("  not installed: %s\n" % (why or "no %s" % UNIT_PATH))
+        if kind == "none":
+            held, words = (_show(system, path, ("LoadState", "ActiveState", "FragmentPath"), need="LoadState")
+                           if path else (None, "no systemctl at %s" % " or ".join(SYSTEMCTLS)))
+            if held is None:
+                out.write("  whether systemd holds a unit of the name is not known: %s\nRESULT: NOT INSTALLED BY"
+                          " RAQIB, NOT KNOWN WHETHER A UNIT OF THE NAME RUNS\n" % words)
+                return 3
+            if not _none_known(held):
+                out.write("  systemd holds a unit of the name: %s\nRESULT: NOT INSTALLED BY RAQIB, YET A UNIT OF"
+                          " THE NAME IS %s\n" % (_held_words(held), "ACTIVE" if held.get("ActiveState") in
+                                                 RUNNING else "LOADED"))
+                return 3
         out.write("RESULT: NOT INSTALLED\n")
         return 3
     out.write("  installed: %s (it carries %s)\n" % (UNIT_PATH, MARK))
-    path = system.systemctl_path()
     if not path:
         out.write("  no systemctl at %s: the unit's state is not known\nRESULT: NOT KNOWN\n" % " or ".join(SYSTEMCTLS))
         return 3
@@ -812,6 +920,9 @@ def status(system, out):
     out.write("  restarts: %s (systemctl's NRestarts; each restart is a gap in the watch)\n" % (
         props.get("NRestarts") or "?"))
     differ = _not_as_installed(props)
+    other = text_differs(whole)
+    if other:
+        differ.append("NOT AS INSTALLED: %s" % other)
     for line in differ:
         out.write("  %s\n" % line)
     as_installed = not differ

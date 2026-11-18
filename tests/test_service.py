@@ -30,13 +30,16 @@ STDLIB = "/usr/lib/python3.12"
 SYSTEMCTL = "/usr/bin/systemctl"
 UNIT = service.UNIT_PATH
 SHOW_ACTIVE = ("LoadState=loaded\nUnitFileState=enabled\nActiveState=active\nSubState=running\nResult=success\n"
-               "ExecMainStatus=0\nNRestarts=0\nFragmentPath=%s\nDropInPaths=\n" % UNIT)
+               "ExecMainStatus=0\nNRestarts=0\nFragmentPath=%s\nDropInPaths=\nNeedDaemonReload=no\n" % UNIT)
 SHOW_FAILED = ("LoadState=loaded\nUnitFileState=enabled\nActiveState=failed\nSubState=failed\nResult=exit-code\n"
-               "ExecMainStatus=1\nNRestarts=4\nFragmentPath=%s\nDropInPaths=\n" % UNIT)
+               "ExecMainStatus=1\nNRestarts=4\nFragmentPath=%s\nDropInPaths=\nNeedDaemonReload=no\n" % UNIT)
 SHOW_GONE = "LoadState=not-found\nActiveState=inactive\n"
 DISTUTILS = (b"import os; var = 'SETUPTOOLS_USE_DISTUTILS'; enabled = os.environ.get(var, 'local') == 'local';"
              b" enabled and __import__('_distutils_hack').add_shim(); \n")
 PROPS = "--property=" + ",".join(service.SHOW)
+HELD = ["show", "raqib-watch.service", "--no-pager", "--property=LoadState,ActiveState,FragmentPath"]
+LOADED = ["show", "raqib-watch.service", "--no-pager", "--property=" + ",".join(service.LOADED)]
+AFTER = ["show", "raqib-watch.service", "--no-pager", PROPS]
 
 
 class St:
@@ -58,6 +61,7 @@ class Fake:
         self.calls, self.writes, self.removed, self.fail = [], [], [], {}
         self.slept, self.reads, self.listed, self.lstats = [], [], [], set()
         self.no_site_flag, self.sites, self.pkg, self.gone, self.unreadable = False, [SITE], PKG, SHOW_GONE, False
+        self.ignore_env, self.env, self.shows = False, {}, []
         for d in (STDLIB + "/lib-dynload", PKG + "/rules", service.UNIT_DIR, "/var/lib"):
             self.add(d)
         self.add("/usr/bin/python3.12", "file")
@@ -105,6 +109,12 @@ class Fake:
     def no_site(self):
         return self.no_site_flag
 
+    def ignores_environment(self):
+        return self.ignore_env
+
+    def env_set(self, names):
+        return [n for n in names if n in self.env]
+
     def site_packages(self):
         return list(self.sites)
 
@@ -139,17 +149,17 @@ class Fake:
         pre = path.rstrip("/") + "/"
         return sorted(p[len(pre):] for p in self.nodes if p.startswith(pre) and "/" not in p[len(pre):])
 
-    def read_head(self, path):
+    def read_head(self, path, limit=service.HEAD_MAX):
         if self.unreadable:
             raise PermissionError(13, "made-up")
-        return self.nodes[path][3][:service.HEAD_MAX]
+        return self.nodes[path][3][:limit]
 
-    def read_text(self, path, limit):
+    def read_bytes(self, path, limit):
         self.reads.append(path)
         _, node = self.resolve(path)
         if node[0] != "file" or len(node[3] or b"") > limit:
             raise OSError("not read whole")
-        return (node[3] or b"").decode("utf-8-sig")
+        return node[3] or b""
 
     def sleep(self, seconds):
         self.slept.append(seconds)
@@ -161,6 +171,8 @@ class Fake:
         self.calls.append(list(args))
         if args[0] in self.fail:
             return self.fail[args[0]]
+        if args[0] == "show" and self.shows:   # answers in order, where a test gives them
+            return 0, self.shows.pop(0), ""
         return (0, self.show if UNIT in self.nodes else self.gone, "") if args[0] == "show" else (0, "", "")
 
     def write_unit(self, text):
@@ -278,9 +290,10 @@ def test_e1_a_loop_of_folder_links_walks_each_real_folder_once():
 
 def test_e1_walk_max_passed_refuses_and_says_the_number(monkeypatch):
     monkeypatch.setattr(service, "WALK_MAX", 5)
-    where, why = bad_of(Fake())
+    fake = Fake()
+    where, why = bad_of(fake)
     assert why.startswith("more than 5 entries to walk (WALK_MAX): a walk that is not whole is not a pass")
-    assert service.WALK_MAX == 5 and 100000 <= 200000 == service.WALK_MAX + 199995
+    assert where == fake.listed[-1]   # the folder being walked when the bound was passed is the one said
 
 
 def test_e1_a_world_writable_parent_three_levels_up_is_said_first_from_the_root_down():
@@ -433,11 +446,38 @@ def test_e2_refused_where_the_package_is_not_in_one_of_the_interpreters_site_fol
     fake = Fake()
     fake.pkg = "/srv/checkout/raqib"   # a checkout run by -m, or an editable install
     err = refused(fake.add("/srv/checkout/raqib/cli.py", "file", 0o644), "install")
-    assert "the raqib package it runs from, /srv/checkout/raqib, is not in one of this interpreter's site" in err
-    assert "install raqib into this interpreter" in err and "a checkout or an editable install is not it" in err
+    assert "the raqib package it runs from, /srv/checkout/raqib, is not directly in one of this interpreter's" in err
+    assert "install raqib into this interpreter" in err and "a checkout, an editable install or a copy" in err
     fake = Fake()
     fake.sites = [SITE + "-other"]
-    assert "is not in one of this interpreter's site folders (%s-other)" % SITE in refused(fake, "install")
+    assert "is not directly in one of this interpreter's site folders (%s-other)" % SITE in refused(fake, "install")
+    fake = Fake().add(SITE + "/vendor/raqib/cli.py", "file", 0o644)
+    fake.pkg = SITE + "/vendor/raqib"   # AD-4 (G8): a copy deeper below a site folder is not the one -m imports
+    assert "%s/vendor/raqib, is not directly in one" % SITE in refused(fake, "install")
+
+
+def test_e4_refused_where_pythonhome_or_pythonplatlibdir_is_set_and_the_environment_is_read():
+    for name in ("PYTHONHOME", "PYTHONPLATLIBDIR"):
+        fake = Fake()
+        fake.env = {name: ""}
+        err = refused(fake, "install")
+        assert "refused: %s is set and this interpreter reads its environment" % name in err and "-I or -E" in err
+    fake = Fake()
+    fake.env, fake.ignore_env = {"PYTHONHOME": "/srv/elsewhere"}, True   # -I or -E: the variable moves nothing
+    assert run(fake, "install")[0] == 0
+    assert service.ENV_MOVES == ("PYTHONHOME", "PYTHONPLATLIBDIR")
+
+
+@pytest.mark.parametrize("content,byte", [(b"/srv/a\x0b../../x\n", "0x0b"), (b"\xef\xbb\xbf/srv/a\n", "0xef"),
+                                          (b"/srv/a\x85\n", "0x85"), (b"/srv/\x00\n", "0x00"),
+                                          (b"/srv/a\x1c\n", "0x1c")])
+def test_e4_a_pth_file_holding_a_byte_site_reads_differently_is_refused_and_not_read_into_entries(content, byte):
+    fake = Fake().add(SITE + "/zz-odd.pth", "file", 0o644, content=content)
+    where, why = bad_of(fake)
+    assert where == SITE + "/zz-odd.pth" and why.startswith("a .pth file holding byte %s at offset" % byte)
+    assert "it is not read" in why and "/srv/a" not in fake.lstats
+    fake = Fake().add("/srv/b").add(SITE + "/zz-ok.pth", "file", 0o644, content=b"\t/srv/tabbed\r\n/srv/b\r")
+    assert bad_of(fake) is None and "/srv/b" in fake.lstats   # tab, CR and LF are what every site reads alike
 
 
 def test_e2_the_list_holds_systemctl_the_watchs_ss_and_the_units_folder():
@@ -538,53 +578,58 @@ def test_e4_install_says_its_counts_by_kind_waits_and_asks_systemctl():
     fake = Fake()
     code, out, err = run(fake, "install")
     assert code == 0 and err == "" and fake.writes == [WHOLE] and fake.slept == [service.START_WAIT] == [3]
-    assert fake.calls == [["daemon-reload"], ["enable", "--now", "raqib-watch.service"],
-                          ["show", "raqib-watch.service", "--no-pager", PROPS]]
+    assert fake.calls == [HELD, ["daemon-reload"], LOADED, ["enable", "--now", "raqib-watch.service"], AFTER]
     assert "wrote /etc/systemd/system/raqib-watch.service (root, 0644): ExecStart=%s %s" % (PY, service.EXEC) in out
     line = [x for x in out.splitlines() if x.startswith("  checked ")][0]
     _, counts = service.install_check(Fake(), PY, SYSTEMCTL)
     assert line == "  " + service.checked_words(counts)
-    assert ("each owned by root and writable by neither its group nor others: %d folders, %d files, %d links, 0 of"
-            " another kind" % (counts["folders"], counts["files"], counts["links"])) in line
+    assert ("each owned by root, and each but a link writable by neither its group nor others (a link is checked by"
+            " its owner, then what it points to): %d folders, %d files, %d links, 0 of another kind" % (
+                counts["folders"], counts["files"], counts["links"])) in line
     assert "root's alone (ADR-0013 A-3)" not in out and "every path the unit loads" not in out
     assert "after 3 s: ActiveState=active, SubState=running, Result=success, ExecMainStatus=0, NRestarts=0" in out
     assert out.rstrip().endswith("RESULT: installed, enabled, active 3 s after its start")
     assert "NOT AS INSTALLED" not in out
-    fake = Fake(show=SHOW_ACTIVE.replace("DropInPaths=", "DropInPaths=/run/x.conf"))
-    code, out, _ = run(fake, "install")
-    assert code == 0 and "NOT AS INSTALLED: drop-ins change the unit: /run/x.conf" in out
 
 
 def test_e4_not_active_after_the_wait_is_exit_1_with_the_state_and_the_result():
-    fake = Fake(show=SHOW_FAILED)
+    fake = Fake()
+    fake.shows = [SHOW_GONE, SHOW_ACTIVE, SHOW_FAILED]   # before the write, after the reload, after the wait
     code, out, _ = run(fake, "install")
     assert code == 1 and "ActiveState=failed" in out and "Result=exit-code" in out and "ExecMainStatus=1" in out
     assert out.rstrip().endswith("RESULT: installed, enabled, NOT ACTIVE 3 s after its start (journalctl -u"
                                  " raqib-watch.service says why)")
     fake = Fake()
-    fake.fail["show"] = (None, "", "no answer in 120 s (made-up)")
+    fake.shows = [SHOW_GONE, SHOW_ACTIVE, "LoadState=loaded\n"]
     code, out, _ = run(fake, "install")
-    assert code == 1 and "no answer in 120 s" in out and "NOT KNOWN" in out
+    assert code == 1 and "(no ActiveState)" in out and "its state 3 s after its start NOT KNOWN" in out
 
 
 def test_e4_over_raqibs_own_unit_it_restarts_it():
     fake = Fake().unit(service.MARK + "\n[Service]\nExecStart=/old\n")
     code, out, _ = run(fake, "install")
     assert code == 0 and fake.nodes[UNIT][3] == WHOLE.encode("ascii")
-    assert fake.calls[:3] == [["daemon-reload"], ["enable", "raqib-watch.service"], ["restart", "raqib-watch.service"]]
-    assert "replaced Raqib's own /etc/systemd/system/raqib-watch.service" in out
-    assert "it is restarted, so no watch keeps the old text" in out and fake.slept == [3]
+    assert fake.calls == [["daemon-reload"], LOADED, ["enable", "raqib-watch.service"],
+                          ["restart", "raqib-watch.service"], AFTER]
+    assert "replaced Raqib's own /etc/systemd/system/raqib-watch.service" in out and fake.slept == [3]
+    lines = out.splitlines()
+    said = [i for i, x in enumerate(lines) if "it was restarted, so no watch keeps the old text" in x]
+    done = [i for i, x in enumerate(lines) if x.endswith("restart raqib-watch.service: done")]
+    assert said and done and said[0] > done[0]   # said after the restart ran, never before (G12)
+    fake = Fake().unit(service.MARK + "\n[Service]\nExecStart=/old\n")
+    fake.fail["restart"] = (1, "", "made-up")
+    code, out, _ = run(fake, "install")
+    assert code == 1 and "restarted" not in out
 
 
 def test_e4_no_start_neither_enables_nor_starts_and_over_a_running_unit_says_it_keeps_its_text():
     fake = Fake()
     code, out, _ = run(fake, "install", "--no-start")
-    assert code == 0 and fake.writes == [WHOLE] and fake.calls == [["daemon-reload"]] and fake.slept == []
-    assert "neither enabled nor started" in out and "keeps the text" not in out
+    assert code == 0 and fake.writes == [WHOLE] and fake.calls == [HELD, ["daemon-reload"], LOADED]
+    assert "neither enabled nor started" in out and "keeps the text" not in out and fake.slept == []
     fake = Fake().unit(service.MARK + "\n[Service]\nExecStart=/old\n")
     code, out, _ = run(fake, "install", "--no-start")
-    assert code == 0 and fake.calls == [["daemon-reload"], ["show", "raqib-watch.service", "--no-pager",
-                                                            "--property=ActiveState"]]
+    assert code == 0 and fake.calls == [["daemon-reload"], LOADED]
     assert "a watch is running: it keeps the text it started with until: systemctl restart raqib-watch.service" in out
 
 
@@ -609,7 +654,9 @@ def test_e4_remove_stops_disables_removes_reloads_and_the_record_stays_its_path_
     fake = installed()
     code, out, err = run(fake, "remove")
     assert code == 0 and err == ""
-    assert fake.calls == [["disable", "--now", "raqib-watch.service"], ["daemon-reload"]] and fake.removed == [UNIT]
+    assert fake.calls == [["disable", "--now", "raqib-watch.service"], ["daemon-reload"],
+                          ["show", "raqib-watch.service", "--no-pager", "--property=ActiveState"]]
+    assert fake.removed == [UNIT] and "reset-failed" not in out
     assert UNIT not in fake.nodes and service.RECORD + "/events.jsonl" in fake.nodes
     assert "the record stays: /var/lib/raqib (its events: /var/lib/raqib/.raqib/host/events.jsonl)" in out
 
@@ -671,14 +718,15 @@ def test_e4_and_e2_options_belong_to_their_action():
 
 # --- E5 (A-8, AC-7, AC-9): remove with no file, status, the words of systemctl ------------------------------------
 
-LOADSTATE = ["show", "raqib-watch.service", "--no-pager", "--property=LoadState,ActiveState"]
+LOADSTATE = HELD
 
 
 def test_e5_remove_with_no_unit_file_asks_systemctl_and_not_found_is_exit_0():
     fake = Fake()
     code, out, _ = run(fake, "remove")
     assert code == 0 and fake.calls == [LOADSTATE] and fake.removed == []
-    assert "no unit installed (no /etc/systemd/system/raqib-watch.service; systemd: LoadState=not-found)" in out
+    assert ("no unit installed (no /etc/systemd/system/raqib-watch.service; systemd: LoadState=not-found,"
+            " ActiveState=inactive)") in out
     assert "RESULT: nothing installed" in out
 
 
@@ -688,7 +736,8 @@ def test_e5_remove_with_no_unit_file_and_a_unit_of_the_name_still_loaded_is_exit
     code, out, _ = run(fake, "remove", "--purge")
     assert code == 1 and fake.calls == [LOADSTATE] and fake.removed == [] and service.STATE_DIR in fake.nodes
     assert "but systemd still has a unit of the name: LoadState=loaded, ActiveState=active" in out
-    assert "RESULT: nothing touched, a unit of the name is still loaded" in out
+    assert "nothing touched, nothing purged" in out
+    assert "RESULT: nothing touched, a unit of the name is still held by systemd" in out
     fake = Fake()
     fake.fail["show"] = (None, "", "no answer in 120 s (made-up)")
     code, out, _ = run(fake, "remove")
@@ -700,7 +749,7 @@ def test_e5_status_active_is_0_by_systemctls_own_words_and_needs_no_rights():
     code, out, _ = run(fake, "status")
     assert code == 0 and fake.calls == [["show", "raqib-watch.service", "--no-pager", PROPS]]
     assert PROPS == ("--property=LoadState,UnitFileState,ActiveState,SubState,Result,ExecMainStatus,NRestarts,"
-                     "FragmentPath,DropInPaths")
+                     "FragmentPath,DropInPaths,NeedDaemonReload")
     assert "installed: /etc/systemd/system/raqib-watch.service (it carries # raqib-service/1)" in out
     assert "enabled: enabled (systemctl's UnitFileState)" in out and "active: active, running" in out
     assert "restarts: 0 (systemctl's NRestarts; each restart is a gap in the watch)" in out
@@ -754,12 +803,19 @@ def test_e5_a_systemctl_that_timed_out_or_exited_non_zero_is_said_as_it_was_neve
     fake.fail["show"] = (1, "", "Failed to connect to bus: made-up")
     code, out, _ = run(fake, "status")
     assert code == 3 and "gave no state: exit 1, said: Failed to connect to bus: made-up" in out
+    said = [out]
     fake = Fake()
     fake.fail["enable"] = (None, "", "no answer in 120 s (systemctl stopped; made-up)")
     code, out, _ = run(fake, "install")
     assert code == 1 and "enable --now raqib-watch.service: FAILED: no answer in 120 s" in out
-    for words in (out,) + tuple(run(f, "status")[1] for f in (installed(uid=1000),)):
-        assert "not run" not in words and "cannot be run" not in words
+    said.append(out)
+    for action, fail in (("status", (None, "", "no answer in 120 s (made-up)")), ("remove", (1, "", "made-up"))):
+        fake = installed(uid=1000 if action == "status" else 0)
+        fake.fail["show" if action == "status" else "disable"] = fail
+        said.append(run(fake, action)[1])
+    assert "FAILED: exit 1, said: made-up" in said[-1] and "gave no state: no answer in 120 s" in said[-2]
+    for words in said:   # each a systemctl that ran: timed out or exited non-zero, never said as not run (G14)
+        assert "not run" not in words and "cannot be run" not in words, words
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="a FIFO as POSIX makes it")
@@ -771,18 +827,144 @@ def test_e5_the_units_head_is_read_without_waiting_and_only_from_a_regular_file(
     with pytest.raises(OSError, match="not a regular file"):
         real.read_head(str(tmp_path / "fifo"))   # O_NONBLOCK: no writer, and still no wait
     with pytest.raises(OSError, match="not a regular file"):
-        real.read_text(str(tmp_path / "fifo"), service.PTH_MAX)
-    (tmp_path / "a.pth").write_bytes(b"\xef\xbb\xbf/srv/x\n")
-    assert real.read_text(str(tmp_path / "a.pth"), service.PTH_MAX) == "/srv/x\n"
+        real.read_bytes(str(tmp_path / "fifo"), service.PTH_MAX)
+    (tmp_path / "a.pth").write_bytes(b"/srv/x\n")
+    assert real.read_bytes(str(tmp_path / "a.pth"), service.PTH_MAX) == b"/srv/x\n"
     with pytest.raises(OSError, match="longer than 3 bytes"):
-        real.read_text(str(tmp_path / "a.pth"), 3)
-    (tmp_path / "b.pth").write_bytes(b"/srv/\xff\n")
-    with pytest.raises(ValueError):
-        real.read_text(str(tmp_path / "b.pth"), service.PTH_MAX)
+        real.read_bytes(str(tmp_path / "a.pth"), 3)
+    assert real.read_head(str(tmp_path / "unit"), 7) == b"# raqib"
 
 
 def test_e5_not_linux_is_2():
     assert "Linux only" in refused(Fake(uid=1000, platform="win32"), "status")
+
+
+# --- REDO 4, E1 (AD-1): with no unit file, systemd is asked before a state is said or a file written -----------
+
+HELD_BY = (("LoadState=not-found\nActiveState=active\nFragmentPath=\n", "ActiveState=active"),
+           ("LoadState=loaded\nActiveState=inactive\nFragmentPath=/usr/lib/systemd/system/raqib-watch.service\n",
+            "FragmentPath=/usr/lib/systemd/system/raqib-watch.service"),
+           ("LoadState=not-found\nActiveState=activating\nFragmentPath=\n", "ActiveState=activating"),
+           ("LoadState=not-found\nActiveState=reloading\nFragmentPath=\n", "ActiveState=reloading"),
+           ("LoadState=masked\nActiveState=inactive\nFragmentPath=/dev/null\n", "LoadState=masked"))
+
+
+@pytest.mark.parametrize("gone,words", HELD_BY)
+def test_e1_install_with_no_file_refuses_a_unit_of_the_name_systemd_holds_naming_where_from(gone, words):
+    fake = Fake()
+    fake.gone = gone
+    code, out, err = run(fake, "install")
+    assert code == 2 and fake.writes == [] and fake.calls == [HELD] and UNIT not in fake.nodes, (out, err)
+    assert "yet systemd holds a unit of the name (" in err and words in err and "FragmentPath=" in err
+    assert "nothing written" in err
+
+
+def test_e1_install_with_no_file_and_no_answer_from_systemctl_is_refused():
+    for fail in ((None, "", "no answer in 120 s (made-up)"), (1, "", "Failed to connect to bus: made-up")):
+        fake = Fake()
+        fake.fail["show"] = fail
+        code, _, err = run(fake, "install")
+        assert code == 2 and fake.writes == [] and fake.calls == [HELD] and "systemd gave no word" in err
+    fake = Fake()
+    fake.gone = "LoadState=not-found\nActiveState=failed\n"   # a failed unit of the name, nothing of it running
+    assert run(fake, "install")[0] == 0 and fake.writes == [WHOLE]
+
+
+@pytest.mark.parametrize("gone,words", HELD_BY)
+def test_e1_remove_with_no_file_and_a_unit_systemd_holds_is_exit_1_nothing_touched_nothing_purged(gone, words):
+    fake = Fake().add(service.STATE_DIR, mode=0o700).add(service.RECORD + "/events.jsonl", "file", 0o600)
+    fake.gone = gone
+    code, out, _ = run(fake, "remove", "--purge")
+    assert code == 1 and fake.calls == [HELD] and fake.removed == [] and service.RECORD + "/events.jsonl" in fake.nodes
+    assert words in out and "nothing touched, nothing purged" in out and "RESULT: nothing installed" not in out
+
+
+def test_e1_status_with_no_file_asks_and_says_a_unit_of_the_name_that_systemd_holds():
+    fake = Fake(uid=1000)
+    fake.gone = HELD_BY[0][0]   # LoadState=not-found, ActiveState=active: a file deleted under a running unit
+    code, out, _ = run(fake, "status")
+    assert code == 3 and fake.calls == [HELD]
+    assert out.rstrip().endswith("RESULT: NOT INSTALLED BY RAQIB, YET A UNIT OF THE NAME IS ACTIVE")
+    fake = Fake(uid=1000)
+    fake.gone = HELD_BY[1][0]
+    code, out, _ = run(fake, "status")
+    assert code == 3 and out.rstrip().endswith("RESULT: NOT INSTALLED BY RAQIB, YET A UNIT OF THE NAME IS LOADED")
+    assert "FragmentPath=/usr/lib/systemd/system/raqib-watch.service" in out
+    fake = Fake(uid=1000)
+    fake.fail["show"] = (None, "", "no answer in 120 s (made-up)")
+    code, out, _ = run(fake, "status")
+    assert code == 3 and "NOT KNOWN WHETHER A UNIT OF THE NAME RUNS" in out and "no answer in 120 s" in out
+    code, out, _ = run(Fake(uid=1000), "status")
+    assert code == 3 and out.rstrip().endswith("RESULT: NOT INSTALLED") and "NOT INSTALLED BY RAQIB" not in out
+
+
+# --- REDO 4, E2 (AD-2): "as installed" is the whole text, and a file systemd has loaded ---------------------------
+
+def test_e2_status_a_changed_directive_with_the_mark_kept_is_not_as_installed():
+    fake = installed(uid=1000)
+    fake.unit(WHOLE.replace("ProtectSystem=strict\n", "ProtectSystem=no\n"))
+    code, out, _ = run(fake, "status")
+    assert code == 1 and out.rstrip().endswith("RESULT: ACTIVE, NOT AS INSTALLED")
+    assert ("NOT AS INSTALLED: the unit's file is a different text from the one this Raqib writes for %s" % PY) in out
+    fake.unit(WHOLE.replace("ExecStart=" + PY, "ExecStart=/usr/bin/other " + PY))   # another program in front
+    assert "different text from the one this Raqib writes for /usr/bin/other" in run(fake, "status")[1]
+    fake.unit(WHOLE.replace("ExecStart=" + PY, "ExecStart=/usr/bin/other"))   # the interpreter is the file's word
+    assert run(fake, "status")[0] == 0   # what status does not see: which interpreter the install named (docs)
+    fake.unit(WHOLE.replace("ExecStart=" + PY, "ExecStart=-" + PY))
+    assert "its ExecStart names no interpreter of the safe characters" in run(fake, "status")[1]
+    fake.unit(WHOLE + "#" * service.UNIT_MAX)
+    assert "longer than %d bytes (UNIT_MAX)" % service.UNIT_MAX in run(fake, "status")[1]
+
+
+def test_e2_status_a_file_changed_and_not_reloaded_is_not_as_installed_and_the_clean_case_is_active():
+    fake = installed(uid=1000, show=SHOW_ACTIVE.replace("NeedDaemonReload=no", "NeedDaemonReload=yes"))
+    code, out, _ = run(fake, "status")
+    assert code == 1 and "changed since systemd loaded it (systemctl's NeedDaemonReload=yes)" in out
+    code, out, _ = run(installed(uid=1000), "status")
+    assert code == 0 and "NOT AS INSTALLED" not in out and out.rstrip().endswith("RESULT: ACTIVE")
+    assert service.text_differs(WHOLE.encode("ascii")) is None and service.UNIT_MAX == 16384
+
+
+# --- REDO 4, E3 (AD-3): the install does not start what is not as installed ---------------------------------------
+
+def test_e3_not_as_installed_after_the_reload_is_exit_1_neither_enabled_nor_started():
+    for text, words in (("DropInPaths=", "DropInPaths=/etc/systemd/system/raqib-watch.service.d/x.conf"),
+                        ("FragmentPath=" + UNIT, "FragmentPath=/run/systemd/transient/raqib-watch.service"),
+                        ("NeedDaemonReload=no", "NeedDaemonReload=yes")):
+        for argv in (["install"], ["install", "--no-start"]):
+            fake = Fake(show=SHOW_ACTIVE.replace(text, words))
+            code, out, _ = run(fake, *argv)
+            assert code == 1 and fake.calls == [HELD, ["daemon-reload"], LOADED] and fake.slept == [], out
+            assert "RESULT: the unit is written; NOT AS INSTALLED, not started: " in out
+    fake = Fake(show=SHOW_ACTIVE.replace("DropInPaths=", "DropInPaths=/run/x.conf"))
+    assert run(fake, "install")[1].rstrip().endswith("not started: drop-ins change the unit: /run/x.conf"
+                                                     " (systemctl's DropInPaths)")
+
+
+def test_e3_not_as_installed_after_the_wait_is_exit_1_and_the_result_says_it():
+    fake = Fake()
+    fake.shows = [SHOW_GONE, SHOW_ACTIVE, SHOW_ACTIVE.replace("DropInPaths=", "DropInPaths=/run/late.conf")]
+    code, out, _ = run(fake, "install")
+    assert code == 1 and out.rstrip().endswith("RESULT: installed, enabled, active 3 s after its start, NOT AS"
+                                               " INSTALLED: drop-ins change the unit: /run/late.conf (systemctl's"
+                                               " DropInPaths)")
+
+
+# --- REDO 4, E5 (AD-5): remove forgets the failed state of the unit it removed ------------------------------------
+
+def test_e5_remove_resets_a_failed_state_of_the_removed_unit_and_says_so_and_a_failed_reset_is_said():
+    fake = installed()
+    fake.gone = "LoadState=not-found\nActiveState=failed\n"
+    code, out, _ = run(fake, "remove")
+    assert code == 0 and fake.calls[-2:] == [["show", "raqib-watch.service", "--no-pager", "--property=ActiveState"],
+                                            ["reset-failed", "raqib-watch.service"]]
+    assert "systemd held the removed unit as failed" in out and "reset-failed raqib-watch.service: done" in out
+    fake = installed()
+    fake.gone = "LoadState=not-found\nActiveState=failed\n"
+    fake.fail["reset-failed"] = (1, "", "made-up")
+    code, out, _ = run(fake, "remove")
+    assert code == 0 and "reset-failed raqib-watch.service: FAILED: exit 1, said: made-up" in out
+    assert out.rstrip().endswith("RESULT: removed")
 
 
 # --- E8: one object for the system; the standard library; imported only by the service command -------------------
@@ -851,12 +1033,14 @@ def flat(path):
 
 
 SPEC_SAYS = (
-    "Exit 0 active as installed, 1 installed and not active, or active but loaded from another file or with a"
-    " drop-in (`RESULT: ACTIVE, NOT AS INSTALLED`), 3 not installed or not known (a unit file that cannot be read,"
-    " no systemctl, or no state from it), 2 not Linux.",
-    "`--no-start` writes the unit and reloads; the unit is neither enabled nor started",
-    "With no unit file it asks systemctl for the unit's LoadState: `not-found` is exit 0 (nothing installed, said);"
-    " anything else, or no answer, is said and is exit 1, and nothing is touched.",
+    "Exit 0 active as installed, 1 installed and not active, or active but not as installed (`RESULT: ACTIVE, NOT"
+    " AS INSTALLED`), 3 not installed or not known (a unit file that cannot be read, no systemctl, or no state from"
+    " it), 2 not Linux.",
+    "`--no-start` writes the unit, reloads and makes the same check after the reload; the unit is neither enabled"
+    " nor started",
+    "With no unit file it asks systemctl for the unit's LoadState and ActiveState: LoadState `not-found` with"
+    " ActiveState `inactive` or `failed` is exit 0 (nothing installed, said); anything else, or no answer, is said"
+    " and is exit 1, and nothing is touched and nothing purged.",
     "Each folder on the way and each path itself must be owned by uid 0 and writable by neither its group nor"
     " others.",
     "A symbolic link is checked as itself, by its owner (a link's mode bits say nothing).",
@@ -891,6 +1075,34 @@ SPEC_SAYS = (
     "An agent in a network namespace of its own holds sockets the watch, in the host's namespace, may not see: not"
     " measured.",
     "ACTIVE says the unit runs, not that the watch writes: a blind or a stuck watch is still active",
+    # AD-1 to AD-7 (REDO 4, E7)
+    "With no unit file it first asks systemctl whether systemd holds a unit of the name (LoadState, ActiveState,"
+    " FragmentPath): one loaded from any place, or running, is not Raqib's to replace",
+    "With no unit file it asks systemctl too, and says a unit of the name that systemd holds (`RESULT: NOT"
+    " INSTALLED BY RAQIB, YET A UNIT OF THE NAME IS ACTIVE`, or `IS LOADED`, exit 3).",
+    "a unit not as installed is neither enabled nor started (exit 1, `RESULT: the unit is written; NOT AS"
+    " INSTALLED, not started: ...`).",
+    '"As installed" means all of these, by systemd\'s word and the file\'s:',
+    "is byte for byte the text this Raqib writes for the interpreter its ExecStart names.",
+    "What still does not show: a change of Raqib's own code by root, or by a user who is root by sudo or polkit,"
+    " after the install (the check is made when it installs); which interpreter the install named, since status"
+    " takes it from the file; and the drop-in folders, which are root's by default and are not walked",
+    "PYTHONHOME or PYTHONPLATLIBDIR is set and the interpreter reads its environment",
+    "or a copy deeper below a site folder is not it;",
+    "the versions of site split and decode such a file differently, so it is refused, with its path, and not read"
+    " into entries.",
+    "Two things are outside that: the environment the unit's own `.pth` import lines run in, which is the unit's"
+    " and not the install's, and what such a line may add or reach that is not an entry of sys.path",
+    "A missing path under a place the system makes for a user (a login's run folder, a mounted medium, a new home)"
+    " can become that user's when the system makes it",
+    "whoever reads the journal reads the findings' lines the unit prints.",
+    "A stop after a finding reads as `failed` to systemd, since the watch's own exit is 1 then; this stays for S1,"
+    " and `raqib service remove` clears it (`systemctl reset-failed`).",
+    "says what systemd warned of and what the main process holds",
+    "the unit's main process's own word from /proc (its bounding set of capabilities, its seccomp mode and its"
+    " no-new-privileges bit), MET only where they are the unit's (X29). That is not every directive in force.",
+    "a link among them is checked by its owner, and then what it points to.",
+    "No line says a thing was done before it was.",
 )
 THREAT_SAYS = (
     "Who can stop it: the watched agent, running as a person without rights, cannot stop, restart or change a unit"
@@ -922,6 +1134,21 @@ THREAT_SAYS = (
     "ACTIVE, as `raqib service status` says it, says the unit runs, not that the watch writes its record",
     "Two watches may run on one host, the service's and a person's own. They do not know each other, and each"
     " writes its own record.",
+    # AD-1 to AD-7 (REDO 4, E7)
+    "Such a user can also change the unit or Raqib's code. A change of the unit shows in `raqib service status`"
+    " (NOT AS INSTALLED: the file's whole text, where systemd loaded it from, its drop-ins, a file changed and not"
+    " reloaded); a change of Raqib's own code after the install does not.",
+    "A stop after a finding reads as failed to systemd, since the watch's own exit is 1 then; `raqib service"
+    " remove` clears that state of the unit it removed.",
+    "whoever reads the journal reads the findings' lines the unit prints.",
+    "one that reads PYTHONHOME or PYTHONPLATLIBDIR from its environment, a raqib that is not directly in that"
+    " interpreter's own site folders, and a *.pth file holding a byte outside printable ASCII, tab and the two"
+    " line ends;",
+    "one under a place the system makes for a user (a login's run folder, a mounted medium, a new home) can become"
+    " that user's.",
+    "What a *.pth file's import line reaches that is not an entry of sys.path, and the environment it runs in, are"
+    " the unit's and are not walked.",
+    "The unit's drop-in folders are root's by default and are not walked; a drop-in that is there shows in status.",
 )
 NEVER_SAID = ("person without rights cannot read", "cannot read the record", "cannot read the service's record",
               "only root can", "ipaddressallow", "cap_net_admin", "bounds such a defect")
@@ -960,8 +1187,12 @@ def test_e7_the_guide_names_the_three_commands_in_its_table_and_the_cli_says_the
     assert [r.split("`")[1] for r in rows] == ["raqib service install [--no-start]", "raqib service remove [--purge]",
                                                "raqib service status"]
     assert "serves no page" in rows[0] and "3 s after the start it asks systemctl" in rows[0]
-    assert "exit 1 and nothing touched where it still has one" in rows[1]
-    assert ("exit 0 active as installed, 1 installed and not active, or loaded from another file or with a"
-            " drop-in, 3 not installed or not known, 2 not Linux") in rows[2]
+    assert "with no unit file, where systemd holds a unit of the name (loaded from any place, or running)" in rows[0]
+    assert "after the reload, a unit not as installed is not started (exit 1)" in rows[0]
+    assert ("with no unit file, exit 0 only where systemd holds no unit of the name (LoadState not-found,"
+            " ActiveState inactive or failed), else exit 1, nothing touched and nothing purged") in rows[1]
+    assert "`systemctl reset-failed`" in rows[1] and "a unit of the name that systemd holds is said" in rows[2]
+    assert ("exit 0 active as installed, 1 installed and not active, or not as installed, 3 not installed or not"
+            " known, 2 not Linux") in rows[2]
     assert "service install [--no-start] | remove [--purge] | status" in cli.__doc__
     assert "`raqib watch --host --no-page`" in " ".join(cli.__doc__.split())

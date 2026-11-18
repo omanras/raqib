@@ -605,6 +605,16 @@ def _service_case(facts, key):
     return x, None
 
 
+CAP_BOUND = (1 << 2) | (1 << 19)   # AD-6: CAP_DAC_READ_SEARCH (2) and CAP_SYS_PTRACE (19), and no other: 0x80004
+
+
+def _hex(text):
+    try:
+        return int(str(text), 16)
+    except ValueError:
+        return None
+
+
 def _below(path, place):
     return isinstance(path, str) and isinstance(place, str) and place.startswith("/") and (
         path == place or path.startswith(place.rstrip("/") + "/"))
@@ -622,9 +632,10 @@ def read_service(facts):
     machine. MET; MISSED with what is missing (facts None or without a case: silence is a finding); n/a only
     where it was not run and the facts' platform is not Linux (AA-4): not run on Linux is MISSED. X28 is MET only
     where the refusal names the place every user can write (mode 0777, not sticky, inside a folder root's alone)
-    or a path below it; X29 only where systemd's own word on the unit was read and its manager warned of none of
-    the unit's directives; X30 only where the unit is not active, systemd does not know it and the record's
-    folder is gone. It never raises: facts that cannot be read are MISSED."""
+    or a path below it; X29 only where systemd's own word on the unit was read, its manager warned of none of the
+    unit's directives, and the main process's own word (AD-6) is a bounding set of exactly the two capabilities,
+    a seccomp filter and no new privileges; X30 only where the unit is not active, systemd does not know it and
+    the record's folder is gone. It never raises: facts that cannot be read are MISSED."""
     try:
         if not isinstance(facts, dict):
             return [(n, MISSED, "the service's run left no facts (silence is a finding)") for n in SERVICE_NAMES]
@@ -667,6 +678,7 @@ def read_service(facts):
             seen = [f for f in x.get("findings") or [] if isinstance(f, dict)]
             show = x.get("show") if isinstance(x.get("show"), dict) else {}
             journal = x.get("journal") if isinstance(x.get("journal"), dict) else {}
+            proc = x.get("proc") if isinstance(x.get("proc"), dict) else {}
             warned = [str(w) for w in journal.get("lines") or []] if isinstance(journal.get("lines"), list) else []
             missing = [w for w, bad in (
                 ("the install exited %s" % install.get("exit"), install.get("exit") != 0),
@@ -681,15 +693,22 @@ def read_service(facts):
                 ("the manager's journal read (exit %s: %s)" % (journal.get("exit"), journal.get("err") or "no lines"),
                  journal.get("exit") != 0 or not isinstance(journal.get("lines"), list) or not journal.get("read")),
                 ("no line of the manager's on the unit's directives; it said: %s" % " | ".join(warned[:3]),
-                 bool(warned)))
+                 bool(warned)),
+                ("the main process's own word (%s)" % proc.get("error"), bool(proc.get("error")) or not proc),
+                ("its bounding set exactly CAP_DAC_READ_SEARCH and CAP_SYS_PTRACE (CapBnd %#x); it read CapBnd=%s"
+                 % (CAP_BOUND, proc.get("CapBnd")), _hex(proc.get("CapBnd")) != CAP_BOUND),
+                ("a seccomp filter (Seccomp 2); it read Seccomp=%s" % proc.get("Seccomp"), proc.get("Seccomp") != "2"),
+                ("no new privileges (NoNewPrivs 1); it read NoNewPrivs=%s" % proc.get("NoNewPrivs"),
+                 proc.get("NoNewPrivs") != "1"))
                 if bad]
             rows.append((SERVICE_NAMES[1], MISSED if missing else MET,
                          "missing: " + "; ".join(missing) if missing else
                          "active; the stand-in as %s (uid %s, pid %s): %s; systemd: %d directive(s) shown, none"
-                         " warned of in %s journal line(s)" % (
+                         " warned of in %s journal line(s); the main process (pid %s): CapBnd=%s, Seccomp=2,"
+                         " NoNewPrivs=1" % (
                              (x.get("user") or {}).get("name"), (x.get("user") or {}).get("uid"), agent.get("pid"),
                              "; ".join("%s on %s" % (f.get("rule"), f.get("tree")) for f in mine[:3]), len(show),
-                             journal.get("read"))))
+                             journal.get("read"), proc.get("pid"), proc.get("CapBnd"))))
         x, why = _service_case(facts, "x30")
         if x is None:
             rows.append((SERVICE_NAMES[2], MISSED, why))

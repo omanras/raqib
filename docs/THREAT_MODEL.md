@@ -1534,7 +1534,11 @@ collector that is slow, down or refusing never delays or loses a capture
     cannot stop, restart or change a unit of the system's. Root can, and root
     is also any user with sudo (a password it knows, none asked, or a ticket
     still valid) and any user a polkit rule lets manage units: an agent
-    running as such a user can stop it.
+    running as such a user can stop it. Such a user can also change the
+    unit or Raqib's code. A change of the unit shows in `raqib service
+    status` (NOT AS INSTALLED: the file's whole text, where systemd loaded
+    it from, its drop-ins, a file changed and not reloaded); a change of
+    Raqib's own code after the install does not.
   - Who can write its record: the service writes under /var/lib/raqib,
     root's alone (mode 0700). The agent cannot write its events or its
     record again, and turning a rule off in its user's ~/.raqib turns
@@ -1557,22 +1561,33 @@ collector that is slow, down or refusing never delays or loses a capture
     but systemctl's own stop (Restart=always), whatever its exit. Each time
     is a gap in what the watch sees, and systemd counts them (NRestarts,
     which `raqib service status` says). A user who can make the watch exit
-    can make such gaps again and again.
+    can make such gaps again and again. A stop after a finding reads as
+    failed to systemd, since the watch's own exit is 1 then; `raqib service
+    remove` clears that state of the unit it removed.
   - The service serves no page. Its watch runs with --no-page and opens no
     listener; the unit allows no address family but unix and netlink, and
     denies every IP address. So no person and no agent reads root's view of
     the host over a port, root parses no user's request, and there is no
     port for anyone to take first. What the watch writes to its output goes
     to the system's journal, which root and the groups the system gives the
-    journal to can read.
+    journal to can read: whoever reads the journal reads the findings' lines
+    the unit prints.
   - A unit that runs a file a user can write gives that user the system.
-    So the install refuses an interpreter run without its site and a raqib
-    that is not in that interpreter's own site folders, and it refuses
-    unless the interpreter, its pyvenv.cfg, every file and folder under each
+    So the install refuses an interpreter run without its site, one that
+    reads PYTHONHOME or PYTHONPLATLIBDIR from its environment, a raqib that
+    is not directly in that interpreter's own site folders, and a *.pth file
+    holding a byte outside printable ASCII, tab and the two line ends; and
+    it refuses unless the interpreter, its pyvenv.cfg, every file and folder under each
     entry of sys.path and under each path its *.pth files name, the raqib
     package, systemctl, ss and the unit's folder, and every folder above
     each of these, are root's and writable by nobody else; it says which
-    path is not, and how many paths of which kinds it checked.
+    path is not, and how many paths of which kinds it checked. A path that
+    does not exist is checked as far as it exists; one under a place the
+    system makes for a user (a login's run folder, a mounted medium, a new
+    home) can become that user's. What a *.pth file's import line reaches
+    that is not an entry of sys.path, and the environment it runs in, are
+    the unit's and are not walked. The unit's drop-in folders are root's by
+    default and are not walked; a drop-in that is there shows in status.
   - Not checked: the shared libraries the interpreter and its extension
     modules load (libpython and the libraries they name). They are found by
     reading those files, not by where they are.
