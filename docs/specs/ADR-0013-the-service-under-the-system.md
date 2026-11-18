@@ -165,3 +165,37 @@ CAP_NET_ADMIN beside them, and with one of the two alone it sees no tree and say
   choices stand: the guide's sentence at the end of the `--attach-hooks` paragraph; `--no-open` beside
   `--no-page` is accepted and changes nothing; with no page the loop says no line of how the watch ends
   beyond what the start and the stops' line already say.
+
+## Amendment D (the Table, 2026-11-18) - the second review (docs/review/2026-11-18-M12.1-redo3.md)
+The reviewer said NEXT with what must be fixed first: from reading, a user without rights has no way to run
+code as root, to choose a file root writes or removes, or to make the three commands lie; what it found
+needs root, or a user who is root by sudo or polkit. The field (the rig, commit d804836): X28, X29 and X30
+MET with the unit of Amendment C - no page, AF_UNIX and AF_NETLINK alone, two capabilities. These are fixed
+before the merge, in one more round:
+- AD-1 (G1, G3: systemd is asked before a state is said or a file written). `remove` with no unit file: a unit
+  of the name that systemd holds as anything but not-found and not active is said, exit 1, nothing touched,
+  nothing purged. `status` with no unit file asks too, and says a unit of the name that runs. `install` with
+  no unit file asks first: a unit of the name loaded from another place, or running, is a refusal (A-4 is for
+  the name, not only for the path).
+- AD-2 (G2: "as installed" is the text). `status` compares the whole unit file with the text this Raqib
+  writes for the interpreter the file names, and reads systemd's NeedDaemonReload: a different text, or a
+  file changed since it was loaded, is NOT AS INSTALLED and not exit 0. FOR: a change of the unit shows as a
+  stop does. The documents say what still does not show: a change of Raqib's own code by root.
+- AD-3 (G4: the install does not start what is not as installed). After the reload and before the start the
+  install reads FragmentPath and DropInPaths: not as installed is exit 1, not started, and the RESULT says
+  it. The drop-in folders are not walked; the documents say that they are root's by default and not checked.
+- AD-4 (G5, G7, G8: the install sees what the unit will, more exactly). Refused where PYTHONHOME or
+  PYTHONPLATLIBDIR is set and the interpreter does not ignore the environment; where the package's folder is
+  not itself directly in a site folder; and a `.pth` file that holds a byte outside printable ASCII, tab and
+  the two line ends is refused, not read (the versions of site split and decode such a file differently).
+- AD-5 (G10: the end of a removed unit). `remove` asks systemd to forget a failed state of the removed unit
+  (`reset-failed`), and says so. That a stop after a finding reads as `failed` - the watch's own exit 1 -
+  stays for S1 and is said; a stop that systemd reads as a stop is S3's to rule, with what a person reads.
+- AD-6 (G11: the rig measures what is in force). X29's facts carry the main process's own word from /proc:
+  its bounding set of capabilities, its seccomp mode and its no-new-privileges bit; X29 is MET only where
+  they are the unit's. The journal's words gain "not support". The documents say X29 reads these and
+  systemd's warnings, not every directive in force.
+- AD-7 (G6, G9, G12: the documents and the words). Said: a missing path under a place the system makes for
+  a user (a login's run folder, a mounted medium, a new home) can become that user's; who reads the journal
+  reads the findings' lines the unit prints; a link is checked by its owner. No line says a thing was done
+  before it was.
