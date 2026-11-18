@@ -21,6 +21,23 @@ the lines in question never arise there. A line whose message is longer than a d
 bytes, over udp) is refused locally as a line longer than one request is: counted, named, passed, never cut.
 Syslog carries no token (no --token-file) and only the raqib shape (the MSG is the line).
 
+The journal (ADR-0011 W; `--to journal:`, Linux only): one entry a line by the journal's native protocol to its
+socket (JOURNAL), from the user's own process (journal_entry: MESSAGE the line, PRIORITY as syslog's severity,
+SYSLOG_IDENTIFIER raqib, SYSLOG_FACILITY, RAQIB_ID/KIND/HOST/TIME where they are text). An entry too long for a
+datagram is handed as a sealed memory file (JournalSend.sealed), never cut. Taken is `sent`: the journal answers
+nothing; the forwarder paces itself to JOURNAL_PACE lines a second (pace). No socket there is `connect`, tried
+again as any collector that is down. No token, --ca, --plain, --shape or --framing.
+
+The Windows event log (ADR-0011 Y; `--to eventlog:`, Windows only): one event a line in the Application log
+under the source EVENTLOG_SOURCE, by ReportEventW with nothing registered (Y-1), its one string the line as
+written without its newline, its type from the severity and its id from the kind (eventlog_events, Y-2); a line
+of more than EVENTLOG_PART characters is handed in parts, in order, each two strings - a head that names the
+part, the whole line's sha256 and its length, and that part of the line - id EVENTLOG_PART_ID, never cut (Y-3).
+The system's calls go through one object (EventLogApi), made at the first send, never at import. Taken is
+`written`: the system's call said the log took every event of the batch (Y-4); at most EVENTLOG_PACE events a
+second, parts counted (pace). A source that cannot be opened is `connect`; an event refused is `write`, and the
+next batch is halved as the journal's is (X-4, Y-5). No token, --ca, --plain, --shape hec, --framing or --facility.
+
 The cursor and the lines in question (L-1, M-1, M-2, N-3, N-5). What a run holds, and what a try does with it:
 
 - the head (`head`, in the state): the sha256 of the file's first bytes, at most HEAD_MAX, and how many (N-3).
@@ -105,9 +122,12 @@ the state, which is the other's now.
 """
 from __future__ import annotations
 
+import array
 import binascii
 import calendar
+import ctypes   # Y-2: the event log's calls (EventLogApi); nothing of Windows is loaded at import
 import datetime
+import errno
 import hashlib
 import http.client
 import ipaddress
@@ -123,28 +143,49 @@ import threading
 import time
 from urllib.parse import urlsplit
 
+try:   # W-3: the seals of a memory file (Linux); a system with none has no memory file to send
+    import fcntl
+except ImportError:
+    fcntl = None
+
 from raqib import event
 from raqib import eventlog
 from raqib import host as host_watch
+from raqib import link
 from raqib import ui
+from raqib.link import EVENTLOG as EVENTLOG_SCHEME
+from raqib.link import JOURNAL as JOURNAL_SCHEME
+from raqib.link import (DELIVERIES, DELIVERY, DELIVERY_OF, DIR_NAME, ERRORS, FACILITIES, FRAMINGS, HEAD_MAX, KEYS,
+                        LATER, NAME, SCHEMA, SCHEMES, SHA, SHAPES, STATUS_RULE, SYSLOG, SYSLOG_ERRORS, SYSLOG_KEYS,
+                        _count, _instant, _state_problem, forward_dir, judge, seconds_of, state_path, state_problem,
+                        where)
 
-SCHEMA = "raqib-forward/1"
-DIR_NAME = "forward"
-NAME = re.compile(r"[a-z0-9-]{1,32}\Z")   # J-13
-SHAPES = ("raqib", "hec")                  # J-6
-SYSLOG = ("syslog+udp", "syslog+tcp", "syslog+tls")
-SCHEMES = ("http", "https") + SYSLOG
-DELIVERY = "acknowledged"                  # J-3: HTTP's word
-DELIVERIES = ("acknowledged", "written", "sent")
-DELIVERY_OF = {"http": DELIVERY, "https": DELIVERY, "syslog+udp": "sent", "syslog+tcp": "written",
-               "syslog+tls": "written"}    # J-3: what taken means, per transport
 PLAIN = ("http", "syslog+udp", "syslog+tcp")   # J-8: the wires that are not encrypted
 PORT_OF = {"http": 80, "https": 443, "syslog+udp": 514, "syslog+tls": 6514}   # P-3: syslog+tcp has none
-SYSLOG_KEYS = ("facility", "framing")      # P-3: written in a syslog destination's state only
 FACILITY = 13                              # J-6: log audit, unless --facility N
-FACILITIES = range(0, 24)                  # RFC 5424 6.2.1: the facilities are 0 to 23
-FRAMINGS = ("octet", "newline")            # J-6: RFC 6587 octet counting (the default) or a newline after each
 DATAGRAM_MAX = 65000                       # J-6: a message longer than this is never sent over udp
+JOURNAL = "/run/systemd/journal/socket"    # W-2: the journal's socket; Forwarder(journal=) names another
+JOURNAL_PACE = 250                         # W-4: at most this many lines a second to the journal
+JOURNAL_TEXT_MAX = 256                     # W-2: a RAQIB_ field is text of at most this many characters
+JOURNAL_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")   # W-2: a RAQIB_ field holds no control character
+EVENTLOG_SOURCE = "Raqib"                  # Y-1: the source's name in the Application log; nobody registered it
+EVENTLOG_PACE = 100                        # Y-4: at most this many events a second to the event log, parts counted
+EVENTLOG_PART = 30000                      # Y-3: a line of more characters than this is handed in parts this long
+EVENTLOG_HEAD_MAX = 300                    # Y-3: a part's head is at most this many characters
+EVENTLOG_PART_ID = 1009                    # Y-3: the id of every part's event
+EVENTLOG_ID_ELSE = 1000                    # Y-2: the id of a kind that is none of EVENTLOG_IDS
+EVENTLOG_IDS = {"finding": 1001, "source-finding": 1002, "note": 1003, "tree": 1004, "hole": 1005, "knock": 1006,
+                "heartbeat": 1007, "watch": 1008}   # Y-2: the event's id by its kind, so that a reader filters by id
+EVENTLOG_ERROR, EVENTLOG_WARNING, EVENTLOG_INFORMATION = 1, 2, 4   # the event types ReportEventW takes
+EVENTLOG_TYPES = {"high": EVENTLOG_ERROR, "medium": EVENTLOG_WARNING, "hole": EVENTLOG_WARNING,
+                  "low": EVENTLOG_INFORMATION, "info": EVENTLOG_INFORMATION, "none": EVENTLOG_INFORMATION}   # Y-2
+EVENTLOG_TYPE_ELSE = EVENTLOG_WARNING      # a severity the event contract does not have, or none: never calm
+EVENTLOG_HEAD_ID = re.compile(r"[\x21-\x7e]{1,128}\Z")   # Y-3: the id in a part's head, else "-"
+# W-3: a memory file's seals (Linux's fixed values where this Python does not name them): no seal more, no shrink,
+# no growth, no write - what the journal is handed cannot change under it
+F_ADD_SEALS = getattr(fcntl, "F_ADD_SEALS", 1033)
+SEALS = (getattr(fcntl, "F_SEAL_SEAL", 1) | getattr(fcntl, "F_SEAL_SHRINK", 2) | getattr(fcntl, "F_SEAL_GROW", 4) |
+         getattr(fcntl, "F_SEAL_WRITE", 8))
 # J-6: the event's severity as RFC 5424's (2 critical, 4 warning, 5 notice, 6 informational)
 SEVERITY = {"high": 2, "medium": 4, "low": 5, "hole": 4, "none": 6, "info": 6}
 SEVERITY_ELSE = 4                          # a severity the event contract does not have: a warning, never calm
@@ -165,7 +206,6 @@ POLL_S = 1.0                               # how often a forwarder with nothing 
 SLICE_S = 0.25                             # L-4, M-4: no wait is longer than this without looking for Stop
 JOIN_S = 0.5                               # an abandoned send's thread is given this long to end (M-5: never closed)
 SCAN_READ = 64 * 1024                      # L-8, M-3: a line too long is looked through in pieces this long
-HEAD_MAX = 4096                            # N-3: the file's first bytes hashed, at most this many
 BEHIND_LOOK = 16 * SCAN_READ               # N-8: `behind` looks back from the file's end at most this far
 ANSWER_READ = 64 * 1024                    # of an answer's body, only the hec code is read
 TOKEN_READ = 64 * 1024
@@ -173,43 +213,8 @@ TOKEN = re.compile(rb"[\x21-\x7e]+\Z")     # one token: printable ASCII, no spac
 TARGET = re.compile(r"[\x21-\x7e]*\Z")     # L-6: a path and query of printable ASCII, no space
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")   # M-8: a control character anywhere in the URL
 LABEL = re.compile(r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\Z")
-SHA = re.compile(r"[0-9a-f]{64}\Z")
 TAIL = "tail"                              # read_lines: more than 512 KiB after the last newline (L-8)
 OTHER = "other"                            # read_at: the file is not the one the try began with (M-8)
-# J-9 failing.error: the forwarder's own words, never the collector's.
-ERRORS = {
-    "connect": "no connection to the collector",
-    "tls": "the TLS handshake or the certificate failed",
-    "no-answer": "the connection ended with no answer",
-    "late": "no answer in time",
-    "redirect": "the collector answered a redirect (never followed)",
-    "busy": "the collector said it is busy (408 or 429)",
-    "server": "the collector failed (5xx)",
-    "answer": "an answer that does not say the batch was taken",
-    "refusing": "the collector refused each line sent alone and took no line after them (a 4xx): they wait in"
-                " question",
-    "token": "the collector refused the token (401 or 403)",
-    "token-file": "the token file cannot be read or fails its checks",
-    "write": "the system did not take the batch's bytes or datagrams, or the connection did not end in order after"
-             " them (syslog: a reset, the collector's end before the forwarder's, no route)",
-    "file": "the events file cannot be read, or more than 512 KiB follow its last newline",
-    "stuck": "four sends abandoned have not ended (a name that never resolves, a connect that never returns): no"
-             " send starts until one ends",
-    "unforeseen": "an error the forwarder did not foresee ended the run",
-}
-# P-5: the words said of a syslog send, which has no answer (an orderly end is what is waited for)
-SYSLOG_ERRORS = dict(ERRORS, late="the batch was not written, or the connection not ended in order, within the"
-                                  " bound",
-                     tls="the TLS handshake or the certificate failed, or the collector ended the session with an"
-                         " alert or with no close")
-KEYS = ("schema", "name", "pid", "written", "destination", "shape", "delivery", "plain", "file", "cursor", "from",
-        "beat", "sent", "skipped", "refused", "restarts", "last_id", "last_ok", "behind", "failing", "head",
-        "in_question")
-LATER = ("head", "in_question")            # N-3, N-5: a state written before them is read without them
-# L-2: the status's rule, said by FORWARD.md and the guide in these words (a test holds the three together)
-STATUS_RULE = ("exit 0 only where nothing is failing and no whole line has waited longer than a beat; 1 where it"
-               " is failing (`refusing` too) or behind; 3 where there is no state, it cannot be read, or it was"
-               " written more than two beats ago or in the future (the forwarder is silent)")
 
 
 class UsageError(Exception):
@@ -225,28 +230,13 @@ class NameLost(Exception):
     """N-4: the pid file holds another live process's pid; the run ends with 1, the reason said once."""
 
 
-def forward_dir(home=None):
-    """~/.raqib/forward, the home resolved as the watch resolves its own (raqib/host.py host_dir)."""
-    return os.path.join(os.path.dirname(host_watch.host_dir(home)), DIR_NAME)
-
-
 def events_default(home=None):
     return os.path.join(host_watch.host_dir(home), eventlog.NAME)
-
-
-def state_path(name, home=None):
-    return os.path.join(forward_dir(home), name + ".json")
 
 
 def iso(seconds):
     d = datetime.datetime.fromtimestamp(seconds, datetime.timezone.utc)
     return d.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (d.microsecond // 1000)
-
-
-def seconds_of(text):
-    """An instant of raqib-event/1 (or of the state) as seconds since the epoch."""
-    d = datetime.datetime.strptime(text[:-1], "%Y-%m-%dT%H:%M:%S.%f")
-    return calendar.timegm(d.timetuple()) + d.microsecond / 1e6
 
 
 def hec_time(text):
@@ -288,15 +278,26 @@ def destination(url, plain=False):
     if not isinstance(url, str) or CONTROL.search(url):   # urlsplit would drop a tab or a newline unsaid
         raise UsageError("--to: the URL holds a control character (a tab, a newline, ...): it is refused, never"
                          " taken without it")
+    if url[:len(JOURNAL_SCHEME) + 1].lower() == JOURNAL_SCHEME + ":":   # W-1, W-6: the scheme and nothing else
+        if len(url) != len(JOURNAL_SCHEME) + 1:
+            raise UsageError("--to journal: is the whole destination: the system's own journal, by its own socket;"
+                             " nothing follows the colon (no host, port, path or option), not %r" % url)
+        return {"scheme": JOURNAL_SCHEME}, None
+    if url[:len(EVENTLOG_SCHEME) + 1].lower() == EVENTLOG_SCHEME + ":":   # Y-1, Y-5: the scheme and nothing else
+        if len(url) != len(EVENTLOG_SCHEME) + 1:
+            raise UsageError("--to eventlog: is the whole destination: the Windows event log (the Application log,"
+                             " the source Raqib); nothing follows the colon (no host, port, path or option), not %r"
+                             % url)
+        return {"scheme": EVENTLOG_SCHEME}, None
     try:
         parts = urlsplit(url)
         port = parts.port
     except ValueError:
         raise UsageError("--to: not a URL with a valid port")
     scheme = parts.scheme.lower()
-    if scheme not in SCHEMES:
+    if scheme not in SCHEMES or scheme in (JOURNAL_SCHEME, EVENTLOG_SCHEME):
         raise UsageError("--to: an http:// or https:// collector, or syslog over syslog+udp://, syslog+tcp:// or"
-                         " syslog+tls://")
+                         " syslog+tls://, or journal: (Linux), or eventlog: (Windows)")
     if "@" in parts.netloc:
         raise UsageError("--to: no user information in the URL (the token is read from --token-file only, J-7)")
     host = parts.hostname
@@ -328,11 +329,6 @@ def destination(url, plain=False):
         raise UsageError("--to http://%s: plain http is taken only to a loopback address (127.0.0.0/8, ::1) unless"
                          " --plain is given (J-8)" % host)
     return {"scheme": scheme, "host": host, "port": port or (443 if scheme == "https" else 80), "path": path}, target
-
-
-def where(dest):
-    host = "[%s]" % dest["host"] if ":" in dest["host"] else dest["host"]
-    return "%s://%s:%d%s" % (dest["scheme"], host, dest["port"], dest["path"])
 
 
 def tls_context(ca=None, whole_end=False):
@@ -466,6 +462,89 @@ def syslog_len(raw, obj, scheme, facility=FACILITY, framing="octet"):
     return n + 1 if framing == "newline" else n + len(b"%d " % n)
 
 
+def journal_field(key, value):
+    """W-2, the journal's native protocol: KEY=value and a newline; a value that holds a newline as KEY, a
+    newline, its length as 8 bytes little-endian, the value, a newline."""
+    if b"\n" in value:
+        return key + b"\n" + len(value).to_bytes(8, "little") + value + b"\n"
+    return key + b"=" + value + b"\n"
+
+
+def _journal_text(value):
+    """W-2: a RAQIB_ field's value - text of at most JOURNAL_TEXT_MAX characters with no control character, as
+    UTF-8 - or None, and the field is left out (a value no check foresaw, such as a lone surrogate, too)."""
+    try:
+        if isinstance(value, str) and len(value) <= JOURNAL_TEXT_MAX and not JOURNAL_CONTROL.search(value):
+            return value.encode("utf-8")
+    except Exception:
+        pass
+    return None
+
+
+def journal_entry(raw, obj, facility=FACILITY):
+    """W-2: one line as one entry of the journal: MESSAGE the line as written without its newline (always),
+    PRIORITY the event's severity as syslog's (J-6: high 2, medium 4, low 5, a hole 4, none and info 6; else 4),
+    SYSLOG_IDENTIFIER raqib, SYSLOG_FACILITY, then RAQIB_ID, RAQIB_KIND, RAQIB_HOST and RAQIB_TIME where the event
+    holds them as text (_journal_text). P-1: it never raises, whatever the line holds: what cannot be read of the
+    event is left out, and PRIORITY is then 4 (a warning, never calm)."""
+    line = raw[:-1] if raw.endswith(b"\n") else raw
+    more, priority = [], SEVERITY_ELSE
+    try:
+        obj = obj if isinstance(obj, dict) else {}
+        priority = severity_of(obj)
+        watch = obj.get("watch") if isinstance(obj.get("watch"), dict) else {}
+        for key, value in ((b"RAQIB_ID", obj.get("id")), (b"RAQIB_KIND", obj.get("kind")),
+                           (b"RAQIB_HOST", watch.get("host")), (b"RAQIB_TIME", obj.get("time"))):
+            text = _journal_text(value)
+            if text is not None:
+                more.append(journal_field(key, text))
+    except Exception:   # P-1: no event ends the forwarder; MESSAGE still carries the line as written
+        more, priority = [], SEVERITY_ELSE
+    return b"".join([journal_field(b"MESSAGE", line), journal_field(b"PRIORITY", b"%d" % priority),
+                     journal_field(b"SYSLOG_IDENTIFIER", b"raqib"), journal_field(b"SYSLOG_FACILITY", b"%d" % facility)]
+                    + more)
+
+
+def eventlog_type(obj):
+    """Y-2: the event's type from its severity: high Error; medium and a hole Warning; low, info and none
+    Information. A severity the event contract does not have, or none at all, is a Warning (never calm)."""
+    sev = obj.get("severity") if isinstance(obj, dict) else None
+    return EVENTLOG_TYPES.get(sev, EVENTLOG_TYPE_ELSE) if isinstance(sev, str) else EVENTLOG_TYPE_ELSE
+
+
+def eventlog_id(obj):
+    """Y-2: the event's id from its kind by the fixed table EVENTLOG_IDS; 1000 for a kind that is none of them."""
+    kind = obj.get("kind") if isinstance(obj, dict) else None
+    return EVENTLOG_IDS.get(kind, EVENTLOG_ID_ELSE) if isinstance(kind, str) else EVENTLOG_ID_ELSE
+
+
+def eventlog_events(raw, obj):
+    """Y-2, Y-3: one line as what the event log is handed - a list of (type, id, strings), in order. A line of at
+    most EVENTLOG_PART characters is one event, its one string the line as written without its newline. A longer
+    one is handed in parts of EVENTLOG_PART characters, in order, each an event of two strings - its head,
+    `raqib-part I/N id=ID sha256=HEX chars=TOTAL` (ID the event's id where it is 1 to 128 printable ASCII
+    characters with no space, else "-"; HEX and TOTAL the whole line's sha256 and length), then that part of the
+    line - with the id EVENTLOG_PART_ID and the line's own type: a reader puts the second strings together in
+    order and has the line. An event's line is ASCII (EVENT.md); P-1: it never raises, whatever the line holds."""
+    line = raw[:-1] if raw.endswith(b"\n") else raw
+    try:
+        text = line.decode("ascii")
+    except UnicodeDecodeError:   # never an event's line (classify reads ASCII only); said, never a traceback
+        text = line.decode("utf-8", "replace")
+    try:
+        kind, ident = eventlog_type(obj), eventlog_id(obj)
+        named = obj.get("id") if isinstance(obj, dict) else None
+        named = named if isinstance(named, str) and EVENTLOG_HEAD_ID.match(named) else "-"
+    except Exception:   # P-1: no event ends the forwarder; the string still carries the line as written
+        kind, ident, named = EVENTLOG_TYPE_ELSE, EVENTLOG_ID_ELSE, "-"
+    if len(text) <= EVENTLOG_PART:
+        return [(kind, ident, (text,))]
+    count, digest = -(-len(text) // EVENTLOG_PART), hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return [(kind, EVENTLOG_PART_ID, ("raqib-part %d/%d id=%s sha256=%s chars=%d" % (
+        i + 1, count, named, digest, len(text)), text[i * EVENTLOG_PART:(i + 1) * EVENTLOG_PART]))
+        for i in range(count)]
+
+
 def _sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
@@ -546,107 +625,6 @@ def head_of(f, length):
     f.seek(0)
     data = f.read(min(length, HEAD_MAX))
     return {"length": len(data), "sha256": _sha(data)}
-
-
-def _count(v):
-    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
-
-
-def _instant(v):
-    if not isinstance(v, str) or not v.endswith("Z"):
-        return False
-    try:
-        seconds_of(v)
-    except ValueError:
-        return False
-    return True
-
-
-def state_problem(old):
-    """L-6, M-6, N-6: why a JSON state is not what the forwarder writes (None where it is). The run refuses to go
-    on from such a state, and --status reads it as unreadable (3). It never raises, whatever the JSON holds."""
-    try:
-        return _state_problem(old)
-    except Exception:   # N-6: a value of a type no check foresaw is no state of the forwarder's
-        return "a value the forwarder never writes"
-
-
-def _state_problem(old):
-    if not isinstance(old, dict) or old.get("schema") != SCHEMA:
-        return "not a %s state" % SCHEMA
-    missing = [k for k in KEYS if k not in old and k not in LATER]
-    if missing:
-        return "no %s" % ", ".join(missing)
-    if not isinstance(old["name"], str) or not NAME.match(old["name"]) or not _count(old["pid"]):
-        return "name or pid is not one a forwarder has"
-    if not _instant(old["written"]):
-        return "written is not an instant"
-    d = old["destination"]
-    if not (isinstance(d, dict) and d.get("scheme") in SCHEMES and isinstance(d.get("host"), str) and
-            d["host"] and _count(d.get("port")) and 0 < d["port"] < 65536 and isinstance(d.get("path"), str)):
-        return "destination is not {scheme, host, port, path}"
-    if old["shape"] not in SHAPES or old["delivery"] not in DELIVERIES or not isinstance(old["plain"], bool):
-        return "shape, delivery or plain is not one the forwarder writes"
-    if d["scheme"] in SYSLOG and (old["shape"] != "raqib" or old["delivery"] != DELIVERY_OF[d["scheme"]] or
-                                  d["path"] != ""):
-        return "a syslog destination with a shape, delivery or path the forwarder never writes for it"
-    if d["scheme"] in SYSLOG:   # P-3: a state written before the two were kept has neither, and is read
-        if "facility" in old and (not _count(old["facility"]) or old["facility"] not in FACILITIES):
-            return "facility is not a syslog facility (0 to 23)"
-        if "framing" in old and not (old["framing"] is None if d["scheme"] == "syslog+udp" else
-                                     isinstance(old["framing"], str) and old["framing"] in FRAMINGS):
-            return "framing is not one the forwarder writes for the destination (none over udp)"
-        if ("facility" in old) != ("framing" in old):
-            return "a syslog state holds both facility and framing, or neither"
-    elif any(k in old for k in SYSLOG_KEYS):
-        return "facility or framing in the state of an HTTP destination"
-    if not isinstance(old["file"], str):
-        return "file is not a text"
-    cur = old["cursor"]
-    if not isinstance(cur, dict) or not _count(cur.get("offset")):
-        return "no cursor offset of whole bytes"
-    sha = cur.get("line_sha256")
-    if not (sha is None or isinstance(sha, str) and SHA.match(sha)):
-        return "a cursor whose line_sha256 is not a sha256"
-    if cur["offset"] > 0 and sha is None:
-        return "a cursor above 0 with no line_sha256 (every line passed has its hash)"
-    start = old["from"]
-    if not isinstance(start, dict) or start.get("start") not in ("start", "end") or not _count(start.get("offset")):
-        return "from is not {start, offset}"
-    beat = old["beat"]
-    if isinstance(beat, bool) or not isinstance(beat, (int, float)) or not math.isfinite(beat) or beat <= 0:
-        return "beat is not a number of seconds above 0"
-    if not all(_count(old[k]) for k in ("sent", "skipped", "restarts", "behind")):
-        return "sent, skipped, restarts and behind are not counts"
-    refused = old["refused"]
-    if not isinstance(refused, dict) or not _count(refused.get("count")) or not isinstance(refused.get("ids"), list):
-        return "refused is not {count, ids}"
-    if not all(isinstance(i, str) for i in refused["ids"]):
-        return "refused.ids are not texts"
-    if old["last_id"] is not None and not isinstance(old["last_id"], str):
-        return "last_id is not a text"
-    if old["last_ok"] is not None and not _instant(old["last_ok"]):
-        return "last_ok is not an instant"
-    failing = old["failing"]
-    if failing is not None:
-        if not isinstance(failing, dict) or not _instant(failing.get("since")) or not _count(failing.get("tries")):
-            return "failing is not {since, tries, error, status}"
-        error = failing.get("error")
-        if not isinstance(error, str) or error not in ERRORS:   # N-6: a list is no word (and no key of a dict)
-            return "failing.error is not one of the forwarder's words"
-        st = failing.get("status")
-        if st is not None and not _count(st):
-            return "failing.status is not a status"
-    head = old.get("head")
-    if head is not None and not (isinstance(head, dict) and _count(head.get("length")) and
-                                 head["length"] <= HEAD_MAX and isinstance(head.get("sha256"), str) and
-                                 SHA.match(head["sha256"])):
-        return "head is not {length, sha256}"
-    inq = old.get("in_question", {"count": 0, "since": None})
-    if not (isinstance(inq, dict) and _count(inq.get("count")) and
-            (inq.get("since") is None or _instant(inq.get("since")))):
-        return "in_question is not {count, since}"
-    return None
 
 
 class Result:
@@ -914,15 +892,176 @@ class SyslogSend(Send):
         return Result("taken")
 
 
+class JournalSend(Send):
+    """W-2, W-3: one batch to the journal, on a thread of its own and bounded as a syslog send is (L-4, M-4, M-5:
+    the socket within connect_s, the entries within answer_s; abandoned by shutting its socket down; closed by its
+    own thread alone). A datagram socket of the user's own, connected to the journal's socket - no socket at the
+    path, or a path that is no socket, is `connect` (W-5) - then each entry sent to that path as one datagram. An
+    entry the socket refuses as too long (EMSGSIZE) is handed as a sealed memory file, the journal's own way
+    (sealed()). The journal answers nothing: the batch is taken when every entry was handed with no error (`sent`,
+    W-4: nothing is known). A memory file that cannot be made or sent is a failed send (`write`): never a cut,
+    never a pass."""
+
+    def __init__(self, fwd, entries):
+        Send.__init__(self, fwd, entries, None)
+        self.where = fwd.journal
+
+    def exchange(self):
+        try:
+            sock = self.hold(socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM))
+            sock.settimeout(self.left())
+            sock.connect(self.where)
+        except (OSError, AttributeError, ValueError, TypeError):   # no socket there, or one that takes nothing
+            return Result("failed", "connect", phase="connect")
+        self.mark("send")
+        try:
+            sock.settimeout(self.answer_s)
+            for entry in self.body:
+                try:
+                    sock.sendto(entry, self.where)
+                except OSError as exc:
+                    if exc.errno != errno.EMSGSIZE:
+                        raise
+                    if not self.sealed(sock, entry):
+                        return Result("failed", "write", phase="send")
+        except socket.timeout:
+            return Result("failed", "late", phase="send")
+        except (OSError, ValueError):
+            return Result("failed", "write", phase="send")
+        return Result("taken")
+
+    def sealed(self, sock, entry):
+        """W-3: the entry written whole to a memory file (memfd_create, sealing allowed), sealed against any
+        change (F_ADD_SEALS: seal, shrink, grow, write), and its descriptor sent with the socket's own message to
+        the journal's path (sendmsg with SCM_RIGHTS - never socket.send_fds, which drops the address). True where
+        it was handed; False where the system has no memory file or a step failed. The descriptor is this
+        thread's own and closed by it."""
+        fd = None
+        try:
+            fd = os.memfd_create("raqib-journal", os.MFD_ALLOW_SEALING | getattr(os, "MFD_CLOEXEC", 0))
+            view = memoryview(entry)
+            while view:
+                view = view[os.write(fd, view):]
+            fcntl.fcntl(fd, F_ADD_SEALS, SEALS)
+            sock.sendmsg([b""], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", [fd]))], 0, self.where)
+            return True
+        except socket.timeout:
+            raise
+        except (OSError, AttributeError, ValueError, TypeError):
+            return False
+        finally:
+            if fd is not None:
+                os.close(fd)
+
+
+def eventlog_dll(name):
+    """Y-2: a DLL of the system's, as EventLogApi loads it unless given its own loader (a test replaces this)."""
+    return ctypes.WinDLL(name, use_last_error=True)
+
+
+class EventLogApi:
+    """Y-2: the three calls of advapi32 the event log's send makes, with the signatures the rig's Windows machine
+    took (X27) -
+    RegisterEventSourceW (a handle for the source, registered or not), ReportEventW (nonzero where the log took
+    the event), DeregisterEventSource. Every call of the system goes through this one object; `loader(name)` gives
+    the DLL (eventlog_dll unless a test gives its own). Windows only: it is made at the forwarder's first send
+    (Forwarder.eventlog_api), never at import."""
+
+    def __init__(self, loader=None, last_error=None):
+        dll = (loader or eventlog_dll)("advapi32")
+        # Z-4: the system's own reason for a refusal (GetLastError, kept by ctypes for this thread)
+        self.last_error = last_error or getattr(ctypes, "get_last_error", None)
+        handle, word, dword, boolean = ctypes.c_void_p, ctypes.c_ushort, ctypes.c_ulong, ctypes.c_long
+
+        def fn(name, restype, *argtypes):
+            f = getattr(dll, name)
+            f.restype, f.argtypes = restype, list(argtypes)
+            return f
+        self.RegisterEventSourceW = fn("RegisterEventSourceW", handle, ctypes.c_wchar_p, ctypes.c_wchar_p)
+        self.ReportEventW = fn("ReportEventW", boolean, handle, word, word, dword, ctypes.c_void_p, word, dword,
+                               ctypes.POINTER(ctypes.c_wchar_p), ctypes.c_void_p)
+        self.DeregisterEventSource = fn("DeregisterEventSource", boolean, handle)
+
+    def open(self, source):
+        """The source's handle on this machine (no server named), or None where it cannot be opened."""
+        return self.RegisterEventSourceW(None, source) or None
+
+    def report(self, handle, kind, ident, strings):
+        """One event: its type, category 0, its id, no user, its strings, no raw data. True where it was taken."""
+        texts = (ctypes.c_wchar_p * len(strings))(*strings)
+        return bool(self.ReportEventW(handle, kind, 0, ident, None, len(strings), 0, texts, None))
+
+    def close(self, handle):
+        self.DeregisterEventSource(handle)
+
+    def reason(self):
+        """Z-4: the system's error number for the call that just failed on this thread, or None where it gave
+        none: what tells a full log, no right and a stopped service apart."""
+        try:
+            code = int(self.last_error())
+        except Exception:
+            return None
+        return code if code > 0 else None
+
+
+class EventLogSend(Send):
+    """Y-1 to Y-5: one batch to the Windows event log, on a thread of its own and bounded as the journal's send is
+    (L-4, M-4, M-5: the source opened within connect_s, the events within answer_s; abandoned, it hands no event
+    more). The source is opened once a send and closed by its own thread on every way out. A source that cannot
+    be opened is `connect`; an event the system's call refused is `write` (nothing of the batch passes). The batch
+    is taken when every event of every line, parts included, was taken (`written`, Y-4: not a search of the
+    log)."""
+
+    def __init__(self, fwd, events):
+        Send.__init__(self, fwd, events, None)
+        self.api_of = fwd.eventlog_api
+
+    def exchange(self):
+        failures = (OSError, AttributeError, ValueError, TypeError, ctypes.ArgumentError)
+        try:
+            api = self.api_of()
+            handle = api.open(EVENTLOG_SOURCE)
+        except failures:   # no advapi32, no such call, or a source the system would not open
+            return Result("failed", "connect", phase="connect")
+        if not handle:
+            return Result("failed", "connect", status=self.why(api), phase="connect")
+        self.mark("send")
+        try:
+            for kind, ident, strings in self.body:
+                if self.abandoned:   # Stop or the bound came: no event more (the source is closed below)
+                    return Result("failed", "late", phase="send")
+                if not api.report(handle, kind, ident, strings):
+                    return Result("failed", "write", status=self.why(api), phase="send")
+        except failures:
+            return Result("failed", "write", phase="send")
+        finally:
+            try:
+                api.close(handle)
+            except failures:
+                pass
+        return Result("taken")
+
+    @staticmethod
+    def why(api):
+        """Z-4: the system's error number, where the API object can say it (a test's stand-in may say none)."""
+        try:
+            return api.reason()
+        except Exception:
+            return None
+
+
 class Forwarder:
     """One name, one file, one destination (J-13). Every clock, wait and timeout can be given (tests): `clock`
     is the wall's and gives only the state's times; `mono` does not step and gives every wait and the beat;
-    `nap(event, seconds)` is how the forwarder waits for a send in slices; `lookup` is getaddrinfo."""
+    `nap(event, seconds)` is how the forwarder waits for a send in slices; `lookup` is getaddrinfo; `journal` is
+    the journal's socket (JOURNAL where None: a test's stand-in gives its own); `loader` is the event log's DLL
+    loader (EventLogApi's: a test's fake system gives its own)."""
 
     def __init__(self, name, path, url, shape="raqib", token_file=None, ca=None, plain=False, beat=None,
                  start="start", batch=MAX_LINES, home=None, out=None, clock=time.time, mono=time.monotonic,
                  wait=None, connect_s=CONNECT_S, answer_s=ANSWER_S, poll_s=POLL_S, alive=ui.pid_alive,
-                 platform=None, pid=None, opener=None, nap=None, lookup=None, facility=None, framing=None):
+                 platform=None, pid=None, opener=None, nap=None, lookup=None, facility=None, framing=None,
+                 journal=None, loader=None):
         self.name = check_name(name)
         if shape not in SHAPES:
             raise UsageError("--shape: raqib or hec, not %r" % (shape,))
@@ -930,7 +1069,16 @@ class Forwarder:
         self.shape, self.token_file, self.platform = shape, token_file, platform or sys.platform
         scheme = self.dest["scheme"]
         self.syslog, self.delivery = scheme in SYSLOG, DELIVERY_OF[scheme]
-        self.facility, self.framing = self.syslog_options(scheme, shape, token_file, facility, framing)
+        self.to_journal, self.journal = scheme == JOURNAL_SCHEME, journal or JOURNAL
+        self.to_eventlog, self.loader, self.evapi = scheme == EVENTLOG_SCHEME, loader, None
+        if self.to_journal:   # W-1, W-6
+            self.facility, self.framing = self.journal_options(shape, token_file, ca, plain, facility, framing,
+                                                               self.platform)
+        elif self.to_eventlog:   # Y-5
+            self.facility, self.framing = self.eventlog_options(shape, token_file, ca, plain, facility, framing,
+                                                                self.platform)
+        else:
+            self.facility, self.framing = self.syslog_options(scheme, shape, token_file, facility, framing)
         if shape == "hec" and not token_file:
             raise UsageError("--shape hec needs --token-file (Authorization: Splunk <token>)")
         try:
@@ -1017,6 +1165,65 @@ class Forwarder:
             raise UsageError("--framing: octet (RFC 6587 octet counting, the default) or newline")
         return facility, framing
 
+    @classmethod
+    def journal_options(cls, shape, token_file, ca, plain, facility, framing, platform):
+        """W-1, W-6: what the journal takes - the raqib shape, --facility 0 to 23 (13 unless given) - and what it
+        does not, each a usage error with its reason: a token, --ca, --plain, another shape, --framing; then a
+        system that is not Linux (the journal is Linux's; the Windows event log is eventlog:)."""
+        if token_file:
+            raise UsageError("--token-file: the journal takes no token (an entry is handed to the system's own"
+                             " socket, never to a collector): journal: takes no token file")
+        if ca is not None:
+            raise UsageError("--ca: the journal is no TLS peer (a socket of this system, not a connection): journal:"
+                             " takes no --ca")
+        if plain:
+            raise UsageError("--plain: nothing goes on a wire to the journal (it is this system's own socket):"
+                             " journal: takes no --plain")
+        if shape != "raqib":
+            raise UsageError("--shape %s is HTTP's: to the journal MESSAGE is the line as written (W-2)" % shape)
+        if framing is not None:
+            raise UsageError("--framing: an entry of the journal is never framed (one entry a datagram, or a sealed"
+                             " memory file): --framing is syslog over tcp's and tls's")
+        facility = cls.syslog_options("syslog+udp", "raqib", None, facility, None)[0]   # parsed as syslog's
+        if not str(platform).startswith("linux"):
+            raise UsageError("--to journal: is Linux's (the system's journal, systemd-journald); this system is %s:"
+                             " it has no journal to hand the events to (W-1)" % platform)
+        return facility, None
+
+    @staticmethod
+    def eventlog_options(shape, token_file, ca, plain, facility, framing, platform):
+        """Y-5: the event log takes the raqib shape and nothing else - a token, --ca, --plain, --shape hec,
+        --framing and --facility are each a usage error with its reason; then a system that is not Windows."""
+        if token_file:
+            raise UsageError("--token-file: the Windows event log takes no token (an event is handed to this"
+                             " system's own call, never to a collector): eventlog: takes no token file")
+        if ca is not None:
+            raise UsageError("--ca: the Windows event log is no TLS peer (a call of this system, not a connection):"
+                             " eventlog: takes no --ca")
+        if plain:
+            raise UsageError("--plain: nothing goes on a wire to the Windows event log (it is this system's own"
+                             " call): eventlog: takes no --plain")
+        if shape != "raqib":
+            raise UsageError("--shape %s is HTTP's: to the Windows event log the event's string is the line as"
+                             " written (Y-2)" % shape)
+        if framing is not None:
+            raise UsageError("--framing: an event of the Windows event log is never framed (one event a line, a"
+                             " long line in parts): --framing is syslog over tcp's and tls's")
+        if facility is not None:
+            raise UsageError("--facility: the Windows event log has no facility (an event's type and id say what"
+                             " it is, Y-2): --facility is syslog's and the journal's")
+        if str(platform) != "win32":
+            raise UsageError("--to eventlog: is Windows' (the Application log, ReportEventW); this system is %s:"
+                             " it has no Windows event log to hand the events to (Y-5)" % platform)
+        return None, None
+
+    def eventlog_api(self):
+        """Y-2: the system's calls, made at the first send and kept for the run (EventLogApi, by self.loader).
+        Only a forwarder to eventlog: on Windows sends to it (eventlog_options), so only there is it made."""
+        if self.evapi is None:
+            self.evapi = EventLogApi(self.loader)
+        return self.evapi
+
     # --- the state (J-9) -------------------------------------------------------------------------------------
     def behind(self):
         """J-9: bytes of whole lines after the cursor not yet passed. N-8: it looks back from the file's end at
@@ -1063,6 +1270,8 @@ class Forwarder:
                 "in_question": {"count": self.question, "since": self.since if self.question else None}}
         if self.syslog:   # P-3: the facility and the framing are the destination's, kept as the shape is
             s.update(facility=self.facility, framing=self.state_framing())
+        elif self.to_journal:   # W-2: the journal's facility is kept as syslog's is; it has no framing
+            s.update(facility=self.facility)
         return s
 
     def state_framing(self):
@@ -1269,6 +1478,9 @@ class Forwarder:
                     raise UsageError("the name %s forwards with facility %d, framing %s: another facility or"
                                      " framing is another name, as another shape is (P-3)" % (
                                          self.name, old["facility"], old["framing"] or "none"))
+            elif self.to_journal and old.get("facility") != self.facility:   # W-2, as P-3
+                raise UsageError("the name %s forwards to the journal with facility %s: another facility is another"
+                                 " name, as another shape is (P-3)" % (self.name, old.get("facility")))
             elif self.syslog:   # P-3: a state written before the two were kept: this start's are kept from now
                 kept = ("; the state held no facility or framing (written before they were kept): this start's,"
                         " facility %d, framing %s, are kept from now" % (self.facility,
@@ -1284,7 +1496,8 @@ class Forwarder:
             if old["failing"]:
                 self.failing, self.carried = dict(old["failing"]), True
             return "resumed at offset %d%s%s" % (self.offset, "; failing %s, as the state said, until a try %s" % (
-                self.failing["error"], "ends in order" if self.syslog else "has an answer") if self.carried else "",
+                self.failing["error"], "ends in order" if self.syslog else "is handed whole" if self.to_journal
+                else "is taken whole" if self.to_eventlog else "has an answer") if self.carried else "",
                                                  kept)
         if self.start_from["start"] == "end":
             try:
@@ -1358,6 +1571,17 @@ class Forwarder:
     def send(self, lines):
         if self.syslog:   # J-6: one message per line; J-7: no token
             r = self.carry(lambda: SyslogSend(self, [self.wire(ln) for ln in lines]))
+        elif self.to_journal:   # W-2: one entry per line; W-4: paced
+            began = self.mono()
+            r = self.carry(lambda: JournalSend(self, [self.wire(ln) for ln in lines]))
+            if r.kind == "taken":
+                self.pace(len(lines), began)
+        elif self.to_eventlog:   # Y-2, Y-3: one event a line, a long line in parts; Y-4: paced, parts counted
+            began = self.mono()
+            events = [one for ln in lines for one in self.wire(ln)]
+            r = self.carry(lambda: EventLogSend(self, events))
+            if r.kind == "taken":
+                self.pace(len(events), began)
         else:
             try:
                 token = self.token()
@@ -1367,27 +1591,54 @@ class Forwarder:
         if r.kind == "taken" and self.size < self.batch:   # N-1: a taken send doubles it, up to --batch
             self.size = min(self.batch, self.size * 2)
             self.say("a send was taken: the next batch is %d line(s)" % self.size)
-        elif r.kind == "failed" and r.error == "late" and r.phase in ("send", "answer"):
-            size = max(1, len(lines) // 2)   # M-4, N-1: late in its request or its answer, halved down to one
+        elif r.kind == "failed" and (r.error == "late" and r.phase in ("send", "answer") or
+                                     (self.to_journal or self.to_eventlog) and r.error == "write"):
+            # M-4, N-1: late in its request or its answer, halved down to one. X-4: an entry the journal would
+            # not take is halved too, so the lines before it are not handed again at every try; Y-5: an event
+            # the Windows event log refused, the same
+            size = max(1, len(lines) // 2)
             if size < self.size:
                 self.size = size
                 self.say("a send of %d line(s) was late (%s): the next batch is %d" % (
-                    len(lines), ("its bytes not written" if r.phase == "send" else "no orderly end of the connection")
-                    if self.syslog else "its request not sent" if r.phase == "send" else "no whole answer",
+                    len(lines), ("an event refused" if self.to_eventlog and r.error == "write" else
+                                 "an entry not handed" if r.error == "write" else "its bytes not written"
+                                 if r.phase == "send" else "no orderly end of the connection")
+                    if self.syslog or self.to_journal or self.to_eventlog else "its request not sent"
+                    if r.phase == "send" else "no whole answer",
                     self.size))
         return r
 
     def wire(self, ln):
-        """J-6: what one line puts on the wire: HTTP's piece of a body, or syslog's framed message (a datagram)."""
+        """J-6: what one line puts on the wire: HTTP's piece of a body, or syslog's framed message (a datagram);
+        W-2: the journal's entry."""
         if self.syslog:
             return syslog_frame(syslog_message(ln.raw, ln.obj, self.facility), self.dest["scheme"], self.framing)
+        if self.to_journal:
+            return journal_entry(ln.raw, ln.obj, self.facility)
+        if self.to_eventlog:   # Y-2, Y-3: the events of one line (more than one where it is long)
+            return eventlog_events(ln.raw, ln.obj)
         return piece(self.shape, ln.raw, ln.obj)
 
     def wire_len(self, ln):
-        """M-3: the length of self.wire(ln), computed without building it."""
+        """M-3: the length of self.wire(ln), computed without building it. W-3: to the journal no entry is too
+        long (a sealed memory file carries what a datagram cannot): a batch is bounded by its lines' own bytes,
+        so every line the forwarder reads whole (at most 512 KiB, M-3) is sent, never refused for its length."""
         if self.syslog:
             return syslog_len(ln.raw, ln.obj, self.dest["scheme"], self.facility, self.framing)
+        if self.to_journal:
+            return len(ln.raw)
+        if self.to_eventlog:   # Y-3: a long line goes in parts, never refused for its length within 512 KiB
+            return len(ln.raw)
         return piece_len(self.shape, ln.raw, ln.obj)
+
+    def pace(self, count, began):
+        """W-4: at most JOURNAL_PACE lines a second to the journal. After a batch of `count` lines taken, what is
+        left of count / JOURNAL_PACE seconds from its start is waited by the forwarder's own wait (pause: the
+        injected wait, the state once a beat); Stop ends the wait at once, and the batch stays taken. Y-4: to the
+        Windows event log at most EVENTLOG_PACE events a second, `count` its events (parts counted)."""
+        left = began + count / float(EVENTLOG_PACE if self.to_eventlog else JOURNAL_PACE) - self.mono()
+        if left > 0:
+            self.pause(left)
 
     def too_long(self, ln):
         """K-2, M-3, J-6: longer than one request may be (512 KiB), or over udp than one datagram (65000)."""
@@ -1435,6 +1686,8 @@ class Forwarder:
             self.skipped += 1
         elif not ln.long and self.dest["scheme"] == "syslog+udp" and self.wire_len(ln) <= MAX_BYTES:
             self.count_refused(ln, "locally: longer than one datagram may be (over %d bytes, J-6)" % DATAGRAM_MAX)
+        elif self.to_journal or self.to_eventlog:   # X-2: the forwarder's own bound of a line, whatever carries it
+            self.count_refused(ln, "locally: longer than one batch may be (%d KiB, J-11)" % (MAX_BYTES // 1024))
         else:
             self.count_refused(ln, "locally: longer than one request may be (J-11)")
         self.pass_line(ln)
@@ -1471,7 +1724,8 @@ class Forwarder:
                 more = ("the cursor stays before them; %d line(s) in question from offset %d (asked alone as far as"
                         " offset %d) wait for a later line taken" % (self.question, self.offset, self.reach))
             self.say("failing: %s (%s%s); %d tr%s; %s" % (
-                r.error, (SYSLOG_ERRORS if self.syslog else ERRORS).get(r.error, r.error), "" if r.status is None else ", status %d" % r.status,
+                r.error, link.errors_of(self.dest["scheme"]).get(r.error, r.error),
+                "" if r.status is None else ", status %d" % r.status,
                 self.failing["tries"], "y" if self.failing["tries"] == 1 else "ies", more))
 
     def failed(self, r):
@@ -1954,7 +2208,10 @@ class Forwarder:
             self.say("%s -> %s (shape %s, delivery %s%s%s); %s; state %s" % (
                 self.path, where(self.dest), self.shape, self.delivery,
                 ", facility %d, framing %s" % (self.facility, self.framing if self.dest["scheme"] != "syslog+udp"
-                                               else "none: one datagram a message") if self.syslog else "",
+                                               else "none: one datagram a message") if self.syslog else
+                ", facility %d, at most %d lines a second" % (self.facility, JOURNAL_PACE) if self.to_journal else
+                ", source %s, at most %d events a second, a line over %d characters in parts" % (
+                    EVENTLOG_SOURCE, EVENTLOG_PACE, EVENTLOG_PART) if self.to_eventlog else "",
                 ", plain: not encrypted" if self.plain else "", how, self.state_file))
             self.write_state()
             self.loop(once)
@@ -1981,93 +2238,27 @@ class Forwarder:
 
 
 # --- --status (J-9, L-2, M-6) --------------------------------------------------------------------------------
-def judge(state, now):
-    """(exit, word, lines) of one state, by STATUS_RULE. M-6, N-6: a state that is not what the forwarder writes
-    is unreadable (3), never read as calm, and never a traceback. N-5: a line in question longer than a beat is a
-    whole line that waited (1), settling included."""
-    try:
-        why = state_problem(state)
-        if why:
-            return 3, "UNREADABLE", ["not what a forwarder writes: %s" % why]
-        written, beat = seconds_of(state["written"]), float(state["beat"])
-        dest, cursor, refused, failing = state["destination"], state["cursor"], state["refused"], state["failing"]
-        inq = state.get("in_question") or {"count": 0, "since": None}
-        lines = ["to %s (shape %s, delivery %s%s%s)" % (
-                     where(dest), state["shape"], state["delivery"],
-                     "" if "facility" not in state else ", facility %d, framing %s" % (
-                         state["facility"], state.get("framing") or "none: one datagram a message"),
-                     ", plain: not encrypted" if state["plain"] else ""),
-                 "file %s, cursor %d (from the %s, offset %d)" % (state["file"], cursor["offset"],
-                                                                   state["from"]["start"], state["from"]["offset"]),
-                 "sent %d, skipped %d, refused %d%s, restarts %d" % (
-                     state["sent"], state["skipped"], refused["count"],
-                     " (latest: %s)" % ", ".join(str(i) for i in refused["ids"][-3:]) if refused["ids"] else "",
-                     state["restarts"]),
-                 "last taken: %s at %s; behind %d byte(s); in question %d%s" % (
-                     state["last_id"] or "none", state["last_ok"] or "never", state["behind"], inq["count"],
-                     " since %s" % inq["since"] if inq["count"] and inq.get("since") else ""),
-                 "written %s by pid %d (a beat of %g s)" % (state["written"], state["pid"], beat)]
-        last_ok = seconds_of(state["last_ok"]) if state["last_ok"] else None
-        asked = seconds_of(inq["since"]) if inq["count"] and inq.get("since") else None
-    except Exception:   # state_problem read every key; this is the last guard against a traceback
-        return 3, "UNREADABLE", ["a %s state that cannot be read" % SCHEMA]
-    age = now - written
-    if age < 0:
-        return 3, "SILENT", lines + ["the state was written %.0f s in the future of this clock: its age cannot be"
-                                     " told, so it is not fresh" % -age]
-    if age > 2 * beat:
-        return 3, "SILENT", lines + ["the state was written %.0f s ago, more than two beats: the forwarder is silent"
-                                     " (stopped, killed or stuck)" % age]
-    if failing:
-        return 1, "FAILING", lines + ["failing since %s: %s (%s), %d tr%s%s" % (
-            failing["since"], failing["error"], (SYSLOG_ERRORS if dest["scheme"] in SYSLOG else
-                                                 ERRORS)[failing["error"]], failing["tries"],
-            "y" if failing["tries"] == 1 else "ies",
-            "" if failing.get("status") is None else ", status %d" % failing["status"])]
-    if inq["count"] and (asked is None or written - asked > beat):
-        return 1, "BEHIND", lines + ["%d line(s) in question since %s, longer than a beat: they wait (settling"
-                                     " included)" % (inq["count"], inq.get("since") or "a time not said")]
-    if state["behind"] and (last_ok is None or written - last_ok > beat):
-        return 1, "BEHIND", lines + ["%d byte(s) of whole lines wait longer than a beat%s" % (
-            state["behind"], " (no send of this name was ever taken)" if last_ok is None else "")]
-    return 0, "OK", lines
-
-
 def status(name=None, home=None, out=None, clock=time.time):
     out = out if out is not None else sys.stdout
     folder = forward_dir(home)
     if name:
         check_name(name)
-        names = [name]
-    else:
-        try:
-            names = sorted(n[:-5] for n in os.listdir(folder) if n.endswith(".json") and NAME.match(n[:-5]))
-        except OSError:
-            names = []
-    if not names:
-        out.write("raqib forward --status: no forwarder has written a state in %s: silent (exit 3)\n" % folder)
+    rows = link.read(home, clock(), name or None)   # R-1: the state's reader and its judgement are link's
+    if rows.problem:   # S-2: states that could not be looked for are not "no state"
+        out.write("raqib forward --status: %s: nothing is known of the forwarders (exit 3)\n" % rows.problem)
+    if not rows:
+        if not rows.problem:
+            out.write("raqib forward --status: no forwarder has written a state in %s: silent (exit 3)\n" % folder)
         return 3
-    worst, now = 0, clock()
-    for n in names:
-        refused = "unknown"
-        try:
-            with open(state_path(n, home), "rb") as f:
-                state = json.loads(f.read().decode("ascii"))
-        except FileNotFoundError:
-            code, word, lines = 3, "SILENT", ["no state: %s (it never ran, or not here)" % state_path(n, home)]
-        except Exception:   # N-6: OSError, not JSON, not ASCII, nested past what the reader takes, anything else
-            code, word, lines = 3, "UNREADABLE", ["the state %s cannot be read" % state_path(n, home)]
-        else:
-            code, word, lines = judge(state, now)
-            try:
-                refused = "%d" % state["refused"]["count"] if code != 3 or word != "UNREADABLE" else "unknown"
-            except Exception:
-                pass
-        out.write("raqib forward %s: %s (exit %d); refused %s\n" % (n, word, code, refused))
-        for line in lines:
+    for row in rows:
+        out.write("raqib forward %s: %s (exit %d); refused %s\n" % (
+            row["name"], row["word"], row["code"], "unknown" if row["refused"] is None else "%d" % row["refused"]))
+        for line in row["lines"]:
             out.write("  %s\n" % line)
-        worst = code if (code == 3 or worst != 3 and code > worst) else worst
-    return worst
+    if rows.rest:   # R-4, S-1: at most LINKS_MAX names are read; the rest are counted, said, and are exit 3
+        out.write("raqib forward --status: %d more state(s) in %s not read: at most %d are read, in order of name;"
+                  " what is not read is not calm (exit 3)\n" % (rows.rest, folder, link.LINKS_MAX))
+    return link.worst(rows)
 
 
 def cli_run(args, out):

@@ -18,6 +18,22 @@ loopback only, udp and tcp): X23 the whole file over tcp, octet counting, --once
 For each, what arrived, the collector's problems with the messages' RFC 5424 shape, how it framed them, and
 the forwarder's state.
 
+To the journal (ADR-0011 W-2, W-8), on Linux with the journal's socket there: X26 the whole file, --once,
+`--to journal:`, then read back with journalctl - this run's entries alone, by the journal's trusted _PID of
+the forwarder's own process and SYSLOG_IDENTIFIER raqib (W-7: who wrote an entry is asked of the journal's
+trusted fields) - polled for at most READ_S, since the journal may need a moment after the send; what was
+read is recorded. Elsewhere (Windows, or no socket) it is not run, and the reason is the fact. A test points
+JOURNAL at a stand-in of its own: the forwarder then runs through JOURNAL_RUN, which hands it that path (the
+CLI has no option for it), and journal_read is the test's.
+
+To the Windows event log (ADR-0011 Y-7), on Windows: X27 the whole file, --once, `--to eventlog:`, and a made-up
+file of three lines whose second is LONG_EVENTLOG characters (handed in parts, Y-3), each then read back with
+wevtutil - the Application log, the provider Raqib, the record's own Execution ProcessID the forwarder's (as its
+state says it), oldest first, as XML - polled for at most READ_S; the XML read is recorded whole, and
+tools/rig/check.py puts the lines together. Elsewhere it is not run, and the reason is the fact. A test sets
+EVENTLOG_FAKE (a file): the forwarder then runs through EVENTLOG_RUN with a made-up advapi32 (FakeAdvapi) that
+writes each event to that file as wevtutil prints it, and eventlog_read is the test's - never the system's.
+
 It never raises (L-10): each case is its own, an error in one is a fact of that case, and a missing events file
 is a fact; it writes its facts and exits 0 whatever happened (2 only for its own usage). Stdlib only.
 """
@@ -25,6 +41,7 @@ import argparse
 import binascii
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -40,6 +57,20 @@ PATH = "/services/collector/event"
 FORWARD = [sys.executable, "-m", "raqib", "forward"]   # the forwarder (a test names one that cannot start)
 CASES = ("x19", "x20", "x21", "x22")
 SYSLOG_CASES = ("x23", "x24", "x25")   # J-6: over tcp, over udp, over tcp with --framing newline
+JOURNAL_CASES = ("x26",)               # W-8: to the journal, Linux only
+JOURNAL = "/run/systemd/journal/socket"   # the journal's socket, as raqib/forward.py's JOURNAL (a test: a stand-in)
+REAL_JOURNAL = JOURNAL
+PLATFORM = sys.platform
+JOURNALCTL = ["journalctl", "--no-pager", "--all", "-b", "-o", "json", "-t", "raqib"]   # X-5: --all: long fields whole
+READ_S = 30.0                          # journalctl is asked again for at most this long after the send
+EVENTLOG_CASES = ("x27",)              # Y-7: to the Windows event log, Windows only
+LONG_EVENTLOG = 100000                 # Y-7: a made-up line of this many characters (four parts of 30000 at most)
+EVENTLOG_FAKE = None                   # a test's file for the made-up system (None: the system's own, on Windows)
+EVENTLOG_RUN = ("import sys\nsys.path.insert(0, sys.argv[1])\nimport forward_run\n"
+                "sys.exit(forward_run.run_fake_eventlog(sys.argv[2], sys.argv[3:]))")
+EVENTS_NS = "http://schemas.microsoft.com/win/2004/08/events/event"
+JOURNAL_RUN = ("import sys\nfrom raqib import cli, forward\nforward.JOURNAL = sys.argv[1]\n"
+               "sys.exit(cli.main(['forward'] + sys.argv[2:]))")
 
 
 class Run:
@@ -265,6 +296,241 @@ def x25(r):
     return over_syslog(r, "x25", "tcp", ("--framing", "newline"))
 
 
+def journal_read(pid):
+    """One read of the journal: this run's entries (SYSLOG_IDENTIFIER raqib, _PID the forwarder's process), as
+    `journalctl -o json` gives them: (entries, journalctl's exit, its first words on stderr)."""
+    p = subprocess.run(JOURNALCTL + ["_PID=%d" % pid], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    entries = []
+    for row in p.stdout.decode("utf-8", "replace").splitlines():
+        if row.strip():
+            try:
+                entries.append(json.loads(row))
+            except ValueError:
+                entries.append({"unreadable": row[:200]})
+    return entries, p.returncode, p.stderr.decode("utf-8", "replace")[:500]
+
+
+def _text(value):
+    """A field as journalctl's JSON says it: text, or an array of bytes where it is not printable UTF-8."""
+    if isinstance(value, list):
+        try:
+            return bytes(value).decode("utf-8", "replace")
+        except (TypeError, ValueError):
+            return None
+    return value if isinstance(value, str) else None
+
+
+LONG = 300 * 1024   # X-5: a made-up line longer than the journal's socket takes as a datagram (measured: 212000)
+
+
+def journal_long(r):
+    """X-5: three made-up events, the second LONG bytes, to the journal by the forwarder: the long one goes as a
+    sealed memory file (W-3). What journalctl read back of them: each MESSAGE's length and whether it is the
+    line as written."""
+    from raqib import event
+    facts = {"run": "rig-long", "mode": "host", "platform": "linux", "version": "0.0.0", "host": "rig.example",
+             "beat": 20.0}
+    rows = []
+    for n, pad in ((1, 0), (2, LONG), (3, 0)):
+        e = event.note({"text": "rig long %d%s" % (n, "x" * pad)}, facts, "2026-11-17T07:50:0%d.250Z" % n, n,
+                       "note:%d" % n)
+        rows.append(event.line(e))
+    path = os.path.join(r.home, "long.jsonl")
+    with open(path, "wb") as f:
+        f.write(("\n".join(rows) + "\n").encode("ascii"))
+    more = [path, "--to", "journal:", "--name", "rig-x26-long", "--beat", "1", "--once"]
+    argv = FORWARD + more if JOURNAL == REAL_JOURNAL else [sys.executable, "-c", JOURNAL_RUN, JOURNAL] + more
+    proc, out = r.start("x26 long", argv)
+    try:
+        proc.wait(120)
+    except subprocess.TimeoutExpired:
+        pass
+    code = r.end("x26 long", proc, out)
+    got, end = ([], None, None), time.monotonic() + READ_S
+    while True:
+        got = journal_read(proc.pid)
+        if len(got[0]) >= len(rows) or time.monotonic() >= end:
+            break
+        time.sleep(0.25)
+    messages = [_text(e.get("MESSAGE")) for e in got[0]]
+    return {"exit": code, "lines": [len(x) for x in rows], "read": [len(m) if isinstance(m, str) else None
+                                                                    for m in messages],
+            "as_written": messages == rows, "journalctl": {"exit": got[1], "stderr": got[2]},
+            "state": {k: (r.state("rig-x26-long") or {}).get(k) for k in ("sent", "refused", "failing", "behind")}}
+
+
+def x26(r):
+    """W-8: the whole file to the journal, --once, read back by journalctl; not run where there is no journal."""
+    if not PLATFORM.startswith("linux"):
+        return {"not_run": "not Linux (%s): the journal is Linux's (W-1)" % PLATFORM}
+    try:   # X-6: on Linux a journal that is not there is a finding of the rig, not a case that does not apply
+        mode = os.stat(JOURNAL).st_mode
+    except OSError as exc:
+        return {"error": "no journal's socket at %s (%s) on a Linux machine" % (JOURNAL, type(exc).__name__)}
+    if not stat.S_ISSOCK(mode):
+        return {"error": "%s is no socket: no journal on a Linux machine" % JOURNAL}
+    with open(r.events, "rb") as f:
+        want = f.read().count(b"\n")
+    name = "rig-x26"
+    more = [r.events, "--to", "journal:", "--name", name, "--beat", "1", "--once"]
+    argv = FORWARD + more if JOURNAL == REAL_JOURNAL else [sys.executable, "-c", JOURNAL_RUN, JOURNAL] + more
+    proc, out = r.start("x26", argv)
+    try:
+        proc.wait(300)
+    except subprocess.TimeoutExpired:
+        pass
+    code = r.end("x26", proc, out)
+    s = r.state(name) or {}
+    got, asked, end = ([], None, None), 0, time.monotonic() + READ_S
+    while True:   # the journal may take a moment to show what it was handed
+        asked += 1
+        try:
+            got = journal_read(proc.pid)
+        except (OSError, subprocess.SubprocessError) as exc:
+            got = ([], None, "journalctl cannot be run: %s" % type(exc).__name__)
+            break
+        if len(got[0]) >= want or time.monotonic() >= end:
+            break
+        time.sleep(0.25)
+    entries = got[0]
+    r.run("x26 status", FORWARD + ["--status", name])
+    try:
+        long = journal_long(r)
+    except Exception as exc:   # the rig's own failure is said, never raised
+        long = {"error": "%s: %s" % (type(exc).__name__, exc)}
+    return {"exit": code, "pid": proc.pid, "socket": JOURNAL, "lines": want, "asked": asked, "long": long,
+            "journalctl": {"exit": got[1], "stderr": got[2]}, "read": len(entries),
+            "messages": [_text(e.get("MESSAGE")) for e in entries],
+            "identifiers": sorted(set(str(_text(e.get("SYSLOG_IDENTIFIER"))) for e in entries)),
+            "priorities": [_text(e.get("PRIORITY")) for e in entries[:50]],
+            "delivery": s.get("delivery"), "sent": s.get("sent"), "refused": (s.get("refused") or {}).get("count"),
+            "behind": s.get("behind"), "failing": s.get("failing"), "destination": s.get("destination")}
+
+
+class FakeAdvapi:
+    """A test's made-up advapi32 (EVENTLOG_FAKE): each event the forwarder reports is appended to `path` as one
+    <Event> element on a line of its own, as wevtutil prints it (no root element; System's Provider, EventID,
+    Level, Execution ProcessID this process's; EventData's Data, one a string, XML-escaped)."""
+
+    LEVEL = {1: 2, 2: 3, 4: 4}   # ReportEventW's type as the record's Level: Error 2, Warning 3, Information 4
+
+    def __init__(self, path):
+        self.path = path
+
+        def fn(f):   # a plain function, so that ctypes' restype and argtypes can be set on it
+            return lambda *a: f(*a)
+        self.RegisterEventSourceW = fn(lambda server, source: 1 if source == "Raqib" else 0)
+        self.ReportEventW = fn(self.report)
+        self.DeregisterEventSource = fn(lambda handle: 1)
+
+    def load(self, name):
+        return self
+
+    def report(self, handle, kind, category, ident, user, count, size, strings, raw):
+        from xml.sax.saxutils import escape
+        datas = "".join("<Data>%s</Data>" % escape(strings[i]) for i in range(count))
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write("<Event xmlns='%s'><System><Provider Name='Raqib'/><EventID Qualifiers='0'>%d</EventID>"
+                    "<Level>%d</Level><Execution ProcessID='%d' ThreadID='1'/><Channel>Application</Channel>"
+                    "</System><EventData>%s</EventData></Event>\n" % (EVENTS_NS, ident, self.LEVEL.get(kind, 0),
+                                                                    os.getpid(), datas))
+        return 1
+
+
+def run_fake_eventlog(path, args):
+    """EVENTLOG_RUN's body: `raqib forward ARGS` as on Windows, its calls taken by FakeAdvapi(path)."""
+    sys.path.insert(0, ROOT)
+    from raqib import cli, forward
+    real = forward.Forwarder
+    forward.Forwarder = lambda *a, **k: real(*a, platform="win32", loader=FakeAdvapi(path).load, **k)
+    return cli.main(["forward"] + list(args))
+
+
+def eventlog_read(pid):
+    """One read of the Application log: this run's events (provider Raqib, the record's Execution ProcessID
+    `pid`), oldest first, as XML: (wevtutil's output, its exit, its first words on stderr). The command line is
+    given whole (its query quoted for wevtutil), as the rig's Windows machine took it (X27)."""
+    cmd = ('wevtutil qe Application "/q:*[System[Provider[@Name=\'Raqib\'] and Execution[@ProcessID=%d]]]" /f:xml'
+           ' /rd:false' % int(pid))
+    p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    return p.stdout.decode("utf-8", "replace"), p.returncode, p.stderr.decode("utf-8", "replace")[:500]
+
+
+def eventlog_count(text):
+    """How many <Event> elements the XML holds (the wait's measure only; check.py reads them)."""
+    return text.count("<Event ") + text.count("<Event>")
+
+
+def to_eventlog(r, name, path, want, where):
+    """One forwarder to the event log, --once, then its events read back for at most READ_S (`want`: how many
+    events are awaited). The record's ProcessID is the forwarder's own, as its state says (a launcher's pid,
+    proc.pid, may be another's)."""
+    more = [path, "--to", "eventlog:", "--name", name, "--beat", "1", "--once"]
+    argv = FORWARD + more if EVENTLOG_FAKE is None else [sys.executable, "-c", EVENTLOG_RUN, HERE,
+                                                         EVENTLOG_FAKE] + more
+    proc, out = r.start(where, argv)
+    try:
+        proc.wait(300)
+    except subprocess.TimeoutExpired:
+        pass
+    code = r.end(where, proc, out)
+    s = r.state(name) or {}
+    pid = s.get("pid") if isinstance(s.get("pid"), int) else proc.pid
+    got, asked, end = ("", None, None), 0, time.monotonic() + READ_S
+    while True:   # the log may take a moment to show what it was handed
+        asked += 1
+        try:
+            got = eventlog_read(pid)
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            got = ("", None, "wevtutil cannot be run: %s" % type(exc).__name__)
+            break
+        if eventlog_count(got[0]) >= want or time.monotonic() >= end:
+            break
+        time.sleep(0.25)
+    return {"exit": code, "pid": pid, "process": proc.pid, "asked": asked, "xml": got[0],
+            "wevtutil": {"exit": got[1], "stderr": got[2]}, "read": eventlog_count(got[0]),
+            "delivery": s.get("delivery"), "sent": s.get("sent"), "refused": (s.get("refused") or {}).get("count"),
+            "behind": s.get("behind"), "failing": s.get("failing"), "destination": s.get("destination")}
+
+
+def parts_of(chars):
+    return max(1, -(-chars // 30000))
+
+
+def x27(r):
+    """Y-7: the whole file to the Windows event log, --once, and a made-up long line, read back by wevtutil; not
+    run where there is no Windows event log (a test's made-up system is run anywhere)."""
+    if PLATFORM != "win32" and EVENTLOG_FAKE is None:
+        return {"not_run": "not Windows (%s): the event log is Windows' (Y-5)" % PLATFORM}
+    with open(r.events, "rb") as f:
+        rows = f.read().split(b"\n")[:-1]
+    facts = to_eventlog(r, "rig-x27", r.events, sum(parts_of(len(x)) for x in rows), "x27")
+    facts["lines"] = len(rows)
+    r.run("x27 status", FORWARD + ["--status", "rig-x27"])
+    try:   # Y-3: a made-up line of LONG_EVENTLOG characters, in parts
+        from raqib import event
+        made = {"run": "rig-long", "mode": "host", "platform": "win32", "version": "0.0.0", "host": "rig.example",
+                "beat": 20.0}
+        lines = []
+        for n in (1, 2, 3):
+            e = event.note({"text": "rig long %d" % n}, made, "2026-11-17T07:50:0%d.250Z" % n, n, "note:%d" % n)
+            if n == 2:   # padded to exactly LONG_EVENTLOG characters
+                e = event.note({"text": "rig long 2" + "x" * (LONG_EVENTLOG - len(event.line(e)))}, made,
+                               "2026-11-17T07:50:02.250Z", 2, "note:2")
+            lines.append(event.line(e))
+        path = os.path.join(r.home, "long-eventlog.jsonl")
+        with open(path, "wb") as f:
+            f.write(("\n".join(lines) + "\n").encode("ascii"))
+        import hashlib
+        long = to_eventlog(r, "rig-x27-long", path, sum(parts_of(len(x)) for x in lines), "x27 long")
+        long.update(lines=[len(x) for x in lines], sha256=[hashlib.sha256(x.encode("ascii")).hexdigest()
+                                                            for x in lines])
+    except Exception as exc:   # the rig's own failure is said, never raised
+        long = {"error": "%s: %s" % (type(exc).__name__, exc)}
+    facts["long"] = long
+    return facts
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="tools/rig/forward_run.py")
     p.add_argument("--events", required=True)
@@ -280,7 +546,8 @@ def main(argv=None):
         if not os.path.isfile(r.events):
             facts["events_missing"] = True   # the watch wrote none: X16 says it; nothing is forwarded
         else:
-            for name, case in zip(CASES + SYSLOG_CASES, (x19, x20, x21, x22, x23, x24, x25)):
+            for name, case in zip(CASES + SYSLOG_CASES + JOURNAL_CASES + EVENTLOG_CASES,
+                                  (x19, x20, x21, x22, x23, x24, x25, x26, x27)):
                 try:
                     facts[name] = case(r)
                 except Exception as exc:   # one case's error is that case's fact

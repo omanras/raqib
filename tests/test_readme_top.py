@@ -89,7 +89,23 @@ GUIDE_ROWS = ["| `raqib events FILE` | check a watch's events file (`~/.raqib/ho
               "octet count, or --framing newline for a collector that wants lines, and taken is `written`, the "
               "connection ended in order after the batch - not a stored event; `syslog+tcp://` needs its port "
               "written; over udp one datagram a message, taken is `sent`, nothing is known, "
-              "and a message over 65000 bytes is refused, counted and passed, never cut; no token); a line "
+              "and a message over 65000 bytes is refused, counted and passed, never cut; no token)"
+              # ADR-0011 W (M10.3c-a): the journal, in the forward row (G-11)
+              " or to the system's journal (`journal:`, Linux only: one entry a line by the journal's own "
+              "protocol, MESSAGE the line as written, PRIORITY the severity as syslog's, SYSLOG_IDENTIFIER "
+              "raqib, SYSLOG_FACILITY 13 unless `--facility N`, and RAQIB_ID, RAQIB_KIND, RAQIB_HOST and "
+              "RAQIB_TIME where the event holds them as text; an entry too long for a datagram is handed as a "
+              "sealed memory file, never cut; taken is `sent`, nothing is known, at most 250 lines a second; no "
+              "token, `--ca`, `--plain`, `--shape hec` or `--framing`)"
+              # ADR-0011 Y (M10.3c-b): the Windows event log, in the forward row (G-11)
+              " or to the Windows event log (`eventlog:`, Windows only: one event a line in the Application log"
+              " under the source `Raqib`, nothing registered, its one string the line as written, its type from"
+              " the severity - high Error, medium and a hole Warning, low, info and none Information - and its"
+              " id from the kind, 1001 to 1008, else 1000; a line over 30000 characters goes in parts, in order,"
+              " id 1009, each with a head `raqib-part I/N id=ID sha256=HEX chars=TOTAL` by which a reader puts"
+              " the line back together; taken is `written`, the system's call took the event, at most 100 events"
+              " a second, parts counted; no token, `--ca`, `--plain`, `--shape hec`, `--framing` or"
+              " `--facility`); a line "
               "that is not an event is skipped and counted, never sent; a line the collector refuses alone is "
               "counted and passed only when it is refused alone again after a later line was taken (until then "
               "it is failing `refusing` and the cursor waits); its cursor and state are "
@@ -168,6 +184,31 @@ BYTES_WIN = [
     " memory only); a killed watch leaves it until the next start, which stops it and says so.",
 ]
 GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + GUIDE_ROWS + HOST_UNREAD + BYTES_WIN
+# M10.4b (ADR-0011 R-2, R-3, T-1, T-5, V): the window's Link screen, said where the window's screens are
+LINK_SCREEN = [
+    "Link, the rail's item under Log, shows the forwarders of `raqib forward` as their states in "
+    "`~/.raqib/forward` say, read off the window's thread at most once a second by the reader and the "
+    "judgement of `raqib forward --status`: each one's name, its word (OK, BEHIND, FAILING, SILENT, "
+    "UNREADABLE) and its lines - where it sends and by which delivery word, plain or not, what was last "
+    "taken and when, what waits, what was refused, why it fails; the forwarders that are not OK come "
+    "first, and the screen has no button.",
+    "The rail's Link line counts every word that is not OK on every screen (\"Link: 1 failing, 1 behind, 1"
+    " silent\";",
+    "\"Link: 2 OK\";",
+    "\"Link: none\"): none is hidden behind a worse one.",
+    "A link that sends is no judgement of the host: an OK forwarder is a note, never green, as green "
+    "beside a watch means its rules found nothing;",
+    "FAILING and BEHIND are alarm, SILENT and UNREADABLE incomplete, as their exit codes are.",
+    "The whole link is an alarm where one forwarder is known to fail, whatever is not known beside it; "
+    "else incomplete where something is not known - a silent or unreadable state, a folder that cannot be"
+    " listed, states past the 64 read, a read not back in 10 s; else a note.",
+    "With no state at all the screen says \"No forwarder: nothing leaves this host by Raqib\", a note, and "
+    "the command that starts one.",
+    "A state's text is shown as text, at most 300 characters a line, what is not printable as \"?\".",
+    "The screen starts, stops and configures no forwarder, holds no token and opens no connection, and no"
+    " result, exit code, finding or knock of a watch depends on it (ADR-0011 Amendments R, T, U and V).",
+]
+GUIDE_NEW += LINK_SCREEN
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")

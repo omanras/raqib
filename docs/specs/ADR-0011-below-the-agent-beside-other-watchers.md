@@ -858,3 +858,263 @@ Recorded, not built: the header's fallback counts nothing (a defect there would 
 a collector that never ends its side at the half-close makes every batch late, said failing; what real
 collectors do at the end of a connection is not checked on the rig (rsyslog and syslog-ng: a later task).
 
+## Amendment R (the Table, 2026-11-17) - the link is shown: the window's panel for the forwarder (M10.4)
+J-9 wrote the state for two readers: a person at the host, and this panel. The window runs the watch in its
+own process, so it may not import the forwarder (K-1: only cli.cmd_forward does; the forwarder's module holds
+the network). This rules how the link is read and shown. Each ruling names what it is FOR and what it MUST NOT
+TOUCH.
+- R-1 (the state's reader is a module with no network). What reads and judges a state - the schema's keys,
+  the state's problems, the judgement of STATUS_RULE, where the states are - lives in raqib/link.py, which
+  imports nothing of the network and nothing of the forwarder; raqib/forward.py takes those names from it
+  (one statement of each, never two). `raqib forward --status` says what it said, byte for byte. FOR: one
+  judgement for the command and the window. MUST NOT TOUCH: the cursor's machine, the sends, the state's
+  shape (`raqib-forward/1` is not changed by this).
+- R-2 (the panel reads; it starts nothing). The window shows, for each forwarder that wrote a state in
+  ~/.raqib/forward: its name, the word of its judgement (OK, BEHIND, FAILING, SILENT, UNREADABLE), where it
+  sends and by which delivery word, plain or not, what was last taken and when, what waits, what was
+  refused, why it fails. It starts and stops no forwarder, holds and shows no token, opens no connection.
+  With no state at all it says so - nothing leaves this host by Raqib - and how one is started. FOR: a
+  person at the host who must know whether the SIEM still hears. MUST NOT TOUCH: the watch (J-1): no
+  result, exit code or finding of a watch depends on a forwarder, in the window either.
+- R-3 (silence is shown as silence). A state older than two beats, from the future, or unreadable is never
+  shown as calm: it is the worst word of the panel, and the rail's item carries the worst word of all the
+  forwarders at all times, whatever screen is open (CLAUDE.md rule 4).
+- R-4 (bounded, and never in the way). The states are read at most once a second, each at most 1 MiB (more
+  is unreadable, said), at most 64 names (the rest counted, said); a read that fails is that forwarder's
+  UNREADABLE, never the window's failure.
+- R-5 (two tasks). M10.4a: raqib/link.py and the forwarder taking its names from it, nothing shown yet.
+  M10.4b: the window's Link screen and the rail's item.
+Not here, recorded: starting a forwarder from the window (with the service, later); the link on the local
+page; the forwarder's own log in the window.
+
+## Amendment S (the Table, 2026-11-17) - rulings on review 2026-11-17-M10.4a.md (57fa113): what is not read is not calm
+The packet: a move line for line, the five files in scope; REDO, narrow, for an exit that went calm over
+states it did not read, and words that were not true. Small, and built by the Table.
+- S-1 (states counted and not read are exit 3). With more than 64 states the old status read them all; the
+  new one read 64 and returned their worst - 0 over a silent 65th. `worst` is 3 wherever a state was counted
+  and not read, and the further line says so. FOR: R-3 and CLAUDE.md rule 4. Cost, accepted: 65 calm
+  forwarders say 3 - a host with more than 64 is told to ask for each by name.
+- S-2 (states that could not be looked for are not "no state"). A folder that is there and cannot be listed
+  (or whose listing fails part way) is said with its reason, exit 3: nothing is known of the forwarders. No
+  folder at all stays "no forwarder has written a state". FOR: the panel's "nothing leaves this host" must
+  be read, not assumed.
+- S-3 (true words). A state longer than 1 MiB "is longer than 1 MiB and is not read" - not "more than a
+  forwarder writes": a forwarder fed long ids can write one (its state is then unreadable to its own status,
+  which errs toward the alarm). Recorded: the forwarder's state bounded by its writer.
+- S-4 (what is no regular file is not opened; a link to nothing is not absent). The type is asked before
+  the open (a device is never opened); a link to nothing is UNREADABLE, as the page's own rule says of
+  one (J-11 of ADR-0006's line), not SILENT "it never ran".
+- S-5 (accepted as built). A pipe or a device where a state should be is UNREADABLE and never waited on
+  (the old status waited for ever: a repair inside a move, kept and said). raqib/link.py's own imports hold
+  no network; that raqib.host, which it asks for the folder, loads the local page's server modules is the
+  letter of the guard and is what the window loads anyway - a second statement of the folder's rule would
+  be worse. `Rows` is a list that carries `rest` and `problem`; a copy loses them, and its doc says so.
+  The clock is asked once, always.
+Recorded for M10.4b (the panel): the row lacks the age, the destination's text and the judgement's reason
+apart from its lines - the panel must not restate `judge`; a state's text is a stranger's (escaped, never
+drawn whole); the folder is walked whole on each read. Recorded, not built: a beat without an upper bound
+(a state that says a beat of years is never silent); the E1 guard skips tuple targets.
+
+## Amendment T (the Table, 2026-11-17) - the panel's rulings beyond R (M10.4b)
+R ruled what the panel is. Reading the window's code and the M10.4a review added these.
+- T-1 (a link that sends is no judgement of the host). The window's levels come from one function of the exit
+  code (0 clean, 1 alarm, 3 incomplete). A forwarder that is OK is shown at the level `note`, never `clean`:
+  green beside a watch means its rules found nothing, and a link says nothing of that. FAILING and BEHIND are
+  `alarm`, SILENT and UNREADABLE `incomplete`, as their codes are everywhere.
+- T-2 (the panel does not restate the judgement). The row of raqib/link.py carries what the panel shows: the
+  state's age, where it sends as text, the lines that describe it and the lines that say why it is judged
+  so. The window formats rows; it holds no rule of its own about beats or failures.
+- T-3 (a state's text is a stranger's). Whatever a state holds is shown as text, with control characters
+  removed and each line bounded; nothing of it is drawn as markup, opened, or run. A writer of the state
+  folder can make the panel say a bounded untrue thing about a forwarder - the folder is the user's own, as
+  the forwarder's is - and never more.
+- T-4 (read off the window's thread). The states are read by a worker, at most once a second and never two
+  reads at once; the window shows the last read and says its age when a read has not returned in ten
+  seconds (the link's state is then not known: `incomplete`).
+- T-5 (no state is not an alarm). A host with no forwarder is a host that sends nothing: said plainly at the
+  level `note`, with the command that would start one as text. A folder that could not be listed is not
+  that (S-2): it is `incomplete`.
+
+## Amendment U (the Table, 2026-11-17) - the builder's STOP on M10.4b (36464ad), and its questions
+The builder stopped at E1, rightly: the criterion asked for new keys on the row and for two tests that list
+the row's keys to pass unchanged. The contradiction was the Table's.
+- U-1 (the row's keys are the Table's to widen). Those two tests are the registry of the row's shape; the
+  Table added the four keys to them and built T-2 in raqib/link.py itself (FACTS, `_parts`): age and to are
+  None and the facts are none for a state that is missing or unreadable, whose lines are all its why.
+- U-2 (a late read never lowers an alarm). Where a read has not returned in ten seconds the panel says for how
+  long nothing was read; its level is `incomplete`, unless the last read showed FAILING or BEHIND, which stays
+  `alarm` beside those words. FOR: T-4 must not turn a known failure amber.
+- U-3 (the rail counts each word at the worst code). "2 forwarders, 1 failing, 1 behind"; no order between
+  two words of one code is ruled or needed.
+- U-4 (a read in flight does not hold the window). The link's worker is waited for at the window's end for at
+  most two seconds and is no part of "the watch did not end"; it is a daemon thread that holds nothing.
+- U-5 (the spec's sentence). FORWARD.md already names the window as the state's second reader: E9 asks only
+  that it name the Link screen there.
+
+## Amendment V (the Table, 2026-11-17) - rulings on review 2026-11-17-M10.4b.md (b4348d4): nothing hidden behind a worse word
+The Table looked at the screen itself (a virtual display here) before the packet came, and saw what the packet
+then named: with five forwarders the rail said "1 unreadable, 1 silent" and no word of the one that failed.
+That was U-3, the Table's own ruling, and it was wrong. Small, and built by the Table.
+- V-1 (every word that is not OK is counted; U-3 is withdrawn). "Link: 1 failing, 1 behind, 1 silent, 1
+  unreadable". FOR: one stale or planted state must not hide every later failure from the rail. The words
+  are the rows' own; the window only orders them, what is known to fail first.
+- V-2 (a forwarder known to fail keeps the link an alarm), whatever is not known beside it: a silent or
+  unreadable state, states counted and not read, a folder not listed, a late read (U-2 was this for the late
+  read alone). Else what is not known is `incomplete`; else `note`. The command's exit code is not this: it
+  stays 3 over 1, and the screen says it. MUST NOT TOUCH: `link.worst`.
+- V-3 (the rail's line is bounded as it is made). It is built of counts and fixed words (a word that is none
+  of the five is "other"; a count past 9999 is "9999+"), so nothing of it is ever cut away; the longest there
+  can be fits the rail at 900x600 (a test draws it).
+- V-4 (what is not OK comes first) on the screen, each group in order of name.
+- V-5 (a stranger's text costs what it shows). A line is cut to its 300 characters before it is looked at,
+  never after; the view is made again only when a read returned; and the reader's next read waits four times
+  what the last one took where that is more than a second. FOR: a folder of large states - the watched agent
+  can write there - must not slow the window or starve the watch. What is not printable is shown as "?"
+  (T-3 said removed: the code's word is the true one, and the documents say it).
+- V-6 (the text stays where the reader is). Nothing that ticks stands in a forwarder's head line; a text that
+  did change is written again at the reader's place, the selection kept.
+- V-7 (the link's failure is the link's). The reader is started last in the window's making; a reader that
+  cannot be asked is "not read", and never ends the rest of a tick.
+Accepted as built: a reader that raises drops the last rows (link.read never raises); the head of the guide's
+sentence of the rail still lists four items (a test of another task holds its words; the Link paragraph says
+the fifth); E6's test of the watch's independence rests on the code reading nothing of the link - true by
+reading, thin as a test. Recorded: the folder walked whole on each read; a beat without an upper bound.
+
+## Amendment W (the commander's word, 2026-11-17, and the Table's rulings on it) - the local sinks (M10.3c)
+The Table asked: the local sinks (the journal, the Windows event log) and the service write outside ~/.raqib,
+which the threat model says Raqib never does; may that line move? The Table proposed, and the commander
+said yes to it: outside ~/.raqib Raqib writes only by an explicit command; what needs rights (an install and
+its removal) is run by an administrator; the watch never does it on its own; and the sinks come first, as
+destinations of the forwarder, so that the watch itself still writes its file only.
+- W-0 (the line, as moved). `raqib watch` and the window write under ~/.raqib and nowhere else, as before.
+  `raqib forward --to journal:` and `--to eventlog:` hand the events to the system's own log because a person
+  ran them. Nothing is installed, registered or switched on by either; an install is a command of its own
+  (later), with its removal. MUST NOT TOUCH: the watch, the capture path, the events file.
+- W-1 (a sink is a destination). The same forwarder, cursor, state, status and Link screen: `journal:` on
+  Linux (this task), `eventlog:` on Windows (the next, after its limits are measured). A destination that is
+  not this system's is a usage error.
+- W-2 (the journal, by its own protocol; measured on a Linux runner before ruling). One entry a line, by
+  the native protocol to the journal's socket, from the user's own process with no rights: MESSAGE the line
+  as written (a shape wraps the line, it never rewrites it), PRIORITY from the event's severity as syslog's
+  is (J-6), SYSLOG_IDENTIFIER raqib, SYSLOG_FACILITY 13 unless --facility, and RAQIB_ID, RAQIB_KIND,
+  RAQIB_HOST, RAQIB_TIME from the event where they are text. Measured: such entries were read back by
+  `journalctl -t`, in order.
+- W-3 (no line is too long). An entry the socket takes as a datagram is sent as one (measured: 212000 bytes
+  taken, 250000 refused); a longer one is handed as a sealed memory file, the journal's own way (measured to
+  5 MB, kept whole). Nothing is cut, and nothing is refused for its length.
+- W-4 (`sent`: nothing is known). The journal answers nothing. It may drop entries over its own rate limit,
+  unseen by the sender (measured: a burst of 40000 was kept whole on a runner; other hosts are set
+  otherwise). The forwarder paces itself, at most 250 lines a second, and the documents say what tells of a
+  loss: the journal's own line of suppressed messages, and the search for a missing heartbeat.
+- W-5 (no journal is a collector that is down). Where the socket is not there the forwarder is failing
+  (`connect`), says so, and tries again, as with any collector (J-10); it falls back to nothing.
+- W-6 (what does not apply is refused). No token, no --ca, no --plain, no --shape, no --framing with
+  `journal:`; the state says the scheme and the delivery word, and nothing of a host or a port.
+- W-7 (who reads it, and who else can write it; said). What goes to the journal is read by whoever reads the
+  journal (root, the journal's and adm's groups, the user's own), and the journal may pass it on (measured:
+  ForwardToSyslog=yes on a runner): the events then leave the host by the system's hand, not Raqib's. Any
+  process of the user - the watched agent is one - can write entries that say raqib: the journal's own
+  trusted fields (_PID, _UID, _EXE) say who wrote an entry, and a reader of the journal must ask them.
+- W-8 (the rig). X26, on the Linux machine: every whole line of the events file is in the journal, in
+  order, read back by journalctl.
+Not here, recorded: `eventlog:`; an install for it (a registered source, an administrator's, with its
+removal); the service.
+
+## Amendment X (the Table, 2026-11-17) - rulings on review 2026-11-17-M10.3c-a.md (a3bb1bc): the journal, in the field
+The field first: on the rig's Linux machine the forwarder handed the watch's events file to a real journal and
+journalctl read every line back, as written and in order (X26 MET, 20 of 20); the six CI jobs were green. The
+packet: the protocol as built cannot be made to carry a forged field or a second entry; REDO, narrow. Small,
+and built by the Table.
+- X-1 (`--shape raqib` is the journal's shape). Only `--shape hec` is refused with `journal:`; the scheme is
+  read in any case of letters, as a URL's is. The documents say so (W-6 said `--shape`: this is the ruling).
+- X-2 (W-3, held to the forwarder's own bound of a line). Nothing is cut and no line up to 512 KiB is refused
+  for its length; a longer line is refused locally, counted and named, as over every transport (M-3), in
+  words that fit ("longer than one batch may be").
+- X-3 (the journal's own words). A journal state's first line says no framing (an entry may be a memory
+  file); its failing words are the journal's - no collector, no connection, no answer.
+- X-4 (an entry the journal would not take does not make its neighbours arrive for ever). A failed `write`
+  to the journal halves the next batch, down to one line, as a late send does: the lines before it are
+  handed again a few times while the batch is halved, pass, and are not sent again at every try.
+- X-5 (the rig shows the memory file's way, and reads long fields). journalctl is asked with --all (without
+  it a field over 4096 bytes is not shown, and a long line would read as missing) and for this boot; X26
+  also sends a made-up line of 300 KiB through the forwarder and is MET only where it came back whole.
+- X-6 (on Linux a journal that is not there is the rig's finding), MISSED, not a case that does not apply.
+- X-7 (W-7, said whole). Any local process of any user can write entries that say raqib; under the same
+  user and interpreter only `_PID` differs, and the forwarder's pid is in a file the agent can rewrite: an
+  entry that says raqib is a lead, not a proof. The journal's rate limit is a unit's or a session's: a
+  watched agent beside the forwarder may use it up. A forwarder run as a unit of its own is the answer to
+  both, and comes with the service.
+Accepted as built: the socket connected before sending (shown in the field; it lets a full journal wait and
+Stop end the wait); the run's entries told by the forwarder's pid; the memory file made without the kernel's
+no-exec seal (an older journal would not take it sealed so; where a kernel refuses such a file every long
+entry is failing `write`, said); the pace an average over batches. Recorded: forward.JOURNAL is the socket's
+path and link.JOURNAL the scheme's word; `raqib watch PROJECT` installs its hooks into the project (the
+sentence of the line stands in the host watch's section).
+
+## Amendment Y (the Table, 2026-11-17) - the Windows event log as a destination (M10.3c-b), measured first
+Measured on a Windows runner (an administrator's process; a plain user's was not measured) before ruling:
+ReportEventW by a source nobody registered is taken into the Application log and read back with its string
+whole (non-ASCII too); the viewer then says the source's description cannot be found and shows the string
+after that sentence. One string holds at most 32731 UTF-16 units; two strings together no more; raw data
+61440 bytes; a record about 64 KiB in all. The record's own Execution ProcessID is the sender's. A burst of
+3000 was kept. Each ruling names what it is FOR and what it MUST NOT TOUCH.
+- Y-1 (a destination, nothing installed). `raqib forward --to eventlog:` on Windows hands each line to the
+  Application log under the source `Raqib`, by ReportEventW, with nothing registered (W-0): no key is
+  written, no message file installed. FOR: a SOC whose agents already read the Windows logs. The cost is
+  the viewer's sentence before each string, said in the documents; a registered source is an install's
+  work, an administrator's, later.
+- Y-2 (one event a line, the line as written). The event's one string is the line. Its type is from the
+  severity (high: Error; medium and a hole: Warning; low, info and none: Information). Its id is from the
+  event's kind by a fixed table, so that a reader filters by id: 1001 finding, 1002 source-finding, 1003
+  note, 1004 tree, 1005 hole, 1006 knock, 1007 heartbeat, 1008 watch, and 1000 for a kind that is none of
+  them. MUST NOT TOUCH: the line.
+- Y-3 (a line longer than one string is handed in parts, never cut away). A line of more than 30000
+  characters goes as several events in order, each with two strings: a part's head (`raqib-part I/N id=ID
+  sha256=HEX chars=TOTAL`, the id the event's where it is text, the hash and the count the whole line's)
+  and that part of the line; a reader puts the parts' second strings together in order and has the line,
+  and the hash says it is whole. Parts carry the id 1009 and the type of their line. FOR: nothing lost and
+  nothing cut unseen, within what one record holds. A batch is taken only when every part of every line
+  was taken.
+- Y-4 (`written`). The system's call returned that the log took the event; it is not a search of the log.
+  The Application log is bounded and overwrites its oldest: Raqib's events push other programs' out, and are
+  pushed out. The forwarder paces itself, at most 100 events a second, and the documents say it; a log of
+  Raqib's own is the install's work.
+- Y-5 (no source, no rights). Where the source cannot be opened the forwarder is failing (`connect`); where
+  an event is refused, failing (`write`) and the batch halved as X-4 rules; it tries again and falls back to
+  nothing. Not on Windows, `--to eventlog:` is a usage error. No token, no --ca, no --plain, no --shape
+  hec, no --framing, no --facility with it.
+- Y-6 (who reads it, who else can write it; said). Whoever reads the Application log reads the events (by
+  default any signed-in user). Any process can write events under the source `Raqib`: the record's own
+  process id and user are the system's word, the source's name is nobody's - an event that says Raqib is a
+  lead, not a proof (X-7).
+- Y-7 (the rig). X27, on the Windows machine: every whole line of the events file is in the Application
+  log under this run's process, as written and in order, a made-up long line put together from its parts
+  among them; on Linux it is not run.
+
+## Amendment Z (the Table, 2026-11-17) - rulings on review 2026-11-17-M10.3c-b.md (1ab2aa2): the event log, in the field
+The field first: on the rig's Windows machine the forwarder handed the watch's events file to the real
+Application log and wevtutil read every line back, as written and in order, and a made-up line of 100000
+characters whole from its four parts (X27 MET, 62 of 62); the six CI jobs were green. The packet: the send
+is sound; REDO, narrow, in the documents - and four things for the Table. Small, and built by the Table.
+- Z-1 (Y-6 said more than was measured). The Table measured the record's process id, not its user: the
+  forwarder gives no user, and the documents now say only what was measured. An A5 of the Table's own.
+- Z-2 (the reader's rule, whole). How a reader puts a long line together is said in full: one process's
+  parts, in the log's order, a part 1 begins anew, whole at N/N with the hash of the line's ASCII bytes
+  and their count; a set that does not end or does not hash is dropped (the line comes again whole); a set
+  whole twice is the line twice. Two processes' parts are kept apart by the record's process id.
+- Z-3 (what tells of a loss in the event log). The reader's search for a host with no heartbeat for more
+  than two beats; the forwarder sees no event pushed out and no log cleared, and the watched agent can do
+  the first on purpose. Said in the threat model and the specification.
+- Z-4 (a refusal carries the system's own reason). `failing.status` holds the system's error number for the
+  call that failed, where it gave one: a full log, no right and a stopped service are told apart.
+- Z-5 (the words of `stuck`). For the journal and the event log they speak of the system's call that does
+  not return, not of a name or a connection.
+- Z-6 (the rig's long line is told by its own lines), so a process id used again cannot make X27 MISSED
+  falsely.
+Accepted as built: a severity the contract does not have is Warning (no valid event reaches it); a hole is
+a Warning as over syslog (J-6); the id in a part's head is printable ASCII with no space; the read-back's
+key is the forwarder's pid from its state on the rig's fresh home; ctypes imported at the module's top.
+Recorded: a plain user's process was not measured (Z-4's number will say what it is refused for); a send
+given up while the system's call is still out may land one event late; the guard against the real system
+is each test file's own.
+

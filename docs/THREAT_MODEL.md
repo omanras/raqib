@@ -1224,12 +1224,18 @@ is amended by T-2, T-1 restated by V-1).
   an `ss` that has not returned in 30 s). On Windows a live watch run by
   an administrator starts one tracing session of its own and stops it at
   its end, and stops the sessions killed watches of Raqib left; no other
-  session is touched. The only writes are under `~/.raqib`, and the hook settings of a
-  project only with `--attach-hooks`.
+  session is touched. `raqib watch` and the window write under ~/.raqib and nowhere else,
+  and the hook settings of a project only with `--attach-hooks`. Outside ~/.raqib Raqib
+  writes only by an explicit command: `raqib forward --to journal:` hands the events to the
+  system's journal because a person ran it, and `raqib forward --to eventlog:` hands them to
+  the Windows event log (the Application log) because a person ran it. Nothing is installed,
+  registered or switched on by either, the watch never does it on its own, and the watch, the
+  capture path and the events file are not touched by them (ADR-0011 W-0, Y-1).
 
 ### The forwarder (`raqib forward`; ADR-0011 Amendments J to N)
 A forwarder is a process of its own that reads the watch's events file and
-sends every whole line to one collector, over HTTP or over syslog
+sends every whole line to one collector, over HTTP or over syslog, or
+hands it to the system's own journal or to the Windows event log
 (docs/specs/FORWARD.md). The
 watch does not know it runs: nothing of the capture path imports it, and a
 collector that is slow, down or refusing never delays or loses a capture
@@ -1278,6 +1284,53 @@ collector that is slow, down or refusing never delays or loses a capture
   then no send starts and the forwarder is failing `stuck` - an alarm, not
   a growth without end. An abandoned send's sockets are shut down and left
   to its own thread, never closed under it.
+- **The journal.** `--to journal:` (Linux) hands each line, as an entry
+  of the journal's own protocol, to the system's journal socket, from the
+  user's own process with no rights (ADR-0011 W). What goes there is read
+  by whoever reads the journal: root, the journal's and adm's groups, and
+  the user's own; and the journal may pass it on (to a syslog daemon, to
+  another host): the events then leave the host by the system's hand, not
+  Raqib's. Any local process of any user - the watched agent is one - can
+  write entries that say raqib (the journal's socket is open to all):
+  SYSLOG_IDENTIFIER and the RAQIB_ fields prove nothing. The journal's own
+  trusted fields say who wrote an entry, and a reader of the journal must
+  ask them; but an agent that runs as the same user under the same Python
+  differs from the forwarder only in `_PID`, and the forwarder's pid is
+  kept in a state file that agent can rewrite. So an entry in the journal
+  that says raqib is a lead, not a proof: the watch's own events file and
+  its record are the proof, and a forwarder run as a unit of its own (with
+  the service, later) is what will give its entries a unit nobody else
+  has. The journal
+  answers nothing (`sent`): it may drop entries over its own rate limit,
+  unseen by the forwarder, whose status stays OK; that limit is counted
+  for a unit or a session, so a watched agent in the forwarder's own
+  session may use it up and have raqib's entries dropped. The forwarder paces
+  itself (at most 250 lines a second); what tells of a loss is the
+  journal's own line of suppressed messages and the search for a missing
+  heartbeat. No journal (no socket) is a collector that is down: failing
+  `connect`, tried again, nothing passes.
+- **The Windows event log.** `--to eventlog:` (Windows) hands each line,
+  as an event of the Application log under the source `Raqib`, by the
+  system's own call (ReportEventW), with nothing registered: no key is
+  written and no message file installed (ADR-0011 Y). Whoever reads the
+  Application log reads the events (by default any signed-in user). Any
+  process can write events under the source `Raqib`: the source's name is
+  nobody's, only the record's own process id is the system's word, and
+  the forwarder's events carry no user, so an event that says Raqib is a
+  lead, not a proof (as an entry of
+  the journal that says raqib is); the watch's own events file and its
+  record are the proof. The Application log is bounded and overwrites its
+  oldest: Raqib's events push other programs' out, and are pushed out -
+  the watched agent can do it on purpose, any process writes to that log,
+  and an administrator's process can clear it. The forwarder sees neither:
+  what tells is the reader's search for a host with no heartbeat for more
+  than two beats. The forwarder paces itself, at most 100 events a second
+  over its batches (the parts of a long line counted); a log of Raqib's own is an install's work, later. Taken is
+  `written`: the system's call said the log took every event of a batch, not
+  that the event is still there. A source that cannot be opened is a
+  collector that is down: failing `connect`, tried again, nothing passes; an
+  event refused is failing `write`, nothing passes, and the next batch is
+  halved.
 - **Syslog.** Over `syslog+udp://` and `syslog+tcp://` every event is
   clear text over udp and tcp: any host on the path reads it whole, and can
   change it or drop it, and over udp can send datagrams with the host's
@@ -1387,6 +1440,23 @@ collector that is slow, down or refusing never delays or loses a capture
   `time`, the host's clock that the same account may set (EVENT.md says
   the same of any reader) - and a forwarder under another account (the
   service, later).
+- **The window reads the states.** The window's Link screen reads the states
+  in `~/.raqib/forward/` by the reader and the judgement `raqib forward
+  --status` uses, at most once a second and off the window's thread; it
+  starts, stops and configures no forwarder, holds and shows no token and
+  opens no connection, and no result, exit code or finding of a watch
+  depends on it. A state's text is a stranger's: it is shown as text, at
+  most 300 characters of a line looked at and what is not printable shown
+  as "?", and nothing of it is drawn as markup, opened or run. A writer of
+  the state folder - the watched agent can be one, it runs as the same
+  user - can therefore make the Link screen say a bounded untrue thing
+  about a forwarder, and can make the reader work: at most 64 states of
+  1 MiB are parsed, off the window's thread, and the next read waits four
+  times what the last one took. It cannot hide a forwarder that fails:
+  every word that is not OK is counted on the rail, none behind a worse
+  one, and a forwarder known to fail keeps the link an alarm whatever
+  stands beside it. What it can do is add false ones, or remove a state
+  (ADR-0011 Amendments R, T and V).
 
 ## 6. Attacks on the watcher itself
 
