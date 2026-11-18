@@ -158,3 +158,10 @@ CAP_NET_ADMIN beside them, and with one of the two alone it sees no tree and say
   that the watch writes: S3.
 - AC-12 (open, recorded in the plan). The unit as a user of its own holding the two capabilities, not root:
   to be measured before it is ruled.
+- AC-13 (the builder's stop on M12.1p, before its commit; docs/review/2026-11-18-M12.1p-questions.md). The
+  builder is right that `--no-page --refresh 5` cannot be told from no `--refresh` while the parser's default
+  is the number. The scope of raqib/cli.py gains that one line: `watch`'s `--refresh` defaults to None, which
+  both of its readers already take as the default's 5; `raqib app`'s own option is not touched. Its other
+  choices stand: the guide's sentence at the end of the `--attach-hooks` paragraph; `--no-open` beside
+  `--no-page` is accepted and changes nothing; with no page the loop says no line of how the watch ends
+  beyond what the start and the stops' line already say.
