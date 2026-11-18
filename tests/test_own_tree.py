@@ -96,6 +96,8 @@ NOT_RECORDED = {
         " sample; subprocess.run gives no pid. The watch's channel reads through read_live_bounded, recorded",
     ("raqib/doctor.py", "run_version"):
         "`raqib doctor`, a command of its own: it takes no process sample, so no tree of its own is left out",
+    ("raqib/service.py", "run_systemctl"):
+        "`raqib service`, a command of its own: it takes no process sample, so no tree of its own is left out",
 }
 STARTS_NOTHING = {"raqib/cli.py": "the command line: its commands start programs only through the modules above"}
 

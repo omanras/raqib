@@ -264,6 +264,20 @@ no command, raqib prints its usage and exits 2.
       is not (or the file holds none), 2 when the file cannot be read. It
       reads; it sends nothing.
 
+  service install [--no-start] | remove [--purge] | status
+      M12.1 (ADR-0013): the host watch as a unit of the system's, on Linux
+      (systemd): raqib-watch.service runs `raqib watch --host` as root, its
+      record under /var/lib/raqib (docs/specs/SERVICE.md). install and
+      remove only as root (no elevation is asked). install refuses (exit 2,
+      nothing written) unless the interpreter, pyvenv.cfg, sys.path's
+      folders and *.pth files and the raqib package, and every folder above
+      them, are root's alone; then it writes the unit and enables and starts
+      it (--no-start: neither). remove stops, disables and removes Raqib's
+      unit and leaves the record (--purge removes /var/lib/raqib too). A unit
+      of the name without Raqib's mark is not touched. status needs no
+      rights: exit 0 active, 1 installed and not active, 3 not installed or
+      systemctl cannot be run, 2 not Linux.
+
 Exit codes (rules, report, ui): 0 clean, 1 alarm (any finding, empty or
 corrupt trace, findings made for another trace), 3 incomplete (a rule did
 not run), 2 usage or unreadable input.
@@ -672,6 +686,16 @@ def _parser():
                     help="say a forwarder's state (every one without NAME): exit 0 only where nothing is failing"
                          " and no whole line has waited longer than a beat, 1 failing (refusing too) or behind, 3"
                          " no state, unreadable, or written more than two beats ago or in the future (silent)")
+    sv = sub.add_parser("service", help="the host watch as a unit of the system's, Linux (systemd): install, remove"
+                                        " or say its status (M12.1, ADR-0013)")
+    sv.add_argument("action", choices=("install", "remove", "status"),
+                    help="install (root): write raqib-watch.service, enable and start it; remove (root): stop,"
+                         " disable and remove it, the record kept; status: installed, enabled, active (exit 0"
+                         " active, 1 installed and not active, 3 not installed)")
+    sv.add_argument("--no-start", action="store_true", help="install only: write the unit; neither enabled nor"
+                                                            " started")
+    sv.add_argument("--purge", action="store_true", help="remove only: remove the service's record too,"
+                                                         " /var/lib/raqib and nothing else")
     dr = sub.add_parser("doctor", help="say in one screen what watch needs and is missing (M6.3; read-only)")
     dr.add_argument("project", nargs="?", default=None, help="the project the agent works in (default: .)")
     return p
@@ -1477,6 +1501,15 @@ def cmd_forward(args, out):
         raise UsageError(str(exc))
 
 
+def cmd_service(args, out):
+    """M12.1 (ADR-0013): raqib/service.py, imported here only; the watch does not know it."""
+    from raqib import service
+    try:
+        return service.cli_run(args, out)
+    except service.Refused as exc:
+        raise UsageError(str(exc))
+
+
 def cmd_doctor(args, out):
     return doctor.run(args.project, out)
 
@@ -1513,7 +1546,8 @@ def main(argv=None, out=None):
         command = {"rules": cmd_rules, "report": cmd_report, "check-rules": cmd_check_rules,
                    "suspect": cmd_suspect, "ui": cmd_ui, "eval": cmd_eval,
                    "discover": cmd_discover, "watch": cmd_watch, "app": cmd_app, "doctor": cmd_doctor,
-                   "events": cmd_events, "forward": cmd_forward, "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon}[args.command]
+                   "events": cmd_events, "forward": cmd_forward, "proxy": cmd_proxy, "os-sysmon": cmd_os_sysmon,
+                   "service": cmd_service}[args.command]
         return command(args, out)
     except UsageError as exc:
         sys.stderr.write("raqib: %s\n" % exc)

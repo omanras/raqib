@@ -209,6 +209,23 @@ LINK_SCREEN = [
     " result, exit code, finding or knock of a watch depends on it (ADR-0011 Amendments R, T, U and V).",
 ]
 GUIDE_NEW += LINK_SCREEN
+# ADR-0013 (M12.1): the service's commands, rows of the guide's table only (as the forwarder's, G-11)
+SERVICE_ROWS = [
+    "| `raqib service install [--no-start]` | Linux, as root (it asks for no elevation): write `/etc/"
+    "systemd/system/raqib-watch.service` and enable and start it, the host watch as a unit of the sys"
+    "tem's with its record under `/var/lib/raqib` (`docs/specs/SERVICE.md`); refused, exit 2 and noth"
+    "ing written, unless the interpreter, its `pyvenv.cfg`, every folder of sys.path and its `*.pth` "
+    "files, the raqib package and every folder above them are root's and writable by nobody else (the"
+    " first that is not is said), or where a unit of the name does not carry Raqib's mark; `--no-star"
+    "t`: neither enabled nor started; exit 1 where systemctl failed |",
+    "| `raqib service remove [--purge]` | Linux, as root: stop, disable and remove Raqib's unit (one "
+    "without Raqib's mark is not touched: exit 2); the record under `/var/lib/raqib` stays and its pa"
+    "th is said, unless `--purge` removes that folder too, and only it; no unit installed is exit 0 |",
+    "| `raqib service status` | no rights needed: installed, enabled and active by systemctl's own wo"
+    "rds, and the last result where not active; exit 0 active, 1 installed and not active, 3 not inst"
+    "alled or systemctl cannot be run, 2 not Linux |",
+]
+GUIDE_NEW += SERVICE_ROWS
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")
