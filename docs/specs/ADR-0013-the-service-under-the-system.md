@@ -102,3 +102,59 @@ table to 120. The Table ruled AA-1 without measuring the row. The fault is the T
   named by where they are.
 - AB-4 (a lesson, recorded). Before a HANDOFF names a file's line to change, the Table measures that line
   against its guards, not only which guards exist.
+
+## Amendment C (the Table, 2026-11-18) - the review of M12.1 REDO 2 (docs/review/2026-11-18-M12.1.md)
+The reviewer said STOP, and its two blockers are the Table's: A-3's letter fell short of its purpose, and this
+ADR said no person without rights reads the service's record while the watch serves its page to every user.
+Measured before these rulings (GitHub's Linux machine; the rig and the probe branch): X28, X29 and X30 MET;
+every directive of the unit loaded as written and none was warned of; a user without rights read the root
+service's page (http 200, the finding on it); an agent whose program and folder are in /tmp was found under
+PrivateTmp; a stop after a finding leaves the unit `failed` (the watch's own exit 1, ALARM); ss gives the same
+lines with AF_NETLINK alone; the watch reads the same with CAP_SYS_PTRACE and CAP_DAC_READ_SEARCH as with
+CAP_NET_ADMIN beside them, and with one of the two alone it sees no tree and says so (INCOMPLETE).
+- AC-1 (F2: the service serves no page). A task of its own, first: `raqib watch --host --no-page` opens no
+  listener and says so. The unit's ExecStart carries it; RestrictAddressFamilies=AF_UNIX AF_NETLINK;
+  IPAddressDeny=any and no IPAddressAllow. FOR: no person and no agent without rights reads what root's watch
+  sees, root parses no user's request, and there is no port to take first. What a person reads of the
+  service is stage S3's to design. MUST NOT TOUCH: a person's own watch keeps its page as it is.
+- AC-2 (F1, F3, F6: everything the interpreter may load, whole). Every entry of sys.path is walked whole, as
+  the package is: every file and folder below it; a link by AB-3's rule, and where it points to a folder that
+  folder whole too, each real folder once; past WALK_MAX entries the install refuses and says so. An entry
+  that does not exist: the folders above it that do are checked. AB-3's "nothing is read" is amended for one
+  thing: a `.pth` file, once found root's alone, is read as text, and each line of it that is a path is
+  taken as an entry, existing or not. Nothing is run. FOR: the letter of A-3 now reaches its purpose.
+- AC-3 (F4: the install sees what the unit will). Refused where the install's interpreter runs without its
+  site (`-S`), and where the raqib package it runs from is not in one of that interpreter's own site folders
+  (a checkout run by -m, an editable install). The unit's `-I` only takes entries away, so what the install
+  walked holds all the unit will load from.
+- AC-4 (F5: what else root runs or trusts). The list also holds the systemctl found, each path of the watch's
+  ss that exists (a constant here, held equal to the watch's by a test), and the unit's folder.
+- AC-5 (F7: capabilities as measured). CAP_NET_ADMIN leaves the unit: CapabilityBoundingSet=CAP_SYS_PTRACE
+  CAP_DAC_READ_SEARCH. The threat model says what these two still open to a defect in the watch (every
+  file read; other processes reached), as the kernel's rules read, not as measured.
+- AC-6 (F12, the builder's Q1: the word after the start). After `enable --now` the install waits START_WAIT
+  (3 s) and asks systemctl: active is said as active, with the wait; anything else is exit 1 with the state
+  and the result. An install over Raqib's own running unit restarts it (`systemctl restart`); with
+  `--no-start` it says the running watch keeps the text it started with.
+- AC-7 (the restart, the stop). Restart=always: a watch ended by anything but systemctl's stop comes back,
+  whatever its exit. No SuccessExitStatus: a crash is exit 1 too. The status shows systemctl's NRestarts and
+  says of exit status 1 what it is: the watch's own ALARM at its end, or an error; the journal says which.
+- AC-8 (F13: evidence, not a sentence). The install says how many paths it checked, of which kinds.
+- AC-9 (F11, F14, F19: no state said that was not read). `remove` with no file asks systemctl; a unit of the
+  name still loaded is said and is exit 1. `status`: a file that cannot be read is NOT KNOWN (3), never NOT
+  INSTALLED; a FragmentPath that is not the unit's path, or any drop-in, is said and is not exit 0. The
+  unit's head is read without waiting and only from a regular file. A systemctl that ran and timed out, or
+  ran and failed, is not said as "not run".
+- AC-10 (F15 to F18, Q2: the rig proves what it says). X28's place is a folder every user can write, not
+  sticky, under a folder root's alone; the check requires the refusal to name that place or a path below it.
+  X30 requires the unit not active and the record's folder gone. n/a only where the platform is not Linux.
+  X29's facts carry systemd's own word on the unit (its directives as loaded, the manager's lines that name
+  the unit and say unknown, ignored or invalid): any such line is MISSED. A-6's "said by the status" is
+  withdrawn for S1: the rig says it. The rig's tool runs only with `--throwaway`, and says why.
+- AC-11 (F7 to F10, F20: the documents say what is so). Who can stop it: root, which a user with sudo or a
+  polkit rule is; a watch made to exit comes back after 5 s, a gap each time. Not checked: shared libraries.
+  The check guards the unit's starts, not the install itself: an install run from code a user can write has
+  already run it. An agent in a network namespace of its own: not measured. ACTIVE says the unit runs, not
+  that the watch writes: S3.
+- AC-12 (open, recorded in the plan). The unit as a user of its own holding the two capabilities, not root:
+  to be measured before it is ruled.
