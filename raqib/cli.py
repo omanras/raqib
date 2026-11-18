@@ -137,7 +137,7 @@ no command, raqib prints its usage and exits 2.
       ~/.raqib/host/rounds.jsonl (one line per round). Another matter is
       a terminal that stops reading (Ctrl-S, a full pipe): the stop waits
       until it drains, and then says its words.
-  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--beat S] [--event-host NAME] [--no-open] [--no-notify] [--port N]
+  watch --host [--every T] [--window S] [--rounds N] [--attach-hooks] [--suspect BACKEND [--suspect-every N]] [--beat S] [--event-host NAME] [--no-open] [--no-notify] [--port N] [--no-page]
       Watch this host, not a project (M7.2, ADR-0007): a round of live
       discover every T seconds (default 10; Linux /proc, --window S seconds
       of it; Windows one sample of the OS API and, where Sysmon is, the
@@ -574,8 +574,13 @@ def _parser():
     w.add_argument("--no-notify", action="store_true", help="no OS notifications (also off when CI is set)")
     w.add_argument("--port", type=int, default=None, metavar="N",
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
-    w.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
+    # ADR-0013 AC-13: None when not given (the starts read it as the default's), so --no-page can refuse it
+    w.add_argument("--refresh", type=_refresh, default=None, metavar="N",
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
+    # M12.1p (ADR-0013 Amendment C, AC-1): the host watch without its page
+    w.add_argument("--no-page", action="store_true",
+                   help="--host: serve no page: no port is opened and nothing listens on one; the report and the"
+                        " events file are as without it (not with --port or --refresh)")
     # M7.2 (ADR-0007 decision 2): the host, not a name.
     w.add_argument("--host", action="store_true",
                    help="watch this host, not a project: discover in rounds; NEW-AGENT and AGENT-DARK-LIVE knock;"
@@ -1362,6 +1367,8 @@ def _watch(args, out, stops):
             or args.beat is not None or args.event_host is not None):
         raise UsageError("--every, --window, --rounds, --attach-hooks and --suspect apply to watch --host only"
                          " (and --beat, --event-host)")
+    if args.no_page:   # M12.1p (ADR-0013 AC-1)
+        raise UsageError("--no-page is --host's: a project watch serves its page (watch --host --no-page)")
     rules, gap, evaluator = _watch_setup()
     try:
         return watch.command(args.project, args.log, args.no_open, args.no_notify, args.port, out,
@@ -1376,6 +1383,10 @@ def _watch_host(args, out, stops=None):
         raise UsageError("--host watches this host, not a project: give no PROJECT (watch --host, or watch PROJECT)")
     if args.log is not None:
         raise UsageError("--host keeps its record under ~/.raqib/host/: --log applies to a project watch")
+    if args.no_page and args.port is not None:   # M12.1p (ADR-0013 AC-1): no page, so no port to choose
+        raise UsageError("--no-page serves no page and opens no port: --port does not apply with it")
+    if args.no_page and args.refresh is not None:   # M12.1p, AC-13: no page, so nothing reloads (any N)
+        raise UsageError("--no-page serves no page, so nothing reloads: --refresh does not apply with it")
     every = host.EVERY_DEFAULT if args.every is None else args.every
     if not (0.1 <= every <= 86400):
         raise UsageError("--every must be a number of seconds from 0.1 to 86400")
@@ -1422,7 +1433,7 @@ def _watch_host(args, out, stops=None):
                             no_notify=args.no_notify, port=args.port, out=out, refresh=args.refresh,
                             attach_hooks=args.attach_hooks, suspect=backend,
                             suspect_threshold=args.suspect_threshold, suspect_every=args.suspect_every,
-                            stops=stops, beat=beat, event_host=args.event_host)
+                            stops=stops, beat=beat, event_host=args.event_host, no_page=args.no_page)
     except watch.WatchError as exc:
         raise UsageError(str(exc))
 

@@ -226,6 +226,10 @@ SERVICE_ROWS = [
     "alled or systemctl cannot be run, 2 not Linux |",
 ]
 GUIDE_NEW += SERVICE_ROWS
+# ADR-0013 Amendment C (M12.1p, AC-1): the host watch without its page, where watch --host's options are told
+NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing listens on one, no page is opened in a"
+           " browser, and its report and its events file are unchanged (ADR-0013 Amendment C, AC-1)."]
+GUIDE_NEW += NO_PAGE
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")

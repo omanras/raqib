@@ -129,7 +129,9 @@ the home ([docs/THREAT_MODEL.md](THREAT_MODEL.md)).
 
 `--attach-hooks` (the window: "attach hooks to Claude Code projects", off by default) also installs
 `raqib watch`'s hooks into the project a Claude Code tree works in: that settings file is the only
-thing ever written into a project, and only with that word.
+thing ever written into a project, and only with that word. `--no-page` serves no page: the watch
+opens no port and nothing listens on one, no page is opened in a browser, and its report and its
+events file are unchanged (ADR-0013 Amendment C, AC-1).
 
 A tree with no source at all for two rounds is HOST-UNWATCHED (high).
 
