@@ -64,3 +64,17 @@ service with the system's rights, built in stages, the smallest first.
   review reads for that first.
 - The service's record is not readable by the person at the host until S3.
 - Two watches may run on one host, the service's and a person's own; they do not know each other.
+
+## Amendment A (the Table, 2026-11-18) - the builder's STOP on M12.1 (95cd5de), and its questions
+The builder stopped before writing code, rightly: a new command needs the README's row of commands, which a
+guard holds to the parser, and that file was not in its scope. The scope was the Table's to make whole.
+- AA-1 (the README's row). README.md joins the scope for that row alone: `service` is named among "the rest".
+- AA-2 (systemctl is not the watch's helper). The guard that every program Raqib starts is recorded exists
+  so that the watch knows its own helpers from the trees it judges (ADR-0007 BH). `raqib service` is a
+  command of its own that takes no process sample: its one function that runs systemctl is listed among the
+  starts that are not recorded, with that reason, as `raqib doctor`'s is. The module stays the standard
+  library's alone.
+- AA-3 (the rig's workflow is the Table's). The builder writes the rig's tool and the check; the Table wires
+  them into the workflow when the task lands, and the field's word comes then.
+- AA-4 (the check's words). MISSED where a criterion is not met, n/a where it is not run, as X26 and X27.
+
