@@ -78,6 +78,16 @@ jobs:
           echo "=== rhythm"; python "$GITHUB_WORKSPACE/tools/rig/rhythm_read.py" node qwen opencode bun curl || true
           echo "=== report"; sed -n '/^Raqib watch --host/,$p' ../watch-opencode.out
 
+  service:
+    name: the watch as a unit of the system's (M12, the service)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: a unit, plain and hardened, and another user's process
+        run: bash tools/rig/service_probe.sh
   journal:
     name: what the journal takes (M10.3c, ADR-0011 W)
     runs-on: ubuntu-latest
