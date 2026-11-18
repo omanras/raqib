@@ -81,13 +81,13 @@ jobs:
   service:
     name: the watch as a unit of the system's (M12, the service)
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: a unit, plain and hardened, and another user's process
-        run: bash tools/rig/service_probe.sh
+      - name: the service as M12.1 builds it, and what its review asked to be measured
+        run: bash tools/rig/service_probe2.sh
   journal:
     name: what the journal takes (M10.3c, ADR-0011 W)
     runs-on: ubuntu-latest
