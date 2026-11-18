@@ -431,8 +431,9 @@ def test_e1_where_it_runs_is_written_fresh_and_each_fact_is_pinned_by_the_code_o
 
 def test_e3_the_commands_table_is_cut_from_the_guides_and_in_the_ruled_order():
     """ADR-0010 E-3: `raqib app` first, then watch, watch --host, doctor, report, rules, discover, --version, and
-    one row for the rest that points at the guide. Each command row is a guide row (its command the row's or a
-    prefix of it, its words a part of the row's): the guide's table gained E-3's new rows (NEW_ROWS)."""
+    the rest in rows that point at the guide (ADR-0013 AB-1: more than one where one would pass 120). Each
+    command row is a guide row (its command the row's or a prefix of it, its words a part of the row's): the
+    guide's table gained E-3's new rows (NEW_ROWS)."""
     full = {}
     for row in table_rows(section("Commands", GUIDE)):
         command, does = cells(row)
@@ -441,7 +442,7 @@ def test_e3_the_commands_table_is_cut_from_the_guides_and_in_the_ruled_order():
     assert len(rows) >= 8 and all(len(row) <= 120 for row in rows)
     short = [row for row in rows if row.startswith("| `raqib ")]
     rest = [row for row in rows if not row.startswith("| `raqib ")]
-    assert rows == short + rest and len(rest) == 1
+    assert rows == short + rest and rest
     for row in short:
         command, does = cells(row)
         command = command.strip("`")
@@ -452,10 +453,16 @@ def test_e3_the_commands_table_is_cut_from_the_guides_and_in_the_ruled_order():
     assert keys == ["app", "watch", "watch --host", "doctor", "report", "rules", "discover", "--version"], keys
     for row in NEW_ROWS:
         assert row in rows and row in table_rows(section("Commands", GUIDE)), row
-    named = set(keys) | set(re.findall(r"`([a-z-]+)`", cells(rest[0])[0]))
+    named = set(keys) | set(re.findall(r"`([a-z-]+)`", " ".join(cells(row)[0] for row in rest)))
     for name in ("watch", "doctor", "report", "ui", "suspect", "proxy", "os-sysmon"):   # the first build's names
         assert name in named, name
-    assert cells(rest[0])[0].startswith("the rest: ") and links(rest[0]) == ["docs/GUIDE.md#commands"]
+    # ADR-0013 AB-1: the rest is cut into rows, none past 120; the first says "the rest: ", a later one "and: ",
+    # each points at the guide and names at least one command, none twice.
+    for i, row in enumerate(rest):
+        assert cells(row)[0].startswith("and: " if i else "the rest: ") and links(row) == ["docs/GUIDE.md#commands"]
+        assert re.findall(r"`([a-z-]+)`", cells(row)[0]), row
+    told = re.findall(r"`([a-z-]+)`", " ".join(cells(row)[0] for row in rest))
+    assert len(told) == len(set(told)) and not set(told) & set(keys), told
 
 
 def test_e3_every_command_in_the_table_is_the_parsers_and_parses_as_shown():
@@ -465,7 +472,7 @@ def test_e3_every_command_in_the_table_is_the_parsers_and_parses_as_shown():
     p, commands, helps = parser_parts()
     rows = table_rows(section("Commands"))
     short = [row for row in rows if row.startswith("| `raqib ")]
-    rest = cells([row for row in rows if not row.startswith("| `raqib ")][0])[0]
+    rest = " ".join(cells(row)[0] for row in rows if not row.startswith("| `raqib "))
     named = [cells(row)[0].strip("`").split()[1] for row in short]
     assert set(n for n in named if not n.startswith("-")) | set(re.findall(r"`([a-z-]+)`", rest)) == set(commands)
     for row in short:

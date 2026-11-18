@@ -78,3 +78,27 @@ guard holds to the parser, and that file was not in its scope. The scope was the
   them into the workflow when the task lands, and the field's word comes then.
 - AA-4 (the check's words). MISSED where a criterion is not met, n/a where it is not run, as X26 and X27.
 
+
+## Amendment B (the Table, 2026-11-18) - the builder's second STOP on M12.1 (d663662)
+The builder stopped again before code, rightly again: AA-1 could not be done as ruled. The README's row of the
+rest was 120 characters already, and two guards hold every line of the README and every row of its Commands
+table to 120. The Table ruled AA-1 without measuring the row. The fault is the Table's, twice on one task.
+- AB-1 (the rest is cut into rows; the width is kept). The 120 is for a person's screen and is not raised, for
+  one row or for any. The rest of the commands is told in as many rows as it needs: the first begins
+  "the rest: ", a later one "and: "; each points at the guide, names at least one command, and none is named
+  twice. FOR: a new command never again meets a full row. MUST NOT TOUCH: the eight ruled rows and their
+  order, the 120, the rule that the table names the parser's commands and nothing else.
+- AB-2 (the Table wrote it). README.md's row `and: service` and the guard's change in
+  tests/test_readme_top.py are the Table's, made in this commit. README.md leaves the builder's scope; in
+  tests/test_readme_top.py its scope stays the registry of the guide's lines. Until the parser has `service`
+  one test of that file fails on this branch, by design: the builder's command makes it pass.
+- AB-3 (what the check of ownership reads, beyond the letter of A-3). The builder asked for two things and has
+  them. `owned_by_root(paths, stat=os.stat, readlink=os.readlink)`: a link is checked as itself (its owner;
+  a link's mode bits say nothing) and then as what it points to, whole, with a bound on the depth; a loop or a
+  link past the bound is a refusal, never a pass. And the install's list of paths also holds what the
+  interpreter reads as code or as where code is before Raqib's first line runs: `pyvenv.cfg` beside the
+  interpreter or one folder above it, and every `*.pth` file in each folder of sys.path. FOR: `-I` does not
+  stop a `.pth` file's lines from running. MUST NOT TOUCH: nothing is read or run to find these; they are
+  named by where they are.
+- AB-4 (a lesson, recorded). Before a HANDOFF names a file's line to change, the Table measures that line
+  against its guards, not only which guards exist.
