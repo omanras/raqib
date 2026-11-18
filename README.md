@@ -85,6 +85,7 @@ watch --host` and `raqib discover` have no live reader there and no CI job runs 
 | `raqib discover` | find AI agents on a host by what they do |
 | `raqib --version` | print raqib <version> and exit 0 |
 | the rest: `ui` `suspect` `proxy` `os-sysmon` `check-rules` `eval` `events` `forward` | [all](docs/GUIDE.md#commands) |
+| and: `service` | [all](docs/GUIDE.md#commands) |
 
 TRACE is a trace file, a `raqib.log.jsonl` of JSON lines; `raqib watch` keeps it under `~/.raqib/traces/` by default.
 
