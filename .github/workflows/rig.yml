@@ -9,6 +9,8 @@
 # The service (ADR-0013 A-9, AA-3): on Linux, as root, tools/rig/service_run.py tries an install from a place
 # every user can write (X28), installs from a place root's alone and runs the stand-in as a second user (X29),
 # and removes (X30); on Windows it runs nothing and says so. The unit and its record are removed by the run.
+# --throwaway: the tool makes a user, installs a unit of the system's and runs root's code from a place every user
+# can write; it is for a machine that is thrown away after the run, and runs nothing without the word.
 name: rig
 
 on:
@@ -112,7 +114,7 @@ jobs:
       - name: the service as root, a unit of the system's (X28 to X30)
         if: always()
         run: |
-          sudo /usr/bin/python3 tools/rig/service_run.py --out "$RUNNER_TEMP/service.json" || true
+          sudo /usr/bin/python3 tools/rig/service_run.py --throwaway --out "$RUNNER_TEMP/service.json" || true
           sudo chmod 0644 "$RUNNER_TEMP/service.json" || true
           echo "=== what the service run saw"; cat "$RUNNER_TEMP/service.json" || true
       - name: read the report against what the stand-in did
