@@ -1,6 +1,6 @@
 # PROC-EVENTS - the reader of Linux's process events
 
-`raqib/procevents.py` (ADR-0007 Amendments BQ, BR, BS, BT and BU). On Linux
+`raqib/procevents.py` (ADR-0007 Amendments BQ, BR, BS, BT, BU and BW). On Linux
 the kernel says, of every process, when it forks, when it changes its
 program (exec) and when it exits. The reader listens to that, and to nothing
 else: it switches nothing on, asks for no right and reads no argument of any
@@ -216,55 +216,79 @@ whose other thread never yields, 158 to 202 programs of 200 not read; with
 the reader in a process of its own, 0 to 2. Every fork, exec and exit was
 heard in every case: what is missed is the program's name, read too late.
 So under the watch the reader runs in a process of its own, never as a
-thread of the watch (Amendment BU).
+thread of the watch (Amendment BU; its review, Amendment BW).
 
 The serve mode. `python -m raqib.procevents --serve` starts a Reader, then
-says `{"ready": null}` on its first line, before any ask; where the reader's
-start is refused it says `{"ready": "<the refusal>"}` instead and exits 0.
-Then it answers each line of its standard input with one line of JSON:
+says `{"ready": null, "v": 1}` on its first line, before any ask; where the
+reader's start is refused it says the refusal in `ready` instead and exits
+0. Every line it writes carries `"v": 1`, the protocol's version. Then it
+answers each line of its standard input with one line of JSON:
 
-- `read` or `read N` -> `{"processes", "ends", "older", "more", "counts",
-  "ask"}`: what the Reader's `read()` gave and its `counts()`, holding at
-  most 2000 entries in all (SERVE_MAX), processes first, then ends, then
-  older; what does not fit comes with the next `read`, and `more` is true.
-  A new `read()` of the Reader is taken only when what the helper holds from
-  the reads before was given whole, so what it holds is bounded by the
-  Reader's own bounds. `ask` is N, or null for a bare `read`;
+- `read` or `read N` -> `{"v", "ask", "processes", "ends", "older",
+  "more", "counts"}`: what the Reader's `read()` gave and its `counts()`,
+  processes first, then ends, then older, packed until the line would pass
+  1 MiB (LINE_MAX, its newline included) and at most 2000 entries in all
+  (SERVE_MAX); what does not fit comes with the next `read`, and `more` is
+  true. An entry that alone would pass the bound is given with its programs
+  unread (TOO_LONG_EXE). A new `read()` of the Reader is taken only when
+  what the helper holds from the reads before was given whole, so what it
+  holds is bounded by the Reader's own bounds. `ask` is N, or null for a
+  bare `read`;
 - `stop`, or the end of its input -> it stops the Reader and exits 0;
-- any other line -> `{"error": ...}` (the line is not repeated) and the
-  helper lives on.
+- any other line, and `read` followed by anything `int()` refuses ->
+  `{"error": ..., "v": 1}` (the line is not repeated) and the helper lives
+  on.
 
-It reads nothing but its input, writes nothing but its output and starts no
+What it reads and opens: its standard input; its Reader reads the kernel's
+socket and, at each exec, that process's /proc/PID/exe and /proc/PID/stat.
+It opens no other file, writes only its standard output and starts no
 program. Where its output cannot be written it stops the Reader and exits 1.
 A Ctrl-C at the terminal does not end it: the end of its input does, so a
 watch that dies, however it dies, leaves no helper behind.
 
-The client. `procevents.Helper` starts the helper by the interpreter the
-watch runs under (`sys.executable`), with `-I` where the watch itself runs
-isolated, `-m raqib.procevents --serve`, its standard error to nothing and
-its directory the one that holds the raqib package the watch runs. The
-process is handed at once to the `started` callable it is given, so the
-watch records it as its own (raqib/own.py). `ask(timeout)` gives the answer,
-or one of `late`, `ended`, `not a line` or `refused`, and never waits past
-its timeout: a thread reads the helper's output into a queue. Each ask is
-`read N` with its own number and answers carry the ask's number, so a late
-answer is never taken by the next ask: it is left, and counted (`stale`).
-`stop()` closes the helper's input, waits 2 s (STOP_SECONDS), then ends it
-(terminate, then kill after 1 s) and says so.
+What it loads (BW-5). The helper is the interpreter the watch runs under
+(`sys.executable`), with `-I` where the watch runs isolated and `-P`
+otherwise (no directory of its own before the import path), and `-c` with a
+fixed program, a constant of the module: it sets `sys.path` to the list
+given as its one argument - the watch's own `sys.path`, its absolute
+entries, in order, as JSON - and runs `raqib.procevents.main(["--serve"])`.
+Its directory is `/`, its standard error goes to nothing (a crash is said
+as an end), and its environment is the watch's. So it loads Raqib from where
+the watch loaded it and from nowhere else.
+
+The client. `procevents.Helper` starts it and hands the process at once to
+the `started` callable it is given, so the watch records it as its own
+(raqib/own.py), and does not wait for it. `ask(timeout)` gives the answer,
+or one of `starting`, `late`, `ended`, `not a line` or `refused`, and waits
+at most its timeout: a thread reads the helper's output, lines of at most
+LINE_MAX bytes (a longer one is `not a line`), at most 4 lines held unread
+(HELD_LINES), and an ask reads at most the ready line and one answer. At
+most one ask is unanswered: while one is, `ask` writes nothing and waits for
+that answer, and an answer that comes after its round is taken by the ask
+that reads it, so its numbers count once. Before the helper's first line,
+`ask` says `starting` for 5 s after the start (STARTING_SECONDS), then
+`late`. A line of another version, a number that is no number or another
+shape is `not a line`. `stop()` closes the helper's input, waits 2 s
+(STOP_SECONDS), then ends it (terminate, then kill after 1 s) and says so.
 
 The watch (raqib/host.py, ProcEvents). On Linux the live reader starts one
 helper at its first round, before the round's sample, so the helper is in
-that sample as the watch's own and ready when asked; after each sample it
-asks it once and waits 2 s (ASK_SECONDS). The round's inventory carries
-`procevents`: `began` (the processes whose fork was heard and that were not
-given before), `inside` (those of them whose end was heard by the same
-answer: they began and ended between two samples), `unread_exe` (the step of
-the reader's `missed.exe`), `lost` (the reader's), `refused`, `hole` and
-`more`: numbers and the reader's or the watch's own words, never a program.
-A refusal is final; a helper that ended is started again once and a second
-end is final; a late answer and a line that is not the helper's are holes of
-their round, and the next round asks again. On Windows and elsewhere no
-helper is started and the key is absent.
+that sample as the watch's own; after each sample it asks it once and waits
+at most 2 s and at most a quarter of the watch's interval. The round's
+inventory carries `procevents`: `began` (the processes whose fork was heard
+and that were not given before), `inside` (those of them whose end came in
+the same answer: they began and ended between two asks), `unread_exe` (the
+step of the reader's `missed.exe`: reads, not programs), `beyond` and `lost`
+(the reader's, summed over every helper the watch had), `refused`, `hole`,
+`more`, `restarts`, `asked` and `answered`: numbers and the reader's or the
+watch's own words, never a program. A refusal is final. A helper that ended,
+whose reader ended, or that was late three rounds running is ended and
+started again once, and a second end is final; between an end and the next
+start nothing is heard, and the report says so. A late answer and a line
+that is not the helper's are holes of their round, and the next round asks
+again. A line the watch cannot count (a record with no usable pid, counts of
+another shape) is `not a line`, never an exception. On Windows and elsewhere
+no helper is started and the key is absent.
 
 ## What was measured
 
