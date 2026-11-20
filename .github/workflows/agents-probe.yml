@@ -217,7 +217,8 @@ jobs:
           sleep 8
           echo "=== helpers before"; pgrep -af "procevents" || echo none
           pkill -STOP -f "procevents.main" && echo "the helper is stopped (SIGSTOP)" || echo "no helper found to stop"
-          wait $w; echo "the watch's exit: $?; it took $(( $(date +%s) - start )) s (ten rounds of 3 s)"
+          code=0; wait $w || code=$?; echo "the watch's exit: $code; it took $(( $(date +%s) - start )) s (ten rounds of 3 s)"
+          echo "=== findings"; grep "FINDING\|^ALARMS\|^RESULT\|Traceback\|Error" "$RUNNER_TEMP/w-stop.out" "$RUNNER_TEMP/w-stop.err" | cut -c1-260 | head -12
           echo "=== the section"; sed -n '/^PROCESS EVENTS/,/^[A-Z][A-Z ]*[:(]/p' "$RUNNER_TEMP/w-stop.out" | cut -c1-300 | head -24
           echo "=== rounds"; grep -c "^\[.*round [0-9]*:" "$RUNNER_TEMP/w-stop.out"; grep "late\|INCOMPLETE\|RESULT" "$RUNNER_TEMP/w-stop.out" | cut -c1-260 | head -12
           echo "=== the words on what lives between two samples"; grep -i "between two" "$RUNNER_TEMP/w-stop.out" | cut -c1-300 | tail -3
