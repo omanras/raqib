@@ -2632,7 +2632,13 @@ class HostWatch:
             with open(_o.path.join(_o.path.expanduser("~"), ".raqib", "host", "round-debug.log"), "a") as _d:
                 _d.write(_j.dumps({"round": n, "at": ts, "holes": [str(h)[:300] for h in (inv.get("holes") or [])],
                                    "trees": [[t.get("pid"), t.get("image"), t.get("class"), len(t.get("children") or ()),
-                                              len(t.get("remotes") or ())] for t in (inv.get("trees") or [])]},
+                                              len(t.get("remotes") or ())]
+                                             for k in ("trees", "candidates", "act_roots", "agents")
+                                             for t in (inv.get(k) or []) if isinstance(t, dict)],
+                                   "inv_keys": sorted(inv.keys()), "quiet": sorted(str(k) for k in self.quiet),
+                                   "sources": {str(k[0]): [s.kind, s.thread is not None and s.thread.is_alive(),
+                                                           s.ended, s.error, getattr(s, "passes", None)]
+                                               for k, s in self.sources.items()}},
                                   default=str) + "\n")
         except Exception:
             pass

@@ -96,11 +96,16 @@ try:
             d = json.loads(line)
             if not 10 <= d.get("round", 0) <= 20:
                 continue
-            mine = [t for t in d.get("trees") or [] if pid is not None and str(t[0]) == str(pid)]
+            mine = [t for t in d.get("trees") or [] if pid is not None and str(pid) in json.dumps(t)]
             new = [h for h in d.get("holes") or [] if not seen[h]]
             for h in d.get("holes") or []:
                 seen[h] += 1
-            print("round %s at %s: holes %d; the stand-in's tree in the inventory: %s; holes not seen before: %s" % (
-                d.get("round"), d.get("at"), len(d.get("holes") or []), mine, [h[:260] for h in new][:4]))
+            print("round %s at %s: holes %d; the stand-in's tree in the inventory: %s; its source: %s; quiet: %s; "
+                  "holes not seen before: %s" % (
+                      d.get("round"), d.get("at"), len(d.get("holes") or []), mine,
+                      (d.get("sources") or {}).get(str(pid)), [q for q in d.get("quiet") or [] if str(pid) in q],
+                      [h[:200] for h in new][:3]))
+            if d.get("round") == 10:
+                print("   the inventory's keys:", d.get("inv_keys"))
 except (OSError, ValueError) as exc:
     print("round-debug:", type(exc).__name__)
