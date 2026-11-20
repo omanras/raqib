@@ -108,22 +108,24 @@ first-finding knock may go to an act the os source saw first, and a tree that be
 record alone continues it in a new file whose lines are numbered from one again (ADR-0007 Amendments
 AJ, AK and AL). Each pass of a tree's os follow asks the channel a bounded question, as a round's
 read does (events 1, 3 and 11: the first pass those since the watch's start, then the records after
-the highest it has read in the whole channel, at most the round's cap; a cut is a hole); the rounds'
-own read starts at the live reader's start, which can differ by the reader's start delay. A follow
-attached again is given the tree the earlier follow published at the end of its last finished pass,
-and when the round's read restarts, every follow's bound restarts at the restart's time, whether or
-not the record numbers restarted, as the restart's hole says of the follows then running; a follow
-attached after a restart says in its source text that it reads from the restart's time; the follow
-no longer reads the tree's past before the watch's start (after a restart, nor what came between the
-watch's start and it), and a child that started before the watch is not known to it (the host's
-record has what a sample shows of it). A child in the sample is a HostChild line and its event 1 an
-os line: where one rule fires on both, the report's listing shows one entry naming both lines, taken
-for the same act (one image, starts within 1 s), and counts it once; the join is the listing's only:
-the window and the state count both findings, and the catalog's rules knock for the pair at most
-once. What an agent without hooks reads with its own code (a file it opens, a directory it lists) is
-in no source of the host watch; the proxy source records the tool call where the agent is pointed at
-it; the host watch does not read the proxy's trace; the read starts no child and opens no
-connection, and Sysmon has no event for a read; a file's deletion is in no source at all. In the
+the highest it has read in the whole channel, at most the round's cap; a cut is a hole); before it,
+the follow asks one of its own for event 13 (a value set under the registry's Run or RunOnce key, at
+most 500 a pass), and a value logged after a cut of the other answer waits for the next pass; the
+rounds' own read starts at the live reader's start, which can differ by the reader's start delay. A
+follow attached again is given the tree the earlier follow published at the end of its last finished
+pass, and when the round's read restarts, every follow's bound restarts at the restart's time,
+whether or not the record numbers restarted, as the restart's hole says of the follows then running;
+a follow attached after a restart says in its source text that it reads from the restart's time; the
+follow no longer reads the tree's past before the watch's start (after a restart, nor what came
+between the watch's start and it), and a child that started before the watch is not known to it (the
+host's record has what a sample shows of it). A child in the sample is a HostChild line and its
+event 1 an os line: where one rule fires on both, the report's listing shows one entry naming both
+lines, taken for the same act (one image, starts within 1 s), and counts it once; the join is the
+listing's only: the window and the state count both findings, and the catalog's rules knock for the
+pair at most once. What an agent without hooks reads with its own code (a file it opens, a directory
+it lists) is in no source of the host watch; the proxy source records the tool call where the agent
+is pointed at it; the host watch does not read the proxy's trace; the read starts no child and opens
+no connection, and Sysmon has no event for a read; a file's deletion is in no source at all. In the
 third field run the watched read the watcher's record: the agent read the watch's own files under
 the home ([docs/THREAT_MODEL.md](THREAT_MODEL.md)).
 
@@ -373,9 +375,9 @@ overlay)" ([ADR-0008](specs/ADR-0008-the-rules-panel.md)).
    lines also carry the local git state, read from the files under `.git`
    (no `git` is run): the head commit, the sha256 of the index, and why
    either could not be read.
-2. **Rules.** Twenty-four rules turn the trace into findings, and every finding
+2. **Rules.** Twenty-five rules turn the trace into findings, and every finding
    cites the trace lines behind it (A5). The rules are 5 silence rules, 1
-   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 18 more: 16
+   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 19 more: 17
    YAML rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED,
    INDEX-UNTOUCHED, `raqib/rules/tree.py`). Each YAML rule declares its
    false-positive budget and is measured against fixtures (A6); CROSS-SOURCE
@@ -432,8 +434,9 @@ design, a quiet minute is reported, not assumed harmless.
 | SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
 | NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command; under `raqib watch --host` also a tree's child of those names (the host's record, or Sysmon's process line by `input_meta.image`, Windows programs such as bitsadmin and plink included) |
 | DESTRUCT-CMD | rm, dd, shred, mkfs and the like anywhere in a Bash command; under `raqib watch --host` also a tree's child of those names (the host's record, or Sysmon's process line by `input_meta.image`, Windows programs such as vssadmin, diskpart and format included) |
-| PERSIST-AUTOSTART | a file written directly in a Startup folder of Windows (`...\Microsoft\Windows\Start Menu\Programs\Startup\`, a user's or all users', either slash, any case; `desktop.ini` and deeper folders left out), read from Sysmon's file line (event 11) of a watched tree or from a Write, Edit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: there only a hooks file tool is judged. An autostart value of the registry, a scheduled task and a file moved or renamed into the folder are not read yet |
+| PERSIST-AUTOSTART | a file written directly in a Startup folder of Windows (`...\Microsoft\Windows\Start Menu\Programs\Startup\`, a user's or all users', either slash, any case; `desktop.ini` and deeper folders left out), read from Sysmon's file line (event 11) of a watched tree or from a Write, Edit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: there only a hooks file tool is judged. A value under the registry's Run or RunOnce key is PERSIST-RUN-KEY's; a scheduled task and a file moved or renamed into the folder are not read yet |
 | NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` true) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's own included), unless it is ssh started by git (high). Linux has no os source for it: nothing there is judged by it, and the host's own sample of a connection is not judged yet |
+| PERSIST-RUN-KEY | a value set under a Run or RunOnce key of the registry (anything below `...\Microsoft\Windows\CurrentVersion\Run\` or `\RunOnce\` of a user's hive or the machine's, the 32-bit view too, any case; `RunNotification`, `RunOnceEx` and `RunServices` left out), read from Sysmon's registry line (event 13) of a watched tree, whatever program of the tree set it; the finding names the hive, run or runonce, the value's name between double quotes (at most 80 characters), the program the value would run and the program that set it, never the value's text (high). Where the name holds a backslash the event cannot tell it from a value of a key under Run, and the finding says so. It needs Windows with Sysmon logging a value set under these keys: where the configuration logs none, there is nothing to read. Linux has no os source for it: nothing there is judged by it |
 | SECRET-OUTPUT | a key, token or private key in a tool's output (by pattern name; the text is never stored) |
 | DRIFT-FILES | edits to more than two files outside the task's declared scope |
 | LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py` on the same Bash call or before it in the session (holes such as a stale, piped or backgrounded gate are listed in the rule) |
@@ -590,8 +593,9 @@ wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml > sysmon.xml   # or expo
 raqib os-sysmon --root 4100 --log trace.jsonl --from sysmon.xml --cwd C:\work\proj
 raqib report $HOME\.raqib\traces\proj.jsonl
 ```
-- **What it reads.** Sysmon events 1 (process create), 11 (file create) and
-  3 (network connect) of the tree under the root: the root, and every
+- **What it reads.** Sysmon events 1 (process create), 11 (file create), 3
+  (network connect) and 13 (a value set below the registry's Run or RunOnce
+  key, ADR-0014) of the tree under the root: the root, and every
   process whose parent is in the tree (the ProcessGuid keeps a reused pid
   out). The root is the LATEST process that held the pid in the export;
   when earlier processes held it too, one `RAQIB-SILENCE:` line says how
@@ -600,9 +604,11 @@ raqib report $HOME\.raqib\traces\proj.jsonl
   once, and exits; it does not follow the log. On Linux and macOS it reads
   only `--from` (else exit 2).
 - **What it records.** One session, `os-PID`, with a `pre` and a `post` per
-  event at the time of the act, `source: "os"`, tool `process`, `file` or
-  `net`. Hashes of the command line, the path or the destination, never the
-  text; the program name (`bash.exe`), its image name in discover's form
+  event at the time of the act, `source: "os"`, tool `process`, `file`,
+  `net` or `registry`. Hashes of the command line, the path, the destination
+  or the registry's target and value text, never the text; for a value set,
+  its name in the clear (redacted, at most 80 characters) and the name of the
+  program it would run; the program name (`bash.exe`), its image name in discover's form
   (`input_meta.image`, `bash`; since M7.8), its depth below the root and its
   parent's line; the path, redacted as the hook redacts it; the destination
   port and whether it is private. `cwd` is `--cwd DIR` (an absolute

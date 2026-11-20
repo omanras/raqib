@@ -3098,6 +3098,37 @@ with the processes it names.
   and ends is a hint beside the sample. A record's join to a sampled process is by pid and the kernel's start
   ticks together. A short connection given to its process stays M14.2.
 
+## Amendment BV (the Table, 2026-11-20) - an empty ProcessGuid is no ProcessGuid (found on the way to M15.2)
+Found while measuring M15.2 (ADR-0014 AC-9): in some runs every line of the stand-in's tree stopped about
+thirty seconds before the tree ended, and nothing said so. Measured (the probe branch, GitHub's Windows
+machine; one line written for each pass of a follow and each round, for the probe only):
+- Sysmon stopped holding the stand-in's process while it ran. The starts of its later children carried
+  `ParentProcessGuid` all zeros, `ParentImage` and `ParentCommandLine` `-`, and the right `ParentProcessId`.
+  In 17 runs of ninety seconds, two had such starts (1 and 11 of some 860); one more run had an ended
+  process's own ProcessGuid empty.
+- The follow took the zeros for a ProcessGuid: the children were no members, their passes wrote no line
+  (five passes in a row with nothing, the members' count standing still), and the bound moved past them for
+  good. The round did the same: it said the pid "held one more process" keyed by the zeros, and the tree was
+  quiet while it worked. It is main's own fault, older than M15.2: seen 5 times in some 38 runs of M15.2's
+  build, whose second read starts more helpers, and in none of 9 of main's.
+- With the zeros taken as no ProcessGuid (the probe's build): a run whose channel held 11 such starts wrote
+  every one of the stand-in's 45 children.
+- BV-1 (the rule). An all-zero ProcessGuid or ParentProcessGuid is no ProcessGuid, in the follow and in the
+  round: the event is joined by the pid it names, as an event that carries none always was. It is said: the
+  follow writes one silence line for its life, the round one hole with the count. FOR: a long-lived agent
+  whose process Sysmon lets go of keeps its tree and its lines. MUST NOT TOUCH: an event that carries a
+  ProcessGuid is keyed by it as before; no existing export's lines change.
+- BV-2 (Sysmon's `-`). `-` as an Image or a CommandLine is Sysmon's word for what it does not hold, never a
+  program's name: the name is unread (null), and the round gives the pid no image called `-`.
+- BV-3 (what it costs, said). Joined by a pid, a child is given to the pid's present holder: where the pid
+  was taken again in between, nothing tells the two apart; and the root's own pid stays the root's for the
+  follow's life. A rule that reads the parent's name has none; a connection whose own ProcessGuid is empty has
+  neither its program's name nor its parent's. A process joined by a pid carries no mark of a nested tree's
+  root, so an outer tree's follow takes it for its own as well (the second review, K2 to K4).
+- BV-4 (not measured). How long a process must live, or how busy a machine must be, before Sysmon lets go of
+  it; a real desktop. The commander's field run with a named agent that lived for minutes is where to look
+  first: the watch now says the hole when it happens.
+
 ## Amendment BW (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1b.md (a661e0d): REDO
 The reviewer said REDO: the client can block the watch and its Stop for ever, two sentences of the report can
 be false, and the rig's claim cannot fail. In the field the build did what BU asks on a healthy machine (the

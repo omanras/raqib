@@ -27,7 +27,8 @@ the refusal names a right this user lacks, EPERM or EACCES).
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
 says each in a WORKLOAD line: X32 PERSIST-AUTOSTART, X33 NET-ADMIN-PORT, X34 PERSIST-RUN-KEY name its tree
-(n/a where there is no os source, or where the stand-in did not do the act).
+(n/a where there is no os source, or where the stand-in did not do the act); each is MISSED where the act was done
+and no finding names its tree (X34 too, since its rule landed: ADR-0014 AC-8).
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
@@ -165,9 +166,9 @@ BEHAVIOUR = (
      "startup file written", MISSED),
     ("X33 reaching a login port of a private address is a NET-ADMIN-PORT finding", "NET-ADMIN-PORT",
      "port 22 of this machine's own address reached", MISSED),
-    # OPEN until the rule lands (ADR-0014 Amendment B, M15.2): then MISSED, as the two above
+    # ADR-0014 AC-8: the rule has landed (Amendment B, M15.2): MISSED where absent, as the two above
     ("X34 an autostart value set in the registry is a PERSIST-RUN-KEY finding", "PERSIST-RUN-KEY",
-     "autostart value set", OPEN),
+     "autostart value set", MISSED),
 )
 
 

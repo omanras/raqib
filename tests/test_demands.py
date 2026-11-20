@@ -740,7 +740,7 @@ def test_e3_e4_the_close_shape_of_this_project_fires_neither_demand(tmp_path):
 
 def test_e5_readme_rows_capture_bullet_and_cannot_see():
     flat = " ".join(GUIDE.split())   # M9.2: How it works, the table and What it cannot see: docs/GUIDE.md
-    assert "Twenty-four rules turn the trace into findings" in flat and "and 18 more: 16 YAML rules" in flat   # M4.3; M7.2; REDO C-1c; M7.2b; M7.4; M15.1
+    assert "Twenty-five rules turn the trace into findings" in flat and "and 19 more: 17 YAML rules" in flat   # M4.3; M7.2; REDO C-1c; M7.2b; M7.4; M15.1; M15.2
     assert "| LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py`" in GUIDE
     assert "| EDIT-NO-TEST | an edit under `raqib/` or `tests/` with no ok run of pytest" in GUIDE
     assert "never its arguments" not in README and "never its arguments" not in GUIDE
@@ -776,7 +776,7 @@ def test_e5_the_baseline_record_has_the_dated_note_with_the_measured_numbers():
 def test_e5_gate_yml_derives_the_catalog_count():
     gate = (ROOT / ".github" / "workflows" / "gate.yml").read_text(encoding="utf-8")
     assert "never a literal" in gate and not re.search(r"len\(catalog\) == \d", gate)
-    assert len(list(CATALOG.glob("*.yaml"))) == 16   # M7.2: + NEW-AGENT, AGENT-DARK-LIVE; REDO C-1c: + NEW-AGENT-UNKNOWN; M7.2b: + HOST-UNWATCHED; M15.1: + PERSIST-AUTOSTART, NET-ADMIN-PORT
+    assert len(list(CATALOG.glob("*.yaml"))) == 17   # M7.2: + NEW-AGENT, AGENT-DARK-LIVE; REDO C-1c: + NEW-AGENT-UNKNOWN; M7.2b: + HOST-UNWATCHED; M15.1: + PERSIST-AUTOSTART, NET-ADMIN-PORT; M15.2: + PERSIST-RUN-KEY
 
 
 # --- M4.2b REDO (ADR-0002 Amendment H) ------------------------------------------------------------

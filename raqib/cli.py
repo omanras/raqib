@@ -212,7 +212,8 @@ no command, raqib prints its usage and exits 2.
   os-sysmon --root PID[:GUID] --log PATH [--from FILE.xml] [--cwd DIR]
       Record what the operating system saw the process tree under PID do
       (M5.3, ADR-0003 Amendment C, raqib/hooks/os_sysmon.py): Sysmon events
-      1 (process create), 11 (file create) and 3 (network connect) become
+      1 (process create), 11 (file create), 3 (network connect) and 13 (a
+      value set under the registry's Run or RunOnce key, ADR-0014) become
       `pre`+`post` lines of the trace PATH with source "os", session
       os-PID; hashes and program names only, never an argument. Live on
       Windows it runs C:\\Windows\\System32\\wevtutil.exe (read-only); with
