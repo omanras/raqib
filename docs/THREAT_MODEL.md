@@ -903,26 +903,35 @@ What it does not see:
 
 ### The autostart places read by Raqib itself (ADR-0014 Amendment G; M15.3a)
 - **What this read does not see** (docs/specs/AUTOSTART.md; the read stands
-  alone in M15.3a: no watch reads it and no rule judges it yet). The places
-  AG-5 lists - Image File Execution Options, AppInit_DLLs, a WMI subscription,
-  the policies' Run keys, Active Setup, a service's ServiceDll, a COM
-  object, a hive that is not loaded (a driver is read: it is a key of the
-  services) - and RunOnceEx, RunServices, a user's
-  own Winlogon values, another user's Startup folder and the scheduler's
-  folder of task files. A change made and undone between two reads, and what
-  was there before the first read. Who made a change: the read names the
-  entry, never a process. A place the reading user's rights refuse (measured:
-  the scheduler's tree under a deny-only Administrators group) is said as
-  refused, never as empty, and gives no change; a task's program is not read
-  (its Actions are hashed, not parsed), so a task's change names no program. An
-  agent that runs as an administrator can change what the read reads (a key's
-  rights, the folder's listing) as it can any watcher of its own user; that is
-  not measured. A way round that needs no such right: an entry that first
-  appears while its place is unread (a Startup file its maker holds open
-  without sharing across one read) is in the next read's base and is never said
-  as added; the read says the place unread, and names no entry. A hive loaded
-  between two reads reads as its entries added. Both are ruled before the watch
-  reads this (ADR-0014 AH-3).
+  alone in M15.3a and M15.3b: no watch reads it and no rule judges it yet). The
+  places AG-5 lists - Image File Execution Options, AppInit_DLLs, a WMI
+  subscription, the policies' Run keys, Active Setup, a service's ServiceDll, a
+  COM object, a hive that is not loaded (a driver is read: it is a key of the
+  services) - and RunOnceEx, RunServices, a user's own Winlogon values, another
+  user's Startup folder, a Startup folder on a share (not read: the capture
+  path makes no network call), the scheduler's folder of task files, and a
+  content beyond its first 64 KiB. What was there before the first read: it is
+  the base, and is never said. A change made and undone between two reads, and
+  one made and undone while its place or its key is not read. Who made a
+  change: the read names the entry, never a process. A place the reading user's
+  rights refuse (measured: the scheduler's tree under a deny-only
+  Administrators group) is said as refused, never as empty; a place the read's
+  deadline (5 s) did not reach is said as not read. A task's program is not
+  read (its Actions are hashed, not parsed), so a task's change names no
+  program; a program named from an unquoted text with a blank, or from a
+  Winlogon list of more than one, is said as one that `may run`. An agent that
+  runs as an administrator can change what the read reads (a key's rights, the
+  folder's listing) as it can any watcher of its own user; that is not
+  measured. Closed (ADR-0014 Amendment I): an entry that first appears while
+  its place or its key is unread - a Startup file its maker holds open without
+  sharing across one read - is said as added by the first read that reads it
+  (a held file: listed, said as added with its content not read), because each
+  key is compared with what it last held when it was read; a hive loaded
+  between two reads is one change, `hive loaded`, not its entries added; the
+  read opens a Startup file with every sharing, so it no longer holds a file
+  against its maker's delete or rename (measured before: a rename failed 5406
+  times of 5406 while a 24 MB file was hashed); and every hash is salted, so a
+  key cannot be matched by trying a SID.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the

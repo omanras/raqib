@@ -3,6 +3,7 @@ and compares two reads; tools/rig/autostart_run.py runs it beside the stand-in. 
 made-up registry and made-up folders handed to read(); the one real read is Windows' alone."""
 import ast
 import io
+import hashlib
 import json
 import os
 import socket
@@ -66,10 +67,11 @@ class Reg:
 
 
 class Folders(autostart.Disk):
-    """Real files in a temporary folder; a name in `refused` is a file whose content is refused, a folder in
-    `refused` one whose listing is."""
+    """Real files in a temporary folder, opened by Python's open (the opener a test gives: AI-3); a name in
+    `refused` is a file whose content is refused, a folder in `refused` one whose listing is."""
 
     def __init__(self, refused=()):
+        super().__init__(lambda path: open(path, "rb"))
         self.refused = set(refused)
 
     def files(self, folder):
@@ -77,10 +79,10 @@ class Folders(autostart.Disk):
             raise PermissionError(13, "refused", folder)
         return super().files(folder)
 
-    def sha256(self, folder, name):
+    def head(self, folder, name):
         if name in self.refused:
             raise PermissionError(13, "refused", os.path.join(folder, name))
-        return super().sha256(folder, name)
+        return super().head(folder, name)
 
 
 def user_run(leaf="Run"):
@@ -141,10 +143,11 @@ def test_every_place_is_read_with_its_entries(folders):
     assert [(e["scope"], e["name"], e["program"]) for e in entries(got, "service")] == [
         ("machine", "RaqibRigService", "cmd.exe")]   # a key with no ImagePath runs nothing
     assert [(e["name"], e["program"]) for e in entries(got, "task")] == [("\\Vendor\\Update", None)]
-    assert [(e["name"], e["program"]) for e in entries(got, "winlogon")] == [("Shell", "explorer.exe"),
-                                                                              ("Userinit", None)]
+    # AI-8: Winlogon's value is a list; its first item is named (the usual Userinit ends with a comma)
+    assert [(e["name"], e["program"], e["sure"]) for e in entries(got, "winlogon")] == [
+        ("Shell", "explorer.exe", True), ("Userinit", "userinit.exe", True)]
     for e in got["entries"]:
-        assert set(e) == set(autostart.FIELDS)
+        assert set(e) == set(autostart.FIELDS) | {"sure", "triggers", "part"}
         assert e["sha256"] and len(e["sha256"]) == 64 and len(e["key"]) == 64
     assert got["seconds"] >= 0
 
@@ -232,17 +235,23 @@ def test_one_hive_under_two_names_and_its_views_is_one_entry(folders):
     assert len({e["key"] for e in got["entries"]}) == len(got["entries"])
 
 
-def test_the_machines_32_bit_view_only_where_it_holds_another_entry(folders):
+def test_ai7_the_machines_32_bit_view_is_always_its_own_entries(folders):
     reg = machine()
     path = "SOFTWARE\\%s\\Run" % CU
-    reg.put("HKLM", path, [("Helper", "C:\\Program Files\\Helper\\helper.exe /quiet", EXPAND),   # the same: once
-                           ("Old", "old.exe", SZ),                                                # only here
+    reg.put("HKLM", path, [("Helper", "C:\\Program Files\\Helper\\helper.exe /quiet", EXPAND),   # the same text
+                           ("Old", "old.exe", SZ),
                            ("Tool", "tool32.exe", SZ)], views=(True,))
-    reg.put("HKLM", path, [("Tool", "tool64.exe", SZ)], views=(False,))                          # same name, other
+    reg.put("HKLM", path, [("Tool", "tool64.exe", SZ)], views=(False,))
     got = autostart.read(reg, folders, platform="win32")
     run = [(e["name"], e["view32"], e["program"]) for e in entries(got, "run") if e["scope"] == "machine"]
-    assert sorted(run) == [("Helper", False, "Program"), ("Old", True, "old.exe"), ("Tool", False, "tool64.exe"),
-                           ("Tool", True, "tool32.exe")]
+    assert sorted(run) == [("Helper", False, "Program"), ("Helper", True, "Program"), ("Old", True, "old.exe"),
+                           ("Tool", False, "tool64.exe"), ("Tool", True, "tool32.exe")]
+    # the 64-bit twin changes: the 32-bit one, there all along, is not said as added (F7)
+    w = autostart.Watcher(registry=reg, folders=folders, platform="win32")
+    w.take(w.read())
+    reg.vals[("HKLM", False, path.lower())] = [("Tool", "tool64.exe", SZ), ("Helper", "other.exe", SZ)]
+    got = [(c["change"], c["name"], c["view32"]) for c in w.take(w.read())["changes"]]
+    assert got == [("changed", "Helper", False)]
 
 
 # --- E2: what the rights do not give ----------------------------------------------------------------------------
@@ -330,7 +339,10 @@ def test_winreg_is_imported_inside_the_call_alone():
     assert where[0] in list(ast.walk(read_fn))
     mods = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     mods |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
-    assert not mods & {"socket", "urllib", "http", "ssl", "subprocess", "ctypes", "tempfile", "shutil"}
+    assert not mods & {"socket", "urllib", "http", "ssl", "subprocess", "tempfile", "shutil"}
+    top = {a.name.split(".")[0] for n in tree.body if isinstance(n, ast.Import) for a in n.names}
+    top |= {n.module.split(".")[0] for n in tree.body if isinstance(n, ast.ImportFrom) and n.module}
+    assert not top & {"winreg", "ctypes", "msvcrt"}   # AI-3: Windows' own calls, imported inside the calls alone
 
 
 class FakeWinreg:
@@ -497,7 +509,7 @@ def test_the_real_read_on_windows():
     assert autostart.changes(got, autostart.read())["unread"].get("service") is None
 
 
-# --- E7: tools/rig/autostart_run.py -----------------------------------------------------------------------------
+# --- E9: tools/rig/autostart_run.py -----------------------------------------------------------------------------
 
 class StandIn:
     def __init__(self, lines, polls):
@@ -513,21 +525,38 @@ class StandIn:
         self.killed = True
 
 
-def test_the_rig_run_writes_every_change_with_its_round(folders, tmp_path, capsys):
-    plain = autostart.read(machine(), folders, platform="win32")
-    reg = machine()
-    reg.put("HKLM", autostart.SERVICES + "\\RaqibRigTwo", [("ImagePath", "cmd.exe /c echo", EXPAND)], views=(False,))
-    made = autostart.read(reg, folders, platform="win32")
-    reads = iter([plain, made, plain, plain])
+def test_the_rig_run_holds_a_file_across_one_read_and_writes_what_each_read_said(folders, capsys):
+    disk, reg, slept = Folders(), machine(), []
+
+    def hold(path):   # the test's holder: the file is made, and its content is refused while it is held
+        with open(path, "wb") as f:
+            f.write(b"rem raqib rig held\r\n")
+        disk.refused.add(os.path.basename(path))
+        return lambda: disk.refused.discard(os.path.basename(path))
+
+    def sleep(s):   # the stand-in's service: made during its run, deleted before its end
+        slept.append(s)
+        if len(slept) == 4:
+            reg.put("HKLM", autostart.SERVICES + "\\RaqibRigService2", [("ImagePath", "cmd.exe /c echo", EXPAND)],
+                    views=(False,))
+        if len(slept) == 5:
+            del reg.vals[("HKLM", False, (autostart.SERVICES + "\\RaqibRigService2").lower())]
+    w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=disk)
     child = StandIn(["WORKLOAD 00:00:01 service made, never started", "noise"], [None, None, 0])
-    facts = autostart_run.collect(reader=lambda: next(reads), start=lambda: child, platform="win32",
-                                  sleep=lambda s: None, clock=lambda: 0.0)
-    assert facts["error"] is None and facts["reads"] == 4 and facts["workload_rc"] == 0
-    assert [(c["round"], c["change"], c["place"], c["name"], c["program"]) for c in facts["changes"]] == [
-        (2, "added", "service", "RaqibRigTwo", "cmd.exe"), (3, "removed", "service", "RaqibRigTwo", "cmd.exe")]
+    facts = autostart_run.collect(watcher=w, hold=hold, start=lambda: child, folder=folders["user"],
+                                  platform="win32", sleep=sleep, clock=lambda: 0.0)
+    assert facts["error"] is None and facts["reads"] == 7 and facts["workload_rc"] == 0
+    assert [(r["round"], r["held"], r["listed"], r["content"], r["changes"]) for r in facts["held"]["reads"]] == [
+        (2, True, True, "not read", ["added"]), (3, False, True, "read", ["read"]), (4, False, False, None, ["removed"])]
+    assert facts["held"]["made"] and facts["held"]["removed"]
+    assert not os.path.exists(os.path.join(folders["user"], autostart_run.HELD_NAME))
+    assert [(c["round"], c["change"], c["place"], c["name"], c["program"], c["sure"]) for c in facts["changes"]
+            if c["place"] == "service"] == [(5, "added", "service", "RaqibRigService2", "cmd.exe", True),
+                                            (6, "removed", "service", "RaqibRigService2", "cmd.exe", True)]
     assert facts["workload"] == ["WORKLOAD 00:00:01 service made, never started"]
-    assert facts["first"]["places"]["task"] == {"state": "read", "entries": 1, "keys_refused": 0, "reason": None}
-    assert "sha256" not in json.dumps(facts) and SID not in json.dumps(facts)
+    assert facts["first"]["places"]["task"]["state"] == "read"
+    said = json.dumps(facts)
+    assert "sha256" not in said and SID not in said and "triggers" not in said
 
 
 def test_the_rig_run_off_windows_and_its_errors_are_facts(tmp_path, capsys):
@@ -535,15 +564,21 @@ def test_the_rig_run_off_windows_and_its_errors_are_facts(tmp_path, capsys):
     assert autostart_run.main(["--out", str(out)], platform="linux") == 0
     facts = json.loads(out.read_text())
     assert facts["not_run"].startswith("not Windows (linux)") and facts["changes"] == []
-    facts = autostart_run.collect(reader=lambda: 1 / 0, platform="win32")
-    assert facts["error"].startswith("ZeroDivisionError")
-    child = StandIn([], [None])
-    reads = iter([{"seconds": 0.1}] * 3)
-    ticks = iter([0.0, 500.0, 500.0])
-    facts = autostart_run.collect(reader=lambda: next(reads), compare=lambda a, b: {"changes": [], "unread": {}},
-                                  start=lambda: child, platform="win32", sleep=lambda s: None,
-                                  clock=lambda: next(ticks))
+
+    class Broken:
+        def read(self):
+            raise OSError(5, "refused", "C:\\Users\\%s\\x" % PERSON)
+    facts = autostart_run.collect(watcher=Broken(), platform="win32")
+    assert facts["error"] == "OSError (5)" and PERSON not in json.dumps(facts)
+
+    def no_hold(path):
+        raise PermissionError(13, "refused", path)
+    child, ticks = StandIn([], [None]), iter([0.0, 500.0, 500.0])
+    w = autostart.Watcher(registry=machine(), folders={}, platform="win32", disk=Folders())
+    facts = autostart_run.collect(watcher=w, hold=no_hold, start=lambda: child, folder=str(tmp_path),
+                                  platform="win32", sleep=lambda s: None, clock=lambda: next(ticks))
     assert facts["ended_by_run"] is True and child.killed and facts["reads"] == 2
+    assert facts["held"] == {"made": False, "error": "PermissionError (13)", "reads": [], "removed": False}
 
 
 # --- E6, E7: the spec, the threat model, the rig's steps --------------------------------------------------------
@@ -553,14 +588,22 @@ def test_the_spec_says_what_is_not_read_what_is_refused_and_what_was_measured():
     for words in ("Image File Execution Options", "`AppInit_DLLs`", "a WMI subscription", "the policies' Run keys",
                   "Active Setup", "`ServiceDll`", "a COM object", "a hive that is not loaded",
                   "A driver is not in this list: it is a key of the services with an `ImagePath`",
-                  "is in the next read's base and is never said as added",
+                  "is said as added by the first read that reads it, once",
+                  "`rescheduled` (AI-5): a task whose triggers alone changed",
+                  "`hive loaded`, `hive unloaded` (AI-6)", "A sentence says `may run` where it is false",
+                  "is not listed and no file in it is opened (AI-4; CLAUDE.md rule 5)",
+                  "`FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`", "keyed (HMAC-SHA256) with a salt (AI-9)",
+                  "a rename of it by another handle failed 5406 times of 5406", "Not measured: which part of that task",
                   "the name shown holds `[sid]` in its place",
                   "a deeper one is counted as a key not read and the place says `partly`",
-                  "`refused`: every key asked was refused", "`partly`: some keys were refused", "0.07 s",
-                  "236 tasks, 26 of its keys refused", "687 with an `ImagePath`", "Not measured: a real desktop's"):
+                  "`refused`: every key asked was refused", "`partly`: some keys were not read", "0.07 s",
+                  "236 tasks, 26 of its keys refused", "687 with an `ImagePath`",
+                  "a real desktop's churn (an updater that makes its own task or service)"):
         assert words in flat, words
     threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
     assert threat.count("**What this read does not see** (docs/specs/AUTOSTART.md;") == 1
+    assert "Closed (ADR-0014 Amendment I): an entry that first appears while its place or its key is unread" in threat
+    assert "it is the base, and is never said" in threat
 
 
 def test_the_rig_runs_the_read_on_both_machines_and_check_reads_it():
@@ -573,4 +616,276 @@ def test_the_rig_runs_the_read_on_both_machines_and_check_reads_it():
     work = (ROOT / "tools" / "rig" / "workload.py").read_text(encoding="ascii")
     assert '["sc.exe", "create", SERVICE, "binPath=", SERVICE_BIN, "start=", "demand"]' in work
     assert '["sc.exe", "delete", SERVICE]' in work and 'SERVICE_BIN = "cmd.exe /c echo"' in work
+    assert "say(\"the startup file's delete failed (%s)\" % type(exc).__name__)" in work   # AI-10
     assert "sc.exe start" not in work and '"start", SERVICE' not in work   # never started
+
+
+# --- M15.3b (ADR-0014 Amendment I) ------------------------------------------------------------------------------
+
+def kinds(got):
+    return [(c["change"], c["place"], c["name"]) for c in got["changes"]]
+
+
+def watcher(reg, folders, **given):
+    return autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=given.pop("disk", Folders()),
+                             **given)
+
+
+def test_ai1_the_first_read_gives_none_and_a_place_refused_or_failed_then_read_says_its_new_entry_once(folders):
+    reg = machine()
+    w = watcher(reg, folders)
+    first = w.take(w.read())
+    assert first["first"] is True and first["changes"] == []
+    reg.put("HKLM", TREE + "\\Vendor\\New", [("Id", "{0000-5}", SZ)], views=(False,))
+    reg.put("HKLM", autostart.SERVICES + "\\NewSvc", [("ImagePath", "new.exe", SZ)], views=(False,))
+    reg.fail("HKLM", TREE, PermissionError(5, "refused"), views=(False,))
+    reg.fail("HKLM", autostart.SERVICES, OSError(1450, "x"), views=(False,))
+    second = w.take(w.read())
+    assert second["changes"] == [] and set(second["unread"]) == {"service", "task"}
+    del reg.errors[("HKLM", False, TREE.lower())]
+    del reg.errors[("HKLM", False, autostart.SERVICES.lower())]
+    assert kinds(w.take(w.read())) == [("added", "service", "NewSvc"), ("added", "task", "\\Vendor\\New")]
+    assert w.take(w.read())["changes"] == []
+
+
+def test_ai1_a_place_read_in_part_says_a_new_entry_of_a_key_it_read_and_keeps_the_refused_ones(folders):
+    reg = machine()
+    reg.put("HKLM", TREE + "\\Locked", [("Id", "{0000-2}", SZ)], views=(False,))
+    w = watcher(reg, folders)
+    before = w.read()
+    w.take(before)
+    reg.fail("HKLM", TREE + "\\Locked", PermissionError(5, "refused"), views=(False,))
+    reg.put("HKLM", TREE + "\\Vendor\\New", [("Id", "{0000-5}", SZ)], views=(False,))
+    now = w.read()
+    assert now["places"]["task"]["state"] == "partly"
+    assert autostart.changes(before, now)["changes"] == []          # two reads: the coarse comparison, unchanged
+    got = w.take(now)
+    assert kinds(got) == [("added", "task", "\\Vendor\\New")] and "in part" in got["unread"]["task"]
+    del reg.errors[("HKLM", False, (TREE + "\\Locked").lower())]
+    assert w.take(w.read())["changes"] == []                          # the refused key held what it held: nothing
+
+
+def test_ai1_a_place_unread_for_three_reads_loses_nothing(folders):
+    reg = machine()
+    reg.put("HKLM", TREE + "\\Old", [("Id", "{0000-3}", SZ)], views=(False,))
+    w = watcher(reg, folders)
+    w.take(w.read())
+    reg.fail("HKLM", TREE, PermissionError(5, "refused"), views=(False,))
+    for _ in range(3):
+        assert w.take(w.read())["changes"] == []
+        if ("HKLM", False, (TREE + "\\Old").lower()) in reg.vals:   # made and undone while the place is refused
+            del reg.vals[("HKLM", False, (TREE + "\\Old").lower())]
+            reg.put("HKLM", TREE + "\\Vendor\\Added", [("Id", "{0000-4}", SZ)], views=(False,))
+            reg.vals[("HKLM", False, (TASKS + "\\{0000-1}").lower())][0] = ("Actions", b"other", BINARY)
+    del reg.errors[("HKLM", False, TREE.lower())]
+    assert kinds(w.take(w.read())) == [("removed", "task", "\\Old"), ("added", "task", "\\Vendor\\Added"),
+                                       ("changed", "task", "\\Vendor\\Update")]
+
+
+def test_ai2_a_startup_file_listed_with_its_content_unread_is_added_then_read(folders):
+    disk = Folders()
+    w = watcher(machine(), folders, disk=disk)
+    w.take(w.read())
+    with open(os.path.join(folders["user"], "held.cmd"), "wb") as f:
+        f.write(b"rem held\r\n")
+    disk.refused.add("held.cmd")
+    got = w.take(w.read())
+    assert kinds(got) == [("added", "startup", "held.cmd")] and got["changes"][0]["sha256"] is None
+    assert autostart.change_line(2, got["changes"][0]) == \
+        'CHANGE round 2: added startup "held.cmd" of the user, content not read'
+    assert w.take(w.read())["changes"] == []                          # still held: nothing new
+    disk.refused.clear()
+    got = w.take(w.read())
+    assert kinds(got) == [("read", "startup", "held.cmd")]
+    assert autostart.change_line(4, got["changes"][0]) == 'CHANGE round 4: content read startup "held.cmd" of the user'
+    disk.refused.add("held.cmd")                                      # held again: its last content is kept
+    assert w.take(w.read())["changes"] == []
+
+
+class FakeKernel32:
+    def __init__(self, handle):
+        self.handle, self.asked, self.closed = handle, [], []
+
+    def CreateFileW(self, *args):
+        self.asked.append(args)
+        return self.handle
+
+    def CloseHandle(self, handle):
+        self.closed.append(handle)
+
+
+def test_ai3_a_startup_file_is_opened_with_every_sharing(tmp_path):
+    path = tmp_path / "x.cmd"
+    path.write_bytes(b"rem x\r\n")
+    k = FakeKernel32(7)
+    opener = autostart.share_opener(k, lambda handle, flags: os.open(str(path), flags), lambda: 0)
+    with opener(str(path)) as f:
+        assert f.read() == b"rem x\r\n"
+    (name, access, share, sa, how, flags, template), = k.asked   # the fd's flags: read-only, binary on Windows
+    assert (name, access, share, how) == (str(path), autostart.GENERIC_READ, 0x7, autostart.OPEN_EXISTING)
+    assert share == autostart.SHARE_ALL == 0x1 | 0x2 | 0x4
+    for code, kind in ((32, PermissionError), (5, PermissionError), (2, FileNotFoundError), (87, OSError)):
+        with pytest.raises(kind):
+            autostart.share_opener(FakeKernel32(-1), None, lambda: code)(str(path))
+
+
+def test_ai3_where_no_file_can_be_opened_with_every_sharing_none_is_opened(folders):
+    class NoOpener(autostart.Disk):
+        def __init__(self):
+            super().__init__(None)
+    got = autostart.read(machine(), folders, platform="win32", disk=NoOpener())
+    s = got["places"]["startup"]
+    assert s["state"] == "partly" and s["keys_why"] == {autostart.NO_SHARING: 2}
+    assert {e["sha256"] for e in entries(got, "startup")} == {None}
+
+
+def test_ai4_a_content_is_hashed_by_its_length_and_its_first_64_kib(tmp_path):
+    head = b"r" * autostart.HEAD_BYTES
+    for name, body in (("a", head + b"one"), ("b", head + b"two"), ("c", head + b"three")):
+        (tmp_path / name).write_bytes(body)
+    disk = autostart.Disk(lambda p: open(p, "rb"))
+    h = autostart._Hasher(b"salt")
+    a, b, c = (h.file(*disk.head(str(tmp_path), n)) for n in "abc")
+    assert a == b != c and len(disk.head(str(tmp_path), "a")[1]) == autostart.HEAD_BYTES
+    assert h.content((SZ, "x" * 70000 + "1")) == h.content((SZ, "x" * 70000 + "2")) != h.content((SZ, "x" * 70002))
+
+
+def test_ai4_the_deadline_says_each_place_it_did_not_reach_as_not_read(folders):
+    class Clock:   # a made-up clock: still for the first read, then a second a call
+        now, step = 0.0, 0.0
+
+        def __call__(self):
+            self.now += self.step
+            return self.now
+    clock, reg = Clock(), machine()
+    w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=Folders(), clock=clock, deadline=12)
+    assert w.take(w.read())["unread"] == {}
+    clock.step = 1.0
+    got = w.read()
+    states = {p: (s["state"], s["reason"]) for p, s in got["places"].items()}
+    assert states["run"] == ("read", None) and states["winlogon"][0] == "unread"
+    cut = [p for p, (st, _) in states.items() if st == "unread"]
+    assert cut and all("deadline (12 s) passed" in states[p][1] for p in cut)
+    assert not [e for e in got["entries"] if e["place"] in cut]                  # never read as empty
+    assert "; not read: " in autostart.first_line(got)
+    assert w.take(got)["changes"] == [] and set(cut) <= set(w.take(got)["unread"])   # the base keeps them
+
+
+def test_ai4_a_startup_folder_on_a_share_is_not_listed_or_opened(folders):
+    asked = []
+
+    class Watching(Folders):
+        def files(self, folder):
+            asked.append(folder)
+            return super().files(folder)
+    unc = {"user": "\\\\fileserver\\home\\Startup", "machine": folders["machine"]}
+    got = autostart.read(machine(), unc, platform="win32", disk=Watching())
+    assert asked == [folders["machine"]]
+    s = got["places"]["startup"]
+    assert s["state"] == "partly" and s["keys_why"] == {autostart.ON_SHARE: 1}
+    remote = autostart.read(machine(), folders, platform="win32", disk=Watching(), drive_kind=lambda f: "remote")
+    assert remote["places"]["startup"]["state"] == "unread" and "on a share" in remote["places"]["startup"]["reason"]
+    unknown = autostart.read(machine(), folders, platform="win32", disk=Watching(), drive_kind=lambda f: None)
+    assert unknown["places"]["startup"]["keys_why"] == {autostart.SHARE_UNKNOWN: 2}
+    assert asked == [folders["machine"]]
+    assert autostart.on_share("\\\\?\\UNC\\fileserver\\x", None) is True
+    assert autostart.on_share("\\\\?\\C:\\x", lambda f: "local") is False
+
+
+def test_ai5_a_tasks_triggers_alone_are_rescheduled_its_actions_changed(folders):
+    reg = machine()
+    w = watcher(reg, folders)
+    w.take(w.read())
+    body = reg.vals[("HKLM", False, (TASKS + "\\{0000-1}").lower())]
+    body[1] = ("Triggers", b"\x17later", BINARY)
+    got = w.take(w.read())
+    assert kinds(got) == [("rescheduled", "task", "\\Vendor\\Update")]
+    assert autostart.change_line(2, got["changes"][0]) == 'CHANGE round 2: rescheduled task "\\Vendor\\Update"'
+    body[0] = ("Actions", b"\x03\x00other", BINARY)
+    assert kinds(w.take(w.read())) == [("changed", "task", "\\Vendor\\Update")]
+    body[0], body[1] = ("Actions", b"\x03\x00third", BINARY), ("Triggers", b"\x17third", BINARY)
+    assert kinds(w.take(w.read())) == [("changed", "task", "\\Vendor\\Update")]   # both: what it would run changed
+    e = entries(w.read(), "task")[0]
+    assert e["sha256"] and e["triggers"] and e["sha256"] != e["triggers"]
+
+
+def test_ai6_a_hive_that_comes_or_goes_is_one_change_and_names_no_hive(folders):
+    other = "S-1-5-21-4444444444-5555555555-6666666666-1002"   # made up
+    reg = machine()
+    w = watcher(reg, folders)
+    w.take(w.read())
+    reg.put("HKU", "%s\\Software\\%s\\Run" % (other, CU), [("A", "a.exe", SZ), ("B", "b.exe", SZ)])
+    reg.put("HKU", "%s\\Software\\%s\\RunOnce" % (other, CU), [("C", "c.exe", SZ)])
+    got = w.take(w.read())
+    assert [(c["change"], c["entries"]) for c in got["changes"]] == [("hive loaded", 3)]
+    assert autostart.change_line(2, got["changes"][0]) == "CHANGE round 2: hive loaded (a user's hive, 3 entries)"
+    reg.vals[("HKU", False, ("%s\\Software\\%s\\Run" % (other, CU)).lower())].append(("D", "d.exe", SZ))
+    assert kinds(w.take(w.read())) == [("added", "run", "D")]                      # set in a hive already there
+    for k in [k for k in reg.vals if k[0] == "HKU" and k[2].startswith(other.lower())]:
+        del reg.vals[k]
+    got = w.take(w.read())
+    assert [(c["change"], c["entries"]) for c in got["changes"]] == [("hive unloaded", 4)]
+    said = json.dumps(got) + json.dumps(w.read())
+    for sid in (other, SID):
+        assert sid not in said and hashlib.sha256(sid.encode()).hexdigest() not in said
+        assert hashlib.sha256(("HKU\\" + sid).encode()).hexdigest() not in said
+
+
+def test_ai7_a_users_hive_is_read_in_one_view(folders):
+    reg = machine()
+    reg.vals[("HKU", True, user_run().lower())] = [("Only32", "x.exe", SZ)]
+    got = autostart.read(reg, folders, platform="win32")
+    assert [e["name"] for e in entries(got, "run") if e["scope"] == "user"] == ["RaqibRigValue"]
+
+
+def test_ai8_a_name_that_may_not_be_what_runs_is_said_so(folders):
+    reg = machine()
+    reg.put("HKU", user_run(), [("Blank", "C:\\Program Files\\Helper\\helper.exe /quiet", SZ),
+                                ("Quoted", '"C:\\Program Files\\Helper\\helper.exe" /quiet', SZ),
+                                ("Bare", "cmd /c rem x", SZ), ("Alone", "C:\\x\\alone.exe", SZ)])
+    reg.vals[("HKLM", False, autostart.WINLOGON.lower())] = [
+        ("Shell", "explorer.exe", SZ), ("Userinit", "C:\\Windows\\system32\\userinit.exe,C:\\x\\other.exe,", SZ)]
+    got = autostart.read(reg, folders, platform="win32")
+    sure = {e["name"]: (e["program"], e["sure"]) for e in entries(got, "run") + entries(got, "winlogon")}
+    assert sure["Blank"] == ("Program", False) and sure["Quoted"] == ("helper.exe", True)
+    assert sure["Bare"] == ("cmd", True) and sure["Alone"] == ("alone.exe", True)
+    assert sure["Userinit"] == ("userinit.exe", False) and sure["Shell"] == ("explorer.exe", True)
+    line = autostart.change_line(3, dict(entries(got, "winlogon")[1], change="changed"))
+    assert line == 'CHANGE round 3: changed winlogon "Userinit" (may run userinit.exe)'
+    blank = [e for e in entries(got, "run") if e["name"] == "Blank"][0]
+    assert autostart.change_line(3, dict(blank, change="added")).endswith("(may run Program)")
+
+
+def test_ai9_the_hashes_are_salted_by_the_watcher_and_never_left_unsalted(folders):
+    a, b = (watcher(machine(), folders) for _ in range(2))
+    ra, rb = a.read(), b.read()
+    assert {e["key"] for e in ra["entries"]}.isdisjoint({e["key"] for e in rb["entries"]})
+    assert [e["sha256"] for e in ra["entries"]] != [e["sha256"] for e in rb["entries"]]
+    plain = autostart.read(machine(), folders, platform="win32")    # a read of its own: the process's salt
+    again = autostart.read(machine(), folders, platform="win32")
+    assert [e["key"] for e in plain["entries"]] == [e["key"] for e in again["entries"]]
+    said = json.dumps(ra) + json.dumps(plain) + repr(a)
+    texts = [SID, "HKU\\" + SID, "RaqibRigValue", "cmd /c rem raqib rig", "explorer.exe", "rem raqib rig secret-content",
+             "\0".join(("run", "HKU\\" + SID, "64", "raqibrigvalue"))]
+    for t in texts:
+        assert hashlib.sha256(t.encode()).hexdigest() not in said, t
+    with open(os.path.join(folders["user"], "raqib-rig-startup.cmd"), "rb") as f:
+        assert hashlib.sha256(f.read()).hexdigest() not in said
+    assert "salt" not in said.lower() and repr(a) == "<autostart.Watcher>"
+
+
+def test_e8_the_command_says_each_kind_and_may_run(folders):
+    reg = machine()
+    w = watcher(reg, folders)
+    first = w.read()
+    reg.put("HKU", user_run(), [("Blank", "C:\\Program Files\\x\\y.exe /q", SZ)])
+    reg.vals[("HKLM", False, (TASKS + "\\{0000-1}").lower())][1] = ("Triggers", b"\x17later", BINARY)
+    reg.put("HKU", "S-1-5-21-7-8-9-1003\\Software\\%s\\Run" % CU, [("Z", "z.exe", SZ)])
+    second = w.read()
+    reads, out = iter([first, second]), io.StringIO()
+    assert autostart.main(["--rounds", "2", "--every", "0"], out=out, reader=lambda: next(reads), watcher=w,
+                          sleep=lambda s: None) == 0
+    assert out.getvalue().splitlines()[1:] == [
+        'CHANGE round 2: added run "Blank" of the user (may run Program)',
+        'CHANGE round 2: rescheduled task "\\Vendor\\Update"',
+        "CHANGE round 2: hive loaded (a user's hive, 1 entries)"]

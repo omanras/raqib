@@ -352,7 +352,13 @@ def autostart_facts(**over):
         changes += [{"round": 4, "change": "added", "place": place, "scope": "user", "view32": False, "name": name,
                      "program": None}, {"round": 30, "change": "removed", "place": place, "scope": "user",
                                         "view32": False, "name": name, "program": None}]
-    facts = {"platform": "win32", "reads": 40, "seconds_max": 0.09, "changes": changes, "unread": [], "error": None}
+    held = {"made": True, "error": None, "removed": True, "reads": [   # ADR-0014 AI-10: the file held across one read
+        {"round": 2, "held": True, "listed": True, "content": "not read", "changes": ["added"]},
+        {"round": 3, "held": False, "listed": True, "content": "read", "changes": ["read"]},
+        {"round": 4, "held": False, "listed": False, "content": None, "changes": ["removed"]}]}
+    facts = {"platform": "win32", "reads": 40, "seconds_max": 0.09, "changes": changes, "unread": [], "error": None,
+             "held": held, "workload": ["WORKLOAD 07:50:50 startup file written",
+                                        "WORKLOAD 07:51:30 undone: the startup file"]}
     facts.update(over)
     return facts
 
@@ -413,3 +419,32 @@ def test_x37_n_a_off_windows_and_a_row_of_main_only_where_given(tmp_path, capsys
     assert "MET     X37 " in capsys.readouterr().out
     check.main(base + ["--autostart", str(tmp_path / "none.json")])
     assert "MISSED  X37 " in capsys.readouterr().out
+
+
+# --- X37 (ADR-0014 AI-10): the stand-in's delete, the held file, every other change by its kind ------------------
+def test_x37_missed_where_the_stand_ins_delete_of_its_startup_file_failed():
+    facts = autostart_facts(workload=["WORKLOAD 07:51:30 the startup file's delete failed (PermissionError)"])
+    state, words = x37(facts)
+    assert state == check.MISSED and "its Startup file failed beside the reads (PermissionError)" in words
+
+
+@pytest.mark.parametrize("held,why", [
+    ({"made": False, "error": "PermissionError (5)", "reads": []}, "the held file was not made (PermissionError (5))"),
+    ({"made": True, "reads": [{"round": 2, "listed": False, "changes": []}]}, "the held file was listed by no read"),
+    ({"made": True, "reads": [{"round": 2, "listed": True, "content": "not read", "changes": []},
+                              {"round": 3, "listed": True, "content": "read", "changes": ["added"]}]},
+     "not said as added by the first read that listed it (read 2: no change)")])
+def test_x37_missed_where_the_held_file_was_not_said_as_added_by_the_first_read_that_listed_it(held, why):
+    state, words = x37(autostart_facts(held=held))
+    assert state == check.MISSED and why in words
+
+
+def test_x37_names_every_other_change_by_its_kind_and_place():
+    facts = autostart_facts()
+    facts["changes"] += [{"round": 9, "change": "rescheduled", "place": "task", "name": "\\Vendor\\Task"},
+                         {"round": 12, "change": "changed", "place": "task", "name": "\\Vendor\\Other"},
+                         {"round": 2, "change": "added", "place": "startup", "name": "raqib-rig-held.cmd"}]
+    state, words = x37(facts)
+    assert state == check.MET and "other changes: changed task 1, rescheduled task 1" in words
+    assert "the held file added in read 2, its content not read" in words
+    assert "other changes: none" in x37(autostart_facts())[1]
