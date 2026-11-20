@@ -1488,7 +1488,7 @@ def cmd_events(args, out):
     4), 2 when FILE or OTHER cannot be read. It reads; it sends nothing."""
     from raqib import event
     held = None
-    for path in (args.file, getattr(args, "against", None)):
+    for which, path in enumerate((args.file, getattr(args, "against", None))):
         if path is None:
             continue
         try:
@@ -1497,7 +1497,7 @@ def cmd_events(args, out):
         except OSError as exc:
             sys.stderr.write("raqib events: cannot read %s: %s\n" % (path, exc.strerror or exc))
             return 2
-        if path is args.file:
+        if which == 0:   # HB-4: told by its place, never by the paths being one object
             data = got
         else:
             held = got.split(b"\n")
@@ -1515,9 +1515,14 @@ def cmd_events(args, out):
                 exc, UnicodeDecodeError) else "not JSON (nested deeper than can be read)" if isinstance(
                 exc, RecursionError) else "not JSON (%s)" % exc))
             continue
-        found = event.check(obj)
-        key = (obj.get("watch") or {}).get("host") if isinstance(obj, dict) and isinstance(
-            obj.get("watch"), dict) else None, obj.get("id") if isinstance(obj, dict) else None
+        try:   # HB-2 (HA-9): no line ends the reader, whatever its values are
+            found = event.check(obj)
+        except Exception as exc:
+            problems.append("line %d: not an event: it cannot be checked (%s)" % (i, type(exc).__name__))
+            continue
+        host = (obj.get("watch") or {}).get("host") if isinstance(obj, dict) and isinstance(
+            obj.get("watch"), dict) else None
+        key = host if isinstance(host, str) else None, obj.get("id") if isinstance(obj, dict) else None
         if key[1] is not None and isinstance(key[1], str):
             if key in ids:
                 found.append("id: %s said twice in the file (line %d)" % (key[1], ids[key]))
@@ -1559,8 +1564,8 @@ def cmd_events(args, out):
             return ["%s: chain whole, %d line(s)%s" % (name, c["lines"], twice)]
         lines = ["%s: chain not whole, %d line(s)%s" % (name, c["lines"], twice)]
         if c["late"] is not None:
-            lines.append("  begins before this file: its first line here, line %d, names a line that is not here"
-                         " (an export that starts late, or a file whose beginning was cut)" % c["late"])
+            lines.append("  begins before this file: its first line here, line %d, names no line of its run before"
+                         " it here (an export that starts late, or a file whose beginning was cut)" % c["late"])
         for p in c["problems"]:
             if p["what"] == event.BESIDE:
                 lines.append("  %d line(s) beside the chain, line %d%s: they follow %s, and line %d names %s again"
@@ -1596,17 +1601,23 @@ def cmd_events(args, out):
                                                                                esc(host)))
         for i, ident, host, here in cmp["differ"]:
             out.write("    line %d of %s (id %s, host %s): the file's line %s holds other bytes\n" % (
-                i, args.against, esc(ident), esc(host), ", ".join(str(n) for n in here[:3])))
+                i, args.against, esc(ident), esc(host), ", ".join(str(n) for n in here[:3]) + (
+                    " and %d more" % (len(here) - 3) if len(here) > 3 else "")))
         if cmp["more_missing"] or cmp["more_differ"]:
             out.write("    the bound of %d reached: %d more not listed\n" % (
                 event.BOUND, cmp["more_missing"] + cmp["more_differ"]))
     off = (len(cmp["missing"]) + cmp["more_missing"], len(cmp["differ"]) + cmp["more_differ"]) if cmp else (0, 0)
-    out.write("RESULT: %s%s%s%s\n" % ("every line is an event" if not problems else
-                                      "%d line(s) not an event" % bad if rows else "no event",
-                                      "; %d run(s) whose chain is not whole" % bad_runs if bad_runs else "",
-                                      "; %d line(s) of the collector's not in the file" % off[0] if off[0] else "",
-                                      "; %d line(s) of the collector's with other bytes" % off[1] if off[1] else ""))
-    return 0 if not problems and not bad_runs and not any(off) else 1
+    blind = cmp is not None and cmp["read"] == cmp["unread"]   # HB-3: nothing of OTHER could be compared
+    if blind:
+        out.write("    nothing compared: %s holds no line that names its host and id (an empty export, another"
+                  " envelope, or another encoding than the file's)\n" % args.against)
+    out.write("RESULT: %s%s%s%s%s\n" % ("every line is an event" if not problems else
+                                        "%d line(s) not an event" % bad if rows else "no event",
+                                        "; %d run(s) whose chain is not whole" % bad_runs if bad_runs else "",
+                                        "; %d line(s) of the collector's not in the file" % off[0] if off[0] else "",
+                                        "; %d line(s) of the collector's with other bytes" % off[1] if off[1] else "",
+                                        "; nothing of the collector's could be compared" if blind else ""))
+    return 0 if not problems and not bad_runs and not any(off) and not blind else 1
 
 
 def cmd_forward(args, out):

@@ -867,7 +867,7 @@ WATCH_EVENTS_HEAD = "PROCESS EVENTS (Linux):"
 
 
 # ADR-0016 Amendment A: a run is said by its run word and its host; under a chain not whole, a line for each problem
-CHAIN_WHOLE = re.compile(r"^  run (.+?) \(host .*\): chain whole, (\d+) line\(s\)(?:, \d+ said twice)?$", re.M)
+CHAIN_WHOLE = re.compile(r"^  run (.+?) \(host .*\): chain whole, (\d+) line\(s\)(?:, (\d+) said twice)?$", re.M)
 CHAIN_BAD = re.compile(r"^  run .+? \(host .*\): (?:chain not whole|no line holds prev, yet ).*$|^    (?:broken at line"
                        r" \d+|begins before this file|\d+ line\(s\) beside the chain).*$", re.M)
 
@@ -890,9 +890,11 @@ def read_chain(answer, report):
             return [(name, MISSED, "the report names no run: the watch's own run cannot be told%s" % (
                 "; " + bad[0][:160] if bad else ""))]
         whole = [m for m in CHAIN_WHOLE.finditer(answer) if m.group(1) == run.group(1)]
-        ok = bool(whole) and not bad
-        return [(name, MET if ok else MISSED, "run %s: %s%s" % (
+        twice = whole[0].group(3) if whole else None   # HB-6: the writer writes no line twice: another hand's
+        ok = bool(whole) and not bad and not twice
+        return [(name, MET if ok else MISSED, "run %s: %s%s%s" % (
             run.group(1), "chain whole, %s line(s)" % whole[0].group(2) if whole else "no line says its chain whole",
+            "; %s line(s) said twice in the watch's own file, which its writer never does" % twice if twice else "",
             "; " + "; ".join(b[:160] for b in bad[:2]) if bad else ""))]
     except Exception as exc:   # never raises: a reader that fails is MISSED
         return [(name, MISSED, "the answer could not be read: %s" % exc)]

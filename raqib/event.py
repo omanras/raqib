@@ -640,7 +640,8 @@ def chained(ev, prev):
 
 CHAIN_SINCE = (0, 4, 0)   # HA-2: the first version that writes the chain (the Table moves it at the merge)
 BOUND = 10                # HA-7: the problems of one run listed (and the lines of a comparison, HA-5)
-VERSION = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)\Z")   # HA-2: a version read (another is said as not read)
+# HA-2: a version read (another is said as not read). HB-1: each part bounded, so that reading one cannot raise
+VERSION = re.compile(r"([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})\Z")
 WHOLE, NOT_WHOLE, UNCHAINED, TAKEN = "whole", "not whole", "not chained", "taken out"   # a run's chain
 BROKEN, BESIDE = "broken", "beside"   # a problem of a chain (HA-7)
 

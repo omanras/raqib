@@ -141,7 +141,8 @@ anywhere; a collector's own agent may tail the file.
   said when reached (HA-7); or not chained (no line of the run holds `prev`, and no version of its lines that is
   read is 0.4.0 or later: written by a Raqib before this one, not a problem; a version not of the form N.N.N is
   said as not read); or taken out (no line holds `prev`, and a version of its lines is one that always writes it:
-  HA-2). Every line before the run's last is so covered (but the run's last line: no line names it, so changed, or followed by a line added after the run ended that names it, it is not seen from the file alone; ADR-0016 HA-4). Exit 0 when every line is an event and every run's
+  HA-2). The version is the line's own word: a run whose every `prev` was removed and whose version was written
+  again as an older one is said not chained, and that is not seen from the file alone (H-5, HB-5). Every line before the run's last is so covered (but the run's last line: no line names it, so changed, or followed by a line added after the run ended that names it, it is not seen from the file alone; ADR-0016 HA-4). Exit 0 when every line is an event and every run's
   chain is whole or not chained, 1 otherwise (or when the file holds none), 2 when the file cannot be read. It
   reads; it sends nothing (F-8).
 - `raqib events FILE --against OTHER` (HA-5) reads OTHER as the lines a collector holds (its own export, one
@@ -158,7 +159,8 @@ anywhere; a collector's own agent may tail the file.
 
 What a collector's own agent, tailing `events.jsonl`, may rely on and must allow for (H-8):
 - The file holds many runs: every host watch on the account appends to the same `~/.raqib/host/events.jsonl`.
-  A run is its `watch.run`; outside its run a thing is "<watch.run>/<about>".
+  A run is its `watch.host` and its `watch.run` together (ADR-0016 HA-3); outside its run a thing is
+  "<watch.run>/<about>".
 - Raqib only appends to it. It never rewrites, rotates or truncates the file; a file that shrank or was replaced
   was changed by someone else.
 - A last line with no newline is not whole: do not send it, wait for its newline. It is being written, or it is
@@ -175,11 +177,14 @@ What a collector's own agent, tailing `events.jsonl`, may rely on and must allow
   and `id`, and take a thing's latest rev.
 - Within a run (its `watch.host` and `watch.run`), each line names the run's line before it by `prev`
   (ADR-0016): the sha256 of that line's bytes as the file holds them, without its newline; the run's first
-  written line holds "first". Lines of other runs between them are not links of this run, and a line that is
+  written line holds "first". The writer ends a line with a newline alone; `raqib events` takes one carriage
+  return before the newline as part of the line's end (a copy that came back with Windows' line ends checks as
+  the file it was copied from), so a file whose line ends were all changed so is not said as changed. Lines of other runs between them are not links of this run, and a line that is
   not whole JSON is no link. A line removed from the middle, changed, added or moved is seen by anyone who holds
   the lines (`raqib events FILE`) (but the run's last line: no line names it, so changed, or followed by a line added after the run ended that names it, it is not seen from the file alone; ADR-0016 HA-4). The chain holds no secret (H-5): an end cut off, or a tail written again
   from any line with its hashes computed again, is not seen from the file alone; a collector that kept the lines
-  it was sent, byte for byte, sees either by `raqib events FILE --against` its lines. A line of an older build
+  it was sent, byte for byte, sees it by `raqib events FILE --against` its lines where it holds a line of the
+  part that was cut or written again, and not otherwise. A line of an older build
   holds no `prev`: its run is not chained, which is not a problem.
 - A reader must allow a key it does not know (ADR-0016 H-6): an addition such as `prev` does not move the
   schema's name, and a later addition may come the same way. Skip a key you do not know; never refuse a line for

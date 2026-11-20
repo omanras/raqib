@@ -1799,7 +1799,11 @@ collector that is slow, down or refusing never delays or loses a capture
   - What it does not prove: the chain holds no secret. Whoever can write
     the file can cut its end, or write a tail again from any line and
     compute the hashes again; the file alone then looks whole, and a test
-    of each case says so. A run of an older build has no chain at all.
+    of each case says so. A run of an older build has no chain at all, and
+    a version is the line's own word: whoever removes every `prev` of a run
+    and writes its lines' version again as an older one makes it read as an
+    older build's, not as a chain taken out. A file whose line ends were
+    all changed to Windows' checks as it did before.
   - What a collector that holds a later line can tell: over the file alone,
     nothing more - a tail written again is whole by itself, and so are the
     collector's own lines. Side by side it can: `raqib events FILE --against

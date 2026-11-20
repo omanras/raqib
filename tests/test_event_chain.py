@@ -454,8 +454,8 @@ def test_r4_an_export_that_starts_mid_run_began_before_the_file_and_is_no_break(
     got = answer(rows)["r1"]
     assert (got["state"], got["late"], got["problems"]) == (event.NOT_WHOLE, 1, [])
     code, out = cli_events(tmp_path, rows)
-    assert code == 1 and ("    begins before this file: its first line here, line 1, names a line that is not here (an"
-                          " export that starts late, or a file whose beginning was cut)\n") in out
+    assert code == 1 and ("    begins before this file: its first line here, line 1, names no line of its run before"
+                          " it here (an export that starts late, or a file whose beginning was cut)\n") in out
     assert "broken" not in out
 
 
@@ -544,6 +544,69 @@ def test_r6_the_lines_said_are_bounded(tmp_path):
     rows = made("r1", 14)
     code, out = cli_events(tmp_path, rows[:1], against=other(tmp_path, rows))
     assert code == 1 and out.count("): not in the file\n") == 10 and "    the bound of 10 reached: 3 more not listed" in out
+
+
+# --- HB (the second review): no line ends the reader; nothing compared is said ----------------------------------
+
+def test_hb1_a_version_of_thousands_of_digits_is_not_read_and_raises_nothing(tmp_path):
+    """ADR-0016 HB-1: int() of more than 4300 digits raises on Python 3.11 and later; a version's parts are bounded,
+    so such a text is no version (said as not read), and the command ends as for any line that is no event."""
+    assert event.version_of("0." + "9" * 5000 + ".0") is None and event.version_of("1234567.0.0") is None
+    assert event.version_of("0.4.0") == (0, 4, 0) and event.version_of("123456.0.9") == (123456, 0, 9)
+    rows = []
+    for raw in made("r1", 2):
+        ev = json.loads(raw)
+        del ev["prev"]
+        ev["watch"]["version"] = "0." + "9" * 5000 + ".0"
+        rows.append(json.dumps(ev, sort_keys=True, separators=(",", ":")).encode("ascii"))
+    assert answer(rows)["r1"]["state"] == event.UNCHAINED
+    code, out = cli_events(tmp_path, rows)
+    assert code in (0, 1) and "Traceback" not in out and run_line() in out
+
+
+@pytest.mark.parametrize("change", [
+    lambda ev: ev["watch"].update(host=["a", "b"]),          # a host that cannot be a key
+    lambda ev: ev["watch"].update(host={"a": 1}),
+    lambda ev: ev.update(kind="watch", state="end", result={"word": {"a": 1}, "exit": 0}, counts={}),
+    lambda ev: ev.update(kind="watch", state="end", result={"word": "CLEAN", "exit": [0]}, counts={}),
+])
+def test_hb2_a_line_whose_values_cannot_be_checked_is_named_and_does_not_end_the_command(tmp_path, change):
+    """ADR-0016 HB-2 (HA-9): whoever can write the events file cannot end `raqib events` with one line."""
+    rows = made("r1", 3)
+    odd = json.loads(rows[1])
+    change(odd)
+    rows[1] = json.dumps(odd, sort_keys=True, separators=(",", ":")).encode("ascii")
+    code, out = cli_events(tmp_path, rows)
+    assert code == 1 and "line 2: " in out and out.rstrip().splitlines()[-1].startswith("RESULT: ")
+
+
+def test_hb3_an_other_file_of_which_nothing_can_be_compared_is_a_problem_and_is_said(tmp_path):
+    """ADR-0016 HB-3: an empty export, one in another envelope or another encoding compares nothing: that is said,
+    exit 1, never "a collector behind: not a problem" alone."""
+    rows = made("r1", 3)
+    for held in ([], [b'{"event": {"x": 1}}', b"not json"], [r.decode("ascii").encode("utf-16") for r in rows]):
+        code, out = cli_events(tmp_path, rows, against=other(tmp_path, held))
+        assert code == 1 and "    nothing compared: " in out, held
+        assert out.rstrip().endswith("; nothing of the collector's could be compared")
+    code, out = cli_events(tmp_path, rows, against=other(tmp_path, rows[:1]))
+    assert code == 0 and "nothing compared" not in out
+
+
+def test_hb4_a_file_compared_with_itself_under_a_one_letter_name_is_compared(tmp_path, monkeypatch):
+    """ADR-0016 HB-4: FILE and OTHER are told by their place; two equal one-letter names are one object in CPython."""
+    rows = made("r1", 2)
+    (tmp_path / "e").write_bytes(b"".join(r + b"\n" for r in rows))
+    monkeypatch.chdir(tmp_path)
+    out = io.StringIO()
+    code = cli.cmd_events(type("A", (), {"file": "e", "against": "e"})(), out)
+    assert code == 0 and "  against e: 2 line(s), 2 in the file byte for byte" in out.getvalue()
+
+
+def test_hb5_the_number_this_build_says_writes_the_chain():
+    """ADR-0016 HB-5: the first version that writes the chain is not after this build's own: a run of this build with
+    no prev is said as taken out, not as an older build's."""
+    import raqib
+    assert event.version_of(raqib.__version__) >= event.CHAIN_SINCE
 
 
 # --- R7 (HA-4, H-5): the limits, said in tests ------------------------------------------------------------------

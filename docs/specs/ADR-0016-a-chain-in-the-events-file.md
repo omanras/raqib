@@ -100,3 +100,31 @@ by the Table in 4208d72).
   whose first write fails (the next written line says `first`); a file replaced under a running watch (the
   next line names a line that is not there: said). The rig keeps what `raqib events` wrote to its error
   stream. The tool of the examples says in its own words what `prev` in its list is for.
+
+## Amendment B (the Table, 2026-11-21) - the second review (docs/review/2026-11-20-M13.1-redo.md): M13.1 lands
+The reviewer's verdict is NEXT with five must-fix items. The field's word (the rig on 5d3e673): X38 MET on Linux
+(20 lines) and on Windows (59 lines).
+- HB-1 (a version is bounded). A part of a version is at most six digits: a longer one is no version, said as
+  not read. Reading a version cannot raise (a number of thousands of digits ends a newer interpreter's int()).
+- HB-2 (no line ends the command). A line whose values cannot be checked - a host that is a list, a result's
+  word that is an object - is named as not an event and the command goes on; a line's id is keyed with its
+  host only where the host is a text. HA-9's sentence now holds for `raqib events` as it did for the forwarder.
+- HB-3 (nothing compared is said). `--against` over a file of which no line names its host and id - an empty
+  export, another envelope, another encoding - compares nothing: that is said, and is a problem (exit 1),
+  never "a collector behind" alone.
+- HB-4 (FILE and OTHER are told by their place), so a file compared with itself under any name is compared.
+- HB-5 (the version is the line's own word). `CHAIN_SINCE` is the number of the merge that lands the chain, and
+  a test holds that this build's own number is not below it. Whoever removes every `prev` of a run and writes
+  its lines' version again as an older one makes it read as an older build's: said in the spec and the threat
+  model with H-5's other limits.
+- HB-6 (words and the rig). A run that begins before the file is said as naming no line of its run before it
+  here; a run is its host and its run word wherever the spec says what a run is; the spec says that one
+  carriage return before a newline is part of the line's end to the check, and what that leaves unseen; a
+  differing line says how many more of the file's lines hold its id; `--against` is said to see a cut or a
+  tail written again only where the collector holds a line of that part. X38 is not MET where the watch's own
+  run holds a line said twice: its writer writes none.
+- HB-7 (recorded). After a break the walk goes on from the line that broke, so one act can give several
+  breaks: each is true, the first is where the file was touched, and the answer does not say so yet. In a
+  fork the earlier branch is the one said beside. "Chain whole" does not say whether the run said its end.
+  The forwarder of this build skips a later build's line that holds a key it does not know. `raqib events`
+  holds the file and the other whole in memory. Each waits for its own task.

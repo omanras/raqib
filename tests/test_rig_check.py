@@ -364,7 +364,8 @@ def test_x38_met_where_this_watch_s_run_is_whole_and_no_line_names_a_break():
     older = WHOLE.replace("RESULT:", "  run old-run (host rig.example): not chained, 4 line(s) (no line holds prev:"
                                      " written by a Raqib before this one, version 0.2.0)\nRESULT:")
     assert x38(older)[0] == check.MET   # an older build's run beside it is no break
-    assert x38(WHOLE.replace("9 line(s)", "9 line(s), 2 said twice"))[0] == check.MET   # HA-6: no break
+    state, words = x38(WHOLE.replace("9 line(s)", "9 line(s), 2 said twice"))   # HB-6: no break, and not MET
+    assert state == check.MISSED and "2 line(s) said twice in the watch's own file" in words
     # the Table (seen on the rig's Windows machine: the kept answer ends its lines as Windows does, and X38 was MISSED)
     assert x38(WHOLE.replace("\n", "\r\n"), RAN.replace("\n", "\r\n")) == (
         check.MET, "run rig-run: chain whole, 9 line(s)")
