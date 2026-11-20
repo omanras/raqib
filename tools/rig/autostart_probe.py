@@ -179,6 +179,21 @@ PLACES = (("run keys", run_keys), ("startup folders", startup_folders), ("task t
           ("task files", task_files), ("services", services), ("winlogon", winlogon))
 
 
+def schtasks_query():
+    """What the scheduler's own tool tells a caller of any rights: how many tasks, how long (a helper process)."""
+    began = time.perf_counter()
+    try:
+        done = subprocess.run(["schtasks", "/query", "/fo", "csv", "/nh"], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"error": "%s" % exc, "seconds": round(time.perf_counter() - began, 3)}
+    rows = [x for x in done.stdout.decode("utf-8", "replace").splitlines() if x.startswith('"')]
+    names = {x.split('","')[0].strip('"') for x in rows}
+    return {"exit": done.returncode, "rows": len(rows), "tasks": len(names),
+            "ours": sum(1 for n in names if "RaqibRig" in n), "stderr": len(done.stderr),
+            "seconds": round(time.perf_counter() - began, 3)}
+
+
 def read_all():
     out = {"places": {}}
     began = time.perf_counter()
@@ -303,17 +318,28 @@ def main(argv):
         with open(argv[argv.index("--reads") + 1], "w", encoding="utf-8") as f:
             json.dump({"seconds": snap["seconds"],
                        "places": {k: {"entries": len(v["entries"]), "refused": v["refused"], "error": v["error"],
-                                      "seconds": v["seconds"]} for k, v in snap["places"].items()}}, f)
+                                      "seconds": v["seconds"]} for k, v in snap["places"].items()},
+                       "schtasks": [schtasks_query(), schtasks_query()]}, f)
         return 0
     first = read_all()
     say_read(first, "first (this process's own rights)")
     say_read(read_all(), "second")
     names = sorted(first["places"]["run keys"]["entries"]) + sorted(first["places"]["startup folders"]["entries"])
     print("RUN KEYS AND STARTUP, by name: %s" % names)
+    print("SCHTASKS /query, twice: %s" % json.dumps([schtasks_query(), schtasks_query()]))
+    call(["schtasks", "/create", "/tn", "RaqibRigSeen", "/tr", HARMLESS, "/sc", "once", "/st", "23:59", "/f"])
+    print("SCHTASKS /query with a task of this user's made: %s" % json.dumps(schtasks_query()))
     quiet(int(os.environ.get("QUIET_SECONDS", "90")), 5)
     acts()
     return 0
 
 
+def cleanup():
+    call(["schtasks", "/delete", "/tn", "RaqibRigSeen", "/f"])
+
+
 if __name__ == "__main__":
+    if "--cleanup" in sys.argv:
+        cleanup()
+        sys.exit(0)
     sys.exit(main(sys.argv[1:]))
