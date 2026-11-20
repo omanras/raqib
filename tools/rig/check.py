@@ -880,7 +880,8 @@ def read_chain(answer, report):
         return [(name, SKIP, "the rig ran no raqib events over the watch's events file")]
     try:
         run = re.search(r"(?m)^run: (\S+) \(seqs", report or "")
-        if not (answer or "").strip():
+        answer = (answer or "").replace("\r\n", "\n")   # the Table: Windows' own line ends (seen on the rig: MISSED)
+        if not answer.strip():
             return [(name, MISSED, "raqib events said nothing (silence is a finding)")]
         bad = [m.group(0).strip() for m in CHAIN_BAD.finditer(answer)]
         if run is None:
