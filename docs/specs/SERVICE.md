@@ -194,7 +194,11 @@ The install also refuses where:
 A raqib that a person installed for themselves (in their home, or a venv they own) is refused, by design. The
 install that passes is root's own: a folder root makes for it, a venv in that folder (`python3 -m venv DIR`),
 and `DIR/bin/pip install` run as root, then `sudo DIR/bin/raqib service install`. A venv in a folder a user can
-write (on some machines `/opt` is one) is refused. `raqib watch` as a person runs it is unchanged and needs none
+write (on some machines `/opt` is one) is refused. Give pip a copy of the checkout that root made
+(`sudo cp -r CHECKOUT DIR/src`, then `sudo DIR/bin/pip install DIR/src`), not the checkout itself: a build as
+root leaves root's own `build/` folder in the folder it builds from, and the person's next install from that
+checkout then fails (seen in the field, 2026-11-20: `Operation not permitted` under `build/lib`; the remedy
+there is `sudo rm -rf build raqib.egg-info` in the checkout). `raqib watch` as a person runs it is unchanged and needs none
 of this.
 
 The check guards the unit's starts, not the install itself: an install run from code a user can write has
