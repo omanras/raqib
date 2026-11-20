@@ -3297,3 +3297,41 @@ MET - the stand-in's wget, which lived under a second, is a NET-TOOL finding of 
 - BZ-13 (recorded). The always-said hole of liveness in the inventory is stale on Linux with a reader; changing
   it moves every inventory's bytes and waits for M14.1d. A pid used again under one tree across rounds; BX-5's
   words on a loss after a retired helper's last answer.
+
+## Amendment CA (the Table, 2026-11-21) - the second review of M14.1c (docs/review/2026-11-20-M14.1c-redo.md)
+The reviewer's verdict is STOP for two rulings, then five small items. The field's word (the rig on e9c7fa1):
+X36 MET by the rule as it stood, on a line that named curl and wget together; X35 MET; the gate green on the six
+CI jobs.
+- CA-1 (every link of an act-root is sampled). BZ-1 asked that an act-root's root be a process a sample held.
+  The shell under it is held to the same: the chain that makes an act-root - its root and the shell that ran
+  the command - is of processes a sample held. What only the reader gave adds acts to an act-root that the
+  samples made; it never makes one. FOR: BZ-1's own - no way to an alarm that the act-root's budget, measured
+  on samples, never saw. MUST NOT TOUCH: an act-root the samples make, to the byte.
+- CA-2 (a line says where each child came from). A HostChild line of a round that read the reader's text
+  carries, beside the programs' names and in their order, where each child was seen: by the sample, by the
+  process events, or by both. A line of a round with no reader's text is byte for byte what it was. FOR: a
+  fact of the line is written by the source and not worked out from cites that mix a line's children (A-1 of
+  ADR-0014's kind); X36 reads it. MUST NOT TOUCH: what the rules match; no rule reads the new key.
+- CA-3 (X36 by that fact). X36 is MET only where the tool's own entry on its line says the process events
+  alone. Where it says both, the tool lived to a sample: the row says so and is neither MET nor MISSED (the
+  rig's timing, not the watch's fault). Where it says the sample alone, the reader gave nothing for it:
+  MISSED.
+- CA-4 (a time is named by where it came from). A child's start taken from the reader's record is said as the
+  process events' word (when its fork was heard), in the round's record of starts and in the basis of an act's
+  time; it is never said as a read of /proc that was not made.
+- CA-5 (words). The note of a watch that heard and was not whole does not say "for the whole watch". The note
+  says that a child is named by its program's file, not by the name it was called by. The lists of the holes
+  of the result name the answer that holds back a rest wherever they are. The threat model says "no file of
+  its choosing". "Under a tree that talks at a sample" is said with the act-root's case beside it where the
+  rules and the rule form say it.
+- CA-6 (the tests can fail). The test of the watch's own record across rounds fails where the round an answer
+  covers is taken wrongly; the section's count of the watch's own is held by a test; a copy of the record that
+  is written again for the same pid takes the new time and image; a copy forgotten at the bound is counted and
+  said. A test that empties the process's own record puts it back.
+- CA-7 (recorded for M14.1d). A pid used again within one round or across rounds under one tree; the start of
+  a child keyed by its pid alone; the socket tool's rows that name a pid of their own where the kernel's table
+  cannot be read; BZ-3's three silences, measured on the probe branch acdc838: on Ubuntu 24.04 `nc` and
+  `netcat` are the file `nc.openbsd`, `telnet` is `inetutils-telnet`, `ftp` is `tnftp`; in a run of a real
+  agent (qwen) 8 of 36 processes ran a second program in the pid of the first, the shell that ran its command
+  in its own place (`bash -> python`, `bash -> hostname`), each within one round; one child of 212 in a made-up
+  set of idioms outlived a parent that had been given a round before.
