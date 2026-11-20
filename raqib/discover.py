@@ -1081,16 +1081,18 @@ def _sysmon_records_at(src, line, event_id, d, problems, keyed, timed):
         return []
     head = "Sysmon %d %s pid %d %s" % (event_id, d.get("UtcTime", "-"), pid, image or "-")
     if event_id == 1:
-        ppid, parent = _int(d.get("ParentProcessId", "")), d.get("ParentImage") or None
+        ppid, parent = _int(d.get("ParentProcessId", "")), _held(d.get("ParentImage"))
         text = "%s parent %s %s: %s" % (head, d.get("ParentProcessId", "-"), parent or "-", d.get("CommandLine", ""))
         out = [_rec("proc", src, line, text, pid=pid, ppid=ppid, image=image_name(image), exe=image,
                     argv=win_argv(d.get("CommandLine")), cwd=d.get("CurrentDirectory") or None,
                     env_keys=None, ts=ts)]
         if keyed:
             out[0].update(guid=guid, pguid=_guid_text(d.get("ParentProcessGuid")), created=True)
+            if empty_guid(d.get("ProcessGuid")) or empty_guid(d.get("ParentProcessGuid")):
+                out[0]["guid_empty"] = True   # BV-1: counted and said by the round (_key_channel's holes)
         if ppid is not None:
             out.append(_rec("proc", src, line, text, pid=ppid, ppid=None, image=image_name(parent),
-                            exe=parent, argv=win_argv(d.get("ParentCommandLine")), cwd=None,
+                            exe=parent, argv=win_argv(_held(d.get("ParentCommandLine"))), cwd=None,
                             env_keys=None, ts=ts, derived=True))
             if keyed:
                 out[-1]["guid"] = _guid_text(d.get("ParentProcessGuid"))
@@ -1128,6 +1130,8 @@ def _sysmon_records_at(src, line, event_id, d, problems, keyed, timed):
     own = _rec("proc", src, line, text, pid=pid, ppid=None, image=image_name(image), exe=image,
                argv=[], cwd=None, env_keys=None, ts=ts, derived=True)
     out = [own] + ([event] if event else [])
+    if keyed and empty_guid(d.get("ProcessGuid")):
+        own["guid_empty"] = True   # BV-1: an event of any kind joined by its pid is counted and said by the round
     return out if not keyed else [dict(r, guid=guid) for r in out]
 
 
@@ -1137,9 +1141,23 @@ GUID_TEXT = re.compile(r"\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-F
 def _guid_text(value):
     """A ProcessGuid as one text ({...}, lower case), or None (absent, or not a GUID)."""
     value = (value or "").strip()
-    if not GUID_TEXT.match(value):
+    if not GUID_TEXT.match(value) or empty_guid(value):   # ADR-0007 BV-1: an empty ProcessGuid is no ProcessGuid
         return None
     return "{%s}" % value.strip("{}").lower()
+
+
+EMPTY_GUID_TEXT = re.compile(r"\{?0{8}-0{4}-0{4}-0{4}-0{12}\}?\Z")
+
+
+def empty_guid(value):
+    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: a GUID of zeros
+    (and nothing else: `-`, `0` or an empty text is not it)."""
+    return bool(EMPTY_GUID_TEXT.match((value or "").strip()))
+
+
+def _held(value):
+    """BV-2: a ParentImage or ParentCommandLine as Sysmon wrote it, or None where it wrote "-" (not held)."""
+    return None if (value or "").strip() == "-" else (value or None)
 
 
 def parse_footprints(text, src="footprints"):
@@ -2321,6 +2339,11 @@ def _guid_instances(records):
                          " each its own process (M7.9)" % (
                              pid, len(gs), ", ".join(gs), ", %d beside the sampled one" % len(apart) if insts and apart
                              else ""))
+    emptied = sum(1 for r in records if r.get("guid_empty"))
+    if emptied:   # ADR-0007 BV-1: said, never joined in silence
+        holes.append("%d event(s) of this round's channel named their process or its parent by an empty"
+                     " ProcessGuid (all zeros: Sysmon no longer held it): joined by the pid they name; a pid taken"
+                     " again is not told apart there" % emptied)
     if untold:
         shown = sorted(set(untold))
         holes.append("%d process(es) whose start was read on one side only (the sample or the channel's event 1) were"

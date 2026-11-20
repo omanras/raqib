@@ -139,3 +139,125 @@ a NET-ADMIN-PORT finding that names the program and what started it; each high, 
   (Q-2): they read as older lines. A finding of NET-ADMIN-PORT cites the net line and not the start its names
   came from (F14). The four keys enter the watch's key of an act (F15): two feeds of one event that hold
   different starts would be two acts; not shown reachable. Port 139 is not on the list (F10).
+
+## Amendment B (the Table, 2026-11-20) - S2 measured and ruled: the registry's autostart values (M15.2)
+Measured before ruling (the probe branch cd55ab0, GitHub's Windows machine, main fbf7090 merged; twice: under
+the rig's own configuration, and under a public configuration of Sysmon that many use, fetched there and never
+kept in this tree). The stand-in set five harmless values, each undone: two under its user's Run key (by reg.exe
+and by PowerShell), one under RunOnce, one under the machine's Run key, one under the machine's 32-bit view.
+- Sysmon's event 13 named each one, with the program that set it (`Image`), its process, the command in
+  `Details`, and the value's whole name in `TargetObject`, in these four shapes:
+  `HKU\<SID>\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\<name>`, the same with `RunOnce`,
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\<name>`, and
+  `HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Run\<name>`.
+- Under the public configuration all five were logged, and they were the only events 13 of the 91 seconds (230
+  events in all; the registry's are a few among them there, because that configuration names the keys it logs).
+  Under it the two rules of S1 fired as on the rig's configuration (the Startup file; the two connections to 22).
+- On a fresh machine the user's Run key was not there at all: the first value made the key (an event 12) and
+  then set the value (an event 13). A value's removal is an event 12 (`DeleteValue`).
+- A value under `...\Schedule\TaskCache\Tree\` is set by the Schedule service for every task, the system's own
+  among them; its `Details` is a number, an id or `Binary Data`, never a command.
+- Not measured: a configuration that logs every key (how many events 13 a pass then holds); a value set by a
+  hive loaded from a file; a rename of a value or a key (event 14); the commander's own Sysmon.
+- AB-1 (a rule of its own). A value set under Run or RunOnce is PERSIST-RUN-KEY, not PERSIST-AUTOSTART: a
+  rule says one thing in one sentence, and its ways round are its own (ADR-0002). This replaces the words of
+  A-2 and A-7 that named PERSIST-AUTOSTART for it. Class PERSIST, kind signature, severity high, ATT&CK
+  T1547.001. FOR: the commander's second act (a value under the user's Run key) is said when it is set, whatever
+  program set it. MUST NOT TOUCH: PERSIST-AUTOSTART and its fixtures stay as they are; on a benign tree a
+  source finding is noted, not knocked, as before.
+- AB-2 (the line). An os line of tool `registry` is written for an event 13 whose target is a value directly
+  under `\Microsoft\Windows\CurrentVersion\Run` or `\RunOnce` of `HKU\<a SID>\SOFTWARE` or `HKLM\SOFTWARE`,
+  with or without `\Wow6432Node` after `SOFTWARE`, in any case of letters: the four measured shapes and the two
+  they imply. The match is on the whole key: `RunNotification`, `RunOnceEx`, `RunServices`, and a value of a
+  key under Run are not it. The line carries `autostart` (run or runonce), `hive` (user or machine), `view32`
+  (true under Wow6432Node), `value_name` (redacted and bounded as a path is), `program` (the name of the
+  program the value would run, through the gate a command's head goes through; null where `Details` is not a
+  command), `image` (the name of the program the event names, through the gate a process line's name goes
+  through) and `parent_image` (as an os net line's: from that process's own start, null where the follow holds
+  none). The target and the text of `Details` are in the line's hash and never in the clear (A-1). An event 13
+  of any other key is not a line in S2. FOR: the rule reads facts of the event; nothing an agent wrote is
+  copied into a finding. MUST NOT TOUCH: a process, file or net line, byte for byte.
+- AB-3 (the read). Under the watch each pass of a tree's follow asks a second bounded question, for event 13
+  alone, after its first: its own cap, its own highest record (kept with the tree the follow keeps, so that a
+  follow attached again reads none twice), the same restart. The first question is what it was, to the byte.
+  A second read that reaches its cap is said once, a hole of its kind; one that fails is said once as a
+  silence and takes nothing from the pass's other lines. An event 13 is the tree's where its process is in the
+  tree as the pass's first read left it. An export read by `raqib os-sysmon` gives its events 13 as lines too,
+  in their time's order; `missing_events` stays a word about events 1, 11 and 3, so every line an export gave
+  before is the line it gives now. FOR: a Sysmon that logs many keys takes nothing from the events Raqib
+  already reads. Cost, measured only under the two configurations above: a second short read per tree per
+  pass; what it costs beside a configuration that logs every key is to be measured (the plan).
+- AB-4 (the watch). A registry line is an os line like the other three: the watch's key of an act, its word
+  for an event's kind, and the rules of a tree's sources read it; it is paired with no line of the host's own
+  record (told twice is a process's matter).
+- AB-5 (what waits). AA-3 (an unread Initiated is the rule's partial note) and AA-4 (a channel that gives no
+  event 11, and now none 13, said by the watch) are M15.2b, after this lands: until then the threat model
+  says both. The rig's own claim for this rule is the Table's to add after the landing.
+
+## Amendment C (the Table, 2026-11-20) - the review of M15.2 (docs/review/2026-11-20-M15.2.md): STOP, ruled
+The reviewer said STOP: a pass asked its two questions one after the other, each with its own bound, and a value
+set by a process whose start the first answer did not yet hold was dropped for good, with nothing said. AB-3's
+word "after its first" was the Table's, and it was wrong. Measured before this ruling (the probe branch, GitHub's
+Windows machine, the build of 8a262e3; the stand-in set 40 more values under its user's Run key, each by a
+fresh reg.exe at a moment of its own, each undone):
+- In 19 of 21 runs each of the 40 was a line and a PERSIST-RUN-KEY finding. In two runs 38 were: the two
+  missing values' programs were all there as process lines, and the passes' own bounds show the cause - the
+  second read's highest record was ahead of the first's (924 and 930; 1011 and 1014; 1190 and 1192): F1 as
+  the reviewer read it.
+- A value whose name holds a backslash (F5): Sysmon wrote its target as `...\CurrentVersion\Run\<part>\<part>`,
+  the shape a value of a key under Run would have. The build did not make it a line, and said nothing.
+- In two other runs every line of the stand-in's tree stopped about thirty seconds before the tree ended, its
+  process lines too, and nothing said so; the tree was then quiet in the rounds while it still worked. Not seen
+  in nine runs of main's build under the same acts. Its cause is not found yet (AC-9).
+- AC-1 (F1: the order of a pass's two questions). The question for event 13 is asked first; then the first
+  question, to the byte what it was. Every event 13 the pass takes was then logged before the other question
+  was asked, so the start of the process that set it is in that answer or an earlier one. Where the other
+  answer is cut at its cap, the pass takes no event 13 above the cut's last record, and the registry's bound
+  stops there; where the other read fails, the pass takes none and the bound does not move. FOR: no value set
+  by a tree's process is passed over because of when two reads happened. MUST NOT TOUCH: the first question's
+  arguments; what a pass writes for events 1, 11 and 3.
+- AC-2 (F3: a root not found yet). In a pass whose root is not found the registry's bound does not move.
+- AC-3 (F5: a backslash in a value's name). An event 13 whose target is anything below a Run or RunOnce key
+  of AB-2 is a line: `nested` is true where what follows the key holds a backslash, and `value_name` is all of
+  what follows it. The event cannot tell a value whose name holds a backslash from a value of a key under
+  Run; the rule fires for both and its sentence says that it cannot tell. `RunNotification`, `RunOnceEx` and
+  `RunServices` are other keys and stay out. FOR: a name chosen to look like a key is not a way round. The
+  cost is a finding for a value of a real key under Run, which Windows does not use; not measured on a desktop.
+- AC-4 (F6: the value's name in a sentence). `value_name` is bounded at 80 characters, and a sentence shows it
+  between double quotes, a double quote inside it written as an apostrophe. FOR: text an agent chose cannot
+  pass for the sentence's own words.
+- AC-5 (F2: the watch asks). The watch gives its follow the word to read the registry as it gives every other
+  word; a test holds it; where a follow given to the watch does not take that word, the source's own words
+  say that the registry is not read.
+- AC-6 (F7: the sentences this stage made false). Every sentence of the tree that says the registry is not
+  read, or names the os source's events and tools without event 13, is put right, the ones outside the first
+  HANDOFF's Scope too (named in the REDO's Scope).
+- AC-7 (F4, F8, F10, F12, F13: said, not built). An event 13 named by a pid alone; a value the system sets on
+  a tree's behalf; a second read's problem at a line number said before; two follows that hold different
+  starts; whether Windows runs a value under a user's 32-bit view, and how Sysmon writes SYSTEM's own hive:
+  each is said in the threat model as not measured or not shown reachable.
+- AC-8 (the rig). X34 is MISSED, not OPEN, where the stand-in set the value and no finding names its tree.
+- AC-9 (the lines that stopped). M15.2 does not merge until the two runs' cause is found, or shown to be main's
+  own (then it is recorded and ruled apart). The probe branch carries, for the probe only, one line for each
+  pass of a follow and for each round's sources.
+
+## Amendment D (the Table, 2026-11-20) - the second review (docs/review/2026-11-20-M15.2-redo.md): M15.2 lands
+The reviewer said NEXT: the REDO does what Amendment C rules, the questions are asked in the ruled order, and
+the fake channel of its tests grows between the two questions of a pass. In the field (the probe branch
+f94b9bd, GitHub's Windows machine, the build that lands): thirteen runs, 40 values each by a fresh reg.exe at
+a moment of its own - every one a line and a PERSIST-RUN-KEY finding, where the first build lost one to three
+in four runs of seventeen; a value whose name holds a backslash was a finding that says so.
+- AD-1 (AC-9 is met). The lines that stopped were Sysmon's empty ProcessGuid, main's own fault, found and
+  ruled as ADR-0007 Amendment BV; its fix rides on this branch and was read by the same reviewer. With it, a
+  run whose channel held eleven such starts wrote every child (the probe's build of the same change).
+- AD-2 (said as it is; the review's must-fix items). The order Sysmon logs a process's start and its value in
+  is not measured: AC-1 closes F1 where the start is logged first, and the documents say that, not more. A
+  value whose name ends with a backslash is no line and nothing says so: said, not measured. The round counts
+  an event of any kind that named its process by an empty ProcessGuid, not a start alone. What BV's join by
+  pid costs is said whole (ADR-0007 BV-3). An empty ProcessGuid is a GUID of zeros and nothing else.
+- AD-3 (recorded, each for its own measurement or ruling). Whether Sysmon ever logs a value before its own
+  process's start; whether Windows runs a value under a key below Run, one whose name holds or ends with a
+  backslash, or one under a user's 32-bit view; whether the follow's word on an empty ProcessGuid belongs in a
+  tree's source only where that tree's own event was joined by pid; whether a child joined by its parent's pid
+  should carry that parent's mark of a nested root; a placeholder of the rules' sentences chosen by a boolean
+  (the nested clause is printed on every finding until then); AA-3 and AA-4 (M15.2b).

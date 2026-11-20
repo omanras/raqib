@@ -16,7 +16,7 @@ from readme_text import GUIDE, flat, section as cut, units  # noqa: E402  (M9.2:
 THREAT = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
 CATALOG = ROOT / "raqib" / "rules" / "catalog"
 WORDS = {4: "4", 6: "Six", 7: "7", 11: "Eleven", 12: "Twelve", 13: "Thirteen", 14: "Fourteen", 15: "Fifteen",
-         16: "Sixteen", 17: "Seventeen", 19: "Nineteen", 20: "Twenty", 21: "Twenty-one", 22: "Twenty-two", 23: "Twenty-three", 24: "Twenty-four"}
+         16: "Sixteen", 17: "Seventeen", 19: "Nineteen", 20: "Twenty", 21: "Twenty-one", 22: "Twenty-two", 23: "Twenty-three", 24: "Twenty-four", 25: "Twenty-five"}
 
 
 def test_readme_counts_the_rules():
@@ -26,7 +26,7 @@ def test_readme_counts_the_rules():
     crossing = [r for r in table if r["class"] == "CROSS"]   # M5.3 C-1: the code rule of cross.py
     anchors = [r for r in table if r["id"] in tree.RULE_KINDS]   # M4.3 J-1: the code rules of tree.py
     assert "%s rules turn the trace into findings" % WORDS[len(table)] in GUIDE   # M9.2: How it works
-    assert len(table) == len(silence) + len(crossing) + len(anchors) + len(rules) == 24   # M15.1: + PERSIST-AUTOSTART, NET-ADMIN-PORT; M7.4: + HOST-RHYTHM; M7.2: 5 + 1 + 14 (REDO C-1c: + NEW-AGENT-UNKNOWN); M7.2b: + HOST-UNWATCHED
+    assert len(table) == len(silence) + len(crossing) + len(anchors) + len(rules) == 25   # M15.2: + PERSIST-RUN-KEY; M15.1: + PERSIST-AUTOSTART, NET-ADMIN-PORT; M7.4: + HOST-RHYTHM; M7.2: 5 + 1 + 14 (REDO C-1c: + NEW-AGENT-UNKNOWN); M7.2b: + HOST-UNWATCHED
     assert ("The rules are %d silence rules, %d cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and %d"
             " more: %d YAML rules in `raqib/rules/catalog` and %d tree anchors (%s, `raqib/rules/tree.py`)." % (
                 len(silence), len(crossing), len(anchors) + len(rules), len(rules), len(anchors),
@@ -35,7 +35,7 @@ def test_readme_counts_the_rules():
              "SCOPE-CWD-ROOT", "SCOPE-CWD-MOVED", "NET-TOOL", "DESTRUCT-CMD", "SECRET-OUTPUT",
              "DRIFT-FILES", "CROSS-SOURCE", "LANDED-NO-GATE", "EDIT-NO-TEST", "HEAD-UNMOVED", "INDEX-UNTOUCHED",
              "NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE", "HOST-UNWATCHED", "HOST-RHYTHM",
-             "PERSIST-AUTOSTART", "NET-ADMIN-PORT"}   # M7.2; REDO C-1c; M7.2b; M7.4; M15.1 (ADR-0014)
+             "PERSIST-AUTOSTART", "NET-ADMIN-PORT", "PERSIST-RUN-KEY"}   # M7.2; REDO C-1c; M7.2b; M7.4; M15.1, M15.2 (ADR-0014)
     assert {r["id"] for r in table} == named, "update the README rule table"
     # Every rule has a row of the README's rule table, alone or in a row of its family (M4.2).
     rows = [line.split("|")[1].strip() for line in section("What it catches", GUIDE).splitlines()

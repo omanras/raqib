@@ -1,6 +1,6 @@
-# HANDOFF — none open  (M15.1 and M14.1a landed 2026-11-20; the next tasks are handed off on their own branches)
+# HANDOFF — none open  (M15.1, M14.1a and M15.2 landed 2026-11-20; the next tasks are handed off on their own branches)
 
-Task: none on main. Do not build here. In review on its branch: M15.2 (claude/M15.2, ADR-0014 Amendment B: the registry's autostart values; its review said STOP on the order of its two reads, and the Table rules it before its REDO). Next on the other track: M14.1b (ADR-0007 BT-6, BT-5: the reader of Linux's process events in a process of its own, its processes given to the round as the channel's are on Windows); the Table writes its ruling and its HANDOFF.
+Task: none on main. Do not build here. In build on its branch: M14.1b REDO (claude/M14.1b, ADR-0007 Amendment BW: the helper process of the reader of Linux's process events, after its review). Next on the other track: M15.2b (ADR-0014 AA-3, AA-4: an unread Initiated is the rule's partial note; a channel that gives no event 11 or 13 is said by the watch); the Table writes its ruling and its HANDOFF.
 
 Scope:
   (none)

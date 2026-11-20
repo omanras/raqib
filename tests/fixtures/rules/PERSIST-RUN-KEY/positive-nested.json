@@ -1,0 +1,200 @@
+{
+ "expect_seq": [
+  4,
+  5
+ ],
+ "lines": [
+  {
+   "cwd": "C:\\work\\proj",
+   "missing_events": [
+    3,
+    11
+   ],
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "reg.exe",
+    "command_programs": [
+     "reg.exe"
+    ],
+    "depth": 1,
+    "image": "reg",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "403b3f93d5dfac98cbea755ae008debc0f70233fd5e567fc947ff1910e4eb0ee",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "reg.exe",
+    "command_programs": [
+     "reg.exe"
+    ],
+    "depth": 1,
+    "image": "reg",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "403b3f93d5dfac98cbea755ae008debc0f70233fd5e567fc947ff1910e4eb0ee",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 1,
+    "hive": "user",
+    "image": "reg",
+    "nested": true,
+    "parent_image": "agent",
+    "program": "cmd",
+    "value_name": "RaqibTestH\\Part",
+    "view32": false
+   },
+   "input_sha256": "f6421c05a6d31f91072f430a2944bf489e82cf1954d048618cf009978e204fa0",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 1,
+    "hive": "user",
+    "image": "reg",
+    "nested": true,
+    "parent_image": "agent",
+    "program": "cmd",
+    "value_name": "RaqibTestH\\Part",
+    "view32": false
+   },
+   "input_sha256": "f6421c05a6d31f91072f430a2944bf489e82cf1954d048618cf009978e204fa0",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "runonce",
+    "depth": 1,
+    "hive": "machine",
+    "image": "reg",
+    "nested": true,
+    "parent_image": "agent",
+    "program": null,
+    "value_name": "RaqibTest\\Deeper\\Part",
+    "view32": false
+   },
+   "input_sha256": "460b6a9b17f3cc1897bda41f0b3e7e3eee588ebe1a169c830c42bbc29379aa4f",
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "runonce",
+    "depth": 1,
+    "hive": "machine",
+    "image": "reg",
+    "nested": true,
+    "parent_image": "agent",
+    "program": null,
+    "value_name": "RaqibTest\\Deeper\\Part",
+    "view32": false
+   },
+   "input_sha256": "460b6a9b17f3cc1897bda41f0b3e7e3eee588ebe1a169c830c42bbc29379aa4f",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 5,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 6,
+   "session_id": "os-4985",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:02.200Z"
+  }
+ ]
+}

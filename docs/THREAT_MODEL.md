@@ -644,6 +644,30 @@ Rulings: ADR-0003 Amendments C and D.
   the final poll reads after the last round are counted in the report,
   not judged by HOST-RHYTHM; where its two times agree, a process's start
   (event 1) matches a sampled CreationDate exactly as before.
+- Sysmon can stop holding a process that still runs. Seen in the field: the
+  starts of a long-lived parent's later children then name the parent by an
+  empty ProcessGuid (all zeros), with `-` as its image and its command line,
+  the parent's pid still right; in 17 runs of ninety seconds it happened in
+  two, to one child and to eleven. Raqib once took the zeros for a
+  ProcessGuid of their own: the children joined no tree, their lines were
+  never written, and the round took the tree for quiet while it worked. An
+  empty ProcessGuid is now no ProcessGuid: the event is joined by the pid it
+  names, as an event that carries none is, and the follow and the round each
+  say so. What that costs: where the pid was taken again by another process
+  in between, the child is given to the pid's present holder, and nothing
+  tells the two apart there; the root's own pid stays the root's for the
+  follow's life, so a child named by it after the root ended is the tree's
+  even where the follow read the start of the pid's new holder; the parent's
+  name is unread (`-` is not a program's name), so a rule that reads a
+  parent's name does not have it; a connection whose own ProcessGuid is empty
+  has neither its program's name nor its parent's (its start is held by its
+  ProcessGuid); and a process joined by a pid is not marked as at or under
+  another watched tree's root, so where it is a nested tree's, the outer tree
+  takes its acts and talks as its own too. The follow's word is written once
+  in each tree's source whose pass read such an event, the tree's own or not.
+  Not measured: how long a process must live, or how busy the machine must
+  be, before Sysmon lets go of it; whether a real desktop's Sysmon does it
+  more often than a machine made for one run.
 
 ### The rules of behaviour (PERSIST-AUTOSTART, NET-ADMIN-PORT; ADR-0014)
 Rulings: ADR-0014 A-3 to A-6 and A-8. Two signatures judge what a tree does to the
@@ -668,8 +692,8 @@ What they see:
 
 What they do not see:
 - Every autostart place the rule does not read yet. Measured: an autostart value
-  under `CurrentVersion\Run` is Sysmon's event 13, with the program that set it,
-  and Raqib does not read event 13 yet; a scheduled task is written by the
+  under `CurrentVersion\Run` is Sysmon's event 13, with the program that set it;
+  PERSIST-RUN-KEY judges it (below), not this rule; a scheduled task is written by the
   Schedule service (svchost, as SYSTEM, 24 ms after schtasks started), not by a
   process of the tree.
 - A file moved or renamed into the folder: not measured. A move within one
@@ -684,7 +708,8 @@ What they do not see:
   out with loopback. An address of 100.64.0.0/10 counts as private.
 - A net line whose `Initiated` was not read is not judged, and nothing says
   so: a silence of this rule. Under `raqib watch --host` a Sysmon that gives no
-  file event is not said either. Both are the next stage's to close.
+  file event is not said either. Both wait for the stage after the registry's
+  values (ADR-0014 AB-5): until then they are said here.
 - The budgets of the two rules were measured on no real desktop's work. A
   deploy over ssh to a machine of the same network, a remote session of an
   editor, a local virtual machine reached at its private address, a profile's
@@ -710,6 +735,104 @@ What is not a finding (A-6): a file under TEMP, and a shell under a shell, are a
 agent's ordinary work. They are recorded (the lines are in the tree's source) and
 judged by no rule. Measured: a file under TEMP written by a powershell under a cmd
 was a file line with its path, and nothing fired on it, by design.
+
+### The registry's autostart values (PERSIST-RUN-KEY; ADR-0014 Amendment B)
+Rulings: ADR-0014 AB-1 to AB-5, and Amendment C (AC-1 to AC-8). One signature
+judges a value set under the registry's Run or RunOnce key by a process of a
+watched tree. What was measured (a stand-in agent on a Windows machine, under
+the rig's own Sysmon configuration and under a public configuration that many
+use; harmless values, each undone) is the ground of what follows.
+
+What it sees:
+- Anything set below `\Microsoft\Windows\CurrentVersion\Run` or `\RunOnce` of a
+  user's hive (`HKU\<SID>\SOFTWARE`) or the machine's (`HKLM\SOFTWARE`), with or
+  without `\Wow6432Node` after `SOFTWARE`, in any case of letters, as Sysmon's
+  event 13 names it, whatever program of the tree set it. Measured: the values
+  were in four shapes of `TargetObject` - the user's Run and RunOnce, the
+  machine's Run and the machine's 32-bit Run - and each event named the program
+  that set it (reg.exe, powershell.exe) and its process. The machine's RunOnce,
+  plain and 32-bit, are the two shapes the four imply; the pattern also holds
+  the user's 32-bit view (eight shapes in all).
+- A value whose name holds a backslash. Measured: Sysmon wrote its target as
+  `...\CurrentVersion\Run\<part>\<part>`, the shape a value of a key under Run
+  would have. The event cannot tell the two apart: the line says `nested`, the
+  rule fires for both, and its sentence says that it cannot tell. The cost is a
+  finding for a value of a real key under Run, which Windows is not believed to
+  use (not measured on a desktop).
+- Under the public configuration all five values of the first measure were
+  logged, and they were the only events 13 of the 91 seconds measured.
+- The line carries the hive, run or runonce, the 32-bit view, the value's name
+  (redacted, at most 80 characters; a sentence shows it between double quotes,
+  a double quote in it written as an apostrophe, so text an agent chose cannot
+  pass for the sentence's own words), the name of the program the value would
+  run (none where the value's text is not a command: binary data, a number, an
+  id) and the program that set it with its parent. The target and the value's
+  text are in the line's hash only, never in a finding.
+- Under `raqib watch --host` each pass of a tree's os follow asks its question
+  for event 13 first (at most 500 events a pass), and then the first question,
+  which is what it was. Every event 13 the pass takes was so logged before the
+  other question was asked, and, where Sysmon logs a process's start before its
+  value (not measured), the start of the process that set it is in that answer
+  or an earlier one; a value logged before its own process's start, the start
+  falling in a later answer, would be passed over unsaid. Measured on the build that asked the two the other
+  way round: in two of 21 runs, two of 40 values set by fresh reg.exe processes
+  were never lines, though their process lines were there; the second read's
+  bound had run ahead of the first's. Where the other answer is cut at its cap,
+  no event 13 above its last record is taken and the registry's bound stops
+  there, so the next pass reads it; where the other read fails, the pass takes
+  none and the bound does not move; while the tree's root is not found yet, the
+  bound does not move either. A read of event 13 at its cap is said, and one
+  that fails is said as a silence and takes nothing from the pass's other lines.
+
+What it does not see:
+- Another autostart place of the registry: RunOnceEx, RunServices, a user's
+  hive not named by a SID, a scheduled task and a service. Measured: about
+  twenty seconds after the stand-in's values, Windows' own sihost.exe set
+  values under `...\CurrentVersion\RunNotification\`, a key that begins with the
+  same letters; the match is on the whole key, so they are not this rule's. A
+  value under `...\Schedule\TaskCache\Tree\` is set by the Schedule service for
+  every task, the system's own among them, and its value is a number, an id or
+  binary data, never a command.
+- A value or a key renamed into place (Sysmon's event 14): not read, not
+  measured. A value's removal and a key made are event 12: not read. Measured:
+  on a fresh machine the user's Run key was not there; the first value made the
+  key (an event 12) and then set the value (an event 13), which is judged.
+- A Sysmon whose configuration logs no value set under these keys: nothing is
+  then there to read, and Raqib cannot tell that from nothing done. A
+  configuration that logs every key was not measured: how many events 13 a pass
+  then holds, and what the read of event 13 costs beside it, are not known.
+- A hive written offline or loaded from a file: not measured.
+- A value changed by a program of the system on the tree's behalf: the event is
+  believed to name that program, not a process of the tree (not measured for
+  the registry; the measured case is the Schedule service's own TaskCache key).
+- An event 13 named by its pid alone (no ProcessGuid) is placed by the tree as
+  the pass's walk ends, not in the order of time as the other events are: a pid
+  reused within one pass could give a value to the wrong process. Sysmon
+  writes the ProcessGuid, or an empty one where it no longer holds the process
+  (seen for a parent, and once for a process that had ended; not seen on an
+  event 13).
+- A problem of the event 13 read (a line that cannot be read, an event with no
+  TargetObject) is said once per its words for the life of a follow; a later
+  problem at a line number said before is not said again. Not measured.
+- Two follows that hold different starts of one process (nested trees) could
+  give one event 13 two parents' names, and so two acts. Not shown reachable.
+- Whether Windows runs a value under a user's 32-bit view
+  (`HKU\<SID>\SOFTWARE\Wow6432Node\...\Run`), and whether Sysmon writes
+  SYSTEM's own hive as `HKU\S-1-5-18` or as `HKU\.DEFAULT` (the second is not
+  read): not measured. A service account's hive counts as a user's.
+- A value whose name ends with a backslash: its target ends with one and is no
+  line, and nothing says so. Whether Windows accepts or runs such a value is
+  not measured.
+- An export cut short holds nothing after its end.
+- The budget was measured on no real desktop's work: no benign recording holds a
+  registry line. A program the tree starts that sets its own Run value (an
+  installer, an updater) would fire, and how often is not known.
+- Not measured either: the commander's own Sysmon.
+- Linux has no os source: the rule judges nothing there.
+- Still waiting, and said here until they are closed: a net line whose
+  `Initiated` was not read is not judged and nothing says so; under
+  `raqib watch --host` a Sysmon channel that gives no file event, and now none
+  of event 13, is not said.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
@@ -1292,7 +1415,10 @@ is amended by T-2, T-1 restated by V-1).
   start (the rounds' read starts at the live reader's own start, which
   can differ by the reader's start delay), then the records after the
   highest it has read in the whole channel, at most the round's cap, a
-  cut being a hole. A follow attached again is given the tree the
+  cut being a hole; before it, the follow asks one of its own for event 13
+  (at most 500 events 13 a pass, of any key; only a value set below the
+  registry's Run or RunOnce key is a line), and a value logged after a cut
+  of the other answer waits for the next pass. A follow attached again is given the tree the
   earlier follow published at the end of its last finished pass, never
   the live tree of a follow still in a pass; the tree a follow keeps is
   never pruned for its life (memory, not judgment); when the round's

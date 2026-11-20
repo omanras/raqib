@@ -256,8 +256,8 @@ def test_x32_to_x34_each_act_the_stand_in_says_it_did_is_a_finding_of_its_tree()
 
 @pytest.mark.parametrize("ident,rule,absent", [("X32", "PERSIST-AUTOSTART", check.MISSED),
                                                ("X33", "NET-ADMIN-PORT", check.MISSED),
-                                               ("X34", "PERSIST-RUN-KEY", check.OPEN)])
-def test_x32_to_x34_an_act_with_no_finding_is_missed_and_the_rule_not_landed_is_open(ident, rule, absent):
+                                               ("X34", "PERSIST-RUN-KEY", check.MISSED)])   # AC-8: landed
+def test_x32_to_x34_an_act_with_no_finding_is_missed(ident, rule, absent):
     gone = "\n".join(line for line in BEHAVED.splitlines() if "] %s on " % rule not in line) + "\n"
     got = behaviour(report=gone)
     assert got[ident][0] == absent and "0 %s line(s)" % rule in got[ident][1]

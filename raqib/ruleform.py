@@ -98,7 +98,7 @@ RECORD_ENTRIES = 10000     # REDO E-9: the directory entries walked under traces
 CITED_MAX = 3
 STAGE_YOUNG = 600          # REDO 2 F-7: a form-* folder younger than this (seconds) may be another Test's: left alone
 # REDO 2 F-10: the tool names the host source and the os source write; their lines are not hook lines
-SOURCE_TOOLS = (host.CHILD_TOOL, host.CONN_TOOL, host.GONE_TOOL, "process", "net", "file")
+SOURCE_TOOLS = (host.CHILD_TOOL, host.CONN_TOOL, host.GONE_TOOL, "process", "net", "file", "registry")   # AB-4
 QUIET_PROGRAMS = ("ls", "git", "make")
 QUIET_HOSTS = ("example.org", "example.net", "example.com")
 QUIET_TOOLS = ("Read", "Grep", "LS")
