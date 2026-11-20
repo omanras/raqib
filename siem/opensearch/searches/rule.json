@@ -1,5 +1,5 @@
 {
-  "finds": "Every finding of one rule of the catalog, by its id (the parameter rule_id).",
+  "finds": "Every finding of one rule, by its id (the parameter rule_id), each rev and each copy.",
   "request": "POST raqib-events*/_search/template",
   "body": {
     "source": {
@@ -16,7 +16,7 @@
       },
       "sort": [
         {
-          "@timestamp": "desc"
+          "event.ingested": "desc"
         }
       ]
     },

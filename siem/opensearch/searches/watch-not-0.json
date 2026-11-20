@@ -32,7 +32,7 @@
     },
     "sort": [
       {
-        "@timestamp": "desc"
+        "event.ingested": "desc"
       }
     ]
   }

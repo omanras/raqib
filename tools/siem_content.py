@@ -1,14 +1,16 @@
-"""The files of siem/ that are made from the catalog (ADR-0017 S-3, M16.1 E4): siem/attack/rules.md, a table of
-every rule of raqib/rules/catalog with its class, kind, severity and ATT&CK techniques, and
-siem/attack/raqib-layer.json, a layer for the ATT&CK Navigator of the same techniques.
+"""The files of siem/ that are made from the rules (ADR-0017 S-3 and Amendment A SA-8, M16.1 E4 and REDO R5):
+siem/attack/rules.md, a table of every rule the report lists - raqib/report.py's own rule_table: the silence rules,
+the cross-source rule and the drift anchors the code holds, and the rules of raqib/rules/catalog - with its class,
+kind, severity and ATT&CK techniques, and siem/attack/raqib-layer.json, a layer for the ATT&CK Navigator of the
+same techniques (never loaded into a Navigator yet, siem/README.md).
 
     python3 tools/siem_content.py --write   writes both from the catalog
     python3 tools/siem_content.py --check   exit 0 when both are what --write would write; else exit 1 and each
-                                            difference named (the gate calls it: a rule added to the catalog
-                                            fails the gate until --write is run)
+                                            difference named (the gate calls it: a rule added or changed fails
+                                            the gate until --write is run)
 
-Standard library and raqib's own YAML reader only. It reads the catalog and writes under siem/attack; raqib never
-imports it."""
+Standard library and raqib only (it imports raqib.report and raqib.rules.engine to read the rules as the report
+does; nothing under raqib/ is changed). It writes under siem/attack; raqib never imports it."""
 import difflib
 import json
 import os
@@ -17,7 +19,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from raqib.rules import yamlite  # noqa: E402
+from raqib import report  # noqa: E402
+from raqib.rules import engine  # noqa: E402
 
 CATALOG = os.path.join(ROOT, "raqib", "rules", "catalog")
 TABLE = os.path.join("siem", "attack", "rules.md")
@@ -25,15 +28,11 @@ LAYER = os.path.join("siem", "attack", "raqib-layer.json")
 
 
 def catalog(path=CATALOG):
-    """Every rule of the catalog, sorted by id: {id, title, class, kind, severity, attack}."""
-    rules = []
-    for name in sorted(os.listdir(path)):
-        if not name.endswith(".yaml"):
-            continue
-        with open(os.path.join(path, name), encoding="utf-8") as f:
-            doc = yamlite.loads(f.read())
-        rules.append({"id": doc["id"], "title": doc["title"], "class": doc["class"], "kind": doc["kind"],
-                      "severity": doc["severity"], "attack": list(doc.get("attack") or [])})
+    """Every rule the report lists (report.rule_table over the catalog, as the watch loads it), sorted by id:
+    {id, title, class, kind, severity, attack}; a kind the code does not declare is "none"."""
+    rules = [{"id": r["id"], "title": r["title"], "class": r["class"], "kind": r["kind"] or "none",
+              "severity": r["severity"], "attack": list(r["attack"] or [])}
+             for r in report.rule_table(engine.load_catalog(path))]
     return sorted(rules, key=lambda r: r["id"])
 
 
@@ -51,10 +50,13 @@ def table(rules):
     lines = [
         "# The catalog's rules and their ATT&CK techniques",
         "",
-        "Made by `python3 tools/siem_content.py --write` from `raqib/rules/catalog`; `--check` holds it in the gate.",
+        "Made by `python3 tools/siem_content.py --write` from every rule the report lists (`raqib/report.py`,",
+        "`rule_table`: the silence rules, the cross-source rule and the drift anchors of the code, and the rules of",
+        "`raqib/rules/catalog`); `--check` holds it in the gate.",
         "Do not edit it by hand. A technique is what a finding is consistent with, never that it happened",
         "(docs/specs/EVENT.md, `rule.attack`); a finding carries its rule's in `threat.technique.id` (siem/README.md).",
-        "The same techniques, for the ATT&CK Navigator: `raqib-layer.json` beside this file.",
+        "The same techniques, for the ATT&CK Navigator: `raqib-layer.json` beside this file (never loaded into a",
+        "Navigator yet).",
         "",
         "| rule | title | class | kind | severity | ATT&CK techniques |",
         "|---|---|---|---|---|---|",
@@ -75,7 +77,8 @@ def layer(rules):
         "name": "Raqib - the techniques of the catalog's rules",
         "versions": {"layer": "4.5"},
         "domain": "enterprise-attack",
-        "description": ("Made by python3 tools/siem_content.py --write from raqib/rules/catalog. A technique is what a "
+        "description": ("Made by python3 tools/siem_content.py --write from every rule the report lists "
+                        "(raqib/report.py rule_table). A technique is what a "
                         "finding of the rule is consistent with, never that it happened. The score is the number "
                         "of rules that declare the technique."),
         "sorting": 0,
@@ -112,7 +115,7 @@ def differences(root=ROOT, rules=None):
         for line in difflib.unified_diff(have.splitlines(), want.splitlines(), lineterm="", n=0):
             if line.startswith(("---", "+++", "@@")):
                 continue
-            out.append("%s: %s %s" % (rel, "the catalog has" if line[0] == "+" else "the file has", line[1:]))
+            out.append("%s: %s %s" % (rel, "the rules give" if line[0] == "+" else "the file has", line[1:]))
     return out
 
 
@@ -131,9 +134,9 @@ def main(argv=None):
         for line in diffs:
             print(line)
         if diffs:
-            print("siem/attack is not the catalog's: run python3 tools/siem_content.py --write")
+            print("siem/attack is not the rules': run python3 tools/siem_content.py --write")
             return 1
-        print("siem/attack is the catalog's (%d rules)" % len(catalog()))
+        print("siem/attack is the rules' (%d rules)" % len(catalog()))
         return 0
     print("usage: python3 tools/siem_content.py --write | --check", file=sys.stderr)
     return 2

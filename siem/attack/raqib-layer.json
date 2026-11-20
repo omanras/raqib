@@ -4,7 +4,7 @@
     "layer": "4.5"
   },
   "domain": "enterprise-attack",
-  "description": "Made by python3 tools/siem_content.py --write from raqib/rules/catalog. A technique is what a finding of the rule is consistent with, never that it happened. The score is the number of rules that declare the technique.",
+  "description": "Made by python3 tools/siem_content.py --write from every rule the report lists (raqib/report.py rule_table). A technique is what a finding of the rule is consistent with, never that it happened. The score is the number of rules that declare the technique.",
   "sorting": 0,
   "hideDisabled": false,
   "techniques": [
@@ -70,6 +70,13 @@
       "enabled": true,
       "showSubtechniques": false,
       "comment": "SECRET-OUTPUT (SECRET, signature, high)"
+    },
+    {
+      "techniqueID": "T1562",
+      "score": 6,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "CROSS-SOURCE (CROSS, anchor, high); SILENCE-EMPTY (SILENCE, demand, high); SILENCE-GAP (SILENCE, demand, high); SILENCE-HALF (SILENCE, demand, high); SILENCE-OPEN (SILENCE, demand, high); SILENCE-ORDER (SILENCE, demand, high)"
     }
   ],
   "gradient": {
@@ -78,13 +85,13 @@
       "#e65100"
     ],
     "minValue": 0,
-    "maxValue": 3
+    "maxValue": 6
   },
   "legendItems": [],
   "metadata": [
     {
       "name": "rules",
-      "value": "17"
+      "value": "25"
     }
   ]
 }

@@ -206,7 +206,7 @@ What a collector's own agent, tailing `events.jsonl`, may rely on and must allow
   Windows and `boot+N` on Linux: the engine takes the first it sees for a date and then refuses the other, and
   a refused line is lost unless the indexer's errors are read. The answer is siem/'s content (siem/README.md):
   a pipeline that follows the Mapping and a template that guesses nothing (strings as keywords, the parts
-  whose shape differs from kind to kind kept whole).
+  whose shape differs from kind to kind kept whole), installed before the first line reaches the index.
 
 ### a chained run, made up
 

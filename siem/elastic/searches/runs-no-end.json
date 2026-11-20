@@ -1,0 +1,84 @@
+{
+  "finds": "The runs, by host and run, that said no watch end and whose latest deadline (a line's arrival and two of its own watch.beat) the engine's own clock has passed, at most 10000 runs judged.",
+  "request": "POST raqib-events*/_search",
+  "body": {
+    "size": 0,
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "exists": {
+              "field": "raqib.watch.beat"
+            }
+          },
+          {
+            "exists": {
+              "field": "event.ingested"
+            }
+          },
+          {
+            "exists": {
+              "field": "host.name"
+            }
+          },
+          {
+            "exists": {
+              "field": "raqib.watch.run"
+            }
+          }
+        ]
+      }
+    },
+    "aggs": {
+      "runs": {
+        "multi_terms": {
+          "terms": [
+            {
+              "field": "host.name"
+            },
+            {
+              "field": "raqib.watch.run"
+            }
+          ],
+          "size": 10000
+        },
+        "aggs": {
+          "deadline": {
+            "max": {
+              "script": {
+                "source": "doc['event.ingested'].value.toInstant().toEpochMilli() + (long)(2000 * doc['raqib.watch.beat'].value)"
+              }
+            }
+          },
+          "ends": {
+            "filter": {
+              "bool": {
+                "filter": [
+                  {
+                    "term": {
+                      "event.action": "watch"
+                    }
+                  },
+                  {
+                    "term": {
+                      "raqib.state": "end"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "stopped": {
+            "bucket_selector": {
+              "buckets_path": {
+                "d": "deadline",
+                "e": "ends._count"
+              },
+              "script": "params.e == 0 && params.d < System.currentTimeMillis()"
+            }
+          }
+        }
+      }
+    }
+  }
+}

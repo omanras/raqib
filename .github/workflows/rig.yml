@@ -178,6 +178,10 @@ jobs:
     # and prints X39 to X42, each MET or MISSED with its numbers. A MISSED claim does not fail the job (ADR-0012);
     # an engine that did not start, or a sigma-cli that could not be installed, is said as such, never as MET.
     # Nothing is sent off the machine; what comes in is the engines' images and sigma-cli, for this job only.
+    # REDO (Amendment A, SA-10): the watch says heartbeats (a beat of 5 s); sigma-cli, pySigma and the two backends
+    # are pinned to the set pip resolves for Python 3.12 (the versions are printed in X42's row); the runner feeds
+    # made-up events and near misses, the made-up hosts of the silence measurement, the odd lines and a shipper's
+    # fields beside the examples and the watch's file.
     name: rig siem (${{ matrix.engine }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -202,10 +206,10 @@ jobs:
       - name: a short host watch's own events file
         run: |
           python -m pip install --disable-pip-version-check -q .
-          raqib watch --host --rounds 4 --every 5 --no-open > "$RUNNER_TEMP/watch.out" 2>&1 || echo "the watch's exit: $?"
+          raqib watch --host --rounds 4 --every 5 --beat 5 --no-open > "$RUNNER_TEMP/watch.out" 2>&1 || echo "the watch's exit: $?"
           ls -la "$HOME/.raqib/host/" || true
       - name: sigma-cli, for this job only (never a dependency of raqib)
-        run: python -m pip install --disable-pip-version-check -q sigma-cli pysigma-backend-elasticsearch pysigma-backend-opensearch || echo "sigma-cli could not be installed"
+        run: python -m pip install --disable-pip-version-check -q sigma-cli==3.1.0 pySigma==1.5.1 pysigma-backend-elasticsearch==2.1.1 pysigma-backend-opensearch==2.0.3 || echo "sigma-cli could not be installed"
       - name: the content through the engine (X39 to X42)
         if: always()
         run: |

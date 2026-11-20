@@ -1,5 +1,5 @@
 {
-  "description": "raqib-event/1 to ECS as docs/specs/EVENT.md's Mapping names it (siem/README.md): every named key to its ECS field, every other key under raqib, the line in event.original, the arrival in event.ingested; a line that is not an event is kept with event.kind pipeline_error and its reason in error.message",
+  "description": "raqib-event/1 to ECS as docs/specs/EVENT.md's Mapping names it (siem/README.md): every named key to its ECS field, every other key the spec knows under raqib, the names of the keys it does not know in raqib.unknown_keys, the line in event.original, the arrival in event.ingested; a line that is not an event by these checks is kept with event.kind pipeline_error and its reason in error.message; no field a shipper set is removed, and no document id is set",
   "processors": [
     {
       "set": {
@@ -16,7 +16,13 @@
     {
       "fail": {
         "if": "!(ctx.raqib instanceof Map) || ctx.raqib.schema != 'raqib-event/1'",
-        "message": "not a raqib-event/1 event: the line is JSON but its schema is not raqib-event/1"
+        "message": "not a raqib-event/1 event: its schema is not raqib-event/1"
+      }
+    },
+    {
+      "script": {
+        "lang": "painless",
+        "source": "boolean typed(def v, String t) { if (t == 's') { return v instanceof String; } if (t == 'i') { return v instanceof Integer || v instanceof Long; } if (t == 'p') { return (v instanceof Integer || v instanceof Long) && v >= 1; } if (t == 'c') { return (v instanceof Integer || v instanceof Long) && v >= 0; } if (t == 'f') { return v instanceof Integer || v instanceof Long || v instanceof Double || v instanceof Float; } if (t == 'b') { return v instanceof Boolean; } if (t == 'o') { return v instanceof Map; } if (t == 'S') { if (!(v instanceof List)) { return false; } for (def x : v) { if (!(x instanceof String)) { return false; } } return true; } return true; } void walk(def v, int depth, List tally) { if (depth > 10) { throw new IllegalArgumentException('not an event: deeper than 10 levels'); } if (v instanceof Map) { for (def e : v.entrySet()) { if (e.getKey() == '') { throw new IllegalArgumentException('not an event: an empty key'); } tally.set(0, tally.get(0) + 1); if (tally.get(0) > 200) { throw new IllegalArgumentException('not an event: more than 200 keys'); } walk(e.getValue(), depth + 1, tally); } } else if (v instanceof List) { for (def x : v) { walk(x, depth + 1, tally); } } else if (v instanceof String && v.length() > 8000) { throw new IllegalArgumentException('not an event: a text longer than 8000 characters'); } } def r = ctx.raqib; def tally = [0]; walk(r, 1, tally); def base = ['schema', 'id', 'n', 'time', 'kind', 'about', 'rev', 'severity', 'watch']; for (def k : base) { if (!r.containsKey(k)) { throw new IllegalArgumentException('not an event: the base key ' + k + ' is missing'); } } def top = ['schema': 's', 'id': 's', 'n': 'p', 'prev': 's', 'time': 's', 'kind': 's', 'about': 's', 'rev': 'p', 'severity': 's', 'alarm': 'b', 'summary': 's', 'rule': 'o', 'subject': 'o', 'evidence': 'o', 'hole': 'o', 'knocked': 'o', 'state': 's', 'result': 'o', 'counts': 'o', 'watch': 'o']; for (def e : top.entrySet()) { if (r.containsKey(e.getKey()) && !typed(r[e.getKey()], e.getValue())) { throw new IllegalArgumentException('not an event: ' + e.getKey() + ' is not of its kind of value'); } } def kinds = ['finding', 'source-finding', 'note', 'tree', 'hole', 'knock', 'heartbeat', 'watch']; if (!kinds.contains(r.kind)) { throw new IllegalArgumentException('not an event: its kind is not one of the spec\\'s eight'); } def wbase = ['run', 'host', 'beat']; for (def k : wbase) { if (!r.watch.containsKey(k)) { throw new IllegalArgumentException('not an event: the base key watch.' + k + ' is missing'); } } def checked = ['rule': ['id': 's', 'class': 's', 'kind': 's', 'fp_budget': 'f', 'attack': 'S'], 'subject': ['pid': 'c', 'image': 's'], 'watch': ['run': 's', 'mode': 's', 'platform': 's', 'version': 's', 'host': 's', 'beat': 'f']]; for (def p : checked.entrySet()) { def part = r[p.getKey()]; if (part != null) { for (def e : p.getValue().entrySet()) { if (part.containsKey(e.getKey()) && !typed(part[e.getKey()], e.getValue())) { throw new IllegalArgumentException('not an event: ' + p.getKey() + '.' + e.getKey() + ' is not of its kind of value'); } } } }"
       }
     },
     {
@@ -37,26 +43,14 @@
     {
       "script": {
         "lang": "painless",
-        "source": "def r = ctx.raqib; for (def k : ['id', 'kind', 'severity']) { if (!(r[k] instanceof String)) { throw new IllegalArgumentException('raqib-event/1: ' + k + ' is required, a string'); } } for (def k : ['summary', 'about', 'state']) { if (r.containsKey(k) && !(r[k] instanceof String)) { throw new IllegalArgumentException('raqib-event/1: ' + k + ' is not a string'); } } for (def k : ['n', 'rev']) { if (r.containsKey(k) && !(r[k] instanceof Integer || r[k] instanceof Long)) { throw new IllegalArgumentException('raqib-event/1: ' + k + ' is not an integer'); } } for (def k : ['rule', 'subject', 'evidence', 'hole', 'knocked', 'result', 'counts', 'watch']) { if (r.containsKey(k) && !(r[k] instanceof Map)) { throw new IllegalArgumentException('raqib-event/1: ' + k + ' is not an object'); } } def w = r.watch; if (w == null || !(w.host instanceof String) || !(w.beat instanceof Number)) { throw new IllegalArgumentException('raqib-event/1: watch.host (a string) and watch.beat (a number) are required'); } if (w.containsKey('version') && !(w.version instanceof String)) { throw new IllegalArgumentException('raqib-event/1: watch.version is not a string'); } def ru = r.rule; if (ru != null) { for (def k : ['id', 'class']) { if (ru.containsKey(k) && !(ru[k] instanceof String)) { throw new IllegalArgumentException('raqib-event/1: rule.' + k + ' is not a string'); } } if (ru.containsKey('attack') && !(ru.attack instanceof List)) { throw new IllegalArgumentException('raqib-event/1: rule.attack is not a list'); } } def su = r.subject; if (su != null) { if (su.containsKey('pid') && !(su.pid instanceof Integer || su.pid instanceof Long)) { throw new IllegalArgumentException('raqib-event/1: subject.pid is not an integer'); } if (su.containsKey('image') && !(su.image instanceof String)) { throw new IllegalArgumentException('raqib-event/1: subject.image is not a string'); } } r.remove('time'); ctx.event.id = r.remove('id'); ctx.event.action = r.remove('kind'); def sev = ['high': 4, 'medium': 3, 'low': 2, 'info': 1, 'hole': 3]; if (sev.containsKey(r.severity)) { ctx.event.severity = sev[r.remove('severity')]; } ctx.event.kind = r.remove('alarm') == true ? 'alert' : 'event'; if (r.containsKey('summary')) { ctx.message = r.remove('summary'); } else { ctx.remove('message'); } ctx.host = ['name': w.remove('host')]; ctx.observer = ['product': 'Raqib']; if (w.containsKey('version')) { ctx.observer.version = w.remove('version'); } if (w.isEmpty()) { r.remove('watch'); } if (ru != null) { if (ru.containsKey('id')) { ctx.rule = ['id': ru.remove('id')]; } if (ru.containsKey('class')) { if (ctx.rule == null) { ctx.rule = [:]; } ctx.rule.category = ru.remove('class'); } if (ru.containsKey('attack')) { ctx.threat = ['technique': ['id': ru.remove('attack')]]; } if (ru.isEmpty()) { r.remove('rule'); } } if (su != null) { def p = [:]; if (su.containsKey('pid')) { p.pid = su.remove('pid'); } if (su.containsKey('image')) { p.name = su.remove('image'); } if (!p.isEmpty()) { ctx.process = p; } if (su.isEmpty()) { r.remove('subject'); } }"
+        "source": "Map obj(Map m, String k) { if (!(m[k] instanceof Map)) { m[k] = [:]; } return m[k]; } def r = ctx.raqib; def top = ['schema': 's', 'id': 's', 'n': 'p', 'prev': 's', 'time': 's', 'kind': 's', 'about': 's', 'rev': 'p', 'severity': 's', 'alarm': 'b', 'summary': 's', 'rule': 'o', 'subject': 'o', 'evidence': 'o', 'hole': 'o', 'knocked': 'o', 'state': 's', 'result': 'o', 'counts': 'o', 'watch': 'o']; def parts = ['rule': ['id', 'class', 'kind', 'fp_budget', 'attack'], 'subject': ['tree', 'pid', 'image', 'started', 'named', 'agent', 'path', 'benign', 'history', 'by'], 'evidence': ['run', 'round', 'rounds', 'record', 'source', 'trace', 'seqs', 'lines', 'cites', 'cites_left_out', 'same_as'], 'hole': ['kind', 'class', 'count', 'last'], 'knocked': ['status', 'event', 'title', 'limit_id', 'called', 'for'], 'result': ['word', 'exit', 'suppressed'], 'counts': ['rounds', 'findings', 'source_findings', 'holes', 'blind', 'notes', 'trees', 'knocks'], 'watch': ['run', 'mode', 'platform', 'version', 'host', 'beat']]; def unknown = []; for (def k : new ArrayList(r.keySet())) { if (!top.containsKey(k)) { unknown.add(k); r.remove(k); } } for (def p : parts.entrySet()) { def part = r[p.getKey()]; if (part instanceof Map) { for (def k : new ArrayList(part.keySet())) { if (!p.getValue().contains(k)) { unknown.add(p.getKey() + '.' + k); part.remove(k); } } } } if (!unknown.isEmpty()) { Collections.sort(unknown); r.unknown_keys = unknown.size() > 50 ? new ArrayList(unknown.subList(0, 50)) : unknown; } r.remove('time'); def ev = obj(ctx, 'event'); ev.id = r.remove('id'); ev.action = r.remove('kind'); def sev = ['high': 4, 'medium': 3, 'low': 2, 'info': 1, 'hole': 3]; if (sev.containsKey(r.severity)) { ev.severity = sev[r.remove('severity')]; } ev.kind = r.remove('alarm') == true ? 'alert' : 'event'; if (r.containsKey('summary')) { ctx.message = r.remove('summary'); } else { ctx.remove('message'); } def w = r.watch; def h = obj(ctx, 'host'); h.name = w.remove('host'); def ob = obj(ctx, 'observer'); ob.product = 'Raqib'; if (w.containsKey('version')) { ob.version = w.remove('version'); } if (w.isEmpty()) { r.remove('watch'); } def ru = r.rule; if (ru != null) { if (ru.containsKey('id')) { def rr = obj(ctx, 'rule'); rr.id = ru.remove('id'); } if (ru.containsKey('class')) { def rc = obj(ctx, 'rule'); rc.category = ru.remove('class'); } if (ru.containsKey('attack')) { def te = obj(obj(ctx, 'threat'), 'technique'); te.id = ru.remove('attack'); } if (ru.isEmpty()) { r.remove('rule'); } } def su = r.subject; if (su != null) { if (su.containsKey('pid')) { def pp = obj(ctx, 'process'); pp.pid = su.remove('pid'); } if (su.containsKey('image')) { def pn = obj(ctx, 'process'); pn.name = su.remove('image'); } if (su.isEmpty()) { r.remove('subject'); } }"
       }
     }
   ],
   "on_failure": [
     {
       "remove": {
-        "field": [
-          "raqib",
-          "rule",
-          "threat",
-          "process",
-          "host",
-          "observer",
-          "@timestamp",
-          "event.id",
-          "event.action",
-          "event.severity",
-          "event.kind"
-        ],
+        "field": "raqib",
         "ignore_missing": true
       }
     },
@@ -81,13 +75,8 @@
     {
       "set": {
         "field": "@timestamp",
-        "value": "{{{_ingest.timestamp}}}"
-      }
-    },
-    {
-      "set": {
-        "field": "message",
-        "value": "{{{event.original}}}"
+        "value": "{{{_ingest.timestamp}}}",
+        "override": false
       }
     }
   ]

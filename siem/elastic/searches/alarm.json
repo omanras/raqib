@@ -1,5 +1,5 @@
 {
-  "finds": "Every event the watch counts as an alarm (a finding, a source finding or a hole whose alarm is true).",
+  "finds": "Every saying with alarm true of a finding, a source finding or a hole, each rev and each copy of a line sent twice (take a thing's latest rev, siem/README.md).",
   "request": "POST raqib-events*/_search",
   "body": {
     "query": {
@@ -15,7 +15,7 @@
     },
     "sort": [
       {
-        "@timestamp": "desc"
+        "event.ingested": "desc"
       }
     ]
   }

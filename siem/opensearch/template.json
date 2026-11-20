@@ -2,6 +2,7 @@
   "index_patterns": [
     "raqib-events*"
   ],
+  "priority": 200,
   "template": {
     "settings": {
       "index": {
@@ -125,6 +126,12 @@
               "type": "long"
             },
             "severity": {
+              "type": "keyword"
+            },
+            "prev": {
+              "type": "keyword"
+            },
+            "unknown_keys": {
               "type": "keyword"
             },
             "watch": {
