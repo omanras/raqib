@@ -369,6 +369,36 @@ jobs:
           "=== rounds and result"; ($t | Select-String -Pattern "^ROUNDS:|^RESULT|^HOLES").Line
           "=== events in the channel by id"; Get-WinEvent -LogName Microsoft-Windows-Sysmon/Operational -MaxEvents 5000 -ErrorAction SilentlyContinue | Group-Object Id | Sort-Object Name | ForEach-Object { "$($_.Name): $($_.Count)" }
 
+  autostart:
+    name: what Raqib could read of the autostart places by itself (M15.3, measured before ADR-0014 S3 is ruled)
+    runs-on: windows-latest
+    timeout-minutes: 12
+    env:
+      PYTHONUTF8: "1"
+      QUIET_SECONDS: "90"
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the places read, a quiet minute and a half, four acts each undone
+        shell: pwsh
+        run: python tools\rig\autostart_probe.py
+      - name: the same reads under a token of fewer rights
+        shell: pwsh
+        run: |
+          $py = (Get-Command python).Source
+          $probe = (Resolve-Path tools\rig\autostart_probe.py).Path
+          $out = "$env:PUBLIC\raqib-reads.json"; $who = "$env:PUBLIC\raqib-who.txt"
+          runas /trustlevel:0x20000 "cmd /c whoami /groups /fo csv > $who 2>&1"
+          runas /trustlevel:0x20000 "`"$py`" `"$probe`" --reads `"$out`""
+          Start-Sleep 20
+          "=== the token's administrators group"; if (Test-Path $who) { (Get-Content $who | Select-String -Pattern "S-1-5-32-544|S-1-16-").Line } else { "no answer was written" }
+          "=== the reads"; if (Test-Path $out) { Get-Content $out } else { "no reads were written (the token could not run it, or could not write there)" }
+
   effects:
     name: what an agent's three acts leave (the field test of 2026-11-20; M15; raqib of ${{ matrix.build }}, try ${{ matrix.try }})
     runs-on: windows-latest
