@@ -139,3 +139,57 @@ a NET-ADMIN-PORT finding that names the program and what started it; each high, 
   (Q-2): they read as older lines. A finding of NET-ADMIN-PORT cites the net line and not the start its names
   came from (F14). The four keys enter the watch's key of an act (F15): two feeds of one event that hold
   different starts would be two acts; not shown reachable. Port 139 is not on the list (F10).
+
+## Amendment B (the Table, 2026-11-20) - S2 measured and ruled: the registry's autostart values (M15.2)
+Measured before ruling (the probe branch cd55ab0, GitHub's Windows machine, main fbf7090 merged; twice: under
+the rig's own configuration, and under a public configuration of Sysmon that many use, fetched there and never
+kept in this tree). The stand-in set five harmless values, each undone: two under its user's Run key (by reg.exe
+and by PowerShell), one under RunOnce, one under the machine's Run key, one under the machine's 32-bit view.
+- Sysmon's event 13 named each one, with the program that set it (`Image`), its process, the command in
+  `Details`, and the value's whole name in `TargetObject`, in these four shapes:
+  `HKU\<SID>\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\<name>`, the same with `RunOnce`,
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\<name>`, and
+  `HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Run\<name>`.
+- Under the public configuration all five were logged, and they were the only events 13 of the 91 seconds (230
+  events in all; the registry's are a few among them there, because that configuration names the keys it logs).
+  Under it the two rules of S1 fired as on the rig's configuration (the Startup file; the two connections to 22).
+- On a fresh machine the user's Run key was not there at all: the first value made the key (an event 12) and
+  then set the value (an event 13). A value's removal is an event 12 (`DeleteValue`).
+- A value under `...\Schedule\TaskCache\Tree\` is set by the Schedule service for every task, the system's own
+  among them; its `Details` is a number, an id or `Binary Data`, never a command.
+- Not measured: a configuration that logs every key (how many events 13 a pass then holds); a value set by a
+  hive loaded from a file; a rename of a value or a key (event 14); the commander's own Sysmon.
+- AB-1 (a rule of its own). A value set under Run or RunOnce is PERSIST-RUN-KEY, not PERSIST-AUTOSTART: a
+  rule says one thing in one sentence, and its ways round are its own (ADR-0002). This replaces the words of
+  A-2 and A-7 that named PERSIST-AUTOSTART for it. Class PERSIST, kind signature, severity high, ATT&CK
+  T1547.001. FOR: the commander's second act (a value under the user's Run key) is said when it is set, whatever
+  program set it. MUST NOT TOUCH: PERSIST-AUTOSTART and its fixtures stay as they are; on a benign tree a
+  source finding is noted, not knocked, as before.
+- AB-2 (the line). An os line of tool `registry` is written for an event 13 whose target is a value directly
+  under `\Microsoft\Windows\CurrentVersion\Run` or `\RunOnce` of `HKU\<a SID>\SOFTWARE` or `HKLM\SOFTWARE`,
+  with or without `\Wow6432Node` after `SOFTWARE`, in any case of letters: the four measured shapes and the two
+  they imply. The match is on the whole key: `RunNotification`, `RunOnceEx`, `RunServices`, and a value of a
+  key under Run are not it. The line carries `autostart` (run or runonce), `hive` (user or machine), `view32`
+  (true under Wow6432Node), `value_name` (redacted and bounded as a path is), `program` (the name of the
+  program the value would run, through the gate a command's head goes through; null where `Details` is not a
+  command), `image` (the name of the program the event names, through the gate a process line's name goes
+  through) and `parent_image` (as an os net line's: from that process's own start, null where the follow holds
+  none). The target and the text of `Details` are in the line's hash and never in the clear (A-1). An event 13
+  of any other key is not a line in S2. FOR: the rule reads facts of the event; nothing an agent wrote is
+  copied into a finding. MUST NOT TOUCH: a process, file or net line, byte for byte.
+- AB-3 (the read). Under the watch each pass of a tree's follow asks a second bounded question, for event 13
+  alone, after its first: its own cap, its own highest record (kept with the tree the follow keeps, so that a
+  follow attached again reads none twice), the same restart. The first question is what it was, to the byte.
+  A second read that reaches its cap is said once, a hole of its kind; one that fails is said once as a
+  silence and takes nothing from the pass's other lines. An event 13 is the tree's where its process is in the
+  tree as the pass's first read left it. An export read by `raqib os-sysmon` gives its events 13 as lines too,
+  in their time's order; `missing_events` stays a word about events 1, 11 and 3, so every line an export gave
+  before is the line it gives now. FOR: a Sysmon that logs many keys takes nothing from the events Raqib
+  already reads. Cost, measured only under the two configurations above: a second short read per tree per
+  pass; what it costs beside a configuration that logs every key is to be measured (the plan).
+- AB-4 (the watch). A registry line is an os line like the other three: the watch's key of an act, its word
+  for an event's kind, and the rules of a tree's sources read it; it is paired with no line of the host's own
+  record (told twice is a process's matter).
+- AB-5 (what waits). AA-3 (an unread Initiated is the rule's partial note) and AA-4 (a channel that gives no
+  event 11, and now none 13, said by the watch) are M15.2b, after this lands: until then the threat model
+  says both. The rig's own claim for this rule is the Table's to add after the landing.
