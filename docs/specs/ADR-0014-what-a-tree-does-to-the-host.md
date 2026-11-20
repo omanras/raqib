@@ -324,3 +324,57 @@ stood for the whole watch though a value was logged seconds after the question.
   registry in one report; the start line's and the guide's "one bounded wevtutil" a round is two in the first
   round; the answer's event is not checked to be Sysmon's event 13 (the round's read checks what it asked);
   a stand-in channel with no question says nothing. Each waits for M15.3, which removes the question.
+
+## Amendment G (the Table, 2026-11-20) - S3 measured and ruled: the autostart places read by Raqib itself (M15.3)
+The three rules of persistence hang on Sysmon and on its configuration: where it logs no file or no registry
+value there is nothing to read (Amendments E and F only say so), and what the system's own services write for
+a tree (a service, a scheduled task) no line of the tree tells at all. A-2's S3 answers both: Raqib reads the
+places itself.
+
+Measured before ruling (the probe branch 80eee27, GitHub's Windows machine, the standard library alone, no
+helper process, no right asked):
+- Every place read in 0.07 s (0.24 s the first time): the Run and RunOnce values of every loaded hive and the
+  machine's, both views (2 entries); the two Startup folders (3); the scheduler's tree in the registry (236
+  tasks, 26 of its keys refused) and its folder of files (212); the services' key (687 with an ImagePath);
+  Winlogon's Shell and Userinit.
+- A quiet minute and a half, a read every 5 s: nothing changed in any place.
+- Four acts by the system's own tools, each harmless and undone (a Run value, a file in the Startup folder, a
+  scheduled task, a service never started): each was in the first read after it (under 0.1 s) and gone from
+  the first read after its undoing; nothing was left. The user's hive is read twice by two names (HKCU, and
+  HKU under its SID) and its Run key is one key in both views: an entry must be counted once.
+- Under a token whose Administrators group is deny-only: the Run keys, the Startup folders, the services and
+  Winlogon are read as before; the scheduler's tree and its folder are refused whole.
+- Not measured: a real desktop's churn (an updater that makes its own task or service); the scheduler's own
+  query tool under fewer rights (the probe is extended for it); how long the read takes on a machine with
+  thousands of services.
+
+- AG-1 (what is read). On Windows, by the standard library, in the watch's own process: the values under Run
+  and RunOnce of every loaded user's hive (by its SID, never twice) and the machine's, the 32-bit view where it
+  is another key; the files directly in a user's and all users' Startup folder (`desktop.ini` left out, as
+  A-3); each service's ImagePath, Start and Type; each scheduled task's actions and triggers where the watch's
+  rights give them; Winlogon's Shell and Userinit. An entry is its place, whose it is (user or machine), its
+  name (bounded and redacted as a value's name is, AB-2 and AC-4) and the hash of its content; where the content is a
+  command, the name of the program it would run, through the same gate as PERSIST-RUN-KEY's. FOR: persistence
+  is seen where Sysmon logs nothing, and where no line of the tree could tell it. MUST NOT TOUCH: a value's
+  text, a file's content, a SID and a user's name are never written (A-1).
+- AG-2 (what is said of the read). A place the watch's rights do not give is said as such (the scheduler's
+  tasks under a plain user's rights), never read as empty; a read that fails is said with its reason; a place
+  whose keys are refused in part says how many. A place unread in either of two reads gives no change.
+- AG-3 (a change). Two reads are compared: an entry added, changed (its hash) or removed. The watch will
+  compare each round's read with the one before it, the first with the read made at its start: what was
+  there when the watch began is never said (a limit, said), and a change made and undone between two reads
+  is not seen by this read (Sysmon's lines see it).
+- AG-4 (stages). M15.3a: the read standing alone (raqib/autostart.py, `python -m raqib.autostart`), its own
+  tests on a made-up registry, its spec, and the rig running it beside the stand-in (X37). Nothing of the
+  watch changes. M15.3b: the watch reads at its start and each round, writes a change as a host line (tool
+  HostAutostart) and three rules judge it - an entry of the Run keys, the Startup folders or Winlogon; a
+  service; a scheduled task - each medium, each only where no line of a tree in those rounds tells the same
+  act (PERSIST-RUN-KEY's and PERSIST-AUTOSTART's findings stand and are counted once) and where a tree was
+  alive. The read does not say who made a change, and Raqib does not guess it: the finding names the entry
+  and the trees alive then, and accuses none. The ruling of M15.3b is written after M15.3a's review, with
+  what the rig showed.
+- AG-5 (recorded). An entry removed is recorded and judged by no rule yet (removing a security tool's own
+  autostart is an act of its own kind). The places not read are the rule's ways round and are listed: Image
+  File Execution Options, AppInit_DLLs, a WMI subscription, the policies' Run keys, Active Setup, a service's
+  ServiceDll, a driver, a COM object, a hive that is not loaded. Whether the question of AE-3 is still needed
+  once the watch reads the Run keys itself is ruled with M15.3b. Linux's places are S4 (M15.4).
