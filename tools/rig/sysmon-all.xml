@@ -5,5 +5,8 @@
     <FileCreate onmatch="exclude"/>
     <DnsQuery onmatch="exclude"/>
     <ClipboardChange onmatch="exclude"/>
+    <RegistryEvent onmatch="include">
+      <TargetObject condition="contains">\CurrentVersion\Run</TargetObject>
+    </RegistryEvent>
   </EventFiltering>
 </Sysmon>

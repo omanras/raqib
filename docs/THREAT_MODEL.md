@@ -513,6 +513,49 @@ Rulings: ADR-0003 Amendments C and D.
     outside after it heard its first event freezes the counts unseen, and
     a sender whose pid in the tracing is not the connection's owner in
     the table (an inherited socket) is not matched.
+- **The kernel's process events on Linux (ADR-0007 Amendments BQ, BR
+  and BS; the reader alone, docs/specs/PROC-EVENTS.md):**
+  - the reader listens to the kernel's word of every fork, exec and exit,
+    and reads at an exec the program and the parent of the process and
+    nothing else; no watch reads it yet, so between two samples a live
+    watch on Linux still sees what it saw before;
+  - an agent that starts more processes than the reader's bound (32768)
+    has the rest counted `beyond`, not kept; the bound counts over the
+    reader's life, and a process whose end was lost never leaves it;
+  - a process that ends before its program is read, that is not readable
+    by this user (a program can make itself so), or that the system hides
+    from the reader is given without its program: the read is counted in
+    `missed` and named in its `unread`;
+  - a process that changes its program again keeps the programs it had
+    before in `earlier`, its newest 16; the number of older ones is said;
+  - a pid taken again within one second of the exec, before the read, is
+    not told apart: the newcomer's program and start are then given as the
+    first process's; a start later than that is told, nothing of that
+    read is given, and it is counted in `reused`;
+  - a burst the kernel cannot queue for the reader is counted in `lost`
+    (ENOBUFS), never as nothing happened; what the queue held is given,
+    what came while it was full is gone, and the kernel's own count on
+    each CPU gives how many at least, a gap with no ENOBUFS included; the
+    answer the kernel sends to any listener's ask takes a number of that
+    count and is counted as one, so another listener is no loss; the
+    time a datagram was last heard is said (`last`);
+  - a process ends with its last thread: an exit of its leader thread
+    while another lives on is not its end; an end of a process the reader
+    did not hold from its fork, or any end given after a loss, may be its
+    leader thread's alone, and says so;
+  - if a thread's exec ever came before its leader's exit (not seen in
+    2400 runs), the reader would give the end of a process that lives on,
+    and its real end as an end of a process it did not hold;
+  - a child made to be its maker's sibling is given the parent the kernel
+    names, which is not its maker;
+  - a kernel that refuses (an older one, or a container's) is the hole,
+    said in the reader's words as `refused`, and nothing else is tried;
+    no right is asked; another process cannot answer the reader's ask for
+    it (its mark is random);
+  - the program is raw text of the process's choosing in part (a removed
+    file, a program run from memory with a name it chose): a consumer that
+    shows it must escape it; no argument of any process is read, so what a
+    program was asked to do is not in this source.
 - **What CROSS-SOURCE does not judge, by ruling:**
   - C-2, both directions: a trace with no os line (Linux, macOS, or
     os-sysmon not run) gets no finding and no note, and the report's
