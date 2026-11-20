@@ -11,6 +11,9 @@
 # and removes (X30); on Windows it runs nothing and says so. The unit and its record are removed by the run.
 # --throwaway: the tool makes a user, installs a unit of the system's and runs root's code from a place every user
 # can write; it is for a machine that is thrown away after the run, and runs nothing without the word.
+# The rules of behaviour (ADR-0014, ADR-0012 Amendment A): on Windows the stand-in leaves a file in its Startup
+# folder, reaches port 22 of the machine's own address and sets a value under its Run key, each harmless and each
+# undone; X32 to X34 say whether each was a finding of its tree.
 name: rig
 
 on:
