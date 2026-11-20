@@ -32,7 +32,8 @@ user can do that to its own Run key or Startup folder: said, and a lever that is
 a share is not read at all; a Startup file is opened with every sharing and without following a link, or not
 opened (AI-3, AK-4): what was measured is that another call's rename and delete do not fail while the read holds
 a file; an open that asks for no sharing still fails for the instant of the read (not measured). read() never
-raises and imports winreg and ctypes only inside the call. Off Windows it reads nothing and says so (Linux's places are ADR-0014 S4).
+raises and imports winreg and ctypes only inside the call. Off Windows it reads nothing and says so (Linux's
+places are ADR-0014 S4).
 
 A Watcher takes reads one after another and compares each with what every place, and every key of it, last held
 when it was read (AI-1): an entry that appears while a part that was read before is not read is said as added by
@@ -435,8 +436,8 @@ def _sure(text, machine=False, environ=None):
 
 def _program(data, place, machine=False, environ=None):
     """(program, sure, listing): the program a content would run, as PERSIST-RUN-KEY's line names it, and whether
-    that name is sure (AJ-3, AK-3; `machine`: the text is the machine's own, AL-4). A Winlogon value is a list: one program is named; a list of more than one names
-    none (`listing` True, AJ-3). (None, None, False) where the content is not text or names no program."""
+    that name is sure (AJ-3, AK-3; `machine`: the text is the machine's own, AL-4). A Winlogon value is a list:
+    one program is named; a list of more than one names none (`listing` True, AJ-3). (None, None, False) where the content is not text or names no program."""
     if not isinstance(data, str) or not data.strip(WINDOWS_BLANKS):
         return None, None, False
     text = data.strip(WINDOWS_BLANKS)
