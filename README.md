@@ -99,6 +99,8 @@ catches](docs/GUIDE.md#what-it-catches), [What it cannot see](docs/GUIDE.md#what
 (os-sysmon)](docs/GUIDE.md#watch-what-the-system-saw-os-sysmon), [Find the agents on a host
 (discover)](docs/GUIDE.md#find-the-agents-on-a-host-discover), [More](docs/GUIDE.md#more).
 
+What each version of Raqib brought, and how to update to it, is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Licence
 Raqib is dedicated to the public domain: [CC0 1.0 Universal](LICENSE). To the
 extent possible under law, its author has waived all copyright and related
