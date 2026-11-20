@@ -220,7 +220,8 @@ def _flat_json(inv):
     """The inventory's bytes, its catalog's path and the checkout's own place taken out (the files were made from
     the checkout's root, with relative paths)."""
     text = json.dumps(inv, sort_keys=True, ensure_ascii=True).replace(json.dumps(CATALOG["path"])[1:-1], "CATALOG")
-    for folder in LINUX_FIXTURES.values():   # the Table: on Windows a fixture's files are named with its separator
+    for folder in list(LINUX_FIXTURES.values()) + [FIXTURE]:   # the Table: on Windows a fixture's files are named
+        # with its separator (this task's own fixture too: the under-init comparison failed on both Windows jobs)
         text = text.replace(json.dumps(str(folder) + os.sep)[1:-1], folder.relative_to(ROOT).as_posix() + "/")
     return text.replace(json.dumps(str(ROOT) + os.sep)[1:-1], "")
 
