@@ -228,6 +228,63 @@ jobs:
       - name: add, watch, switch off, watch, remove, watch
         run: python tools/rig/rules_probe.py
 
+  pubconf:
+    name: the three acts under a public Sysmon configuration (${{ matrix.conf }}; M15.2, measured before ruling)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - conf: swift
+            url: https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml
+          - conf: modular
+            url: https://raw.githubusercontent.com/olafhartong/sysmon-modular/master/sysmonconfig.xml
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install raqib
+        run: python -m pip install --disable-pip-version-check .
+      - name: install Sysmon with the public configuration (fetched here, never kept in the tree)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://download.sysinternals.com/files/Sysmon.zip -OutFile $env:RUNNER_TEMP\Sysmon.zip
+          Expand-Archive $env:RUNNER_TEMP\Sysmon.zip $env:RUNNER_TEMP\Sysmon -Force
+          Invoke-WebRequest "${{ matrix.url }}" -OutFile $env:RUNNER_TEMP\pub.xml
+          "the configuration: $((Get-Item $env:RUNNER_TEMP\pub.xml).Length) bytes"
+          & $env:RUNNER_TEMP\Sysmon\Sysmon64.exe -accepteula -i $env:RUNNER_TEMP\pub.xml
+          Start-Sleep 3
+      - name: the watch while the stand-in does the three acts
+        shell: pwsh
+        run: |
+          $l = Start-Process python -ArgumentList "tools\rig\effects.py","--listen" -RedirectStandardOutput "$env:RUNNER_TEMP\listen.out" -RedirectStandardError "$env:RUNNER_TEMP\listen.err" -PassThru -NoNewWindow
+          $out = "$env:RUNNER_TEMP\watch.out"; $err = "$env:RUNNER_TEMP\watch.err"
+          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","18","--every","5","--no-open" -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+          Start-Sleep 7
+          python tools\rig\effects.py | Tee-Object -FilePath $env:RUNNER_TEMP\effects.out
+          $w.WaitForExit(200000) | Out-Null
+          "=== the watch's exit: $($w.ExitCode)"
+          "=== the watch's report"; Get-Content $out
+          "=== the watch's stderr"; Get-Content $err | Select-Object -Last 40
+          Stop-Process -Id $l.Id -Force -ErrorAction SilentlyContinue
+      - name: what the stand-in's tree left in its source, and the findings
+        if: always()
+        shell: pwsh
+        run: python tools\rig\effects_read.py $env:RUNNER_TEMP\effects.out
+      - name: what the configuration logged
+        if: always()
+        shell: pwsh
+        run: |
+          cmd /c "wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml > %RUNNER_TEMP%\channel.xml"
+          python tools\rig\pubconf_read.py $env:RUNNER_TEMP\channel.xml
+
   effects:
     name: what an agent's three acts leave (the field test of 2026-11-20; M15)
     runs-on: windows-latest
