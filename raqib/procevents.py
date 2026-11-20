@@ -1,6 +1,8 @@
 """Linux: the processes that began, read from the kernel's own process events
 (the netlink connector: fork, exec, exit) by a listener of the reader's own
-(ADR-0007 Amendments BQ, BR and BS). This is the reader alone: no watch reads
+(ADR-0007 Amendments BQ, BR, BS, BT and BU). A live watch on Linux runs it in
+a helper process of its own (serve(), `python -m raqib.procevents --serve`)
+through its client (Helper), and counts what it gives; nothing is judged from
 it yet. docs/specs/PROC-EVENTS.md says all of it in prose, and keeps what was
 measured apart from what is read in the kernel's source.
 
@@ -62,15 +64,20 @@ exit. Only one Reader runs in a process (the bind is on its pid).
 Everything of the system goes through arguments a test replaces: the
 socket's maker, the reads of /proc, the clocks, the random mark, the ticks
 of a second, the thread class, the exit registry, the platform. The
-standard library only. It imports `socket` for AF_NETLINK alone; it starts
-no program and writes no file. It imports on every system.
+standard library only. It imports `socket` for AF_NETLINK alone; it writes
+no file. The Reader and serve() start no program; Helper starts one, the
+helper, through the callable the watch gives it (BU-1). It imports on every
+system.
 """
 from __future__ import annotations
 
 import atexit
 import datetime
 import errno
+import json
 import os
+import queue
+import signal
 import socket
 import struct
 import sys
@@ -809,3 +816,264 @@ class Reader:
         self._state = "stopped"
         self.stop_problems = problems
         return problems
+
+
+# --- the helper (ADR-0007 Amendment BU): the reader in a process of its own -----------------------------------
+SERVE_MAX = 2000           # entries one answer holds at most, processes, ends and older together (BU-2); the rest next
+ASK_SECONDS = 2.0          # how long the watch waits for an answer (BU-2)
+STOP_SECONDS = 2.0         # stop(): how long the helper is waited for once its input is closed, before it is ended
+KILL_SECONDS = 1.0         # and after it is ended, before it is killed
+LATE, ENDED, NOT_A_LINE, REFUSED = "late", "ended", "not a line", "refused"   # what ask() gives instead of an answer
+NOT_A_COMMAND = "not a command: the helper answers `read`, `read N` and `stop`"
+ANSWER_KEYS = ("processes", "ends", "older", "more", "counts")
+
+
+def _line(value):
+    return json.dumps(value, sort_keys=True, ensure_ascii=True) + "\n"
+
+
+def serve(stdin=None, stdout=None, reader=None, bound=SERVE_MAX):
+    """BU-1: the helper's loop. Starts the reader, says `{"ready": null}` (or `{"ready": "<its refusal>"}` and
+    returns 0), then answers each line of stdin: `read` or `read N` -> one JSON line {"processes", "ends", "older",
+    "more", "counts", "ask"} holding at most `bound` entries in all (what does not fit comes with the next `read`,
+    and "more" says so; "ask" is N, or None); `stop` or the end of stdin -> the reader stopped, 0; any other line
+    -> {"error": NOT_A_COMMAND} (the line is not echoed) and the helper lives. A new read() of the reader is taken
+    only when what it holds from the reads before was given whole, so what it holds is bounded by the reader's
+    own bounds. It reads nothing but its input and writes nothing but its output; 1 where the output cannot be
+    written."""
+    stdin = sys.stdin if stdin is None else stdin
+    stdout = sys.stdout if stdout is None else stdout
+    reader = Reader() if reader is None else reader
+    held = {"processes": [], "ends": [], "older": []}
+    try:
+        why = reader.start()
+        if why == RUNNING:
+            why = None
+        try:
+            stdout.write(_line({"ready": why}))
+            stdout.flush()
+        except (OSError, ValueError):
+            return 1
+        if why:
+            return 0
+        for raw in stdin:
+            words = raw.split()
+            if words == ["stop"]:
+                return 0
+            if not words or words[0] != "read" or len(words) > 2 or (len(words) == 2 and not words[1].isdigit()):
+                out = {"error": NOT_A_COMMAND}
+            else:
+                if not any(held.values()):
+                    got = reader.read()
+                    for key in held:
+                        held[key] = list(got.get(key) or ())
+                out, room = {"ask": int(words[1]) if len(words) == 2 else None}, bound
+                for key in ("processes", "ends", "older"):
+                    out[key], held[key] = held[key][:room], held[key][room:]
+                    room -= len(out[key])
+                out["more"] = any(held.values())
+                out["counts"] = reader.counts()
+            try:
+                stdout.write(_line(out))
+                stdout.flush()
+            except (OSError, ValueError):
+                return 1
+        return 0
+    finally:
+        reader.stop()
+
+
+def main(argv=None):
+    """`python -m raqib.procevents --serve`: the helper (BU-1). A Ctrl-C at the terminal does not end it: the end of
+    its input does, so a watch that dies leaves none behind."""
+    argv = sys.argv[1:] if argv is None else argv
+    if argv != ["--serve"]:
+        sys.stderr.write("usage: python -m raqib.procevents --serve\n")
+        return 2
+    if hasattr(signal, "SIGINT"):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+    return serve()
+
+
+def command(executable=None, isolated=None):
+    """The helper's command: this interpreter, -I where this process runs isolated, -m raqib.procevents --serve."""
+    executable = sys.executable if executable is None else executable
+    isolated = bool(sys.flags.isolated) if isolated is None else isolated
+    return [executable] + (["-I"] if isolated else []) + ["-m", "raqib.procevents", "--serve"]
+
+
+def _pump(out, lines):
+    """The client's thread: each line of the helper's output into `lines`, then None at its end."""
+    try:
+        for raw in iter(out.readline, b""):
+            lines.put(raw)
+    except Exception:
+        pass
+    lines.put(None)
+
+
+class Helper:
+    """The watch's client of the helper (BU-1, BU-2). start() returns None or why the helper could not be started
+    (and raises nothing); the process is started by `popen` and handed at once to `started` (raqib/own.py: the
+    watch's record of what it started). ask(timeout) -> (the answer, None) or (None, LATE | ENDED | NOT_A_LINE |
+    REFUSED) and never waits past its timeout: a thread reads the helper's output into a queue. Each ask carries
+    its number and only the answer that carries it is taken, so a late answer is never taken by the next ask.
+    `refused` holds the reader's refusal where the helper's first line said one. stop() closes the helper's input,
+    waits STOP_SECONDS, then ends it, and returns its problems ([] when clean); a second stop() does nothing."""
+
+    def __init__(self, started=None, popen=None, argv=None, thread=None, clock=None):
+        self._started = started or (lambda proc: proc)
+        self._popen = popen
+        self.argv = list(argv) if argv is not None else command()
+        self._thread_class = thread or threading.Thread
+        self._clock = clock or time.monotonic
+        self.proc = None
+        self.ready = False
+        self.refused = None
+        self.ended = False           # its output ended: the helper is gone
+        self.stale = 0               # answers that came for an ask before (late) and were left
+        self.asks = 0
+        self.stop_problems = None
+        self._lines = queue.Queue()
+        self._thread = None
+
+    def start(self):
+        if self.proc is not None:
+            return None
+        try:
+            popen = self._popen
+            if popen is None:
+                import subprocess
+                popen = subprocess.Popen
+                # the package's own parent as its directory: -m finds the raqib this process runs
+                kw = {"stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL,
+                      "close_fds": True, "cwd": os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}
+            else:
+                kw = {}
+            self.proc = self._started(popen(self.argv, **kw))
+        except Exception as exc:
+            self.proc = None
+            return "the helper could not be started (%s)" % _flat(exc)
+        try:   # the thread holds the pipe and the queue, not the client: a client let go ends its helper
+            self._thread = self._thread_class(target=_pump, args=(self.proc.stdout, self._lines),
+                                              name="raqib-procevents-helper", daemon=True)
+            self._thread.start()
+        except Exception as exc:
+            self._thread = None
+            self.stop()
+            return "the helper's output could not be read (%s)" % _flat(exc)
+        return None
+
+    def _next(self, deadline):
+        """The next line of the helper's output, None at its end, or LATE where none came before the deadline."""
+        left = deadline - self._clock()
+        if left <= 0:
+            try:
+                return self._lines.get_nowait()
+            except queue.Empty:
+                return LATE
+        try:
+            return self._lines.get(timeout=left)
+        except queue.Empty:
+            return LATE
+
+    @staticmethod
+    def _parse(raw):
+        try:
+            value = json.loads(raw.decode("ascii") if isinstance(raw, bytes) else raw)
+        except (ValueError, UnicodeDecodeError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    def _end(self):
+        self.ended = True
+        self._lines.put(None)        # every later ask hears the end at once
+        return None, ENDED
+
+    def ask(self, timeout=ASK_SECONDS):
+        if self.refused is not None:
+            return None, REFUSED
+        if self.proc is None or self.ended:
+            return None, ENDED
+        deadline = self._clock() + timeout
+        while not self.ready:
+            raw = self._next(deadline)
+            if raw is LATE:
+                return None, LATE
+            if raw is None:
+                return self._end()
+            first = self._parse(raw)
+            if first is None or set(first) != {"ready"} or not (first["ready"] is None or isinstance(
+                    first["ready"], str)):
+                return None, NOT_A_LINE
+            if first["ready"] is not None:
+                self.refused = first["ready"]
+                return None, REFUSED
+            self.ready = True
+        self.asks += 1
+        number = self.asks
+        try:
+            self.proc.stdin.write(b"read %d\n" % number)
+            self.proc.stdin.flush()
+        except (OSError, ValueError):
+            return self._end()
+        while True:
+            raw = self._next(deadline)
+            if raw is LATE:
+                return None, LATE
+            if raw is None:
+                return self._end()
+            got = self._parse(raw)
+            if got is None or not all(k in got for k in ANSWER_KEYS) or not isinstance(got.get("ask"), int):
+                return None, NOT_A_LINE
+            if got["ask"] < number:
+                self.stale += 1          # the answer to an ask that was late: not this one's
+                continue
+            if got["ask"] != number:
+                return None, NOT_A_LINE
+            return got, None
+
+    def __del__(self):
+        """A client let go without stop(): its helper's input is closed, so the helper ends (BU-1). subprocess
+        keeps a Popen whose child runs alive to reap it later, so the pipe would not close by itself."""
+        proc = getattr(self, "proc", None)
+        if proc is not None and self.stop_problems is None:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+
+    def stop(self):
+        if self.stop_problems is not None:
+            return []
+        self.stop_problems = problems = []
+        proc = self.proc
+        if proc is None:
+            return problems
+        try:
+            proc.stdin.close()
+        except Exception as exc:
+            problems.append("the helper's input could not be closed (%s)" % _flat(exc))
+        try:
+            proc.wait(STOP_SECONDS)
+        except Exception:
+            problems.append("the helper did not end within %g s of its input's end: it was ended" % STOP_SECONDS)
+            try:
+                proc.terminate()
+                proc.wait(KILL_SECONDS)
+            except Exception:
+                try:
+                    proc.kill()
+                    proc.wait(KILL_SECONDS)
+                except Exception as exc:
+                    problems.append("the helper could not be ended (%s)" % _flat(exc))
+        if self._thread is not None:   # its output ends with it: the thread that read it ends too (bounded)
+            try:
+                self._thread.join(KILL_SECONDS)
+            except Exception:
+                pass
+        return problems
+
+
+if __name__ == "__main__":
+    sys.exit(main())

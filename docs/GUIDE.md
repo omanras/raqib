@@ -197,7 +197,21 @@ reader's first check is made in, when that check finds none. Since M7.8 an os pr
 its image name in discover's form (`input_meta.image`: `curl.exe` -> `curl`), so NET-TOOL and
 DESTRUCT-CMD judge the programs Sysmon saw the tree start as they judge the host's children, Windows
 programs included (bitsadmin, plink, vssadmin, diskpart and the like); a cmdlet, a shell builtin, a
-renamed copy and every argument stay unseen.
+renamed copy and every argument stay unseen. On Linux the watch also counts what happens between two
+rounds (ADR-0007 Amendment BU): at its first round it starts a helper, a second process of its own
+that runs the reader of the kernel's process events
+([docs/specs/PROC-EVENTS.md](specs/PROC-EVENTS.md)), and after each round's sample it asks the
+helper once what it heard. Its report then has a section `PROCESS EVENTS (Linux):` after the place
+of Windows' CHANNEL line: the rounds asked and answered, the processes that began, those of them
+that began and ended between two samples, the programs not read (a process can end before its
+program is read), and what the reader lost, in its own words. Nothing is judged from it yet: no rule
+reads it, no line of a tree's source is written from it, and the findings, the result and the exit
+code are what they would be without it. No program's name or path is shown: only numbers. Where the
+helper answered every round and nothing was lost, the note that what lives between two rounds is not
+seen on Linux says instead that a process that begins and ends between two rounds is heard and
+counted, not judged; where it did not (refused, late, ended, lost), the old words stand with the
+reason beside them, and each such hole is a blind spot of its own kind (it does not change the
+result), said once while it lasts. A helper that ends is started again once; a second end is final.
 
 A tree whose root process is still in the round's sample and is not in the round is `quiet (its root
 alive in round N; not seen talking with an act at the sample; source kept)` ("source kept" only when
