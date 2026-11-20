@@ -63,6 +63,24 @@ CHANGED = {
     " rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED, INDEX-UNTOUCHED, `raqib/rules/tree.py`).":
     "The rules are 5 silence rules, 1 cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 19 more: 17 YAML"
     " rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED, INDEX-UNTOUCHED, `raqib/rules/tree.py`).",
+    # M15.2 REDO (ADR-0014 AC-6): what os-sysmon reads and writes names event 13 and the tool registry
+    '- **What it reads.** Sysmon events 1 (process create), 11 (file create) and 3 (network connect) of t'
+    'he tree under the root: the root, and every process whose parent is in the tree (the ProcessGuid kee'
+    'ps a reused pid out).':
+    '- **What it reads.** Sysmon events 1 (process create), 11 (file create), 3 (network connect) and 13 '
+    "(a value set below the registry's Run or RunOnce key, ADR-0014) of the tree under the root: the root"
+    ', and every process whose parent is in the tree (the ProcessGuid keeps a reused pid out).',
+    '"os"`, tool `process`, `file` or `net`.':
+    '"os"`, tool `process`, `file`, `net` or `registry`.',
+    'Hashes of the command line, the path or the destination, never the text; the program name (`bash.exe'
+    "`), its image name in discover's form (`input_meta.image`, `bash`; since M7.8), its depth below the "
+    "root and its parent's line; the path, redacted as the hook redacts it; the destination port and whet"
+    'her it is private.':
+    "Hashes of the command line, the path, the destination or the registry's target and value text, never"
+    ' the text; for a value set, its name in the clear (redacted, at most 80 characters) and the name of '
+    "the program it would run; the program name (`bash.exe`), its image name in discover's form (`input_m"
+    "eta.image`, `bash`; since M7.8), its depth below the root and its parent's line; the path, redacted "
+    'as the hook redacts it; the destination port and whether it is private.',
 }
 # The README's own two sentences that "Where it runs" keeps from the old Install and watch (ADR-0010 E-5: the
 # Windows install line is in "Where it runs"); the old split rule cuts the first at its colon.
@@ -163,8 +181,10 @@ HOST_UNREAD = [
      "lines are numbered from one again (ADR-0007 Amendments AJ, AK and AL).",
     "Each pass of a tree's os follow asks the channel a bounded question, as a round's read does (events "
      "1, 3 and 11: the first pass those since the watch's start, then the records after the highest it has"
-     " read in the whole channel, at most the round's cap; a cut is a hole); the rounds' own read starts "
-     "at the live reader's start, which can differ by the reader's start delay.",
+     " read in the whole channel, at most the round's cap; a cut is a hole); before it, the follow asks one"
+     " of its own for event 13 (a value set under the registry's Run or RunOnce key, at most 500 a pass),"
+     " and a value logged after a cut of the other answer waits for the next pass; the rounds' own read "
+     "starts at the live reader's start, which can differ by the reader's start delay.",
     "A follow attached again is given the tree the earlier follow published at the end of its last "
      "finished pass, and when the round's read restarts, every follow's bound restarts at the restart's "
      "time, whether or not the record numbers restarted, as the restart's hole says of the follows then "
@@ -198,8 +218,8 @@ BEHAVIOUR_ROWS = [
     "\\Start Menu\\Programs\\Startup\\`, a user's or all users', either slash, any case; `desktop.ini` and de"
     "eper folders left out), read from Sysmon's file line (event 11) of a watched tree or from a Write, E"
     "dit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: ther"
-    "e only a hooks file tool is judged. An autostart value of the registry, a scheduled task and a file "
-    "moved or renamed into the folder are not read yet |",
+    "e only a hooks file tool is judged. A value under the registry's Run or RunOnce key is PERSIST-RUN-KEY's; "
+    "a scheduled task and a file moved or renamed into the folder are not read yet |",
     "| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` tru"
     "e) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback "
     "nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's own included"
@@ -208,14 +228,15 @@ BEHAVIOUR_ROWS = [
 ]
 # M15.2 (ADR-0014 Amendment B, AB-1): the registry's autostart values, a row of the guide's What it catches
 BEHAVIOUR_ROWS.append(
-    '| PERSIST-RUN-KEY | a value set under a Run or RunOnce key of the registry (a value directly under `'
-    "...\\Microsoft\\Windows\\CurrentVersion\\Run\\` or `\\RunOnce\\` of a user's hive or the machine's, the 32-"
-    'bit view too, any case; `RunNotification`, `RunOnceEx`, `RunServices` and a value of a key under Run'
-    " left out), read from Sysmon's registry line (event 13) of a watched tree, whatever program of the t"
-    "ree set it; the finding names the hive, run or runonce, the value's name, the program the value woul"
-    "d run and the program that set it, never the value's text (high). It needs Windows with Sysmon loggi"
-    'ng a value set under these keys: where the configuration logs none, there is nothing to read. Linux '
-    'has no os source for it: nothing there is judged by it |')
+    '| PERSIST-RUN-KEY | a value set under a Run or RunOnce key of the registry (anything below `...\\Micr'
+    "osoft\\Windows\\CurrentVersion\\Run\\` or `\\RunOnce\\` of a user's hive or the machine's, the 32-bit view"
+    " too, any case; `RunNotification`, `RunOnceEx` and `RunServices` left out), read from Sysmon's regis"
+    'try line (event 13) of a watched tree, whatever program of the tree set it; the finding names the hi'
+    "ve, run or runonce, the value's name between double quotes (at most 80 characters), the program the "
+    "value would run and the program that set it, never the value's text (high). Where the name holds a b"
+    'ackslash the event cannot tell it from a value of a key under Run, and the finding says so. It needs'
+    ' Windows with Sysmon logging a value set under these keys: where the configuration logs none, there '
+    'is nothing to read. Linux has no os source for it: nothing there is judged by it |')
 GUIDE_NEW += BEHAVIOUR_ROWS
 # M10.4b (ADR-0011 R-2, R-3, T-1, T-5, V): the window's Link screen, said where the window's screens are
 LINK_SCREEN = [

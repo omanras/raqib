@@ -6,19 +6,18 @@ attack: [T1547.001]
 # ADR-0002: the shape of a bad act (a key of the registry), so it lists its evasions (ADR-0002's note of 2026-11-20).
 kind: signature
 evasion:
-  - "another autostart place of the registry: only a value directly under CurrentVersion\\Run or RunOnce of a user's hive (HKU\\<a SID>) or the machine's (HKLM), the 32-bit view too, is read; RunOnceEx, RunServices, a value of a key under Run, a user's hive not named by a SID (HKU\\.DEFAULT), a scheduled task and a service (ADR-0014 S3) are not; a file in a Startup folder is PERSIST-AUTOSTART's"
+  - "another autostart place of the registry: only what is set below CurrentVersion\\Run or RunOnce of a user's hive (HKU\\<a SID>) or the machine's (HKLM), the 32-bit views too, is read; RunOnceEx, RunServices, a user's hive not named by a SID (HKU\\.DEFAULT), a scheduled task and a service (ADR-0014 S3) are not; a file in a Startup folder is PERSIST-AUTOSTART's"
   - "a value or a key renamed into place: a rename is Sysmon's event 14, which is not read; only a value set (event 13) is (not measured)"
   - "a Sysmon that logs no value set there: a configuration that logs no value set under these keys leaves nothing to read, and Raqib cannot tell that from nothing done (under raqib watch --host a channel that gives no event 13 is not said yet: ADR-0014 Amendment B, AB-5)"
   - "a hive written offline or loaded from a file: a value written into a hive's file, or set in a hive loaded from one, is not believed to be an event 13 under these keys (not measured)"
-  - "a value changed by a program of the system on the tree's behalf: the event names that program (a service, the system's own process), not a process of the tree, so the line is not the tree's (ADR-0014 S3)"
+  - "a value changed by a program of the system on the tree's behalf: the event is believed to name that program (a service, the system's own process), not a process of the tree, so the line is not the tree's (not measured for the registry; ADR-0014 S3)"
   - "Linux has no os source: nothing there is judged by this rule (its autostart places are ADR-0014 S4)"
-  - "an export or a follow that reached its cap: an export cut short holds nothing after its end; a follow's second read at its cap (500 events 13 a pass) is said, and the records after it are read by the next pass"
-  - "a value whose name holds a backslash: its target reads as a value of a key under Run, which is not read (not measured)"
+  - "an export or a follow that reached its cap: an export cut short holds nothing after its end; a follow's read of event 13 at its cap (500 a pass) is said, and the records after it are read by the next pass, as is an event 13 above a cut of the follow's other read (held, ADR-0014 AC-1)"
 severity: high
 # A value under Run or RunOnce is not written by ordinary work: the budget is tight.
 fp_budget: 0.05
-description: "ADR-0014 Amendment B, AB-1 and AB-2 (M15.2): an os registry line (source os, tool registry, Sysmon event 13: a value set by a process of the tree) whose input_meta.autostart is run or runonce: a value directly under ...\\Microsoft\\Windows\\CurrentVersion\\Run or \\RunOnce of a user's hive (HKU\\<a SID>\\SOFTWARE) or the machine's (HKLM\\SOFTWARE), the 32-bit view (Wow6432Node) too, whatever program of the tree set it. What is set there runs at the next logon (RunOnce once). The line carries facts of the event: the hive, run or runonce, the value's name (redacted by common.redact, bounded), the name of the program the value would run (null where its text is not a command), and the program that set it with its parent; the target and the value's text are in the line's hash only, never in a finding. PERSIST-AUTOSTART is as it was (MUST NOT TOUCH); on a benign tree a source finding is noted, not knocked, as before."
-summary: "{input_meta.image} sets a {input_meta.autostart} value of the {input_meta.hive} hive at seq {seq} ({input_meta.value_name}: it would run {input_meta.program}; started by {input_meta.parent_image})"
+description: "ADR-0014 Amendment B, AB-1 and AB-2, and Amendment C, AC-3 and AC-4 (M15.2): an os registry line (source os, tool registry, Sysmon event 13: a value set by a process of the tree) whose input_meta.autostart is run or runonce: anything set below ...\\Microsoft\\Windows\\CurrentVersion\\Run or \\RunOnce of a user's hive (HKU\\<a SID>\\SOFTWARE) or the machine's (HKLM\\SOFTWARE), the 32-bit view (Wow6432Node) too, whatever program of the tree set it; where what follows the key holds a backslash (input_meta.nested) the event cannot tell a value whose name holds one from a value of a key under Run, and the rule fires for both. What is set there runs at the next logon (RunOnce once). The line carries facts of the event: the hive, run or runonce, the value's name (redacted by common.redact, at most 80 characters, a double quote written as an apostrophe; the sentence shows it between double quotes), the name of the program the value would run (null where its text is not a command), and the program that set it with its parent; the target and the value's text are in the line's hash only, never in a finding. PERSIST-AUTOSTART is as it was (MUST NOT TOUCH); on a benign tree a source finding is noted, not knocked, as before."
+summary: "{input_meta.image} (started by {input_meta.parent_image}) sets the {input_meta.autostart} value \"{input_meta.value_name}\" of the {input_meta.hive} hive at seq {seq}; it would run {input_meta.program}; a backslash in the name: {input_meta.nested} (where true, the event cannot tell a value whose name holds one from a value of a key under the Run or RunOnce key)"
 match:
   all:
     - {field: phase, eq: pre}
@@ -31,6 +30,7 @@ match:
 fixtures:
   positive:
     - tests/fixtures/rules/PERSIST-RUN-KEY/positive-run-values.json
+    - tests/fixtures/rules/PERSIST-RUN-KEY/positive-nested.json
   negative:
     - tests/fixtures/rules/PERSIST-RUN-KEY/negative-not-a-run-value.json
     - tests/fixtures/rules/PERSIST-RUN-KEY/negative-autostart-absent.json

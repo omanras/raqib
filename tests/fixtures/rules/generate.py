@@ -446,6 +446,13 @@ os_doc(R + "PERSIST-RUN-KEY/positive-run-values.json", os_export(75501, 4990, [
     ("reg", "02.800", 4990, OS.AGENT, MACHINE_32.lower() + "RUNONCE\\RaqibTestF", "cmd /c echo test"),
     ("reg", "02.900", 4992, REG_EXE, USER_RUN + "Run\\RaqibTestG", "Binary Data")]), 4990,
     cite=lambda r: r["tool"] == "registry")
+# ADR-0014 AC-3: what follows the key holds a backslash (nested): a value whose name holds one, or a value of a key
+# under Run - the event cannot tell them apart (measured: Sysmon wrote ...\\Run\\<part>\\<part> for such a name).
+os_doc(R + "PERSIST-RUN-KEY/positive-nested.json", os_export(75801, 4985, [
+    ("proc", "02.000", 4986, REG_EXE, 4985, OS.AGENT),
+    ("reg", "02.100", 4986, REG_EXE, USER_RUN + "Run\\RaqibTestH\\Part", "cmd /c echo test"),
+    ("reg", "02.200", 4986, REG_EXE, MACHINE_RUN + "RunOnce\\RaqibTest\\Deeper\\Part", "Binary Data")]), 4985,
+    cite=lambda r: r["tool"] == "registry")
 # Not this rule's: a registry line whose autostart is null (os-sysmon writes none: made by hand), a file whose path
 # holds CurrentVersion\Run, a process line of reg.exe; the RunNotification value Windows' own sihost sets is no line.
 def _no_autostart(r):
