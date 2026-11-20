@@ -15,6 +15,11 @@ event log (Y-7, Windows; not run elsewhere).
 an install from a place a user can write is refused, X29 an install from root's own place gives an active unit
 that sees a second user's stand-in agent, X30 the removal leaves no unit (n/a where it was not run, AA-4).
 
+The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
+this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
+says each in a WORKLOAD line: X32 PERSIST-AUTOSTART, X33 NET-ADMIN-PORT, X34 PERSIST-RUN-KEY name its tree
+(n/a where there is no os source, or where the stand-in did not do the act).
+
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
 import hashlib
@@ -145,6 +150,18 @@ def read_events(events, lines, code):
     return out
 
 
+# ADR-0014: (the claim, the rule, the WORKLOAD words that say the act was done, the state where no finding names it)
+BEHAVIOUR = (
+    ("X32 a file left in the Startup folder is a PERSIST-AUTOSTART finding", "PERSIST-AUTOSTART",
+     "startup file written", MISSED),
+    ("X33 reaching a login port of a private address is a NET-ADMIN-PORT finding", "NET-ADMIN-PORT",
+     "port 22 of this machine's own address reached", MISSED),
+    # OPEN until the rule lands (ADR-0014 Amendment B, M15.2): then MISSED, as the two above
+    ("X34 an autostart value set in the registry is a PERSIST-RUN-KEY finding", "PERSIST-RUN-KEY",
+     "autostart value set", OPEN),
+)
+
+
 def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=False, events=None):
     """[(id, state, words)] for one watch. `sources`: (name, text) of the files the watch kept. `events`: the text
     of its events file (None: the rig gave none, and X16-X18 are n/a)."""
@@ -252,6 +269,16 @@ def read(report, workload, sources=(), exit_code=None, platform="win32", sysmon=
             say(ident, MET if needle in text else MISSED, why)
         clip = [f for f in listed + findings if "CLIPBOARD" in f.upper()]
         say("X15 writing the clipboard is a finding", MET if clip else OPEN, "no rule for it yet (M7.10, recorded)")
+    # ADR-0014 (the rules of behaviour): what the stand-in did to the host, each act said by its own WORKLOAD line
+    for ident, rule, did, absent in BEHAVIOUR:
+        if not (platform == "win32" and sysmon):
+            say(ident, SKIP, "no os source on this machine (the rule reads Sysmon's lines)")
+        elif did not in workload:
+            say(ident, SKIP, "the stand-in did not do it here (no WORKLOAD line says '%s')" % did)
+        else:
+            hit = [f for f in listed if pid is not None and re.search(r"\b%s on \S+ pid %d\b" % (rule, pid), f)]
+            say(ident, MET if hit else absent, "%d %s line(s) on pid %s%s" % (
+                len(hit), rule, pid, ": " + hit[0].strip()[:120] if hit else ""))
     out += read_events(events, lines, code)
     return out
 

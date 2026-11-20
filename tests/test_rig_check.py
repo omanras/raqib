@@ -57,6 +57,7 @@ def test_the_made_up_report_is_all_met_but_the_clipboard_which_is_open():
     got = states()
     assert got.pop("X15") == check.OPEN                                   # no rule for the clipboard yet: recorded
     assert [got.pop(k) for k in ("X16", "X17", "X18")] == [check.SKIP] * 3   # M10.2: no events file given here
+    assert [got.pop(k) for k in ("X32", "X33", "X34")] == [check.SKIP] * 3   # ADR-0014: this stand-in did none of them
     assert set(got.values()) == {check.MET} and sorted(got, key=lambda x: int(x[1:])) == ["X%d" % i for i in range(1, 15)]
     assert got["X12"] == check.MET   # ADR-0007 AR-4: with Sysmon X12 is judged (MET here), n/a only without it
 
@@ -228,3 +229,47 @@ def test_x18_compares_things_of_the_report_s_run_a_pair_said_as_one_act():
     two_runs = json.dumps(other, sort_keys=True) + "\n" + paired
     assert x(report=ran, events=two_runs)["X18"][0] == check.MET      # another run's events are not this report's
     assert x(report=report, events=two_runs)["X18"][0] == check.MISSED   # without the run line: every event counts
+
+
+# --- X32 to X34 (ADR-0014): what the stand-in did to the host ---------------------------------------------------
+ACTS = ("WORKLOAD 07:50:50 startup file written\nWORKLOAD 07:50:53 port 22 of this machine's own address reached\n"
+        "WORKLOAD 07:50:54 autostart value set\n")
+BEHAVED = REPORT.replace(
+    "SOURCE FINDINGS: 2 (2 live", "SOURCE FINDINGS: 5 (5 live").replace(
+    "SYSMON: the live reader's check",
+    "  [high] PERSIST-AUTOSTART on python pid 9828 via os: file writes a file in a Startup folder at seq 17 (C:\\x); off\n"
+    "  [high] NET-ADMIN-PORT on python pid 9828 via os: net reaches port 22 of a private address at seq 25; off\n"
+    "  [high] PERSIST-RUN-KEY on python pid 9828 via os: registry sets an autostart value at seq 21; off\n"
+    "SYSMON: the live reader's check").replace("2 source finding(s) listed (4 findings", "5 source finding(s) listed (7 findings")
+
+
+def behaviour(report=BEHAVED, workload=WORKLOAD + ACTS, platform="win32", sysmon=True):
+    return {i.split(" ", 1)[0]: (s, w) for i, s, w in check.read(report, workload, SOURCES, 1, platform, sysmon)
+            if i.split(" ", 1)[0] in ("X32", "X33", "X34")}
+
+
+def test_x32_to_x34_each_act_the_stand_in_says_it_did_is_a_finding_of_its_tree():
+    got = behaviour()
+    assert {k: s for k, (s, _) in got.items()} == {"X32": check.MET, "X33": check.MET, "X34": check.MET}
+    assert "PERSIST-AUTOSTART on python pid 9828" in got["X32"][1]
+
+
+@pytest.mark.parametrize("ident,rule,absent", [("X32", "PERSIST-AUTOSTART", check.MISSED),
+                                               ("X33", "NET-ADMIN-PORT", check.MISSED),
+                                               ("X34", "PERSIST-RUN-KEY", check.OPEN)])
+def test_x32_to_x34_an_act_with_no_finding_is_missed_and_the_rule_not_landed_is_open(ident, rule, absent):
+    gone = "\n".join(line for line in BEHAVED.splitlines() if "] %s on " % rule not in line) + "\n"
+    got = behaviour(report=gone)
+    assert got[ident][0] == absent and "0 %s line(s)" % rule in got[ident][1]
+    assert all(got[k][0] == check.MET for k in got if k != ident)          # the other two are not touched
+    other = behaviour(report=BEHAVED.replace("%s on python pid 9828" % rule, "%s on python pid 77" % rule))
+    assert other[ident][0] == absent                                       # another tree's finding is not this one's
+
+
+def test_x32_to_x34_are_not_judged_without_an_os_source_or_where_the_act_was_not_done():
+    assert {s for s, _ in behaviour(platform="linux", sysmon=False).values()} == {check.SKIP}
+    assert {s for s, _ in behaviour(sysmon=False).values()} == {check.SKIP}
+    undone = WORKLOAD + ACTS.replace("startup file written", "startup file not written").replace(
+        "address reached", "address not reached").replace("value set", "value not set")
+    got = behaviour(workload=undone)
+    assert {s for s, _ in got.values()} == {check.SKIP} and "did not do it" in got["X33"][1]
