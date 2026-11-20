@@ -506,3 +506,55 @@ open: it is that task's triggers that Windows moves.
   while Windows still runs them (the service's case): the place is then read in part for good, and said. A
   value set in a hive in the interval it was loaded in is taken into the base with the hive. Whether a logon
   gives the count the watcher says. Each is measured with M15.3c.
+
+## Amendment K (the Table, 2026-11-21) - the second review of M15.3b (docs/review/2026-11-21-M15.3b-redo.md): REDO 2
+The reviewer's verdict is REDO, small: two items of code, the words, a line of the questions file. Nothing here was
+measured before it was ruled: each item is the watcher's own logic over what a registry or a folder gives it, and
+GitHub's Windows machine gives no slow key and no key of a thousand values (the longest read there is 0.156 s).
+The field's word on 0333a02: the gate green on six jobs, R7's test passed on Windows, X37 MET with the held read.
+- AK-1 (the bound is said on every key). Every key the read takes values of - a service's, a task's, Winlogon's,
+  as Run's - passes the same bound, and a key met at the bound is a part not read, said each read: none of its
+  entries is compared, so none is said removed or changed for a value that was only out of reach. FOR: a key
+  filled past the bound can no longer make a false `removed`, nor hold an entry that is never said, in silence.
+  MUST NOT TOUCH: the bound itself (1000), and the subkeys of the services' key and of the tasks' tree, which
+  are keys of their own under the deadline (the builder's choice 5, kept).
+- AK-2 (no key is starved inside a step). RunOnce is a step of its own (six steps); inside a step the machine's
+  key or folder is read before the users'; and the users' hives and folders of a step are begun one further at
+  each read, as the steps are. FOR: one slow key of one user cannot keep RunOnce, the machine's Run keys, the
+  machine's Startup folder or another user's key unread for good. The test of AJ-2 holds RunOnce and the
+  machine's keys too. MUST NOT TOUCH: AJ-1 - a part first read late is still a base.
+- AK-3 (a name that is sure, again). Not sure: a first word that holds a `%` (the read expands nothing: the
+  variable is the user's, not the reader's); an unquoted text where more than one run from its start to a blank
+  or to its end ends in a program's extension (`C:\Sites\example.com files\tool.exe`); a text that holds a
+  blank other than a space or a tab. A text is split at spaces and tabs only. `svchost.exe -k netsvcs` stays
+  sure. FOR: `sure` is said only where the text names one program however it is read. MUST NOT TOUCH:
+  raqib/hooks/os_sysmon.py's own reading of a Run value (PERSIST-RUN-KEY's; its blanks are a recorded debt,
+  ruled with M15.3c). Not measured, said: whether Winlogon keeps a quoted comma inside one program's name.
+- AK-4 (a link is never followed, and a swap is said). The module's opener asks Windows not to follow a link at
+  the open itself, and a file whose handle says it is a link is an entry said as a link with its content not
+  read. A link's content is a fixed word of its own, so a file that becomes a link under the same name, or a
+  link that becomes a file, is said as changed. Two names of one folder that differ only by case are one key:
+  the second is a part not read, said. FOR: between the listing and the open nothing can turn the read toward
+  a share (rule 5) or hide a swap behind an old hash.
+- AK-5 (a failed step, a salt, a bad argument). A step that raises marks the parts it had listed as not read
+  (so that they are not new when next seen). `Watcher` takes no salt from a caller: the command's own use is a
+  private flag that takes the process's salt. `read` gives a failed read, never an exception, for a `begin`
+  that is no step.
+- AK-6 (the words say what the code does and what ran). The spec, the threat model and the module's own words
+  say: which parts a slow key still delays and that a key or folder over the bound is never compared while it
+  is over (a plain user can do that to its own Run key and Startup folder: the lever that is left); that a key's
+  enumeration reads each value whole and a folder's listing every name (the bound is of entries compared, the
+  64 KiB of what is hashed); that a change made and undone while a part is unread is not said; that what was
+  measured of a held file is another call's rename and delete - an open that asks for no sharing still fails
+  while the read holds the file, for the instant of the read (not measured: put back); that a part read late
+  is a base. Everything that never ran on Windows is listed as that: the long form's effect on odd names, a
+  link, drive kinds 0, 1 and 4, a cut, the rotation, the bound, a late base.
+- AK-7 (the claims and the tests). X37 is MET only where a later read, after the held file was let go, read its
+  content. The tests the review names are made able to fail or added (its S5 a to g): a whole read before the
+  cut one; a made-up directory entry that is a reparse point; WinRegistry's own bound; the process's salt and
+  the word salt in what is said; the invalid escape; `late` asserted at the bound; `read` on Windows using the
+  module's opener. The questions file names every phrase of the spec a test no longer holds.
+- AK-8 (recorded for M15.3c). A base taken late is a line of the host's own (rule 4: it is what the watch did
+  not see added), not only a count on the command's output. `pending` grows with keys made and removed while a
+  place keeps failing (bounded by what exists; low). `changes()` alone, outside the watcher, compares the first
+  thousand of a key over the bound.
