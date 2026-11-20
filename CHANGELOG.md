@@ -5,6 +5,68 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.4.0 - 2026-11-21
+
+What is new:
+- A chain in the events file (ADR-0016 and its Amendments A and B). Every event a host watch writes names the
+  line its run wrote before it by that line's sha256 (`prev`; the run's first line says `first`). `raqib events
+  FILE` says of each run whether its chain is whole, where it breaks (a line removed, changed, added or moved),
+  which lines stand beside it, whether the run begins before the file, and whether a chain was taken out of a
+  run whose version always writes one. A line of an older Raqib holds no `prev`: its run is said as not
+  chained, which is not a problem.
+- `raqib events FILE --against OTHER`: the lines a collector holds, side by side with the host's file, by host
+  and id: which are in the file byte for byte, which are not there, which are there with other bytes. This is
+  how a line changed on the host after the collector took it is seen; it needs the collector's lines as they
+  were sent.
+- No line of the events file can end `raqib events` or the forwarder: a line nested too deep, or with values
+  that cannot be checked, is named and passed over.
+- The events' schema keeps its name (`raqib-event/1`): `prev` is an addition, and a reader of the file must
+  allow a key it does not know (the spec says so now).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- A run that began under an older Raqib and is still in the file stays as it is; the chain begins with the
+  first watch started after the update.
+
+Not measured:
+- What the chain does not prove is not a measurement, and is said here all the same: the chain holds no
+  secret. Whoever can write the file can cut its end, write a tail again with its hashes,
+  or take a chain out and write an older version on its lines: the file alone then looks whole. The run's last
+  line is named by no line. A collector that kept its lines sees a change of what it holds, by `--against`.
+- A real collector's export brought back as lines (Splunk, a syslog server, the journal): whether its bytes are
+  the bytes that were sent.
+- `raqib events` on a very large file: it holds the file in memory.
+
+## 0.3.0 - 2026-11-20
+
+What is new:
+- Raqib can read Windows' autostart places by itself, with no Sysmon and no right asked (ADR-0014 Amendments G
+  and H; docs/specs/AUTOSTART.md): the Run and RunOnce values of every loaded user's hive and the machine's,
+  the Startup folders, the services, the scheduled tasks where its rights give them, and Winlogon's Shell and
+  Userinit. `python -m raqib.autostart --rounds N --every S` says what each read holds and each entry added,
+  changed or removed between two reads, by its place, its name and the program it would run; never a value's
+  text, a file's content or a SID. A place the rights refuse is said as refused, never read as empty.
+- The watch does not read it yet and no rule judges it yet: that is the next step on this track (M15.3b).
+- The rig makes a service that is never started, beside its Run value and its Startup file, and claims that
+  the read sees each appear and go (X37).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+
+Not measured:
+- A real desktop: how often an updater makes its own task or service with nothing done, and how long a read
+  takes with thousands of services (on GitHub's machine: 39 reads, the longest 0.157 s).
+- What two reads can say that is not so (an entry that first appears while its place is unread; a hive loaded
+  between two reads): said in the spec, ruled before the watch reads this.
+
 ## 0.2.0 - 2026-11-20
 
 What is new:

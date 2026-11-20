@@ -7,7 +7,11 @@ revision last said and what was said (the event without its id, n, rev and
 time). say() builds the event with raqib/event.py and writes one line -
 appended, flushed - when the thing is new (rev 1) or what would be said of it
 changed (the next rev); the same again is not written. A heartbeat and the
-watch's end are written whatever else changed (F-3).
+watch's end are written whatever else changed (F-3). ADR-0016 H-1, H-2: every
+line it writes holds `prev`, the word "first" on the run's first written line,
+else the sha256 of the line this run wrote before it (event.chained); `head`
+is that last line's digest, moved only by a line written whole (a line that
+could not be written leaves it where it was).
 
 ledgers() is the watch's pass over its own lists (F-2): the watch gives each
 list apart and names nothing by guessing from what an entry holds: its trees
@@ -40,7 +44,7 @@ from raqib import event
 NAME = "events.jsonl"     # beside the watch's record (rounds.jsonl)
 BEAT_DEFAULT = 60.0       # F-3: seconds; never shorter than a round
 UNNAMED = "unnamed"       # F-6: the host's name where the system gives none
-VARY = ("id", "n", "rev", "time")   # what changes with each saying, not with the thing
+VARY = ("id", "n", "prev", "rev", "time")   # what changes with each saying, not with the thing (prev: ADR-0016)
 # H-1: per kind, exactly the keys of an entry its builder in raqib/event.py reads (a note that is a text: the text);
 # the pass adds the rest of what an event is built from (a source finding's same_as; a knock's "for", a tree's
 # candidate_by: on the row it gives). The time ("at", "first_seen") is left out: it is never what is compared (VARY).
@@ -105,6 +109,7 @@ class EventLog:
         self.facts = dict(facts, beat=self.beat)   # H-6: the beat is on every event (watch.beat)
         self.rules = rules if isinstance(rules, dict) else {}
         self.n = 0                 # the run's count: the last number used
+        self.head = None           # ADR-0016 H-2: the digest of the last line this run wrote (None: none yet)
         self.said = {}             # about -> (rev, what was said, its core)
         self.unbuilt = {}          # about -> why it could not be built (F-4: one hole per thing)
         self.kept = {}             # H-1: about -> the values its event was last built from (said, same, not built)
@@ -154,6 +159,7 @@ class EventLog:
             said = {k: v for k, v in ev.items() if k not in VARY}
             what = event.line(said)
             kernel = event.line(core(said)) if core is not None else None
+            ev = event.chained(ev, self.head or event.FIRST)   # H-1: the run's line before it, or first
             data = (event.line(ev) + "\n").encode("ascii")
         except Exception as exc:   # C-10: an entry that lacks what its kind requires; never a half event
             first = about not in self.unbuilt
@@ -185,6 +191,7 @@ class EventLog:
                 return "not written", self.write_error
             return "not written", None
         self.said[about] = (rev, what, kernel)   # G-6 (b): only a line written is said
+        self.head = event.digest(data[:-1])      # H-2: only a line written moves the head
         self.written += 1
         if ev.get("kind") == "heartbeat":
             self.heartbeats += 1

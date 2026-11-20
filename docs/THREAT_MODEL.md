@@ -901,6 +901,29 @@ What it does not see:
   configuration that logs other keys only), and that is not said. The certain
   cure is Raqib reading the autostart places itself (ADR-0014 S3).
 
+### The autostart places read by Raqib itself (ADR-0014 Amendment G; M15.3a)
+- **What this read does not see** (docs/specs/AUTOSTART.md; the read stands
+  alone in M15.3a: no watch reads it and no rule judges it yet). The places
+  AG-5 lists - Image File Execution Options, AppInit_DLLs, a WMI subscription,
+  the policies' Run keys, Active Setup, a service's ServiceDll, a COM
+  object, a hive that is not loaded (a driver is read: it is a key of the
+  services) - and RunOnceEx, RunServices, a user's
+  own Winlogon values, another user's Startup folder and the scheduler's
+  folder of task files. A change made and undone between two reads, and what
+  was there before the first read. Who made a change: the read names the
+  entry, never a process. A place the reading user's rights refuse (measured:
+  the scheduler's tree under a deny-only Administrators group) is said as
+  refused, never as empty, and gives no change; a task's program is not read
+  (its Actions are hashed, not parsed), so a task's change names no program. An
+  agent that runs as an administrator can change what the read reads (a key's
+  rights, the folder's listing) as it can any watcher of its own user; that is
+  not measured. A way round that needs no such right: an entry that first
+  appears while its place is unread (a Startup file its maker holds open
+  without sharing across one read) is in the next read's base and is never said
+  as added; the read says the place unread, and names no entry. A hive loaded
+  between two reads reads as its entries added. Both are ruled before the watch
+  reads this (ADR-0014 AH-3).
+
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
 tree as P-1..P-4, R-2..R-9, T-2..T-8, V-1..V-6 and X-1..X-9 leave it (R-1
@@ -1782,6 +1805,39 @@ collector that is slow, down or refusing never delays or loses a capture
   - A careful rewrite of whole sessions is not detected; nothing in v0.1
     claims otherwise.
   - Eval event `s12-rewrite-trace` exists, and the rules miss it.
+- **Editing the events file (ADR-0016 H-5, Amendment A).** Every line the
+  host watch writes to `~/.raqib/host/events.jsonl` names the line its run
+  wrote before it by that line's sha256 (`prev`; a run's first line holds
+  `first`), and `raqib events FILE` checks each run's chain (a run is its
+  host and its run word).
+  - What it proves: within a run, a line taken out of the middle, changed,
+    added or moved is seen by anyone who holds the lines (the line after it
+    no longer names the one before it), but the run's last line: no line
+    names it, so changed, or followed by a line added after the run ended
+    that names it, it is not seen from the file alone (HA-4). A line that
+    names the same line as the one before it is said as a line beside the
+    chain (a line the writer did not count as written, or one put there by
+    another hand). A run whose lines hold no `prev` while their version is
+    one that always writes it is said as a chain taken out (HA-2).
+  - What it does not prove: the chain holds no secret. Whoever can write
+    the file can cut its end, or write a tail again from any line and
+    compute the hashes again; the file alone then looks whole, and a test
+    of each case says so. A run of an older build has no chain at all, and
+    a version is the line's own word: whoever removes every `prev` of a run
+    and writes its lines' version again as an older one makes it read as an
+    older build's, not as a chain taken out. A file whose line ends were
+    all changed to Windows' checks as it did before.
+  - What a collector that holds a later line can tell: over the file alone,
+    nothing more - a tail written again is whole by itself, and so are the
+    collector's own lines. Side by side it can: `raqib events FILE --against
+    OTHER` looks for each line the collector holds (OTHER, its own export)
+    in the file by host and id, and says which are not there and which are
+    there with other bytes (exit 1). It needs the lines as they were sent,
+    byte for byte; a file changed only after the last line a collector
+    holds is not seen.
+  - Under the service the record is root's and the watched account cannot
+    write it; a chain keyed by a secret that account cannot read is a later
+    stage, recorded and not built.
 - **Switching the hooks off.** The agent can edit `.claude/settings.json`,
   or set `disableAllHooks`, after install. The installer checks only at
   install time (M0.3 M8).

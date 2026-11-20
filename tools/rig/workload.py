@@ -28,6 +28,8 @@ def run(argv, wait=True, timeout=60):
 RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE = "RaqibRigValue"
 HARMLESS = "cmd /c rem raqib rig"
+SERVICE = "RaqibRigService"
+SERVICE_BIN = "cmd.exe /c echo"   # ADR-0014 AG-4: a service that would only echo, made and never started
 
 
 def own_address():
@@ -40,9 +42,11 @@ def own_address():
 
 
 def behaviour(startup):
-    """ADR-0014 (Windows): three harmless acts, each undone by undo(): a file in the user's Startup folder that
-    holds a remark, a connection to port 22 of this machine's own address (its own sshd answers), and a value under
-    the user's Run key that would run a remark. What each did is said, for tools/rig/check.py (X32 to X34)."""
+    """ADR-0014 (Windows): four harmless acts, each undone by undo(): a file in the user's Startup folder that
+    holds a remark, a connection to port 22 of this machine's own address (its own sshd answers), a value under
+    the user's Run key that would run a remark, and a service that would echo, made to start on demand and never
+    started (AG-4). What each did is said, for tools/rig/check.py (X32 to X34, and X37 where
+    tools/rig/autostart_run.py runs it)."""
     run(["powershell", "-NoProfile", "-Command", "Set-Content -LiteralPath '%s' -Value 'rem raqib rig'" % startup])
     say("startup file %s" % ("written" if os.path.exists(startup) else "not written"))
     try:
@@ -55,6 +59,8 @@ def behaviour(startup):
         say("port 22 of this machine's own address %s" % ("reached" if child.returncode == 0 else "not reached"))
     child = run(["reg", "add", RUN_KEY, "/v", RUN_VALUE, "/t", "REG_SZ", "/d", HARMLESS, "/f"])
     say("autostart value %s" % ("set" if child.returncode == 0 else "not set"))
+    child = run(["sc.exe", "create", SERVICE, "binPath=", SERVICE_BIN, "start=", "demand"])
+    say("service %s" % ("made, never started" if child.returncode == 0 else "not made"))
 
 
 def undo(startup):
@@ -64,6 +70,9 @@ def undo(startup):
     except OSError as exc:
         say("the startup file was not there to undo (%s)" % type(exc).__name__)
     run(["reg", "delete", RUN_KEY, "/v", RUN_VALUE, "/f"])
+    child = run(["sc.exe", "delete", SERVICE])
+    say("undone: the service" if child.returncode == 0 else "the service was not there to undo (rc=%s)" %
+        child.returncode)
 
 
 def main():

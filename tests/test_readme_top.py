@@ -114,8 +114,24 @@ NEW_ROWS = ["| `raqib app [PROJECT]` | open Raqib as a desktop window: the host 
             "| `raqib discover` | find AI agents on a host by what they do |",
             "| `raqib --version` | print raqib <version> and exit 0 |"]
 # ADR-0011 G-11 (the Table): a row of the guide's table only (the README names the command in "the rest")
-GUIDE_ROWS = ["| `raqib events FILE` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a"
-              " `raqib-event/1` event; exit 0, 1 or 2 |",
+GUIDE_ROWS = ["| `raqib events FILE [--against OTHER]` | check a watch's events file "
+              "(`~/.raqib/host/events.jsonl`): every line a `raqib-event/1` event, then one line per run, by its "
+              "host and run (ADR-0016): its chain whole (so many lines, and the lines said twice), not whole (and "
+              "under it, in the file's order, to a bound of 10 a run that is said: that it begins before this file, "
+              "each break - a line before it was removed, changed, added or moved - and each run of lines beside it "
+              "- not counted as written by the writer, or put there by another hand - with the line they follow and "
+              "the line that names it again), not chained (a run of a Raqib before this one: not a problem) or "
+              "taken out (no line holds `prev`, and its version always writes it); exit 0, 1 (a line that is not an "
+              "event, a chain not whole or taken out, or no event) or 2 (cannot be read). Each line names the line "
+              "its run wrote before it by its sha256 (`prev`), so a line taken out of the middle, changed, added or "
+              "moved is seen (but the run's last line: no line names it, so changed, or followed by a line added "
+              "after the run ended that names it, it is not seen from the file alone); the chain has no secret, and "
+              "an end cut off, or a tail written again with its hashes, is not seen from the file alone. `--against "
+              "OTHER`: OTHER is the lines a collector holds (its own export); each is looked for in FILE by host "
+              "and id, and those not in FILE and those with other bytes are said by their line numbers in both "
+              "(exit 1; 2 where OTHER cannot be read): this, not the file alone, shows a line changed or an end cut "
+              "after the collector took it. It needs the collector's lines byte for byte as they were sent (a line "
+              "end aside) |",
               # ADR-0011 J (M10.3) and L (its REDO): the forwarder, rows of the guide only (G-11)
               "| `raqib forward [FILE] --to URL --name NAME [--shape raqib\\|hec] [--token-file FILE] [--ca "
               "FILE] [--plain] [--facility N] [--framing octet\\|newline] [--once]` | send every whole line of "
