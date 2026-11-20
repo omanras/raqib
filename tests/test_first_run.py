@@ -915,7 +915,8 @@ def normalised(text, base):
 STOP_LINE = object()   # the line naming what stops the watch: the platform's own (B-3, C-5)
 # REDO 2 C-2: the watch's own first lines, in their order, as the code before this REDO printed them (normalised)
 FIRST_LINES = {
-    "PROJ": ["raqib watch: project BASE/proj",
+    # M17.1 (ADR-0015 V-2): the first line ends with the number, read from raqib.__version__
+    "PROJ": ["raqib watch: project BASE/proj; raqib %s" % raqib.__version__,
              "raqib watch: trace BASE/home/.raqib/traces/proj-H/raqib.log.jsonl (watch default, outside the project)",
              "raqib watch: state BASE/home/.raqib/traces/proj-H/raqib.log.jsonl.watch.json",
              "raqib watch: scope: no HANDOFF.md in the project: no scope; rules that need one do not run",
@@ -928,7 +929,8 @@ FIRST_LINES = {
              "raqib watch: registry BASE/home/.raqib/watches.json (this watch is a row; rows are never removed)",
              "raqib watch: page not opened (--no-open)"],
     "--host": ["raqib watch --host: the host, not a name (ADR-N); nothing is installed, no project is touched (no"
-               " --attach-hooks)", "raqib watch --host: record BASE/home/.raqib/host/rounds.jsonl",
+               " --attach-hooks); raqib %s" % raqib.__version__,   # M17.1 (ADR-0015 V-2)
+               "raqib watch --host: record BASE/home/.raqib/host/rounds.jsonl",
                "raqib watch --host: state BASE/home/.raqib/host/rounds.jsonl.watch.json",
                # M10.2 (ADR-0011 F-6, F-7): the events file and its beat; the host's name
                "raqib watch --host: events BASE/home/.raqib/host/events.jsonl (raqib-event/1, one line appended for"
@@ -942,7 +944,8 @@ FIRST_LINES = {
 # ... and the report's own lines (not indented), through RESULT: the project watch's all, the host watch's
 # headings that every platform prints (its report says the platform's own words beside them)
 REPORT_LINES = {
-    "PROJ": ["Raqib watch", "project: BASE/proj", "trace: BASE/home/.raqib/traces/proj-H/raqib.log.jsonl",
+    "PROJ": ["Raqib watch; raqib %s" % raqib.__version__,   # M17.1 (ADR-0015 V-2): the number ends it
+             "project: BASE/proj", "trace: BASE/home/.raqib/traces/proj-H/raqib.log.jsonl",
              "state: BASE/home/.raqib/traces/proj-H/raqib.log.jsonl.watch.json (finished)",
              "scope: no HANDOFF.md in the project: no scope; rules that need one do not run",
              "watched: N-N-NTN:N:N.NZ to N-N-NTN:N:N.NZ; N lines read in this trace content; N trace resets",
@@ -957,7 +960,7 @@ REPORT_LINES = {
              "findings: raqib watch: the rules re-run on the trace as it grows", "ALARMS (A3, A5): N", "FINDINGS: N",
              "SUSPICION (model, raises only, A2): N", "RULES THAT DID NOT RUN: N", "RULES (A6 fp_budget): N",
              "RESULT: ALARM (exit N)"],
-    "--host": ["Raqib watch --host (ADR-N): the host, not a name",
+    "--host": ["Raqib watch --host (ADR-N): the host, not a name; raqib %s" % raqib.__version__,   # M17.1
                "state: BASE/home/.raqib/host/rounds.jsonl.watch.json (finished)",
                "record: BASE/home/.raqib/host/rounds.jsonl; latest inventory: BASE/home/.raqib/host/inventory.json",
                "ROUNDS", "TREES SEEN", "FINDINGS", "SUSPICION", "RHYTHM BEATS",

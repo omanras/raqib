@@ -4771,7 +4771,8 @@ class HostWatch:
         not_judged = self.all_not_judged()
         rules_off = overlay.report_lines(self.rules_overlay, not_judged)   # M7.6 (ADR-0008 decision 3)
         first = bool(overlay.suppressed(not_judged))   # REDO A-2: RULES OFF first when it suppressed anything
-        out = ["Raqib watch --host (ADR-0007): the host, not a name",
+        from raqib import watch   # M17.1 (ADR-0015 V-2): the number, read, never typed
+        out = ["Raqib watch --host (ADR-0007): the host, not a name; %s" % watch.version_word(),
                "host: %s; a round every %g s; window %g s; rounds %d%s" % (
                    self.platform, self.every, self.window, self.rounds,
                    " of %d" % self.rounds_max if self.rounds_max else ""),
@@ -5176,9 +5177,10 @@ def start(catalog, rules, every=EVERY_DEFAULT, window=0.0, rounds=None, no_open=
         notifier.close()
         raise watch.WatchError(str(exc))
     watcher.refresh = refresh
-    out.write("raqib watch --host: the host, not a name (ADR-0007); %s\n" % (
+    out.write("raqib watch --host: the host, not a name (ADR-0007); %s; %s\n" % (
         "--attach-hooks: a Claude Code tree's project gets the hooks of raqib watch (the hook settings are the only"
-        " write into a project)" if attach_hooks else "nothing is installed, no project is touched (no --attach-hooks)"))
+        " write into a project)" if attach_hooks else "nothing is installed, no project is touched (no --attach-hooks)",
+        watch.version_word()))   # M17.1 (ADR-0015 V-2)
     out.write("raqib watch --host: sources: %s (%s%s)\n" % (   # AB-3: said from, and as, the watch's own check
         "os (Sysmon) for every tree: %s" % watcher.sysmon[1] if watcher.sysmon[0] else
         "the host's own record of every tree (%s)" % watcher.sysmon[1], OWN_CHECK,

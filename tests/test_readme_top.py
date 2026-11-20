@@ -296,6 +296,28 @@ GUIDE_NEW += SERVICE_ROWS
 NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing listens on one, no page is opened in a"
            " browser, and its report and its events file are unchanged (ADR-0013 Amendment C, AC-1)."]
 GUIDE_NEW += NO_PAGE
+# M17.1 (ADR-0015 V-1 to V-3, Amendment A): the number, what a move of it means, the changelog and the update
+# steps, in the guide's Install and watch
+VERSION_NUMBER = [
+    "Which Raqib runs is said by its number, `0.MINOR.PATCH`:",
+    "`raqib --version` prints `raqib` and the number, the first line a watch prints and the first line of its report"
+    " end with it (`; raqib` and the number), the window's title bar says `Raqib` and the number, every event holds it"
+    " as `watch.version`, and `raqib doctor` says it.",
+    "MINOR moves with every merge into `main` that changes what Raqib does for a person (a rule, a source, a command,"
+    " a report), PATCH with a merge that only repairs, and a merge of documents or tests alone moves nothing: two"
+    " copies that do different things never say the same number.",
+    "The number is not a promise of stability, and the events' schema has its own name (`raqib-event/1`).",
+    "[CHANGELOG.md](CHANGELOG.md) says, the newest first, what each number brought, how to update to it and what was"
+    " not measured.",
+    "To update a checkout, as CHANGELOG.md gives it:",
+    "- Windows:",
+    "`git pull`, then `py -m pip install --upgrade .`",
+    "- Linux:",
+    "`git pull`, then `pipx install --force .`; root's copy for the service is built from a copy of the checkout"
+    " ([SERVICE.md](docs/specs/SERVICE.md)).",
+    "- Then `raqib --version` says the number at the top of CHANGELOG.md.",
+]
+GUIDE_NEW += VERSION_NUMBER
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")

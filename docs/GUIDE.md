@@ -8,6 +8,22 @@ leading backslashes only) in any ASCII case, with `\` or `/`; the forward-slash 
 `//server/share` is read as a POSIX path (a hole), `/mnt/c/...` (WSL) and `C:\...` are different
 paths, and `--root /x` means `\x` on the current drive.
 
+Which Raqib runs is said by its number, `0.MINOR.PATCH`: `raqib --version` prints `raqib` and the
+number, the first line a watch prints and the first line of its report end with it (`; raqib` and
+the number), the window's title bar says `Raqib` and the number, every event holds it as
+`watch.version`, and `raqib doctor` says it. MINOR moves with every merge into `main` that changes
+what Raqib does for a person (a rule, a source, a command, a report), PATCH with a merge that only
+repairs, and a merge of documents or tests alone moves nothing: two copies that do different things
+never say the same number. The number is not a promise of stability, and the events' schema has its
+own name (`raqib-event/1`). [CHANGELOG.md](../CHANGELOG.md) says, the newest first, what each number
+brought, how to update to it and what was not measured.
+
+To update a checkout, as CHANGELOG.md gives it:
+- Windows: `git pull`, then `py -m pip install --upgrade .`
+- Linux: `git pull`, then `pipx install --force .`; root's copy for the service is built from a
+  copy of the checkout ([SERVICE.md](specs/SERVICE.md)).
+- Then `raqib --version` says the number at the top of CHANGELOG.md.
+
 ## Watch a project
 This section begins in the README, under [Watch a project](../README.md#watch-a-project).
 

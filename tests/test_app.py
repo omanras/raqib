@@ -17,6 +17,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import raqib  # noqa: E402
 from raqib import app, cli, notify, tray, ui, watch  # noqa: E402
 from raqib.rules import engine  # noqa: E402
 
@@ -24,6 +25,9 @@ WINDOWS = os.name == "nt"
 RULES = engine.load_catalog(ROOT / "raqib" / "rules" / "catalog")
 START = datetime.datetime(2026, 11, 3, 12, 0, 0, tzinfo=datetime.timezone.utc)
 WAIT_SECONDS = 30
+# M17.1 (ADR-0015 V-2): a project watch's final report's first line ends with the number, read from
+# raqib.__version__
+REPORT_HEAD = "Raqib watch; raqib %s\n" % raqib.__version__
 
 
 @pytest.fixture(autouse=True)
@@ -254,7 +258,7 @@ def test_e2_start_runs_the_same_watch_in_a_worker_and_stop_ends_it_like_ctrl_c(t
     session.stop("Stop in the window")
     assert until(lambda: session.snapshot()["phase"] == "finished")
     snap = session.snapshot()
-    assert snap["final_text"].startswith("Raqib watch\n") and "RESULT: ALARM (exit 1)" in snap["final_text"]
+    assert snap["final_text"].startswith(REPORT_HEAD) and "RESULT: ALARM (exit 1)" in snap["final_text"]
     assert snap["final_exit"] == 1
     log = session.log.text()
     assert "raqib watch: stopped (Stop in the window)" in log and "page not opened (--no-open)" in log
@@ -1323,7 +1327,7 @@ def test_a8_a_close_that_raises_keeps_the_final_report_and_its_exit(tmp_path, mo
     session.stop("test")
     session.thread.join(WAIT_SECONDS)
     snap = session.snapshot()
-    assert snap["phase"] == "finished" and snap["final_text"].startswith("Raqib watch\n")
+    assert snap["phase"] == "finished" and snap["final_text"].startswith(REPORT_HEAD)
     assert snap["final_exit"] in (0, 1) and snap["error"] is None
     assert snap["holes"] == ["the watch did not close cleanly (page server or notifier): OSError: the notifier's"
                              " temp files could not be removed"]

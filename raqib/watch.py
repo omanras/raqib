@@ -134,6 +134,13 @@ _sleep = time.sleep  # the poll wait; tests replace it
 _retry_sleep = time.sleep  # the wait between os.replace attempts; tests replace it
 
 
+def version_word():
+    """M17.1 (ADR-0015 V-2): the number as the first line a watch prints and the first line of its report end with
+    it, "raqib <version>": read from raqib.__version__ when said, never typed again."""
+    import raqib
+    return "raqib %s" % raqib.__version__
+
+
 class WatchError(Exception):
     """Watch cannot start (exit 2)."""
 
@@ -939,7 +946,7 @@ class Watch:
             entries = list(self.inventory.values())
             notifier = self.notifier.state()
             band = self.notifier.band()[1].replace("notifications: ", "", 1)
-        out = ["Raqib watch", "project: %s" % self.project, "trace: %s" % self.trace_path,
+        out = ["Raqib watch; %s" % version_word(), "project: %s" % self.project, "trace: %s" % self.trace_path,
                "state: %s (%s)" % (self.state_path, self.status),
                "scope: %s" % (self.scope or "-"),
                "watched: %s to %s; %d lines read in this trace content; %d trace resets"
@@ -1370,7 +1377,7 @@ def start(project, log, no_open, no_notify, port, out, evaluator, rules, gap_sec
     project = installer.absolute(project)
     evaluate, scope = evaluator(project)
     trace_path, source, notes = choose_trace(installer, project, log, home)
-    out.write("raqib watch: project %s\n" % _safe(project))
+    out.write("raqib watch: project %s; %s\n" % (_safe(project), version_word()))
     for note in notes:
         out.write("raqib watch: note: %s\n" % _safe(note))
     try:
