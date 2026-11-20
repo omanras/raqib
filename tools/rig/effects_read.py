@@ -33,8 +33,17 @@ for path in sorted(glob.glob(os.path.join(home, "sources", "*.jsonl"))):
                 {k: meta[k] for k in KEYS if k in meta}, sort_keys=True)))
     print("source %s%s: %s" % (name, " (the stand-in's)" if mine else "", json.dumps(kinds, sort_keys=True)))
     if mine:
-        for row in rows[:160]:
+        for row in rows[:60]:
             print(row[:300])
+        print("  ... the last 12 of %d:" % len(rows))
+        for row in rows[-12:]:
+            print(row[:300])
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            marks = [line.strip()[:260] for line in fh if "RAQIB-SILENCE" in line or '"session_start"' in line
+                     or '"session_end"' in line]
+        print("  its passes (session marks and silences), %d:" % len(marks))
+        for m in marks:
+            print("   ", m)
 events = os.path.join(home, "events.jsonl")
 try:
     with open(events, encoding="utf-8", errors="replace") as fh:

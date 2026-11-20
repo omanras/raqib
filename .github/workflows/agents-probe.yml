@@ -293,9 +293,13 @@ jobs:
           python tools\rig\pubconf_read.py $env:RUNNER_TEMP\channel.xml
 
   effects:
-    name: what an agent's three acts leave (the field test of 2026-11-20; M15)
+    name: what an agent's three acts leave (the field test of 2026-11-20; M15; raqib of ${{ matrix.build }})
     runs-on: windows-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [this, main]
     env:
       PYTHONUTF8: "1"
     steps:
@@ -306,8 +310,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: install raqib
-        run: python -m pip install --disable-pip-version-check .
+      - name: install raqib (this branch's, or main's to compare)
+        shell: pwsh
+        run: |
+          if ("${{ matrix.build }}" -eq "main") {
+            git fetch --depth 1 origin main
+            git worktree add $env:RUNNER_TEMP\main FETCH_HEAD
+            python -m pip install --disable-pip-version-check $env:RUNNER_TEMP\main
+          } else {
+            python -m pip install --disable-pip-version-check .
+          }
       - name: install Sysmon (the rig's kinds, and the registry's autostart keys)
         shell: pwsh
         run: |
