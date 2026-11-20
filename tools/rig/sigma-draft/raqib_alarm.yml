@@ -1,0 +1,15 @@
+title: Raqib - a finding that alarms
+id: 5f0c1c0e-6a53-4a0f-9a4e-0d1c2b3a4e51
+status: experimental
+description: A rule of Raqib fired on an AI agent's tree and the watch counts it as an alarm (raqib-event/1, kind finding or source-finding, alarm true).
+logsource:
+  product: raqib
+  service: events
+detection:
+  selection:
+    kind:
+      - finding
+      - source-finding
+    alarm: true
+  condition: selection
+level: high

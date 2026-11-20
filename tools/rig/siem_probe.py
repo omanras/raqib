@@ -21,7 +21,7 @@ EXAMPLE = re.compile(r"^```json\n(.+?)\n```", re.M)
 PIPELINE = {
     "description": "raqib-event/1 to ECS, as docs/specs/EVENT.md's Mapping names it; the rest stays under raqib",
     "processors": [
-        {"set": {"field": "event.original", "copy_from": "message"}},
+        {"set": {"field": "event.original", "value": "{{{message}}}"}},   # OpenSearch 2.17 has no copy_from
         {"json": {"field": "message", "target_field": "raqib"}},
         {"fail": {"if": "ctx.raqib?.schema != 'raqib-event/1'", "message": "not a raqib-event/1 line"}},
         {"date": {"field": "raqib.time", "formats": ["ISO8601"], "target_field": "@timestamp"}},

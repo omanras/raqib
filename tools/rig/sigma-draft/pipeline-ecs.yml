@@ -1,0 +1,15 @@
+name: raqib-event/1 as the ECS pipeline of Raqib names it
+priority: 30
+transformations:
+  - id: raqib_ecs_fields
+    type: field_name_mapping
+    mapping:
+      kind: event.action
+      alarm: raqib.alarm
+      severity: raqib.severity
+      rule.id: rule.id
+      hole.kind: raqib.hole.kind
+      watch.host: host.name
+    rule_conditions:
+      - type: logsource
+        product: raqib

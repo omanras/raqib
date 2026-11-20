@@ -1,0 +1,12 @@
+title: Raqib - a hole of the capture
+id: 5f0c1c0e-6a53-4a0f-9a4e-0d1c2b3a4e52
+status: experimental
+description: The watch says that it could not see something (raqib-event/1, kind hole). Silence is an alarm.
+logsource:
+  product: raqib
+  service: events
+detection:
+  selection:
+    kind: hole
+  condition: selection
+level: medium

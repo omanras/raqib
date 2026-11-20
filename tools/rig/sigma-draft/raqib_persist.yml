@@ -1,0 +1,17 @@
+title: Raqib - an agent's tree planted persistence
+id: 5f0c1c0e-6a53-4a0f-9a4e-0d1c2b3a4e53
+status: experimental
+description: A finding of one of Raqib's rules of persistence (rule.id begins with PERSIST-).
+logsource:
+  product: raqib
+  service: events
+detection:
+  selection:
+    kind:
+      - finding
+      - source-finding
+    rule.id|startswith: 'PERSIST-'
+  condition: selection
+level: high
+tags:
+  - attack.persistence

@@ -172,7 +172,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-latest]
+        os: [ubuntu-24.04, ubuntu-latest]   # 22.04's own Python is 3.10: raqib does not install there without another
     steps:
       - uses: actions/checkout@v4
         with:
@@ -433,6 +433,18 @@ jobs:
       - name: the events as they are, through a pipeline, and the searches
         run: |
           python tools/rig/siem_probe.py docs/specs/EVENT.md ~/.raqib/host/events.jsonl || { echo "=== the engine's last words"; docker logs --tail 40 engine; exit 1; }
+      - name: the drafts of Sigma rules, converted and run
+        run: |
+          python -m pip install --disable-pip-version-check -q sigma-cli pysigma-backend-elasticsearch pysigma-backend-opensearch pysigma-backend-splunk || echo "sigma's tools could not be installed"
+          sigma version || true
+          d=tools/rig/sigma-draft
+          echo "=== to the engine's query string, through the pipeline of names"
+          if [ "${{ matrix.engine }}" = elasticsearch ]; then t=lucene; else t=opensearch_lucene; fi
+          sigma convert -t $t -p $d/pipeline-ecs.yml $d/raqib_alarm.yml $d/raqib_hole.yml $d/raqib_persist.yml > "$RUNNER_TEMP/q.txt" || { echo "the conversion failed"; sigma list targets || true; }
+          cat "$RUNNER_TEMP/q.txt" || true
+          python tools/rig/sigma_probe.py "$RUNNER_TEMP/q.txt" || true
+          echo "=== to Splunk's search language, with no pipeline (not run: no Splunk here)"
+          sigma convert -t splunk --without-pipeline $d/raqib_alarm.yml $d/raqib_hole.yml $d/raqib_persist.yml || echo "the conversion failed"
 
   effects:
     name: what an agent's three acts leave (the field test of 2026-11-20; M15; raqib of ${{ matrix.build }}, try ${{ matrix.try }})
