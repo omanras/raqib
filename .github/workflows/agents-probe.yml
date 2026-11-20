@@ -361,6 +361,12 @@ jobs:
           Get-WinEvent -FilterHashtable @{LogName=$log; Id=3} -MaxEvents 4000 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'DestinationPort: 22\s' } | ForEach-Object { "--- event 3"; $_.Message }
           "=== process events (1) of reg, schtasks, ssh, and powershell under cmd"
           Get-WinEvent -FilterHashtable @{LogName=$log; Id=1} -MaxEvents 4000 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'Image: .*\\(reg|schtasks|ssh)\.exe' -or ($_.Message -match 'Image: .*\\powershell\.exe' -and $_.Message -match 'ParentImage: .*\\cmd\.exe') } | ForEach-Object { "--- event 1"; ($_.Message -split "`n" | Where-Object { $_ -match '^(UtcTime|ProcessId|Image|CommandLine|CurrentDirectory|User|IntegrityLevel|ParentProcessId|ParentImage|ParentCommandLine):' }) }
+      - name: how often Sysmon wrote an empty ProcessGuid
+        if: always()
+        shell: pwsh
+        run: |
+          cmd /c "wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml > %RUNNER_TEMP%\channel.xml"
+          python tools\rig\pubconf_read.py $env:RUNNER_TEMP\channel.xml
 
   windows:
     name: agents (windows, Sysmon)

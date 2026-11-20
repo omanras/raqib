@@ -343,6 +343,8 @@ def dest_sha256(ip, port, protocol):
 
 def _guid(value):
     value = (value or "").strip()
+    if value and not value.strip("{}-0"):   # PROBE: Sysmon's empty ProcessGuid (all zeros) is no ProcessGuid
+        return None
     return value or None
 
 

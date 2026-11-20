@@ -24,6 +24,7 @@ def when(ev):
 
 
 ids = collections.Counter()
+GUIDS = collections.Counter()
 per = collections.Counter()
 fam = collections.Counter()
 run, startup, port22, times = [], [], [], []
@@ -37,6 +38,10 @@ for ev in events:
     t = when(ev)
     if t:
         times.append(t)
+    for name in ("ProcessGuid", "ParentProcessGuid"):
+        value = field(ev, name)
+        if value is not None:
+            GUIDS[(i, name, "empty" if not value.strip("{}-0") else "given")] += 1
     if i == 13:
         target = field(ev, "TargetObject") or ""
         if t:
@@ -78,3 +83,6 @@ for image, name in startup[:10]:
 print("event 3 to port 22: %d" % len(port22))
 for image, init in port22[:10]:
     print("  %s initiated %s" % ((image or "?").rsplit("\\", 1)[-1], init))
+print("ProcessGuid and ParentProcessGuid, empty (all zeros) or given, per event id:")
+for key in sorted(GUIDS):
+    print("  event %d %s %s: %d" % (key[0], key[1], key[2], GUIDS[key]))

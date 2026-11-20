@@ -1137,7 +1137,7 @@ GUID_TEXT = re.compile(r"\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-F
 def _guid_text(value):
     """A ProcessGuid as one text ({...}, lower case), or None (absent, or not a GUID)."""
     value = (value or "").strip()
-    if not GUID_TEXT.match(value):
+    if not GUID_TEXT.match(value) or not value.strip("{}-0"):   # PROBE: an all-zero ProcessGuid is none
         return None
     return "{%s}" % value.strip("{}").lower()
 
