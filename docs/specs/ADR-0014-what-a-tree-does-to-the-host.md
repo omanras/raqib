@@ -464,3 +464,45 @@ GitHub's Windows machine, the module of 0.3.0):
   every change that is not the stand-in's by its kind (measured so far: one task rescheduled or changed).
 - AI-11 (stages). M15.3b is this, in the module alone: nothing of the watch changes. M15.3c: the watch reads
   at its start and each round, a change is a host line, and the rules of AG-4 judge it.
+
+## Amendment J (the Table, 2026-11-21) - the review of M15.3b (docs/review/2026-11-21-M15.3b.md): REDO
+The reviewer's verdict is NEXT with six must-fix items and two findings for the Table to rule before the watch
+reads this. The field's word (the rig on b1a3f00, the code's first run on Windows): X37 MET with the held file
+and the stand-in's delete; the one change nobody made was a task rescheduled - the measurement Amendment I left
+open: it is that task's triggers that Windows moves.
+- AJ-1 (what a part held when it was first read is never said). The base of a part - a place, a key, a hive -
+  is what it held the first time it was read, whenever that is: its entries are taken as the base then and
+  none is said as added. The watcher says that it took a base late (the part and how many entries), once.
+  AI-1 holds for a part that was read before: what appears in it while it is not read is said by the first
+  read that reads it again. FOR: a first read that the deadline cut, or a hive whose key was refused at first,
+  does not become hundreds of entries said as planted. MUST NOT TOUCH: AG-3 - what was there when the watch
+  began is never said.
+- AJ-2 (no place is starved). A read begins with the place after the one the read before began with, and a
+  place that the deadline cuts keeps what it read of itself: the keys and files reached are parts read, the
+  rest not read. A folder and a key are read to a bound of entries that is said when met. FOR: a process that
+  makes its own Startup folder or Run key slow cannot keep the services, the tasks and Winlogon unread for
+  good; each is read whole at least every few reads, and the watcher says which were cut. The spec says that
+  the deadline is looked at between keys and files, not inside one call, and the threat model says the lever
+  that is left (a place made slow is itself cut, said each time, and names no entry).
+- AJ-3 (a name that is sure). An unquoted text's first word is sure where it ends in a program's extension;
+  it is not sure where it holds a separator, is followed by a blank and ends in none (`C:\Program Files\x.exe`
+  read to its first blank). A quoted first word is sure. A Winlogon value that lists more than one program
+  names none, and its line says that it is a list.
+- AJ-4 (a file is read as it is listed, and a link is not followed). A Startup file is opened by the name the
+  folder listed, in the path's long form, so that Windows does not read another name for it; a file that is a
+  link is listed and its content is not read (it may lead to a share). A file that cannot be opened for
+  another reason is an entry with its content not read and that reason; only the folder's own listing can fail
+  the place. A drive whose kind cannot be told is not read.
+- AJ-5 (a hive that comes while Run or RunOnce is not read). Its entries are not said as added: every part of
+  a hive that the base does not hold is the hive's, by AJ-1.
+- AJ-6 (a read of another salt is not taken). The watcher takes only reads made with its own salt; another is
+  refused and said, and changes nothing of the base.
+- AJ-7 (the claims and the tests can fail). X37 is MET only where the read that first listed the held file was
+  the read made while it was held, with its content not read, and the held file was removed after; the rig's
+  words say a place read in part as that. A test on Windows holds AI-3's property itself: while the module's
+  own opener holds a file, another handle renames it and deletes it, and both succeed. The assertion the
+  first build weakened is put back.
+- AJ-8 (recorded). A plain user can deny its own Run key or Startup folder to a reader of another identity
+  while Windows still runs them (the service's case): the place is then read in part for good, and said. A
+  value set in a hive in the interval it was loaded in is taken into the base with the hive. Whether a logon
+  gives the count the watcher says. Each is measured with M15.3c.
