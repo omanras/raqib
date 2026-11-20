@@ -56,11 +56,12 @@ CHANGED = {
     "| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child"
     " within 30 s, 3 times in the last 10 rounds (the think-act cycle; high; once per streak) |",
     # M15.1 (ADR-0014): two YAML rules more, PERSIST-AUTOSTART and NET-ADMIN-PORT; the two counts move, nothing else
+    # M15.2 (ADR-0014 Amendment B): one more, PERSIST-RUN-KEY; the two counts move again
     "**Rules.** Twenty-two rules turn the trace into findings, and every finding cites the trace lines behind it (A5).":
-    "**Rules.** Twenty-four rules turn the trace into findings, and every finding cites the trace lines behind it (A5).",
+    "**Rules.** Twenty-five rules turn the trace into findings, and every finding cites the trace lines behind it (A5).",
     "The rules are 5 silence rules, 1 cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 16 more: 14 YAML"
     " rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED, INDEX-UNTOUCHED, `raqib/rules/tree.py`).":
-    "The rules are 5 silence rules, 1 cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 18 more: 16 YAML"
+    "The rules are 5 silence rules, 1 cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 19 more: 17 YAML"
     " rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED, INDEX-UNTOUCHED, `raqib/rules/tree.py`).",
 }
 # The README's own two sentences that "Where it runs" keeps from the old Install and watch (ADR-0010 E-5: the
@@ -205,6 +206,16 @@ BEHAVIOUR_ROWS = [
     "), unless it is ssh started by git (high). Linux has no os source for it: nothing there is judged by"
     " it, and the host's own sample of a connection is not judged yet |",
 ]
+# M15.2 (ADR-0014 Amendment B, AB-1): the registry's autostart values, a row of the guide's What it catches
+BEHAVIOUR_ROWS.append(
+    '| PERSIST-RUN-KEY | a value set under a Run or RunOnce key of the registry (a value directly under `'
+    "...\\Microsoft\\Windows\\CurrentVersion\\Run\\` or `\\RunOnce\\` of a user's hive or the machine's, the 32-"
+    'bit view too, any case; `RunNotification`, `RunOnceEx`, `RunServices` and a value of a key under Run'
+    " left out), read from Sysmon's registry line (event 13) of a watched tree, whatever program of the t"
+    "ree set it; the finding names the hive, run or runonce, the value's name, the program the value woul"
+    "d run and the program that set it, never the value's text (high). It needs Windows with Sysmon loggi"
+    'ng a value set under these keys: where the configuration logs none, there is nothing to read. Linux '
+    'has no os source for it: nothing there is judged by it |')
 GUIDE_NEW += BEHAVIOUR_ROWS
 # M10.4b (ADR-0011 R-2, R-3, T-1, T-5, V): the window's Link screen, said where the window's screens are
 LINK_SCREEN = [
@@ -630,7 +641,7 @@ def test_e2_the_sample_report_is_the_codes_own(monkeypatch):
     assert code == 1 and text.endswith("RESULT: ALARM (exit 1)\n")
     block = section("What an alarm looks like").split("```text\n", 1)[1].split("```", 1)[0]
     assert block == with_the_cut(text)
-    assert block.count(RULES_CUT % 24) == 1 and "SILENCE-GAP     SILENCE" not in block and "  id  " not in block
+    assert block.count(RULES_CUT % 25) == 1 and "SILENCE-GAP     SILENCE" not in block and "  id  " not in block
     findings = re.findall(r"^  \[(\w+)\] (\S+) ", block, re.M)
     assert findings == [("medium", "DESTRUCT-CMD"), ("medium", "NET-TOOL")], findings
     assert '      Bash runs rm at seq 2 (programs ["curl", "bash", "rm"])\n' in block

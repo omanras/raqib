@@ -625,8 +625,8 @@ What they see:
 
 What they do not see:
 - Every autostart place the rule does not read yet. Measured: an autostart value
-  under `CurrentVersion\Run` is Sysmon's event 13, with the program that set it,
-  and Raqib does not read event 13 yet; a scheduled task is written by the
+  under `CurrentVersion\Run` is Sysmon's event 13, with the program that set it;
+  PERSIST-RUN-KEY judges it (below), not this rule; a scheduled task is written by the
   Schedule service (svchost, as SYSTEM, 24 ms after schtasks started), not by a
   process of the tree.
 - A file moved or renamed into the folder: not measured. A move within one
@@ -667,6 +667,68 @@ What is not a finding (A-6): a file under TEMP, and a shell under a shell, are a
 agent's ordinary work. They are recorded (the lines are in the tree's source) and
 judged by no rule. Measured: a file under TEMP written by a powershell under a cmd
 was a file line with its path, and nothing fired on it, by design.
+
+### The registry's autostart values (PERSIST-RUN-KEY; ADR-0014 Amendment B)
+Rulings: ADR-0014 AB-1 to AB-5. One signature judges a value set under the
+registry's Run or RunOnce key by a process of a watched tree. What was measured
+(a stand-in agent on a Windows machine, under the rig's own Sysmon configuration
+and under a public configuration that many use; five harmless values, each
+undone) is the ground of what follows.
+
+What it sees:
+- A value set directly under `\Microsoft\Windows\CurrentVersion\Run` or
+  `\RunOnce` of a user's hive (`HKU\<SID>\SOFTWARE`) or the machine's
+  (`HKLM\SOFTWARE`), with or without `\Wow6432Node` after `SOFTWARE`, in any case
+  of letters, as Sysmon's event 13 names it, whatever program of the tree set
+  it. Measured: the values were in four shapes of `TargetObject` - the user's Run
+  and RunOnce, the machine's Run and the machine's 32-bit Run - and each event
+  named the program that set it (reg.exe, powershell.exe) and its process. The
+  machine's RunOnce, plain and 32-bit, are the two shapes the four imply.
+- Under the public configuration all five values were logged, and they were the
+  only events 13 of the 91 seconds measured.
+- The line carries the hive, run or runonce, the 32-bit view, the value's name
+  (redacted, bounded), the name of the program the value would run (none where
+  the value's text is not a command: binary data, a number, an id) and the
+  program that set it with its parent. The target and the value's text are in
+  the line's hash only, never in a finding.
+- Under `raqib watch --host` each pass of a tree's os follow asks a second,
+  bounded question for event 13 alone (at most 500 events a pass), after its
+  first; the first question is what it was. A second read at its cap is said,
+  and one that fails is said as a silence and takes nothing from the pass's
+  other lines.
+
+What it does not see:
+- Another autostart place of the registry: RunOnceEx, RunServices, a value of a
+  key under Run, a user's hive not named by a SID, a scheduled task and a
+  service. Measured: about twenty seconds after the stand-in's values, Windows'
+  own sihost.exe set values under `...\CurrentVersion\RunNotification\`, a key
+  that begins with the same letters; the match is on the whole key, so they are
+  not this rule's. A value under `...\Schedule\TaskCache\Tree\` is set by the
+  Schedule service for every task, the system's own among them, and its value is
+  a number, an id or binary data, never a command.
+- A value or a key renamed into place (Sysmon's event 14): not read, not
+  measured. A value's removal and a key made are event 12: not read. Measured:
+  on a fresh machine the user's Run key was not there; the first value made the
+  key (an event 12) and then set the value (an event 13), which is judged.
+- A Sysmon whose configuration logs no value set under these keys: nothing is
+  then there to read, and Raqib cannot tell that from nothing done. A
+  configuration that logs every key was not measured: how many events 13 a pass
+  then holds, and what the second read costs beside it, are not known.
+- A hive written offline or loaded from a file: not measured.
+- A value changed by a program of the system on the tree's behalf: the event
+  names that program, not a process of the tree.
+- A value whose name holds a backslash: its target reads as a value of a key
+  under Run, which is not read.
+- An export cut short holds nothing after its end.
+- The budget was measured on no real desktop's work: no benign recording holds a
+  registry line. A program the tree starts that sets its own Run value (an
+  installer, an updater) would fire, and how often is not known.
+- Not measured either: the commander's own Sysmon.
+- Linux has no os source: the rule judges nothing there.
+- Still waiting, and said here until they are closed: a net line whose
+  `Initiated` was not read is not judged and nothing says so; under
+  `raqib watch --host` a Sysmon channel that gives no file event, and now none
+  of event 13, is not said.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
