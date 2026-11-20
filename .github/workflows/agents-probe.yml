@@ -182,6 +182,9 @@ jobs:
       - name: after an overflow, and what threads send (the review of M14.1a)
         if: always()
         run: python3 tools/rig/linux_events_probe2.py
+      - name: seq, the order at an overflow, a thread's exec under load (the second review of M14.1a)
+        if: always()
+        run: python3 tools/rig/linux_events_probe3.py
       - name: the reader itself (M14.1a), as a plain user, five times
         if: always()
         run: |
