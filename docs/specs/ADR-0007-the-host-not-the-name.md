@@ -3468,3 +3468,32 @@ has shown, and one (CE-3) is given a claim of its own to be measured by.
   (Q2); the reader's first record that names a parent (redo Q2). Recorded: children with no start read are
   keyed by pid alone; BA-1's take-back by pid; a name longer than the kernel's fifteen makes the whole answer
   not a line (E1's letter); kept children of gone trees are let go only when heard to end.
+
+## Amendment CF (the Table, 2026-11-21) - the second review of M14.1d (docs/review/2026-11-21-M14.1d-redo2.md): lands
+The reviewer's verdict is NEXT after three items by the Table's hand. The field's word on f679208 and again on
+4948ab1 (GitHub's Linux machine, kernel 7.0): X36, X43, X44, X45 and X46 MET - each by the child's own entry in
+its line and a NET-TOOL finding that cites that line; X46 is the stand-in's fetch run through `sudo -n`: a child
+the process events alone saw, its file not read, named by the kernel's name. The gate green on six jobs.
+- CF-1 (under an act-root the sample's parent stands). CE-2 as built reads the samples' own links for the whole
+  search of act-roots, so CD-1 does not reach an act-root's children: a process the reader heard made under an
+  act-root's shell that a sample holds under pid 1 is no act of it. That is ruled as it stands, and said in
+  the four texts that claimed more. FOR: nothing of an act-root - its making, its acts, its budget measured on
+  samples (CB-1) - moves by the reader's word before a desktop's measure (CB-3, CC-6). MUST NOT TOUCH: a tree
+  that talks, where CD-1 holds as the rig shows. Recorded for M14.2, with CC-6: the reader's links for the
+  acts of an act-root the samples made, built and reviewed as its own item.
+- CF-2 (the counts are each true). The section's count of children named by the kernel's name alone counts
+  each child, not each name of a line; the count of children with no line takes from the round's own count
+  (the inventory's children with no program read) only those of them that got a line by a name, a child a
+  round - never a child a sample also saw, never one the watch joined itself. A test holds two children of
+  one line by one name, one a sample also saw, and one with neither file nor name.
+- CF-3 (small, by hand). The hole for a held tree's kept children has its own once, so that AZ-2's hole never
+  silences it. The words: a program not read, and no name of it read either, gets no line; the gone tree's
+  count says "to start or to become"; a held line's word says "a child it kept, or a child of one"; where
+  the file was not read the name is all there is and is the process's to choose.
+- CF-4 (kept, or recorded for M14.2). Kept as built: the builder's Q1 (a kept maker works through the watch:
+  a process a talking subreaper holds stays with it), Q2, Q3, Q4 (`files_unread` on the line), C1, C3, C4.
+  Recorded: a kept child on the held road whose new program's name the gate refuses says no hole; X44's
+  "file by another name" branch is loose where a line is shared; a start not read lets a kept child go; a
+  finding a person reads does not yet say that the file was not read (the rules' sentences: no rule reads
+  `files_unread`); the section's two new counts are not in the guide's list; X46 where the watch itself runs
+  as root; the debts of CE-8; a tree kept alive by its kept children.

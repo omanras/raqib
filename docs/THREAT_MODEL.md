@@ -526,10 +526,14 @@ Rulings: ADR-0003 Amendments C and D.
     differ, by the name it was called by (CC-1, CC-2). A process is its
     maker's child where the reader heard it made and its maker is a process
     of the round or a child the watch keeps (CD-1, CE-2); else the sample's
-    parent stands. An act-root is made by the samples alone (CB-1, CE-2).
+    parent stands. An act-root is made by the samples alone (CB-1, CE-2),
+    and under one the sample's parent stands for every process (CF-1): what
+    an act-root's shell starts in the background and leaves is nobody's,
+    as before this task.
     A child whose file the reader could not read (one run through `sudo`)
     is named by the name the kernel gave it, and its line says its file was
-    not read (CE-3). Not judged: a tree that lives whole between two
+    not read (CE-3): that name is then all there is, and it is the
+    process's to choose - a tool run so under another name is missed. Not judged: a tree that lives whole between two
     samples (a tree needs a talker at a sample; a connection between two
     samples is still unseen), a child's own connections, a program past
     the bound of 8 a process, a child whose parent the watch never wrote,

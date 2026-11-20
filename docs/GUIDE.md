@@ -246,16 +246,18 @@ heard to start is said, as a hole of the result. A child whose file the reader c
 run through `sudo`) is named by the name the kernel gave it, its line saying its file was not read.
 A process is its maker's child where the reader heard it made and its maker is a process of the
 round or a child the watch keeps, though a sample holds it under pid 1 (a bash a shell started in
-the background and that outlived it); an act-root is made by the samples' own links alone. Not
-judged: a tree that lives whole between two samples (a tree needs a talker at a sample, and a
-connection that opens and closes between two samples is still unseen), a child's own connections, a
-program past the bound of 8 a process (the oldest of those run between two asks), a child whose
-parent the watch never wrote, a process whose maker the reader did not hear that a sample holds
-under pid 1, and an act-root the reader's word alone would make; a process can be called by a tool's
-name it is not (a link of its own), and its tree then alarms by its own doing. A program not read is
-in the round and counted; it gets no line. What is judged from the helper is the helper's word: the
-watch does not check its lines. Its report has a section `PROCESS EVENTS (Linux):` after the place
-of Windows' CHANNEL line: what is judged and what is not, the rounds asked and answered, the
+the background and that outlived it); an act-root is made by the samples' own links alone, and under
+an act-root a process stays with the parent a sample holds it under (what its shell starts in the
+background and leaves is nobody's there, as before: the next task). Not judged: a tree that lives
+whole between two samples (a tree needs a talker at a sample, and a connection that opens and closes
+between two samples is still unseen), a child's own connections, a program past the bound of 8 a
+process (the oldest of those run between two asks), a child whose parent the watch never wrote, a
+process whose maker the reader did not hear that a sample holds under pid 1, and an act-root the
+reader's word alone would make; a process can be called by a tool's name it is not (a link of its
+own), and its tree then alarms by its own doing. A program not read, and no name of it read either,
+is in the round and counted; it gets no line. What is judged from the helper is the helper's word:
+the watch does not check its lines. Its report has a section `PROCESS EVENTS (Linux):` after the
+place of Windows' CHANNEL line: what is judged and what is not, the rounds asked and answered, the
 processes that began, those of them that began and ended between two asks, the programs not read
 (reads at an exec that failed: a process can end before its program is read), how many processes
 were given to the rounds, joined to a tree as its child and, of them, had no program read, how many

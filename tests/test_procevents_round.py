@@ -546,6 +546,8 @@ def test_e6_the_documents_follow():
                      # M14.1d REDO 2 (CE-1 to CE-6)
                      "The search for act-roots reads the samples' own parent links, never one the reader gave over them"
                      " (CE-2).",
+                     "So under an act-root the sample's parent stands for every process (CF-1)",
+                     "whose program was not read, and no name of it either, is in the round and counted",
                      "Only children the process events heard are kept; a child of a child written from a sample alone"
                      " is nobody's once its parent ends.",
                      "a tree that has gone is written nothing, and how many processes its kept children were heard to"
@@ -566,7 +568,9 @@ def test_e6_the_documents_follow():
                      " round or a child the watch keeps",   # M14.1d REDO 2 (CE-2)
                      "a child of a child written from a sample alone is nobody's once its parent ends",
                      "named by the name the kernel gave it, its line saying its file was not read",
-                     "A program not read is in the round and counted; it gets no line.",
+                     "A program not read, and no name of it read either, is in the round and counted; it gets no"
+                     " line.",
+                     "under an act-root a process stays with the parent a sample holds it under",   # CF-1
                      "the root of a tree, and of an act-root, is always a process a sample held",
                      "where the reader answered and was not whole, the note says what was heard and judged and why it"
                      " was not whole",
@@ -1182,6 +1186,19 @@ def test_ce3_a_child_known_by_the_kernels_name_alone_gets_its_line_said_as_file_
     assert host.PE_ALONE % 1 in text and "of them with no program read (no line): 1" in text
 
 
+def test_cf2_the_counts_of_children_named_alone_and_of_children_with_no_line_are_each_true(tmp_path, monkeypatch):
+    """The second review's MUST FIX 2: two children of one line by the same kernel name are two; a child a sample
+    also saw (its image the sample's) is not taken from the children with no line; one with neither file nor
+    name is the one with no line."""
+    alive = [(1, (1922, 1600, "curl", 2522))]
+    script = [answer([progs(1920, [None], 2520, names=["wget"]), progs(1921, [None], 2521, names=["wget"]),
+                      progs(1922, [None], 2522, names=["nc"]), progs(1923, [None], 2523)])]
+    w, text, _ = watched(tmp_path, monkeypatch, script, 1, alive=alive)
+    (meta,) = [x["input_meta"] for x in child_lines(tmp_path / "home")]
+    assert {1920, 1921, 1922} <= {c["pid"] for c in meta["children"]} and 1923 not in [
+        c["pid"] for c in meta["children"]]
+    assert host.PE_ALONE % 3 in text                                 # 1920, 1921 and the sampled 1922 (named nc)
+    assert "of them with no program read (no line): 1" in text      # 1923 alone: never hidden by the others
 def test_ce4_never_a_name_less_and_a_file_not_read_is_never_unfit(tmp_path, monkeypatch):
     alive = [(1, (1910, 1600, "curl", 2510)), (1, (1911, 1600, "nc", 2511))]
     script = [answer([progs(1910, [None], 2510), progs(1911, ["/usr/bin/xyz"], 2511, names=["abcdefghijklmno"])])]

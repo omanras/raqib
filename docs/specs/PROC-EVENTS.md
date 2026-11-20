@@ -407,7 +407,11 @@ bash that a shell started in the background and that outlived it is the
 tree's child from the round it was heard in, is kept, and every program it
 runs later is judged as the tree's. A process the reader did not give keeps
 the sample's parent. The search for act-roots reads the samples' own parent
-links, never one the reader gave over them (CE-2). Only children the process
+links, never one the reader gave over them (CE-2). So under an act-root the
+sample's parent stands for every process (CF-1): one the reader heard made
+under an act-root's shell that a sample holds under pid 1 is no act of it,
+is not kept, and what it runs later is nobody's - as before this task, and
+the next task's to take. Only children the process
 events heard are kept; a child of a child written from a sample alone is
 nobody's once its parent ends. A kept child, or a child of one, is given to
 its tree while the tree is quiet by the road a held tree's given children go
@@ -437,8 +441,9 @@ tree, and so is a process whose maker the reader did not hear (begun before
 the reader, or its fork lost) that a sample holds under pid 1 (CD-2). An act-root the reader's word alone would make is not made (CB-1). A
 process can be called by a tool's name it is not (a link of its own): it is
 then judged by that name, and its tree alarms by its own doing. A child
-whose program was not read is in the round and counted; it gets no line and
-no hole.
+whose program was not read, and no name of it either, is in the round and
+counted; it gets no line and no hole (one whose name alone was read gets
+its line by that name, CE-3).
 
 The words (BY-4). A program's name reaches a line's programs only through
 the gate a sampled child's name goes through (a plain program name, else
