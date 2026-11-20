@@ -1,0 +1,19 @@
+title: Raqib - a finding of destruction
+id: 6f3d2a91-4c1e-4b8a-9d27-1e5a0c7b3f45
+status: experimental
+description: 'A finding of a rule of class DESTRUCT (a destructive command of a watched tree).'
+author: Raqib
+logsource:
+  product: raqib
+detection:
+  selection:
+    kind:
+      - finding
+      - source-finding
+    rule.class: DESTRUCT
+  condition: selection
+falsepositives:
+  - 'The rule''s own false-positive budget (rule.fp_budget)'
+level: medium
+tags:
+  - attack.t1485

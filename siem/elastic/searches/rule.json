@@ -1,0 +1,27 @@
+{
+  "finds": "Every finding of one rule, by its id (the parameter rule_id), each rev and each copy.",
+  "request": "POST raqib-events*/_search/template",
+  "body": {
+    "source": {
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "rule.id": "{{rule_id}}"
+              }
+            }
+          ]
+        }
+      },
+      "sort": [
+        {
+          "event.ingested": "desc"
+        }
+      ]
+    },
+    "params": {
+      "rule_id": "NEW-AGENT-UNKNOWN"
+    }
+  }
+}

@@ -170,3 +170,48 @@ jobs:
           name: rig-linux
           path: rig-out/
           if-no-files-found: ignore
+
+  siem:
+    # ADR-0017 S-2 (M16.1 E6): the ready content of siem/, proved by the engines themselves. Each engine runs in a
+    # container published on this machine's own loopback port and nowhere else; tools/rig/siem_run.py installs
+    # the content, puts the examples of docs/specs/EVENT.md and a short host watch's own events file through it,
+    # and prints X39 to X42, each MET or MISSED with its numbers. A MISSED claim does not fail the job (ADR-0012);
+    # an engine that did not start, or a sigma-cli that could not be installed, is said as such, never as MET.
+    # Nothing is sent off the machine; what comes in is the engines' images and sigma-cli, for this job only.
+    # REDO (Amendment A, SA-10): the watch says heartbeats (a beat of 5 s); sigma-cli, pySigma and the two backends
+    # are pinned to the set pip resolves for Python 3.12 (the versions are printed in X42's row); the runner feeds
+    # made-up events and near misses, the made-up hosts of the silence measurement, the odd lines and a shipper's
+    # fields beside the examples and the watch's file.
+    name: rig siem (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [elasticsearch, opensearch]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the engine, on this machine's own port and nowhere else
+        run: |
+          if [ "${{ matrix.engine }}" = elasticsearch ]; then
+            docker run -d --name engine -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false -e ES_JAVA_OPTS="-Xms1g -Xmx1g" docker.elastic.co/elasticsearch/elasticsearch:8.15.3 || echo "the engine could not be started"
+          else
+            docker run -d --name engine -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true -e DISABLE_INSTALL_DEMO_CONFIG=true -e OPENSEARCH_JAVA_OPTS="-Xms1g -Xmx1g" opensearchproject/opensearch:2.17.1 || echo "the engine could not be started"
+          fi
+      - name: a short host watch's own events file
+        run: |
+          python -m pip install --disable-pip-version-check -q .
+          raqib watch --host --rounds 4 --every 5 --beat 5 --no-open > "$RUNNER_TEMP/watch.out" 2>&1 || echo "the watch's exit: $?"
+          ls -la "$HOME/.raqib/host/" || true
+      - name: sigma-cli, for this job only (never a dependency of raqib)
+        run: python -m pip install --disable-pip-version-check -q sigma-cli==3.1.0 pySigma==1.5.1 pysigma-backend-elasticsearch==2.1.1 pysigma-backend-opensearch==2.0.3 || echo "sigma-cli could not be installed"
+      - name: the content through the engine (X39 to X42)
+        if: always()
+        run: |
+          python tools/rig/siem_run.py docs/specs/EVENT.md "$HOME/.raqib/host/events.jsonl" --summary "$GITHUB_STEP_SUMMARY" || echo "the runner's exit: $?"
+          echo "=== the engine's last words"; docker logs --tail 30 engine 2>&1 || true

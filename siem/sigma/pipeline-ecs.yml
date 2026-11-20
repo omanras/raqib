@@ -1,0 +1,107 @@
+# siem/sigma/pipeline-ecs.yml - the pipeline of names for sigma-cli (pySigma): every key of raqib-event/1
+# (docs/specs/EVENT.md, Keys) to the field siem/elastic and siem/opensearch's ingest pipeline writes it to,
+# the ECS column of that table. Two of the named keys change their value as well as their name there -
+# alarm true is event.kind alert, and a severity is a number - and the two value steps below say so; the
+# rules of siem/sigma/rules name neither alarm false nor severity: alarm false would be turned into
+# alert, and the severities hole and medium are both 3 (siem/README.md, Sigma). A rule of a SOC's own
+# must not name them either.
+name: raqib-event/1 to the ECS fields of siem (EVENT.md Mapping)
+priority: 30
+transformations:
+  - id: raqib_alarm_true_is_alert
+    type: set_value
+    value: alert
+    field_name_conditions:
+      - type: include_fields
+        fields: [alarm]
+    rule_conditions:
+      - type: logsource
+        product: raqib
+  - id: raqib_severity_number
+    type: map_string
+    mapping: {high: '4', medium: '3', low: '2', info: '1', hole: '3'}
+    field_name_conditions:
+      - type: include_fields
+        fields: [severity]
+    rule_conditions:
+      - type: logsource
+        product: raqib
+  - id: raqib_ecs_fields
+    type: field_name_mapping
+    mapping:
+      schema: 'raqib.schema'
+      id: 'event.id'
+      n: 'raqib.n'
+      time: '@timestamp'
+      kind: 'event.action'
+      about: 'raqib.about'
+      rev: 'raqib.rev'
+      severity: 'event.severity'
+      alarm: 'event.kind'
+      summary: 'message'
+      rule: 'raqib.rule'
+      rule.id: 'rule.id'
+      rule.class: 'rule.category'
+      rule.kind: 'raqib.rule.kind'
+      rule.fp_budget: 'raqib.rule.fp_budget'
+      rule.attack: 'threat.technique.id'
+      subject: 'raqib.subject'
+      subject.tree: 'raqib.subject.tree'
+      subject.pid: 'process.pid'
+      subject.image: 'process.name'
+      subject.started: 'raqib.subject.started'
+      subject.named: 'raqib.subject.named'
+      subject.agent: 'raqib.subject.agent'
+      subject.path: 'raqib.subject.path'
+      subject.benign: 'raqib.subject.benign'
+      subject.history: 'raqib.subject.history'
+      subject.by: 'raqib.subject.by'
+      evidence: 'raqib.evidence'
+      evidence.run: 'raqib.evidence.run'
+      evidence.round: 'raqib.evidence.round'
+      evidence.rounds: 'raqib.evidence.rounds'
+      evidence.record: 'raqib.evidence.record'
+      evidence.source: 'raqib.evidence.source'
+      evidence.trace: 'raqib.evidence.trace'
+      evidence.seqs: 'raqib.evidence.seqs'
+      evidence.lines: 'raqib.evidence.lines'
+      evidence.cites: 'raqib.evidence.cites'
+      evidence.cites_left_out: 'raqib.evidence.cites_left_out'
+      evidence.same_as: 'raqib.evidence.same_as'
+      hole: 'raqib.hole'
+      hole.kind: 'raqib.hole.kind'
+      hole.class: 'raqib.hole.class'
+      hole.count: 'raqib.hole.count'
+      hole.last: 'raqib.hole.last'
+      knocked: 'raqib.knocked'
+      knocked.status: 'raqib.knocked.status'
+      knocked.event: 'raqib.knocked.event'
+      knocked.title: 'raqib.knocked.title'
+      knocked.limit_id: 'raqib.knocked.limit_id'
+      knocked.called: 'raqib.knocked.called'
+      knocked.for: 'raqib.knocked.for'
+      state: 'raqib.state'
+      result: 'raqib.result'
+      result.word: 'raqib.result.word'
+      result.exit: 'raqib.result.exit'
+      result.suppressed: 'raqib.result.suppressed'
+      counts: 'raqib.counts'
+      counts.rounds: 'raqib.counts.rounds'
+      counts.findings: 'raqib.counts.findings'
+      counts.source_findings: 'raqib.counts.source_findings'
+      counts.holes: 'raqib.counts.holes'
+      counts.blind: 'raqib.counts.blind'
+      counts.notes: 'raqib.counts.notes'
+      counts.trees: 'raqib.counts.trees'
+      counts.knocks: 'raqib.counts.knocks'
+      watch: 'raqib.watch'
+      watch.run: 'raqib.watch.run'
+      watch.mode: 'raqib.watch.mode'
+      watch.platform: 'raqib.watch.platform'
+      watch.version: 'observer.version'
+      watch.host: 'host.name'
+      watch.beat: 'raqib.watch.beat'
+      prev: 'raqib.prev'
+    rule_conditions:
+      - type: logsource
+        product: raqib

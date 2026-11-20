@@ -1,0 +1,14 @@
+title: Raqib - a watch that ended incomplete
+id: 6f3d2a91-4c1e-4b8a-9d27-1e5a0c7b3f48
+status: experimental
+description: 'A watch ended and its report says INCOMPLETE (exit 3) - it could not see all it was to see.'
+author: Raqib
+logsource:
+  product: raqib
+detection:
+  selection:
+    kind: watch
+    state: end
+    result.word: INCOMPLETE
+  condition: selection
+level: medium

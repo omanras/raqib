@@ -1,0 +1,56 @@
+{
+  "finds": "The hosts where the engine's own clock has passed the latest deadline any line of the host gave (its arrival, event.ingested, and two of that line's own watch.beat, a beat counted as at most 86400 s; never the event's time), the earliest deadline (the longest passed) first; at most 10000 hosts are judged, past that bound the hosts whose deadline is latest are left out first, and a sum_other_doc_count above 0 in the answer means lines of hosts beyond the bound exist.",
+  "request": "POST raqib-events*/_search",
+  "body": {
+    "size": 0,
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "exists": {
+              "field": "raqib.watch.beat"
+            }
+          },
+          {
+            "exists": {
+              "field": "event.ingested"
+            }
+          },
+          {
+            "exists": {
+              "field": "host.name"
+            }
+          }
+        ]
+      }
+    },
+    "aggs": {
+      "hosts": {
+        "terms": {
+          "field": "host.name",
+          "size": 10000,
+          "order": {
+            "deadline": "asc"
+          }
+        },
+        "aggs": {
+          "deadline": {
+            "max": {
+              "script": {
+                "source": "doc['event.ingested'].value.toInstant().toEpochMilli() + (long)(2000 * Math.min(doc['raqib.watch.beat'].value, 86400.0))"
+              }
+            }
+          },
+          "silent": {
+            "bucket_selector": {
+              "buckets_path": {
+                "d": "deadline"
+              },
+              "script": "params.d < System.currentTimeMillis()"
+            }
+          }
+        }
+      }
+    }
+  }
+}

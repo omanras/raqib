@@ -1,0 +1,89 @@
+{
+  "description": "raqib-event/1 to ECS as docs/specs/EVENT.md's Mapping names it (siem/README.md). First, a shipper's host, event, error, observer, rule, process or threat that is not an object is moved to displaced.NAME as a text of at most 1024 characters. An event: every named key to its ECS field (host.name, @timestamp, event.id, event.action, event.kind and the others replace what a shipper set there), message replaced by the event's summary or removed where it has none, every other key the spec knows under raqib, the names of the keys it does not know in raqib.unknown_keys, the line in event.original, the arrival in event.ingested. A line that is not an event by these checks is kept as an error document: raqib removed, event.kind pipeline_error, its reason in error.message, event.original and message the line, event.ingested the arrival, @timestamp the arrival unless a shipper set it, every other field as the shipper set it. No document id is set",
+  "processors": [
+    {
+      "script": {
+        "lang": "painless",
+        "source": "String text(def v) { String t = v == null ? 'null' : v.toString(); if (t.length() > 1024) { int cut = 1024; int c = (int) t.charAt(1023); if (c >= 55296 && c <= 56319) { cut = 1023; } t = t.substring(0, cut); } return t; } Map moved = [:]; for (def k : ['host', 'event', 'error', 'observer', 'rule', 'process', 'threat']) { if (ctx.containsKey(k) && !(ctx[k] instanceof Map)) { moved[k] = text(ctx.remove(k)); } } if (ctx.containsKey('displaced') && !(ctx.displaced instanceof Map)) { moved.displaced = text(ctx.remove('displaced')); } if (!moved.isEmpty()) { def d = ctx.displaced; if (d instanceof Map) { d.putAll(moved); } else { ctx.displaced = moved; } }"
+      }
+    },
+    {
+      "set": {
+        "field": "event.original",
+        "value": "{{{message}}}"
+      }
+    },
+    {
+      "json": {
+        "field": "message",
+        "target_field": "raqib"
+      }
+    },
+    {
+      "fail": {
+        "if": "!(ctx.raqib instanceof Map) || ctx.raqib.schema != 'raqib-event/1'",
+        "message": "not a raqib-event/1 event: its schema is not raqib-event/1"
+      }
+    },
+    {
+      "script": {
+        "lang": "painless",
+        "source": "boolean typed(def v, String t) { if (t == 's') { return v instanceof String; } if (t == 'i') { return v instanceof Integer || v instanceof Long; } if (t == 'p') { return (v instanceof Integer || v instanceof Long) && v >= 1; } if (t == 'c') { return (v instanceof Integer || v instanceof Long) && v >= 0; } if (t == 'f') { return v instanceof Integer || v instanceof Long || v instanceof Double || v instanceof Float; } if (t == 'b') { return v instanceof Boolean; } if (t == 'o') { return v instanceof Map; } if (t == 'S') { if (!(v instanceof List)) { return false; } for (def x : v) { if (!(x instanceof String)) { return false; } } return true; } return true; } void walk(def v, int depth, List tally) { if (depth > 10) { throw new IllegalArgumentException('not an event: deeper than 10 levels'); } if (v instanceof Map) { for (def e : v.entrySet()) { if (e.getKey() == '') { throw new IllegalArgumentException('not an event: an empty key'); } if (e.getKey().length() > 256) { throw new IllegalArgumentException('not an event: a key longer than 256 characters'); } tally.set(0, tally.get(0) + 1); if (tally.get(0) > 200) { throw new IllegalArgumentException('not an event: more than 200 keys'); } walk(e.getValue(), depth + 1, tally); } } else if (v instanceof List) { for (def x : v) { walk(x, depth + 1, tally); } } else if (v instanceof String && v.length() > 8000) { throw new IllegalArgumentException('not an event: a text longer than 8000 characters'); } else if ((v instanceof Double || v instanceof Float) && !(v >= -Double.MAX_VALUE && v <= Double.MAX_VALUE)) { throw new IllegalArgumentException('not an event: a number that is not finite'); } } def r = ctx.raqib; def tally = [0]; walk(r, 1, tally); def base = ['schema', 'id', 'n', 'time', 'kind', 'about', 'rev', 'severity', 'watch']; for (def k : base) { if (!r.containsKey(k)) { throw new IllegalArgumentException('not an event: the base key ' + k + ' is missing'); } } def top = ['schema': 's', 'id': 's', 'n': 'p', 'prev': 's', 'time': 's', 'kind': 's', 'about': 's', 'rev': 'p', 'severity': 's', 'alarm': 'b', 'summary': 's', 'rule': 'o', 'subject': 'o', 'evidence': 'o', 'hole': 'o', 'knocked': 'o', 'state': 's', 'result': 'o', 'counts': 'o', 'watch': 'o']; for (def e : top.entrySet()) { if (r.containsKey(e.getKey()) && !typed(r[e.getKey()], e.getValue())) { throw new IllegalArgumentException('not an event: ' + e.getKey() + ' is not of its kind of value'); } } def kinds = ['finding', 'source-finding', 'note', 'tree', 'hole', 'knock', 'heartbeat', 'watch']; if (!kinds.contains(r.kind)) { throw new IllegalArgumentException('not an event: its kind is not one of the spec\\'s eight'); } def wbase = ['run', 'host', 'beat']; for (def k : wbase) { if (!r.watch.containsKey(k)) { throw new IllegalArgumentException('not an event: the base key watch.' + k + ' is missing'); } } def checked = ['rule': ['id': 's', 'class': 's', 'kind': 's', 'fp_budget': 'f', 'attack': 'S'], 'subject': ['pid': 'c', 'image': 's'], 'watch': ['run': 's', 'mode': 's', 'platform': 's', 'version': 's', 'host': 's', 'beat': 'f']]; for (def p : checked.entrySet()) { def part = r[p.getKey()]; if (part != null) { for (def e : p.getValue().entrySet()) { if (part.containsKey(e.getKey()) && !typed(part[e.getKey()], e.getValue())) { throw new IllegalArgumentException('not an event: ' + p.getKey() + '.' + e.getKey() + ' is not of its kind of value'); } } } }"
+      }
+    },
+    {
+      "date": {
+        "field": "raqib.time",
+        "formats": [
+          "ISO8601"
+        ],
+        "target_field": "@timestamp"
+      }
+    },
+    {
+      "set": {
+        "field": "event.ingested",
+        "value": "{{{_ingest.timestamp}}}"
+      }
+    },
+    {
+      "script": {
+        "lang": "painless",
+        "source": "Map obj(Map m, String k) { if (!(m[k] instanceof Map)) { m[k] = [:]; } return m[k]; } def r = ctx.raqib; def top = ['schema': 's', 'id': 's', 'n': 'p', 'prev': 's', 'time': 's', 'kind': 's', 'about': 's', 'rev': 'p', 'severity': 's', 'alarm': 'b', 'summary': 's', 'rule': 'o', 'subject': 'o', 'evidence': 'o', 'hole': 'o', 'knocked': 'o', 'state': 's', 'result': 'o', 'counts': 'o', 'watch': 'o']; def parts = ['rule': ['id', 'class', 'kind', 'fp_budget', 'attack'], 'subject': ['tree', 'pid', 'image', 'started', 'named', 'agent', 'path', 'benign', 'history', 'by'], 'evidence': ['run', 'round', 'rounds', 'record', 'source', 'trace', 'seqs', 'lines', 'cites', 'cites_left_out', 'same_as'], 'hole': ['kind', 'class', 'count', 'last'], 'knocked': ['status', 'event', 'title', 'limit_id', 'called', 'for'], 'result': ['word', 'exit', 'suppressed'], 'counts': ['rounds', 'findings', 'source_findings', 'holes', 'blind', 'notes', 'trees', 'knocks'], 'watch': ['run', 'mode', 'platform', 'version', 'host', 'beat']]; def unknown = []; for (def k : new ArrayList(r.keySet())) { if (!top.containsKey(k)) { unknown.add(k); r.remove(k); } } for (def p : parts.entrySet()) { def part = r[p.getKey()]; if (part instanceof Map) { for (def k : new ArrayList(part.keySet())) { if (!p.getValue().contains(k)) { unknown.add(p.getKey() + '.' + k); part.remove(k); } } } } if (!unknown.isEmpty()) { Collections.sort(unknown); r.unknown_keys = unknown.size() > 50 ? new ArrayList(unknown.subList(0, 50)) : unknown; } r.remove('time'); def ev = obj(ctx, 'event'); ev.id = r.remove('id'); ev.action = r.remove('kind'); def sev = ['high': 4, 'medium': 3, 'low': 2, 'info': 1, 'hole': 3]; if (sev.containsKey(r.severity)) { ev.severity = sev[r.remove('severity')]; } ev.kind = r.remove('alarm') == true ? 'alert' : 'event'; if (r.containsKey('summary')) { ctx.message = r.remove('summary'); } else { ctx.remove('message'); } def w = r.watch; def h = obj(ctx, 'host'); h.name = w.remove('host'); def ob = obj(ctx, 'observer'); ob.product = 'Raqib'; if (w.containsKey('version')) { ob.version = w.remove('version'); } if (w.isEmpty()) { r.remove('watch'); } def ru = r.rule; if (ru != null) { if (ru.containsKey('id')) { def rr = obj(ctx, 'rule'); rr.id = ru.remove('id'); } if (ru.containsKey('class')) { def rc = obj(ctx, 'rule'); rc.category = ru.remove('class'); } if (ru.containsKey('attack')) { def te = obj(obj(ctx, 'threat'), 'technique'); te.id = ru.remove('attack'); } if (ru.isEmpty()) { r.remove('rule'); } } def su = r.subject; if (su != null) { if (su.containsKey('pid')) { def pp = obj(ctx, 'process'); pp.pid = su.remove('pid'); } if (su.containsKey('image')) { def pn = obj(ctx, 'process'); pn.name = su.remove('image'); } if (su.isEmpty()) { r.remove('subject'); } }"
+      }
+    }
+  ],
+  "on_failure": [
+    {
+      "remove": {
+        "field": "raqib",
+        "ignore_missing": true
+      }
+    },
+    {
+      "set": {
+        "field": "event.kind",
+        "value": "pipeline_error"
+      }
+    },
+    {
+      "set": {
+        "field": "error.message",
+        "value": "{{{_ingest.on_failure_message}}}"
+      }
+    },
+    {
+      "set": {
+        "field": "event.ingested",
+        "value": "{{{_ingest.timestamp}}}"
+      }
+    },
+    {
+      "set": {
+        "field": "@timestamp",
+        "value": "{{{_ingest.timestamp}}}",
+        "override": false
+      }
+    }
+  ]
+}

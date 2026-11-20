@@ -413,6 +413,19 @@ PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ): the guide's words 
      'that nothing was heard between its end and the new start; a second end is final.',
 ]
 GUIDE_NEW += PROCESS_EVENTS
+# M16.1 (ADR-0017 E7): the short section at the end of the guide's More that points to siem/README.md
+SIEM_SECTION = [
+    "### Into a SOC's search engine",
+    "`siem/` holds what a SOC installs to read the events (`~/.raqib/host/events.jsonl`, or what `raqib forward`"
+    " sends) in Elasticsearch or OpenSearch: an ingest pipeline to the ECS fields of the spec's Mapping, a"
+    " template for each engine, the searches (an alarm, a rule's findings, a hole, a watch that did not end"
+    " with 0, the search for silence, the runs that stopped with no end and the lines kept as error documents),"
+    " Sigma rules over the events' own keys, and a table of every rule the report lists with its ATT&CK"
+    " techniques.",   # M16.1 REDO: R2, R5; REDO 2: R4 (not-events.json)
+    "How to install it, and what was measured and what was not:",
+    "[siem/README.md](siem/README.md).",
+]
+GUIDE_NEW += SIEM_SECTION
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")
