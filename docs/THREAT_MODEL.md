@@ -514,22 +514,28 @@ Rulings: ADR-0003 Amendments C and D.
     a sender whose pid in the tracing is not the connection's owner in
     the table (an inherited socket) is not matched.
 - **The kernel's process events on Linux (ADR-0007 Amendments BQ, BR,
-  BS, BT, BU, BW and BY; docs/specs/PROC-EVENTS.md):**
+  BS, BT, BU, BW, BY and CC to CE; docs/specs/PROC-EVENTS.md):**
   - the reader listens to the kernel's word of every fork, exec and exit,
-    and reads at an exec the program and the parent of the process and
-    nothing else; a live watch on Linux runs it in a helper and gives what
-    it heard to each round beside the sample (BY-2): a process that began
-    between two samples under a tree that talks at a sample is that tree's
-    child, and NET-TOOL and DESTRUCT-CMD judge it by the name of its
-    program's file (a link's target, such as `nc.openbsd` or `busybox`, not
-    the name it was called by, so a rule's list of names can miss it). The
-    root of a tree, and of an act-root, is always a process a sample held
-    (BZ-1). Not judged (BZ-3): a tree that lives whole between two samples
-    (a tree needs a talker at a sample; a connection between two samples is
-    still unseen), a child's own connections, a program a process changes
-    to after its line was written and the programs it had before, and a
-    child whose parent was given in an earlier round and ended before the
-    sample. A program not read is in the round and counted, with no line;
+    and reads at an exec the program, the parent and the name the kernel
+    gave the process (from the same stat), and nothing more of it; a live
+    watch on Linux runs it in a helper and gives what it heard to each
+    round beside the sample (BY-2): a process that began between two
+    samples under a tree that talks at a sample (or under an act-root the
+    samples made) is that tree's child, and NET-TOOL and DESTRUCT-CMD judge
+    every program it ran (the newest 8), by its file's name and, where they
+    differ, by the name it was called by (CC-1, CC-2). A process is its
+    maker's child where the reader heard it made and its maker is a process
+    of the round or a child the watch keeps (CD-1, CE-2); else the sample's
+    parent stands. An act-root is made by the samples alone (CB-1, CE-2).
+    A child whose file the reader could not read (one run through `sudo`)
+    is named by the name the kernel gave it, and its line says its file was
+    not read (CE-3). Not judged: a tree that lives whole between two
+    samples (a tree needs a talker at a sample; a connection between two
+    samples is still unseen), a child's own connections, a program past
+    the bound of 8 a process, a child whose parent the watch never wrote,
+    and a process whose maker the reader did not hear that a sample holds
+    under pid 1. A program not read, and no name read, is in the round and
+    counted, with no line;
   - the helper's lines are its word, not a fact the watch checked (BY-4,
     BX-5): what is judged from them is said to come from the reader, and a
     program's name reaches a line's programs only through the gate a sampled
@@ -614,11 +620,15 @@ Rulings: ADR-0003 Amendments C and D.
     tool's name it is not (a link of its own named `curl`): its tree is then
     judged by that name, and alarms by its own doing; a name of the
     kernel's full length (15) is taken as cut and not used;
-  - the watch keeps, per tree, the children it wrote whose end the process
-    events have not told (at most 512 a tree; passing it is said and is a
-    hole of the result), so a child whose parent has gone is still its
-    tree's (CC-3); a child whose parent the watch never wrote is in no
-    tree;
+  - the watch keeps, per tree, only the children it wrote that the process
+    events heard and whose end they have not told (at most 512 a tree;
+    passing it is said and is a hole of the result), so a child whose
+    parent has gone is still its tree's (CC-3), given to it while the tree
+    is quiet too (CE-1); a child of a child written from a sample alone is
+    nobody's once its parent ends, and a child whose parent the watch never
+    wrote is in no tree. A tree that has gone is written nothing: how many
+    processes its kept children were heard to start is said, as a hole of
+    the result (CE-1);
   - a pid taken again within one second of the exec, before the read, is
     not told apart: the newcomer's program and start are then given as the
     first process's; a start later than that is told, nothing of that

@@ -1198,8 +1198,9 @@ LIVENESS_READER = (
     "liveness (a round that read the process events): a child that began and ended between snapshots is seen where"
     " the process events gave it under a tree that talks at a snapshot, or under an act-root the snapshots made,"
     " with every program it ran (up to 8 a process) and the name it was called by; a tree that lives whole between"
-    " snapshots is not seen, nor is what a child talks to, a child whose parent the watch never wrote, or a"
-    " connection that ended between snapshots. An agent between two requests owns no connection, so its acts go to"
+    " snapshots is not seen, nor is what a child talks to, a child whose parent the watch never wrote, a process"
+    " whose maker the reader did not hear that a snapshot holds under pid 1, or a connection that ended between"
+    " snapshots. An agent between two requests owns no connection, so its acts go to"
     " a talking ancestor: what is left of its talk (a TIME-WAIT row with no owner, a DNS cache row with no pid) is"
     " shown as recent talk, owner unknown, never as a candidate, and its tree can be an act-root (talk not seen)")
 
@@ -1979,7 +1980,10 @@ def _merge_procs(records):
     events gave the process, the parent it names (the process that made it,
     from the kernel's fork event) is its parent, though a sample holds it
     under another (the kernel hands a process whose parent ended to another);
-    a process the reader did not give keeps the sample's."""
+    a process the reader did not give keeps the sample's. CE-2: the reader's
+    parent stands only where it is a process of the round (in its sample or
+    its text); a sampled process whose parent it changed keeps the sample's
+    own as "sampled_ppid", which the search for act-roots reads."""
     procs = {}
     made_by = {}   # CD-1: pid -> the parent the reader names (its first record that names one)
     own = [r for r in records if r["kind"] == "proc" and not r.get("derived")]
@@ -2004,7 +2008,12 @@ def _merge_procs(records):
             p["images"].append(r["image"])
         p["image"] = p["images"][0] if p["images"] else None
     for pid, ppid in made_by.items():
-        procs[pid]["ppid"] = ppid
+        p = procs[pid]
+        if ppid not in procs or ppid == p["ppid"]:   # CE-2: else the sample's word stands
+            continue
+        if any(not _reader_src(r) for r in p["recs"]):
+            p["sampled_ppid"] = p["ppid"]
+        p["ppid"] = ppid
     return procs
 
 
@@ -3182,6 +3191,25 @@ def _sampled(p):
     return any(not _reader_src(r) for r in p["recs"])
 
 
+def _sample_links(procs):
+    """ADR-0007 CE-2: the round's processes as the samples link them: a sampled process whose parent the reader
+    gave (CD-1) has the sample's own parent again, its link dated afresh; the reader's processes alone keep the
+    links the reader gave (a chain the reader alone gave under an act-root adds its acts, CB-1)."""
+    if not any("sampled_ppid" in p for p in procs.values()):
+        return procs
+    out = dict(procs)
+    for pid, p in procs.items():
+        if "sampled_ppid" not in p:
+            continue
+        q = dict(p, ppid=p["sampled_ppid"])
+        q.pop("link", None)
+        parent = procs.get(q["ppid"]) if q["ppid"] is not None and q["ppid"] != pid else None
+        if parent is not None:
+            q["link"] = _link_verdict(q, parent, False)
+        out[pid] = q
+    return out
+
+
 def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     """E3, the act-root class (signature; the catalog's act_root block), as
     narrowed by G-1: a process P whose image path is under a user directory,
@@ -3193,6 +3221,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     owns no talking connection in any sample read. The reader's own tree is
     never evidence. Talk in a later sample makes P a talker, so it is a
     candidate instead (the window merge); recent talk never promotes it."""
+    procs = _sample_links(procs)   # CE-2: the search reads the samples' own parent links, never the reader's over them
     spec = catalog["act_root"]
     shells, never = set(spec["shells"]), set(spec["not_images"])
     parents = shells | set(spec["launchers"])

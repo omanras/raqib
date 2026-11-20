@@ -94,6 +94,7 @@ def later_programs():
             child.wait(30)
         except subprocess.TimeoutExpired:
             child.kill()
+            child.wait(5)
         say("end bash rc=%s" % child.returncode)
     if shutil.which("nc"):
         run(["nc", "-z", "-w", "2", "example.com", "443"])
@@ -108,6 +109,32 @@ def later_programs():
     say("outliving pid %s (sh rc=%s)" % (got.stdout.strip() or "?", got.returncode))
     time.sleep(10)   # the outliving bash sleeps 7 s, then fetches in its own pid
     say("outliving waited")
+    sudo_fetch()
+
+
+def sudo_fetch():
+    """ADR-0007 CE-3 (X46, Linux): the same harmless fetch, thrown away, run through `sudo -n` where the machine
+    allows it without a password (a throwaway CI machine): a process whose file a plain reader cannot read. Said
+    n/a where `sudo -n true` fails; never asks for a password."""
+    ok = False
+    if shutil.which("wget") and shutil.which("sudo"):
+        try:
+            ok = subprocess.run(["sudo", "-n", "true"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=10).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            ok = False
+    if not ok:
+        say("sudo-fetch not run: sudo -n is not allowed here (or wget or sudo not installed)")
+        return
+    say("start sudo")
+    child = subprocess.Popen(["sudo", "-n"] + FETCH.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    say("sudo-fetch pid %d" % child.pid)
+    try:
+        child.wait(30)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait(5)
+    say("end sudo rc=%s" % child.returncode)
 
 
 def main():

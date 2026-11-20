@@ -397,15 +397,18 @@ NO_CHANNEL_READ = ("the round's inventory carries no read of the Sysmon channel 
 PE_SECTION = "PROCESS EVENTS (Linux):"
 PE_JUDGED = ("judged: a process that began between two samples under a tree that talks at a sample (or under an"
              " act-root the samples made) is that tree's child, with every program it ran while heard (up to 8 a"
-             " process), each by its file's name and by the name it was called by where they differ, and so is a"
-             " child of a child the watch wrote whose parent has gone; a process is its maker's child where the"
-             " reader heard it made, though a sample holds it under pid 1 (CD-1), from the reader (the helper's"
-             " lines are its word, not checked by the watch; a process can be called by a tool's name it is not); not judged: a"
-             " tree that lives whole between two samples, a child's own connections, a program past the bound of 8"
-             " a process (the oldest of those run between two asks), a child whose parent the watch never wrote, a"
+             " process), each by its file's name and by the name it was called by where they differ (by that name"
+             " alone where its file was not read, said so); a child of a child the watch wrote that the process"
+             " events heard is the tree's though its parent has gone, and is given to the tree while it is quiet"
+             " too; a process is its maker's child where the reader heard it made and its maker is of the round or"
+             " kept (CD-1, CE-2), from the reader (the helper's lines are its word, not checked by the watch; a"
+             " process can be called by a tool's name it is not); not judged: a tree that lives whole between two"
+             " samples, a child's own connections, a program past the bound of 8 a process (the oldest of those run"
+             " between two asks), a child whose parent the watch never wrote or wrote from a sample alone, a"
              " process the reader did not hear made that a sample holds under pid 1, an act-root the reader's word"
-             " alone would make; a program not read is counted, with no line")
-                 # BY-2 to BY-4, BZ-3, CC-1 to CC-4, CD-1
+             " alone would make, a tree that has gone (its kept children are said, not written); a program not read,"
+             " and no name read, is counted, with no line")
+                 # BY-2 to BY-4, BZ-3, CC-1 to CC-4, CD-1, CE-1 to CE-3
 PE_TOOK = "  given to the rounds: %d; joined to a tree as its child: %d; of them with no program read (no line): %d"
 PE_BY_FORK = ("  given with no start ticks read, so each is one process by its pid and the time its fork was heard (BY-1):"
               " %d")
@@ -430,6 +433,10 @@ PE_OF_RESULT = " (a hole of the result)"
 PE_GAP = ("the children judged from the reader's processes have a gap from this round: a hole of the result; the"
           " sample's processes are judged as before")   # BZ-11: a finding keeps an alarm the result
 PE_OWN = "  the watch's own processes, left out of the rounds (its record of what it started): %d"   # BZ-7
+PE_ALONE = ("  children whose file was not read, named by the name the kernel gave them alone (a line each, its file"
+            " said as not read): %d")   # CE-3
+PE_GONE_KEPT = ("  processes the kept children of a tree that has gone were heard to start, written to no tree (a"
+                " hole of the result): %d")   # CE-1
 PE_KEPT_PASSED = ("  children kept past the bound of %d a tree (written, their end not heard), the oldest let go: %d; a"
                   " child of one of them whose parent has gone is in no tree (a hole of the result)")   # CC-3
 PE_PROGRAMS_MAX = 8      # CC-1: the programs the reader keeps of a process (procevents.PROGRAMS_MAX)
@@ -442,11 +449,13 @@ BETWEEN_HEARD = ("a process that begins and ends between two rounds is heard: Li
                  " process of the watch's own read the kernel's process events: a process that began under a tree"
                  " that talks at a sample (or under an act-root the samples made) is that tree's child, judged by"
                  " every program it ran (up to 8 a process), each by its file's name and by the name it was called by"
-                 " where they differ, and so is a child of a child the watch wrote whose parent has gone, from the"
-                 " reader; not judged: a tree that lives whole between two snapshots, what a child talks to, a"
-                 " program past the bound of 8 a process, a child whose parent the watch never wrote, and an act-root"
-                 " the reader's word alone would make; a program not read is counted, with no line (PROCESS"
-                 " EVENTS)")   # M14.1c (ADR-0007 BY-3, BZ-3, CA-5); M14.1d (CC-1 to CC-4)
+                 " where they differ, and so is a child of a child the watch wrote that the process events heard,"
+                 " whose parent has gone, from the reader; not judged: a tree that lives whole between two snapshots,"
+                 " what a child talks to, a program past the bound of 8 a process, a child whose parent the watch"
+                 " never wrote or wrote from a sample alone, a process whose maker the reader did not hear that a"
+                 " sample holds under pid 1, an act-root the reader's word alone would make, and a tree that has gone"
+                 " (its kept children are said, not written); a program not read, and no name read, is counted, with"
+                 " no line (PROCESS EVENTS)")   # BY-3, BZ-3, CA-5, CC-1 to CC-4, CD-1, CE-1 to CE-3
 BETWEEN_NOT_WHOLE = "; the reader was not whole for the whole watch: %s"   # BZ-2: after an answered ask
 BETWEEN_NOT_HEARD = "; the process events are not counted for the whole watch: %s"
 
@@ -679,6 +688,7 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
 
 READER_LABEL = "live: the helper of the process events (raqib/procevents.py), since the round before"
 READER_GIVEN, READER_ENDS = "reader_given", "reader_ends"   # CC-3: of the round's inventory, popped by the watch
+KEPT_WORD = "none: the process events (a child of a child it kept)"   # CE-1: a held tree's line, AZ-4's word
 KEPT_MAX = 512           # CC-3: the children a tree keeps (written, their end not heard) at most
 EVENTS_STARTED_FROM = "the process events: when its fork was heard (the reader's record; no /proc read)"   # CA-4
 EVENTS_BASIS = "events"   # CA-4: the basis of an act's time taken from the reader's record
@@ -1314,6 +1324,7 @@ def carry_host(old, src):
     if old is not None and old.kind in (HOST_SOURCE, "os") and old.writes_host():
         src.children, src.remotes = set(old.children), set(old.remotes)
         src.said = {k: set(v) for k, v in old.said.items()}   # CC-1: what each child's lines named
+        src.child_pids = set(old.child_pids)
         src.open, src.last_bytes = set(old.open), dict(old.last_bytes)
 
 
@@ -1750,6 +1761,7 @@ class TreeSource:
         self.seq = 0
         self.children = set()        # host: the children already written, by (pid, start) (CC-4)
         self.said = {}               # CC-1, CC-2: (pid, start) -> what that child's lines named (its file, its name)
+        self.child_pids = set()      # CE-6: the child pids written, as M14.1c kept them (a round with no reader)
         self.remotes = set()         # host: the remote host:port already written
         self.open = set()            # K-6: the remotes of the tree's last round (a line on change only)
         self.last_bytes = {}         # K-6: remote -> (sent, received) of the last round its bytes were read
@@ -1784,9 +1796,11 @@ SEEN_SAMPLE, SEEN_EVENTS, SEEN_BOTH = "sample", "events", "both"   # CA-2: where
 def child_names(child):
     """CC-1, CC-2 (M14.1d): [(kind, raw, name)] a child's lines may name, in order: for each program its process
     ran (`programs` where the process events gave them, else its image) its file's name ("file", the image, the
-    name through plain_program or None), then the name the kernel gave the process at that exec ("name") where it
-    is not the file's, is shorter than the kernel's full length (15: taken as cut) and passes the gate; a name the
-    gate refuses is left out and the file's stays."""
+    name through plain_program or None), then the name the kernel gave the process at that exec where it is not
+    the file's, is shorter than the kernel's full length (15: taken as cut) and passes the gate - "name", or
+    "name-alone" where that program's file was not read (CE-3); a name the gate refuses is left out and the file's
+    stays. CE-4: where `programs` exist, the child's own image (the samples' name, or the catalog's label) is
+    named too where no program gives it - a name more, never a name less."""
     programs = child.get("programs") or [{"image": child.get("image"), "name": None}]
     out = []
     for e in programs:
@@ -1796,7 +1810,10 @@ def child_names(child):
         out.append(("file", image, plain_program(image)))
         gated = plain_program(called) if isinstance(called, str) and len(called) < discover.READER_NAME_MAX else None
         if gated is not None and gated != plain_program(image):
-            out.append(("name", called, gated))
+            out.append(("name-alone" if image is None else "name", called, gated))
+    own = plain_program(child.get("image"))
+    if child.get("programs") and own is not None and own not in {name for _, _, name in out}:
+        out.append(("file", child.get("image"), own))
     return out
 
 
@@ -1809,7 +1826,7 @@ def child_seen_by(child):
 
 
 def host_child_line(sid, seq, ts, n, run, sample, tree_seq, pid, programs, children, cites, inventory_tree=None,
-                    command_sources=None):
+                    command_sources=None, files_unread=None):
     """A HostChild line (M7.2b E2): the new children's image names in
     command_programs, the field NET-TOOL and DESTRUCT-CMD read. Never tool
     Bash, never a command line. ADR-0007 AZ-4: inventory_tree, the word of
@@ -1826,6 +1843,8 @@ def host_child_line(sid, seq, ts, n, run, sample, tree_seq, pid, programs, child
         line["input_meta"]["inventory_tree"] = inventory_tree
     if command_sources is not None:   # CA-2: only a round that read the reader's text; no rule reads it
         line["input_meta"]["command_sources"] = list(command_sources)
+    if files_unread:   # CE-3: the names the kernel gave of children whose file the reader could not read
+        line["input_meta"]["files_unread"] = list(files_unread)
     return line
 
 
@@ -2899,9 +2918,6 @@ class HostWatch:
         # ADR-0007 AY-1: whose a child is, decided once, before any line of the round (a held tree's are its own)
         current = self._one_key(trees_of(self._give_held(inv, now, n), self.catalog, no_drive))   # M7.9 E2
         self.kept_ends = ends_now
-        for key, acts in (getattr(self, "held_orphans", None) or {}).items():   # CD-1: as AY-2's given acts
-            if key not in current:
-                self.given.setdefault(key, []).extend(acts)
         for text in self.holes_owed:
             self._hole(now, "tree-key", "round %d: %s" % (n, text), round_=n)
         self._channel_holes(now, n, inv)
@@ -2993,6 +3009,7 @@ class HostWatch:
         if connections_unread(inv):
             kept = {k for k in left if alive is None or tuple(k) in alive}
         quiet_keys = {k for k in left - kept if alive is not None and tuple(k) in alive}
+        self._give_kept(now, n, current, quiet_keys | kept)   # CE-1: a kept child of a quiet or kept tree, as AY-2
         for k in (quiet_keys | {k for k, t in current.items() if not t["brief"]}):   # AA-4: its life, to its last sample
             self.trees[k]["last_sampled_at"] = iso(round_at)
         gone_keys = sorted(left - kept - quiet_keys, key=lambda k: (str(k[0]), str(k[1]), str(k[2])))
@@ -3022,8 +3039,10 @@ class HostWatch:
             fresh = self._source_beats(key)   # read once: no beat, no line (the beats are not lost: none)
             given = self.given.get(key) if key in quiet_keys or key in kept else None
             kids = children_of(given, key[0]) if given else []
+            said = src.said if src is not None else {}
             orphans = {(a.get("pid"), a.get("started")) for a in (getattr(self, "held_orphans", None) or {}).get(
-                key, ())}   # CD-1: a kept child given again is gained, though seen, where it ran a program not said
+                key, ()) if any(name is not None and name not in said.get((a.get("pid"), a.get("started")), ())
+                               for _, _, name in child_names(a))}   # CE-1: gained, though seen, only with a new name
             gained = [c for c in kids if ((c.get("pid"), c.get("started")) not in self.kids.get(key, ())
                                           or (c.get("pid"), c.get("started")) in orphans)
                       and not self._given_elsewhere(key, c)]   # AZ-3
@@ -3509,8 +3528,9 @@ class HostWatch:
             if len(s["restarts"]) < PE_EPISODES_MAX:
                 s["restarts"].append((n, hole or "the helper ended"))
         took = inv.get("from_reader") if isinstance(inv.get("from_reader"), dict) else {}
-        for group in ("candidates", "act_roots"):   # CC-1: the programs past the reader's bound, by child, the most
-            for t in inv.get(group) or ():
+        held_acts = [{"acts": acts} for acts in (getattr(self, "held_orphans", None) or {}).values()]   # CE-1
+        for group in ("candidates", "act_roots", None):   # CC-1: the programs past the reader's bound, by child, most
+            for t in (inv.get(group) or () if group else held_acts):
                 for a in t.get("acts") or () if isinstance(t, dict) else ():
                     if isinstance(a, dict) and _pe_num(a.get("dropped")) and a["dropped"]:
                         k = (a.get("pid"), a.get("started"))
@@ -3622,9 +3642,13 @@ class HostWatch:
                                                         % s["starting"] if s["starting"] else ""),
                "  processes that began: %d; of them began and ended between two asks: %d" % (s["began"], s["inside"]),
                "  programs not read: %d (reads at an exec that failed)" % s["unread_exe"],
-               PE_TOOK % (s["given"], s["joined"], s["unread"])]
+               PE_TOOK % (s["given"], s["joined"], max(0, s["unread"] - len(getattr(self, "name_alone", ()))))]
+        alone = len(getattr(self, "name_alone", ()))
+        out += [PE_ALONE % alone] if alone else []   # CE-3: counted apart from the children with no line
         out += [PE_BY_FORK % s["by_fork"]] if s["by_fork"] else []
         out += [PE_OWN % s["own"]] if s["own"] else []
+        gone = sum((getattr(self, "gone_kept", None) or {}).values())
+        out += [PE_GONE_KEPT % gone] if gone else []
         passed = sum((getattr(self, "kept_passed", None) or {}).values())
         out += [PE_KEPT_PASSED % (KEPT_MAX, passed)] if passed else []
         dropped = sum(s["dropped_by"].values())
@@ -3845,19 +3869,27 @@ class HostWatch:
         talks and the sample gave it no act) is given such a child as AY-2 gives a held tree its children."""
         self.held_orphans = {}   # tree key -> the acts this round gives it while it is not in the inventory
         kept = getattr(self, "kept_children", None) or {}
+        held_now = {(p.get("pid"), p.get("started")) for p in inv.get("processes") or () if isinstance(p, dict)}
+        held_now |= {(g["pid"], "boot+%d" % g["ticks"] if g["ticks"] is not None else None) for g in self.given_now}
+        by_pid = {}
+        for pid, start in held_now:
+            by_pid.setdefault(pid, set()).add(start)
+        for children in kept.values():   # CE-6: a kept child whose pid the round holds with another start is let go
+            for ck in [ck for ck in children if ck[0] in by_pid and ck[1] not in by_pid[ck[0]]]:
+                del children[ck]
         if not self.given_now or not kept:
             return
         entries = {}
         for group in ("candidates", "act_roots"):
             for t in inv.get(group) or ():
                 if isinstance(t, dict):
-                    entries.setdefault(t.get("pid"), t)
+                    entries.setdefault(tuple(inv_key(t)), t)   # CE-6: by the tree's key, not its root's pid
         acted = {(a.get("pid"), a.get("started")) for t in entries.values() for a in t.get("acts") or ()
                  if isinstance(a, dict)}
         parents = []   # (pid, began, ended, the tree's inventory entry, or the key of a tree not in it)
         selves = {}    # CC-1: a kept child itself, given again with a program not yet said (its parent gone)
         for tkey, children in kept.items():
-            home = entries.get(tkey[0]) or ("held", tkey)
+            home = entries.get(tuple(tkey)) or ("held", tkey)
             parents += [(ck[0], v["began"], v["ended"], home) for ck, v in children.items()]
             selves.update({ck: home for ck in children})
         for g in sorted(self.given_now, key=lambda g: g["began"]):
@@ -3882,6 +3914,35 @@ class HostWatch:
             acted.add(ckey)
             ended = discover.reader_time(g["ended"]) if g.get("ended") else None
             parents.append((g["pid"], began, ended, home))
+
+    def _give_kept(self, now, n, current, held):
+        """CE-1: the acts _attach_orphans found for a tree not in the round's inventory. A held tree (quiet, or kept
+        with the connections unread) is given them by AY-2's road whole: where its host record can be written
+        (_host_unwritable) as its given acts, marked (AZ-3); else the hole held-not-given, once a tree. A tree
+        gone, or let go, is written nothing: how many processes its kept children were heard to start is counted
+        (said in the section) and is one hole of the result a tree."""
+        for key, acts in (getattr(self, "held_orphans", None) or {}).items():
+            if key in current:
+                continue
+            if key in held:
+                why = self._host_unwritable(key)
+                if why is None:
+                    for a in acts:
+                        self.given.setdefault(key, []).append(a)
+                        self.given_marks.setdefault((a.get("pid"), a.get("started")), (key, KEPT_WORD))
+                elif key not in self.not_given_said:
+                    self.not_given_said.add(key)
+                    self._hole(now, "held-not-given", "round %d: tree %s: the processes its kept children were"
+                               " heard to start (the first: pid %s) are not given to it: %s; said once for this"
+                               " tree" % (n, tree_word(key), acts[0].get("pid"), why), round_=n)
+                continue
+            gone = self.__dict__.setdefault("gone_kept", {})
+            first = key not in gone
+            gone[key] = gone.get(key, 0) + len(acts)
+            if first:
+                self._hole(now, PE_HOLE_KIND, "round %d: the process events: tree %s has gone, and its kept children"
+                           " were heard to start %d process(es): nothing is written to a tree that ended; counted in"
+                           " PROCESS EVENTS" % (n, tree_word(key), len(acts)), round_=n)
 
     def _keep_child(self, now, n, key, c):
         """CC-3, CC-4: a child written on tree `key` that the process events heard is kept by (pid, start) until
@@ -4848,16 +4909,20 @@ class HostWatch:
                 # CC-1, CC-4: a child is new by (pid, start); a child written before is new again where it ran a
                 # program its lines have not named (the command a shell runs in its own place, in a later round)
                 fresh = [c for c in t.get("children") or () if not self._given_elsewhere(key, c)]   # ADR-0007 AZ-3
-                programs, children, cites, unfit = [], [], [], []
+                reader = getattr(self, "reader_round", False)
+                if not reader:   # CE-6: Windows, and a round with no reader's text, as M14.1c: a child new by its pid
+                    fresh = [c for c in fresh if c.get("pid") not in src.child_pids]
+                programs, children, cites, unfit, alone = [], [], [], [], []
                 seen_by = {}   # CA-2: program -> where its children were seen ("sample", "events")
                 for c in fresh:
                     ckey = (c.get("pid"), c.get("started"))
                     said = src.said.setdefault(ckey, set())
                     new = []
-                    for kind, raw, name in child_names(c):
-                        if kind == "file" and raw is None and reader_only(c):
-                            # BY-4 (M14.1c): a program the reader alone gave and did not read gives no line and no
-                            # hole (counted in PROCESS EVENTS); it stays new, so a later read of it is written then
+                    names = child_names(c) if reader else [("file", c.get("image"), plain_program(c.get("image")))]
+                    for kind, raw, name in names:
+                        if kind == "file" and raw is None and (reader_only(c) or c.get("programs")):
+                            # BY-4 (M14.1c): a program the reader did not read gives no hole (CE-4: never "unfit");
+                            # it is counted in PROCESS EVENTS and stays new, so a later read of it is written then
                             continue
                         if name is None:   # a file's name the gate refuses: the existing hole, once a child
                             if kind == "file" and ("unfit", raw) not in said:
@@ -4868,7 +4933,11 @@ class HostWatch:
                             continue
                         said.add(name)
                         new.append(name)
+                        if kind == "name-alone" and name not in alone:
+                            alone.append(name)   # CE-3: known by the kernel's name alone, its file not read
+                            self.__dict__.setdefault("name_alone", set()).add((key, ckey))
                     src.children.add(ckey)
+                    src.child_pids.add(c.get("pid"))
                     for name in new:
                         if name not in programs:
                             programs.append(name)
@@ -4892,7 +4961,7 @@ class HostWatch:
                                                children, cites, inventory_tree=", ".join(under) or None,
                                                command_sources=[SEEN_BOTH if len(seen_by[x]) > 1 else
                                                                 next(iter(seen_by[x])) for x in programs]
-                                               if getattr(self, "reader_round", False) else None))
+                                               if reader else None, files_unread=alone or None))
                 now_remotes = {}
                 for r in t.get("remotes") or ():
                     if r.get("remote"):

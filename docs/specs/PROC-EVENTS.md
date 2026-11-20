@@ -320,8 +320,8 @@ another shape, a time the round cannot read or one that is no real
 instant, or a pid at or above discover's bound for keying instances apart
 makes the answer `not a line`, BZ-4) for that round alone, and gives
 discover one text of the kind `procevents`: one JSON line per process
-whose fork was heard, `{pid, ppid, exe, ticks, began, ended, code}` and
-nothing else (`exe` and `ticks` null where not read). A round whose helper
+whose fork was heard (since M14.1d `{pid, ppid, programs, dropped, ticks,
+began, ended, code}`, see below; `ticks` null where not read). A round whose helper
 gave nothing has no such text, and is the round it was, byte for byte. A
 process the watch started itself (its pid in the watch's record of what it
 started, raqib/own.py, its parent the watch, its program the recorded image
@@ -350,8 +350,8 @@ another process, keyed apart. A child the reader gave is linked to the
 instance of its parent pid alive when its fork was heard, where the reader
 gave that instance. Then the round is built as any: each process goes to
 its nearest talking ancestor as an act, and an act is its tree's child and
-its HostChild line, so NET-TOOL and DESTRUCT-CMD judge it by the name of
-its program's file. A tree that is a candidate only by what the reader
+its HostChild line, so NET-TOOL and DESTRUCT-CMD judge every program it
+ran, by its file's name and the name it was called by (CC-1, CC-2). A tree that is a candidate only by what the reader
 gave is as one that is so only by the channel on Windows (`candidate_by`
 "channel", AA-1), and the footprints are those of the round built without
 the reader's records (AD-1). An act-root is made only by what the samples
@@ -398,13 +398,32 @@ not heard to end before it began) is that tree's child though its parent is
 in neither the sample nor the round's text, and so is a kept child given
 again. A process is its maker's child (CD-1): where the reader gave a
 process, the parent it names (the process that made it, from the kernel's
-fork event) is its parent, though a sample holds it under another - the
+fork event) is its parent - where that parent is a process of the round,
+in its sample or its text (CE-2; else the sample's word stands, and the
+watch's kept children carry it, CC-3) - though a sample holds it under
+another - the
 kernel hands a process whose parent ended to pid 1 or a subreaper; so a
 bash that a shell started in the background and that outlived it is the
 tree's child from the round it was heard in, is kept, and every program it
 runs later is judged as the tree's. A process the reader did not give keeps
-the sample's parent. A pid used again with another start is another child
-wherever the watch keys a child. The round's standing hole of liveness says, in a round
+the sample's parent. The search for act-roots reads the samples' own parent
+links, never one the reader gave over them (CE-2). Only children the process
+events heard are kept; a child of a child written from a sample alone is
+nobody's once its parent ends. A kept child, or a child of one, is given to
+its tree while the tree is quiet by the road a held tree's given children go
+(its marks, the test that the tree can be written, the hole where it is not;
+CE-1), and only where it ran a program its lines have not named; a tree that
+has gone is written nothing, and how many processes its kept children were
+heard to start is said in the section and as one hole of the result. A child
+whose file the reader could not read and whose kernel name it read is named
+by that name, its line saying so (`input_meta.files_unread`, CE-3), counted
+apart from the children that got no line. Where `programs` exist, the
+child's own image (the samples' name) is still named where no program gives
+it, and a file not read is never `unfit` (CE-4). A kept child's tree is found
+by the tree's key, and a kept child is let go where the round holds its pid
+with another start; Windows and a round with no reader's text write a
+child's line as M14.1c did (CE-6). A pid used again with another start is
+another child wherever the watch keys a child. The round's standing hole of liveness says, in a round
 that read the reader's text, what such a round sees and does not.
 
 What is not judged (BY-3, BZ-3, CC). A tree needs a talker at a sample, and

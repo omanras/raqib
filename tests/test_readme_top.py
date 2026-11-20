@@ -368,7 +368,7 @@ VERSION_NUMBER = [
 GUIDE_NEW += VERSION_NUMBER
 # M14.1b and its REDO (ADR-0007 BU-3, BW-3, BW-6): the report's PROCESS EVENTS section on Linux, said in the
 # guide's Watch the host
-PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ, CC, CD): the guide's words on what the watch judges from the reader
+PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ, CC, CD, CE): the guide's words on what the watch judges from the reader
     'On Linux the watch also hears what happens between two rounds (ADR-0007 Amendments BU, BW and BY): '
      'at its first round it starts a helper, a second process of its own that runs the reader of the '
      "kernel's process events ([docs/specs/PROC-EVENTS.md](docs/specs/PROC-EVENTS.md)), and after each "
@@ -385,10 +385,16 @@ PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ, CC, CD): the guide'
      'the root of a tree, and of an act-root, is always a process a sample held.',
     'A process the watch wrote a line for that runs a program not yet said, in a later round (the command'
      ' a shell runs in its own place), gets a line for that program, and a child whose parent has gone is '
-     "still its tree's where the watch wrote that parent (it keeps, per tree, the children it wrote whose "
-     'end it has not heard: at most 512).',
-    "A process is its maker's child where the reader heard it made, though a sample holds it under pid 1 "
-     '(a bash a shell started in the background and that outlived it).',
+     "still its tree's where the watch wrote that parent and the process events heard it (it keeps, per "
+     'tree, only such children whose end it has not heard: at most 512), given to it while the tree is '
+     "quiet too; a child of a child written from a sample alone is nobody's once its parent ends, and a "
+     'tree that has gone is written nothing: how many processes its kept children were heard to start is '
+     'said, as a hole of the result.',
+    'A child whose file the reader could not read (one run through `sudo`) is named by the name the '
+     'kernel gave it, its line saying its file was not read.',
+    "A process is its maker's child where the reader heard it made and its maker is a process of the "
+     'round or a child the watch keeps, though a sample holds it under pid 1 (a bash a shell started in '
+     "the background and that outlived it); an act-root is made by the samples' own links alone.",
     'Not judged: a tree that lives whole between two samples (a tree needs a talker at a sample, and a '
      "connection that opens and closes between two samples is still unseen), a child's own connections, a "
      'program past the bound of 8 a process (the oldest of those run between two asks), a child whose '
