@@ -216,13 +216,13 @@ jobs:
           w=$!
           sleep 8
           echo "=== helpers before"; pgrep -af "procevents" || echo none
-          pkill -STOP -f "raqib.procevents" && echo "the helper is stopped (SIGSTOP)" || echo "no helper found to stop"
+          pkill -STOP -f "procevents.main" && echo "the helper is stopped (SIGSTOP)" || echo "no helper found to stop"
           wait $w; echo "the watch's exit: $?; it took $(( $(date +%s) - start )) s (ten rounds of 3 s)"
           echo "=== the section"; sed -n '/^PROCESS EVENTS/,/^[A-Z][A-Z ]*[:(]/p' "$RUNNER_TEMP/w-stop.out" | cut -c1-300 | head -24
           echo "=== rounds"; grep -c "^\[.*round [0-9]*:" "$RUNNER_TEMP/w-stop.out"; grep "late\|INCOMPLETE\|RESULT" "$RUNNER_TEMP/w-stop.out" | cut -c1-260 | head -12
           echo "=== the words on what lives between two samples"; grep -i "between two" "$RUNNER_TEMP/w-stop.out" | cut -c1-300 | tail -3
           echo "=== helpers left"; pgrep -af "procevents" || echo none
-          pkill -KILL -f "raqib.procevents" || true
+          pkill -KILL -f "procevents.main" || true
       - name: the reader itself (M14.1a), as a plain user, five times
         if: always()
         run: |
