@@ -147,7 +147,7 @@ def test_every_place_is_read_with_its_entries(folders):
     assert [(e["name"], e["program"], e["sure"]) for e in entries(got, "winlogon")] == [
         ("Shell", "explorer.exe", True), ("Userinit", "userinit.exe", True)]
     for e in got["entries"]:
-        assert set(e) == set(autostart.FIELDS) | {"sure", "list", "triggers", "part"}
+        assert set(e) == set(autostart.FIELDS) | {"sure", "list", "link", "triggers", "part"}
         assert e["sha256"] and len(e["sha256"]) == 64 and len(e["key"]) == 64
     assert got["seconds"] >= 0
 
@@ -734,6 +734,7 @@ def test_ai3_a_startup_file_is_opened_with_every_sharing(tmp_path):
     (name, access, share, sa, how, flags, template), = k.asked   # the fd's flags: read-only, binary on Windows
     assert (name, access, share, how) == (str(path), autostart.GENERIC_READ, 0x7, autostart.OPEN_EXISTING)
     assert share == autostart.SHARE_ALL == 0x1 | 0x2 | 0x4
+    assert flags == autostart.FILE_ATTRIBUTE_NORMAL | autostart.FILE_FLAG_OPEN_REPARSE_POINT == 0x00200080   # AK-4
     for code, kind in ((32, PermissionError), (5, PermissionError), (2, FileNotFoundError), (87, OSError)):
         with pytest.raises(kind):
             autostart.share_opener(FakeKernel32(-1), None, lambda: code)(str(path))
@@ -761,7 +762,7 @@ def test_ai4_a_content_is_hashed_by_its_length_and_its_first_64_kib(tmp_path):
 
 
 class Clock:
-    """A made-up clock: it moves only when a place's read makes it move (`spend`)."""
+    """A made-up clock: it moves only when a place's read makes it move."""
 
     def __init__(self):
         self.now = 0.0
@@ -770,8 +771,11 @@ class Clock:
         return self.now
 
 
+OTHER = "S-1-5-21-4444444444-5555555555-6666666666-1002"   # made up: another user's hive
+
+
 class SlowReg(Reg):
-    """The user's Run key takes the whole deadline each time it is read (a process made its own key slow)."""
+    """One user's Run key takes the whole deadline each time it is read (a process made its own key slow)."""
 
     def __init__(self, clock, cost):
         super().__init__()
@@ -783,55 +787,76 @@ class SlowReg(Reg):
         return super().values(root, path, view32)
 
 
-def slow_machine(clock, cost):
-    reg = SlowReg(clock, cost)
-    reg.vals, reg.names = machine().vals, machine().names
+def like(cls, *args):
+    """A made-up registry of the class `cls`, holding machine()'s keys."""
+    reg, m = cls(*args), machine()
+    reg.vals, reg.names, reg.errors = m.vals, m.names, m.errors
     return reg
 
 
-def test_ai4_aj2_the_deadline_cuts_between_keys_and_no_place_is_starved(folders):
+def slow_machine(clock, cost):
+    return like(SlowReg, clock, cost)
+
+
+def test_ai4_aj2_ak2_the_deadline_cuts_between_keys_and_no_key_is_starved(folders):
     clock = Clock()
-    reg = slow_machine(clock, 5.0)
+    reg = slow_machine(clock, 0.0)
+    reg.put("HKU", "%s\\Software\\%s\\Run" % (OTHER, CU), [("BRun", "b.exe", SZ)])
+    reg.put("HKU", "%s\\Software\\%s\\RunOnce" % (OTHER, CU), [("BOnce", "b1.exe", SZ)])
+    reg.vals[("HKLM", False, ("SOFTWARE\\%s\\RunOnce" % CU).lower())] = [("MOnce", "m1.exe", SZ)]
+    reg.vals[("HKLM", True, ("SOFTWARE\\%s\\RunOnce" % CU).lower())] = [("MOnce32", "m2.exe", SZ)]
+    reg.vals[("HKLM", True, ("SOFTWARE\\%s\\Run" % CU).lower())] = [("M32", "m3.exe", SZ)]
     w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=Folders(), clock=clock, deadline=5)
+    whole = w.read()                                         # S5a: a whole read first: the base holds everything
+    assert w.take(whole)["first"] and {s["state"] for s in whole["places"].values()} == {"read"}
+    reg.cost = 5.0                                           # now one user's Run key takes the whole deadline
     reads = []
-    for _ in range(5):
+    for _ in range(len(autostart.STEPS)):                    # the stated number: one turn of the six steps
         r = w.read()
         reads.append(r)
         got = w.take(r)
-        assert got["changes"] == []                             # nothing cut is ever said as removed or added
+        assert got["changes"] == [] and got["late"] == {}    # nothing cut is said as removed, added or late
         assert {p for p, x in r["places"].items() if x["state"] != "read"} <= set(got["unread"])
-    assert [r["begin"] for r in reads] == list(autostart.STEPS)  # each read begins with the step after the last's
-    first = reads[0]["places"]
-    # the read that began with the slow key: the key it reached is read, the rest of run and every later place not
-    assert first["run"]["state"] == "partly" and "passed before it was reached" in " ".join(first["run"]["keys_why"])
-    assert [e["name"] for e in reads[0]["entries"] if e["place"] == "run"] == ["RaqibRigValue"]
-    for p in ("runonce", "startup", "service", "task", "winlogon"):
-        assert first[p]["state"] == "unread" and "deadline (5 s) passed" in first[p]["reason"]
-        assert not [e for e in reads[0]["entries"] if e["place"] == p]          # never read as empty
-    for p in ("startup", "service", "task", "winlogon"):                        # over five reads: each read whole
+    assert [r["begin"] for r in reads] == list(autostart.STEPS[1:] + autostart.STEPS[:1])
+    seen = {(e["place"], e["name"]) for r in reads for e in r["entries"]}
+    for want in (("runonce", "Once"), ("runonce", "BOnce"), ("runonce", "MOnce"), ("runonce", "MOnce32"),
+                 ("run", "Helper"), ("run", "M32"), ("run", "BRun"), ("startup", "Shared.lnk")):
+        assert want in seen, want                            # each key read whole at least once (AK-2)
+    for p in ("service", "task", "winlogon"):
         assert any(r["places"][p]["state"] == "read" for r in reads), p
-    assert "; not read: " in autostart.first_line(reads[0])
+    slow = [r for r in reads if r["begin"] == "run"][0]      # the read that began with the slow key's step
+    cut = slow["places"]
+    assert cut["run"]["state"] == "partly" and "passed before it was reached" in " ".join(cut["run"]["keys_why"])
+    assert [e["name"] for e in slow["entries"] if e["place"] == "run"] == ["Helper", "M32", "RaqibRigValue"]
+    for p in ("runonce", "startup", "service", "task", "winlogon"):
+        assert cut[p]["state"] == "unread" and "deadline (5 s) passed" in cut[p]["reason"]
+        assert not [e for e in slow["entries"] if e["place"] == p]          # never read as empty
+    assert "; not read: " in autostart.first_line(slow)
 
 
 def test_aj2_a_place_cut_while_it_is_read_keeps_what_it_reached(folders):
     clock = Clock()
 
     class SlowServices(Reg):
+        slow = False
+
         def values(self, root, path, view32=False):
-            if path.lower().startswith(autostart.SERVICES.lower() + "\\"):
+            if self.slow and path.lower().startswith(autostart.SERVICES.lower() + "\\"):
                 clock.now += 2.0
             return super().values(root, path, view32)
-    reg = SlowServices()
-    reg.vals, reg.names = machine().vals, machine().names
+    reg = like(SlowServices)
     for n in range(4):
         reg.put("HKLM", autostart.SERVICES + "\\S%d" % n, [("ImagePath", "s%d.exe" % n, SZ)], views=(False,))
     w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=Folders(), clock=clock, deadline=5)
-    w.begin = autostart.STEPS.index("service")
+    w.take(w.read())                                         # S5a: a whole read first
+    reg.slow = True
+    while autostart.STEPS[w.begin % len(autostart.STEPS)] != "service":
+        assert w.take(w.read())["changes"] == []
     got = w.read()
     s = got["places"]["service"]
     # NoImage, RaqibRigService and S0 reached (2 s each; NoImage runs nothing), S1 to S3 not: parts not read
     assert s["state"] == "partly" and s["entries"] == 2 and s["keys_why"] == {autostart.CUT_KEY % 5: 3}
-    assert w.take(got)["changes"] == []
+    assert w.take(got)["changes"] == []                      # no service not reached is said as removed
 
 
 def test_aj2_a_folder_is_read_to_a_bound_of_entries(tmp_path):
@@ -848,7 +873,9 @@ def test_aj2_a_folder_is_read_to_a_bound_of_entries(tmp_path):
     assert len(entries(got, "startup")) == autostart.ENTRY_BOUND
     w.take(got)
     os.remove(str(user / "f0000.cmd"))
-    assert w.take(w.read())["changes"] == []          # a folder not read whole keeps what it held
+    got = w.take(w.read())
+    # S5f: at 1000 the folder is read whole for the first time: a base taken late, none of its files said
+    assert got["changes"] == [] and got["late"] == {"startup": {"parts": 1, "entries": autostart.ENTRY_BOUND}}
 
 
 def test_aj2_a_key_is_read_to_a_bound_of_entries(folders):
@@ -961,6 +988,8 @@ def test_ai9_the_hashes_are_salted_by_the_watcher_and_never_left_unsalted(folder
     with open(os.path.join(folders["user"], "raqib-rig-startup.cmd"), "rb") as f:
         assert hashlib.sha256(f.read()).hexdigest() not in said
     assert a._Watcher__salt.hex() not in said and repr(a) == "<autostart.Watcher>"
+    assert autostart._process_salt().hex() not in said                   # S5d: the process's salt too
+    assert "salt" not in said.lower().replace("salt_id", "")             # and the word, but in the field's name
 
 
 def test_e8_the_command_says_each_kind_and_may_run(folders):
@@ -990,10 +1019,12 @@ def test_aj1_a_first_read_cut_before_the_services_then_a_whole_read_says_no_adde
     reg.cost = 0.0
     got = w.take(w.read())
     assert got["changes"] == []
-    assert {p: n["entries"] for p, n in got["late"].items()} == {"run": 1, "runonce": 1, "startup": 2, "service": 1,
-                                                                 "task": 1, "winlogon": 2}
+    # AK-2: the machine's Run keys come first, so the first read read Run whole before the slow key cut the rest
+    assert {p: n["entries"] for p, n in got["late"].items()} == {"runonce": 1, "startup": 2, "service": 1, "task": 1,
+                                                                 "winlogon": 2}
     out = autostart.late_line(2, got["late"])
-    assert out.startswith("BASE round 2: taken late, none said as added: run (") and "service (3 key(s), 1 entries)" in out
+    assert out.startswith("BASE round 2: taken late, none said as added: runonce (") and \
+        "service (3 key(s), 1 entries)" in out
     again = w.take(w.read())
     assert again["changes"] == [] and again["late"] == {}   # said once
 
@@ -1145,10 +1176,199 @@ def test_aj1_a_key_made_under_a_part_read_before_and_unread_at_first_is_said_as_
     reg = machine()
     w = watcher(reg, folders)
     w.take(w.read())
-    reg.put("HKLM", autostart.SERVICES + "\Planted", [("ImagePath", "planted.exe", SZ)], views=(False,))
-    reg.fail("HKLM", autostart.SERVICES + "\Planted", PermissionError(5, "refused"), views=(False,))
+    reg.put("HKLM", autostart.SERVICES + "\\Planted", [("ImagePath", "planted.exe", SZ)], views=(False,))
+    reg.fail("HKLM", autostart.SERVICES + "\\Planted", PermissionError(5, "refused"), views=(False,))
     got = w.take(w.read())
     assert got["changes"] == [] and "in part" in got["unread"]["service"]
     del reg.errors[("HKLM", False, (autostart.SERVICES + "\\Planted").lower())]
     got = w.take(w.read())
     assert kinds(got) == [("added", "service", "Planted")] and got["late"] == {}
+
+
+# --- M15.3b REDO 2 (ADR-0014 Amendment K) -----------------------------------------------------------------------
+
+class BoundReg(Reg):
+    """A made-up registry that gives at most ENTRY_BOUND + 1 values of a key, as WinRegistry does."""
+
+    def values(self, root, path, view32=False):
+        return super().values(root, path, view32)[:autostart.ENTRY_BOUND + 1]
+
+
+def test_ak1_a_service_a_task_and_winlogon_at_the_bound_are_said_not_read_and_nothing_is_removed(folders):
+    reg = like(BoundReg)
+    w = watcher(reg, folders)
+    w.take(w.read())
+    fill = [("F%04d" % n, n, DWORD) for n in range(autostart.ENTRY_BOUND + 1)]
+    for key in (autostart.SERVICES + "\\RaqibRigService", TREE + "\\Vendor\\Update", autostart.WINLOGON):
+        k = ("HKLM", False, key.lower())
+        reg.vals[k] = fill + reg.vals[k]      # ImagePath the 1002nd value, the task's Id last, Shell after 1001
+    for _ in range(2):                         # said each read
+        got = w.read()
+        said = w.take(got)
+        assert said["changes"] == [] and said["late"] == {}
+        for p in ("service", "task", "winlogon"):
+            assert got["places"][p]["state"] == "partly" and got["places"][p]["keys_why"] == {autostart.OVER_BOUND: 1}
+            assert "in part" in said["unread"][p]
+    for key in (autostart.SERVICES + "\\RaqibRigService", TREE + "\\Vendor\\Update", autostart.WINLOGON):
+        k = ("HKLM", False, key.lower())
+        reg.vals[k] = reg.vals[k][len(fill):]
+    assert w.take(w.read())["changes"] == []  # back under the bound: what it holds is what the base held
+
+
+def test_ak1_the_registry_over_winreg_asks_at_most_1001_values():
+    w = FakeWinreg({("HKLM", "A"): {"subkeys": [], "values": [("V%d" % n, n, DWORD) for n in range(1002)]}})
+    asked = []
+    enum = w.EnumValue
+    w.EnumValue = lambda key, i: (asked.append(i), enum(key, i))[1]
+    got = autostart.WinRegistry(w).values("HKLM", "A")
+    assert len(got) == autostart.ENTRY_BOUND + 1 and asked == list(range(autostart.ENTRY_BOUND + 1))
+
+
+def test_ak3_a_name_is_sure_only_where_the_text_names_one_program():
+    for text, sure in (("C:\\Windows\\system32\\svchost.exe -k netsvcs", True), ('"C:\\a b\\c.exe" /x', True),
+                       ("%ProgramFiles%\\x\\y.exe -z", False), ('"%ProgramFiles%\\x\\y.exe" -z', False),
+                       ("C:\\Sites\\example.com files\\tool.exe", False), ("C:\\x\\a.exe\u00a0-q", False),
+                       ("C:\\x\\a.exe -q\u2003x", False), ("C:\\x\\a.exe\t-q", True), ("C:\\x\\a.exe  -q", True),
+                       ("cmd /c rem x", True), ("C:\\x\\run.CMD /q", True)):
+        assert autostart._sure(text) is sure, text
+    assert autostart._program("C:\\x\\tool.exe\t-k", "run") == ("tool.exe", True, False)   # a tab is a blank
+    assert autostart._program("C:\\x\\a.exe\u00a0-q", "run")[1] is False
+
+
+class LinkDisk(Folders):
+    """Real files; a name in `links` opens as a link (the handle says reparse point)."""
+
+    def __init__(self):
+        super().__init__()
+        self.links = set()
+        self.attributes = lambda f: (autostart.FILE_ATTRIBUTE_REPARSE_POINT
+                                     if os.path.basename(f.name) in self.links else 0)
+
+
+def test_ak4_a_handle_that_says_link_is_a_link_and_a_swap_is_changed(folders):
+    disk = LinkDisk()
+    w = watcher(machine(), folders, disk=disk)
+    w.take(w.read())
+    disk.links.add("raqib-rig-startup.cmd")
+    got = w.take(w.read())
+    assert kinds(got) == [("changed", "startup", "raqib-rig-startup.cmd")] and got["changes"][0]["link"] is True
+    assert autostart.change_line(2, got["changes"][0]) == \
+        'CHANGE round 2: changed startup "raqib-rig-startup.cmd" of the user, a link (not opened or followed)'
+    assert w.take(w.read())["changes"] == []          # a link stays a link: its word does not change
+    disk.links.clear()
+    assert kinds(w.take(w.read())) == [("changed", "startup", "raqib-rig-startup.cmd")]
+
+
+def test_ak4_two_names_equal_but_for_case_the_second_is_not_read(folders):
+    listing = Listing([("Run.cmd", "file"), ("run.cmd", "file")], lambda path: open(__file__, "rb"), long_form=False)
+    got = autostart.read(machine(), folders, platform="win32", disk=listing)
+    s = got["places"]["startup"]
+    assert s["state"] == "partly" and s["keys_why"] == {autostart.CASE_TWIN: 2}   # one in each folder
+    assert [e["name"] for e in entries(got, "startup")] == ["Run.cmd", "Run.cmd"]
+
+
+def test_ak4_s5b_a_made_up_directory_entry_that_is_a_reparse_point_is_a_link():
+    class Entry:
+        def __init__(self, name, attributes, file=True, link=False):
+            self.name, self.attributes, self.file, self.link = name, attributes, file, link
+
+        def is_symlink(self):
+            return self.link
+
+        def is_file(self, follow_symlinks=True):
+            assert follow_symlinks is False    # never stats the target
+            return self.file
+
+        def stat(self, follow_symlinks=True):
+            assert follow_symlinks is False
+            return type("Stat", (), {"st_file_attributes": self.attributes})()
+
+    class Scan:
+        def __init__(self, folder):
+            self.items = [Entry("junction.cmd", 0x400), Entry("plain.cmd", 0x20), Entry("folder", 0x10, file=False),
+                          Entry("sym.cmd", 0x20, link=True)]
+
+        def __enter__(self):
+            return iter(self.items)
+
+        def __exit__(self, *a):
+            return False
+    disk = autostart.Disk(None, long_form=False, scandir=Scan)
+    assert disk.files("x") == [("junction.cmd", "link"), ("plain.cmd", "file"), ("sym.cmd", "link")]
+
+
+@pytest.mark.skipif(not sys.platform.startswith("win"), reason="a real link read by the module's own opener (AK-4)")
+def test_ak4_a_real_symbolic_link_on_windows_is_read_as_a_link(tmp_path):
+    folder = tmp_path / "Startup"
+    folder.mkdir()
+    (tmp_path / "target.cmd").write_bytes(b"rem target\r\n")
+    try:
+        os.symlink(str(tmp_path / "target.cmd"), str(folder / "link.cmd"))
+    except OSError:
+        pytest.skip("this user cannot make a symbolic link here")
+    got = autostart.read(machine(), {"user": str(folder), "machine": str(tmp_path / "none")}, platform="win32")
+    assert [(e["name"], e["link"]) for e in entries(got, "startup")] == [("link.cmd", True)]
+    assert got["places"]["startup"]["keys_why"] == {autostart.A_LINK: 1}
+    with pytest.raises(autostart.IsALink):              # opened as itself, the handle says it is a link
+        autostart._default_disk().head(str(folder), "link.cmd")
+
+
+def test_ak5_a_step_that_raises_marks_what_it_listed_as_not_read(folders):
+    reg = machine()
+    k = ("HKLM", False, (autostart.SERVICES + "\\RaqibRigService").lower())
+    good = list(reg.vals[k])
+    reg.vals[k] = [("ImagePath", "cmd.exe /c echo")]   # a value of two fields: the step raises while it reads
+    w = watcher(reg, folders)
+    first = w.read()
+    assert first["places"]["service"]["state"] == "failed"
+    w.take(first)
+    reg.vals[k] = good
+    got = w.take(w.read())
+    assert got["changes"] == [] and got["late"] == {"service": {"parts": 3, "entries": 1}}
+
+
+def test_ak5_a_watcher_takes_no_salt_and_read_takes_no_bad_begin_or_salt(folders):
+    for given in ({"salt": b"0" * 32}, {"begin": 3}):
+        with pytest.raises(TypeError):
+            autostart.Watcher(registry=machine(), **given)
+    for bad in ({"begin": "x"}, {"begin": -1}, {"begin": True}, {"begin": 1.5}, {"salt": "text"}):
+        got = autostart.read(machine(), folders, platform="win32", disk=Folders(), **bad)
+        assert got["read"] is True and {s["state"] for s in got["places"].values()} == {"failed"}, bad
+    assert autostart.read(machine(), folders, platform="win32", disk=Folders(), begin=7)["begin"] == "runonce"
+
+
+def test_s5g_a_read_on_windows_uses_the_modules_own_opener(monkeypatch, folders):
+    sentinel = object()
+    monkeypatch.setattr(autostart, "_windows_opener", lambda: sentinel)
+    nt = autostart._default_disk(system="nt")
+    assert nt.opener is sentinel and nt.long_form is True
+    assert autostart._default_disk(system="posix").opener is not sentinel
+    used = []
+    monkeypatch.setattr(autostart, "_default_disk", lambda opener=None: (used.append(opener), Folders())[1])
+    autostart.read(machine(), folders, platform="win32")
+    assert used == [None]                               # read() takes its disk from _default_disk
+
+
+
+def test_ak6_the_words_say_no_more_than_the_code_does():
+    """ADR-0014 AK-6: no sentence of the spec, the threat model's entry or the module's words promises that a
+    change is never lost or that every other place is reached; each says what a slow key still delays, that a key
+    over the bound is never compared while it is over, and what was measured of a held file."""
+    spec = " ".join((ROOT / "docs" / "specs" / "AUTOSTART.md").read_text(encoding="utf-8").split())
+    threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
+    entry = threat.split("**What this read does not see** (docs/specs/AUTOSTART.md;", 1)[1].split("### ", 1)[0]
+    module = " ".join(autostart.__doc__.split())
+    for text in (spec, entry, module):
+        for words in ("never lost", "every other place is reached", "at least once every five", "bounded by size"):
+            assert words not in text, words
+    for words in ("What a slow key still delays", "none of its entries is compared while it is over",
+                  "enumeration reads each of its values whole", "another call's rename and delete",
+                  "An open by another process that asks for no sharing still fails while the read holds the file",
+                  "Never run on Windows, given to the code in tests alone", "drive kinds 0, 1 and 4",
+                  "whether Winlogon keeps a quoted comma inside one program's name"):
+        assert words in spec, words
+    for words in ("is never compared while it is over", "reads each value whole", "asks for no sharing still fails"):
+        assert words in entry, words
+    for words in ("none of its entries compared while it is over", "another call's rename and delete",
+                  "an open that asks for no sharing still fails", "a part first read late"):
+        assert words in module, words

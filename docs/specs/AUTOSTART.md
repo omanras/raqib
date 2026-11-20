@@ -1,8 +1,8 @@
 # AUTOSTART - the autostart places, read by Raqib itself
 
 Rulings: ADR-0014 Amendments G (AG-1 to AG-5), H (AH-1 to AH-8), I (AI-1 to
-AI-11) and J (AJ-1 to AJ-8). Stages: M15.3a, the read standing alone; M15.3b
-and its REDO, the read made fit for the watch (`raqib/autostart.py`,
+AI-11), J (AJ-1 to AJ-8) and K (AK-1 to AK-8). Stages: M15.3a, the read standing
+alone; M15.3b and its two REDOs, the read made fit for the watch (`raqib/autostart.py`,
 `python -m raqib.autostart`). Nothing of the watch reads it yet: the watch's
 reading, its host lines and the three rules that judge a change are M15.3c.
 
@@ -44,19 +44,26 @@ process, no right asked, no network call:
 - A Startup file is opened by the name its folder listed, in the path's long
   form (`\\?\` before the folder's own path made whole), so that Windows reads
   no other name for it - a trailing dot or blank, a device's name (AJ-4). It is
-  opened for reading with read, write and delete sharing (`CreateFileW` with
+  opened asking Windows not to follow a link (`FILE_FLAG_OPEN_REPARSE_POINT`),
+  and a file whose open handle says it is a reparse point is a link, its
+  content not read (AK-4). It is opened for reading with read, write and delete sharing (`CreateFileW` with
   `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`, by `ctypes`), so
   that another process's delete or rename of it does not fail while it is read
   (AI-3; ADR-0011 A: Raqib does not hinder what it watches). Where it cannot be
   opened so, it is not opened: its content is not read, and the place says
   `it cannot be opened with every sharing`.
 - A link in a Startup folder - a symbolic link or another reparse point, told
-  by the listing itself (`is_symlink`, `FILE_ATTRIBUTE_REPARSE_POINT`) - is an
-  entry with its content not read, said `a link: not opened or followed`: it is
-  never opened or followed (it may lead to a share). A file whose open fails
-  for another reason, "not found" among them, is an entry with its content not
-  read and that reason; only the folder's own listing can fail the place
-  (AJ-4).
+  by the listing itself (`is_symlink`, `FILE_ATTRIBUTE_REPARSE_POINT`) or by the
+  open's handle - is an entry with its content not read, said `a link: not
+  opened or followed`: it is never followed (it may lead to a share). A link's
+  content is a fixed word of its own, hashed under the salt, so that a file that
+  becomes a link under the same name, or a link that becomes a file, is said
+  `changed` (AK-4). A file whose open fails for another reason, "not found"
+  among them, is an entry with its content not read and that reason; only the
+  folder's own listing can fail the place (AJ-4). Two names of one folder equal
+  but for case are one key: the first in order is the entry, the second is a
+  part not read, said `a second name of one key (equal but for case): not
+  read` (AK-4).
 - The services: every key under `Services` is opened; one with no `ImagePath`
   (a key of settings, a group) runs nothing and is not an entry. A driver is
   such a key too.
@@ -89,14 +96,24 @@ An entry is a dict:
   than one names none (AJ-3).
 - `list`: true for a Winlogon value that lists more than one program; its
   line says `(a list of programs)`.
-- `sure` (AI-8, AJ-3): whether the program named is what Windows runs. A
-  quoted first word is sure. An unquoted first word that ends in a program's
-  extension - `.exe`, `.com`, `.bat`, `.cmd`, `.scr`, `.pif`, in any case - is
-  sure (`C:\Windows\system32\svchost.exe -k netsvcs`). One that holds a
-  separator (`\` or `/`), is followed by a blank and ends in none is not sure
-  (`C:\Program Files\x\y.exe` and `C:\My Tools.exe` read to their first blank).
-  Any other is sure (`cmd /c ...`). None where there is no program. A sentence
-  says `may run` where it is false, `would run` where it is true.
+- `link`: true for a link in a Startup folder (its `sha256` is the link's
+  fixed word); its line says `a link (not opened or followed)`.
+- `sure` (AI-8, AJ-3, AK-3): whether the text names one program however it is
+  read. A text is split at spaces and tabs alone, as Windows splits a command.
+  Not sure: a text that holds a blank other than a space or a tab (a no-break
+  space, a line's end); a first word that holds a `%` (the read expands
+  nothing: the variable is the user's, not the reader's), quoted or not; an
+  unquoted text where more than one run from its start to a blank or to its end
+  ends in a program's extension (`C:\Sites\example.com files\tool.exe`); an
+  unquoted first word that holds a separator (`\` or `/`), is followed by a
+  blank and ends in none (`C:\Program Files\x\y.exe` and `C:\My Tools.exe` read
+  to their first blank). Sure: a quoted first word; an unquoted one that ends in
+  a program's extension - `.exe`, `.com`, `.bat`, `.cmd`, `.scr`, `.pif`, in any
+  case - where no longer run does too (`C:\Windows\system32\svchost.exe -k
+  netsvcs`); any other (`cmd /c ...`). None where there is no program. A
+  sentence says `may run` where it is false, `would run` where it is true. The
+  program's name itself is still PERSIST-RUN-KEY's reading, which splits at
+  every blank (its own debt, ruled with M15.3c).
 - `sha256`: the content's hash (for a value: its type and its data; for a
   file: the file; for a service: its three values; for a task: its actions).
   None where the content was not read.
@@ -151,28 +168,48 @@ Each place says how it was read, in `places[place]`:
   `reason` says which. It has no entries; it is never read as empty.
 - `failed`: another error, with its `reason`.
 
-The bounds (AI-4, AJ-2):
+The bounds (AI-4, AJ-2, AK-1, AK-2):
 - The deadline (5 s by default, `read(deadline=...)`) is looked at before each
-  place and between keys and files - before each hive's Run key, each Startup
-  file, each service, each key of the task tree - never inside one call: one
-  key's enumeration, one folder's listing, one file's open and read run to
-  their end, and their time is not bounded by it (each is bounded by size
-  instead, below). A place the deadline cuts keeps what it read of itself: the
-  keys and files it reached are read, the keys it did not reach are parts not
-  read and the files listed and not reached are entries with their content not
-  read, each said with the deadline's reason; the place says `partly`.
-- A read begins with the step after the one the read before began with (the
-  Watcher gives it; the steps are run and runonce together, startup, service,
-  task, winlogon; a read made without a watcher begins with the first). A place
-  made slow is cut itself, and the places after it in that read are not
-  reached; each of them is reached first, and read whole unless it is slow
-  itself, at least once every five reads.
-- A key's values and a folder's files are read to a bound of 1000 (one more is
-  asked, to tell that the bound was met): where it is met the first 1000 are
-  given, the key or folder is a part not read whole, and the place says
-  `more than 1000 entries: not read whole`. The services' key and the task
-  tree's folders are listed whole (each service and each task is its own key,
-  under the deadline).
+  place and between keys and files - before each Run and RunOnce key, each
+  Startup folder and file, each service, each key of the task tree - never
+  inside one call: one key's enumeration, one folder's listing, one file's open
+  and read run to their end, and their time is not bounded by it. A key's
+  enumeration reads each of its values whole (the 64 KiB bounds what is hashed,
+  not what is read), and a folder's listing goes over every name in it (the
+  bound below is of the entries compared, not of the names listed). A place the
+  deadline cuts keeps what it read of itself: the keys and files it reached are
+  read, the keys it did not reach are parts not read and the files listed and
+  not reached are entries with their content not read, each said with the
+  deadline's reason; the place says `partly`.
+- There are six steps: `run`, `runonce`, `startup`, `service`, `task`,
+  `winlogon`. A read begins with the step after the one the read before began
+  with (the Watcher gives the read's number; a read made without a watcher
+  begins with the first). Inside a step the machine's key or folder is read
+  before the users': both views of the machine's Run or RunOnce key, then every
+  user's; the machine's Startup folder, then the user's. The users' hives of a
+  step are begun one further at each read, as the steps are. The users' hives
+  are listed once a read, by whichever of `run` and `runonce` is read first.
+- What a slow key still delays: in a read that reaches it, the keys after it in
+  its step and every step after its step in that read are not reached. In a
+  later read those are reached before it - a step that begins the read, or
+  comes before the slow key's step; a user's key that the turn puts before the
+  slow one - so within one turn of six reads each of them is read whole, unless
+  it is slow itself or over the bound. A change in it is said by the first read
+  that reads it whole; a change made and undone in that time is not said.
+- Every key whose values the read takes - a Run or RunOnce key, a service's,
+  a task's key in the tree and its body, Winlogon's - and every Startup folder
+  is read to a bound of 1000 entries (one more is asked, to tell that the bound
+  was met; WinRegistry asks no more). Where it is met the first 1000 are given,
+  the key or folder is a part not read whole, said each read as `more than 1000
+  entries: not read whole`, and none of its entries is compared while it is
+  over: none is said added, changed or removed for a value that was only out of
+  reach (AK-1). A task's body over the bound is said on its key in the tree.
+  The services' key and the task tree's folders are listed whole (each service
+  and each task is its own key, under the deadline).
+- A step that raises while it reads is `failed`, and the parts it had listed
+  are marked not read, so that none of them is new when it is next seen (AK-5).
+  A `begin` that is not a read's number (0 or more), or a salt that is not
+  bytes, gives a read whose places are all `failed`, never an exception.
 
 `read` never raises. Off Windows (with no registry handed in) it reads nothing,
 and one sentence says so: Linux's places are ADR-0014 S4 (M15.4).
@@ -180,7 +217,7 @@ and one sentence says so: Linux's places are ADR-0014 S4 (M15.4).
 ## A change (AG-3, AI-1 to AI-6, AJ-1, AJ-5, AJ-6)
 
 A `Watcher` takes reads one after another (`watcher.read()`, then
-`watcher.take(result)`) and gives the changes of each against its base: what
+`watcher.take(result)`); it takes no salt and no turn from a caller (AK-5) and gives the changes of each against its base: what
 every place, and inside a place read in part every key or folder, last held
 when it was read (AI-1). Its first read gives none. A place `refused`, `failed`
 or `unread`, and a key not read, keep what they last held; nothing is said of
@@ -227,7 +264,9 @@ added by the first read that reads it, once (AI-1). The kinds of change:
 changed (its `sha256`) or removed; a place refused, failed or unread in either
 read, or whose keys not read are not the same in both, gives no change and is
 named in `unread`. It knows no part, no hive, no triggers, no salt: the Watcher
-is what the watch uses.
+is what the watch uses. Over the bound it compares the first 1000 entries a key
+gives: a shift in which 1000 those are is said there as entries added or
+removed (the Watcher compares nothing of such a key).
 
 What was there when the first read was made, and what a part held when it was
 first read, is the base and is never said as a change (AG-3, AJ-1). A change
@@ -324,14 +363,28 @@ first read that listed it with its content not read, 41 reads with the longest
 0.156 s - and the one change nobody made was a task `rescheduled`: it is that
 task's triggers that Windows moves by itself.
 
-That the read no longer holds a file against its maker is measured by a test
-that runs on Windows alone (`test_aj7_while_the_modules_own_windows_opener_
-holds_a_file_it_is_renamed_and_deleted`: while the module's own opener holds a
-file, another call renames it and then deletes it, and both succeed) and by
-the rig's held file and the stand-in's delete (X37); it was not measured on a
-file of 24 MB again.
+What was measured of a held file since the read opens with every sharing is
+another call's rename and delete: a test that runs on Windows alone
+(`test_aj7_while_the_modules_own_windows_opener_holds_a_file_it_is_renamed_and_
+deleted`: while the module's own opener holds a file, another call renames it
+and then deletes it, and both succeed; it passed on GitHub's Windows machine)
+and the rig's held file and the stand-in's delete (X37). The read does not hold
+a file against its maker's rename or delete. An open by another process that
+asks for no sharing still fails while the read holds the file, for the instant
+of the read: that is Windows' rule for any reader, and it is not measured. It
+was not measured on a file of 24 MB again.
 
-Not measured: a hive loaded by a logon, and whether a logon gives the count the
+Never run on Windows, given to the code in tests alone: the long form's effect
+on a name with a trailing dot or blank or a device's name; a link read by the
+listing, and by the open's handle (a Windows-only test makes a real symbolic
+link, where the job's user may make one); drive kinds 0, 1 and 4; a cut by the
+deadline; the turn of the steps and of the users' hives; the bound of 1000; a
+base taken late; a step that raises; two names equal but for case.
+
+Not measured: an open by another process that asks for no sharing while the
+read holds the file (it fails for that instant, by Windows' rule); whether
+Winlogon keeps a quoted comma inside one program's name (the read keeps it);
+a hive loaded by a logon, and whether a logon gives the count the
 Watcher says (AJ-8); a real desktop's churn (an updater that makes its own
 task or service); the scheduler's own query tool under fewer rights; how long
 the read takes on a machine with thousands of services, and so how often the

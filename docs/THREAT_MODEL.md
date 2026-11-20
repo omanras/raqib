@@ -924,21 +924,26 @@ What it does not see:
   from an unquoted text whose first word holds a separator, is followed by a
   blank and ends in no program's extension is said as one that `may run`, and
   a Winlogon list of more than one program names none.
-- **The lever that is left** (ADR-0014 AJ-2). Any process of the user can make
-  its own Startup folder or Run key slow (many files, many or large values, a
-  file slow to open): the deadline is looked at between keys and files, never
-  inside one call, so one listing, one key's enumeration or one open can run
-  past it (each is bounded by size: 1000 entries, 64 KiB of a file). The place
-  made slow is then cut at each read that reaches it, said each time, and the
-  places after it in that read are not reached; a read begins with the place
-  after the one the read before began with, so every other place is reached
-  first, and read whole unless it is slow itself, at least once every five
-  reads. A change in a place is said at the first read that reads it whole; it
-  is late by up to five reads, never lost. A plain user can also deny its own
-  Run key or Startup folder to a reader of another identity while Windows still
-  runs them (AJ-8; not measured): the place is then read in part for good, and
-  said. An agent that runs as an administrator can change what the read reads
-  (a key's rights, the folder's listing) as it can any watcher of its own user;
+- **The lever that is left** (ADR-0014 AJ-2), as AK-2 and AK-6 leave it. Any process of the
+  user can make its own Startup folder or Run key slow or large (many files,
+  many or large values, a file slow to open). The deadline is looked at between
+  keys and files, never inside one call: one listing, one key's enumeration or
+  one open runs to its end, a key's enumeration reads each value whole and a
+  folder's listing every name (the bound of 1000 is of the entries compared and
+  64 KiB of what is hashed, not of what is read). In a read that reaches the
+  slow key, the keys after it in its step and the steps after its step are not
+  reached, and that is said; in a later read of the same turn they are reached
+  before it (the steps turn, the users' hives turn inside a step, the machine's
+  key or folder comes first), so a change in them is said late, within one turn
+  of six reads, by the first read that reads them whole - unless it was made
+  and undone in that time, which is not said. A key or folder held over 1000
+  entries is never compared while it is over: a plain user can do that to its
+  own Run key and Startup folder, and every change in it is then unsaid but for
+  the words `in part` at each read. A plain user can also deny its own Run key
+  or Startup folder to a reader of another identity while Windows still runs
+  them (AJ-8; not measured): the place is then read in part for good, and said.
+  An agent that runs as an administrator can change what the read reads (a
+  key's rights, the folder's listing) as it can any watcher of its own user;
   that is not measured.
 - **Closed** (ADR-0014 Amendments I and J). An entry that first appears while
   a place or a key that was read before is unread - a Startup file its maker
@@ -947,13 +952,17 @@ What it does not see:
   read); a hive loaded between two reads is one change, `hive loaded`, not its
   entries added; a part read for the first time late is its base, not its
   entries planted. The read opens a Startup file by its listed name in the long
-  form and with every sharing, so it does not hold a file against its maker's
-  delete or rename: measured before the change, a rename failed 5406 times of
-  5406 while a 24 MB file was hashed; measured since, on Windows, by a test in
-  which another call renames and then deletes a file while the module's own
-  opener holds it, and by the rig's held file and the stand-in's delete (X37),
-  not on a 24 MB file again. Every hash is salted, so a key cannot be matched by
-  trying a SID, and a read of another salt is not taken.
+  form, asks Windows not to follow a link, and opens with every sharing, so it
+  does not hold a file against its maker's rename or delete: measured before the
+  change, a rename failed 5406 times of 5406 while a 24 MB file was hashed;
+  measured since, on Windows, by a test in which another call renames and then
+  deletes a file while the module's own opener holds it, and by the rig's held
+  file and the stand-in's delete (X37), not on a 24 MB file again. An open by
+  another process that asks for no sharing still fails while the read holds the
+  file, for the instant of the read (Windows' rule; not measured). A file
+  swapped for a link under the same name is said as changed (AK-4). Every hash
+  is salted, so a key cannot be matched by trying a SID, and a read of another
+  salt is not taken.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the

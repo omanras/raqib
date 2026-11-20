@@ -446,7 +446,8 @@ def test_x37_names_every_other_change_by_its_kind_and_place():
                          {"round": 2, "change": "added", "place": "startup", "name": "raqib-rig-held.cmd"}]
     state, words = x37(facts)
     assert state == check.MET and "other changes: changed task 1, rescheduled task 1" in words
-    assert "the held file added in read 2 while held, its content not read, and removed after" in words
+    assert ("the held file added in read 2 while held, its content not read, read after it was let go, and removed"
+            " after") in words
     assert "other changes: none" in x37(autostart_facts())[1]
 
 
@@ -459,7 +460,8 @@ def test_x37_names_every_other_change_by_its_kind_and_place():
     ({"round": 2, "held": True, "listed": True, "content": "not read", "changes": ["added"]}, False,
      "the held file was not removed after")])
 def test_x37_missed_unless_the_held_read_listed_it_unread_and_it_was_removed(first, removed, why):
-    held = {"made": True, "error": None, "removed": removed, "reads": [first]}
+    later = {"round": 3, "held": False, "listed": True, "content": "read", "changes": ["read"]}   # AK-7: read after
+    held = {"made": True, "error": None, "removed": removed, "reads": [first, later]}
     state, words = x37(autostart_facts(held=held))
     assert state == check.MISSED and why in words
 
@@ -470,3 +472,14 @@ def test_x37_says_a_place_read_in_part_as_read_in_part_not_as_unread():
                             partly=[{"round": 7, "places": {"task": "in part: 26 key(s) refused"}}])
     state, words = x37(facts)
     assert state == check.MET and "unread: read 5: task; read in part: read 6: task; read 7: task" in words
+
+
+
+def test_x37_missed_where_no_later_read_after_the_let_go_read_the_held_files_content():
+    """ADR-0014 AK-7: a run whose opener never read a Startup file is not MET on the held file."""
+    held = {"made": True, "error": None, "removed": True, "reads": [
+        {"round": 2, "held": True, "listed": True, "content": "not read", "changes": ["added"]},
+        {"round": 3, "held": False, "listed": True, "content": "not read", "changes": []},
+        {"round": 4, "held": False, "listed": False, "content": None, "changes": ["removed"]}]}
+    state, words = x37(autostart_facts(held=held))
+    assert state == check.MISSED and "no later read, after the held file was let go, read its content" in words

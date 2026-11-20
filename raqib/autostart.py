@@ -1,4 +1,4 @@
-"""The autostart places of Windows, read by Raqib itself (ADR-0014 Amendments G, H and I; M15.3a, M15.3b).
+"""The autostart places of Windows, read by Raqib itself (ADR-0014 Amendments G to K; M15.3a, M15.3b).
 
 read() reads, with the standard library alone and in this process, every place AG-1 names: the values under Run
 and RunOnce of every loaded user's hive (HKU by its SID, in one view; a `_Classes` hive and `.DEFAULT` left out;
@@ -10,8 +10,10 @@ apart: AI-5); Winlogon's Shell and Userinit.
 An entry: `place` (run, runonce, startup, service, task, winlogon), `scope` (user or machine), `view32`, `name`
 (as raqib.hooks.os_sysmon.value_name gives a value's name: redacted, bounded, a SID in it shown as [sid]),
 `program` (as PERSIST-RUN-KEY's line names the program a value would run; None where the content is not a
-command or was not read), `sure` (False where that name may not be what runs: AI-8), `sha256` (its content's
-hash: a value's data, a file, a service's three values, a task's actions; None where it was not read),
+command or was not read), `sure` (False where the text may name another program however it is read: AI-8,
+AK-3), `list` (a Winlogon list of more than one program, which names none), `link` (a link in a Startup folder,
+never followed: its content is a fixed word, AK-4), `sha256` (its content's hash: a value's data, a file, a
+service's three values, a task's actions; None where it was not read),
 `triggers` (a task's triggers' hash), `key` (where it is) and `part` (the key or folder it was read from). Every
 hash is a keyed hash (HMAC-SHA256) under a salt that is random and never leaves the process (AI-9), over a
 content's length and its first 64 KiB (AI-4). A value's text, a file's content, a SID and a user's name stay in
@@ -19,14 +21,25 @@ this process's memory.
 
 What the rights or the bounds do not give is said per place, never read as empty (AG-2, AI-4): `refused` (the
 whole place), `partly` (how many of its keys were not read, and why), `failed` (another error, with its
-reason) or `unread` (the read's deadline passed before it was read whole); a place that is not there is empty.
-A Startup folder on a share is not read at all; a Startup file is opened with every sharing, or not opened
-(AI-3). read() never raises and imports winreg and ctypes only inside the call. Off Windows it reads nothing
-and says so (Linux's places are ADR-0014 S4).
+reason) or `unread` (the read's deadline passed before it was reached); a place that is not there is empty. The
+deadline is looked at between keys and files, never inside one call. Six steps, `runonce` its own; a read begins
+one step further than the read before, and inside a step the machine's key or folder comes first and the users'
+hives turn too (AK-2): a slow key delays the keys after it in its step and the steps after it in that read, which
+a later read of the turn reaches first. Every key whose values are taken, and every Startup folder, is bounded at
+1000 entries: one over it is a part not read, said each read, none of its entries compared while it is over (a
+user can do that to its own Run key or Startup folder: said, and a lever that is left, AK-1). A Startup folder on
+a share is not read at all; a Startup file is opened with every sharing and without following a link, or not
+opened (AI-3, AK-4): what was measured is that another call's rename and delete do not fail while the read holds
+a file; an open that asks for no sharing still fails for the instant of the read. read() never raises and imports
+winreg and ctypes only inside the call. Off Windows it reads nothing and says so (Linux's places are ADR-0014 S4).
 
 A Watcher takes reads one after another and compares each with what every place, and every key of it, last held
-when it was read (AI-1): an entry that first appears while its place or its key is not read is said as added by
-the first read that reads it. changes(before, after) compares two reads, as in M15.3a.
+when it was read (AI-1): an entry that appears while a part that was read before is not read is said as added by
+the first read that reads it again; a part first read late (a place the deadline cut, a key refused at first) is a
+base, none of its entries said, and the watcher says once that it took it (AJ-1). A change made and undone while
+a part is not read is not said. A key's enumeration reads each value whole and a folder's listing every name: the
+bound (1000) is of the entries compared, and 64 KiB of what is hashed (AK-6). changes(before, after) compares two
+reads, as in M15.3a.
 
     python -m raqib.autostart [--rounds N] [--every S]
 
@@ -72,7 +85,10 @@ ENTRY_BOUND = 1000                    # AJ-2: a key's values or a folder's files
 PROGRAM_EXTENSIONS = (".exe", ".com", ".bat", ".cmd", ".scr", ".pif")   # AJ-3: a first word that names a program
 FILE_ATTRIBUTE_REPARSE_POINT = 0x400  # AJ-4: a symbolic link or another reparse point
 LOCAL_DRIVES = (2, 3, 5, 6)           # GetDriveTypeW: removable, fixed, CD-ROM, RAM disk; 0 and 1 are not known
-STEPS = ("run", "startup", "service", "task", "winlogon")   # AJ-2: a read begins with the step after the last one's
+STEPS = ("run", "runonce", "startup", "service", "task", "winlogon")   # AJ-2, AK-2: a read begins one step further
+WINDOWS_BLANKS = " \t"                # AK-3: Windows splits a command at spaces and tabs alone
+FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000   # AK-4: the open itself does not follow a link
+LINK_WORD = "a link: its content is not read"   # AK-4: a link's content, a fixed word of its own (hashed)
 SALT_ID = "the salt's own name"       # AJ-6: hashed under the salt, it tells two salts apart and tells neither
 DEADLINE_S = 5.0                      # AI-4: a read's deadline, by default
 SALT_BYTES = 32
@@ -90,6 +106,7 @@ ON_SHARE = "on a share: not read (the capture path makes no network call)"
 SHARE_UNKNOWN = "whether it is on a share is not known: not read"
 NO_SHARING = "it cannot be opened with every sharing: not opened"
 A_LINK = "a link: not opened or followed"
+CASE_TWIN = "a second name of one key (equal but for case): not read"
 NOT_FOUND = "not found when opened"
 OVER_BOUND = "more than %d entries: not read whole" % ENTRY_BOUND
 BELOW_BOUND = "below the depth bound"
@@ -139,6 +156,18 @@ class CannotShare(Exception):
     """AI-3: there is no way here to open a file with every sharing, so it is not opened."""
 
 
+class IsALink(Exception):
+    """AK-4: the open's handle says the file is a link (a reparse point): its content is not read."""
+
+
+def _handle_attributes(f):
+    """The attributes of an open file's handle (Windows: st_file_attributes of fstat); 0 where there are none."""
+    try:
+        return getattr(os.fstat(f.fileno()), "st_file_attributes", 0) or 0
+    except (AttributeError, OSError, ValueError):
+        return 0
+
+
 def _win_error(code):
     """An OSError of a Windows error number, of the kind Python gives it (no path, no text of the system's)."""
     kind = FileNotFoundError if code in WIN_NOT_THERE else PermissionError if code in WIN_REFUSED else OSError
@@ -153,11 +182,13 @@ def _win_error(code):
 
 def share_opener(kernel32, osfhandle, last_error, invalid=-1):
     """AI-3: an opener that opens a file for reading with read, write and delete sharing (CreateFileW, OPEN_EXISTING),
-    so that another process's delete or rename of it does not fail while it is read. kernel32, osfhandle
+    so that another process's delete or rename of it does not fail while it is read; AK-4: it asks Windows not to
+    follow a link (FILE_FLAG_OPEN_REPARSE_POINT), so a link opens as itself and Disk.head says it is one. kernel32, osfhandle
     (msvcrt.open_osfhandle) and last_error (ctypes.get_last_error) are handed in: Windows' own in read(), a test's
     elsewhere. It gives a binary file object; it raises what Windows refuses."""
     def open_shared(path):
-        handle = kernel32.CreateFileW(path, GENERIC_READ, SHARE_ALL, None, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, None)
+        handle = kernel32.CreateFileW(path, GENERIC_READ, SHARE_ALL, None, OPEN_EXISTING,
+                                      FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, None)   # AK-4
         if handle is None or handle == invalid:
             raise _win_error(last_error())
         try:
@@ -258,15 +289,17 @@ class Disk:
     HEAD_BYTES, the file opened by the opener (AI-3: Windows' with every sharing; CannotShare where there is
     none) by its listed name in the long form on Windows (AJ-4). A test hands in its own, or its own opener."""
 
-    def __init__(self, opener=None, long_form=None):
+    def __init__(self, opener=None, long_form=None, scandir=None, attributes=None):
         self.opener = opener
         self.long_form = os.name == "nt" if long_form is None else long_form
+        self.scandir = scandir or os.scandir                 # a test hands in made-up entries
+        self.attributes = attributes or _handle_attributes   # a test hands in a handle's attributes
 
     def files(self, folder):
         """[(name, "file" | "link")] of what is directly in the folder, at most ENTRY_BOUND + 1 (AJ-2): a symbolic
         link or another reparse point is a "link" and is not followed (AJ-4); a folder is left out."""
         out = []
-        with os.scandir(folder) as it:
+        with self.scandir(folder) as it:
             for e in it:
                 if e.is_symlink() or _reparse(e):
                     out.append((e.name, "link"))
@@ -283,6 +316,8 @@ class Disk:
         if self.opener is None:
             raise CannotShare()
         with self.opener(self.path(folder, name)) as f:
+            if self.attributes(f) & FILE_ATTRIBUTE_REPARSE_POINT:   # AK-4: opened as itself, a link is not read
+                raise IsALink()
             return os.fstat(f.fileno()).st_size, f.read(HEAD_BYTES)
 
 
@@ -343,7 +378,8 @@ class _Hasher:
 
 
 def _split_list(text):
-    """Winlogon's list: its items, split on commas outside double quotes, the empty ones left out."""
+    """Winlogon's list: its items, split on commas outside double quotes, the empty ones left out (AK-3: blanks
+    are spaces and tabs alone)."""
     items, cur, quoted = [], [], False
     for c in text:
         if c == '"':
@@ -354,28 +390,43 @@ def _split_list(text):
         else:
             cur.append(c)
     items.append("".join(cur))
-    return [i.strip() for i in items if i.strip()]
+    return [i.strip(WINDOWS_BLANKS) for i in items if i.strip(WINDOWS_BLANKS)]
+
+
+def _first_word(text):
+    """The text up to its first space or tab (AK-3: Windows splits a command at those alone)."""
+    return re.split(r"[ \t]", text, maxsplit=1)[0]
 
 
 def _sure(text):
-    """AJ-3: whether the first word is what Windows runs. A quoted first word is sure; an unquoted one that ends in
-    a program's extension is sure; one that holds a separator, is followed by a blank and ends in none is not
-    (`C:\\Program Files\\x.exe` read to its first blank); any other is sure (`cmd /c ...`)."""
+    """AJ-3, AK-3: whether the text names one program however it is read. Not sure: a text that holds a blank
+    other than a space or a tab; a first word that holds a `%` (the read expands nothing); an unquoted text where
+    more than one run from its start to a blank or to its end ends in a program's extension; an unquoted first
+    word that holds a separator, is followed by a blank and ends in no program's extension. Sure: a quoted first
+    word; an unquoted one that ends in a program's extension; any other (`cmd /c ...`)."""
+    if any(c.isspace() and c not in WINDOWS_BLANKS for c in text):
+        return False
     if text.startswith('"'):
+        end = text.find('"', 1)
+        return "%" not in (text[1:end] if end > 0 else text[1:])
+    first = _first_word(text)
+    if "%" in first:
+        return False
+    runs = {text[:m.start()].rstrip(WINDOWS_BLANKS) for m in re.finditer(r"[ \t]", text)} | {text}
+    if sum(1 for r in runs if r and r.lower().endswith(PROGRAM_EXTENSIONS)) > 1:
+        return False
+    if first.lower().endswith(PROGRAM_EXTENSIONS):
         return True
-    words = text.split(None, 1)
-    if words[0].lower().endswith(PROGRAM_EXTENSIONS):
-        return True
-    return not (len(words) > 1 and any(s in words[0] for s in SEPARATORS))
+    return not (len(text) > len(first) and any(s in first for s in SEPARATORS))
 
 
 def _program(data, place):
     """(program, sure, listing): the program a content would run, as PERSIST-RUN-KEY's line names it, and whether
-    that name is sure (AJ-3). A Winlogon value is a list: one program is named; a list of more than one names none
-    (`listing` True, AJ-3). (None, None, False) where the content is not text or names no program."""
-    if not isinstance(data, str) or not data.strip():
+    that name is sure (AJ-3, AK-3). A Winlogon value is a list: one program is named; a list of more than one names
+    none (`listing` True, AJ-3). (None, None, False) where the content is not text or names no program."""
+    if not isinstance(data, str) or not data.strip(WINDOWS_BLANKS):
         return None, None, False
-    text = data.strip()
+    text = data.strip(WINDOWS_BLANKS)
     if place == "winlogon":
         items = _split_list(text)
         if len(items) > 1:
@@ -436,10 +487,12 @@ class _Place:
     def given(self):
         return self.last in ("ok", "absent")
 
-    def part(self, ident, parent=None, hive=False, read=True):
-        """A key or a folder of the place, by a keyed hash of where it is: the base of a comparison (AI-1)."""
+    def part(self, ident, parent=None, hive=False, read=True, lists=False):
+        """A key or a folder of the place, by a keyed hash of where it is: the base of a comparison (AI-1). `lists`:
+        its read lists the parts under it (the users' hives, the services' key, a key of the task tree, a Startup
+        folder), so one under it that its last read did not list is new; a fixed key (Run, RunOnce) is not."""
         pid = self.h.text("part\0%s\0%s" % (self.name, ident))
-        self.parts[pid] = {"place": self.name, "parent": parent, "hive": hive, "read": bool(read)}
+        self.parts[pid] = {"place": self.name, "parent": parent, "hive": hive, "read": bool(read), "lists": lists}
         return pid
 
     def unreached(self, ident, parent, why):
@@ -449,18 +502,19 @@ class _Place:
         return self.part(ident, parent, read=False)
 
     def bounded(self, got, ident, pid):
-        """AJ-2: a key or a folder with more than ENTRY_BOUND entries is not read whole: the first ENTRY_BOUND are
-        given, the part is not read, and the bound is said."""
+        """AJ-2, AK-1: a key or a folder with more than ENTRY_BOUND entries is not read whole: the first
+        ENTRY_BOUND are given, the part is not read (none of its entries is compared), and the bound is said."""
         if got is not None and len(got) > ENTRY_BOUND:
             self.not_read.append((ident, OVER_BOUND))
             self.parts[pid]["read"] = False
             return list(got)[:ENTRY_BOUND]
         return got
 
-    def add(self, scope, view32, raw_name, program, sure, digest, where, part, triggers=None, listing=False):
+    def add(self, scope, view32, raw_name, program, sure, digest, where, part, triggers=None, listing=False,
+            link=False):
         shown = os_sysmon.value_name(SID_IN_NAME.sub("[sid]", raw_name))   # AH-1: a SID in a name is not shown
         self.entries.append({"place": self.name, "scope": scope, "view32": view32, "name": shown,
-                             "program": program, "sure": sure, "list": listing, "sha256": digest,
+                             "program": program, "sure": sure, "list": listing, "link": link, "sha256": digest,
                              "triggers": triggers,
                              "key": self.h.text("\0".join((self.name, where, "32" if view32 else "64",
                                                            raw_name.lower()))),
@@ -487,30 +541,37 @@ class _Place:
                 "refused_sha256": self.h.text("\n".join(sorted(i for i, _ in self.not_read)))}
 
 
-def _run_keys(reg, places, hives, deadline, limit):
-    """Run and RunOnce of every loaded user's hive (by its SID, one view: AI-7) and of the machine's, both views,
-    each its own. AJ-2: the deadline is looked at before each key; the keys it did not let the read reach are
-    parts not read."""
-    run = places["run"]
-    users = run.ask("HKU", lambda: reg.subkeys("HKU", "", False))
-    listed = run.given()
-    if users is None:   # the users' hives not listed: said for RunOnce as for Run
-        places["runonce"].not_read += [x for x in run.not_read if x[0] == "HKU"]
-        places["runonce"].failed = run.failed
-    listing = hives.part("HKU", None, read=listed)
-    sources = []
-    for sid in sorted(users or ()):
-        if SID.match(sid):
-            pid = hives.part("hive " + sid, listing, hive=True)
-            sources.append(("HKU", sid + "\\Software", "user", "HKU\\" + sid, pid, (False,)))
-    sources.append(("HKLM", "SOFTWARE", "machine", "HKLM", None, (False, True)))
-    todo = [(kind, leaf, src, view32) for kind, leaf in RUN_KEYS for src in sources for view32 in src[5]]
-    for i, (kind, leaf, (root, soft, scope, hive, parent, _), view32) in enumerate(todo):
-        place = places[kind]
+def _users(reg, places, hives, memo):
+    """The users' hives (by SID), listed once a read by whichever of Run and RunOnce is read first (AK-2); a
+    refusal or a failure of the listing is said for both."""
+    if "users" not in memo:
+        users = hives.ask("HKU", lambda: reg.subkeys("HKU", "", False))
+        listing = hives.part("HKU", None, read=hives.given(), lists=True)
+        if users is None:
+            for p in ("run", "runonce"):
+                places[p].not_read += [x for x in hives.not_read if x[0] == "HKU"]
+                places[p].failed = places[p].failed or hives.failed
+        memo["users"] = [(sid, hives.part("hive " + sid, listing, hive=True))
+                         for sid in sorted(users or ()) if SID.match(sid)]
+    return memo["users"]
+
+
+def _run_key(kind, reg, places, hives, memo, deadline, limit, turn):
+    """Run or RunOnce (AK-2: each its own step): the machine's key first, both views, each its own (AI-7); then
+    every loaded user's hive (by its SID, one view), begun one further at each read (`turn`). AJ-2: the deadline is
+    looked at before each key; the keys it did not let the read reach are parts not read."""
+    place, leaf = places[kind], dict(RUN_KEYS)[kind]
+    users = _users(reg, places, hives, memo)
+    if users:
+        users = users[turn % len(users):] + users[:turn % len(users)]
+    sources = [("HKLM", "SOFTWARE", "machine", "HKLM", None, (False, True))]
+    sources += [("HKU", sid + "\\Software", "user", "HKU\\" + sid, pid, (False,)) for sid, pid in users]
+    todo = [(src, view32) for src in sources for view32 in src[5]]
+    for i, ((root, soft, scope, hive, parent, _), view32) in enumerate(todo):
         ident = "%s\\%s %d" % (hive, leaf, view32)
         if deadline.passed():
-            for kind2, leaf2, src2, view2 in todo[i:]:
-                places[kind2].unreached("%s\\%s %d" % (src2[3], leaf2, view2), src2[4], CUT_KEY % limit)
+            for src2, view2 in todo[i:]:
+                place.unreached("%s\\%s %d" % (src2[3], leaf, view2), src2[4], CUT_KEY % limit)
             return
         path = "%s\\%s\\%s" % (soft, CURRENT_VERSION, leaf)
         got = place.ask(ident, lambda: reg.values(root, path, view32))
@@ -522,7 +583,8 @@ def _run_keys(reg, places, hives, deadline, limit):
 
 
 def _startup(disk, folders, place, drive_kind, deadline, limit):
-    roots = [(scope, folders.get(scope)) for scope, _ in STARTUP_ROOTS]
+    """The machine's Startup folder, then the user's (AK-2)."""
+    roots = [(scope, folders.get(scope)) for scope, _ in STARTUP_ROOTS[::-1]]
     for n, (scope, folder) in enumerate(roots):
         ident = "startup " + scope
         if not folder:
@@ -540,21 +602,28 @@ def _startup(disk, folders, place, drive_kind, deadline, limit):
             place.part(ident, None, read=False)
             continue
         listed = place.ask(ident, lambda: disk.files(folder))   # only the folder's own listing can fail the place
-        pid = place.part(ident, None, read=place.given())
+        pid = place.part(ident, None, read=place.given(), lists=True)
         listed = place.bounded(listed, ident, pid)
-        cut = False
+        cut, seen = False, set()
         for name, kind in sorted(listed or ()):
             if name.lower() in LEFT_OUT:
                 continue
-            why = None
+            if name.lower() in seen:   # AK-4: a second name of one key (equal but for case): a part not read
+                place.not_read.append(("%s %s" % (ident, name), CASE_TWIN))
+                place.part("%s %s" % (ident, name), pid, read=False)
+                continue
+            seen.add(name.lower())
+            why, link = None, False
             if cut or deadline.passed():   # AJ-2: listed, not reached: an entry, its content not read
                 cut, why = True, CUT_KEY % limit
                 place.cut = place.cut or why
             elif kind == "link":           # AJ-4: a link is not opened or followed (it may lead to a share)
-                why = A_LINK
+                why, link = A_LINK, True
             else:
                 try:
                     length, head = disk.head(folder, name)
+                except IsALink:             # AK-4: the handle says it is a link: its content is not read
+                    why, link = A_LINK, True
                 except FileNotFoundError:   # AJ-4: listed and not found: an entry with that reason, never dropped
                     why = NOT_FOUND
                 except PermissionError:     # AI-2: listed, its content refused: an entry, its content not read
@@ -565,20 +634,24 @@ def _startup(disk, folders, place, drive_kind, deadline, limit):
                     why = _why(exc)
             if why is not None:
                 place.not_read.append(("%s %s" % (ident, name), why))
-            place.add(scope, False, name, None, None, None if why else place.h.file(length, head), ident, pid)
+            # AK-4: a link's content is a fixed word of its own, so that a file swapped for a link is a change
+            digest = place.h.text(LINK_WORD) if link else None if why else place.h.file(length, head)
+            place.add(scope, False, name, None, None, digest, ident, pid, link=link)
 
 
 def _services(reg, place, deadline, limit):
     names = place.ask("services", lambda: reg.subkeys("HKLM", SERVICES, False))
-    root = place.part("services", None, read=place.given())
+    root = place.part("services", None, read=place.given(), lists=True)
     names = sorted(names or ())
     for n, name in enumerate(names):
         if deadline.passed():
             for later in names[n:]:
                 place.unreached("service " + later, root, CUT_KEY % limit)
             return
-        got = place.ask("service " + name, lambda: reg.values("HKLM", SERVICES + "\\" + name, False))
-        pid = place.part("service " + name, root, read=place.given())
+        ident = "service " + name
+        got = place.ask(ident, lambda: reg.values("HKLM", SERVICES + "\\" + name, False))
+        pid = place.part(ident, root, read=place.given())
+        got = place.bounded(got, ident, pid)   # AK-1: a key at the bound is a part not read
         if got is None:
             continue
         held = {str(n_).lower(): (t, d) for n_, d, t in got}
@@ -592,7 +665,7 @@ def _services(reg, place, deadline, limit):
 def _tasks(reg, place, path, rel, depth, parent, deadline, limit):
     subs = place.ask(("tree " if depth == 0 else "folder ") + rel, lambda: reg.subkeys("HKLM", path, False))
     if depth == 0:
-        parent = place.part("tree", None, read=place.given())
+        parent = place.part("tree", None, read=place.given(), lists=True)
     elif place.last == REFUSED:   # its folders not listed: what was under it is kept, never said as removed
         place.parts[parent]["read"] = False
     if subs is None:
@@ -605,14 +678,17 @@ def _tasks(reg, place, path, rel, depth, parent, deadline, limit):
                 place.unreached("tree " + rel + "\\" + later, parent, CUT_KEY % limit)
             return
         got = place.ask("tree " + sub_rel, lambda: reg.values("HKLM", sub, False))
-        pid = place.part("tree " + sub_rel, parent, read=place.given())
+        pid = place.part("tree " + sub_rel, parent, read=place.given(), lists=True)
+        got = place.bounded(got, "tree " + sub_rel, pid)   # AK-1
         if got is None:   # refused, failed or gone: its folder is not walked (a refused key is counted once)
             continue
         held = {str(n_).lower(): (t, d) for n_, d, t in got}
         ident = held.get("id", (None, None))[1]
         if isinstance(ident, str) and ident:
             body = place.ask("task " + ident, lambda: reg.values("HKLM", TASK_BODIES + "\\" + ident, False))
-            if body is None and place.last == REFUSED:
+            refused = body is None and place.last == REFUSED
+            body = place.bounded(body, "task " + ident, pid)   # AK-1: the body's bound is the tree key's part's
+            if refused:
                 actions = triggers = None
             else:   # AI-5: its actions are its content; its triggers are hashed apart
                 parts = {str(n_).lower(): (t, d) for n_, d, t in body or ()}
@@ -630,6 +706,7 @@ def _tasks(reg, place, path, rel, depth, parent, deadline, limit):
 def _winlogon(reg, place):
     got = place.ask("winlogon", lambda: reg.values("HKLM", WINLOGON, False))
     pid = place.part("winlogon", None, read=place.given())
+    got = place.bounded(got, "winlogon", pid)   # AK-1
     held = {str(n).lower(): (str(n), t, d) for n, d, t in got or ()}
     for want in WINLOGON_VALUES:
         if want.lower() in held:
@@ -645,6 +722,15 @@ def default_folders(environ=None):
     return {scope: os.path.join(environ[var], *STARTUP) if environ.get(var) else None for scope, var in STARTUP_ROOTS}
 
 
+def _default_disk(opener=None, system=None):
+    """The Disk a read uses where none is handed in: on Windows the module's own opener (every sharing, no link
+    followed) and the long form; elsewhere (a test's read) Python's open. `system` is os.name unless a test says."""
+    system = os.name if system is None else system
+    if opener is None:
+        opener = _windows_opener() if system == "nt" else (lambda path: open(path, "rb"))
+    return Disk(opener, long_form=(system == "nt"))
+
+
 def read(registry=None, folders=None, platform=None, clock=None, disk=None, salt=None, deadline=DEADLINE_S,
          opener=None, drive_kind=None, begin=0):
     """One read of every place (AG-1): {"read", "said", "platform", "seconds", "deadline", "begin", "salt_id",
@@ -652,22 +738,28 @@ def read(registry=None, folders=None, platform=None, clock=None, disk=None, salt
     with none handed in nothing is read and `said` is the sentence that says so. The salt is the watcher's (AI-9),
     else the process's own; `salt_id` is a hash of a constant under it, which tells two salts apart and neither.
     The deadline (seconds) bounds the read between keys and files, never inside one call (AI-4, AJ-2): a place it
-    did not reach is `unread`, one it cut keeps what it reached and says the rest not read. The read begins with
-    the step `begin` (STEPS; the watcher gives the one after its last read's). The opener and the drive's kind are
-    Windows' own on Windows (AI-3, AI-4), a test's elsewhere. It never raises: a place whose read fails is
-    `failed`, with its reason."""
+    did not reach is `unread`, one it cut keeps what it reached and says the rest not read. `begin` is the read's
+    number (0 or more): the read begins with the step it names (STEPS, turning), and the users' hives of a step
+    are begun one further each read (AK-2). The opener and the drive's kind are Windows' own on Windows (AI-3,
+    AI-4), a test's elsewhere. It never raises: a place whose read fails is `failed`, with its reason, and a bad
+    `begin` or salt fails the read (AK-5)."""
     platform = sys.platform if platform is None else platform
     clock = clock or time.monotonic
     t0 = _now(clock)
-    hasher = _Hasher(_process_salt() if salt is None else salt)
-    first = int(begin or 0) % len(STEPS)
     result = {"read": False, "said": None, "platform": platform, "seconds": 0.0, "deadline": deadline,
-              "begin": STEPS[first], "salt_id": hasher.text(SALT_ID), "entries": [], "places": {}, "parts": {}}
-    places = {p: _Place(p, hasher) for p in PLACES}
-    hives = _Place(HIVE, hasher)
-    limit = deadline
-    due = _Deadline(clock, t0, deadline)
+              "begin": None, "salt_id": None, "entries": [], "places": {}, "parts": {}}
+    hasher = _Hasher(_process_salt())
     try:
+        if isinstance(begin, bool) or not isinstance(begin, int) or begin < 0:
+            raise ValueError("begin is a read's number, 0 or more")
+        hasher = _Hasher(_process_salt() if salt is None else salt)
+        result["salt_id"] = hasher.text(SALT_ID)
+        first = begin % len(STEPS)
+        result["begin"] = STEPS[first]
+        places = {p: _Place(p, hasher) for p in PLACES}
+        hives = _Place(HIVE, hasher)
+        limit = deadline
+        due = _Deadline(clock, t0, deadline)
         if registry is None:
             if not str(platform).startswith("win"):
                 result["said"] = NOT_WINDOWS % platform
@@ -680,29 +772,29 @@ def read(registry=None, folders=None, platform=None, clock=None, disk=None, salt
                     places[p].failed = "winreg cannot be used (%s)" % _why(exc)
         result["read"] = True
         folders = default_folders() if folders is None else folders
-        if disk is None:
-            disk = Disk(opener if opener is not None else _windows_opener() if os.name == "nt" else
-                        (lambda path: open(path, "rb")))
+        disk = _default_disk(opener) if disk is None else disk
         if drive_kind is None:
             drive_kind = _windows_drive_kind() if os.name == "nt" else _local
-        steps = {"run": (("run", "runonce"), lambda: _run_keys(registry, places, hives, due, limit)),
-                 "startup": (("startup",), lambda: _startup(disk, folders, places["startup"], drive_kind, due, limit)),
-                 "service": (("service",), lambda: _services(registry, places["service"], due, limit)),
-                 "task": (("task",), lambda: _tasks(registry, places["task"], TASK_TREE, "", 0, None, due, limit)),
-                 "winlogon": (("winlogon",), lambda: _winlogon(registry, places["winlogon"]))}
+        memo = {}
+        steps = {"run": lambda: _run_key("run", registry, places, hives, memo, due, limit, begin),
+                 "runonce": lambda: _run_key("runonce", registry, places, hives, memo, due, limit, begin),
+                 "startup": lambda: _startup(disk, folders, places["startup"], drive_kind, due, limit),
+                 "service": lambda: _services(registry, places["service"], due, limit),
+                 "task": lambda: _tasks(registry, places["task"], TASK_TREE, "", 0, None, due, limit),
+                 "winlogon": lambda: _winlogon(registry, places["winlogon"])}
         for name in STEPS[first:] + STEPS[:first]:
-            covers, step = steps[name]
-            if all(places[c].failed is not None for c in covers):   # winreg could not be used
+            if places[name].failed is not None:   # winreg could not be used
                 continue
             if due.passed():   # AI-4: a place the read did not reach is said as not read, with that reason
-                for c in covers:
-                    places[c].cut = places[c].cut or CUT_BEFORE % limit
+                places[name].cut = places[name].cut or CUT_BEFORE % limit
                 continue
             try:
-                step()
-            except Exception as exc:   # never raises: the place failed
-                for c in covers:
-                    places[c].failed = places[c].failed or _why(exc)
+                steps[name]()
+            except Exception as exc:   # never raises: the place failed, and what it had listed is not read (AK-5)
+                places[name].failed = places[name].failed or _why(exc)
+                for q in list(places[name].parts.values()) + (list(hives.parts.values()) if name in
+                                                               ("run", "runonce") else []):
+                    q["read"] = False
         entries = []
         for p in PLACES:
             entries += places[p].entries
@@ -779,7 +871,7 @@ def changes(before, after):
     return {"changes": out, "unread": gone}
 
 
-WATCH_FIELDS = FIELDS + ("sure", "list", "triggers")
+WATCH_FIELDS = FIELDS + ("sure", "list", "link", "triggers")
 KINDS = ("added", "changed", "rescheduled", "read", "removed", "hive loaded", "hive unloaded")
 OTHER_SALT = "a read made with another salt: not taken, and nothing of the base changed (AJ-6)"
 
@@ -799,11 +891,13 @@ class Watcher:
     once as a base taken late, none of its entries said as added. Its salt (AI-9) is random and kept in this
     object alone: read() hands it to the module's read, and it is never printed, written or returned; a read of
     another salt is not taken (AJ-6). Each read begins with the step after the one the read before began with
-    (AJ-2). `given` is what read() takes besides (a test's registry, folders, clock, opener, drive's kind); `salt`
-    is for a reader of the process's own reads alone (the command's, where a reader is handed in)."""
+    (AJ-2, AK-2). `given` is what read() takes besides (a test's registry, folders, clock, opener, drive's kind).
+    It takes no salt (AK-5): `_process` is the command's own flag, for a reader of the process's own reads."""
 
-    def __init__(self, deadline=DEADLINE_S, salt=None, **given):
-        self.__salt = os.urandom(SALT_BYTES) if salt is None else bytes(salt)
+    def __init__(self, deadline=DEADLINE_S, _process=False, **given):
+        if "salt" in given or "begin" in given:   # AK-5: no caller gives a watcher its salt or its turn
+            raise TypeError("a Watcher takes no salt and no begin: its salt is its own, random (AI-9)")
+        self.__salt = _process_salt() if _process else os.urandom(SALT_BYTES)
         self.__id = _Hasher(self.__salt).text(SALT_ID)
         self.given = dict(given, deadline=deadline)
         self.base = None      # part -> {"place", "parent", "hive", "read", "entries": {key: entry}}
@@ -815,7 +909,7 @@ class Watcher:
 
     def read(self):
         result = read(salt=self.__salt, begin=self.begin, **self.given)
-        self.begin = (self.begin + 1) % len(STEPS)
+        self.begin += 1   # AK-2: the read's number: the next read begins one step, and one user, further
         return result
 
     def take(self, result):
@@ -850,11 +944,12 @@ class Watcher:
             return {"changes": [], "unread": said, "late": {}, "first": True, "refused": None}
         base, known, memo, kind_of = self.base, set(self.base), {}, {}
 
-        def gone(pid):   # absent now: gone where its nearest ancestor present now was read now
-            if pid not in memo:
+        def gone(pid):   # absent now: gone where its nearest ancestor present now was read now and lists what
+            if pid not in memo:   # is under it (a fixed key under a hive is not gone for not being asked)
                 q = base.get(pid)
                 parent = q["parent"] if q else (self.pending.get(pid) or (None,))[0]
-                memo[pid] = False if parent is None else usable(parent) if parent in parts else gone(parent)
+                memo[pid] = False if parent is None else (usable(parent) and bool(parts[parent].get("lists"))) \
+                    if parent in parts else gone(parent)
             return memo[pid]
 
         def kind(pid):
@@ -868,8 +963,8 @@ class Watcher:
                     k = "new" if self.pending[pid][1] else "late"
                 elif parent is None:
                     k = "late"
-                elif parent in known:
-                    k = "loaded" if q["hive"] else "new"
+                elif parent in known:   # under a part read before: new where that part lists what is under it
+                    k = ("loaded" if q["hive"] else "new") if base[parent].get("lists") else "late"
                 elif parent in parts:
                     up = kind(parent)
                     k = "hive" if up in ("loaded", "hive") else up
@@ -950,7 +1045,7 @@ class Watcher:
     @staticmethod
     def _hive(kind, pid, n):
         return {"place": HIVE, "scope": "user", "view32": False, "name": "a user's hive", "program": None,
-                "sure": None, "list": False, "sha256": None, "triggers": None, "key": pid, "change": kind,
+                "sure": None, "list": False, "link": False, "sha256": None, "triggers": None, "key": pid, "change": kind,
                 "entries": n}
 
 
@@ -994,7 +1089,9 @@ def change_line(round_no, c):
         words += " of the %s" % c["scope"]
     if c.get("view32"):
         words += ", 32-bit view"
-    if c["change"] == "added" and c.get("sha256") is None:
+    if c.get("link"):
+        words += ", a link (not opened or followed)"
+    elif c["change"] == "added" and c.get("sha256") is None:
         words += ", content not read"
     if c.get("list"):
         words += " (a list of programs)"
@@ -1029,7 +1126,7 @@ def main(argv=None, out=None, reader=None, sleep=None, watcher=None):
         print("python -m raqib.autostart: --rounds is 1 or more and --every 0 or more", file=sys.stderr)
         return 2
     if watcher is None:   # a reader handed in reads with the process's salt; the watcher takes them so
-        watcher = Watcher(salt=_process_salt()) if reader is not None else Watcher()
+        watcher = Watcher(_process=True) if reader is not None else Watcher()
     reader = reader or watcher.read
     first = reader()
     watcher.take(first)

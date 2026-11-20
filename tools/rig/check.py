@@ -873,7 +873,8 @@ def read_autostart(facts):
     AUTOSTART_ACTS, the names tools/rig/workload.py gives them) is an `added` change and, in a later read, a
     `removed` one; no WORKLOAD line says the stand-in's delete of its Startup file failed; and the file the run held
     open with no sharing across one read was made, said as `added` by the first read that listed it - the read
-    made while it was held, its content not read - and removed after (AJ-7). MISSED
+    made while it was held, its content not read - read by a later read after it was let go (AK-7), and removed
+    after (AJ-7). MISSED
     otherwise, with what is missing and the reads that left a place unread (facts None, not run on Windows, an
     error: silence is a finding); n/a off Windows. Its words name every other change by its kind and place (one
     nobody of the rig made: Windows moves some of its own tasks). It never raises: facts that cannot be read are
@@ -922,11 +923,14 @@ def read_autostart(facts):
             missing.append("the read that first listed the held file was not the one made while it was held with"
                            " its content not read (read %s: held %s, content %s)" % (
                                listed[0].get("round"), listed[0].get("held"), listed[0].get("content")))
+        elif not [r for r in held.get("reads") or [] if isinstance(r, dict) and r.get("held") is False
+                  and r.get("content") == "read" and (r.get("round") or 0) > (listed[0].get("round") or 0)]:
+            missing.append("no later read, after the held file was let go, read its content (AK-7)")
         elif held.get("removed") is not True:
             missing.append("the held file was not removed after (it may be left in the Startup folder)")
         else:
-            seen.append("the held file added in read %s while held, its content not read, and removed after" %
-                        listed[0].get("round"))
+            seen.append("the held file added in read %s while held, its content not read, read after it was let"
+                        " go, and removed after" % listed[0].get("round"))
         ours = {(p, w.lower()) for p, w in AUTOSTART_ACTS} | {("startup", AUTOSTART_HELD)}
         others = {}
         for c in changes:
