@@ -414,19 +414,27 @@ os_doc(R + "NET-ADMIN-PORT/positive-admin-ports.json", os_export(75201, 4950, [
     ("net", "04.200", 4970, PWSH, "fd00::25", 445), ("net", "04.300", 4970, PWSH, "::ffff:192.168.1.21", 5986)]),
     4950, cite=lambda r: r["tool"] == "net")
 # Not this rule's: loopback, link-local (IPv4, IPv6) and public 22, private 443, a connection accepted on 22 (the
-# listener's own port), an ssh started by git, a 22 whose Initiated is not read.
+# listener's own port), an ssh started by git. (A 22 whose Initiated is not read is negative-initiated-unread.json's,
+# M15.2b: it is no longer judged, so it would leave this file unmeasured.)
 os_doc(R + "NET-ADMIN-PORT/negative-not-admin.json", os_export(75301, 4951, [
     ("proc", "02.000", 4961, PWSH, 4951, OS.AGENT),
     ("net", "02.100", 4961, PWSH, "127.0.0.1", 22), ("net", "02.200", 4961, PWSH, "169.254.10.20", 22),
     ("net", "02.300", 4961, PWSH, "fe80::1", 22), ("net", "02.400", 4961, PWSH, "203.0.113.7", 22),
     ("net", "02.500", 4961, PWSH, "192.168.1.20", 443), ("net", "02.600", 4961, PWSH, "192.168.1.20", 22, "false"),
-    ("net", "02.700", 4961, PWSH, "192.168.1.20", 22, "-"),
     ("proc", "03.000", 4971, OS.GIT, 4951, OS.AGENT), ("proc", "03.100", 4981, OS.GIT_SSH, 4971, OS.GIT),
     ("net", "03.200", 4981, OS.GIT_SSH, "10.0.0.5", 22)]), 4951)
 # A net line written before M15.1 (no initiated, dest_scope, image, parent_image): not judged (partial), never fired.
 os_doc(R + "NET-ADMIN-PORT/negative-before-the-keys.json", os_export(75401, 4952, [
     ("proc", "02.000", 4962, PWSH, 4952, OS.AGENT), ("net", "02.100", 4962, PWSH, "192.168.1.20", 22)]), 4952,
     strip=("initiated", "dest_scope", "image", "parent_image"))
+# ADR-0014 AE-1 (M15.2b): a 22 of a private address whose Initiated is not read - absent, empty, another word - has no
+# initiated key (os-sysmon's own lines): not judged (partial, said), never fired. A public 22 of the same kind is
+# false whatever it was, so it is judged and needs no note.
+os_doc(R + "NET-ADMIN-PORT/negative-initiated-unread.json", os_export(75901, 4953, [
+    ("proc", "02.000", 4963, PWSH, 4953, OS.AGENT),
+    ("net", "02.100", 4963, PWSH, "192.168.1.20", 22, "-"), ("net", "02.200", 4963, PWSH, "10.0.0.5", 3389, ""),
+    ("net", "02.300", 4963, PWSH, "fd00::25", 445, "maybe"), ("net", "02.400", 4963, PWSH, "203.0.113.7", 22, "-")]),
+    4953)
 # M15.2 (ADR-0014 Amendment B, AB-1, AB-2): PERSIST-RUN-KEY. Its os lines are os-sysmon's own (os_sysmon.build) of
 # SYNTHETIC exports holding events 13 in the four measured shapes of TargetObject and the two they imply (a made-up
 # SID, made-up value names, harmless value text only).

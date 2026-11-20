@@ -325,44 +325,6 @@
   {
    "cwd": "C:\\work\\proj",
    "input_meta": {
-    "dest_port": 22,
-    "dest_private": true,
-    "dest_scope": "private",
-    "image": "powershell",
-    "initiated": null,
-    "parent_image": "agent"
-   },
-   "input_sha256": "52aa3ef0c0ebf7d9290b335db628b117a35c6166226c2e92f5f66acb0e73108d",
-   "phase": "pre",
-   "seq": 10,
-   "session_id": "os-4951",
-   "source": "os",
-   "tool": "net",
-   "ts": "2026-11-03T09:00:02.700Z"
-  },
-  {
-   "cwd": "C:\\work\\proj",
-   "input_meta": {
-    "dest_port": 22,
-    "dest_private": true,
-    "dest_scope": "private",
-    "image": "powershell",
-    "initiated": null,
-    "parent_image": "agent"
-   },
-   "input_sha256": "52aa3ef0c0ebf7d9290b335db628b117a35c6166226c2e92f5f66acb0e73108d",
-   "ok": true,
-   "output_meta": {},
-   "phase": "post",
-   "seq": 10,
-   "session_id": "os-4951",
-   "source": "os",
-   "tool": "net",
-   "ts": "2026-11-03T09:00:02.700Z"
-  },
-  {
-   "cwd": "C:\\work\\proj",
-   "input_meta": {
     "command_head": "git.exe",
     "command_programs": [
      "git.exe"
@@ -374,7 +336,7 @@
    },
    "input_sha256": "0baaf9aac47c93eef4cdada3049cf95f18785021ff043bf4176cb9f9f5ef82c9",
    "phase": "pre",
-   "seq": 11,
+   "seq": 10,
    "session_id": "os-4951",
    "source": "os",
    "tool": "process",
@@ -396,7 +358,7 @@
    "ok": true,
    "output_meta": {},
    "phase": "post",
-   "seq": 11,
+   "seq": 10,
    "session_id": "os-4951",
    "source": "os",
    "tool": "process",
@@ -412,11 +374,11 @@
     "depth": 2,
     "image": "ssh",
     "parent_image": "git",
-    "parent_seq": 11
+    "parent_seq": 10
    },
    "input_sha256": "b4b6813d49ba1be72b5aba0290735dc6e938c3a67e4338c05f4bbd59d8e0b1ad",
    "phase": "pre",
-   "seq": 12,
+   "seq": 11,
    "session_id": "os-4951",
    "source": "os",
    "tool": "process",
@@ -432,13 +394,13 @@
     "depth": 2,
     "image": "ssh",
     "parent_image": "git",
-    "parent_seq": 11
+    "parent_seq": 10
    },
    "input_sha256": "b4b6813d49ba1be72b5aba0290735dc6e938c3a67e4338c05f4bbd59d8e0b1ad",
    "ok": true,
    "output_meta": {},
    "phase": "post",
-   "seq": 12,
+   "seq": 11,
    "session_id": "os-4951",
    "source": "os",
    "tool": "process",
@@ -456,7 +418,7 @@
    },
    "input_sha256": "724a77f4c2e498f1fb874860c1364190be93f74d9c5d01208f765c09200f6321",
    "phase": "pre",
-   "seq": 13,
+   "seq": 12,
    "session_id": "os-4951",
    "source": "os",
    "tool": "net",
@@ -476,7 +438,7 @@
    "ok": true,
    "output_meta": {},
    "phase": "post",
-   "seq": 13,
+   "seq": 12,
    "session_id": "os-4951",
    "source": "os",
    "tool": "net",
@@ -485,7 +447,7 @@
   {
    "cwd": "C:\\work\\proj",
    "phase": "session_end",
-   "seq": 14,
+   "seq": 13,
    "session_id": "os-4951",
    "source": "os",
    "tool": "-",
