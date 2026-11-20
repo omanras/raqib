@@ -299,8 +299,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build: [this, main]
-        try: [1, 2, 3, 4]
+        build: [this]
+        try: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       PYTHONUTF8: "1"
     steps:

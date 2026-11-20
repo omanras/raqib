@@ -2626,6 +2626,16 @@ class HostWatch:
             if note["status"] != "disabled":
                 text = "round %d: rule %s %s: %s" % (n, note["rule_id"], note["status"], note["detail"])
                 self._hole(now, "host-rule", text)
+        try:   # PROBE ONLY (never merged): the inventory's holes of each round, and its trees
+            import json as _j
+            import os as _o
+            with open(_o.path.join(_o.path.expanduser("~"), ".raqib", "host", "round-debug.log"), "a") as _d:
+                _d.write(_j.dumps({"round": n, "at": ts, "holes": [str(h)[:300] for h in (inv.get("holes") or [])],
+                                   "trees": [[t.get("pid"), t.get("image"), t.get("class"), len(t.get("children") or ()),
+                                              len(t.get("remotes") or ())] for t in (inv.get("trees") or [])]},
+                                  default=str) + "\n")
+        except Exception:
+            pass
         record = {"round": n, "at": ts, "seconds": round(seconds, 3), "late": late, "error": None,
                   "sample": sample, "records": inv.get("records"), "holes": len(inv.get("holes") or []),
                   "incomplete": list(inv.get("incomplete") or []), "result": inv.get("result"),

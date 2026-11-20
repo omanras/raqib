@@ -77,3 +77,30 @@ for path in sorted(glob.glob(os.path.join(home, "sources", "*.jsonl"))):
             if '"phase":"pre"' in line and '"tool":"process"' in line and '"image":"reg"' in line:
                 regs += 1
 print("process lines of reg in the stand-in's source: %d (the stand-in started reg 46 times before its undo)" % regs)
+
+debug = os.path.join(home, "follow-debug.log")
+try:
+    with open(debug, encoding="utf-8", errors="replace") as fh:
+        rows = [line.strip() for line in fh if pid is not None and ('"pid": %s,' % pid) in line]
+    print("the follow's passes of the stand-in's tree (probe only), %d; the last 14:" % len(rows))
+    for row in rows[-14:]:
+        print("   ", row[:420])
+except OSError as exc:
+    print("follow-debug:", type(exc).__name__)
+
+try:
+    import collections
+    seen = collections.Counter()
+    with open(os.path.join(home, "round-debug.log"), encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            d = json.loads(line)
+            if not 10 <= d.get("round", 0) <= 20:
+                continue
+            mine = [t for t in d.get("trees") or [] if pid is not None and str(t[0]) == str(pid)]
+            new = [h for h in d.get("holes") or [] if not seen[h]]
+            for h in d.get("holes") or []:
+                seen[h] += 1
+            print("round %s at %s: holes %d; the stand-in's tree in the inventory: %s; holes not seen before: %s" % (
+                d.get("round"), d.get("at"), len(d.get("holes") or []), mine, [h[:260] for h in new][:4]))
+except (OSError, ValueError) as exc:
+    print("round-debug:", type(exc).__name__)

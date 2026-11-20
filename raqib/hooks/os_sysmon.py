@@ -1142,6 +1142,18 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
             append(log, marked + lines)
         out.write("raqib os-sysmon: follow pass %d: %d events of the tree under pid %d -> %s; %d RAQIB-SILENCE"
                   " line(s)\n" % (passes, max(0, (len(lines) - 2) // 2), pid, log, len(marked)))
+        try:   # PROBE ONLY (never merged): one line per pass, to find why a tree's last lines were lost
+            import time as _t
+            with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(log))), "follow-debug.log"), "a") as _d:
+                _d.write(json.dumps({"at": _t.strftime("%H:%M:%S", _t.gmtime()), "pid": pid, "pass": passes, "top": top,
+                                     "reg_top": (tree or {}).get("registry_top"), "text": len(text or ""),
+                                     "failed": failed, "second": None if second is None else len(second),
+                                     "second_failed": second_failed, "lines": len(lines),
+                                     "members": len((tree or {}).get("members") or (tree or {}).get("by_guid") or ()),
+                                     "keys": sorted((tree or {}).keys()),
+                                     "restart": str((tree or {}).get("restart"))}) + "\n")
+        except Exception as _e:
+            pass
         if on_read is not None:
             on_read(passes, failed is None, failed)
         if on_pass is not None:
