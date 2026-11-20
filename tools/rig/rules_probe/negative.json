@@ -1,0 +1,52 @@
+{
+ "lines": [
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-20T09:00:00.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 80,
+    "dest_private": false
+   },
+   "input_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-20T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "dest_port": 80,
+    "dest_private": false
+   },
+   "input_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "net",
+   "ts": "2026-11-20T09:00:01.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 3,
+   "session_id": "os-4700",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-20T09:00:02.000Z"
+  }
+ ]
+}

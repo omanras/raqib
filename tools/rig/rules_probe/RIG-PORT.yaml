@@ -1,0 +1,22 @@
+# Probe only: a rule a person wrote by hand, added with `raqib rules --add` (the rig's check of adding and removing).
+id: RIG-PORT
+title: The rig's own rule, added by file
+class: USER
+kind: signature
+evasion:
+  - "another port: only 443 is matched"
+severity: high
+fp_budget: 0
+description: "A line of the os source for a connection to port 443 (the stand-in's own talk on the rig)."
+summary: "{tool} connects to port {input_meta.dest_port} at seq {seq}"
+match:
+  all:
+    - {field: phase, eq: pre}
+    - {field: source, eq: os}
+    - {field: tool, eq: net}
+    - {field: input_meta.dest_port, eq: 443}
+fixtures:
+  positive:
+    - positive.json
+  negative:
+    - negative.json
