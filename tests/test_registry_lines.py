@@ -392,6 +392,18 @@ def test_e1_a_cut_of_the_other_answer_holds_the_value_above_it_for_the_next_pass
     assert silent == [os_sysmon.silence_line(4950, os_sysmon.FOLLOW_CUT % (2, 2, 79002))]
 
 
+def test_e1_a_members_value_above_a_cut_is_held_and_is_a_line_once(tmp_path):
+    # the second review, K11: the value's process is a member already (its start is below the cut); only its record
+    # is above the cut. Without the hold at the cut it would be a line in this pass and again in the next
+    x = export([("proc", "01.000", 4970, REG, 4950, SYN.AGENT), ("proc", "01.100", 4980, CMD, 4950, SYN.AGENT),
+                ("reg", "01.200", 4970, REG, USER + "Run\\RaqibTestA")])
+    channel = Wevtutil(chunks(x))   # 79001 root, 79002 reg.exe (the cut of 2), 79003 cmd, 79004 reg.exe's value
+    lines, silent, tops = follow(channel, 2, tmp_path, cap=2)
+    assert tops == [(1, 79002, None), (2, 79003, 79004)]
+    assert names(lines) == ["RaqibTestA"]                                        # once
+    assert [r["tool"] for r in lines if r["phase"] == "pre"] == ["process", "process", "process", "registry"]
+
+
 def test_e1_a_failed_other_read_takes_no_value_and_the_registrys_bound_does_not_move(tmp_path):
     now, grow = grown()
     channel = Wevtutil(now, grow, fail={2})   # pass 1's other question does not return
@@ -586,7 +598,7 @@ def test_e5_the_watch_knows_registry_and_judge_source_gives_one_high_source_find
     assert "PERSIST-RUN-KEY" not in {r.id for r in host.source_rules(RULES, host_lines=True)}
 
 
-CLAUSE = "; this follow does not read the registry (Sysmon event 13): no value it sets is a line here"
+CLAUSE = "; this follow does not read the registry (Sysmon event 13): no value the tree sets is a line here"
 
 
 class NamesRegistry:

@@ -192,7 +192,7 @@ REGISTRY_EVENT = 13
 REGISTRY_READ = (REGISTRY_EVENT,)
 REGISTRY_TOOL = "registry"
 TOOLS = {1: "process", 11: "file", 3: "net", REGISTRY_EVENT: REGISTRY_TOOL}
-REGISTRY_CAP = 500                # AB-3: a follow's second question, at most this many events 13 per pass
+REGISTRY_CAP = 500                # AB-3, AC-1: a follow's question for event 13, at most this many a pass
 # AB-2, AC-3: anything below ...\CurrentVersion\Run or \RunOnce of a user's hive (HKU\<a SID>) or the machine's,
 # with or without \Wow6432Node after SOFTWARE, any case; the whole key, anchored at both ends (never RunNotification);
 # what follows the key is the value's name (a backslash in it: `nested`); a target that ends at the key or with a
@@ -372,10 +372,13 @@ EMPTY_GUID = ("Sysmon wrote an empty ProcessGuid (all zeros) for a process or fo
               " process. Those events are joined by the pid they name; a pid taken again is not told apart there")
 
 
+EMPTY_GUID_TEXT = re.compile(r"\{?0{8}-0{4}-0{4}-0{4}-0{12}\}?\Z")
+
+
 def empty_guid(value):
-    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: all zeros."""
-    value = (value or "").strip()
-    return bool(value) and not value.strip("{}-0")
+    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: a GUID of zeros
+    (and nothing else: `-`, `0` or an empty text is not it)."""
+    return bool(EMPTY_GUID_TEXT.match((value or "").strip()))
 
 
 def _event_guid(value):
@@ -1100,7 +1103,8 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     (round_query over REGISTRY_READ, round_args with REGISTRY_CAP), through
     the same reader and helpers, then the first question, to the byte what
     it was: every event 13 the pass takes was logged before the other
-    question was asked, so its process's start is in that answer or an
+    question was asked, so (where Sysmon logs a process's start before its
+    value: not measured) its process's start is in that answer or an
     earlier one. It asks after its own bound (tree's "registry_top", kept
     with the tree, so a follow attached again reads none twice), or,
     before it has one, since the start (with no start: after after_record);

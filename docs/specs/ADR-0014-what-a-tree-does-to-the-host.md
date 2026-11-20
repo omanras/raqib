@@ -240,3 +240,24 @@ fresh reg.exe at a moment of its own, each undone):
 - AC-9 (the lines that stopped). M15.2 does not merge until the two runs' cause is found, or shown to be main's
   own (then it is recorded and ruled apart). The probe branch carries, for the probe only, one line for each
   pass of a follow and for each round's sources.
+
+## Amendment D (the Table, 2026-11-20) - the second review (docs/review/2026-11-20-M15.2-redo.md): M15.2 lands
+The reviewer said NEXT: the REDO does what Amendment C rules, the questions are asked in the ruled order, and
+the fake channel of its tests grows between the two questions of a pass. In the field (the probe branch
+f94b9bd, GitHub's Windows machine, the build that lands): thirteen runs, 40 values each by a fresh reg.exe at
+a moment of its own - every one a line and a PERSIST-RUN-KEY finding, where the first build lost one to three
+in four runs of seventeen; a value whose name holds a backslash was a finding that says so.
+- AD-1 (AC-9 is met). The lines that stopped were Sysmon's empty ProcessGuid, main's own fault, found and
+  ruled as ADR-0007 Amendment BV; its fix rides on this branch and was read by the same reviewer. With it, a
+  run whose channel held eleven such starts wrote every child (the probe's build of the same change).
+- AD-2 (said as it is; the review's must-fix items). The order Sysmon logs a process's start and its value in
+  is not measured: AC-1 closes F1 where the start is logged first, and the documents say that, not more. A
+  value whose name ends with a backslash is no line and nothing says so: said, not measured. The round counts
+  an event of any kind that named its process by an empty ProcessGuid, not a start alone. What BV's join by
+  pid costs is said whole (ADR-0007 BV-3). An empty ProcessGuid is a GUID of zeros and nothing else.
+- AD-3 (recorded, each for its own measurement or ruling). Whether Sysmon ever logs a value before its own
+  process's start; whether Windows runs a value under a key below Run, one whose name holds or ends with a
+  backslash, or one under a user's 32-bit view; whether the follow's word on an empty ProcessGuid belongs in a
+  tree's source only where that tree's own event was joined by pid; whether a child joined by its parent's pid
+  should carry that parent's mark of a nested root; a placeholder of the rules' sentences chosen by a boolean
+  (the nested clause is printed on every finding until then); AA-3 and AA-4 (M15.2b).

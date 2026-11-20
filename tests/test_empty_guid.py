@@ -101,7 +101,7 @@ def test_bv1_a_parent_pid_that_is_not_the_trees_is_still_not_the_trees():
 
 def test_bv1_the_words_empty_and_given():
     assert os_sysmon.empty_guid(ZERO) and os_sysmon.empty_guid(ZERO.strip("{}")) and discover.empty_guid(ZERO)
-    for given in (SYN.pguid_of(5001), "", None, "{00000000-0000-0000-0000-000000000001}"):
+    for given in (SYN.pguid_of(5001), "", None, "{00000000-0000-0000-0000-000000000001}", "-", "0", "{}", "--"):
         assert not os_sysmon.empty_guid(given) and not discover.empty_guid(given)
     assert os_sysmon._event_guid(ZERO) is None and os_sysmon._event_guid(SYN.pguid_of(5001)) == SYN.pguid_of(5001)
     assert discover._guid_text(ZERO) is None and discover._guid_text(SYN.pguid_of(5001)) == SYN.pguid_of(5001)
@@ -118,7 +118,28 @@ def test_bv1_the_round_keys_the_start_by_its_parents_pid_and_says_how_many():
     assert not any(r.get("guid") == ZERO or r.get("pguid") == ZERO for r in records)
     _, holes = discover._guid_instances(records)
     said = [h for h in holes if "empty ProcessGuid" in h]
-    assert len(said) == 1 and said[0].startswith("1 process start(s) of this round's channel")
+    assert len(said) == 1 and said[0].startswith("1 event(s) of this round's channel")
     assert not any(ZERO in h for h in holes)                         # no process "of its own" made of the zeros
     _, quiet = discover._guid_instances(discover.parse_sysmon(export(forgotten=False), keyed=True)[0])
     assert not any("empty ProcessGuid" in h for h in quiet)
+
+
+def test_bv1_an_event_of_another_kind_with_an_empty_guid_is_counted_by_the_round_too():
+    def more(x):
+        x.file("03.000", 5001, CMD, "C:\\Users\\user\\AppData\\Local\\Temp\\by-an-unheld-process.txt", guid=ZERO)
+    records, _ = discover.parse_sysmon(export(forgotten=False, more=[more]), keyed=True)
+    assert sum(1 for r in records if r.get("guid_empty")) == 1 and not any(r.get("guid") == ZERO for r in records)
+    _, holes = discover._guid_instances(records)
+    assert [h for h in holes if "empty ProcessGuid" in h][0].startswith("1 event(s) of this round's channel")
+
+
+def test_bv2_an_image_of_a_dash_is_unread_never_a_programs_name():
+    assert os_sysmon.program_name("-") is None and os_sysmon.program_name(" - ") is None
+    assert os_sysmon.program_name("C:\\Windows\\System32\\reg.exe") == "reg.exe"
+    x = SYN.Export(first_record=81001)
+    x.proc("00.100", ROOT_PID, SYN.AGENT, '"%s"' % SYN.AGENT, 900, SYN.EXPLORER, "C:\\Windows\\Explorer.EXE")
+    x.proc("02.000", 5002, "-", "-", ROOT_PID, SYN.AGENT, '"%s"' % SYN.AGENT)      # Sysmon holds no image of it
+    lines, _ = os_sysmon.build(x.text(), ROOT_PID)
+    child = [d for d in pres(lines) if d["tool"] == "process"][1]["input_meta"]
+    assert child.get("command_unread") is True and "command_head" not in child and child["image"] is None
+    assert discover._held("-") is None and discover._held(" - ") is None and discover._held("x") == "x"

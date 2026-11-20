@@ -3884,7 +3884,7 @@ class HostWatch:
         except (TypeError, ValueError):
             registry = False
         if not registry:
-            since += "; this follow does not read the registry (Sysmon event 13): no value it sets is a line here"
+            since += "; this follow does not read the registry (Sysmon event 13): no value the tree sets is a line here"
         src = TreeSource("os", "os: Sysmon, rooted at pid %s%s: %s%s" % (t.get("pid"), guid, path, since), path=path,
                          feeds=[feed, host_feed], word="os: Sysmon, rooted at pid %s%s" % (t.get("pid"), guid),
                          also_host=True)
