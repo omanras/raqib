@@ -293,13 +293,14 @@ jobs:
           python tools\rig\pubconf_read.py $env:RUNNER_TEMP\channel.xml
 
   effects:
-    name: what an agent's three acts leave (the field test of 2026-11-20; M15; raqib of ${{ matrix.build }})
+    name: what an agent's three acts leave (the field test of 2026-11-20; M15; raqib of ${{ matrix.build }}, try ${{ matrix.try }})
     runs-on: windows-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         build: [this, main]
+        try: [1, 2, 3, 4]
     env:
       PYTHONUTF8: "1"
     steps:

@@ -67,3 +67,13 @@ for path in sorted(glob.glob(os.path.join(home, "sources", "*.jsonl"))):
             many.update(re.findall(r"RaqibRigMany\d\d", line))
 print("of the 40 values set one by one, each by a fresh reg.exe: %d are a registry line (missing: %s)" % (
     len(many), sorted(set("RaqibRigMany%02d" % i for i in range(40)) - many)))
+
+regs = 0
+for path in sorted(glob.glob(os.path.join(home, "sources", "*.jsonl"))):
+    if pid is None or ("-%s-" % pid) not in os.path.basename(path) or path.endswith("-host.jsonl"):
+        continue
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if '"phase":"pre"' in line and '"tool":"process"' in line and '"image":"reg"' in line:
+                regs += 1
+print("process lines of reg in the stand-in's source: %d (the stand-in started reg 46 times before its undo)" % regs)
