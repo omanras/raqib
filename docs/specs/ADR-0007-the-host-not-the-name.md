@@ -3197,3 +3197,45 @@ samples. Its result was the machine's own (a runner's process made an unknown tr
   The rounds before a helper's first line. One line that is no line costs three late rounds and the one
   restart: whether that is meant. X35 and the reader's bounds. A loss after a retired helper's last answer is
   not known, and is to be said so.
+
+## Amendment BY (the Table, 2026-11-20) - M14.1c: the round takes the reader's processes (BU-6, BX-5)
+On Linux a child that begins and ends between two samples was in no round: the commander's field test of
+2026-11-20 lost every short curl, wget and shred of a named agent. The reader hears them (M14.1a), in a
+process of its own that the watch asks each round (M14.1b: on GitHub's Ubuntu, 210 of 210 processes of a watch
+began and ended between two samples). This task gives them to the round. Read in discover's own code before
+ruling: the anchor is one for every source - each process record goes to its nearest talking ancestor as an
+act, and an act is its tree's child, its HostChild line, and so what NET-TOOL and DESTRUCT-CMD read. On
+Windows the round's channel gives such records (Sysmon's event 1); on Linux the reader gives them.
+- BY-1 (the records). Each round the watch gives discover what the helper's answers held since the last
+  round, as a source of its own kind beside the sample: for each process its pid, the parent the kernel named,
+  its program (the path the reader read, or unread), the kernel's start ticks (the key the sample makes of a
+  process's start), when it began, and when and how it ended where that was heard. No argument: the reader
+  reads none. A record is one process by its pid and its start ticks together; where the ticks were not read,
+  by its pid and the time its fork was heard, and that is said.
+- BY-2 (what the round does with them). A process the reader gave is a process of the round as a sampled one
+  is: it is linked to its parent, anchored to its nearest talking ancestor, and counted as that tree's act and
+  child. Where the sample holds the same process (the same pid and start), the two are one. A tree that is a
+  candidate only by what the reader gave is treated as one that is so only by the channel on Windows (AA-1).
+  FOR: the short programs an agent starts are its tree's children, judged by the rules that read a child's
+  name. MUST NOT TOUCH: Windows, to the byte; a Linux round whose helper gave nothing is the round it was.
+- BY-3 (what it is not yet). A tree needs a talker, and a connection that opens and closes between two
+  samples is still unseen (M14.2): a whole tree that lives between two samples is not made by this task, a
+  child's own connections are not read, and the documents say so.
+- BY-4 (a name is text a process chose, and a line is the helper's word). A program's name reaches a line
+  only through the gate a sampled child's name goes through. A process whose program was not read gives no
+  child line and is counted, not said as a hole each time. The helper's lines are not proof of who wrote
+  them (BX-5): what is judged from them is said to come from the reader, and the threat model says what a
+  process of the same user could make the watch write.
+- BY-5 (when the reader is not whole). Where the kernel refuses the reader at the watch's start (a container,
+  a right not given), the machine does not give this source: a blind spot of the run, as before, and the round
+  is the sample's alone. Where a reader that answered then stopped answering, ended, lost events or passed a
+  bound, something that was being judged has a gap: a hole of the result, said with the round it began in.
+  After a loss every word of the reader about ends is a hint (BT-5): a process is ended for the round only
+  when the sample no longer holds it.
+- BY-6 (the watch's own, and the helper's start). The watch's own short helpers (the socket tool it runs each
+  round) are recorded as its own when they start, so the reader's word of them is the watch's tree and no
+  stranger's. An interpreter replaced on disk while the helper runs is still the helper's (BW-9). The helper
+  always runs isolated: its path is given to it, so it needs nothing of the user's environment or site
+  folder. The ask is written so that it cannot block.
+- BY-7 (the rig). On Linux the stand-in starts a network tool that lives under a second; X36 is MET where a
+  NET-TOOL finding of the stand-in's tree names it, MISSED where the stand-in ran it and none does.
