@@ -216,12 +216,14 @@ every folder, whatever their modes. The hardening narrows what such a defect doe
 
 ## The helper of the process events
 
-As every watch on Linux, the unit's watch starts the helper of the process events (ADR-0007 Amendment BU;
+As every watch on Linux, the unit's watch starts the helper of the process events (ADR-0007 Amendments BU and BW;
 docs/specs/PROC-EVENTS.md): a child of the unit's process that runs the reader of the kernel's process events and
-answers the watch over its own input and output. It runs under the unit's limits, which already let the reader
-hear (measured under them: the two capabilities, AF_NETLINK allowed), and it is ended with the unit: it ends when
-its input ends, and systemd ends the unit's processes at its stop. What it heard is counted in the watch's report,
-not judged; the rig's service run says whether the unit's watch heard.
+answers the watch over its own input and output. The unit runs `-I`, so the helper is started with `-I` and the
+unit's own import path. It runs under the unit's limits, which already let the reader hear (measured under them:
+the two capabilities, AF_NETLINK allowed), and it is ended with the unit: it ends when its input ends, and systemd
+ends the unit's processes at its stop. What it heard is counted in the watch's report, not judged. No run of the
+rig reads the unit's own watch yet: the rig's X35 reads a user's watch, and whether the unit's watch heard is not
+checked (M12.3).
 
 ## Where the record is
 

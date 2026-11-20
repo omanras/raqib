@@ -275,15 +275,18 @@ def test_x32_to_x34_are_not_judged_without_an_os_source_or_where_the_act_was_not
     assert {s for s, _ in got.values()} == {check.SKIP} and "did not do it" in got["X33"][1]
 
 
-# --- X35 (ADR-0007 BU-5): the watch's own count of the process events ---------------------------------------------
+# --- X35 (ADR-0007 BU-5, BW-7): the watch's own count of the process events -------------------------------------
 LINUX_WORKLOAD = ("WORKLOAD 07:50:35 pid 9828\nWORKLOAD 07:50:35 talking\nWORKLOAD 07:50:43 start curl\n"
                   "WORKLOAD 07:50:55 start curl\nWORKLOAD 07:50:56 end curl rc=0\nWORKLOAD 07:51:15 done\n")
 EVENTS_SECTION = ("PROCESS EVENTS (Linux): the kernel's process events, read by a helper process of the watch's own;"
                   " not judged yet: no rule reads them, no line of a tree's source is written from them\n"
                   "  rounds asked: 16, answered: 16\n"
-                  "  processes that began: 41; of them began and ended between two samples: 37\n"
-                  "  programs not read: 0\n"
+                  "  processes that began: 41; of them began and ended between two asks: 37\n"
+                  "  programs not read: 0 (reads at an exec that failed)\n"
+                  "  past the reader's bounds: 0\n"
                   "  lost: none\n")
+RESTART = ("  started again, round 4: ended: the helper of the process events ended (its output ended); it is started"
+           " again, once; nothing was heard between the end of the helper before and this start\n")
 
 
 def x35(section=EVENTS_SECTION, workload=LINUX_WORKLOAD, platform="linux"):
@@ -293,24 +296,35 @@ def x35(section=EVENTS_SECTION, workload=LINUX_WORKLOAD, platform="linux"):
     return state, words
 
 
-def test_x35_met_where_the_section_says_the_stand_ins_children_began_and_nothing_was_lost():
+def test_x35_met_only_where_every_ask_was_answered_no_restart_nothing_lost_and_the_children_began_a_floor():
     state, words = x35()
-    assert state == check.MET and words.startswith("41 process(es) began, the stand-in started 2 child(ren)")
+    assert state == check.MET and words.startswith("16 of 16 round(s) answered; at least the stand-in's 2 child(ren)"
+                                                   " began (41 process(es) of the machine: a floor")
     assert x35(section=EVENTS_SECTION.replace("began: 41", "began: 2"))[0] == check.MET
-    with_hole = EVENTS_SECTION + "  hole, round 3: late: the helper's answer did not come within 2 s\n"
-    state, words = x35(section=with_hole)
-    assert state == check.MET and "hole, round 3: late" in words
+    assert x35(section=EVENTS_SECTION.replace("answered: 16", "answered: 16; before the helper was ready: 2"))[0] \
+        == check.MET
 
 
-def test_x35_missed_where_the_section_is_absent_short_lost_or_refused_on_a_kernel_that_answers():
-    assert x35(section="")[0] == check.MISSED and "holds no PROCESS EVENTS" in x35(section="")[1]
-    state, words = x35(section=EVENTS_SECTION.replace("began: 41", "began: 1"))
-    assert state == check.MISSED and "1 process(es) began, fewer than the 2" in words
-    state, words = x35(section=EVENTS_SECTION.replace("lost: none", "lost: ENOBUFS 1 time(s), at least 4 event(s)"))
-    assert state == check.MISSED and "lost: ENOBUFS 1 time(s)" in words
-    refused = EVENTS_SECTION + "  refused: the process events are not read: no answer to the ask within 2 s\n"
-    state, words = x35(section=refused)
-    assert state == check.MISSED and "where the kernel is known to answer" in words
+@pytest.mark.parametrize("change,said", [
+    (lambda t: "", "holds no PROCESS EVENTS"),
+    (lambda t: t.replace("answered: 16", "answered: 15") + "  hole, round 3: late: the helper's answer did not come"
+     " within 2 s\n", "15 of 16 round(s) asked were answered"),
+    (lambda t: t.replace("asked: 16, answered: 16", "asked: 0, answered: 0"), "0 of 0 round(s)"),
+    (lambda t: t + RESTART, "the helper was started again: started again, round 4"),
+    (lambda t: t + "  and started again 2 more time(s), not printed\n", "the helper was started again"),
+    (lambda t: t.replace("lost: none", "lost: helper 1: ENOBUFS 1 time(s)"), "lost: helper 1: ENOBUFS 1 time(s)"),
+    (lambda t: t.replace("lost: none", "lost: not known (no answer)"), "lost: not known (no answer)"),
+    (lambda t: t.replace("began: 41", "began: 1"), "1 process(es) began, fewer than the 2"),
+    (lambda t: t + "  refused: the process events are not read: no answer to the ask within 2 s\n",
+     "refused (not for want of a right)")])
+def test_x35_missed_on_linux_for_each_way_the_section_says_the_helper_was_not_whole(change, said):
+    state, words = x35(section=change(EVENTS_SECTION))
+    assert state == check.MISSED and said in words, words
+
+
+def test_x35_missed_where_the_stand_in_said_it_started_no_child():
+    state, words = x35(workload="WORKLOAD 07:50:35 pid 9828\nWORKLOAD 07:51:15 done\n")
+    assert state == check.MISSED and "the stand-in said it started no child" in words
 
 
 def test_x35_n_a_off_linux_and_where_the_refusal_names_a_right_this_user_lacks():

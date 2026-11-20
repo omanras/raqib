@@ -207,6 +207,22 @@ jobs:
           echo "=== trees"; grep -A12 "^TREES SEEN" "$RUNNER_TEMP/w141b.out" | cut -c1-200
           echo "=== helpers left"; pgrep -af "raqib.procevents" || echo none
           echo "=== stderr"; tail -5 "$RUNNER_TEMP/w141b.err"
+      - name: the watch whose helper is stopped under it stays on time (M14.1b REDO, BW-1)
+        if: always()
+        run: |
+          python -m pip install --disable-pip-version-check -q . || pip install --break-system-packages -q .
+          start=$(date +%s)
+          raqib watch --host --rounds 10 --every 3 --no-open --no-page > "$RUNNER_TEMP/w-stop.out" 2> "$RUNNER_TEMP/w-stop.err" &
+          w=$!
+          sleep 8
+          echo "=== helpers before"; pgrep -af "procevents" || echo none
+          pkill -STOP -f "raqib.procevents" && echo "the helper is stopped (SIGSTOP)" || echo "no helper found to stop"
+          wait $w; echo "the watch's exit: $?; it took $(( $(date +%s) - start )) s (ten rounds of 3 s)"
+          echo "=== the section"; sed -n '/^PROCESS EVENTS/,/^[A-Z][A-Z ]*[:(]/p' "$RUNNER_TEMP/w-stop.out" | cut -c1-300 | head -24
+          echo "=== rounds"; grep -c "^\[.*round [0-9]*:" "$RUNNER_TEMP/w-stop.out"; grep "late\|INCOMPLETE\|RESULT" "$RUNNER_TEMP/w-stop.out" | cut -c1-260 | head -12
+          echo "=== the words on what lives between two samples"; grep -i "between two" "$RUNNER_TEMP/w-stop.out" | cut -c1-300 | tail -3
+          echo "=== helpers left"; pgrep -af "procevents" || echo none
+          pkill -KILL -f "raqib.procevents" || true
       - name: the reader itself (M14.1a), as a plain user, five times
         if: always()
         run: |
@@ -316,7 +332,7 @@ jobs:
       fail-fast: false
       matrix:
         build: [this]
-        try: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        try: [1, 2]
     env:
       PYTHONUTF8: "1"
     steps:

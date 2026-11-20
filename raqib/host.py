@@ -392,6 +392,9 @@ PE_NOT_A_LINE = "not a line: the helper's answer was not its line"
 PE_ENDED = "ended: the helper of the process events ended (%s); it is started again, once"
 PE_FINAL = ("ended for good: the helper of the process events ended again (%s): the process events are not read for the"
             " rest of the watch")
+PE_LATE_RUN = 3          # BW-1: rounds late running after which the watch ends the helper and starts it again
+PE_LATE_RUN_WHY = "late %d rounds running (%g s each): ended by the watch"
+PE_EPISODES_MAX = 10     # BW-6: the lines of the helper's episodes a watch prints; then how many more
 BETWEEN_HEARD = ("a process that begins and ends between two rounds is heard and counted, not judged: Linux: the rounds"
                  " read /proc, and a helper process of the watch's own read the kernel's process events for the whole"
                  " watch: each process that began is counted in PROCESS EVENTS, and no rule reads them yet; what a tree"
@@ -588,26 +591,61 @@ def procevents_helper():
     return procevents.Helper(started=helper_started)
 
 
+def _pe_num(x):
+    return isinstance(x, int) and not isinstance(x, bool) and x >= 0
+
+
+def _pe_record(rec):
+    """BW-8: a record of the reader the watch can count: a dict with a usable pid and times that are text."""
+    return (isinstance(rec, dict) and isinstance(rec.get("pid"), int) and not isinstance(rec.get("pid"), bool)
+            and rec["pid"] > 0 and all(rec.get(k) is None or isinstance(rec.get(k), str) for k in ("began", "ended")))
+
+
+def _pe_counts(counts):
+    """BW-8: the reader's counts in the shape the watch reads: (missed exe, lost, beyond, ended) or None."""
+    missed, lost, beyond, ended = (counts.get("missed"), counts.get("lost"), counts.get("beyond"),
+                                   counts.get("ended"))
+    if not (isinstance(missed, dict) and _pe_num(missed.get("exe")) and isinstance(lost, dict)
+            and _pe_num(lost.get("count")) and _pe_num(lost.get("events"))
+            and (lost.get("why") is None or isinstance(lost.get("why"), str)) and _pe_num(beyond)
+            and (ended is None or isinstance(ended, str))):
+        return None
+    return missed["exe"], lost, beyond, ended
+
+
 class ProcEvents:
-    """M14.1b (ADR-0007 BU-1 to BU-3): the Linux live reader's helper. begin(), at a round before its sample, starts
-    it where none runs (the first round; once again where it ended); round(), after the sample, asks it once
-    (procevents.ASK_SECONDS) and gives inv["procevents"]: {"began", "inside", "unread_exe", "lost", "refused",
-    "hole", "more"} - numbers and the reader's or the watch's own words, never a process's program. A refusal, a
-    helper that could not start, and a second end are final. close() stops it; nothing is started after."""
+    """M14.1b (ADR-0007 BU-1 to BU-3, BW-1 to BW-4, BW-8): the Linux live reader's helper. begin(), at a round
+    before its sample, starts it (the first round); round(), after the sample, asks it once (at most
+    procevents.ASK_SECONDS, and at most a quarter of its watch's interval: set_every) and gives inv["procevents"]:
+    {"began", "inside", "unread_exe", "beyond", "lost", "refused", "hole", "more", "restarts", "asked",
+    "answered"} - numbers and the reader's or the watch's own words, never a process's program. `lost` and
+    `beyond` are summed over every helper the watch had. A refusal and a helper that could not start are final; a
+    helper that ended, whose reader ended, or that was late PE_LATE_RUN rounds running is ended and started again
+    once, and a second end is final. A line that is not the helper's is a hole of its round: round() never raises
+    for what a line holds. close() stops it; nothing is started after."""
 
     def __init__(self, make, timeout=None):
         from raqib import procevents
         self.pe = procevents
         self.make, self.timeout = make, procevents.ASK_SECONDS if timeout is None else timeout
-        self.helper, self.starts, self.final, self.closed = None, 0, None, None
-        self.refused, self.lost, self.missed_exe = None, None, 0
+        self.helper, self.starts, self.restarts, self.final, self.closed = None, 0, 0, None, None
+        self.refused, self.heard, self.missed_exe, self.late_run = None, False, 0, 0
+        self.lost_now, self.beyond_now = None, 0                  # the running helper's last counts
+        self.lost_before = {"count": 0, "events": 0, "why": []}   # those of the helpers before it (BW-2)
+        self.beyond_before = 0
         self.counted = {}            # (pid, began) -> True, insertion-ordered, bounded (PE_GIVEN_MAX)
         self.problems = []
         self.lock = threading.Lock()
 
+    def set_every(self, every):
+        """BW-4: the ask waits at most a quarter of the watch's interval (and at most ASK_SECONDS)."""
+        if isinstance(every, (int, float)) and every > 0:
+            self.timeout = min(self.pe.ASK_SECONDS, every / 4.0)
+
     def _start(self):
         self.starts += 1
-        self.missed_exe = 0
+        self.missed_exe = self.late_run = 0
+        self.lost_now, self.beyond_now = None, 0
         try:
             helper = self.make()
             why = helper.start()
@@ -623,22 +661,75 @@ class ProcEvents:
             if self.helper is None and self.final is None and self.closed is None and self.starts == 0:
                 self._start()
 
-    def _inv(self, hole=None, began=0, inside=0, unread_exe=0, more=False):
-        return {"began": began, "inside": inside, "unread_exe": unread_exe, "lost": self.lost,
-                "refused": self.refused, "hole": hole, "more": more}
+    def _lost(self):
+        if not self.heard:
+            return None
+        now = self.lost_now or {"count": 0, "events": 0, "why": None}
+        whys = list(self.lost_before["why"])
+        if now.get("why"):
+            whys.append(("helper %d: %s" % (self.starts, now["why"])) if self.starts > 1 else now["why"])
+        return {"count": self.lost_before["count"] + now["count"], "events": self.lost_before["events"] + now["events"],
+                "why": "; ".join(whys) or None}
 
-    def _stop(self):
+    def _inv(self, hole=None, began=0, inside=0, unread_exe=0, more=False, asked=False, answered=False):
+        return {"began": began, "inside": inside, "unread_exe": unread_exe,
+                "beyond": self.beyond_before + self.beyond_now, "lost": self._lost(), "refused": self.refused,
+                "hole": hole, "more": more, "restarts": self.restarts, "asked": asked, "answered": answered}
+
+    def _retire(self):
+        """The running helper stopped; its last counts kept for the watch (BW-2)."""
         helper, self.helper = self.helper, None
+        if self.lost_now:
+            self.lost_before["count"] += self.lost_now["count"]
+            self.lost_before["events"] += self.lost_now["events"]
+            if self.lost_now.get("why"):
+                self.lost_before["why"].append("helper %d: %s" % (self.starts, self.lost_now["why"]))
+        self.beyond_before += self.beyond_now
+        self.lost_now, self.beyond_now = None, 0
         if helper is not None:
-            self.problems += helper.stop() or []
+            try:
+                self.problems += helper.stop() or []
+            except Exception as exc:
+                self.problems.append("the helper's stop failed: %s: %s" % (type(exc).__name__, exc))
 
     def _ended(self, why):
-        self._stop()
+        """The helper ended, or is ended: started again once; the second end is final. The hole's words."""
+        self._retire()
         if self.starts >= 2:
             self.final = PE_FINAL % why
-            return self._inv(self.final)
+            return self.final
+        self.restarts += 1
         self._start()
-        return self._inv(self.final or PE_ENDED % why)
+        return self.final or PE_ENDED % why
+
+    def _count(self, answer):
+        """(began, inside, unread_exe, more, the reader's end) of a valid answer, or None (BW-8: not a line)."""
+        lists = [answer.get(k) for k in ("processes", "ends", "older")]
+        counts = answer.get("counts")
+        if not all(isinstance(x, list) for x in lists) or not isinstance(counts, dict) or \
+                not isinstance(answer.get("more"), bool):
+            return None
+        shaped = _pe_counts(counts)
+        if shaped is None or not all(_pe_record(r) for x in lists for r in x):
+            return None
+        missed, lost, beyond, ended = shaped
+        began = inside = 0
+        for rec in lists[0]:
+            if rec.get("began") is None:
+                continue             # its fork not heard: it began before the reader, or its fork was lost
+            key = (rec["pid"], rec["began"])
+            if key in self.counted:
+                continue             # given again (it changed its program): counted once
+            self.counted[key] = True
+            while len(self.counted) > PE_GIVEN_MAX:
+                del self.counted[next(iter(self.counted))]
+            began += 1
+            inside += rec.get("ended") is not None
+        unread_exe, self.missed_exe = max(0, missed - self.missed_exe), missed
+        self.lost_now = {"count": lost["count"], "events": lost["events"],
+                         "why": _pe_words(lost["why"]) if lost.get("why") else None}
+        self.beyond_now, self.heard = beyond, True
+        return began, inside, unread_exe, answer["more"], ended
 
     def round(self):
         with self.lock:
@@ -646,64 +737,59 @@ class ProcEvents:
                 return self._inv(self.final)
             if self.helper is None:
                 return self._inv(PE_NOT_STARTED % (self.closed or "none runs"))
-            answer, why = self.helper.ask(self.timeout)
+            try:
+                answer, why = self.helper.ask(self.timeout)
+            except Exception as exc:   # a client that raises is a helper that ended
+                answer, why = None, self.pe.ENDED
+                self.problems.append("the helper's client failed: %s: %s" % (type(exc).__name__, exc))
+            if why == self.pe.STARTING:   # BW-4: its first line has not come yet: no hole for STARTING_SECONDS
+                return self._inv(None)
             if why == self.pe.REFUSED:
                 self.refused = _pe_words(getattr(self.helper, "refused", None) or "no reason given")
                 self.final = PE_REFUSED % self.refused
-                self._stop()
+                self._retire()
                 return self._inv(self.final)
             if why == self.pe.ENDED:
-                return self._ended("its output ended")
+                return self._inv(self._ended("its output ended"), asked=True)
             if why == self.pe.LATE:
-                return self._inv(PE_LATE % self.timeout)
-            lists = [answer.get(k) if answer else None for k in ("processes", "ends", "older")]
-            counts = answer.get("counts") if answer else None
-            if why is not None or not all(isinstance(x, list) for x in lists) or not isinstance(counts, dict):
-                return self._inv(PE_NOT_A_LINE)
-            began = inside = 0
-            for rec in lists[0]:
-                if not isinstance(rec, dict) or rec.get("began") is None:
-                    continue         # its fork not heard: it began before the reader, or its fork was lost
-                key = (rec.get("pid"), rec.get("began"))
-                if key in self.counted:
-                    continue         # given again (it changed its program): counted once
-                self.counted[key] = True
-                while len(self.counted) > PE_GIVEN_MAX:
-                    del self.counted[next(iter(self.counted))]
-                began += 1
-                inside += rec.get("ended") is not None
-            missed = (counts.get("missed") or {}).get("exe")
-            missed = missed if isinstance(missed, int) else self.missed_exe
-            unread_exe, self.missed_exe = max(0, missed - self.missed_exe), missed
-            lost = counts.get("lost")
-            if isinstance(lost, dict):
-                self.lost = {"count": lost.get("count"), "events": lost.get("events"),
-                             "why": _pe_words(lost["why"]) if lost.get("why") else None}
-            out = self._inv(None, began, inside, unread_exe, answer.get("more") is True)
-            if counts.get("ended"):  # the reader inside the helper ended: from then on it hears nothing
-                out["hole"] = self._ended("its reader ended: %s" % _pe_words(counts["ended"]))["hole"]
-            return out
+                self.late_run += 1
+                if self.late_run >= PE_LATE_RUN:   # BW-1: ended by the watch and started again, once
+                    return self._inv(self._ended(PE_LATE_RUN_WHY % (PE_LATE_RUN, self.timeout)), asked=True)
+                return self._inv(PE_LATE % self.timeout, asked=True)
+            try:
+                got = self._count(answer) if why is None and isinstance(answer, dict) else None
+            except Exception:
+                got = None
+            if got is None:
+                return self._inv(PE_NOT_A_LINE, asked=True)
+            self.late_run = 0
+            began, inside, unread_exe, more, ended = got
+            hole = self._ended("its reader ended: %s" % _pe_words(ended)) if ended else None
+            return self._inv(hole, began, inside, unread_exe, more, asked=True, answered=True)
 
     def close(self, why="the watch stopped (Stop)"):
         """Stops the helper; nothing is started after. The problems of its stops ([] when clean)."""
         with self.lock:
             self.closed = why
-            self._stop()
+            self._retire()
             problems, self.problems = self.problems, []
             return problems
 
 
 class HelperOwner:
-    """BU-1 (as AB-9): the helper of one watch's live reader is that watch's to stop. The reader runs with
-    PROCEVENTS_OWNER.owner set to its watch's; a helper added after its owner's close is stopped at once."""
+    """BU-1 (as AB-9): the helper of one watch's live reader is that watch's to stop, and asks within that watch's
+    interval (BW-4: `every`). The reader runs with PROCEVENTS_OWNER.owner set to its watch's; a helper added after
+    its owner's close is stopped at once."""
 
-    def __init__(self):
-        self.items, self.closed, self.lock = [], None, threading.Lock()
+    def __init__(self, every=None):
+        self.items, self.closed, self.lock, self.every = [], None, threading.Lock(), every
 
     def add(self, item):
         with self.lock:
             self.items.append(item)
             closed = self.closed
+        if self.every is not None and hasattr(item, "set_every"):
+            item.set_every(self.every)
         return item.close(closed) if closed is not None else []
 
     def close(self, why="the watch stopped (Stop)"):
@@ -1938,7 +2024,7 @@ class HostWatch:
         # AB-3 (E4): the first lines speak from the watch's own check at its start, and say it is that check; where
         # the live reader's first check differs, its round says so once (_channel_holes)
         self.procevents = None        # M14.1b (BU-3): what the rounds' helper said, summed; None: no round carried it
-        self.procevents_owner = HelperOwner()   # BU-1: the helper of this watch's reader, stopped with the watch
+        self.procevents_owner = HelperOwner(self.every)   # BU-1, BW-4: this watch's reader's helper, stopped with it
         self.between_index = None     # BU-3: where the Linux words of what lives between two rounds stand in notes
         if self.platform.startswith("linux"):
             self.between_said = True
@@ -3112,58 +3198,90 @@ class HostWatch:
         return b
 
     def _procevents_note(self, now, n, inv):
-        """M14.1b (ADR-0007 BU-2, BU-3): what the round's helper said, summed for the report's PROCESS EVENTS. Its
-        holes (refused, not started, late, not a line, ended, ended for good) are blind spots, each of its own kind:
-        they do not change the result (BU-3: the result and the exit code are what they were), and each is said
-        once while it lasts (an episode ends at a round without it). Nothing is judged from it."""
+        """M14.1b (ADR-0007 BU-2, BU-3, BW-2, BW-3, BW-6): what the round's helper said, summed for the report's
+        PROCESS EVENTS. Its holes (refused, not started, late, not a line, ended, ended for good) are blind spots,
+        each of its own kind: they do not change the result (BU-3), and each is said once while it lasts (an
+        episode ends at a round without it); at most PE_EPISODES_MAX episodes are printed, then how many more.
+        A round's numbers are summed whatever its hole (a late answer is taken by the round that reads it).
+        Nothing is judged from it."""
         pe = inv.get("procevents")
         if not isinstance(pe, dict):
             return
         s = self.procevents
         if s is None:
-            s = self.procevents = {"rounds": 0, "answered": 0, "began": 0, "inside": 0, "unread_exe": 0,
-                                   "lost": None, "refused": None, "holes": [], "open": None, "more": False}
+            s = self.procevents = {"rounds": 0, "asked": 0, "answered": 0, "starting": 0, "began": 0, "inside": 0,
+                                   "unread_exe": 0, "beyond": 0, "lost": None, "refused": None, "holes": [],
+                                   "holes_more": 0, "open": None, "more": False, "restarts": [], "restarts_n": 0}
         s["rounds"] += 1
-        hole = pe.get("hole")
-        if hole is None:
-            s["answered"] += 1
-            for k in ("began", "inside", "unread_exe"):
-                s[k] += pe.get(k) if isinstance(pe.get(k), int) else 0
+        hole = pe.get("hole") if isinstance(pe.get("hole"), str) else None
+        asked, answered = pe.get("asked") is True, pe.get("answered") is True
+        s["asked"] += asked
+        s["answered"] += answered
+        s["starting"] += not asked and hole is None
+        for k in ("began", "inside", "unread_exe"):
+            s[k] += pe.get(k) if _pe_num(pe.get(k)) else 0
+        if _pe_num(pe.get("beyond")):
+            s["beyond"] = pe["beyond"]
         s["lost"] = pe.get("lost") or s["lost"]
         s["refused"] = pe.get("refused") or s["refused"]
-        s["more"] = pe.get("more") is True
-        kind = hole.split(":", 1)[0] if isinstance(hole, str) else None
+        if answered:
+            s["more"] = pe.get("more") is True
+        restarts = pe.get("restarts") if _pe_num(pe.get("restarts")) else s["restarts_n"]
+        while s["restarts_n"] < restarts:   # BW-2: a start again says its own gap
+            s["restarts_n"] += 1
+            if len(s["restarts"]) < PE_EPISODES_MAX:
+                s["restarts"].append((n, hole or "the helper ended"))
+        kind = hole.split(":", 1)[0] if hole else None
         if kind is not None:
             self._blind(now, "process events %s" % kind, "the process events: %s" % hole, n)
             if kind != s["open"]:
-                s["holes"].append((n, hole))
-                self._say(now, "BLIND SPOT round %d: the process events: %s (not judged; does not change the result)"
-                          % (n, hole))
+                if len(s["holes"]) < PE_EPISODES_MAX:
+                    s["holes"].append((n, hole))
+                    self._say(now, "BLIND SPOT round %d: the process events: %s (not judged; does not change the"
+                              " result)" % (n, hole))
+                else:
+                    s["holes_more"] += 1
+                    if s["holes_more"] == 1:
+                        self._say(now, "BLIND SPOT round %d: the process events: more than %d episodes of the helper:"
+                                  " the next are counted in the report, not printed" % (n, PE_EPISODES_MAX))
         s["open"] = kind
-        if self.between_index is not None:   # E4: the Linux words of what lives between two rounds, as it is now
+        if self.between_index is not None:   # E4, BW-3: the Linux words of what lives between two rounds, as it is
             why = self.procevents_unhealthy()
             self.notes[self.between_index] = BETWEEN_HEARD if why is None else (
                 BETWEEN_HOLE % BETWEEN_LINUX + BETWEEN_NOT_HEARD % why)
 
     def procevents_unhealthy(self):
-        """None where the helper answered every round and the reader lost nothing; else why, in its words."""
+        """BW-3: None only where every ask was answered in its round, no helper was started again, nothing was
+        lost, the reader passed none of its bounds and the last answer left nothing for a next one; else why, each
+        reason named."""
         s = self.procevents
         if s is None:
             return "no round carried them"
-        why = ["round %d: %s" % (n, h) for n, h in s["holes"][:3]]
-        if len(s["holes"]) > 3:
-            why.append("and %d more" % (len(s["holes"]) - 3))
+        why = []
+        if s["asked"] > s["answered"]:
+            why.append("%d of %d ask(s) not answered in their round" % (s["asked"] - s["answered"], s["asked"]))
+        why += ["round %d: %s" % (n, h) for n, h in s["holes"][:3]]
+        more = len(s["holes"]) + s["holes_more"] - 3
+        if more > 0:
+            why.append("and %d more episode(s) of the helper" % more)
+        if s["restarts_n"]:
+            why.append("the helper was started again %d time(s): nothing was heard between an end and the next start"
+                       % s["restarts_n"])
         lost = s["lost"] or {}
         if lost.get("count") or lost.get("events"):
             why.append("the reader lost events: %s" % (lost.get("why") or "%s ENOBUFS, %s event(s)" % (
                 lost.get("count"), lost.get("events"))))
+        if s["beyond"]:
+            why.append("the reader passed its bounds: %d event(s) or record(s) beyond them" % s["beyond"])
+        if s["more"]:
+            why.append("the last answer left more for a next one: not every process that began was counted")
         if not s["answered"] and not why:
-            why.append("no answer")
+            why.append("no ask was answered")
         return "; ".join(why) or None
 
     def procevents_lines(self):
-        """E4 (BU-3): the report's PROCESS EVENTS section: numbers, the reader's words and the watch's; never a
-        process's program (BU-4). [] where no round carried them (Windows, a stand-in reader)."""
+        """E4 (BU-3, BW-2, BW-3, BW-6): the report's PROCESS EVENTS section: numbers, the reader's words and the
+        watch's; never a process's program (BU-4). [] where no round carried them (Windows, a stand-in reader)."""
         s = self.procevents
         if s is None:
             return []
@@ -3173,14 +3291,21 @@ class HostWatch:
                 "events")))
         out = [PE_SECTION + " the kernel's process events, read by a helper process of the watch's own; %s"
                % PE_NOT_JUDGED,
-               "  rounds asked: %d, answered: %d" % (s["rounds"], s["answered"]),
-               "  processes that began: %d; of them began and ended between two samples: %d" % (s["began"],
-                                                                                                  s["inside"]),
-               "  programs not read: %d" % s["unread_exe"],
+               "  rounds asked: %d, answered: %d%s" % (s["asked"], s["answered"], "; before the helper was ready: %d"
+                                                        % s["starting"] if s["starting"] else ""),
+               "  processes that began: %d; of them began and ended between two asks: %d" % (s["began"], s["inside"]),
+               "  programs not read: %d (reads at an exec that failed)" % s["unread_exe"],
+               "  past the reader's bounds: %d" % s["beyond"],
                "  lost: %s" % lost_text]
         if s["refused"]:
             out.append("  refused: %s" % s["refused"])
+        out += ["  started again, round %d: %s; nothing was heard between the end of the helper before and this start"
+                % (n, h) for n, h in s["restarts"]]
+        if s["restarts_n"] > len(s["restarts"]):
+            out.append("  and started again %d more time(s), not printed" % (s["restarts_n"] - len(s["restarts"])))
         out += ["  hole, round %d: %s" % (n, h) for n, h in s["holes"]]
+        if s["holes_more"]:
+            out.append("  and %d more episode(s) of the helper, not printed" % s["holes_more"])
         if s["more"]:
             out.append("  the last answer did not hold all the reader had: the rest was not asked for")
         return out

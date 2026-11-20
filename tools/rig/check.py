@@ -18,10 +18,11 @@ that sees a second user's stand-in agent, X30 the removal leaves no unit (n/a wh
 X31 every short act that ran is given with its program, its parent (the run's own process) and its end's code, and
 nothing is lost (n/a off Linux, or where the start was refused for want of a right of this user, EPERM or EACCES;
 any other refusal is MISSED, the refusal said).
-X35 (ADR-0007 BU-5; read from --report and --workload, Linux; n/a elsewhere): the watch's report holds its PROCESS
-EVENTS section, its helper was not refused, nothing was lost, and the processes that began are at least the
-children the stand-in said it started (its "start" lines); MISSED where the section is absent, or says a refusal
-on a kernel that answers (X31's rule: n/a where the refusal names a right this user lacks, EPERM or EACCES).
+X35 (ADR-0007 BU-5, BW-7; read from --report and --workload, Linux; n/a elsewhere): the watch's report holds its
+PROCESS EVENTS section, every round asked was answered, no helper was started again, nothing was lost, and the
+processes that began are at least the children the stand-in said it started (its "start" lines; a floor: the
+count holds every process of the machine); MISSED otherwise, or where it says a refusal (X31's rule: n/a where
+the refusal names a right this user lacks, EPERM or EACCES).
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -855,13 +856,18 @@ def _procevents_rows(facts):
 
 
 WATCH_EVENTS_NAME = ("X35 the watch's helper heard the kernel's process events: its report's PROCESS EVENTS section,"
-                     " not refused, nothing lost, at least the stand-in's children began")
+                     " every ask answered, no helper started again, nothing lost, at least the stand-in's children"
+                     " began")
 WATCH_EVENTS_HEAD = "PROCESS EVENTS (Linux):"
 
 
 def read_watch_events(report, workload, platform):
-    """X35 (ADR-0007 BU-5): the watch's own count of the process events, read from its report beside what the
-    stand-in said it started. It never raises: a report that cannot be read is MISSED."""
+    """X35 (ADR-0007 BU-5, BW-7): the watch's own count of the process events, read from its report beside what the
+    stand-in said it started. MET only where the section is there, every round asked was answered, no helper was
+    started again, nothing was lost and the processes that began are at least the stand-in's children (a floor:
+    the count holds every process of the machine, the watch's own `ss` among them); MISSED otherwise on Linux, a
+    workload that says no child included; n/a off Linux, or where the refusal names a right this user lacks (EPERM,
+    EACCES; X31's rule). It never raises: a report that cannot be read is MISSED."""
     name = WATCH_EVENTS_NAME
     try:
         if not str(platform or "").startswith("linux"):
@@ -874,23 +880,35 @@ def read_watch_events(report, workload, platform):
         if refused is not None:
             if NO_RIGHT.search(refused):
                 return [(name, SKIP, "the helper's reader was refused for want of a right of this user: %s" % refused)]
-            return [(name, MISSED, "the helper's reader was refused where the kernel is known to answer: %s" % refused)]
+            return [(name, MISSED, "the helper's reader was refused (not for want of a right): %s" % refused)]
         children = len(re.findall(r"(?m)^WORKLOAD \S+ start \S", str(workload or "")))
         began = number(r"processes that began: (\d+)", body)
+        asked = number(r"rounds asked: (\d+)", body)
+        answered = number(r"rounds asked: \d+, answered: (\d+)", body)
         lost = next((x.strip()[len("lost: "):] for x in lines if x.strip().startswith("lost: ")), None)
+        restarts = [x.strip() for x in lines if x.strip().startswith(("started again", "and started again"))]
         holes = [x.strip() for x in lines if x.strip().startswith("hole, ")]
         missing = []
+        if asked is None or answered is None:
+            missing.append("no count of the rounds asked and answered")
+        elif answered != asked or not asked:
+            missing.append("%d of %d round(s) asked were answered" % (answered, asked))
+        if restarts:
+            missing.append("the helper was started again: %s" % "; ".join(restarts))
+        if lost != "none":
+            missing.append("lost: %s" % (lost if lost is not None else "not said"))
+        if not children:
+            missing.append("the stand-in said it started no child: nothing to hold the count against")
         if began is None:
             missing.append("no count of the processes that began")
         elif began < children:
             missing.append("%d process(es) began, fewer than the %d child(ren) the stand-in started" % (began,
                                                                                                      children))
-        if lost != "none":
-            missing.append("lost: %s" % (lost if lost is not None else "not said"))
         if missing:
             return [(name, MISSED, "missing: %s%s" % ("; ".join(missing), "; " + "; ".join(holes) if holes else ""))]
-        return [(name, MET, "%d process(es) began, the stand-in started %d child(ren); lost: none%s" % (
-            began, children, "; " + "; ".join(holes) if holes else ""))]
+        return [(name, MET, "%d of %d round(s) answered; at least the stand-in's %d child(ren) began (%d process(es)"
+                 " of the machine: a floor, not the stand-in's alone); no helper started again; lost: none%s" % (
+                     answered, asked, children, began, "; " + "; ".join(holes) if holes else ""))]
     except Exception as exc:   # never raises
         return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
 
