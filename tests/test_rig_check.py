@@ -273,3 +273,59 @@ def test_x32_to_x34_are_not_judged_without_an_os_source_or_where_the_act_was_not
         "address reached", "address not reached").replace("value set", "value not set")
     got = behaviour(workload=undone)
     assert {s for s, _ in got.values()} == {check.SKIP} and "did not do it" in got["X33"][1]
+
+
+# --- X35 (ADR-0007 BU-5): the watch's own count of the process events ---------------------------------------------
+LINUX_WORKLOAD = ("WORKLOAD 07:50:35 pid 9828\nWORKLOAD 07:50:35 talking\nWORKLOAD 07:50:43 start curl\n"
+                  "WORKLOAD 07:50:55 start curl\nWORKLOAD 07:50:56 end curl rc=0\nWORKLOAD 07:51:15 done\n")
+EVENTS_SECTION = ("PROCESS EVENTS (Linux): the kernel's process events, read by a helper process of the watch's own;"
+                  " not judged yet: no rule reads them, no line of a tree's source is written from them\n"
+                  "  rounds asked: 16, answered: 16\n"
+                  "  processes that began: 41; of them began and ended between two samples: 37\n"
+                  "  programs not read: 0\n"
+                  "  lost: none\n")
+
+
+def x35(section=EVENTS_SECTION, workload=LINUX_WORKLOAD, platform="linux"):
+    report = REPORT.replace("TREES SEEN:", section + "TREES SEEN:", 1)
+    ((ident, state, words),) = check.read_watch_events(report, workload, platform)
+    assert ident.startswith("X35 ")
+    return state, words
+
+
+def test_x35_met_where_the_section_says_the_stand_ins_children_began_and_nothing_was_lost():
+    state, words = x35()
+    assert state == check.MET and words.startswith("41 process(es) began, the stand-in started 2 child(ren)")
+    assert x35(section=EVENTS_SECTION.replace("began: 41", "began: 2"))[0] == check.MET
+    with_hole = EVENTS_SECTION + "  hole, round 3: late: the helper's answer did not come within 2 s\n"
+    state, words = x35(section=with_hole)
+    assert state == check.MET and "hole, round 3: late" in words
+
+
+def test_x35_missed_where_the_section_is_absent_short_lost_or_refused_on_a_kernel_that_answers():
+    assert x35(section="")[0] == check.MISSED and "holds no PROCESS EVENTS" in x35(section="")[1]
+    state, words = x35(section=EVENTS_SECTION.replace("began: 41", "began: 1"))
+    assert state == check.MISSED and "1 process(es) began, fewer than the 2" in words
+    state, words = x35(section=EVENTS_SECTION.replace("lost: none", "lost: ENOBUFS 1 time(s), at least 4 event(s)"))
+    assert state == check.MISSED and "lost: ENOBUFS 1 time(s)" in words
+    refused = EVENTS_SECTION + "  refused: the process events are not read: no answer to the ask within 2 s\n"
+    state, words = x35(section=refused)
+    assert state == check.MISSED and "where the kernel is known to answer" in words
+
+
+def test_x35_n_a_off_linux_and_where_the_refusal_names_a_right_this_user_lacks():
+    assert x35(platform="win32")[0] == check.SKIP and x35(section="", platform="win32")[0] == check.SKIP
+    refused = EVENTS_SECTION + "  refused: the process events are not read: the bind was refused (EPERM)\n"
+    assert x35(section=refused)[0] == check.SKIP
+    assert check.read_watch_events(None, None, "linux")[0][1] == check.MISSED   # never raises
+
+
+def test_x35_is_a_row_of_main_and_off_linux_it_counts_for_nothing(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(REPORT.replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1), encoding="utf-8")
+    (tmp_path / "l.out").write_text(LINUX_WORKLOAD, encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--exit-code", "1"]
+    check.main(base + ["--platform", "win32", "--sysmon"])
+    out = capsys.readouterr().out
+    assert "n/a     X35 " in out and "RIG: 12 met, 0 missed, 0 open" in out
+    check.main(base + ["--platform", "linux"])
+    assert "MET     X35 " in capsys.readouterr().out

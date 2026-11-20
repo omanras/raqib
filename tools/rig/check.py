@@ -18,6 +18,10 @@ that sees a second user's stand-in agent, X30 the removal leaves no unit (n/a wh
 X31 every short act that ran is given with its program, its parent (the run's own process) and its end's code, and
 nothing is lost (n/a off Linux, or where the start was refused for want of a right of this user, EPERM or EACCES;
 any other refusal is MISSED, the refusal said).
+X35 (ADR-0007 BU-5; read from --report and --workload, Linux; n/a elsewhere): the watch's report holds its PROCESS
+EVENTS section, its helper was not refused, nothing was lost, and the processes that began are at least the
+children the stand-in said it started (its "start" lines); MISSED where the section is absent, or says a refusal
+on a kernel that answers (X31's rule: n/a where the refusal names a right this user lacks, EPERM or EACCES).
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -850,6 +854,47 @@ def _procevents_rows(facts):
         return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
 
 
+WATCH_EVENTS_NAME = ("X35 the watch's helper heard the kernel's process events: its report's PROCESS EVENTS section,"
+                     " not refused, nothing lost, at least the stand-in's children began")
+WATCH_EVENTS_HEAD = "PROCESS EVENTS (Linux):"
+
+
+def read_watch_events(report, workload, platform):
+    """X35 (ADR-0007 BU-5): the watch's own count of the process events, read from its report beside what the
+    stand-in said it started. It never raises: a report that cannot be read is MISSED."""
+    name = WATCH_EVENTS_NAME
+    try:
+        if not str(platform or "").startswith("linux"):
+            return [(name, SKIP, "not run: not Linux (%s)" % (platform or "no platform said"))]
+        lines = section(str(report or "").splitlines(), WATCH_EVENTS_HEAD)
+        if not lines:
+            return [(name, MISSED, "the watch's report holds no %s section (silence is a finding)" % WATCH_EVENTS_HEAD)]
+        body = "\n".join(lines)
+        refused = next((x.strip()[len("refused: "):] for x in lines if x.strip().startswith("refused: ")), None)
+        if refused is not None:
+            if NO_RIGHT.search(refused):
+                return [(name, SKIP, "the helper's reader was refused for want of a right of this user: %s" % refused)]
+            return [(name, MISSED, "the helper's reader was refused where the kernel is known to answer: %s" % refused)]
+        children = len(re.findall(r"(?m)^WORKLOAD \S+ start \S", str(workload or "")))
+        began = number(r"processes that began: (\d+)", body)
+        lost = next((x.strip()[len("lost: "):] for x in lines if x.strip().startswith("lost: ")), None)
+        holes = [x.strip() for x in lines if x.strip().startswith("hole, ")]
+        missing = []
+        if began is None:
+            missing.append("no count of the processes that began")
+        elif began < children:
+            missing.append("%d process(es) began, fewer than the %d child(ren) the stand-in started" % (began,
+                                                                                                     children))
+        if lost != "none":
+            missing.append("lost: %s" % (lost if lost is not None else "not said"))
+        if missing:
+            return [(name, MISSED, "missing: %s%s" % ("; ".join(missing), "; " + "; ".join(holes) if holes else ""))]
+        return [(name, MET, "%d process(es) began, the stand-in started %d child(ren); lost: none%s" % (
+            began, children, "; " + "; ".join(holes) if holes else ""))]
+    except Exception as exc:   # never raises
+        return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -887,6 +932,7 @@ def main(argv=None):
     if a.events:   # given and missing: the watch wrote none, which X16 says (not n/a)
         events = text(a.events) if os.path.isfile(a.events) else ""
     rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon, events)
+    rows += read_watch_events(text(a.report), text(a.workload), a.platform)   # X35 (ADR-0007 BU-5)
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

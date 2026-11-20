@@ -380,6 +380,23 @@ CHANNEL_HELD = {1: "no event 1 read so far: a tree that starts and ends between 
                 22: "no event 22 read so far: a name asked between two rounds may be unseen"}
 NO_CHANNEL_READ = ("the round's inventory carries no read of the Sysmon channel (a reader that does not read it): a tree"
                    " that lives between two rounds is not seen")
+# M14.1b (ADR-0007 BU): Linux: the kernel's process events, read by a helper process of the watch's own, counted
+PE_SECTION = "PROCESS EVENTS (Linux):"
+PE_NOT_JUDGED = "not judged yet: no rule reads them, no line of a tree's source is written from them"
+PE_GIVEN_MAX = 32768     # processes counted, kept by (pid, its fork's time) so one given again is not counted twice
+PE_TEXT_MAX = 300        # the most of the reader's own words a hole carries
+PE_NOT_STARTED = "not started: the helper of the process events could not be started (%s)"
+PE_REFUSED = "refused: %s"
+PE_LATE = "late: the helper's answer did not come within %g s"
+PE_NOT_A_LINE = "not a line: the helper's answer was not its line"
+PE_ENDED = "ended: the helper of the process events ended (%s); it is started again, once"
+PE_FINAL = ("ended for good: the helper of the process events ended again (%s): the process events are not read for the"
+            " rest of the watch")
+BETWEEN_HEARD = ("a process that begins and ends between two rounds is heard and counted, not judged: Linux: the rounds"
+                 " read /proc, and a helper process of the watch's own read the kernel's process events for the whole"
+                 " watch: each process that began is counted in PROCESS EVENTS, and no rule reads them yet; what a tree"
+                 " that lives between two snapshots talks and does is in no round")
+BETWEEN_NOT_HEARD = "; the process events are not counted for the whole watch: %s"
 
 
 class HostError(Exception):
@@ -427,7 +444,7 @@ def reader_wall():
     return time.time()
 
 
-def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, sysmon=None):
+def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, sysmon=None, helper=None):
     """The live round: discover's live collection, one sample on Windows
     (--window S on Linux: S seconds of snapshots, 1 s apart), built into an
     inventory as `raqib discover` builds it live. Read-only (A4). M7.4 E1:
@@ -448,11 +465,31 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
     run as its `sysmon` source; inv["channel"] says what was read, could not
     be read, how far behind, which kinds, and the holes (a read that fails
     keeps the sample). No caller passes anything: the CLI, the window and a
-    test's stand-in get the same reader."""
+    test's stand-in get the same reader. M14.1b (ADR-0007 BU): on Linux the
+    reader starts, at its first round and before its sample, a helper process
+    that runs raqib/procevents.py's Reader (ProcEvents), asks it after each
+    sample and keeps what it said as inv["procevents"] (numbers only); the
+    helper is stopped by the watch that owns the reader (PROCEVENTS_OWNER) or
+    by close(). helper: a factory of a stand-in Helper (tests); None is the
+    real one, on a system that is Linux."""
     platform_ = platform or sys.platform
     # Z-3: the reader's start is taken when it is made; Z-6: sysmon() -> (ok, why) is the one check (a test's stand-in)
-    own = {"checked": False, "channel": None, "why": None, "wall0": reader_wall(), "mono0": time.monotonic()}
+    own = {"checked": False, "channel": None, "why": None, "wall0": reader_wall(), "mono0": time.monotonic(),
+           "procevents": None}
     check = sysmon or (lambda: sysmon_present(platform_))
+    make = helper if helper is not None else procevents_helper if sys.platform.startswith("linux") else None
+
+    def procevents_of():
+        """BU-1: Linux only; made at the first round and handed to the watch that owns this reader."""
+        if not platform_.startswith("linux") or make is None:
+            return None
+        if own["procevents"] is None:
+            own["procevents"] = ProcEvents(make)
+            owner = getattr(PROCEVENTS_OWNER, "owner", None)
+            if owner is not None:
+                owner.add(own["procevents"])
+            own["procevents"].begin()
+        return own["procevents"]
 
     def channel_of():
         if platform_ != "win32":
@@ -474,10 +511,14 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
 
     def close(why="the look ended"):
         """AB-9: the reader's own close, for a single look outside a watch (the texts of the helpers it ended)."""
-        return own["channel"].close(why) if own["channel"] is not None else []
+        texts = own["channel"].close(why) if own["channel"] is not None else []
+        if own["procevents"] is not None:   # BU-1: the look's helper is stopped with the look
+            texts += ["the process events' helper: %s" % p for p in own["procevents"].close(why)]
+        return texts
 
     def read():
         info = {}     # D-3: the run record of this round (hostwin: SystemRoot's drive)
+        events = procevents_of()   # BU-1: started before the round's sample, so it is ready when asked after it
         texts, holes, _ = discover.collect_live(catalog, window=window, homes=homes, platform=platform,
                                                 win_samples=1, win_every=0.0, run_info=info)
         # M7.8 (P-2): the round's process sample rides on the inventory, so a tree whose root is alive and does
@@ -516,9 +557,166 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
             by, hole = discover.proc_start_times(pids)
             inv["child_started"] = {"from": "/proc/PID/stat starttime + /proc/stat btime", "hole": hole,
                                     "by": {str(p): v for p, v in by.items()}}
+        if events is not None:   # BU-2: asked once, after the round's sample; BU-3: counted, not judged
+            inv["procevents"] = events.round()
         return inv
     read.close = close
     return read
+
+
+def _pe_words(text):
+    """The reader's own words as a hole carries them: ASCII printable, one line, at most PE_TEXT_MAX."""
+    text = "".join(c if " " <= c <= "~" else " " for c in str(text))
+    return " ".join(text.split())[:PE_TEXT_MAX]
+
+
+def helper_started(proc):
+    """BU-1, BH-1: the helper in the watch's record, by the image a /proc sample reads for it: sys.executable may be
+    a link (python3 -> python3.12), and the sample reads the exe link, so the record holds the real file's name."""
+    from raqib import own
+    own.started(proc)
+    pid = getattr(proc, "pid", None)
+    real = os.path.realpath(sys.executable) if sys.executable else None
+    if isinstance(pid, int) and real and os.path.basename(real) != os.path.basename(sys.executable):
+        own.RECORD.add(pid, image=real)
+    return proc
+
+
+def procevents_helper():
+    """BU-1: the default factory of the Linux live reader's helper (a test gives its own: live_reader(helper=))."""
+    from raqib import procevents
+    return procevents.Helper(started=helper_started)
+
+
+class ProcEvents:
+    """M14.1b (ADR-0007 BU-1 to BU-3): the Linux live reader's helper. begin(), at a round before its sample, starts
+    it where none runs (the first round; once again where it ended); round(), after the sample, asks it once
+    (procevents.ASK_SECONDS) and gives inv["procevents"]: {"began", "inside", "unread_exe", "lost", "refused",
+    "hole", "more"} - numbers and the reader's or the watch's own words, never a process's program. A refusal, a
+    helper that could not start, and a second end are final. close() stops it; nothing is started after."""
+
+    def __init__(self, make, timeout=None):
+        from raqib import procevents
+        self.pe = procevents
+        self.make, self.timeout = make, procevents.ASK_SECONDS if timeout is None else timeout
+        self.helper, self.starts, self.final, self.closed = None, 0, None, None
+        self.refused, self.lost, self.missed_exe = None, None, 0
+        self.counted = {}            # (pid, began) -> True, insertion-ordered, bounded (PE_GIVEN_MAX)
+        self.problems = []
+        self.lock = threading.Lock()
+
+    def _start(self):
+        self.starts += 1
+        self.missed_exe = 0
+        try:
+            helper = self.make()
+            why = helper.start()
+        except Exception as exc:
+            helper, why = None, "%s: %s" % (type(exc).__name__, exc)
+        if why:
+            self.final = (PE_NOT_STARTED if self.starts == 1 else PE_FINAL) % _pe_words(why)
+            return
+        self.helper = helper
+
+    def begin(self):
+        with self.lock:
+            if self.helper is None and self.final is None and self.closed is None and self.starts == 0:
+                self._start()
+
+    def _inv(self, hole=None, began=0, inside=0, unread_exe=0, more=False):
+        return {"began": began, "inside": inside, "unread_exe": unread_exe, "lost": self.lost,
+                "refused": self.refused, "hole": hole, "more": more}
+
+    def _stop(self):
+        helper, self.helper = self.helper, None
+        if helper is not None:
+            self.problems += helper.stop() or []
+
+    def _ended(self, why):
+        self._stop()
+        if self.starts >= 2:
+            self.final = PE_FINAL % why
+            return self._inv(self.final)
+        self._start()
+        return self._inv(self.final or PE_ENDED % why)
+
+    def round(self):
+        with self.lock:
+            if self.final is not None:
+                return self._inv(self.final)
+            if self.helper is None:
+                return self._inv(PE_NOT_STARTED % (self.closed or "none runs"))
+            answer, why = self.helper.ask(self.timeout)
+            if why == self.pe.REFUSED:
+                self.refused = _pe_words(getattr(self.helper, "refused", None) or "no reason given")
+                self.final = PE_REFUSED % self.refused
+                self._stop()
+                return self._inv(self.final)
+            if why == self.pe.ENDED:
+                return self._ended("its output ended")
+            if why == self.pe.LATE:
+                return self._inv(PE_LATE % self.timeout)
+            lists = [answer.get(k) if answer else None for k in ("processes", "ends", "older")]
+            counts = answer.get("counts") if answer else None
+            if why is not None or not all(isinstance(x, list) for x in lists) or not isinstance(counts, dict):
+                return self._inv(PE_NOT_A_LINE)
+            began = inside = 0
+            for rec in lists[0]:
+                if not isinstance(rec, dict) or rec.get("began") is None:
+                    continue         # its fork not heard: it began before the reader, or its fork was lost
+                key = (rec.get("pid"), rec.get("began"))
+                if key in self.counted:
+                    continue         # given again (it changed its program): counted once
+                self.counted[key] = True
+                while len(self.counted) > PE_GIVEN_MAX:
+                    del self.counted[next(iter(self.counted))]
+                began += 1
+                inside += rec.get("ended") is not None
+            missed = (counts.get("missed") or {}).get("exe")
+            missed = missed if isinstance(missed, int) else self.missed_exe
+            unread_exe, self.missed_exe = max(0, missed - self.missed_exe), missed
+            lost = counts.get("lost")
+            if isinstance(lost, dict):
+                self.lost = {"count": lost.get("count"), "events": lost.get("events"),
+                             "why": _pe_words(lost["why"]) if lost.get("why") else None}
+            out = self._inv(None, began, inside, unread_exe, answer.get("more") is True)
+            if counts.get("ended"):  # the reader inside the helper ended: from then on it hears nothing
+                out["hole"] = self._ended("its reader ended: %s" % _pe_words(counts["ended"]))["hole"]
+            return out
+
+    def close(self, why="the watch stopped (Stop)"):
+        """Stops the helper; nothing is started after. The problems of its stops ([] when clean)."""
+        with self.lock:
+            self.closed = why
+            self._stop()
+            problems, self.problems = self.problems, []
+            return problems
+
+
+class HelperOwner:
+    """BU-1 (as AB-9): the helper of one watch's live reader is that watch's to stop. The reader runs with
+    PROCEVENTS_OWNER.owner set to its watch's; a helper added after its owner's close is stopped at once."""
+
+    def __init__(self):
+        self.items, self.closed, self.lock = [], None, threading.Lock()
+
+    def add(self, item):
+        with self.lock:
+            self.items.append(item)
+            closed = self.closed
+        return item.close(closed) if closed is not None else []
+
+    def close(self, why="the watch stopped (Stop)"):
+        with self.lock:
+            self.closed = why
+            items = list(self.items)
+        out = []
+        for item in items:
+            out += item.close(why)
+        return out
+
+
+PROCEVENTS_OWNER = threading.local()   # BU-1: .owner, the HelperOwner of the watch whose reader runs in this thread
 
 
 def tracing_reader():
@@ -1739,8 +1937,12 @@ class HostWatch:
         self.gone_at = {}             # X-4: tree key -> the round time it went gone
         # AB-3 (E4): the first lines speak from the watch's own check at its start, and say it is that check; where
         # the live reader's first check differs, its round says so once (_channel_holes)
+        self.procevents = None        # M14.1b (BU-3): what the rounds' helper said, summed; None: no round carried it
+        self.procevents_owner = HelperOwner()   # BU-1: the helper of this watch's reader, stopped with the watch
+        self.between_index = None     # BU-3: where the Linux words of what lives between two rounds stand in notes
         if self.platform.startswith("linux"):
             self.between_said = True
+            self.between_index = len(self.notes)
             self.notes.append(BETWEEN_HOLE % BETWEEN_LINUX)
         elif self.platform == "win32" and not self.sysmon[0]:
             self.between_said = True
@@ -2232,6 +2434,7 @@ class HostWatch:
         """AB-9: the reader runs as this watch's, so a channel its live reader opens is this watch's to close."""
         from raqib.hooks import os_sysmon
         os_sysmon.OWNER.owner = self.channel_owner
+        PROCEVENTS_OWNER.owner = self.procevents_owner   # BU-1: the helper its live reader starts is this watch's
         LIVE_ROUND.win32 = False
         try:
             inv = self.reader()
@@ -2240,6 +2443,7 @@ class HostWatch:
             return inv
         finally:
             os_sysmon.OWNER.owner = None
+            PROCEVENTS_OWNER.owner = None
 
     def _tracing_round(self, inv):
         """M7.21b (ADR-0007 BO-1, BO-2, BO-7), on the reader's thread: at
@@ -2354,6 +2558,7 @@ class HostWatch:
         for m in [m for m in self.round_times if m <= n - self.rhythm_r]:
             del self.round_times[m]
         self._bytes_note(now, n, inv)
+        self._procevents_note(now, n, inv)
         if no_drive:   # D-3: said as a hole, once per round
             self._hole(now, "benign-no-drive", "round %d: %s; judged as not benign: %s" % (
                 n, discover.NO_DRIVE, ", ".join(no_drive)), round_=n)
@@ -2905,6 +3110,80 @@ class HostWatch:
              "round": n, "rounds": [n] if n is not None else []}
         self.blind.append(b)
         return b
+
+    def _procevents_note(self, now, n, inv):
+        """M14.1b (ADR-0007 BU-2, BU-3): what the round's helper said, summed for the report's PROCESS EVENTS. Its
+        holes (refused, not started, late, not a line, ended, ended for good) are blind spots, each of its own kind:
+        they do not change the result (BU-3: the result and the exit code are what they were), and each is said
+        once while it lasts (an episode ends at a round without it). Nothing is judged from it."""
+        pe = inv.get("procevents")
+        if not isinstance(pe, dict):
+            return
+        s = self.procevents
+        if s is None:
+            s = self.procevents = {"rounds": 0, "answered": 0, "began": 0, "inside": 0, "unread_exe": 0,
+                                   "lost": None, "refused": None, "holes": [], "open": None, "more": False}
+        s["rounds"] += 1
+        hole = pe.get("hole")
+        if hole is None:
+            s["answered"] += 1
+            for k in ("began", "inside", "unread_exe"):
+                s[k] += pe.get(k) if isinstance(pe.get(k), int) else 0
+        s["lost"] = pe.get("lost") or s["lost"]
+        s["refused"] = pe.get("refused") or s["refused"]
+        s["more"] = pe.get("more") is True
+        kind = hole.split(":", 1)[0] if isinstance(hole, str) else None
+        if kind is not None:
+            self._blind(now, "process events %s" % kind, "the process events: %s" % hole, n)
+            if kind != s["open"]:
+                s["holes"].append((n, hole))
+                self._say(now, "BLIND SPOT round %d: the process events: %s (not judged; does not change the result)"
+                          % (n, hole))
+        s["open"] = kind
+        if self.between_index is not None:   # E4: the Linux words of what lives between two rounds, as it is now
+            why = self.procevents_unhealthy()
+            self.notes[self.between_index] = BETWEEN_HEARD if why is None else (
+                BETWEEN_HOLE % BETWEEN_LINUX + BETWEEN_NOT_HEARD % why)
+
+    def procevents_unhealthy(self):
+        """None where the helper answered every round and the reader lost nothing; else why, in its words."""
+        s = self.procevents
+        if s is None:
+            return "no round carried them"
+        why = ["round %d: %s" % (n, h) for n, h in s["holes"][:3]]
+        if len(s["holes"]) > 3:
+            why.append("and %d more" % (len(s["holes"]) - 3))
+        lost = s["lost"] or {}
+        if lost.get("count") or lost.get("events"):
+            why.append("the reader lost events: %s" % (lost.get("why") or "%s ENOBUFS, %s event(s)" % (
+                lost.get("count"), lost.get("events"))))
+        if not s["answered"] and not why:
+            why.append("no answer")
+        return "; ".join(why) or None
+
+    def procevents_lines(self):
+        """E4 (BU-3): the report's PROCESS EVENTS section: numbers, the reader's words and the watch's; never a
+        process's program (BU-4). [] where no round carried them (Windows, a stand-in reader)."""
+        s = self.procevents
+        if s is None:
+            return []
+        lost = s["lost"]
+        lost_text = "not known (no answer)" if not lost else "none" if not (lost.get("count") or lost.get(
+            "events")) else (lost.get("why") or "%s ENOBUFS, at least %s event(s)" % (lost.get("count"), lost.get(
+                "events")))
+        out = [PE_SECTION + " the kernel's process events, read by a helper process of the watch's own; %s"
+               % PE_NOT_JUDGED,
+               "  rounds asked: %d, answered: %d" % (s["rounds"], s["answered"]),
+               "  processes that began: %d; of them began and ended between two samples: %d" % (s["began"],
+                                                                                                  s["inside"]),
+               "  programs not read: %d" % s["unread_exe"],
+               "  lost: %s" % lost_text]
+        if s["refused"]:
+            out.append("  refused: %s" % s["refused"])
+        out += ["  hole, round %d: %s" % (n, h) for n, h in s["holes"]]
+        if s["more"]:
+            out.append("  the last answer did not hold all the reader had: the rest was not asked for")
+        return out
 
     def _bytes_note(self, now, n, inv):
         """E1/K-8: what the reader gave of the connections' bytes; a gap is a
@@ -4517,6 +4796,8 @@ class HostWatch:
         # start no helper); a wevtutil of theirs still out is ended and recorded
         for text in self.channel_owner.close("the watch stopped (Stop)"):
             self._hole(now, "channel-helper", "the round's channel read: %s" % text)
+        for text in self.procevents_owner.close("the watch stopped (Stop)"):   # BU-1: never a hole of the result
+            self.notes.append("the process events' helper at the stop: %s" % text)
 
     def _helper_holes(self, now):
         """I-5: every wevtutil helper an os follow had to end is a hole of
@@ -4808,6 +5089,7 @@ class HostWatch:
                                "record %s" % c.get("after") if c.get("after") is not None else (
                                    "its query's start %s" % query_start(c.get("query"))
                                    if query_start(c.get("query")) else "the watch's start")) if c.get("error") else ""))
+        out += self.procevents_lines()   # M14.1b (BU-3): after the CHANNEL line's place; absent without a helper
         if self.by_channel:   # AA-1, AB-1: the trees counted by image path, not knocked
             out.append("UNKNOWN, %s (listed and sourced, not knocked, AA-1): %d tree(s) of %d path(s)" % (
                 BY_CHANNEL.upper(), self.by_channel_count(), len(self.by_channel)))

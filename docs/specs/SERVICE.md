@@ -214,6 +214,15 @@ As the kernel's rules read, not as measured: CAP_SYS_PTRACE lets a defect in the
 root's own included, and read and change their memory; CAP_DAC_READ_SEARCH lets it read every file and list
 every folder, whatever their modes. The hardening narrows what such a defect does; it does not remove it.
 
+## The helper of the process events
+
+As every watch on Linux, the unit's watch starts the helper of the process events (ADR-0007 Amendment BU;
+docs/specs/PROC-EVENTS.md): a child of the unit's process that runs the reader of the kernel's process events and
+answers the watch over its own input and output. It runs under the unit's limits, which already let the reader
+hear (measured under them: the two capabilities, AF_NETLINK allowed), and it is ended with the unit: it ends when
+its input ends, and systemd ends the unit's processes at its stop. What it heard is counted in the watch's report,
+not judged; the rig's service run says whether the unit's watch heard.
+
 ## Where the record is
 
 The service's home is `/var/lib/raqib`: systemd makes it root's, mode 0700 (StateDirectory; ADR-0013 A-5). Its

@@ -3060,6 +3060,43 @@ commit that files the review, after measuring the first (the probe branch 172730
   program's name, read too late. Ruled: under the watch the reader runs in a process of its own, never as a
   thread of the watch. FOR: the watch's own work does not blind it to the programs an agent starts.
 
+## Amendment BU (the Table, 2026-11-20) - M14.1b: the reader in a process of its own, counted by the watch
+BQ-2 gave M14.1b the whole road: the watch takes the reader's events. BT-6 measured that the reader must not
+share the watch's interpreter. The road is taken in two tasks, so that each is reviewed for what it can get
+wrong: first the process and its channel to the watch, with nothing judged from it; then what discover does
+with the processes it names.
+- BU-1 (the helper). On Linux the watch starts one process of Raqib's own that runs the reader and nothing
+  else, by the interpreter the watch runs under and with the same isolation; it is in the watch's record of
+  what it started (BH-1), so no round takes it for a tree. It speaks to the watch over its own standard
+  input and output alone: one line asked, one line of JSON answered. It opens no file, starts no program,
+  and ends when its input ends, so a watch that dies leaves none behind. FOR: the reader hears a process that
+  lives under a millisecond while the watch works. MUST NOT TOUCH: Windows and every other system start no
+  helper; a watch on Linux whose helper cannot start is the watch it was, with one hole more.
+- BU-2 (what a round asks). Each round, after its sample, the watch asks the helper once and waits a bounded
+  time. The answer holds what the reader gave since the last ask (bounded: what does not fit comes with the
+  next, and says so) and the reader's counts. A late answer, an answer that is not the helper's line, a
+  helper that ended: each is a hole of its own kind, said once while it lasts, and the next round asks again
+  (a helper that ended is started again once, and a second end is final for the watch and said).
+- BU-3 (what the watch does with it in this task: it counts, and says). Nothing is judged from the reader's
+  processes yet, and no line of a tree's record is written from them. The inventory of a round carries what
+  the reader said (how many processes began, how many of them began and ended inside the round's interval,
+  how many programs were not read, what was lost by the kernel's count), and the report says it in one
+  section, with the reader's own word where it lost or refused. Where the reader is healthy, the watch's
+  word that it "sees nothing between two samples" on Linux is replaced by what it is now: heard, counted,
+  not judged until the next task. FOR: a person reads on his own machine how much lives between two samples
+  before any rule stands on it. MUST NOT TOUCH: every finding, every line of a tree's source, the result and
+  the exit code of a watch are what they were.
+- BU-4 (text an agent chose). A process's program path is text the process chose. In this task it reaches
+  no report, no event and no file: only numbers do. Where a later task shows a name it goes through the gate
+  a child's name goes through (a plain program name, else a hole).
+- BU-5 (the service). The unit's limits already let the reader hear (measured under them: the two
+  capabilities, AF_NETLINK allowed). The helper is a child of the unit's process and is ended with it. The
+  rig's service run says whether the unit's watch heard.
+- BU-6 (recorded for the next task, M14.1c). The reader's processes given to discover as the round's channel
+  is on Windows: a child that began and ended between two samples is its tree's child and its HostChild
+  line, so the rules that read a program's name judge it. BT-5 stands: after a loss every word about threads
+  and ends is a hint beside the sample. A record's join to a sampled process is by pid and the kernel's start
+  ticks together. A short connection given to its process stays M14.2.
 ## Amendment BV (the Table, 2026-11-20) - an empty ProcessGuid is no ProcessGuid (found on the way to M15.2)
 Found while measuring M15.2 (ADR-0014 AC-9): in some runs every line of the stand-in's tree stopped about
 thirty seconds before the tree ended, and nothing said so. Measured (the probe branch, GitHub's Windows

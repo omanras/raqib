@@ -1,12 +1,13 @@
 # PROC-EVENTS - the reader of Linux's process events
 
-`raqib/procevents.py` (ADR-0007 Amendments BQ, BR and BS). On Linux the
-kernel says, of every process, when it forks, when it changes its program
-(exec) and when it exits. The reader listens to that, and to nothing else:
-it switches nothing on, asks for no right and reads no argument of any
-process. It is the reader alone: no watch reads it yet; until one does,
-what a live watch sees on Linux between two samples is what it saw before.
-Only one reader runs in a process (its bind is on the process's pid).
+`raqib/procevents.py` (ADR-0007 Amendments BQ, BR, BS, BT and BU). On Linux
+the kernel says, of every process, when it forks, when it changes its
+program (exec) and when it exits. The reader listens to that, and to nothing
+else: it switches nothing on, asks for no right and reads no argument of any
+process. Since M14.1b a live watch on Linux runs it in a helper process of
+its own and counts what it gives (see "The helper" below); nothing is judged
+from it yet. Only one reader runs in a process (its bind is on the process's
+pid).
 
 ## The layout
 
@@ -207,6 +208,63 @@ started and never stopped is stopped at the interpreter's exit. Everything
 of the system goes through arguments a test replaces (the socket's maker,
 the reads of /proc, the clocks, the random mark, the ticks of a second, the
 thread, the exit registry, the platform).
+
+## The helper: the reader in a process of its own
+
+Measured (Amendment BT, BT-6): with the reader's thread inside a process
+whose other thread never yields, 158 to 202 programs of 200 not read; with
+the reader in a process of its own, 0 to 2. Every fork, exec and exit was
+heard in every case: what is missed is the program's name, read too late.
+So under the watch the reader runs in a process of its own, never as a
+thread of the watch (Amendment BU).
+
+The serve mode. `python -m raqib.procevents --serve` starts a Reader, then
+says `{"ready": null}` on its first line, before any ask; where the reader's
+start is refused it says `{"ready": "<the refusal>"}` instead and exits 0.
+Then it answers each line of its standard input with one line of JSON:
+
+- `read` or `read N` -> `{"processes", "ends", "older", "more", "counts",
+  "ask"}`: what the Reader's `read()` gave and its `counts()`, holding at
+  most 2000 entries in all (SERVE_MAX), processes first, then ends, then
+  older; what does not fit comes with the next `read`, and `more` is true.
+  A new `read()` of the Reader is taken only when what the helper holds from
+  the reads before was given whole, so what it holds is bounded by the
+  Reader's own bounds. `ask` is N, or null for a bare `read`;
+- `stop`, or the end of its input -> it stops the Reader and exits 0;
+- any other line -> `{"error": ...}` (the line is not repeated) and the
+  helper lives on.
+
+It reads nothing but its input, writes nothing but its output and starts no
+program. Where its output cannot be written it stops the Reader and exits 1.
+A Ctrl-C at the terminal does not end it: the end of its input does, so a
+watch that dies, however it dies, leaves no helper behind.
+
+The client. `procevents.Helper` starts the helper by the interpreter the
+watch runs under (`sys.executable`), with `-I` where the watch itself runs
+isolated, `-m raqib.procevents --serve`, its standard error to nothing and
+its directory the one that holds the raqib package the watch runs. The
+process is handed at once to the `started` callable it is given, so the
+watch records it as its own (raqib/own.py). `ask(timeout)` gives the answer,
+or one of `late`, `ended`, `not a line` or `refused`, and never waits past
+its timeout: a thread reads the helper's output into a queue. Each ask is
+`read N` with its own number and answers carry the ask's number, so a late
+answer is never taken by the next ask: it is left, and counted (`stale`).
+`stop()` closes the helper's input, waits 2 s (STOP_SECONDS), then ends it
+(terminate, then kill after 1 s) and says so.
+
+The watch (raqib/host.py, ProcEvents). On Linux the live reader starts one
+helper at its first round, before the round's sample, so the helper is in
+that sample as the watch's own and ready when asked; after each sample it
+asks it once and waits 2 s (ASK_SECONDS). The round's inventory carries
+`procevents`: `began` (the processes whose fork was heard and that were not
+given before), `inside` (those of them whose end was heard by the same
+answer: they began and ended between two samples), `unread_exe` (the step of
+the reader's `missed.exe`), `lost` (the reader's), `refused`, `hole` and
+`more`: numbers and the reader's or the watch's own words, never a program.
+A refusal is final; a helper that ended is started again once and a second
+end is final; a late answer and a line that is not the helper's are holes of
+their round, and the next round asks again. On Windows and elsewhere no
+helper is started and the key is absent.
 
 ## What was measured
 

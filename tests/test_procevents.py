@@ -857,8 +857,8 @@ def _imports(source):
 
 def test_e9_the_standard_library_alone_no_program_and_no_file_written():
     tree, mods = _imports(SOURCE)
-    assert mods == {"__future__", "atexit", "datetime", "errno", "os", "socket", "struct", "sys", "threading",
-                    "time"}
+    assert mods == {"__future__", "atexit", "datetime", "errno", "json", "os", "queue", "signal", "socket", "struct",
+                    "subprocess", "sys", "threading", "time"}
     assert mods - {"__future__"} <= set(sys.stdlib_module_names)
     calls = [ast.unparse(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)]
     for bad in ("os.system", "os.popen", "os.fork", "os.spawn", "os.exec", "os.posix_spawn", "os.write", "os.remove",
@@ -895,7 +895,7 @@ def test_e9_no_socket_but_af_netlink_is_opened(monkeypatch):
 def test_e9_nothing_in_raqib_imports_the_reader_yet():
     users = [p.relative_to(ROOT).as_posix() for p in (ROOT / "raqib").rglob("*.py")
              if p.name != "procevents.py" and "procevents" in p.read_text(encoding="utf-8")]
-    assert users == []
+    assert users == ["raqib/host.py"]
 
 
 # --- E6: the docs ---------------------------------------------------------------------------------------------
