@@ -324,3 +324,93 @@ stood for the whole watch though a value was logged seconds after the question.
   registry in one report; the start line's and the guide's "one bounded wevtutil" a round is two in the first
   round; the answer's event is not checked to be Sysmon's event 13 (the round's read checks what it asked);
   a stand-in channel with no question says nothing. Each waits for M15.3, which removes the question.
+
+## Amendment G (the Table, 2026-11-20) - S3 measured and ruled: the autostart places read by Raqib itself (M15.3)
+The three rules of persistence hang on Sysmon and on its configuration: where it logs no file or no registry
+value there is nothing to read (Amendments E and F only say so), and what the system's own services write for
+a tree (a service, a scheduled task) no line of the tree tells at all. A-2's S3 answers both: Raqib reads the
+places itself.
+
+Measured before ruling (the probe branch 80eee27, GitHub's Windows machine, the standard library alone, no
+helper process, no right asked):
+- Every place read in 0.07 s (0.24 s the first time): the Run and RunOnce values of every loaded hive and the
+  machine's, both views (2 entries); the two Startup folders (3); the scheduler's tree in the registry (236
+  tasks, 26 of its keys refused) and its folder of files (212); the services' key (687 with an ImagePath);
+  Winlogon's Shell and Userinit.
+- A quiet minute and a half, a read every 5 s: nothing changed in any place.
+- Four acts by the system's own tools, each harmless and undone (a Run value, a file in the Startup folder, a
+  scheduled task, a service never started): each was in the first read after it (under 0.1 s) and gone from
+  the first read after its undoing; nothing was left. The user's hive is read twice by two names (HKCU, and
+  HKU under its SID) and its Run key is one key in both views: an entry must be counted once.
+- Under a token whose Administrators group is deny-only: the Run keys, the Startup folders, the services and
+  Winlogon are read as before; the scheduler's tree and its folder are refused whole.
+- Not measured: a real desktop's churn (an updater that makes its own task or service); the scheduler's own
+  query tool under fewer rights (the probe is extended for it); how long the read takes on a machine with
+  thousands of services.
+
+- AG-1 (what is read). On Windows, by the standard library, in the watch's own process: the values under Run
+  and RunOnce of every loaded user's hive (by its SID, never twice) and the machine's, the 32-bit view where it
+  is another key; the files directly in a user's and all users' Startup folder (`desktop.ini` left out, as
+  A-3); each service's ImagePath, Start and Type; each scheduled task's actions and triggers where the watch's
+  rights give them; Winlogon's Shell and Userinit. An entry is its place, whose it is (user or machine), its
+  name (bounded and redacted as a value's name is, AB-2 and AC-4) and the hash of its content; where the content is a
+  command, the name of the program it would run, through the same gate as PERSIST-RUN-KEY's. FOR: persistence
+  is seen where Sysmon logs nothing, and where no line of the tree could tell it. MUST NOT TOUCH: a value's
+  text, a file's content, a SID and a user's name are never written (A-1).
+- AG-2 (what is said of the read). A place the watch's rights do not give is said as such (the scheduler's
+  tasks under a plain user's rights), never read as empty; a read that fails is said with its reason; a place
+  whose keys are refused in part says how many. A place unread in either of two reads gives no change.
+- AG-3 (a change). Two reads are compared: an entry added, changed (its hash) or removed. The watch will
+  compare each round's read with the one before it, the first with the read made at its start: what was
+  there when the watch began is never said (a limit, said), and a change made and undone between two reads
+  is not seen by this read (Sysmon's lines see it).
+- AG-4 (stages). M15.3a: the read standing alone (raqib/autostart.py, `python -m raqib.autostart`), its own
+  tests on a made-up registry, its spec, and the rig running it beside the stand-in (X37). Nothing of the
+  watch changes. M15.3b: the watch reads at its start and each round, writes a change as a host line (tool
+  HostAutostart) and three rules judge it - an entry of the Run keys, the Startup folders or Winlogon; a
+  service; a scheduled task - each medium, each only where no line of a tree in those rounds tells the same
+  act (PERSIST-RUN-KEY's and PERSIST-AUTOSTART's findings stand and are counted once) and where a tree was
+  alive. The read does not say who made a change, and Raqib does not guess it: the finding names the entry
+  and the trees alive then, and accuses none. The ruling of M15.3b is written after M15.3a's review, with
+  what the rig showed.
+- AG-5 (recorded). An entry removed is recorded and judged by no rule yet (removing a security tool's own
+  autostart is an act of its own kind). The places not read are the rule's ways round and are listed: Image
+  File Execution Options, AppInit_DLLs, a WMI subscription, the policies' Run keys, Active Setup, a service's
+  ServiceDll, a driver, a COM object, a hive that is not loaded. Whether the question of AE-3 is still needed
+  once the watch reads the Run keys itself is ruled with M15.3b. Linux's places are S4 (M15.4).
+
+## Amendment H (the Table, 2026-11-20) - the review of M15.3a (docs/review/2026-11-20-M15.3a.md): M15.3a lands
+The reviewer's verdict is NEXT with four must-fix items. The field's word (the rig on 670ed0b, GitHub's Windows
+machine): X37 MET - the stand-in's Run value, Startup file and service each added and later removed, 39 reads,
+the longest 0.157 s, no place unread; the real read's own test green on both Windows jobs.
+- AH-1 (a SID in a name). A name is text its maker chose, and a per-user task of an updater holds its user's
+  SID. Wherever a SID stands in a name, the name shown holds `[sid]` in its place; the entry's key holds the
+  name as it is, so two entries that differ only there stay two. A user's name inside a name cannot be told
+  from any other word and is shown: said in the spec. FOR: AG-1's MUST NOT TOUCH holds for what a maker
+  writes too. MUST NOT TOUCH: what two reads compare.
+- AH-2 (the bound is said). A folder of tasks below the bound of the walk is counted as a key not read, and the
+  place says `partly`: a task that the read did not reach is never a place read whole.
+- AH-3 (ruled before the watch reads this: M15.3b). What two reads can say that is not so, or leave unsaid, is
+  in the spec now and is ruled with M15.3b, each measured first where it can be: an entry that first appears
+  while its place is unread is never said as added (the base of a comparison, per place and per key, must be
+  the last read that held that key); a hive loaded or unloaded reads as its entries added or removed; the
+  machine's 32-bit twin of a value said as added when its 64-bit twin changes; a program named from the first
+  word of a text that Windows runs otherwise (an unquoted path with a blank, a Winlogon value that lists more
+  than one program); a read with no bound on its size and its time, and a Startup folder on a share read over
+  the network (the capture path makes no network call: CLAUDE.md's rule 5 must hold when the watch reads it);
+  a file held open while it is hashed.
+- AH-4 (the rig's own acts). Where the rig's run has to end the stand-in, its acts are not undone: X37's row
+  says so, and an error is said by its kind alone. The rig's facts are kept with its other files.
+- AH-5 (a key deleted while it is read) is not there, as one that was never there; another error of a key still
+  fails its place, with its reason.
+- AH-6 (the hashes have no salt). An entry's key is a hash over where it is, a user's SID included, and its
+  content's hash is of the content alone: either can be matched by whoever tries the right text. Neither
+  leaves the process in M15.3a. A stage that writes one into a line rules first how (a salt of the run, as the
+  lines' own hashes have).
+- AH-7 (a driver). AG-5's list named "a driver" as not read. It is read: a driver is a key of the services with
+  an ImagePath. The word is withdrawn from the list; whether a rule's sentence tells a driver from a service
+  is M15.3b's.
+- AH-8 (the builder's questions). A task's program and a Startup link's target are not read in this stage (1,
+  4: the Actions' format is measured first; a link's target is inside its content). Userinit's comma and the
+  unquoted path (2, 3) are AH-3's. The coarse comparison of a place read in part (6) stands until AH-3 is
+  ruled. The rig's second run of the stand-in (8) stands; X36 is M14.1c's (7).

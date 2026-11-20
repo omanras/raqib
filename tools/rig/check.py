@@ -4,7 +4,8 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
 
     python tools/rig/check.py --report WATCH.out --workload WORKLOAD.out [--sources DIR] [--exit-code N]
                               [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
-                              [--service FACTS.json] [--procevents FACTS.json] [--events-check FILE]
+                              [--service FACTS.json] [--procevents FACTS.json] [--autostart FACTS.json]
+                              [--events-check FILE]
                               [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
@@ -34,6 +35,9 @@ this machine's own address and sets a value under its user's Run key (Windows; e
 says each in a WORKLOAD line: X32 PERSIST-AUTOSTART, X33 NET-ADMIN-PORT, X34 PERSIST-RUN-KEY name its tree
 (n/a where there is no os source, or where the stand-in did not do the act); each is MISSED where the act was done
 and no finding names its tree (X34 too, since its rule landed: ADR-0014 AC-8).
+--autostart: what tools/rig/autostart_run.py saw raqib.autostart's reads give beside the stand-in (ADR-0014 AG-4):
+X37 the stand-in's Run value, its Startup file and its service are each an `added` change and later a `removed`
+one; MISSED otherwise (facts missing, not run on Windows, an error); n/a off Windows.
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
@@ -860,6 +864,56 @@ def _procevents_rows(facts):
         return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
 
 
+AUTOSTART_NAME = ("X37 the autostart places read by Raqib itself: the stand-in's Run value, its Startup file and its"
+                  " service are each added and later removed")
+AUTOSTART_ACTS = (("run", "RaqibRigValue"), ("startup", "raqib-rig-startup.cmd"), ("service", "RaqibRigService"))
+
+
+def read_autostart(facts):
+    """X37 (ADR-0014 AG-4): what tools/rig/autostart_run.py saw raqib.autostart's reads give while the stand-in
+    worked. MET where each of the stand-in's three acts (its Run value, its Startup file, its service: AUTOSTART_ACTS,
+    the names tools/rig/workload.py gives them) is an `added` change and, in a later read, a `removed` one; MISSED
+    otherwise, with what is missing and the reads that left a place unread (facts None, not run on Windows, an
+    error: silence is a finding); n/a off Windows. It never raises: facts that cannot be read are MISSED."""
+    name = AUTOSTART_NAME
+    try:
+        if not isinstance(facts, dict):
+            return [(name, MISSED, "the autostart run left no facts (silence is a finding)")]
+        platform = str(facts.get("platform") or "")
+        if not platform.startswith("win"):
+            return [(name, SKIP, "not run: not Windows (%s)" % (platform or "no platform said"))]
+        if facts.get("not_run"):
+            return [(name, MISSED, "not run on Windows: %s" % facts["not_run"])]
+        if facts.get("error"):
+            return [(name, MISSED, "the run failed: %s%s" % (facts["error"], (
+                "; the run ended the stand-in before its end: its acts were not undone"
+                if facts.get("ended_by_run") else "")))]
+        changes = [c for c in facts.get("changes") or [] if isinstance(c, dict)]
+        seen, missing = [], []
+        for place, want in AUTOSTART_ACTS:
+            mine = [c for c in changes if c.get("place") == place and str(c.get("name") or "").lower() == want.lower()
+                    and isinstance(c.get("round"), int)]
+            added = [c["round"] for c in mine if c.get("change") == "added"]
+            removed = [c["round"] for c in mine if c.get("change") == "removed" and added and c["round"] > min(added)]
+            if not added:
+                missing.append("%s %s: no added change" % (place, want))
+            elif not removed:
+                missing.append("%s %s: added in read %d, no removed change after it" % (place, want, min(added)))
+            else:
+                seen.append("%s added in read %d, removed in read %d" % (place, min(added), min(removed)))
+        unread = ["read %s: %s" % (u.get("round"), ", ".join(sorted(u.get("places") or {})))
+                  for u in facts.get("unread") or [] if isinstance(u, dict)]
+        if missing:
+            ended = ("; the run ended the stand-in before its end: its acts were not undone"
+                     if facts.get("ended_by_run") else "")
+            return [(name, MISSED, "missing: %s; unread: %s%s" % ("; ".join(missing), "; ".join(unread) or "none",
+                                                               ended))]
+        return [(name, MET, "%s; %s read(s), the longest %s s; unread: %s" % (
+            "; ".join(seen), facts.get("reads"), facts.get("seconds_max"), "; ".join(unread) or "none"))]
+    except Exception as exc:   # never raises: facts that cannot be read are MISSED
+        return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
+
+
 WATCH_EVENTS_NAME = ("X35 the watch's helper heard the kernel's process events: its report's PROCESS EVENTS section,"
                      " every ask answered, no helper started again, nothing lost, at least the stand-in's children"
                      " began")
@@ -972,6 +1026,7 @@ def main(argv=None):
     p.add_argument("--forward")
     p.add_argument("--service")
     p.add_argument("--procevents")
+    p.add_argument("--autostart")
     p.add_argument("--events-check")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
@@ -1016,6 +1071,12 @@ def main(argv=None):
         except (OSError, ValueError):
             procevents_facts = None
         rows += read_procevents(procevents_facts)
+    if a.autostart:   # X37 (ADR-0014 AG-4): given and missing is the run's silence, MISSED
+        try:
+            autostart_facts = json.loads(text(a.autostart))
+        except (OSError, ValueError):
+            autostart_facts = None
+        rows += read_autostart(autostart_facts)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

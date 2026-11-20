@@ -1,23 +1,10 @@
-# HANDOFF — M13.1 REDO  (ADR-0016 Amendment A, HA-1 to HA-10: the review of M13.1)
+# HANDOFF — none open  (M15.1, M14.1a, M15.2, M14.1b, M15.2b, M17.1, M15.3a and M13.1 landed by 2026-11-21; the next tasks are on their own branches)
 
-Task: the review's findings, as the Table ruled them. Read docs/review/2026-11-20-M13.1.md (the packet; its file:line cites are of 14fef1b) and ADR-0016's Amendment A, then do each item below. Nothing else changes. The Table's fix of X38 for Windows' line ends (4208d72, tools/rig/check.py and its test) stands.
+Task: none on main. Do not build here. In build on their branches: the second REDO of M14.1c (claude/M14.1c, ADR-0007 Amendment CA), M15.3b (claude/M15.3b, ADR-0014 Amendment I: the autostart read made fit for the watch). Reviewed and waiting for the Table's ruling: M16.1 (claude/M16.1, ADR-0017: ready content for a SOC's tools; the search for silence is measured again first). Next: M14.1d (ADR-0007 CA-7: what a process changes to, a child whose parent has gone, the name a program was called by), M15.3c (the watch reads the autostart places and rules judge a change).
+
+From 0.2.0 on (ADR-0015): a merge into main that changes what Raqib does moves `raqib.__version__`, writes its entry at the top of CHANGELOG.md and runs `python3 tools/event_examples.py --write`. The Table does it in the merge.
 
 Scope:
-  raqib/event.py, raqib/cli.py (only `cmd_events`, its helper and the parser of `events`), raqib/forward.py (ONLY the reading of one line in `classify`: HA-9), tools/event_examples.py (only its docstrings), tools/rig/check.py, tests/test_rig_check.py and .github/workflows/rig.yml (only X38's step: the error stream kept), docs/specs/EVENT.md, docs/GUIDE.md (only the row and sentences of `raqib events`), docs/THREAT_MODEL.md (only the chain's entry), tests/test_event_chain.py, tests/test_forward.py (only a test of HA-9), docs/review/2026-11-20-M13.1-redo-questions.md; and a test of tests/ ONLY where it holds, word for word or by count, a line this task changes (named in the questions file; no other assertion weakened).
+  (none)
 
-Exit criteria:
-- R1 (HA-1) A line is a link where it is a JSON object with `watch.host`, `watch.run` (strings) and a well-formed `prev`, whatever `event.check` says of it; `raqib events` still names that line's problems as today. Test: a run with a middle line that holds a key this build does not know: the chain is whole, the line's own problem is named, exit 1 for the line and no break said. EVENT.md: the reader's section says a torn write is a line that is not whole JSON, and no longer that any line failing the check is one.
-- R2 (HA-2) `CHAIN_SINCE = (0, 4, 0)` in raqib/event.py (the Table moves it at the merge if the number differs). A run with no `prev` on any line: where every readable `watch.version` of its lines is below it, "not chained" as today (exit unchanged); where one is at or above it, a problem (exit 1) said in its own words; a version that is not `0.N.N` is said as not read (not a problem). Tests: each.
-- R3 (HA-3) Runs are keyed by host and run. Test: two hosts' runs under one run word in one file are each whole.
-- R4 (HA-6) A run whose first line in the file holds a hash: said as beginning before this file, exit 1, never as broken at that line. A line byte for byte equal to an earlier line of its run: counted as said twice, no break, not beside. Tests: an export that starts mid-run; a line sent twice.
-- R5 (HA-7) Every break and every line beside the chain of a run is listed in the file's order, to a bound of 10 a run that is said when reached; a line beside is cited with the line it names and the line that names that one again; no stale value in what the function returns. Tests: a break after a line beside (both said); twelve breaks (ten said, the bound said).
-- R6 (HA-5) `raqib events FILE --against OTHER`: the answer as HA-5 says (counts; each missing and each differing line by its line numbers in both files, to a bound that is said), exit 1 where any is missing or differs, 2 where OTHER cannot be read; without `--against` nothing changes. The help and GUIDE's row say that it needs the collector's lines byte for byte. Tests: equal; a line changed in FILE after OTHER took it (both files whole by themselves: shown only side by side); a line of OTHER not in FILE; OTHER holding less than FILE (not a problem: the collector is behind).
-- R7 (HA-4, HA-10) Words: EVENT.md, GUIDE and THREAT_MODEL say the last line's limit wherever they say a changed or added line is seen; the threat model's collector sentence says what R6 does; the base keys' range leaves `prev` out; a test writes a run's tail again with new hashes and shows the check says whole (the limit, said in the test's words).
-- R8 (HA-8) EVENT.md gains the made-up run of two written lines under a heading that does not begin `### example:`; a test holds it as HA-8 says; `tools/event_examples.py --check` passes and its docstrings say what `prev` in VARIES is for.
-- R9 (HA-9) A line whose JSON reading raises RecursionError is named as not an event by `raqib events` (no traceback), is no link, and is a refused line to the forwarder (which goes on). Tests: both.
-- R10 (HA-10) Tests: a run whose first write fails; a file replaced under a running watch. The rig's Windows step prints and keeps the error stream of `raqib events`.
-- R11 Gate green in the foreground; ASCII outside docs; raqib/host.py and raqib/discover.py not edited; no existing assertion weakened.
-Not in scope: a keyed chain; the version and CHANGELOG.md (the Table's at the merge).
-If an item needs a file outside Scope: STOP and say which file and which line.
-Commit: `landed: M13.1 REDO the review's findings` or `STOP: M13.1 REDO <reason>`.
-Read HANDOFF.md and do only the task it specifies.
+If you were started as a builder on this file: STOP, commit nothing, and say that no task is open.

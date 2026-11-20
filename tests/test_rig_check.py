@@ -345,6 +345,76 @@ def test_x35_is_a_row_of_main_and_off_linux_it_counts_for_nothing(tmp_path, caps
     assert "MET     X35 " in capsys.readouterr().out
 
 
+# --- X37 (ADR-0014 AG-4): the autostart places read by Raqib itself beside the stand-in -------------------------
+def autostart_facts(**over):
+    changes = []
+    for place, name in check.AUTOSTART_ACTS:
+        changes += [{"round": 4, "change": "added", "place": place, "scope": "user", "view32": False, "name": name,
+                     "program": None}, {"round": 30, "change": "removed", "place": place, "scope": "user",
+                                        "view32": False, "name": name, "program": None}]
+    facts = {"platform": "win32", "reads": 40, "seconds_max": 0.09, "changes": changes, "unread": [], "error": None}
+    facts.update(over)
+    return facts
+
+
+def x37(facts):
+    rows = check.read_autostart(facts)
+    assert len(rows) == 1 and rows[0][0].startswith("X37 ")
+    return rows[0][1], rows[0][2]
+
+
+def test_x37_met_where_each_act_is_added_and_later_removed():
+    state, words = x37(autostart_facts())
+    assert state == check.MET and "service added in read 4, removed in read 30" in words and "40 read(s)" in words
+
+
+@pytest.mark.parametrize("drop,why", [(("added", "service"), "service RaqibRigService: no added change"),
+                                      (("removed", "run"), "run RaqibRigValue: added in read 4, no removed change"),
+                                      (("added", "startup"), "startup raqib-rig-startup.cmd: no added change")])
+def test_x37_missed_where_an_act_is_not_added_then_removed(drop, why):
+    facts = autostart_facts()
+    facts["changes"] = [c for c in facts["changes"] if (c["change"], c["place"]) != drop]
+    facts["unread"] = [{"round": 7, "places": {"task": "refused"}}]
+    state, words = x37(facts)
+    assert state == check.MISSED and why in words and "read 7: task" in words
+
+
+def test_x37_missed_where_the_removal_came_first_or_the_run_was_silent():
+    facts = autostart_facts()
+    for c in facts["changes"]:
+        c["round"] = {"added": 30, "removed": 4}[c["change"]]
+    assert x37(facts)[0] == check.MISSED
+    assert x37(None)[0] == check.MISSED and x37({"platform": "win32", "changes": 3})[0] == check.MISSED
+    assert x37(autostart_facts(error="OSError: x"))[0] == check.MISSED
+    assert x37(autostart_facts(not_run="why"))[0] == check.MISSED
+
+
+def test_x37_says_when_the_run_ended_the_stand_in_and_its_acts_were_not_undone():
+    """ADR-0014 AH-4: a stand-in the run had to end did not undo its acts; X37's row says so, MISSED."""
+    facts = autostart_facts(ended_by_run=True)
+    facts["changes"] = [c for c in facts["changes"] if c["change"] == "added"]
+    state, words = x37(facts)
+    assert state == check.MISSED and "the run ended the stand-in before its end: its acts were not undone" in words
+    state, words = x37(autostart_facts(error="OSError (5)", ended_by_run=True))
+    assert state == check.MISSED and "its acts were not undone" in words
+    assert "not undone" not in x37(autostart_facts(error="OSError (5)"))[1]
+
+
+def test_x37_n_a_off_windows_and_a_row_of_main_only_where_given(tmp_path, capsys):
+    import json
+    assert x37({"platform": "linux", "not_run": "not Windows (linux)"})[0] == check.SKIP
+    (tmp_path / "w.out").write_text(REPORT, encoding="utf-8")
+    (tmp_path / "l.out").write_text("WORKLOAD 07:50:35 pid 9828\n", encoding="utf-8")
+    (tmp_path / "a.json").write_text(json.dumps(autostart_facts()), encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "win32"]
+    check.main(base)
+    assert "X37 " not in capsys.readouterr().out
+    check.main(base + ["--autostart", str(tmp_path / "a.json")])
+    assert "MET     X37 " in capsys.readouterr().out
+    check.main(base + ["--autostart", str(tmp_path / "none.json")])
+    assert "MISSED  X37 " in capsys.readouterr().out
+
+
 # --- X38 (ADR-0016 H-4, M13.1): raqib events over the watch's events file says this watch's run is whole --------
 
 RAN = REPORT.replace("\nFINDINGS: 1", "\nrun: rig-run (seqs 1..9 of the record)\nFINDINGS: 1", 1)
