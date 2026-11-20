@@ -67,3 +67,70 @@ events file):
 - The content follows the spec: a key added to the events (ADR-0016's `prev`) is in the namespace by the
   pipeline's own rule and needs no change; a named key added to the Mapping needs its line in the pipeline,
   and the rig's claim fails until it is there.
+
+## Amendment A (the Table, 2026-11-21) - the review of M16.1 (docs/review/2026-11-20-M16.1.md): STOP, ruled
+The reviewer stopped at the search for silence. Measured before ruling (the probe branch 1a1b253, the content of
+4599659 installed, Elasticsearch 8.15.3 and OpenSearch 2.17.1, made-up hosts under .example):
+- A deadline for every line - its arrival by the engine's clock and two of its own beats - and a host silent
+  where the engine's clock has passed the latest deadline any of its lines gave: one search on both engines,
+  the engine reading its own clock inside the selector (no time given by the caller). At once: none silent.
+  After 3.6 s: the three hosts with a beat of 1 s and the host whose watch said its end. After 8 s: also the
+  host whose first line had a beat of 3 s and whose later line had 1 s. Never: the host with a beat of 600 s,
+  nor one whose heartbeat carried a `time` of the year 2000. Listed as it should be: a host that said only its
+  start and never a heartbeat, and one whose heartbeat carried a `time` of 2099.
+- The runs that stopped with no end, by host and run with the same deadline and a count of ends: exactly the
+  five made-up runs with no end, never the one that said its end. On both engines.
+- A search on a key inside a part kept whole (`raqib.result.word:INCOMPLETE`): one of one, on both.
+- Twelve lines that are not as the spec has them. Refused by the engine and so lost: an empty key; `watch.run`
+  as an object; a key the spec does not know nested 25 deep (and, in Elasticsearch, `evidence` so nested); 1001
+  keys the spec does not know; a word of 40000 characters inside a part kept whole. Kept as an ordinary event:
+  a `kind` the spec does not have; no `n`; `alarm` as a text. Kept as an error document: `n` beyond a long; a
+  line that is not JSON; another schema. The line after each was kept every time.
+- A shipper's own `host.hostname` and `host.ip` on the document: gone after the pipeline, which writes
+  `host` anew.
+
+- SA-1 (silence is a deadline every line gives). The search for silence lists the hosts where the engine's own
+  clock has passed the latest deadline that any line of the host gave: the line's arrival
+  (`event.ingested`) and two of that line's own `watch.beat`. Every line counts, not heartbeats alone; the beat
+  is the line's own, so a long beat holds only for two of itself after its own arrival and no longer; no time
+  is given by the caller. The hosts nearest their deadline's passing come first, and the search says its
+  bound of hosts. FOR: the one alarm no event can carry is not put off by an old line, a forged long beat's
+  reach is two of that beat, and a watch killed before its first heartbeat is seen. MUST NOT TOUCH: an
+  event's own `time` is never what silence is judged by.
+- SA-2 (the runs that stopped with no end). A search of its own: by host and run, the same deadline, and no
+  `watch` event of `state` end. It is the spec's word for a watch that was killed (EVENT.md), beside the
+  host's silence (FORWARD.md): the first names the run, the second the host.
+- SA-3 (what the content trusts, said). The page says it plainly: every key of a well-formed line is trusted,
+  `watch.host`, `watch.beat` and `time` among them, and the watched account writes the file; a forged line
+  can keep a host off the list for two of the beat it names and can say any host's name. The answer the
+  collector holds is where a line came from: the shipper's own fields.
+- SA-4 (the shipper's fields are kept). The pipeline sets `host.name` and leaves every other field a shipper
+  set on the document, `host.*` among them, on an event and on an error document alike.
+- SA-5 (a line is an event, or it is kept as what it is; none is lost). The pipeline keeps as an error
+  document, with its reason and the whole line, any line that is not an event by what the pipeline can tell:
+  not JSON, another schema, a `kind` the spec does not have, a base key missing or of another kind of value
+  (`alarm` that is not true or false, a number where a text is due), and any shape an engine would refuse - a
+  nesting deeper than a bound, a text longer than a bound, more keys than a bound, an empty key. A key the
+  spec does not know is not indexed: its name is listed and its value stays in the whole line. The rig feeds
+  each measured line and claims that none is refused by the engine. The page says that the full check of a
+  line is `raqib events` on the host, and that the pipeline's is the part an engine needs.
+- SA-6 (no identity from the line). The content sets no document id from a line: a forged line could then
+  write over a true one. Lines sent twice are two documents; the page says so and how to count once.
+- SA-7 (the searches say what they count). An alarm's search counts every saying; the page says to take a
+  thing's latest `rev`. `@timestamp` is the event's own time, the host's clock: a rule or a view that windows
+  on it misses a line that arrives late; `event.ingested` is the arrival. The page says both, and that the
+  template must be there before the first line and what a shipper that names its own pipeline does.
+- SA-8 (every rule a watch can say is in the table). The table of techniques and the layer take every rule the
+  report lists - the catalog's and those the code holds outside it (the silence rules, the cross-source rule,
+  the drift anchors) - from the code's own list, not from the catalog's folder alone.
+- SA-9 (the Sigma rules). No shipped rule names `alarm: false` or `severity`, and the page says why a rule of a
+  SOC's own must not (the pipeline of names cannot carry them rightly). One more rule: a heartbeat whose
+  state says the watch is not watching. Each rule is shown on the rig to match an event of its kind and to
+  pass over a near miss.
+- SA-10 (the claims can fail). The rig feeds made-up events of every class the rules and searches name, the
+  made-up hosts of the measurement above for silence and for the runs with no end, a line of each shape of
+  SA-5, and a document with a shipper's fields; it holds `event.ingested` between its own clock before and
+  after the send; it names in every row what was fed and the versions of the tools it installed, which are
+  pinned; the real watch of the job says heartbeats (a short beat).
+- SA-11 (said as not measured). The layer was never loaded into a Navigator; nothing of Splunk, Sentinel,
+  Wazuh, an engine's own shipper tailing the file, or volume.
