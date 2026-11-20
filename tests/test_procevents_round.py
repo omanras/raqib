@@ -521,7 +521,8 @@ def test_e6_the_documents_follow():
                      " does not check them.",
                      "always with `-I`", "an input that is full (a part of the ask written, or none) is `ended`",
                      # M14.1c REDO (BZ-1, BZ-3, BZ-5, BZ-6, BZ-8)
-                     "The search for act-roots takes as a root only a process a sample held (BZ-1)",
+                     "An act-root is made only by what the samples alone make: its root, the shell under it and a command under"
+                     " that shell are each a process a sample held (BZ-1, CA-1, CB-1)",
                      "A program a process changes to after its line was written (a shell that runs its last command in"
                      " its own place, in a later round) gets no second line, and a process's earlier programs are"
                      " never given.",
@@ -707,12 +708,22 @@ def test_s1_ca1_a_shell_no_sample_held_makes_no_chain_of_an_act_root():
                      in (sh, git))
     inv = build(dict(texts, proc=("p", sample, None), procevents=("x", reader, None)), holes)
     assert inv["act_roots"] == [] and not [t for t in inv["candidates"] if t["pid"] in (2010, 2020)]
-    # the shell sampled, its git given by the reader alone: the act-root as before, git among its acts
+    # CB-1: the shell sampled, its git given by the reader alone: still no act-root (no sample held a command: the
+    # samples alone would make none, and the act-root's budget was measured on samples)
     sample += proc_line(*sh)
     reader = line(git[0], ppid=git[1], exe=git[3], ticks=git[4], ended=None, code=None)
     inv = build(dict(texts, proc=("p", sample, None), procevents=("x", reader, None)), holes)
+    assert inv["act_roots"] == [] and not [t for t in inv["candidates"] if t["pid"] in (2010, 2020)]
+    # the whole chain sampled: the act-root the samples make; a second chain the reader alone gave under the same
+    # root adds its processes as acts (CA-1: what only the reader gave adds acts, and never makes an act-root)
+    sample += proc_line(*git)
+    more = (line(2031, ppid=tool[0], exe="/usr/bin/sh", ticks=5000, ended=None, code=None)
+            + line(2032, ppid=2031, exe="/usr/bin/curl", ticks=5001, ended=None, code=None))
+    inv = build(dict(texts, proc=("p", sample, None), procevents=("x", more, None)), holes)
     (root,) = inv["act_roots"]
-    assert root["pid"] == 2020 and {(a["pid"], a["image"]) for a in root["acts"]} == {(2021, "sh"), (2022, "git")}
+    assert root["pid"] == 2020 and {(a["pid"], a["image"]) for a in root["acts"]} == {
+        (2021, "sh"), (2022, "git"), (2031, "sh"), (2032, "curl")}
+    assert root["chains"][0]["pid"] == 2021   # the samples' own chain is said first
 
 
 def child_lines(home):

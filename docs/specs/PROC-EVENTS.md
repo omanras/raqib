@@ -346,11 +346,16 @@ its HostChild line, so NET-TOOL and DESTRUCT-CMD judge it by the name of
 its program's file. A tree that is a candidate only by what the reader
 gave is as one that is so only by the channel on Windows (`candidate_by`
 "channel", AA-1), and the footprints are those of the round built without
-the reader's records (AD-1). The search for act-roots takes as a root only
-a process a sample held (BZ-1), and as the shell of its chain only a
-process a sample held (CA-1): what only the reader gave adds acts to an
-act-root the samples made; it never makes one. An end heard from the reader never ends a process the sample
-holds: the round's process list is the sample's. The round reads no /proc
+the reader's records (AD-1). An act-root is made only by what the samples
+alone make: its root, the shell under it and a command under that shell are
+each a process a sample held (BZ-1, CA-1, CB-1). A chain the reader alone
+gave under such a root - a second shell and its command, between two
+samples - adds its processes as the act-root's acts, which are judged; under
+a root the samples did not make an act-root it adds nothing, and that is not
+judged (the act-root's budget was measured on samples; whether the reader's
+word may make one is measured first, M14.1d). An end heard from the reader
+never ends a process the sample holds: the round's process list is the
+sample's. The round reads no /proc
 start of a child the reader alone gave and said ended: its start is the
 record's (BZ-8), kept in the round's record of starts apart from the /proc
 reads (`child_started.events`, "the process events: when its fork was
@@ -359,7 +364,11 @@ heard"), and an act timed by it has the basis `events`, never `stat`
 `input_meta.command_sources` and in the order of `command_programs`, where
 each program's children were seen: `sample`, `events` or `both` (CA-2); a
 line of a round with no reader's text has no such key, and no rule reads
-it.
+it. Where one name covers several children of a line, its word is theirs
+together (a sampled one and a heard one read `both`). The word is worked out
+from the records a child cites: a watch that takes more than one snapshot a
+round (`--window`) can say `sample` of a child the reader heard too (CB-3);
+a watch as it runs by default takes one.
 
 What is not judged (BY-3, BZ-3). A tree needs a talker at a sample, and a
 connection that opens and closes between two samples is unseen (M14.2): a

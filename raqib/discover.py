@@ -3107,8 +3107,8 @@ def _norm_path(path):
 
 
 def _sampled(p):
-    """ADR-0007 BZ-1, CA-1: whether a process of the round has a record that is not the reader's (a sample held it).
-    What only the reader gave adds acts to an act-root the samples made; it never makes one."""
+    """ADR-0007 BZ-1, CA-1, CB-1: whether a process of the round has a record that is not the reader's (a sample held
+    it). What only the reader gave adds acts to an act-root the samples made; it never makes one."""
     return any(not _reader_src(r) for r in p["recs"])
 
 
@@ -3156,11 +3156,14 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         parent = procs[s["ppid"]]
         if parent["pid"] in self_tree or shell(parent):
             continue
-        if not _sampled(s):   # ADR-0007 CA-1: the shell of a chain is a process a sample held, as its root is
-            continue
         under = below(pid)
         if any(not shell(procs[d]) and outside(d, parent) for d in under):
-            chains.setdefault(parent["pid"], []).append((pid, under))
+            # ADR-0007 CB-1: a chain MAKES an act-root only where the samples alone make it - its shell and a
+            # command under it are processes a sample held; a chain the reader gave adds acts to an act-root, never
+            # makes one
+            made = _sampled(s) and any(not shell(procs[d]) and outside(d, parent) and _sampled(procs[d])
+                                       for d in under)
+            chains.setdefault(parent["pid"], []).append((pid, under, made))
     roots = []
     for pid in sorted(chains):
         p = procs[pid]
@@ -3171,8 +3174,10 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
             continue
         if not _sampled(p):   # ADR-0007 BZ-1: a root is a process a sample held
             continue
+        if not any(made for _, _, made in chains[pid]):   # CB-1: no chain of it is the samples' own
+            continue
         acts, heads = [], []
-        for s, under in chains[pid]:
+        for s, under, _ in sorted(chains[pid], key=lambda c: (not c[2], c[0])):   # the samples' chains first
             commands = sorted({procs[d]["image"] or "?" for d in under if not shell(procs[d]) and outside(d, p)})
             heads.append({"pid": s, "image": procs[s]["image"], "below": len(under), "commands": commands,
                           "cites": _cites(procs[s]["recs"], 1)})

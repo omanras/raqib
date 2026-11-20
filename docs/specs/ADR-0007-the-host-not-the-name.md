@@ -3335,3 +3335,23 @@ CI jobs.
   agent (qwen) 8 of 36 processes ran a second program in the pid of the first, the shell that ran its command
   in its own place (`bash -> python`, `bash -> hostname`), each within one round; one child of 212 in a made-up
   set of idioms outlived a parent that had been given a round before.
+
+## Amendment CB (the Table, 2026-11-21) - the third review (docs/review/2026-11-21-M14.1c-redo2.md): M14.1c lands
+The reviewer's verdict is NEXT with two small items; the first asked which reading of CA-1 the Table meant. The
+field's word (the rig on ac5412d): X36 MET by the line's own fact (`command_sources: events` for the wget, on a
+line that names curl too); the gate green on the six CI jobs.
+- CB-1 (an act-root is what the samples alone make). CA-1 held the root and the shell to a sample; the review
+  showed that a command the reader alone gave could still complete an act-root no sample would have made. The
+  rule is the strict one: an act-root is made only where its root, the shell under it and a command under that
+  shell are each a process a sample held. Then, and only then, a chain the reader alone gave under that root
+  adds its processes as the act-root's acts, and they are judged. FOR: the act-root's budget was measured on
+  samples, and no alarm arises from a word it never measured. MUST NOT TOUCH: an act-root the samples make, to
+  the byte.
+- CB-2 (words). HOST-RHYTHM's own sentence and the watch's note on acts between rounds name the act-root's case
+  beside the tree that talks; the rule's list of the words for where an act's time came from holds `events`.
+- CB-3 (recorded for M14.1d). Whether the reader's word may make an act-root (a user-folder program whose shell
+  and command both live between two samples), measured first on a desktop's ordinary work. Where a line's
+  `command_sources` is worked out from the cites, a watch that takes more than one snapshot a round can say
+  `sample` of a child the reader heard too: discover gives each act its sources then. A child with no cite is
+  said `sample`. The test that a line of a round with no reader's text is unchanged compares two runs of this
+  code, not the base's bytes.
