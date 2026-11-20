@@ -43,11 +43,11 @@ def texts_of(root, path, names=None, view=0):
     return out
 
 
-def say(place, texts):
+def say(place, texts, machine=True):
     count = collections.Counter()
     shown = collections.defaultdict(list)
     for t in texts:
-        if autostart._sure(t):
+        if autostart._sure(t, machine):   # AL-4: a machine's own text; the reader's own environment
             count["sure"] += 1
         else:
             w = why(t)
