@@ -922,8 +922,11 @@ What it does not see:
   reach is said as not read. A task's program is not read (its Actions are
   hashed, not parsed), so a task's change names no program; a program named
   from an unquoted text whose first word holds a separator, is followed by a
-  blank and ends in no program's extension is said as one that `may run`, and
-  a Winlogon list of more than one program names none.
+  blank and ends in no program's extension is said as one that `may run` - as
+  is one whose first word holds a `%`, one that holds a blank other than a
+  space or a tab, and one where more than one run of the text ends in a
+  program's extension (AK-3) - and a Winlogon list of more than one program
+  names none.
 - **The lever that is left** (ADR-0014 AJ-2), as AK-2 and AK-6 leave it. Any process of the
   user can make its own Startup folder or Run key slow or large (many files,
   many or large values, a file slow to open). The deadline is looked at between
@@ -932,11 +935,15 @@ What it does not see:
   folder's listing every name (the bound of 1000 is of the entries compared and
   64 KiB of what is hashed, not of what is read). In a read that reaches the
   slow key, the keys after it in its step and the steps after its step are not
-  reached, and that is said; in a later read of the same turn they are reached
-  before it (the steps turn, the users' hives turn inside a step, the machine's
-  key or folder comes first), so a change in them is said late, within one turn
-  of six reads, by the first read that reads them whole - unless it was made
-  and undone in that time, which is not said. A key or folder held over 1000
+  reached, and that is said; in a later read they are reached before it (the
+  steps turn at each read, the users' hives turn once a whole turn of the
+  steps, the machine's key or folder comes first), so a change in them is said
+  late - where the slow keys are one user's own, within six reads for each
+  user's hive loaded - by the first read that reads them whole, unless it was
+  made and undone in that time, which is not said. Nothing turns inside the
+  services' or the tasks' step: a slow key there delays the keys after it in
+  every read, said `in part` each time (those keys are the machine's; whether a
+  plain user can make one slow is not measured). A key or folder held over 1000
   entries is never compared while it is over: a plain user can do that to its
   own Run key and Startup folder, and every change in it is then unsaid but for
   the words `in part` at each read. A plain user can also deny its own Run key
@@ -960,7 +967,8 @@ What it does not see:
   file and the stand-in's delete (X37), not on a 24 MB file again. An open by
   another process that asks for no sharing still fails while the read holds the
   file, for the instant of the read (Windows' rule; not measured). A file
-  swapped for a link under the same name is said as changed (AK-4). Every hash
+  swapped for a link under the same name, or a link for a file, is said as
+  changed whether or not the content of either was read (AK-4, AL-3). Every hash
   is salted, so a key cannot be matched by trying a SID, and a read of another
   salt is not taken.
 

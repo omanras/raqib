@@ -811,20 +811,22 @@ def test_ai4_aj2_ak2_the_deadline_cuts_between_keys_and_no_key_is_starved(folder
     assert w.take(whole)["first"] and {s["state"] for s in whole["places"].values()} == {"read"}
     reg.cost = 5.0                                           # now one user's Run key takes the whole deadline
     reads = []
-    for _ in range(len(autostart.STEPS)):                    # the stated number: one turn of the six steps
+    for _ in range(2 * len(autostart.STEPS)):                # the stated number: six reads for each of two hives
         r = w.read()
         reads.append(r)
         got = w.take(r)
         assert got["changes"] == [] and got["late"] == {}    # nothing cut is said as removed, added or late
         assert {p for p, x in r["places"].items() if x["state"] != "read"} <= set(got["unread"])
-    assert [r["begin"] for r in reads] == list(autostart.STEPS[1:] + autostart.STEPS[:1])
+    assert [r["begin"] for r in reads] == 2 * list(autostart.STEPS[1:] + autostart.STEPS[:1])
     seen = {(e["place"], e["name"]) for r in reads for e in r["entries"]}
     for want in (("runonce", "Once"), ("runonce", "BOnce"), ("runonce", "MOnce"), ("runonce", "MOnce32"),
                  ("run", "Helper"), ("run", "M32"), ("run", "BRun"), ("startup", "Shared.lnk")):
         assert want in seen, want                            # each key read whole at least once (AK-2)
-    for p in ("service", "task", "winlogon"):
+    for p in ("startup", "service", "task", "winlogon"):     # each place read whole in some read of the turn
         assert any(r["places"][p]["state"] == "read" for r in reads), p
-    slow = [r for r in reads if r["begin"] == "run"][0]      # the read that began with the slow key's step
+    whole = [r for r in reads if r["begin"] == "run" and r["places"]["run"]["state"] == "read"]
+    assert len(whole) == 1                                   # AL-2: in one turn the slow user's key comes last
+    slow = [r for r in reads if r["begin"] == "run" and r["places"]["run"]["state"] == "partly"][0]
     cut = slow["places"]
     assert cut["run"]["state"] == "partly" and "passed before it was reached" in " ".join(cut["run"]["keys_why"])
     assert [e["name"] for e in slow["entries"] if e["place"] == "run"] == ["Helper", "M32", "RaqibRigValue"]
@@ -850,9 +852,10 @@ def test_aj2_a_place_cut_while_it_is_read_keeps_what_it_reached(folders):
     w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=Folders(), clock=clock, deadline=5)
     w.take(w.read())                                         # S5a: a whole read first
     reg.slow = True
-    while autostart.STEPS[w.begin % len(autostart.STEPS)] != "service":
-        assert w.take(w.read())["changes"] == []
     got = w.read()
+    while got["begin"] != "service":                         # the reads before the one that begins with the services
+        assert w.take(got)["changes"] == []
+        got = w.read()
     s = got["places"]["service"]
     # NoImage, RaqibRigService and S0 reached (2 s each; NoImage runs nothing), S1 to S3 not: parts not read
     assert s["state"] == "partly" and s["entries"] == 2 and s["keys_why"] == {autostart.CUT_KEY % 5: 3}
@@ -1213,6 +1216,12 @@ def test_ak1_a_service_a_task_and_winlogon_at_the_bound_are_said_not_read_and_no
         k = ("HKLM", False, key.lower())
         reg.vals[k] = reg.vals[k][len(fill):]
     assert w.take(w.read())["changes"] == []  # back under the bound: what it holds is what the base held
+    bodies = [k for k in reg.vals if k[2].startswith(autostart.TASK_BODIES.lower() + "\\") and reg.vals[k]]
+    assert bodies                              # S6: a task's body over the bound: no `changed`, no `rescheduled`
+    reg.vals[bodies[0]] = fill + reg.vals[bodies[0]]
+    got = w.read()
+    said = w.take(got)
+    assert said["changes"] == [] and got["places"]["task"]["keys_why"] == {autostart.OVER_BOUND: 1}
 
 
 def test_ak1_the_registry_over_winreg_asks_at_most_1001_values():
@@ -1257,6 +1266,25 @@ def test_ak4_a_handle_that_says_link_is_a_link_and_a_swap_is_changed(folders):
     assert w.take(w.read())["changes"] == []          # a link stays a link: its word does not change
     disk.links.clear()
     assert kinds(w.take(w.read())) == [("changed", "startup", "raqib-rig-startup.cmd")]
+
+
+def test_al3_a_file_never_read_that_becomes_a_link_is_changed_and_so_is_the_way_back(folders):
+    """The third review's S1: the base holds no content of a file that was refused; the swap is said all the same."""
+    disk = LinkDisk()
+    disk.refused = {"raqib-rig-startup.cmd"}
+    w = watcher(machine(), folders, disk=disk)
+    first = w.read()
+    assert [e["sha256"] for e in entries(first, "startup") if e["name"] == "raqib-rig-startup.cmd"] == [None]
+    w.take(first)
+    disk.refused.clear()                                # the name now opens, and the handle says it is a link
+    disk.links.add("raqib-rig-startup.cmd")
+    got = w.take(w.read())
+    assert kinds(got) == [("changed", "startup", "raqib-rig-startup.cmd")] and got["changes"][0]["link"] is True
+    disk.links.clear()                                  # a file again, its content refused again: changed, not silent
+    disk.refused = {"raqib-rig-startup.cmd"}
+    got = w.take(w.read())
+    assert kinds(got) == [("changed", "startup", "raqib-rig-startup.cmd")] and got["changes"][0]["link"] is False
+    assert w.take(w.read())["changes"] == []
 
 
 def test_ak4_two_names_equal_but_for_case_the_second_is_not_read(folders):
@@ -1313,18 +1341,51 @@ def test_ak4_a_real_symbolic_link_on_windows_is_read_as_a_link(tmp_path):
         autostart._default_disk().head(str(folder), "link.cmd")
 
 
-def test_ak5_a_step_that_raises_marks_what_it_listed_as_not_read(folders):
-    reg = machine()
+class RawReg(Reg):
+    """A registry that gives a key's values as they are stored: a value of two fields makes the step itself raise
+    (where it takes the three apart), not the ask around the registry's call."""
+
+    def values(self, root, path, view32=False):
+        return list(self.vals[self._key(root, path, view32)])
+
+
+def test_ak5_a_step_that_raises_marks_what_it_listed_as_not_read(folders, monkeypatch):
+    reg = like(RawReg)
     k = ("HKLM", False, (autostart.SERVICES + "\\RaqibRigService").lower())
     good = list(reg.vals[k])
     reg.vals[k] = [("ImagePath", "cmd.exe /c echo")]   # a value of two fields: the step raises while it reads
+    with pytest.raises(ValueError):                    # the step itself raises: read()'s own net is what holds it
+        autostart._services(reg, autostart._Place("service", autostart._Hasher(b"0" * 32)),
+                            autostart._Deadline(lambda: 0.0, 0.0, 5), 5)
     w = watcher(reg, folders)
     first = w.read()
     assert first["places"]["service"]["state"] == "failed"
+    assert first["parts"] and not any(q["read"] for q in first["parts"].values() if q["place"] == "service")
     w.take(first)
     reg.vals[k] = good
     got = w.take(w.read())
     assert got["changes"] == [] and got["late"] == {"service": {"parts": 3, "entries": 1}}
+
+
+def test_al1_a_hive_that_comes_in_a_read_whose_run_step_raises_is_still_said_loaded(folders):
+    """The third review's MUST FIX 1: the marking of a step that raised never takes a hive's own part: a hive
+    first listed in that read is said loaded, and none of its keys enters the base without a word."""
+    reg = like(RawReg)
+    w = watcher(reg, folders)
+    w.take(w.read())
+    reg.put("HKU", "%s\\Software\\%s\\Run" % (OTHER, CU), [("BRun", "b.exe", SZ)])
+    reg.put("HKU", "%s\\Software\\%s\\RunOnce" % (OTHER, CU), [("BOnce", "b1.exe", SZ)])
+    k = ("HKLM", False, ("SOFTWARE\\%s\\Run" % CU).lower())
+    good = list(reg.vals[k])
+    reg.vals[k] = [("Helper", "two fields")]            # the machine's Run key makes the run step raise
+    bad = w.read()
+    assert bad["places"]["run"]["state"] == "failed"
+    got = w.take(bad)
+    loaded = [c for c in got["changes"] if c["change"] == "hive loaded"]
+    assert len(loaded) == 1 and not [c for c in got["changes"] if c["change"] in ("added", "removed")]
+    reg.vals[k] = good
+    later = [c for _ in range(len(autostart.STEPS)) for c in w.take(w.read())["changes"]]
+    assert not [c for c in later if c["change"] in ("added", "removed", "hive loaded")], later
 
 
 def test_ak5_a_watcher_takes_no_salt_and_read_takes_no_bad_begin_or_salt(folders):

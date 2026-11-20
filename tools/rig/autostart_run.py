@@ -121,7 +121,8 @@ def _of_held(rnd, result, got, held_now):
     mine = [e for e in result.get("entries") or () if e.get("place") == "startup" and e.get("scope") == "user"
             and e.get("name") == HELD_NAME]
     return {"round": rnd, "held": held_now, "listed": bool(mine),
-            "content": None if not mine else "read" if mine[0].get("sha256") else "not read",
+            "content": None if not mine else "read" if mine[0].get("sha256") and not mine[0].get("link")
+            else "not read",   # a link's fixed word is not a content read (the third review's S2)
             "changes": [c["change"] for c in got["changes"] if c.get("place") == "startup"
                         and c.get("name") == HELD_NAME]}
 

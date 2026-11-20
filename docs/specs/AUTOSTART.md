@@ -99,7 +99,8 @@ An entry is a dict:
 - `link`: true for a link in a Startup folder (its `sha256` is the link's
   fixed word); its line says `a link (not opened or followed)`.
 - `sure` (AI-8, AJ-3, AK-3): whether the text names one program however it is
-  read. A text is split at spaces and tabs alone, as Windows splits a command.
+  read. A text is split at spaces and tabs alone (taken as how Windows splits
+  a command: not measured).
   Not sure: a text that holds a blank other than a space or a tab (a no-break
   space, a line's end); a first word that holds a `%` (the read expands
   nothing: the variable is the user's, not the reader's), quoted or not; an
@@ -187,15 +188,23 @@ The bounds (AI-4, AJ-2, AK-1, AK-2):
   begins with the first). Inside a step the machine's key or folder is read
   before the users': both views of the machine's Run or RunOnce key, then every
   user's; the machine's Startup folder, then the user's. The users' hives of a
-  step are begun one further at each read, as the steps are. The users' hives
-  are listed once a read, by whichever of `run` and `runonce` is read first.
+  step are begun one further at each whole turn of the six steps (AL-2: not at
+  each read - a turn of users that moved with the steps would give some pairs
+  of step and user never). The users' hives are listed once a read, by
+  whichever of `run` and `runonce` is read first.
 - What a slow key still delays: in a read that reaches it, the keys after it in
   its step and every step after its step in that read are not reached. In a
   later read those are reached before it - a step that begins the read, or
   comes before the slow key's step; a user's key that the turn puts before the
-  slow one - so within one turn of six reads each of them is read whole, unless
-  it is slow itself or over the bound. A change in it is said by the first read
-  that reads it whole; a change made and undone in that time is not said.
+  slow one. Where the slow keys are one user's own (its Run key, its RunOnce
+  key, its Startup folder), every other key is read whole within six reads for
+  each user's hive loaded (12 reads on a machine of two hives), unless it is
+  slow itself or over the bound. What still has no turn, and is said `in part`
+  at each read: a slow key inside the services' or the tasks' step delays the
+  keys after it in that step in every read (those keys are the machine's: not
+  measured whether a plain user can make one slow). A change is said by the
+  first read that reads its key whole; a change made and undone in that time
+  is not said.
 - Every key whose values the read takes - a Run or RunOnce key, a service's,
   a task's key in the tree and its body, Winlogon's - and every Startup folder
   is read to a bound of 1000 entries (one more is asked, to tell that the bound
@@ -207,9 +216,11 @@ The bounds (AI-4, AJ-2, AK-1, AK-2):
   The services' key and the task tree's folders are listed whole (each service
   and each task is its own key, under the deadline).
 - A step that raises while it reads is `failed`, and the parts it had listed
-  are marked not read, so that none of them is new when it is next seen (AK-5).
-  A `begin` that is not a read's number (0 or more), or a salt that is not
-  bytes, gives a read whose places are all `failed`, never an exception.
+  are marked not read, so that none of them is new when it is next seen (AK-5)
+  - but never a hive's own part (AL-1): a hive first listed in a read whose
+  Run step raised is still said `hive loaded` by that read. A `begin` that is
+  not a read's number (0 or more), or a salt that is a text, gives a read
+  whose places are all `failed`, never an exception.
 
 `read` never raises. Off Windows (with no registry handed in) it reads nothing,
 and one sentence says so: Linux's places are ADR-0014 S4 (M15.4).
@@ -374,12 +385,14 @@ asks for no sharing still fails while the read holds the file, for the instant
 of the read: that is Windows' rule for any reader, and it is not measured. It
 was not measured on a file of 24 MB again.
 
-Never run on Windows, given to the code in tests alone: the long form's effect
-on a name with a trailing dot or blank or a device's name; a link read by the
-listing, and by the open's handle (a Windows-only test makes a real symbolic
-link, where the job's user may make one); drive kinds 0, 1 and 4; a cut by the
-deadline; the turn of the steps and of the users' hives; the bound of 1000; a
-base taken late; a step that raises; two names equal but for case.
+Run on Windows since (62e9399, GitHub's Windows machines): a real symbolic
+link to a file, made in a temporary folder by the job's user, read as a link by
+the listing and by the open's handle. Never run on Windows, given to the code
+in tests alone: the long form's effect on a name with a trailing dot or blank
+or a device's name; a file swapped for a link between the listing and the open;
+a reparse point of another kind; drive kinds 0, 1 and 4; a cut by the deadline;
+the turn of the steps and of the users' hives; the bound of 1000; a base taken
+late; a step that raises; two names equal but for case.
 
 Not measured: an open by another process that asks for no sharing while the
 read holds the file (it fails for that instant, by Windows' rule); whether
@@ -404,7 +417,9 @@ start on demand), undoes each, and says whether its own delete of its Startup
 file failed. X37 is MET where the stand-in's three acts are each `added` and
 later `removed`, its delete did not fail, the read that first listed the held
 file was the one made while it was held (its content not read) and said it
-`added`, and the held file was removed after; its words name every other change
+`added`, a later read, after the file was let go, read its content (AK-7: a
+link's fixed word is not a content read), and the held file was removed after;
+its words name every other change
 by its kind and place, and a place read in part as read in part. A held file
 the run could not remove (the run killed) is left in the folder: it holds a
 `rem`, and the job's machine is thrown away after it.

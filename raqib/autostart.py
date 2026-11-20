@@ -24,14 +24,15 @@ whole place), `partly` (how many of its keys were not read, and why), `failed` (
 reason) or `unread` (the read's deadline passed before it was reached); a place that is not there is empty. The
 deadline is looked at between keys and files, never inside one call. Six steps, `runonce` its own; a read begins
 one step further than the read before, and inside a step the machine's key or folder comes first and the users'
-hives turn too (AK-2): a slow key delays the keys after it in its step and the steps after it in that read, which
-a later read of the turn reaches first. Every key whose values are taken, and every Startup folder, is bounded at
+hives turn once a whole turn of the steps (AK-2, AL-2): a slow key delays the keys after it in its step and the
+steps after it in that read, which a later read reaches first - within six reads for each user's hive loaded,
+where the slow keys are one user's own. Every key whose values are taken, and every Startup folder, is bounded at
 1000 entries: one over it is a part not read, said each read, none of its entries compared while it is over (a
 user can do that to its own Run key or Startup folder: said, and a lever that is left, AK-1). A Startup folder on
 a share is not read at all; a Startup file is opened with every sharing and without following a link, or not
 opened (AI-3, AK-4): what was measured is that another call's rename and delete do not fail while the read holds
-a file; an open that asks for no sharing still fails for the instant of the read. read() never raises and imports
-winreg and ctypes only inside the call. Off Windows it reads nothing and says so (Linux's places are ADR-0014 S4).
+a file; an open that asks for no sharing still fails for the instant of the read (not measured). read() never
+raises and imports winreg and ctypes only inside the call. Off Windows it reads nothing and says so (Linux's places are ADR-0014 S4).
 
 A Watcher takes reads one after another and compares each with what every place, and every key of it, last held
 when it was read (AI-1): an entry that appears while a part that was read before is not read is said as added by
@@ -558,8 +559,8 @@ def _users(reg, places, hives, memo):
 
 def _run_key(kind, reg, places, hives, memo, deadline, limit, turn):
     """Run or RunOnce (AK-2: each its own step): the machine's key first, both views, each its own (AI-7); then
-    every loaded user's hive (by its SID, one view), begun one further at each read (`turn`). AJ-2: the deadline is
-    looked at before each key; the keys it did not let the read reach are parts not read."""
+    every loaded user's hive (by its SID, one view), begun one further at each turn of the steps (`turn`). AJ-2:
+    the deadline is looked at before each key; the keys it did not let the read reach are parts not read."""
     place, leaf = places[kind], dict(RUN_KEYS)[kind]
     users = _users(reg, places, hives, memo)
     if users:
@@ -740,9 +741,9 @@ def read(registry=None, folders=None, platform=None, clock=None, disk=None, salt
     The deadline (seconds) bounds the read between keys and files, never inside one call (AI-4, AJ-2): a place it
     did not reach is `unread`, one it cut keeps what it reached and says the rest not read. `begin` is the read's
     number (0 or more): the read begins with the step it names (STEPS, turning), and the users' hives of a step
-    are begun one further each read (AK-2). The opener and the drive's kind are Windows' own on Windows (AI-3,
-    AI-4), a test's elsewhere. It never raises: a place whose read fails is `failed`, with its reason, and a bad
-    `begin` or salt fails the read (AK-5)."""
+    are begun one further each whole turn of the steps (AK-2, AL-2). The opener and the drive's kind are Windows'
+    own on Windows (AI-3, AI-4), a test's elsewhere. It never raises: a place whose read fails is `failed`, with
+    its reason, and a bad `begin` or salt fails the read (AK-5)."""
     platform = sys.platform if platform is None else platform
     clock = clock or time.monotonic
     t0 = _now(clock)
@@ -776,8 +777,9 @@ def read(registry=None, folders=None, platform=None, clock=None, disk=None, salt
         if drive_kind is None:
             drive_kind = _windows_drive_kind() if os.name == "nt" else _local
         memo = {}
-        steps = {"run": lambda: _run_key("run", registry, places, hives, memo, due, limit, begin),
-                 "runonce": lambda: _run_key("runonce", registry, places, hives, memo, due, limit, begin),
+        turn = begin // len(STEPS)   # AL-2: the users are begun one further each whole turn of the steps
+        steps = {"run": lambda: _run_key("run", registry, places, hives, memo, due, limit, turn),
+                 "runonce": lambda: _run_key("runonce", registry, places, hives, memo, due, limit, turn),
                  "startup": lambda: _startup(disk, folders, places["startup"], drive_kind, due, limit),
                  "service": lambda: _services(registry, places["service"], due, limit),
                  "task": lambda: _tasks(registry, places["task"], TASK_TREE, "", 0, None, due, limit),
@@ -792,9 +794,9 @@ def read(registry=None, folders=None, platform=None, clock=None, disk=None, salt
                 steps[name]()
             except Exception as exc:   # never raises: the place failed, and what it had listed is not read (AK-5)
                 places[name].failed = places[name].failed or _why(exc)
-                for q in list(places[name].parts.values()) + (list(hives.parts.values()) if name in
-                                                               ("run", "runonce") else []):
-                    q["read"] = False
+                listing = [q for q in hives.parts.values() if not q["hive"]] if name in ("run", "runonce") else []
+                for q in list(places[name].parts.values()) + listing:   # AL-1: never a hive's own part: a hive
+                    q["read"] = False                                    # that came in this read is still said
         entries = []
         for p in PLACES:
             entries += places[p].entries
@@ -902,14 +904,14 @@ class Watcher:
         self.given = dict(given, deadline=deadline)
         self.base = None      # part -> {"place", "parent", "hive", "read", "entries": {key: entry}}
         self.pending = {}     # part -> (its parent, born new): a part seen in a read and never read yet (AJ-1)
-        self.begin = 0
+        self.__begin = 0
 
     def __repr__(self):
         return "<autostart.Watcher>"
 
     def read(self):
-        result = read(salt=self.__salt, begin=self.begin, **self.given)
-        self.begin += 1   # AK-2: the read's number: the next read begins one step, and one user, further
+        result = read(salt=self.__salt, begin=self.__begin, **self.given)
+        self.__begin += 1   # AK-2: the read's number: the next read begins one step further
         return result
 
     def take(self, result):
@@ -1004,6 +1006,8 @@ class Watcher:
                     o = old.get(key)
                     if o is None:
                         out.append(self._change("added", e))
+                    elif bool(e.get("link")) != bool(o.get("link")):   # AL-3: a file became a link, or a link a
+                        out.append(self._change("changed", e, was=o.get("sha256")))   # file, read or not
                     elif e.get("sha256") is None:   # its content not read now: the base keeps what it last read
                         e = dict(e, sha256=o.get("sha256"), triggers=o.get("triggers"))
                     elif o.get("sha256") is None:
