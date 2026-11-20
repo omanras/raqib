@@ -18,11 +18,15 @@ that sees a second user's stand-in agent, X30 the removal leaves no unit (n/a wh
 X31 every short act that ran is given with its program, its parent (the run's own process) and its end's code, and
 nothing is lost (n/a off Linux, or where the start was refused for want of a right of this user, EPERM or EACCES;
 any other refusal is MISSED, the refusal said).
-X35 (ADR-0007 BU-5, BW-7; read from --report and --workload, Linux; n/a elsewhere): the watch's report holds its
-PROCESS EVENTS section, every round asked was answered, no helper was started again, nothing was lost, and the
-processes that began are at least the children the stand-in said it started (its "start" lines; a floor: the
-count holds every process of the machine); MISSED otherwise, or where it says a refusal (X31's rule: n/a where
-the refusal names a right this user lacks, EPERM or EACCES).
+X35 (ADR-0007 BU-5, BW-7, BX-5; read from --report and --workload, Linux; n/a elsewhere): the watch's report holds
+its PROCESS EVENTS section, every round asked was answered, no helper was started again, nothing was lost, nothing
+was past the reader's bounds, and the processes that began are at least the children the stand-in said it started
+(its "start" lines; a floor: the count holds every process of the machine); MISSED otherwise, or where it says a
+refusal (X31's rule: n/a where the refusal names a right this user lacks, EPERM or EACCES).
+X36 (ADR-0007 BY-7; read from --report and --workload): the stand-in's wget, a child that lives under a second,
+is a NET-TOOL finding of the stand-in's tree that names wget (the watch took it from the process events); MISSED
+where the stand-in ran it and none does; n/a off Linux, where wget is not installed, where the stand-in did not run
+it, or where the helper was refused.
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -856,8 +860,8 @@ def _procevents_rows(facts):
 
 
 WATCH_EVENTS_NAME = ("X35 the watch's helper heard the kernel's process events: its report's PROCESS EVENTS section,"
-                     " every ask answered, no helper started again, nothing lost, at least the stand-in's children"
-                     " began")
+                     " every ask answered, no helper started again, nothing lost, nothing past the reader's bounds, at"
+                     " least the stand-in's children began")
 WATCH_EVENTS_HEAD = "PROCESS EVENTS (Linux):"
 
 
@@ -888,6 +892,7 @@ def read_watch_events(report, workload, platform):
         lost = next((x.strip()[len("lost: "):] for x in lines if x.strip().startswith("lost: ")), None)
         restarts = [x.strip() for x in lines if x.strip().startswith(("started again", "and started again"))]
         holes = [x.strip() for x in lines if x.strip().startswith("hole, ")]
+        beyond = number(r"past the reader's bounds: (\d+)", body)
         missing = []
         if asked is None or answered is None:
             missing.append("no count of the rounds asked and answered")
@@ -897,6 +902,8 @@ def read_watch_events(report, workload, platform):
             missing.append("the helper was started again: %s" % "; ".join(restarts))
         if lost != "none":
             missing.append("lost: %s" % (lost if lost is not None else "not said"))
+        if beyond != 0:   # BX-5: a record past a bound of the reader is not counted, so the floor is not one
+            missing.append("past the reader's bounds: %s" % (beyond if beyond is not None else "not said"))
         if not children:
             missing.append("the stand-in said it started no child: nothing to hold the count against")
         if began is None:
@@ -907,8 +914,47 @@ def read_watch_events(report, workload, platform):
         if missing:
             return [(name, MISSED, "missing: %s%s" % ("; ".join(missing), "; " + "; ".join(holes) if holes else ""))]
         return [(name, MET, "%d of %d round(s) answered; at least the stand-in's %d child(ren) began (%d process(es)"
-                 " of the machine: a floor, not the stand-in's alone); no helper started again; lost: none%s" % (
-                     answered, asked, children, began, "; " + "; ".join(holes) if holes else ""))]
+                 " of the machine: a floor, not the stand-in's alone); no helper started again; lost: none; past the"
+                 " reader's bounds: 0%s" % (answered, asked, children, began, "; " + "; ".join(holes) if holes else ""))]
+    except Exception as exc:   # never raises
+        return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
+
+
+SHORT_TOOL_NAME = ("X36 the stand-in's wget, a child that lives under a second, is a NET-TOOL finding of its tree that"
+                   " names wget")
+
+
+def read_short_tool(report, workload, platform):
+    """X36 (ADR-0007 BY-7): MET where a NET-TOOL line of the stand-in's tree (its pid, from the workload) names
+    wget; MISSED where the stand-in ran wget and none does; n/a off Linux, where wget is not installed, where the
+    stand-in did not run it, or where the helper was refused (its PROCESS EVENTS section says a refusal). It never
+    raises: a report that cannot be read is MISSED."""
+    name = SHORT_TOOL_NAME
+    try:
+        if not str(platform or "").startswith("linux"):
+            return [(name, SKIP, "not run: not Linux (%s)" % (platform or "no platform said"))]
+        work = str(workload or "")
+        if re.search(r"(?m)^WORKLOAD \S+ wget not installed\s*$", work):
+            return [(name, SKIP, "wget is not installed on this machine: the stand-in did not run it")]
+        ran = re.search(r"(?m)^WORKLOAD \S+ end wget rc=(\S+)\s*$", work)
+        if not re.search(r"(?m)^WORKLOAD \S+ start wget\s*$", work):
+            return [(name, SKIP, "the stand-in did not run wget")]
+        full = str(report or "").splitlines()
+        at = next((i for i, x in enumerate(full) if x.startswith("Raqib watch --host")), None)
+        lines = full[at:] if at is not None else []
+        events = section(lines, WATCH_EVENTS_HEAD)
+        refused = next((x.strip()[len("refused: "):] for x in events if x.strip().startswith("refused: ")), None)
+        if refused is not None:
+            return [(name, SKIP, "the helper's reader was refused: %s" % refused)]
+        pid = number(r"WORKLOAD \S+ pid (\d+)", work)
+        listed = section(lines, "SOURCE FINDINGS:")
+        hits = [f for f in listed if pid is not None and re.search(r"NET-TOOL on \S+ pid %d\b" % pid, f)
+                and re.search(r"\bwget\b", f)]
+        rc = ran.group(1) if ran else "not said"
+        if hits:
+            return [(name, MET, "%d NET-TOOL line(s) on pid %s name wget (its rc=%s): %s" % (
+                len(hits), pid, rc, hits[0].strip()[:110]))]
+        return [(name, MISSED, "the stand-in ran wget (rc=%s) and no NET-TOOL line on pid %s names it" % (rc, pid))]
     except Exception as exc:   # never raises
         return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
 
@@ -951,6 +997,7 @@ def main(argv=None):
         events = text(a.events) if os.path.isfile(a.events) else ""
     rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon, events)
     rows += read_watch_events(text(a.report), text(a.workload), a.platform)   # X35 (ADR-0007 BU-5)
+    rows += read_short_tool(text(a.report), text(a.workload), a.platform)     # X36 (ADR-0007 BY-7)
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

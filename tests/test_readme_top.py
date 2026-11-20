@@ -298,27 +298,40 @@ NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing list
 GUIDE_NEW += NO_PAGE
 # M14.1b and its REDO (ADR-0007 BU-3, BW-3, BW-6): the report's PROCESS EVENTS section on Linux, said in the
 # guide's Watch the host
-PROCESS_EVENTS = [
-    'On Linux the watch also counts what happens between two rounds (ADR-0007 Amendments BU and BW): at'
-     ' its first round it starts a helper, a second process of its own that runs the reader of the'
-     " kernel's process events ([docs/specs/PROC-EVENTS.md](docs/specs/PROC-EVENTS.md)), and after each"
-     " round's sample it asks the helper once what it heard, waiting at most 2 s and at most a quarter of"
-     ' the interval.',
-    "Its report then has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line:"
-     ' the rounds asked and answered, the processes that began, those of them that began and ended'
-     ' between two asks, the programs not read (reads at an exec that failed: a process can end before'
-     " its program is read), what was past the reader's bounds, and what the reader lost, in its own"
-     ' words, over every helper the watch had.',
-    "Nothing is judged from it yet: no rule reads it, no line of a tree's source is written from it, and"
-     ' the findings, the result and the exit code are what they would be without it.',
-    "No program's name or path is shown: only numbers.",
-    'Only where every ask was answered in its round, no helper was started again, nothing was lost,'
-     " nothing was past the reader's bounds and the last answer left nothing for a next one, the note"
-     ' that what lives between two rounds is not seen on Linux says instead that a process that begins'
-     ' and ends between two rounds is heard and counted, not judged; otherwise the old words stand with'
-     ' each reason beside them.',
-    'A refused, late or ended helper is a blind spot of its own kind (it does not change the result),'
-     ' said once while it lasts, and at most 10 such episodes are printed, then how many more.',
+PROCESS_EVENTS = [   # M14.1c (ADR-0007 BY): the guide's words on what the watch now judges from the reader
+    'On Linux the watch also hears what happens between two rounds (ADR-0007 Amendments BU, BW and BY): '
+     'at its first round it starts a helper, a second process of its own that runs the reader of the '
+     "kernel's process events ([docs/specs/PROC-EVENTS.md](docs/specs/PROC-EVENTS.md)), and after each "
+     "round's sample it asks the helper once what it heard, waiting at most 2 s and at most a quarter of "
+     'the interval.',
+    'What the helper gave since the round before is given to the round beside its sample (M14.1c): a '
+     "process that began between two samples under a tree that talks at a sample is that tree's child, "
+     "with its HostChild line by its program's name, through the gate a sampled child's name goes through,"
+     ' so NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred as they judge a sampled child; a '
+     'process the sample also holds (the same pid and the same start ticks) is one process.',
+    'A tree that is a candidate only by what the reader gave is listed `by the channel`, as on Windows.',
+    'Not judged: a tree that lives whole between two samples (a tree needs a talker at a sample, and a '
+     "connection that opens and closes between two samples is still unseen), a child's own connections, "
+     'and a program not read (counted, with no line).',
+    "What is judged from the helper is the helper's word: the watch does not check its lines.",
+    "Its report has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line: what is"
+     ' judged and what is not, the rounds asked and answered, the processes that began, those of them that'
+     ' began and ended between two asks, the programs not read (reads at an exec that failed: a process '
+     'can end before its program is read), how many processes were given to the rounds, joined to a tree '
+     "as its child and, of them, had no program read, what was past the reader's bounds, and what the "
+     'reader lost, in its own words, over every helper the watch had.',
+    "No program's name or path is shown in that section: only numbers.",
+    'Only where every ask was answered in its round, no helper was started again, nothing was lost, '
+     "nothing was past the reader's bounds and the last answer left nothing for a next one, the note that "
+     'what lives between two rounds is not seen on Linux says instead what is now seen and what is not; '
+     'otherwise the old words stand with each reason beside them.',
+    'A helper refused at its first start (a container, a right not given), or late or ended before its '
+     'first answer, is a blind spot of its own kind: it does not change the result, and the rounds are the'
+     " sample's alone.",
+    "After its first answer, a late answer, a line that is not the helper's, an end (and its one "
+     'restart), a loss of events or a bound passed is a hole of the result of its own kind (`procevents`):'
+     ' what was being judged has a gap, and the result is INCOMPLETE.',
+    'Each is said once while it lasts, and at most 10 such episodes are printed, then how many more.',
     'A helper that ends, or is late three rounds running, is started again once, and the section says'
      ' that nothing was heard between its end and the new start; a second end is final.',
 ]

@@ -2,6 +2,7 @@
 children an agent starts. What it prints is the ground truth the watch's report is read against (tools/rig/check.py).
 It runs in CI only, on a machine made for the job; it is never imported by raqib and is no part of the capture path."""
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -78,6 +79,11 @@ def main():
                      "https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe"], wait=False)
     time.sleep(12)
     run(["curl", "-s", "--max-time", "10", "-o", nul, "https://example.com/"])          # a short child
+    if sys.platform.startswith("linux"):   # ADR-0007 BY-7 (X36): a network tool that lives under a second
+        if shutil.which("wget"):
+            run(["wget", "-q", "-O", "/dev/null", "--timeout=5", "https://example.com/"])
+        else:
+            say("wget not installed")
     if windows:
         run(["powershell", "-NoProfile", "-Command", "Set-Clipboard -Value 'raqib-rig'"])   # writes the clipboard
         run(["cmd", "/c", "whoami"])

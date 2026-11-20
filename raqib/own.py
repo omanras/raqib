@@ -28,12 +28,19 @@ STARTED_BEFORE = 60.0   # seconds a helper's start, as the OS gives it, may be b
 STARTED_AFTER = 2.0     # seconds it may be after: one clock read against another (discover.GUID_SAME_SECONDS)
 
 
+DELETED = " (deleted)"   # what the kernel adds to the exe link of a program whose file was replaced or removed
+
+
 def _base(name):
     """The lower-case basename of an image path (either separator), or None
     where there is no usable name. The one shape a record's image and a
-    sample's image are compared in (ADR-0007 BI-2)."""
+    sample's image are compared in (ADR-0007 BI-2). An image that ends with
+    " (deleted)" is the image it was (BY-6: an interpreter replaced on disk
+    while the helper runs is still the helper's)."""
     if not isinstance(name, str):
         return None
+    if name.endswith(DELETED):
+        name = name[:-len(DELETED)]
     name = name.replace("\\", "/").rsplit("/", 1)[-1].strip().lower()
     return name or None
 
