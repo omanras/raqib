@@ -92,11 +92,13 @@ def test_e1_a_connection_made_one_accepted_and_one_whose_initiated_is_unread():
                                 ("net", "01.100", 4950, SYN.AGENT, "192.168.1.20", 22, "false"),
                                 ("net", "01.200", 4950, SYN.AGENT, "192.168.1.20", 22, "-"),
                                 ("net", "01.300", 4950, SYN.AGENT, "192.168.1.20", 22, "maybe")]))
-    assert [m["initiated"] for m in nets(recs)] == [True, False, None, None]
+    # M15.2b (ADR-0014 AE-1): an Initiated not read is no key (it was null until then)
+    assert [m.get("initiated", "no key") for m in nets(recs)] == [True, False, "no key", "no key"]
     assert [os_sysmon.initiated(v) for v in ("true", "FALSE", " True ", "", None, 1)] == [
         True, False, True, None, None, None]
-    # pre and post carry the same keys
-    assert all(set(FOUR) <= set(r["input_meta"]) for r in recs if r["tool"] == "net")
+    # pre and post carry the same keys (M15.2b, AE-1: initiated only where it was read)
+    assert all(set(FOUR) - {"initiated"} <= set(r["input_meta"]) for r in recs if r["tool"] == "net")
+    assert [r["phase"] for r in recs if r["tool"] == "net" and "initiated" in r["input_meta"]] == ["pre", "post"] * 2
 
 
 def test_e1_image_and_parent_from_the_start_the_follow_holds_null_where_it_holds_none():
@@ -202,7 +204,8 @@ def test_e3_net_admin_port_fires_on_a_private_admin_port_made_by_any_program():
     assert {m["dest_scope"] for m in metas if m["dest_port"] == 22} == {"loopback", "link-local", "public", "private"}
     assert any(m["dest_port"] == 443 and m["dest_scope"] == "private" for m in metas)
     assert any(m["initiated"] is False and m["dest_scope"] == "private" and m["dest_port"] == 22 for m in metas)
-    assert any(m["initiated"] is None and m["dest_scope"] == "private" and m["dest_port"] == 22 for m in metas)
+    # M15.2b (ADR-0014 AE-1): the 22 whose Initiated is not read moved to negative-initiated-unread.json (no key)
+    assert all("initiated" in m for m in metas)
     assert any((m["image"], m["parent_image"]) == ("ssh", "git") and m["dest_scope"] == "private" for m in metas)
 
 
@@ -252,14 +255,15 @@ def test_e4_check_rules_lists_both_rules_ok_within_their_budgets():
            for k in ("PERSIST-AUTOSTART", "NET-ADMIN-PORT")}
     # PERSIST-AUTOSTART has no gate (C-1a): every benign file is measured; NET-ADMIN-PORT's gate is source os and
     # tool net, which no benign file holds: its one measured negative is its own, the line before the keys is partial
-    assert got == {"PERSIST-AUTOSTART": ("ok", 0.0, 10, 0), "NET-ADMIN-PORT": ("ok", 0.0, 1, 9)}
+    # (M15.2b, AE-1: and so are the lines whose Initiated is not read, a negative of their own: 9 unmeasured -> 10)
+    assert got == {"PERSIST-AUTOSTART": ("ok", 0.0, 10, 0), "NET-ADMIN-PORT": ("ok", 0.0, 1, 10)}
     out = subprocess.run([sys.executable, "-m", "raqib", "check-rules"], cwd=str(ROOT), capture_output=True,
                          text=True, timeout=300)
     assert out.returncode == 0, out.stderr
     rows = {line.split()[0]: line for line in out.stdout.splitlines()[1:]}
     assert re.match(r"PERSIST-AUTOSTART ok +0\.000 +0\.05 +2 positive; .* 10 measured, 0 unmeasured",
                     rows["PERSIST-AUTOSTART"])
-    assert re.match(r"NET-ADMIN-PORT +ok +0\.000 +0\.05 +1 positive; .* 1 measured, 9 unmeasured",
+    assert re.match(r"NET-ADMIN-PORT +ok +0\.000 +0\.05 +1 positive; .* 1 measured, 10 unmeasured",
                     rows["NET-ADMIN-PORT"])
 
 

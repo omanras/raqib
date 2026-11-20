@@ -720,7 +720,8 @@ def test_e6_the_guide_and_the_threat_model_hold_the_sentences_that_matter():
                      "nothing is then there to read, and Raqib cannot tell that from nothing done.",
                      "A configuration that logs every key was not measured",
                      "Linux has no os source: the rule judges nothing there.",
-                     "a net line whose `Initiated` was not read is not judged and nothing says so;",
+                     # M15.2b (ADR-0014 AE-3): the two silences that waited here are said now
+                     "Where it holds none, that is a blind spot of the run, `registry`, said once:",
                      "asks its question for event 13 first (at most 500 events a pass), and then the first question,",
                      "no event 13 above its last record is taken and the registry's bound stops there,",
                      "while the tree's root is not found yet, the bound does not move either.",
@@ -731,7 +732,7 @@ def test_e6_the_guide_and_the_threat_model_hold_the_sentences_that_matter():
                      "and so two acts. Not shown reachable.",
                      "SYSTEM's own hive as `HKU\\S-1-5-18` or as `HKU\\.DEFAULT` (the second is not read): not"
                      " measured.",
-                     "a Sysmon channel that gives no file event, and now none of event 13, is not said."):
+                     "a channel that holds some event 13 may still not log the Run keys"):
         assert sentence in flat, sentence
     assert not re.search(r"\bM\d+\.\d+", flat)   # no milestone token
 

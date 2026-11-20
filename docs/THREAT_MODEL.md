@@ -706,10 +706,14 @@ What they do not see:
   Windows machine is so outside NET-ADMIN-PORT.
 - Another machine on the same link reached by its link-local address is left
   out with loopback. An address of 100.64.0.0/10 counts as private.
-- A net line whose `Initiated` was not read is not judged, and nothing says
-  so: a silence of this rule. Under `raqib watch --host` a Sysmon that gives no
-  file event is not said either. Both wait for the stage after the registry's
-  values (ADR-0014 AB-5): until then they are said here.
+- A net line whose Initiated was not read has no `initiated` key (ADR-0014 AE-1):
+  NET-ADMIN-PORT does not judge it, and its partial note says so, as for a line
+  written before the four keys. Real Sysmon writes Initiated always, so the reach
+  is small. Under `raqib watch --host` the watch says once, after three rounds
+  that read the channel, that no event 11 was read (ADR-0014 AE-2): no file a
+  tree makes is then seen, and PERSIST-AUTOSTART's os lines have nothing to read.
+  It is learned from what the rounds read, as for events 1, 3 and 22, not from
+  the configuration: a channel that gave one event 11 is not said again.
 - The budgets of the two rules were measured on no real desktop's work. A
   deploy over ssh to a machine of the same network, a remote session of an
   editor, a local virtual machine reached at its private address, a profile's
@@ -829,10 +833,17 @@ What it does not see:
   installer, an updater) would fire, and how often is not known.
 - Not measured either: the commander's own Sysmon.
 - Linux has no os source: the rule judges nothing there.
-- Still waiting, and said here until they are closed: a net line whose
-  `Initiated` was not read is not judged and nothing says so; under
-  `raqib watch --host` a Sysmon channel that gives no file event, and now none
-  of event 13, is not said.
+- Said (ADR-0014 AE-3): at the first round that reads the channel, the watch
+  asks it once for its newest event 13, whatever its key (a bounded question of
+  its own; the round's own question is what it was). Where it holds none, that
+  is a blind spot of the run, `registry`, said once: this Sysmon's configuration
+  logs no registry value, or none was set under a key it logs since the log
+  began, and PERSIST-RUN-KEY has nothing to read here. Where the question cannot
+  be asked or is not answered, it is said as not known, with the reason. Where
+  it holds one, the inventory carries its time and nothing is said. The limit:
+  a channel that holds some event 13 may still not log the Run keys (a
+  configuration that logs other keys only), and that is not said. The certain
+  cure is Raqib reading the autostart places itself (ADR-0014 S3).
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
@@ -1120,7 +1131,7 @@ is amended by T-2, T-1 restated by V-1).
   fails, times out or reaches the cap of events per round is a hole of
   that round (the next round reads on from the last record read, so a
   channel busier than the cap makes the rounds lag; a lag of more than a
-  round is said); a kind of event 1, 3 or 22 not read after three rounds
+  round is said); a kind of event 1, 3, 11 or 22 not read after three rounds
   (Sysmon's configuration: Raqib never changes it, A4) is said once and
   the report lists the kinds read; where neither a start time nor a
   ProcessGuid tells two processes of one image under one pid apart, they

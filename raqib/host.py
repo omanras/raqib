@@ -377,7 +377,16 @@ BY_CHANNEL_RUNS = 5                # AA-1 (W6): the runs of a path kept with the
 CHANNEL_KIND_ROUNDS = 3            # REDO X-8: a kind not read after this many rounds with the channel is said once
 CHANNEL_HELD = {1: "no event 1 read so far: a tree that starts and ends between two rounds may be unseen",
                 3: "no event 3 read so far: talk between rounds may be unseen (Sysmon without -n logs none)",
+                # ADR-0014 AE-2 (M15.2b): the file events, said under the same rule (AA-4)
+                11: "no event 11 read so far: no file a tree makes is seen, and PERSIST-AUTOSTART's os lines have"
+                    " nothing to read (this Sysmon's configuration may not log file creation)",
                 22: "no event 22 read so far: a name asked between two rounds may be unseen"}
+# ADR-0014 AE-3 (M15.2b): the blind spot `registry`, from the channel's one question for event 13 (said once a run)
+REGISTRY_UNHELD = ("the Sysmon channel holds no event 13 (a registry value set): this Sysmon's configuration logs no"
+                   " registry value, or none was set under a key it logs since the log began; PERSIST-RUN-KEY has"
+                   " nothing to read here")
+REGISTRY_UNKNOWN = ("whether the Sysmon channel holds any event 13 (a registry value set) is not known (%s):"
+                    " PERSIST-RUN-KEY may have nothing to read here")
 NO_CHANNEL_READ = ("the round's inventory carries no read of the Sysmon channel (a reader that does not read it): a tree"
                    " that lives between two rounds is not seen")
 
@@ -448,10 +457,14 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
     run as its `sysmon` source; inv["channel"] says what was read, could not
     be read, how far behind, which kinds, and the holes (a read that fails
     keeps the sample). No caller passes anything: the CLI, the window and a
-    test's stand-in get the same reader."""
+    test's stand-in get the same reader. ADR-0014 AE-3 (M15.2b): in the
+    first round that reads the channel, after its read, the channel's
+    newest event 13 is asked once (os_sysmon.Channel.registry_held), and
+    that round's inv["channel"]["registry"] carries the answer."""
     platform_ = platform or sys.platform
     # Z-3: the reader's start is taken when it is made; Z-6: sysmon() -> (ok, why) is the one check (a test's stand-in)
-    own = {"checked": False, "channel": None, "why": None, "wall0": reader_wall(), "mono0": time.monotonic()}
+    own = {"checked": False, "channel": None, "why": None, "wall0": reader_wall(), "mono0": time.monotonic(),
+           "asked": False}   # AE-3 (M15.2b): the channel's question for event 13 was asked
     check = sysmon or (lambda: sysmon_present(platform_))
 
     def channel_of():
@@ -503,6 +516,13 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
             channel.commit(record, at)             # X-4: the bound moves only with the round kept
             inv["channel"] = dict(record, reads=channel.reads, failed=channel.failed, cut_rounds=channel.cut,
                                   events_total=channel.events, kinds_read=sorted(channel.kinds))
+            if record.get("error") is None and not own["asked"]:
+                # ADR-0014 AE-3 (M15.2b): once, in the first round that reads the channel, after its read: the
+                # channel's newest event 13 (None: a stand-in that has no such question, nothing asked or said)
+                own["asked"] = True
+                held = channel.registry_held() if hasattr(channel, "registry_held") else None
+                if held is not None:
+                    inv["channel"]["registry"] = held
         elif platform_ == "win32":
             inv["channel"] = {"off": own["why"] or "no Sysmon channel"}
         if platform_ == "win32":   # M7.21b (BO-2): a live Windows round; a watch adds the tracing's counts
@@ -3559,6 +3579,12 @@ class HostWatch:
                 self.notes.append("round %d: the note \"no event 1 from the channel for %s\" is withdrawn: an event 1"
                                   " of %s came" % (n, image, image))
         self.channel_last = record
+        held = record.get("registry")
+        if isinstance(held, dict):   # ADR-0014 AE-3 (M15.2b): the reader's one question for event 13; held: nothing
+            if held.get("error") is not None:
+                self._blind(now, "registry", REGISTRY_UNKNOWN % _safe(" ".join(str(held["error"]).split())), n)
+            elif held.get("held") is False:
+                self._blind(now, "registry", REGISTRY_UNHELD, n)
         kinds = {"error": CHANNEL_UNREAD, "cut": "channel-cut", "dropped": "channel-unbounded",
                  "silent": "channel-silent", "restarted": "channel-restart"}
         made, follows = [], 0
