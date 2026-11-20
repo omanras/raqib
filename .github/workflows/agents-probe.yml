@@ -165,6 +165,17 @@ jobs:
           "exit: $LASTEXITCODE"
           "after the next run:"
           logman query -ets | Select-String "raqib"
+  linuxevents:
+    name: what Linux tells between two samples (M14, the field test of 2026-11-20)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: the kernel's process events and socket ends, as root, and under the unit's limits
+        run: bash tools/rig/linux_events_probe.sh
+
   rules:
     name: a person's rules added, switched off and removed, against a live watch (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
