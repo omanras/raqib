@@ -636,8 +636,8 @@ What they see:
   path. `desktop.ini`, which Windows keeps there, is left out.
 - NET-ADMIN-PORT: a connection the process itself made, as event 3 says it
   (`Initiated`), to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private
-  address that is neither loopback nor link-local, whatever program opened the
-  socket. Measured: PowerShell's own socket to port 22 and an ssh to the same
+  address that is neither loopback nor link-local, whatever program of the tree
+  opened the socket. Measured: PowerShell's own socket to port 22 and an ssh to the same
   port were each a net line with port 22 and a private address, and no rule
   judged the first. An os net line now carries `initiated`, `dest_scope`, `image`
   and `parent_image` (the names its process's own start gave); the address and
@@ -649,7 +649,24 @@ What they do not see:
   and Raqib does not read event 13 yet; a scheduled task is written by the
   Schedule service (svchost, as SYSTEM, 24 ms after schtasks started), not by a
   process of the tree.
-- A file moved or renamed into the folder: Sysmon logs no file creation for it.
+- A file moved or renamed into the folder: not measured. A move within one
+  volume is believed to be no file creation for Sysmon; a move from another
+  volume is a copy, and so one. A file already there changed in place, and a
+  hard link made there, are believed to be none either.
+- What the kernel does for a tree: Windows' own SMB client (a share, a named
+  pipe, sc or schtasks against another machine) connects to port 445 as System,
+  not as a process of the tree. Not measured here; the commonest way to another
+  Windows machine is so outside NET-ADMIN-PORT.
+- Another machine on the same link reached by its link-local address is left
+  out with loopback. An address of 100.64.0.0/10 counts as private.
+- A net line whose `Initiated` was not read is not judged, and nothing says
+  so: a silence of this rule. Under `raqib watch --host` a Sysmon that gives no
+  file event is not said either. Both are the next stage's to close.
+- The budgets of the two rules were measured on no real desktop's work. A
+  deploy over ssh to a machine of the same network, a remote session of an
+  editor, a local virtual machine reached at its private address, a profile's
+  copy that holds a Startup folder: each would fire, and how often is not
+  known.
 - A Sysmon that logs no file creation or no connection there: nothing is then
   there to read, and Raqib cannot tell that from nothing done.
 - A port not on the list, a public address, a relay or a tunnel.

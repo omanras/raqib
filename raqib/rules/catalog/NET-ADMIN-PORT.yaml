@@ -14,6 +14,8 @@ evasion:
   - "this machine's own private address, which a line cannot tell from another machine's (a connection to the host's own sshd on its LAN address fires)"
   - "ssh started by git is left out (NET-TOOL's own exception, ADR-0007 R-7): the parent is known by its name only, so any program named git.exe that starts one named ssh.exe is left out, and what real git's ssh reaches is what the agent configures"
   - "a net line written before M15.1 has no initiated, dest_scope, image or parent_image: the rule cannot judge it (partial, said), never guesses it; a line whose Initiated was not read (initiated null) is not judged as initiated"
+  - "a connection the kernel makes for the tree: Windows' own SMB client (a share, a named pipe, sc or schtasks against another machine) connects to 445 as System, not as a process of the tree, so the line is not the tree's (not measured here; ADR-0014 S3)"
+  - "another machine on the same link reached by its link-local address (fe80::/10, 169.254.0.0/16) is left out with loopback (ADR-0014 A-4): to be ruled again with S3"
 severity: high
 # Reaching another machine's login or administration port is not ordinary work: the budget is tight.
 fp_budget: 0.05

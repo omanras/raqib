@@ -7,11 +7,14 @@ attack: [T1547.001]
 kind: signature
 evasion:
   - "another autostart place: a value under CurrentVersion\\Run or RunOnce (the registry is not read until ADR-0014 S2: Sysmon event 13), a scheduled task or a service (written by the system's own service, not by the tree: S3), a Startup folder named by the registry's User Shell Folders when it is moved elsewhere"
-  - "a file moved or renamed into the folder: Sysmon logs a file creation (event 11), and a move or a rename is none; a hooks line names the tool's own path only, so a Bash cp, mv or redirect into the folder is not a Write"
-  - "a Sysmon that logs no file creation there: nothing is then there to read, and Raqib cannot tell that from nothing done (the export's missing event 11 is said, a filter of the configuration is not)"
+  - "a file moved or renamed into the folder: not measured; a move or a rename within one volume is believed to be no file creation for Sysmon (event 11), a move from another volume is a copy and so one; a hooks line names the tool's own path only, so a Bash cp, mv or redirect into the folder is not a Write"
+  - "a Sysmon that logs no file creation there: nothing is then there to read, and Raqib cannot tell that from nothing done (under raqib watch --host a channel that gives no event 11 is not said yet: ADR-0014 Amendment A, AA-4)"
   - "Linux has no os source: nothing there is judged by this rule (its autostart places are ADR-0014 S4); a hooks Write is judged on any system, by its path"
   - "a path written another way than the folder's own: an 8.3 short name (STARTM~1), a junction, a symlink or a mount point that leads into the folder, a path relative to it, or a file of the folder named through an environment variable the tool did not expand"
   - "an os file line with no path (TargetFilename unread) is not judged (partial, said)"
+  - "a file already in the folder changed in place, or a hard link made in the folder: neither is believed to be a file creation for Sysmon (not measured); a hooks Edit of a file there is matched"
+  - "a hooks path that is not in its plain form (a . or .. part, a doubled separator, a path relative to a folder above Startup): the pattern reads the path as it is written"
+  - "a write by a file tool of another name (an MCP server's own write tool, a patch tool whose paths are inside its text): only Write, Edit, MultiEdit and NotebookEdit are matched"
 severity: high
 # A Startup file is not written by ordinary work: the budget is tight.
 fp_budget: 0.05

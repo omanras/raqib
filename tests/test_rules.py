@@ -1330,7 +1330,7 @@ def test_m41_b4_amendment_a_counts_the_lines_added_beyond_the_table():
     for rule_id, (_, items) in m151.items():
         assert [e.split(":", 1)[0] for e in every[rule_id].evasion[:len(items)]] == items, rule_id
     assert {rule_id: len(every[rule_id].evasion) - len(items) for rule_id, (_, items) in m151.items()} == {
-        "PERSIST-AUTOSTART": 3, "NET-ADMIN-PORT": 5}
+        "PERSIST-AUTOSTART": 6, "NET-ADMIN-PORT": 7}   # ADR-0014 Amendment A: +3, +2
     signatures = {rule_id: rule for rule_id, rule in every.items() if rule_id in m41}
     assert set(now) == set(signatures) == set(m41)
     # M7.2b (H-2): NET-TOOL and DESTRUCT-CMD gained one evasion line each, for the host source; the note's
