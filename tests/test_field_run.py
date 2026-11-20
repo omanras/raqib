@@ -509,10 +509,10 @@ def test_e4_readme_has_the_two_lines():
 
 
 def test_e4_kinds_stay_4_7_11():
-    """No rule is added or changes kind: the catalog's share of the gate's 6 : 7 : 11 is 6 : 2 : 8 (M15.1, ADR-0014: two signatures; the
+    """No rule is added or changes kind: the catalog's share of the gate's 7 : 7 : 11 is 7 : 2 : 8 (M15.1, ADR-0014: two signatures; M15.2: one; the
     silence, cross-source and tree rules, untouched here, make the rest)."""
     kinds = [r.kind for r in RULES]
-    assert (kinds.count("signature"), kinds.count("demand"), kinds.count("anchor")) == (6, 2, 8)   # M15.1: + two signatures
+    assert (kinds.count("signature"), kinds.count("demand"), kinds.count("anchor")) == (7, 2, 8)   # M15.1: + two signatures; M15.2: + PERSIST-RUN-KEY
     assert {r.id: r.kind for r in RULES}["AGENT-DARK-LIVE"] == "anchor" == {r.id: r.kind for r in RULES}[host.RHYTHM]
 
 

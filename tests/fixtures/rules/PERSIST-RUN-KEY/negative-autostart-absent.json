@@ -1,0 +1,106 @@
+{
+ "lines": [
+  {
+   "cwd": "C:\\work\\proj",
+   "missing_events": [
+    3,
+    11
+   ],
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-4997",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-4997",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-4997",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "depth": 0,
+    "hive": "user",
+    "image": "agent",
+    "parent_image": "explorer",
+    "program": "cmd",
+    "value_name": "RaqibTestA",
+    "view32": false
+   },
+   "input_sha256": "b9b918188a21a0c4ff6039ff96e4027c032467e99f861752a0130b89668675c7",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-4997",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "depth": 0,
+    "hive": "user",
+    "image": "agent",
+    "parent_image": "explorer",
+    "program": "cmd",
+    "value_name": "RaqibTestA",
+    "view32": false
+   },
+   "input_sha256": "b9b918188a21a0c4ff6039ff96e4027c032467e99f861752a0130b89668675c7",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-4997",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 4,
+   "session_id": "os-4997",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:02.100Z"
+  }
+ ]
+}

@@ -310,7 +310,7 @@ CLOCK_STEP = ("the wall clock stepped back %.0f s during the watch (the watch's 
               " now %s): an os event is history only when it is before that earlier start (T-3)")
 JUDGED_ELSEWHERE = "judged on another tree"   # REDO R-3: one act, one finding, shown on the nearest tree
 BEFORE_START = "before the watch's start: history (never knocked)"                 # REDO R-2
-LOGGED_EVENT = {"process": 1, "file": 11, "net": 3}   # AM-2: an os line's tool -> its Sysmon event (os_sysmon.TOOLS)
+LOGGED_EVENT = {"process": 1, "file": 11, "net": 3, "registry": 13}   # AM-2, AB-4: an os line's tool -> its event
 NO_SAMPLE_NOTE = ("the round's inventory carries no process sample (an export read as rounds, or a reader before"
                   " M7.8): a tree not in the round is called gone, never quiet (ADR-0007 P-2), or kept when the"
                   " round's connections were not read either (R-4)")
@@ -1006,7 +1006,8 @@ def act_key(rec):
     """REDO R-3, REDO 2 T-7: one os event, read by any feed: (time, tool,
     input hash, image, parent image), or None for a line that is not an os
     event line with a hash."""
-    if not (isinstance(rec, dict) and rec.get("source") == "os" and rec.get("tool") in ("process", "file", "net")
+    if not (isinstance(rec, dict) and rec.get("source") == "os"
+            and rec.get("tool") in ("process", "file", "net", "registry")   # ADR-0014 AB-4: registry
             and isinstance(rec.get("input_sha256"), str)):
         return None
     meta = rec.get("input_meta") if isinstance(rec.get("input_meta"), dict) else {}
@@ -3899,6 +3900,14 @@ class HostWatch:
         # ADR-0007 BC-2: and, at every pass, the roots of the other trees under its root whose own follow lives
         more = follow_kw(follow, since=self.start_eff, tree=src.os_tree, restart=self.follow_restart.get,
                          server_hash=True, mark_under=lambda: self._told(key))
+        # ADR-0014 AB-3: and a second bounded question each pass, for event 13 alone, asked of a follow that names it
+        # (os_sysmon.follow); a stand-in follow that does not name it is called as it was
+        import inspect
+        try:
+            if "registry" in inspect.signature(follow).parameters:
+                more["registry"] = True
+        except (TypeError, ValueError):
+            pass
 
         def run():
             try:

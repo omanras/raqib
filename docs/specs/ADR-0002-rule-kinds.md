@@ -257,6 +257,13 @@ behaviour: what a tree does to the host, beside what its program is called):
 
 Ratio after M15.1: 6 : 7 : 11.
 
+Note (2026-11-20, M15.2, ADR-0014 Amendment B, AB-1): one more signature row,
+the registry's autostart values read as lines of a tree's os source:
+
+| PERSIST-RUN-KEY | signature | another autostart place of the registry; a value or a key renamed into place; a Sysmon that logs no value set there |
+
+Ratio after M15.2: 7 : 7 : 11.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind

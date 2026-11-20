@@ -1,0 +1,495 @@
+{
+ "expect_seq": [
+  5,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12
+ ],
+ "lines": [
+  {
+   "cwd": "C:\\work\\proj",
+   "missing_events": [
+    3,
+    11
+   ],
+   "phase": "session_start",
+   "seq": 1,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "phase": "pre",
+   "seq": 2,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "agent.exe",
+    "command_programs": [
+     "agent.exe"
+    ],
+    "depth": 0,
+    "image": "agent",
+    "parent_image": "explorer"
+   },
+   "input_sha256": "4fc7444ef9c70842197e27ad8827369806f37f58b9bbafce710bee56a8537053",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 2,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:00.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "6ffb5d41692ad55448c2e95a31684494dfa7856cc9296050bc45541a689e215b",
+   "phase": "pre",
+   "seq": 3,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "cmd.exe",
+    "command_programs": [
+     "cmd.exe"
+    ],
+    "depth": 1,
+    "image": "cmd",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "6ffb5d41692ad55448c2e95a31684494dfa7856cc9296050bc45541a689e215b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 3,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.000Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "reg.exe",
+    "command_programs": [
+     "reg.exe"
+    ],
+    "depth": 2,
+    "image": "reg",
+    "parent_image": "cmd",
+    "parent_seq": 3
+   },
+   "input_sha256": "403b3f93d5dfac98cbea755ae008debc0f70233fd5e567fc947ff1910e4eb0ee",
+   "phase": "pre",
+   "seq": 4,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "reg.exe",
+    "command_programs": [
+     "reg.exe"
+    ],
+    "depth": 2,
+    "image": "reg",
+    "parent_image": "cmd",
+    "parent_seq": 3
+   },
+   "input_sha256": "403b3f93d5dfac98cbea755ae008debc0f70233fd5e567fc947ff1910e4eb0ee",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 4,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.100Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 2,
+    "hive": "user",
+    "image": "reg",
+    "parent_image": "cmd",
+    "program": "cmd",
+    "value_name": "RaqibTestA",
+    "view32": false
+   },
+   "input_sha256": "b9b918188a21a0c4ff6039ff96e4027c032467e99f861752a0130b89668675c7",
+   "phase": "pre",
+   "seq": 5,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 2,
+    "hive": "user",
+    "image": "reg",
+    "parent_image": "cmd",
+    "program": "cmd",
+    "value_name": "RaqibTestA",
+    "view32": false
+   },
+   "input_sha256": "b9b918188a21a0c4ff6039ff96e4027c032467e99f861752a0130b89668675c7",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 5,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.200Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "powershell.exe",
+    "command_programs": [
+     "powershell.exe"
+    ],
+    "depth": 1,
+    "image": "powershell",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "980fa795bcf338fb1d824c26067896db8068d186030021de98dc68dabe0e6acd",
+   "phase": "pre",
+   "seq": 6,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "command_head": "powershell.exe",
+    "command_programs": [
+     "powershell.exe"
+    ],
+    "depth": 1,
+    "image": "powershell",
+    "parent_image": "agent",
+    "parent_seq": 2
+   },
+   "input_sha256": "980fa795bcf338fb1d824c26067896db8068d186030021de98dc68dabe0e6acd",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 6,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "process",
+   "ts": "2026-11-03T09:00:02.300Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "runonce",
+    "depth": 1,
+    "hive": "user",
+    "image": "powershell",
+    "parent_image": "agent",
+    "program": "tool.exe",
+    "value_name": "RaqibTestB",
+    "view32": false
+   },
+   "input_sha256": "19f7769d29aa750b137bdb346249270bf447cb0400b286a400a5c263da88e014",
+   "phase": "pre",
+   "seq": 7,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.400Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "runonce",
+    "depth": 1,
+    "hive": "user",
+    "image": "powershell",
+    "parent_image": "agent",
+    "program": "tool.exe",
+    "value_name": "RaqibTestB",
+    "view32": false
+   },
+   "input_sha256": "19f7769d29aa750b137bdb346249270bf447cb0400b286a400a5c263da88e014",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 7,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.400Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 1,
+    "hive": "machine",
+    "image": "powershell",
+    "parent_image": "agent",
+    "program": "notepad.exe",
+    "value_name": "RaqibTestC",
+    "view32": false
+   },
+   "input_sha256": "0add079f08164f0a8f9a2931b086a45e30469e7a641d9980d5a28c363cb4940b",
+   "phase": "pre",
+   "seq": 8,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 1,
+    "hive": "machine",
+    "image": "powershell",
+    "parent_image": "agent",
+    "program": "notepad.exe",
+    "value_name": "RaqibTestC",
+    "view32": false
+   },
+   "input_sha256": "0add079f08164f0a8f9a2931b086a45e30469e7a641d9980d5a28c363cb4940b",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 8,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.500Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 1,
+    "hive": "machine",
+    "image": "powershell",
+    "parent_image": "agent",
+    "program": "cmd",
+    "value_name": "RaqibTestD",
+    "view32": true
+   },
+   "input_sha256": "4773869f530974ff1b45c9567e0b94243f595d698f62e5483528d879bf640b1d",
+   "phase": "pre",
+   "seq": 9,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.600Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 1,
+    "hive": "machine",
+    "image": "powershell",
+    "parent_image": "agent",
+    "program": "cmd",
+    "value_name": "RaqibTestD",
+    "view32": true
+   },
+   "input_sha256": "4773869f530974ff1b45c9567e0b94243f595d698f62e5483528d879bf640b1d",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 9,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.600Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "runonce",
+    "depth": 0,
+    "hive": "machine",
+    "image": "agent",
+    "parent_image": "explorer",
+    "program": "cmd",
+    "value_name": "RaqibTestE",
+    "view32": false
+   },
+   "input_sha256": "08e263d81efea7d79ffcab47c651b22e4db5bd81c73adc6a060f0f812e465bba",
+   "phase": "pre",
+   "seq": 10,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.700Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "runonce",
+    "depth": 0,
+    "hive": "machine",
+    "image": "agent",
+    "parent_image": "explorer",
+    "program": "cmd",
+    "value_name": "RaqibTestE",
+    "view32": false
+   },
+   "input_sha256": "08e263d81efea7d79ffcab47c651b22e4db5bd81c73adc6a060f0f812e465bba",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 10,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.700Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "runonce",
+    "depth": 0,
+    "hive": "machine",
+    "image": "agent",
+    "parent_image": "explorer",
+    "program": "cmd",
+    "value_name": "RaqibTestF",
+    "view32": true
+   },
+   "input_sha256": "bdfa69da02b6b9a0df1eb3f62488399c1d5ebfc612c43b8c61f5c857220806e4",
+   "phase": "pre",
+   "seq": 11,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.800Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "runonce",
+    "depth": 0,
+    "hive": "machine",
+    "image": "agent",
+    "parent_image": "explorer",
+    "program": "cmd",
+    "value_name": "RaqibTestF",
+    "view32": true
+   },
+   "input_sha256": "bdfa69da02b6b9a0df1eb3f62488399c1d5ebfc612c43b8c61f5c857220806e4",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 11,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.800Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 2,
+    "hive": "user",
+    "image": "reg",
+    "parent_image": "cmd",
+    "program": null,
+    "value_name": "RaqibTestG",
+    "view32": false
+   },
+   "input_sha256": "363a13a079b86d5fcf07bdd13ac77917ca36a58c70fcfc6d597b52a97a7f5105",
+   "phase": "pre",
+   "seq": 12,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.900Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "input_meta": {
+    "autostart": "run",
+    "depth": 2,
+    "hive": "user",
+    "image": "reg",
+    "parent_image": "cmd",
+    "program": null,
+    "value_name": "RaqibTestG",
+    "view32": false
+   },
+   "input_sha256": "363a13a079b86d5fcf07bdd13ac77917ca36a58c70fcfc6d597b52a97a7f5105",
+   "ok": true,
+   "output_meta": {},
+   "phase": "post",
+   "seq": 12,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "registry",
+   "ts": "2026-11-03T09:00:02.900Z"
+  },
+  {
+   "cwd": "C:\\work\\proj",
+   "phase": "session_end",
+   "seq": 13,
+   "session_id": "os-4990",
+   "source": "os",
+   "tool": "-",
+   "ts": "2026-11-03T09:00:02.900Z"
+  }
+ ]
+}

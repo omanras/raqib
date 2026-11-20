@@ -57,8 +57,8 @@ SUSPICION (model, raises only, A2): 0
 RULES THAT DID NOT RUN: 1
   - DRIFT-FILES not-evaluated: needs context: scope
 
-RULES (A6 fp_budget): 24
-  ... (24 rows: every rule, its kind, severity and budget)
+RULES (A6 fp_budget): 25
+  ... (25 rows: every rule, its kind, severity and budget)
 
 RESULT: ALARM (exit 1)
 ```

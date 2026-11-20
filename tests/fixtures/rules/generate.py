@@ -339,11 +339,17 @@ CMD_EXE = "C:\\Windows\\System32\\cmd.exe"
 
 def os_export(first, root, acts):
     """A SYNTHETIC export: the agent (root) under explorer, then acts, each ("proc", at, pid, image, ppid, pimage),
-    ("file", at, pid, image, path) or ("net", at, pid, image, ip, port[, initiated]); initiated "-" drops the field."""
+    ("file", at, pid, image, path), ("net", at, pid, image, ip, port[, initiated]) (initiated "-" drops the field) or
+    (M15.2) ("reg", at, pid, image, target, details): a Sysmon event 13 (SetValue) as measured (ADR-0014 AB)."""
     x = OS.Export(first_record=first)
     x.proc("00.100", root, OS.AGENT, '"%s"' % OS.AGENT, 900, OS.EXPLORER, "C:\\Windows\\Explorer.EXE")
     for act in acts:
-        if act[0] == "proc":
+        if act[0] == "reg":
+            _, at, pid, image, target, details = act
+            x.event(13, at, [("RuleName", "-"), ("EventType", "SetValue"), ("UtcTime", OS.DAY + at),
+                             ("ProcessGuid", OS.pguid_of(pid)), ("ProcessId", pid), ("Image", image),
+                             ("TargetObject", target), ("Details", details), ("User", "host\\user")])
+        elif act[0] == "proc":
             _, at, pid, image, ppid, pimage = act
             x.proc(at, pid, image, '"%s"' % image, ppid, pimage, '"%s"' % pimage)
         elif act[0] == "file":
@@ -358,15 +364,18 @@ def os_export(first, root, acts):
                                        "<Data Name='DestinationIsIpv6'>%s</Data>" % ("true" if ":" in ip else "false"))
     return x.text()
 
-def os_doc(path, export, root, cite=None, strip=()):
-    """os-sysmon's lines of the export's tree (keys in strip taken out of every net line: a line written before them);
-    a positive's expect_seq is the seq of every pre line of the tool cite names whose path or port is cited."""
+def os_doc(path, export, root, cite=None, strip=(), edit=None):
+    """os-sysmon's lines of the export's tree (keys in strip taken out of every net line: a line written before them;
+    edit, M15.2: a function given each line, to make a line os-sysmon does not write); a positive's expect_seq is the
+    seq of every pre line of the tool cite names whose path or port is cited."""
     got, _ = _OS_SYSMON.build(export, root, cwd=OS.OS_CWD)
     lines = [json.loads(line) for line in got]
     for r in lines:
         if r["tool"] == "net":
             for key in strip:
                 r["input_meta"].pop(key)
+        if edit is not None:
+            edit(r)
     doc = {"lines": lines}
     if cite:
         doc["expect_seq"] = sorted(r["seq"] for r in lines if r["phase"] == "pre" and cite(r))
@@ -418,3 +427,37 @@ os_doc(R + "NET-ADMIN-PORT/negative-not-admin.json", os_export(75301, 4951, [
 os_doc(R + "NET-ADMIN-PORT/negative-before-the-keys.json", os_export(75401, 4952, [
     ("proc", "02.000", 4962, PWSH, 4952, OS.AGENT), ("net", "02.100", 4962, PWSH, "192.168.1.20", 22)]), 4952,
     strip=("initiated", "dest_scope", "image", "parent_image"))
+# M15.2 (ADR-0014 Amendment B, AB-1, AB-2): PERSIST-RUN-KEY. Its os lines are os-sysmon's own (os_sysmon.build) of
+# SYNTHETIC exports holding events 13 in the four measured shapes of TargetObject and the two they imply (a made-up
+# SID, made-up value names, harmless value text only).
+REG_EXE = "C:\\Windows\\System32\\reg.exe"
+SID = "S-1-5-21-1111111111-2222222222-3333333333-1001"
+USER_RUN = "HKU\\" + SID + "\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\"
+MACHINE_RUN = "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\"
+MACHINE_32 = "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\"
+os_doc(R + "PERSIST-RUN-KEY/positive-run-values.json", os_export(75501, 4990, [
+    ("proc", "02.000", 4991, CMD_EXE, 4990, OS.AGENT), ("proc", "02.100", 4992, REG_EXE, 4991, CMD_EXE),
+    ("reg", "02.200", 4992, REG_EXE, USER_RUN + "Run\\RaqibTestA", "cmd /c echo test"),
+    ("proc", "02.300", 4993, PWSH, 4990, OS.AGENT),
+    ("reg", "02.400", 4993, PWSH, USER_RUN + "RunOnce\\RaqibTestB", '"C:\\Program Files\\Example\\tool.exe" --start'),
+    ("reg", "02.500", 4993, PWSH, MACHINE_RUN + "Run\\RaqibTestC", "C:\\Windows\\System32\\notepad.exe"),
+    ("reg", "02.600", 4993, PWSH, MACHINE_32 + "Run\\RaqibTestD", "cmd /c echo test"),
+    ("reg", "02.700", 4990, OS.AGENT, MACHINE_RUN + "RunOnce\\RaqibTestE", "cmd /c echo test"),
+    ("reg", "02.800", 4990, OS.AGENT, MACHINE_32.lower() + "RUNONCE\\RaqibTestF", "cmd /c echo test"),
+    ("reg", "02.900", 4992, REG_EXE, USER_RUN + "Run\\RaqibTestG", "Binary Data")]), 4990,
+    cite=lambda r: r["tool"] == "registry")
+# Not this rule's: a registry line whose autostart is null (os-sysmon writes none: made by hand), a file whose path
+# holds CurrentVersion\Run, a process line of reg.exe; the RunNotification value Windows' own sihost sets is no line.
+def _no_autostart(r):
+    if r["tool"] == "registry":
+        r["input_meta"]["autostart"] = None
+os_doc(R + "PERSIST-RUN-KEY/negative-not-a-run-value.json", os_export(75601, 4995, [
+    ("proc", "02.000", 4996, REG_EXE, 4995, OS.AGENT),
+    ("reg", "02.100", 4996, REG_EXE, USER_RUN + "Run\\RaqibTestA", "cmd /c echo test"),
+    ("reg", "02.200", 4996, REG_EXE, USER_RUN + "RunNotification\\RaqibTestN", "DWORD (0x00000003)"),
+    ("file", "02.300", 4995, OS.AGENT, "C:\\Users\\user\\AppData\\Local\\Temp\\CurrentVersion\\Run\\notes.txt")]),
+    4995, edit=_no_autostart)
+# A registry line with no autostart key at all (not a line os-sysmon writes): not judged (partial, said), never fired.
+os_doc(R + "PERSIST-RUN-KEY/negative-autostart-absent.json", os_export(75701, 4997, [
+    ("reg", "02.100", 4997, OS.AGENT, USER_RUN + "Run\\RaqibTestA", "cmd /c echo test")]), 4997,
+    edit=lambda r: r["input_meta"].pop("autostart") if r["tool"] == "registry" else None)
