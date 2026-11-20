@@ -1174,7 +1174,35 @@ def parse_footprints(text, src="footprints"):
 
 
 READER = "procevents"   # ADR-0007 BY-1: the kind of the text of Linux's process events the watch gives a round
-READER_KEYS = ("pid", "ppid", "exe", "ticks", "began", "ended", "code")   # a line of it holds these and nothing else
+READER_KEYS = ("pid", "ppid", "programs", "dropped", "ticks", "began", "ended", "code")   # a line holds these alone
+READER_OLD_KEYS = ("pid", "ppid", "exe", "ticks", "began", "ended", "code")   # M14.1c's line: one program, no name
+READER_PROGRAMS_MAX = 8   # CC-1: the programs a line gives of a process at most (procevents.PROGRAMS_MAX)
+READER_NAME_MAX = 15      # CC-2: the kernel's name of a process is at most 15 bytes (TASK_COMM_LEN less its end)
+
+
+def _reader_programs(value):
+    """CC-1, CC-2: the programs of a reader's line - a list of 1 to READER_PROGRAMS_MAX entries, each exactly
+    {exe, name} (a text or null; a name of at most READER_NAME_MAX characters) - or None where it is not so."""
+    if not isinstance(value, list) or not 1 <= len(value) <= READER_PROGRAMS_MAX:
+        return None
+    out = []
+    for e in value:
+        if not (isinstance(e, dict) and set(e) == {"exe", "name"} and (e["exe"] is None or isinstance(e["exe"], str))
+                and (e["name"] is None or (isinstance(e["name"], str) and len(e["name"]) <= READER_NAME_MAX))):
+            return None
+        out.append({"exe": e["exe"] or None, "name": e["name"] or None})
+    return out
+
+
+LIVENESS_READER = (
+    "liveness (a round that read the process events): a child that began and ended between snapshots is seen where"
+    " the process events gave it under a tree that talks at a snapshot, or under an act-root the snapshots made,"
+    " with every program it ran (up to 8 a process) and the name it was called by; a tree that lives whole between"
+    " snapshots is not seen, nor is what a child talks to, a child whose parent the watch never wrote, a process"
+    " whose maker the reader did not hear that a snapshot holds under pid 1, or a connection that ended between"
+    " snapshots. An agent between two requests owns no connection, so its acts go to"
+    " a talking ancestor: what is left of its talk (a TIME-WAIT row with no owner, a DNS cache row with no pid) is"
+    " shown as recent talk, owner unknown, never as a candidate, and its tree can be an act-root (talk not seen)")
 
 
 def _count_value(value, low=0):
@@ -1204,7 +1232,14 @@ def parse_procevents(text, src=READER):
     of it are one process) and the time its fork was heard. It is marked as
     the reader's own (`created`, `began`), with its end and code where they
     were heard (a hint: nothing in a round is ended by it). A line that is
-    not such a line is a problem of the round, never an exception."""
+    not such a line is a problem of the round, never an exception.
+    ADR-0007 CC-1, CC-2 (M14.1d): a line gives every program the process
+    ran while heard, in order (`programs`: at most READER_PROGRAMS_MAX,
+    each its file's path and the name the kernel gave it at that exec;
+    `dropped`: the earlier ones past that bound), {pid, ppid, programs,
+    dropped, ticks, began, ended, code}; the record's exe and image are
+    its last program's, and `programs` keeps each with its image. A line of
+    M14.1c's shape (one `exe`) is one program with no name."""
     records, problems = [], []
     for number, raw in _numbered(text):
         if not raw.strip():
@@ -1214,11 +1249,22 @@ def parse_procevents(text, src=READER):
         except (ValueError, RecursionError):
             problems.append(_problem(src, number, "not a JSON line"))
             continue
-        if not isinstance(obj, dict) or set(obj) != set(READER_KEYS):
-            problems.append(_problem(src, number, "a line of the process events holds exactly %s"
-                                     % ", ".join(READER_KEYS)))
+        if not isinstance(obj, dict) or set(obj) not in (set(READER_KEYS), set(READER_OLD_KEYS)):
+            problems.append(_problem(src, number, "a line of the process events holds exactly %s (or %s)"
+                                     % (", ".join(READER_KEYS), ", ".join(READER_OLD_KEYS))))
             continue
-        pid, ppid, exe, ticks, code = (obj[k] for k in ("pid", "ppid", "exe", "ticks", "code"))
+        old = "exe" in obj
+        programs = ([{"exe": obj["exe"], "name": None}] if old and (obj["exe"] is None or isinstance(obj["exe"], str))
+                    else None if old else _reader_programs(obj["programs"]))
+        dropped = 0 if old else obj["dropped"]
+        if programs is None or not _count_value(dropped):
+            problems.append(_problem(src, number, "the programs of a process of the process events are 1 to %d"
+                                                  " entries of {exe, name} (a text or null; a name of at most %d"
+                                                  " characters) and a count of those not kept"
+                                     % (READER_PROGRAMS_MAX, READER_NAME_MAX)))
+            continue
+        pid, ppid, ticks, code = (obj[k] for k in ("pid", "ppid", "ticks", "code"))
+        exe = programs[-1]["exe"]
         began, ended = reader_time(obj["began"]), obj["ended"]
         if not (_count_value(pid, 1) and pid < REUSE and (ppid is None or (_count_value(ppid) and ppid < REUSE))
                 and (exe is None or isinstance(exe, str))
@@ -1234,6 +1280,7 @@ def parse_procevents(text, src=READER):
         records.append(_rec("proc", src, number, raw, pid=pid, ppid=ppid, argv=[], image=image_name(exe), exe=exe,
                             exe_from="record" if exe else None, cwd=None, env_keys=None, sockets=None, ts=began,
                             unread=[], created=True, began=obj["began"], ended=ended, code=code,
+                            programs=[dict(e, image=image_name(e["exe"])) for e in programs], dropped=dropped,
                             **({"started": "boot+%d" % ticks} if ticks is not None else {})))
     return records, problems
 
@@ -1929,8 +1976,16 @@ def _merge_procs(records):
     """pid -> process. Records read from a process list or Sysmon 1 come
     first; records derived from another event's Image field only fill gaps.
     The first value of a field wins; every image the pid had is kept (an
-    exec keeps the pid)."""
+    exec keeps the pid). ADR-0007 CD-1: where the reader of the process
+    events gave the process, the parent it names (the process that made it,
+    from the kernel's fork event) is its parent, though a sample holds it
+    under another (the kernel hands a process whose parent ended to another);
+    a process the reader did not give keeps the sample's. CE-2: the reader's
+    parent stands only where it is a process of the round (in its sample or
+    its text); a sampled process whose parent it changed keeps the sample's
+    own as "sampled_ppid", which the search for act-roots reads."""
     procs = {}
+    made_by = {}   # CD-1: pid -> the parent the reader names (its first record that names one)
     own = [r for r in records if r["kind"] == "proc" and not r.get("derived")]
     derived = [r for r in records if r["kind"] == "proc" and r.get("derived")]
     for r in own + derived:
@@ -1938,6 +1993,8 @@ def _merge_procs(records):
                                         "exe": None, "argv": [], "cwd": None, "env_keys": None,
                                         "sockets": None, "recs": [], "derived": True})
         p["recs"].append(r)
+        if r.get("ppid") is not None and r["pid"] not in made_by and _reader_src(r):
+            made_by[r["pid"]] = r["ppid"]
         if not r.get("derived"):
             p["derived"] = False
         for key in ("ppid", "exe", "cwd", "env_keys"):
@@ -1950,6 +2007,13 @@ def _merge_procs(records):
         if r.get("image") and r["image"] not in p["images"]:
             p["images"].append(r["image"])
         p["image"] = p["images"][0] if p["images"] else None
+    for pid, ppid in made_by.items():
+        p = procs[pid]
+        if ppid not in procs or ppid == p["ppid"]:   # CE-2: else the sample's word stands
+            continue
+        if any(not _reader_src(r) for r in p["recs"]):
+            p["sampled_ppid"] = p["ppid"]
+        p["ppid"] = ppid
     return procs
 
 
@@ -2441,6 +2505,19 @@ def _guid_instances(records):
     return out, holes
 
 
+def _programs_of(p):
+    """ADR-0007 CC-1, CC-2 (M14.1d, API for raqib/host.py): {"programs": every program the process ran while the
+    reader heard it, in order, each {"image": its file's name as image_name names it, "name": the name the kernel
+    gave the process at that exec, or None}, "dropped": the earlier ones past the reader's bound} of a process the
+    reader gave (its newest such record), else {} - so an act of a round with no reader's text is what it was."""
+    recs = [r for r in (p or {}).get("recs") or () if r.get("programs") is not None and _reader_src(r)]
+    if not recs:
+        return {}
+    r = recs[-1]
+    return {"programs": [{"image": e.get("image"), "name": e.get("name")} for e in r["programs"]],
+            "dropped": r.get("dropped") or 0}
+
+
 def _reader_src(r):
     """Whether a record is of the reader of Linux's process events (BY-1)."""
     return (split_name(r.get("src")) or (None,))[0] == READER
@@ -2563,7 +2640,7 @@ def _acts_core(records, catalog, channel=False):
                     "path": None, "via": list(reversed(chain)), "reader_ancestor": pid in self_line,
                     "started": started_of(p) or (_channel_fields(p)["channel_started"] if channel else None),   # X-6
                     # M7.4 E1 (API): the child's creation time where the reader gives it (M7.9: or its Sysmon 1 time)
-                    "cites": _cites(p["recs"])})
+                    "cites": _cites(p["recs"]), **_programs_of(p)})
                 break
             chain.append(anc)
     for f in (r for r in records if r["kind"] == "file"):
@@ -2657,6 +2734,8 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     # no reader's text is the round it was
     records, reader_apart, reader_by_fork = _reader_instances(records)
     reader = any(s["kind"] == READER and s["text_read"] for s in parsed)
+    if reader:   # ADR-0007 CC-5: the standing hole says what a round that read the reader's text sees and does not
+        holes = [LIVENESS_READER if h == ALWAYS_HOLES[0] else h for h in holes]
     unjoined = records   # AB-6: the round's records before the anchor, for the round built without the channel
     records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts, watch = _acts_core(
         records, catalog, channel)
@@ -3112,6 +3191,25 @@ def _sampled(p):
     return any(not _reader_src(r) for r in p["recs"])
 
 
+def _sample_links(procs):
+    """ADR-0007 CE-2: the round's processes as the samples link them: a sampled process whose parent the reader
+    gave (CD-1) has the sample's own parent again, its link dated afresh; the reader's processes alone keep the
+    links the reader gave (a chain the reader alone gave under an act-root adds its acts, CB-1)."""
+    if not any("sampled_ppid" in p for p in procs.values()):
+        return procs
+    out = dict(procs)
+    for pid, p in procs.items():
+        if "sampled_ppid" not in p:
+            continue
+        q = dict(p, ppid=p["sampled_ppid"])
+        q.pop("link", None)
+        parent = procs.get(q["ppid"]) if q["ppid"] is not None and q["ppid"] != pid else None
+        if parent is not None:
+            q["link"] = _link_verdict(q, parent, False)
+        out[pid] = q
+    return out
+
+
 def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     """E3, the act-root class (signature; the catalog's act_root block), as
     narrowed by G-1: a process P whose image path is under a user directory,
@@ -3123,6 +3221,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     owns no talking connection in any sample read. The reader's own tree is
     never evidence. Talk in a later sample makes P a talker, so it is a
     candidate instead (the window merge); recent talk never promotes it."""
+    procs = _sample_links(procs)   # CE-2: the search reads the samples' own parent links, never the reader's over them
     spec = catalog["act_root"]
     shells, never = set(spec["shells"]), set(spec["not_images"])
     parents = shells | set(spec["launchers"])
@@ -3192,7 +3291,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
                 acts.append({"how": "process", "pid": q, "image": label or qp["image"], "listed": label is not None,
                              "path": None, "via": list(reversed(via)), "reader_ancestor": False,
                              "started": started_of(qp),   # M7.4 E1 (API)
-                             "cites": _cites(qp["recs"])})
+                             "cites": _cites(qp["recs"]), **_programs_of(qp)})
         owner = next((a for a in ancestors(procs, pid, self_tree) if a in talkers), None)   # BH-4
         times = [r["ts"] for q in [pid] + [a["pid"] for a in acts] for r in procs[q]["recs"] if r.get("ts")]
         first = heads[0]

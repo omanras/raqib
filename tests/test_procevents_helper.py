@@ -121,7 +121,7 @@ def test_e1_bw1_an_entry_that_alone_would_pass_the_bound_gives_its_program_as_un
     given = [x for a in parsed(out[1:]) for x in a["processes"]]
     got = given[0]
     assert got["exe"] is None and got["unread"]["exe"] == procevents.TOO_LONG_EXE and got["pid"] == 3
-    assert got["earlier"] == [{"exe": None, "unread": {"exe": procevents.TOO_LONG_EXE}}]
+    assert got["earlier"] == [{"exe": None, "name": None, "unread": {"exe": procevents.TOO_LONG_EXE}}]   # CC-2
     assert given[1:] == [proc(4)] and all(len(x) + 1 <= 900 for x in out)
 
 

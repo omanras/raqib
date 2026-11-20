@@ -100,7 +100,10 @@ def asked(op, pid=PID):
         struct.pack("=I", op)
 
 
-def stat_line(pid, ppid, ticks, comm="a) (b"):
+NAME = "a) (b"   # M14.1d (CC-2): the name the fake's stat gives every process (one that holds ") (" too)
+
+
+def stat_line(pid, ppid, ticks, comm=NAME):
     """/proc/PID/stat as Linux writes it (a name that holds ") (" too); starttime is the 22nd field."""
     rest = "S %d 1 1 0 -1 4194304 1 0 0 0 0 0 0 0 20 0 1 0 %d 1000 100 18446744073709551615" % (ppid, ticks)
     return ("%d (%s) %s\n" % (pid, comm, rest)).encode("ascii")
@@ -277,7 +280,8 @@ def test_e1_fork_exec_and_exit_in_one_datagram_each_padded_to_four_bytes():
     assert len(odd) % 4 == 0 and struct.unpack_from("=I", odd, 0)[0] == 77
     feed(r, born + odd + exec_(5001) + exit_(5001, code=7 << 8))
     got = r.read()
-    assert got == {"processes": [{"pid": 5001, "ppid": 4000, "exe": "/usr/bin/curl", "earlier": [],
+    assert got == {"processes": [{"pid": 5001, "ppid": 4000, "exe": "/usr/bin/curl", "name": NAME, "earlier": [],
+                                  "dropped": 0,
                                   "started_ticks": 123456, "began": text_of(WALL - 0.25),
                                   "ended": text_of(WALL - 0.25), "code": 7, "signal": None, "unread": {}}],
                    "ends": [], "older": []}
@@ -324,7 +328,7 @@ def test_e1_br1_a_thread_that_is_not_the_leader_execs_as_measured_one_process_it
     feed(r, exec_(5001), exit_(5001, code=6 << 8))
     got = r.read()
     assert [(p["pid"], p["exe"], p["earlier"], p["code"], p["started_ticks"], p["unread"]) for p in got["processes"]] \
-        == [(5001, "/usr/bin/curl", [{"exe": "/usr/bin/python3", "unread": {}}], 6, 50, {})]
+        == [(5001, "/usr/bin/curl", [{"exe": "/usr/bin/python3", "name": NAME, "unread": {}}], 6, 50, {})]
     assert got["ends"] == [] and got["older"] == [] and r.counts()["older"] == 0 and r.counts()["live"] == 0
     assert r.counts()["threads"] == 1
 
@@ -352,7 +356,7 @@ def test_e1_br1_an_exec_after_an_exit_with_no_fork_between_is_the_same_process_n
     feed(r, exec_(5001))
     p = r.read()["processes"][0]
     assert (p["pid"], p["exe"], p["ended"], p["ppid"], p["started_ticks"]) == (5001, "/usr/bin/wget", None, 4000, 50)
-    assert "began" not in p["unread"] and p["earlier"] == [{"exe": "/usr/bin/sh", "unread": {}}]
+    assert "began" not in p["unread"] and p["earlier"] == [{"exe": "/usr/bin/sh", "name": NAME, "unread": {}}]
     feed(r, fork(4000, 5001))                                # a fork between: a new process; the old one's end lost
     system.proc(5001, "/usr/bin/cp", 4100, 70)
     feed(r, exec_(5001))
@@ -396,7 +400,7 @@ def test_e2_br2_two_execs_within_one_read_keep_the_first_program_in_earlier():
     system.links[5001] = "/usr/bin/curl"
     feed(r, exec_(5001))
     got = r.read()["processes"]
-    assert [(p["exe"], p["earlier"]) for p in got] == [("/usr/bin/curl", [{"exe": "/usr/bin/dash", "unread": {}}])]
+    assert [(p["exe"], p["earlier"]) for p in got] == [("/usr/bin/curl", [{"exe": "/usr/bin/dash", "name": NAME, "unread": {}}])]
     assert r.counts()["events"]["exec"] == 2 and r.counts()["given"] == 1
 
 
@@ -409,7 +413,7 @@ def test_e2_br2_a_second_exec_whose_reads_fail_never_replaces_what_the_first_rea
     system.stats[5001] = PermissionError(errno.EACCES, "no")
     feed(r, exec_(5001))
     p = r.read()["processes"][0]
-    assert p["exe"] is None and p["earlier"] == [{"exe": "/usr/bin/dash", "unread": {}}]
+    assert p["exe"] is None and p["earlier"] == [{"exe": "/usr/bin/dash", "name": NAME, "unread": {}}]
     assert (p["ppid"], p["started_ticks"]) == (4000, 8)       # what the first read gave stands
     assert p["unread"]["exe"].startswith("not read at its exec (%s" % name(errno.ENOENT))
     assert p["unread"]["stat"].startswith("not read at its exec (%s" % name(errno.EACCES))
@@ -426,7 +430,7 @@ def test_e2_br2_a_second_exec_after_a_read_is_given_again_with_its_earlier():
     feed(r, exec_(5001), exit_(5001))
     again = r.read()
     assert [(p["pid"], p["exe"], p["earlier"], p["code"], p["began"]) for p in again["processes"]] == [
-        (5001, "/usr/bin/git", [{"exe": "/usr/bin/dash", "unread": {}}], 0, first["began"])]
+        (5001, "/usr/bin/git", [{"exe": "/usr/bin/dash", "name": NAME, "unread": {}}], 0, first["began"])]
     assert again["ends"] == [] and r.counts()["given"] == 2
 
 
@@ -442,7 +446,7 @@ def test_e3_br3_a_start_later_than_the_exec_by_more_than_a_second_is_another_pro
     p = r.read()["processes"][0]
     if reused:
         assert p["exe"] is None and p["started_ticks"] is None and p["ppid"] == 4000
-        assert p["unread"] == {"exe": procevents.ANOTHER, "stat": procevents.ANOTHER}
+        assert p["unread"] == {"exe": procevents.ANOTHER, "stat": procevents.ANOTHER, "name": procevents.ANOTHER}
         assert procevents.ANOTHER.startswith("another process held the pid") and r.counts()["reused"] == 1
     else:
         assert p["exe"] == "/usr/bin/touch" and p["started_ticks"] == ticks and p["unread"] == {}
@@ -610,10 +614,12 @@ def test_e6_an_unread_program_is_said_with_every_cause_it_can_have():
     assert a["exe"] is None and a["started_ticks"] == 42
     assert a["unread"] == {"exe": "not read at its exec (%s: gone before the read, or hidden from this reader by the"
                                   " system)" % name(errno.ENOENT)}
-    assert b["exe"] == "/usr/bin/shred" and b["unread"] == {
-        "stat": "not read at its exec (%s: not readable by this user: another user's process, or a program that made"
-                " itself so)" % name(errno.EACCES)}
-    assert c["ppid"] is None and c["began"] is None and set(c["unread"]) == {"began", "exe", "stat", "threads"}
+    assert b["exe"] == "/usr/bin/shred" and b["unread"] == {k: "not read at its exec (%s: not readable by this user:"
+                                                                " another user's process, or a program that made"
+                                                                " itself so)" % name(errno.EACCES)
+                                                             for k in ("stat", "name")}   # CC-2: read with the stat
+    assert c["ppid"] is None and c["began"] is None and set(c["unread"]) == {"began", "exe", "stat", "name",
+                                                                             "threads"}
     assert c["unread"]["stat"] == "not read at its exec (ValueError)" and c["unread"]["began"] == procevents.NO_FORK
     assert c["unread"]["threads"] == procevents.NO_FORK_THREADS
     assert r.counts()["missed"] == {"exe": 2, "stat": 2}     # reads, not processes: 5003 added one to each
@@ -922,15 +928,16 @@ def test_e6_the_spec_says_the_layout_what_is_read_every_count_and_what_was_measu
             "a socket of AF_NETLINK, SOCK_DGRAM, protocol 11 (the connector), bound to the reader's pid and group 1",
             "Several messages may come in one datagram, each padded to 4 bytes.",
             "At an exec the reader reads at once the link /proc/PID/exe (the program) and /proc/PID/stat (the parent"
-            " and the start in clock ticks), and nothing else of the process.",
+            ", the start in clock ticks and the name the kernel gave the process), and nothing else of the"
+            " process.",   # M14.1d (CC-2): the name, from the same stat
             "No argument, no environment, no working directory and no open file of a process is ever read, and"
             " nothing is read at a fork or an exit.",
             "An ended record is taken up again by an exec of its pid, with no fork between, only where its start and"
             " the exec's read start are both known and equal",
             "A pid taken again within one second of the exec, before the read, is not told apart, and the newcomer's"
             " program and start are then given as the first process's.",
-            "A record keeps its newest 16 earlier programs (EARLIER_MAX); the number of older ones not kept is said"
-            " on the record",
+            "A record keeps its newest 7 earlier programs (EARLIER_MAX); the number of older ones not kept is said"
+            " on the record",   # M14.1d (CC-1): 8 programs a process
             "runs the program of the process that made it",
             "what the queue held is given; what came while it was full is gone; how many: at least the count.",
             "A step seen while no ENOBUFS has come since the start is a loss the kernel did not tell",
@@ -1000,7 +1007,7 @@ def test_e6_the_threat_model_says_what_an_agent_can_do_about_this_source_without
             "a kernel that refuses (an older one, or a container's) is the hole, said in the reader's words as"
             " `refused`, and nothing else is tried",
             "a child made to be its maker's sibling is given the parent the kernel names, which is not its maker",
-            "a process that changes its program again keeps the programs it had before in `earlier`, its newest 16"):
+            "a process that changes its program again keeps the programs it had before in `earlier`, its newest 7"):
         assert sentence in section, sentence
     for gone in ("within one clock tick", "whatever shows it escapes it", "how many events the queue held"):
         assert gone not in section, gone
@@ -1127,7 +1134,7 @@ def test_h5_an_end_past_the_bound_was_never_given_and_is_not_called_the_end_give
     assert p["ended"] is None and "ended" not in p["unread"]
 
 
-def test_e3_bs4_a_record_keeps_its_newest_16_earlier_programs_and_counts_the_rest():
+def test_e3_bs4_a_record_keeps_its_newest_7_earlier_programs_and_counts_the_rest():
     system = System()
     system.proc(5001, "/usr/bin/p0", 4000, 50)
     r = started(system)
@@ -1136,9 +1143,11 @@ def test_e3_bs4_a_record_keeps_its_newest_16_earlier_programs_and_counts_the_res
         system.links[5001] = "/usr/bin/p%d" % i
         feed(r, exec_(5001))
     p = r.read()["processes"][0]
-    assert procevents.EARLIER_MAX == 16 and len(p["earlier"]) == 16 and p["exe"] == "/usr/bin/p39"
-    assert [e["exe"] for e in p["earlier"]] == ["/usr/bin/p%d" % i for i in range(23, 39)]
-    assert p["unread"]["earlier"] == "23 earlier program(s) not kept: a record keeps its newest 16 (EARLIER_MAX)"
+    # M14.1d (CC-1): 8 programs a process at most, the one it has now among them
+    assert procevents.PROGRAMS_MAX == 8 and procevents.EARLIER_MAX == 7 and len(p["earlier"]) == 7
+    assert p["exe"] == "/usr/bin/p39" and [e["exe"] for e in p["earlier"]] == ["/usr/bin/p%d" % i for i in range(32, 39)]
+    assert p["unread"]["earlier"] == "32 earlier program(s) not kept: a record keeps its newest 7 (EARLIER_MAX)"
+    assert p["dropped"] == 32
 
 
 # --- E4 (BS-5): the kernel's count of events on each CPU --------------------------------------------------------

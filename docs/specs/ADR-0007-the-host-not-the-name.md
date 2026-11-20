@@ -3355,3 +3355,145 @@ line that names curl too); the gate green on the six CI jobs.
   `sample` of a child the reader heard too: discover gives each act its sources then. A child with no cite is
   said `sample`. The test that a line of a round with no reader's text is unchanged compares two runs of this
   code, not the base's bytes.
+
+## Amendment CC (the Table, 2026-11-21) - M14.1d: what a short child does that was said and not judged (BZ-3, CA-7)
+M14.1c landed with three silences said in its own words and measured for this task (the probe branch acdc838,
+GitHub's Linux machine, an strace of each tree read by tools/rig/exec_probe.py):
+- The files of the common tools on Ubuntu 24.04: `nc` and `netcat` are `nc.openbsd`, `telnet` is
+  `inetutils-telnet`, `ftp` is `tnftp`, `sh` is `dash`; `curl`, `wget`, `ssh`, `scp`, `rsync` and `git` are
+  their own names. NET-TOOL's list knows `nc`, not `nc.openbsd`.
+- A real agent's run (qwen, the scripted model): of 36 processes, 8 ran a second program in the pid of the
+  first - its shell tool runs `bash -c` with a command and bash runs the command in its own place
+  (`bash -> python` five times, `bash -> hostname`, `bash -> whoami`). Each within one round. In a set of the
+  common idioms: `bash -> curl` and `env -> curl` in one pid.
+- One child of 212, in the idioms, outlived a parent that had begun more than a round before and ended within
+  a round after the child began.
+- Not measured: a second program run in a pid more than a round after the first, in a real agent (the idioms
+  ran `sh`, which here is dash and does not do it; bash does); a desktop's ordinary work.
+
+- CC-1 (every program a process ran). The reader keeps, for a process, each program it ran while the reader
+  heard it, in order, to a bound a process that is counted when passed - not the last alone. A child's line
+  names each. Where a process the watch already wrote a line for runs another program in a later round, the
+  watch writes a line for that program. FOR: the command a shell runs in its own place is judged whenever it
+  runs, and the shell before it is still said. MUST NOT TOUCH: a line already written.
+- CC-2 (the name a program was called by). At each exec the reader reads, beside the program's file, the name
+  the kernel gave the process for it: the last part of the path that was run. A child's line names both where
+  they differ, each through the name gate; a name of the kernel's full length is taken as cut and not used.
+  FOR: `nc`, `telnet`, `ftp` and a tool that is a link to one program of many names are judged by the name a
+  rule's list holds. A name more, never a name less: the file's own name always stays. A process can be
+  called by a tool's name it is not (a link of its own): its tree then alarms by its own doing, and that is
+  said in the rule's words.
+- CC-3 (a child whose parent has gone). The watch keeps, for each tree, the children it wrote lines for and has
+  not heard end, by pid and start, to a bound that is said when passed. A process whose parent is one of them
+  is that tree's child, though the parent is in neither this round's sample nor its text.
+- CC-4 (a child is its pid and its start). Wherever the watch keeps a child - which it wrote, when it began -
+  it keeps it by pid and start together, so that a pid used again is another child.
+- CC-5 (the standing hole follows the reader). The inventory's always-said hole that nothing between two
+  samples is seen says, in a round that read the reader's text, what is and is not seen then; a round with no
+  reader's text is byte for byte what it was.
+- CC-6 (not here). An act-root made by the reader's word waits for a desktop's measure (CB-3). What a short
+  child talks to, and a tree that lives whole between two samples, are M14.2.
+- CC-7 (the rig). On Linux the stand-in runs, each harmless: a `bash -c` whose first step sleeps longer than a
+  round and whose last command is a fetch thrown away (the command runs in bash's own pid, a round after
+  bash's line); `nc -z` to a public name where nc is there; and a child that outlives the shell that started
+  it. X43: the fetch is a NET-TOOL finding of the stand-in's tree. X44: `nc` is one, named `nc`. X45: the
+  outliving child's tool is one. Each n/a where its tool is not installed or the helper was refused.
+
+## Amendment CD (the Table, 2026-11-21) - M14.1d in the field: X45 MISSED, and why (a short REDO before the review)
+The rig on bf47ca6 (GitHub's Linux machine, kernel 7.0): the gate green on six jobs; X43 MET (the fetch bash ran
+in its own pid a round after its own line is a NET-TOOL finding of the stand-in's tree) and X44 MET (`nc`, whose
+file is `nc.openbsd`, is one, named `nc`); X45 MISSED - no line of the stand-in's tree names the fetch of the
+bash that outlived its `sh`. The Table ran the same act under a real watch on a Linux machine of its own (kernel
+6.18; the reader answered every ask) and read the tree's lines: the tree's line names the `sh` (heard by the
+process events alone, begun and ended within one round) and never the bash. The reader gave the bash with the
+`sh` as its parent; the sample of the same round holds the bash under pid 1, where the kernel put it when the
+`sh` ended; and where a sample and the reader both name a process's parent, the sample's word is taken first.
+So the bash was nobody's child, was never kept (CC-3 keeps what the watch wrote), and its fetch seven seconds
+later was a stranger's. CC-3 as built covers a parent that ended in an earlier round than its child was heard
+in; the field's case is a parent that begins and ends in the very round its child is first heard in - which is
+what a shell that starts a command in the background and returns does every time.
+- CD-1 (the parent at birth stands). Where the reader gave a process, the parent it names - the process that
+  made it, read from the kernel's own event - is whose child it is, though a sample holds it under another
+  parent now (the kernel hands a process whose parent ended to another). FOR: what a tree starts through a
+  shell that returns at once is the tree's child from the first round it is heard in, is kept, and every
+  program it runs later is judged as the tree's. MUST NOT TOUCH: a process the reader did not give (the
+  sample's word is all there is); a round that read no reader's text (byte for byte what it was); a tree's own
+  key and root.
+- CD-2 (said). The section and the spec say it: a process is its maker's child. A process whose maker the
+  reader did not hear (begun before the reader, or lost) and whom the sample holds under pid 1 is still
+  nobody's: said among what is not judged.
+
+## Amendment CE (the Table, 2026-11-21) - the review of M14.1d and its REDO (docs/review/2026-11-21-M14.1d.md): REDO 2
+The reviewer's verdict is STOP, for rulings. The field's word on c260c0e: X36, X43, X44, X45 MET and the gate
+green; the review shows that X43 and X45 as written can be MET by another child's fetch, so they are not yet
+proof. Nothing new was measured for these rulings: each narrows what the reader's word may do to what the rig
+has shown, and one (CE-3) is given a claim of its own to be measured by.
+- CE-1 (a kept child's tree is quiet, or gone). The road the REDO opened is kept: a kept child, or a child of
+  one, that the reader gives is given to its tree in a round where the tree is otherwise quiet - CD-1's FOR
+  asks it, and X45 rests on it. It goes the road a held tree's given children go, whole: the same marks, the
+  same test that the tree can be written to, the same hole where one is held and not given, and its dropped
+  programs counted. A round in which a kept child is given again with nothing new writes no line. Where the
+  tree has gone, nothing is written to it: the watch says, in the section and as a hole of the result, how
+  many processes a gone tree's kept children were heard to start. FOR: what a tree left running does while the
+  tree is quiet is the tree's; what it does after the tree ended is at least said (rule 4). MUST NOT TOUCH: a
+  tree that was let go is not woken; a tree that ended gets no line. Recorded for M14.2: whether a tree with
+  kept children alive is a tree still.
+- CE-2 (CD-1 does not make an act-root, and does not take a child away). An act-root is made by what the
+  samples alone make (CB-1): its search reads the samples' own parent links, never a link the reader gave. The
+  reader's parent stands over a sample's only where that parent is a process of the round - in its sample or
+  its text - or a child the watch keeps; else the sample's word stands. FOR: the reader's word adds a child to
+  its maker's tree; it never makes a root, and never leaves a sampled process nobody's. MUST NOT TOUCH: the
+  field's case (the `sh` is in the round's text).
+- CE-3 (a child known by the kernel's name alone). Where the reader could not read a child's file and did read
+  the name the kernel gave it, the child gets its line by that name, and the line says that its file was not
+  read; such children are counted apart from the children that got no line. FOR: what a tree runs through
+  `sudo` or a program that changes its user is a process whose file a plain reader cannot read - under BY-4 it
+  had no line at all. A name more, never a name less. The name is the process's to choose, and the line says
+  what it is. Claim X46 measures it: the stand-in runs its fetch through `sudo -n` where the machine allows,
+  and the fetch is a NET-TOOL finding of its tree, by the kernel's name, its file said as not read.
+- CE-4 (never a name less). Where a process has programs from the reader, the name the samples gave it (its
+  own image) is still named where no program gives it; a file not read is said as not read, never as unfit.
+- CE-5 (the claims prove what they say). X43 and X45 are MET only where the line's own entry for that child
+  names the tool and a NET-TOOL finding cites that line; X44 says where nc was seen (the process events, a
+  sample, both) and is MET by the name alone only where the events alone saw it or the file's name differs.
+- CE-6 (pid and start, where it was pid alone). A kept child's tree is found by the tree's key, not its root's
+  pid; a kept child is let go where the round holds its pid with another start. Windows, and a round that read
+  no reader's text, write a child's line as M14.1c did: the line for a later program (the builder's C5) is for
+  a round that read the reader's text.
+- CE-7 (the words). The threat model, the spec, the guide, the section and the notes say what is judged now and
+  no longer state what CC and CD closed; they say that only children the process events heard are kept, that a
+  child of a child written from a sample alone is nobody's once its parent ends, and what CE-1 says of a gone
+  tree. A test holds the new sentences and that the old ones are gone.
+- CE-8 (kept as built, or recorded). The newest eight programs (Q1); a kept child given again is its tree's
+  (Q2); the reader's first record that names a parent (redo Q2). Recorded: children with no start read are
+  keyed by pid alone; BA-1's take-back by pid; a name longer than the kernel's fifteen makes the whole answer
+  not a line (E1's letter); kept children of gone trees are let go only when heard to end.
+
+## Amendment CF (the Table, 2026-11-21) - the second review of M14.1d (docs/review/2026-11-21-M14.1d-redo2.md): lands
+The reviewer's verdict is NEXT after three items by the Table's hand. The field's word on f679208 and again on
+4948ab1 (GitHub's Linux machine, kernel 7.0): X36, X43, X44, X45 and X46 MET - each by the child's own entry in
+its line and a NET-TOOL finding that cites that line; X46 is the stand-in's fetch run through `sudo -n`: a child
+the process events alone saw, its file not read, named by the kernel's name. The gate green on six jobs.
+- CF-1 (under an act-root the sample's parent stands). CE-2 as built reads the samples' own links for the whole
+  search of act-roots, so CD-1 does not reach an act-root's children: a process the reader heard made under an
+  act-root's shell that a sample holds under pid 1 is no act of it. That is ruled as it stands, and said in
+  the four texts that claimed more. FOR: nothing of an act-root - its making, its acts, its budget measured on
+  samples (CB-1) - moves by the reader's word before a desktop's measure (CB-3, CC-6). MUST NOT TOUCH: a tree
+  that talks, where CD-1 holds as the rig shows. Recorded for M14.2, with CC-6: the reader's links for the
+  acts of an act-root the samples made, built and reviewed as its own item.
+- CF-2 (the counts are each true). The section's count of children named by the kernel's name alone counts
+  each child, not each name of a line; the count of children with no line takes from the round's own count
+  (the inventory's children with no program read) only those of them that got a line by a name, a child a
+  round - never a child a sample also saw, never one the watch joined itself. A test holds two children of
+  one line by one name, one a sample also saw, and one with neither file nor name.
+- CF-3 (small, by hand). The hole for a held tree's kept children has its own once, so that AZ-2's hole never
+  silences it. The words: a program not read, and no name of it read either, gets no line; the gone tree's
+  count says "to start or to become"; a held line's word says "a child it kept, or a child of one"; where
+  the file was not read the name is all there is and is the process's to choose.
+- CF-4 (kept, or recorded for M14.2). Kept as built: the builder's Q1 (a kept maker works through the watch:
+  a process a talking subreaper holds stays with it), Q2, Q3, Q4 (`files_unread` on the line), C1, C3, C4.
+  Recorded: a kept child on the held road whose new program's name the gate refuses says no hole; X44's
+  "file by another name" branch is loose where a line is shared; a start not read lets a kept child go; a
+  finding a person reads does not yet say that the file was not read (the rules' sentences: no rule reads
+  `files_unread`); the section's two new counts are not in the guide's list; X46 where the watch itself runs
+  as root; the debts of CE-8; a tree kept alive by its kept children.

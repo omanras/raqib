@@ -654,3 +654,97 @@ def test_x38_the_rig_runs_raqib_events_after_the_watch_on_both_systems_and_keeps
     # HA-10: what raqib events wrote to its error stream is printed and kept (on Linux it is in the answer: 2>&1)
     assert "Get-Content $env:RUNNER_TEMP\\events-check.err" in win and "events-check.err rig-out" in win
     assert '"$RUNNER_TEMP/events-check.out" 2>&1' in linux
+
+
+# --- X43 to X46 (ADR-0007 CC-7, CE-3, CE-5): programs a child runs later, the name nc, an outliving bash, sudo ------
+LATER_WORKLOAD = LINUX_WORKLOAD.replace("WORKLOAD 07:51:15 done\n", "WORKLOAD 07:51:00 start bash\n"
+                                        "WORKLOAD 07:51:00 bash-exec pid 9911\nWORKLOAD 07:51:08 end bash rc=0\n"
+                                        "WORKLOAD 07:51:08 start nc\nWORKLOAD 07:51:09 end nc rc=0\n"
+                                        "WORKLOAD 07:51:09 start sh\nWORKLOAD 07:51:09 outliving pid 9922 (sh rc=0)\n"
+                                        "WORKLOAD 07:51:19 outliving waited\nWORKLOAD 07:51:20 start sudo\n"
+                                        "WORKLOAD 07:51:20 sudo-fetch pid 9930\nWORKLOAD 07:51:21 end sudo rc=0\n"
+                                        "WORKLOAD 07:51:22 done\n")
+
+
+def later_line(seq, children, programs, seen=None, unread=None):
+    """A HostChild line of the stand-in's tree: its children [(pid, image)] and programs, where each was seen."""
+    meta = {"command_programs": list(programs), "command_sources": list(seen or ["events"] * len(programs)),
+            "pid": 9828, "children": [{"pid": p, "image": i} for p, i in children], "cites": []}
+    if unread:
+        meta["files_unread"] = list(unread)
+    return json.dumps({"seq": seq, "tool": "HostChild", "source": "host", "input_meta": meta}) + "\n"
+
+
+LATER_SOURCES = [("t.jsonl", later_line(6, [(9911, "bash")], ["bash"]) + later_line(8, [(9911, "wget")], ["wget"])
+                  + later_line(9, [(9915, "nc.openbsd")], ["nc.openbsd", "nc"])
+                  + later_line(10, [(9922, "bash")], ["bash"]) + later_line(12, [(9922, "wget")], ["wget"])
+                  + later_line(14, [(9930, "sudo"), (9931, "wget")], ["sudo", "wget"], unread=["sudo", "wget"]))]
+
+
+def later_report(*seqs):
+    report = REPORT
+    at = report.index("  [medium] NET-TOOL on python pid 9828")
+    lines = "".join("  [medium] NET-TOOL on python pid 9828 via host: HostChild may reach the network at seq %d (host -,"
+                    " program %s, programs [\"%s\"]); off\n" % (seq, x, x) for seq, x in seqs)
+    return (report[:at] + lines + report[at:]).replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1)
+
+
+ALL_CITED = later_report((8, "wget"), (9, "nc"), (12, "wget"), (14, "wget"))
+
+
+def later(report=ALL_CITED, workload=LATER_WORKLOAD, platform="linux", sources=LATER_SOURCES):
+    rows = check.read_later_programs(report, workload, platform, sources)
+    assert [r[0][:4] for r in rows] == ["X43 ", "X44 ", "X45 ", "X46 "]
+    return {r[0][:3]: (r[1], r[2]) for r in rows}
+
+
+def test_x43_to_x46_met_where_each_childs_own_entry_names_it_and_a_finding_cites_that_line():
+    got = later()
+    assert {k: v[0] for k, v in got.items()} == {"X43": check.MET, "X44": check.MET, "X45": check.MET,
+                                                 "X46": check.MET}
+    assert "own entry for pid 9911 names wget (seq 8)" in got["X43"][1]
+    assert "own entry for pid 9922 names wget (seq 12)" in got["X45"][1] and "seen by: events" in got["X44"][1]
+
+
+def test_x45_is_missed_where_its_pid_shares_a_line_with_another_childs_fetch():
+    """CE-5: the outliving bash's first line shares a round with X43's wget: the line names wget and holds pid 9922,
+    but 9922's own entry is bash: not MET."""
+    shared = [("t.jsonl", later_line(8, [(9911, "wget"), (9922, "bash")], ["wget", "bash"]))]
+    got = later(report=later_report((8, "wget")), sources=shared)
+    assert got["X43"][0] == check.MET and got["X45"][0] == check.MISSED
+    assert later(report=later_report((9, "wget")), sources=shared)["X43"][0] == check.MISSED   # cites another line
+
+
+def test_x44_says_where_nc_was_seen_and_is_not_met_by_a_samples_name_alone():
+    sample_only = [("t.jsonl", later_line(9, [(9915, "nc")], ["nc"], seen=["sample"]))]
+    state, words = later(sources=sample_only)["X44"]
+    assert state == check.MISSED and "seen by: sample" in words
+    both = [("t.jsonl", later_line(9, [(9915, "nc.openbsd")], ["nc.openbsd", "nc"], seen=["both", "both"]))]
+    assert later(sources=both)["X44"][0] == check.MET   # its file by another name: CC-2's own word
+
+
+def test_x46_needs_the_events_alone_and_the_file_said_not_read():
+    for meta in (later_line(14, [(9931, "wget")], ["wget"], unread=None),
+                 later_line(14, [(9931, "wget")], ["wget"], seen=["both"], unread=["wget"])):
+        assert later(sources=[("t.jsonl", meta)])["X46"][0] == check.MISSED
+
+
+def test_x43_to_x46_missed_where_the_line_or_the_citing_finding_is_not_there():
+    only_bash = [("t.jsonl", later_line(6, [(9911, "bash")], ["bash"]) + later_line(10, [(9922, "bash")], ["bash"]))]
+    assert {v[0] for v in later(sources=only_bash).values()} == {check.MISSED}
+    assert {v[0] for v in later(report=later_report((1, "curl"))).values()} == {check.MISSED}
+    assert "no sources given" in later(sources=())["X43"][1]
+    assert {v[0] for v in later(report=None, workload=None).values()} == {check.SKIP}   # never raises: not said run
+
+
+def test_x43_to_x46_n_a_off_linux_without_the_tool_where_not_run_or_the_helper_was_refused():
+    assert {v[0] for v in later(platform="win32").values()} == {check.SKIP}
+    refused = ALL_CITED.replace("  lost: none\n", "  lost: none\n  refused: the process events are not read: no"
+                                " answer\n")
+    assert {v[0] for v in later(report=refused).values()} == {check.SKIP}
+    missing = LATER_WORKLOAD.replace("start nc\n", "nc not installed\n").replace(
+        "bash-exec pid 9911", "bash-exec not run: wget or bash not installed").replace(
+        "outliving pid 9922 (sh rc=0)", "outliving not run: wget, bash or sh not installed").replace(
+        "sudo-fetch pid 9930", "sudo-fetch not run: sudo -n is not allowed here")
+    assert {v[0] for v in later(workload=missing).values()} == {check.SKIP}
+    assert {v[0] for v in later(workload=LINUX_WORKLOAD).values()} == {check.SKIP}   # an older stand-in

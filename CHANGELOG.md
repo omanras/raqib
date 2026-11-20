@@ -5,6 +5,53 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.8.0 - 2026-11-21
+
+What is new:
+- On Linux a short child is judged by everything it ran, and by the name it was called by (ADR-0007 Amendments
+  CC to CF). A child's line names every program its process ran while the process events heard it (the newest
+  eight; more are counted and said), so the command a shell runs in its own place (`bash -c "...; curl ..."`)
+  is judged whenever it runs, in the round of the shell's line or a later one. Where the kernel's name for a
+  process differs from its file's, the line names both: `nc`, whose file on Ubuntu is `nc.openbsd`, is judged
+  as `nc`.
+- A process is its maker's child. Where the process events heard a process made, the process that made it is
+  its parent, though a sample already holds it under pid 1: what a tree starts through a shell that returns
+  at once - a command left in the background - is the tree's child, is kept, and what it runs later is the
+  tree's, also in a round where the tree itself is quiet.
+- A program run through `sudo` gets a line. A plain reader cannot read the file of a process that runs as
+  another user; until now such a child had no line at all. It is now named by the name the kernel gave it,
+  and its line says that its file was not read (`files_unread`).
+- Said, not hidden: a tree that has ended is written nothing, and how many processes its kept children were
+  heard to start is in the report's PROCESS EVENTS section and is a hole of the result.
+- Measured on GitHub's Linux machine (kernel 7.0; the rig's X43 to X46, each by the child's own entry in its
+  line and a NET-TOOL finding that cites that line): the fetch a `bash -c` ran in its own pid a round after its
+  own line; `nc -z`, named `nc`; the fetch of a bash that outlived the `sh` that started it; the same fetch
+  run through `sudo -n`, its file not read. The first run of X45 was MISSED: that is how the maker's rule came.
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- Nothing changes on Windows in this number.
+
+Not measured:
+- Under an act-root - an agent that holds no connection at a sample - the sample's parent still stands: what
+  its shell leaves in the background is nobody's, as before. Ruled so until a desktop's measure; the next task.
+- What a short child talks to, and a tree that lives whole between two samples: not seen yet (the next task).
+- A tree kept alive by the children it left: today the tree ends and its children's later acts are counted,
+  not written.
+- A name is the process's own to choose: a tool run through `sudo` under another name is missed, and a
+  process can call itself by a tool's name it is not (its tree then alarms by its own doing).
+- A desktop's ordinary work for an hour: what these lines add to HOST-RHYTHM's and NET-TOOL's findings.
+- Pid reuse, a tree that has gone, the bounds of 8 programs and 512 kept children: on made-up rounds only.
+- How often the reader loses its race with a process that ends before it is read. On the rig's last run before
+  this number one `nc` of 14 short acts was gone before the reader read anything of it (its record given, its
+  program and name said as not read, so no line; the claim X31 MISSED); the same commit run again gave 14 of
+  14, as every run before had. The watch counts such a child in PROCESS EVENTS (programs not read); the rate
+  on a real desktop is not measured.
+
 ## 0.7.0 - 2026-11-21
 
 What is new:
