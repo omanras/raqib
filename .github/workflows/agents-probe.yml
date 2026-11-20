@@ -179,6 +179,9 @@ jobs:
           persist-credentials: false
       - name: the kernel's process events and socket ends, as root, and under the unit's limits
         run: bash tools/rig/linux_events_probe.sh
+      - name: after an overflow, and what threads send (the review of M14.1a)
+        if: always()
+        run: python3 tools/rig/linux_events_probe2.py
       - name: the reader itself (M14.1a), as a plain user, five times
         if: always()
         run: |
