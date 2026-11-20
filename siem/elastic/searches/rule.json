@@ -1,0 +1,27 @@
+{
+  "finds": "Every finding of one rule of the catalog, by its id (the parameter rule_id).",
+  "request": "POST raqib-events*/_search/template",
+  "body": {
+    "source": {
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "rule.id": "{{rule_id}}"
+              }
+            }
+          ]
+        }
+      },
+      "sort": [
+        {
+          "@timestamp": "desc"
+        }
+      ]
+    },
+    "params": {
+      "rule_id": "NEW-AGENT-UNKNOWN"
+    }
+  }
+}

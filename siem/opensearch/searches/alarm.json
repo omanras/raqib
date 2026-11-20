@@ -1,0 +1,22 @@
+{
+  "finds": "Every event the watch counts as an alarm (a finding, a source finding or a hole whose alarm is true).",
+  "request": "POST raqib-events*/_search",
+  "body": {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "event.kind": "alert"
+            }
+          }
+        ]
+      }
+    },
+    "sort": [
+      {
+        "@timestamp": "desc"
+      }
+    ]
+  }
+}

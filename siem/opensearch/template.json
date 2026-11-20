@@ -1,0 +1,179 @@
+{
+  "index_patterns": [
+    "raqib-events*"
+  ],
+  "template": {
+    "settings": {
+      "index": {
+        "default_pipeline": "raqib-event-1"
+      }
+    },
+    "mappings": {
+      "date_detection": false,
+      "dynamic_templates": [
+        {
+          "strings": {
+            "match_mapping_type": "string",
+            "mapping": {
+              "type": "keyword",
+              "ignore_above": 1024
+            }
+          }
+        }
+      ],
+      "properties": {
+        "@timestamp": {
+          "type": "date"
+        },
+        "message": {
+          "type": "text"
+        },
+        "error": {
+          "properties": {
+            "message": {
+              "type": "text"
+            }
+          }
+        },
+        "event": {
+          "properties": {
+            "original": {
+              "type": "keyword",
+              "index": false,
+              "doc_values": false
+            },
+            "ingested": {
+              "type": "date"
+            },
+            "severity": {
+              "type": "long"
+            },
+            "id": {
+              "type": "keyword"
+            },
+            "action": {
+              "type": "keyword"
+            },
+            "kind": {
+              "type": "keyword"
+            }
+          }
+        },
+        "host": {
+          "properties": {
+            "name": {
+              "type": "keyword"
+            }
+          }
+        },
+        "observer": {
+          "properties": {
+            "product": {
+              "type": "keyword"
+            },
+            "version": {
+              "type": "keyword"
+            }
+          }
+        },
+        "rule": {
+          "properties": {
+            "id": {
+              "type": "keyword"
+            },
+            "category": {
+              "type": "keyword"
+            }
+          }
+        },
+        "threat": {
+          "properties": {
+            "technique": {
+              "properties": {
+                "id": {
+                  "type": "keyword"
+                }
+              }
+            }
+          }
+        },
+        "process": {
+          "properties": {
+            "pid": {
+              "type": "long"
+            },
+            "name": {
+              "type": "keyword"
+            }
+          }
+        },
+        "raqib": {
+          "properties": {
+            "schema": {
+              "type": "keyword"
+            },
+            "about": {
+              "type": "keyword"
+            },
+            "state": {
+              "type": "keyword"
+            },
+            "n": {
+              "type": "long"
+            },
+            "rev": {
+              "type": "long"
+            },
+            "severity": {
+              "type": "keyword"
+            },
+            "watch": {
+              "properties": {
+                "run": {
+                  "type": "keyword"
+                },
+                "mode": {
+                  "type": "keyword"
+                },
+                "platform": {
+                  "type": "keyword"
+                },
+                "beat": {
+                  "type": "double"
+                }
+              }
+            },
+            "rule": {
+              "properties": {
+                "kind": {
+                  "type": "keyword"
+                },
+                "fp_budget": {
+                  "type": "double"
+                }
+              }
+            },
+            "subject": {
+              "type": "flat_object"
+            },
+            "evidence": {
+              "type": "flat_object"
+            },
+            "hole": {
+              "type": "flat_object"
+            },
+            "knocked": {
+              "type": "flat_object"
+            },
+            "result": {
+              "type": "flat_object"
+            },
+            "counts": {
+              "type": "flat_object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

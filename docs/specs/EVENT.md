@@ -151,6 +151,12 @@ What a collector's own agent, tailing `events.jsonl`, may rely on and must allow
 - The end's `result` is the watch's result when the end was written. Where the watch's own state file failed
   before the end and was written after it, or failed only after it, the report's last word and the end's can
   differ: the report is the watch's last word, the end is what it could say in the file.
+- An engine that guesses the kinds of the fields refuses lines (ADR-0017 S-4, measured in Elasticsearch
+  8.15.3 and OpenSearch 2.17.1: 6 of 31 lines refused in both). A tree's `subject.started` is an instant on
+  Windows and `boot+N` on Linux: the engine takes the first it sees for a date and then refuses the other, and
+  a refused line is lost unless the indexer's errors are read. The answer is siem/'s content (siem/README.md):
+  a pipeline that follows the Mapping and a template that guesses nothing (strings as keywords, the parts
+  whose shape differs from kind to kind kept whole).
 
 ## Keys
 

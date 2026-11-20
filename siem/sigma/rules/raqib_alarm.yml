@@ -1,0 +1,17 @@
+title: Raqib - a finding that alarms
+id: 6f3d2a91-4c1e-4b8a-9d27-1e5a0c7b3f41
+status: experimental
+description: 'A rule of Raqib fired on an AI agent''s tree and the watch counts it as an alarm (kind finding or source-finding, alarm true).'
+author: Raqib
+logsource:
+  product: raqib
+detection:
+  selection:
+    kind:
+      - finding
+      - source-finding
+    alarm: true
+  condition: selection
+falsepositives:
+  - 'The rule''s own false-positive budget (rule.fp_budget)'
+level: high

@@ -1,0 +1,90 @@
+{
+  "name": "Raqib - the techniques of the catalog's rules",
+  "versions": {
+    "layer": "4.5"
+  },
+  "domain": "enterprise-attack",
+  "description": "Made by python3 tools/siem_content.py --write from raqib/rules/catalog. A technique is what a finding of the rule is consistent with, never that it happened. The score is the number of rules that declare the technique.",
+  "sorting": 0,
+  "hideDisabled": false,
+  "techniques": [
+    {
+      "techniqueID": "T1005",
+      "score": 1,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "SCOPE-PATH (SCOPE, signature, medium)"
+    },
+    {
+      "techniqueID": "T1021",
+      "score": 1,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "NET-ADMIN-PORT (NET, signature, high)"
+    },
+    {
+      "techniqueID": "T1048",
+      "score": 1,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "NET-TOOL (NET, signature, medium)"
+    },
+    {
+      "techniqueID": "T1059",
+      "score": 3,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "HOST-RHYTHM (HOST, anchor, high); NEW-AGENT (HOST, anchor, high); NEW-AGENT-UNKNOWN (HOST, anchor, medium)"
+    },
+    {
+      "techniqueID": "T1071",
+      "score": 1,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "HOST-RHYTHM (HOST, anchor, high)"
+    },
+    {
+      "techniqueID": "T1105",
+      "score": 1,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "NET-TOOL (NET, signature, medium)"
+    },
+    {
+      "techniqueID": "T1485",
+      "score": 1,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "DESTRUCT-CMD (DESTRUCT, signature, medium)"
+    },
+    {
+      "techniqueID": "T1547.001",
+      "score": 2,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "PERSIST-AUTOSTART (PERSIST, signature, high); PERSIST-RUN-KEY (PERSIST, signature, high)"
+    },
+    {
+      "techniqueID": "T1552",
+      "score": 1,
+      "enabled": true,
+      "showSubtechniques": false,
+      "comment": "SECRET-OUTPUT (SECRET, signature, high)"
+    }
+  ],
+  "gradient": {
+    "colors": [
+      "#ffe0b2",
+      "#e65100"
+    ],
+    "minValue": 0,
+    "maxValue": 3
+  },
+  "legendItems": [],
+  "metadata": [
+    {
+      "name": "rules",
+      "value": "17"
+    }
+  ]
+}

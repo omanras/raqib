@@ -1,0 +1,57 @@
+{
+  "finds": "The hosts whose latest heartbeat arrived, by the engine's own clock of arrival (event.ingested, never the event's time), more than two of its beats (watch.beat, the longest the host said) before the time given as the parameter now (epoch milliseconds).",
+  "request": "POST raqib-events*/_search/template",
+  "body": {
+    "source": {
+      "size": 0,
+      "query": {
+        "bool": {
+          "filter": [
+            {
+              "term": {
+                "event.action": "heartbeat"
+              }
+            }
+          ]
+        }
+      },
+      "aggs": {
+        "hosts": {
+          "terms": {
+            "field": "host.name",
+            "size": 10000
+          },
+          "aggs": {
+            "last": {
+              "max": {
+                "field": "event.ingested"
+              }
+            },
+            "beat": {
+              "max": {
+                "field": "raqib.watch.beat"
+              }
+            },
+            "silent": {
+              "bucket_selector": {
+                "buckets_path": {
+                  "last": "last",
+                  "beat": "beat"
+                },
+                "script": {
+                  "source": "params.last + 2000.0 * params.beat < Long.parseLong(params.now)",
+                  "params": {
+                    "now": "{{now}}"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "params": {
+      "now": "1767225600000"
+    }
+  }
+}
