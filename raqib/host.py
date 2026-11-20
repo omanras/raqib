@@ -378,13 +378,14 @@ CHANNEL_KIND_ROUNDS = 3            # REDO X-8: a kind not read after this many r
 CHANNEL_HELD = {1: "no event 1 read so far: a tree that starts and ends between two rounds may be unseen",
                 3: "no event 3 read so far: talk between rounds may be unseen (Sysmon without -n logs none)",
                 # ADR-0014 AE-2 (M15.2b): the file events, said under the same rule (AA-4)
-                11: "no event 11 read so far: no file a tree makes is seen, and PERSIST-AUTOSTART's os lines have"
-                    " nothing to read (this Sysmon's configuration may not log file creation)",
+                11: "no event 11 read so far: a file a tree makes may be unseen, and PERSIST-AUTOSTART's os lines"
+                    " may have nothing to read (this Sysmon's configuration may not log file creation)",
                 22: "no event 22 read so far: a name asked between two rounds may be unseen"}
 # ADR-0014 AE-3 (M15.2b): the blind spot `registry`, from the channel's one question for event 13 (said once a run)
-REGISTRY_UNHELD = ("the Sysmon channel holds no event 13 (a registry value set): this Sysmon's configuration logs no"
-                   " registry value, or none was set under a key it logs since the log began; PERSIST-RUN-KEY has"
-                   " nothing to read here")
+REGISTRY_UNHELD = ("the Sysmon channel held no event 13 (a registry value set) at this watch's first read of it: this"
+                   " Sysmon's configuration may log no registry value, or none was set under a key it logs in what the"
+                   " channel then held; PERSIST-RUN-KEY may have nothing to read here (asked once a run: a value logged"
+                   " after it does not take this back)")
 REGISTRY_UNKNOWN = ("whether the Sysmon channel holds any event 13 (a registry value set) is not known (%s):"
                     " PERSIST-RUN-KEY may have nothing to read here")
 NO_CHANNEL_READ = ("the round's inventory carries no read of the Sysmon channel (a reader that does not read it): a tree"
@@ -477,16 +478,17 @@ def live_reader(catalog, window=0.0, platform=None, homes=None, ss_paths=None, s
     run as its `sysmon` source; inv["channel"] says what was read, could not
     be read, how far behind, which kinds, and the holes (a read that fails
     keeps the sample). No caller passes anything: the CLI, the window and a
-    test's stand-in get the same reader. M14.1b (ADR-0007 BU): on Linux the
-    reader starts, at its first round and before its sample, a helper process
-    that runs raqib/procevents.py's Reader (ProcEvents), asks it after each
-    sample and keeps what it said as inv["procevents"] (numbers only); the
-    helper is stopped by the watch that owns the reader (PROCEVENTS_OWNER) or
-    by close(). helper: a factory of a stand-in Helper (tests); None is the
-    real one, on a system that is Linux. ADR-0014 AE-3 (M15.2b): in the
+    test's stand-in get the same reader. ADR-0014 AE-3 (M15.2b): in the
     first round that reads the channel, after its read, the channel's
     newest event 13 is asked once (os_sysmon.Channel.registry_held), and
-    that round's inv["channel"]["registry"] carries the answer."""
+    that round's inv["channel"]["registry"] carries the answer. M14.1b
+    (ADR-0007 BU): on Linux the reader starts, at its first round and before
+    its sample, a helper process that runs raqib/procevents.py's Reader
+    (ProcEvents), asks it after each sample and keeps what it said as
+    inv["procevents"] (numbers only); the helper is stopped by the watch that
+    owns the reader (PROCEVENTS_OWNER) or by close(). helper: a factory of a
+    stand-in Helper (tests); None is the real one, on a system that is
+    Linux."""
     platform_ = platform or sys.platform
     # Z-3: the reader's start is taken when it is made; Z-6: sysmon() -> (ok, why) is the one check (a test's stand-in)
     own = {"checked": False, "channel": None, "why": None, "wall0": reader_wall(), "mono0": time.monotonic(),
@@ -612,7 +614,8 @@ def procevents_helper():
 
 
 def _pe_num(x):
-    return isinstance(x, int) and not isinstance(x, bool) and x >= 0
+    # the second review, M3: a number of a helper's line is a count; one too large to be a count is no number
+    return isinstance(x, int) and not isinstance(x, bool) and 0 <= x < 1 << 63
 
 
 def _pe_record(rec):
@@ -696,8 +699,9 @@ class ProcEvents:
                 "beyond": self.beyond_before + self.beyond_now, "lost": self._lost(), "refused": self.refused,
                 "hole": hole, "more": more, "restarts": self.restarts, "asked": asked, "answered": answered}
 
-    def _retire(self):
-        """The running helper stopped; its last counts kept for the watch (BW-2)."""
+    def _retire(self, within=None):
+        """The running helper stopped; its last counts kept for the watch (BW-2). within (seconds): the helper is
+        ended inside a round and at once, each wait bounded by the ask's own time (the second review, M1)."""
         helper, self.helper = self.helper, None
         if self.lost_now:
             self.lost_before["count"] += self.lost_now["count"]
@@ -708,13 +712,13 @@ class ProcEvents:
         self.lost_now, self.beyond_now = None, 0
         if helper is not None:
             try:
-                self.problems += helper.stop() or []
+                self.problems += (helper.stop() if within is None else helper.stop(within)) or []
             except Exception as exc:
                 self.problems.append("the helper's stop failed: %s: %s" % (type(exc).__name__, exc))
 
     def _ended(self, why):
         """The helper ended, or is ended: started again once; the second end is final. The hole's words."""
-        self._retire()
+        self._retire(self.timeout)
         if self.starts >= 2:
             self.final = PE_FINAL % why
             return self.final
@@ -767,7 +771,7 @@ class ProcEvents:
             if why == self.pe.REFUSED:
                 self.refused = _pe_words(getattr(self.helper, "refused", None) or "no reason given")
                 self.final = PE_REFUSED % self.refused
-                self._retire()
+                self._retire(self.timeout)
                 return self._inv(self.final)
             if why == self.pe.ENDED:
                 return self._inv(self._ended("its output ended"), asked=True)

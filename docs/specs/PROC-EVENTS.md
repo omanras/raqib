@@ -285,8 +285,11 @@ watch's own words, never a program. A refusal is final. A helper that ended,
 whose reader ended, or that was late three rounds running is ended and
 started again once, and a second end is final; between an end and the next
 start nothing is heard, and the report says so. A late answer and a line
-that is not the helper's are holes of their round, and the next round asks
-again. A line the watch cannot count (a record with no usable pid, counts of
+that is not the helper's are holes of their round; while an ask is unanswered
+the next round writes no new ask and waits again for that answer, and three
+rounds late running end the helper. A helper the watch ends inside a round
+is ended at once, each wait bounded by the ask's own time, so the round is
+not held for it. A line the watch cannot count (a record with no usable pid, counts of
 another shape) is `not a line`, never an exception. On Windows and elsewhere
 no helper is started and the key is absent.
 

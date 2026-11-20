@@ -77,9 +77,9 @@ class StandIn:
         step = self.script.pop(0) if self.script else answer()
         return (None, step) if isinstance(step, str) else (step, None)
 
-    def stop(self):
+    def stop(self, within=None):
         self.stops += 1
-        self.log.append("stop")
+        self.log.append("stop" if within is None else ("stop", within))
         return []
 
 
@@ -180,9 +180,16 @@ def test_e1_bw1_an_input_that_never_drains_costs_each_round_its_time_10000_round
     make = fake_client(drains=False)
     events = host.ProcEvents(make, timeout=0.01)
     events.begin()
-    t0 = time.monotonic()
-    got = [events.round() for _ in range(10000)]
+    t0, took, got = time.monotonic(), [], []
+    for _ in range(10000):
+        r0 = time.monotonic()
+        got.append(events.round())
+        took.append(time.monotonic() - r0)
     assert time.monotonic() - t0 < 30
+    # the second review, M1: the rounds that END a helper (the third late one, twice) are not held for its sake:
+    # the helper is ended at once and each wait is the ask's own time (0.01 s here), never the Stop's two seconds
+    assert max(took) < 0.5, sorted(took)[-3:]
+    assert all(getattr(p, "killed", False) and not p.terminated for p in make.procs)
     assert all(len(p.asked) <= 1 for p in make.procs) and len(make.procs) == 2
     assert got[-1]["hole"].startswith("ended for good")
     assert events.close() == []
@@ -302,11 +309,18 @@ def test_e4_at_every_0_1_a_helper_that_never_answers_adds_at_most_25_ms_and_make
         finally:
             asks.append((timeout, time.monotonic() - t0))
     monkeypatch.setattr(procevents.Helper, "ask", timed)
+    ticks = []
     for _ in range(8):
+        t0 = time.monotonic()
         w.tick(wait=5)
+        ticks.append(time.monotonic() - t0)
         time.sleep(0.1)
     w.finish()
-    assert asks and all(t == 0.025 and took < 0.025 + 0.05 for t, took in asks), asks
+    # the second review, M1 and its must-fix 4: tick(wait=5) waits for the round, so the watch's own lateness
+    # check cannot see a slow one: each round is timed here. The rounds that end the helper (the third late one)
+    # are among them; with the Stop's two seconds inside a round this was over a second
+    assert max(ticks) < 0.5, ticks
+    assert asks and all(t == 0.025 and took < 0.025 + 0.25 for t, took in asks), asks
     assert not [r for r in w.round_lines if r.get("late") or r.get("error")]
     assert not [h for h in w.holes if h["kind"] in host.READER_HOLES]
 

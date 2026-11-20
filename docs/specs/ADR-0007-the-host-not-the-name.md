@@ -3128,6 +3128,37 @@ machine; one line written for each pass of a follow and each round, for the prob
   it; a real desktop. The commander's field run with a named agent that lived for minutes is where to look
   first: the watch now says the hole when it happens.
 
+## Amendment BV (the Table, 2026-11-20) - an empty ProcessGuid is no ProcessGuid (found on the way to M15.2)
+Found while measuring M15.2 (ADR-0014 AC-9): in some runs every line of the stand-in's tree stopped about
+thirty seconds before the tree ended, and nothing said so. Measured (the probe branch, GitHub's Windows
+machine; one line written for each pass of a follow and each round, for the probe only):
+- Sysmon stopped holding the stand-in's process while it ran. The starts of its later children carried
+  `ParentProcessGuid` all zeros, `ParentImage` and `ParentCommandLine` `-`, and the right `ParentProcessId`.
+  In 17 runs of ninety seconds, two had such starts (1 and 11 of some 860); one more run had an ended
+  process's own ProcessGuid empty.
+- The follow took the zeros for a ProcessGuid: the children were no members, their passes wrote no line
+  (five passes in a row with nothing, the members' count standing still), and the bound moved past them for
+  good. The round did the same: it said the pid "held one more process" keyed by the zeros, and the tree was
+  quiet while it worked. It is main's own fault, older than M15.2: seen 5 times in some 38 runs of M15.2's
+  build, whose second read starts more helpers, and in none of 9 of main's.
+- With the zeros taken as no ProcessGuid (the probe's build): a run whose channel held 11 such starts wrote
+  every one of the stand-in's 45 children.
+- BV-1 (the rule). An all-zero ProcessGuid or ParentProcessGuid is no ProcessGuid, in the follow and in the
+  round: the event is joined by the pid it names, as an event that carries none always was. It is said: the
+  follow writes one silence line for its life, the round one hole with the count. FOR: a long-lived agent
+  whose process Sysmon lets go of keeps its tree and its lines. MUST NOT TOUCH: an event that carries a
+  ProcessGuid is keyed by it as before; no existing export's lines change.
+- BV-2 (Sysmon's `-`). `-` as an Image or a CommandLine is Sysmon's word for what it does not hold, never a
+  program's name: the name is unread (null), and the round gives the pid no image called `-`.
+- BV-3 (what it costs, said). Joined by a pid, a child is given to the pid's present holder: where the pid
+  was taken again in between, nothing tells the two apart; and the root's own pid stays the root's for the
+  follow's life. A rule that reads the parent's name has none; a connection whose own ProcessGuid is empty has
+  neither its program's name nor its parent's. A process joined by a pid carries no mark of a nested tree's
+  root, so an outer tree's follow takes it for its own as well (the second review, K2 to K4).
+- BV-4 (not measured). How long a process must live, or how busy a machine must be, before Sysmon lets go of
+  it; a real desktop. The commander's field run with a named agent that lived for minutes is where to look
+  first: the watch now says the hole when it happens.
+
 ## Amendment BW (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1b.md (a661e0d): REDO
 The reviewer said REDO: the client can block the watch and its Stop for ever, two sentences of the report can
 be false, and the rig's claim cannot fail. In the field the build did what BU asks on a healthy machine (the
@@ -3170,3 +3201,32 @@ review is about the machine that is not healthy, which is where a watch must not
   the result (the builder's Q1). An interpreter replaced on disk reads as "(deleted)" and the record of the
   watch's own no longer matches it (L6): said in the threat model now, fixed with the join. The watch's own
   short children (`ss` each round) are heard like any other.
+<<<<<<< HEAD
+=======
+
+## Amendment BX (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1b-redo.md (269dd9e): M14.1b lands
+The reviewer said NEXT: the REDO closes the hang of a real helper, the erased loss, the false healthy words and
+the rig's empty claim. Four small things were left, and the Table made them by hand in the commit that files
+the review. Measured in the field before the merge (the probe branch b9eb9d3, two Ubuntu images, kernel 7.0):
+a watch of ten rounds of three seconds whose helper was stopped under it at eight seconds ended in 27 and 28
+seconds; it answered seven asks of ten, said the late round, ended the helper at the third and started it
+again once, said that nothing was heard between the two, and kept the old words on what lives between two
+samples. Its result was the machine's own (a runner's process made an unknown tree on both).
+- BX-1 (M1: a round is not held to end a helper). A helper the watch ends inside a round - late three rounds
+  running, ended, refused - is ended at once, and each wait is at most the ask's own time. The Stop of the
+  watch still gives its helper two seconds to end by itself. FOR: with a short interval the round that ends a
+  helper is not late, so no hole of the result comes from the helper (BU-3).
+- BX-2 (M3: a number is a count). A number of a helper's line that is too large to be a count is no number,
+  and the line is no line. FOR: nothing a line holds can stop the watch's report.
+- BX-3 (M2, M4, M5: said as it is). A process of the same user that writes in the helper's place is not told
+  apart from it, and the threat model says so and what it could do. What the interpreter reads at a helper's
+  start before the fixed program sets its path is said. The spec no longer says that the next round asks
+  again while an ask is unanswered.
+- BX-4 (the tests). The rounds that end a helper are timed; the line's bound has a test that fails without it.
+- BX-5 (recorded for M14.1c, from the review). The helper's lines are not proof of who wrote them: a name
+  from them goes through the name gate, and the "heard and counted" words are the helper's word, not a fact
+  the watch checked. The ask's write is to be made unable to block. Whether the helper always runs isolated.
+  The rounds before a helper's first line. One line that is no line costs three late rounds and the one
+  restart: whether that is meant. X35 and the reader's bounds. A loss after a retired helper's last answer is
+  not known, and is to be said so.
+>>>>>>> claude/M15.2b

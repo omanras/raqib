@@ -128,8 +128,8 @@ def test_e1_the_fixture_of_an_unread_initiated_and_the_rules_words():
 OLD_HELD = {1: "no event 1 read so far: a tree that starts and ends between two rounds may be unseen",
             3: "no event 3 read so far: talk between rounds may be unseen (Sysmon without -n logs none)",
             22: "no event 22 read so far: a name asked between two rounds may be unseen"}
-SENTENCE_11 = ("no event 11 read so far: no file a tree makes is seen, and PERSIST-AUTOSTART's os lines have nothing"
-               " to read (this Sysmon's configuration may not log file creation)")
+SENTENCE_11 = ("no event 11 read so far: a file a tree makes may be unseen, and PERSIST-AUTOSTART's os lines may have"
+               " nothing to read (this Sysmon's configuration may not log file creation)")
 
 
 def wrote(rec, utc, pid=5888, guid=None):
@@ -227,8 +227,10 @@ def test_e3_none_held_is_a_blind_spot_said_once(tmp_path, monkeypatch):
     assert b["detail"] == host.REGISTRY_UNHELD + host.BLIND_TAIL and b["class"] == host.BLIND
     assert (b["round"], b["rounds"]) == (1, [1])
     assert host.REGISTRY_UNHELD == (
-        "the Sysmon channel holds no event 13 (a registry value set): this Sysmon's configuration logs no registry"
-        " value, or none was set under a key it logs since the log began; PERSIST-RUN-KEY has nothing to read here")
+        "the Sysmon channel held no event 13 (a registry value set) at this watch's first read of it: this Sysmon's"
+        " configuration may log no registry value, or none was set under a key it logs in what the channel then held;"
+        " PERSIST-RUN-KEY may have nothing to read here (asked once a run: a value logged after it does not take this"
+        " back)")
     report = w.summary()[0]
     assert report.count("  - registry: " + host.REGISTRY_UNHELD + host.BLIND_TAIL + "; 1 round(s)") == 1
 
@@ -290,6 +292,12 @@ def test_e3_a_stand_in_without_the_question_is_never_asked_and_nothing_is_said(t
     reader.newest = lambda args, timeout: (calls.append(("newest",) + tuple(args)) or (channel_xml(), None))
     chan = os_sysmon.Channel(reader=reader)
     assert chan.registry_held() == {"held": False} and calls == [("newest",) + os_sysmon.newest_args()]
+    # ADR-0014 AF-5: an answer that holds no event and is not empty is not "none": it is not known, with the reason
+    reader.newest = lambda args, timeout: ("The system cannot find the file specified.\r\n", None)
+    assert os_sysmon.Channel(reader=reader).registry_held() == {
+        "error": "wevtutil's answer holds no event and is not empty (44 characters): not read"}
+    reader.newest = lambda args, timeout: (" \r\n", None)
+    assert os_sysmon.Channel(reader=reader).registry_held() == {"held": False}
 
 
 def test_e3_never_asked_without_sysmon_or_off_windows(tmp_path, monkeypatch):
@@ -362,8 +370,8 @@ def test_e4_the_guide_and_the_threat_model_say_it():
                      "Its os lines need Windows with Sysmon logging file creation (event 11): under `raqib watch"
                      " --host` the watch says once when its rounds have read no event 11 of the channel",
                      "It needs Windows with Sysmon logging connections (event 3; Sysmon without -n logs none)",
-                     "the watch asks the channel once for its newest event 13; where it holds none, the blind spot"
-                     " `registry` says that PERSIST-RUN-KEY has nothing to read here"):
+                     "the watch asks the channel once, at its first read, for its newest event 13; where it holds"
+                     " none then, the blind spot `registry` says that PERSIST-RUN-KEY may have nothing to read here"):
         assert sentence in guide, sentence
     threat = flat("docs/THREAT_MODEL.md")
     for sentence in ("A net line whose Initiated was not read has no `initiated` key (ADR-0014 AE-1):",
@@ -371,7 +379,8 @@ def test_e4_the_guide_and_the_threat_model_say_it():
                      "a channel that holds some event 13 may still not log the Run keys",
                      "it is said as not known, with the reason"):
         assert sentence in threat, sentence
-    assert "AA-3 waits" not in threat and "AA-4 waits" not in threat
+    assert "Still waiting, and said here until they are closed" not in threat
+    assert "Both wait for the stage after the registry's values" not in threat
 
 
 # --- E5: ASCII ----------------------------------------------------------------------------------------------------------

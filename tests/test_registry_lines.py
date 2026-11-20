@@ -532,7 +532,8 @@ def test_e4_the_rule_as_amendment_b_rules_it():
     assert "registry is not read" not in " ".join(rule("PERSIST-AUTOSTART").evasion)   # AC-6
     assert "PERSIST-RUN-KEY's: Sysmon event 13" in rule("PERSIST-AUTOSTART").evasion[0]
     third = r.evasion[2]
-    assert "Raqib cannot tell that from nothing done" in third and "not said yet" in third
+    assert "Raqib cannot tell that from nothing done" in third and "ADR-0014 AE-3" in third
+    assert "not said yet" not in third and "not said yet" not in " ".join(rule("PERSIST-AUTOSTART").evasion)
     for word in ("{input_meta.hive}", "{input_meta.autostart}", "{input_meta.value_name}", "{input_meta.program}",
                  "{input_meta.image}"):
         assert word in r.doc["summary"], word
@@ -721,7 +722,7 @@ def test_e6_the_guide_and_the_threat_model_hold_the_sentences_that_matter():
                      "A configuration that logs every key was not measured",
                      "Linux has no os source: the rule judges nothing there.",
                      # M15.2b (ADR-0014 AE-3): the two silences that waited here are said now
-                     "Where it holds none, that is a blind spot of the run, `registry`, said once:",
+                     "Where it holds none then, that is a blind spot of the run, `registry`, said once and in the past tense",
                      "asks its question for event 13 first (at most 500 events a pass), and then the first question,",
                      "no event 13 above its last record is taken and the registry's bound stops there,",
                      "while the tree's root is not found yet, the bound does not move either.",

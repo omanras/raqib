@@ -532,8 +532,18 @@ Rulings: ADR-0003 Amendments C and D.
     process that holds a listener of the kernel's events for the watch's
     life; it adds no right and no reach outside the machine. Each line it
     writes is bounded (1 MiB) and the watch holds at most four unread and
-    at most one ask unanswered, so a helper that is stopped, slow or wrong
-    costs the watch a hole, never its round or its Stop. A helper that is
+    at most one ask unanswered, so a helper that is stopped or slow costs
+    the watch a hole, never its round or its Stop (measured: a helper
+    stopped under a watch of ten rounds of three seconds; the watch ended
+    in 28 s, said the three late rounds and started the helper again once).
+    A process of the same user that writes the helper's output in its place
+    is not told apart from the helper: its numbers are counted as the
+    helper's, and one that answers while the helper reads nothing could
+    still hold the watch at a write; that process could as well stop the
+    watch itself. Before the helper's fixed program sets its import path,
+    the interpreter's own start reads what the watch's start read (the site
+    folders' own files; without isolation the user's too): the places are
+    the watch's, their contents are read again at each start. A helper that is
     refused, late, or ended is a blind spot of the watch, said; one late
     three rounds running is ended and started again once, a second end is
     final, and the watch then counts nothing between two samples for the
@@ -737,11 +747,15 @@ What they do not see:
 - A net line whose Initiated was not read has no `initiated` key (ADR-0014 AE-1):
   NET-ADMIN-PORT does not judge it, and its partial note says so, as for a line
   written before the four keys. Real Sysmon writes Initiated always, so the reach
-  is small. Under `raqib watch --host` the watch says once, after three rounds
-  that read the channel, that no event 11 was read (ADR-0014 AE-2): no file a
-  tree makes is then seen, and PERSIST-AUTOSTART's os lines have nothing to read.
+  is small. A line written by an earlier build with a null `initiated` (its
+  Initiated not read) is judged as not initiated, and nothing says so. Under `raqib watch --host` the watch says once, after three rounds
+  that read the channel, that no event 11 was read (ADR-0014 AE-2, its
+  words Amendment F's): a file a tree makes may then be unseen, and
+  PERSIST-AUTOSTART's os lines may have nothing to read (three rounds with no
+  file made are said the same way: the watch cannot tell the two apart).
   It is learned from what the rounds read, as for events 1, 3 and 22, not from
-  the configuration: a channel that gave one event 11 is not said again.
+  the configuration: a channel that gave an event 11 in those rounds is not said
+  at all, and a note once said is not taken back in that run.
 - The budgets of the two rules were measured on no real desktop's work. A
   deploy over ssh to a machine of the same network, a remote session of an
   editor, a local virtual machine reached at its private address, a profile's
@@ -863,12 +877,26 @@ What it does not see:
 - Linux has no os source: the rule judges nothing there.
 - Said (ADR-0014 AE-3): at the first round that reads the channel, the watch
   asks it once for its newest event 13, whatever its key (a bounded question of
-  its own; the round's own question is what it was). Where it holds none, that
-  is a blind spot of the run, `registry`, said once: this Sysmon's configuration
-  logs no registry value, or none was set under a key it logs since the log
-  began, and PERSIST-RUN-KEY has nothing to read here. Where the question cannot
-  be asked or is not answered, it is said as not known, with the reason. Where
-  it holds one, the inventory carries its time and nothing is said. The limit:
+  its own; the round's own question is what it was). Where it holds none then,
+  that is a blind spot of the run, `registry`, said once and in the past tense
+  (Amendment F): this Sysmon's configuration may log no registry value, or none
+  was set under a key it logs in what the channel then held, and PERSIST-RUN-KEY
+  may have nothing to read here. It is asked once a run, so a value logged after
+  it does not take the sentence back: measured on a fresh machine whose Sysmon
+  logs the Run keys, the watch said it for all its rounds though a value was
+  logged seconds after the question (a tree's follow asks for its own values
+  each pass, and that is not changed). Where the question cannot be asked or is
+  not answered, it is said as not known, with the reason. Where it holds one,
+  the inventory carries its time and nothing is said. The question is asked
+  once: one that fails is not asked again, and the run says not known. It is
+  asked inside the first round that reads the channel, after its read, with the
+  round's own timeout: a slow answer delays that round's inventory and can make
+  the round late; a question that did not return is ended and recorded, and the
+  next round carries that record as a hole of the channel's read (named as that
+  round's, which it was not), so the result is then incomplete; in a run with no
+  next round no hole is made, and only the blind spot's reason says it. Not
+  measured: how long the question takes on a full channel that holds none. The
+  limit:
   a channel that holds some event 13 may still not log the Run keys (a
   configuration that logs other keys only), and that is not said. The certain
   cure is Raqib reading the autostart places itself (ADR-0014 S3).

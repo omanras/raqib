@@ -1308,6 +1308,9 @@ def newest_args(event=REGISTRY_EVENT):
     return ("qe", CHANNEL, "/q:*[System[(EventID=%d)]]" % int(event), "/rd:true", "/c:1", "/f:xml")
 
 
+ANSWER_COMMENT = re.compile(r"<!--.*?-->", re.S)   # ADR-0014 AF-5: what an empty answer may still hold
+
+
 def _chunks(text):
     """The text cut at each <Event: (chunk, record id or None, SystemTime text or None)."""
     starts = [m.start() for m in discover.EVENT_START.finditer(text)]
@@ -1385,7 +1388,9 @@ class Channel:
         text, failed = ask(newest_args(), self.timeout)
         if failed is not None:
             return {"error": failed}
-        _, chunks = _chunks(text or "")
+        head, chunks = _chunks(text or "")
+        if not chunks and ANSWER_COMMENT.sub("", head).strip():   # ADR-0014 AF-5: an answer that is not none
+            return {"error": "wevtutil's answer holds no event and is not empty (%d characters): not read" % len(head)}
         return {"held": True, "newest": discover.iso(chunks[0][2])} if chunks else {"held": False}
 
     def read(self, at):

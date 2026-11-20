@@ -212,6 +212,14 @@ class FakeProc:
         self.terminated = True
         self.stuck = False
 
+    def kill(self):
+        """A killed process's output ends with it."""
+        self.killed, self.stuck, self.closed = True, False, True
+        try:
+            os.close(self._w)
+        except OSError:
+            pass
+
 
 READY = {"ready": None, "v": 1}
 
@@ -297,6 +305,19 @@ def test_e1_bw1_an_input_that_never_drains_takes_one_ask_in_10000_and_every_ask_
         assert h.ask(0.0) == (None, procevents.LATE)
     assert p.asked == [b"read 1\n"] and time.monotonic() - t0 < 20
     assert h.stop() == []
+
+
+def test_e1_bw1_the_pipes_reader_gives_a_line_over_the_bound_as_too_long_and_holds_none_of_it():
+    # the second review, must-fix 4: the test below would pass with no bound at all (its long line is "not a line"
+    # for an extra key too); this one fails if the bound is removed
+    import queue
+    lines = queue.Queue(4)
+    procevents._pump(io.BytesIO(b"x" * (2 << 20) + b"\n" + b'{"ok": 1}\n'), lines, threading.Event())
+    assert lines.get_nowait() is procevents.TOO_LONG
+    assert lines.get_nowait() == b'{"ok": 1}\n' and lines.get_nowait() is None
+    small = queue.Queue(4)
+    procevents._pump(io.BytesIO(b"y" * 100 + b"\n"), small, threading.Event(), line_max=64)
+    assert small.get_nowait() is procevents.TOO_LONG and procevents.LINE_MAX == 1 << 20
 
 
 def test_e1_bw1_a_line_of_2_mib_is_not_a_line_and_the_next_line_is_read():

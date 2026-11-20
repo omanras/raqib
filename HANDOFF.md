@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # HANDOFF — M15.2b  (ADR-0014 Amendment E, AE-1 to AE-3: what was not read is said)
 
 Task: three silences of the rules of behaviour are said. Read ADR-0014's Amendments A (AA-3, AA-4) and E first, then in raqib/host.py how the watch says a kind of event the channel has not given (`CHANNEL_HELD`, `CHANNEL_KIND_ROUNDS`) and how a blind spot is said (`_blind`), and in raqib/hooks/os_sysmon.py the class `Channel` (the round's one bounded read) and `initiated`.
@@ -15,3 +16,12 @@ Not in scope: reading the autostart places by Raqib itself (M15.3), events 12 an
 If an exit criterion needs a file outside Scope: STOP and say which file and which line.
 Commit: `landed: M15.2b what was not read is said` or `STOP: M15.2b <reason>`.
 Read HANDOFF.md and do only the task it specifies.
+=======
+# HANDOFF — none open
+
+M15.2b (what was not read is said: ADR-0014 Amendments E and F) is reviewed and waits for its merge by the Table.
+In build: M14.1c (ADR-0007 Amendment BY). In review: M17.1 (ADR-0015).
+Next by the plan: M15.3 (the autostart places read by Raqib itself).
+
+A builder that reads this: there is no task. STOP.
+>>>>>>> claude/M15.2b

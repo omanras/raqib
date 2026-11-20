@@ -234,7 +234,7 @@ BEHAVIOUR_ROWS = [
     "e only a hooks file tool is judged. A value under the registry's Run or RunOnce key is PERSIST-RUN-K"
     "EY's; a scheduled task and a file moved or renamed into the folder are not read yet. Its os lines ne"
     'ed Windows with Sysmon logging file creation (event 11): under `raqib watch --host` the watch says o'
-    'nce when its rounds have read no event 11 of the channel (no file a tree makes is then seen) |',
+    'nce when its rounds have read no event 11 of the channel (a file a tree makes may then be unseen) |',
     "| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` tru"
     'e) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback '
     "nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's "
@@ -254,9 +254,10 @@ BEHAVIOUR_ROWS.append(
     "ve, run or runonce, the value's name between double quotes (at most 80 characters), the program the "
     "value would run and the program that set it, never the value's text (high). Where the name holds a b"
     'ackslash the event cannot tell it from a value of a key under Run, and the finding says so. Under `r'
-    'aqib watch --host` the watch asks the channel once for its newest event 13; where it holds none, the'
-    ' blind spot `registry` says that PERSIST-RUN-KEY has nothing to read here, and where the question fa'
-    'ils, that this is not known (one that holds some event 13 may still not log the Run keys, and nothin'
+    'aqib watch --host` the watch asks the channel once, at its first read, for its newest event 13; whe'
+    're it holds none then, the blind spot `registry` says that PERSIST-RUN-KEY may have nothing to read '
+    'here (a value logged later does not take it back), and where the question fails, that this is not kn'
+    'own (one that holds some event 13 may still not log the Run keys, and nothin'
     'g is said). It needs Windows with Sysmon logging a value set under these keys: where the configurati'
     'on logs none, there is nothing to read. Linux has no os source for it: nothing there is judged by it'
     ' |')
