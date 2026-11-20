@@ -51,3 +51,52 @@ that is the task's own exit criterion.
 - The mapping gains one line: `prev` is in the namespace (OCSF `unmapped.raqib.prev`, ECS `raqib.prev`).
 - The search of a SOC for a broken chain is not a query of a search engine: it is this command over an
   export. The ready content (M16) says so.
+
+## Amendment A (the Table, 2026-11-20) - the review of M13.1 (docs/review/2026-11-20-M13.1.md): a short REDO
+The reviewer's verdict is NEXT with four must-fix items; two findings change what the check says and are ruled
+here. The field's word (the rig on 14fef1b): on Linux X38 MET, the run whole over 20 lines; on Windows the run
+whole over 66 lines by `raqib events`, and X38 MISSED by its own reader's fault (Windows' line ends; put right
+by the Table in 4208d72).
+- HA-1 (a link is told by its shape). A line is a link of its run where it is a JSON object that names its
+  host and its run and holds a `prev` of the right shape, whether or not this build's `event.check` takes it
+  as an event. A line a later Raqib wrote with a key this build does not know is still named by this build as
+  a problem of that line, as today; it is a link all the same, and the line after it is not said broken for
+  it. FOR: H-6's word that a reader allows a key it does not know holds for the chain itself. MUST NOT TOUCH:
+  what `event.check` says of a line. The spec's sentence that a line which fails the check is a torn write is
+  put right: a torn write is a line that is not whole JSON.
+- HA-2 (a chain taken out is said). A run no line of which holds `prev` is not chained. Where its lines'
+  `watch.version` is the first version that writes the chain or a later one, that is a problem of the file
+  (exit 1), said as what it is: this version always writes `prev`, and no line of the run holds one. Where
+  the version is older, or cannot be read, it is said as today (not a problem). The first version is one
+  constant, set to the number of the merge that lands this.
+- HA-3 (a run is its host's). The check keys a run by its host and its run word together.
+- HA-4 (the run's last line). No line names a run's last line. Changed, or followed by a line added after the
+  run ended that names it, it is not seen from the file alone. H-1's FOR is read so: a line removed, changed,
+  added or moved before the run's last line is seen. Every place that says "changed, added" says this limit.
+- HA-5 (what a collector can tell, made a command). `raqib events FILE` over one file cannot show that a line
+  a collector holds was changed on the host afterwards: both files are whole by themselves. What shows it is
+  the two side by side. `raqib events FILE --against OTHER` reads OTHER as the lines a collector holds and
+  says, by host and id: how many are in FILE byte for byte, which are not in FILE, and which are there with
+  other bytes, each by its line numbers; exit 1 where one is missing or differs. It asks that the collector
+  kept the lines' bytes as they were sent, and says so. FOR: H-3's head that leaves the host is something a
+  person can use. MUST NOT TOUCH: `raqib events FILE` without the argument, but for this amendment's items.
+- HA-6 (what the check says of lines that are not the whole run). A run whose first line here holds a hash is
+  said as beginning before this file (its first lines are not here: an export that starts late, or a file
+  whose beginning was cut), apart from a break, exit 1. A line that is byte for byte a line of the run already
+  read is a line said twice, counted, and is no break and no line beside the chain.
+- HA-7 (every problem of a run, in the file's order). The answer for a run lists each break and each line
+  beside the chain, up to a bound that is said; a later break does not hide an earlier line beside. A line
+  beside the chain is cited with the line it names and the line that names that one again.
+- HA-8 (the spec shows a chained line). The examples of the spec are the builder functions' own events and
+  hold no `prev` (the Consequence that every example gains one is withdrawn). The spec gains a made-up run of
+  two written lines, under a heading that is not an example's, and a test holds that each is an event, that
+  the first says `first` and that the second names the sha256 of the first as the document writes it.
+- HA-9 (a line that cannot be read does not end the reader). A line whose reading raises (JSON nested deeper
+  than the interpreter reads) is named as not an event by `raqib events` and is no link; the forwarder takes
+  it as a line it refuses, and is not ended by it. Whoever can write the events file must not be able to end
+  either with one line.
+- HA-10 (words and small things). The base keys' range in the spec leaves `prev` out. The threat model's
+  sentence on a tail written again is held by a test of that very case, as the cut end's is. Tests: a run
+  whose first write fails (the next written line says `first`); a file replaced under a running watch (the
+  next line names a line that is not there: said). The rig keeps what `raqib events` wrote to its error
+  stream. The tool of the examples says in its own words what `prev` in its list is for.
