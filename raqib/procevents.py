@@ -105,7 +105,8 @@ SHAPE = {"fork": 32, "exec": 24, "exit": 32, "answer": 20}   # the bytes of the 
 OTHER_WHAT = {0x4: "uid", 0x40: "gid", 0x80: "sid", 0x100: "ptrace", 0x200: "comm", 0x20000000: "nonzero_exit",
               0x40000000: "coredump"}
 PROCESSES_MAX = 32768      # the most it keeps of each kind (over its life: see the spec); past it: `beyond`
-EARLIER_MAX = 16           # the earlier programs a record keeps, the newest (BS-4); the rest are counted on it
+PROGRAMS_MAX = 8           # CC-1: the programs a record keeps at most, the one it has now among them
+EARLIER_MAX = PROGRAMS_MAX - 1   # the earlier programs a record keeps, the newest (BS-4); the rest are counted on it
 CPUS_MAX = 4096            # the CPUs whose last count of events it keeps (BS-5)
 RECV_BYTES = 65536
 RCVBUF_BYTES = 1 << 20     # asked of the socket's receive queue; what the system kept is read back
@@ -251,6 +252,15 @@ def stat_fields(raw):
     return int(rest[1]), int(rest[19])
 
 
+def stat_name(raw):
+    """CC-2: the name the kernel gave the process at its exec (the last part of the path that was run, cut to 15
+    bytes), from /proc/PID/stat's bytes: the text between the first "(" and the last ")"; ValueError where there is
+    none. Raw text of the process's choosing: a consumer that shows it must escape it."""
+    if b"(" not in raw or b")" not in raw:
+        raise ValueError("a stat with no name")
+    return raw[raw.index(b"(") + 1:raw.rindex(b")")].decode("utf-8", "surrogateescape")
+
+
 def _read_bytes(path):
     with open(path, "rb") as f:
         return f.read()
@@ -261,13 +271,14 @@ def _boot_ns():
 
 
 class _Proc:
-    __slots__ = ("pid", "ppid", "exe", "earlier", "dropped", "started_ticks", "began", "ended", "code", "signal",
+    __slots__ = ("pid", "ppid", "exe", "name", "earlier", "dropped", "started_ticks", "began", "ended", "code",
+                 "signal",
                  "unread", "given", "queued", "forked", "execs", "threads", "leader_ended", "end_dropped",
                  "end_pending")
 
     def __init__(self, pid, ppid, began, unread, forked):
         self.pid, self.ppid, self.began, self.unread, self.forked = pid, ppid, began, unread, forked
-        self.exe = self.started_ticks = self.ended = self.code = self.signal = self.leader_ended = None
+        self.exe = self.name = self.started_ticks = self.ended = self.code = self.signal = self.leader_ended = None
         self.end_pending = None      # the end put in `ends` and not read yet
         self.end_dropped = False     # its end was past the bound of `ends`: never given (counted in `beyond`)
         self.earlier, self.threads, self.execs, self.dropped = [], set(), 0, 0
@@ -283,7 +294,8 @@ class _Proc:
             unread["threads"] = NO_FORK_THREADS
         if self.dropped:
             unread["earlier"] = EARLIER_DROPPED % (self.dropped, EARLIER_MAX)
-        return {"pid": self.pid, "ppid": self.ppid, "exe": self.exe, "earlier": [dict(e) for e in self.earlier],
+        return {"pid": self.pid, "ppid": self.ppid, "exe": self.exe, "name": self.name,
+                "earlier": [dict(e) for e in self.earlier], "dropped": self.dropped,
                 "started_ticks": self.started_ticks, "began": self.began, "ended": self.ended, "code": self.code,
                 "signal": self.signal, "unread": unread}
 
@@ -600,24 +612,28 @@ class Reader:
         self._keep(_Proc(pid, parent_tgid, at, {"exe": NO_EXEC_EXE, "stat": NO_EXEC_STAT}, True))
 
     def _read_exec(self, pid, boot_ns):
-        """(exe, its why, ppid, ticks, the stat's why, another) read at once at an exec; a read of another process
-        (its start later than the exec) gives nothing (BR-3) and `another` is True."""
-        exe = exe_why = ppid = ticks = stat_why = None
+        """(exe, its why, ppid, ticks, the stat's why, another, name) read at once at an exec; a read of another
+        process (its start later than the exec) gives nothing (BR-3) and `another` is True. CC-2: the name the
+        kernel gave the process is read from the same stat."""
+        exe = exe_why = ppid = ticks = stat_why = name = None
         try:
             exe = self._readlink("/proc/%d/exe" % pid)
         except Exception as exc:
             self._missed["exe"] += 1
             exe_why = self._missed_words(exc)
         try:
-            ppid, ticks = stat_fields(self._read_bytes("/proc/%d/stat" % pid))
+            raw = self._read_bytes("/proc/%d/stat" % pid)
+            ppid, ticks = stat_fields(raw)
+            name = stat_name(raw)
         except Exception as exc:
             self._missed["stat"] += 1
             stat_why = self._missed_words(exc)
+            ppid = ticks = name = None
         if ticks is not None and self._hz and boot_ns is not None and \
                 ticks / self._hz > boot_ns / 1e9 + REUSED_SECONDS:
             self._reused += 1
-            return None, ANOTHER, None, None, ANOTHER, True
-        return exe, exe_why, ppid, ticks, stat_why, False
+            return None, ANOTHER, None, None, ANOTHER, True, None
+        return exe, exe_why, ppid, ticks, stat_why, False, name
 
     def _end_unread(self, end):
         """Whether `end` (a dict) is in `ends` and not read yet."""
@@ -628,7 +644,7 @@ class Reader:
         if pid != tgid:
             self._threads += 1
             return
-        exe, exe_why, ppid, ticks, stat_why, another = self._read_exec(pid, boot_ns)
+        exe, exe_why, ppid, ticks, stat_why, another, name = self._read_exec(pid, boot_ns)
         rec = self._live.get(pid)
         if rec is None:
             old = self._gone.get(pid)
@@ -660,19 +676,24 @@ class Reader:
         rec.threads.clear()          # an exec leaves one thread
         rec.leader_ended = None
         if rec.execs:                # BR-2: the program it had is kept, in order; the newest EARLIER_MAX (BS-4)
-            rec.earlier.append({"exe": rec.exe, "unread": {"exe": rec.unread["exe"]} if "exe" in rec.unread else {}})
+            rec.earlier.append({"exe": rec.exe, "name": rec.name,
+                                "unread": {k: rec.unread[k] for k in ("exe", "name") if k in rec.unread}})
             if len(rec.earlier) > EARLIER_MAX:
                 del rec.earlier[0]
                 rec.dropped += 1
         rec.execs += 1
-        rec.exe = exe
+        rec.exe, rec.name = exe, name
         rec.unread.pop("exe", None)
+        rec.unread.pop("name", None)
         if exe_why:
             rec.unread["exe"] = exe_why
+        if stat_why:                 # CC-2: the name is read with the stat, and unread with it
+            rec.unread["name"] = stat_why
         rec.unread.pop("stat", None)
         if ticks is not None and rec.started_ticks is not None and ticks != rec.started_ticks:
             self._reused += 1        # the start differs from this process's own: another holder was read
             ticks, ppid, stat_why = None, None, ANOTHER
+            rec.name, rec.unread["name"] = None, ANOTHER
             if exe_why is None:
                 rec.exe, rec.unread["exe"] = None, ANOTHER
         if ticks is not None:
@@ -857,7 +878,8 @@ def _shrunk(entry):
         out["exe"] = None
         unread["exe"] = TOO_LONG_EXE
     if out.get("earlier"):
-        out["earlier"] = [{"exe": None, "unread": {"exe": TOO_LONG_EXE}} for _ in out["earlier"]]
+        out["earlier"] = [{"exe": None, "name": e.get("name") if isinstance(e, dict) else None,
+                           "unread": {"exe": TOO_LONG_EXE}} for e in out["earlier"]]
     out["unread"] = unread
     return out
 

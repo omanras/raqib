@@ -80,14 +80,22 @@ above.
 ## What is read at an exec, and what never is
 
 At an exec the reader reads at once the link /proc/PID/exe (the program) and
-/proc/PID/stat (the parent and the start in clock ticks), and nothing else of
-the process. No argument, no environment, no working directory and no open
+/proc/PID/stat (the parent, the start in clock ticks and the name the kernel
+gave the process), and nothing else of the process. No argument, no environment, no working directory and no open
 file of a process is ever read, and nothing is read at a fork or an exit.
 
 - `exe` is the program a process has now; `earlier` holds, in order, the
   programs it had before, each with what was unread of it. A record keeps
-  its newest 16 earlier programs (EARLIER_MAX); the number of older ones not
-  kept is said on the record (`unread.earlier`). A process given in an
+  its newest 7 earlier programs (EARLIER_MAX); the number of older ones not
+  kept is said on the record (`unread.earlier`) and counted (`dropped`): 8
+  programs a process at most, the one it has now among them (PROGRAMS_MAX,
+  ADR-0007 CC-1).
+- `name` is the name the kernel gave the process at that exec (CC-2): the
+  last part of the path that was run, cut to 15 bytes, read from the same
+  stat (the text between its first "(" and its last ")"); each earlier
+  program keeps its own. A name the stat could not give is named in
+  `unread.name` with the stat's why. Raw text of the process's choosing: a
+  consumer that shows it must escape it. A process given in an
   earlier read that execs again is given again, whole, with its `earlier`.
   A failed read never replaces what an earlier read gave (the start, the
   parent), and is named in `unread` for that exec.
@@ -129,7 +137,7 @@ file of a process is ever read, and nothing is read at a fork or an exit.
 `read()` returns `{"processes", "ends", "older"}`:
 
 - `processes`: every process that began, or changed its program, since the
-  read before, each `{pid, ppid, exe, earlier, started_ticks, began, ended,
+  read before, each `{pid, ppid, exe, name, earlier, dropped, started_ticks, began, ended,
   code, signal, unread}`; `ended`, `code` and `signal` where its end was
   heard by then; `unread` is `{field: why}` for what was not read (`{}` when
   whole);
@@ -370,17 +378,40 @@ from the records a child cites: a watch that takes more than one snapshot a
 round (`--window`) can say `sample` of a child the reader heard too (CB-3);
 a watch as it runs by default takes one.
 
-What is not judged (BY-3, BZ-3). A tree needs a talker at a sample, and a
-connection that opens and closes between two samples is unseen (M14.2): a
+Every program, the name called by, a parent gone (ADR-0007 CC-1 to CC-4,
+M14.1d). A line of the round's text gives every program the process ran
+while heard, in order: `{pid, ppid, programs, dropped, ticks, began, ended,
+code}`, `programs` 1 to 8 entries of `{exe, name}` (a name of at most 15
+characters), `dropped` the earlier ones the reader did not keep; a line of
+M14.1c's shape (one `exe`) is read as one program with no name. A child's
+line names each program its process ran, in order (`command_programs`, with
+`command_sources` beside them), by its file's name and, where it differs,
+is shorter than 15 characters and passes the name gate, by the name the
+kernel gave it (a file `nc.openbsd` called `nc`: both); the file's name
+always stays. A process the watch wrote a line for that runs a program not
+yet said, in a later round, gets a line for that program; a program said
+of it is not said again. The watch keeps, per tree, the children it wrote
+that the process events heard and whose end it has not heard (by pid and
+start; at most 512 a tree, passing it said in the section and a hole of the
+result); a process whose parent is one of them (that pid, begun before it,
+not heard to end before it began) is that tree's child though its parent is
+in neither the sample nor the round's text, and so is a kept child given
+again. A pid used again with another start is another child wherever the
+watch keys a child. The round's standing hole of liveness says, in a round
+that read the reader's text, what such a round sees and does not.
+
+What is not judged (BY-3, BZ-3, CC). A tree needs a talker at a sample, and
+a connection that opens and closes between two samples is unseen (M14.2): a
 tree that lives whole between two samples is in no round, and a child's own
-connections are not read. A program a process changes to after its line was
-written (a shell that runs its last command in its own place, in a later
-round) gets no second line, and a process's earlier programs are never
-given. A child whose parent was given in an earlier round and ended before
-this sample is in no tree. A child is named by its program's file (the
-target of a link: `nc.openbsd`, `busybox`), not by the name it was called
-by, so a rule's list of names can miss it. A child whose program was not
-read is in the round and counted; it gets no line and no hole.
+connections are not read. A program past the bound of 8 a process (the
+oldest of those run between two asks) is not kept and not judged; it is
+counted in the section. A child whose parent the watch never wrote (its
+parent in neither the sample, the text nor the kept children) is in no
+tree. An act-root the reader's word alone would make is not made (CB-1). A
+process can be called by a tool's name it is not (a link of its own): it is
+then judged by that name, and its tree alarms by its own doing. A child
+whose program was not read is in the round and counted; it gets no line and
+no hole.
 
 The words (BY-4). A program's name reaches a line's programs only through
 the gate a sampled child's name goes through (a plain program name, else

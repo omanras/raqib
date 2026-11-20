@@ -116,11 +116,15 @@ def test_e1_five_thousand_lines_are_read_whole_and_fast():
     assert len(records) == 5000 and not problems and time.monotonic() - t0 < 5
 
 
+def given_of(pid, ppid, exe, ticks, began, ended, code, name=None):
+    """A process as the watch keeps it of an answer (M14.1d, CC-1: its programs, each with the kernel's name)."""
+    return {"pid": pid, "ppid": ppid, "programs": [{"exe": exe, "name": name}], "dropped": 0, "ticks": ticks,
+            "began": began, "ended": ended, "code": code}
+
+
 def test_e1_the_watch_writes_one_line_per_process_with_those_keys_alone_and_leaves_its_own_out():
-    given = [{"pid": 41, "ppid": 1600, "exe": "/usr/bin/curl", "ticks": 3, "began": "2026-11-20T10:00:01.000000Z",
-              "ended": None, "code": None},
-             {"pid": 42, "ppid": 77, "exe": "/usr/sbin/ss", "ticks": 4, "began": "2026-11-20T10:00:01.000000Z",
-              "ended": "2026-11-20T10:00:01.010000Z", "code": 0}]
+    given = [given_of(41, 1600, "/usr/bin/curl", 3, "2026-11-20T10:00:01.000000Z", None, None),
+             given_of(42, 77, "/usr/sbin/ss", 4, "2026-11-20T10:00:01.000000Z", "2026-11-20T10:00:01.010000Z", 0)]
     at = datetime.datetime(2026, 11, 20, 10, 0, 1, tzinfo=datetime.timezone.utc).timestamp()
     text = host.reader_text(given, {42: (at, "ss")}, self_pid=77)
     assert [json.loads(x)["pid"] for x in text.splitlines()] == [41]   # BY-6: the watch's own ss is not given
@@ -136,9 +140,8 @@ def test_e1_procevents_keeps_the_records_of_an_answer_for_its_round_and_drops_th
     events = host.ProcEvents(factory(StandIn([answer([rec, dict(rec, pid=6, began=None)]), answer([])])))
     events.begin()
     assert events.round()["began"] == 1
-    assert events.take() == [{"pid": 5, "ppid": 1600, "exe": "/usr/bin/curl", "ticks": 9,
-                              "began": "2026-11-20T10:00:01.000000Z", "ended": "2026-11-20T10:00:01.100000Z",
-                              "code": 0}]   # no fork heard: no process of the round's interval
+    assert events.take() == [given_of(5, 1600, "/usr/bin/curl", 9, "2026-11-20T10:00:01.000000Z",
+                                      "2026-11-20T10:00:01.100000Z", 0)]   # no fork heard: no process of the round
     assert events.take() == [] and events.round()["began"] == 0 and events.take() == []
     for bad in (dict(rec, ppid="1"), dict(rec, exe=3), dict(rec, started_ticks=-1), dict(rec, code="0")):
         events = host.ProcEvents(factory(StandIn([answer([bad])])))
@@ -388,8 +391,7 @@ def test_e5_the_socket_tool_the_round_starts_is_in_the_watchs_record_and_is_no_s
     (pid,) = set(own.RECORD.kept()) - before
     assert own.RECORD.kept()[pid][1] == "ss"
     began = datetime.datetime.fromtimestamp(t0, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    given = [{"pid": pid, "ppid": os.getpid(), "exe": os.path.realpath(path), "ticks": 10 ** 6, "began": began,
-              "ended": began, "code": 0}]
+    given = [given_of(pid, os.getpid(), os.path.realpath(path), 10 ** 6, began, began, 0)]
     assert host.reader_text(given, own.RECORD.kept()) == ""          # the watch's own: not given to the round
     sample = json.dumps({"snapshot": "2026-11-20T10:00:00.000Z", "self": os.getpid(), "helpers": []}) + "\n" + \
         json.dumps({"pid": os.getpid(), "ppid": 1, "argv": ["python3"], "exe": sys.executable, "start_ticks": 5,
@@ -494,19 +496,20 @@ def test_e6_the_section_and_the_note_say_what_is_judged_and_what_is_not(tmp_path
     w, clock = make_watch(tmp_path, feed_inv([pe(2), pe(1)]))
     text, _ = run(w, clock, 2)
     flat_ = " ".join(text.split())
-    for words in ("judged: a process that began between two samples under a tree that talks at a sample is that"
-                  " tree's child, by the name of its program's file (a link's target, not the name it was called"
-                  " by), from the reader (the helper's lines are its word, not checked by the watch)",
-                  "not judged: a tree that lives whole between two samples, a child's own connections, a program a"
-                  " process changes to after its line was written and the programs it had before, a child whose"
-                  " parent was given in an earlier round and ended before the sample; a program not read is counted,"
-                  " with no line",
+    for words in (host.PE_JUDGED,   # M14.1d (CC-1 to CC-4): what is judged now, and what still is not
+                  "with every program it ran while heard (up to 8 a process), each by its file's name and by the name"
+                  " it was called by where they differ, and so is a child of a child the watch wrote whose parent"
+                  " has gone",
+                  "a process can be called by a tool's name it is not",
+                  "not judged: a tree that lives whole between two samples, a child's own connections, a program past"
+                  " the bound of 8 a process (the oldest of those run between two asks), a child whose parent the"
+                  " watch never wrote, an act-root the reader's word alone would make; a program not read is"
+                  " counted, with no line",
                   "given to the rounds: 0; joined to a tree as its child: 0; of them with no program read (no line): 0",
-                  "not judged: a tree that lives whole between two snapshots, what a child talks to, a program a"
-                  " process changes to after its line was written and the programs it had before, and a child whose"
-                  " parent was given in an earlier round and ended before the sample; a program not read is counted,"
-                  " with no line"):
-        assert words in flat_, words   # M14.1c REDO (BZ-3)
+                  "not judged: a tree that lives whole between two snapshots, what a child talks to, a program past the"
+                  " bound of 8 a process, a child whose parent the watch never wrote, and an act-root the reader's"
+                  " word alone would make; a program not read is counted, with no line"):
+        assert " ".join(words.split()) in flat_, words
     assert "heard and counted, not judged" not in flat_ and "not judged yet" not in flat_
     assert "a program not read are in no round" not in flat_
 
@@ -523,21 +526,27 @@ def test_e6_the_documents_follow():
                      # M14.1c REDO (BZ-1, BZ-3, BZ-5, BZ-6, BZ-8)
                      "An act-root is made only by what the samples alone make: its root, the shell under it and a command under"
                      " that shell are each a process a sample held (BZ-1, CA-1, CB-1)",
-                     "A program a process changes to after its line was written (a shell that runs its last command in"
-                     " its own place, in a later round) gets no second line, and a process's earlier programs are"
-                     " never given.",
-                     "A child whose parent was given in an earlier round and ended before this sample is in no tree.",
-                     "A child is named by its program's file (the target of a link: `nc.openbsd`, `busybox`), not by"
-                     " the name it was called by",
+                     # M14.1d (CC-1 to CC-4): the three silences, now judged; what still is not
+                     "A process the watch wrote a line for that runs a program not yet said, in a later round, gets a"
+                     " line for that program; a program said of it is not said again.",
+                     "is that tree's child though its parent is in neither the sample nor the round's text",
+                     "by the name the kernel gave it (a file `nc.openbsd` called `nc`: both); the file's name always"
+                     " stays.",
+                     "A program past the bound of 8 a process (the oldest of those run between two asks) is not kept"
+                     " and not judged",
+                     "A child whose parent the watch never wrote (its parent in neither the sample, the text nor the"
+                     " kept children) is in no tree.",
                      "where the sample read one, the two are kept apart",
                      "or an answer that holds back a rest for a next one",
                      "The round reads no /proc start of a child the reader alone gave and said ended"):
         assert sentence in spec, sentence
     guide = flat("docs/GUIDE.md")
-    for sentence in ("so NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred whose file has that name",
+    for sentence in ("so NET-TOOL and DESTRUCT-CMD judge a short curl, wget, nc or shred by either name (M14.1d)",
                      "Not judged: a tree that lives whole between two samples",
-                     "a program a process changes to after its line was written and the programs it had before, and a"
-                     " child whose parent was given in an earlier round and ended before the sample.",
+                     "a program past the bound of 8 a process (the oldest of those run between two asks), a child whose"
+                     " parent the watch never wrote, and an act-root the reader's word alone would make; a process can"
+                     " be called by a tool's name it is not (a link of its own), and its tree then alarms by its own"
+                     " doing.",
                      "A program not read is in the round and counted; it gets no line.",
                      "the root of a tree, and of an act-root, is always a process a sample held",
                      "where the reader answered and was not whole, the note says what was heard and judged and why it"
@@ -678,8 +687,7 @@ def test_r7_bz7_the_watchs_own_socket_tool_stays_its_own_in_an_answer_taken_a_ro
     assert three["procevents"]["own"] == 1 and "from_reader" not in three
     assert not [h for h in three["holes"] if stranger in h]
     # without the watch's record it is a stranger under the watch's pid: what the copies kept prevented
-    given = {"pid": 4194000, "ppid": me, "exe": "/usr/sbin/ss", "ticks": 60, "began": began, "ended": ss["ended"],
-             "code": 0}
+    given = given_of(4194000, me, "/usr/sbin/ss", 60, began, ss["ended"], 0)
     inv = build(dict(texts, proc=("p", sample, None), procevents=("x", host.reader_text([given], {}), None)), holes)
     assert [h for h in inv["holes"] if stranger in h]
 
@@ -780,7 +788,7 @@ def test_s4_ca4_a_start_from_the_readers_record_is_the_events_word_and_one_from_
 def test_s5_ca5_the_words():
     heard = " ".join(host.BETWEEN_HEARD.split())
     assert "for the whole watch" not in heard and "process events: a process that began under a tree" in heard
-    assert "judged by the name of its program's file (not the name it was called by)" in heard
+    assert "each by its file's name and by the name it was called by where they differ" in heard   # M14.1d (CC-2)
     threat, spec = flat("docs/THREAT_MODEL.md"), flat("docs/specs/PROC-EVENTS.md")
     assert ("a bound passed or an answer that holds back a rest for a next one is a hole of the result (BY-5, BZ-6)"
             in threat)
@@ -792,8 +800,11 @@ def test_s5_ca5_the_words():
     for rule in ("NET-TOOL", "DESTRUCT-CMD"):
         text = (ROOT / "raqib" / "rules" / "catalog" / ("%s.yaml" % rule)).read_text(encoding="utf-8")
         assert "under a tree that talks at a sample, or under an act-root the samples made (M14.1c, CA-1)" in text
-    assert "named by its program's file (a link's target), not the name it was called by" in (
-        ROOT / "raqib" / "rules" / "catalog" / "NET-TOOL.yaml").read_text(encoding="utf-8")
+    for rule in ("NET-TOOL", "DESTRUCT-CMD"):   # M14.1d (CC-2): the file's name and, where they differ, the name called by
+        text = (ROOT / "raqib" / "rules" / "catalog" / ("%s.yaml" % rule)).read_text(encoding="utf-8")
+        assert ("named by its program's file and, where they differ, by the name it was called by (CC-2:"
+                " `nc.openbsd` called `nc`); a process called by a tool's name it is not (a link of its own) is"
+                " judged by that name, so its tree alarms by its own doing") in text
 
 
 def own_sample(monkeypatch):
@@ -878,3 +889,120 @@ def test_s6_ca6_a_copy_forgotten_at_the_bound_is_counted_and_said(tmp_path, monk
     text, _ = run(w, clock, 1)
     said = [x for x in text.splitlines() if x.startswith(host.PE_OWN_FORGOT.split("%d")[0] + "2")]
     assert len(said) == 1 and int(said[0].rsplit(": ", 1)[1]) >= 1, said   # counted and said, never silent
+
+
+# --- M14.1d (ADR-0007 Amendment CC): every program of a short child, the name it was called by, a parent gone -------
+def progs(pid, files, ticks, ppid=1600, names=None, began="2026-11-20T10:00:05.000000Z", ended=None):
+    """A process of an answer that ran `files` in order, the kernel's name of each (`names`, else None)."""
+    names = list(names) if names is not None else [None] * len(files)
+    rec = reader_rec(pid, files[-1], ticks, ppid=ppid, began=began, ended=ended)
+    rec["earlier"] = [{"exe": f, "name": x, "unread": {}} for f, x in zip(files[:-1], names[:-1])]
+    rec["name"] = names[-1]
+    return rec
+
+
+def lines_of(home):
+    return [(x["input_meta"]["round"], x["input_meta"]["command_programs"], [c["pid"] for c in x["input_meta"][
+        "children"]]) for x in child_lines(home)]
+
+
+def watched(tmp_path, monkeypatch, script, rounds, alive=()):
+    stand_in_sample(monkeypatch, alive=alive)
+    w, clock = make_watch(tmp_path, host.live_reader(CATALOG, 0.0, "linux", helper=factory(StandIn(script))))
+    text, code = run(w, clock, rounds)
+    return w, text, lines_of(tmp_path / "home")
+
+
+def test_cc1_e1_a_line_of_the_text_gives_every_program_and_the_old_shape_still_parses():
+    new = json.dumps({"pid": 5, "ppid": 1600, "programs": [{"exe": "/usr/bin/bash", "name": "bash"},
+                                                           {"exe": "/usr/bin/nc.openbsd", "name": "nc"}],
+                      "dropped": 2, "ticks": 3, "began": "2026-11-20T10:00:01Z", "ended": None, "code": None})
+    (r, _), problems = discover.parse_procevents(new + "\n" + line(6))
+    assert not problems and r["image"] == "nc.openbsd" and r["dropped"] == 2
+    assert r["programs"] == [{"exe": "/usr/bin/bash", "name": "bash", "image": "bash"},
+                             {"exe": "/usr/bin/nc.openbsd", "name": "nc", "image": "nc.openbsd"}]
+    records, _ = discover.parse_procevents(line(6))   # M14.1c's shape: one program, no name
+    assert records[0]["programs"] == [{"exe": "/usr/bin/curl", "name": None, "image": "curl"}]
+
+
+@pytest.mark.parametrize("programs,dropped", [([], 0), ([{"exe": "/x", "name": None}] * 9, 0),
+                                              ([{"exe": "/x"}], 0), ([{"exe": "/x", "name": None, "argv": []}], 0),
+                                              ([{"exe": 7, "name": None}], 0), ([{"exe": "/x", "name": "a" * 16}], 0),
+                                              ([{"exe": "/x", "name": 5}], 0), ("x", 0), ([{"exe": "/x", "name": None}],
+                                                                                         -1)])
+def test_cc1_e1_a_programs_key_of_another_shape_or_past_its_bounds_is_no_line(programs, dropped):
+    bad = json.dumps({"pid": 5, "ppid": 1600, "programs": programs, "dropped": dropped, "ticks": 3,
+                      "began": "2026-11-20T10:00:01Z", "ended": None, "code": None})
+    records, problems = discover.parse_procevents(bad + "\n" + line(6))
+    assert [r["pid"] for r in records] == [6] and len(problems) == 1
+
+
+def test_cc1_e2_bash_then_curl_in_one_pid_in_one_round_one_line_names_both_and_net_tool_fires(tmp_path, monkeypatch):
+    w, _, got = watched(tmp_path, monkeypatch, [answer([progs(1810, ["/usr/bin/bash", "/usr/bin/curl"], 2300)])], 1)
+    assert got == [(1, ["bash", "curl"], [1700, 1810])]
+    assert "NET-TOOL" in {f["rule_id"] for f in w.source_findings}
+
+
+def test_cc1_e2_a_program_run_in_a_later_round_gets_its_line_and_one_said_is_not_said_again(tmp_path, monkeypatch):
+    script = [answer([]), answer([progs(1820, ["/usr/bin/bash"], 2310)]), answer([]),
+              answer([progs(1820, ["/usr/bin/bash", "/usr/bin/wget"], 2310)]),
+              answer([progs(1820, ["/usr/bin/bash", "/usr/bin/wget"], 2310)])]
+    w, _, got = watched(tmp_path, monkeypatch, script, 5)
+    assert [g for g in got if 1820 in g[2]] == [(2, ["bash"], [1820]), (4, ["wget"], [1820])]
+    assert [f["rule_id"] for f in w.source_findings].count("NET-TOOL") == 1
+
+
+def test_cc2_e3_the_name_called_by_beside_the_files_each_through_the_gate(tmp_path, monkeypatch):
+    script = [answer([progs(1830, ["/usr/bin/nc.openbsd"], 2320, names=["nc"]),
+                      progs(1831, ["/usr/bin/busybox"], 2321, names=["wget"]),
+                      progs(1832, ["/usr/bin/true"], 2322, names=["x y"]),           # the gate refuses it
+                      progs(1833, ["/usr/bin/abcdefghijklmnopq"], 2323, names=["abcdefghijklmno"]),   # 15: cut
+                      progs(1834, ["/usr/bin/shred"], 2324)])]                       # its name not read
+    w, _, got = watched(tmp_path, monkeypatch, script, 1)
+    ((_, programs, _),) = got
+    assert programs == ["bash", "nc.openbsd", "nc", "busybox", "wget", "true", "abcdefghijklmnopq", "shred"]
+    tools = [f for f in w.source_findings if f["rule_id"] == "NET-TOOL"]
+    assert tools and not [h for h in w.holes if h["kind"] == "host-source-unfit"]
+
+
+def test_cc3_e4_a_child_whose_parent_was_given_a_round_before_and_ended_is_its_trees_child(tmp_path, monkeypatch):
+    parent = progs(1840, ["/usr/bin/bash"], 2330, began="2026-11-20T10:00:04.000000Z")
+    child = progs(1841, ["/usr/bin/curl"], 2331, ppid=1840, began="2026-11-20T10:00:06.000000Z",
+                  ended="2026-11-20T10:00:06.300000Z")
+    ended = dict(answer([child]), ends=[{"pid": 1840, "started_ticks": 2330, "began": parent["began"],
+                                         "ended": "2026-11-20T10:00:07.000000Z", "code": 0, "signal": None,
+                                         "unread": {}}])
+    w, _, got = watched(tmp_path, monkeypatch, [answer([]), answer([parent]), ended, answer([])], 4)
+    assert [g for g in got if 1840 in g[2] or 1841 in g[2]] == [(2, ["bash"], [1840]), (3, ["curl"], [1841])]
+    assert "NET-TOOL" in {f["rule_id"] for f in w.source_findings}
+
+
+def test_cc3_e4_a_child_of_a_kept_child_two_rounds_later_and_a_pid_used_again_is_another_child(tmp_path,
+                                                                                              monkeypatch):
+    p = progs(1850, ["/usr/bin/bash"], 2340, began="2026-11-20T10:00:04.000000Z")
+    c = progs(1851, ["/usr/bin/sh"], 2341, ppid=1850, began="2026-11-20T10:00:05.000000Z")
+    g = progs(1852, ["/usr/bin/wget"], 2342, ppid=1851, began="2026-11-20T10:00:09.000000Z",
+              ended="2026-11-20T10:00:09.500000Z")
+    first = progs(1860, ["/usr/bin/curl"], 2350, ended="2026-11-20T10:00:05.500000Z")
+    again = progs(1860, ["/usr/bin/curl"], 2360, began="2026-11-20T10:00:09.000000Z",
+                  ended="2026-11-20T10:00:09.200000Z")
+    w, _, got = watched(tmp_path, monkeypatch, [answer([p, first]), answer([c]), answer([]), answer([g, again])], 4)
+    mine = [x for x in got if set(x[2]) & {1850, 1851, 1852, 1860}]
+    # the grandchild's parent (1851) is in neither round 4's sample nor its text: it is the tree's by the kept 1851;
+    # 1860 begun again (another start) is another child, written again
+    assert mine == [(1, ["bash", "curl"], [1700, 1850, 1860]), (2, ["sh"], [1851]), (4, ["curl", "wget"], [1860, 1852])]
+
+
+def test_cc3_e4_children_kept_past_the_bound_are_said_and_a_hole_of_the_result(tmp_path, monkeypatch):
+    monkeypatch.setattr(host, "KEPT_MAX", 2)
+    alive = [progs(1870 + i, ["/usr/bin/sleep"], 2370 + i) for i in range(3)]
+    w, text, _ = watched(tmp_path, monkeypatch, [answer(alive)], 1)
+    holes = [h for h in w.holes if h["kind"] == host.PE_HOLE_KIND and "kept more than 2 children" in h["detail"]]
+    assert len(holes) == 1 and host.PE_KEPT_PASSED % (2, 1) in text
+
+
+def test_cc1_e1_the_reader_reads_each_programs_name_at_its_exec_from_the_stat():
+    assert procevents.stat_name(b"5 (nc) S 1 2") == "nc" and procevents.stat_name(b"5 (a) (b) S 1") == "a) (b"
+    with pytest.raises(ValueError):
+        procevents.stat_name(b"5 nc S")
+    assert procevents.PROGRAMS_MAX == 8 and procevents.EARLIER_MAX == 7

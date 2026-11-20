@@ -76,6 +76,40 @@ def undo(startup):
         child.returncode)
 
 
+FETCH = "wget -q -O /dev/null --tries=1 --timeout=5 https://example.com/"   # a fetch thrown away
+
+
+def later_programs():
+    """ADR-0007 CC-7 (Linux; each harmless, each said): X43, a `bash -c` whose first step sleeps longer than a round
+    and whose last command, a fetch, bash runs in its own pid; X44, `nc -z` to the same public name where nc is
+    installed; X45, a bash that outlives the sh that started it, then runs a fetch in its own pid."""
+    if not shutil.which("wget") or not shutil.which("bash"):
+        say("bash-exec not run: wget or bash not installed")
+    else:
+        say("start bash")
+        child = subprocess.Popen(["bash", "-c", "sleep 7; " + FETCH], stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL)
+        say("bash-exec pid %d" % child.pid)
+        try:
+            child.wait(30)
+        except subprocess.TimeoutExpired:
+            child.kill()
+        say("end bash rc=%s" % child.returncode)
+    if shutil.which("nc"):
+        run(["nc", "-z", "-w", "2", "example.com", "443"])
+    else:
+        say("nc not installed")
+    if not shutil.which("wget") or not shutil.which("bash") or not shutil.which("sh"):
+        say("outliving not run: wget, bash or sh not installed")
+        return
+    say("start sh")
+    got = subprocess.run(["sh", "-c", 'bash -c "sleep 7; %s" >/dev/null 2>&1 & echo $!' % FETCH],
+                         capture_output=True, text=True, timeout=30)
+    say("outliving pid %s (sh rc=%s)" % (got.stdout.strip() or "?", got.returncode))
+    time.sleep(10)   # the outliving bash sleeps 7 s, then fetches in its own pid
+    say("outliving waited")
+
+
 def main():
     windows = os.name == "nt"
     nul = "NUL" if windows else "/dev/null"
@@ -93,6 +127,7 @@ def main():
             run(["wget", "-q", "-O", "/dev/null", "--timeout=5", "--tries=1", "https://example.com/"])   # BZ-10
         else:
             say("wget not installed")
+        later_programs()
     if windows:
         run(["powershell", "-NoProfile", "-Command", "Set-Clipboard -Value 'raqib-rig'"])   # writes the clipboard
         run(["cmd", "/c", "whoami"])

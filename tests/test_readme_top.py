@@ -368,7 +368,7 @@ VERSION_NUMBER = [
 GUIDE_NEW += VERSION_NUMBER
 # M14.1b and its REDO (ADR-0007 BU-3, BW-3, BW-6): the report's PROCESS EVENTS section on Linux, said in the
 # guide's Watch the host
-PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ): the guide's words on what the watch judges from the reader
+PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ, CC): the guide's words on what the watch judges from the reader
     'On Linux the watch also hears what happens between two rounds (ADR-0007 Amendments BU, BW and BY): '
      'at its first round it starts a helper, a second process of its own that runs the reader of the '
      "kernel's process events ([docs/specs/PROC-EVENTS.md](docs/specs/PROC-EVENTS.md)), and after each "
@@ -376,16 +376,22 @@ PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ): the guide's words 
      'the interval.',
     'What the helper gave since the round before is given to the round beside its sample (M14.1c): a '
      "process that began between two samples under a tree that talks at a sample is that tree's child, "
-     "with its HostChild line by the name of its program's file (a link's target, such as `nc.openbsd` or "
-     "`busybox`, not the name it was called by), through the gate a sampled child's name goes through, so "
-     'NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred whose file has that name; a process the '
-     'sample also holds (the same pid and the same start ticks) is one process.',
+     'with its HostChild line naming every program it ran while heard (up to 8 a process, in order), each '
+     "by its file's name and, where they differ, by the name the kernel gave it (a file `nc.openbsd` "
+     "called `nc`: both), each through the gate a sampled child's name goes through, so NET-TOOL and "
+     'DESTRUCT-CMD judge a short curl, wget, nc or shred by either name (M14.1d); a process the sample '
+     'also holds (the same pid and the same start ticks) is one process.',
     'A tree that is a candidate only by what the reader gave is listed `by the channel`, as on Windows; '
      'the root of a tree, and of an act-root, is always a process a sample held.',
+    'A process the watch wrote a line for that runs a program not yet said, in a later round (the command'
+     ' a shell runs in its own place), gets a line for that program, and a child whose parent has gone is '
+     "still its tree's where the watch wrote that parent (it keeps, per tree, the children it wrote whose "
+     'end it has not heard: at most 512).',
     'Not judged: a tree that lives whole between two samples (a tree needs a talker at a sample, and a '
      "connection that opens and closes between two samples is still unseen), a child's own connections, a "
-     'program a process changes to after its line was written and the programs it had before, and a child '
-     'whose parent was given in an earlier round and ended before the sample.',
+     'program past the bound of 8 a process (the oldest of those run between two asks), a child whose '
+     "parent the watch never wrote, and an act-root the reader's word alone would make; a process can be "
+     "called by a tool's name it is not (a link of its own), and its tree then alarms by its own doing.",
     'A program not read is in the round and counted; it gets no line.',
     "What is judged from the helper is the helper's word: the watch does not check its lines.",
     "Its report has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line: what is"

@@ -32,6 +32,11 @@ command_sources: events); n/a where that entry says both (it lived to a sample: 
 MISSED where it says the sample alone, where no finding names wget, where no line says where it was seen, or
 where no sources were given; n/a off Linux, where wget is not installed, where the stand-in did not run it, or
 where the helper was refused.
+X43 to X45 (ADR-0007 CC-7; read from --report, --workload and --sources, Linux): X43, the fetch a `bash -c` ran in
+its own pid a round after its own line is a NET-TOOL finding of the stand-in's tree, its HostChild line naming wget
+for that pid; X44, `nc -z` (the file nc.openbsd on Ubuntu) is one, its line naming nc; X45, the fetch of a bash
+that outlived the sh that started it is one, its line naming wget for that pid. Each n/a off Linux, where its tool
+is not installed or the stand-in did not run it, or where the helper was refused.
 --events-check: what `raqib events` printed over the watch's events file, run after the watch and kept (ADR-0016
 H-4, M13.1 and its REDO): X38 the line of this watch's run (the report's `run:`) says its chain is whole, and no
 line says a chain not whole or taken out, nor a break, a line beside a chain or a run begun before the file;
@@ -1097,6 +1102,89 @@ def read_short_tool(report, workload, platform, sources=()):
         return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
 
 
+LATER_NAMES = {
+    "X43": "X43 the fetch bash ran in its own pid a round after its own line is a NET-TOOL finding of the stand-in's"
+           " tree",
+    "X44": "X44 nc (its file nc.openbsd on Ubuntu) is a NET-TOOL finding of the stand-in's tree, named nc",
+    "X45": "X45 the fetch of a bash that outlived the sh that started it is a NET-TOOL finding of the stand-in's"
+           " tree"}
+
+
+def _host_child_lines(sources, pid):
+    """The HostChild lines of the tree of `pid` in the watch's source files: [input_meta] (not JSON: passed over)."""
+    out = []
+    for _name, text in sources or ():
+        for raw in str(text or "").splitlines():
+            try:
+                line = json.loads(raw)
+            except ValueError:
+                continue
+            meta = line.get("input_meta") if isinstance(line, dict) else None
+            if isinstance(meta, dict) and line.get("tool") == "HostChild" and meta.get("pid") == pid:
+                out.append(meta)
+    return out
+
+
+def read_later_programs(report, workload, platform, sources=()):
+    """X43 to X45 (ADR-0007 CC-7, M14.1d): read as X36 is, from the report's SOURCE FINDINGS and the tree's
+    source lines. X43: a HostChild line of the stand-in's tree names wget for the pid the stand-in said bash had
+    ("bash-exec pid N"), and a NET-TOOL line on the stand-in names wget. X44: a HostChild line names nc and a
+    NET-TOOL line names nc. X45: a HostChild line names wget for the pid of the bash that outlived its sh
+    ("outliving pid N"), and a NET-TOOL line names wget. Each n/a off Linux, where the helper was refused, or where
+    the stand-in did not run it (its tool not installed); MISSED otherwise where it is not so. Never raises."""
+    rows = []
+    try:
+        work = str(workload or "")
+        full = str(report or "").splitlines()
+        at = next((i for i, x in enumerate(full) if x.startswith("Raqib watch --host")), None)
+        lines = full[at:] if at is not None else []
+        events = section(lines, WATCH_EVENTS_HEAD)
+        refused = next((x.strip()[len("refused: "):] for x in events if x.strip().startswith("refused: ")), None)
+        pid = number(r"WORKLOAD \S+ pid (\d+)", work)
+        listed = section(lines, "SOURCE FINDINGS:")
+        metas = _host_child_lines(sources, pid) if pid is not None else []
+
+        def tool(name):
+            return [f for f in listed if pid is not None and re.search(r"NET-TOOL on \S+ pid %d\b" % pid, f)
+                    and re.search(r"\b%s\b" % re.escape(name), f)]
+
+        def named_for(child, name):
+            return [m for m in metas if name in (m.get("command_programs") or ())
+                    and any(isinstance(c, dict) and c.get("pid") == child for c in m.get("children") or ())]
+        cases = (("X43", r"bash-exec pid (\d+)", r"bash-exec not run", "wget"),
+                 ("X44", None, r"nc not installed", "nc"),
+                 ("X45", r"outliving pid (\d+)", r"outliving not run", "wget"))
+        for ident, said, missing, name in cases:
+            label = LATER_NAMES[ident]
+            if not str(platform or "").startswith("linux"):
+                rows.append((label, SKIP, "not run: not Linux (%s)" % (platform or "no platform said")))
+                continue
+            if refused is not None:
+                rows.append((label, SKIP, "the helper's reader was refused: %s" % refused))
+                continue
+            if re.search(r"(?m)^WORKLOAD \S+ %s" % missing, work):
+                rows.append((label, SKIP, "the stand-in did not run it (%s)" % missing))
+                continue
+            child = number(r"WORKLOAD \S+ %s" % said, work) if said else None
+            if (said and child is None) or (not said and not re.search(r"(?m)^WORKLOAD \S+ start nc\s*$", work)):
+                rows.append((label, SKIP, "the stand-in did not say it ran it"))
+                continue
+            found = named_for(child, name) if said else [m for m in metas if name in (m.get("command_programs") or ())]
+            hits = tool(name)
+            if found and hits:
+                rows.append((label, MET, "a HostChild line of the stand-in's tree names %s%s, and %d NET-TOOL line(s)"
+                             " on pid %s name it" % (name, " for pid %d" % child if said else "", len(hits), pid)))
+            else:
+                rows.append((label, MISSED, "%s; %s" % (
+                    "a HostChild line names %s%s" % (name, " for pid %d" % child if said else "") if found else
+                    "no HostChild line of the stand-in's tree names %s%s%s" % (
+                        name, " for pid %d" % child if said else "", "" if sources else " (no sources given)"),
+                    "%d NET-TOOL line(s) on pid %s name it" % (len(hits), pid))))
+    except Exception as exc:   # never raises
+        rows = [(LATER_NAMES[k], MISSED, "its report cannot be read (%s)" % type(exc).__name__) for k in LATER_NAMES]
+    return rows
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -1138,6 +1226,7 @@ def main(argv=None):
     rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon, events)
     rows += read_watch_events(text(a.report), text(a.workload), a.platform)   # X35 (ADR-0007 BU-5)
     rows += read_short_tool(text(a.report), text(a.workload), a.platform, sources)   # X36 (BY-7, BZ-10)
+    rows += read_later_programs(text(a.report), text(a.workload), a.platform, sources)   # X43-X45 (CC-7)
     if a.events_check:   # X38 (ADR-0016 H-4): given and missing is the check's silence, MISSED
         rows += read_chain(text(a.events_check) if os.path.isfile(a.events_check) else "", text(a.report))
     else:

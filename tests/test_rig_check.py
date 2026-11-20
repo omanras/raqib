@@ -584,3 +584,65 @@ def test_x38_the_rig_runs_raqib_events_after_the_watch_on_both_systems_and_keeps
     # HA-10: what raqib events wrote to its error stream is printed and kept (on Linux it is in the answer: 2>&1)
     assert "Get-Content $env:RUNNER_TEMP\\events-check.err" in win and "events-check.err rig-out" in win
     assert '"$RUNNER_TEMP/events-check.out" 2>&1' in linux
+
+
+# --- X43 to X45 (ADR-0007 CC-7, M14.1d): programs a child runs later, the name nc, a child that outlives its sh ----
+LATER_WORKLOAD = LINUX_WORKLOAD.replace("WORKLOAD 07:51:15 done\n", "WORKLOAD 07:51:00 start bash\n"
+                                        "WORKLOAD 07:51:00 bash-exec pid 9911\nWORKLOAD 07:51:08 end bash rc=0\n"
+                                        "WORKLOAD 07:51:08 start nc\nWORKLOAD 07:51:09 end nc rc=0\n"
+                                        "WORKLOAD 07:51:09 start sh\nWORKLOAD 07:51:09 outliving pid 9922 (sh rc=0)\n"
+                                        "WORKLOAD 07:51:19 outliving waited\nWORKLOAD 07:51:20 done\n")
+
+
+def later_line(child, programs, seq):
+    return json.dumps({"seq": seq, "tool": "HostChild", "source": "host", "input_meta": {
+        "command_programs": list(programs), "command_sources": ["events"] * len(programs), "pid": 9828,
+        "children": [{"pid": child, "image": programs[0]}], "cites": []}}) + "\n"
+
+
+LATER_SOURCES = [("t.jsonl", later_line(9911, ("bash",), 6) + later_line(9911, ("wget",), 8)
+                  + later_line(9915, ("nc.openbsd", "nc"), 9) + later_line(9922, ("bash",), 10)
+                  + later_line(9922, ("wget",), 12))]
+
+
+def later_report(*names):
+    report = REPORT
+    at = report.index("  [medium] NET-TOOL on python pid 9828")
+    lines = "".join("  [medium] NET-TOOL on python pid 9828 via host: HostChild may reach the network at seq 9 (host -,"
+                    " program %s, programs [\"%s\"]); off\n" % (x, x) for x in names)
+    return (report[:at] + lines + report[at:]).replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1)
+
+
+def later(report=None, workload=LATER_WORKLOAD, platform="linux", sources=LATER_SOURCES):
+    rows = check.read_later_programs(later_report("wget", "nc") if report is None else report, workload, platform,
+                                     sources)
+    assert [r[0][:4] for r in rows] == ["X43 ", "X44 ", "X45 "]
+    return {r[0][:3]: (r[1], r[2]) for r in rows}
+
+
+def test_x43_x44_x45_met_where_the_trees_lines_name_each_and_a_net_tool_line_names_it():
+    got = later()
+    assert {k: v[0] for k, v in got.items()} == {"X43": check.MET, "X44": check.MET, "X45": check.MET}
+    assert "names wget for pid 9911" in got["X43"][1] and "names wget for pid 9922" in got["X45"][1]
+
+
+def test_x43_x44_x45_missed_where_the_line_or_the_finding_is_not_there():
+    only_bash = [("t.jsonl", later_line(9911, ("bash",), 6) + later_line(9922, ("bash",), 10))]
+    got = later(sources=only_bash)
+    assert {k: v[0] for k, v in got.items()} == {"X43": check.MISSED, "X44": check.MISSED, "X45": check.MISSED}
+    got = later(report=later_report("curl"))   # the lines, and no NET-TOOL line names wget or nc
+    assert {k: v[0] for k, v in got.items()} == {"X43": check.MISSED, "X44": check.MISSED, "X45": check.MISSED}
+    assert "no sources given" in later(sources=())["X43"][1]
+    assert later(report=None, workload=None)["X43"][0] in (check.SKIP, check.MISSED)   # never raises
+
+
+def test_x43_x44_x45_n_a_off_linux_without_the_tool_where_not_run_or_the_helper_was_refused():
+    assert {v[0] for v in later(platform="win32").values()} == {check.SKIP}
+    refused = later_report("wget", "nc").replace("  lost: none\n", "  lost: none\n  refused: the process events are"
+                                                 " not read: no answer\n")
+    assert {v[0] for v in later(report=refused).values()} == {check.SKIP}
+    missing = LATER_WORKLOAD.replace("start nc\n", "nc not installed\n").replace(
+        "bash-exec pid 9911", "bash-exec not run: wget or bash not installed").replace(
+        "outliving pid 9922 (sh rc=0)", "outliving not run: wget, bash or sh not installed")
+    assert {v[0] for v in later(workload=missing).values()} == {check.SKIP}
+    assert {v[0] for v in later(workload=LINUX_WORKLOAD).values()} == {check.SKIP}   # an older stand-in

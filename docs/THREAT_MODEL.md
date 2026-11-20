@@ -604,7 +604,21 @@ Rulings: ADR-0003 Amendments C and D.
     from the reader is given without its program: the read is counted in
     `missed` and named in its `unread`;
   - a process that changes its program again keeps the programs it had
-    before in `earlier`, its newest 16; the number of older ones is said;
+    before in `earlier`, its newest 7 (8 a process with the one it has
+    now, CC-1); the number of older ones is said, counted and never judged:
+    a process that runs more than 8 programs between two asks hides the
+    oldest of them;
+  - at each exec the reader reads, from the same stat, the name the kernel
+    gave the process (CC-2); a child's line names it beside its file's name
+    where they differ, through the name gate. A process can be called by a
+    tool's name it is not (a link of its own named `curl`): its tree is then
+    judged by that name, and alarms by its own doing; a name of the
+    kernel's full length (15) is taken as cut and not used;
+  - the watch keeps, per tree, the children it wrote whose end the process
+    events have not told (at most 512 a tree; passing it is said and is a
+    hole of the result), so a child whose parent has gone is still its
+    tree's (CC-3); a child whose parent the watch never wrote is in no
+    tree;
   - a pid taken again within one second of the exec, before the read, is
     not told apart: the newcomer's program and start are then given as the
     first process's; a start later than that is told, nothing of that
