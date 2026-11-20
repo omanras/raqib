@@ -780,6 +780,14 @@ def test_e5_window_filter_on_timed_records():
 def test_e6_discover_opens_no_socket_touches_no_process_and_runs_nothing_by_bare_name():
     tree = ast.parse((ROOT / "raqib" / "discover.py").read_text(encoding="utf-8"))
     imported, runs = set(), []
+    (ss_def,) = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "run_ss"]
+    run_ss_calls = [n for n in ast.walk(ss_def) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in ("Popen", "kill")]
+    # M14.1c REDO (ADR-0007 BZ-12): the ss it started is killed at its timeout and at any other error of its reading
+    assert sorted(n.func.attr for n in run_ss_calls) == ["Popen", "kill", "kill"]
+    (popen,) = [n for n in run_ss_calls if n.func.attr == "Popen"]
+    assert any(isinstance(n, ast.Call) and ast.unparse(n.func) == "own.started" and n.args == [popen]
+               for n in ast.walk(ss_def))   # BY-6: recorded in the statement that starts it
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported |= {a.name.split(".")[0] for a in node.names}
@@ -788,10 +796,14 @@ def test_e6_discover_opens_no_socket_touches_no_process_and_runs_nothing_by_bare
         elif isinstance(node, ast.Call):
             f = node.func
             name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
-            assert name not in ("kill", "killpg", "send_signal", "terminate", "ptrace", "Popen", "system",
-                                "popen", "urlopen", "create_connection", "which", "execv", "execve", "execvp",
-                                "execvpe", "execl", "execlp", "execle", "execlpe", "spawnv", "spawnvp", "spawnl",
-                                "spawnlp", "posix_spawn", "posix_spawnp", "startfile"), name
+            if node in run_ss_calls and name == "kill":   # M14.1c (ADR-0007 BY-6): run_ss ends the ss it started,
+                assert ast.unparse(node) == "proc.kill()"     # alone, at its timeout, as subprocess.run did
+                continue
+            assert node in run_ss_calls or name not in (   # BY-6: its one Popen, inside own.started (above)
+                "kill", "killpg", "send_signal", "terminate", "ptrace", "Popen", "system",
+                "popen", "urlopen", "create_connection", "which", "execv", "execve", "execvp",
+                "execvpe", "execl", "execlp", "execle", "execlpe", "spawnv", "spawnvp", "spawnl",
+                "spawnlp", "posix_spawn", "posix_spawnp", "startfile"), name
             assert not any(k.arg == "shell" for k in node.keywords)
             if isinstance(f, ast.Attribute) and getattr(f.value, "id", None) == "subprocess":
                 runs.append(node)
@@ -814,10 +826,20 @@ def test_e6_discover_opens_no_socket_touches_no_process_and_runs_nothing_by_bare
 def test_b1_run_ss_refuses_a_bare_name_and_uses_a_minimal_env(monkeypatch):
     seen = []
 
-    def fake_run(argv, **kw):
-        seen.append((argv, kw["env"]))
-        return subprocess.CompletedProcess(argv, 0, "State\n", "")
-    monkeypatch.setattr(discover.subprocess, "run", fake_run)
+    class FakePopen:   # M14.1c (BY-6): run_ss starts ss by Popen, in the watch's record
+        def __init__(self, argv, **kw):
+            seen.append((argv, kw["env"]))
+            self.args, self.pid, self.returncode = argv, 4321, 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def communicate(self, timeout=None):
+            return "State\n", ""
+    monkeypatch.setattr(discover.subprocess, "Popen", FakePopen)
     text, error = discover.run_ss("ss", at=AT)
     assert text is None and "not an absolute path" in error and seen == []
     path = os.path.abspath(os.sep + os.path.join("usr", "sbin", "ss"))
@@ -860,7 +882,7 @@ def test_b1_live_reads_proc_net_first_and_never_runs_ss(tmp_path, monkeypatch):
     net = "\n".join([NET_HEAD, net_row(0, "0500000A:9C40", "0A684FA0:01BB", "01", 4242)]) + "\n"
     fake_proc(root, [(50, 1, "agent", b"/usr/local/bin/agent\0"), (51, 50, "bash", b"/bin/bash\0")], net,
               sockets={50: [4242]})
-    monkeypatch.setattr(discover.subprocess, "run", lambda *a, **k: pytest.fail("ss must not run"))
+    monkeypatch.setattr(discover.subprocess, "Popen", lambda *a, **k: pytest.fail("ss must not run"))   # BY-6
     texts, holes, _ = discover.collect_live(CATALOG, homes=[], platform="linux", proc_root=str(root))
     assert "ss" not in texts and "proc-net" in texts and texts["proc-net"][2] is None
     assert any("tcp6 not present" in x for x in texts["proc-net"][1].splitlines())

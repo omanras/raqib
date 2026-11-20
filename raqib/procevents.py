@@ -832,6 +832,7 @@ STOP_SECONDS = 2.0         # stop(): how long the helper is waited for once its 
 KILL_SECONDS = 1.0         # and after it is ended, before it is killed
 LATE, ENDED, NOT_A_LINE, REFUSED, STARTING = "late", "ended", "not a line", "refused", "starting"   # not an answer
 TOO_LONG = object()        # the client's mark of a line longer than LINE_MAX
+FULL = "its input was full: the ask could not be written without waiting"   # BY-6: said as the helper's end
 NOT_A_COMMAND = "not a command: the helper answers `read`, `read N` and `stop`"
 ANSWER_KEYS = ("v", "ask", "processes", "ends", "older", "more", "counts")
 TOO_LONG_EXE = "its program's path is not given: the record alone would pass the line's bound (LINE_MAX)"
@@ -952,14 +953,14 @@ def main(argv=None):
     return serve()
 
 
-def command(executable=None, isolated=None, path=None):
-    """BW-5: the helper's command: this interpreter; -I where this process runs isolated, else -P (no directory of
-    its own before the path); -c SERVE_PROGRAM, a constant; its one argument this process's import path, its
-    absolute entries in order, as JSON. The helper loads Raqib from where this process did, and from nowhere else."""
+def command(executable=None, path=None):
+    """BW-5, BY-6: the helper's command: this interpreter, always -I (isolated: no user site folder, no PYTHON*
+    variable of the environment, no directory of its own before the path), -c SERVE_PROGRAM, a constant; its one
+    argument this process's import path, its absolute entries in order, as JSON. The helper loads Raqib from where
+    this process did, and from nowhere else: it needs nothing of the user's environment or site folder."""
     executable = sys.executable if executable is None else executable
-    isolated = bool(sys.flags.isolated) if isolated is None else isolated
     path = [p for p in (sys.path if path is None else path) if isinstance(p, str) and os.path.isabs(p)]
-    return [executable, "-I" if isolated else "-P", "-c", SERVE_PROGRAM, json.dumps(path)]
+    return [executable, "-I", "-c", SERVE_PROGRAM, json.dumps(path)]
 
 
 def _pump(out, lines, stop, line_max=LINE_MAX):
@@ -1015,6 +1016,7 @@ class Helper:
         self.ready = False
         self.refused = None
         self.ended = False           # its output ended: the helper is gone
+        self.ended_why = None        # BY-6: why, where it is not that its output ended (its input full)
         self.asks = 0                # asks written
         self.outstanding = None      # the number of the ask written and not answered yet
         self.began = None            # when it was started (the clock's)
@@ -1040,6 +1042,16 @@ class Helper:
         except Exception as exc:
             self.proc = None
             return "the helper could not be started (%s)" % _flat(exc)
+        self._fd = None   # BY-6: the ask is written to a pipe that does not block; a full one is the helper's end
+        fileno = getattr(self.proc.stdin, "fileno", None)
+        if fileno is not None:   # an input with no descriptor (a test's stand-in) is written as it is
+            try:
+                fd = fileno()
+                os.set_blocking(fd, False)
+                self._fd = fd
+            except Exception as exc:   # BZ-12: an input that cannot be made unblocking is the helper not started
+                self.stop(0)
+                return "the helper's input could not be made unblocking (%s)" % _flat(exc)
         try:   # the thread holds the pipe and the queue, not the client: a client let go ends its helper
             self._thread = self._thread_class(target=_pump, args=(self.proc.stdout, self._lines, self._stop),
                                               name="raqib-procevents-helper", daemon=True)
@@ -1107,9 +1119,17 @@ class Helper:
             self.ready = True
         if self.outstanding is None:   # BW-1: a new ask only where the last was answered
             self.asks += 1
+            line = b"read %d\n" % self.asks
             try:
-                self.proc.stdin.write(b"read %d\n" % self.asks)
-                self.proc.stdin.flush()
+                if getattr(self, "_fd", None) is None:
+                    self.proc.stdin.write(line)
+                    self.proc.stdin.flush()
+                elif getattr(self.proc.stdin, "raw", self.proc.stdin).write(line) != len(line):
+                    raise BlockingIOError("a part of the ask was written")   # BY-6: never blocks; None or a part: full
+            except BlockingIOError:
+                self.ended_why = FULL
+                self._stop.set()
+                return self._end()
             except (OSError, ValueError):
                 return self._end()
             self.outstanding = self.asks

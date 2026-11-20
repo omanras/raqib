@@ -366,6 +366,18 @@ def test_e2_a_line_not_json_or_not_an_event_is_skipped_counted_never_sent(tmp_pa
     assert state(tmp_path)["skipped"] == 2 and state(tmp_path)["sent"] == 4
 
 
+def test_ha9_a_line_nested_deeper_than_can_be_read_is_refused_and_the_forwarder_goes_on(tmp_path, collectors):
+    """ADR-0016 HA-9: one line written to the events file cannot end the forwarder."""
+    c = collectors(shape="raqib")
+    good = lines(3)
+    deep = b"[" * 100000 + b"]" * 100000 + b"\n"
+    assert len(deep) < forward.MAX_BYTES and forward.classify(deep[:-1]) is None
+    f = fwd(tmp_path, write(tmp_path / "e.jsonl", good[:1] + [deep] + good[1:]), c.port)
+    assert f.run(once=True) == 0
+    assert c.events == [r.decode("ascii")[:-1] for r in good]
+    assert state(tmp_path)["skipped"] == 1 and state(tmp_path)["sent"] == 3
+
+
 def test_e2_a_last_line_with_no_newline_waits_and_is_sent_when_its_newline_comes(tmp_path, collectors):
     c = collectors(shape="raqib")
     rows = lines(2)

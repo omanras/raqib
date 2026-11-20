@@ -1,21 +1,10 @@
-# HANDOFF — M15.3b REDO 2  (ADR-0014 Amendment K, AK-1 to AK-7: the second review of M15.3b)
+# HANDOFF — none open  (M15.1, M14.1a, M15.2, M14.1b, M15.2b, M17.1, M15.3a, M13.1, M14.1c, M16.1 and M15.3b landed by 2026-11-21; the next tasks are on their own branches)
 
-Task: the second review's findings, as the Table ruled them. Read docs/review/2026-11-21-M15.3b-redo.md (the packet; its line numbers are of your commit 0333a02) and ADR-0014's Amendment K, then do each item below. Nothing of the watch changes.
+Task: none on main. Do not build here. In review on its branch: the second REDO of M14.1d (claude/M14.1d, ADR-0007 Amendment CE: every program of a short child, a process is its maker's child, a child known by the kernel's name alone). Next: M15.3c (the watch reads the autostart places and rules judge a change; ADR-0014 AL-6 lists what it measures first), M16.2 (a Splunk app from siem/), M14.2 (a short connection given to its process).
+
+From 0.2.0 on (ADR-0015): a merge into main that changes what Raqib does moves `raqib.__version__`, writes its entry at the top of CHANGELOG.md and runs `python3 tools/event_examples.py --write`. The Table does it in the merge.
 
 Scope:
-  raqib/autostart.py, tests/test_autostart.py, docs/specs/AUTOSTART.md, docs/THREAT_MODEL.md (only the entry of this read), tools/rig/autostart_run.py, tools/rig/check.py and tests/test_rig_check.py (only X37), docs/review/2026-11-21-M15.3b-redo2-questions.md; and a test of tests/ ONLY where it holds, word for word or by count, a line this task changes (each named in the questions file, with every phrase a test no longer holds; no other assertion weakened).
+  (none)
 
-Exit criteria:
-- R1 (AK-1) Every key whose values the read takes (a service's, a task's body and tree key, Winlogon's, Run's) passes the bound; a key met at the bound is a part not read, said each read, none of its entries compared. Tests: a made-up registry that gives at most 1001 values as the real one does; a service whose ImagePath is its last value of 1002: no `removed`, no entry lost in silence, the key said not read; the same for a task's Id and for Winlogon's Shell.
-- R2 (AK-2) Six steps: `runonce` its own. Inside a step the machine's key or folder before the users'; the users' hives and folders begun one further at each read. Test: AJ-2's made-up clock with one user's Run key taking the whole deadline every time: over a stated number of reads RunOnce (the users' and the machine's), the machine's Run keys (both views), the machine's Startup folder, another user's Run key, the services, the tasks and Winlogon are each read whole at least once.
-- R3 (AK-3) `sure`: not sure where the first word holds `%`; where more than one run from the text's start to a blank or its end ends in a program's extension; where the text holds a blank other than space or tab. Split at space and tab only. Tests: each; `C:\Windows\system32\svchost.exe -k netsvcs` stays sure; a quoted word stays sure.
-- R4 (AK-4) The Windows opener asks not to follow a link (FILE_FLAG_OPEN_REPARSE_POINT) and a handle whose attributes say reparse point is a link, content not read. A link has a fixed content word of its own: a file that becomes a link under one name (and back) is `changed`. Two listed names of one folder equal but for case: the second is a part not read, said. Tests: with given openers and listings; one Windows-only test that makes a real symbolic link in a temporary folder and reads it (skipped by name where the link cannot be made).
-- R5 (AK-5) A step that raises marks the parts it had listed as not read (test: no `added` when they are next read). `Watcher` takes no salt argument; the command's use is a private flag. `read(begin=...)` with a value that is no step gives a failed read, no exception.
-- R6 (AK-7) X37: MET also needs a later read, after the held file was let go, that read its content; MISSED with words otherwise. Tests in tests/test_rig_check.py.
-- R7 (AK-7) The review's S5 a to g, each: the cut test takes a whole read first and asserts no `removed`; a made-up DirEntry that is a reparse point; WinRegistry asks at most 1001 values (a fake winreg); the said text holds neither salt in hex nor the word salt but in `salt_id`; the invalid escape; `late` asserted at the bound; `read` on Windows uses the module's opener.
-- R8 (AK-6) AUTOSTART.md, the THREAT_MODEL entry and the module's docstring: every sentence of AK-6; "Not measured" lists what never ran on Windows and the open that asks for no sharing; no sentence says "never lost" or "every other place is reached".
-- R9 Gate green in the foreground; ASCII outside docs; raqib/host.py, raqib/discover.py, raqib/hooks/ and raqib/rules/ not edited; no network call; no new dependency.
-Not in scope: the watch reading it, the rules, a late base as a host line (M15.3c); the version and CHANGELOG.md (the Table's at the merge). The rig's acts are harmless and each is undone; no exploit code or attack steps.
-If an item needs a file outside Scope: STOP and say which file and which line.
-Commit: `landed: M15.3b REDO 2 the second review's findings` or `STOP: M15.3b REDO 2 <reason>`.
-Read HANDOFF.md and do only the task it specifies.
+If you were started as a builder on this file: STOP, commit nothing, and say that no task is open.

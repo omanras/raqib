@@ -5,6 +5,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
     python tools/rig/check.py --report WATCH.out --workload WORKLOAD.out [--sources DIR] [--exit-code N]
                               [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
                               [--service FACTS.json] [--procevents FACTS.json] [--autostart FACTS.json]
+                              [--events-check FILE]
                               [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
@@ -19,11 +20,22 @@ that sees a second user's stand-in agent, X30 the removal leaves no unit (n/a wh
 X31 every short act that ran is given with its program, its parent (the run's own process) and its end's code, and
 nothing is lost (n/a off Linux, or where the start was refused for want of a right of this user, EPERM or EACCES;
 any other refusal is MISSED, the refusal said).
-X35 (ADR-0007 BU-5, BW-7; read from --report and --workload, Linux; n/a elsewhere): the watch's report holds its
-PROCESS EVENTS section, every round asked was answered, no helper was started again, nothing was lost, and the
-processes that began are at least the children the stand-in said it started (its "start" lines; a floor: the
-count holds every process of the machine); MISSED otherwise, or where it says a refusal (X31's rule: n/a where
-the refusal names a right this user lacks, EPERM or EACCES).
+X35 (ADR-0007 BU-5, BW-7, BX-5; read from --report and --workload, Linux; n/a elsewhere): the watch's report holds
+its PROCESS EVENTS section, every round asked was answered, no helper was started again, nothing was lost, nothing
+was past the reader's bounds, and the processes that began are at least the children the stand-in said it started
+(its "start" lines; a floor: the count holds every process of the machine); MISSED otherwise, or where it says a
+refusal (X31's rule: n/a where the refusal names a right this user lacks, EPERM or EACCES).
+X36 (ADR-0007 BY-7, BZ-10, CA-3; read from --report, --workload and --sources): the stand-in's wget, a child
+that lives under a second (one try), is a NET-TOOL finding of the stand-in's tree that names wget, and the
+HostChild line of the tree's source that names wget says the process events alone saw it (its own entry of
+command_sources: events); n/a where that entry says both (it lived to a sample: the rig's timing, said so);
+MISSED where it says the sample alone, where no finding names wget, where no line says where it was seen, or
+where no sources were given; n/a off Linux, where wget is not installed, where the stand-in did not run it, or
+where the helper was refused.
+--events-check: what `raqib events` printed over the watch's events file, run after the watch and kept (ADR-0016
+H-4, M13.1 and its REDO): X38 the line of this watch's run (the report's `run:`) says its chain is whole, and no
+line says a chain not whole or taken out, nor a break, a line beside a chain or a run begun before the file;
+MISSED otherwise, an answer given and missing or empty included (n/a where the rig ran none).
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -964,9 +976,43 @@ def read_autostart(facts):
 
 
 WATCH_EVENTS_NAME = ("X35 the watch's helper heard the kernel's process events: its report's PROCESS EVENTS section,"
-                     " every ask answered, no helper started again, nothing lost, at least the stand-in's children"
-                     " began")
+                     " every ask answered, no helper started again, nothing lost, nothing past the reader's bounds, at"
+                     " least the stand-in's children began")
 WATCH_EVENTS_HEAD = "PROCESS EVENTS (Linux):"
+
+
+# ADR-0016 Amendment A: a run is said by its run word and its host; under a chain not whole, a line for each problem
+CHAIN_WHOLE = re.compile(r"^  run (.+?) \(host .*\): chain whole, (\d+) line\(s\)(?:, (\d+) said twice)?$", re.M)
+CHAIN_BAD = re.compile(r"^  run .+? \(host .*\): (?:chain not whole|no line holds prev, yet ).*$|^    (?:broken at line"
+                       r" \d+|begins before this file|\d+ line\(s\) beside the chain).*$", re.M)
+
+
+def read_chain(answer, report):
+    """X38 (ADR-0016 H-4, M13.1): the answer of `raqib events` over the watch's events file. MET where its line for
+    this watch's run (the report's `run: ... (seqs`) says the chain is whole and no line of it names a break or a
+    line beside a chain; MISSED otherwise (an answer that is missing or empty is silence: a finding); n/a where the
+    rig ran none (answer None). It never raises."""
+    name = "X38 the chain of this watch's run in its events file is whole (raqib events)"
+    if answer is None:
+        return [(name, SKIP, "the rig ran no raqib events over the watch's events file")]
+    try:
+        run = re.search(r"(?m)^run: (\S+) \(seqs", report or "")
+        answer = (answer or "").replace("\r\n", "\n")   # the Table: Windows' own line ends (seen on the rig: MISSED)
+        if not answer.strip():
+            return [(name, MISSED, "raqib events said nothing (silence is a finding)")]
+        bad = [m.group(0).strip() for m in CHAIN_BAD.finditer(answer)]
+        if run is None:
+            return [(name, MISSED, "the report names no run: the watch's own run cannot be told%s" % (
+                "; " + bad[0][:160] if bad else ""))]
+        whole = [m for m in CHAIN_WHOLE.finditer(answer) if m.group(1) == run.group(1)]
+        twice = whole[0].group(3) if whole else None   # HB-6: the writer writes no line twice: another hand's
+        ok = bool(whole) and not bad and not twice
+        return [(name, MET if ok else MISSED, "run %s: %s%s%s" % (
+            run.group(1), "chain whole, %s line(s)" % whole[0].group(2) if whole else "no line says its chain whole",
+            "; %s line(s) said twice in the watch's own file, which its writer never does" % twice if twice else "",
+            "; " + "; ".join(b[:160] for b in bad[:2]) if bad else ""))]
+    except Exception as exc:   # never raises: a reader that fails is MISSED
+        return [(name, MISSED, "the answer could not be read: %s" % exc)]
 
 
 def read_watch_events(report, workload, platform):
@@ -996,6 +1042,7 @@ def read_watch_events(report, workload, platform):
         lost = next((x.strip()[len("lost: "):] for x in lines if x.strip().startswith("lost: ")), None)
         restarts = [x.strip() for x in lines if x.strip().startswith(("started again", "and started again"))]
         holes = [x.strip() for x in lines if x.strip().startswith("hole, ")]
+        beyond = number(r"past the reader's bounds: (\d+)", body)
         missing = []
         if asked is None or answered is None:
             missing.append("no count of the rounds asked and answered")
@@ -1005,6 +1052,8 @@ def read_watch_events(report, workload, platform):
             missing.append("the helper was started again: %s" % "; ".join(restarts))
         if lost != "none":
             missing.append("lost: %s" % (lost if lost is not None else "not said"))
+        if beyond != 0:   # BX-5: a record past a bound of the reader is not counted, so the floor is not one
+            missing.append("past the reader's bounds: %s" % (beyond if beyond is not None else "not said"))
         if not children:
             missing.append("the stand-in said it started no child: nothing to hold the count against")
         if began is None:
@@ -1015,8 +1064,89 @@ def read_watch_events(report, workload, platform):
         if missing:
             return [(name, MISSED, "missing: %s%s" % ("; ".join(missing), "; " + "; ".join(holes) if holes else ""))]
         return [(name, MET, "%d of %d round(s) answered; at least the stand-in's %d child(ren) began (%d process(es)"
-                 " of the machine: a floor, not the stand-in's alone); no helper started again; lost: none%s" % (
-                     answered, asked, children, began, "; " + "; ".join(holes) if holes else ""))]
+                 " of the machine: a floor, not the stand-in's alone); no helper started again; lost: none; past the"
+                 " reader's bounds: 0%s" % (answered, asked, children, began, "; " + "; ".join(holes) if holes else ""))]
+    except Exception as exc:   # never raises
+        return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
+
+
+SHORT_TOOL_NAME = ("X36 the stand-in's wget, a child that lives under a second, is a NET-TOOL finding of its tree that"
+                   " names wget")
+
+
+SEEN = ("sample", "events", "both")   # ADR-0007 CA-2: a HostChild line's command_sources, where each child was seen
+BOTH_WORDS = "it lived to a sample: the reader and the sample both held it"
+
+
+def _tool_lines(sources, pid, tool):
+    """CA-3: where the HostChild lines of the tree of `pid` in the watch's source files saw `tool`: the entry of
+    `tool` in each line's command_sources (in the order of command_programs), or None for a line that carries no
+    such list. A line that is not JSON is passed over."""
+    out = []
+    for name, text in sources or ():
+        for raw in str(text or "").splitlines():
+            try:
+                line = json.loads(raw)
+            except ValueError:
+                continue
+            meta = line.get("input_meta") if isinstance(line, dict) else None
+            if not (isinstance(meta, dict) and line.get("tool") == "HostChild" and meta.get("pid") == pid):
+                continue
+            programs, seen = meta.get("command_programs") or [], meta.get("command_sources")
+            if not isinstance(programs, list) or tool not in programs:
+                continue
+            ok = isinstance(seen, list) and len(seen) == len(programs)
+            out.append(seen[programs.index(tool)] if ok and seen[programs.index(tool)] in SEEN else None)
+    return out
+
+
+def read_short_tool(report, workload, platform, sources=()):
+    """X36 (ADR-0007 BY-7, BZ-10, CA-3): MET where a NET-TOOL line of the stand-in's tree (its pid, from the
+    workload) names wget and a HostChild line of that tree's source says the wget was seen by the process events
+    alone (its entry of command_sources: "events"); n/a where it says both ("it lived to a sample": the rig's
+    timing); MISSED where it says the sample alone, where no finding names wget, where no such line says where
+    the wget was seen, or where no sources were given; n/a off Linux, where wget is not installed, where the
+    stand-in did not run it, or where the helper was refused (its PROCESS EVENTS section says a refusal). It never
+    raises: a report that cannot be read is MISSED."""
+    name = SHORT_TOOL_NAME
+    try:
+        if not str(platform or "").startswith("linux"):
+            return [(name, SKIP, "not run: not Linux (%s)" % (platform or "no platform said"))]
+        work = str(workload or "")
+        if re.search(r"(?m)^WORKLOAD \S+ wget not installed\s*$", work):
+            return [(name, SKIP, "wget is not installed on this machine: the stand-in did not run it")]
+        ran = re.search(r"(?m)^WORKLOAD \S+ end wget rc=(\S+)\s*$", work)
+        if not re.search(r"(?m)^WORKLOAD \S+ start wget\s*$", work):
+            return [(name, SKIP, "the stand-in did not run wget")]
+        full = str(report or "").splitlines()
+        at = next((i for i, x in enumerate(full) if x.startswith("Raqib watch --host")), None)
+        lines = full[at:] if at is not None else []
+        events = section(lines, WATCH_EVENTS_HEAD)
+        refused = next((x.strip()[len("refused: "):] for x in events if x.strip().startswith("refused: ")), None)
+        if refused is not None:
+            return [(name, SKIP, "the helper's reader was refused: %s" % refused)]
+        pid = number(r"WORKLOAD \S+ pid (\d+)", work)
+        listed = section(lines, "SOURCE FINDINGS:")
+        hits = [f for f in listed if pid is not None and re.search(r"NET-TOOL on \S+ pid %d\b" % pid, f)
+                and re.search(r"\bwget\b", f)]
+        rc = ran.group(1) if ran else "not said"
+        if not hits:
+            return [(name, MISSED, "the stand-in ran wget (rc=%s) and no NET-TOOL line on pid %s names it" % (
+                rc, pid))]
+        seen = _tool_lines(sources, pid, "wget")
+        if "events" in seen:
+            return [(name, MET, "%d NET-TOOL line(s) on pid %s name wget (its rc=%s), and its HostChild line says"
+                     " the process events alone saw it (command_sources: events): %s" % (
+                         len(hits), pid, rc, hits[0].strip()[:110]))]
+        if "both" in seen:
+            return [(name, SKIP, "%s (command_sources: both; rc=%s): the reader's road was not shown alone" % (
+                BOTH_WORDS, rc))]
+        if "sample" in seen:
+            return [(name, MISSED, "the sample alone saw the wget on pid %s (command_sources: sample): the reader"
+                     " gave nothing for it (rc=%s)" % (pid, rc))]
+        return [(name, MISSED, "%d NET-TOOL line(s) on pid %s name wget, but no HostChild line of its tree's source"
+                 " says where the wget was seen%s: whose word it is cannot be told" % (
+                     len(hits), pid, "" if sources else " (no sources given)"))]
     except Exception as exc:   # never raises
         return [(name, MISSED, "its report cannot be read (%s)" % type(exc).__name__)]
 
@@ -1042,6 +1172,7 @@ def main(argv=None):
     p.add_argument("--service")
     p.add_argument("--procevents")
     p.add_argument("--autostart")
+    p.add_argument("--events-check")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -1060,6 +1191,11 @@ def main(argv=None):
         events = text(a.events) if os.path.isfile(a.events) else ""
     rows = read(text(a.report), text(a.workload), sources, a.exit_code, a.platform, a.sysmon, events)
     rows += read_watch_events(text(a.report), text(a.workload), a.platform)   # X35 (ADR-0007 BU-5)
+    rows += read_short_tool(text(a.report), text(a.workload), a.platform, sources)   # X36 (BY-7, BZ-10)
+    if a.events_check:   # X38 (ADR-0016 H-4): given and missing is the check's silence, MISSED
+        rows += read_chain(text(a.events_check) if os.path.isfile(a.events_check) else "", text(a.report))
+    else:
+        rows += read_chain(None, text(a.report))
     if a.forward:   # X19-X22 (ADR-0011 J-14): given and missing is the forwarder's silence, MISSED
         try:
             facts = json.loads(text(a.forward))

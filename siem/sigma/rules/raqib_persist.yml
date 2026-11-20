@@ -1,0 +1,19 @@
+title: Raqib - a finding of persistence
+id: 6f3d2a91-4c1e-4b8a-9d27-1e5a0c7b3f43
+status: experimental
+description: 'A finding of a rule of class PERSIST (an autostart place written by a watched tree).'
+author: Raqib
+logsource:
+  product: raqib
+detection:
+  selection:
+    kind:
+      - finding
+      - source-finding
+    rule.class: PERSIST
+  condition: selection
+falsepositives:
+  - 'The rule''s own false-positive budget (rule.fp_budget)'
+level: high
+tags:
+  - attack.t1547.001

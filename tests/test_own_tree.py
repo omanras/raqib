@@ -85,12 +85,7 @@ OTHER_STARTS = {"system", "popen", "startfile", "posix_spawn", "posix_spawnp", "
                 "spawnle", "spawnlp", "spawnlpe", "fork", "forkpty", "create_subprocess_exec",
                 "create_subprocess_shell"}
 # The short list: a start that is not recorded, each with its reason.
-NOT_RECORDED = {
-    ("raqib/discover.py", "run_ss"):
-        "ss: subprocess.run gives no pid, and tests/test_discover.py's B-1 guard holds discover.py to this one"
-        " subprocess.run and no Popen (tests replace discover.subprocess.run). ss runs to its end inside the call, in"
-        " the thread that takes the sample; one still running under the reader's pid in a sample is not the watch's"
-        " (BH-3) and is named (the builder's question Q1 of this task)",
+NOT_RECORDED = {   # M14.1c (ADR-0007 BY-6): discover's run_ss is recorded now (own.started), so it left this list
     ("raqib/hooks/os_sysmon.py", "read_live"):
         "the `raqib os-sysmon` command's one read (raqib/cli.py), a command of its own that takes no process"
         " sample; subprocess.run gives no pid. The watch's channel reads through read_live_bounded, recorded",
@@ -151,7 +146,8 @@ def test_e1_every_program_raqib_starts_is_recorded_or_in_the_short_list_with_its
             assert _starts(path) == [], rel
     assert set(unrecorded) == set(NOT_RECORDED), unrecorded      # the list is whole, and none of it is stale
     assert all(reason for reason in NOT_RECORDED.values())
-    assert {("raqib/notify.py", "run_program"), ("raqib/hooks/os_sysmon.py", "read_live_bounded")} <= recorded
+    assert {("raqib/notify.py", "run_program"), ("raqib/hooks/os_sysmon.py", "read_live_bounded"),
+            ("raqib/discover.py", "run_ss")} <= recorded   # M14.1c (BY-6): the socket tool the round runs
     # raqib/own.py: the standard library only, and no network
     tree = ast.parse((ROOT / "raqib" / "own.py").read_text(encoding="utf-8"))
     imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}

@@ -14,6 +14,8 @@
 # The rules of behaviour (ADR-0014, ADR-0012 Amendment A): on Windows the stand-in leaves a file in its Startup
 # folder, reaches port 22 of the machine's own address and sets a value under its Run key, each harmless and each
 # undone; X32 to X34 say whether each was a finding of its tree.
+# The chain (ADR-0016 H-4, M13.1): after the watch, `raqib events` runs over its events file and its answer is kept;
+# X38 says whether the line of this watch's run says its chain is whole and no line names a break.
 name: rig
 
 on:
@@ -60,6 +62,16 @@ jobs:
           "code=$($w.ExitCode)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "=== the watch's report"; Get-Content $out
           "=== the watch's stderr"; Get-Content $err
+      - name: check the chain of the watch's events file with raqib events, its answer kept (X38)
+        if: always()
+        shell: pwsh
+        run: |
+          raqib events $HOME\.raqib\host\events.jsonl > $env:RUNNER_TEMP\events-check.out 2> $env:RUNNER_TEMP\events-check.err
+          "=== raqib events (exit $LASTEXITCODE)"; Get-Content $env:RUNNER_TEMP\events-check.out
+          "=== its error stream"; Get-Content $env:RUNNER_TEMP\events-check.err -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force rig-out | Out-Null
+          Copy-Item $env:RUNNER_TEMP\events-check.err rig-out -ErrorAction SilentlyContinue
+          exit 0
       - name: forward the watch's events to stand-in collectors on loopback, HTTP and syslog (X19 to X25)
         if: always()
         shell: pwsh
@@ -79,7 +91,7 @@ jobs:
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --events-check $env:RUNNER_TEMP\events-check.out --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -89,6 +101,7 @@ jobs:
           Copy-Item $HOME\.raqib\host\sources rig-out\sources -Recurse -ErrorAction SilentlyContinue
           Copy-Item $HOME\.raqib\host\events.jsonl rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\forward.json, $env:RUNNER_TEMP\autostart.json rig-out -ErrorAction SilentlyContinue
+          Copy-Item $env:RUNNER_TEMP\events-check.out rig-out -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -119,6 +132,11 @@ jobs:
           echo "code=$code" >> "$GITHUB_ENV"
           echo "=== the watch's report"; cat "$RUNNER_TEMP/watch.out"
           echo "=== the watch's stderr"; cat "$RUNNER_TEMP/watch.err"
+      - name: check the chain of the watch's events file with raqib events, its answer kept (X38)
+        if: always()
+        run: |
+          code=0; raqib events "$HOME/.raqib/host/events.jsonl" > "$RUNNER_TEMP/events-check.out" 2>&1 || code=$?
+          echo "=== raqib events (exit $code)"; cat "$RUNNER_TEMP/events-check.out"
       - name: forward the watch's events to stand-in collectors on loopback, HTTP and syslog (X19 to X25)
         if: always()
         run: python tools/rig/forward_run.py --events "$HOME/.raqib/host/events.jsonl" --out "$RUNNER_TEMP/forward.json"
@@ -136,7 +154,7 @@ jobs:
         run: python tools/rig/autostart_run.py --out "$RUNNER_TEMP/autostart.json" || true
       - name: read the report against what the stand-in did
         if: always()
-        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --autostart "$RUNNER_TEMP/autostart.json" --summary "$GITHUB_STEP_SUMMARY"
+        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --autostart "$RUNNER_TEMP/autostart.json" --events-check "$RUNNER_TEMP/events-check.out" --summary "$GITHUB_STEP_SUMMARY"
       - name: gather what the watch wrote
         if: always()
         run: |
@@ -145,9 +163,55 @@ jobs:
           cp -r "$HOME/.raqib/host/sources" rig-out/sources 2>/dev/null || true
           cp "$HOME/.raqib/host/events.jsonl" rig-out/ 2>/dev/null || true
           cp "$RUNNER_TEMP/forward.json" "$RUNNER_TEMP/service.json" "$RUNNER_TEMP/procevents.json" "$RUNNER_TEMP/autostart.json" rig-out/ 2>/dev/null || true
+          cp "$RUNNER_TEMP/events-check.out" rig-out/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: rig-linux
           path: rig-out/
           if-no-files-found: ignore
+
+  siem:
+    # ADR-0017 S-2 (M16.1 E6): the ready content of siem/, proved by the engines themselves. Each engine runs in a
+    # container published on this machine's own loopback port and nowhere else; tools/rig/siem_run.py installs
+    # the content, puts the examples of docs/specs/EVENT.md and a short host watch's own events file through it,
+    # and prints X39 to X42, each MET or MISSED with its numbers. A MISSED claim does not fail the job (ADR-0012);
+    # an engine that did not start, or a sigma-cli that could not be installed, is said as such, never as MET.
+    # Nothing is sent off the machine; what comes in is the engines' images and sigma-cli, for this job only.
+    # REDO (Amendment A, SA-10): the watch says heartbeats (a beat of 5 s); sigma-cli, pySigma and the two backends
+    # are pinned to the set pip resolves for Python 3.12 (the versions are printed in X42's row); the runner feeds
+    # made-up events and near misses, the made-up hosts of the silence measurement, the odd lines and a shipper's
+    # fields beside the examples and the watch's file.
+    name: rig siem (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [elasticsearch, opensearch]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the engine, on this machine's own port and nowhere else
+        run: |
+          if [ "${{ matrix.engine }}" = elasticsearch ]; then
+            docker run -d --name engine -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false -e ES_JAVA_OPTS="-Xms1g -Xmx1g" docker.elastic.co/elasticsearch/elasticsearch:8.15.3 || echo "the engine could not be started"
+          else
+            docker run -d --name engine -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true -e DISABLE_INSTALL_DEMO_CONFIG=true -e OPENSEARCH_JAVA_OPTS="-Xms1g -Xmx1g" opensearchproject/opensearch:2.17.1 || echo "the engine could not be started"
+          fi
+      - name: a short host watch's own events file
+        run: |
+          python -m pip install --disable-pip-version-check -q .
+          raqib watch --host --rounds 4 --every 5 --beat 5 --no-open > "$RUNNER_TEMP/watch.out" 2>&1 || echo "the watch's exit: $?"
+          ls -la "$HOME/.raqib/host/" || true
+      - name: sigma-cli, for this job only (never a dependency of raqib)
+        run: python -m pip install --disable-pip-version-check -q sigma-cli==3.1.0 pySigma==1.5.1 pysigma-backend-elasticsearch==2.1.1 pysigma-backend-opensearch==2.0.3 || echo "sigma-cli could not be installed"
+      - name: the content through the engine (X39 to X42)
+        if: always()
+        run: |
+          python tools/rig/siem_run.py docs/specs/EVENT.md "$HOME/.raqib/host/events.jsonl" --summary "$GITHUB_STEP_SUMMARY" || echo "the runner's exit: $?"
+          echo "=== the engine's last words"; docker logs --tail 30 engine 2>&1 || true

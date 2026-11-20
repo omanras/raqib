@@ -5,6 +5,154 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.7.0 - 2026-11-21
+
+What is new:
+- The read of Windows' autostart places is made fit for a watch (ADR-0014 Amendments I to L). `python -m
+  raqib.autostart` now keeps what every place, and every key inside it, last held, and says each change by its
+  kind: an entry added, changed or removed; a task rescheduled (its triggers moved, its actions the same); a
+  user's hive loaded or unloaded, as one change and not its entries; a Startup file that became a link. It
+  still stands alone: the watch does not read it yet, and no rule judges a change (the next task).
+- What it cannot say it says. A place the read's deadline cut, a key refused, a key or folder of more than a
+  thousand entries, a file held open by its maker: each is said as not read, at each read, and nothing in it is
+  said added or removed for having been out of reach. A part read for the first time late is taken as it is and
+  said once as that, never as hundreds of entries planted.
+- It does not get in the way: a Startup file is opened with every sharing and never through a link, and each
+  read begins one place further than the last, so that one slow key cannot keep the others unread.
+- A program's name is said `would run` where the text names one program however it is read, `may run` where it
+  does not. Every hash is salted anew by each process, so that two runs cannot be set side by side.
+- Measured on GitHub's Windows machines: a file held open with no sharing is said as added by the read made
+  while it was held and read after it was let go; a real symbolic link is read as a link; a file the module
+  holds is renamed and deleted by another call; of 687 services' texts 685 are `would run` (before the ruling
+  that measured it, 444 of 689); the stand-in's Run value, Startup file and service each said added and later
+  removed in 42 reads, the longest 0.125 s (X37 on the rig).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+
+Not measured:
+- No read on a real machine met the deadline or a bound (the longest took 0.219 s): the cut, the turn of the
+  places and of the users, the bound of a thousand and a base taken late have run on made-up registries only.
+- A real desktop: how often Windows itself changes a service or a task (one change of a service that nobody of
+  the rig made was seen once), and so what a rule on these changes would cost.
+- An open by another process that asks for no sharing while the read holds a file; a file swapped for a link
+  between the listing and the open; a reparse point that is not a symbolic link; a hive loading at a logon.
+- Whether a plain user can deny its own Run key to a reader of another identity while Windows still runs it
+  (the service's case).
+
+## 0.6.0 - 2026-11-21
+
+What is new:
+- Ready content for a SOC's search engine, under `siem/` (ADR-0017 and its Amendments A to C): for Elasticsearch
+  and for OpenSearch an ingest pipeline and an index template that turn each line of the events file into one
+  document - an event with the fields EVENT.md's Mapping names, or an error document that keeps the whole line
+  and says why it is no event; none is dropped. Seven searches: every alarm, one rule's findings, the holes, the
+  watches that did not end clean, the lines kept as error documents, the hosts that went silent, and the runs
+  that stopped with no end. Nine Sigma rules with a pipeline of names, and a table and an ATT&CK layer of every
+  rule the report lists. `siem/README.md` says how to install each and what the content trusts.
+- Silence is judged by the engine's own clock against a deadline every line gives - its arrival and two of its
+  own heartbeat's interval, an interval counted as a day at most - so no time is given by the person who asks,
+  and a host's clock cannot hide it.
+- Measured on GitHub's Linux machine against Elasticsearch 8.15.3 and OpenSearch 2.17.1 (the rig's claims X39 to
+  X42, each run): 111 lines sent, none refused - the real watch's own file, every example of the spec, made-up
+  events of each rule's class with a near miss for each, 23 malformed lines (each an error document with the
+  reason the page names, and the line after it kept), and a shipper's own fields kept or moved aside; every
+  search equal to a count made apart from the engine, the two searches of silence at four moments; each Sigma
+  rule, converted by pinned tools, matching its own event and not its near miss.
+- Nothing of the watch itself changes in this number: the same events, the same rules.
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- The content is not installed with Raqib: it is files of the checkout, installed on the engine as
+  siem/README.md says (the pipeline and the template before the first line reaches the index).
+
+Not measured:
+- Splunk, Microsoft Sentinel and Wazuh: no content for them yet (the next tasks), and nothing of this content
+  was run on them. The Sigma rules were converted and run for Elasticsearch and OpenSearch only.
+- A real shipper tailing the file on a host (Filebeat, Fluent Bit, Logstash): the rig sends the lines itself.
+  A shipper's field of another shape than the ones the page names may make an engine refuse a line.
+- Volume, more than one node or shard, retention, an engine with its security on, and either search of silence
+  run on a schedule with an alert: each engine has its own way, and none was set up here.
+- The two days a forged heartbeat can keep a host off the search for silence, and a bound of 10000 hosts or
+  runs being met: ruled and said, not run.
+- The ATT&CK layer was never loaded into a Navigator.
+
+## 0.5.0 - 2026-11-21
+
+What is new:
+- On Linux, a program that starts and ends between two samples is judged (ADR-0007 Amendments BY to CB). The
+  watch's helper hears the kernel's process events; each round takes the processes it heard, and one that began
+  under a tree that talks at a sample is that tree's child: it gets its line, and NET-TOOL and DESTRUCT-CMD
+  judge it by the name of its program's file. Measured on GitHub's Linux machine: a `wget` that lived under a
+  second is a NET-TOOL finding of its tree. Until now such a program was not seen at all on Linux.
+- The report's PROCESS EVENTS section says what was given to the rounds, what was joined to a tree, what the
+  watch left out as its own, and every way the reader was not whole; a reader that was late, ended, lost
+  events or held back a rest after it had answered is a hole of the result, so the result says INCOMPLETE
+  unless a finding makes it an alarm.
+- A line of a tree's children says where each was seen (`command_sources`: the sample, the process events, or
+  both), in a round that heard the reader.
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+
+Not measured:
+- Three things a child can do and not be judged, said in the report and the guide, measured for the next step:
+  it changes its program after its line was written (a shell that runs its last command in its own place, in
+  a later round); its parent was given in an earlier round and has ended; its program's file is not called as
+  the tool is (on Ubuntu 24.04 `nc` is the file `nc.openbsd`, `telnet` is `inetutils-telnet`, `ftp` is
+  `tnftp`), so a rule's list of names can miss it.
+- A tree that lives whole between two samples, and what a short child talks to: not seen yet (the next tasks).
+- A desktop's ordinary work for an hour: how many findings the short children add (HOST-RHYTHM counts them as
+  acts now).
+
+## 0.4.0 - 2026-11-21
+
+What is new:
+- A chain in the events file (ADR-0016 and its Amendments A and B). Every event a host watch writes names the
+  line its run wrote before it by that line's sha256 (`prev`; the run's first line says `first`). `raqib events
+  FILE` says of each run whether its chain is whole, where it breaks (a line removed, changed, added or moved),
+  which lines stand beside it, whether the run begins before the file, and whether a chain was taken out of a
+  run whose version always writes one. A line of an older Raqib holds no `prev`: its run is said as not
+  chained, which is not a problem.
+- `raqib events FILE --against OTHER`: the lines a collector holds, side by side with the host's file, by host
+  and id: which are in the file byte for byte, which are not there, which are there with other bytes. This is
+  how a line changed on the host after the collector took it is seen; it needs the collector's lines as they
+  were sent.
+- No line of the events file can end `raqib events` or the forwarder: a line nested too deep, or with values
+  that cannot be checked, is named and passed over.
+- The events' schema keeps its name (`raqib-event/1`): `prev` is an addition, and a reader of the file must
+  allow a key it does not know (the spec says so now).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- A run that began under an older Raqib and is still in the file stays as it is; the chain begins with the
+  first watch started after the update.
+
+Not measured:
+- What the chain does not prove is not a measurement, and is said here all the same: the chain holds no
+  secret. Whoever can write the file can cut its end, write a tail again with its hashes,
+  or take a chain out and write an older version on its lines: the file alone then looks whole. The run's last
+  line is named by no line. A collector that kept its lines sees a change of what it holds, by `--against`.
+- A real collector's export brought back as lines (Splunk, a syslog server, the journal): whether its bytes are
+  the bytes that were sent.
+- `raqib events` on a very large file: it holds the file in memory.
+
 ## 0.3.0 - 2026-11-20
 
 What is new:

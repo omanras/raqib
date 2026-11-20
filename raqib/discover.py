@@ -101,10 +101,10 @@ from raqib.rules import yamlite
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CATALOG = os.path.join(ROOT, "raqib", "discover", "endpoints.yaml")
-SOURCES = ("proc", "proc-net", "ss", "win-process", "win-tcp", "win-dns", "sysmon", "footprints")
+SOURCES = ("proc", "proc-net", "ss", "win-process", "win-tcp", "win-dns", "sysmon", "footprints", "procevents")
 FILE_NAMES = {"proc": "proc.txt", "proc-net": "proc-net.txt", "ss": "ss.txt",
               "win-process": "win-process.csv", "win-tcp": "win-tcp.csv", "win-dns": "win-dns.csv",
-              "sysmon": "sysmon.xml", "footprints": "footprints.txt"}
+              "sysmon": "sysmon.xml", "footprints": "footprints.txt", "procevents": "procevents.txt"}
 PROCESS_SOURCES = ("proc", "win-process", "sysmon")
 CONNECTION_SOURCES = ("proc-net", "ss", "win-tcp", "sysmon")
 # E1 (M5.0b): the docs/GUIDE.md loop writes one file per kind and sample k = 1..N.
@@ -1173,9 +1173,74 @@ def parse_footprints(text, src="footprints"):
     return records, []
 
 
+READER = "procevents"   # ADR-0007 BY-1: the kind of the text of Linux's process events the watch gives a round
+READER_KEYS = ("pid", "ppid", "exe", "ticks", "began", "ended", "code")   # a line of it holds these and nothing else
+
+
+def _count_value(value, low=0):
+    """An int of a reader's line (never a bool), at least `low`, small enough to be a count (BX-2)."""
+    return isinstance(value, int) and not isinstance(value, bool) and low <= value < 1 << 63
+
+
+def reader_time(value):
+    """ADR-0007 BZ-4: a time of the reader's line as an aware UTC datetime, or None where it is no text, cannot be
+    read, or is no real instant (one whose reading raises). Never raises."""
+    try:
+        return _ts(value) if isinstance(value, str) else None
+    except (ValueError, OverflowError, TypeError):
+        return None
+
+
+def parse_procevents(text, src=READER):
+    """ADR-0007 BY-1 (M14.1c): the processes the watch's helper of Linux's
+    process events gave since the round before (raqib/host.py writes the
+    text): one JSON line per process, {pid, ppid, exe, ticks, began, ended,
+    code} and nothing else. Each is a process record as parse_proc makes
+    one of a sampled process: its pid, the parent the kernel named, its
+    image by image_name of the program's path the reader read (none where
+    it was not read), that path as its exe, no argv (the reader reads
+    none), the start key "boot+<ticks>" where the ticks were read (the key
+    the sample makes of a start, so a sampled process and the reader's word
+    of it are one process) and the time its fork was heard. It is marked as
+    the reader's own (`created`, `began`), with its end and code where they
+    were heard (a hint: nothing in a round is ended by it). A line that is
+    not such a line is a problem of the round, never an exception."""
+    records, problems = [], []
+    for number, raw in _numbered(text):
+        if not raw.strip():
+            continue
+        try:
+            obj = json.loads(raw)
+        except (ValueError, RecursionError):
+            problems.append(_problem(src, number, "not a JSON line"))
+            continue
+        if not isinstance(obj, dict) or set(obj) != set(READER_KEYS):
+            problems.append(_problem(src, number, "a line of the process events holds exactly %s"
+                                     % ", ".join(READER_KEYS)))
+            continue
+        pid, ppid, exe, ticks, code = (obj[k] for k in ("pid", "ppid", "exe", "ticks", "code"))
+        began, ended = reader_time(obj["began"]), obj["ended"]
+        if not (_count_value(pid, 1) and pid < REUSE and (ppid is None or (_count_value(ppid) and ppid < REUSE))
+                and (exe is None or isinstance(exe, str))
+                and (ticks is None or _count_value(ticks)) and began is not None
+                and (ended is None or reader_time(ended) is not None) and (code is None or (isinstance(code, int) and not isinstance(code, bool)
+                                         and -(1 << 31) < code < 1 << 31))):
+            problems.append(_problem(src, number, "a process of the process events needs an int pid and an int or"
+                                                  " null ppid (each below the bound of a pid), ticks and code, a text"
+                                                  " or null exe, a readable time or null ended, and the readable time"
+                                                  " its fork was heard"))
+            continue
+        exe = exe or None
+        records.append(_rec("proc", src, number, raw, pid=pid, ppid=ppid, argv=[], image=image_name(exe), exe=exe,
+                            exe_from="record" if exe else None, cwd=None, env_keys=None, sockets=None, ts=began,
+                            unread=[], created=True, began=obj["began"], ended=ended, code=code,
+                            **({"started": "boot+%d" % ticks} if ticks is not None else {})))
+    return records, problems
+
+
 PARSERS = {"proc": parse_proc, "proc-net": parse_proc_net, "ss": parse_ss,
            "win-process": parse_win_process, "win-tcp": parse_win_tcp, "win-dns": parse_win_dns,
-           "sysmon": parse_sysmon, "footprints": parse_footprints}
+           "sysmon": parse_sysmon, "footprints": parse_footprints, READER: parse_procevents}
 
 
 # --- live readers (read-only; Linux /proc and /proc/net; homes anywhere) ---------------------
@@ -1346,16 +1411,27 @@ def run_ss(path, args=SS_ARGS, at=None):
     env = {"LC_ALL": "C"}
     if os.name == "nt" and os.environ.get("SYSTEMROOT"):
         env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
-    try:
-        proc = subprocess.run([path] + list(args), capture_output=True, text=True, timeout=30,
-                              stdin=subprocess.DEVNULL, env=env)
+    try:   # ADR-0007 BY-6: in the watch's record when it starts (raqib/own.py), so the reader's word of it is the
+        # watch's own and no stranger's
+        proc = own.started(subprocess.Popen([path] + list(args), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE, text=True, env=env))
     except FileNotFoundError:
         return None, "%s not found" % path
     except (OSError, subprocess.SubprocessError) as exc:
         return None, "%s failed: %s" % (path, exc)
+    with proc:
+        try:
+            out, err = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired as exc:   # as subprocess.run: the ss it started is ended, then waited for
+            proc.kill()
+            proc.communicate()
+            return None, "%s failed: %s" % (path, exc)
+        except Exception as exc:   # ADR-0007 BZ-12: any other error of its reading ends it too
+            proc.kill()
+            return None, "%s failed: %s" % (path, exc)
     if proc.returncode != 0:
-        return None, "%s exited %d: %s" % (path, proc.returncode, bounded(proc.stderr.strip(), 160))
-    return "# at %s (%s)\n%s" % (at, " ".join([path] + list(args)), proc.stdout), None
+        return None, "%s exited %d: %s" % (path, proc.returncode, bounded((err or "").strip(), 160))
+    return "# at %s (%s)\n%s" % (at, " ".join([path] + list(args)), out), None
 
 
 def parse_ss_bytes(text, src="ss-info"):
@@ -2365,6 +2441,73 @@ def _guid_instances(records):
     return out, holes
 
 
+def _reader_src(r):
+    """Whether a record is of the reader of Linux's process events (BY-1)."""
+    return (split_name(r.get("src")) or (None,))[0] == READER
+
+
+def _reader_instances(records):
+    """ADR-0007 BY-1, BY-2 (M14.1c): (records, keyed apart, joined by the
+    time of their fork). A process the reader gave is one process with the
+    sampled process of its pid where their start ticks are the same (the
+    sample's key "boot+N"), or where the sample read no start for it (as
+    the merge by pid was); a record whose ticks were not read joins it only
+    where the sample read no start for it (BZ-5: where the sample read one,
+    the two are kept apart - a line more, never a program named on another
+    process). Otherwise it is another process, keyed apart
+    (pid + REUSE * n, as _instances keys a reused pid), and so is a second
+    record of the reader with the same pid and another start. A child the
+    reader gave is linked to the instance of its parent pid that was alive
+    when its fork was heard, where the reader gave that instance; else to
+    the pid's present holder, and its link is dated as any (BE-1). Records
+    of no reader are returned as they were."""
+    if not any(r["kind"] == "proc" and _reader_src(r) for r in records):
+        return records, 0, 0
+    sampled = {}   # pid -> {"keys": the sample's boot keys, "read": whether the sample read any start for it}
+    for r in records:
+        if r["kind"] == "proc" and not r.get("derived") and not _reader_src(r) and r.get("pid") is not None:
+            s = sampled.setdefault(r["pid"], {"keys": set(), "read": False})
+            key = _start_key(r.get("started"))
+            if key is not None and key[0] == "boot":
+                s["keys"].add(key)
+            s["read"] = s["read"] or key is not None
+    insts = {}     # pid -> [(keyed pid, its identity, began, ended)] of the reader's records
+    keyed, apart, by_fork = {}, 0, 0
+    for i, r in enumerate(records):
+        if r["kind"] != "proc" or not _reader_src(r):
+            continue
+        pid, key, began = r["pid"], _start_key(r.get("started")), r.get("ts")
+        ident = key if key is not None else ("began", began)
+        by_fork += key is None
+        s = sampled.get(pid)
+        same = next((k for k, x, _, _ in insts.get(pid, ()) if x == ident), None)
+        if same is None and s is not None:
+            one = (key is not None and key in s["keys"]) or not s["read"]   # BZ-5
+            same = pid if one else None
+        if same is None:
+            taken = {k for k, _, _, _ in insts.get(pid, ())} | ({pid} if s is not None else set())
+            n = 0
+            while pid + REUSE * n in taken:
+                n += 1
+            same = pid + REUSE * n
+            apart += n > 0
+        insts.setdefault(pid, []).append((same, ident, began, _ts(r.get("ended"))))
+        keyed[i] = same
+    out = []
+    for i, r in enumerate(records):
+        if i not in keyed:
+            out.append(r)
+            continue
+        changed = {"pid": keyed[i]}
+        began = r.get("ts")
+        alive = [(b, k) for k, _, b, e in insts.get(r.get("ppid"), ()) if b is not None and began is not None
+                 and b <= began and (e is None or e >= began) and k != keyed[i]]
+        if alive:
+            changed["ppid"] = max(alive, key=lambda bk: bk[0])[1]
+        out.append(dict(r, **changed))
+    return out, apart, by_fork
+
+
 def _channel_fields(p):
     """M7.9 (API for raqib/host.py): what the round's channel says of a
     tree's root: guid (its ProcessGuid, or None), brief (no record of it
@@ -2448,8 +2591,8 @@ def _without_channel(records, parsed, catalog, candidates, act_roots):
     naming the tree of the channel's round that holds the linking tree's
     root (that root's own tree, else the larger tree it is part of), in
     the field of the class it has without the channel."""
-    records = [r for r in records if (split_name(r["src"]) or (None,))[0] != "sysmon"]
-    parsed = [s for s in parsed if s["kind"] != "sysmon"]
+    records = [r for r in records if (split_name(r["src"]) or (None,))[0] not in ("sysmon", READER)]   # BY-2
+    parsed = [s for s in parsed if s["kind"] not in ("sysmon", READER)]
     records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts, _ = _acts_core(records, catalog)
     ids = {pid: "C%d" % i for i, pid in enumerate(sorted(acts), start=1)}
     cands = [{"pid": pid, "id": ids[pid], "tree": [pid] + [a["pid"] for a in acts[pid] if a["how"] == "process"],
@@ -2510,6 +2653,10 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
     if channel:
         records, guid_holes = _guid_instances(records)
         reuse_holes += guid_holes
+    # ADR-0007 BY-1, BY-2 (M14.1c): the reader's processes joined to the sampled ones by pid and start; a round with
+    # no reader's text is the round it was
+    records, reader_apart, reader_by_fork = _reader_instances(records)
+    reader = any(s["kind"] == READER and s["text_read"] for s in parsed)
     unjoined = records   # AB-6: the round's records before the anchor, for the round built without the channel
     records, procs, conns, talkers, snapshots, self_pids, self_tree, self_line, acts, watch = _acts_core(
         records, catalog, channel)
@@ -2609,7 +2756,7 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
                            [s["name"] for s in parsed if s["kind"] in CONNECTION_SOURCES and s["text_read"]
                             and holds(s, "conn")]) if judge else []
     bare = None
-    if channel:   # ADR-0007 AD-1: the footprints are those of the same round built WITHOUT the channel's records
+    if channel or reader:   # ADR-0007 AD-1 (BY-2: the reader's too): the footprints of the round built WITHOUT them
         bare = _without_channel(unjoined, parsed, catalog, candidates, act_roots)
         footprints, dark = bare["footprints"], bare["dark"]
     else:
@@ -2771,6 +2918,19 @@ def build(parsed, catalog, window=None, holes=(), live=False, processes=False, c
         # records (the sampled records keep their keys: _guid_instances moves Sysmon records only), else "channel"
         for t in candidates:
             t["candidate_by"] = "sample" if bare["roots"].get(t["pid"]) == "candidate" else "channel"
+    if reader and not channel:   # ADR-0007 BY-2 (AA-1, AD-1): as a tree of the channel's on Windows, by its class
+        for t in candidates + act_roots:   # in the round built WITHOUT the reader's records (no guid, no brief)
+            t["bare_class"] = bare["roots"].get(t["pid"])
+        for t in candidates:
+            t["candidate_by"] = "sample" if bare["roots"].get(t["pid"]) == "candidate" else "channel"
+    if reader:   # BY-4, E6: what the round took of the reader: given, joined to a tree, joined with no program read
+        from_reader = {pid for pid, p in procs.items() if any(_reader_src(r) for r in p["recs"])}
+        joined = {a["pid"] for t in candidates + act_roots for a in t.get("acts") or ()
+                  if a.get("how") == "process" and a.get("pid") in from_reader}
+        extra["from_reader"] = {
+            "given": sum(len(s["records"]) for s in parsed if s["kind"] == READER), "joined": len(joined),
+            "unread": sum(1 for pid in joined if not procs[pid]["image"]), "by_fork": reader_by_fork,
+            "apart": reader_apart}
     if processes:   # M7.8 (P-2): the round's process sample, for "quiet" (root alive, no talk) against "gone"
         extra["processes"] = _last_sample(records, procs)
     return _os_pids(dict(extra, **{
@@ -2946,6 +3106,12 @@ def _norm_path(path):
     return re.sub(r"\A/(?:/\?|\?\?)/", "", (path or "").strip().strip('"').replace("\\", "/").lower())
 
 
+def _sampled(p):
+    """ADR-0007 BZ-1, CA-1, CB-1: whether a process of the round has a record that is not the reader's (a sample held
+    it). What only the reader gave adds acts to an act-root the samples made; it never makes one."""
+    return any(not _reader_src(r) for r in p["recs"])
+
+
 def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     """E3, the act-root class (signature; the catalog's act_root block), as
     narrowed by G-1: a process P whose image path is under a user directory,
@@ -2992,7 +3158,12 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
             continue
         under = below(pid)
         if any(not shell(procs[d]) and outside(d, parent) for d in under):
-            chains.setdefault(parent["pid"], []).append((pid, under))
+            # ADR-0007 CB-1: a chain MAKES an act-root only where the samples alone make it - its shell and a
+            # command under it are processes a sample held; a chain the reader gave adds acts to an act-root, never
+            # makes one
+            made = _sampled(s) and any(not shell(procs[d]) and outside(d, parent) and _sampled(procs[d])
+                                       for d in under)
+            chains.setdefault(parent["pid"], []).append((pid, under, made))
     roots = []
     for pid in sorted(chains):
         p = procs[pid]
@@ -3001,8 +3172,12 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         if pid in talkers or any(i in never for i in p["images"]) or place is None or _helper(p) \
                 or up is None or not any(i in parents for i in up["images"]):
             continue
+        if not _sampled(p):   # ADR-0007 BZ-1: a root is a process a sample held
+            continue
+        if not any(made for _, _, made in chains[pid]):   # CB-1: no chain of it is the samples' own
+            continue
         acts, heads = [], []
-        for s, under in chains[pid]:
+        for s, under, _ in sorted(chains[pid], key=lambda c: (not c[2], c[0])):   # the samples' chains first
             commands = sorted({procs[d]["image"] or "?" for d in under if not shell(procs[d]) and outside(d, p)})
             heads.append({"pid": s, "image": procs[s]["image"], "below": len(under), "commands": commands,
                           "cites": _cites(procs[s]["recs"], 1)})

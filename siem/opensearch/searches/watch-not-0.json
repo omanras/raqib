@@ -1,0 +1,39 @@
+{
+  "finds": "Every watch that ended with a result other than 0 (its end's result.exit is not 0).",
+  "request": "POST raqib-events*/_search",
+  "body": {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "event.action": "watch"
+            }
+          },
+          {
+            "term": {
+              "raqib.state": "end"
+            }
+          },
+          {
+            "exists": {
+              "field": "raqib.result.exit"
+            }
+          }
+        ],
+        "must_not": [
+          {
+            "term": {
+              "raqib.result.exit": "0"
+            }
+          }
+        ]
+      }
+    },
+    "sort": [
+      {
+        "event.ingested": "desc"
+      }
+    ]
+  }
+}

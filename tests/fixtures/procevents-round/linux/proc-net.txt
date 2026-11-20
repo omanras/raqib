@@ -1,0 +1,4 @@
+# M14.1c fixture SYNTHETIC: the agent's one connection (inode 51001) to a documentation address, port 443
+# at 2026-11-20T10:00:00.000Z (/proc/net/tcp)
+  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 140200C0:C79C 786433C6:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 51001 1 0000000000000000 20 4 30 10 -1

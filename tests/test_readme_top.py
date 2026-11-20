@@ -114,8 +114,24 @@ NEW_ROWS = ["| `raqib app [PROJECT]` | open Raqib as a desktop window: the host 
             "| `raqib discover` | find AI agents on a host by what they do |",
             "| `raqib --version` | print raqib <version> and exit 0 |"]
 # ADR-0011 G-11 (the Table): a row of the guide's table only (the README names the command in "the rest")
-GUIDE_ROWS = ["| `raqib events FILE` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a"
-              " `raqib-event/1` event; exit 0, 1 or 2 |",
+GUIDE_ROWS = ["| `raqib events FILE [--against OTHER]` | check a watch's events file "
+              "(`~/.raqib/host/events.jsonl`): every line a `raqib-event/1` event, then one line per run, by its "
+              "host and run (ADR-0016): its chain whole (so many lines, and the lines said twice), not whole (and "
+              "under it, in the file's order, to a bound of 10 a run that is said: that it begins before this file, "
+              "each break - a line before it was removed, changed, added or moved - and each run of lines beside it "
+              "- not counted as written by the writer, or put there by another hand - with the line they follow and "
+              "the line that names it again), not chained (a run of a Raqib before this one: not a problem) or "
+              "taken out (no line holds `prev`, and its version always writes it); exit 0, 1 (a line that is not an "
+              "event, a chain not whole or taken out, or no event) or 2 (cannot be read). Each line names the line "
+              "its run wrote before it by its sha256 (`prev`), so a line taken out of the middle, changed, added or "
+              "moved is seen (but the run's last line: no line names it, so changed, or followed by a line added "
+              "after the run ended that names it, it is not seen from the file alone); the chain has no secret, and "
+              "an end cut off, or a tail written again with its hashes, is not seen from the file alone. `--against "
+              "OTHER`: OTHER is the lines a collector holds (its own export); each is looked for in FILE by host "
+              "and id, and those not in FILE and those with other bytes are said by their line numbers in both "
+              "(exit 1; 2 where OTHER cannot be read): this, not the file alone, shows a line changed or an end cut "
+              "after the collector took it. It needs the collector's lines byte for byte as they were sent (a line "
+              "end aside) |",
               # ADR-0011 J (M10.3) and L (its REDO): the forwarder, rows of the guide only (G-11)
               "| `raqib forward [FILE] --to URL --name NAME [--shape raqib\\|hec] [--token-file FILE] [--ca "
               "FILE] [--plain] [--facility N] [--framing octet\\|newline] [--once]` | send every whole line of "
@@ -352,31 +368,64 @@ VERSION_NUMBER = [
 GUIDE_NEW += VERSION_NUMBER
 # M14.1b and its REDO (ADR-0007 BU-3, BW-3, BW-6): the report's PROCESS EVENTS section on Linux, said in the
 # guide's Watch the host
-PROCESS_EVENTS = [
-    'On Linux the watch also counts what happens between two rounds (ADR-0007 Amendments BU and BW): at'
-     ' its first round it starts a helper, a second process of its own that runs the reader of the'
-     " kernel's process events ([docs/specs/PROC-EVENTS.md](docs/specs/PROC-EVENTS.md)), and after each"
-     " round's sample it asks the helper once what it heard, waiting at most 2 s and at most a quarter of"
-     ' the interval.',
-    "Its report then has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line:"
-     ' the rounds asked and answered, the processes that began, those of them that began and ended'
-     ' between two asks, the programs not read (reads at an exec that failed: a process can end before'
-     " its program is read), what was past the reader's bounds, and what the reader lost, in its own"
-     ' words, over every helper the watch had.',
-    "Nothing is judged from it yet: no rule reads it, no line of a tree's source is written from it, and"
-     ' the findings, the result and the exit code are what they would be without it.',
-    "No program's name or path is shown: only numbers.",
-    'Only where every ask was answered in its round, no helper was started again, nothing was lost,'
-     " nothing was past the reader's bounds and the last answer left nothing for a next one, the note"
-     ' that what lives between two rounds is not seen on Linux says instead that a process that begins'
-     ' and ends between two rounds is heard and counted, not judged; otherwise the old words stand with'
-     ' each reason beside them.',
-    'A refused, late or ended helper is a blind spot of its own kind (it does not change the result),'
-     ' said once while it lasts, and at most 10 such episodes are printed, then how many more.',
-    'A helper that ends, or is late three rounds running, is started again once, and the section says'
-     ' that nothing was heard between its end and the new start; a second end is final.',
+PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ): the guide's words on what the watch judges from the reader
+    'On Linux the watch also hears what happens between two rounds (ADR-0007 Amendments BU, BW and BY): '
+     'at its first round it starts a helper, a second process of its own that runs the reader of the '
+     "kernel's process events ([docs/specs/PROC-EVENTS.md](docs/specs/PROC-EVENTS.md)), and after each "
+     "round's sample it asks the helper once what it heard, waiting at most 2 s and at most a quarter of "
+     'the interval.',
+    'What the helper gave since the round before is given to the round beside its sample (M14.1c): a '
+     "process that began between two samples under a tree that talks at a sample is that tree's child, "
+     "with its HostChild line by the name of its program's file (a link's target, such as `nc.openbsd` or "
+     "`busybox`, not the name it was called by), through the gate a sampled child's name goes through, so "
+     'NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred whose file has that name; a process the '
+     'sample also holds (the same pid and the same start ticks) is one process.',
+    'A tree that is a candidate only by what the reader gave is listed `by the channel`, as on Windows; '
+     'the root of a tree, and of an act-root, is always a process a sample held.',
+    'Not judged: a tree that lives whole between two samples (a tree needs a talker at a sample, and a '
+     "connection that opens and closes between two samples is still unseen), a child's own connections, a "
+     'program a process changes to after its line was written and the programs it had before, and a child '
+     'whose parent was given in an earlier round and ended before the sample.',
+    'A program not read is in the round and counted; it gets no line.',
+    "What is judged from the helper is the helper's word: the watch does not check its lines.",
+    "Its report has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line: what is"
+     ' judged and what is not, the rounds asked and answered, the processes that began, those of them that'
+     ' began and ended between two asks, the programs not read (reads at an exec that failed: a process '
+     'can end before its program is read), how many processes were given to the rounds, joined to a tree '
+     "as its child and, of them, had no program read, how many of the watch's own processes were left out,"
+     " what was past the reader's bounds, and what the reader lost, in its own words, over every helper "
+     'the watch had.',
+    "No program's name or path is shown in that section: only numbers.",
+    'Only where every ask was answered in its round, no helper was started again, nothing was lost, '
+     "nothing was past the reader's bounds and the last answer left nothing for a next one, the note that "
+     'what lives between two rounds is not seen on Linux says instead what is now seen and what is not; '
+     'where the reader answered and was not whole, the note says what was heard and judged and why it was '
+     'not whole; where it never answered, the old words stand with each reason beside them.',
+    'A helper refused at its first start (a container, a right not given), or late or ended before its '
+     'first answer, is a blind spot of its own kind: it does not change the result, and the rounds are the'
+     " sample's alone.",
+    "After its first answer, a late answer, a line that is not the helper's, an end (and its one "
+     'restart), a loss of events, a bound passed or an answer that holds back a rest for a next one is a '
+     'hole of the result of its own kind (`procevents`): what was being judged has a gap, and the result '
+     'is INCOMPLETE unless a finding makes it an alarm.',
+    'Each is said once while it lasts, and at most 10 such episodes are printed, then how many more.',
+    'A helper that ends, or is late three rounds running, is started again once, and the section says '
+     'that nothing was heard between its end and the new start; a second end is final.',
 ]
 GUIDE_NEW += PROCESS_EVENTS
+# M16.1 (ADR-0017 E7): the short section at the end of the guide's More that points to siem/README.md
+SIEM_SECTION = [
+    "### Into a SOC's search engine",
+    "`siem/` holds what a SOC installs to read the events (`~/.raqib/host/events.jsonl`, or what `raqib forward`"
+    " sends) in Elasticsearch or OpenSearch: an ingest pipeline to the ECS fields of the spec's Mapping, a"
+    " template for each engine, the searches (an alarm, a rule's findings, a hole, a watch that did not end"
+    " with 0, the search for silence, the runs that stopped with no end and the lines kept as error documents),"
+    " Sigma rules over the events' own keys, and a table of every rule the report lists with its ATT&CK"
+    " techniques.",   # M16.1 REDO: R2, R5; REDO 2: R4 (not-events.json)
+    "How to install it, and what was measured and what was not:",
+    "[siem/README.md](siem/README.md).",
+]
+GUIDE_NEW += SIEM_SECTION
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")

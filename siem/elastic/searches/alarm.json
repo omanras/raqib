@@ -1,0 +1,22 @@
+{
+  "finds": "Every saying with alarm true of a finding, a source finding or a hole, each rev and each copy of a line sent twice (take a thing's latest rev, siem/README.md).",
+  "request": "POST raqib-events*/_search",
+  "body": {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "event.kind": "alert"
+            }
+          }
+        ]
+      }
+    },
+    "sort": [
+      {
+        "event.ingested": "desc"
+      }
+    ]
+  }
+}

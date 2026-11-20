@@ -223,26 +223,44 @@ reader's first check is made in, when that check finds none. Since M7.8 an os pr
 its image name in discover's form (`input_meta.image`: `curl.exe` -> `curl`), so NET-TOOL and
 DESTRUCT-CMD judge the programs Sysmon saw the tree start as they judge the host's children, Windows
 programs included (bitsadmin, plink, vssadmin, diskpart and the like); a cmdlet, a shell builtin, a
-renamed copy and every argument stay unseen. On Linux the watch also counts what happens between two
-rounds (ADR-0007 Amendments BU and BW): at its first round it starts a helper, a second process of
-its own that runs the reader of the kernel's process events
+renamed copy and every argument stay unseen. On Linux the watch also hears what happens between two
+rounds (ADR-0007 Amendments BU, BW and BY): at its first round it starts a helper, a second process
+of its own that runs the reader of the kernel's process events
 ([docs/specs/PROC-EVENTS.md](specs/PROC-EVENTS.md)), and after each round's sample it asks the
-helper once what it heard, waiting at most 2 s and at most a quarter of the interval. Its report
-then has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line: the rounds
-asked and answered, the processes that began, those of them that began and ended between two asks,
-the programs not read (reads at an exec that failed: a process can end before its program is read),
-what was past the reader's bounds, and what the reader lost, in its own words, over every helper the
-watch had. Nothing is judged from it yet: no rule reads it, no line of a tree's source is written
-from it, and the findings, the result and the exit code are what they would be without it. No
-program's name or path is shown: only numbers. Only where every ask was answered in its round, no
-helper was started again, nothing was lost, nothing was past the reader's bounds and the last answer
-left nothing for a next one, the note that what lives between two rounds is not seen on Linux says
-instead that a process that begins and ends between two rounds is heard and counted, not judged;
-otherwise the old words stand with each reason beside them. A refused, late or ended helper is a
-blind spot of its own kind (it does not change the result), said once while it lasts, and at most 10
-such episodes are printed, then how many more. A helper that ends, or is late three rounds running,
-is started again once, and the section says that nothing was heard between its end and the new
-start; a second end is final.
+helper once what it heard, waiting at most 2 s and at most a quarter of the interval. What the
+helper gave since the round before is given to the round beside its sample (M14.1c): a process that
+began between two samples under a tree that talks at a sample is that tree's child, with its
+HostChild line by the name of its program's file (a link's target, such as `nc.openbsd` or
+`busybox`, not the name it was called by), through the gate a sampled child's name goes through, so
+NET-TOOL and DESTRUCT-CMD judge a short curl, wget or shred whose file has that name; a process the
+sample also holds (the same pid and the same start ticks) is one process. A tree that is a candidate
+only by what the reader gave is listed `by the channel`, as on Windows; the root of a tree, and of
+an act-root, is always a process a sample held. Not judged: a tree that lives whole between two
+samples (a tree needs a talker at a sample, and a connection that opens and closes between two
+samples is still unseen), a child's own connections, a program a process changes to after its line
+was written and the programs it had before, and a child whose parent was given in an earlier round
+and ended before the sample. A program not read is in the round and counted; it gets no line. What
+is judged from the helper is the helper's word: the watch does not check its lines. Its report has a
+section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line: what is judged and what
+is not, the rounds asked and answered, the processes that began, those of them that began and ended
+between two asks, the programs not read (reads at an exec that failed: a process can end before its
+program is read), how many processes were given to the rounds, joined to a tree as its child and, of
+them, had no program read, how many of the watch's own processes were left out, what was past the
+reader's bounds, and what the reader lost, in its own words, over every helper the watch had. No
+program's name or path is shown in that section: only numbers. Only where every ask was answered in
+its round, no helper was started again, nothing was lost, nothing was past the reader's bounds and
+the last answer left nothing for a next one, the note that what lives between two rounds is not seen
+on Linux says instead what is now seen and what is not; where the reader answered and was not whole,
+the note says what was heard and judged and why it was not whole; where it never answered, the old
+words stand with each reason beside them. A helper refused at its first start (a container, a right
+not given), or late or ended before its first answer, is a blind spot of its own kind: it does not
+change the result, and the rounds are the sample's alone. After its first answer, a late answer, a
+line that is not the helper's, an end (and its one restart), a loss of events, a bound passed or an
+answer that holds back a rest for a next one is a hole of the result of its own kind (`procevents`):
+what was being judged has a gap, and the result is INCOMPLETE unless a finding makes it an alarm.
+Each is said once while it lasts, and at most 10 such episodes are printed, then how many more. A
+helper that ends, or is late three rounds running, is started again once, and the section says that
+nothing was heard between its end and the new start; a second end is final.
 
 A tree whose root process is still in the round's sample and is not in the round is `quiet (its root
 alive in round N; not seen talking with an act at the sample; source kept)` ("source kept" only when
@@ -523,7 +541,7 @@ Once installed, `raqib COMMAND`; from a checkout without installing,
 | `raqib eval [--candidate ollama:MODEL]` | false negatives and false positives of the rules and of each model on 50 labelled events: a checkout's tests/fixtures/eval/events.json or --events FILE (an installed raqib has none and exits 2) |
 | `raqib proxy --listen 127.0.0.1:PORT --upstream URL --log TRACE [--cwd DIR]` | relay another agent's model API calls and record its tool calls (below) |
 | `raqib os-sysmon --root PID[:GUID] --log TRACE [--from FILE.xml] [--cwd DIR]` | record what Sysmon saw the agent's process tree do (below); exit 1 when it wrote a `RAQIB-SILENCE:` line, 2 off Windows without `--from` |
-| `raqib events FILE` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a `raqib-event/1` event; exit 0, 1 or 2 |
+| `raqib events FILE [--against OTHER]` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a `raqib-event/1` event, then one line per run, by its host and run (ADR-0016): its chain whole (so many lines, and the lines said twice), not whole (and under it, in the file's order, to a bound of 10 a run that is said: that it begins before this file, each break - a line before it was removed, changed, added or moved - and each run of lines beside it - not counted as written by the writer, or put there by another hand - with the line they follow and the line that names it again), not chained (a run of a Raqib before this one: not a problem) or taken out (no line holds `prev`, and its version always writes it); exit 0, 1 (a line that is not an event, a chain not whole or taken out, or no event) or 2 (cannot be read). Each line names the line its run wrote before it by its sha256 (`prev`), so a line taken out of the middle, changed, added or moved is seen (but the run's last line: no line names it, so changed, or followed by a line added after the run ended that names it, it is not seen from the file alone); the chain has no secret, and an end cut off, or a tail written again with its hashes, is not seen from the file alone. `--against OTHER`: OTHER is the lines a collector holds (its own export); each is looked for in FILE by host and id, and those not in FILE and those with other bytes are said by their line numbers in both (exit 1; 2 where OTHER cannot be read): this, not the file alone, shows a line changed or an end cut after the collector took it. It needs the collector's lines byte for byte as they were sent (a line end aside) |
 | `raqib forward [FILE] --to URL --name NAME [--shape raqib\|hec] [--token-file FILE] [--ca FILE] [--plain] [--facility N] [--framing octet\|newline] [--once]` | send every whole line of a watch's events file (default `~/.raqib/host/events.jsonl`, read only) to one collector, at least once and in the file's order (but for a line refused once and taken when asked again): over HTTP (`http://`, `https://`: taken is `acknowledged`, a 2xx) or over syslog (`syslog+udp://`, `syslog+tcp://`, `syslog+tls://`: one RFC 5424 message a line, the line as its message, app raqib, the message id the event's kind, the facility 13 unless `--facility N`, the severity high 2, medium 4, low 5, a hole 4, none and info 6; over tcp and tls framed by octet count, or --framing newline for a collector that wants lines, and taken is `written`, the connection ended in order after the batch - not a stored event; `syslog+tcp://` needs its port written; over udp one datagram a message, taken is `sent`, nothing is known, and a message over 65000 bytes is refused, counted and passed, never cut; no token) or to the system's journal (`journal:`, Linux only: one entry a line by the journal's own protocol, MESSAGE the line as written, PRIORITY the severity as syslog's, SYSLOG_IDENTIFIER raqib, SYSLOG_FACILITY 13 unless `--facility N`, and RAQIB_ID, RAQIB_KIND, RAQIB_HOST and RAQIB_TIME where the event holds them as text; an entry too long for a datagram is handed as a sealed memory file, never cut; taken is `sent`, nothing is known, at most 250 lines a second; no token, `--ca`, `--plain`, `--shape hec` or `--framing`) or to the Windows event log (`eventlog:`, Windows only: one event a line in the Application log under the source `Raqib`, nothing registered, its one string the line as written, its type from the severity - high Error, medium and a hole Warning, low, info and none Information - and its id from the kind, 1001 to 1008, else 1000; a line over 30000 characters goes in parts, in order, id 1009, each with a head `raqib-part I/N id=ID sha256=HEX chars=TOTAL` by which a reader puts the line back together; taken is `written`, the system's call took the event, at most 100 events a second, parts counted; no token, `--ca`, `--plain`, `--shape hec`, `--framing` or `--facility`); a line that is not an event is skipped and counted, never sent; a line the collector refuses alone is counted and passed only when it is refused alone again after a later line was taken (until then it is failing `refusing` and the cursor waits); its cursor and state are `~/.raqib/forward/NAME.json`; https and syslog+tls are verified by the system's authorities or `--ca`, and plain http, udp and tcp go only to a loopback address unless `--plain`; the token only from `--token-file` (HTTP only), never printed (off Windows a file others can read is exit 2; on Windows it is not checked); `--once` exit 0 all taken, 1 not all, 2 usage |
 | `raqib forward --status [NAME]` | say a forwarder's state and the lines it refused (`--beat S`: it writes one at least every S seconds, default 60, at least 1): exit 0 only where nothing is failing and no whole line has waited longer than a beat; 1 where it is failing (`refusing` too) or behind; 3 where there is no state, it cannot be read, or it was written more than two beats ago or in the future (the forwarder is silent) |
 | `raqib forward FILE --to URL --name NAME --shape hec --token-file FILE` | one envelope per line in the shape of Splunk's HTTP event collector (`time` in seconds, `host` the event's `watch.host`, `source` raqib, `sourcetype` raqib:event, `event` the line unchanged) with `Authorization: Splunk <token>`; on the collector, the one search for silence: no heartbeat of a host for more than two beats by the collector's own time of arrival, never the event's `time` (`kind` heartbeat by `watch.host`; `watch.beat` is the beat) |
@@ -867,3 +885,13 @@ Status: v0.1 candidate: capture, rules, report, suspicion
 layer, evaluation, web view and docs. The last exit criterion of the plan
 (M3.3) is still open: one person outside the project runs the quickstart in the README
 ([Install and watch](../README.md#install-and-watch)) and files one issue.
+
+### Into a SOC's search engine
+
+`siem/` holds what a SOC installs to read the events (`~/.raqib/host/events.jsonl`, or what
+`raqib forward` sends) in Elasticsearch or OpenSearch: an ingest pipeline to the ECS fields of the
+spec's Mapping, a template for each engine, the searches (an alarm, a rule's findings, a hole, a
+watch that did not end with 0, the search for silence, the runs that stopped with no end and the
+lines kept as error documents), Sigma rules over the events' own keys, and a table of every rule the
+report lists with its ATT&CK techniques. How to install it, and what was
+measured and what was not: [siem/README.md](../siem/README.md).
