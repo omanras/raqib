@@ -644,6 +644,22 @@ Rulings: ADR-0003 Amendments C and D.
   the final poll reads after the last round are counted in the report,
   not judged by HOST-RHYTHM; where its two times agree, a process's start
   (event 1) matches a sampled CreationDate exactly as before.
+- Sysmon can stop holding a process that still runs. Seen in the field: the
+  starts of a long-lived parent's later children then name the parent by an
+  empty ProcessGuid (all zeros), with `-` as its image and its command line,
+  the parent's pid still right; in 17 runs of ninety seconds it happened in
+  two, to one child and to eleven. Raqib once took the zeros for a
+  ProcessGuid of their own: the children joined no tree, their lines were
+  never written, and the round took the tree for quiet while it worked. An
+  empty ProcessGuid is now no ProcessGuid: the event is joined by the pid it
+  names, as an event that carries none is, and the follow and the round each
+  say so. What that costs: where the pid was taken again by another process
+  in between, the child is given to the pid's present holder, and nothing
+  tells the two apart there; the parent's name is unread (`-` is not a
+  program's name), so a rule that reads a parent's name does not have it.
+  Not measured: how long a process must live, or how busy the machine must
+  be, before Sysmon lets go of it; whether a real desktop's Sysmon does it
+  more often than a machine made for one run.
 
 ### The rules of behaviour (PERSIST-AUTOSTART, NET-ADMIN-PORT; ADR-0014)
 Rulings: ADR-0014 A-3 to A-6 and A-8. Two signatures judge what a tree does to the
@@ -781,8 +797,10 @@ What it does not see:
   the registry; the measured case is the Schedule service's own TaskCache key).
 - An event 13 named by its pid alone (no ProcessGuid) is placed by the tree as
   the pass's walk ends, not in the order of time as the other events are: a pid
-  reused within one pass could give a value to the wrong process. Not shown
-  reachable: Sysmon writes the ProcessGuid.
+  reused within one pass could give a value to the wrong process. Sysmon
+  writes the ProcessGuid, or an empty one where it no longer holds the process
+  (seen for a parent, and once for a process that had ended; not seen on an
+  event 13).
 - A problem of the event 13 read (a line that cannot be read, an event with no
   TargetObject) is said once per its words for the life of a follow; a later
   problem at a line number said before is not said again. Not measured.

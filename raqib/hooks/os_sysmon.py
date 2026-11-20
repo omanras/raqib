@@ -202,6 +202,7 @@ AUTOSTART_VALUE = re.compile(r"(?is)\A(?:HKU\\(S-1-[0-9]+(?:-[0-9]+)+)|HKLM)\\SO
 VALUE_NAME_MAX = 80               # AC-4: a value's name in a line, at most (a longer one ends with ...)
 NOT_A_COMMAND = re.compile(r"\A(?:Binary Data\Z|[DQ]WORD \()")   # AB-2: Details that names no program
 SESSION_TOOL = "-"
+UNNAMED = "-"   # ADR-0007 BV-2: Sysmon's word for an Image or a CommandLine it does not hold
 SILENT_IF_MISSING = {
     1: "the export holds no event 1 (process create): no process of the tree is seen",
     11: "the export holds no event 11 (file create): no file write of the tree is seen; the Sysmon"
@@ -242,6 +243,8 @@ def program_name(image):
     if not isinstance(image, str) or not image.strip():
         return None
     base = image.strip().replace("/", "\\").rstrip("\\").rsplit("\\", 1)[-1]
+    if base == UNNAMED:   # ADR-0007 BV-2: "-" is Sysmon's word for an Image it does not hold, not a program's name
+        return None
     if base and common.HEAD_NAME.match(base) and not common.looks_like_key(base):
         return base
     return None
@@ -365,6 +368,23 @@ def _guid(value):
     return value or None
 
 
+EMPTY_GUID = ("Sysmon wrote an empty ProcessGuid (all zeros) for a process or for a parent: it no longer held that"
+              " process. Those events are joined by the pid they name; a pid taken again is not told apart there")
+
+
+def empty_guid(value):
+    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: all zeros."""
+    value = (value or "").strip()
+    return bool(value) and not value.strip("{}-0")
+
+
+def _event_guid(value):
+    """An event's ProcessGuid or ParentProcessGuid: None where the event has none, and where Sysmon wrote the
+    empty one (BV-1: an empty ProcessGuid is no ProcessGuid; the pid the event names decides, as for an event
+    that carries none)."""
+    return None if empty_guid(value) else _guid(value)
+
+
 def parse_root(value):
     """(pid, ProcessGuid or None) of --root PID[:GUID] (ruling D-5)."""
     if isinstance(value, int) and not isinstance(value, bool):
@@ -429,7 +449,9 @@ def _read(text, ids, origin, silences, unread, present, problems):
             silences.append("the event at line %d%s (Sysmon %d) has no ProcessId or UtcTime: it is not recorded"
                             % (ev["line"], where, ev["event"]))
             continue
-        events.append(dict(ev, pid=pid, ts=ts, guid=_guid(d.get("ProcessGuid")), time_from=time_from,
+        if (empty_guid(d.get("ProcessGuid")) or empty_guid(d.get("ParentProcessGuid"))) and EMPTY_GUID not in silences:
+            silences.append(EMPTY_GUID)   # BV-1: said (once a follow), never joined in silence
+        events.append(dict(ev, pid=pid, ts=ts, guid=_event_guid(d.get("ProcessGuid")), time_from=time_from,
                            time_skew_s=skew, origin=origin))
     return events
 
@@ -603,7 +625,7 @@ def _root(events, root, guid):
             first.setdefault(e["guid"], e["ts"])
             if e["event"] == 1:
                 start[e["guid"]] = (e["ts"], e["record_id"] if e["record_id"] is not None else -1)
-        pguid = _guid(d.get("ParentProcessGuid"))
+        pguid = _event_guid(d.get("ParentProcessGuid"))
         if e["event"] == 1 and _int(d.get("ParentProcessId")) == root and pguid:
             first.setdefault(pguid, e["ts"])
     named = any(e["pid"] == root or (e["event"] == 1 and _int(e["data"].get("ParentProcessId")) == root)
@@ -659,7 +681,7 @@ def _tree(events, root, root_guid, tree=None, parents=None):
         d = e["data"]
         parent = None
         if e["event"] == 1:
-            pguid, ppid = _guid(d.get("ParentProcessGuid")), _int(d.get("ParentProcessId"))
+            pguid, ppid = _event_guid(d.get("ParentProcessGuid")), _int(d.get("ParentProcessId"))
             if e["pid"] == root and (e["guid"] is None or _same_guid(e["guid"], root_guid)):
                 depth = 0
             elif pguid is not None:
@@ -808,6 +830,7 @@ def _lines(kept, root, cwd, start_seq, missing, server_hash=False, marks=None):
             if parent is not None and parent in line_of:
                 meta["parent_seq"] = line_of[parent]
             line_of[_gkey(e["guid"]) if e["guid"] is not None else ("pid", e["pid"])] = seq
+            line_of[("pid", e["pid"])] = seq   # BV-1: a parent named by its pid alone is the pid's present holder
         if marks is not None and marks[i] is not None:   # BC-1: at or under another tree's root (else no key)
             meta["under_root"] = marks[i]
         base = {"ts": discover.iso(e["ts"]), "seq": seq, "session_id": sid}
