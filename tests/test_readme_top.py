@@ -39,6 +39,19 @@ NEW_HEADINGS = ["Install and watch", "Watch a project", "Doctor", "What an alarm
 # (ADR-0010 decision 6: the README's install block). Link targets are not words: a guide link is relative to
 # docs/, and the comparisons below read every link as the repository path it names.
 CHANGED = {
+    # M15.2b (ADR-0014 AE-2): event 11 is said under the same rule as events 1, 3 and 22
+    "A read that fails, times out, reaches the cap or lags by more than a round is a hole of its round; a stopped "
+    "or cleared channel is said in the third of three rounds in a row that each sampled a process created a round "
+    "earlier and read no event 1 at all, and then its read restarts - on a quiet desktop it is not said, a hole "
+    "that remains; an image whose event 1 does not come while others do is a note (left out by its configuration, "
+    "or late), withdrawn when an event 1 of that image comes and said again at its next miss; a kind not read after "
+    "three rounds (no event 1, 3 or 22) is said once, and the report lists the kinds read.":
+    "A read that fails, times out, reaches the cap or lags by more than a round is a hole of its round; a stopped "
+    "or cleared channel is said in the third of three rounds in a row that each sampled a process created a round "
+    "earlier and read no event 1 at all, and then its read restarts - on a quiet desktop it is not said, a hole "
+    "that remains; an image whose event 1 does not come while others do is a note (left out by its configuration, "
+    "or late), withdrawn when an event 1 of that image comes and said again at its next miss; a kind not read after "
+    "three rounds (no event 1, 3, 11 or 22) is said once, and the report lists the kinds read.",
     "The last exit criterion of the plan (M3.3) is still open: one person outside the project runs this quickstart"
     " and files one issue.":
     "The last exit criterion of the plan (M3.3) is still open: one person outside the project runs the quickstart"
@@ -214,19 +227,25 @@ BYTES_WIN = [
 GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + GUIDE_ROWS + HOST_UNREAD + BYTES_WIN
 # M15.1 (ADR-0014 A-3, A-4): the two rules of behaviour, rows of the guide's What it catches
 BEHAVIOUR_ROWS = [
-    "| PERSIST-AUTOSTART | a file written directly in a Startup folder of Windows (`...\\Microsoft\\Windows"
+    '| PERSIST-AUTOSTART | a file written directly in a Startup folder of Windows (`...\\Microsoft\\Windows'
     "\\Start Menu\\Programs\\Startup\\`, a user's or all users', either slash, any case; `desktop.ini` and de"
     "eper folders left out), read from Sysmon's file line (event 11) of a watched tree or from a Write, E"
-    "dit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: ther"
-    "e only a hooks file tool is judged. A value under the registry's Run or RunOnce key is PERSIST-RUN-KEY's; "
-    "a scheduled task and a file moved or renamed into the folder are not read yet |",
+    'dit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: ther'
+    "e only a hooks file tool is judged. A value under the registry's Run or RunOnce key is PERSIST-RUN-K"
+    "EY's; a scheduled task and a file moved or renamed into the folder are not read yet. Its os lines ne"
+    'ed Windows with Sysmon logging file creation (event 11): under `raqib watch --host` the watch says o'
+    'nce when its rounds have read no event 11 of the channel (a file a tree makes may then be unseen) |',
     "| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` tru"
-    "e) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback "
-    "nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's own included"
-    "), unless it is ssh started by git (high). Linux has no os source for it: nothing there is judged by"
-    " it, and the host's own sample of a connection is not judged yet |",
+    'e) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback '
+    "nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's "
+    'own included), unless it is ssh started by git (high). Linux has no os source for it: nothing there '
+    "is judged by it, and the host's own sample of a connection is not judged yet. It needs Windows with "
+    'Sysmon logging connections (event 3; Sysmon without -n logs none): under `raqib watch --host` the wa'
+    'tch says once when its rounds have read no event 3 of the channel; a net line whose `initiated` was '
+    "not read (no key) is not judged, and the rule's partial note says so |",
 ]
 # M15.2 (ADR-0014 Amendment B, AB-1): the registry's autostart values, a row of the guide's What it catches
+# M15.2b (ADR-0014 AE-1 to AE-3): each of the three rows says what it needs of Sysmon and what the watch says
 BEHAVIOUR_ROWS.append(
     '| PERSIST-RUN-KEY | a value set under a Run or RunOnce key of the registry (anything below `...\\Micr'
     "osoft\\Windows\\CurrentVersion\\Run\\` or `\\RunOnce\\` of a user's hive or the machine's, the 32-bit view"
@@ -234,9 +253,14 @@ BEHAVIOUR_ROWS.append(
     'try line (event 13) of a watched tree, whatever program of the tree set it; the finding names the hi'
     "ve, run or runonce, the value's name between double quotes (at most 80 characters), the program the "
     "value would run and the program that set it, never the value's text (high). Where the name holds a b"
-    'ackslash the event cannot tell it from a value of a key under Run, and the finding says so. It needs'
-    ' Windows with Sysmon logging a value set under these keys: where the configuration logs none, there '
-    'is nothing to read. Linux has no os source for it: nothing there is judged by it |')
+    'ackslash the event cannot tell it from a value of a key under Run, and the finding says so. Under `r'
+    'aqib watch --host` the watch asks the channel once, at its first read, for its newest event 13; whe'
+    're it holds none then, the blind spot `registry` says that PERSIST-RUN-KEY may have nothing to read '
+    'here (a value logged later does not take it back), and where the question fails, that this is not kn'
+    'own (one that holds some event 13 may still not log the Run keys, and nothin'
+    'g is said). It needs Windows with Sysmon logging a value set under these keys: where the configurati'
+    'on logs none, there is nothing to read. Linux has no os source for it: nothing there is judged by it'
+    ' |')
 GUIDE_NEW += BEHAVIOUR_ROWS
 # M10.4b (ADR-0011 R-2, R-3, T-1, T-5, V): the window's Link screen, said where the window's screens are
 LINK_SCREEN = [
@@ -296,6 +320,36 @@ GUIDE_NEW += SERVICE_ROWS
 NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing listens on one, no page is opened in a"
            " browser, and its report and its events file are unchanged (ADR-0013 Amendment C, AC-1)."]
 GUIDE_NEW += NO_PAGE
+# M17.1 (ADR-0015 V-1 to V-3, Amendment A): the number, what a move of it means, the changelog and the update
+# steps, in the guide's Install and watch
+VERSION_NUMBER = [
+    "Which Raqib runs is said by its number, `0.MINOR.PATCH`:",
+    "`raqib --version` prints `raqib` and the number, the first line a watch prints and the first line of its report"
+    " end with it (`; raqib` and the number), the window's title bar says `Raqib` and the number, every event holds it"
+    " as `watch.version`, and `raqib doctor` says it.",
+    "MINOR moves with every merge into `main` that changes what Raqib does for a person (a rule, a source, a command,"
+    " a report), PATCH with a merge that only repairs, and a merge of documents or tests alone moves nothing: two"
+    " copies that do different things never say the same number.",
+    "The number is not a promise of stability, and the events' schema has its own name (`raqib-event/1`).",
+    "[CHANGELOG.md](CHANGELOG.md) says, the newest first, what each number brought, how to update to it and what was"
+    " not measured.",
+    "To update a checkout, as CHANGELOG.md gives it:",
+    "- In the checkout's folder.",
+    "First stop a running watch, window or service: a running one keeps the number it started with.",
+    "- `git pull`",
+    "- Installed with pipx, on Linux or Windows:",
+    "`pipx install --force .`",
+    "- Installed with pip:",
+    "`pip install --upgrade .` in the same venv; with Windows' launcher, `py -m pip install --upgrade .`",
+    "- The Linux service (root's copy, [SERVICE.md](docs/specs/SERVICE.md)), with DIR its folder and NUMBER the new"
+    " number: a new copy of the checkout for each number, `sudo cp -r .",
+    "DIR/src-NUMBER`, then `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER` and `sudo DIR/bin/raqib service"
+    " install` again (it writes the unit again and restarts it).",
+    "These steps were not run on a machine yet.",
+    "A watch with rules of your own measures its thresholds again at its first start after an update, and says so.",
+    "- Then `raqib --version` says the number at the top of CHANGELOG.md.",
+]
+GUIDE_NEW += VERSION_NUMBER
 # M14.1b and its REDO (ADR-0007 BU-3, BW-3, BW-6): the report's PROCESS EVENTS section on Linux, said in the
 # guide's Watch the host
 PROCESS_EVENTS = [   # M14.1c (ADR-0007 BY): the guide's words on what the watch now judges from the reader

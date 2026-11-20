@@ -555,7 +555,8 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
                    "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
                    "SECRET-OUTPUT": (7, 2),
                    # M15.1 (ADR-0014): no benign file holds an os net line (NET-ADMIN-PORT's gate); PERSIST-AUTOSTART has none
-                   "NET-ADMIN-PORT": (1, 9), "PERSIST-AUTOSTART": (10, 0),
+                   # M15.2b (ADR-0014 AE-1): its lines whose Initiated is not read are a negative of their own (9 -> 10)
+                   "NET-ADMIN-PORT": (1, 10), "PERSIST-AUTOSTART": (10, 0),
                    # M15.2 (ADR-0014 AB-1): no benign file holds an os registry line (PERSIST-RUN-KEY's gate)
                    "PERSIST-RUN-KEY": (1, 9)}
     text = (ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md").read_text(encoding="utf-8")
@@ -567,7 +568,8 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
     text += (ROOT / "docs" / "review" / "2026-11-20-M15.2-questions.md").read_text(encoding="utf-8")   # M15.2: its rule
     # ADR-0007 AP-3: HOST-RHYTHM's 9 measured are asserted above from check-rules; the files read here hold the 7 of
     # their time (the new count is said in its own review file, which no test reads)
-    recorded = dict(got, **{"HOST-RHYTHM": (7, 8)})
+    # M15.2b: NET-ADMIN-PORT's 10 unmeasured are asserted above, as AP-3's; the files read here hold the 9 of M15.1
+    recorded = dict(got, **{"HOST-RHYTHM": (7, 8), "NET-ADMIN-PORT": (1, 9)})
     for rule_id, (m, u) in recorded.items():
         assert re.search(r"%s +ok .* %d measured, %d unmeasured" % (re.escape(rule_id), m, u), text), rule_id
 
