@@ -121,7 +121,7 @@ EVASIONS = {
         " there (an os or host line's image is lower case with no .exe)",
         "host source (raqib watch --host): a child that lives only between two rounds is seen only where the round"
         " reads the Sysmon channel or, on Linux, the watch's reader of the process events gives it under a tree that"
-        " talks at a sample",
+        " talks at a sample, or under an act-root the samples made",
         "os source: a process line written before M7.8 has no image and is not judged; a program run inside WSL"
         " or by a multicall binary (busybox x) is another image",
     ),

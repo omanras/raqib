@@ -3106,6 +3106,12 @@ def _norm_path(path):
     return re.sub(r"\A/(?:/\?|\?\?)/", "", (path or "").strip().strip('"').replace("\\", "/").lower())
 
 
+def _sampled(p):
+    """ADR-0007 BZ-1, CA-1: whether a process of the round has a record that is not the reader's (a sample held it).
+    What only the reader gave adds acts to an act-root the samples made; it never makes one."""
+    return any(not _reader_src(r) for r in p["recs"])
+
+
 def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
     """E3, the act-root class (signature; the catalog's act_root block), as
     narrowed by G-1: a process P whose image path is under a user directory,
@@ -3150,6 +3156,8 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         parent = procs[s["ppid"]]
         if parent["pid"] in self_tree or shell(parent):
             continue
+        if not _sampled(s):   # ADR-0007 CA-1: the shell of a chain is a process a sample held, as its root is
+            continue
         under = below(pid)
         if any(not shell(procs[d]) and outside(d, parent) for d in under):
             chains.setdefault(parent["pid"], []).append((pid, under))
@@ -3161,7 +3169,7 @@ def _act_roots(procs, talkers, self_tree, ids, catalog, conn_names):
         if pid in talkers or any(i in never for i in p["images"]) or place is None or _helper(p) \
                 or up is None or not any(i in parents for i in up["images"]):
             continue
-        if not any(not _reader_src(r) for r in p["recs"]):   # ADR-0007 BZ-1: a root is a process a sample held
+        if not _sampled(p):   # ADR-0007 BZ-1: a root is a process a sample held
             continue
         acts, heads = [], []
         for s, under in chains[pid]:

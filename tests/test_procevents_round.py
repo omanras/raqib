@@ -33,6 +33,16 @@ LINUX_FIXTURES = {"linux": ROOT / "tests" / "fixtures" / "discover" / "linux",
 
 
 @pytest.fixture(autouse=True)
+def _own_record():
+    """CA-6: a test that empties or adds to this process's own record (raqib/own.py) puts it back."""
+    kept = dict(own.RECORD._kept)
+    yield
+    with own.RECORD._lock:
+        own.RECORD._kept.clear()
+        own.RECORD._kept.update(kept)
+
+
+@pytest.fixture(autouse=True)
 def _home(tmp_path, monkeypatch):
     path = tmp_path / "home"
     path.mkdir(exist_ok=True)
@@ -681,4 +691,179 @@ def test_r8_bz8_no_proc_read_for_the_start_of_a_child_the_reader_said_ended(monk
                                     reader_rec(1805, "/usr/bin/wget", 2230, ended=None)])]))
     inv = host.live_reader(CATALOG, 0.0, "linux", helper=make)()
     assert read == [[1700, 1805]]   # the sampled bash and the child alive at the ask; never the ended curl
-    assert inv["child_started"]["by"]["1801"] == "2026-11-20T10:00:05.000000Z"   # its start is the record's
+    # its start is the record's, named as the process events' word (CA-4), never among the /proc reads
+    assert "1801" not in inv["child_started"]["by"]
+    assert inv["child_started"]["events"] == {"from": host.EVENTS_STARTED_FROM,
+                                              "by": {"1801": "2026-11-20T10:00:05.000000Z"}}
+
+
+
+# --- M14.1c REDO 2 (ADR-0007 Amendment CA) --------------------------------------------------------------------------
+def test_s1_ca1_a_shell_no_sample_held_makes_no_chain_of_an_act_root():
+    texts, holes = texts_of(reader=False)
+    tool, sh, git = CHAIN
+    sample = texts["proc"][1] + TERMINAL + proc_line(*tool)
+    reader = "".join(line(pid, ppid=ppid, exe=exe, ticks=ticks, ended=None, code=None) for pid, ppid, _, exe, ticks
+                     in (sh, git))
+    inv = build(dict(texts, proc=("p", sample, None), procevents=("x", reader, None)), holes)
+    assert inv["act_roots"] == [] and not [t for t in inv["candidates"] if t["pid"] in (2010, 2020)]
+    # the shell sampled, its git given by the reader alone: the act-root as before, git among its acts
+    sample += proc_line(*sh)
+    reader = line(git[0], ppid=git[1], exe=git[3], ticks=git[4], ended=None, code=None)
+    inv = build(dict(texts, proc=("p", sample, None), procevents=("x", reader, None)), holes)
+    (root,) = inv["act_roots"]
+    assert root["pid"] == 2020 and {(a["pid"], a["image"]) for a in root["acts"]} == {(2021, "sh"), (2022, "git")}
+
+
+def child_lines(home):
+    out = []
+    for name, text in sorted(files(home).items()):
+        if "/sources/" in "/" + name:
+            out += [json.loads(x) for x in text.splitlines() if x.strip() and '"HostChild"' in x]
+    return out
+
+
+def test_s2_ca2_a_childs_line_says_where_each_child_was_seen_only_in_a_round_that_read_the_readers_text(
+        tmp_path, monkeypatch):
+    stand_in_sample(monkeypatch, alive=[(2, (1760, 1600, "make", 2600))])
+    make = factory(StandIn([answer([reader_rec(1700, "/usr/bin/bash", 2100, ended=None),
+                                    reader_rec(1801, "/usr/bin/curl", 2200)]), answer([])]))
+    w, clock = make_watch(tmp_path, host.live_reader(CATALOG, 0.0, "linux", helper=make))
+    run(w, clock, 2)
+    got = [(x["input_meta"]["round"], x["input_meta"]["command_programs"], x["input_meta"].get("command_sources"))
+           for x in child_lines(tmp_path / "home")]
+    assert got == [(1, ["bash", "curl"], ["both", "events"]), (2, ["make"], None)]   # round 2 read no reader's text
+    assert "command_sources" not in json.dumps(child_lines(tmp_path / "home")[1])
+
+
+def test_s2_ca2_a_round_with_no_readers_text_writes_its_lines_byte_for_byte_as_before(tmp_path, monkeypatch):
+    """The same rounds with a helper that gives nothing and with one that never started: the same source lines."""
+    def lines(home, helper):
+        stand_in_sample(monkeypatch, alive=[(2, (1760, 1600, "make", 2600))])
+        w, clock = make_watch(home, host.live_reader(CATALOG, 0.0, "linux", helper=factory(helper)))
+        run(w, clock, 2)
+        return [{k: v for k, v in x.items() if k not in ("ts",)} for x in child_lines(home / "home")]
+    empty = lines(tmp_path / "a", StandIn([answer([]), answer([])]))
+    none = lines(tmp_path / "b", StandIn(why="no helper here (a test)"))
+    assert empty == none and empty and not [x for x in empty if "command_sources" in x["input_meta"]]
+
+
+def test_s4_ca4_a_start_from_the_readers_record_is_the_events_word_and_one_from_proc_is_as_before(tmp_path,
+                                                                                                   monkeypatch):
+    stand_in_sample(monkeypatch)
+    monkeypatch.setattr(discover, "proc_start_times", lambda pids: ({p: "2026-11-20T10:00:04.000000Z" for p in pids
+                                                                    if p == 1805}, None))
+    make = factory(StandIn([answer([reader_rec(1801, "/usr/bin/curl", 2200),
+                                    reader_rec(1805, "/usr/bin/wget", 2230, ended=None)])]))
+    inv = host.live_reader(CATALOG, 0.0, "linux", helper=make)()
+    started = inv["child_started"]
+    assert started["from"] == "/proc/PID/stat starttime + /proc/stat btime" and started["by"] == {
+        "1805": "2026-11-20T10:00:04.000000Z"}
+    assert started["events"] == {"from": host.EVENTS_STARTED_FROM, "by": {"1801": "2026-11-20T10:00:05.000000Z"}}
+    assert "the process events" in host.EVENTS_STARTED_FROM and "fork was heard" in host.EVENTS_STARTED_FROM
+    w, _ = make_watch(tmp_path, feed_inv([pe(1)]))
+    assert w._act_time(0.0, 1, {"pid": 1801}, inv)[1] == host.EVENTS_BASIS == "events"
+    assert w._act_time(0.0, 1, {"pid": 1805}, inv)[1] == "stat"
+
+
+def test_s5_ca5_the_words():
+    heard = " ".join(host.BETWEEN_HEARD.split())
+    assert "for the whole watch" not in heard and "process events: a process that began under a tree" in heard
+    assert "judged by the name of its program's file (not the name it was called by)" in heard
+    threat, spec = flat("docs/THREAT_MODEL.md"), flat("docs/specs/PROC-EVENTS.md")
+    assert ("a bound passed or an answer that holds back a rest for a next one is a hole of the result (BY-5, BZ-6)"
+            in threat)
+    assert "It cannot make the watch run anything or write a file of its choosing (CA-5)." in threat
+    assert ("a loss, a bound passed or an answer that holds back a rest for a next one is a hole of the result of the"
+            " kind `procevents` (BY-5, BZ-6" in spec)
+    words = " ".join((ROOT / "raqib" / "ruleform.py").read_text(encoding="utf-8").split())
+    assert "talks at a sample, or under an act-root the samples made" in words.replace('" "', "")
+    for rule in ("NET-TOOL", "DESTRUCT-CMD"):
+        text = (ROOT / "raqib" / "rules" / "catalog" / ("%s.yaml" % rule)).read_text(encoding="utf-8")
+        assert "under a tree that talks at a sample, or under an act-root the samples made (M14.1c, CA-1)" in text
+    assert "named by its program's file (a link's target), not the name it was called by" in (
+        ROOT / "raqib" / "rules" / "catalog" / "NET-TOOL.yaml").read_text(encoding="utf-8")
+
+
+def own_sample(monkeypatch):
+    """discover's live collection: the fixture's sample with this process as the reader (a record of what it
+    started: "helpers"), forgetting, as snapshot_proc does, every recorded pid the sample does not hold."""
+    me = os.getpid()
+    texts, holes = texts_of(reader=False)
+    sample = texts["proc"][1].replace('"self": 500,', '"helpers": [], "self": %d,' % me) + proc_line(
+        me, 1, "python3", sys.executable, 50)
+
+    def collect_live(catalog, **kw):
+        own.RECORD.alive({}, {}, since=time.time())
+        return dict(texts, proc=("p", sample, None)), list(holes), 1
+    monkeypatch.setattr(discover, "collect_live", collect_live)
+    monkeypatch.setattr(discover, "read_conn_bytes", lambda paths: ({}, "fake ss", None))
+    monkeypatch.setattr(discover, "proc_start_times", lambda pids: ({}, None))
+    return texts, holes, sample
+
+
+def socket_tool(pid, at=None):
+    at = time.time() if at is None else at
+    began = datetime.datetime.fromtimestamp(at, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return dict(reader_rec(pid, "/usr/sbin/ss", 60, ppid=os.getpid(), began=began), started_ticks=60)
+
+
+STRANGER = "that the watch did not start"
+
+
+def late_then_tool():
+    """Round 1 answered; ask 2 written in round 2 (R) and late; round 3 takes its answer, empty; round 4's ask 3
+    is answered with the socket tool run after round 2's build."""
+    ss = socket_tool(4194010)
+    return Counting([answer([], ask=1), procevents.LATE, answer([], ask=2), answer([ss], ask=3)],
+                    asks=[1, 2, 2, 3])
+
+
+def test_s6_ca6_an_answer_late_and_empty_then_one_with_the_tool_run_after_the_asks_round_keeps_it_the_watchs(
+        monkeypatch):
+    own_sample(monkeypatch)
+    reader = host.live_reader(CATALOG, 0.0, "linux", helper=factory(late_then_tool()))
+    reader()
+    two = reader()
+    own.RECORD.add(4194010, image="ss")   # the round's socket tool, run after round 2's build (R)
+    three, four = reader(), reader()
+    assert two["procevents"]["hole"] == host.PE_LATE % 2.0 and three["procevents"]["answered"]
+    assert three["procevents"]["own"] == 0 and four["procevents"]["own"] == 1
+    assert not [h for h in four["holes"] if STRANGER in h]   # fails where round 3's answer is taken to cover round 3
+
+
+def test_s6_ca6_the_report_says_how_many_of_the_watchs_own_were_left_out(tmp_path, monkeypatch):
+    own_sample(monkeypatch)
+    w, clock = make_watch(tmp_path, host.live_reader(CATALOG, 0.0, "linux", helper=factory(late_then_tool())))
+    w.tick(wait=30)
+    clock.t += w.every
+    w.tick(wait=30)
+    clock.t += w.every
+    own.RECORD.add(4194010, image="ss")
+    text, _ = run(w, clock, 2)
+    assert host.PE_OWN % 1 in text
+
+
+def test_s6_ca6_a_copy_written_again_for_the_same_pid_takes_the_new_time_and_image(monkeypatch):
+    stand_in_sample(monkeypatch)
+    old = time.time() - 300
+    own.RECORD.add(4194020, at=old, image="ss")
+    ss = socket_tool(4194020)
+    reader = host.live_reader(CATALOG, 0.0, "linux", helper=factory(StandIn([answer([], more=True),
+                                                                             answer([ss])])))
+    reader()                                # the copy (old time) is kept: a rest is held back
+    own.RECORD.add(4194020, image="ss")      # the same pid recorded again, now
+    two = reader()
+    assert two["procevents"]["own"] == 1 and "from_reader" not in two   # by the new copy's time, not the old one
+
+
+def test_s6_ca6_a_copy_forgotten_at_the_bound_is_counted_and_said(tmp_path, monkeypatch):
+    stand_in_sample(monkeypatch)
+    monkeypatch.setattr(host, "PE_OWN_MAX", 2)
+    for pid in (4194031, 4194032, 4194033):
+        own.RECORD.add(pid, image="x")
+    w, clock = make_watch(tmp_path, host.live_reader(CATALOG, 0.0, "linux", helper=factory(
+        StandIn([answer([], more=True)]))))
+    text, _ = run(w, clock, 1)
+    said = [x for x in text.splitlines() if x.startswith(host.PE_OWN_FORGOT.split("%d")[0] + "2")]
+    assert len(said) == 1 and int(said[0].rsplit(": ", 1)[1]) >= 1, said   # counted and said, never silent

@@ -539,7 +539,8 @@ Rulings: ADR-0003 Amendments C and D.
     plain program names), so findings of NET-TOOL or DESTRUCT-CMD on that
     tree that nothing did; it could leave out what did run, so a short child
     is not judged; and it could name the watch's own pid as a child's
-    parent. It cannot make the watch run anything or write a file. The
+    parent. It cannot make the watch run anything or write a file of its
+    choosing (CA-5). The
     watch reads no /proc start of a process the reader said ended (BZ-8),
     but it reads /proc/PID/stat for the start of each other child the
     round names, so such a process could make the watch read that file of
@@ -580,9 +581,9 @@ Rulings: ADR-0003 Amendments C and D.
     A helper refused at its first start (a container, a right not given),
     or late or ended before its first answer, is a blind spot of the watch,
     said, and the rounds are the sample's alone; after its first answer, a
-    late answer, a line that is not the helper's, an end, a loss of events
-    or a bound passed is a hole of the result (BY-5): what was being judged
-    has a gap. One late three rounds running is ended and started again
+    late answer, a line that is not the helper's, an end, a loss of events,
+    a bound passed or an answer that holds back a rest for a next one is a
+    hole of the result (BY-5, BZ-6): what was being judged has a gap. One late three rounds running is ended and started again
     once, a second end is final, and the watch then hears nothing between
     two samples for the rest of its run. A process of the same user can end
     or stop the helper: that is said, never silent;

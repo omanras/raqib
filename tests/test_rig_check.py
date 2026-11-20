@@ -358,14 +358,17 @@ WGET_LINE = ("  [medium] NET-TOOL on python pid 9828 via host: HostChild may rea
              " wget, programs [\"wget\"]); off\n")
 
 
-def child_line(pid=9828, programs=("wget",), srcs=("procevents",), seq=5):
-    """A HostChild line of the stand-in's tree's source file, its cites of the sources `srcs` (hashes only)."""
-    return json.dumps({"seq": seq, "tool": "HostChild", "source": "host", "input_meta": {
-        "command_programs": list(programs), "pid": pid, "children": [{"pid": 9900, "image": programs[0]}],
-        "cites": [{"src": x, "line": 3, "text_sha256": "0" * 64} for x in srcs]}}) + "\n"
+def child_line(pid=9828, programs=("wget",), seen=("events",), seq=5):
+    """A HostChild line of the stand-in's tree's source file: its programs and, in their order, where each was seen
+    (ADR-0007 CA-2: command_sources; None: a line of a round with no reader's text, which carries none)."""
+    meta = {"command_programs": list(programs), "pid": pid, "children": [{"pid": 9900, "image": programs[0]}],
+            "cites": [{"src": "procevents", "line": 3, "text_sha256": "0" * 64}]}
+    if seen is not None:
+        meta["command_sources"] = list(seen)
+    return json.dumps({"seq": seq, "tool": "HostChild", "source": "host", "input_meta": meta}) + "\n"
 
 
-READER_SOURCES = [("20261120T075035.000Z-1-9828-ab.jsonl", "not json\n" + child_line(programs=("curl",), srcs=("proc",),
+READER_SOURCES = [("20261120T075035.000Z-1-9828-ab.jsonl", "not json\n" + child_line(programs=("curl",), seen=None,
                                                                                          seq=1) + child_line())]
 
 
@@ -381,20 +384,27 @@ def with_wget(report=REPORT):
     return report[:at] + WGET_LINE + report[at:]
 
 
-def test_x36_met_where_a_net_tool_line_of_the_stand_ins_tree_names_wget_and_its_line_cites_the_process_events():
-    state, words = x36(report=with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1))
-    assert state == check.MET and words.startswith("1 NET-TOOL line(s) on pid 9828 name wget (its rc=0), and its"
-                                                   " HostChild line cites the process events (procevents)")
-
-
-def test_x36_not_met_where_the_line_that_names_wget_is_the_samples_own_or_its_line_is_not_found():
+def test_x36_met_only_where_the_wgets_own_entry_says_the_process_events_alone():
     report = with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1)
-    state, words = x36(report=report, sources=[("t.jsonl", child_line(srcs=("proc",)))])
-    assert state == check.MISSED and words.startswith("the sample's own: the HostChild line that names wget on pid"
-                                                      " 9828 cites proc, not the process events")
-    for sources in ((), [("t.jsonl", child_line(pid=77))], [("t.jsonl", child_line(programs=("curl",)))]):
+    state, words = x36(report=report)
+    assert state == check.MET and words.startswith("1 NET-TOOL line(s) on pid 9828 name wget (its rc=0), and its"
+                                                   " HostChild line says the process events alone saw it")
+    together = [("t.jsonl", child_line(programs=("curl", "wget"), seen=("both", "events")))]   # CA-3: its own entry
+    assert x36(report=report, sources=together)[0] == check.MET
+
+
+def test_x36_n_a_where_the_wget_lived_to_a_sample_and_missed_where_the_sample_alone_or_nothing_says_it():
+    report = with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1)
+    state, words = x36(report=report, sources=[("t.jsonl", child_line(seen=("both",)))])
+    assert state == check.SKIP and words.startswith("it lived to a sample: the reader and the sample both held it")
+    mixed = [("t.jsonl", child_line(programs=("curl", "wget"), seen=("events", "both")))]   # curl's entry is not it
+    assert x36(report=report, sources=mixed)[0] == check.SKIP
+    state, words = x36(report=report, sources=[("t.jsonl", child_line(seen=("sample",)))])
+    assert state == check.MISSED and "the sample alone saw the wget on pid 9828" in words
+    for sources in ((), [("t.jsonl", child_line(pid=77))], [("t.jsonl", child_line(programs=("curl",)))],
+                    [("t.jsonl", child_line(seen=None))], [("t.jsonl", child_line(seen=("events", "x")))]):
         state, words = x36(report=report, sources=sources)
-        assert state == check.MISSED and "whose word it is cannot be told" in words
+        assert state == check.MISSED and "whose word it is cannot be told" in words, sources
 
 
 def test_x36_missed_where_the_stand_in_ran_wget_and_no_line_of_its_tree_names_it():

@@ -290,8 +290,9 @@ step of the reader's `missed.exe`: reads, not programs), `beyond` and `lost`
 watch's own words, never a program. A refusal is final. Before the first
 answered ask a hole of the helper is a blind spot that does not change the
 result; after it, a late answer, a line that is not the helper's, an end,
-a loss or a bound passed is a hole of the result of the kind `procevents`
-(BY-5, see "The round"). A helper that ended,
+a loss, a bound passed or an answer that holds back a rest for a next one
+is a hole of the result of the kind `procevents` (BY-5, BZ-6, see "The
+round"). A helper that ended,
 whose reader ended, or that was late three rounds running is ended and
 started again once, and a second end is final; between an end and the next
 start nothing is heard, and the report says so. A late answer and a line
@@ -346,11 +347,19 @@ its program's file. A tree that is a candidate only by what the reader
 gave is as one that is so only by the channel on Windows (`candidate_by`
 "channel", AA-1), and the footprints are those of the round built without
 the reader's records (AD-1). The search for act-roots takes as a root only
-a process a sample held (BZ-1): a chain of the reader's processes alone is
-no act-root. An end heard from the reader never ends a process the sample
+a process a sample held (BZ-1), and as the shell of its chain only a
+process a sample held (CA-1): what only the reader gave adds acts to an
+act-root the samples made; it never makes one. An end heard from the reader never ends a process the sample
 holds: the round's process list is the sample's. The round reads no /proc
 start of a child the reader alone gave and said ended: its start is the
-record's (BZ-8).
+record's (BZ-8), kept in the round's record of starts apart from the /proc
+reads (`child_started.events`, "the process events: when its fork was
+heard"), and an act timed by it has the basis `events`, never `stat`
+(CA-4). A HostChild line of a round that read the reader's text says, in
+`input_meta.command_sources` and in the order of `command_programs`, where
+each program's children were seen: `sample`, `events` or `both` (CA-2); a
+line of a round with no reader's text has no such key, and no rule reads
+it.
 
 What is not judged (BY-3, BZ-3). A tree needs a talker at a sample, and a
 connection that opens and closes between two samples is unseen (M14.2): a
