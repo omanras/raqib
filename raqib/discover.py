@@ -1130,6 +1130,8 @@ def _sysmon_records_at(src, line, event_id, d, problems, keyed, timed):
     own = _rec("proc", src, line, text, pid=pid, ppid=None, image=image_name(image), exe=image,
                argv=[], cwd=None, env_keys=None, ts=ts, derived=True)
     out = [own] + ([event] if event else [])
+    if keyed and empty_guid(d.get("ProcessGuid")):
+        own["guid_empty"] = True   # BV-1: an event of any kind joined by its pid is counted and said by the round
     return out if not keyed else [dict(r, guid=guid) for r in out]
 
 
@@ -1144,10 +1146,13 @@ def _guid_text(value):
     return "{%s}" % value.strip("{}").lower()
 
 
+EMPTY_GUID_TEXT = re.compile(r"\{?0{8}-0{4}-0{4}-0{4}-0{12}\}?\Z")
+
+
 def empty_guid(value):
-    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: all zeros."""
-    value = (value or "").strip()
-    return bool(value) and not value.strip("{}-0")
+    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: a GUID of zeros
+    (and nothing else: `-`, `0` or an empty text is not it)."""
+    return bool(EMPTY_GUID_TEXT.match((value or "").strip()))
 
 
 def _held(value):
@@ -2336,7 +2341,7 @@ def _guid_instances(records):
                              else ""))
     emptied = sum(1 for r in records if r.get("guid_empty"))
     if emptied:   # ADR-0007 BV-1: said, never joined in silence
-        holes.append("%d process start(s) of this round's channel named the process or its parent by an empty"
+        holes.append("%d event(s) of this round's channel named their process or its parent by an empty"
                      " ProcessGuid (all zeros: Sysmon no longer held it): joined by the pid they name; a pid taken"
                      " again is not told apart there" % emptied)
     if untold:

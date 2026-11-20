@@ -1,0 +1,9 @@
+<Sysmon schemaversion="4.90">
+  <!-- Probe only: a Sysmon that logs processes, connections and names, and neither file creation nor the registry -->
+  <EventFiltering>
+    <ProcessCreate onmatch="exclude"/>
+    <NetworkConnect onmatch="exclude"/>
+    <FileCreate onmatch="include"/>
+    <DnsQuery onmatch="exclude"/>
+  </EventFiltering>
+</Sysmon>

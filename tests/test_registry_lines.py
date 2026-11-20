@@ -392,6 +392,18 @@ def test_e1_a_cut_of_the_other_answer_holds_the_value_above_it_for_the_next_pass
     assert silent == [os_sysmon.silence_line(4950, os_sysmon.FOLLOW_CUT % (2, 2, 79002))]
 
 
+def test_e1_a_members_value_above_a_cut_is_held_and_is_a_line_once(tmp_path):
+    # the second review, K11: the value's process is a member already (its start is below the cut); only its record
+    # is above the cut. Without the hold at the cut it would be a line in this pass and again in the next
+    x = export([("proc", "01.000", 4970, REG, 4950, SYN.AGENT), ("proc", "01.100", 4980, CMD, 4950, SYN.AGENT),
+                ("reg", "01.200", 4970, REG, USER + "Run\\RaqibTestA")])
+    channel = Wevtutil(chunks(x))   # 79001 root, 79002 reg.exe (the cut of 2), 79003 cmd, 79004 reg.exe's value
+    lines, silent, tops = follow(channel, 2, tmp_path, cap=2)
+    assert tops == [(1, 79002, None), (2, 79003, 79004)]
+    assert names(lines) == ["RaqibTestA"]                                        # once
+    assert [r["tool"] for r in lines if r["phase"] == "pre"] == ["process", "process", "process", "registry"]
+
+
 def test_e1_a_failed_other_read_takes_no_value_and_the_registrys_bound_does_not_move(tmp_path):
     now, grow = grown()
     channel = Wevtutil(now, grow, fail={2})   # pass 1's other question does not return
@@ -586,7 +598,7 @@ def test_e5_the_watch_knows_registry_and_judge_source_gives_one_high_source_find
     assert "PERSIST-RUN-KEY" not in {r.id for r in host.source_rules(RULES, host_lines=True)}
 
 
-CLAUSE = "; this follow does not read the registry (Sysmon event 13): no value it sets is a line here"
+CLAUSE = "; this follow does not read the registry (Sysmon event 13): no value the tree sets is a line here"
 
 
 class NamesRegistry:
@@ -708,7 +720,8 @@ def test_e6_the_guide_and_the_threat_model_hold_the_sentences_that_matter():
                      "nothing is then there to read, and Raqib cannot tell that from nothing done.",
                      "A configuration that logs every key was not measured",
                      "Linux has no os source: the rule judges nothing there.",
-                     "a net line whose `Initiated` was not read is not judged and nothing says so;",
+                     # M15.2b (ADR-0014 AE-3): the two silences that waited here are said now
+                     "Where it holds none, that is a blind spot of the run, `registry`, said once:",
                      "asks its question for event 13 first (at most 500 events a pass), and then the first question,",
                      "no event 13 above its last record is taken and the registry's bound stops there,",
                      "while the tree's root is not found yet, the bound does not move either.",
@@ -719,7 +732,7 @@ def test_e6_the_guide_and_the_threat_model_hold_the_sentences_that_matter():
                      "and so two acts. Not shown reachable.",
                      "SYSTEM's own hive as `HKU\\S-1-5-18` or as `HKU\\.DEFAULT` (the second is not read): not"
                      " measured.",
-                     "a Sysmon channel that gives no file event, and now none of event 13, is not said."):
+                     "a channel that holds some event 13 may still not log the Run keys"):
         assert sentence in flat, sentence
     assert not re.search(r"\bM\d+\.\d+", flat)   # no milestone token
 

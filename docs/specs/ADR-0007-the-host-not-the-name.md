@@ -3120,7 +3120,10 @@ machine; one line written for each pass of a follow and each round, for the prob
 - BV-2 (Sysmon's `-`). `-` as an Image or a CommandLine is Sysmon's word for what it does not hold, never a
   program's name: the name is unread (null), and the round gives the pid no image called `-`.
 - BV-3 (what it costs, said). Joined by a pid, a child is given to the pid's present holder: where the pid
-  was taken again in between, nothing tells the two apart. A rule that reads the parent's name has none.
+  was taken again in between, nothing tells the two apart; and the root's own pid stays the root's for the
+  follow's life. A rule that reads the parent's name has none; a connection whose own ProcessGuid is empty has
+  neither its program's name nor its parent's. A process joined by a pid carries no mark of a nested tree's
+  root, so an outer tree's follow takes it for its own as well (the second review, K2 to K4).
 - BV-4 (not measured). How long a process must live, or how busy a machine must be, before Sysmon lets go of
   it; a real desktop. The commander's field run with a named agent that lived for minutes is where to look
   first: the watch now says the hole when it happens.

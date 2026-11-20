@@ -325,6 +325,50 @@ jobs:
           cmd /c "wevtutil qe Microsoft-Windows-Sysmon/Operational /f:xml > %RUNNER_TEMP%\channel.xml"
           python tools\rig\pubconf_read.py $env:RUNNER_TEMP\channel.xml
 
+  said:
+    name: what the watch says of a Sysmon that logs less (${{ matrix.conf }}; M15.2b, AE-2 and AE-3)
+    runs-on: windows-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        conf: [sysmon-quiet.xml, sysmon-reg.xml]
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install raqib and Sysmon with this configuration
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check .
+          Invoke-WebRequest https://download.sysinternals.com/files/Sysmon.zip -OutFile $env:RUNNER_TEMP\Sysmon.zip
+          Expand-Archive $env:RUNNER_TEMP\Sysmon.zip $env:RUNNER_TEMP\Sysmon -Force
+          & $env:RUNNER_TEMP\Sysmon\Sysmon64.exe -accepteula -i tools\rig\${{ matrix.conf }}
+          Start-Sleep 3
+      - name: a watch of six rounds while a file is made and a value is set (each undone)
+        shell: pwsh
+        run: |
+          $out = "$env:RUNNER_TEMP\watch.out"; $err = "$env:RUNNER_TEMP\watch.err"
+          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","6","--every","5","--no-open","--no-page" -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+          Start-Sleep 6
+          Set-Content -LiteralPath "$env:TEMP\raqib-said.txt" -Value "x"; Remove-Item "$env:TEMP\raqib-said.txt"
+          reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v RaqibSaid /t REG_SZ /d "cmd /c rem" /f | Out-Null
+          reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v RaqibSaid /f | Out-Null
+          $w.WaitForExit(120000) | Out-Null
+          "=== the watch's exit: $($w.ExitCode)"
+          $t = Get-Content $out
+          "=== CHANNEL"; ($t | Select-String -Pattern "^CHANNEL").Line
+          "=== what it says of event 11 and of the registry"; ($t | Select-String -Pattern "event 11|event 13|registry").Line | Select-Object -First 12
+          "=== BLIND SPOTS"; $i = ($t | Select-String -Pattern "^BLIND SPOTS" | Select-Object -First 1).LineNumber; if ($i) { $t[($i-1)..([Math]::Min($i+5,$t.Count-1))] }
+          "=== rounds and result"; ($t | Select-String -Pattern "^ROUNDS:|^RESULT|^HOLES").Line
+          "=== events in the channel by id"; Get-WinEvent -LogName Microsoft-Windows-Sysmon/Operational -MaxEvents 5000 -ErrorAction SilentlyContinue | Group-Object Id | Sort-Object Name | ForEach-Object { "$($_.Name): $($_.Count)" }
+
   effects:
     name: what an agent's three acts leave (the field test of 2026-11-20; M15; raqib of ${{ matrix.build }}, try ${{ matrix.try }})
     runs-on: windows-latest

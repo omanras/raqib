@@ -240,3 +240,47 @@ fresh reg.exe at a moment of its own, each undone):
 - AC-9 (the lines that stopped). M15.2 does not merge until the two runs' cause is found, or shown to be main's
   own (then it is recorded and ruled apart). The probe branch carries, for the probe only, one line for each
   pass of a follow and for each round's sources.
+
+## Amendment D (the Table, 2026-11-20) - the second review (docs/review/2026-11-20-M15.2-redo.md): M15.2 lands
+The reviewer said NEXT: the REDO does what Amendment C rules, the questions are asked in the ruled order, and
+the fake channel of its tests grows between the two questions of a pass. In the field (the probe branch
+f94b9bd, GitHub's Windows machine, the build that lands): thirteen runs, 40 values each by a fresh reg.exe at
+a moment of its own - every one a line and a PERSIST-RUN-KEY finding, where the first build lost one to three
+in four runs of seventeen; a value whose name holds a backslash was a finding that says so.
+- AD-1 (AC-9 is met). The lines that stopped were Sysmon's empty ProcessGuid, main's own fault, found and
+  ruled as ADR-0007 Amendment BV; its fix rides on this branch and was read by the same reviewer. With it, a
+  run whose channel held eleven such starts wrote every child (the probe's build of the same change).
+- AD-2 (said as it is; the review's must-fix items). The order Sysmon logs a process's start and its value in
+  is not measured: AC-1 closes F1 where the start is logged first, and the documents say that, not more. A
+  value whose name ends with a backslash is no line and nothing says so: said, not measured. The round counts
+  an event of any kind that named its process by an empty ProcessGuid, not a start alone. What BV's join by
+  pid costs is said whole (ADR-0007 BV-3). An empty ProcessGuid is a GUID of zeros and nothing else.
+- AD-3 (recorded, each for its own measurement or ruling). Whether Sysmon ever logs a value before its own
+  process's start; whether Windows runs a value under a key below Run, one whose name holds or ends with a
+  backslash, or one under a user's 32-bit view; whether the follow's word on an empty ProcessGuid belongs in a
+  tree's source only where that tree's own event was joined by pid; whether a child joined by its parent's pid
+  should carry that parent's mark of a nested root; a placeholder of the rules' sentences chosen by a boolean
+  (the nested clause is printed on every finding until then); AA-3 and AA-4 (M15.2b).
+
+## Amendment E (the Table, 2026-11-20) - M15.2b: what was not read is said (AA-3, AA-4)
+Two silences of the rules of behaviour were recorded when they landed (AA-3, AA-4) and left for this task.
+Neither needs a measurement to rule: each is a fact the watch already holds and does not say.
+- AE-1 (AA-3: an unread Initiated). An os net line whose `Initiated` was not read carries no `initiated` key
+  (it carried null). A fact that is not there is unknown to the engine, so NET-ADMIN-PORT cannot judge the
+  line and says so in its partial note, as it does for a line written before the four keys. FOR: a connection
+  the rule could not judge is never counted as judged. MUST NOT TOUCH: a line whose Initiated was read, to the
+  byte.
+- AE-2 (AA-4: a channel that gives no event 11). The watch already says, once, when its rounds have read no
+  event 1, 3 or 22 of the channel. It says the same of event 11: no file a tree makes is then seen, and
+  PERSIST-AUTOSTART's os lines have nothing to read.
+- AE-3 (AA-4: a channel that holds no event 13). The rounds do not read event 13 (a follow does, for its
+  tree). At its first read the round's channel asks one bounded question more: the newest event 13 the
+  channel holds, whatever its key. Where it holds none, that is a blind spot of the run, said once:
+  PERSIST-RUN-KEY has nothing to read on this machine unless this Sysmon's configuration is changed. Where it
+  holds one, the inventory carries its time and nothing is said: it shows that this Sysmon logs some registry
+  values, not that it logs the Run keys, and the documents say that limit. Where the question cannot be
+  asked, that is said as not known. FOR: a person learns at the start of a watch that a rule of his is blind
+  here, not after an agent has used it. MUST NOT TOUCH: the round's own question each round, to the byte; the
+  result and the exit code (a blind spot is counted apart).
+- AE-4 (recorded). The certain cure is ADR-0014 S3: the autostart places read by Raqib itself each round, so
+  that no rule of persistence hangs on Sysmon's configuration. It is the next stage of this track (M15.3).

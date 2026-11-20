@@ -114,7 +114,9 @@ What is written (C-5), one session per run, `os-<PID>`:
   are written like TCP ones (the protocol is in the hashes only). ADR-0014
   A-5 (M15.1): a connection's line also carries "initiated" (true where
   the process made the connection, false where it accepted one, as the
-  event's Initiated says; null where that is not read), "dest_scope"
+  event's Initiated says; ADR-0014 AE-1 (M15.2b): no "initiated" key at
+  all where that is not read - absent, empty or another word - so a rule
+  that reads it cannot judge the line and says so), "dest_scope"
   (dest_scope(): loopback, link-local, private or public; null where the
   address is not one) and "image" and "parent_image": the names of the
   process the event names and of its parent as that process's own event 1
@@ -192,7 +194,7 @@ REGISTRY_EVENT = 13
 REGISTRY_READ = (REGISTRY_EVENT,)
 REGISTRY_TOOL = "registry"
 TOOLS = {1: "process", 11: "file", 3: "net", REGISTRY_EVENT: REGISTRY_TOOL}
-REGISTRY_CAP = 500                # AB-3: a follow's second question, at most this many events 13 per pass
+REGISTRY_CAP = 500                # AB-3, AC-1: a follow's question for event 13, at most this many a pass
 # AB-2, AC-3: anything below ...\CurrentVersion\Run or \RunOnce of a user's hive (HKU\<a SID>) or the machine's,
 # with or without \Wow6432Node after SOFTWARE, any case; the whole key, anchored at both ends (never RunNotification);
 # what follows the key is the value's name (a backslash in it: `nested`); a target that ends at the key or with a
@@ -332,7 +334,8 @@ def dest_scope(text):
 
 def initiated(value):
     """ADR-0014 A-5: an event 3's Initiated as Sysmon writes it (true or
-    false, any case), else None (not read)."""
+    false, any case), else None (not read: AE-1, the line then has no
+    "initiated" key)."""
     word = value.strip().lower() if isinstance(value, str) else None
     return {"true": True, "false": False}.get(word)
 
@@ -372,10 +375,13 @@ EMPTY_GUID = ("Sysmon wrote an empty ProcessGuid (all zeros) for a process or fo
               " process. Those events are joined by the pid they name; a pid taken again is not told apart there")
 
 
+EMPTY_GUID_TEXT = re.compile(r"\{?0{8}-0{4}-0{4}-0{4}-0{12}\}?\Z")
+
+
 def empty_guid(value):
-    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: all zeros."""
-    value = (value or "").strip()
-    return bool(value) and not value.strip("{}-0")
+    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: a GUID of zeros
+    (and nothing else: `-`, `0` or an empty text is not it)."""
+    return bool(EMPTY_GUID_TEXT.match((value or "").strip()))
 
 
 def _event_guid(value):
@@ -771,8 +777,10 @@ def _event_fields(e, depth, server_hash=False):
         meta["dest_sha256"] = server
     # ADR-0014 A-5: who made the connection, where it goes, and the names its process's own start said (_start_names)
     image, parent_image = e.get("names") or (None, None)
-    meta.update(initiated=initiated(d.get("Initiated")), dest_scope=dest_scope(d.get("DestinationIp")),
-                image=image, parent_image=parent_image)
+    said = initiated(d.get("Initiated"))
+    if said is not None:   # ADR-0014 AE-1 (M15.2b): an Initiated not read is no key (unknown to the rules), never null
+        meta["initiated"] = said
+    meta.update(dest_scope=dest_scope(d.get("DestinationIp")), image=image, parent_image=parent_image)
     return common.canonical_sha256({"destination": destination}), meta
 
 
@@ -1033,6 +1041,12 @@ def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Pop
     return decode(data or b""), None
 
 
+# ADR-0014 AE-3 (M15.2b): the channel's one question for event 13 (Channel.registry_held) is asked through
+# read_live_bounded's `newest`, read_live_bounded itself; a stand-in of the round's read (a test's) is asked it only
+# where it has a `newest` of its own, so one without it is never asked
+read_live_bounded.newest = read_live_bounded
+
+
 FOLLOW_CUT = ("the follow's pass read %d events, the cap (/c:%d): the records after record %s are read by its next"
               " pass")   # AI-1: a cut is a hole
 REGISTRY_CUT = ("the follow's read of event 13 (a registry value set) read %d events, its cap (/c:%d): the records"
@@ -1100,7 +1114,8 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     (round_query over REGISTRY_READ, round_args with REGISTRY_CAP), through
     the same reader and helpers, then the first question, to the byte what
     it was: every event 13 the pass takes was logged before the other
-    question was asked, so its process's start is in that answer or an
+    question was asked, so (where Sysmon logs a process's start before its
+    value: not measured) its process's start is in that answer or an
     earlier one. It asks after its own bound (tree's "registry_top", kept
     with the tree, so a follow attached again reads none twice), or,
     before it has one, since the start (with no start: after after_record);
@@ -1286,6 +1301,13 @@ def round_args(query, cap=ROUND_CAP):
     return ("qe", CHANNEL, "/q:%s" % query, "/c:%d" % int(cap), "/f:xml")
 
 
+def newest_args(event=REGISTRY_EVENT):
+    """ADR-0014 AE-3 (M15.2b): wevtutil's arguments for the channel's newest
+    event of this id, whatever it names: newest first (/rd:true), one event
+    (/c:1), XML. Only Raqib's own value is formatted into it (int())."""
+    return ("qe", CHANNEL, "/q:*[System[(EventID=%d)]]" % int(event), "/rd:true", "/c:1", "/f:xml")
+
+
 def _chunks(text):
     """The text cut at each <Event: (chunk, record id or None, SystemTime text or None)."""
     starts = [m.start() for m in discover.EVENT_START.finditer(text)]
@@ -1316,6 +1338,7 @@ class Channel:
         self.cap = int(ROUND_CAP if cap is None else cap)
         self.timeout = float(timeout)
         self.helpers = Helpers() if helpers is None else helpers
+        self.given = reader is not None   # AE-3: a caller's reader is asked registry_held only by its own `newest`
         self.reader = reader or (lambda args, timeout: read_live_bounded(timeout, self.helpers, args=args))
         self.after = None
         self.reads = self.failed = self.cut = self.events = self.dropped = 0
@@ -1339,6 +1362,31 @@ class Channel:
         if self in OPEN_CHANNELS:
             OPEN_CHANNELS.remove(self)
         return self.helpers.end(why)
+
+    def registry_held(self):
+        """ADR-0014 AE-3 (M15.2b): the channel's newest event 13 (a registry
+        value set), whatever its key: one bounded question of its own
+        (newest_args), never a round's, through the same wevtutil, timeout
+        and helpers (so its owner's Stop ends it, and a helper it had to end
+        is in the record the next round carries). {"held": True, "newest":
+        its ISO time, or None where it is not read}, {"held": False} or
+        {"error": why it was not asked or not answered}. None where it is
+        not asked at all: the round's read is a stand-in (a test's) with no
+        `newest` of its own, or this channel was given a reader with none."""
+        if self.given:
+            ask = getattr(self.reader, "newest", None)
+        else:
+            own = getattr(read_live_bounded, "newest", None)
+            ask = None if own is None else (lambda args, timeout: own(timeout, self.helpers, args=args))
+        if ask is None:
+            return None
+        if self.closed:
+            return {"error": "the channel is closed (its watch stopped): not asked"}
+        text, failed = ask(newest_args(), self.timeout)
+        if failed is not None:
+            return {"error": failed}
+        _, chunks = _chunks(text or "")
+        return {"held": True, "newest": discover.iso(chunks[0][2])} if chunks else {"held": False}
 
     def read(self, at):
         """One round's read at `at` (an aware datetime): (kept text or None,

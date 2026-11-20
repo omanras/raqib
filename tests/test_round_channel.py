@@ -775,7 +775,8 @@ def test_x8_no_probe_at_the_start_and_a_kind_not_read_in_three_rounds_is_said_on
     w, fake, _ = channel_watch(tmp_path, monkeypatch, ["quiet/quiet"] * 4, ["", shell_events(rec=500), "", ""])
     assert len(fake.args) == 4 and not any("/rd:true" in a for a in fake.args)   # no probe: one read per round
     said = [n for n in w.notes if "read so far" in n]
-    assert len(said) == 1 and "no event 22 read so far" in said[0]
+    # M15.2b (ADR-0014 AE-2): no event 11 is read either, and is said under the same rule (1 -> 2 sentences)
+    assert len(said) == 2 and "no event 11 read so far" in said[0] and "no event 22 read so far" in said[1]
     report = w.summary()[0]
     assert "kinds read: event 1, event 3" in report and report.count("no event 22 read so far") == 2
 
