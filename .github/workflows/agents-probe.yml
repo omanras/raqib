@@ -407,6 +407,7 @@ jobs:
           git fetch -q --depth 1 origin claude/M15.3b
           New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\m153b" | Out-Null
           git show FETCH_HEAD:raqib/autostart.py | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\m153b\autostart.py"
+          $env:PYTHONPATH = (Get-Location).Path
           python tools\rig\sure_probe.py "$env:RUNNER_TEMP\m153b"
       - name: the places read, a quiet minute and a half, four acts each undone
         shell: pwsh
