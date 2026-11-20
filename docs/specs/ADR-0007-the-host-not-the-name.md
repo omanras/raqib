@@ -3398,3 +3398,27 @@ GitHub's Linux machine, an strace of each tree read by tools/rig/exec_probe.py):
   bash's line); `nc -z` to a public name where nc is there; and a child that outlives the shell that started
   it. X43: the fetch is a NET-TOOL finding of the stand-in's tree. X44: `nc` is one, named `nc`. X45: the
   outliving child's tool is one. Each n/a where its tool is not installed or the helper was refused.
+
+## Amendment CD (the Table, 2026-11-21) - M14.1d in the field: X45 MISSED, and why (a short REDO before the review)
+The rig on bf47ca6 (GitHub's Linux machine, kernel 7.0): the gate green on six jobs; X43 MET (the fetch bash ran
+in its own pid a round after its own line is a NET-TOOL finding of the stand-in's tree) and X44 MET (`nc`, whose
+file is `nc.openbsd`, is one, named `nc`); X45 MISSED - no line of the stand-in's tree names the fetch of the
+bash that outlived its `sh`. The Table ran the same act under a real watch on a Linux machine of its own (kernel
+6.18; the reader answered every ask) and read the tree's lines: the tree's line names the `sh` (heard by the
+process events alone, begun and ended within one round) and never the bash. The reader gave the bash with the
+`sh` as its parent; the sample of the same round holds the bash under pid 1, where the kernel put it when the
+`sh` ended; and where a sample and the reader both name a process's parent, the sample's word is taken first.
+So the bash was nobody's child, was never kept (CC-3 keeps what the watch wrote), and its fetch seven seconds
+later was a stranger's. CC-3 as built covers a parent that ended in an earlier round than its child was heard
+in; the field's case is a parent that begins and ends in the very round its child is first heard in - which is
+what a shell that starts a command in the background and returns does every time.
+- CD-1 (the parent at birth stands). Where the reader gave a process, the parent it names - the process that
+  made it, read from the kernel's own event - is whose child it is, though a sample holds it under another
+  parent now (the kernel hands a process whose parent ended to another). FOR: what a tree starts through a
+  shell that returns at once is the tree's child from the first round it is heard in, is kept, and every
+  program it runs later is judged as the tree's. MUST NOT TOUCH: a process the reader did not give (the
+  sample's word is all there is); a round that read no reader's text (byte for byte what it was); a tree's own
+  key and root.
+- CD-2 (said). The section and the spec say it: a process is its maker's child. A process whose maker the
+  reader did not hear (begun before the reader, or lost) and whom the sample holds under pid 1 is still
+  nobody's: said among what is not judged.
