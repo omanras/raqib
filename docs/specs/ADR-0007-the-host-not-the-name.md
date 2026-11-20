@@ -3140,3 +3140,29 @@ review is about the machine that is not healthy, which is where a watch must not
   the result (the builder's Q1). An interpreter replaced on disk reads as "(deleted)" and the record of the
   watch's own no longer matches it (L6): said in the threat model now, fixed with the join. The watch's own
   short children (`ss` each round) are heard like any other.
+
+## Amendment BX (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1b-redo.md (269dd9e): M14.1b lands
+The reviewer said NEXT: the REDO closes the hang of a real helper, the erased loss, the false healthy words and
+the rig's empty claim. Four small things were left, and the Table made them by hand in the commit that files
+the review. Measured in the field before the merge (the probe branch b9eb9d3, two Ubuntu images, kernel 7.0):
+a watch of ten rounds of three seconds whose helper was stopped under it at eight seconds ended in 27 and 28
+seconds; it answered seven asks of ten, said the late round, ended the helper at the third and started it
+again once, said that nothing was heard between the two, and kept the old words on what lives between two
+samples. Its result was the machine's own (a runner's process made an unknown tree on both).
+- BX-1 (M1: a round is not held to end a helper). A helper the watch ends inside a round - late three rounds
+  running, ended, refused - is ended at once, and each wait is at most the ask's own time. The Stop of the
+  watch still gives its helper two seconds to end by itself. FOR: with a short interval the round that ends a
+  helper is not late, so no hole of the result comes from the helper (BU-3).
+- BX-2 (M3: a number is a count). A number of a helper's line that is too large to be a count is no number,
+  and the line is no line. FOR: nothing a line holds can stop the watch's report.
+- BX-3 (M2, M4, M5: said as it is). A process of the same user that writes in the helper's place is not told
+  apart from it, and the threat model says so and what it could do. What the interpreter reads at a helper's
+  start before the fixed program sets its path is said. The spec no longer says that the next round asks
+  again while an ask is unanswered.
+- BX-4 (the tests). The rounds that end a helper are timed; the line's bound has a test that fails without it.
+- BX-5 (recorded for M14.1c, from the review). The helper's lines are not proof of who wrote them: a name
+  from them goes through the name gate, and the "heard and counted" words are the helper's word, not a fact
+  the watch checked. The ask's write is to be made unable to block. Whether the helper always runs isolated.
+  The rounds before a helper's first line. One line that is no line costs three late rounds and the one
+  restart: whether that is meant. X35 and the reader's bounds. A loss after a retired helper's last answer is
+  not known, and is to be said so.

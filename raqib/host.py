@@ -592,7 +592,8 @@ def procevents_helper():
 
 
 def _pe_num(x):
-    return isinstance(x, int) and not isinstance(x, bool) and x >= 0
+    # the second review, M3: a number of a helper's line is a count; one too large to be a count is no number
+    return isinstance(x, int) and not isinstance(x, bool) and 0 <= x < 1 << 63
 
 
 def _pe_record(rec):
@@ -676,8 +677,9 @@ class ProcEvents:
                 "beyond": self.beyond_before + self.beyond_now, "lost": self._lost(), "refused": self.refused,
                 "hole": hole, "more": more, "restarts": self.restarts, "asked": asked, "answered": answered}
 
-    def _retire(self):
-        """The running helper stopped; its last counts kept for the watch (BW-2)."""
+    def _retire(self, within=None):
+        """The running helper stopped; its last counts kept for the watch (BW-2). within (seconds): the helper is
+        ended inside a round and at once, each wait bounded by the ask's own time (the second review, M1)."""
         helper, self.helper = self.helper, None
         if self.lost_now:
             self.lost_before["count"] += self.lost_now["count"]
@@ -688,13 +690,13 @@ class ProcEvents:
         self.lost_now, self.beyond_now = None, 0
         if helper is not None:
             try:
-                self.problems += helper.stop() or []
+                self.problems += (helper.stop() if within is None else helper.stop(within)) or []
             except Exception as exc:
                 self.problems.append("the helper's stop failed: %s: %s" % (type(exc).__name__, exc))
 
     def _ended(self, why):
         """The helper ended, or is ended: started again once; the second end is final. The hole's words."""
-        self._retire()
+        self._retire(self.timeout)
         if self.starts >= 2:
             self.final = PE_FINAL % why
             return self.final
@@ -747,7 +749,7 @@ class ProcEvents:
             if why == self.pe.REFUSED:
                 self.refused = _pe_words(getattr(self.helper, "refused", None) or "no reason given")
                 self.final = PE_REFUSED % self.refused
-                self._retire()
+                self._retire(self.timeout)
                 return self._inv(self.final)
             if why == self.pe.ENDED:
                 return self._inv(self._ended("its output ended"), asked=True)

@@ -1135,7 +1135,11 @@ class Helper:
             except Exception:
                 pass
 
-    def stop(self):
+    def stop(self, within=None):
+        """Ends the helper. Without `within`: its input is closed and it is given STOP_SECONDS to end by itself
+        (the watch's own Stop). With `within` (seconds; ADR-0007 BX-1, the second review's M1: a helper the watch
+        ends inside a round - late, ended or refused): its input is closed and it is ended at once, and each wait
+        is at most `within`, so the round that ends it is not held for the helper's sake."""
         if self.stop_problems is not None:
             return []
         self.stop_problems = problems = []
@@ -1147,22 +1151,28 @@ class Helper:
             proc.stdin.close()
         except Exception as exc:
             problems.append("the helper's input could not be closed (%s)" % _flat(exc))
+        wait = KILL_SECONDS if within is None else max(0.0, min(KILL_SECONDS, within))
         try:
+            if within is not None:
+                raise TimeoutError("ended at once")
             proc.wait(STOP_SECONDS)
         except Exception:
-            problems.append("the helper did not end within %g s of its input's end: it was ended" % STOP_SECONDS)
+            if within is None:
+                problems.append("the helper did not end within %g s of its input's end: it was ended" % STOP_SECONDS)
             try:
+                if within is not None:   # a stopped process takes no SIGTERM until it is continued: the kill ends it
+                    raise TimeoutError("ended at once")
                 proc.terminate()
-                proc.wait(KILL_SECONDS)
+                proc.wait(wait)
             except Exception:
                 try:
                     proc.kill()
-                    proc.wait(KILL_SECONDS)
+                    proc.wait(wait)
                 except Exception as exc:
                     problems.append("the helper could not be ended (%s)" % _flat(exc))
         if self._thread is not None:   # its output ends with it: the thread that read it ends too (bounded)
             try:
-                self._thread.join(KILL_SECONDS)
+                self._thread.join(wait)
             except Exception:
                 pass
         return problems

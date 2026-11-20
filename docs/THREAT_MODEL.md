@@ -532,8 +532,18 @@ Rulings: ADR-0003 Amendments C and D.
     process that holds a listener of the kernel's events for the watch's
     life; it adds no right and no reach outside the machine. Each line it
     writes is bounded (1 MiB) and the watch holds at most four unread and
-    at most one ask unanswered, so a helper that is stopped, slow or wrong
-    costs the watch a hole, never its round or its Stop. A helper that is
+    at most one ask unanswered, so a helper that is stopped or slow costs
+    the watch a hole, never its round or its Stop (measured: a helper
+    stopped under a watch of ten rounds of three seconds; the watch ended
+    in 28 s, said the three late rounds and started the helper again once).
+    A process of the same user that writes the helper's output in its place
+    is not told apart from the helper: its numbers are counted as the
+    helper's, and one that answers while the helper reads nothing could
+    still hold the watch at a write; that process could as well stop the
+    watch itself. Before the helper's fixed program sets its import path,
+    the interpreter's own start reads what the watch's start read (the site
+    folders' own files; without isolation the user's too): the places are
+    the watch's, their contents are read again at each start. A helper that is
     refused, late, or ended is a blind spot of the watch, said; one late
     three rounds running is ended and started again once, a second end is
     final, and the watch then counts nothing between two samples for the
