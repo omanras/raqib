@@ -44,3 +44,33 @@ did not name. The Scope now names it. Its choices are ruled as it made them:
   docs/specs/EVENT.md from the code, and `--check` says whether they are the code's own; the test that holds
   them calls the same function. Without it every move of the number would fail the gate until eighteen lines
   were edited by hand, and a number that is hard to move is not moved.
+
+## Amendment B (the Table, 2026-11-20) - the review of M17.1 (docs/review/2026-11-20-M17.1.md): M17.1 lands
+The reviewer's verdict is NEXT with two must-fix items; most of its findings are of the Table's own text.
+- VB-1 (the update steps). The steps the Table wrote could not be followed on every install path the README
+  gives. They are now by how Raqib was installed (pipx; pip in a venv or Windows' launcher; root's copy for the
+  Linux service), they say first to stop what runs (a running watch keeps the number it started with: the
+  very confusion this ADR is for), and the service's copy is a new folder for each number, never a copy over
+  the old one. The service's steps are written from its spec and were not run on a machine: the entry and the
+  guide say so, and M17.2 (packages) measures them. FOR: a person who follows the entry ends with the number
+  it names. MUST NOT TOUCH: SERVICE.md's install steps.
+- VB-2 (the tool's imports). The tool imports the standard library, raqib and tests/test_event.py, which needs
+  pytest: VA-3 asks that the tool and the test share one builder, and the builder is the test's. The tool's
+  words and its test's name now say so. E4's "the standard library and raqib alone" was the Table's wish and
+  is withdrawn: a second copy of the fixture runs would be two builders that can disagree.
+- VB-3 (an example's fence). The tool finds an example by its heading and the fence under it, and never
+  crosses a heading or another fence on the way: an example whose fence is missing is no example of the
+  document, is named, and nothing is written under a wrong label.
+- VB-4 (one wording). `raqib --version` and the lines of a watch take the words "raqib <number>" from one
+  function.
+- VB-5 (the Consequences' sentence, put right). The gate does not move the examples:
+  `tools/event_examples.py --write` does, run by the Table at the merge, and the gate stays red until it is
+  run. The protocol's line says so, and that the tool needs pytest.
+- VB-6 (the changelog's words). The 0.2.0 entry says the number's own lines as what is new (a script that
+  matched a first line whole must match its beginning); it no longer says the reader "hears every process"
+  (measured: it missed 0 to 2 of 200 programs that live under a millisecond), nor that the rig "holds" the
+  rules (a missed claim is reported and does not fail a push), and the service is 0.1.0's, not new here.
+- VB-7 (recorded). The events take the number when the module is imported (one value a process, so a real run
+  is right; a test that moves the number does not move the events'). Run D's id, n and about are the
+  document's and are never refreshed by the tool. An overlay's thresholds are measured again after every move
+  of the number, by design (the stamp holds the version): the entry now says it.

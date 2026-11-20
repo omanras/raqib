@@ -12,11 +12,11 @@ check = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(check)
 
 WORKLOAD = "WORKLOAD 07:50:35 pid 9828\nWORKLOAD 07:50:35 talking\nWORKLOAD 07:51:15 done\n"
-REPORT = """raqib watch --host: the host, not a name (ADR-0007)
+REPORT = """raqib watch --host: the host, not a name (ADR-0007); raqib 9.8.7
 [07:51:21Z] round 16: 295 records read, 14 holes; 1 tree(s) now
 raqib watch --host: 16 round(s) done (--rounds)
 
-Raqib watch --host (ADR-0007): the host, not a name
+Raqib watch --host (ADR-0007): the host, not a name; raqib 9.8.7
 host: win32; a round every 5 s; window 0 s; rounds 16 of 16
 ROUNDS: 16 started, 16 with an inventory, 0 late, 0 failed
   round 1: 249 records read, 13 holes

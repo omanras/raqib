@@ -310,11 +310,19 @@ VERSION_NUMBER = [
     "[CHANGELOG.md](CHANGELOG.md) says, the newest first, what each number brought, how to update to it and what was"
     " not measured.",
     "To update a checkout, as CHANGELOG.md gives it:",
-    "- Windows:",
-    "`git pull`, then `py -m pip install --upgrade .`",
-    "- Linux:",
-    "`git pull`, then `pipx install --force .`; root's copy for the service is built from a copy of the checkout"
-    " ([SERVICE.md](docs/specs/SERVICE.md)).",
+    "- In the checkout's folder.",
+    "First stop a running watch, window or service: a running one keeps the number it started with.",
+    "- `git pull`",
+    "- Installed with pipx, on Linux or Windows:",
+    "`pipx install --force .`",
+    "- Installed with pip:",
+    "`pip install --upgrade .` in the same venv; with Windows' launcher, `py -m pip install --upgrade .`",
+    "- The Linux service (root's copy, [SERVICE.md](docs/specs/SERVICE.md)), with DIR its folder and NUMBER the new"
+    " number: a new copy of the checkout for each number, `sudo cp -r .",
+    "DIR/src-NUMBER`, then `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER` and `sudo DIR/bin/raqib service"
+    " install` again (it writes the unit again and restarts it).",
+    "These steps were not run on a machine yet.",
+    "A watch with rules of your own measures its thresholds again at its first start after an update, and says so.",
     "- Then `raqib --version` says the number at the top of CHANGELOG.md.",
 ]
 GUIDE_NEW += VERSION_NUMBER

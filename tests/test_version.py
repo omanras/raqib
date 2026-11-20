@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 import raqib  # noqa: E402
 from raqib import app, cli, host, watch  # noqa: E402
 from readme_text import GUIDE, README, flat, section  # noqa: E402
+from hostthreads import raqib_threads_end  # noqa: E402,F401  (V-5: every HostWatch ended, no thread leaked)
 from test_host import CATALOG, RULES, inv  # noqa: E402
 from test_watch import run_watch  # noqa: E402
 
@@ -320,7 +321,25 @@ def test_e4_an_example_lost_or_of_no_event_is_named_and_exits_1(tmp_path, built)
         assert "the example a knock no run makes is of no built event" in out.getvalue()
 
 
-def test_e4_the_tool_is_ascii_and_imports_the_standard_library_and_raqib_alone():
+def test_vb3_an_example_whose_fence_is_missing_is_named_and_never_takes_the_next_ones_line(tmp_path, built):
+    real = DOC.read_text(encoding="utf-8")
+    labels = list(event_examples.found(real))
+    first = labels[0]
+    at = real.index("### example: %s\n" % first)
+    fence = real.index("```json\n", at)
+    broken = real[:fence] + real[fence:].replace("```json\n", "```\n", 1)   # the first example's fence is lost
+    doc = tmp_path / "EVENT.md"
+    for how in ("--check", "--write"):
+        doc.write_text(broken, encoding="utf-8")
+        out = io.StringIO()
+        assert event_examples.main([how, "--doc", str(doc)], out=out, built=built) == 1
+        said = out.getvalue()
+        assert said.count("no example of") == 1 and "no example of %s in the document" % first in said
+        assert doc.read_text(encoding="utf-8") == broken   # nothing written under a wrong label
+    assert list(event_examples.found(broken)) == labels[1:]
+
+
+def test_e4_the_tool_is_ascii_and_imports_the_standard_library_raqib_and_the_events_test():
     data = TOOL.read_bytes()
     assert data.isascii()
     names = set()
@@ -344,8 +363,12 @@ def test_e5_the_guide_says_where_the_number_is_read_what_a_move_means_and_how_to
                   "PATCH with a merge that only repairs", "a merge of documents or tests alone moves nothing",
                   "The number is not a promise of stability",
                   "[CHANGELOG.md](../CHANGELOG.md) says, the newest first, what each number brought, how to update",
-                  "- Windows: `git pull`, then `py -m pip install --upgrade .`",
-                  "- Linux: `git pull`, then `pipx install --force .`",
+                  "First stop a running watch, window or service: a running one keeps the number it started with.",
+                  "- Installed with pipx, on Linux or Windows: `pipx install --force .`",
+                  "- Installed with pip: `pip install --upgrade .` in the same venv; with Windows' launcher,"
+                  " `py -m pip install --upgrade .`",
+                  "`sudo DIR/bin/raqib service install` again (it writes the unit again and restarts it)",
+                  "These steps were not run on a machine yet.",
                   "- Then `raqib --version` says the number at the top of CHANGELOG.md."):
         assert words in guide, words
     # the steps as CHANGELOG.md's newest entry gives them: each of its commands is the guide's
