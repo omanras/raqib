@@ -163,15 +163,22 @@ file of a process is ever read, and nothing is read at a fork or an exit.
   lost at least, by the kernel's own count on each CPU: where the count on a
   CPU steps over a number, the step less one is added. In the measured
   words: what the queue held is given; what came while it was full is gone;
-  how many: at least the count. A step with no ENOBUFS since `counts()` was
-  last read is a loss the kernel did not tell, and `why` says so. A count
+  how many: at least the count. A step seen while no ENOBUFS has come since
+  the start is a loss the kernel did not tell, and `why` says so; after an
+  ENOBUFS a gap is not told apart from it (the ENOBUFS is read before its
+  gaps show, and a CPU's gap shows only at that CPU's next event). An answer
+  to any listener's ask takes the next number of its CPU's count, as an
+  event does, and is counted as one, so another listener's ask is no loss.
+  A count
   that does not step forward is not counted and is said once in `said`. A
   CPU heard from for the first time has nothing to compare: the count is
   from below. `why` is none while nothing was lost;
 - `beyond`: what was past a bound of the reader's own: `PROCESSES_MAX`
   (32768), a constant, for each of the processes kept, the processes held
   for the next read, the ends held for it, the threads of one process and
-  the memories of ended and refused pids (these forget their oldest);
+  the memories of ended and refused pids and of the ends of processes not
+  held (these forget their oldest, and a forgetting is not counted: a pid
+  forgotten is then said as one whose fork was not heard);
   CPUS_MAX (4096) CPUs whose count is kept. `beyond` counts events and
   records past the bound, not processes. The bound counts over the reader's
   life: a process whose end was lost never leaves `live`, so after enough
@@ -255,6 +262,15 @@ reader's thread shares the interpreter with the rest of its process: under
 a busy watch its reads may come later than under the rig (to be measured
 with the watch).
 
+Measured (Amendment BT; the probe branch 1727304, kernels 6.8, 7.0 and 6.18).
+While one listener read, a second asked to listen and to stop, three times:
+the first read six answers, each carrying a real CPU and that CPU's next
+number of the count; with the answers left out of the count the gaps added
+up to six, with them taken as part of it to none. The reader in a process of
+its own, 200 short children while the process that started it never
+yielded, nine runs on three images: 0, 0, 0, 0, 0, 1, 1, 0 and 0 programs
+not read; the reader's thread inside that busy process: 158 to 202 of 200.
+
 ## Read in the kernel's source, not measured
 
 Read in the kernel's source, not measured: the kernel sends the answer to
@@ -262,7 +278,10 @@ every ask to the whole group (so the reader's mark is random); an ask from
 outside the system's first namespaces (as in a container) is not answered;
 the event's stamp is on the monotonic clock and stat's start on the boot
 clock, in ticks of a second; the kernel's send of an event can fail without
-an ENOBUFS (the count's gaps would show it); a child made with CLONE_PARENT
+an ENOBUFS (the count's gaps would show it); after an overflow the kernel may
+give nothing until the queue has been read empty, not only while it is full
+(BS's run read nothing meanwhile and cannot tell the two apart; the count's
+gaps count those events either way); a child made with CLONE_PARENT
 is named its maker's parent's; a process hidden by the system's /proc
 options reads as gone (ENOENT); a process that made itself not dumpable
 reads as not readable (EACCES).

@@ -3027,3 +3027,35 @@ The redone reader's own run, 15 times on those images: no read missed, nothing l
   reset at an exec, a thread bound, an eviction, or the word for unknown ticks is removed.
 - BS-10 (recorded for M14.1b). Whether a record carries the kernel event's CPU and count as evidence
   (question 8); a reader inside a time namespace, and event times after a suspend (G14): not measured.
+
+## Amendment BT (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1a-redo2.md (0c5014b); M14.1a lands
+The reviewer said NEXT: the commit does what BS rules, and two of BS-5's own rules still made the reader say
+something false. Both were the Table's words, not the builder's, and the Table put them right by hand in the
+commit that files the review, after measuring the first (the probe branch 1727304; kernels 6.8, 7.0 and 6.18).
+- Measured: while one listener read, a second asked to listen and to stop, three times. The first read six
+  answers, each with a real CPU and that CPU's next number of the kernel's count. Left out of the count, the
+  answers made six gaps; taken as part of it, none. The Table's note to the builder, that an answer carries the
+  ask's own number, was wrong.
+- BT-1 (H1: an answer is counted). An answer takes a number of its CPU's count as an event does, and the
+  reader counts it so. FOR: a second listener on the machine - another watch, the rig beside the service - is
+  never a loss the reader invents, and no user can make the reader say "lost" by asking the kernel to listen.
+- BT-2 (H2: told and untold). A gap is "a loss the kernel did not tell" only while no ENOBUFS has come since
+  the reader's start. After one, a gap is not told apart from it: the ENOBUFS is read before its gaps show, and
+  a CPU's gap shows only at that CPU's next event, which may be much later. The numbers do not change.
+- BT-3 (H3, H5: two sentences that were false). A later end of a process not held is one thread's, and says
+  so; it is never called a leader's. A record taken up again says "the end given before" only of an end that
+  was given: one past the bound of the ends never was.
+- BT-4 (H4, H6, H9: said as it is). Whether events made while the reader empties an overflowed queue are given
+  is not measured, and the spec says so. A bounded memory that forgets a pid is not counted; the pid is then
+  said as one whose fork was not heard; the module no longer says that every way it loses is counted.
+- BT-5 (recorded for M14.1b; H7, H8, H10, H11 and the reviewer's nine points). Under a loss a held process's
+  later thread's exit is dropped, and "the end given before was its leader's" may be another process's: after a
+  loss the watch takes every word about threads and ends as a hint beside its own sample. A record's join is by
+  pid, beginning and start together. The scan of unread ends at a take-up is to be measured under load.
+- BT-6 (the ground of M14.1b, measured: the probe branch c3c94d9 and b38f54c, three Ubuntu images, four CPUs).
+  200 children that live under a millisecond, three turns on each image, twice. With the reader's thread
+  inside a process whose other thread never yields: 158 to 202 programs of 200 not read. With that thread busy
+  half a second in every two: 10 to 29. With the reader in a process of its own while the process that
+  started it never yields: 0 to 2. Every fork, exec and exit was heard in every case; what is missed is the
+  program's name, read too late. Ruled: under the watch the reader runs in a process of its own, never as a
+  thread of the watch. FOR: the watch's own work does not blind it to the programs an agent starts.

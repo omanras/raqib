@@ -44,11 +44,13 @@ more than REUSED_SECONDS is another process's, and nothing of that read is
 given (BR-3, `reused`); a pid taken again within that second is not told
 apart (BS-1).
 
-Every way it loses is counted: the kernel's ENOBUFS (`lost.count`), the
+What it loses and can count is counted: the kernel's ENOBUFS (`lost.count`), the
 kernel's own count of events on each CPU stepping over a number (`lost.events`,
 at least; BS-5), a read missed, a message unread, a bound passed (`beyond`),
 a read of another process (`reused`), a thread that ended before the stop
-(`ended`); `last` is when a datagram was last heard.
+(`ended`); `last` is when a datagram was last heard. Not counted, and said in
+the spec: the last events of a CPU that sends none after them, a CPU first
+heard after a loss, a pid a bounded memory forgot.
 
 No rights, no asking: a start the system refuses returns its reason in this
 module's words (PREFIX) and raises nothing; a start of a running reader
@@ -118,6 +120,8 @@ END_NOT_HELD = ("its threads are not known (the reader did not hold this process
 END_LOST = "its threads are not known: events were lost (%s), so this end may be its leader thread's alone"
 LATER_END = ("a later end of the same pid: a thread of it ended after the end given before, which was then its"
              " leader thread's alone")
+LATER_THREADS = ("its threads are not known (the reader did not hold this process from its fork): this end is one"
+                 " thread's, and the process may live on in others")
 ENDED_BEFORE = "the end given before was its leader thread's: the process went on with an exec"
 EARLIER_DROPPED = "%d earlier program(s) not kept: a record keeps its newest %d (EARLIER_MAX)"
 BEYOND_BEGAN = ("past the bound: its beginning was heard and not kept (PROCESSES_MAX, counted over the reader's"
@@ -248,12 +252,14 @@ def _boot_ns():
 
 class _Proc:
     __slots__ = ("pid", "ppid", "exe", "earlier", "dropped", "started_ticks", "began", "ended", "code", "signal",
-                 "unread", "given", "queued", "forked", "execs", "threads", "leader_ended", "end_pending")
+                 "unread", "given", "queued", "forked", "execs", "threads", "leader_ended", "end_dropped",
+                 "end_pending")
 
     def __init__(self, pid, ppid, began, unread, forked):
         self.pid, self.ppid, self.began, self.unread, self.forked = pid, ppid, began, unread, forked
         self.exe = self.started_ticks = self.ended = self.code = self.signal = self.leader_ended = None
         self.end_pending = None      # the end put in `ends` and not read yet
+        self.end_dropped = False     # its end was past the bound of `ends`: never given (counted in `beyond`)
         self.earlier, self.threads, self.execs, self.dropped = [], set(), 0, 0
         self.given = self.queued = False
 
@@ -311,7 +317,7 @@ class Reader:
         self._gone, self._refused_pids = {}, {}   # pid -> its ended record; pids the bound refused (both bounded)
         self._older_pids = {}        # pid -> (its later end, the read it waits for): ends given of processes not held
         self._seqs = {}              # cpu -> the kernel's last count of events heard on it (bounded)
-        self._lost_events = self._untold = self._lost_at_counts = self._reads = 0
+        self._lost_events = self._untold = self._reads = 0
         self._back_said = self._boot_said = False
         self._events = {"fork": 0, "exec": 0, "exit": 0}
         self._missed = {"exe": 0, "stat": 0}
@@ -488,7 +494,7 @@ class Reader:
                                       % _why(exc))
             for kind, when, fields, cpu, seq in items:
                 try:
-                    if cpu is not None and kind != "answer":
+                    if cpu is not None:      # an answer too: it takes the next number of its CPU (measured, BT)
                         self._count_seq(cpu, seq)
                     if kind == "unread":
                         self._count_unread(when)
@@ -503,8 +509,9 @@ class Reader:
 
     def _count_seq(self, cpu, seq):
         """BS-5: the kernel's count of events on a CPU. A step over a number is that many events lost at least;
-        one with no ENOBUFS since counts() was last read is a loss the kernel did not tell; a step back is said
-        once and not counted."""
+        one seen while no ENOBUFS has come since the start is a loss the kernel did not tell (after an ENOBUFS a
+        gap is not told apart from it: the ENOBUFS is read before its gaps show); a step back is said once and not
+        counted. An answer to any listener's ask takes a number of the count as an event does."""
         last = self._seqs.get(cpu)
         if last is None:
             if len(self._seqs) >= CPUS_MAX:
@@ -514,7 +521,7 @@ class Reader:
             step = (seq - last) & 0xFFFFFFFF
             if 1 < step < 0x80000000:
                 self._lost_events += step - 1
-                if self._lost == self._lost_at_counts:
+                if not self._lost:
                     self._untold += step - 1
             elif step != 1 and not self._back_said:
                 self._back_said = True
@@ -632,9 +639,9 @@ class Reader:
                 del self._gone[pid]
                 if old.end_pending is not None and self._end_unread(old.end_pending):
                     self._ends = [e for e in self._ends if e is not old.end_pending]   # withdrawn (BS-3)
-                elif old.end_pending is not None or (old.given and not old.queued):
-                    old.unread["ended"] = ENDED_BEFORE
-                old.end_pending = None
+                elif (old.end_pending is not None or (old.given and not old.queued)) and not old.end_dropped:
+                    old.unread["ended"] = ENDED_BEFORE   # only of an end that was given: one past the bound never was
+                old.end_pending, old.end_dropped = None, False
                 old.ended = old.code = old.signal = None
             self._refused_pids.pop(pid, None)
             self._older_pids.pop(pid, None)
@@ -678,6 +685,8 @@ class Reader:
             end = rec.end()
             if len(self._ends) < PROCESSES_MAX:
                 rec.end_pending = end
+            else:
+                rec.end_dropped = True
             self._hold(self._ends, end)
 
     def _on_exit(self, at, boot_ns, pid, tgid, raw_code, raw_signal):
@@ -698,7 +707,7 @@ class Reader:
                     later.update(ended=at, code=code, signal=sig)
                     return
                 later = {"pid": tgid, "started_ticks": None, "began": None, "ended": at, "code": code,
-                         "signal": sig, "unread": {"began": NO_FORK, "ended": LATER_END, "threads": END_NOT_HELD}}
+                         "signal": sig, "unread": {"began": NO_FORK, "ended": LATER_END, "threads": LATER_THREADS}}
                 self._older_n += 1
                 self._hold(self._older, later)
                 self._older_pids[tgid] = (later, self._reads)
@@ -761,8 +770,7 @@ class Reader:
                 parts.append("how many: at least %d event(s) by the kernel's own count on each CPU (a count from"
                              " below)" % self._lost_events)
             if self._untold:
-                parts.append("%d of them came with no ENOBUFS: a loss the kernel did not tell" % self._untold)
-            self._lost_at_counts = self._lost
+                parts.append("%d of them came before any ENOBUFS: a loss the kernel did not tell" % self._untold)
             return {"since": self._since, "last": self._last, "events": dict(self._events), "given": self._given,
                     "missed": dict(self._missed), "unread": dict(self._unread), "threads": self._threads,
                     "older": self._older_n, "reused": self._reused,

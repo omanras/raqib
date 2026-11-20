@@ -536,6 +536,8 @@ Rulings: ADR-0003 Amendments C and D.
     (ENOBUFS), never as nothing happened; what the queue held is given,
     what came while it was full is gone, and the kernel's own count on
     each CPU gives how many at least, a gap with no ENOBUFS included; the
+    answer the kernel sends to any listener's ask takes a number of that
+    count and is counted as one, so another listener is no loss; the
     time a datagram was last heard is said (`last`);
   - a process ends with its last thread: an exit of its leader thread
     while another lives on is not its end; an end of a process the reader
