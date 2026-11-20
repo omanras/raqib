@@ -72,10 +72,14 @@ jobs:
         if: always()
         shell: pwsh
         run: python tools\rig\procevents_run.py --out $env:RUNNER_TEMP\procevents.json
+      - name: the autostart places read by Raqib itself beside a second run of the stand-in (X37)
+        if: always()
+        shell: pwsh
+        run: python tools\rig\autostart_run.py --out $env:RUNNER_TEMP\autostart.json
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --autostart $env:RUNNER_TEMP\autostart.json --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -127,9 +131,12 @@ jobs:
       - name: the reader of the kernel's process events hears short acts (X31)
         if: always()
         run: python tools/rig/procevents_run.py --out "$RUNNER_TEMP/procevents.json" || true
+      - name: the autostart places are Windows' (X37 said as n/a)
+        if: always()
+        run: python tools/rig/autostart_run.py --out "$RUNNER_TEMP/autostart.json" || true
       - name: read the report against what the stand-in did
         if: always()
-        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --summary "$GITHUB_STEP_SUMMARY"
+        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --autostart "$RUNNER_TEMP/autostart.json" --summary "$GITHUB_STEP_SUMMARY"
       - name: gather what the watch wrote
         if: always()
         run: |

@@ -901,6 +901,23 @@ What it does not see:
   configuration that logs other keys only), and that is not said. The certain
   cure is Raqib reading the autostart places itself (ADR-0014 S3).
 
+### The autostart places read by Raqib itself (ADR-0014 Amendment G; M15.3a)
+- **What this read does not see** (docs/specs/AUTOSTART.md; the read stands
+  alone in M15.3a: no watch reads it and no rule judges it yet). The places
+  AG-5 lists - Image File Execution Options, AppInit_DLLs, a WMI subscription,
+  the policies' Run keys, Active Setup, a service's ServiceDll, a driver, a
+  COM object, a hive that is not loaded - and RunOnceEx, RunServices, a user's
+  own Winlogon values, another user's Startup folder and the scheduler's
+  folder of task files. A change made and undone between two reads, and what
+  was there before the first read. Who made a change: the read names the
+  entry, never a process. A place the reading user's rights refuse (measured:
+  the scheduler's tree under a deny-only Administrators group) is said as
+  refused, never as empty, and gives no change; a task's program is not read
+  (its Actions are hashed, not parsed), so a task's change names no program. An
+  agent that runs as an administrator can change what the read reads (a key's
+  rights, the folder's listing) as it can any watcher of its own user; that is
+  not measured.
+
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
 tree as P-1..P-4, R-2..R-9, T-2..T-8, V-1..V-6 and X-1..X-9 leave it (R-1
