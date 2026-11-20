@@ -111,6 +111,7 @@ import threading
 import time
 import traceback
 
+import raqib
 from raqib import host as hostmod, link, notify, overlay, ruleform, tray as traymod, ui, watch
 
 TITLE = "Raqib"
@@ -204,6 +205,11 @@ PERSONALIZE_KEY = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize
 
 
 RESULT_WORDS = (("CLEAN", "clean"), ("ALARM", "alarm"), ("INCOMPLETE", "incomplete"))
+
+
+def window_title():
+    """M17.1 (ADR-0015 V-2): the title bar says the number, "Raqib <version>", read from raqib.__version__."""
+    return "%s %s" % (TITLE, raqib.__version__)
 
 
 def level_of(code, word=None):
@@ -3123,7 +3129,7 @@ class Window:
         self.images = {}                       # the drawn pictures (Tk drops a PhotoImage no one holds)
         self.styles = set()
         self.elements = {}                     # M8.4: each image element's (border, its pictures as given to ttk)
-        root.title(TITLE)
+        root.title(window_title())   # M17.1 (ADR-0015 V-2)
         width, height = self.px(THEME["size"])
         root.geometry("%dx%d" % (min(width, max(root.winfo_screenwidth() - self.px(40), self.px(900))),
                                  min(height, max(root.winfo_screenheight() - self.px(80), self.px(600)))))

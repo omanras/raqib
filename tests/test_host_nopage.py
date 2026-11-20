@@ -20,6 +20,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import raqib  # noqa: E402
 from raqib import cli, discover, host, ui, watch  # noqa: E402
 from raqib.rules import engine  # noqa: E402
 
@@ -166,7 +167,7 @@ def test_e2_the_loop_with_no_page_and_ci_set_says_nothing_of_a_page(_home):
 # were before M12.1p (HOME: the test's home; PORT: the port the page took; the round lines are the tick's).
 DEFAULT_HEAD = [
     "raqib watch --host: the host, not a name (ADR-0007); nothing is installed, no project is touched (no"
-    " --attach-hooks)",
+    " --attach-hooks); raqib %s" % raqib.__version__,   # M17.1 (ADR-0015 V-2): the number ends the first line
     "raqib watch --host: sources: the host's own record of every tree (no Sysmon channel here (test: the os source"
     " is Windows only)) (the watch's own check at its start)",
     "raqib watch --host: a round every 10 s (the homes only (no live reader here)), the reader's deadline 20 s;"

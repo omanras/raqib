@@ -9,3 +9,7 @@
    `docs/review/<date>-<task>-questions.md`.
 5. Never answer a design question locally. Write it to the questions file and STOP.
 6. The next HANDOFF is written by the judge/commander, never by the builder.
+7. A merge into `main` that changes what Raqib does moves the number (`raqib/__init__.py`) and writes its
+   entry at the top of `CHANGELOG.md`, in the merge itself (ADR-0015); `python3 tools/event_examples.py --write`
+   then makes the events' examples again (`py` on Windows; it needs pytest, as the gate does), and the gate
+   stays red until it is run. The Table does both; a builder never invents an entry.

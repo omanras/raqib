@@ -456,8 +456,7 @@ class _Version(argparse.Action):
 
 def version_line():
     """M9.1 (ADR-0010 decision 2): what --version prints."""
-    from raqib import __version__
-    return "raqib %s" % __version__
+    return watch.version_word()   # ADR-0015 VB-4: one wording of the number, the watch's
 
 
 def _parser():
