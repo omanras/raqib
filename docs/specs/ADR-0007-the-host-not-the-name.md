@@ -2897,3 +2897,40 @@ pruning by the provider's end events is a later task); the rhythm rule's own sen
 Windows as without byte counts (true where the tracing is not read; its wording is the rule's next change);
 IPv6 and mapped addresses in the field; a non-administrator's run in the field (the leftovers' note).
 
+
+## Amendment BQ (the Table, 2026-11-20) - Linux: what happens between two samples (measured first; M14.1)
+The commander's field test on Ubuntu (2026-11-20, main c596cbf, the window and the service; the agent a named
+one): the watch named the agent three seconds into the test and judged the children that lived about 25 s. It
+saw nothing of what ended between two samples: files made and removed in 0.15 s, three curls of under a second
+each, wget, a name lookup, nc. That is the hole the watch says at its start on Linux, and it is most of what an
+agent does.
+Measured (the probe branch, GitHub's Ubuntu 22.04 with kernel 6.8, and 24.04 and 26.04 with kernel 7.0; the
+standard library alone, AF_NETLINK): the kernel's process events (the netlink connector: fork, exec, exit) were
+heard for each of 14 short acts - touch (2 to 4 ms), mv, cp and rm (1 ms each), three curls, wget, getent, nc,
+Python's own client, sh, shred, git and its child - with the exit's code; and for every exec the program
+(/proc/PID/exe) and the parent (/proc/PID/stat) were read in time (0 of 16 to 20 missed; the read 0.02 to
+0.13 ms after the event). They were heard by a plain user on all three, and under the service's own limits
+(its seccomp filter, AF_UNIX and AF_NETLINK alone, its two capabilities). The end of every TCP socket was heard
+too (sock_diag's destroy groups) with its destination, its owner's uid and its bytes, but the socket's inode
+is 0 at its end and no process is said. Not measured: a kernel older than 6.8 (the connector may be root's
+there); whether a plain user hears another user's processes; a machine that starts thousands of processes a
+second; a process inside a container.
+- BQ-1 (the source). On Linux a live watch listens to the kernel's process events and takes from them the
+  processes that began since the round before: what the channel is on Windows for a process (M7.9), by the
+  same rule - it listens to what the kernel already says, switches nothing on, asks for no right; where the
+  kernel refuses, the refusal is the hole, in the watch's words, and the samples go on as before. FOR: a
+  child of a tree that starts and ends between two samples is an act of that tree, with its program, so the
+  rules that read programs and the rhythm judge it. MUST NOT TOUCH: no argument of a process is read from an
+  event (the program, the parent, the start, the end and its code only); the sample stays what says a tree is
+  alive.
+- BQ-2 (two tasks). M14.1a: the reader alone (raqib/procevents.py), as M7.21a built the tracing's: its
+  messages as measured, what is read at an exec, every way it can lose an event counted (the kernel's
+  ENOBUFS, a process gone before its program was read, a bound of its own), ended on every way out; and the
+  rig hears the stand-in's short children through it. M14.1b: the watch takes its events - a child told only
+  by an event is an act of its tree, once, whichever source tells it; a tree that lives wholly between two
+  samples is listed as the channel's brief trees are.
+- BQ-3 (connections, not ruled yet). A socket's end names a user and a destination, not a process. How a
+  short connection is given to its process (the tree's children read while they live, joined to the end by
+  its addresses) is to be measured before it is ruled: M14.2.
+- BQ-4 (recorded for its own ruling). An idle agent of a name the catalog holds was in no round for two
+  minutes, and AGENT-DARK-LIVE said "no live tree" of its footprints while its process lived.
