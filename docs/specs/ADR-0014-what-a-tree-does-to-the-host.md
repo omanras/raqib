@@ -414,3 +414,53 @@ the longest 0.157 s, no place unread; the real read's own test green on both Win
   4: the Actions' format is measured first; a link's target is inside its content). Userinit's comma and the
   unquoted path (2, 3) are AH-3's. The coarse comparison of a place read in part (6) stands until AH-3 is
   ruled. The rig's second run of the stand-in (8) stands; X36 is M14.1c's (7).
+
+## Amendment I (the Table, 2026-11-21) - AH-3 measured and ruled: the read made fit for the watch (M15.3b)
+AH-3 left for this stage what two reads can say that is not so. Measured before ruling (the probe branch acdc838,
+GitHub's Windows machine, the module of 0.3.0):
+- A Startup file made and held open with no sharing across one read: that read says the place read in part
+  and gives no change; the next read, compared with it, gives no change either (the refused keys differ); the
+  entry is said as added only against the read before both. Compared read by read, as the command does, the
+  entry is never said. The reviewer's reading, shown in the field.
+- While the module hashes a Startup file of 24 MB, a rename of that file by another handle failed 5406 times
+  of 5406: the read holds the file against the watched process for as long as it reads it.
+- Beside the rig's stand-in, 70 reads a second apart: the stand-in's three acts each added and removed, and one
+  change nobody made - a task of Windows' own (`SoftwareProtectionPlatform\SvcRestartTask`) said as changed.
+  A quiet 90 s on the same machine had shown none: Windows moves some of its own tasks by itself.
+- Not measured: which part of that task changed (its actions or its triggers); a hive loaded by a logon; a
+  real desktop.
+
+- AI-1 (the base of a comparison is the last read that read the thing). The module keeps, for one watcher, what
+  each place last held when it was read - and inside a place read in part, what each of its keys last held -
+  and compares a read with that, part by part. An entry that first appears while its place, or its key, is
+  not read is said as added by the first read that reads it. FOR: no entry is passed over because the read
+  before could not see. MUST NOT TOUCH: `changes(before, after)` of two reads, as it is.
+- AI-2 (an entry that is listed is an entry). A Startup file that the folder lists and whose content cannot be
+  read is an entry with no content hash, said as added with its content not read; when its content is first
+  read that is said as read, not as a change.
+- AI-3 (the read never holds what it reads). A Startup file is opened with every sharing, so that another
+  process's delete or rename of it does not fail while it is read; where it cannot be opened so, it is not
+  opened. FOR: Raqib does not stop or hinder what it watches (ADR-0011 A).
+- AI-4 (a read is bounded, and says its bounds). A content is hashed by its length and its first 64 KiB; a
+  read has a deadline (5 s by default) after which the places not reached are said as not read, with that
+  reason; a Startup folder that is on a share is not read at all and is said so: the capture path makes no
+  network call (CLAUDE.md, rule 5).
+- AI-5 (a task's two parts). A task's actions and its triggers are hashed apart. A change of its triggers alone
+  is a change of its own kind, `rescheduled`; `changed` is for what it would run. FOR: a task that Windows
+  re-arms by itself is not said in the words of a task that was made to run something else.
+- AI-6 (a hive that comes or goes). The entries of a user's hive that the last read did not list are not said
+  one by one as added: the change is the hive's own (`hive loaded`, with how many entries it holds), and its
+  entries become the base; likewise a hive that is no longer listed. FOR: a logon is not read as its user's
+  entries being planted.
+- AI-7 (the machine's two views are two keys). An entry of the machine's 32-bit view is its own entry, always;
+  it is not folded with the 64-bit one. A user's hive is read in one view.
+- AI-8 (a name that may not be what runs is said so). Where a content is a text whose first word is not a
+  whole quoted path - an unquoted text with a blank after a separator, a list of more than one program - the
+  entry says that its program is not sure, and a sentence says "may run", not "would run".
+- AI-9 (the hashes are salted). An entry's key and its content's hash are made with a salt of the watcher,
+  random and never written: neither can be matched by trying texts, nor between two machines or two watches.
+- AI-10 (the rig). X37 holds also that the stand-in's own delete of its Startup file did not fail beside the
+  reads, that a file held open across a read is said as added by the first read that lists it, and names
+  every change that is not the stand-in's by its kind (measured so far: one task rescheduled or changed).
+- AI-11 (stages). M15.3b is this, in the module alone: nothing of the watch changes. M15.3c: the watch reads
+  at its start and each round, a change is a host line, and the rules of AG-4 judge it.
