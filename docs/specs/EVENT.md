@@ -117,9 +117,25 @@ anywhere; a collector's own agent may tail the file.
   attempts), the longest pass, the file. Nothing the pass calls can end it, or the watch (G-6).
 - `watch.host` is the system's own name, read once at the start without a network call, or `--event-host NAME`;
   a system that gives none: the watch says so at its start and the events say "unnamed" (F-6).
+- A chain of each run (ADR-0016 H-1, H-2): every line the watch writes holds `prev`, the sha256 of the bytes of
+  the line the same run wrote before it, without its newline, and the run's first written line holds "first".
+  The chain is the run's, not the file's: two watches of one account append to the file at once. The writer
+  chains from the last line it knows it wrote: a line that could not be written does not move the chain's head,
+  and a write that raised and yet left its whole line in the file leaves two lines that name the same line
+  before them. `prev` is not what makes a thing the same again (it changes with each saying, as `n` does).
+  A heartbeat and the watch's end are links of the chain as any event (H-3): a collector that holds one holds
+  the hash of all the run wrote before it.
 - `raqib events FILE` checks every line with `event.check`, prints the count per kind and each problem with its
-  line number: exit 0 when every line is an event, 1 when one is not (or the file holds none), 2 when the file
-  cannot be read. It reads; it sends nothing (F-8).
+  line number, then one line per run (`watch.run`, in the file's order; ADR-0016 H-4, `event.chains`): its
+  chain whole, with its count of lines; broken, at the first line that does not name the run's line before it
+  (one before it was removed, changed, added or moved; a line without `prev` in a run that holds it); lines
+  beside the chain, from the first of them (they follow each other from a line of the run, and the run's next
+  line names that line again: not counted as written by the writer, or put there by another hand); or not
+  chained (no line of the run holds `prev`: written by a Raqib before this one, not a problem). A line that is
+  no event is no link. Exit 0 when every line is an event and no chain is broken or holds a line beside it, 1
+  otherwise (or when the file holds none), 2 when the file cannot be read. It reads; it sends nothing (F-8). The
+  same command over the lines a collector holds of a run (its own export, as they were sent) checks what it
+  holds.
 - A technique id in `rule.attack` says what a finding is consistent with, never that it happened (B-5).
 
 ## For a reader of the file
@@ -139,6 +155,16 @@ What a collector's own agent, tailing `events.jsonl`, may rely on and must allow
 - Within a run, `n` rises in the file's order, with gaps (a number used for a line that was not written). One
   thing at one rev can be under two ids after a failed write (said again with a new `n`); dedup by `watch.host`
   and `id`, and take a thing's latest rev.
+- Within a run, each line names the run's line before it by `prev` (ADR-0016): the sha256 of that line's bytes
+  as the file holds them, without its newline; the run's first written line holds "first". Lines of other runs
+  between them are not links of this run, and a line that is not an event is no link. A line removed from the
+  middle, changed, added or moved is seen by anyone who holds the lines (`raqib events FILE`). The chain holds
+  no secret (H-5): an end cut off, or a tail written again from any line with its hashes computed again, is not
+  seen from the file alone; what a collector already holds a later line of cannot be changed unseen. A line of
+  an older build holds no `prev`: its run is not chained, which is not a problem.
+- A reader must allow a key it does not know (ADR-0016 H-6): an addition such as `prev` does not move the
+  schema's name, and a later addition may come the same way. Skip a key you do not know; never refuse a line for
+  it.
 - `time` is when the thing was said, not when the line was written: a first saying carries the entry's own time,
   so `time` does not rise from line to line and is not from one clock. Order by `n` within a run, not by `time`.
 - A run starts at "watch" `state` start; where that line could not be written the watch tries it again before
@@ -157,7 +183,8 @@ What a collector's own agent, tailing `events.jsonl`, may rely on and must allow
 In C-2's order (a line sorts them). A dotted name is a key of the object named before the dot. Types:
 `str` a non-empty string; `int` an integer; `pos` an integer from 1; `count` an integer from 0; `bool` true
 or false; `number` an integer or a decimal; `instant` a string, UTC ISO 8601 with milliseconds and Z, that is
-a real instant; `object` a non-empty object; `ints` a list of integers from 0; `ids` a list of technique ids (T
+a real instant; `link` the word "first" or a sha256 in 64 characters of lower-case hexadecimal (ADR-0016);
+`object` a non-empty object; `ints` a list of integers from 0; `ids` a list of technique ids (T
 and four digits, a sub-technique's three after a dot), none twice; `cites` a list of cites, each {src: str,
 line: count} and, where the cite holds them, {round: count, seq: count}. A round, a pid, a seq, a line and n
 are never negative (D-5). A closed list's values are quoted. OCSF and ECS: the named
@@ -168,6 +195,7 @@ field (see Mapping), else the namespace.
 | `schema` | `str` | raqib-event/1, the shape's name and version | all | `unmapped.raqib.schema` | `raqib.schema` |
 | `id` | `str` | <run>:<n>: names the saying; never used twice in a run; a collector keys by watch.host and id | all | `metadata.uid` | `event.id` |
 | `n` | `pos` | the event's number in its run: one more for each event the run says | all | `unmapped.raqib.n` | `raqib.n` |
+| `prev` | `link` | the chain (ADR-0016): the sha256 of the bytes of the line the same run wrote before it, without its newline; "first" on the run's first written line. Every line the host watch writes holds it; a line of an older build has none, and `event.snapshot` gives none (not required) | all | `unmapped.raqib.prev` | `raqib.prev` |
 | `time` | `instant` | when Raqib said it: UTC, ISO 8601, milliseconds, Z; a real instant | all | `time` (epoch milliseconds), `time_dt` (as given) | `@timestamp` |
 | `kind` | `str` | "finding", "source-finding", "note", "tree", "hole", "knock", "heartbeat", "watch" | all | `class_uid`, `category_uid` (the class: see Mapping) | `event.action` |
 | `about` | `str` | what the event is about, a name within one run (D-2): finding:i, source-finding:i, hole:i (the watch's), notifier-hole:i (the notifier's), blind:i, note:i, knock:i (a place in a list that only grows, from 1, D-1); note:lost-words (the words a terminal lost); tree:<the tree's word>; watch | all | `finding_info.uid`, `metadata.correlation_uid` (each as "<watch.run>/<about>") | `raqib.about` |
@@ -266,6 +294,9 @@ named field or to the namespace: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`.
   `message`, the rest in the namespace. "The rest", for every kind, is every key this list does not name:
   OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>` (for a Base Event kind that includes `about`, which has no
   finding to be the uid of).
+- `prev` (ADR-0016) is in the namespace, as every key this list does not name: OCSF `unmapped.raqib.prev`, ECS
+  `raqib.prev`. Its value is the hash of the run's line before it as the file holds it, so a collector that keeps
+  `raw_data` / `event.original` can check the chain of what it holds.
 - The whole line -> OCSF `raw_data`; ECS `event.original`.
 
 ## Required keys
@@ -274,7 +305,8 @@ Every event holds the base keys (`schema` to `severity`, and `watch` with `watch
 `watch.beat`); each
 kind adds its own; a dotted name is
 required inside its part. A watch end (`state` end) holds `result` with `exit`, and `counts`; a watch start
-holds neither. Any other key of the table is held only where the entry holds it. `event.check(obj)` names
+holds neither. `prev` is required of no kind: every line the host watch writes holds it (ADR-0016 H-6), and a
+line of an older build, in the same file, has none. Any other key of the table is held only where the entry holds it. `event.check(obj)` names
 every problem of an event, each beginning with its key; every event the module builds has none.
 
 | kind | required keys |
@@ -306,6 +338,9 @@ Run D's source findings are read by two os follows, and which of them the watch 
 run to run: its examples' `id`, `n` and `about` are those of one run (the test compares the rest).
 The heartbeat's and the watch end's examples are the last event of two snapshots of one watch (run B at its
 last round, and after its end), so they share a number, and are never both in one stream.
+The examples are `event.snapshot`'s lines, which hold no `prev`: the chain is the writer's (raqib/eventlog.py),
+and the line before each in its fixture run holds the run's temporary paths, so its hash would differ from run
+to run. A line the host watch writes holds `prev` beside `n` (Keys).
 
 ### example: finding
 

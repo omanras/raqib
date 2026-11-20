@@ -115,7 +115,15 @@ NEW_ROWS = ["| `raqib app [PROJECT]` | open Raqib as a desktop window: the host 
             "| `raqib --version` | print raqib <version> and exit 0 |"]
 # ADR-0011 G-11 (the Table): a row of the guide's table only (the README names the command in "the rest")
 GUIDE_ROWS = ["| `raqib events FILE` | check a watch's events file (`~/.raqib/host/events.jsonl`): every line a"
-              " `raqib-event/1` event; exit 0, 1 or 2 |",
+              " `raqib-event/1` event, then one line per run (ADR-0016): its chain whole (so many lines), broken at a"
+              " line (a line before it was removed, changed, added or moved), holding lines beside it (not counted as"
+              " written by the writer, or put there by another hand), or not chained (a run of a Raqib before this"
+              " one: not a problem); exit 0, 1 (a line that is not an event, a chain broken or with a line beside it,"
+              " or no event) or 2 (cannot be read). Each line names the line its run wrote before it by its sha256"
+              " (`prev`), so a line taken out of the middle, changed, added or moved is seen; the chain has no secret,"
+              " and an end cut off, or a tail written again with its hashes, is not seen from the file alone. Over"
+              " the lines a collector holds of a run (its own export, as they were sent) it checks what the collector"
+              " holds |",
               # ADR-0011 J (M10.3) and L (its REDO): the forwarder, rows of the guide only (G-11)
               "| `raqib forward [FILE] --to URL --name NAME [--shape raqib\\|hec] [--token-file FILE] [--ca "
               "FILE] [--plain] [--facility N] [--framing octet\\|newline] [--once]` | send every whole line of "

@@ -343,3 +343,66 @@ def test_x35_is_a_row_of_main_and_off_linux_it_counts_for_nothing(tmp_path, caps
     assert "n/a     X35 " in out and "RIG: 12 met, 0 missed, 0 open" in out
     check.main(base + ["--platform", "linux"])
     assert "MET     X35 " in capsys.readouterr().out
+
+
+# --- X38 (ADR-0016 H-4, M13.1): raqib events over the watch's events file says this watch's run is whole --------
+
+RAN = REPORT.replace("\nFINDINGS: 1", "\nrun: rig-run (seqs 1..9 of the record)\nFINDINGS: 1", 1)
+WHOLE = ("raqib events: events.jsonl: 9 line(s), 9 event(s)\n  watch: 3\n  run rig-run: chain whole, 9 line(s)\n"
+         "RESULT: every line is an event\n")
+
+
+def x38(answer, report=RAN):
+    ((ident, state, words),) = check.read_chain(answer, report)
+    assert ident.startswith("X38 ")
+    return state, words
+
+
+def test_x38_met_where_this_watch_s_run_is_whole_and_no_line_names_a_break():
+    assert x38(WHOLE) == (check.MET, "run rig-run: chain whole, 9 line(s)")
+    older = WHOLE.replace("RESULT:", "  run old-run: not chained, 4 line(s) (no line holds prev: written by a Raqib"
+                                     " before this one)\nRESULT:")
+    assert x38(older)[0] == check.MET   # an older build's run beside it is no break
+
+
+@pytest.mark.parametrize("answer,said", [
+    (WHOLE.replace("chain whole, 9 line(s)", "chain broken at line 4: it does not name the run's line before it (one"
+                   " before it was removed, changed, added or moved)"), "chain broken at line 4"),
+    (WHOLE.replace("chain whole, 9 line(s)", "1 line(s) beside the chain from line 5: the run's next line names line 4"
+                   " again (not counted as written by the writer, or put there by another hand)"), "beside the chain"),
+    (WHOLE.replace("RESULT:", "  run other: chain broken at line 2: it does not name the run's line before it\nRESULT:"),
+     "run other: chain broken at line 2"),
+    (WHOLE.replace("run rig-run:", "run other-run:"), "no line says its chain whole"),
+    ("", "said nothing"),
+])
+def test_x38_missed_for_a_break_a_line_beside_another_run_s_whole_chain_or_silence(answer, said):
+    state, words = x38(answer)
+    assert state == check.MISSED and said in words, words
+
+
+def test_x38_missed_where_the_report_names_no_run_and_n_a_where_the_rig_ran_no_check():
+    assert x38(WHOLE, REPORT)[0] == check.MISSED and "names no run" in x38(WHOLE, REPORT)[1]
+    assert x38(None)[0] == check.SKIP
+
+
+def test_x38_is_a_row_of_main_given_or_missing(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(RAN, encoding="utf-8")
+    (tmp_path / "l.out").write_text(WORKLOAD, encoding="utf-8")
+    (tmp_path / "c.out").write_text(WHOLE, encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--exit-code", "1",
+            "--platform", "win32", "--sysmon"]
+    check.main(base + ["--events-check", str(tmp_path / "c.out")])
+    assert "MET     X38 " in capsys.readouterr().out
+    check.main(base + ["--events-check", str(tmp_path / "missing.out")])   # given and missing: silence
+    assert "MISSED  X38 " in capsys.readouterr().out
+    check.main(base)
+    assert "n/a     X38 " in capsys.readouterr().out
+
+
+def test_x38_the_rig_runs_raqib_events_after_the_watch_on_both_systems_and_keeps_its_answer():
+    text = (ROOT / ".github" / "workflows" / "rig.yml").read_text(encoding="utf-8")
+    win, linux = text.split("\n  linux:")
+    for job, run, reader in ((win, "raqib events $HOME\\.raqib\\host\\events.jsonl > ", "tools\\rig\\check.py"),
+                             (linux, 'raqib events "$HOME/.raqib/host/events.jsonl" > ', "tools/rig/check.py")):
+        assert job.count(run) == 1 and job.index("workload.py") < job.index(run) < job.index(reader)
+        assert job.count("--events-check ") == 1 and job.count("events-check.out") >= 3   # written, read, kept

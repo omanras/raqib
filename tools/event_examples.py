@@ -11,7 +11,8 @@ number (ADR-0015 V-1) is then one command, never eighteen lines edited by hand. 
 library, raqib and tests/test_event.py (VB-2: the fixture runs are that test's own, and it needs pytest, as the
 gate does; without pytest the tool ends with an ImportError and writes nothing).
 Run D's two os follows list their source findings in either order (EVENT.md says so): for the labels given as
-`varies`, an example's id, n and about are the document's, and the rest is compared and written."""
+`varies`, an example's id, n, about and prev (ADR-0016: the line before it differs as its number does) are the
+document's, and the rest is compared and written."""
 import argparse
 import json
 import re
@@ -25,7 +26,7 @@ DOC = ROOT / "docs" / "specs" / "EVENT.md"
 # VB-3: the lines between an example's heading and its fence hold no heading and no fence (an example whose fence
 # is missing is then no example of the document, and is named; it never takes the next one's line)
 EXAMPLE = re.compile(r"^(### example: (.+?)\n(?:(?!#|```).*\n)*?```json\n)(.+?)(\n```)", re.M)
-VARIES = ("id", "n", "about")   # what a run of `varies` may number differently from the document
+VARIES = ("id", "n", "about", "prev")   # what a run of `varies` may number differently from the document
 
 
 def _event():

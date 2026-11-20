@@ -14,6 +14,8 @@
 # The rules of behaviour (ADR-0014, ADR-0012 Amendment A): on Windows the stand-in leaves a file in its Startup
 # folder, reaches port 22 of the machine's own address and sets a value under its Run key, each harmless and each
 # undone; X32 to X34 say whether each was a finding of its tree.
+# The chain (ADR-0016 H-4, M13.1): after the watch, `raqib events` runs over its events file and its answer is kept;
+# X38 says whether the line of this watch's run says its chain is whole and no line names a break.
 name: rig
 
 on:
@@ -60,6 +62,13 @@ jobs:
           "code=$($w.ExitCode)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "=== the watch's report"; Get-Content $out
           "=== the watch's stderr"; Get-Content $err
+      - name: check the chain of the watch's events file with raqib events, its answer kept (X38)
+        if: always()
+        shell: pwsh
+        run: |
+          raqib events $HOME\.raqib\host\events.jsonl > $env:RUNNER_TEMP\events-check.out 2> $env:RUNNER_TEMP\events-check.err
+          "=== raqib events (exit $LASTEXITCODE)"; Get-Content $env:RUNNER_TEMP\events-check.out
+          exit 0
       - name: forward the watch's events to stand-in collectors on loopback, HTTP and syslog (X19 to X25)
         if: always()
         shell: pwsh
@@ -75,7 +84,7 @@ jobs:
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --events-check $env:RUNNER_TEMP\events-check.out --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -85,6 +94,7 @@ jobs:
           Copy-Item $HOME\.raqib\host\sources rig-out\sources -Recurse -ErrorAction SilentlyContinue
           Copy-Item $HOME\.raqib\host\events.jsonl rig-out -ErrorAction SilentlyContinue
           Copy-Item $env:RUNNER_TEMP\forward.json rig-out -ErrorAction SilentlyContinue
+          Copy-Item $env:RUNNER_TEMP\events-check.out rig-out -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -115,6 +125,11 @@ jobs:
           echo "code=$code" >> "$GITHUB_ENV"
           echo "=== the watch's report"; cat "$RUNNER_TEMP/watch.out"
           echo "=== the watch's stderr"; cat "$RUNNER_TEMP/watch.err"
+      - name: check the chain of the watch's events file with raqib events, its answer kept (X38)
+        if: always()
+        run: |
+          code=0; raqib events "$HOME/.raqib/host/events.jsonl" > "$RUNNER_TEMP/events-check.out" 2>&1 || code=$?
+          echo "=== raqib events (exit $code)"; cat "$RUNNER_TEMP/events-check.out"
       - name: forward the watch's events to stand-in collectors on loopback, HTTP and syslog (X19 to X25)
         if: always()
         run: python tools/rig/forward_run.py --events "$HOME/.raqib/host/events.jsonl" --out "$RUNNER_TEMP/forward.json"
@@ -129,7 +144,7 @@ jobs:
         run: python tools/rig/procevents_run.py --out "$RUNNER_TEMP/procevents.json" || true
       - name: read the report against what the stand-in did
         if: always()
-        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --summary "$GITHUB_STEP_SUMMARY"
+        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --events-check "$RUNNER_TEMP/events-check.out" --summary "$GITHUB_STEP_SUMMARY"
       - name: gather what the watch wrote
         if: always()
         run: |
@@ -138,6 +153,7 @@ jobs:
           cp -r "$HOME/.raqib/host/sources" rig-out/sources 2>/dev/null || true
           cp "$HOME/.raqib/host/events.jsonl" rig-out/ 2>/dev/null || true
           cp "$RUNNER_TEMP/forward.json" "$RUNNER_TEMP/service.json" "$RUNNER_TEMP/procevents.json" rig-out/ 2>/dev/null || true
+          cp "$RUNNER_TEMP/events-check.out" rig-out/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

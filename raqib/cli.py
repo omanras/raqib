@@ -659,7 +659,8 @@ def _parser():
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
     a.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
-    ev = sub.add_parser("events", help="check an events file: every line a raqib-event/1 event (M10.2, ADR-0011 F-8)")
+    ev = sub.add_parser("events", help="check an events file: every line a raqib-event/1 event (M10.2, ADR-0011 F-8),"
+                                       " and each run's chain whole (M13.1, ADR-0016 H-4)")
     ev.add_argument("file", metavar="FILE", help="the events file (watch --host: ~/.raqib/host/events.jsonl)")
     fw = sub.add_parser("forward", help="send a watch's events file to one collector (HTTP or syslog), to the"
                                         " system's journal (journal:, Linux) or to the Windows event log (eventlog:,"
@@ -1472,8 +1473,10 @@ def cmd_app(args, out):
 
 def cmd_events(args, out):
     """M10.2 (ADR-0011 F-8): every line of FILE checked with event.check; the count per kind and each problem with
-    its line number. Exit 0 when every line is an event, 1 when not (a file that holds no event is not a watch's
-    events: rule 4), 2 when the file cannot be read. It reads; it sends nothing."""
+    its line number. M13.1 (ADR-0016 H-4): then one line per run (event.chains, in the file's order): its chain
+    whole, broken at a line, holding lines beside it, or not chained (an older build's run, not a problem). Exit 0
+    when every line is an event and no chain is broken or holds a line beside it, 1 when not (a file that holds
+    no event is not a watch's events: rule 4), 2 when the file cannot be read. It reads; it sends nothing."""
     from raqib import event
     try:
         with open(args.file, "rb") as f:
@@ -1513,9 +1516,33 @@ def cmd_events(args, out):
         problems.append("no event")
         out.write("  the file holds no event: not a watch's events (silence is a finding)\n")
     bad = len({p.split(":", 1)[0] for p in problems})
-    out.write("RESULT: %s\n" % ("every line is an event" if not problems else
-                                "%d line(s) not an event" % bad if rows else "no event"))
-    return 0 if not problems else 1
+
+    def said(c):
+        """ADR-0016 H-4: one run's chain in one line; the run's name as the file holds it, escaped (ASCII, no control
+        character: a name read from a file never makes a line of its own)."""
+        run = json.dumps(c["run"], ensure_ascii=True)[1:-1]
+        if c["state"] == event.WHOLE:
+            return "run %s: chain whole, %d line(s)" % (run, c["lines"])
+        if c["state"] == event.BROKEN:
+            return ("run %s: chain broken at line %d: it does not name the run's line before it (one before it was"
+                    " removed, changed, added or moved)" % (run, c["line"]))
+        if c["state"] == event.BESIDE:
+            return ("run %s: %d line(s) beside the chain from line %d: the run's next line names %s again (not"
+                    " counted as written by the writer, or put there by another hand)" % (
+                        run, c["beside"], c["line"], "line %d" % c["named"] if c["named"] else "the run's start"))
+        return "run %s: not chained, %d line(s) (no line holds prev: written by a Raqib before this one)" % (
+            run, c["lines"])
+
+    chains = event.chains(rows)
+    for c in chains:
+        out.write("  %s\n" % said(c))
+    broken = sum(c["state"] == event.BROKEN for c in chains)
+    beside = sum(c["state"] == event.BESIDE for c in chains)
+    out.write("RESULT: %s%s%s\n" % ("every line is an event" if not problems else
+                                    "%d line(s) not an event" % bad if rows else "no event",
+                                    "; %d run(s) whose chain is broken" % broken if broken else "",
+                                    "; %d run(s) with a line beside its chain" % beside if beside else ""))
+    return 0 if not problems and not broken and not beside else 1
 
 
 def cmd_forward(args, out):
