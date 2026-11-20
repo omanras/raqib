@@ -30,3 +30,17 @@ person's.
 - The examples in the events' spec and every fixture that holds an event's `version` are made again by their
   generators when the number moves: the gate must make that one command, or the number will not be moved.
 - The session protocol gains a line: the merge moves the number and writes the entry.
+
+## Amendment A (the Table, 2026-11-20) - the builder's STOP of M17.1 and its questions, ruled
+The builder stopped rightly: the guide's new sentences are held by a registry in a test the HANDOFF's Scope
+did not name. The Scope now names it. Its choices are ruled as it made them:
+- VA-1 (the form). The number is joined to a first line by `; raqib X.Y.Z`. A watch's first printed line and
+  the first line of its report carry it, for a project's watch and for the host's. `raqib report` is not a
+  watch: its first line stays, and so does the README's sample.
+- VA-2 (what the tests hold). The form `0.MINOR.PATCH` and the changelog's first heading, not the literal
+  number; the date's form on the first heading alone (the oldest entry says "before" a date). A made-up event
+  in a test that holds `0.1.0` as its own input stays as it is.
+- VA-3 (the examples are made by a command). `tools/event_examples.py --write` rewrites the examples of
+  docs/specs/EVENT.md from the code, and `--check` says whether they are the code's own; the test that holds
+  them calls the same function. Without it every move of the number would fail the gate until eighteen lines
+  were edited by hand, and a number that is hard to move is not moved.
