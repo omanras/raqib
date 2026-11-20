@@ -3355,3 +3355,46 @@ line that names curl too); the gate green on the six CI jobs.
   `sample` of a child the reader heard too: discover gives each act its sources then. A child with no cite is
   said `sample`. The test that a line of a round with no reader's text is unchanged compares two runs of this
   code, not the base's bytes.
+
+## Amendment CC (the Table, 2026-11-21) - M14.1d: what a short child does that was said and not judged (BZ-3, CA-7)
+M14.1c landed with three silences said in its own words and measured for this task (the probe branch acdc838,
+GitHub's Linux machine, an strace of each tree read by tools/rig/exec_probe.py):
+- The files of the common tools on Ubuntu 24.04: `nc` and `netcat` are `nc.openbsd`, `telnet` is
+  `inetutils-telnet`, `ftp` is `tnftp`, `sh` is `dash`; `curl`, `wget`, `ssh`, `scp`, `rsync` and `git` are
+  their own names. NET-TOOL's list knows `nc`, not `nc.openbsd`.
+- A real agent's run (qwen, the scripted model): of 36 processes, 8 ran a second program in the pid of the
+  first - its shell tool runs `bash -c` with a command and bash runs the command in its own place
+  (`bash -> python` five times, `bash -> hostname`, `bash -> whoami`). Each within one round. In a set of the
+  common idioms: `bash -> curl` and `env -> curl` in one pid.
+- One child of 212, in the idioms, outlived a parent that had begun more than a round before and ended within
+  a round after the child began.
+- Not measured: a second program run in a pid more than a round after the first, in a real agent (the idioms
+  ran `sh`, which here is dash and does not do it; bash does); a desktop's ordinary work.
+
+- CC-1 (every program a process ran). The reader keeps, for a process, each program it ran while the reader
+  heard it, in order, to a bound a process that is counted when passed - not the last alone. A child's line
+  names each. Where a process the watch already wrote a line for runs another program in a later round, the
+  watch writes a line for that program. FOR: the command a shell runs in its own place is judged whenever it
+  runs, and the shell before it is still said. MUST NOT TOUCH: a line already written.
+- CC-2 (the name a program was called by). At each exec the reader reads, beside the program's file, the name
+  the kernel gave the process for it: the last part of the path that was run. A child's line names both where
+  they differ, each through the name gate; a name of the kernel's full length is taken as cut and not used.
+  FOR: `nc`, `telnet`, `ftp` and a tool that is a link to one program of many names are judged by the name a
+  rule's list holds. A name more, never a name less: the file's own name always stays. A process can be
+  called by a tool's name it is not (a link of its own): its tree then alarms by its own doing, and that is
+  said in the rule's words.
+- CC-3 (a child whose parent has gone). The watch keeps, for each tree, the children it wrote lines for and has
+  not heard end, by pid and start, to a bound that is said when passed. A process whose parent is one of them
+  is that tree's child, though the parent is in neither this round's sample nor its text.
+- CC-4 (a child is its pid and its start). Wherever the watch keeps a child - which it wrote, when it began -
+  it keeps it by pid and start together, so that a pid used again is another child.
+- CC-5 (the standing hole follows the reader). The inventory's always-said hole that nothing between two
+  samples is seen says, in a round that read the reader's text, what is and is not seen then; a round with no
+  reader's text is byte for byte what it was.
+- CC-6 (not here). An act-root made by the reader's word waits for a desktop's measure (CB-3). What a short
+  child talks to, and a tree that lives whole between two samples, are M14.2.
+- CC-7 (the rig). On Linux the stand-in runs, each harmless: a `bash -c` whose first step sleeps longer than a
+  round and whose last command is a fetch thrown away (the command runs in bash's own pid, a round after
+  bash's line); `nc -z` to a public name where nc is there; and a child that outlives the shell that started
+  it. X43: the fetch is a NET-TOOL finding of the stand-in's tree. X44: `nc` is one, named `nc`. X45: the
+  outliving child's tool is one. Each n/a where its tool is not installed or the helper was refused.
