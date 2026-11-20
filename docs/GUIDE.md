@@ -8,6 +8,30 @@ leading backslashes only) in any ASCII case, with `\` or `/`; the forward-slash 
 `//server/share` is read as a POSIX path (a hole), `/mnt/c/...` (WSL) and `C:\...` are different
 paths, and `--root /x` means `\x` on the current drive.
 
+Which Raqib runs is said by its number, `0.MINOR.PATCH`: `raqib --version` prints `raqib` and the
+number, the first line a watch prints and the first line of its report end with it (`; raqib` and
+the number), the window's title bar says `Raqib` and the number, every event holds it as
+`watch.version`, and `raqib doctor` says it. MINOR moves with every merge into `main` that changes
+what Raqib does for a person (a rule, a source, a command, a report), PATCH with a merge that only
+repairs, and a merge of documents or tests alone moves nothing: two copies that do different things
+never say the same number. The number is not a promise of stability, and the events' schema has its
+own name (`raqib-event/1`). [CHANGELOG.md](../CHANGELOG.md) says, the newest first, what each number
+brought, how to update to it and what was not measured.
+
+To update a checkout, as CHANGELOG.md gives it:
+- In the checkout's folder. First stop a running watch, window or service: a running one keeps the
+  number it started with.
+- `git pull`
+- Installed with pipx, on Linux or Windows: `pipx install --force .`
+- Installed with pip: `pip install --upgrade .` in the same venv; with Windows' launcher,
+  `py -m pip install --upgrade .`
+- The Linux service (root's copy, [SERVICE.md](specs/SERVICE.md)), with DIR its folder and NUMBER
+  the new number: a new copy of the checkout for each number, `sudo cp -r . DIR/src-NUMBER`, then
+  `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER` and `sudo DIR/bin/raqib service install`
+  again (it writes the unit again and restarts it). These steps were not run on a machine yet.
+- Then `raqib --version` says the number at the top of CHANGELOG.md. A watch with rules of your own
+  measures its thresholds again at its first start after an update, and says so.
+
 ## Watch a project
 This section begins in the README, under [Watch a project](../README.md#watch-a-project).
 

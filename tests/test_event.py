@@ -22,6 +22,7 @@ A path is the machine's; a comparison across homes or platforms is of the
 event with each path under the run's home written ~/ and posix (pathless).
 """
 import copy
+import importlib.util
 import io
 import json
 import re
@@ -45,6 +46,10 @@ import test_host_sources as hs  # noqa: E402
 import test_overlay as tov  # noqa: E402
 import test_rhythm as tr  # noqa: E402
 import test_watch as tw  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location("event_examples", ROOT / "tools" / "event_examples.py")
+event_examples = importlib.util.module_from_spec(_spec)   # VA-3 (ADR-0015 Amendment A): the examples' tool
+_spec.loader.exec_module(event_examples)
 
 CATALOG_DIR = ROOT / "raqib" / "rules" / "catalog"
 RULES = engine.load_catalog(CATALOG_DIR)
@@ -257,20 +262,26 @@ def run_l(tmp):
     return ended(w, tmp / "home", moments=moments)
 
 
-@pytest.fixture(scope="module")
-def runs(tmp_path_factory):
+def build_runs(mktemp):
+    """The fixture runs, each in the new directory mktemp(name) gives. VA-3 (ADR-0015 Amendment A): shared with
+    tools/event_examples.py, which writes and checks the document's examples from them."""
     out = {}
     with pytest.MonkeyPatch.context() as mp:
-        home = tmp_path_factory.mktemp("event-home")
+        home = mktemp("event-home")
         mp.setenv("HOME", str(home))
         mp.setenv("USERPROFILE", str(home))
         for name, fn in (("A", run_a), ("B", run_b), ("C", run_c), ("D", run_d), ("P", run_p), ("R", run_r),
                          ("F", run_f), ("H", run_h), ("L", run_l)):
-            out[name] = fn(tmp_path_factory.mktemp("event-" + name.lower()))
+            out[name] = fn(mktemp("event-" + name.lower()))
         mp.setattr(host.HostWatch, "_decide", lambda self, now, act: (_ for _ in ()).throw(
             RuntimeError("cannot decide (test)")))
-        out["N"] = run_b(tmp_path_factory.mktemp("event-n"))
+        out["N"] = run_b(mktemp("event-n"))
     return out
+
+
+@pytest.fixture(scope="module")
+def runs(tmp_path_factory):
+    return build_runs(tmp_path_factory.mktemp)
 
 
 def all_events(runs):
@@ -990,20 +1001,27 @@ def examples(runs):
 RUN_D = ("source-finding: history", "source-finding: judged on another tree", "source-finding: noted")
 
 
+def example_events(runs):
+    """{label: the example's event as the document writes it (pathless)}. VA-3 (ADR-0015 Amendment A): what
+    tools/event_examples.py writes and checks, and what the test below compares by its same function."""
+    return {label: pathless(ev, home) for label, (ev, home) in examples(runs).items()}
+
+
 def test_e7_each_example_is_what_the_module_builds_from_its_named_run(runs):
     text = DOC.read_text(encoding="utf-8")
-    found = dict(re.findall(r"^### example: (.+?)\n(?:.*\n)*?```json\n(.+?)\n```", text, re.M))
-    ex = examples(runs)
-    assert set(found) == set(ex)
-    for label, (ev, home) in ex.items():
-        doc, built_ = json.loads(found[label]), pathless(ev, home)
+    found = event_examples.found(text)
+    built = example_events(runs)
+    assert set(found) == set(built)
+    # VA-3: the tool's own comparison (RUN_D: two os follows, which source finding the watch lists first varies
+    # from run to run, so its id, n and about are the document's; the rest is compared); every other line whole
+    assert event_examples.differences(text, built, RUN_D) == []
+    for label, line in found.items():
+        doc = json.loads(line)
         assert event.check(doc) == []
-        if label in RUN_D:   # two os follows: which source finding the watch lists first varies from run to run
+        if label in RUN_D:
             assert doc["about"].startswith("source-finding:") and doc["id"] == "%s:%d" % (doc["watch"]["run"], doc["n"])
-            doc, built_ = ({k: v for k, v in e.items() if k not in ("id", "n", "about")} for e in (doc, built_))
-            assert doc == built_, label
         else:
-            assert found[label] == event.line(built_), label
+            assert line == event.line(built[label]), label
 
 
 def test_e7_the_document_says_paths_ids_and_what_snapshot_is_not():

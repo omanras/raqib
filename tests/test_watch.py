@@ -21,6 +21,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import raqib  # noqa: E402
 from raqib import cli, notify, report, ui, watch  # noqa: E402
 from raqib.rules import engine, trace  # noqa: E402
 
@@ -34,6 +35,8 @@ REAL_TRACES = [FIXTURES / "quickstart-d7841d1-claude-code-2.1.301.log",
                FIXTURES / "file-tools-d7841d1-claude-code-2.1.301.log"]
 START = datetime.datetime(2026, 11, 2, 12, 0, 0, tzinfo=datetime.timezone.utc)
 PROJECT = "/work/demo-proj"
+# M17.1 (ADR-0015 V-2): the final report's first line ends with the number, read from raqib.__version__
+REPORT_HEAD = "Raqib watch; raqib %s\n" % raqib.__version__
 
 
 # --- helpers ---------------------------------------------------------------------
@@ -632,7 +635,7 @@ def test_e1_watch_installs_tails_serves_and_prints_the_final_report(tmp_path, ho
     assert "(off)" in out and "FINDING [medium] DESTRUCT-CMD session s-watch seq 3" in out
     assert "(not notified: severity medium)" in out
     assert "raqib watch: page http://127.0.0.1:" in out and "page not opened (--no-open)" in out
-    assert out.index("Raqib watch\n") < out.index("Raqib report\n") < out.index("RESULT: ALARM (exit 1)")
+    assert out.index(REPORT_HEAD) < out.index("Raqib report\n") < out.index("RESULT: ALARM (exit 1)")
     assert "notifications: off (--no-notify)" in pages[0] and "SECRET-OUTPUT" in pages[0]
     assert "Content-Security-Policy" in pages[0] and "<script" not in pages[0]
     assert project_files(proj) == [".claude/settings.json"]   # nothing else written into the project
@@ -731,7 +734,7 @@ def test_b7_a_busy_port_gives_another_port_and_a_warning(tmp_path, home, monkeyp
     code = cli.main(["watch", str(proj), "--no-open", "--no-notify", "--port", "4242"], out=out)
     text = out.getvalue()
     assert code == 1 and "raqib watch: WARNING: port 4242 on 127.0.0.1 is not available" in text
-    assert "WARNING: port 4242" in text.split("Raqib watch\n", 1)[1]           # and in the final report
+    assert "WARNING: port 4242" in text.split(REPORT_HEAD, 1)[1]           # and in the final report
     trace_path = watch.default_trace(os.path.normpath(str(proj)), str(home))
     st = json.loads(Path(trace_path + ".watch.json").read_text(encoding="ascii"))
     assert st["port"]["requested"] == 4242 and st["port"]["used"] != 4242 and "4242" in st["port"]["warning"]
@@ -1016,7 +1019,7 @@ def test_b4_an_exception_ends_in_finish_crashed_and_the_final_report(tmp_path, h
     code, out = run_watch(monkeypatch, ["watch", proj, "--no-open", "--no-notify", "--port", "0"], [work, boom])
     assert code == 1 and "raqib watch: CRASHED: RuntimeError: boom in the loop" in out
     assert "watch-crashed: the watch ended on an exception: RuntimeError: boom in the loop" in out
-    assert out.index("Raqib watch\n") < out.index("RESULT: ALARM (exit 1)")
+    assert out.index(REPORT_HEAD) < out.index("RESULT: ALARM (exit 1)")
     assert "SECRET-OUTPUT" in out.split("Raqib report\n", 1)[1]
     st = json.loads(Path(str(trace_path) + ".watch.json").read_text(encoding="ascii"))
     assert (st["status"], st["error"]) == ("crashed", "RuntimeError: boom in the loop") and st["finished"]
@@ -1251,7 +1254,7 @@ def test_d7_finish_always_gives_a_final_report_or_a_one_line_reason(tmp_path, mo
     w.finish()
     text = w.final_text
     if broken == "_write_state":
-        assert "Raqib watch\n" in text and text.rstrip().endswith("RESULT: ALARM (exit 1)") and w.final_exit == 1
+        assert REPORT_HEAD in text and text.rstrip().endswith("RESULT: ALARM (exit 1)") and w.final_exit == 1
         assert "cannot write" in w.state_error and "broken _write_state" in w.state_error
     elif broken == "report":
         assert "raqib watch: no final report: it could not be built (RuntimeError: broken report)\n" in text
