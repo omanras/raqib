@@ -27,6 +27,7 @@ SIEM = ROOT / "siem"
 EVENT_MD = (ROOT / "docs" / "specs" / "EVENT.md").read_text(encoding="utf-8")
 EXAMPLES = siem_run.EXAMPLE.findall(EVENT_MD)
 ENGINES = ("elastic", "opensearch")
+BEYOND_A_LONG = "unexpected value type [class java.math.BigInteger]"   # OpenSearch 2.17.1, on the rig (4a834f8)
 SPEC = siem_run.spec_keys(EVENT_MD)
 RULE_FILES = ["raqib_alarm.yml", "raqib_destruction.yml", "raqib_heartbeat_not_watching.yml", "raqib_hole.yml",
               "raqib_network.yml", "raqib_persist.yml", "raqib_secret.yml", "raqib_unnamed_agent.yml",
@@ -457,7 +458,9 @@ class StandIn:
     engine is claimed to do), its searches are read from the runner's requests. Each knob spoils one thing."""
 
     def __init__(self, clock, distribution="opensearch", spoil=None, miscount=0, by_time=False, late=0,
-                 drop_shipper=False, refuse_deep=False, keep_text=False, reason=None, ghost=False, slow=0.0):
+                 drop_shipper=False, refuse_deep=False, keep_text=False, reason=None, ghost=False, slow=0.0,
+                 as_elastic=False):
+        self.as_elastic = as_elastic   # an OpenSearch that words a number beyond a long as Elasticsearch does
         self.clock, self.distribution, self.spoil, self.miscount = clock, distribution, spoil, miscount
         self.by_time, self.late, self.drop_shipper, self.refuse_deep = by_time, late, drop_shipper, refuse_deep
         self.keep_text, self.reason, self.ghost, self.slow = keep_text, reason, ghost, slow
@@ -477,6 +480,8 @@ class StandIn:
             extra = {k: v for k, v in sent.items() if k not in texts}
         else:
             extra = siem_run.shipped_of(sent)
+        if why == siem_run.REASONS["n-beyond-a-long"] and self.distribution == "opensearch" and not self.as_elastic:
+            why = BEYOND_A_LONG   # as the rig measured OpenSearch 2.17.1: its own words, before the check
         if why:
             doc = copy.deepcopy(extra)
             doc.update(message=line)
@@ -638,7 +643,32 @@ def test_r5_r7_an_error_document_without_the_reason_the_hand_written_table_gives
     assert rows(said)[39] == "MISSED" and "a-long-key: not 'not an event: a key longer than 256 characters'" in \
         row(said, 39)
     code, said = run(tmp_path, reason=lambda why: "not an event: x" if why == siem_run.NOT_JSON else why)
-    assert rows(said)[39] == "MISSED" and "not-json: the pipeline's own words where the engine's json processor's" \
+    assert rows(said)[39] == "MISSED" and "not-json: the pipeline's own words where the engine's own are due" \
+        in row(said, 39)
+
+
+def test_x39_holds_the_reason_measured_for_each_engine():
+    """The rig on 4a834f8: OpenSearch refuses a whole number beyond a long in its own words before the check; the
+    table holds that for OpenSearch alone, and every other label is one reason on both engines."""
+    assert siem_run.REASONS_OF == {"opensearch": {"n-beyond-a-long": siem_run.ENGINE_JSON}}
+    assert siem_run.reason_for("n-beyond-a-long", "opensearch") == siem_run.ENGINE_JSON
+    assert siem_run.reason_for("n-beyond-a-long", "elasticsearch") == siem_run.REASONS["n-beyond-a-long"] == \
+        "not an event: n is not of its kind of value"
+    for label, want in siem_run.REASONS.items():
+        if label != "n-beyond-a-long":
+            assert siem_run.reason_for(label, "opensearch") == siem_run.reason_for(label, "elasticsearch") == want
+    assert siem_run.reason_for("no-such-label", "opensearch").startswith("(no reason written")
+    own = BEYOND_A_LONG
+    assert siem_run.reason_wrong(siem_run.ENGINE_JSON, own) is None
+    assert siem_run.reason_wrong(siem_run.REASONS["n-beyond-a-long"], own) is not None
+    assert siem_run.reason_wrong(siem_run.ENGINE_JSON, siem_run.REASONS["n-beyond-a-long"]) is not None
+
+
+def test_x39_an_engine_that_words_a_number_beyond_a_long_as_the_other_does_is_missed(tmp_path):
+    code, said = run(tmp_path)   # the stand-in is an OpenSearch and words it as the rig measured
+    assert rows(said)[39] == "MET", row(said, 39)
+    code, said = run(tmp_path, as_elastic=True)
+    assert rows(said)[39] == "MISSED" and "n-beyond-a-long: the pipeline's own words where the engine's own" \
         in row(said, 39)
 
 

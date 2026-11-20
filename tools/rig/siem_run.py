@@ -67,7 +67,7 @@ MAX_DISPLACED, DAY = 1024, 86400.0
 NOT, NOT_SCHEMA = "not an event: ", "not a raqib-event/1 event: its schema is not raqib-event/1"
 NOT_JSON = "not JSON (the engine's json processor gives its own words)"
 NOT_INSTANT = "time is not an instant (the engine's date processor gives its own words)"
-ENGINE_JSON = "the engine's json processor's own words"
+ENGINE_JSON = "the engine's own words"   # its json processor's, or its own reader's of a document (REASONS_OF)
 # a key's type in EVENT.md's Keys table -> the code the pipeline checks it by (None: not checked)
 CODE = {"str": "s", "instant": "s", "link": "s", "int": "i", "pos": "p", "count": "c", "bool": "b",
         "number": "f", "object": "o", "ids": "S"}
@@ -178,8 +178,8 @@ ODD = (
 )
 
 # X39's own table, written by hand (SB-7), not made from check_of(): label -> the words the error document's
-# error.message must hold, None where the line must be an event, ENGINE_JSON where the engine's json processor
-# refuses the line and the words are its own (then they must be none of the pipeline's)
+# error.message must hold, None where the line must be an event, ENGINE_JSON where the engine itself (its json
+# processor, its reader) refuses the line and the words are its own (then they must be none of the pipeline's)
 REASONS = {
     "an-empty-key": "not an event: an empty key",
     "run-an-object": "not an event: watch.run is not of its kind of value",
@@ -211,6 +211,15 @@ REASONS = {
     "shipper-event-a-text": None,
     "shipper-event-a-text-not-json": ENGINE_JSON,
 }
+# Measured on the rig (4a834f8): OpenSearch 2.17.1 refuses a whole number beyond a long before the pipeline's own
+# check sees it ("unexpected value type [class java.math.BigInteger]"); the line is kept as an error document
+# all the same, in the engine's words. Elasticsearch 8.15.3 gives it to the check. distribution -> label -> reason
+REASONS_OF = {"opensearch": {"n-beyond-a-long": ENGINE_JSON}}
+
+
+def reason_for(label, distribution=None):
+    """The reason REASONS gives a label, or the one measured for this engine where it differs (REASONS_OF)."""
+    return REASONS_OF.get(distribution, {}).get(label, REASONS.get(label, "(no reason written for %s)" % label))
 
 
 def _set(ev, path, value):
@@ -747,7 +756,7 @@ def reason_wrong(want, message):
         return "no reason"
     if want == ENGINE_JSON:
         ours = NOT in message or NOT_SCHEMA.split(":", 1)[0] in message
-        return "the pipeline's own words where the engine's json processor's are due" if ours else None
+        return "the pipeline's own words where the engine's own are due" if ours else None
     return None if want in message else "not %r" % want
 
 
@@ -772,7 +781,7 @@ def longest(lines):
     return max(texts), max(keys)
 
 
-def claim_x39(ask, feed):
+def claim_x39(ask, feed, distribution=None):
     docs = {}
     for index in sorted({s["index"] for s in feed.sent}):
         for d in sources(ask, index) or []:
@@ -787,7 +796,7 @@ def claim_x39(ask, feed):
             wrong.append("%s %s: %s here, %s in the engine" % (s["index"], s["line"][:60], want, kind or "nothing"))
         label = s.get("label")
         if label:
-            reason = REASONS.get(label, "(no reason written for %s)" % label)
+            reason = reason_for(label, distribution)
             why = ("an event where %r is due" % reason if kind == "event" and reason is not None else
                    "an error document where an event is due" if kind == "error" and reason is None else
                    reason_wrong(reason, get(doc, "error.message")) if kind == "error" else None)
@@ -1039,7 +1048,8 @@ def claims(ask, sigma, target, folder, pipeline, template, searches, spec, keys,
     fed.append("%d line(s) of %d made-up host(s) for silence, read at once and after waits" % (
         len(SILENCE_HOSTS) + len(SILENCE_LATER), len({h[0] for h in SILENCE_HOSTS})))
 
-    for n, claim in ((39, lambda: claim_x39(ask, feed)), (40, lambda: claim_x40(ask, feed)),
+    engine = "opensearch" if folder == "opensearch" else "elasticsearch"
+    for n, claim in ((39, lambda: claim_x39(ask, feed, engine)), (40, lambda: claim_x40(ask, feed)),
                      (41, lambda: claim_x41(ask, searches, feed, reads))):
         ok, text = claim()
         row(n, WORD[ok], text)

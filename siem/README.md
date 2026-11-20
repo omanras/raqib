@@ -80,7 +80,9 @@ words (`error.message`):
   `watch.run`, `watch.host`, `watch.beat`);
 - holding a key the spec knows with another kind of value: a top-level key, a key of `watch` or of
   `rule`, `subject.pid` or `subject.image` (`alarm` that is not true or false, `n` that is not a
-  whole number from 1 within a long, a number where a text is due ...);
+  whole number from 1 within a long, a number where a text is due ...); a whole number beyond a
+  long is refused by OpenSearch itself before the check, in its own words (`unexpected value
+  type ...`), and by the check on Elasticsearch - an error document on both;
 - of a `kind` that is not one of the spec's eight, or with a `time` the engine cannot read as an
   instant (the engine's date processor gives its own words).
 
