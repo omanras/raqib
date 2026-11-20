@@ -558,3 +558,45 @@ The field's word on 0333a02: the gate green on six jobs, R7's test passed on Win
   not see added), not only a count on the command's output. `pending` grows with keys made and removed while a
   place keeps failing (bounded by what exists; low). `changes()` alone, outside the watcher, compares the first
   thousand of a key over the bound.
+
+## Amendment L (the Table, 2026-11-21) - the third review of M15.3b (docs/review/2026-11-21-M15.3b-redo2.md): lands
+The reviewer's verdict is NEXT, with fixes the Table makes by hand and two questions to rule. Measured before the
+one ruling that needed it (the probe branch ab206af and f7da80f, GitHub's Windows machine, the module's own
+function over the machine's own texts): of 689 services' ImagePath, 239 are an unquoted first word that holds
+a `%` (`%SystemRoot%\system32\svchost.exe -k netsvcs -p` and its like), 4 a quoted one, 2 a driver's path with a
+blank and no program's extension; both values of the machine's Run key begin with `%windir%`. AK-3 alone said
+245 services and both Run values `may run`. Five users' hives are loaded there: `.DEFAULT`, `S-1-5-18`, `-19`,
+`-20` and the user's own. After AL-4, on the same machine: 685 of 687 services' texts sure, the two drivers'
+paths not; both Run values sure; Winlogon's two sure.
+- AL-1 (a hive that comes in a read whose step raised). The marking of AK-5 never takes a hive's own part: a
+  hive first listed in a read whose Run or RunOnce step raised is said `hive loaded` by that read, and none of
+  its keys enters the base without a word (the builder's question 8, ruled; the review's MUST FIX 1). A test
+  reaches the raise itself, which the first did not.
+- AL-2 (the users turn once a turn of the steps). The users' hives of a step are begun one further at each
+  whole turn of the six steps, not at each read: a turn of users that moved with the steps gave some pairs of
+  step and user never (the builder's question 3; the review's MUST FIX 4b: with four hives, one hive's RunOnce
+  was never read whole). The words say the bound that holds - where the slow keys are one user's own, every
+  other key is read whole within six reads for each hive loaded - and what has no turn: a slow key inside the
+  services' or the tasks' step. FOR: AK-2's promise is true for the case it was made for, and is not said for
+  more. Not measured: any slow key on a real machine (the longest read there is 0.219 s).
+- AL-3 (a swap is said whatever was read). A file that becomes a link, or a link a file, under one name is
+  `changed` though the base held no content of it (a file held or refused when it was first listed).
+- AL-4 (`sure`, by what a real machine holds). A quoted first word is sure unless its name - what follows its
+  last separator - holds a `%`: a variable before the name moves its folder, not the name. An unquoted first
+  word that holds a `%` is not sure, but for a text of the machine's own (a service's, the machine's Run or
+  RunOnce key, Winlogon) that begins with `%SystemRoot%` or `%windir%` and holds no other, where the reader's
+  own value of that variable holds no blank: the variable is then taken as a path with no blank. A user's own
+  text is never taken so. FOR: `may run` says something - two texts of 687 on the measured machine, not 245.
+  MUST NOT TOUCH: AK-3's other two cases; the program's name, which is still PERSIST-RUN-KEY's reading.
+- AL-5 (small). The watcher's read number is its own (no caller sets it). The rig's `content read` is never a
+  link's fixed word. The tests the review found unable to fail are made able to, each checked by taking its
+  fix out: the step that raises, the turn (RunOnce and the machine's keys, and `startup` back among the places
+  read whole), a task's body over the bound. The questions file's "nothing no longer held" for the turn's test
+  was the third such slip of this task: from M15.3c on a builder lists every assertion it removes, and the
+  reviewer is asked to diff the test's assertions, not to trust the list.
+- AL-6 (kept, or recorded for M15.3c). Kept as built: the builder's questions 1 (which parts list what is
+  under them), 2, 4, 5, 6, 7, 9 (by AL-4), 10, 11. Recorded: a Startup folder over the bound still opens and
+  hashes a thousand files a read; every reparse point is a link, so a file that is one of another kind is
+  never read; a change of a service that nobody of the rig made was seen once (`changed service 1`): M15.3c
+  measures what Windows changes by itself before a rule judges `changed service`; X37's SKIP for facts that
+  name no platform; a count of `sure` False a place in the rig's facts.
