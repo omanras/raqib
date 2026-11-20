@@ -5,6 +5,32 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.3.0 - 2026-11-20
+
+What is new:
+- Raqib can read Windows' autostart places by itself, with no Sysmon and no right asked (ADR-0014 Amendments G
+  and H; docs/specs/AUTOSTART.md): the Run and RunOnce values of every loaded user's hive and the machine's,
+  the Startup folders, the services, the scheduled tasks where its rights give them, and Winlogon's Shell and
+  Userinit. `python -m raqib.autostart --rounds N --every S` says what each read holds and each entry added,
+  changed or removed between two reads, by its place, its name and the program it would run; never a value's
+  text, a file's content or a SID. A place the rights refuse is said as refused, never read as empty.
+- The watch does not read it yet and no rule judges it yet: that is the next step on this track (M15.3b).
+- The rig makes a service that is never started, beside its Run value and its Startup file, and claims that
+  the read sees each appear and go (X37).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+
+Not measured:
+- A real desktop: how often an updater makes its own task or service with nothing done, and how long a read
+  takes with thousands of services (on GitHub's machine: 39 reads, the longest 0.157 s).
+- What two reads can say that is not so (an entry that first appears while its place is unread; a hive loaded
+  between two reads): said in the spec, ruled before the watch reads this.
+
 ## 0.2.0 - 2026-11-20
 
 What is new:
