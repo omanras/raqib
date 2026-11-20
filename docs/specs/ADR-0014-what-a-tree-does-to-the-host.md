@@ -261,3 +261,26 @@ in four runs of seventeen; a value whose name holds a backslash was a finding th
   tree's source only where that tree's own event was joined by pid; whether a child joined by its parent's pid
   should carry that parent's mark of a nested root; a placeholder of the rules' sentences chosen by a boolean
   (the nested clause is printed on every finding until then); AA-3 and AA-4 (M15.2b).
+
+## Amendment E (the Table, 2026-11-20) - M15.2b: what was not read is said (AA-3, AA-4)
+Two silences of the rules of behaviour were recorded when they landed (AA-3, AA-4) and left for this task.
+Neither needs a measurement to rule: each is a fact the watch already holds and does not say.
+- AE-1 (AA-3: an unread Initiated). An os net line whose `Initiated` was not read carries no `initiated` key
+  (it carried null). A fact that is not there is unknown to the engine, so NET-ADMIN-PORT cannot judge the
+  line and says so in its partial note, as it does for a line written before the four keys. FOR: a connection
+  the rule could not judge is never counted as judged. MUST NOT TOUCH: a line whose Initiated was read, to the
+  byte.
+- AE-2 (AA-4: a channel that gives no event 11). The watch already says, once, when its rounds have read no
+  event 1, 3 or 22 of the channel. It says the same of event 11: no file a tree makes is then seen, and
+  PERSIST-AUTOSTART's os lines have nothing to read.
+- AE-3 (AA-4: a channel that holds no event 13). The rounds do not read event 13 (a follow does, for its
+  tree). At its first read the round's channel asks one bounded question more: the newest event 13 the
+  channel holds, whatever its key. Where it holds none, that is a blind spot of the run, said once:
+  PERSIST-RUN-KEY has nothing to read on this machine unless this Sysmon's configuration is changed. Where it
+  holds one, the inventory carries its time and nothing is said: it shows that this Sysmon logs some registry
+  values, not that it logs the Run keys, and the documents say that limit. Where the question cannot be
+  asked, that is said as not known. FOR: a person learns at the start of a watch that a rule of his is blind
+  here, not after an agent has used it. MUST NOT TOUCH: the round's own question each round, to the byte; the
+  result and the exit code (a blind spot is counted apart).
+- AE-4 (recorded). The certain cure is ADR-0014 S3: the autostart places read by Raqib itself each round, so
+  that no rule of persistence hangs on Sysmon's configuration. It is the next stage of this track (M15.3).
