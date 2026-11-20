@@ -22,8 +22,16 @@ event this module builds has none, and a builder that would build one with a
 problem raises ValueError naming the key instead (C-10). line(obj) is the one
 line of it (B-3): JSON, keys sorted, compact, ASCII. docs/specs/EVENT.md is
 the contract (B-6, C-11).
+
+The chain (ADR-0016): the writer of the events file (raqib/eventlog.py)
+gives every line it writes `prev` (chained(): the word "first" on a run's
+first written line, else digest() of the line the run wrote before it); an
+event without it is an event all the same (a line of an older build, and
+what the builders here return). chains(rows) checks each run's chain over a
+file's lines (H-4); it holds no secret and cannot see an end cut off (H-5).
 """
 import datetime
+import hashlib
 import json
 import re
 
@@ -32,7 +40,7 @@ from raqib import __version__
 SCHEMA = "raqib-event/1"
 KINDS = ("finding", "source-finding", "note", "tree", "hole", "knock", "heartbeat", "watch")
 # C-2: the keys, in C-2's order (a line sorts them; a dict built here keeps this order)
-KEYS = ("schema", "id", "n", "time", "kind", "about", "rev", "severity", "alarm", "summary", "rule", "subject",
+KEYS = ("schema", "id", "n", "prev", "time", "kind", "about", "rev", "severity", "alarm", "summary", "rule", "subject",
         "evidence", "hole", "knocked", "state", "result", "counts", "watch")
 PARTS = {
     "rule": ("id", "class", "kind", "fp_budget", "attack"),
@@ -48,6 +56,9 @@ PARTS = {
 CITE = ("src", "line", "round", "seq")   # C-3: a cite, never its text
 BASE = ("schema", "id", "n", "time", "kind", "about", "rev", "severity", "watch")
 BASE_PARTS = ("watch.run", "watch.host", "watch.beat")   # D-3, H-6: required in every event beside BASE
+PREV = "prev"   # ADR-0016 H-1, H-6: the chain's link; any kind may hold it, none requires it (an older build's line)
+FIRST = "first"   # H-1: the prev of a run's first written line
+HEX64 = re.compile(r"[0-9a-f]{64}\Z")   # H-1: a sha256 in lower-case hexadecimal
 REQUIRED = {   # C-10: per kind, beside BASE (a dotted name: a key of that part)
     "finding": ("alarm", "summary", "rule", "rule.id", "rule.attack", "evidence"),
     "source-finding": ("alarm", "summary", "rule", "rule.id", "rule.attack", "subject", "evidence", "state"),
@@ -59,7 +70,7 @@ REQUIRED = {   # C-10: per kind, beside BASE (a dotted name: a key of that part)
     "watch": ("state",),
 }
 REQUIRED_END = ("result", "result.word", "result.exit", "counts")   # C-10, G-4: a watch's end, beside REQUIRED["watch"]
-ALLOWED = {   # per kind, the keys it may hold
+ALLOWED = {   # per kind, the keys it may hold (and prev: PREV)
     "finding": BASE + ("alarm", "summary", "rule", "subject", "evidence", "knocked"),
     "source-finding": BASE + ("alarm", "summary", "rule", "subject", "evidence", "knocked", "state"),
     "note": BASE + ("summary", "subject", "evidence"),
@@ -99,7 +110,7 @@ ABOUT_OF = {"finding": ("finding",), "source-finding": ("source-finding",), "not
 # "number": an integer or a float; "ints": a list of integers from 0; "ids": a list of technique ids, none twice;
 # D-5: a round, a pid, a seq, a line and n are never negative)
 TYPES = {
-    "schema": "str", "id": "str", "n": "pos", "time": "instant", "kind": "str", "about": "str", "rev": "pos",
+    "schema": "str", "id": "str", "n": "pos", "prev": "link", "time": "instant", "kind": "str", "about": "str", "rev": "pos",
     "severity": "str", "alarm": "bool", "summary": "str", "state": "str",
     "rule": "object", "subject": "object", "evidence": "object", "hole": "object", "knocked": "object",
     "result": "object", "counts": "object", "watch": "object",
@@ -474,6 +485,8 @@ def _typed(kind_of, v):
         return (_int(v) or isinstance(v, float)) and v == v
     if kind_of == "instant":
         return instant(v)
+    if kind_of == "link":   # ADR-0016 H-1: the word first, or a sha256 in hexadecimal
+        return isinstance(v, str) and (v == FIRST or bool(HEX64.match(v)))
     if kind_of == "object":
         return isinstance(v, dict) and bool(v)
     if kind_of == "ints":
@@ -510,7 +523,7 @@ def check(obj):
     if kind not in KINDS:
         return out + ["kind: must be one of %s" % "|".join(KINDS)]
     for key in obj:
-        if key not in ALLOWED[kind]:
+        if key not in ALLOWED[kind] and key != PREV:
             out.append("%s: not a key of a %s event" % (key, kind))
     end = kind == "watch" and obj.get("state") == "end"
     need = BASE + BASE_PARTS + REQUIRED[kind] + (REQUIRED_END if end else ())
@@ -518,7 +531,9 @@ def check(obj):
         if not _get(obj, key)[0]:
             out.append("%s: missing (required in a %s event)" % (key, kind))
     for key, value in obj.items():
-        if key in TYPES and not _typed(TYPES[key], value):
+        if key == PREV and not _typed("link", value):
+            out.append("prev: must be %s or 64 characters of lower-case hexadecimal (ADR-0016)" % FIRST)
+        elif key in TYPES and not _typed(TYPES[key], value):
             out.append("%s: must be %s" % (key, TYPES[key]))
         if key in PARTS and isinstance(value, dict):
             for k, v in value.items():
@@ -601,3 +616,189 @@ def check(obj):
     except (TypeError, ValueError) as exc:
         out.append("event: not JSON: %s" % exc)
     return out
+
+
+# --- the chain (ADR-0016) -------------------------------------------------------------------------------------
+
+def digest(raw):
+    """H-1: the sha256, in lower-case hexadecimal, of a line's bytes without its newline (str: its ASCII)."""
+    return hashlib.sha256(raw if isinstance(raw, bytes) else raw.encode("ascii")).hexdigest()
+
+
+def chained(ev, prev):
+    """H-1: a copy of the event holding prev (FIRST, or the digest of the line its run wrote before it), placed
+    after n in C-2's order; a line sorts its keys all the same."""
+    out = {}
+    for k, v in ev.items():
+        if k != PREV:
+            out[k] = v
+        if k == "n":
+            out[PREV] = prev
+    out.setdefault(PREV, prev)
+    return out
+
+
+CHAIN_SINCE = (0, 4, 0)   # HA-2: the first version that writes the chain (the Table moves it at the merge)
+BOUND = 10                # HA-7: the problems of one run listed (and the lines of a comparison, HA-5)
+# HA-2: a version read (another is said as not read). HB-1: each part bounded, so that reading one cannot raise
+VERSION = re.compile(r"([0-9]{1,6})\.([0-9]{1,6})\.([0-9]{1,6})\Z")
+WHOLE, NOT_WHOLE, UNCHAINED, TAKEN = "whole", "not whole", "not chained", "taken out"   # a run's chain
+BROKEN, BESIDE = "broken", "beside"   # a problem of a chain (HA-7)
+
+
+def bare(raw):
+    """A line's bytes without its line end: the newline is never given, and one carriage return before it (a copy
+    whose line ends were made Windows') is a line end too; the writer writes none."""
+    return raw[:-1] if raw.endswith(b"\r" if isinstance(raw, bytes) else "\r") else raw
+
+
+def _read(raw):
+    """HA-1, HA-9: the JSON object a line holds, or None: not whole JSON, not ASCII, not an object, or nested deeper
+    than the interpreter reads (never raised)."""
+    try:
+        text = raw.decode("ascii") if isinstance(raw, bytes) else raw.encode("ascii").decode("ascii")
+        obj = json.loads(text)
+    except (UnicodeDecodeError, UnicodeEncodeError, ValueError, RecursionError):
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def _keyed(obj, key):
+    """(watch.host, the value of key: watch.run, or the line's id), or None where either is not a string."""
+    w = obj.get("watch")
+    if not isinstance(w, dict) or not isinstance(w.get("host"), str):
+        return None
+    v = w.get("run") if key == "run" else obj.get(key)
+    return (w["host"], v) if isinstance(v, str) else None
+
+
+def version_of(text):
+    """HA-2: a watch.version as numbers (0, 4, 0), or None where it is not N.N.N (said as not read)."""
+    m = VERSION.match(text) if isinstance(text, str) else None
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def _links(rows):
+    """{(host, run): [(line number, digest, prev or None, has prev, version)]} in the file's order."""
+    runs = {}
+    for i, raw in enumerate(rows, 1):
+        raw = bare(raw)
+        obj = _read(raw)
+        key = _keyed(obj, "run") if obj is not None else None
+        if key is not None:
+            runs.setdefault(key, []).append((i, digest(raw), obj.get(PREV), PREV in obj,
+                                            obj["watch"].get("version")))
+    return runs
+
+
+def _walk(got, lines, bound):
+    """HA-6, HA-7: the walk of one chained run: every break and every line beside the chain, in the file's order,
+    to the bound; a line byte for byte one read before is said twice; a run that begins with a hash began before
+    the file."""
+    def say(problem):
+        if len(got["problems"]) < bound:
+            got["problems"].append(problem)
+        else:
+            got["more"] += 1
+    links, latest, cut = [], {}, -1   # cut: the latest link that does not name the one before it
+    for i, h, prev, has, _ in lines:
+        if h in latest:
+            got["twice"] += 1   # HA-6: no break, no line beside
+            continue
+        k = len(links)
+        shaped = isinstance(prev, str) and (prev == FIRST or bool(HEX64.match(prev)))
+        if k == 0:
+            if prev != FIRST:
+                cut = 0
+                if shaped:
+                    got["late"] = i   # HA-6: its first lines are not here
+                else:
+                    say({"what": BROKEN, "line": i, "before": None, "why": "prev" if has else "none"})
+        elif prev != links[k - 1][1]:
+            j = (-1 if prev == FIRST else latest.get(prev)) if shaped else None
+            if j is not None and j < k - 1 and cut <= j:   # the lines between follow each other from the one named
+                say({"what": BESIDE, "first": links[j + 1][0], "last": links[k - 1][0], "count": k - 1 - j,
+                     "named": links[j][0] if j >= 0 else 0, "again": i})
+            else:
+                say({"what": BROKEN, "line": i, "before": links[k - 1][0],
+                     "why": "names" if shaped else "prev" if has else "none"})
+            cut = k
+        latest[h] = k
+        links.append((i, h))
+    got["lines"] = len(links)
+    got["state"] = WHOLE if got["late"] is None and not got["problems"] else NOT_WHOLE
+
+
+def chains(rows, bound=BOUND):
+    """H-4 as ADR-0016 Amendment A rules it: the chain of each run of a file's lines (rows: each line's bytes
+    without its newline, in the file's order; a line is numbered from 1). A run is its host and its run word
+    (HA-3). A line is a link where it is a JSON object naming its host and its run with a prev of the right shape,
+    whatever check() says of it (HA-1). Returns, per run in the order of its first line, a dict of its own: host,
+    run, lines (the run's lines, each once), twice (lines byte for byte one read before: HA-6), late (the line
+    number of a first line that holds a hash: the run began before this file, HA-6), problems (each break -
+    {"what": BROKEN, "line", "before": the run's line before it or None, "why": "names" a line that is not the
+    one before it, "prev" not of its shape, "none" no prev} - and each line beside the chain - {"what": BESIDE,
+    "first", "last", "count": the lines beside, "named": the line they follow, 0 the run's start, "again": the
+    line that names it again} - in the file's order, to the bound), more (those past the bound), versions (the
+    run's watch.version, each once) and state: WHOLE; NOT_WHOLE (late or a problem); UNCHAINED (no line holds
+    prev, and no version read is CHAIN_SINCE or later: an older build's); TAKEN (no line holds prev, and a version
+    read is CHAIN_SINCE or later: the chain was taken out, HA-2). It holds no secret: an end cut off, a tail
+    written again with its hashes, and the run's last line changed or followed by a line that names it are not
+    seen from the lines alone (H-5, HA-4)."""
+    out = []
+    for (host, run), lines in _links(rows).items():
+        versions = []
+        for v in (x[4] for x in lines):
+            if v not in versions:
+                versions.append(v)
+        got = {"host": host, "run": run, "lines": len(lines), "twice": 0, "late": None, "problems": [], "more": 0,
+               "versions": versions, "state": UNCHAINED}
+        out.append(got)
+        if not any(x[3] for x in lines):
+            read = [version_of(v) for v in versions if version_of(v) is not None]
+            got["state"] = TAKEN if any(v >= CHAIN_SINCE for v in read) else UNCHAINED
+            continue
+        _walk(got, lines, bound)
+    return out
+
+
+def against(rows, held, bound=BOUND):
+    """HA-5: the lines a collector holds (held) beside the file's (rows), each by its host and id, compared byte for
+    byte (a line end aside). Returns {"read": lines of held, "same", "missing": [(held line, id, host)], "differ":
+    [(held line, id, host, [file lines])], "unread": held lines that name no host and id, "more_missing",
+    "more_differ" (past the bound), "behind": the file's lines named by host and id that held does not hold}."""
+    index = {}
+    for i, raw in enumerate(rows, 1):
+        raw = bare(raw)
+        obj = _read(raw)
+        key = _keyed(obj, "id") if obj is not None else None
+        if key is not None:
+            index.setdefault(key, []).append((i, digest(raw)))
+    got = {"read": 0, "same": 0, "missing": [], "differ": [], "unread": 0, "more_missing": 0, "more_differ": 0,
+           "behind": 0}
+    found = set()
+    for i, raw in enumerate(held, 1):
+        got["read"] += 1
+        raw = bare(raw)
+        obj = _read(raw)
+        key = _keyed(obj, "id") if obj is not None else None
+        if key is None:
+            got["unread"] += 1
+            continue
+        here = index.get(key)
+        h = digest(raw)
+        if here is None:
+            what, more, item = "missing", "more_missing", (i, key[1], key[0])
+        elif any(d == h for _, d in here):
+            got["same"] += 1
+            found.add(key)
+            continue
+        else:
+            found.add(key)
+            what, more, item = "differ", "more_differ", (i, key[1], key[0], [n for n, _ in here])
+        if len(got[what]) < bound:
+            got[what].append(item)
+        else:
+            got[more] += 1
+    got["behind"] = sum(len(v) for k, v in index.items() if k not in found)
+    return got

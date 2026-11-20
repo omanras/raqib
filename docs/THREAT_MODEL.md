@@ -1805,6 +1805,39 @@ collector that is slow, down or refusing never delays or loses a capture
   - A careful rewrite of whole sessions is not detected; nothing in v0.1
     claims otherwise.
   - Eval event `s12-rewrite-trace` exists, and the rules miss it.
+- **Editing the events file (ADR-0016 H-5, Amendment A).** Every line the
+  host watch writes to `~/.raqib/host/events.jsonl` names the line its run
+  wrote before it by that line's sha256 (`prev`; a run's first line holds
+  `first`), and `raqib events FILE` checks each run's chain (a run is its
+  host and its run word).
+  - What it proves: within a run, a line taken out of the middle, changed,
+    added or moved is seen by anyone who holds the lines (the line after it
+    no longer names the one before it), but the run's last line: no line
+    names it, so changed, or followed by a line added after the run ended
+    that names it, it is not seen from the file alone (HA-4). A line that
+    names the same line as the one before it is said as a line beside the
+    chain (a line the writer did not count as written, or one put there by
+    another hand). A run whose lines hold no `prev` while their version is
+    one that always writes it is said as a chain taken out (HA-2).
+  - What it does not prove: the chain holds no secret. Whoever can write
+    the file can cut its end, or write a tail again from any line and
+    compute the hashes again; the file alone then looks whole, and a test
+    of each case says so. A run of an older build has no chain at all, and
+    a version is the line's own word: whoever removes every `prev` of a run
+    and writes its lines' version again as an older one makes it read as an
+    older build's, not as a chain taken out. A file whose line ends were
+    all changed to Windows' checks as it did before.
+  - What a collector that holds a later line can tell: over the file alone,
+    nothing more - a tail written again is whole by itself, and so are the
+    collector's own lines. Side by side it can: `raqib events FILE --against
+    OTHER` looks for each line the collector holds (OTHER, its own export)
+    in the file by host and id, and says which are not there and which are
+    there with other bytes (exit 1). It needs the lines as they were sent,
+    byte for byte; a file changed only after the last line a collector
+    holds is not seen.
+  - Under the service the record is root's and the watched account cannot
+    write it; a chain keyed by a secret that account cannot read is a later
+    stage, recorded and not built.
 - **Switching the hooks off.** The agent can edit `.claude/settings.json`,
   or set `disableAllHooks`, after install. The installer checks only at
   install time (M0.3 M8).
