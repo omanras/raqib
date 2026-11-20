@@ -15,6 +15,7 @@ import tempfile
 import time
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+OTHERS = []   # (key, name, more arguments) of the values made by reg.exe beyond the first two, to undo
 HARMLESS = "cmd /c echo benign-persistence-test"
 TASK = "RaqibRigTest"
 
@@ -92,6 +93,8 @@ def undo(startup_file, temp_file):
             say("undone: the value %s" % name)
         except OSError as exc:
             say("the value %s was not there to undo (%s)" % (name, type(exc).__name__))
+    for key, name, more in OTHERS:
+        run(["reg", "delete", key, "/v", name, "/f"] + more)
     for path in (startup_file, temp_file):
         try:
             os.remove(path)
@@ -131,6 +134,12 @@ def main():
              " | Out-Null" % (RUN_KEY, HARMLESS)])
         run(["powershell", "-NoProfile", "-Command",
              "Set-Content -LiteralPath '%s' -Value 'rem raqib rig test'" % startup_file])
+        # the other forms of the same key (M15.2, measured before ruling): RunOnce, the machine's hive, the 32-bit view
+        for key, name, more in (("HKCU\\" + RUN_KEY + "Once", "RaqibRigTestC", []),
+                                ("HKLM\\" + RUN_KEY, "RaqibRigTestD", []),
+                                ("HKLM\\" + RUN_KEY, "RaqibRigTestE", ["/reg:32"])):
+            run(["reg", "add", key, "/v", name, "/t", "REG_SZ", "/d", HARMLESS, "/f"] + more)
+            OTHERS.append((key, name, more))
         run(["schtasks", "/create", "/tn", TASK, "/tr", HARMLESS, "/sc", "onlogon", "/f"])
         values = run_values()
         say("act 2 done: the user's autostart values now: %s; the Startup file exists: %s" % (
