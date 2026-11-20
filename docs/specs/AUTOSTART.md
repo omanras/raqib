@@ -1,10 +1,10 @@
 # AUTOSTART - the autostart places, read by Raqib itself
 
-Rulings: ADR-0014 Amendments G (AG-1 to AG-5), H (AH-1 to AH-8) and I (AI-1 to
-AI-11). Stages: M15.3a, the read standing alone; M15.3b, the read made fit for
-the watch (`raqib/autostart.py`, `python -m raqib.autostart`). Nothing of the
-watch reads it yet: the watch's reading, its host lines and the three rules
-that judge a change are M15.3c.
+Rulings: ADR-0014 Amendments G (AG-1 to AG-5), H (AH-1 to AH-8), I (AI-1 to
+AI-11) and J (AJ-1 to AJ-8). Stages: M15.3a, the read standing alone; M15.3b
+and its REDO, the read made fit for the watch (`raqib/autostart.py`,
+`python -m raqib.autostart`). Nothing of the watch reads it yet: the watch's
+reading, its host lines and the three rules that judge a change are M15.3c.
 
 ## What is read (AG-1, AI-7)
 
@@ -16,11 +16,11 @@ process, no right asked, no network call:
 |---|---|---|---|---|---|
 | `run`, `runonce` | user | `HKU\<SID>\Software\Microsoft\Windows\CurrentVersion\Run` and `\RunOnce`, every loaded hive named by a SID, one view | a value | its type and data | the program its text would run |
 | `run`, `runonce` | machine | `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` and `\RunOnce`, the 64-bit view and the 32-bit view, each its own | a value | its type and data | the program its text would run |
-| `startup` | user | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup` | a file directly in it | the file | None |
-| `startup` | machine | `%ProgramData%\Microsoft\Windows\Start Menu\Programs\Startup` | a file directly in it | the file | None |
+| `startup` | user | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup` | a file or a link directly in it | the file | None |
+| `startup` | machine | `%ProgramData%\Microsoft\Windows\Start Menu\Programs\Startup` | a file or a link directly in it | the file | None |
 | `service` | machine | `HKLM\SYSTEM\CurrentControlSet\Services\<name>` | a key with an `ImagePath` | `ImagePath`, `Start`, `Type` | the program `ImagePath` would run |
 | `task` | machine | `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree`, every key with a value `Id`, to 32 deep | a task | `Actions` of `...\TaskCache\Tasks\<Id>`; its `Triggers` hashed apart | None |
-| `winlogon` | machine | `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon` | `Shell`, `Userinit` | its type and data | the first program its list names |
+| `winlogon` | machine | `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon` | `Shell`, `Userinit` | its type and data | the program it names, where it names one |
 
 - The users' hives are read under `HKU` by their SID: a hive named
   `<SID>_Classes` is left out, `HKU\.DEFAULT` is left out (it is the hive of
@@ -31,22 +31,35 @@ process, no right asked, no network call:
   always entries of their own (`view32` true), never folded with the 64-bit
   view's (AI-7). A value held in both views is two entries; when the 64-bit
   one changes, only it is said.
-- The Startup folders: the files directly in each (a folder in it is not
+- The Startup folders: what is directly in each (a folder in it is not
   entered), `desktop.ini` left out (as ADR-0014 A-3). The user's folder is the
   reading user's (`APPDATA`); where `APPDATA` or `ProgramData` is not set, the
   place is `failed` and says so. A folder on a share - a UNC path (`\\host\x`,
-  `\\?\UNC\...`), or a drive Windows calls remote (`GetDriveTypeW`) - is not
+  `\\?\UNC\...`), or a drive Windows calls remote (`GetDriveTypeW` 4) - is not
   listed and no file in it is opened (AI-4; CLAUDE.md rule 5): it is a key not
-  read, `on a share`. A folder whose drive's kind cannot be told is not read
-  either, and says so.
-- A Startup file is opened for reading with read, write and delete sharing
-  (`CreateFileW` with `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`,
-  by `ctypes`), so that another process's delete or rename of it does not fail
-  while it is read (AI-3; ADR-0011 A: Raqib does not hinder what it watches).
-  Where it cannot be opened so, it is not opened: its content is not read, and
-  the place says `it cannot be opened with every sharing`.
+  read, `on a share`. A folder whose drive's kind cannot be told - no drive
+  letter, `GetDriveTypeW` 0 (unknown) or 1 (no root), or no `ctypes` - is not
+  read either, and says so (AJ-4). Removable, fixed, CD-ROM and RAM drives (2,
+  3, 5, 6) are read.
+- A Startup file is opened by the name its folder listed, in the path's long
+  form (`\\?\` before the folder's own path made whole), so that Windows reads
+  no other name for it - a trailing dot or blank, a device's name (AJ-4). It is
+  opened for reading with read, write and delete sharing (`CreateFileW` with
+  `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`, by `ctypes`), so
+  that another process's delete or rename of it does not fail while it is read
+  (AI-3; ADR-0011 A: Raqib does not hinder what it watches). Where it cannot be
+  opened so, it is not opened: its content is not read, and the place says
+  `it cannot be opened with every sharing`.
+- A link in a Startup folder - a symbolic link or another reparse point, told
+  by the listing itself (`is_symlink`, `FILE_ATTRIBUTE_REPARSE_POINT`) - is an
+  entry with its content not read, said `a link: not opened or followed`: it is
+  never opened or followed (it may lead to a share). A file whose open fails
+  for another reason, "not found" among them, is an entry with its content not
+  read and that reason; only the folder's own listing can fail the place
+  (AJ-4).
 - The services: every key under `Services` is opened; one with no `ImagePath`
-  (a key of settings, a group) runs nothing and is not an entry.
+  (a key of settings, a group) runs nothing and is not an entry. A driver is
+  such a key too.
 - The tasks: the scheduler's tree in the registry is walked, 32 folders deep; a
   deeper one is counted as a key not read and the place says `partly` (AH-2). A
   task's body is the binary `Actions` and `Triggers` of its `Tasks\<Id>` key:
@@ -71,15 +84,19 @@ An entry is a dict:
   only where that part passes the gate a command's head passes
   (`common.HEAD_NAME`, not key-like). None where the content is not text
   (binary, a number), names no such program, or was not read. A Winlogon value
-  is a list split on commas outside quotes: its first item is named
-  (`C:\Windows\system32\userinit.exe,` names `userinit.exe`).
-- `sure` (AI-8): false where the name may not be what runs - an unquoted text
-  whose first word holds a separator (`\` or `/`) and is followed by a blank
-  (Windows tries the longer paths too: `C:\Program Files\x.exe` names
-  `Program`, not sure), or a Winlogon list of more than one program. True for
-  a quoted path, a text of one word, and an unquoted text whose first word holds
-  no separator (`cmd /c ...`). None where there is no program. A sentence says
-  `may run` where it is false, `would run` where it is true.
+  is a list split on commas outside quotes: a list of one names its program
+  (`C:\Windows\system32\userinit.exe,` names `userinit.exe`); a list of more
+  than one names none (AJ-3).
+- `list`: true for a Winlogon value that lists more than one program; its
+  line says `(a list of programs)`.
+- `sure` (AI-8, AJ-3): whether the program named is what Windows runs. A
+  quoted first word is sure. An unquoted first word that ends in a program's
+  extension - `.exe`, `.com`, `.bat`, `.cmd`, `.scr`, `.pif`, in any case - is
+  sure (`C:\Windows\system32\svchost.exe -k netsvcs`). One that holds a
+  separator (`\` or `/`), is followed by a blank and ends in none is not sure
+  (`C:\Program Files\x\y.exe` and `C:\My Tools.exe` read to their first blank).
+  Any other is sure (`cmd /c ...`). None where there is no program. A sentence
+  says `may run` where it is false, `would run` where it is true.
 - `sha256`: the content's hash (for a value: its type and its data; for a
   file: the file; for a service: its three values; for a task: its actions).
   None where the content was not read.
@@ -92,10 +109,13 @@ Every hash is keyed (HMAC-SHA256) with a salt (AI-9): a Watcher's own, random
 (32 bytes), made when it is made, kept in it alone, never printed, written or
 returned; a read made without a watcher takes the process's own salt, made
 once. A key or a content's hash therefore cannot be matched by trying a SID, a
-name or a text, nor between two machines or two watchers; two reads compare
-only under one salt. A content is hashed by its length and its first 64 KiB
-(AI-4): a value's data, a file. A file is read no further than that; two
-contents of one length that differ only after their first 64 KiB have one hash.
+name or a text, nor between two machines or two watchers. A read carries
+`salt_id`, a hash of a constant under its salt: it tells two salts apart and
+tells neither. A Watcher takes only a read of its own salt; a read of another
+is not taken, said, and changes nothing of its base (AJ-6). A content is hashed
+by its length and its first 64 KiB (AI-4): a value's data, a file. A file is
+read no further than that; two contents of one length that differ only after
+their first 64 KiB have one hash.
 
 A name is text its maker chose. Where it holds a SID (a per-user task of an
 updater does), the name shown holds `[sid]` in its place (AH-1); the `key`
@@ -108,40 +128,78 @@ process's memory and leave it only as a salted hash: nothing `read` returns or
 the command prints holds them. A reason of a failed read is its error's kind
 and number alone (an error's text can hold a path, and a path a user's name).
 
-## What the rights and the bounds do not give (AG-2, AI-4)
+## What the rights and the bounds do not give (AG-2, AI-4, AJ-2)
 
 Each place says how it was read, in `places[place]`:
 
 - `read`: every key asked was given (a key or a folder that is not there is
   empty, and is read; a key deleted while it is read is not there, AH-5).
-- `partly`: some keys were not read; `keys_refused` says how many, and
-  `keys_why` how many for each reason: `refused`, `below the depth bound`, `on
-  a share: not read (...)`, `whether it is on a share is not known: not read`,
-  `it cannot be opened with every sharing: not opened`. A Startup file that is
-  listed and whose content is not read is an entry with `sha256` None (AI-2); a
-  task whose body is refused is an entry with `sha256` and `triggers` None.
+- `partly`: some keys were not read (a Startup file counts as one); `keys_refused` says how many,
+  and `keys_why` how many for each reason: `refused`, `below the depth bound`,
+  `more than 1000 entries: not read whole`, `the read's deadline (5 s) passed
+  before it was reached`, `on a share: not read (...)`, `whether it is on a
+  share is not known: not read`, `it cannot be opened with every sharing: not
+  opened`, `a link: not opened or followed`, `not found when opened`, or an
+  open's error by its kind and number. A Startup file that is listed and whose
+  content is not read is an entry with `sha256` None (AI-2); a task whose body
+  is refused is an entry with `sha256` and `triggers` None.
 - `refused`: every key asked was refused: the place is not read, never read
   as empty. Measured: under a token whose Administrators group is deny-only,
   the scheduler's tree is refused whole.
-- `unread` (AI-4): the read's deadline (5 s by default, `read(deadline=...)`)
-  passed before the place was read whole, or no key of it could be read for a
-  bound (both Startup folders on a share): `reason` says which. Its entries are
-  not given; it is never read as empty.
+- `unread` (AI-4): the read's deadline passed before the place was reached, or
+  no key of it could be read for a bound (both Startup folders on a share):
+  `reason` says which. It has no entries; it is never read as empty.
 - `failed`: another error, with its `reason`.
+
+The bounds (AI-4, AJ-2):
+- The deadline (5 s by default, `read(deadline=...)`) is looked at before each
+  place and between keys and files - before each hive's Run key, each Startup
+  file, each service, each key of the task tree - never inside one call: one
+  key's enumeration, one folder's listing, one file's open and read run to
+  their end, and their time is not bounded by it (each is bounded by size
+  instead, below). A place the deadline cuts keeps what it read of itself: the
+  keys and files it reached are read, the keys it did not reach are parts not
+  read and the files listed and not reached are entries with their content not
+  read, each said with the deadline's reason; the place says `partly`.
+- A read begins with the step after the one the read before began with (the
+  Watcher gives it; the steps are run and runonce together, startup, service,
+  task, winlogon; a read made without a watcher begins with the first). A place
+  made slow is cut itself, and the places after it in that read are not
+  reached; each of them is reached first, and read whole unless it is slow
+  itself, at least once every five reads.
+- A key's values and a folder's files are read to a bound of 1000 (one more is
+  asked, to tell that the bound was met): where it is met the first 1000 are
+  given, the key or folder is a part not read whole, and the place says
+  `more than 1000 entries: not read whole`. The services' key and the task
+  tree's folders are listed whole (each service and each task is its own key,
+  under the deadline).
 
 `read` never raises. Off Windows (with no registry handed in) it reads nothing,
 and one sentence says so: Linux's places are ADR-0014 S4 (M15.4).
 
-## A change (AG-3, AI-1 to AI-6)
+## A change (AG-3, AI-1 to AI-6, AJ-1, AJ-5, AJ-6)
 
 A `Watcher` takes reads one after another (`watcher.read()`, then
 `watcher.take(result)`) and gives the changes of each against its base: what
 every place, and inside a place read in part every key or folder, last held
 when it was read (AI-1). Its first read gives none. A place `refused`, `failed`
 or `unread`, and a key not read, keep what they last held; nothing is said of
-them but that they are unread. An entry that first appears while its place or
-its key is not read is said as added by the first read that reads it, once.
-The kinds:
+them but that they are unread.
+
+A part the base does not hold - a place, a key, a folder, a hive's keys - is
+of one of three kinds (AJ-1):
+- one read for the first time though it was there before (a place the deadline
+  or a refusal kept from the first read, a key refused at first and readable
+  now): what it holds when it is first read becomes its base, and none of its
+  entries is said as added. The Watcher says once that it took a base late, per
+  place, with how many keys and entries (`late`; the command's `BASE round N:`
+  line), never naming a hive.
+- one made under a part read before (a new service's key, a new folder of the
+  tree, a Run key made where there was none): its entries are `added`.
+- one of a hive loaded now: see `hive loaded`.
+
+What appears in a part that was read before, while it is not read, is said as
+added by the first read that reads it, once (AI-1). The kinds of change:
 
 - `added`, `removed`: an entry of a key read now that the key did not hold when
   it was last read, or that it no longer holds. A key or folder no longer
@@ -153,27 +211,28 @@ The kinds:
   base, the content it last had: nothing is said.
 - `changed`: its content's hash is not the one it had (`was`); for a task, its
   actions (both its actions and its triggers: one `changed`).
-- `rescheduled` (AI-5): a task whose triggers alone changed. Measured: Windows
-  moves some of its own tasks by itself.
-- `hive loaded`, `hive unloaded` (AI-6): a user's hive listed now that the base
-  did not hold (a logon, a task run as another account), or no longer listed.
-  It is one change, with the count of the entries it holds (`entries`), and its
-  entries are not said one by one: they become the base, or leave it. A hive
-  is never named: its change says `a user's hive`, and its `key` is the salted
-  hash of its part. A value set in a hive that was already there is `added`.
-  The hives are compared only where Run and RunOnce were both read (whole or in
-  part). A hive the base never listed is a hive loaded, the first listing after
-  the users' hives were refused too.
+- `rescheduled` (AI-5): a task whose triggers alone changed.
+- `hive loaded`, `hive unloaded` (AI-6): a user's hive listed now that
+  the base did not hold (a logon, a task run as another account), or no longer
+  listed. It is one change, with the count of the entries of its keys read now
+  (`entries`), and its entries are not said one by one: they become the base,
+  or leave it. A key of that hive not read now (its RunOnce failed or was cut,
+  its key refused) becomes the base when it is first read, as a base taken
+  late (AJ-5). A hive is never named: its change says `a user's hive`, and its `key`
+  is the salted hash of its part. A value set in a hive that was already there
+  is `added`. A hive listed for the first time after the users' hives could not
+  be listed is a base taken late, not a hive loaded.
 
 `changes(before, after)` compares two reads as in M15.3a: every entry added,
 changed (its `sha256`) or removed; a place refused, failed or unread in either
 read, or whose keys not read are not the same in both, gives no change and is
-named in `unread`. It knows no part, no hive, no triggers: the Watcher is what
-the watch uses.
+named in `unread`. It knows no part, no hive, no triggers, no salt: the Watcher
+is what the watch uses.
 
-What was there when the first read was made is the base and is never said as a
-change. A change made and undone between two reads is not seen by this read
-(Sysmon's lines see it where its configuration logs it).
+What was there when the first read was made, and what a part held when it was
+first read, is the base and is never said as a change (AG-3, AJ-1). A change
+made and undone between two reads is not seen by this read (Sysmon's lines see
+it where its configuration logs it).
 
 What two reads can still say that is not so, or leave unsaid:
 - An entry that an enumeration skips because another was deleted meanwhile
@@ -181,8 +240,11 @@ What two reads can still say that is not so, or leave unsaid:
 - An entry added while a key is not read and removed before it is read again is
   never said; an entry whose content changed and changed back while it was not
   read is not said either.
-- A hive loaded while the users' hives could not be listed, and an entry set in
-  it meanwhile: the entry is part of the hive loaded, not an entry added.
+- An entry set in a part before that part was first read - a key refused or a
+  place cut from the watch's first read on - is in its base taken late and is
+  never said (AJ-1: said once as a base taken late, with its count).
+- A hive loaded and a value set in it within one interval: the value is part
+  of the hive loaded, not an entry added (AJ-8).
 
 ## The command
 
@@ -194,16 +256,21 @@ Watcher, one line per change, as
 
     CHANGE round 3: added service "RaqibRigService" (would run cmd.exe)
     CHANGE round 3: added run "Helper" of the user (may run Program)
+    CHANGE round 3: changed winlogon "Userinit" (a list of programs)
     CHANGE round 3: added startup "held.cmd" of the user, content not read
     CHANGE round 4: content read startup "held.cmd" of the user
     CHANGE round 5: rescheduled task "\Vendor\Update"
     CHANGE round 6: hive loaded (a user's hive, 3 entries)
     CHANGE round 7: removed run "RaqibRigValue" of the user (would run cmd)
 
-and one `UNREAD round N:` line where a place was not read whole, with why
-(refused, failed, the deadline, the keys not read and their reasons). ASCII.
-It writes no file and opens no socket. Exit 0; 2 for an argument it does not
-take (`--rounds` below 1, `--every` below 0 or not a finite number).
+one `BASE round N:` line where parts were taken as a base late (per place, how
+many keys and entries), one `UNREAD round N:` line where a place was not read
+whole, with why (refused, failed, the deadline, the keys not read and their
+reasons), and one `REFUSED round N:` line for a read of another salt. ASCII. It
+writes no file and opens no socket. Exit 0; 2 for an argument it does not take
+(`--rounds` below 1, `--every` below 0 or not a finite number). Where a reader
+is handed in (a test's), the command's Watcher takes the process's own salt,
+the salt of a read made without a watcher.
 
 ## What is not read (AG-5)
 
@@ -216,9 +283,11 @@ stage that judges a service rules whether a driver is said apart. Also not read
 by this stage: RunOnceEx and RunServices; a user's `Wow6432Node` Run key named
 as such, and a user's hive in its 32-bit view; a user's own Winlogon values;
 the Startup folder of a user other than the reading one; a Startup folder on a
-share; the scheduler's folder of task files; a task's program (its binary
+share or on a drive whose kind is not known; what a link in a Startup folder
+leads to; the scheduler's folder of task files; a task's program (its binary
 `Actions` are hashed, not parsed); a Startup link's target; a content beyond its
-first 64 KiB. An entry removed is recorded and judged by no rule yet.
+first 64 KiB; a key's values and a folder's files beyond 1000. An entry removed
+is recorded and judged by no rule yet.
 
 ## Measured, and not measured
 
@@ -248,22 +317,41 @@ nobody made - a task of Windows' own
 (`SoftwareProtectionPlatform\SvcRestartTask`) said as changed; a quiet 90 s
 had shown none.
 
-Not measured: which part of that task changed (its actions or its triggers); a
-hive loaded by a logon; a real desktop's churn (an updater that makes its own
+Measured by the rig on M15.3b's first build (Amendment J; GitHub's Windows
+machine): X37 MET - the three acts each added and later removed, the stand-in's
+delete of its Startup file did not fail, the held file said as added by the
+first read that listed it with its content not read, 41 reads with the longest
+0.156 s - and the one change nobody made was a task `rescheduled`: it is that
+task's triggers that Windows moves by itself.
+
+That the read no longer holds a file against its maker is measured by a test
+that runs on Windows alone (`test_aj7_while_the_modules_own_windows_opener_
+holds_a_file_it_is_renamed_and_deleted`: while the module's own opener holds a
+file, another call renames it and then deletes it, and both succeed) and by
+the rig's held file and the stand-in's delete (X37); it was not measured on a
+file of 24 MB again.
+
+Not measured: a hive loaded by a logon, and whether a logon gives the count the
+Watcher says (AJ-8); a real desktop's churn (an updater that makes its own
 task or service); the scheduler's own query tool under fewer rights; how long
 the read takes on a machine with thousands of services, and so how often the
-deadline is met; a folder of the Startup path that is a link to a share (only
-the folder's own drive is asked); whether every opener of a Startup file Raqib
-reads with every sharing still gets what it asks; this module's own read on a
-real desktop.
+deadline is met; how long one key's enumeration, one folder's listing or one
+file's open can be made to take; a folder of the Startup path that is a link to
+a share (only the folder's own drive is asked); whether a plain user can deny
+its own Run key or Startup folder to a reader of another identity while
+Windows still runs them (AJ-8: the place would be read in part for good, and
+said); this module's own read on a real desktop.
 
 The rig (`tools/rig/autostart_run.py`): a Watcher reads; the run makes a file
 in the user's Startup folder (a `rem`), holds it open with no sharing across
-one read, lets it go and removes it, and writes what each read said of it; then
-it reads beside a run of the stand-in, which sets a Run value, writes a Startup
-file and makes a service that is never started (`cmd.exe /c echo`, start on
-demand), undoes each, and says whether its own delete of its Startup file
-failed. X37 is MET where the stand-in's three acts are each `added` and later
-`removed`, its delete did not fail, and the held file was said as `added` by the
-first read that listed it; its words name every other change by its kind and
-place.
+one read, lets it go once and removes it, and writes what each read said of it;
+then it reads beside a run of the stand-in, which sets a Run value, writes a
+Startup file and makes a service that is never started (`cmd.exe /c echo`,
+start on demand), undoes each, and says whether its own delete of its Startup
+file failed. X37 is MET where the stand-in's three acts are each `added` and
+later `removed`, its delete did not fail, the read that first listed the held
+file was the one made while it was held (its content not read) and said it
+`added`, and the held file was removed after; its words name every other change
+by its kind and place, and a place read in part as read in part. A held file
+the run could not remove (the run killed) is left in the folder: it holds a
+`rem`, and the job's machine is thrown away after it.

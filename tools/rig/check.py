@@ -872,7 +872,8 @@ def read_autostart(facts):
     stand-in worked. MET where each of the stand-in's three acts (its Run value, its Startup file, its service:
     AUTOSTART_ACTS, the names tools/rig/workload.py gives them) is an `added` change and, in a later read, a
     `removed` one; no WORKLOAD line says the stand-in's delete of its Startup file failed; and the file the run held
-    open with no sharing across one read was made and said as `added` by the first read that listed it. MISSED
+    open with no sharing across one read was made, said as `added` by the first read that listed it - the read
+    made while it was held, its content not read - and removed after (AJ-7). MISSED
     otherwise, with what is missing and the reads that left a place unread (facts None, not run on Windows, an
     error: silence is a finding); n/a off Windows. Its words name every other change by its kind and place (one
     nobody of the rig made: Windows moves some of its own tasks). It never raises: facts that cannot be read are
@@ -917,9 +918,15 @@ def read_autostart(facts):
         elif "added" not in (listed[0].get("changes") or []):
             missing.append("the held file was not said as added by the first read that listed it (read %s: %s)" % (
                 listed[0].get("round"), ", ".join(listed[0].get("changes") or []) or "no change"))
+        elif not (listed[0].get("held") is True and listed[0].get("content") == "not read"):
+            missing.append("the read that first listed the held file was not the one made while it was held with"
+                           " its content not read (read %s: held %s, content %s)" % (
+                               listed[0].get("round"), listed[0].get("held"), listed[0].get("content")))
+        elif held.get("removed") is not True:
+            missing.append("the held file was not removed after (it may be left in the Startup folder)")
         else:
-            seen.append("the held file added in read %s, its content %s" % (listed[0].get("round"),
-                                                                            listed[0].get("content")))
+            seen.append("the held file added in read %s while held, its content not read, and removed after" %
+                        listed[0].get("round"))
         ours = {(p, w.lower()) for p, w in AUTOSTART_ACTS} | {("startup", AUTOSTART_HELD)}
         others = {}
         for c in changes:
@@ -927,15 +934,27 @@ def read_autostart(facts):
                 k = "%s %s" % (c.get("change"), c.get("place"))
                 others[k] = others.get(k, 0) + 1
         other = "other changes: %s" % (", ".join("%s %d" % (k, others[k]) for k in sorted(others)) or "none")
-        unread = ["read %s: %s" % (u.get("round"), ", ".join(sorted(u.get("places") or {})))
-                  for u in facts.get("unread") or [] if isinstance(u, dict)]
+        unread, partly = [], []   # AJ-7: a place read in part is said as that, not as unread
+        for u in facts.get("unread") or []:
+            if isinstance(u, dict):
+                places = u.get("places") or {}
+                gone = sorted(p for p in places if not str(places[p]).startswith("in part"))
+                inpart = sorted(p for p in places if str(places[p]).startswith("in part"))
+                if gone:
+                    unread.append("read %s: %s" % (u.get("round"), ", ".join(gone)))
+                if inpart:
+                    partly.append("read %s: %s" % (u.get("round"), ", ".join(inpart)))
+        partly += ["read %s: %s" % (u.get("round"), ", ".join(sorted(u.get("places") or {})))
+                   for u in facts.get("partly") or [] if isinstance(u, dict)]
+        unread = "; ".join(unread) or "none"
+        if partly:
+            unread += "; read in part: %s" % "; ".join(partly)
         if missing:
             ended = ("; the run ended the stand-in before its end: its acts were not undone"
                      if facts.get("ended_by_run") else "")
-            return [(name, MISSED, "missing: %s; %s; unread: %s%s" % ("; ".join(missing), other,
-                                                                   "; ".join(unread) or "none", ended))]
+            return [(name, MISSED, "missing: %s; %s; unread: %s%s" % ("; ".join(missing), other, unread, ended))]
         return [(name, MET, "%s; %s; %s read(s), the longest %s s; unread: %s" % (
-            "; ".join(seen), other, facts.get("reads"), facts.get("seconds_max"), "; ".join(unread) or "none"))]
+            "; ".join(seen), other, facts.get("reads"), facts.get("seconds_max"), unread))]
     except Exception as exc:   # never raises: facts that cannot be read are MISSED
         return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
 

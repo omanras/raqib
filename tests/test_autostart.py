@@ -147,7 +147,7 @@ def test_every_place_is_read_with_its_entries(folders):
     assert [(e["name"], e["program"], e["sure"]) for e in entries(got, "winlogon")] == [
         ("Shell", "explorer.exe", True), ("Userinit", "userinit.exe", True)]
     for e in got["entries"]:
-        assert set(e) == set(autostart.FIELDS) | {"sure", "triggers", "part"}
+        assert set(e) == set(autostart.FIELDS) | {"sure", "list", "triggers", "part"}
         assert e["sha256"] and len(e["sha256"]) == 64 and len(e["key"]) == 64
     assert got["seconds"] >= 0
 
@@ -532,7 +532,8 @@ def test_the_rig_run_holds_a_file_across_one_read_and_writes_what_each_read_said
         with open(path, "wb") as f:
             f.write(b"rem raqib rig held\r\n")
         disk.refused.add(os.path.basename(path))
-        return lambda: disk.refused.discard(os.path.basename(path))
+        return lambda: (let_go.append(path), disk.refused.discard(os.path.basename(path)))
+    let_go = []
 
     def sleep(s):   # the stand-in's service: made during its run, deleted before its end
         slept.append(s)
@@ -548,13 +549,14 @@ def test_the_rig_run_holds_a_file_across_one_read_and_writes_what_each_read_said
     assert facts["error"] is None and facts["reads"] == 7 and facts["workload_rc"] == 0
     assert [(r["round"], r["held"], r["listed"], r["content"], r["changes"]) for r in facts["held"]["reads"]] == [
         (2, True, True, "not read", ["added"]), (3, False, True, "read", ["read"]), (4, False, False, None, ["removed"])]
-    assert facts["held"]["made"] and facts["held"]["removed"]
+    assert facts["held"]["made"] and facts["held"]["removed"] and len(let_go) == 1   # AJ-7: let go once
     assert not os.path.exists(os.path.join(folders["user"], autostart_run.HELD_NAME))
     assert [(c["round"], c["change"], c["place"], c["name"], c["program"], c["sure"]) for c in facts["changes"]
             if c["place"] == "service"] == [(5, "added", "service", "RaqibRigService2", "cmd.exe", True),
                                             (6, "removed", "service", "RaqibRigService2", "cmd.exe", True)]
     assert facts["workload"] == ["WORKLOAD 00:00:01 service made, never started"]
-    assert facts["first"]["places"]["task"]["state"] == "read"
+    assert facts["first"]["places"]["task"] == {"state": "read", "entries": 1, "keys_refused": 0, "keys_why": {},
+                                                "reason": None}
     said = json.dumps(facts)
     assert "sha256" not in said and SID not in said and "triggers" not in said
 
@@ -593,7 +595,14 @@ def test_the_spec_says_what_is_not_read_what_is_refused_and_what_was_measured():
                   "`hive loaded`, `hive unloaded` (AI-6)", "A sentence says `may run` where it is false",
                   "is not listed and no file in it is opened (AI-4; CLAUDE.md rule 5)",
                   "`FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`", "keyed (HMAC-SHA256) with a salt (AI-9)",
-                  "a rename of it by another handle failed 5406 times of 5406", "Not measured: which part of that task",
+                  "a rename of it by another handle failed 5406 times of 5406",
+                  "the one change nobody made was a task `rescheduled`: it is that task's triggers",
+                  "is looked at before each place and between keys and files", "never inside one call",
+                  "A read begins with the step after the one the read before began with",
+                  "The Watcher says once that it took a base late", "`more than 1000 entries: not read whole`",
+                  "a list of more than one names none (AJ-3)", "`.exe`, `.com`, `.bat`, `.cmd`, `.scr`, `.pif`",
+                  "a link: not opened or followed", "in the path's long form",
+                  "`GetDriveTypeW` 0 (unknown) or 1 (no root)",
                   "the name shown holds `[sid]` in its place",
                   "a deeper one is counted as a key not read and the place says `partly`",
                   "`refused`: every key asked was refused", "`partly`: some keys were not read", "0.07 s",
@@ -602,8 +611,9 @@ def test_the_spec_says_what_is_not_read_what_is_refused_and_what_was_measured():
         assert words in flat, words
     threat = " ".join((ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8").split())
     assert threat.count("**What this read does not see** (docs/specs/AUTOSTART.md;") == 1
-    assert "Closed (ADR-0014 Amendment I): an entry that first appears while its place or its key is unread" in threat
-    assert "it is the base, and is never said" in threat
+    assert "**Closed** (ADR-0014 Amendments I and J). An entry that first appears while a place or a key" in threat
+    assert "it is the base, and is never said" in threat and "**The lever that is left** (ADR-0014 AJ-2)" in threat
+    assert "measured since, on Windows, by a test in which another call renames and then deletes a file" in threat
 
 
 def test_the_rig_runs_the_read_on_both_machines_and_check_reads_it():
@@ -750,25 +760,103 @@ def test_ai4_a_content_is_hashed_by_its_length_and_its_first_64_kib(tmp_path):
     assert h.content((SZ, "x" * 70000 + "1")) == h.content((SZ, "x" * 70000 + "2")) != h.content((SZ, "x" * 70002))
 
 
-def test_ai4_the_deadline_says_each_place_it_did_not_reach_as_not_read(folders):
-    class Clock:   # a made-up clock: still for the first read, then a second a call
-        now, step = 0.0, 0.0
+class Clock:
+    """A made-up clock: it moves only when a place's read makes it move (`spend`)."""
 
-        def __call__(self):
-            self.now += self.step
-            return self.now
-    clock, reg = Clock(), machine()
-    w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=Folders(), clock=clock, deadline=12)
-    assert w.take(w.read())["unread"] == {}
-    clock.step = 1.0
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+
+class SlowReg(Reg):
+    """The user's Run key takes the whole deadline each time it is read (a process made its own key slow)."""
+
+    def __init__(self, clock, cost):
+        super().__init__()
+        self.clock, self.cost = clock, cost
+
+    def values(self, root, path, view32=False):
+        if self.cost and root == "HKU" and path.lower() == user_run().lower():
+            self.clock.now += self.cost
+        return super().values(root, path, view32)
+
+
+def slow_machine(clock, cost):
+    reg = SlowReg(clock, cost)
+    reg.vals, reg.names = machine().vals, machine().names
+    return reg
+
+
+def test_ai4_aj2_the_deadline_cuts_between_keys_and_no_place_is_starved(folders):
+    clock = Clock()
+    reg = slow_machine(clock, 5.0)
+    w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=Folders(), clock=clock, deadline=5)
+    reads = []
+    for _ in range(5):
+        r = w.read()
+        reads.append(r)
+        got = w.take(r)
+        assert got["changes"] == []                             # nothing cut is ever said as removed or added
+        assert {p for p, x in r["places"].items() if x["state"] != "read"} <= set(got["unread"])
+    assert [r["begin"] for r in reads] == list(autostart.STEPS)  # each read begins with the step after the last's
+    first = reads[0]["places"]
+    # the read that began with the slow key: the key it reached is read, the rest of run and every later place not
+    assert first["run"]["state"] == "partly" and "passed before it was reached" in " ".join(first["run"]["keys_why"])
+    assert [e["name"] for e in reads[0]["entries"] if e["place"] == "run"] == ["RaqibRigValue"]
+    for p in ("runonce", "startup", "service", "task", "winlogon"):
+        assert first[p]["state"] == "unread" and "deadline (5 s) passed" in first[p]["reason"]
+        assert not [e for e in reads[0]["entries"] if e["place"] == p]          # never read as empty
+    for p in ("startup", "service", "task", "winlogon"):                        # over five reads: each read whole
+        assert any(r["places"][p]["state"] == "read" for r in reads), p
+    assert "; not read: " in autostart.first_line(reads[0])
+
+
+def test_aj2_a_place_cut_while_it_is_read_keeps_what_it_reached(folders):
+    clock = Clock()
+
+    class SlowServices(Reg):
+        def values(self, root, path, view32=False):
+            if path.lower().startswith(autostart.SERVICES.lower() + "\\"):
+                clock.now += 2.0
+            return super().values(root, path, view32)
+    reg = SlowServices()
+    reg.vals, reg.names = machine().vals, machine().names
+    for n in range(4):
+        reg.put("HKLM", autostart.SERVICES + "\\S%d" % n, [("ImagePath", "s%d.exe" % n, SZ)], views=(False,))
+    w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=Folders(), clock=clock, deadline=5)
+    w.begin = autostart.STEPS.index("service")
     got = w.read()
-    states = {p: (s["state"], s["reason"]) for p, s in got["places"].items()}
-    assert states["run"] == ("read", None) and states["winlogon"][0] == "unread"
-    cut = [p for p, (st, _) in states.items() if st == "unread"]
-    assert cut and all("deadline (12 s) passed" in states[p][1] for p in cut)
-    assert not [e for e in got["entries"] if e["place"] in cut]                  # never read as empty
-    assert "; not read: " in autostart.first_line(got)
-    assert w.take(got)["changes"] == [] and set(cut) <= set(w.take(got)["unread"])   # the base keeps them
+    s = got["places"]["service"]
+    # NoImage, RaqibRigService and S0 reached (2 s each; NoImage runs nothing), S1 to S3 not: parts not read
+    assert s["state"] == "partly" and s["entries"] == 2 and s["keys_why"] == {autostart.CUT_KEY % 5: 3}
+    assert w.take(got)["changes"] == []
+
+
+def test_aj2_a_folder_is_read_to_a_bound_of_entries(tmp_path):
+    user, common_ = tmp_path / "u", tmp_path / "m"
+    user.mkdir()
+    common_.mkdir()
+    for n in range(autostart.ENTRY_BOUND + 1):
+        (user / ("f%04d.cmd" % n)).write_bytes(b"rem\r\n")
+    folders = {"user": str(user), "machine": str(common_)}
+    w = watcher(machine(), folders)
+    got = w.read()
+    s = got["places"]["startup"]
+    assert s["state"] == "partly" and s["keys_why"] == {autostart.OVER_BOUND: 1}
+    assert len(entries(got, "startup")) == autostart.ENTRY_BOUND
+    w.take(got)
+    os.remove(str(user / "f0000.cmd"))
+    assert w.take(w.read())["changes"] == []          # a folder not read whole keeps what it held
+
+
+def test_aj2_a_key_is_read_to_a_bound_of_entries(folders):
+    reg = machine()
+    reg.put("HKU", user_run(), [("V%04d" % n, "x.exe", SZ) for n in range(autostart.ENTRY_BOUND)])
+    got = autostart.read(reg, folders, platform="win32", disk=Folders())
+    assert got["places"]["run"]["keys_why"] == {autostart.OVER_BOUND: 1}
+    assert len([e for e in entries(got, "run") if e["scope"] == "user"]) == autostart.ENTRY_BOUND
 
 
 def test_ai4_a_startup_folder_on_a_share_is_not_listed_or_opened(folders):
@@ -849,9 +937,10 @@ def test_ai8_a_name_that_may_not_be_what_runs_is_said_so(folders):
     sure = {e["name"]: (e["program"], e["sure"]) for e in entries(got, "run") + entries(got, "winlogon")}
     assert sure["Blank"] == ("Program", False) and sure["Quoted"] == ("helper.exe", True)
     assert sure["Bare"] == ("cmd", True) and sure["Alone"] == ("alone.exe", True)
-    assert sure["Userinit"] == ("userinit.exe", False) and sure["Shell"] == ("explorer.exe", True)
+    assert sure["Userinit"] == (None, None) and sure["Shell"] == ("explorer.exe", True)   # AJ-3: a list names none
+    assert [e["list"] for e in entries(got, "winlogon")] == [False, True]
     line = autostart.change_line(3, dict(entries(got, "winlogon")[1], change="changed"))
-    assert line == 'CHANGE round 3: changed winlogon "Userinit" (may run userinit.exe)'
+    assert line == 'CHANGE round 3: changed winlogon "Userinit" (a list of programs)'
     blank = [e for e in entries(got, "run") if e["name"] == "Blank"][0]
     assert autostart.change_line(3, dict(blank, change="added")).endswith("(may run Program)")
 
@@ -871,7 +960,7 @@ def test_ai9_the_hashes_are_salted_by_the_watcher_and_never_left_unsalted(folder
         assert hashlib.sha256(t.encode()).hexdigest() not in said, t
     with open(os.path.join(folders["user"], "raqib-rig-startup.cmd"), "rb") as f:
         assert hashlib.sha256(f.read()).hexdigest() not in said
-    assert "salt" not in said.lower() and repr(a) == "<autostart.Watcher>"
+    assert a._Watcher__salt.hex() not in said and repr(a) == "<autostart.Watcher>"
 
 
 def test_e8_the_command_says_each_kind_and_may_run(folders):
@@ -889,3 +978,177 @@ def test_e8_the_command_says_each_kind_and_may_run(folders):
         'CHANGE round 2: added run "Blank" of the user (may run Program)',
         'CHANGE round 2: rescheduled task "\\Vendor\\Update"',
         "CHANGE round 2: hive loaded (a user's hive, 1 entries)"]
+
+
+# --- M15.3b REDO (ADR-0014 Amendment J) -------------------------------------------------------------------------
+
+def test_aj1_a_first_read_cut_before_the_services_then_a_whole_read_says_no_added_and_one_late_base(folders):
+    clock = Clock()
+    reg = slow_machine(clock, 5.0)
+    w = autostart.Watcher(registry=reg, folders=folders, platform="win32", disk=Folders(), clock=clock, deadline=5)
+    w.take(w.read())                                   # began with run: services, tasks, winlogon not reached
+    reg.cost = 0.0
+    got = w.take(w.read())
+    assert got["changes"] == []
+    assert {p: n["entries"] for p, n in got["late"].items()} == {"run": 1, "runonce": 1, "startup": 2, "service": 1,
+                                                                 "task": 1, "winlogon": 2}
+    out = autostart.late_line(2, got["late"])
+    assert out.startswith("BASE round 2: taken late, none said as added: run (") and "service (3 key(s), 1 entries)" in out
+    again = w.take(w.read())
+    assert again["changes"] == [] and again["late"] == {}   # said once
+
+
+def test_aj1_aj5_a_hive_listed_while_runonce_fails_gives_one_hive_loaded_and_no_added(folders):
+    other = "S-1-5-21-4444444444-5555555555-6666666666-1002"   # made up
+    reg = machine()
+    w = watcher(reg, folders)
+    w.take(w.read())
+    reg.put("HKU", "%s\\Software\\%s\\Run" % (other, CU), [("A", "a.exe", SZ), ("B", "b.exe", SZ)])
+    reg.put("HKU", "%s\\Software\\%s\\RunOnce" % (other, CU), [("C", "c.exe", SZ)])
+    reg.fail("HKLM", "SOFTWARE\\%s\\RunOnce" % CU, OSError(1450, "x"), views=(False,))
+    said = [w.take(w.read())]
+    del reg.errors[("HKLM", False, ("SOFTWARE\\%s\\RunOnce" % CU).lower())]
+    said += [w.take(w.read()), w.take(w.read())]
+    kinds_said = [c["change"] for got in said for c in got["changes"]]
+    assert kinds_said == ["hive loaded"] and said[0]["changes"][0]["entries"] == 2
+    assert "added" not in kinds_said and said[1]["late"]["runonce"]["entries"] >= 1
+    reg.vals[("HKU", False, ("%s\\Software\\%s\\RunOnce" % (other, CU)).lower())].append(("D", "d.exe", SZ))
+    assert kinds(w.take(w.read())) == [("added", "runonce", "D")]     # AI-1 holds once the key was read
+
+
+def test_aj1_a_key_refused_in_the_first_read_then_readable_is_a_late_base(folders):
+    reg = machine()
+    reg.put("HKLM", TREE + "\\Locked", [("Id", "{0000-2}", SZ)], views=(False,))
+    reg.fail("HKLM", TREE + "\\Locked", PermissionError(5, "refused"), views=(False,))
+    w = watcher(reg, folders)
+    w.take(w.read())
+    del reg.errors[("HKLM", False, (TREE + "\\Locked").lower())]
+    got = w.take(w.read())
+    assert got["changes"] == [] and got["late"] == {"task": {"parts": 1, "entries": 1}}
+    reg.put("HKLM", TREE + "\\Locked\\Inner", [("Id", "{0000-6}", SZ)], views=(False,))
+    assert kinds(w.take(w.read())) == [("added", "task", "\\Locked\\Inner")]   # made under a key read before
+
+
+def test_aj3_a_name_that_is_sure():
+    for text, sure in (("C:\\Windows\\system32\\svchost.exe -k netsvcs", True), ('"C:\\a b\\c.exe" /x', True),
+                       ("C:\\Program Files\\x\\y.exe", False), ("C:\\My Tools.exe", False), ("cmd /c rem x", True),
+                       ("C:\\x\\run.CMD /q", True), ("C:\\x\\tool --x", False), ("C:\\x\\alone.exe", True)):
+        assert autostart._program(text, "run")[1] is sure, text
+    assert autostart._program("C:\\Windows\\system32\\userinit.exe,", "winlogon") == ("userinit.exe", True, False)
+    assert autostart._program("userinit.exe, other.exe", "winlogon") == (None, None, True)
+    assert autostart._program('"C:\\a,b\\x.exe" -x', "winlogon") == ("x.exe", True, False)   # a comma inside quotes
+
+
+class Listing(autostart.Disk):
+    """A made-up folder: its listing and its opener are the test's."""
+
+    def __init__(self, listed, opener, long_form=True):
+        super().__init__(opener, long_form)
+        self.listed = listed
+
+    def files(self, folder):
+        return list(self.listed)
+
+
+def test_aj4_a_file_is_opened_by_its_listed_name_in_the_long_form_and_a_link_is_not_opened():
+    asked = []
+
+    def opener(path):
+        asked.append(path)
+        if path.endswith("gone."):
+            raise FileNotFoundError(2, "not found", path)
+        if path.endswith("odd"):
+            raise OSError(22, "invalid", path)
+        return io.BytesIO(b"rem\r\n")
+    folder = "C:\\Users\\" + PERSON + "\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+    disk = Listing([("gone.", "file"), ("odd", "file"), ("link.cmd", "link"), ("ok.cmd", "file")], opener)
+    with pytest.raises(io.UnsupportedOperation):   # BytesIO has no fileno: the opener was asked, by the long form
+        disk.head(folder, "ok.cmd")
+    assert asked == ["\\\\?\\" + folder + "\\ok.cmd"]
+    assert autostart.long_path("\\\\?\\C:\\x\\", "a ") == "\\\\?\\C:\\x\\a "
+
+    class Heads(Listing):
+        def head(self, folder, name):
+            with self.opener(self.path(folder, name)):
+                return 5, b"rem\r\n"
+    asked.clear()
+    got = autostart.read(machine(), {"user": folder, "machine": "D:\\all"}, platform="win32",
+                         disk=Heads(disk.listed, opener), drive_kind=lambda f: "local")
+    s = got["places"]["startup"]
+    assert s["state"] == "partly" and s["keys_why"] == {autostart.NOT_FOUND: 2, autostart.A_LINK: 2,
+                                                        "OSError (22)": 2}
+    user = {e["name"]: e["sha256"] for e in entries(got, "startup") if e["scope"] == "user"}
+    assert set(user) == {"gone.", "odd", "link.cmd", "ok.cmd"} and user["ok.cmd"] and user["gone."] is None
+    assert not [p for p in asked if p.endswith("link.cmd")] and "\\\\?\\" + folder + "\\gone." in asked
+    assert PERSON not in json.dumps(got)
+
+
+def test_aj4_a_symbolic_link_in_the_folder_is_listed_as_a_link_and_not_followed(tmp_path):
+    folder = tmp_path / "Startup"
+    folder.mkdir()
+    (tmp_path / "target.cmd").write_bytes(b"rem target\r\n")
+    try:
+        os.symlink(str(tmp_path / "target.cmd"), str(folder / "link.cmd"))
+    except (OSError, NotImplementedError):
+        pytest.skip("this system gives no symbolic link to this user")
+    (folder / "plain.cmd").write_bytes(b"rem\r\n")
+    (folder / "inner").mkdir()
+    assert sorted(autostart.Disk(None, long_form=False).files(str(folder))) == [("link.cmd", "link"),
+                                                                                ("plain.cmd", "file")]
+
+
+def test_aj4_the_drive_kind_by_a_made_up_kernel():
+    class Kernel:
+        def __init__(self, kind):
+            self.kind, self.asked = kind, []
+
+        def GetDriveTypeW(self, root):
+            self.asked.append(root)
+            return self.kind
+    for code, said in ((0, None), (1, None), (2, "local"), (3, "local"), (4, "remote")):
+        k = Kernel(code)
+        assert autostart._windows_drive_kind(k)("c:\\Users\\x") == said and k.asked == ["C:\\"]
+    assert autostart._windows_drive_kind(Kernel(3))("\\\\?\\D:\\x") == "local"
+    assert autostart._windows_drive_kind(Kernel(3))("relative\\x") is None
+    assert autostart.on_share("C:\\x", autostart._windows_drive_kind(Kernel(1))) is None   # not read
+
+
+def test_aj6_a_read_of_another_salt_is_not_taken(folders):
+    w = watcher(machine(), folders)
+    w.take(w.read())
+    base = {p: dict(q) for p, q in w.base.items()}
+    got = w.take(autostart.read(machine(), folders, platform="win32", disk=Folders()))
+    assert got["changes"] == [] and got["refused"] == autostart.OTHER_SALT
+    assert {p: dict(q) for p, q in w.base.items()} == base and w.take(w.read())["changes"] == []
+    reads, out = iter([w.read(), autostart.read(machine(), folders, platform="win32", disk=Folders())]), io.StringIO()
+    autostart.main(["--rounds", "2", "--every", "0"], out=out, reader=lambda: next(reads), watcher=w,
+                   sleep=lambda s: None)
+    assert out.getvalue().splitlines()[1].startswith("REFUSED round 2: a read made with another salt")
+
+
+@pytest.mark.skipif(not sys.platform.startswith("win"), reason="the module's own Windows opener is Windows' (R7)")
+def test_aj7_while_the_modules_own_windows_opener_holds_a_file_it_is_renamed_and_deleted(tmp_path):
+    path, moved = tmp_path / "held.cmd", tmp_path / "moved.cmd"
+    path.write_bytes(b"rem held\r\n")
+    opener = autostart._windows_opener()
+    assert opener is not None
+    with opener(str(path)) as f:
+        assert f.read(3) == b"rem"
+        os.rename(str(path), str(moved))          # another call renames it while it is open
+        os.remove(str(moved))                     # and deletes it
+    assert not path.exists() and not moved.exists()
+
+
+def test_aj1_a_key_made_under_a_part_read_before_and_unread_at_first_is_said_as_added(folders):
+    """AI-1 holds where AJ-1 meets it: a key that appeared under a part read before is new, even when the read that
+    first saw it could not read it (refused here; the deadline does the same)."""
+    reg = machine()
+    w = watcher(reg, folders)
+    w.take(w.read())
+    reg.put("HKLM", autostart.SERVICES + "\Planted", [("ImagePath", "planted.exe", SZ)], views=(False,))
+    reg.fail("HKLM", autostart.SERVICES + "\Planted", PermissionError(5, "refused"), views=(False,))
+    got = w.take(w.read())
+    assert got["changes"] == [] and "in part" in got["unread"]["service"]
+    del reg.errors[("HKLM", False, (autostart.SERVICES + "\\Planted").lower())]
+    got = w.take(w.read())
+    assert kinds(got) == [("added", "service", "Planted")] and got["late"] == {}

@@ -10,7 +10,8 @@ with its read's number, as JSON for tools/rig/check.py, which states X37. It jud
 
 The facts: the first read's places (state, entries, keys not read, reason), how many reads were made and the
 longest one's seconds, every change (round, change, place, scope, view32, name, program, sure, and a hive's count
-of entries: never a hash, a value's text or a SID), every read that left a place unread or read in part, the held
+of entries: never a hash, a value's text or a SID), every read that left a place unread, apart from those that read one in part, the parts taken as a base late
+(AJ-1), the reads of another salt, the held
 file's reads, and the stand-in's WORKLOAD lines and exit code (its lines are printed as they come, so the job's
 log holds them). Off Windows nothing is run, and the reason is the fact. It never raises: an error is a fact,
 said by its kind alone; it writes its facts and exits 0 whatever happened (2 only for its own usage). The
@@ -102,8 +103,16 @@ class _Reads:
                           "entries": len(result.get("entries") or ()), "places": _places(result)}
         f["changes"] += [dict({k: c.get(k) for k in CHANGE_FIELDS if k in c}, round=self.round)
                          for c in got["changes"]]
-        if got["unread"]:
-            f["unread"].append({"round": self.round, "places": got["unread"]})
+        gone = {p: w for p, w in got["unread"].items() if not str(w).startswith("in part")}
+        part = {p: w for p, w in got["unread"].items() if str(w).startswith("in part")}
+        if gone:   # AJ-7: a place not read, and apart from it a place read in part
+            f["unread"].append({"round": self.round, "places": gone})
+        if part:
+            f["partly"].append({"round": self.round, "places": part})
+        if got.get("late"):
+            f["late"].append({"round": self.round, "places": got["late"]})
+        if got.get("refused"):
+            f["refused"].append({"round": self.round, "why": got["refused"]})
         return result, got
 
 
@@ -122,6 +131,7 @@ def collect(watcher=None, start=None, hold=None, folder=None, platform=None, sle
     platform = sys.platform if platform is None else platform
     start, hold, sleep, clock = start or start_stand_in, hold or hold_open, sleep or time.sleep, clock or time.monotonic
     facts = {"platform": platform, "first": None, "reads": 0, "seconds_max": None, "changes": [], "unread": [],
+             "partly": [], "late": [], "refused": [],
              "held": {"made": False, "error": None, "reads": [], "removed": False},
              "workload": [], "workload_rc": None, "ended_by_run": False, "error": None}
     if not str(platform).startswith("win"):
@@ -144,7 +154,8 @@ def collect(watcher=None, start=None, hold=None, folder=None, platform=None, sle
             try:
                 for now_held in (True, False, None):   # held across one read; let go; removed
                     if now_held is False:
-                        release()
+                        release, let_go = None, release   # AJ-7: let go once
+                        let_go()
                     elif now_held is None:
                         os.remove(path)
                         held["removed"] = True

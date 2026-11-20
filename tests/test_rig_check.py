@@ -446,5 +446,27 @@ def test_x37_names_every_other_change_by_its_kind_and_place():
                          {"round": 2, "change": "added", "place": "startup", "name": "raqib-rig-held.cmd"}]
     state, words = x37(facts)
     assert state == check.MET and "other changes: changed task 1, rescheduled task 1" in words
-    assert "the held file added in read 2, its content not read" in words
+    assert "the held file added in read 2 while held, its content not read, and removed after" in words
     assert "other changes: none" in x37(autostart_facts())[1]
+
+
+# --- X37 (ADR-0014 AJ-7): the held read, the held file removed, a place read in part ----------------------------
+@pytest.mark.parametrize("first,removed,why", [
+    ({"round": 3, "held": False, "listed": True, "content": "read", "changes": ["added"]}, True,
+     "the read that first listed the held file was not the one made while it was held"),
+    ({"round": 2, "held": True, "listed": True, "content": "read", "changes": ["added"]}, True,
+     "(read 2: held True, content read)"),
+    ({"round": 2, "held": True, "listed": True, "content": "not read", "changes": ["added"]}, False,
+     "the held file was not removed after")])
+def test_x37_missed_unless_the_held_read_listed_it_unread_and_it_was_removed(first, removed, why):
+    held = {"made": True, "error": None, "removed": removed, "reads": [first]}
+    state, words = x37(autostart_facts(held=held))
+    assert state == check.MISSED and why in words
+
+
+def test_x37_says_a_place_read_in_part_as_read_in_part_not_as_unread():
+    facts = autostart_facts(unread=[{"round": 5, "places": {"task": "refused"}},
+                                    {"round": 6, "places": {"task": "in part: 26 key(s) refused"}}],
+                            partly=[{"round": 7, "places": {"task": "in part: 26 key(s) refused"}}])
+    state, words = x37(facts)
+    assert state == check.MET and "unread: read 5: task; read in part: read 6: task; read 7: task" in words
