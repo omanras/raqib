@@ -9,10 +9,11 @@ and writes what read() gave for each as JSON for tools/rig/check.py, which state
 An act whose program is not installed is said as not run. Off Linux nothing is run, and the reason is the fact; a
 start the kernel refuses is the fact, in the reader's words. For every act that ran: its pid, its exit code as the
 run saw it (subprocess's own: negative for a signal), the program it is (the real path of the program the run
-started) and the process read() gave for its pid, with the end a later read gave in `ends`; the programs of its
-children as read() gave them. The reader's counts and its stop's problems are kept too. The run's own thread does
-nothing between two acts, as the probe's did (the reader's thread shares the interpreter with it); read() is asked
-after the last act until every act's end is heard or READ_S passed.
+started) and the process read() gave for its pid (its parent must be the run's own, `run_pid`), with the end a
+later read gave in `ends`; the programs of its children as read() gave them. The reader's counts and its stop's
+problems are kept too. The run's own thread does nothing between two acts, as the probe's did (the reader's thread
+shares the interpreter with it); read() is asked after the last act until every act's end is heard or READ_S
+passed. The acts are the run's own children (BQ-2 says the stand-in's: here the run stands in for it).
 
 It never raises: an error is a fact; it writes its facts and exits 0 whatever happened (2 only for its own usage).
 The standard library and raqib.procevents only. A test hands in its own reader, runner, `which`, server and clock.
@@ -119,7 +120,8 @@ def collect(reader=None, run=None, which=None, server=None, platform=None, work=
     platform = sys.platform if platform is None else platform
     run, which, server = run or run_act, which or shutil.which, server or serve
     sleep, clock = sleep or time.sleep, clock or time.monotonic
-    facts = {"platform": platform, "uid": os.geteuid() if hasattr(os, "geteuid") else None, "acts": [],
+    facts = {"platform": platform, "uid": os.geteuid() if hasattr(os, "geteuid") else None, "run_pid": os.getpid(),
+             "acts": [],
              "children": [], "counts": None, "refused": None, "stop_problems": None, "error": None}
     if not str(platform).startswith("linux"):
         facts["not_run"] = "not Linux (%s): the process events are the Linux kernel's" % platform

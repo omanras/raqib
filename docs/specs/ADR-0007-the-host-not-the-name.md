@@ -2934,3 +2934,44 @@ second; a process inside a container.
   its addresses) is to be measured before it is ruled: M14.2.
 - BQ-4 (recorded for its own ruling). An idle agent of a name the catalog holds was in no round for two
   minutes, and AGENT-DARK-LIVE said "no live tree" of its footprints while its process lived.
+
+## Amendment BR (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1a.md (f0477be), two of them measured
+The reviewer said NEXT with fixes first, and asked of the kernel two things the Table measured before ruling
+(the probe branch 2552282; Ubuntu 22.04 with kernel 6.8, 24.04 and 26.04 with 7.0; a plain user; all three
+agree). After an overflow of the listener's queue (ENOBUFS) the events went on, for that listener alone and
+for a second one opened after it: the reviewer's fear that one overflow silences the source was not what these
+kernels did. When a thread that is not the leader called exec, the kernel sent an exit with pid equal to tgid
+(code 0), then the exec, then the process's real exit. When the leader thread ended and another thread lived
+on, the kernel sent an exit with pid equal to tgid (code 0) at once, and the process's own code (7) came on
+the last thread's exit, a pid not equal to its tgid. The reader's own run, 15 times on those images: no read
+missed, nothing lost, the start answered each time (the answer's ack is the ask's plus one there too).
+- BR-1 (F3: a process ends with its last thread). An exit with pid equal to tgid is the leader's, not the
+  process's, while a thread of it is known to live or an exec of it follows. The reader keeps the threads of
+  each process it holds (their forks and their exits): the process has ended when none is left, and its code
+  is the last exit's. An exec heard after such an exit is the same process, not a new one, and is never given
+  as "no fork heard". Where an event was lost the count of threads is not known, and that is said.
+- BR-2 (F2: every program a process had). A process that execs again keeps the programs it had before, in
+  order; a read that fails is `unread` for that exec and never replaces what an earlier read gave.
+- BR-3 (F4: the pid's holder). The start read from stat is held against the kernel's time of the exec: where
+  they cannot be one process's (the pid was taken again before the read), nothing of the read is given and
+  `unread` says another process held the pid. The spec no longer says that a pid and its start always name
+  one holder.
+- BR-4 (F1: what an overflow means). `counts()` gains the time the last datagram was heard, and the words of
+  a loss say what was measured: on kernels 6.8 and 7.0 the events went on after it; what was in the queue is
+  gone, and how many is not known.
+- BR-5 (F7, F8: no false refusal, no silent end). The ask's mark is one nobody can guess, not the reader's
+  pid. Every way the reader's thread can end before a stop sets `ended` with its reason.
+- BR-6 (F5, F6, F9, F10, F11: the words). An unreadable program is said with every cause it can have (gone;
+  hidden by the system; not readable by this user, which a program can arrange for itself). "Its program is
+  its parent's" is not said where an event was lost. A record the bound refused says so, not "no fork heard".
+  The bound counts over the reader's life and a process whose end was lost never leaves it: said as it is.
+  A child made to be its maker's sibling is given the parent the kernel names, which is not its maker: said
+  in the threat model. Which parent a tree uses is M14.1b's to rule.
+- BR-7 (R1, R2: the rig). X31 holds each act's parent to be the run's own process. A start refused on a
+  machine where the kernel is known to answer is MISSED, not n/a; n/a is for a system that is not Linux and
+  for a refusal that names no right of this user.
+- BR-8 (the gate on Windows). A test that names a system's error names it as that system does.
+- BR-9 (recorded for M14.1b). The reader's thread shares the interpreter with the watch: its misses under a
+  busy watch are to be measured there, with what would close them (the reader in a process of its own; the
+  kernel's own word of a process's name at its end, which needs the system's rights). `exe` is raw text of
+  the process's choosing in part and is escaped where it is shown. Only one Reader runs in a process.

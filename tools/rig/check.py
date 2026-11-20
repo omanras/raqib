@@ -14,9 +14,10 @@ event log (Y-7, Windows; not run elsewhere).
 --service: what tools/rig/service_run.py saw `raqib service` do as root on the Linux machine (ADR-0013 A-9): X28
 an install from a place a user can write is refused, X29 an install from root's own place gives an active unit
 that sees a second user's stand-in agent, X30 the removal leaves no unit (n/a where it was not run, AA-4).
---procevents: what tools/rig/procevents_run.py saw the reader of Linux's process events give (ADR-0007 BQ-2): X31
-every short act that ran is given with its program and its end's code and nothing is lost (n/a off Linux or where
-the kernel refused the start, the refusal said).
+--procevents: what tools/rig/procevents_run.py saw the reader of Linux's process events give (ADR-0007 BQ-2, BR-7):
+X31 every short act that ran is given with its program, its parent (the run's own process) and its end's code, and
+nothing is lost (n/a off Linux, or where the start was refused for want of a right of this user, EPERM or EACCES;
+any other refusal is MISSED, the refusal said).
 
 Exit 0; with --strict, 1 when an expectation is MISSED (OPEN never fails)."""
 import argparse
@@ -732,18 +733,20 @@ def read_service(facts):
         return [(n, MISSED, "its facts cannot be read (%s)" % type(exc).__name__) for n in SERVICE_NAMES]
 
 
-PROCEVENTS_NAME = ("X31 every short act that ran is given by the process events' reader with its program and its"
-                   " end's code, and nothing is lost")
+PROCEVENTS_NAME = ("X31 every short act that ran is given by the process events' reader with its program, its parent"
+                   " and its end's code, and nothing is lost")
+NO_RIGHT = re.compile(r"\b(EPERM|EACCES)\b")
 
 
 def read_procevents(facts):
     """X31 (ADR-0007 BQ-2): what tools/rig/procevents_run.py saw raqib.procevents.Reader give for the short acts it
     ran. MET where every act that ran was given by read() with its program read (the real path of the program the
-    run started) and its end's code (the run's exit code: the code where it exited, the signal where one ended it),
-    and counts() shows no loss (nothing lost to ENOBUFS, nothing beyond the bound, the thread not ended before the
-    stop); MISSED with what is missing (facts None, not run on Linux, an error: silence is a finding); n/a off
-    Linux, or where start() was refused, the refusal said. It never raises: facts that cannot be read are
-    MISSED."""
+    run started), its parent the run's own process (`run_pid`, BR-7) and its end's code (the run's exit code: the
+    code where it exited, the signal where one ended it), and counts() shows no loss (nothing lost to ENOBUFS,
+    nothing beyond the bound, the thread not ended before the stop); MISSED with what is missing (facts None, not
+    run on Linux, an error: silence is a finding). A refused start: n/a where the refusal names a right this user
+    lacks (EPERM, EACCES), else MISSED (on the measured kernels the kernel answers, BR-7); n/a off Linux. It never
+    raises: facts that cannot be read are MISSED."""
     name = PROCEVENTS_NAME
     try:
         if not isinstance(facts, dict):
@@ -756,7 +759,9 @@ def read_procevents(facts):
         if not platform.startswith("linux"):
             return [(name, SKIP, "not run: not Linux (%s)" % (platform or "no platform said"))]
         if facts.get("refused"):
-            return [(name, SKIP, "start() was refused: %s" % facts["refused"])]
+            if NO_RIGHT.search(str(facts["refused"])):
+                return [(name, SKIP, "start() was refused for want of a right of this user: %s" % facts["refused"])]
+            return [(name, MISSED, "start() was refused where the kernel is known to answer: %s" % facts["refused"])]
         if facts.get("error"):
             return [(name, MISSED, "the run failed: %s" % facts["error"])]
         acts = facts.get("acts") or []
@@ -768,6 +773,8 @@ def read_procevents(facts):
             if not isinstance(g, dict):
                 missing.append("%s not given by read()" % act)
                 continue
+            if g.get("ppid") is None or g.get("ppid") != facts.get("run_pid"):
+                missing.append("%s: its parent %s, not the run's own %s" % (act, g.get("ppid"), facts.get("run_pid")))
             if not g.get("exe") or g.get("exe") != a.get("expect"):
                 missing.append("%s: its program read as %s, not %s%s" % (
                     act, g.get("exe"), a.get("expect"), " (unread: %s)" % g["unread"] if g.get("unread") else ""))

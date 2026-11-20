@@ -239,7 +239,7 @@ jobs:
           - conf: swift
             url: https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml
           - conf: modular
-            url: https://raw.githubusercontent.com/olafhartong/sysmon-modular/master/sysmonconfig.xml
+            url: https://raw.githubusercontent.com/olafhartong/sysmon-modular/main/sysmonconfig.xml
     env:
       PYTHONUTF8: "1"
     steps:
