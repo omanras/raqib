@@ -368,7 +368,7 @@ VERSION_NUMBER = [
 GUIDE_NEW += VERSION_NUMBER
 # M14.1b and its REDO (ADR-0007 BU-3, BW-3, BW-6): the report's PROCESS EVENTS section on Linux, said in the
 # guide's Watch the host
-PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ, CC): the guide's words on what the watch judges from the reader
+PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ, CC, CD): the guide's words on what the watch judges from the reader
     'On Linux the watch also hears what happens between two rounds (ADR-0007 Amendments BU, BW and BY): '
      'at its first round it starts a helper, a second process of its own that runs the reader of the '
      "kernel's process events ([docs/specs/PROC-EVENTS.md](docs/specs/PROC-EVENTS.md)), and after each "
@@ -387,11 +387,14 @@ PROCESS_EVENTS = [   # M14.1c and its REDO (ADR-0007 BY, BZ, CC): the guide's wo
      ' a shell runs in its own place), gets a line for that program, and a child whose parent has gone is '
      "still its tree's where the watch wrote that parent (it keeps, per tree, the children it wrote whose "
      'end it has not heard: at most 512).',
+    "A process is its maker's child where the reader heard it made, though a sample holds it under pid 1 "
+     '(a bash a shell started in the background and that outlived it).',
     'Not judged: a tree that lives whole between two samples (a tree needs a talker at a sample, and a '
      "connection that opens and closes between two samples is still unseen), a child's own connections, a "
      'program past the bound of 8 a process (the oldest of those run between two asks), a child whose '
-     "parent the watch never wrote, and an act-root the reader's word alone would make; a process can be "
-     "called by a tool's name it is not (a link of its own), and its tree then alarms by its own doing.",
+     'parent the watch never wrote, a process whose maker the reader did not hear that a sample holds '
+     "under pid 1, and an act-root the reader's word alone would make; a process can be called by a tool's"
+     ' name it is not (a link of its own), and its tree then alarms by its own doing.',
     'A program not read is in the round and counted; it gets no line.',
     "What is judged from the helper is the helper's word: the watch does not check its lines.",
     "Its report has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line: what is"

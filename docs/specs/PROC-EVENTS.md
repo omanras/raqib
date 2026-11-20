@@ -396,8 +396,15 @@ start; at most 512 a tree, passing it said in the section and a hole of the
 result); a process whose parent is one of them (that pid, begun before it,
 not heard to end before it began) is that tree's child though its parent is
 in neither the sample nor the round's text, and so is a kept child given
-again. A pid used again with another start is another child wherever the
-watch keys a child. The round's standing hole of liveness says, in a round
+again. A process is its maker's child (CD-1): where the reader gave a
+process, the parent it names (the process that made it, from the kernel's
+fork event) is its parent, though a sample holds it under another - the
+kernel hands a process whose parent ended to pid 1 or a subreaper; so a
+bash that a shell started in the background and that outlived it is the
+tree's child from the round it was heard in, is kept, and every program it
+runs later is judged as the tree's. A process the reader did not give keeps
+the sample's parent. A pid used again with another start is another child
+wherever the watch keys a child. The round's standing hole of liveness says, in a round
 that read the reader's text, what such a round sees and does not.
 
 What is not judged (BY-3, BZ-3, CC). A tree needs a talker at a sample, and
@@ -407,7 +414,8 @@ connections are not read. A program past the bound of 8 a process (the
 oldest of those run between two asks) is not kept and not judged; it is
 counted in the section. A child whose parent the watch never wrote (its
 parent in neither the sample, the text nor the kept children) is in no
-tree. An act-root the reader's word alone would make is not made (CB-1). A
+tree, and so is a process whose maker the reader did not hear (begun before
+the reader, or its fork lost) that a sample holds under pid 1 (CD-2). An act-root the reader's word alone would make is not made (CB-1). A
 process can be called by a tool's name it is not (a link of its own): it is
 then judged by that name, and its tree alarms by its own doing. A child
 whose program was not read is in the round and counted; it gets no line and

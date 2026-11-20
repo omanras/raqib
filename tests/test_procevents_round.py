@@ -503,8 +503,10 @@ def test_e6_the_section_and_the_note_say_what_is_judged_and_what_is_not(tmp_path
                   "a process can be called by a tool's name it is not",
                   "not judged: a tree that lives whole between two samples, a child's own connections, a program past"
                   " the bound of 8 a process (the oldest of those run between two asks), a child whose parent the"
-                  " watch never wrote, an act-root the reader's word alone would make; a program not read is"
-                  " counted, with no line",
+                  " watch never wrote, a process the reader did not hear made that a sample holds under pid 1, an"
+                  " act-root the reader's word alone would make; a program not read is counted, with no line",
+                  "a process is its maker's child where the reader heard it made, though a sample holds it under pid"
+                  " 1 (CD-1)",   # M14.1d REDO (CD-2)
                   "given to the rounds: 0; joined to a tree as its child: 0; of them with no program read (no line): 0",
                   "not judged: a tree that lives whole between two snapshots, what a child talks to, a program past the"
                   " bound of 8 a process, a child whose parent the watch never wrote, and an act-root the reader's"
@@ -535,7 +537,8 @@ def test_e6_the_documents_follow():
                      "A program past the bound of 8 a process (the oldest of those run between two asks) is not kept"
                      " and not judged",
                      "A child whose parent the watch never wrote (its parent in neither the sample, the text nor the"
-                     " kept children) is in no tree.",
+                     " kept children) is in no tree, and so is a process whose maker the reader did not hear",
+                     "A process is its maker's child (CD-1)",   # M14.1d REDO (CD-2)
                      "where the sample read one, the two are kept apart",
                      "or an answer that holds back a rest for a next one",
                      "The round reads no /proc start of a child the reader alone gave and said ended"):
@@ -544,9 +547,11 @@ def test_e6_the_documents_follow():
     for sentence in ("so NET-TOOL and DESTRUCT-CMD judge a short curl, wget, nc or shred by either name (M14.1d)",
                      "Not judged: a tree that lives whole between two samples",
                      "a program past the bound of 8 a process (the oldest of those run between two asks), a child whose"
-                     " parent the watch never wrote, and an act-root the reader's word alone would make; a process can"
-                     " be called by a tool's name it is not (a link of its own), and its tree then alarms by its own"
-                     " doing.",
+                     " parent the watch never wrote, a process whose maker the reader did not hear that a sample holds"
+                     " under pid 1, and an act-root the reader's word alone would make; a process can be called by a"
+                     " tool's name it is not (a link of its own), and its tree then alarms by its own doing.",
+                     "A process is its maker's child where the reader heard it made, though a sample holds it under"
+                     " pid 1",   # M14.1d REDO (CD-2)
                      "A program not read is in the round and counted; it gets no line.",
                      "the root of a tree, and of an act-root, is always a process a sample held",
                      "where the reader answered and was not whole, the note says what was heard and judged and why it"
@@ -1006,3 +1011,40 @@ def test_cc1_e1_the_reader_reads_each_programs_name_at_its_exec_from_the_stat():
     with pytest.raises(ValueError):
         procevents.stat_name(b"5 nc S")
     assert procevents.PROGRAMS_MAX == 8 and procevents.EARLIER_MAX == 7
+
+
+# --- M14.1d REDO (ADR-0007 Amendment CD): a process is its maker's child -------------------------------------------
+SH = progs(1890, ["/usr/bin/dash"], 2390, names=["sh"], began="2026-11-20T10:00:04.000000Z",
+           ended="2026-11-20T10:00:04.010000Z")
+BASH = progs(1891, ["/usr/bin/bash"], 2391, ppid=1890, began="2026-11-20T10:00:04.005000Z")
+UNDER_INIT = [(1, (1891, 1, "bash", 2391)), (1, (1892, 1891, "sleep", 2392)), (1, (1895, 1, "curl", 2395))]
+
+
+def test_cd1_a_bash_its_sh_left_is_its_makers_child_though_the_sample_holds_it_under_pid_1(tmp_path, monkeypatch):
+    """(a) the round's text gives the sh (begun and ended) and the bash it made; the sample holds the bash under pid
+    1: the tree's line names both, the bash is kept; (c) the sleep the sample holds under the bash is the tree's;
+    (d) the curl the sample holds under pid 1 that the reader did not give is nobody's; (b) two rounds later the
+    bash runs a fetch in its own pid: a line names it and NET-TOOL fires."""
+    later = progs(1891, ["/usr/bin/bash", "/usr/bin/wget"], 2391, ppid=1890, began=BASH["began"])
+    w, _, got = watched(tmp_path, monkeypatch, [answer([SH, BASH]), answer([]), answer([later])], 3, alive=UNDER_INIT)
+    first = next(g for g in got if g[0] == 1)
+    assert {1890, 1891, 1892} <= set(first[2]) and 1895 not in first[2]
+    assert {"dash", "sh", "bash", "sleep"} <= set(first[1]) and "curl" not in first[1]
+    assert [g for g in got if g[0] == 3] == [(3, ["wget"], [1891])]
+    assert [f["rule_id"] for f in w.source_findings].count("NET-TOOL") == 1
+    kept = next(iter(w.kept_children.values()))
+    assert (1891, "boot+2391") in kept
+
+
+def test_cd1_a_process_the_reader_did_not_give_keeps_the_samples_parent_and_no_text_is_as_before():
+    texts, holes = texts_of(reader=False)
+    sample = texts["proc"][1] + "".join(proc_line(pid, ppid, argv0, "/usr/bin/" + argv0, ticks)
+                                         for _, (pid, ppid, argv0, ticks) in UNDER_INIT)
+    plain = build(dict(texts, proc=("p", sample, None)), holes)
+    assert [a["pid"] for a in tree(plain, 1600)["acts"]] == [1700]   # under pid 1: nobody's, as before
+    assert _flat_json(plain) == _flat_json(build(dict(texts, proc=("p", sample, None)), holes))
+    reader = "".join(line(g["pid"], ppid=g["ppid"], exe=g["exe"], ticks=g["started_ticks"], began=g["began"],
+                          ended=g["ended"], code=g["code"]) for g in (SH, BASH))
+    heard = build(dict(texts, proc=("p", sample, None), procevents=("x", reader, None)), holes)
+    assert {a["pid"] for a in tree(heard, 1600)["acts"]} == {1700, 1890, 1891, 1892}   # 1895: the reader gave none
+    assert {"pid": 1891, "image": "bash", "started": "boot+2391"} in heard["processes"]   # the sample's list stands

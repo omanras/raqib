@@ -398,12 +398,14 @@ PE_SECTION = "PROCESS EVENTS (Linux):"
 PE_JUDGED = ("judged: a process that began between two samples under a tree that talks at a sample (or under an"
              " act-root the samples made) is that tree's child, with every program it ran while heard (up to 8 a"
              " process), each by its file's name and by the name it was called by where they differ, and so is a"
-             " child of a child the watch wrote whose parent has gone, from the reader (the helper's lines are its"
-             " word, not checked by the watch; a process can be called by a tool's name it is not); not judged: a"
+             " child of a child the watch wrote whose parent has gone; a process is its maker's child where the"
+             " reader heard it made, though a sample holds it under pid 1 (CD-1), from the reader (the helper's"
+             " lines are its word, not checked by the watch; a process can be called by a tool's name it is not); not judged: a"
              " tree that lives whole between two samples, a child's own connections, a program past the bound of 8"
-             " a process (the oldest of those run between two asks), a child whose parent the watch never wrote, an"
-             " act-root the reader's word alone would make; a program not read is counted, with no line")
-                 # BY-2 to BY-4, BZ-3, CC-1 to CC-4
+             " a process (the oldest of those run between two asks), a child whose parent the watch never wrote, a"
+             " process the reader did not hear made that a sample holds under pid 1, an act-root the reader's word"
+             " alone would make; a program not read is counted, with no line")
+                 # BY-2 to BY-4, BZ-3, CC-1 to CC-4, CD-1
 PE_TOOK = "  given to the rounds: %d; joined to a tree as its child: %d; of them with no program read (no line): %d"
 PE_BY_FORK = ("  given with no start ticks read, so each is one process by its pid and the time its fork was heard (BY-1):"
               " %d")
@@ -2897,6 +2899,9 @@ class HostWatch:
         # ADR-0007 AY-1: whose a child is, decided once, before any line of the round (a held tree's are its own)
         current = self._one_key(trees_of(self._give_held(inv, now, n), self.catalog, no_drive))   # M7.9 E2
         self.kept_ends = ends_now
+        for key, acts in (getattr(self, "held_orphans", None) or {}).items():   # CD-1: as AY-2's given acts
+            if key not in current:
+                self.given.setdefault(key, []).extend(acts)
         for text in self.holes_owed:
             self._hole(now, "tree-key", "round %d: %s" % (n, text), round_=n)
         self._channel_holes(now, n, inv)
@@ -3017,7 +3022,10 @@ class HostWatch:
             fresh = self._source_beats(key)   # read once: no beat, no line (the beats are not lost: none)
             given = self.given.get(key) if key in quiet_keys or key in kept else None
             kids = children_of(given, key[0]) if given else []
-            gained = [c for c in kids if (c.get("pid"), c.get("started")) not in self.kids.get(key, ())
+            orphans = {(a.get("pid"), a.get("started")) for a in (getattr(self, "held_orphans", None) or {}).get(
+                key, ())}   # CD-1: a kept child given again is gained, though seen, where it ran a program not said
+            gained = [c for c in kids if ((c.get("pid"), c.get("started")) not in self.kids.get(key, ())
+                                          or (c.get("pid"), c.get("started")) in orphans)
                       and not self._given_elsewhere(key, c)]   # AZ-3
             if src is None or not (fresh or gained):
                 continue
@@ -3833,7 +3841,9 @@ class HostWatch:
         """CC-3 (M14.1d): a process of the round's text that is no act of any tree and whose parent (its pid, begun
         before it, not heard to end before it began) is a child a tree of this round's inventory kept - written,
         its end not heard - is that tree's child: an act of it, its line written as any child's. One kept this
-        round is a parent too (a child of a kept child). A tree not in this round's inventory gets none."""
+        round is a parent too (a child of a kept child). CD-1: a tree not in this round's inventory (quiet: it
+        talks and the sample gave it no act) is given such a child as AY-2 gives a held tree its children."""
+        self.held_orphans = {}   # tree key -> the acts this round gives it while it is not in the inventory
         kept = getattr(self, "kept_children", None) or {}
         if not self.given_now or not kept:
             return
@@ -3844,15 +3854,12 @@ class HostWatch:
                     entries.setdefault(t.get("pid"), t)
         acted = {(a.get("pid"), a.get("started")) for t in entries.values() for a in t.get("acts") or ()
                  if isinstance(a, dict)}
-        parents = []   # (pid, began, ended, the tree's inventory entry)
+        parents = []   # (pid, began, ended, the tree's inventory entry, or the key of a tree not in it)
+        selves = {}    # CC-1: a kept child itself, given again with a program not yet said (its parent gone)
         for tkey, children in kept.items():
-            entry = entries.get(tkey[0])
-            if entry is not None:
-                parents += [(ck[0], v["began"], v["ended"], entry) for ck, v in children.items()]
-        selves = {}   # CC-1: a kept child itself, given again with a program not yet said (its parent gone)
-        for tkey, children in kept.items():
-            if entries.get(tkey[0]) is not None:
-                selves.update({ck: entries[tkey[0]] for ck in children})
+            home = entries.get(tkey[0]) or ("held", tkey)
+            parents += [(ck[0], v["began"], v["ended"], home) for ck, v in children.items()]
+            selves.update({ck: home for ck in children})
         for g in sorted(self.given_now, key=lambda g: g["began"]):
             began = discover.reader_time(g["began"])
             ckey = (g["pid"], "boot+%d" % g["ticks"] if g["ticks"] is not None else None)
@@ -3864,7 +3871,9 @@ class HostWatch:
             if home is None:
                 continue
             image = discover.image_name(g["programs"][-1]["exe"])
-            home.setdefault("acts", []).append({
+            acts = self.held_orphans.setdefault(home[1], []) if isinstance(home, tuple) else home.setdefault(
+                "acts", [])
+            acts.append({
                 "how": "process", "pid": g["pid"], "image": image, "listed": discover._listed(image, self.catalog),
                 "path": None, "via": [g["ppid"]], "reader_ancestor": False, "started": ckey[1],
                 "cites": [{"src": discover.READER, "line": g["line"], "text": g["text"]}],

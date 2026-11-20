@@ -1975,8 +1975,13 @@ def _merge_procs(records):
     """pid -> process. Records read from a process list or Sysmon 1 come
     first; records derived from another event's Image field only fill gaps.
     The first value of a field wins; every image the pid had is kept (an
-    exec keeps the pid)."""
+    exec keeps the pid). ADR-0007 CD-1: where the reader of the process
+    events gave the process, the parent it names (the process that made it,
+    from the kernel's fork event) is its parent, though a sample holds it
+    under another (the kernel hands a process whose parent ended to another);
+    a process the reader did not give keeps the sample's."""
     procs = {}
+    made_by = {}   # CD-1: pid -> the parent the reader names (its first record that names one)
     own = [r for r in records if r["kind"] == "proc" and not r.get("derived")]
     derived = [r for r in records if r["kind"] == "proc" and r.get("derived")]
     for r in own + derived:
@@ -1984,6 +1989,8 @@ def _merge_procs(records):
                                         "exe": None, "argv": [], "cwd": None, "env_keys": None,
                                         "sockets": None, "recs": [], "derived": True})
         p["recs"].append(r)
+        if r.get("ppid") is not None and r["pid"] not in made_by and _reader_src(r):
+            made_by[r["pid"]] = r["ppid"]
         if not r.get("derived"):
             p["derived"] = False
         for key in ("ppid", "exe", "cwd", "env_keys"):
@@ -1996,6 +2003,8 @@ def _merge_procs(records):
         if r.get("image") and r["image"] not in p["images"]:
             p["images"].append(r["image"])
         p["image"] = p["images"][0] if p["images"] else None
+    for pid, ppid in made_by.items():
+        procs[pid]["ppid"] = ppid
     return procs
 
 
