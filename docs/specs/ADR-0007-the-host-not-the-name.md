@@ -3239,3 +3239,61 @@ Windows the round's channel gives such records (Sysmon's event 1); on Linux the 
   folder. The ask is written so that it cannot block.
 - BY-7 (the rig). On Linux the stand-in starts a network tool that lives under a second; X36 is MET where a
   NET-TOOL finding of the stand-in's tree names it, MISSED where the stand-in ran it and none does.
+
+## Amendment BZ (the Table, 2026-11-20) - the review of M14.1c (docs/review/2026-11-20-M14.1c.md): REDO
+The reviewer's verdict is NEXT with nine must-fix items. The Table rules a REDO: the items are many and in code
+the builder knows, and one needed a ruling. The field's word (the rig on b6b6c84, GitHub's Linux machine): X36
+MET - the stand-in's wget, which lived under a second, is a NET-TOOL finding of its tree - with X35 and X31.
+- BZ-1 (an act-root is a sampled process). BY-3 stands: a tree needs a process that a sample held. A chain made
+  of the reader's processes alone - a program of a user's folder that a terminal's shell ran and that ran a
+  shell with a command, all between two samples - is no act-root: the search for act-roots takes as a root
+  only a process a sample held. FOR: no new way to an alarm that the act-root's budget never measured. MUST
+  NOT TOUCH: an act-root of sampled processes, to the byte.
+- BZ-2 (the note of a watch that was not whole). After an answered ask, a watch whose reader was late, ended or
+  lost says what was heard and judged and why it was not whole. It never says that the rounds read /proc only:
+  that sentence is for a watch whose reader gave no answer at all.
+- BZ-3 (what is judged is said as it is; measured next). Three silences the review found are true and are not
+  closed here. A process that changes its program after its line was written (a shell that runs its last
+  command in its own place, in a later round) gets no second line, and a process's earlier programs are never
+  given. A child whose parent was given in an earlier round and ended before this sample is in no tree. A
+  child is named by its program's file (the target of a link: `nc.openbsd`, `busybox`), not by the name it
+  was called by, so a rule's list of names can miss it. Each is said in the section, the notes, the guide, the
+  threat model and the spec as not judged, in these words' sense; "as a sampled child is" is not said where it
+  is not so. They are the next task (M14.1d), measured first on real agents: how many processes change their
+  program across two rounds, how many children have a parent in neither the sample nor the round's text, and
+  what the network tools' files are called on the common systems.
+- BZ-4 (the reader's own word is not trusted beyond its shape). A time the round cannot read, or one that is
+  no real instant, makes its line not a line (BW-8), in the watch's taking of the answer and in the round's
+  parser: neither can raise. A pid no system gives (at or above the bound the round uses to key instances
+  apart) is not a line.
+- BZ-5 (a record without ticks). It is joined to a sampled process by its pid only where the sample read no
+  start time for that process; where the sample read one and the reader did not, the two are kept apart (the
+  smaller risk: a line more, never a program named on another process).
+- BZ-6 (what the reader holds back). An answer that says it holds more than it gave is a hole of the result of
+  that round, of the kind procevents: the rest is given a round later, a child among it is judged a round
+  late, and one whose parent has left by then is in no tree.
+- BZ-7 (the watch's own, across rounds). A process the watch started stays the watch's own for as long as an
+  answer may still tell of it (a late answer, a rest held back): the copies of its own record are kept until
+  the answer that covers their round was taken, bounded. The count of its own processes left out is kept and
+  said in the section.
+- BZ-8 (a start time is the record's). The round does not read /proc for the start of a process the reader
+  said ended; its start is what the record holds. The threat model's sentence that such a process cannot make
+  the watch read a file is put right.
+- BZ-9 (the tests can fail). The test of the ask that cannot block must fail where the write blocks (a writing
+  end that blocks, a bound of time on the ask); a test that needs what Windows does not give is skipped there
+  by name. The Table's fix of the byte-for-byte test (5fa18e0) stands.
+- BZ-10 (X36 says what it checked). X36 is MET only where the line that names the tool is the reader's (its
+  cite's source is the process events); the stand-in's tool is given one try, so that it cannot outlive a
+  sample by its own retries. Where the line is the sample's, X36 says so and is not MET.
+- BZ-11 (words). The threat model says what a tree's line holds of a reader's record (the record itself, made
+  printable and cut, as a sampled child's is), not that only a name reaches it. "The result is incomplete" is
+  said as a hole of the result where a finding keeps the result an alarm. The notes that say a child between
+  two rounds is an act only with Sysmon are made to depend on the reader, in raqib/host.py and in the three
+  rules' own words (DESTRUCT-CMD, NET-TOOL, HOST-RHYTHM) and the rule form's.
+- BZ-12 (ratified). The changes beyond the Scope's letter that E3 and E5 needed (the host's lines of a reader's
+  child, `command` and the word FULL in raqib/procevents.py, `raqib discover --from` reading a procevents text)
+  are named here and stand. The socket tool that ends with an error other than its time is killed, not waited
+  for; a pipe that cannot be made unblocking is the helper not started, said.
+- BZ-13 (recorded). The always-said hole of liveness in the inventory is stale on Linux with a reader; changing
+  it moves every inventory's bytes and waits for M14.1d. A pid used again under one tree across rounds; BX-5's
+  words on a loss after a retired helper's last answer.
