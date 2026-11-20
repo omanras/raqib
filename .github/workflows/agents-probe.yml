@@ -399,6 +399,40 @@ jobs:
           "=== the token's administrators group"; if (Test-Path $who) { (Get-Content $who | Select-String -Pattern "S-1-5-32-544|S-1-16-").Line } else { "no answer was written" }
           "=== the reads"; if (Test-Path $out) { Get-Content $out } else { "no reads were written (the token could not run it, or could not write there)" }
 
+  siem:
+    name: what a SOC's search engine does with the events (${{ matrix.engine }}; M16, measured before it is ruled)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [elasticsearch, opensearch]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: the engine, on this machine's own port and nowhere else
+        run: |
+          if [ "${{ matrix.engine }}" = elasticsearch ]; then
+            docker run -d --name engine -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false -e ES_JAVA_OPTS="-Xms1g -Xmx1g" docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+          else
+            docker run -d --name engine -p 127.0.0.1:9200:9200 -e discovery.type=single-node -e DISABLE_SECURITY_PLUGIN=true -e DISABLE_INSTALL_DEMO_CONFIG=true -e OPENSEARCH_JAVA_OPTS="-Xms1g -Xmx1g" opensearchproject/opensearch:2.17.1
+          fi
+      - name: a real watch's events file (four rounds of the host watch, a curl beside it)
+        run: |
+          python -m pip install --disable-pip-version-check -q .
+          raqib watch --host --rounds 4 --every 5 --no-open --no-page > "$RUNNER_TEMP/watch.out" 2>&1 &
+          w=$!
+          for i in 1 2 3; do curl -s -o /dev/null https://api.github.com/zen || true; done
+          code=0; wait $w || code=$?
+          echo "the watch's exit: $code"; ls -la ~/.raqib/host/ | sed -n 1,12p
+      - name: the events as they are, through a pipeline, and the searches
+        run: |
+          python tools/rig/siem_probe.py docs/specs/EVENT.md ~/.raqib/host/events.jsonl || { echo "=== the engine's last words"; docker logs --tail 40 engine; exit 1; }
+
   effects:
     name: what an agent's three acts leave (the field test of 2026-11-20; M15; raqib of ${{ matrix.build }}, try ${{ matrix.try }})
     runs-on: windows-latest
