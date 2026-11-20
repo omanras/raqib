@@ -417,11 +417,14 @@ jobs:
           git show FETCH_HEAD:raqib/autostart.py | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\main-as\autostart.py"
           $env:PYTHONPATH = (Get-Location).Path
           $out = "$env:RUNNER_TEMP\quiet.out"
-          python "$env:RUNNER_TEMP\main-as\autostart.py" --rounds 300 --every 2 > $out 2> "$env:RUNNER_TEMP\quiet.err"
+          python "$env:RUNNER_TEMP\main-as\autostart.py" --rounds 60 --every 2 > $out 2> "$env:RUNNER_TEMP\quiet.err"
           "=== lines: $((Get-Content $out).Count); the first two"; Get-Content $out | Select-Object -First 2
           "=== every line that is not a plain read"; Get-Content $out | Select-String -Pattern "CHANGE|BASE|REFUSED|not read|in part|failed" | Select-Object -First 60
           "=== the last line"; Get-Content $out | Select-Object -Last 1
           "=== stderr"; Get-Content "$env:RUNNER_TEMP\quiet.err" -ErrorAction SilentlyContinue | Select-Object -First 5
+      - name: which values of a service's key Windows itself changes, seven minutes (M15.3c)
+        shell: pwsh
+        run: python tools\rig\service_values_probe.py 420
       - name: the places read, a quiet minute and a half, four acts each undone
         shell: pwsh
         run: python tools\rig\autostart_probe.py
