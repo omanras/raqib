@@ -12,7 +12,8 @@ found = re.search(r"WORKLOAD \S+ pid (\d+)", text)
 pid = found.group(1) if found else None
 print("the stand-in's pid:", pid)
 home = os.path.join(os.path.expanduser("~"), ".raqib", "host")
-KEYS = ("image", "parent_image", "depth", "path", "dest_port", "dest_private", "command_programs", "under_root")
+KEYS = ("image", "parent_image", "depth", "path", "dest_port", "dest_private", "command_programs", "under_root",
+        "autostart", "hive", "view32", "value_name", "program")
 for path in sorted(glob.glob(os.path.join(home, "sources", "*.jsonl"))):
     name = os.path.basename(path)
     mine = pid is not None and ("-%s-" % pid) in name
@@ -49,3 +50,11 @@ try:
                                                     subject.get("tree"), str(d.get("summary"))[:200]))
 except OSError as exc:
     print("events:", type(exc).__name__)
+
+many = set()
+for path in sorted(glob.glob(os.path.join(home, "sources", "*.jsonl"))):
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            many.update(re.findall(r"RaqibRigMany\d\d", line))
+print("of the 40 values set one by one, each by a fresh reg.exe: %d are a registry line (missing: %s)" % (
+    len(many), sorted(set("RaqibRigMany%02d" % i for i in range(40)) - many)))

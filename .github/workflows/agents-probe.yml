@@ -270,10 +270,10 @@ jobs:
         run: |
           $l = Start-Process python -ArgumentList "tools\rig\effects.py","--listen" -RedirectStandardOutput "$env:RUNNER_TEMP\listen.out" -RedirectStandardError "$env:RUNNER_TEMP\listen.err" -PassThru -NoNewWindow
           $out = "$env:RUNNER_TEMP\watch.out"; $err = "$env:RUNNER_TEMP\watch.err"
-          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","18","--every","5","--no-open" -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","32","--every","5","--no-open" -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
           Start-Sleep 7
           python tools\rig\effects.py | Tee-Object -FilePath $env:RUNNER_TEMP\effects.out
-          $w.WaitForExit(200000) | Out-Null
+          $w.WaitForExit(260000) | Out-Null
           "=== the watch's exit: $($w.ExitCode)"
           "=== the watch's report"; Get-Content $out
           "=== the watch's stderr"; Get-Content $err | Select-Object -Last 40
@@ -317,10 +317,10 @@ jobs:
         run: |
           $l = Start-Process python -ArgumentList "tools\rig\effects.py","--listen" -RedirectStandardOutput "$env:RUNNER_TEMP\listen.out" -RedirectStandardError "$env:RUNNER_TEMP\listen.err" -PassThru -NoNewWindow
           $out = "$env:RUNNER_TEMP\watch.out"; $err = "$env:RUNNER_TEMP\watch.err"
-          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","18","--every","5","--no-open" -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
+          $w = Start-Process raqib -ArgumentList "watch","--host","--rounds","32","--every","5","--no-open" -RedirectStandardOutput $out -RedirectStandardError $err -PassThru -NoNewWindow
           Start-Sleep 7
           python tools\rig\effects.py | Tee-Object -FilePath $env:RUNNER_TEMP\effects.out
-          $w.WaitForExit(200000) | Out-Null
+          $w.WaitForExit(260000) | Out-Null
           "=== the watch's exit: $($w.ExitCode)"
           "=== the watch's report"; Get-Content $out
           "=== the watch's stderr"; Get-Content $err

@@ -145,6 +145,9 @@ def main():
                                 ("HKLM\\" + RUN_KEY, "RaqibRigTestE", ["/reg:32"])):
             run(["reg", "add", key, "/v", name, "/t", "REG_SZ", "/d", HARMLESS, "/f"] + more)
             OTHERS.append((key, name, more))
+        # a value whose name holds a backslash (the review of M15.2, F5): what does Sysmon write for it?
+        run(["reg", "add", "HKCU\\" + RUN_KEY, "/v", "RaqibRig\\Slash", "/t", "REG_SZ", "/d", HARMLESS, "/f"])
+        OTHERS.append(("HKCU\\" + RUN_KEY, "RaqibRig\\Slash", []))
         run(["schtasks", "/create", "/tn", TASK, "/tr", HARMLESS, "/sc", "onlogon", "/f"])
         values = run_values()
         say("act 2 done: the user's autostart values now: %s; the Startup file exists: %s" % (
@@ -156,7 +159,15 @@ def main():
         run(["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL",
              "-o", "ConnectTimeout=5", "rig@%s" % address, "exit"], timeout=20)
         say("act 3 done")
-        time.sleep(12)
+        # 40 values, each by a fresh reg.exe at a moment of its own (the review of M15.2, F1): how many become lines?
+        import random
+        for i in range(40):
+            name = "RaqibRigMany%02d" % i
+            run(["reg", "add", "HKCU\\" + RUN_KEY, "/v", name, "/t", "REG_SZ", "/d", HARMLESS, "/f"])
+            OTHERS.append(("HKCU\\" + RUN_KEY, name, []))
+            time.sleep(random.uniform(0.2, 1.8))
+        say("the 40 values set")
+        time.sleep(14)
     finally:
         undo(startup_file, temp_file)
         talk.close()
