@@ -72,7 +72,12 @@ def listen():
 def run_values():
     import winreg
     out = {}
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY)
+    except OSError as exc:   # seen on a fresh runner: the user's Run key is not there until something makes it
+        say("the user's Run key is not there (%s)" % type(exc).__name__)
+        return out
+    with key:
         i = 0
         while True:
             try:
