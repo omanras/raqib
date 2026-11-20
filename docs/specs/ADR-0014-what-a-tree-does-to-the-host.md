@@ -107,3 +107,35 @@ ssh.
   through the rules' own words.
 - Recorded for its own ruling, not ruled here: Windows' own service hosts were knocked as unknown agents in both
   runs (svchost twice, an updater once).
+
+## Amendment A (the Table, 2026-11-20) - the review of M15.1 (docs/review/2026-11-20-M15.1.md)
+The reviewer said NEXT: the two rules do what A-3 and A-4 rule and the four keys are captured soundly; nine
+things were to be put right first, each a few lines, and the Table made them in this commit. In the field (the
+probe branch ff32c42, GitHub's Windows machine, the build of 0cc2831): the stand-in's Startup file was a
+PERSIST-AUTOSTART finding, and its two connections to port 22 - PowerShell's own socket, and ssh - were each
+a NET-ADMIN-PORT finding that names the program and what started it; each high, each knocked.
+- AA-1 (F1: the kernel's own connections). Windows' SMB client connects to 445 as System, not as a process of
+  the tree: a share, a named pipe, sc or schtasks against another machine are outside NET-ADMIN-PORT. Said in
+  the rule's evasions and in the threat model; the documents say "whatever program of the tree". Not measured.
+  It is S3's to measure with what else the system does for a tree.
+- AA-2 (F2: link-local). A-4 left link-local out with loopback and gave a reason for loopback only. It stays
+  out in S1 and is said as a way round; it is ruled again with S3, where the host's own lines are judged.
+- AA-3 (F3: an unread Initiated is a silence). A net line whose Initiated was not read is not judged and no
+  note says so. Real Sysmon writes it always, so the reach is small; it is still a silence (A3). S2 makes such
+  a line the rule's partial note. Recorded in the threat model until then.
+- AA-4 (F11: a Sysmon that gives no file event). Under the watch the follow is bounded and the round's check
+  names events 1, 3 and 22: a channel that never gives event 11 is not said, and PERSIST-AUTOSTART's os branch
+  hangs on it. The rule's words no longer say it is said. S2 closes it in the watch (it reads the registry's
+  events there anyway).
+- AA-5 (F4, F5, F12: said as it is). The rule's evasions gain: a file changed in place, a hard link, a hooks
+  path not in its plain form, a file tool of another name. A move into the folder is "not measured", not a
+  fact. The pattern has no anchor on its left: a copy of a profile fires, and so does another machine's
+  folder through a share (the second is right).
+- AA-6 (Q-1, F16: the budgets are not measured). Both rules read 0.000 on the benign corpus, and the corpus
+  holds no os line of a desktop's ordinary work: the budgets stand on nothing a desktop does. Only a real
+  recording measures them. Until one is in the corpus the threat model says so, with what would fire (a
+  deploy over ssh inside one network, an editor's remote session, a local virtual machine, a profile's copy).
+- AA-7 (recorded, not built). The generator's synthetic os talk lines keep the shape from before the four keys
+  (Q-2): they read as older lines. A finding of NET-ADMIN-PORT cites the net line and not the start its names
+  came from (F14). The four keys enter the watch's key of an act (F15): two feeds of one event that hold
+  different starts would be two acts; not shown reachable. Port 139 is not on the list (F10).

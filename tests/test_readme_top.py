@@ -201,7 +201,7 @@ BEHAVIOUR_ROWS = [
     "moved or renamed into the folder are not read yet |",
     "| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` tru"
     "e) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback "
-    "nor link-local (`dest_scope` private), whatever program opened the socket (PowerShell's own included"
+    "nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's own included"
     "), unless it is ssh started by git (high). Linux has no os source for it: nothing there is judged by"
     " it, and the host's own sample of a connection is not judged yet |",
 ]

@@ -281,14 +281,16 @@ def test_e6_the_guide_and_the_threat_model_hold_the_sentences_that_matter():
     assert "read from Sysmon's file line (event 11) of a watched tree or from a Write, Edit, MultiEdit or" in guide
     assert "Linux has no os source for it: there only a hooks file tool is judged." in guide
     assert "| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` true)" in guide
-    assert "whatever program opened the socket (PowerShell's own included), unless it is ssh started by git" in guide
+    assert "whatever program of the tree opened the socket (PowerShell's own included), unless it is ssh started by git" in guide
     assert "Linux has no os source for it: nothing there is judged by it" in guide
     text = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
     part = text.split("### The rules of behaviour (PERSIST-AUTOSTART, NET-ADMIN-PORT; ADR-0014)", 1)[1].split("### ", 1)[0]
     flat = " ".join(part.split())
     for sentence in ("a scheduled task is written by the Schedule service (svchost, as SYSTEM, 24 ms after schtasks"
                      " started), not by a process of the tree.",
-                     "A file moved or renamed into the folder: Sysmon logs no file creation for it.",
+                     "A file moved or renamed into the folder: not measured.",
+                     "connects to port 445 as System, not as a process of the tree.",
+                     "The budgets of the two rules were measured on no real desktop's work.",
                      "nothing is then there to read, and Raqib cannot tell that from nothing done.",
                      "A port not on the list, a public address, a relay or a tunnel.",
                      "Measured: the two short connections to port 22 were in no sample of the host.",
