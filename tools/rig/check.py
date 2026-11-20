@@ -739,11 +739,20 @@ NO_RIGHT = re.compile(r"\b(EPERM|EACCES)\b")
 
 
 def read_procevents(facts):
+    """X31's row, its words led by the kernel's release where the run's facts say it (BS-8)."""
+    rows = _procevents_rows(facts)
+    kernel = facts.get("kernel") if isinstance(facts, dict) else None
+    if kernel:
+        rows = [(n, state, "kernel %s: %s" % (kernel, words)) for n, state, words in rows]
+    return rows
+
+
+def _procevents_rows(facts):
     """X31 (ADR-0007 BQ-2): what tools/rig/procevents_run.py saw raqib.procevents.Reader give for the short acts it
     ran. MET where every act that ran was given by read() with its program read (the real path of the program the
     run started), its parent the run's own process (`run_pid`, BR-7) and its end's code (the run's exit code: the
-    code where it exited, the signal where one ended it), and counts() shows no loss (nothing lost to ENOBUFS,
-    nothing beyond the bound, the thread not ended before the stop); MISSED with what is missing (facts None, not
+    code where it exited, the signal where one ended it), and counts() shows no loss (nothing lost to ENOBUFS or
+    by the kernel's count, nothing beyond the bound, the thread not ended before the stop); MISSED with what is missing (facts None, not
     run on Linux, an error: silence is a finding). A refused start: n/a where the refusal names a right this user
     lacks (EPERM, EACCES), else MISSED (on the measured kernels the kernel answers, BR-7); n/a off Linux. It never
     raises: facts that cannot be read are MISSED."""
@@ -794,6 +803,9 @@ def read_procevents(facts):
             lost = c.get("lost") if isinstance(c.get("lost"), dict) else {}
             if lost.get("count") != 0:
                 missing.append("lost %s (%s)" % (lost.get("count"), lost.get("why")))
+            elif lost.get("events"):     # BS-5: a gap in the kernel's count with no ENOBUFS is a loss too
+                missing.append("at least %s event(s) lost by the kernel's count (%s)" % (lost["events"],
+                                                                                       lost.get("why")))
             if c.get("beyond") != 0:
                 missing.append("beyond the bound %s" % c.get("beyond"))
             if c.get("ended"):

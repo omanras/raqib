@@ -51,9 +51,15 @@ def text_of(seconds):
 
 
 # --- the messages, by hand ------------------------------------------------------------------------------------
-def message(what, data, ts=TS, cpu=1, idx=1, val=1, seq=77, ack=0, nltype=3, cut=None, size=None):
-    """One netlink message of the connector: nlmsghdr (16), cn_msg (20), the event (what, cpu, time; its data),
-    padded to 4 bytes. The kernel's union is 24 bytes, so every event of the measured kernels is 40."""
+SEQS = {}                          # cpu -> the kernel's count of events on it, as the made-up kernel keeps it
+
+
+def message(what, data, ts=TS, cpu=1, idx=1, val=1, seq=None, ack=0, nltype=3, cut=None, size=None):
+    """One netlink message of the connector: nlmsghdr (16), cn_msg (20: its seq the kernel's count of events on the
+    event's CPU, one more for each message made here unless a test names it), the event (what, cpu, time; its
+    data), padded to 4 bytes. The kernel's union is 24 bytes, so every event of the measured kernels is 40."""
+    if seq is None:
+        SEQS[cpu] = seq = SEQS.get(cpu, 1000) + 1
     ev = struct.pack("=IIQ", what, cpu, ts) + data
     if cut is not None:
         ev = ev[:cut]
@@ -124,6 +130,8 @@ class Sock:
         if op == 1 and self.system.answer is not None:     # the kernel answers the ask: its ack plus 1
             nonce = struct.unpack_from("=IIIIHH", data, 16)[3]
             self.inbox.extend(self.system.before + [answer(self.system.answer, ack=nonce + 1)])
+        elif op == 1:
+            self.inbox.extend(self.system.before)
         return len(data)
 
     def recv(self, size):
@@ -178,8 +186,10 @@ class Clock:
     def __init__(self, step=1_000_000):
         self.now, self.step = MONO, step
 
+    wall_s = WALL
+
     def wall(self):
-        return WALL
+        return self.wall_s
 
     def mono(self):
         self.now += self.step
@@ -255,9 +265,10 @@ def test_e1_fork_exec_and_exit_in_one_datagram_each_padded_to_four_bytes():
     system = System()
     system.proc(5001, "/usr/bin/curl", 4000, 123456)
     r = started(system)
+    born = fork(4000, 5001)                 # made in the kernel's order: its count of events is in that order
     odd = message(COMM, struct.pack("=II", 5001, 5001) + b"curl\0\0\0\0\0\0\0\0\0\0\0\0\0")   # 77: padded to 80
     assert len(odd) % 4 == 0 and struct.unpack_from("=I", odd, 0)[0] == 77
-    feed(r, fork(4000, 5001) + odd + exec_(5001) + exit_(5001, code=7 << 8))
+    feed(r, born + odd + exec_(5001) + exit_(5001, code=7 << 8))
     got = r.read()
     assert got == {"processes": [{"pid": 5001, "ppid": 4000, "exe": "/usr/bin/curl", "earlier": [],
                                   "started_ticks": 123456, "began": text_of(WALL - 0.25),
@@ -265,8 +276,8 @@ def test_e1_fork_exec_and_exit_in_one_datagram_each_padded_to_four_bytes():
                    "ends": [], "older": []}
     c = r.counts()
     assert c["events"] == {"fork": 1, "exec": 1, "exit": 1} and c["unread"] == {"comm": 1} and c["given"] == 1
-    assert procevents.parse(fork(1, 2))[0] == ("fork", TS, (1, 1, 2, 2))
-    assert procevents.parse(exit_(9, code=9))[0] == ("exit", TS, (9, 9, 9, 17))
+    assert procevents.parse(fork(1, 2, seq=33, cpu=2))[0] == ("fork", TS, (1, 1, 2, 2), 2, 33)
+    assert procevents.parse(exit_(9, code=9, seq=34, cpu=2))[0] == ("exit", TS, (9, 9, 9, 17), 2, 34)
 
 
 def test_e1_shorter_than_its_shape_or_of_another_what_is_unread_by_its_kind_never_guessed():
@@ -363,9 +374,10 @@ def test_e1_br1_where_lost_is_not_0_a_record_says_its_count_of_threads_is_not_kn
     assert "threads" not in r.read()["processes"][0]["unread"]
     feed(r, OSError(errno.ENOBUFS, "No buffer space available"), fork(4000, 5005))
     p = r.read()["processes"][0]
-    assert p["unread"]["threads"] == procevents.LOST_THREADS % 1 and "count of threads is not known" in \
+    loss = "ENOBUFS 1 time(s), at least 0 event(s) by the kernel's count"
+    assert p["unread"]["threads"] == procevents.LOST_THREADS % loss and "count of threads is not known" in \
         p["unread"]["threads"]
-    assert p["unread"]["exe"] == procevents.LOST_EXEC % 1 and "its parent's" not in p["unread"]["exe"]
+    assert p["unread"]["exe"] == procevents.LOST_EXEC % loss and "made it" not in p["unread"]["exe"]
 
 
 # --- E2 (BR-2): every program a process had --------------------------------------------------------------------
@@ -447,13 +459,15 @@ def test_e4_br4_counts_say_when_a_datagram_was_last_heard_and_a_loss_in_the_meas
     clock = Clock()
     r = reader(System(), clock)
     assert r.counts()["last"] is None
-    assert r.start() is None and r.counts()["last"] == text_of(WALL)     # the answer is a datagram
+    assert r.start() is None and r.counts()["last"] == text_of(WALL) == r.counts()["since"]   # the answer
     clock.step = 0
+    clock.wall_s = WALL + 5                                  # BS-9: `last` moves with the wall clock, `since` not
     feed(r, OSError(errno.ENOBUFS, "No buffer space available"), fork(4000, 5001))
-    lost = r.counts()["lost"]
-    assert lost == {"count": 1, "why": "the kernel's queue for this socket overflowed 1 time(s) (ENOBUFS): what was"
-                                       " in the queue is gone, and how many events is not known; on kernels 6.8 and"
-                                       " 7.0 the events went on after it (measured)"}
+    c = r.counts()
+    assert c["last"] == text_of(WALL + 5) != c["since"] == text_of(WALL)
+    assert c["lost"] == {"count": 1, "events": 0,
+                         "why": "the kernel's queue for this socket overflowed 1 time(s) (ENOBUFS): what the queue"
+                                " held is given; what came while it was full is gone"}
     assert [p["pid"] for p in r.read()["processes"]] == [5001] and r.counts()["ended"] is None
 
 
@@ -567,8 +581,8 @@ def test_e6_what_comes_before_the_answer_is_taken_and_the_receive_queue_kept_is_
     assert [p["exe"] for p in r.read()["processes"]] == ["/usr/bin/git"]
     c = r.counts()
     assert c["lost"]["count"] == 1
-    assert c["said"] == ["the socket's receive queue is 425984 bytes, less than the 1048576 asked (the system's"
-                         " maximum)"]
+    assert c["said"] == ["the socket's receive queue is reported as 425984 bytes, less than the 2097152 the kernel"
+                         " reports for the 1048576 asked (twice the asked): the system's maximum"]
     s2 = System()
     s2.fail["setsockopt"] = OSError(errno.EPERM, "no")
     assert started(s2).counts()["said"] == ["the socket's receive queue is left at the system's size (%s)"
@@ -606,7 +620,7 @@ def test_e6_a_fork_with_no_exec_runs_its_parents_program_unread_only_where_nothi
     assert (p["pid"], p["ppid"], p["exe"], p["began"], p["started_ticks"]) == (5001, 4000, None,
                                                                              text_of(WALL - 0.25), None)
     assert p["unread"] == {"exe": procevents.NO_EXEC_EXE, "stat": procevents.NO_EXEC_STAT} and system.asked == []
-    assert "its parent's program" in procevents.NO_EXEC_EXE
+    assert "the program of the process that made it" in procevents.NO_EXEC_EXE
 
 
 def test_e6_a_record_the_bound_refused_says_the_bound_not_no_fork_heard(monkeypatch):
@@ -658,7 +672,7 @@ def test_e6_an_exit_with_no_exec_heard_is_a_process_older_than_the_reader_said_i
     feed(r, exit_(3000, code=3 << 8))
     assert r.read() == {"processes": [], "ends": [], "older": [
         {"pid": 3000, "started_ticks": None, "began": None, "ended": text_of(WALL - 0.25), "code": 3,
-         "signal": None, "unread": {"began": procevents.NO_FORK}}]}
+         "signal": None, "unread": {"began": procevents.NO_FORK, "threads": procevents.END_NOT_HELD}}]}
     assert r.counts()["older"] == 1 and r.read()["older"] == []
 
 
@@ -891,33 +905,55 @@ def test_e6_the_spec_says_the_layout_what_is_read_every_count_and_what_was_measu
             " and the start in clock ticks), and nothing else of the process.",
             "No argument, no environment, no working directory and no open file of a process is ever read, and"
             " nothing is read at a fork or an exit.",
+            "An ended record is taken up again by an exec of its pid, with no fork between, only where its start and"
+            " the exec's read start are both known and equal",
+            "A pid taken again within one second of the exec, before the read, is not told apart, and the newcomer's"
+            " program and start are then given as the first process's.",
+            "A record keeps its newest 16 earlier programs (EARLIER_MAX); the number of older ones not kept is said"
+            " on the record",
+            "runs the program of the process that made it",
+            "what the queue held is given; what came while it was full is gone; how many: at least the count.",
+            "A step with no ENOBUFS since `counts()` was last read is a loss the kernel did not tell",
             "After an overflow of the listener's queue (ENOBUFS) the events went on, for that listener alone and for"
             " a second one opened after it.",
             "When a thread that is not the leader called exec, the kernel sent an exit with pid equal to tgid (code"
             " 0), then the exec, then the process's real exit.",
             "When the leader thread ended and another thread lived on, the kernel sent an exit with pid equal to tgid"
             " (code 0) at once, and the process's own code came on the last thread's exit.",
-            "The reader's own run, 15 times on those images: no read missed, nothing lost, the start answered each"
-            " time.",
-            "In the builder's sandbox (kernel 6.18, 2 CPUs, as root) the rig's run was MET once in nine runs; in the"
-            " other eight, 1 to 3 of 14 programs were not read in time (ENOENT), each counted in `missed`.",
+            "At an overflow (a queue of 9216 bytes, 300 children made while nothing was read) the error (ENOBUFS)"
+            " was read first; after it the events the queue had held were still given; the events made while it was"
+            " full were never given; events made afterwards all came.",
+            "The gaps in the kernel's count over the events read added up to 275, 589 and 626 where some 890 events"
+            " were lost: a count from below, not the whole.",
+            "the other order was not seen in 2400 runs. If it came, the reader would give the leader thread's exit as"
+            " the end of a process that lives on, and its real end as an end of a process it did not hold.",
+            "In the builder's sandbox (kernel 6.18, 2 CPUs, as root) the first build's rig run was MET once in nine"
+            " runs; in the other eight, 1 to 3 of 14 programs were not read in time (ENOENT), each counted in"
+            " `missed`",
+            "The REDO's runs there: the real test missed 3 or 4 of 5 programs of `true` in three runs",
+            "The second REDO's runs there:",
             "The bound counts over the reader's life: a process whose end was lost never leaves `live`, so after"
             " enough losses every new process is past the bound.",
-            "A pid and its start in clock ticks do not always name one holder",
             "The parent is the one the kernel names: a child made to be its maker's sibling is given its maker's"
             " parent, not its maker.",
             "A program can keep itself unread: by ending before the read, by making itself not readable by this user,"
             " or by being hidden from the reader by the system.",
             "`missed` counts reads, not processes: one process can add one to each of `exe` and `stat`.",
             "`beyond` counts events and records past the bound, not processes.",
+            "Read in the kernel's source, not measured:",
             "Not measured: a kernel older than 6.8 (the connector may be root's there); whether a plain user hears"
             " another user's processes; a machine that starts thousands of processes a second; a process inside a"
-            " container."):
+            " container; a reader inside a time namespace; the times of events read after the machine slept."):
         assert sentence in spec, sentence
     for key in ("since", "last", "events", "given", "missed", "unread", "threads", "older", "reused", "lost",
                 "beyond", "live", "refused", "ended", "said"):
         assert "- `%s`" % key in spec, key
-    assert "every measured event is 40 bytes" not in spec and "name one holder of a pid" not in spec
+    for gone in ("every measured event is 40 bytes", "name one holder of a pid", "within one clock tick",
+                 "within the tick", "its parent's program", "what was in the queue is gone"):
+        assert gone not in spec, gone
+    measured = spec[spec.index("## What was measured"):spec.index("## Read in the kernel's source")]
+    for source_only in ("whole group", "CLONE_PARENT", "not dumpable", "time namespace"):
+        assert source_only not in measured, source_only
 
 
 def test_e6_the_threat_model_says_what_an_agent_can_do_about_this_source_without_a_milestone_token():
@@ -931,16 +967,264 @@ def test_e6_the_threat_model_says_what_an_agent_can_do_about_this_source_without
             "a process that ends before its program is read, that is not readable by this user (a program can make"
             " itself so), or that the system hides from the reader is given without its program: the read is"
             " counted in `missed` and named in its `unread`",
+            "a pid taken again within one second of the exec, before the read, is not told apart: the newcomer's"
+            " program and start are then given as the first process's",
             "a burst the kernel cannot queue for the reader is counted in `lost` (ENOBUFS), never as nothing"
-            " happened; on kernels 6.8 and 7.0 the events went on after it",
+            " happened; what the queue held is given, what came while it was full is gone, and the kernel's own"
+            " count on each CPU gives how many at least, a gap with no ENOBUFS included",
+            "an end of a process the reader did not hold from its fork, or any end given after a loss, may be its"
+            " leader thread's alone, and says so",
+            "if a thread's exec ever came before its leader's exit (not seen in 2400 runs), the reader would give"
+            " the end of a process that lives on",
             "a kernel that refuses (an older one, or a container's) is the hole, said in the reader's words as"
             " `refused`, and nothing else is tried",
             "a child made to be its maker's sibling is given the parent the kernel names, which is not its maker",
-            "a process that changes its program again keeps the programs it had before in `earlier`"):
+            "a process that changes its program again keeps the programs it had before in `earlier`, its newest 16"):
         assert sentence in section, sentence
+    for gone in ("within one clock tick", "whatever shows it escapes it", "how many events the queue held"):
+        assert gone not in section, gone
     assert not re.search(r"\bM\d+\.\d+", section)
 
 
 def test_e9_ascii_outside_docs():
     for path in ("raqib/procevents.py", "tests/test_procevents.py"):
         assert (ROOT / path).read_bytes().isascii(), path
+
+
+# --- REDO 2 (Amendment BS) ----------------------------------------------------------------------------------------
+def ended_once(system, first_stat=None):
+    """A process 5001 forked, exec'd and ended, its end read; the reader and that read."""
+    system.links[5001] = "/usr/bin/sh"
+    system.stats[5001] = first_stat if first_stat is not None else stat_line(5001, 4000, 50)
+    r = started(system)
+    feed(r, fork(4000, 5001), exec_(5001), exit_(5001))
+    got = r.read()["processes"][0]
+    assert got["ended"] is not None
+    return r, got
+
+
+@pytest.mark.parametrize("case", ["a different start", "the old start unknown", "the read failed",
+                                  "the read another's"])
+def test_e1_bs2_an_ended_record_is_taken_up_only_where_both_starts_are_known_and_equal(case):
+    system = System()
+    r, first = ended_once(system, PermissionError(errno.EACCES, "no") if case == "the old start unknown" else None)
+    if case == "the read failed":
+        system.links[5001], system.stats[5001] = "/usr/bin/cat", FileNotFoundError(errno.ENOENT, "gone")
+    else:                                    # 600000 ticks: 6000 s, later than the exec on the boot clock
+        system.proc(5001, "/usr/bin/cat", 4100, 600000 if case == "the read another's" else 60)
+    feed(r, exec_(5001))
+    got = r.read()
+    p = got["processes"][0]
+    assert p["unread"]["began"] == procevents.NO_FORK_AFTER_END and p["earlier"] == [] and p["ended"] is None
+    assert "a thread of the same process called exec" in procevents.NO_FORK_AFTER_END and got["ends"] == []
+    assert r._gone[5001].ended == first["ended"] and r._gone[5001].exe == "/usr/bin/sh"   # left ended
+    if case == "the read another's":
+        assert p["unread"]["exe"] == procevents.ANOTHER and r.counts()["reused"] == 1
+
+
+def test_e2_bs3_an_end_says_its_threads_are_not_known_where_the_process_was_not_held_or_events_were_lost():
+    system = System()
+    system.proc(5001, "/usr/bin/sh", 1, 50)
+    r = started(system)
+    feed(r, exec_(5001))                                       # held from its exec, not its fork
+    r.read()
+    feed(r, exit_(5001))
+    end = r.read()["ends"][0]
+    assert end["unread"] == {"threads": procevents.END_NOT_HELD} and "leader thread's alone" in end["unread"]["threads"]
+    system.proc(5002, "/usr/bin/cp", 4000, 51)
+    feed(r, fork(4000, 5002), exec_(5002))
+    r.read()
+    feed(r, OSError(errno.ENOBUFS, "No buffer space available"), exit_(5002), exit_(3000))
+    got = r.read()
+    loss = "ENOBUFS 1 time(s), at least 0 event(s) by the kernel's count"
+    assert got["ends"][0]["unread"] == {"threads": procevents.END_LOST % loss}
+    assert got["older"][0]["unread"]["threads"] == procevents.END_LOST % loss
+
+
+def test_e2_bs3_a_threads_end_after_an_end_of_a_process_not_held_is_its_later_end_with_its_code():
+    system = System()
+    r = started(system)
+    feed(r, exit_(3000, code=0))                               # order (b) of a process not held: its leader's end
+    first = r.read()["older"]
+    assert [(o["pid"], o["code"]) for o in first] == [(3000, 0)]
+    feed(r, exit_(3001, tgid=3000, code=5 << 8), exit_(3002, tgid=3000, code=7 << 8))   # its threads' ends
+    later = r.read()["older"]
+    assert [(o["pid"], o["code"], o["unread"]) for o in later] == [
+        (3000, 7, {"began": procevents.NO_FORK, "ended": procevents.LATER_END, "threads": procevents.END_NOT_HELD})]
+    feed(r, exit_(3003, tgid=3000, code=9 << 8))               # after a read: another later end
+    assert [(o["pid"], o["code"]) for o in r.read()["older"]] == [(3000, 9)]
+    feed(r, exit_(3101, tgid=3100))                            # a thread of a pid it gave no end of: counted only
+    assert r.read()["older"] == [] and r.counts()["older"] == 3
+
+
+def test_e2_bs3_an_exec_after_an_end_of_a_process_not_held_is_a_new_record_not_no_fork_heard():
+    system = System()
+    system.proc(3000, "/usr/bin/node", 1, 40)
+    r = started(system)
+    feed(r, exit_(3000), exec_(3000))                          # order (a) of a process not held
+    got = r.read()
+    assert got["older"][0]["pid"] == 3000
+    assert [(p["pid"], p["exe"], p["unread"]["began"]) for p in got["processes"]] == [
+        (3000, "/usr/bin/node", procevents.NO_FORK_AFTER_END)]
+
+
+def test_e2_bs3_a_record_taken_up_withdraws_its_unread_end_or_says_the_end_given_before_was_its_leaders():
+    system = System()
+    system.proc(5001, "/usr/bin/sh", 4000, 50)
+    r = started(system)
+    feed(r, fork(4000, 5001), exec_(5001))
+    r.read()
+    feed(r, exit_(5001), exec_(5001))                          # its end not read yet: withdrawn
+    got = r.read()
+    assert got["ends"] == [] and [(p["pid"], p["ended"], "ended" in p["unread"]) for p in got["processes"]] == [
+        (5001, None, False)]
+    feed(r, exit_(5001))
+    assert [e["pid"] for e in r.read()["ends"]] == [5001]      # its end read
+    feed(r, exec_(5001))
+    p = r.read()["processes"][0]
+    assert p["ended"] is None and p["unread"]["ended"] == procevents.ENDED_BEFORE
+    assert "leader thread's" in procevents.ENDED_BEFORE
+
+
+def test_e3_bs4_a_record_keeps_its_newest_16_earlier_programs_and_counts_the_rest():
+    system = System()
+    system.proc(5001, "/usr/bin/p0", 4000, 50)
+    r = started(system)
+    feed(r, fork(4000, 5001))
+    for i in range(40):
+        system.links[5001] = "/usr/bin/p%d" % i
+        feed(r, exec_(5001))
+    p = r.read()["processes"][0]
+    assert procevents.EARLIER_MAX == 16 and len(p["earlier"]) == 16 and p["exe"] == "/usr/bin/p39"
+    assert [e["exe"] for e in p["earlier"]] == ["/usr/bin/p%d" % i for i in range(23, 39)]
+    assert p["unread"]["earlier"] == "23 earlier program(s) not kept: a record keeps its newest 16 (EARLIER_MAX)"
+
+
+# --- E4 (BS-5): the kernel's count of events on each CPU --------------------------------------------------------
+def lost_after(*datagrams):
+    r = started(System())
+    feed(r, *datagrams)
+    return r, r.counts()
+
+
+def test_e4_bs5_no_gap_two_cpus_and_an_answer_between_are_no_loss():
+    r, c = lost_after(fork(1, 6001, cpu=0, seq=10), fork(1, 6002, cpu=3, seq=500), fork(1, 6003, cpu=0, seq=11),
+                      answer(0, ack=9, seq=77), fork(1, 6004, cpu=3, seq=501), exit_(6001, cpu=0, seq=12))
+    assert c["lost"] == {"count": 0, "events": 0, "why": None} and c["said"] == []
+
+
+def test_e4_bs5_a_gap_after_enobufs_is_lost_events_at_least_in_the_measured_words():
+    r, c = lost_after(fork(1, 6001, cpu=0, seq=10), OSError(errno.ENOBUFS, "No buffer space available"),
+                      fork(1, 6002, cpu=0, seq=15))
+    assert c["lost"] == {"count": 1, "events": 4, "why": (
+        "the kernel's queue for this socket overflowed 1 time(s) (ENOBUFS): what the queue held is given; what came"
+        " while it was full is gone; how many: at least 4 event(s) by the kernel's own count on each CPU (a count"
+        " from below)")}
+    p = r.read()["processes"][0]
+    assert p["unread"]["threads"] == procevents.LOST_THREADS % "ENOBUFS 1 time(s), at least 4 event(s) by the" \
+                                                               " kernel's count"
+
+
+def test_e4_bs5_a_gap_with_no_enobufs_is_a_loss_the_kernel_did_not_tell():
+    r, c = lost_after(fork(1, 6001, cpu=0, seq=10), message(COMM, bytes(24), cpu=0, seq=11),
+                      fork(1, 6002, cpu=0, seq=14))
+    assert c["lost"]["count"] == 0 and c["lost"]["events"] == 2
+    assert c["lost"]["why"].endswith("2 of them came with no ENOBUFS: a loss the kernel did not tell")
+    feed(r, OSError(errno.ENOBUFS, "No buffer space available"), fork(1, 6003, cpu=0, seq=20))
+    assert r.counts()["lost"]["why"].endswith("2 of them came with no ENOBUFS: a loss the kernel did not tell")
+    feed(r, fork(1, 6004, cpu=0, seq=23))                      # no ENOBUFS since counts() was read: untold again
+    assert r.counts()["lost"]["events"] == 9 and "4 of them came with no ENOBUFS" in r.counts()["lost"]["why"]
+
+
+def test_e4_bs5_a_count_that_goes_back_is_not_counted_and_is_said_once():
+    r, c = lost_after(fork(1, 6001, cpu=0, seq=10), fork(1, 6002, cpu=0, seq=8), fork(1, 6003, cpu=0, seq=8),
+                      fork(1, 6004, cpu=0, seq=9))
+    assert c["lost"]["events"] == 0 and c["said"] == [
+        "the kernel's count of events on CPU 0 went from 10 to 8: a step that is not forward is not counted (said"
+        " once)"]
+
+
+# --- E6 (BS-7): said as it is ------------------------------------------------------------------------------------
+def test_e6_bs7_a_boot_clock_that_fails_is_said_once_and_the_check_is_off():
+    system = System()
+    system.proc(5001, "/usr/bin/cat", 4000, 600000)          # would be another's with the check on
+    clock = Clock()
+
+    def no_boot():
+        raise OSError(errno.EINVAL, "no such clock")
+    clock.boot = no_boot
+    r = started(system, clock)
+    feed(r, fork(4000, 5001), exec_(5001))
+    assert r.counts()["said"] == ["the boot clock cannot be read (%s): no read is held against its exec's time"
+                                  % name(errno.EINVAL)]
+    assert r.read()["processes"][0]["exe"] == "/usr/bin/cat" and r.counts()["reused"] == 0
+
+
+@pytest.mark.parametrize("kept, said", [(2 * (1 << 20), False), (2 * (1 << 20) - 2, True), (1 << 20, True)])
+def test_e6_bs7_the_queue_is_compared_as_the_kernel_reports_it(kept, said):
+    system = System()
+    system.rcvbuf = kept
+    words = ("the socket's receive queue is reported as %d bytes, less than the 2097152 the kernel reports for the"
+             " 1048576 asked (twice the asked): the system's maximum" % kept)
+    assert started(system).counts()["said"] == ([words] if said else [])
+
+
+def test_e6_bs7_a_start_with_no_answer_while_the_queue_overflowed_says_so():
+    system = System()
+    system.answer = None
+    system.before = [OSError(errno.ENOBUFS, "No buffer space available")]
+    why = reader(system).start()
+    assert why.startswith(procevents.PREFIX + "the kernel did not answer the ask to listen within 2 s")
+    assert why.endswith("; the kernel's queue for this socket overflowed (ENOBUFS) 1 time(s) while the answer was"
+                        " awaited: the answer may be among what was lost")
+
+
+# --- E8 (BS-9): each guard fails a test where it is removed -------------------------------------------------------
+def test_e8_bs9_leader_ended_is_cleared_at_an_exec():
+    system = System()
+    system.proc(5001, "/usr/bin/sh", 4000, 50)
+    r = started(system)
+    feed(r, fork(4000, 5001), exec_(5001), fork(5001, 5002, tgid=5001), exit_(5001), exec_(5001),
+         fork(5001, 5003, tgid=5001), exit_(5003, tgid=5001))
+    assert r.counts()["live"] == 1 and r.read()["processes"][0]["ended"] is None   # a thread's end, not its end
+
+
+def test_e8_bs9_the_threads_of_one_process_are_bounded(monkeypatch):
+    monkeypatch.setattr(procevents, "PROCESSES_MAX", 3)
+    r = started(System())
+    feed(r, fork(4000, 5001), *[fork(5001, 5100 + i, tgid=5001) for i in range(5)])
+    assert len(r._live[5001].threads) == 3 and r.counts()["beyond"] == 2
+
+
+def test_e8_bs9_the_memories_of_ended_and_refused_pids_forget_their_oldest(monkeypatch):
+    monkeypatch.setattr(procevents, "PROCESSES_MAX", 3)
+    system = System()
+    r = started(system)
+    for pid in (5001, 5002, 5003, 5004):
+        system.proc(pid, "/usr/bin/true", 4000, 50)
+        feed(r, fork(4000, pid), exec_(pid), exit_(pid))
+        r.read()
+    assert sorted(r._gone) == [5002, 5003, 5004]
+    feed(r, exec_(5001))                                       # forgotten: not taken up, and nothing says its end
+    assert r.read()["processes"][0]["unread"]["began"] == procevents.NO_FORK
+    feed(r, exit_(5001))
+    r.read()
+    feed(r, fork(4000, 5011), fork(4000, 5012), fork(4000, 5013))   # the bound is full
+    feed(r, *[fork(4000, 6000 + i) for i in range(4)])        # refused; the memory keeps the newest 3
+    feed(r, exit_(6000), exit_(6003))
+    assert [(o["pid"], o["unread"]["began"]) for o in r.read()["older"]] == [
+        (6000, procevents.NO_FORK), (6003, procevents.BEYOND_BEGAN)]
+
+
+def test_e8_bs9_ticks_of_a_second_not_known_are_said(monkeypatch):
+    def nothing(name):
+        raise ValueError("unknown configuration name")
+    monkeypatch.setattr(os, "sysconf", nothing, raising=False)
+    system = System()
+    clock = Clock()
+    r = procevents.Reader(pid=PID, sockets=system.socket, readlink=system.readlink, read_bytes=system.read_bytes,
+                          clock=clock.wall, mono=clock.mono, boot=clock.boot, thread=NoThread, at_exit=Registry(),
+                          platform="linux", urandom=lambda n: MARK_BYTES)
+    assert r.start() is None
+    assert r.counts()["said"] == ["the clock ticks of a second are not known (ValueError): no read is held against"
+                                  " its exec's time"]

@@ -1,55 +1,59 @@
 """Linux: the processes that began, read from the kernel's own process events
 (the netlink connector: fork, exec, exit) by a listener of the reader's own
-(ADR-0007 Amendments BQ and BR). This is the reader alone: no watch reads it
-yet. docs/specs/PROC-EVENTS.md says all of it in prose.
+(ADR-0007 Amendments BQ, BR and BS). This is the reader alone: no watch reads
+it yet. docs/specs/PROC-EVENTS.md says all of it in prose, and keeps what was
+measured apart from what is read in the kernel's source.
 
-The messages, as measured (the probe branch, kernels 6.8 and 7.0): a socket
-of AF_NETLINK, SOCK_DGRAM, protocol 11 (the connector), bound to (the
-reader's pid, group 1). One message asks to listen: a netlink header of 16
-bytes (=IHHII: length, type 3, flags 0, seq 0, the reader's pid), a
-connector header of 20 bytes (=IIIIHH: idx 1, val 1, seq 0, ack, len 4,
-flags 0) and the u32 1. The ask's ack is a mark of 4 random bytes; the
-kernel answers every ask to the whole group (an event of `what` 0 whose u32
-at 16 is an errno) with the ask's ack plus 1, so only the answer that
-carries the mark plus 1 is the reader's (BR-5). start() waits for it: a
-kernel that takes the ask and says nothing is a refusal, not a silence. An
-event is a netlink header, a connector header, then `what` u32, cpu u32,
-the kernel's time u64 (=IIQ, ns of the monotonic clock), then: fork (0x1)
-parent pid, parent tgid, child pid, child tgid; exec (0x2) pid, tgid; exit
-(0x80000000) pid, tgid, code, signal. Several messages may come in one
-datagram, each padded to 4 bytes. A message shorter than its shape, of
-another `what`, of another connector or another netlink type is counted as
-unread by its kind, never guessed.
+The messages (measured on kernels 6.8 and 7.0): a socket of AF_NETLINK,
+SOCK_DGRAM, protocol 11 (the connector), bound to (the reader's pid, group
+1). One message asks to listen: a netlink header of 16 bytes (=IHHII:
+length, type 3, flags 0, seq 0, the reader's pid), a connector header of 20
+bytes (=IIIIHH: idx 1, val 1, seq 0, ack, len 4, flags 0) and the u32 1.
+The ask's ack is a mark of 4 random bytes; the kernel answers the ask (an
+event of `what` 0 whose u32 at 16 is an errno) with the ask's ack plus 1
+(measured), so only the answer that carries the mark plus 1 is the reader's
+(the kernel's source sends every answer to the whole group). start() waits
+for it: a kernel that takes the ask and says nothing is a refusal. An event
+is a netlink header, a connector header (whose seq is the kernel's own count
+of events on the event's CPU), then `what` u32, cpu u32, the kernel's time
+u64 (=IIQ), then: fork (0x1) parent pid, parent tgid, child pid, child tgid;
+exec (0x2) pid, tgid; exit (0x80000000) pid, tgid, code, signal. Several
+messages may come in one datagram, each padded to 4 bytes. A message shorter
+than its shape, of another `what`, of another connector or another netlink
+type is counted as unread by its kind, never guessed.
 
-Threads (BR-1, measured): a fork whose child's tgid is not its pid is a
-thread of the process the tgid names; the reader keeps, for each process it
+Threads (BR-1, BS-3; measured): a fork whose child's tgid is not its pid is
+a thread of the process the tgid names; the reader keeps, for each process it
 holds, the threads it heard begin and not end. An exit with pid equal to
-tgid while a thread of it lives is the leader thread's, not the process's:
-the process ends at its last thread's exit, with that exit's code. An exec
-ends every other thread of a process; an exec of a pid whose exit was heard,
-with no fork of that pid between, is the same process going on.
+tgid while a thread of it lives is the leader thread's: the process ends at
+its last thread's exit, with that exit's code. An exec leaves one thread. An
+ended record is taken up again by an exec of its pid, with no fork between,
+only where its start and the exec's read start are both known and equal
+(BS-2). An end the reader gives where the process's threads are not known
+says it may be the leader thread's alone. The other order of a thread's exec
+(the exec before its leader's exit) was not seen in 2400 runs and is not
+built: the leader's exit would then be given as the end of a process that
+lives on, and its real end as an end of a process the reader did not hold.
 
 What is read at an exec, at once, and nothing else of the process: the link
 /proc/PID/exe (the program) and /proc/PID/stat (the parent and the start in
-clock ticks since boot). No argument, no environment, no working directory,
-no file of the process is read, and nothing at a fork or an exit. A record's
-`exe` is the program it has now, `earlier` the programs it had before (BR-2);
-a failed read never replaces what an earlier read gave. The start read is
-held against the exec's own time on the boot clock: a start later than the
-exec by more than REUSED_SECONDS is another process's (the pid was taken
-again before the read), and nothing of that read is given (BR-3, `reused`).
+clock ticks since boot). A record's `exe` is the program it has now,
+`earlier` its newest EARLIER_MAX programs before (BR-2, BS-4); a failed read
+never replaces what an earlier read gave. A start later than the exec by
+more than REUSED_SECONDS is another process's, and nothing of that read is
+given (BR-3, `reused`); a pid taken again within that second is not told
+apart (BS-1).
 
-read() gives the processes that began, or changed their program, since the
-read before, the ends of processes given before (`ends`), and the ends of
-processes it never kept (`older`). Every way it loses is counted: the
-kernel's ENOBUFS (`lost`), a read missed, a message unread, PROCESSES_MAX
-passed (`beyond`), a read of another process (`reused`), a thread that ended
-before the stop (`ended`); `last` is when a datagram was last heard.
+Every way it loses is counted: the kernel's ENOBUFS (`lost.count`), the
+kernel's own count of events on each CPU stepping over a number (`lost.events`,
+at least; BS-5), a read missed, a message unread, a bound passed (`beyond`),
+a read of another process (`reused`), a thread that ended before the stop
+(`ended`); `last` is when a datagram was last heard.
 
 No rights, no asking: a start the system refuses returns its reason in this
 module's words (PREFIX) and raises nothing; a start of a running reader
 returns RUNNING. stop() ends the thread, asks the kernel to stop sending and
-closes the socket, and a second stop() does nothing; the Reader is a context
+closes the socket; a second stop() does nothing; the Reader is a context
 manager; a reader started and never stopped is stopped at the interpreter's
 exit. Only one Reader runs in a process (the bind is on its pid).
 
@@ -89,6 +93,8 @@ SHAPE = {"fork": 32, "exec": 24, "exit": 32, "answer": 20}   # the bytes of the 
 OTHER_WHAT = {0x4: "uid", 0x40: "gid", 0x80: "sid", 0x100: "ptrace", 0x200: "comm", 0x20000000: "nonzero_exit",
               0x40000000: "coredump"}
 PROCESSES_MAX = 32768      # the most it keeps of each kind (over its life: see the spec); past it: `beyond`
+EARLIER_MAX = 16           # the earlier programs a record keeps, the newest (BS-4); the rest are counted on it
+CPUS_MAX = 4096            # the CPUs whose last count of events it keeps (BS-5)
 RECV_BYTES = 65536
 RCVBUF_BYTES = 1 << 20     # asked of the socket's receive queue; what the system kept is read back
 POLL_SECONDS = 0.25        # the socket's timeout: how soon the thread sees a stop
@@ -97,13 +103,23 @@ JOIN_SECONDS = 5.0
 REUSED_SECONDS = 1.0       # a start later than its exec by more than this is another process's (BR-3)
 PREFIX = "the process events are not read: "
 RUNNING = "running"        # what start() returns for a reader already running: not a refusal
-NO_EXEC_EXE = "no exec heard: it runs its parent's program, which is not read"
+NO_EXEC_EXE = ("no exec heard: it runs the program of the process that made it, which is not read (the kernel may"
+               " name another process as its parent)")
 NO_EXEC_STAT = "no exec heard: its stat is not read"
-LOST_EXEC = "no exec heard, but the kernel's queue overflowed %d time(s) (ENOBUFS): its program is not known"
-LOST_THREADS = ("its count of threads is not known: the kernel's queue overflowed %d time(s) (ENOBUFS), so a"
-                " thread's beginning or end may be lost and its end may be its leader thread's")
+LOST_EXEC = "no exec heard, but events were lost (%s): its program is not known"
+LOST_THREADS = ("its count of threads is not known: events were lost (%s), so a thread's beginning or end may be"
+                " lost and its end may be its leader thread's alone")
 NO_FORK = "no fork heard: it began before the reader, or its fork was lost"
-NO_FORK_THREADS = "its threads from before the reader are not known"
+NO_FORK_AFTER_END = ("no fork heard after the end of its pid was heard: a thread of the same process called exec, or"
+                     " another process took the pid and its fork was lost: not known")
+NO_FORK_THREADS = "its threads from before the reader are not known: its end may be its leader thread's alone"
+END_NOT_HELD = ("its threads are not known (the reader did not hold this process from its fork): this end may be its"
+                " leader thread's alone")
+END_LOST = "its threads are not known: events were lost (%s), so this end may be its leader thread's alone"
+LATER_END = ("a later end of the same pid: a thread of it ended after the end given before, which was then its"
+             " leader thread's alone")
+ENDED_BEFORE = "the end given before was its leader thread's: the process went on with an exec"
+EARLIER_DROPPED = "%d earlier program(s) not kept: a record keeps its newest %d (EARLIER_MAX)"
 BEYOND_BEGAN = ("past the bound: its beginning was heard and not kept (PROCESSES_MAX, counted over the reader's"
                 " life)")
 NO_END = "its end was not heard before its pid began again"
@@ -153,53 +169,55 @@ def refusal(step, exc):
 
 
 def parse(data):
-    """Every message of one datagram, in order: (kind, time_ns, fields) - a fork (parent pid, parent tgid, child
-    pid, child tgid), an exec (pid, tgid), an exit (pid, tgid, code, signal as the kernel gives them), an answer
-    (seq, ack, errno) - or ("unread", why, None) for what is not read. Never guesses, never raises on bytes."""
+    """Every message of one datagram, in order: (kind, time_ns, fields, cpu, seq) - a fork (parent pid, parent
+    tgid, child pid, child tgid), an exec (pid, tgid), an exit (pid, tgid, code, signal as the kernel gives them),
+    an answer (seq, ack, errno) - or ("unread", why, None, cpu, seq) for what is not read (cpu and seq None where
+    the event's header is not there). `seq` is the connector's, the kernel's count on `cpu`. Never guesses, never
+    raises on bytes."""
     out, at, n = [], 0, len(data)
     if not n:
-        return [("unread", "an empty datagram", None)]
+        return [("unread", "an empty datagram", None, None, None)]
     while at < n:
         if n - at < NLMSG.size:
-            out.append(("unread", "a datagram's tail shorter than a netlink header", None))
+            out.append(("unread", "a datagram's tail shorter than a netlink header", None, None, None))
             break
         length, kind = NLMSG.unpack_from(data, at)[:2]
         if length < NLMSG.size or at + length > n:
-            out.append(("unread", "a netlink message whose length is not in its datagram", None))
+            out.append(("unread", "a netlink message whose length is not in its datagram", None, None, None))
             break
         body = data[at + NLMSG.size:at + length]
         at += (length + 3) & ~3
         if kind != NLMSG_DONE:
-            out.append(("unread", "a netlink message of type %d" % kind, None))
+            out.append(("unread", "a netlink message of type %d" % kind, None, None, None))
             continue
         if len(body) < CN.size:
-            out.append(("unread", "a connector message shorter than its header", None))
+            out.append(("unread", "a connector message shorter than its header", None, None, None))
             continue
         idx, val, seq, ack_, size, _ = CN.unpack_from(body, 0)
         if (idx, val) != (CN_IDX_PROC, CN_VAL_PROC):
-            out.append(("unread", "a message of another connector (%d, %d)" % (idx, val), None))
+            out.append(("unread", "a message of another connector (%d, %d)" % (idx, val), None, None, None))
             continue
         if size > len(body) - CN.size:
-            out.append(("unread", "a connector length longer than its message", None))
+            out.append(("unread", "a connector length longer than its message", None, None, None))
             continue
         ev = body[CN.size:CN.size + size]
         if size < EVENT.size:
-            out.append(("unread", "an event shorter than its header", None))
+            out.append(("unread", "an event shorter than its header", None, None, None))
             continue
-        what, _, when = EVENT.unpack_from(ev, 0)
+        what, cpu, when = EVENT.unpack_from(ev, 0)
         name = KINDS.get(what)
         if name is None:
-            out.append(("unread", OTHER_WHAT.get(what, "what 0x%x" % what), None))
+            out.append(("unread", OTHER_WHAT.get(what, "what 0x%x" % what), None, cpu, seq))
         elif len(ev) < SHAPE[name]:
-            out.append(("unread", "%s shorter than its shape" % name, None))
+            out.append(("unread", "%s shorter than its shape" % name, None, cpu, seq))
         elif name == "fork":
-            out.append((name, when, FORK.unpack_from(ev, 16)))
+            out.append((name, when, FORK.unpack_from(ev, 16), cpu, seq))
         elif name == "exec":
-            out.append((name, when, EXEC.unpack_from(ev, 16)))
+            out.append((name, when, EXEC.unpack_from(ev, 16), cpu, seq))
         elif name == "exit":
-            out.append((name, when, EXIT.unpack_from(ev, 16)))
+            out.append((name, when, EXIT.unpack_from(ev, 16), cpu, seq))
         else:
-            out.append((name, when, (seq, ack_, ANSWER.unpack_from(ev, 16)[0])))
+            out.append((name, when, (seq, ack_, ANSWER.unpack_from(ev, 16)[0]), cpu, seq))
     return out
 
 
@@ -229,23 +247,26 @@ def _boot_ns():
 
 
 class _Proc:
-    __slots__ = ("pid", "ppid", "exe", "earlier", "started_ticks", "began", "ended", "code", "signal", "unread",
-                 "given", "queued", "forked", "execs", "threads", "leader_ended")
+    __slots__ = ("pid", "ppid", "exe", "earlier", "dropped", "started_ticks", "began", "ended", "code", "signal",
+                 "unread", "given", "queued", "forked", "execs", "threads", "leader_ended", "end_pending")
 
     def __init__(self, pid, ppid, began, unread, forked):
         self.pid, self.ppid, self.began, self.unread, self.forked = pid, ppid, began, unread, forked
         self.exe = self.started_ticks = self.ended = self.code = self.signal = self.leader_ended = None
-        self.earlier, self.threads, self.execs = [], set(), 0
+        self.end_pending = None      # the end put in `ends` and not read yet
+        self.earlier, self.threads, self.execs, self.dropped = [], set(), 0, 0
         self.given = self.queued = False
 
-    def public(self, lost):
+    def public(self, loss):
         unread = dict(self.unread)
-        if not self.execs and lost:
-            unread["exe"] = LOST_EXEC % lost
-        if lost:
-            unread["threads"] = LOST_THREADS % lost
+        if not self.execs and loss:
+            unread["exe"] = LOST_EXEC % loss
+        if loss:
+            unread["threads"] = LOST_THREADS % loss
         elif not self.forked:
             unread["threads"] = NO_FORK_THREADS
+        if self.dropped:
+            unread["earlier"] = EARLIER_DROPPED % (self.dropped, EARLIER_MAX)
         return {"pid": self.pid, "ppid": self.ppid, "exe": self.exe, "earlier": [dict(e) for e in self.earlier],
                 "started_ticks": self.started_ticks, "began": self.began, "ended": self.ended, "code": self.code,
                 "signal": self.signal, "unread": unread}
@@ -254,7 +275,9 @@ class _Proc:
         out = {"pid": self.pid, "started_ticks": self.started_ticks, "began": self.began, "ended": self.ended,
                "code": self.code, "signal": self.signal, "unread": {}}
         if self.ended is None:
-            out["unread"] = {"ended": self.unread.get("ended", NO_END)}
+            out["unread"]["ended"] = self.unread.get("ended", NO_END)
+        if not self.forked:
+            out["unread"]["threads"] = END_NOT_HELD
         return out
 
 
@@ -286,6 +309,10 @@ class Reader:
             False, None
         self._live, self._pending, self._ends, self._older = {}, [], [], []
         self._gone, self._refused_pids = {}, {}   # pid -> its ended record; pids the bound refused (both bounded)
+        self._older_pids = {}        # pid -> (its later end, the read it waits for): ends given of processes not held
+        self._seqs = {}              # cpu -> the kernel's last count of events heard on it (bounded)
+        self._lost_events = self._untold = self._lost_at_counts = self._reads = 0
+        self._back_said = self._boot_said = False
         self._events = {"fork": 0, "exec": 0, "exit": 0}
         self._missed = {"exe": 0, "stat": 0}
         self._unread, self._said = {}, []
@@ -342,9 +369,10 @@ class Reader:
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, RCVBUF_BYTES)
             kept = sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
-            if kept < RCVBUF_BYTES:
-                self._said.append("the socket's receive queue is %d bytes, less than the %d asked (the system's"
-                                  " maximum)" % (kept, RCVBUF_BYTES))
+            if kept < 2 * RCVBUF_BYTES:  # the kernel reports twice the size it was asked for
+                self._said.append("the socket's receive queue is reported as %d bytes, less than the %d the kernel"
+                                  " reports for the %d asked (twice the asked): the system's maximum"
+                                  % (kept, 2 * RCVBUF_BYTES, RCVBUF_BYTES))
         except OSError as exc:
             self._said.append("the socket's receive queue is left at the system's size (%s)" % _why(exc))
         try:
@@ -361,9 +389,13 @@ class Reader:
         deadline = self._mono() + int(ANSWER_SECONDS * 1e9)
         while self._answer is None:      # what comes before the answer is taken as it comes
             if self._mono() >= deadline:
-                return PREFIX + ("the kernel did not answer the ask to listen within %g s (by the kernel's source, a"
-                                 " process outside the system's first namespaces, as in a container, is not"
-                                 " answered; not measured)" % ANSWER_SECONDS)
+                why = PREFIX + ("the kernel did not answer the ask to listen within %g s (by the kernel's source, a"
+                                " process outside the system's first namespaces, as in a container, is not"
+                                " answered; not measured)" % ANSWER_SECONDS)
+                if self._lost:
+                    why += ("; the kernel's queue for this socket overflowed (ENOBUFS) %d time(s) while the answer"
+                            " was awaited: the answer may be among what was lost" % self._lost)
+                return why
             try:
                 data = sock.recv(RECV_BYTES)
             except socket.timeout:
@@ -448,10 +480,16 @@ class Reader:
                 return
             try:
                 offset = self._boot() - mono     # the boot clock less the monotonic one: time asleep
-            except Exception:
+            except Exception as exc:
                 offset = None
-            for kind, when, fields in items:
+                if not self._boot_said:
+                    self._boot_said = True
+                    self._said.append("the boot clock cannot be read (%s): no read is held against its exec's time"
+                                      % _why(exc))
+            for kind, when, fields, cpu, seq in items:
                 try:
+                    if cpu is not None and kind != "answer":
+                        self._count_seq(cpu, seq)
                     if kind == "unread":
                         self._count_unread(when)
                     elif kind == "answer":
@@ -462,6 +500,27 @@ class Reader:
                         getattr(self, "_on_" + kind)(at, boot_ns, *fields)
                 except Exception as exc:
                     self._count_unread("not read: %s" % type(exc).__name__)
+
+    def _count_seq(self, cpu, seq):
+        """BS-5: the kernel's count of events on a CPU. A step over a number is that many events lost at least;
+        one with no ENOBUFS since counts() was last read is a loss the kernel did not tell; a step back is said
+        once and not counted."""
+        last = self._seqs.get(cpu)
+        if last is None:
+            if len(self._seqs) >= CPUS_MAX:
+                self._beyond += 1
+                return
+        else:
+            step = (seq - last) & 0xFFFFFFFF
+            if 1 < step < 0x80000000:
+                self._lost_events += step - 1
+                if self._lost == self._lost_at_counts:
+                    self._untold += step - 1
+            elif step != 1 and not self._back_said:
+                self._back_said = True
+                self._said.append("the kernel's count of events on CPU %d went from %d to %d: a step that is not"
+                                  " forward is not counted (said once)" % (cpu, last, seq))
+        self._seqs[cpu] = seq
 
     def _on_answer(self, seq, ack_, err):
         if self._mark is not None and ack_ == (self._mark + 1) & 0xFFFFFFFF and self._answer is None:
@@ -515,6 +574,7 @@ class Reader:
             return
         self._gone.pop(pid, None)    # a new process holds the pid
         self._refused_pids.pop(pid, None)
+        self._older_pids.pop(pid, None)
         old = self._live.pop(pid, None)
         if old is not None:          # its end was lost: the pid begins again
             old.unread["ended"] = NO_END
@@ -523,8 +583,8 @@ class Reader:
         self._keep(_Proc(pid, parent_tgid, at, {"exe": NO_EXEC_EXE, "stat": NO_EXEC_STAT}, True))
 
     def _read_exec(self, pid, boot_ns):
-        """(exe, its why, ppid, ticks, the stat's why) read at once at an exec; a read of another process (its
-        start later than the exec) gives nothing (BR-3)."""
+        """(exe, its why, ppid, ticks, the stat's why, another) read at once at an exec; a read of another process
+        (its start later than the exec) gives nothing (BR-3) and `another` is True."""
         exe = exe_why = ppid = ticks = stat_why = None
         try:
             exe = self._readlink("/proc/%d/exe" % pid)
@@ -539,35 +599,54 @@ class Reader:
         if ticks is not None and self._hz and boot_ns is not None and \
                 ticks / self._hz > boot_ns / 1e9 + REUSED_SECONDS:
             self._reused += 1
-            return None, ANOTHER, None, None, ANOTHER
-        return exe, exe_why, ppid, ticks, stat_why
+            return None, ANOTHER, None, None, ANOTHER, True
+        return exe, exe_why, ppid, ticks, stat_why, False
+
+    def _end_unread(self, end):
+        """Whether `end` (a dict) is in `ends` and not read yet."""
+        return any(e is end for e in self._ends)
 
     def _on_exec(self, at, boot_ns, pid, tgid):
         self._events["exec"] += 1
         if pid != tgid:
             self._threads += 1
             return
-        exe, exe_why, ppid, ticks, stat_why = self._read_exec(pid, boot_ns)
+        exe, exe_why, ppid, ticks, stat_why, another = self._read_exec(pid, boot_ns)
         rec = self._live.get(pid)
         if rec is None:
             old = self._gone.get(pid)
-            if old is not None and (old.started_ticks is None or ticks is None or ticks == old.started_ticks):
-                rec = old                # an exec after its exit, no fork between: the same process (BR-1)
+            if old is not None and not another and old.started_ticks is not None and ticks is not None and \
+                    ticks == old.started_ticks:
+                rec = old                # an exec after its end, no fork between, its own start: it went on (BS-2)
             else:
-                rec = _Proc(pid, None, None, {"began": BEYOND_BEGAN if pid in self._refused_pids else NO_FORK},
-                            False)
+                if pid in self._refused_pids:
+                    began = BEYOND_BEGAN
+                elif old is not None or pid in self._older_pids:
+                    began = NO_FORK_AFTER_END
+                else:
+                    began = NO_FORK
+                rec = _Proc(pid, None, None, {"began": began}, False)
             if not self._keep(rec):
                 return
             if rec is old:
                 del self._gone[pid]
+                if old.end_pending is not None and self._end_unread(old.end_pending):
+                    self._ends = [e for e in self._ends if e is not old.end_pending]   # withdrawn (BS-3)
+                elif old.end_pending is not None or (old.given and not old.queued):
+                    old.unread["ended"] = ENDED_BEFORE
+                old.end_pending = None
                 old.ended = old.code = old.signal = None
             self._refused_pids.pop(pid, None)
+            self._older_pids.pop(pid, None)
         else:
             self._queue(rec)         # given before: given again, with the program it became
         rec.threads.clear()          # an exec leaves one thread
         rec.leader_ended = None
-        if rec.execs:                # BR-2: the program it had is kept, in order
+        if rec.execs:                # BR-2: the program it had is kept, in order; the newest EARLIER_MAX (BS-4)
             rec.earlier.append({"exe": rec.exe, "unread": {"exe": rec.unread["exe"]} if "exe" in rec.unread else {}})
+            if len(rec.earlier) > EARLIER_MAX:
+                del rec.earlier[0]
+                rec.dropped += 1
         rec.execs += 1
         rec.exe = exe
         rec.unread.pop("exe", None)
@@ -596,25 +675,41 @@ class Reader:
         self._live.pop(rec.pid, None)
         self._remember(self._gone, rec.pid, rec)
         if rec.given and not rec.queued:
-            self._hold(self._ends, rec.end())
+            end = rec.end()
+            if len(self._ends) < PROCESSES_MAX:
+                rec.end_pending = end
+            self._hold(self._ends, end)
 
     def _on_exit(self, at, boot_ns, pid, tgid, raw_code, raw_signal):
         self._events["exit"] += 1
+        code, sig = wait_status(raw_code)
         if pid != tgid:              # a thread's end; the process's where its leader ended and it was the last
             self._threads += 1
             rec = self._live.get(tgid)
-            if rec is not None and pid in rec.threads:
-                rec.threads.discard(pid)
-                if rec.leader_ended is not None and not rec.threads:
-                    self._finish(rec, at, raw_code)
+            if rec is not None:
+                if pid in rec.threads:
+                    rec.threads.discard(pid)
+                    if rec.leader_ended is not None and not rec.threads:
+                        self._finish(rec, at, raw_code)
+                return
+            if tgid in self._older_pids:   # BS-3: after an end of a process not held, its thread's end is the later
+                later, read_no = self._older_pids[tgid]
+                if later is not None and read_no == self._reads and any(e is later for e in self._older):
+                    later.update(ended=at, code=code, signal=sig)
+                    return
+                later = {"pid": tgid, "started_ticks": None, "began": None, "ended": at, "code": code,
+                         "signal": sig, "unread": {"began": NO_FORK, "ended": LATER_END, "threads": END_NOT_HELD}}
+                self._older_n += 1
+                self._hold(self._older, later)
+                self._older_pids[tgid] = (later, self._reads)
             return
         rec = self._live.get(pid)
         if rec is None:
             self._older_n += 1
-            code, sig = wait_status(raw_code)
             began = BEYOND_BEGAN if self._refused_pids.pop(pid, None) else NO_FORK
             self._hold(self._older, {"pid": pid, "started_ticks": None, "began": None, "ended": at, "code": code,
-                                     "signal": sig, "unread": {"began": began}})
+                                     "signal": sig, "unread": {"began": began, "threads": END_NOT_HELD}})
+            self._remember(self._older_pids, pid, (None, self._reads))
             return
         if rec.threads:              # the leader thread's end: the process lives on in its threads (BR-1)
             rec.leader_ended = at
@@ -622,19 +717,31 @@ class Reader:
         self._finish(rec, at, raw_code)
 
     # the reader's face -----------------------------------------------------------------------
+    def _loss(self):
+        """The words of what was lost, or None where nothing was."""
+        if not self._lost and not self._lost_events:
+            return None
+        return "ENOBUFS %d time(s), at least %d event(s) by the kernel's count" % (self._lost, self._lost_events)
+
     def read(self):
         """A copy: {"processes": every process that began, or changed its program, since the read before, each
         {pid, ppid, exe, earlier, started_ticks, began, ended, code, signal, unread}; "ends": the ends of
         processes given before, each {pid, started_ticks, began, ended, code, signal, unread}; "older": the ends
-        of processes never kept, in the same shape}."""
+        of processes never kept, in the same shape}. Where events were lost, every end says its threads are not
+        known (BS-3)."""
         with self._lock:
+            loss = self._loss()
             out = []
             for rec in self._pending:
-                out.append(rec.public(self._lost))
+                out.append(rec.public(loss))
                 rec.given, rec.queued = True, False
             self._given += len(out)
             ends, older = self._ends, self._older
             self._pending, self._ends, self._older = [], [], []
+            self._reads += 1
+            if loss:
+                for e in ends + older:
+                    e["unread"]["threads"] = END_LOST % loss
             return {"processes": out, "ends": ends, "older": older}
 
     def counts(self):
@@ -642,17 +749,24 @@ class Reader:
         was last heard, None before any), "events" ({fork, exec, exit} heard, threads too), "given" (records
         given by read()), "missed" ({exe, stat}: reads at an exec that failed - reads, not processes), "unread"
         ({kind: n}), "threads" (events of threads), "older", "reused" (reads of another process), "lost"
-        ({"count", "why"}: the kernel's ENOBUFS), "beyond" (events or records past PROCESSES_MAX - not
-        processes), "live" (processes kept whose end is not heard), "refused", "ended", "said"."""
+        ({"count": the kernel's ENOBUFS, "events": events lost at least by the kernel's count, "why"}), "beyond"
+        (events or records past a bound - not processes), "live" (processes kept whose end is not heard),
+        "refused", "ended", "said"."""
         with self._lock:
-            why = None
+            parts = []
             if self._lost:
-                why = ("the kernel's queue for this socket overflowed %d time(s) (ENOBUFS): what was in the queue is"
-                       " gone, and how many events is not known; on kernels 6.8 and 7.0 the events went on after"
-                       " it (measured)" % self._lost)
+                parts.append("the kernel's queue for this socket overflowed %d time(s) (ENOBUFS): what the queue held"
+                             " is given; what came while it was full is gone" % self._lost)
+            if self._lost_events:
+                parts.append("how many: at least %d event(s) by the kernel's own count on each CPU (a count from"
+                             " below)" % self._lost_events)
+            if self._untold:
+                parts.append("%d of them came with no ENOBUFS: a loss the kernel did not tell" % self._untold)
+            self._lost_at_counts = self._lost
             return {"since": self._since, "last": self._last, "events": dict(self._events), "given": self._given,
                     "missed": dict(self._missed), "unread": dict(self._unread), "threads": self._threads,
-                    "older": self._older_n, "reused": self._reused, "lost": {"count": self._lost, "why": why},
+                    "older": self._older_n, "reused": self._reused,
+                    "lost": {"count": self._lost, "events": self._lost_events, "why": "; ".join(parts) or None},
                     "beyond": self._beyond, "live": len(self._live), "refused": self.refused, "ended": self.ended,
                     "said": list(self._said)}
 
