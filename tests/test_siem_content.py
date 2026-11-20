@@ -196,6 +196,8 @@ def test_r6_sb3_the_pipeline_removes_raqib_on_an_error_document_and_message_wher
     _, _, mapping = scripts()
     assert "if (r.containsKey('summary')) { ctx.message = r.remove('summary'); } else { ctx.remove('message'); }" \
         in mapping and text.count("ctx.remove('message')") == 1   # an event with no summary: message removed
+    first = scripts()[0]   # the two removals of the first step are moves aside: nothing else of ctx is removed
+    assert text.count("ctx.remove(") == 3 and first.count("text(ctx.remove(") == 2
     assert not re.search(r"\b_id\b|ctx\._id", text) and "ctx.host = " not in text and "ctx.observer = " not in text
     assert "Map obj(Map m, String k) { if (!(m[k] instanceof Map)) { m[k] = [:]; } return m[k]; }" in text
     description = pipeline["description"]
@@ -205,10 +207,24 @@ def test_r6_sb3_the_pipeline_removes_raqib_on_an_error_document_and_message_wher
         assert said in description, said
 
 
+def test_sc1_a_shippers_own_displaced_that_is_no_object_is_moved_aside_alone_too():
+    """The third review's MUST FIX 2: `displaced` is a part kept whole now; a shipper's text there is moved to
+    displaced.displaced whether or not another field was moved, in both pipelines and in the runner's mirror."""
+    first = scripts()[0]
+    alone = "if (ctx.containsKey('displaced') && !(ctx.displaced instanceof Map)) { moved.displaced = " \
+            "text(ctx.remove('displaced')); } if (!moved.isEmpty())"
+    assert alone in first
+    assert siem_run.shipped_of({"displaced": "x"}) == {"displaced": {"displaced": "x"}}
+    assert siem_run.shipped_of({"displaced": 7, "host": "h"}) == {"displaced": {"displaced": "7", "host": "h"}}
+    assert siem_run.shipped_of({"displaced": {"mine": "kept"}, "host": "h"}) == \
+        {"displaced": {"mine": "kept", "host": "h"}}
+    assert siem_run.shipped_of({"displaced": {"mine": "kept"}}) == {"displaced": {"mine": "kept"}}
+
+
 def test_r3_r1_the_runners_checks_keep_each_odd_line_as_the_hand_written_table_says():
     maker = siem_run.Maker(EVENT_MD)
     labels = [label for label, _ in siem_run.ODD] + [label for label, _, _ in siem_run.SHIPPED]
-    assert sorted(labels) == sorted(siem_run.REASONS) and len(siem_run.ODD) == 23 and len(siem_run.SHIPPED) == 6
+    assert sorted(labels) == sorted(siem_run.REASONS) and len(siem_run.ODD) == 23 and len(siem_run.SHIPPED) == 9
     for label, change in siem_run.ODD:
         line = siem_run.line_of(change(maker.make("heartbeat", "odd.example", "odd", 600)))
         want = siem_run.REASONS[label]
@@ -609,7 +625,7 @@ def test_r6_a_faithful_engine_meets_every_claim_and_each_row_names_what_was_fed(
     for n in (39, 40, 41, 42):
         assert "[fed: engine opensearch 0.0.0, siem/opensearch; %d example(s) of EVENT.md; 6 line(s) of the events" \
                " file(s); 7 made-up event(s) of the rules' classes and 5 near miss(es); 23 odd line(s) and the line" \
-               " after each; 6 document(s) with a shipper's fields, 4 of them with a field moved aside" % len(
+               " after each; 9 document(s) with a shipper's fields, 7 of them with a field moved aside" % len(
                    EXAMPLES) in row(said, n), n
     assert "sigma-cli" in row(said, 42) and "pySigma" in row(said, 42)
     x39 = row(said, 39)
@@ -620,11 +636,11 @@ def test_r6_a_faithful_engine_meets_every_claim_and_each_row_names_what_was_fed(
     assert "the real watch's file: 6 line(s), 6 of them events in the engine (its longest text " in x39
     assert re.search(r"longest text [1-9]\d* and longest key [1-9]\d* UTF-16 units", x39)
     x40 = row(said, 40)
-    assert "0 difference(s)" in x40 and "6 document(s) with a shipper's fields, 3 of them an error document, 4 with" \
+    assert "0 difference(s)" in x40 and "9 document(s) with a shipper's fields, 4 of them an error document, 7 with" \
         " a field moved to displaced" in x40 and "each message its line" in x40
     x41 = row(said, 41)
     assert "rule NO-SUCH-RULE 0/0" in x41 and "rule PERSIST-RUN-KEY 1/1" in x41 and "watch-not-0 " in x41
-    assert "not-events -main 3/3" in x41 and "not-events -odd 19/19" in x41   # SB-6: 16 odd lines and 3 shipped
+    assert "not-events -main 4/4" in x41 and "not-events -odd 19/19" in x41   # SB-6: 16 odd lines and 3 shipped
     assert "not sure: not judged" not in x41 and "(n/a" not in x41
     assert "silence -silence at +1.0 s: engine none; here none surely" in x41
     assert "silence -silence at +3.6 s: engine a.example,d.example,f.example,g.example; here a.example," \
@@ -650,8 +666,8 @@ def test_r5_r7_an_error_document_without_the_reason_the_hand_written_table_gives
 def test_x39_holds_the_reason_measured_for_each_engine():
     """The rig on 4a834f8: OpenSearch refuses a whole number beyond a long in its own words before the check; the
     table holds that for OpenSearch alone, and every other label is one reason on both engines."""
-    assert siem_run.REASONS_OF == {"opensearch": {"n-beyond-a-long": siem_run.ENGINE_JSON}}
-    assert siem_run.reason_for("n-beyond-a-long", "opensearch") == siem_run.ENGINE_JSON
+    assert siem_run.REASONS_OF == {"opensearch": {"n-beyond-a-long": "java.math.BigInteger"}}
+    assert siem_run.reason_for("n-beyond-a-long", "opensearch") == siem_run.BEYOND_A_LONG
     assert siem_run.reason_for("n-beyond-a-long", "elasticsearch") == siem_run.REASONS["n-beyond-a-long"] == \
         "not an event: n is not of its kind of value"
     for label, want in siem_run.REASONS.items():
@@ -659,7 +675,8 @@ def test_x39_holds_the_reason_measured_for_each_engine():
             assert siem_run.reason_for(label, "opensearch") == siem_run.reason_for(label, "elasticsearch") == want
     assert siem_run.reason_for("no-such-label", "opensearch").startswith("(no reason written")
     own = BEYOND_A_LONG
-    assert siem_run.reason_wrong(siem_run.ENGINE_JSON, own) is None
+    assert siem_run.reason_wrong(siem_run.BEYOND_A_LONG, own) is None   # the measured words, not any words
+    assert siem_run.reason_wrong(siem_run.BEYOND_A_LONG, "some other failure of the engine") is not None
     assert siem_run.reason_wrong(siem_run.REASONS["n-beyond-a-long"], own) is not None
     assert siem_run.reason_wrong(siem_run.ENGINE_JSON, siem_run.REASONS["n-beyond-a-long"]) is not None
 
@@ -668,8 +685,7 @@ def test_x39_an_engine_that_words_a_number_beyond_a_long_as_the_other_does_is_mi
     code, said = run(tmp_path)   # the stand-in is an OpenSearch and words it as the rig measured
     assert rows(said)[39] == "MET", row(said, 39)
     code, said = run(tmp_path, as_elastic=True)
-    assert rows(said)[39] == "MISSED" and "n-beyond-a-long: the pipeline's own words where the engine's own" \
-        in row(said, 39)
+    assert rows(said)[39] == "MISSED" and "n-beyond-a-long: not 'java.math.BigInteger'" in row(said, 39)
 
 
 def test_r2_r7_the_pipeline_of_4aaa17c_loses_a_shippers_text_and_its_lines_and_is_missed(tmp_path):

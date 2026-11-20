@@ -197,3 +197,34 @@ ruling (the probe branch 56ab935, tools/rig/siem_probe4.py, the content of 4aaa1
   a heartbeat not WATCHING takes FINISHED too, said as a false positive; Q6, Q7, Q9, Q11; Q8 the pins equal
   what the rig printed. Recorded, not built: the images are pinned by tag; more than one shard or node, a
   clock skew between nodes, retention; a real shipper tailing the file.
+
+## Amendment C (the Table, 2026-11-21) - the third review of M16.1 (docs/review/2026-11-21-M16.1-redo2.md): lands
+The reviewer's verdict is NEXT. The field's word on 4a834f8 (the first run of REDO 2's pipeline): on Elasticsearch
+X39 to X42 MET; on OpenSearch X40 to X42 MET and X39 MISSED on one reason of 23 - a whole number beyond a long
+(`n` = 2**70) is refused by OpenSearch itself before the check, in its own words, and is an error document all
+the same. That is what the hand-written table of SB-7 is for. On bea9a8a, with the table holding it: X39 to X42
+MET on both, the gate green on six jobs.
+- SC-1 (the field the step writes). A shipper's own `displaced` that is not an object is moved to
+  `displaced.displaced` whether or not another field was moved (the template keeps `displaced` whole since
+  SB-2, and a text there would be refused). The rig feeds it alone, with an event and with a line that is not
+  JSON, and beside a `host` that is a text where it is an object. A shipper's own `displaced.host` is
+  overwritten by a moved `host`: recorded, not built.
+- SC-2 (the table holds what was measured). For a number beyond a long on OpenSearch, X39 holds the part of
+  the engine's words that names what it could not take (`java.math.BigInteger`), not any words that are none
+  of the pipeline's. The lines that are not JSON keep the looser mark: the engine's words for them are not
+  yet printed by the rig (recorded).
+- SC-3 (the page says what was measured). Moved aside, and so no reason to lose a line: the seven fields and
+  `displaced`, measured for `host`, `event` and `displaced`. Named as not handled and not measured: a field
+  below them of another kind than the template types, a `message` that is not a text, an `@timestamp` that is
+  not a date, a key with a dot in its name (the builder's Q4). A number beyond a long: measured at `n`.
+  `not-events.json` gives the engine's default ten and the exact count. "The earliest deadline first". The
+  count of a cut was measured without the selector. A real beat over a day lists a live host after two days.
+- SC-4 (kept as built). Q1 a number that is not finite anywhere in the line; Q2 a reason names no key; Q5 the
+  engine's own words for a line that is not JSON; Q6 n/a where the real watch gave no line; Q7 one group not
+  sure makes the row n/a; Q10; Q11.
+- SC-5 (recorded debts). The order of the runs with no end is read by eye, not judged by the runner; the order
+  check of silence trusts the engine's own deadlines; X39's two paths for the real watch's file have no test;
+  an answer of an unexpected shape still ends the runner with a traceback; a line with two faults may be
+  given another reason by an engine than by the runner; a line with a key twice (Q8); NaN and Infinity as
+  words (Q9); the largest shape the bounds allow inside a part kept whole on `flat_object`; a text over 8000
+  characters that a watch could write (the rig's own file: its longest text 650); the images pinned by tag.

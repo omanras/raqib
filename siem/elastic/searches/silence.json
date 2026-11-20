@@ -1,5 +1,5 @@
 {
-  "finds": "The hosts where the engine's own clock has passed the latest deadline any line of the host gave (its arrival, event.ingested, and two of that line's own watch.beat, a beat counted as at most 86400 s; never the event's time), the nearest deadline first; at most 10000 hosts are judged, past that bound the hosts whose deadline is latest are left out first, and a sum_other_doc_count above 0 in the answer means lines of hosts beyond the bound exist.",
+  "finds": "The hosts where the engine's own clock has passed the latest deadline any line of the host gave (its arrival, event.ingested, and two of that line's own watch.beat, a beat counted as at most 86400 s; never the event's time), the earliest deadline (the longest passed) first; at most 10000 hosts are judged, past that bound the hosts whose deadline is latest are left out first, and a sum_other_doc_count above 0 in the answer means lines of hosts beyond the bound exist.",
   "request": "POST raqib-events*/_search",
   "body": {
     "size": 0,

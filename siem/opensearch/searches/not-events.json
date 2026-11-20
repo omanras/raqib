@@ -1,5 +1,5 @@
 {
-  "finds": "Every error document - a line the pipeline could not take as an event, kept whole with event.kind pipeline_error and its reason in error.message - the latest arrival first, with its count exact (track_total_hits).",
+  "finds": "The error documents - each a line the pipeline could not take as an event, kept whole with event.kind pipeline_error and its reason in error.message - the latest arrival first: the engine's default number of them, and the exact count of all (track_total_hits).",
   "request": "POST raqib-events*/_search",
   "body": {
     "track_total_hits": true,

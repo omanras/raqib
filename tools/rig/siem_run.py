@@ -90,7 +90,10 @@ SHIPPED = (("shipper-fields", SHIPPER, True), ("shipper-fields-not-json", SHIPPE
            ("shipper-host-a-text", {"host": "a-shipper-text"}, True),
            ("shipper-host-a-text-not-json", {"host": "a-shipper-text"}, False),
            ("shipper-event-a-text", {"event": LONG_EVENT_TEXT}, True),
-           ("shipper-event-a-text-not-json", {"event": LONG_EVENT_TEXT}, False))
+           ("shipper-event-a-text-not-json", {"event": LONG_EVENT_TEXT}, False),
+           ("shipper-displaced-a-text", {"displaced": "a-shipper-text"}, True),   # SC-1: the field the step writes
+           ("shipper-displaced-a-text-not-json", {"displaced": "a-shipper-text"}, False),
+           ("shipper-displaced-an-object", {"displaced": {"mine": "kept"}, "host": "a-shipper-text"}, True))
 
 # made-up events: label -> (the example it is made from, what is changed); POSITIVE and NEAR say which rule each
 # is for (MISS: a near miss, matching nothing new)
@@ -210,11 +213,15 @@ REASONS = {
     "shipper-host-a-text-not-json": ENGINE_JSON,
     "shipper-event-a-text": None,
     "shipper-event-a-text-not-json": ENGINE_JSON,
+    "shipper-displaced-a-text": None,
+    "shipper-displaced-a-text-not-json": ENGINE_JSON,
+    "shipper-displaced-an-object": None,
 }
 # Measured on the rig (4a834f8): OpenSearch 2.17.1 refuses a whole number beyond a long before the pipeline's own
 # check sees it ("unexpected value type [class java.math.BigInteger]"); the line is kept as an error document
 # all the same, in the engine's words. Elasticsearch 8.15.3 gives it to the check. distribution -> label -> reason
-REASONS_OF = {"opensearch": {"n-beyond-a-long": ENGINE_JSON}}
+BEYOND_A_LONG = "java.math.BigInteger"   # the part of OpenSearch's words that names what it could not take
+REASONS_OF = {"opensearch": {"n-beyond-a-long": BEYOND_A_LONG}}
 
 
 def reason_for(label, distribution=None):
@@ -385,12 +392,12 @@ def shipped_of(extra):
     them; every other field as it was."""
     out = copy.deepcopy(extra or {})
     moved = {k: displaced_text(out.pop(k)) for k in DISPLACE if k in out and not isinstance(out[k], dict)}
+    if "displaced" in out and not isinstance(out["displaced"], dict):   # SC-1: alone too, not only beside another
+        moved["displaced"] = displaced_text(out.pop("displaced"))
     if moved:
         if isinstance(out.get("displaced"), dict):
             out["displaced"].update(moved)
         else:
-            if "displaced" in out:
-                moved["displaced"] = displaced_text(out.pop("displaced"))
             out["displaced"] = moved
     return out
 

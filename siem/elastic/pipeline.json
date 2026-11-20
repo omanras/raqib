@@ -4,7 +4,7 @@
     {
       "script": {
         "lang": "painless",
-        "source": "String text(def v) { String t = v == null ? 'null' : v.toString(); if (t.length() > 1024) { int cut = 1024; int c = (int) t.charAt(1023); if (c >= 55296 && c <= 56319) { cut = 1023; } t = t.substring(0, cut); } return t; } Map moved = [:]; for (def k : ['host', 'event', 'error', 'observer', 'rule', 'process', 'threat']) { if (ctx.containsKey(k) && !(ctx[k] instanceof Map)) { moved[k] = text(ctx.remove(k)); } } if (!moved.isEmpty()) { def d = ctx.displaced; if (d instanceof Map) { d.putAll(moved); } else { if (ctx.containsKey('displaced')) { moved.displaced = text(ctx.remove('displaced')); } ctx.displaced = moved; } }"
+        "source": "String text(def v) { String t = v == null ? 'null' : v.toString(); if (t.length() > 1024) { int cut = 1024; int c = (int) t.charAt(1023); if (c >= 55296 && c <= 56319) { cut = 1023; } t = t.substring(0, cut); } return t; } Map moved = [:]; for (def k : ['host', 'event', 'error', 'observer', 'rule', 'process', 'threat']) { if (ctx.containsKey(k) && !(ctx[k] instanceof Map)) { moved[k] = text(ctx.remove(k)); } } if (ctx.containsKey('displaced') && !(ctx.displaced instanceof Map)) { moved.displaced = text(ctx.remove('displaced')); } if (!moved.isEmpty()) { def d = ctx.displaced; if (d instanceof Map) { d.putAll(moved); } else { ctx.displaced = moved; } }"
       }
     },
     {

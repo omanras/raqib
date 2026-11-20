@@ -26,8 +26,13 @@ The pipeline's first step cannot fail, and runs on every document: where a shipp
 `event`, `error`, `observer`, `rule`, `process` or `threat` holds what is not an object (an old
 collector writes `host` as a text), it is moved to `displaced.NAME` as a text of at most 1024
 characters (UTF-16 units, cut one sooner rather than split a pair). `displaced` is kept whole
-(`flattened`, `flat_object`). A shipper's field of another shape is so kept, and is no reason to
-lose the line. Then the line is copied to `event.original`, read as JSON into `raqib`, and checked.
+(`flattened`, `flat_object`); a shipper's own `displaced` that is not an object is moved to
+`displaced.displaced` the same way. So none of those eight is a reason to lose the line (measured
+for `host` and `event`; the others by the same step). Not handled and not measured: a field below
+them of another kind than the template types (`host.name` an object, `process.pid` a text), a
+`message` that is not a text, an `@timestamp` that is not a date, a key with a dot in its name -
+an engine may refuse such a document, and the line is then lost. Then the line is copied to
+`event.original`, read as JSON into `raqib`, and checked.
 
 On an event, the pipeline gives ECS as EVENT.md's Mapping names it, and sets or replaces:
 
@@ -80,9 +85,10 @@ words (`error.message`):
   `watch.run`, `watch.host`, `watch.beat`);
 - holding a key the spec knows with another kind of value: a top-level key, a key of `watch` or of
   `rule`, `subject.pid` or `subject.image` (`alarm` that is not true or false, `n` that is not a
-  whole number from 1 within a long, a number where a text is due ...); a whole number beyond a
-  long is refused by OpenSearch itself before the check, in its own words (`unexpected value
-  type ...`), and by the check on Elasticsearch - an error document on both;
+  whole number from 1 within a long, a number where a text is due ...); measured at `n`: a whole
+  number beyond a long is an error document on both engines - by the check on Elasticsearch, and
+  on OpenSearch by the engine itself before the check, in its own words (`unexpected value
+  type [class java.math.BigInteger]`). Such a number under another key was not fed;
 - of a `kind` that is not one of the spec's eight, or with a `time` the engine cannot read as an
   instant (the engine's date processor gives its own words).
 
@@ -142,8 +148,8 @@ Two ways, neither measured (see below):
 
 Delivery is at least once (FORWARD.md), and a shipper may send a line again after a restart: a line
 sent twice is two documents, and the searches count both. To count once, take `host.name` and
-`event.id` together (a `terms` on both, or a `composite` of them); a thing is `raqib.watch.run` and
-`raqib.about` together, and its latest saying is its highest `raqib.rev`.
+`event.id` together (a `multi_terms` or a `composite` of the two; not run here); a thing is
+`raqib.watch.run` and `raqib.about` together, and its latest saying is its highest `raqib.rev`.
 
 ## What the content trusts
 
@@ -173,11 +179,14 @@ python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1]))['body
 - `rule.json`: every finding of one rule (a search template; the parameter `rule_id`).
 - `hole.json`: every hole of the capture and every blind spot (`raqib.hole.class` says which).
 - `watch-not-0.json`: every watch that ended with a result other than 0.
-- `not-events.json`: every error document (above), the latest arrival first, its count exact.
+- `not-events.json`: the error documents (above), the latest arrival first: the answer holds the
+  engine's default number of them (ten) and the exact count of all (`track_total_hits`).
 - `silence.json`: the search for silence (ADR-0017 S-5, SA-1 and SB-5). Every line gives a
   deadline: its arrival by the engine's clock (`event.ingested`) and two of that line's own
   `watch.beat`, the beat counted as at most 86400 s (a day). A host is listed when the engine's own
-  clock has passed the latest deadline any of its lines gave; the nearest deadline comes first. No
+  clock has passed the latest deadline any of its lines gave; the earliest deadline, the longest
+  passed, comes first. A real beat longer than a day lists its host two days after its last line,
+  though it lives: the safe side. No
   time is given by the caller, and the event's `time` is never read. A host that has stopped, whose
   shipper or forwarder has, or whose wire is cut is listed; so is a host whose watch ended in order,
   while its lines are in the index.
@@ -187,11 +196,12 @@ python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1]))['body
 
 The bounds and what they cut (SB-4). Each of the two judges at most 10000 groups, and only then
 picks the ones whose deadline has passed, so a cut can hide a group that should be listed. The
-search for silence keeps the hosts nearest their deadline: past its bound, the hosts whose deadline
-is latest are left out first. The runs with no end are ordered `[{"ends": "asc"}, {"deadline":
+search for silence keeps the hosts whose deadline is earliest: past its bound, the hosts whose
+deadline is latest are left out first. The runs with no end are ordered `[{"ends": "asc"}, {"deadline":
 "desc"}]`: past the bound, the runs that said an end are left out first, then the runs whose
 deadline is oldest. In either answer, `sum_other_doc_count` above 0 means that lines of groups
-beyond the bound exist (it counts lines, not hosts or runs, and is 0 only where nothing was cut).
+beyond the bound exist (it counts lines, not hosts or runs, and is 0 only where nothing was cut;
+measured on the probe without the selector in the aggregation).
 To read every run with no end however many there are, page a `composite` of `host.name` and
 `raqib.watch.run` with the same `deadline`, `ends` and selector, following `after_key`, as below.
 That form was measured on the Table's probe (pages of 3 listed the same five runs as the search, in
