@@ -290,12 +290,27 @@ def test_e1_a_local_creation_date_is_not_guessed_as_utc():
 
 
 class FakeSs:
+    """M14.1c (ADR-0007 BY-6): discover's run_ss starts ss by subprocess.Popen inside own.started; this stands in
+    for Popen and keeps each call."""
     def __init__(self, stdout, code=0):
         self.stdout, self.code, self.calls = stdout, code, []
 
     def __call__(self, argv, **kw):
         self.calls.append((argv, kw))
-        return subprocess.CompletedProcess(argv, self.code, self.stdout, "")
+        fake = self
+
+        class Proc:
+            args, pid, returncode = argv, 4242, fake.code
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def communicate(self, timeout=None):
+                return fake.stdout, ""
+        return Proc()
 
 
 SS_TEXT = """State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
@@ -312,7 +327,7 @@ def test_e1_the_bytes_reader_runs_ss_by_absolute_path_with_a_fake_ss(tmp_path, m
     ss = tmp_path / "ss"
     ss.write_text("#!/bin/sh\n", encoding="ascii")
     fake = FakeSs(SS_TEXT)
-    monkeypatch.setattr(discover.subprocess, "run", fake)
+    monkeypatch.setattr(discover.subprocess, "Popen", fake)
     got, label, hole = discover.read_conn_bytes((str(ss),))
     (argv, kw), = fake.calls
     assert argv == [str(ss), "-tinp"] and set(kw["env"]) <= {"LC_ALL", "SYSTEMROOT"} and "PATH" not in kw["env"]
@@ -325,10 +340,10 @@ def test_e1_a_missing_ss_or_an_ss_without_byte_counts_is_a_named_hole(tmp_path, 
     assert got is None and "no ss at" in hole and "not read" in hole
     ss = tmp_path / "ss"
     ss.write_text("#!/bin/sh\n", encoding="ascii")
-    monkeypatch.setattr(discover.subprocess, "run", FakeSs(SS_TEXT.replace("bytes_", "b_")))
+    monkeypatch.setattr(discover.subprocess, "Popen", FakeSs(SS_TEXT.replace("bytes_", "b_")))
     got, label, hole = discover.read_conn_bytes((str(ss),))
     assert got is None and "printed no bytes_sent or bytes_received" in hole
-    monkeypatch.setattr(discover.subprocess, "run", FakeSs("", code=1))
+    monkeypatch.setattr(discover.subprocess, "Popen", FakeSs("", code=1))
     got, label, hole = discover.read_conn_bytes((str(ss),))
     assert got is None and "exited 1" in hole
 

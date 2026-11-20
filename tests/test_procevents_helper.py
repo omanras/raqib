@@ -146,16 +146,16 @@ def test_e1_main_serves_only_with_serve():
 
 
 # --- E5: the command ---------------------------------------------------------------------------------------------
-def test_e5_the_command_is_this_interpreter_minus_p_or_i_and_a_constant_program_with_the_path_as_json():
+def test_e5_the_command_is_this_interpreter_always_minus_i_and_a_constant_program_with_the_path_as_json():
     path = ["", "/a b", "rel/x", "/c\"';$(x)", 7]
-    assert procevents.command("/x/py", isolated=False, path=path) == [
-        "/x/py", "-P", "-c", procevents.SERVE_PROGRAM, json.dumps(["/a b", "/c\"';$(x)"])]
-    assert procevents.command("/x/py", isolated=True, path=["/a"]) == ["/x/py", "-I", "-c", procevents.SERVE_PROGRAM,
-                                                                      '["/a"]']
+    # M14.1c (ADR-0007 BY-6): always -I, never -P alone, whether the watch runs isolated or not
+    assert procevents.command("/x/py", path=path) == [
+        "/x/py", "-I", "-c", procevents.SERVE_PROGRAM, json.dumps(["/a b", "/c\"';$(x)"])]
+    assert procevents.command("/x/py", path=["/a"]) == ["/x/py", "-I", "-c", procevents.SERVE_PROGRAM, '["/a"]']
     assert procevents.SERVE_PROGRAM == ("import json, sys; sys.path[:] = json.loads(sys.argv[1]); from raqib import"
                                         " procevents; sys.exit(procevents.main(['--serve']))")
     got = procevents.command()
-    assert got[:4] == [sys.executable, "-I" if sys.flags.isolated else "-P", "-c", procevents.SERVE_PROGRAM]
+    assert got[:4] == [sys.executable, "-I", "-c", procevents.SERVE_PROGRAM] and "-P" not in got
     assert json.loads(got[4]) == [p for p in sys.path if os.path.isabs(p)]
 
 

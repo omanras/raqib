@@ -2,6 +2,7 @@
 prints (documentation addresses, synthetic names) is read as all MET; each expectation is then broken in turn, by
 the words of the field run that taught it, and must be the one that is MISSED."""
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -279,7 +280,10 @@ def test_x32_to_x34_are_not_judged_without_an_os_source_or_where_the_act_was_not
 LINUX_WORKLOAD = ("WORKLOAD 07:50:35 pid 9828\nWORKLOAD 07:50:35 talking\nWORKLOAD 07:50:43 start curl\n"
                   "WORKLOAD 07:50:55 start curl\nWORKLOAD 07:50:56 end curl rc=0\nWORKLOAD 07:51:15 done\n")
 EVENTS_SECTION = ("PROCESS EVENTS (Linux): the kernel's process events, read by a helper process of the watch's own;"
-                  " not judged yet: no rule reads them, no line of a tree's source is written from them\n"
+                  " judged: a process that began between two samples under a tree that talks at a sample is that"
+                  " tree's child, by its program's name, from the reader (the helper's lines are its word, not checked"
+                  " by the watch); not judged: a tree that lives whole between two samples, a child's own"
+                  " connections, a program not read\n"
                   "  rounds asked: 16, answered: 16\n"
                   "  processes that began: 41; of them began and ended between two asks: 37\n"
                   "  programs not read: 0 (reads at an exec that failed)\n"
@@ -315,6 +319,8 @@ def test_x35_met_only_where_every_ask_was_answered_no_restart_nothing_lost_and_t
     (lambda t: t.replace("lost: none", "lost: helper 1: ENOBUFS 1 time(s)"), "lost: helper 1: ENOBUFS 1 time(s)"),
     (lambda t: t.replace("lost: none", "lost: not known (no answer)"), "lost: not known (no answer)"),
     (lambda t: t.replace("began: 41", "began: 1"), "1 process(es) began, fewer than the 2"),
+    (lambda t: t.replace("bounds: 0", "bounds: 3"), "past the reader's bounds: 3"),   # M14.1c (BX-5)
+    (lambda t: t.replace("  past the reader's bounds: 0\n", ""), "past the reader's bounds: not said"),
     (lambda t: t + "  refused: the process events are not read: no answer to the ask within 2 s\n",
      "refused (not for want of a right)")])
 def test_x35_missed_on_linux_for_each_way_the_section_says_the_helper_was_not_whole(change, said):
@@ -343,6 +349,94 @@ def test_x35_is_a_row_of_main_and_off_linux_it_counts_for_nothing(tmp_path, caps
     assert "n/a     X35 " in out and "RIG: 12 met, 0 missed, 0 open" in out
     check.main(base + ["--platform", "linux"])
     assert "MET     X35 " in capsys.readouterr().out
+
+
+# --- X36 (ADR-0007 BY-7, M14.1c): the stand-in's wget, a child that lives under a second ---------------------------
+WGET_WORKLOAD = LINUX_WORKLOAD.replace("WORKLOAD 07:51:15 done\n", "WORKLOAD 07:50:57 start wget\n"
+                                       "WORKLOAD 07:50:57 end wget rc=0\nWORKLOAD 07:51:15 done\n")
+WGET_LINE = ("  [medium] NET-TOOL on python pid 9828 via host: HostChild may reach the network at seq 5 (host -, program"
+             " wget, programs [\"wget\"]); off\n")
+
+
+def child_line(pid=9828, programs=("wget",), seen=("events",), seq=5):
+    """A HostChild line of the stand-in's tree's source file: its programs and, in their order, where each was seen
+    (ADR-0007 CA-2: command_sources; None: a line of a round with no reader's text, which carries none)."""
+    meta = {"command_programs": list(programs), "pid": pid, "children": [{"pid": 9900, "image": programs[0]}],
+            "cites": [{"src": "procevents", "line": 3, "text_sha256": "0" * 64}]}
+    if seen is not None:
+        meta["command_sources"] = list(seen)
+    return json.dumps({"seq": seq, "tool": "HostChild", "source": "host", "input_meta": meta}) + "\n"
+
+
+READER_SOURCES = [("20261120T075035.000Z-1-9828-ab.jsonl", "not json\n" + child_line(programs=("curl",), seen=None,
+                                                                                         seq=1) + child_line())]
+
+
+def x36(report=None, workload=WGET_WORKLOAD, platform="linux", section=EVENTS_SECTION, sources=READER_SOURCES):
+    report = REPORT.replace("TREES SEEN:", section + "TREES SEEN:", 1) if report is None else report
+    ((ident, state, words),) = check.read_short_tool(report, workload, platform, sources)
+    assert ident.startswith("X36 ")
+    return state, words
+
+
+def with_wget(report=REPORT):
+    at = report.index("  [medium] NET-TOOL on python pid 9828")
+    return report[:at] + WGET_LINE + report[at:]
+
+
+def test_x36_met_only_where_the_wgets_own_entry_says_the_process_events_alone():
+    report = with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1)
+    state, words = x36(report=report)
+    assert state == check.MET and words.startswith("1 NET-TOOL line(s) on pid 9828 name wget (its rc=0), and its"
+                                                   " HostChild line says the process events alone saw it")
+    together = [("t.jsonl", child_line(programs=("curl", "wget"), seen=("both", "events")))]   # CA-3: its own entry
+    assert x36(report=report, sources=together)[0] == check.MET
+
+
+def test_x36_n_a_where_the_wget_lived_to_a_sample_and_missed_where_the_sample_alone_or_nothing_says_it():
+    report = with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1)
+    state, words = x36(report=report, sources=[("t.jsonl", child_line(seen=("both",)))])
+    assert state == check.SKIP and words.startswith("it lived to a sample: the reader and the sample both held it")
+    mixed = [("t.jsonl", child_line(programs=("curl", "wget"), seen=("events", "both")))]   # curl's entry is not it
+    assert x36(report=report, sources=mixed)[0] == check.SKIP
+    state, words = x36(report=report, sources=[("t.jsonl", child_line(seen=("sample",)))])
+    assert state == check.MISSED and "the sample alone saw the wget on pid 9828" in words
+    for sources in ((), [("t.jsonl", child_line(pid=77))], [("t.jsonl", child_line(programs=("curl",)))],
+                    [("t.jsonl", child_line(seen=None))], [("t.jsonl", child_line(seen=("events", "x")))]):
+        state, words = x36(report=report, sources=sources)
+        assert state == check.MISSED and "whose word it is cannot be told" in words, sources
+
+
+def test_x36_missed_where_the_stand_in_ran_wget_and_no_line_of_its_tree_names_it():
+    state, words = x36()   # its curl's lines are there, none names wget
+    assert state == check.MISSED and "ran wget (rc=0) and no NET-TOOL line on pid 9828 names it" in words
+    other = with_wget().replace("NET-TOOL on python pid 9828 via host: HostChild may reach the network at seq 5",
+                                "NET-TOOL on python pid 77 via host: HostChild may reach the network at seq 5")
+    assert x36(report=other.replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1))[0] == check.MISSED
+    assert check.read_short_tool(None, WGET_WORKLOAD, "linux")[0][1] == check.MISSED   # never raises
+
+
+def test_x36_n_a_off_linux_without_wget_where_the_stand_in_did_not_run_it_or_the_helper_was_refused():
+    assert x36(platform="win32")[0] == check.SKIP
+    assert x36(workload=LINUX_WORKLOAD.replace("WORKLOAD 07:51:15 done", "WORKLOAD 07:50:57 wget not installed\n"
+                                               "WORKLOAD 07:51:15 done"))[0] == check.SKIP
+    assert x36(workload=LINUX_WORKLOAD)[0] == check.SKIP
+    refused = EVENTS_SECTION + "  refused: the process events are not read: no answer to the ask within 2 s\n"
+    state, words = x36(section=refused)
+    assert state == check.SKIP and "refused" in words
+
+
+def test_x36_is_a_row_of_main(tmp_path, capsys):
+    (tmp_path / "w.out").write_text(with_wget().replace("TREES SEEN:", EVENTS_SECTION + "TREES SEEN:", 1),
+                                    encoding="utf-8")
+    (tmp_path / "l.out").write_text(WGET_WORKLOAD, encoding="utf-8")
+    (tmp_path / "sources").mkdir()
+    (tmp_path / "sources" / READER_SOURCES[0][0]).write_text(READER_SOURCES[0][1], encoding="utf-8")
+    base = ["--report", str(tmp_path / "w.out"), "--workload", str(tmp_path / "l.out"), "--platform", "linux"]
+    check.main(base + ["--sources", str(tmp_path / "sources")])
+    assert "MET     X36 " in capsys.readouterr().out
+    check.main(base)   # no sources: whose word it is cannot be told
+    assert "MISSED  X36 " in capsys.readouterr().out
 
 
 # --- X37 (ADR-0014 AG-4): the autostart places read by Raqib itself beside the stand-in -------------------------

@@ -514,15 +514,48 @@ Rulings: ADR-0003 Amendments C and D.
     a sender whose pid in the tracing is not the connection's owner in
     the table (an inherited socket) is not matched.
 - **The kernel's process events on Linux (ADR-0007 Amendments BQ, BR,
-  BS, BT, BU and BW; docs/specs/PROC-EVENTS.md):**
+  BS, BT, BU, BW and BY; docs/specs/PROC-EVENTS.md):**
   - the reader listens to the kernel's word of every fork, exec and exit,
     and reads at an exec the program and the parent of the process and
-    nothing else; a live watch on Linux runs it in a helper and counts
-    what it gives, and judges nothing from it yet: between two samples
-    the watch's findings are what they were before;
+    nothing else; a live watch on Linux runs it in a helper and gives what
+    it heard to each round beside the sample (BY-2): a process that began
+    between two samples under a tree that talks at a sample is that tree's
+    child, and NET-TOOL and DESTRUCT-CMD judge it by the name of its
+    program's file (a link's target, such as `nc.openbsd` or `busybox`, not
+    the name it was called by, so a rule's list of names can miss it). The
+    root of a tree, and of an act-root, is always a process a sample held
+    (BZ-1). Not judged (BZ-3): a tree that lives whole between two samples
+    (a tree needs a talker at a sample; a connection between two samples is
+    still unseen), a child's own connections, a program a process changes
+    to after its line was written and the programs it had before, and a
+    child whose parent was given in an earlier round and ended before the
+    sample. A program not read is in the round and counted, with no line;
+  - the helper's lines are its word, not a fact the watch checked (BY-4,
+    BX-5): what is judged from them is said to come from the reader, and a
+    program's name reaches a line's programs only through the gate a sampled
+    child's name goes through. A process of the same user that writes in the
+    helper's place could make the watch write HostChild lines for children
+    that never ran under a tree that talks (with the names it chose, if
+    plain program names), so findings of NET-TOOL or DESTRUCT-CMD on that
+    tree that nothing did; it could leave out what did run, so a short child
+    is not judged; and it could name the watch's own pid as a child's
+    parent. It cannot make the watch run anything or write a file of its
+    choosing (CA-5). The
+    watch reads no /proc start of a process the reader said ended (BZ-8),
+    but it reads /proc/PID/stat for the start of each other child the
+    round names, so such a process could make the watch read that file of
+    pids it names (read-only, a start time, nothing kept but the time). It
+    holds no right the user does not hold, and such a process could as well
+    stop the watch itself;
+  - the watch's own short programs (the socket tool it runs each round) are
+    in its record of what it started when they start (BY-6), so the reader's
+    word of them is the watch's own: a process the reader gives under the
+    watch's pid whose pid, program and start are the record's is not given
+    to the round;
   - the helper is a second process of Raqib's, started by the watch with
-    the watch's own interpreter, `-I` where the watch is isolated and `-P`
-    otherwise, its directory `/`, and the watch's own import path given
+    the watch's own interpreter, always `-I` (isolated: no user site folder
+    and no PYTHON* variable of the environment; BY-6), its directory `/`,
+    and the watch's own import path given
     entry for entry, so it loads Raqib from where the watch did and from
     nowhere else; it is in the watch's record of what it started. It reads
     its input, the kernel's socket and, at each exec, that process's
@@ -540,23 +573,29 @@ Rulings: ADR-0003 Amendments C and D.
     is not told apart from the helper: its numbers are counted as the
     helper's, and one that answers while the helper reads nothing could
     still hold the watch at a write; that process could as well stop the
-    watch itself. Before the helper's fixed program sets its import path,
-    the interpreter's own start reads what the watch's start read (the site
-    folders' own files; without isolation the user's too): the places are
-    the watch's, their contents are read again at each start. A helper that is
-    refused, late, or ended is a blind spot of the watch, said; one late
-    three rounds running is ended and started again once, a second end is
-    final, and the watch then counts nothing between two samples for the
-    rest of its run. A process of the same user can end or stop the
-    helper: that is said, never silent;
-  - A program's path, text a process chose, reaches no output: the helper
-    gives it to the watch, and the watch keeps and says only numbers, in
-    no report, event or file;
+    watch itself. The ask is written so that it cannot block: an input
+    that is full is said as the helper's end. Before the helper's fixed
+    program sets its import path, the interpreter's own start reads what
+    the watch's start read (the system's site folders' own files): the
+    places are the watch's, their contents are read again at each start.
+    A helper refused at its first start (a container, a right not given),
+    or late or ended before its first answer, is a blind spot of the watch,
+    said, and the rounds are the sample's alone; after its first answer, a
+    late answer, a line that is not the helper's, an end, a loss of events,
+    a bound passed or an answer that holds back a rest for a next one is a
+    hole of the result (BY-5, BZ-6): what was being judged has a gap. One late three rounds running is ended and started again
+    once, a second end is final, and the watch then hears nothing between
+    two samples for the rest of its run. A process of the same user can end
+    or stop the helper: that is said, never silent;
+  - A program's path, text a process chose, reaches a tree's programs only
+    through the gate a sampled child's name goes through (a plain program
+    name, else a hole); a tree's line holds the reader's record itself, its
+    path included, made printable and cut as a sampled child's record is
+    (BZ-11); the PROCESS EVENTS section says only numbers;
   - when the interpreter's file is replaced on disk while the watch runs (a
-    package upgrade), /proc shows the helper's program as "(deleted)" and
-    the watch's record no longer proves the helper its own: the round then
-    says, as a hole, a process under the watch that it did not start
-    (recorded for a later task, ADR-0007 BW-9);
+    package upgrade), /proc shows the helper's program with " (deleted)"
+    after it; the watch's record takes that image as the image it was
+    (BY-6), so the helper is still the watch's own;
   - an agent that starts more processes than the reader's bound (32768)
     has the rest counted `beyond`, not kept; the bound counts over the
     reader's life, and a process whose end was lost never leaves it;
@@ -1214,8 +1253,10 @@ is amended by T-2, T-1 restated by V-1).
   (Sysmon's configuration: Raqib never changes it, A4) is said once and
   the report lists the kinds read; where neither a start time nor a
   ProcessGuid tells two processes of one image under one pid apart, they
-  are one tree. Linux (its process events are counted, not judged) and a
-  Windows host without Sysmon keep the whole hole, said once: a `hole:`
+  are one tree. Linux (its process events give the round the children of
+  a tree that talks at a sample; a tree that lives whole between two
+  samples is not seen) and a Windows host without Sysmon keep the whole
+  hole, said once: a `hole:`
   line of the watch's first lines, which speak from the watch's own check
   at its start and say so; where the live reader's first check differs
   (either way), the printed line of the round it is made in says so once,
