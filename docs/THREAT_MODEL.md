@@ -1782,25 +1782,32 @@ collector that is slow, down or refusing never delays or loses a capture
   - A careful rewrite of whole sessions is not detected; nothing in v0.1
     claims otherwise.
   - Eval event `s12-rewrite-trace` exists, and the rules miss it.
-- **Editing the events file (ADR-0016 H-5).** Every line the host watch
-  writes to `~/.raqib/host/events.jsonl` names the line its run wrote
-  before it by that line's sha256 (`prev`; a run's first line holds
-  `first`), and `raqib events FILE` checks each run's chain.
+- **Editing the events file (ADR-0016 H-5, Amendment A).** Every line the
+  host watch writes to `~/.raqib/host/events.jsonl` names the line its run
+  wrote before it by that line's sha256 (`prev`; a run's first line holds
+  `first`), and `raqib events FILE` checks each run's chain (a run is its
+  host and its run word).
   - What it proves: within a run, a line taken out of the middle, changed,
     added or moved is seen by anyone who holds the lines (the line after it
-    no longer names the one before it), and a line that names the same line
-    as the one before it is said as a line beside the chain (a line the
-    writer did not count as written, or one put there by another hand).
+    no longer names the one before it), but the run's last line: no line
+    names it, so changed, or followed by a line added after the run ended
+    that names it, it is not seen from the file alone (HA-4). A line that
+    names the same line as the one before it is said as a line beside the
+    chain (a line the writer did not count as written, or one put there by
+    another hand). A run whose lines hold no `prev` while their version is
+    one that always writes it is said as a chain taken out (HA-2).
   - What it does not prove: the chain holds no secret. Whoever can write
     the file can cut its end, or write a tail again from any line and
     compute the hashes again; the file alone then looks whole, and a test
-    says so. A run of an older build has no chain at all.
-  - What a collector that holds a later line can tell: a heartbeat or a
-    watch's end it already holds names, through the chain, every line its
-    run wrote before it. A file changed before that line no longer leads to
-    it, which `raqib events` over the collector's own export, or over the
-    file beside it, shows. A file changed only after the last line a
-    collector holds is not seen.
+    of each case says so. A run of an older build has no chain at all.
+  - What a collector that holds a later line can tell: over the file alone,
+    nothing more - a tail written again is whole by itself, and so are the
+    collector's own lines. Side by side it can: `raqib events FILE --against
+    OTHER` looks for each line the collector holds (OTHER, its own export)
+    in the file by host and id, and says which are not there and which are
+    there with other bytes (exit 1). It needs the lines as they were sent,
+    byte for byte; a file changed only after the last line a collector
+    holds is not seen.
   - Under the service the record is root's and the watched account cannot
     write it; a chain keyed by a secret that account cannot read is a later
     stage, recorded and not built.

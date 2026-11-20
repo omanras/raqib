@@ -126,16 +126,32 @@ anywhere; a collector's own agent may tail the file.
   A heartbeat and the watch's end are links of the chain as any event (H-3): a collector that holds one holds
   the hash of all the run wrote before it.
 - `raqib events FILE` checks every line with `event.check`, prints the count per kind and each problem with its
-  line number, then one line per run (`watch.run`, in the file's order; ADR-0016 H-4, `event.chains`): its
-  chain whole, with its count of lines; broken, at the first line that does not name the run's line before it
-  (one before it was removed, changed, added or moved; a line without `prev` in a run that holds it); lines
-  beside the chain, from the first of them (they follow each other from a line of the run, and the run's next
-  line names that line again: not counted as written by the writer, or put there by another hand); or not
-  chained (no line of the run holds `prev`: written by a Raqib before this one, not a problem). A line that is
-  no event is no link. Exit 0 when every line is an event and no chain is broken or holds a line beside it, 1
-  otherwise (or when the file holds none), 2 when the file cannot be read. It reads; it sends nothing (F-8). The
-  same command over the lines a collector holds of a run (its own export, as they were sent) checks what it
-  holds.
+  line number, then one line per run (its `watch.host` and `watch.run` together, in the file's order; ADR-0016
+  H-4 and Amendment A, `event.chains`). A line is a link of its run where it is a JSON object naming its host
+  and its run with a `prev` of the right shape, whatever `event.check` says of it (HA-1: a line a later Raqib
+  wrote with a key this build does not know is named as a problem of that line, and is a link all the same); a
+  line that is not whole JSON is no link. A run's chain is whole, with its count of lines (and the lines said
+  twice: a line byte for byte one of the run read before is counted, and is no break, HA-6); or not whole, and
+  under it, in the file's order: that it begins before this file (its first line here holds a hash: an export
+  that starts late, or a file whose beginning was cut), each break (a line that does not name the run's line
+  before it: one before it was removed, changed, added or moved; or a line without `prev`, or with one not of
+  its shape, in a run that holds it) and each run of lines beside the chain (they follow each other from a line
+  of the run, and a later line names that line again: not counted as written by the writer, or put there by
+  another hand), with the line they follow and the line that names it again, to a bound of 10 a run that is
+  said when reached (HA-7); or not chained (no line of the run holds `prev`, and no version of its lines that is
+  read is 0.4.0 or later: written by a Raqib before this one, not a problem; a version not of the form N.N.N is
+  said as not read); or taken out (no line holds `prev`, and a version of its lines is one that always writes it:
+  HA-2). Every line before the run's last is so covered (but the run's last line: no line names it, so changed, or followed by a line added after the run ended that names it, it is not seen from the file alone; ADR-0016 HA-4). Exit 0 when every line is an event and every run's
+  chain is whole or not chained, 1 otherwise (or when the file holds none), 2 when the file cannot be read. It
+  reads; it sends nothing (F-8).
+- `raqib events FILE --against OTHER` (HA-5) reads OTHER as the lines a collector holds (its own export, one
+  line a line) and says, by `watch.host` and `id`, how many are in FILE byte for byte, which are not in FILE and
+  which are there with other bytes, each by its line numbers (to a bound of 10, said), how many lines of OTHER
+  name no host and id, and how many lines of FILE OTHER does not hold (a collector behind: not a problem). Exit 1
+  where one is missing or differs, 2 where OTHER cannot be read. It needs the collector's lines byte for byte as
+  they were sent (a line end aside): a line stored otherwise is said to differ. A file whose end was cut, or
+  whose tail was written again with its hashes after the collector took it, is whole by itself; it is the two
+  side by side that show it.
 - A technique id in `rule.attack` says what a finding is consistent with, never that it happened (B-5).
 
 ## For a reader of the file
@@ -147,21 +163,24 @@ What a collector's own agent, tailing `events.jsonl`, may rely on and must allow
   was changed by someone else.
 - A last line with no newline is not whole: do not send it, wait for its newline. It is being written, or it is
   the torn end of a watch that was stopped: then no newline comes until another watch appends, which first ends
-  the fragment with one. A line that is not JSON (or not an event, `event.check`), in the middle of the file or
-  ended this way, is a torn write: skip it and count it; the line after it begins on a line of its own.
+  the fragment with one. A torn write is a line that is not whole JSON, in the middle of the file or ended this
+  way: skip it and count it; the line after it begins on a line of its own. A line that is whole JSON and that
+  `event.check` does not take (a key this build does not know, ADR-0016 HA-1) is not a torn write: it is a link of
+  its run's chain all the same (below).
 - A cursor is a byte offset into the file, at the end of the last whole line sent (the file is only appended to).
   A file shorter than the cursor, or whose bytes before the cursor changed, is not the file that was read: start
   it again and say so. The file is not rotated and grows for as long as it is kept.
 - Within a run, `n` rises in the file's order, with gaps (a number used for a line that was not written). One
   thing at one rev can be under two ids after a failed write (said again with a new `n`); dedup by `watch.host`
   and `id`, and take a thing's latest rev.
-- Within a run, each line names the run's line before it by `prev` (ADR-0016): the sha256 of that line's bytes
-  as the file holds them, without its newline; the run's first written line holds "first". Lines of other runs
-  between them are not links of this run, and a line that is not an event is no link. A line removed from the
-  middle, changed, added or moved is seen by anyone who holds the lines (`raqib events FILE`). The chain holds
-  no secret (H-5): an end cut off, or a tail written again from any line with its hashes computed again, is not
-  seen from the file alone; what a collector already holds a later line of cannot be changed unseen. A line of
-  an older build holds no `prev`: its run is not chained, which is not a problem.
+- Within a run (its `watch.host` and `watch.run`), each line names the run's line before it by `prev`
+  (ADR-0016): the sha256 of that line's bytes as the file holds them, without its newline; the run's first
+  written line holds "first". Lines of other runs between them are not links of this run, and a line that is
+  not whole JSON is no link. A line removed from the middle, changed, added or moved is seen by anyone who holds
+  the lines (`raqib events FILE`) (but the run's last line: no line names it, so changed, or followed by a line added after the run ended that names it, it is not seen from the file alone; ADR-0016 HA-4). The chain holds no secret (H-5): an end cut off, or a tail written again
+  from any line with its hashes computed again, is not seen from the file alone; a collector that kept the lines
+  it was sent, byte for byte, sees either by `raqib events FILE --against` its lines. A line of an older build
+  holds no `prev`: its run is not chained, which is not a problem.
 - A reader must allow a key it does not know (ADR-0016 H-6): an addition such as `prev` does not move the
   schema's name, and a later addition may come the same way. Skip a key you do not know; never refuse a line for
   it.
@@ -177,6 +196,18 @@ What a collector's own agent, tailing `events.jsonl`, may rely on and must allow
 - The end's `result` is the watch's result when the end was written. Where the watch's own state file failed
   before the end and was written after it, or failed only after it, the report's last word and the end's can
   differ: the report is the watch's last word, the end is what it could say in the file.
+
+### a chained run, made up
+
+Two written lines of one made-up run (`made-up-run` of `host.example`, written by the writer itself,
+raqib/eventlog.py; not an example of the section of examples). The first line holds "first"; the second holds
+the sha256 of the first as it is written here, without its newline. `tests/test_event_chain.py` holds that each
+is an event and that the second names the first.
+
+```jsonl
+{"about":"watch","id":"made-up-run:1","kind":"watch","n":1,"prev":"first","rev":1,"schema":"raqib-event/1","severity":"info","state":"start","time":"2026-11-20T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"made-up-run","version":"0.4.0"}}
+{"about":"note:1","id":"made-up-run:2","kind":"note","n":2,"prev":"d33c5a8500fca8bb62b013baebb0a3cb7f3c221d3dedd1286a0c47bbedd00c34","rev":1,"schema":"raqib-event/1","severity":"info","summary":"a note of the made-up run","time":"2026-11-20T10:00:05.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"made-up-run","version":"0.4.0"}}
+```
 
 ## Keys
 
@@ -301,7 +332,7 @@ named field or to the namespace: OCSF `unmapped.raqib.<key>`, ECS `raqib.<key>`.
 
 ## Required keys
 
-Every event holds the base keys (`schema` to `severity`, and `watch` with `watch.run`, `watch.host` and
+Every event holds the base keys (`schema` to `severity` but `prev`, and `watch` with `watch.run`, `watch.host` and
 `watch.beat`); each
 kind adds its own; a dotted name is
 required inside its part. A watch end (`state` end) holds `result` with `exit`, and `counts`; a watch start
@@ -338,9 +369,9 @@ Run D's source findings are read by two os follows, and which of them the watch 
 run to run: its examples' `id`, `n` and `about` are those of one run (the test compares the rest).
 The heartbeat's and the watch end's examples are the last event of two snapshots of one watch (run B at its
 last round, and after its end), so they share a number, and are never both in one stream.
-The examples are `event.snapshot`'s lines, which hold no `prev`: the chain is the writer's (raqib/eventlog.py),
-and the line before each in its fixture run holds the run's temporary paths, so its hash would differ from run
-to run. A line the host watch writes holds `prev` beside `n` (Keys).
+The examples are the builder functions' own events (`event.snapshot`) and hold no `prev` (ADR-0016 HA-8): the
+chain is the writer's (raqib/eventlog.py), and a line the host watch writes holds `prev` beside `n` (Keys; a
+chained run, made up, is shown in the section for a reader of the file).
 
 ### example: finding
 

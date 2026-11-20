@@ -25,9 +25,9 @@ processes that began are at least the children the stand-in said it started (its
 count holds every process of the machine); MISSED otherwise, or where it says a refusal (X31's rule: n/a where
 the refusal names a right this user lacks, EPERM or EACCES).
 --events-check: what `raqib events` printed over the watch's events file, run after the watch and kept (ADR-0016
-H-4, M13.1): X38 the line of this watch's run (the report's `run:`) says its chain is whole, and no line names a
-break or a line beside a chain; MISSED otherwise, an answer given and missing or empty included (n/a where the
-rig ran none).
+H-4, M13.1 and its REDO): X38 the line of this watch's run (the report's `run:`) says its chain is whole, and no
+line says a chain not whole or taken out, nor a break, a line beside a chain or a run begun before the file;
+MISSED otherwise, an answer given and missing or empty included (n/a where the rig ran none).
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -866,8 +866,10 @@ WATCH_EVENTS_NAME = ("X35 the watch's helper heard the kernel's process events: 
 WATCH_EVENTS_HEAD = "PROCESS EVENTS (Linux):"
 
 
-CHAIN_WHOLE = re.compile(r"^  run (.+): chain whole, (\d+) line\(s\)$", re.M)
-CHAIN_BAD = re.compile(r"^  run (.+): (chain broken at line \d+|\d+ line\(s\) beside the chain from line \d+)", re.M)
+# ADR-0016 Amendment A: a run is said by its run word and its host; under a chain not whole, a line for each problem
+CHAIN_WHOLE = re.compile(r"^  run (.+?) \(host .*\): chain whole, (\d+) line\(s\)(?:, \d+ said twice)?$", re.M)
+CHAIN_BAD = re.compile(r"^  run .+? \(host .*\): (?:chain not whole|no line holds prev, yet ).*$|^    (?:broken at line"
+                       r" \d+|begins before this file|\d+ line\(s\) beside the chain).*$", re.M)
 
 
 def read_chain(answer, report):

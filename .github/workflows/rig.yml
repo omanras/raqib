@@ -68,6 +68,9 @@ jobs:
         run: |
           raqib events $HOME\.raqib\host\events.jsonl > $env:RUNNER_TEMP\events-check.out 2> $env:RUNNER_TEMP\events-check.err
           "=== raqib events (exit $LASTEXITCODE)"; Get-Content $env:RUNNER_TEMP\events-check.out
+          "=== its error stream"; Get-Content $env:RUNNER_TEMP\events-check.err -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force rig-out | Out-Null
+          Copy-Item $env:RUNNER_TEMP\events-check.err rig-out -ErrorAction SilentlyContinue
           exit 0
       - name: forward the watch's events to stand-in collectors on loopback, HTTP and syslog (X19 to X25)
         if: always()

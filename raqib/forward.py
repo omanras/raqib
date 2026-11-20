@@ -372,7 +372,7 @@ def classify(raw):
     at most MAX_BYTES is ever given (M-3: a longer one is never read whole)."""
     try:
         obj = json.loads(raw.decode("ascii"))
-    except (UnicodeDecodeError, ValueError):
+    except (UnicodeDecodeError, ValueError, RecursionError):   # ADR-0016 HA-9: nested deeper than can be read
         return None
     if not isinstance(obj, dict):
         return None

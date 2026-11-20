@@ -348,8 +348,9 @@ def test_x35_is_a_row_of_main_and_off_linux_it_counts_for_nothing(tmp_path, caps
 # --- X38 (ADR-0016 H-4, M13.1): raqib events over the watch's events file says this watch's run is whole --------
 
 RAN = REPORT.replace("\nFINDINGS: 1", "\nrun: rig-run (seqs 1..9 of the record)\nFINDINGS: 1", 1)
-WHOLE = ("raqib events: events.jsonl: 9 line(s), 9 event(s)\n  watch: 3\n  run rig-run: chain whole, 9 line(s)\n"
-         "RESULT: every line is an event\n")
+WHOLE = ("raqib events: events.jsonl: 9 line(s), 9 event(s)\n  watch: 3\n"
+         "  run rig-run (host rig.example): chain whole, 9 line(s)\nRESULT: every line is an event\n")
+NOT_WHOLE = "chain not whole, 9 line(s)\n    "
 
 
 def x38(answer, report=RAN):
@@ -360,22 +361,28 @@ def x38(answer, report=RAN):
 
 def test_x38_met_where_this_watch_s_run_is_whole_and_no_line_names_a_break():
     assert x38(WHOLE) == (check.MET, "run rig-run: chain whole, 9 line(s)")
-    older = WHOLE.replace("RESULT:", "  run old-run: not chained, 4 line(s) (no line holds prev: written by a Raqib"
-                                     " before this one)\nRESULT:")
+    older = WHOLE.replace("RESULT:", "  run old-run (host rig.example): not chained, 4 line(s) (no line holds prev:"
+                                     " written by a Raqib before this one, version 0.2.0)\nRESULT:")
     assert x38(older)[0] == check.MET   # an older build's run beside it is no break
+    assert x38(WHOLE.replace("9 line(s)", "9 line(s), 2 said twice"))[0] == check.MET   # HA-6: no break
     # the Table (seen on the rig's Windows machine: the kept answer ends its lines as Windows does, and X38 was MISSED)
     assert x38(WHOLE.replace("\n", "\r\n"), RAN.replace("\n", "\r\n")) == (
         check.MET, "run rig-run: chain whole, 9 line(s)")
 
 
 @pytest.mark.parametrize("answer,said", [
-    (WHOLE.replace("chain whole, 9 line(s)", "chain broken at line 4: it does not name the run's line before it (one"
-                   " before it was removed, changed, added or moved)"), "chain broken at line 4"),
-    (WHOLE.replace("chain whole, 9 line(s)", "1 line(s) beside the chain from line 5: the run's next line names line 4"
-                   " again (not counted as written by the writer, or put there by another hand)"), "beside the chain"),
-    (WHOLE.replace("RESULT:", "  run other: chain broken at line 2: it does not name the run's line before it\nRESULT:"),
-     "run other: chain broken at line 2"),
-    (WHOLE.replace("run rig-run:", "run other-run:"), "no line says its chain whole"),
+    (WHOLE.replace("chain whole, 9 line(s)", NOT_WHOLE + "broken at line 4: it does not name the run's line before"
+                   " it, line 3 (one before it was removed, changed, added or moved)"), "broken at line 4"),
+    (WHOLE.replace("chain whole, 9 line(s)", NOT_WHOLE + "1 line(s) beside the chain, line 5: they follow line 4, and"
+                   " line 6 names line 4 again (not counted as written by the writer, or put there by another hand)"),
+     "beside the chain"),
+    (WHOLE.replace("chain whole, 9 line(s)", NOT_WHOLE + "begins before this file: its first line here, line 1, names a"
+                   " line that is not here"), "begins before this file"),
+    (WHOLE.replace("RESULT:", "  run other (host rig.example): chain not whole, 2 line(s)\n    broken at line 2: it does"
+                   " not name the run's line before it, line 1\nRESULT:"), "run other (host rig.example): chain not"),
+    (WHOLE.replace("chain whole, 9 line(s)", "no line holds prev, yet its version 0.4.0 writes the chain (from 0.4.0):"
+                   " the chain was taken out, 9 line(s)"), "the chain was taken out"),
+    (WHOLE.replace("run rig-run (", "run other-run ("), "no line says its chain whole"),
     ("", "said nothing"),
 ])
 def test_x38_missed_for_a_break_a_line_beside_another_run_s_whole_chain_or_silence(answer, said):
@@ -409,3 +416,6 @@ def test_x38_the_rig_runs_raqib_events_after_the_watch_on_both_systems_and_keeps
                              (linux, 'raqib events "$HOME/.raqib/host/events.jsonl" > ', "tools/rig/check.py")):
         assert job.count(run) == 1 and job.index("workload.py") < job.index(run) < job.index(reader)
         assert job.count("--events-check ") == 1 and job.count("events-check.out") >= 3   # written, read, kept
+    # HA-10: what raqib events wrote to its error stream is printed and kept (on Linux it is in the answer: 2>&1)
+    assert "Get-Content $env:RUNNER_TEMP\\events-check.err" in win and "events-check.err rig-out" in win
+    assert '"$RUNNER_TEMP/events-check.out" 2>&1' in linux

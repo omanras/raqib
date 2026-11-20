@@ -638,55 +638,166 @@ def chained(ev, prev):
     return out
 
 
-WHOLE, BROKEN, BESIDE, UNCHAINED = "whole", "broken", "beside", "not chained"
+CHAIN_SINCE = (0, 4, 0)   # HA-2: the first version that writes the chain (the Table moves it at the merge)
+BOUND = 10                # HA-7: the problems of one run listed (and the lines of a comparison, HA-5)
+VERSION = re.compile(r"([0-9]+)\.([0-9]+)\.([0-9]+)\Z")   # HA-2: a version read (another is said as not read)
+WHOLE, NOT_WHOLE, UNCHAINED, TAKEN = "whole", "not whole", "not chained", "taken out"   # a run's chain
+BROKEN, BESIDE = "broken", "beside"   # a problem of a chain (HA-7)
 
 
-def _event_of(raw):
-    """The event a line holds, or None (a line that is no event is no link, H-2)."""
+def bare(raw):
+    """A line's bytes without its line end: the newline is never given, and one carriage return before it (a copy
+    whose line ends were made Windows') is a line end too; the writer writes none."""
+    return raw[:-1] if raw.endswith(b"\r" if isinstance(raw, bytes) else "\r") else raw
+
+
+def _read(raw):
+    """HA-1, HA-9: the JSON object a line holds, or None: not whole JSON, not ASCII, not an object, or nested deeper
+    than the interpreter reads (never raised)."""
     try:
-        obj = json.loads(raw.decode("ascii") if isinstance(raw, bytes) else raw.encode("ascii").decode("ascii"))
-    except (UnicodeDecodeError, UnicodeEncodeError, ValueError):
+        text = raw.decode("ascii") if isinstance(raw, bytes) else raw.encode("ascii").decode("ascii")
+        obj = json.loads(text)
+    except (UnicodeDecodeError, UnicodeEncodeError, ValueError, RecursionError):
         return None
-    return obj if isinstance(obj, dict) and not check(obj) else None
+    return obj if isinstance(obj, dict) else None
 
 
-def chains(rows):
-    """H-4: the chain of each run of a file's lines (rows: each line's bytes without its newline, in the file's
-    order; a line is numbered from 1). A run is its watch.run; only a line that is an event (check) is a link.
-    Returns, per run in the order of its first line, {"run", "state", "lines", "line", "named", "beside"}:
-    lines the run's events; state WHOLE (each line names the run's line before it, the first FIRST); BROKEN at
-    line (the first line that does not name the run's line before it: one before it was removed, changed, added
-    or moved; a line without prev in a run that holds it); BESIDE (no break, and line is the first of `beside`
-    lines that follow each other from the run's line `named` - 0: the run's start - while the line after them
-    names that line again: lines the writer did not count as written, H-2, or put there by another hand); or
-    UNCHAINED (no line of the run holds prev: an older build's). It holds no secret: an end cut off, or a tail
-    written again with its hashes, is not seen from the lines alone (H-5)."""
+def _keyed(obj, key):
+    """(watch.host, the value of key: watch.run, or the line's id), or None where either is not a string."""
+    w = obj.get("watch")
+    if not isinstance(w, dict) or not isinstance(w.get("host"), str):
+        return None
+    v = w.get("run") if key == "run" else obj.get(key)
+    return (w["host"], v) if isinstance(v, str) else None
+
+
+def version_of(text):
+    """HA-2: a watch.version as numbers (0, 4, 0), or None where it is not N.N.N (said as not read)."""
+    m = VERSION.match(text) if isinstance(text, str) else None
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def _links(rows):
+    """{(host, run): [(line number, digest, prev or None, has prev, version)]} in the file's order."""
     runs = {}
     for i, raw in enumerate(rows, 1):
-        obj = _event_of(raw)
-        if obj is None:
+        raw = bare(raw)
+        obj = _read(raw)
+        key = _keyed(obj, "run") if obj is not None else None
+        if key is not None:
+            runs.setdefault(key, []).append((i, digest(raw), obj.get(PREV), PREV in obj,
+                                            obj["watch"].get("version")))
+    return runs
+
+
+def _walk(got, lines, bound):
+    """HA-6, HA-7: the walk of one chained run: every break and every line beside the chain, in the file's order,
+    to the bound; a line byte for byte one read before is said twice; a run that begins with a hash began before
+    the file."""
+    def say(problem):
+        if len(got["problems"]) < bound:
+            got["problems"].append(problem)
+        else:
+            got["more"] += 1
+    links, latest, cut = [], {}, -1   # cut: the latest link that does not name the one before it
+    for i, h, prev, has, _ in lines:
+        if h in latest:
+            got["twice"] += 1   # HA-6: no break, no line beside
             continue
-        run = obj["watch"]["run"]
-        runs.setdefault(run, []).append((i, digest(raw), obj.get(PREV)))
+        k = len(links)
+        shaped = isinstance(prev, str) and (prev == FIRST or bool(HEX64.match(prev)))
+        if k == 0:
+            if prev != FIRST:
+                cut = 0
+                if shaped:
+                    got["late"] = i   # HA-6: its first lines are not here
+                else:
+                    say({"what": BROKEN, "line": i, "before": None, "why": "prev" if has else "none"})
+        elif prev != links[k - 1][1]:
+            j = (-1 if prev == FIRST else latest.get(prev)) if shaped else None
+            if j is not None and j < k - 1 and cut <= j:   # the lines between follow each other from the one named
+                say({"what": BESIDE, "first": links[j + 1][0], "last": links[k - 1][0], "count": k - 1 - j,
+                     "named": links[j][0] if j >= 0 else 0, "again": i})
+            else:
+                say({"what": BROKEN, "line": i, "before": links[k - 1][0],
+                     "why": "names" if shaped else "prev" if has else "none"})
+            cut = k
+        latest[h] = k
+        links.append((i, h))
+    got["lines"] = len(links)
+    got["state"] = WHOLE if got["late"] is None and not got["problems"] else NOT_WHOLE
+
+
+def chains(rows, bound=BOUND):
+    """H-4 as ADR-0016 Amendment A rules it: the chain of each run of a file's lines (rows: each line's bytes
+    without its newline, in the file's order; a line is numbered from 1). A run is its host and its run word
+    (HA-3). A line is a link where it is a JSON object naming its host and its run with a prev of the right shape,
+    whatever check() says of it (HA-1). Returns, per run in the order of its first line, a dict of its own: host,
+    run, lines (the run's lines, each once), twice (lines byte for byte one read before: HA-6), late (the line
+    number of a first line that holds a hash: the run began before this file, HA-6), problems (each break -
+    {"what": BROKEN, "line", "before": the run's line before it or None, "why": "names" a line that is not the
+    one before it, "prev" not of its shape, "none" no prev} - and each line beside the chain - {"what": BESIDE,
+    "first", "last", "count": the lines beside, "named": the line they follow, 0 the run's start, "again": the
+    line that names it again} - in the file's order, to the bound), more (those past the bound), versions (the
+    run's watch.version, each once) and state: WHOLE; NOT_WHOLE (late or a problem); UNCHAINED (no line holds
+    prev, and no version read is CHAIN_SINCE or later: an older build's); TAKEN (no line holds prev, and a version
+    read is CHAIN_SINCE or later: the chain was taken out, HA-2). It holds no secret: an end cut off, a tail
+    written again with its hashes, and the run's last line changed or followed by a line that names it are not
+    seen from the lines alone (H-5, HA-4)."""
     out = []
-    for run, links in runs.items():
-        got = {"run": run, "state": WHOLE, "lines": len(links), "line": None, "named": None, "beside": 0}
+    for (host, run), lines in _links(rows).items():
+        versions = []
+        for v in (x[4] for x in lines):
+            if v not in versions:
+                versions.append(v)
+        got = {"host": host, "run": run, "lines": len(lines), "twice": 0, "late": None, "problems": [], "more": 0,
+               "versions": versions, "state": UNCHAINED}
         out.append(got)
-        if all(p is None for _, _, p in links):
-            got["state"] = UNCHAINED
+        if not any(x[3] for x in lines):
+            read = [version_of(v) for v in versions if version_of(v) is not None]
+            got["state"] = TAKEN if any(v >= CHAIN_SINCE for v in read) else UNCHAINED
             continue
-        latest = {}   # a link's digest -> its place in the run (the latest)
-        cut = -1      # the place of the latest link that does not name the one before it (it names an earlier one)
-        for k, (i, h, p) in enumerate(links):
-            want = FIRST if k == 0 else links[k - 1][1]
-            if p != want:
-                j = -1 if p == FIRST else latest.get(p) if p is not None else None
-                if j is None or j >= k - 1 or cut > j:   # it names no line of the run, or the lines between
-                    got.update(state=BROKEN, line=i)     # do not follow each other from the one it names
-                    break
-                if got["state"] == WHOLE:
-                    got.update(state=BESIDE, line=links[j + 1][0], named=links[j][0] if j >= 0 else 0,
-                               beside=k - 1 - j)
-                cut = k
-            latest[h] = k
+        _walk(got, lines, bound)
     return out
+
+
+def against(rows, held, bound=BOUND):
+    """HA-5: the lines a collector holds (held) beside the file's (rows), each by its host and id, compared byte for
+    byte (a line end aside). Returns {"read": lines of held, "same", "missing": [(held line, id, host)], "differ":
+    [(held line, id, host, [file lines])], "unread": held lines that name no host and id, "more_missing",
+    "more_differ" (past the bound), "behind": the file's lines named by host and id that held does not hold}."""
+    index = {}
+    for i, raw in enumerate(rows, 1):
+        raw = bare(raw)
+        obj = _read(raw)
+        key = _keyed(obj, "id") if obj is not None else None
+        if key is not None:
+            index.setdefault(key, []).append((i, digest(raw)))
+    got = {"read": 0, "same": 0, "missing": [], "differ": [], "unread": 0, "more_missing": 0, "more_differ": 0,
+           "behind": 0}
+    found = set()
+    for i, raw in enumerate(held, 1):
+        got["read"] += 1
+        raw = bare(raw)
+        obj = _read(raw)
+        key = _keyed(obj, "id") if obj is not None else None
+        if key is None:
+            got["unread"] += 1
+            continue
+        here = index.get(key)
+        h = digest(raw)
+        if here is None:
+            what, more, item = "missing", "more_missing", (i, key[1], key[0])
+        elif any(d == h for _, d in here):
+            got["same"] += 1
+            found.add(key)
+            continue
+        else:
+            found.add(key)
+            what, more, item = "differ", "more_differ", (i, key[1], key[0], [n for n, _ in here])
+        if len(got[what]) < bound:
+            got[what].append(item)
+        else:
+            got[more] += 1
+    got["behind"] = sum(len(v) for k, v in index.items() if k not in found)
+    return got
