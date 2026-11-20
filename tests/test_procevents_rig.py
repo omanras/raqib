@@ -1,4 +1,4 @@
-"""M14.1a (HANDOFF E6; ADR-0007 Amendment BQ, BQ-2): the rig's run of the reader of Linux's process events
+"""M14.1a and its REDO (ADR-0007 BQ-2, BR-7): the rig's run of the reader of Linux's process events
 (tools/rig/procevents_run.py) and its check, X31 (tools/rig/check.py --procevents). Every fact here is made up: no
 test here opens a netlink socket, starts a program or a server, or needs Linux; the run's reader, its runner, its
 `which`, its server and its clock are the test's. The pids and paths are made up."""
@@ -25,7 +25,8 @@ run_tool = load("rig_procevents_run", ROOT / "tools" / "rig" / "procevents_run.p
 check = load("rig_check_procevents", ROOT / "tools" / "rig" / "check.py")
 TOOL = (ROOT / "tools" / "rig" / "procevents_run.py").read_text(encoding="ascii")
 NAMES = ["touch", "mv", "cp", "rm", "curl", "curl", "curl", "wget", "getent", "nc", "python", "sh", "shred", "git"]
-CLEAN = {"since": "2026-11-20T10:00:00.000000Z", "events": {"fork": 30, "exec": 16, "exit": 30}, "given": 16,
+RUN_PID = 3131
+CLEAN = {"since": "2026-11-20T10:00:00.000000Z", "last": "2026-11-20T10:00:02.000000Z", "reused": 0, "events": {"fork": 30, "exec": 16, "exit": 30}, "given": 16,
          "missed": {"exe": 0, "stat": 0}, "unread": {"comm": 3}, "threads": 4, "older": 2,
          "lost": {"count": 0, "why": None}, "beyond": 0, "live": 1, "refused": None, "ended": None, "said": []}
 
@@ -34,7 +35,8 @@ def act(name, pid, rc=0, exe=None, code=None, signal=None, ended="2026-11-20T10:
     expect = "/usr/bin/%s" % name
     out = {"act": name, "argv0": name, "expect": expect, "pid": pid, "rc": rc, "ms": 2.0}
     if given:
-        out["given"] = {"pid": pid, "ppid": 4000, "exe": expect if exe is None else exe, "started_ticks": 9,
+        out["given"] = {"pid": pid, "ppid": RUN_PID, "exe": expect if exe is None else exe, "earlier": [],
+                        "started_ticks": 9,
                         "began": "2026-11-20T10:00:00.900000Z", "ended": ended,
                         "code": (rc if rc >= 0 else None) if code is None else code,
                         "signal": (-rc if rc < 0 else None) if signal is None else signal, "unread": {}}
@@ -45,7 +47,7 @@ def met_facts():
     acts = [act(n, 5000 + i, rc=128 if n == "git" else 0) for i, n in enumerate(NAMES)]
     acts[9] = {"act": "nc", "argv0": "nc", "not_run": "not installed"}
     acts.append(act("sh", 5100, rc=-9))                  # ended by a signal: the signal is its end's code
-    return {"platform": "linux", "uid": 1001, "acts": acts, "children": [], "counts": json.loads(json.dumps(CLEAN)),
+    return {"platform": "linux", "uid": 1001, "run_pid": RUN_PID, "acts": acts, "children": [], "counts": json.loads(json.dumps(CLEAN)),
             "refused": None, "stop_problems": [], "error": None}
 
 
@@ -75,6 +77,9 @@ MISSES = [
                                                     " /usr/bin/mv"),
     (("acts", 2, "given", "exe"), None, "cp (pid 5002): its program read as None, not /usr/bin/cp"),
     (("acts", 3, "given", "ended"), None, "rm (pid 5003): its end not heard"),
+    (("acts", 6, "given", "ppid"), 4000, "curl (pid 5006): its parent 4000, not the run's own 3131"),
+    (("acts", 7, "given", "ppid"), None, "wget (pid 5007): its parent None, not the run's own 3131"),
+    (("run_pid",), None, "touch (pid 5000): its parent 3131, not the run's own None"),
     (("acts", 4, "given", "code"), 1, "curl (pid 5004): its end's code 1 (signal None), not 0"),
     (("acts", 13, "given", "code"), 0, "git (pid 5013): its end's code 0 (signal None), not 128"),
     (("acts", 14, "given", "signal"), 15, "sh (pid 5100): its end's signal 15, not 9"),
@@ -106,12 +111,20 @@ def test_e6_x31_unread_is_said_with_a_program_not_read():
     assert state == check.MISSED and "(unread: {'exe': 'not read at its exec (ENOENT: gone before the read)'})" in said
 
 
-def test_e6_x31_is_na_off_linux_or_where_the_start_was_refused_with_the_refusal_said():
+def test_e7_x31_is_na_off_linux_or_for_a_refusal_that_names_no_right_of_this_user_else_missed():
     assert x31({"platform": "win32", "not_run": "not Linux (win32): the process events are the Linux kernel's"}) == (
         check.SKIP, "not run: not Linux (win32): the process events are the Linux kernel's")
     assert x31({"platform": "darwin", "acts": []}) == (check.SKIP, "not run: not Linux (darwin)")
-    why = "the process events are not read: the bind to the connector's group of process events was refused (EPERM)"
-    assert x31(dict(met_facts(), refused=why)) == (check.SKIP, "start() was refused: %s" % why)
+    for right in ("EPERM", "EACCES"):
+        why = ("the process events are not read: the bind to the connector's group of process events was refused"
+               " (%s); this kernel keeps its process events from this user" % right)
+        assert x31(dict(met_facts(), refused=why)) == (
+            check.SKIP, "start() was refused for want of a right of this user: %s" % why)
+    for why in ("the process events are not read: the kernel did not answer the ask to listen within 2 s",
+                "the process events are not read: the socket (AF_NETLINK, the connector) was refused (EAFNOSUPPORT)",
+                "the process events are not read: the kernel answered the ask to listen with EINVAL"):
+        assert x31(dict(met_facts(), refused=why)) == (
+            check.MISSED, "start() was refused where the kernel is known to answer: %s" % why)
 
 
 def test_e6_x31_silence_or_garbage_is_missed_and_never_raises():
@@ -132,7 +145,8 @@ def test_e6_check_main_says_x31_with_procevents_and_nothing_else_changes(tmp_pat
     (tmp_path / "p.json").write_text(json.dumps(met_facts()), encoding="utf-8")
     check.main(base + ["--procevents", str(tmp_path / "p.json")])
     out = capsys.readouterr().out
-    assert "MET     X31 every short act that ran" in out
+    assert "MET     X31 every short act that ran is given by the process events' reader with its program, its parent" \
+        in out
 
     def rows(text):     # the table's width follows its longest name: the rows are compared by their words
         return [" ".join(line.split()) for line in text.splitlines() if "X31" not in line and "RIG:" not in line]
@@ -164,7 +178,7 @@ class World:
         rc = 128 if base == "git" else 0
         self.started.append((self.pid, argv))
         if base not in self.drop:
-            self.pending.append({"pid": self.pid, "ppid": 4000, "exe": os.path.realpath("/usr/bin/%s" % base),
+            self.pending.append({"pid": self.pid, "ppid": os.getpid(), "exe": os.path.realpath("/usr/bin/%s" % base),
                                  "started_ticks": 7,
                                  "began": "b", "ended": None, "code": None, "signal": None, "unread": {}})
             self.ends.append({"pid": self.pid, "started_ticks": 7, "ended": "e", "code": rc, "signal": None,
@@ -242,7 +256,8 @@ def test_e6_off_linux_nothing_is_run_and_a_refusal_is_the_fact(tmp_path):
     why = "the process events are not read: the kernel did not answer the ask to listen within 2 s"
     refused = collect(World(refuse=why), tmp_path)
     assert refused["refused"] == why and refused["acts"] == [] and refused["counts"] == CLEAN
-    assert x31(refused) == (check.SKIP, "start() was refused: %s" % why)
+    assert x31(refused) == (check.MISSED, "start() was refused where the kernel is known to answer: %s" % why)
+    assert refused["run_pid"] == os.getpid()
 
 
 def test_e6_the_run_never_raises_and_main_writes_its_facts_and_exits_0(tmp_path, capsys):

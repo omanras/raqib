@@ -513,26 +513,41 @@ Rulings: ADR-0003 Amendments C and D.
     outside after it heard its first event freezes the counts unseen, and
     a sender whose pid in the tracing is not the connection's owner in
     the table (an inherited socket) is not matched.
-- **The kernel's process events on Linux (ADR-0007 Amendment BQ; the
-  reader alone, docs/specs/PROC-EVENTS.md):**
+- **The kernel's process events on Linux (ADR-0007 Amendments BQ and BR;
+  the reader alone, docs/specs/PROC-EVENTS.md):**
   - the reader listens to the kernel's word of every fork, exec and exit,
     and reads at an exec the program and the parent of the process and
     nothing else; no watch reads it yet, so between two samples a live
     watch on Linux still sees what it saw before;
-  - an agent that starts more processes between two reads than the
-    reader's bound (32768) has the rest counted `beyond`, not kept;
-  - a process that ends before its program is read is given without it:
-    the read is counted in `missed` and named in its `unread`; a process
-    of another user, read by a plain user, is the same (not measured);
+  - an agent that starts more processes than the reader's bound (32768)
+    has the rest counted `beyond`, not kept; the bound counts over the
+    reader's life, and a process whose end was lost never leaves it;
+  - a process that ends before its program is read, that is not readable
+    by this user (a program can make itself so), or that the system hides
+    from the reader is given without its program: the read is counted in
+    `missed` and named in its `unread`;
+  - a process that changes its program again keeps the programs it had
+    before in `earlier`: the first program is not lost to the second;
+  - a pid taken again before the read is told by the start the read gives
+    (later than the exec): nothing of that read is given, and it is counted
+    in `reused`; a pid taken again within one clock tick is not told apart;
   - a burst the kernel cannot queue for the reader is counted in `lost`
-    (ENOBUFS), never as nothing happened; how many events it held is not
-    known;
+    (ENOBUFS), never as nothing happened; on kernels 6.8 and 7.0 the
+    events went on after it; how many events the queue held is not known,
+    and the time a datagram was last heard is said (`last`);
+  - a process ends with its last thread: an exit of its leader thread
+    while another lives on is not its end; where events were lost its
+    count of threads is not known, and that is said;
+  - a child made to be its maker's sibling is given the parent the kernel
+    names, which is not its maker;
   - a kernel that refuses (an older one, or a container's) is the hole,
     said in the reader's words as `refused`, and nothing else is tried;
-    no right is asked;
-  - a program run from a removed file or from memory reads as the kernel
-    names it (not measured); no argument of any process is read, so what
-    a program was asked to do is not in this source.
+    no right is asked; another process cannot answer the reader's ask for
+    it (its mark is random);
+  - the program is raw text of the process's choosing in part (a removed
+    file, a program run from memory with a name it chose): whatever shows
+    it escapes it; no argument of any process is read, so what a program
+    was asked to do is not in this source.
 - **What CROSS-SOURCE does not judge, by ruling:**
   - C-2, both directions: a trace with no os line (Linux, macOS, or
     os-sysmon not run) gets no finding and no note, and the report's
