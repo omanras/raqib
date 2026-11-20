@@ -470,6 +470,10 @@ jobs:
           git fetch -q --depth 1 origin claude/M16.1 && git checkout -q FETCH_HEAD -- siem || echo "the content could not be fetched"
           if [ "${{ matrix.engine }}" = elasticsearch ]; then c=siem/elastic; else c=siem/opensearch; fi
           python tools/rig/siem_probe3.py docs/specs/EVENT.md $c || { echo "=== the engine's last words"; docker logs --tail 30 engine; }
+      - name: what the second review of M16.1 suspects and nobody fed (long keys, numbers beyond a double, a shipper's fields as texts, the order of runs)
+        run: |
+          if [ "${{ matrix.engine }}" = elasticsearch ]; then c=siem/elastic; else c=siem/opensearch; fi
+          cd tools/rig && python siem_probe4.py ../../docs/specs/EVENT.md ../../$c || { echo "=== the engine's last words"; docker logs --tail 30 engine; }
       - name: the drafts of Sigma rules, converted and run
         run: |
           python -m pip install --disable-pip-version-check -q sigma-cli pysigma-backend-elasticsearch pysigma-backend-opensearch pysigma-backend-splunk || echo "sigma's tools could not be installed"
