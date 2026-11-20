@@ -11,6 +11,7 @@ import atexit
 import builtins
 import datetime
 import errno
+import itertools
 import os
 import shutil
 import socket
@@ -82,8 +83,14 @@ def exit_(pid, code=0, tgid=None, parent_signal=17, **kw):
     return message(EXIT, struct.pack("=IIIIII", pid, pid if tgid is None else tgid, code, parent_signal, 1, 1), **kw)
 
 
-def answer(err=0, ack=MARK + 1, seq=15821):
-    return message(0, struct.pack("=I", err) + bytes(20), ack=ack, seq=seq, cpu=0xFFFFFFFF)
+ANSWER_SEQ = itertools.count(15821)
+
+
+def answer(err=0, ack=MARK + 1, seq=None, cpu=7):
+    """The kernel's answer as measured (BT): it carries a real CPU and that CPU's next number of the count. The
+    stand-in's answers are on a CPU of their own, each with the next number, unless a test says otherwise."""
+    return message(0, struct.pack("=I", err) + bytes(20), ack=ack, seq=next(ANSWER_SEQ) if seq is None else seq,
+                   cpu=cpu)
 
 
 def asked(op, pid=PID):
@@ -913,7 +920,8 @@ def test_e6_the_spec_says_the_layout_what_is_read_every_count_and_what_was_measu
             " on the record",
             "runs the program of the process that made it",
             "what the queue held is given; what came while it was full is gone; how many: at least the count.",
-            "A step with no ENOBUFS since `counts()` was last read is a loss the kernel did not tell",
+            "A step seen while no ENOBUFS has come since the start is a loss the kernel did not tell",
+            "An answer to any listener's ask takes the next number of its CPU's count",
             "After an overflow of the listener's queue (ENOBUFS) the events went on, for that listener alone and for"
             " a second one opened after it.",
             "When a thread that is not the leader called exec, the kernel sent an exit with pid equal to tgid (code"
@@ -1050,7 +1058,8 @@ def test_e2_bs3_a_threads_end_after_an_end_of_a_process_not_held_is_its_later_en
     feed(r, exit_(3001, tgid=3000, code=5 << 8), exit_(3002, tgid=3000, code=7 << 8))   # its threads' ends
     later = r.read()["older"]
     assert [(o["pid"], o["code"], o["unread"]) for o in later] == [
-        (3000, 7, {"began": procevents.NO_FORK, "ended": procevents.LATER_END, "threads": procevents.END_NOT_HELD})]
+        (3000, 7, {"began": procevents.NO_FORK, "ended": procevents.LATER_END, "threads": procevents.LATER_THREADS})]
+    assert "one thread's" in procevents.LATER_THREADS and "leader" not in procevents.LATER_THREADS   # H3
     feed(r, exit_(3003, tgid=3000, code=9 << 8))               # after a read: another later end
     assert [(o["pid"], o["code"]) for o in r.read()["older"]] == [(3000, 9)]
     feed(r, exit_(3101, tgid=3100))                            # a thread of a pid it gave no end of: counted only
@@ -1086,6 +1095,25 @@ def test_e2_bs3_a_record_taken_up_withdraws_its_unread_end_or_says_the_end_given
     assert "leader thread's" in procevents.ENDED_BEFORE
 
 
+def test_h5_an_end_past_the_bound_was_never_given_and_is_not_called_the_end_given_before(monkeypatch):
+    # the third review, H5: `ends` full at a record's end: the end is counted in `beyond` and never given; a record
+    # taken up again after it must not say "the end given before"
+    system = System()
+    for pid in (5001, 5002):
+        system.proc(pid, "/usr/bin/p", 4000, 50 + pid)
+    r = started(system)
+    feed(r, fork(4000, 5001), exec_(5001), fork(4000, 5002), exec_(5002))
+    assert [p["pid"] for p in r.read()["processes"]] == [5001, 5002]
+    monkeypatch.setattr(procevents, "PROCESSES_MAX", 1)
+    feed(r, exit_(5001), exit_(5002))                          # the second end is past the bound of `ends`
+    assert r.counts()["beyond"] == 1
+    feed(r, exec_(5002))                                       # its own start: taken up again
+    got = r.read()
+    assert [e["pid"] for e in got["ends"]] == [5001]
+    p = [p for p in got["processes"] if p["pid"] == 5002][0]
+    assert p["ended"] is None and "ended" not in p["unread"]
+
+
 def test_e3_bs4_a_record_keeps_its_newest_16_earlier_programs_and_counts_the_rest():
     system = System()
     system.proc(5001, "/usr/bin/p0", 4000, 50)
@@ -1108,9 +1136,13 @@ def lost_after(*datagrams):
 
 
 def test_e4_bs5_no_gap_two_cpus_and_an_answer_between_are_no_loss():
+    # the third review, H1 (measured on 6.8, 7.0 and 6.18): another listener's answer takes the next number of its
+    # CPU, so the event after it steps by one from the answer, not from the event before it
     r, c = lost_after(fork(1, 6001, cpu=0, seq=10), fork(1, 6002, cpu=3, seq=500), fork(1, 6003, cpu=0, seq=11),
-                      answer(0, ack=9, seq=77), fork(1, 6004, cpu=3, seq=501), exit_(6001, cpu=0, seq=12))
+                      answer(0, ack=9, seq=12, cpu=0), fork(1, 6004, cpu=3, seq=501), exit_(6001, cpu=0, seq=13))
     assert c["lost"] == {"count": 0, "events": 0, "why": None} and c["said"] == []
+    r, c = lost_after(fork(1, 6001, cpu=0, seq=10), answer(0, ack=9, seq=12, cpu=0), exit_(6001, cpu=0, seq=13))
+    assert c["lost"]["events"] == 1                      # a number stepped over before the answer is still a loss
 
 
 def test_e4_bs5_a_gap_after_enobufs_is_lost_events_at_least_in_the_measured_words():
@@ -1129,11 +1161,22 @@ def test_e4_bs5_a_gap_with_no_enobufs_is_a_loss_the_kernel_did_not_tell():
     r, c = lost_after(fork(1, 6001, cpu=0, seq=10), message(COMM, bytes(24), cpu=0, seq=11),
                       fork(1, 6002, cpu=0, seq=14))
     assert c["lost"]["count"] == 0 and c["lost"]["events"] == 2
-    assert c["lost"]["why"].endswith("2 of them came with no ENOBUFS: a loss the kernel did not tell")
+    assert c["lost"]["why"].endswith("2 of them came before any ENOBUFS: a loss the kernel did not tell")
     feed(r, OSError(errno.ENOBUFS, "No buffer space available"), fork(1, 6003, cpu=0, seq=20))
-    assert r.counts()["lost"]["why"].endswith("2 of them came with no ENOBUFS: a loss the kernel did not tell")
-    feed(r, fork(1, 6004, cpu=0, seq=23))                      # no ENOBUFS since counts() was read: untold again
-    assert r.counts()["lost"]["events"] == 9 and "4 of them came with no ENOBUFS" in r.counts()["lost"]["why"]
+    assert r.counts()["lost"]["why"].endswith("2 of them came before any ENOBUFS: a loss the kernel did not tell")
+    # the third review, H2 (the measured order: the ENOBUFS is read first, a CPU's gap shows at its next event,
+    # which may come after a counts()): once an ENOBUFS came, a gap is never called untold
+    feed(r, fork(1, 6004, cpu=0, seq=23))
+    assert r.counts()["lost"]["events"] == 9 and "2 of them came before any ENOBUFS" in r.counts()["lost"]["why"]
+
+
+def test_h2_a_gap_seen_after_counts_was_read_is_not_called_untold_once_an_enobufs_came():
+    r, c = lost_after(fork(1, 6001, cpu=0, seq=10), fork(1, 6002, cpu=1, seq=40),
+                      OSError(errno.ENOBUFS, "No buffer space available"), fork(1, 6003, cpu=0, seq=15))
+    assert c["lost"]["events"] == 4 and "did not tell" not in c["lost"]["why"]
+    feed(r, fork(1, 6004, cpu=1, seq=45))                # the idle CPU's gap shows later, after counts() was read
+    c = r.counts()
+    assert c["lost"]["events"] == 8 and "did not tell" not in c["lost"]["why"]
 
 
 def test_e4_bs5_a_count_that_goes_back_is_not_counted_and_is_said_once():

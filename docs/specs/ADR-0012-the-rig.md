@@ -36,3 +36,15 @@ line of the report that contradicted another, and reproduced a question no test 
 A machine with a history: a Sysmon log that holds weeks, a clock that stood still while the machine was
 suspended, an account that is not an administrator's, an agent that acts by its own choice. Those stay the
 commander's field runs, and each one that finds something leaves an expectation or a made-up export behind.
+
+## Amendment A (the Table, 2026-11-20) - the stand-in does to the host what the rules of behaviour read
+The commander's field test of 2026-11-20 found three acts of an agent that no rule judged; ADR-0014 made the
+rules, and each was first seen to fire on the probe branch. The rig now holds them, so that a push that breaks
+one is seen on the push. On Windows the stand-in leaves a file that holds a remark in its user's Startup
+folder, reaches port 22 of the machine's own address (its own sshd answers), and sets a value under its user's
+Run key that would run a remark; it undoes all three, and says each in its own line. The rig's Sysmon logs the
+registry's values under the Run keys for it. X32 (PERSIST-AUTOSTART), X33 (NET-ADMIN-PORT) and X34
+(PERSIST-RUN-KEY) are MET where a finding of the rule names the stand-in's tree; n/a where the machine has no
+os source or the stand-in did not do the act; X34 is OPEN until its rule lands (ADR-0014 Amendment B), then
+MISSED where it is absent, as the other two. What the rig still cannot show for them: a desktop's ordinary
+work, which is where the budgets of these rules are measured (ADR-0014 AA-6).

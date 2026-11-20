@@ -3027,3 +3027,63 @@ The redone reader's own run, 15 times on those images: no read missed, nothing l
   reset at an exec, a thread bound, an eviction, or the word for unknown ticks is removed.
 - BS-10 (recorded for M14.1b). Whether a record carries the kernel event's CPU and count as evidence
   (question 8); a reader inside a time namespace, and event times after a suspend (G14): not measured.
+
+## Amendment BT (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1a-redo2.md (0c5014b); M14.1a lands
+The reviewer said NEXT: the commit does what BS rules, and two of BS-5's own rules still made the reader say
+something false. Both were the Table's words, not the builder's, and the Table put them right by hand in the
+commit that files the review, after measuring the first (the probe branch 1727304; kernels 6.8, 7.0 and 6.18).
+- Measured: while one listener read, a second asked to listen and to stop, three times. The first read six
+  answers, each with a real CPU and that CPU's next number of the kernel's count. Left out of the count, the
+  answers made six gaps; taken as part of it, none. The Table's note to the builder, that an answer carries the
+  ask's own number, was wrong.
+- BT-1 (H1: an answer is counted). An answer takes a number of its CPU's count as an event does, and the
+  reader counts it so. FOR: a second listener on the machine - another watch, the rig beside the service - is
+  never a loss the reader invents, and no user can make the reader say "lost" by asking the kernel to listen.
+- BT-2 (H2: told and untold). A gap is "a loss the kernel did not tell" only while no ENOBUFS has come since
+  the reader's start. After one, a gap is not told apart from it: the ENOBUFS is read before its gaps show, and
+  a CPU's gap shows only at that CPU's next event, which may be much later. The numbers do not change.
+- BT-3 (H3, H5: two sentences that were false). A later end of a process not held is one thread's, and says
+  so; it is never called a leader's. A record taken up again says "the end given before" only of an end that
+  was given: one past the bound of the ends never was.
+- BT-4 (H4, H6, H9: said as it is). Whether events made while the reader empties an overflowed queue are given
+  is not measured, and the spec says so. A bounded memory that forgets a pid is not counted; the pid is then
+  said as one whose fork was not heard; the module no longer says that every way it loses is counted.
+- BT-5 (recorded for M14.1b; H7, H8, H10, H11 and the reviewer's nine points). Under a loss a held process's
+  later thread's exit is dropped, and "the end given before was its leader's" may be another process's: after a
+  loss the watch takes every word about threads and ends as a hint beside its own sample. A record's join is by
+  pid, beginning and start together. The scan of unread ends at a take-up is to be measured under load.
+- BT-6 (the ground of M14.1b, measured: the probe branch c3c94d9 and b38f54c, three Ubuntu images, four CPUs).
+  200 children that live under a millisecond, three turns on each image, twice. With the reader's thread
+  inside a process whose other thread never yields: 158 to 202 programs of 200 not read. With that thread busy
+  half a second in every two: 10 to 29. With the reader in a process of its own while the process that
+  started it never yields: 0 to 2. Every fork, exec and exit was heard in every case; what is missed is the
+  program's name, read too late. Ruled: under the watch the reader runs in a process of its own, never as a
+  thread of the watch. FOR: the watch's own work does not blind it to the programs an agent starts.
+
+## Amendment BV (the Table, 2026-11-20) - an empty ProcessGuid is no ProcessGuid (found on the way to M15.2)
+Found while measuring M15.2 (ADR-0014 AC-9): in some runs every line of the stand-in's tree stopped about
+thirty seconds before the tree ended, and nothing said so. Measured (the probe branch, GitHub's Windows
+machine; one line written for each pass of a follow and each round, for the probe only):
+- Sysmon stopped holding the stand-in's process while it ran. The starts of its later children carried
+  `ParentProcessGuid` all zeros, `ParentImage` and `ParentCommandLine` `-`, and the right `ParentProcessId`.
+  In 17 runs of ninety seconds, two had such starts (1 and 11 of some 860); one more run had an ended
+  process's own ProcessGuid empty.
+- The follow took the zeros for a ProcessGuid: the children were no members, their passes wrote no line
+  (five passes in a row with nothing, the members' count standing still), and the bound moved past them for
+  good. The round did the same: it said the pid "held one more process" keyed by the zeros, and the tree was
+  quiet while it worked. It is main's own fault, older than M15.2: seen 5 times in some 38 runs of M15.2's
+  build, whose second read starts more helpers, and in none of 9 of main's.
+- With the zeros taken as no ProcessGuid (the probe's build): a run whose channel held 11 such starts wrote
+  every one of the stand-in's 45 children.
+- BV-1 (the rule). An all-zero ProcessGuid or ParentProcessGuid is no ProcessGuid, in the follow and in the
+  round: the event is joined by the pid it names, as an event that carries none always was. It is said: the
+  follow writes one silence line for its life, the round one hole with the count. FOR: a long-lived agent
+  whose process Sysmon lets go of keeps its tree and its lines. MUST NOT TOUCH: an event that carries a
+  ProcessGuid is keyed by it as before; no existing export's lines change.
+- BV-2 (Sysmon's `-`). `-` as an Image or a CommandLine is Sysmon's word for what it does not hold, never a
+  program's name: the name is unread (null), and the round gives the pid no image called `-`.
+- BV-3 (what it costs, said). Joined by a pid, a child is given to the pid's present holder: where the pid
+  was taken again in between, nothing tells the two apart. A rule that reads the parent's name has none.
+- BV-4 (not measured). How long a process must live, or how busy a machine must be, before Sysmon lets go of
+  it; a real desktop. The commander's field run with a named agent that lived for minutes is where to look
+  first: the watch now says the hole when it happens.

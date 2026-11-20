@@ -41,7 +41,7 @@ CMD = "C:\\Windows\\System32\\cmd.exe"
 PWSH = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 TEXT = "cmd /c echo test"
 KEY = "AK" + "IA" + "Z7Q2M4N8P3R5T6W9"   # a made-up key shape, never a real one: common.redact's aws pattern
-META = {"autostart", "hive", "view32", "value_name", "program", "image", "parent_image", "depth"}
+META = {"autostart", "hive", "view32", "value_name", "nested", "program", "image", "parent_image", "depth"}
 START = datetime.datetime(2026, 11, 3, 9, 0, 0, tzinfo=datetime.timezone.utc)   # synthetic.py's DAY
 CHANNEL = os_sysmon.CHANNEL
 
@@ -105,7 +105,8 @@ def test_e1_the_four_measured_shapes_and_the_two_implied_in_any_case(target, wan
     for other in (target.lower(), target.upper()):
         got = os_sysmon.autostart_value(other)
         assert got[:3] == want[:3] and got[3].lower() == want[3].lower()
-    assert os_sysmon.AUTOSTART_VALUE.pattern.startswith("(?i)\\A") and os_sysmon.AUTOSTART_VALUE.pattern.endswith("\\Z")
+    pattern = os_sysmon.AUTOSTART_VALUE.pattern
+    assert pattern.startswith("(?is)\\A") and pattern.endswith("\\Z")
 
 
 def test_e1_each_shape_is_a_line_with_its_facts():
@@ -122,7 +123,6 @@ def test_e1_each_shape_is_a_line_with_its_facts():
 NOT_AUTOSTART = [
     USER + "RunNotification\\StartupTNotiRaqibTest",   # measured: Windows' own sihost.exe sets these
     USER + "RunOnceEx\\RaqibTest", MACHINE + "RunServices\\RaqibTest", MACHINE + "RunServicesOnce\\RaqibTest",
-    USER + "Run\\Sub\\RaqibTest",                       # a value of a key under Run
     USER + "Run", MACHINE + "RunOnce",                  # the key itself, no value
     USER + "Run\\", MACHINE + "Run\\RaqibTest\\",       # a trailing backslash
     "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache\\Tree\\RaqibTask\\Id",
@@ -141,8 +141,25 @@ def test_e1_not_an_autostart_value_is_no_line_and_changes_no_other_line(target):
     got, said = built(with_it.text())
     assert regs(got) == [] and said == []
     want, _ = built(without.text())
-    assert [dict(r, ts=None) for r in got if r["tool"] != "file"] == [dict(r, ts=None) for r in want
-                                                                       if r["tool"] != "file"]
+    assert got == want and [r["tool"] for r in got if r["phase"] == "pre"] == ["process", "process", "file"]
+    assert [r["ts"] for r in got if r["tool"] == "file"] == ["2026-11-03T09:00:01.500Z"] * 2   # every line, its time
+
+
+# AC-3: anything below the key is a line; what follows it is the value's name, `nested` where it holds a backslash
+@pytest.mark.parametrize("target, name, nested", [
+    (USER + "Run\\RaqibRig\\Slash", "RaqibRig\\Slash", True),          # measured: Sysmon's target for such a name
+    (USER + "Run\\Sub\\RaqibTest", "Sub\\RaqibTest", True),             # a value of a key under Run: the same
+    (MACHINE32 + "RunOnce\\A\\B\\C", "A\\B\\C", True), (USER + "Run\\\\Lead", "\\Lead", True),
+    (USER + "Run\\Plain", "Plain", False)])
+def test_e3_anything_below_the_key_is_a_line_and_a_backslash_in_its_name_is_nested(target, name, nested):
+    assert os_sysmon.autostart_value(target)[3] == name
+    recs, _ = built(export([("reg", "01.000", 4950, SYN.AGENT, target)]).text())
+    (meta,) = regs(recs)
+    assert (meta["value_name"], meta["nested"]) == (name, nested) and set(meta) == META
+    (f,), notes = engine.evaluate([rule()], recs, {})
+    assert notes == [] and f["severity"] == "high"
+    assert ('a backslash in the name: %s (where true, the event cannot tell a value whose name holds one from a value'
+            ' of a key under the Run or RunOnce key)' % ("true" if nested else "false")) in f["summary"]
 
 
 def test_e1_an_event_with_no_target_object_is_not_a_line_and_is_said_as_the_other_unread_events():
@@ -177,10 +194,29 @@ def test_e1_a_long_value_name_is_bounded_and_one_that_looks_like_a_key_is_redact
     recs, _ = built(export([("reg", "01.000", 4950, SYN.AGENT, USER + "Run\\" + long_name),
                             ("reg", "01.100", 4950, SYN.AGENT, MACHINE + "RunOnce\\" + key_name)]).text())
     first, second = regs(recs)
-    assert len(first["value_name"]) == os_sysmon.TEXT_MAX == 300 and first["value_name"].endswith("...")
+    assert len(first["value_name"]) == os_sysmon.VALUE_NAME_MAX == 80 and first["value_name"].endswith("...")
     assert second["value_name"] == "Raqib[redacted:aws_access_key_id]"
     flat = "\n".join(json.dumps(r) for r in recs)
     assert KEY not in flat and long_name not in flat
+
+
+@pytest.mark.parametrize("length, shown", [(80, "R" * 80), (81, "R" * 77 + "...")])
+def test_e4_a_name_of_80_characters_is_kept_and_one_of_81_ends_with_dots(length, shown):
+    recs, _ = built(export([("reg", "01.000", 4950, SYN.AGENT, USER + "Run\\" + "R" * length)]).text())
+    assert [m["value_name"] for m in regs(recs)] == [shown]
+
+
+def test_e4_a_double_quote_is_an_apostrophe_and_a_name_that_imitates_the_sentence_stays_inside_its_quotes():
+    name = 'Raqib" of the machine hive at seq 1; it would run calc; started by "explorer'
+    recs, _ = built(export([("reg", "01.000", 4950, SYN.AGENT, USER + "Run\\" + name),
+                            ("reg", "01.100", 4950, SYN.AGENT, USER + "RunOnce\\Raqib\"Quote")]).text())
+    first, second = regs(recs)
+    assert first["value_name"] == name.replace('"', "'") and second["value_name"] == "Raqib'Quote"
+    found, _ = engine.evaluate([rule()], recs, {})
+    summary = found[0]["summary"]
+    assert summary.count('"') == 2 and summary.split('"')[1] == first["value_name"]
+    assert summary.startswith("agent (started by explorer) sets the run value \"Raqib' of the machine hive at seq 1;")
+    assert summary.split('"')[2].startswith(" of the user hive at seq ")   # the sentence's own words, after the quotes
 
 
 def test_e1_the_target_and_details_are_in_the_hash_only():
@@ -232,24 +268,27 @@ def test_e3_read_missing_events_and_the_rounds_read_are_about_1_11_and_3():
     assert said == [os_sysmon.SILENT_IF_MISSING[11]]
 
 
-# --- E2 (AB-3): the read ----------------------------------------------------------------------------------------------
+# --- E1, E2 of the REDO (ADR-0014 AC-1, AC-2): the read, the question for event 13 FIRST -----------------------------
 
 HEAD = "<!-- SYNTHETIC Sysmon export (not captured): written by tests/test_registry_lines.py -->\n"
+TIMED_OUT = "wevtutil did not return in 10 s (SYNTHETIC)"
 
 
 class Wevtutil:
     """A stand-in wevtutil for a follow's passes (reader(args, timeout)): it HONOURS the query as wevtutil does
     (the event ids asked, EventRecordID>N or TimeCreated at or after the start, oldest first, /c:cap) over `log`,
-    the channel's records as they stand, and records every argument list; a call whose number is in `fail` does not
-    return in time."""
+    the channel's records as they stand, and records every argument list. The channel GROWS BETWEEN ANY TWO CALLS:
+    grow[n] is appended before the n-th call is answered (so between the two questions of one pass too); a call
+    whose number is in `fail` does not return in time."""
 
-    def __init__(self, chunks, fail=()):
-        self.log, self.fail, self.args = list(chunks), set(fail), []
+    def __init__(self, chunks, grow=None, fail=()):
+        self.log, self.grow, self.fail, self.args = list(chunks), dict(grow or {}), set(fail), []
 
     def __call__(self, args, timeout):
         self.args.append(tuple(args))
+        self.log += self.grow.pop(len(self.args), [])
         if len(self.args) in self.fail:
-            return None, "wevtutil did not return in 10 s (SYNTHETIC)"
+            return None, TIMED_OUT
         if len(args) == 3:
             return HEAD + "".join(c for c, _, _ in self.log), None
         query, cap = args[2][3:], int(args[3][3:])
@@ -268,19 +307,18 @@ def first_q(bound, cap=2000):
     return os_sysmon.round_args(os_sysmon.round_query(*bound, ids=os_sysmon.READ), cap)
 
 
-def second_q(bound, cap=500):
+def reg_q(bound, cap=500):
     return os_sysmon.round_args(os_sysmon.round_query(*bound, ids=(13,)), cap)
 
 
-def follow(channel, later, passes, tmp_path, name="os.jsonl", **kw):
+def follow(channel, passes, tmp_path, name="os.jsonl", **kw):
     """The real os_sysmon.follow of the tree under pid 4950 over the stand-in, bounded (since START), `passes`
-    passes with no wait; after pass n the channel gains later[n-1]. (lines, RAQIB-SILENCE lines, [(pass, top)])."""
-    stop, tops, later = threading.Event(), [], list(later)
+    passes with no wait: (lines, RAQIB-SILENCE lines, [(pass, top, the tree's registry_top at its end)])."""
+    stop, tops = threading.Event(), []
+    tree = kw.setdefault("tree", {})
 
     def on_pass(n, top):
-        tops.append((n, top))
-        if later:
-            channel.log += later.pop(0)
+        tops.append((n, top, tree.get("registry_top")))
         if n >= passes:
             stop.set()
     kw.setdefault("since", START)
@@ -292,103 +330,146 @@ def follow(channel, later, passes, tmp_path, name="os.jsonl", **kw):
     return [json.loads(x) for x in text if x.startswith("{")], [x for x in text if os_sysmon.MARKER in x], tops
 
 
-def three_passes():
-    """79001 kimi-like root start, 79002 reg.exe's start, 79003 its Run value, 79004 a value of a process outside
-    the tree | 79005 cmd's start, 79006 its value, 79007 reg.exe's RunOnce value | 79008 cmd's machine value (its
-    start was the second pass's), 79009 a connection."""
+def names(lines):
+    return [m["value_name"] for m in regs(lines)]
+
+
+def grown():
+    """The channel of the three-pass test, in the order Sysmon logged it (record numbers count up):
+    now:            79001 the root's start, 79002 reg.exe's start, 79003 its value A, 79004 an outsider's value;
+    before call 2:  79005 cmd's start, 79006 its value B   (between the two questions of pass 1);
+    before call 3:  79007 powershell's start, 79008 its value C   (after both questions of pass 1);
+    before call 5:  79009 cmd's machine value D, 79010 a connection."""
     x = export([("proc", "01.000", 4970, REG, 4950, SYN.AGENT), ("reg", "01.100", 4970, REG, USER + "Run\\RaqibTestA"),
                 ("reg", "01.200", 7000, PWSH, USER + "Run\\RaqibOther"),
-                ("proc", "02.000", 4980, CMD, 4950, SYN.AGENT), ("reg", "02.100", 4980, CMD, USER + "Run\\RaqibTestB"),
-                ("reg", "02.200", 4970, REG, USER + "RunOnce\\RaqibTestC"),
+                ("proc", "01.300", 4980, CMD, 4950, SYN.AGENT), ("reg", "01.400", 4980, CMD, USER + "Run\\RaqibTestB"),
+                ("proc", "02.000", 4990, PWSH, 4950, SYN.AGENT),
+                ("reg", "02.100", 4990, PWSH, USER + "RunOnce\\RaqibTestC"),
                 ("reg", "03.000", 4980, CMD, MACHINE + "Run\\RaqibTestD"),
                 ("net", "03.100", 4970, REG, "192.0.2.20", 443)])
     c = chunks(x)
-    assert [r for _, r, _ in c] == list(range(79001, 79010))
-    return c[:4], [c[4:7], c[7:]]
+    assert [r for _, r, _ in c] == list(range(79001, 79011))
+    return c[:4], {2: c[4:6], 3: c[6:8], 5: c[8:]}
 
 
-def test_e2_three_passes_ask_the_two_questions_each_in_order_and_read_every_event_13_once(tmp_path):
-    now, later = three_passes()
-    channel, tree = Wevtutil(now), {}
-    lines, silent, tops = follow(channel, later, 3, tmp_path, tree=tree)
-    assert channel.args == [first_q((None, START)), second_q((None, START)),
-                            first_q((79002, None)), second_q((79004, None)),
-                            first_q((79005, None)), second_q((79007, None))]
-    assert channel.args[1] == ("qe", CHANNEL, "/q:*[System[(EventID=13) and TimeCreated[@SystemTime>="
+def test_e1_registry_first_and_a_value_set_between_the_two_questions_is_a_line_of_the_next_pass_once(tmp_path):
+    now, grow = grown()
+    channel = Wevtutil(now, grow)
+    lines, silent, tops = follow(channel, 3, tmp_path)
+    assert channel.args == [reg_q((None, START)), first_q((None, START)),
+                            reg_q((79004, None)), first_q((79005, None)),
+                            reg_q((79008, None)), first_q((79007, None))]
+    assert channel.args[0] == ("qe", CHANNEL, "/q:*[System[(EventID=13) and TimeCreated[@SystemTime>="
                                               "'2026-11-03T09:00:00.000Z']]]", "/c:500", "/f:xml")
-    assert channel.args[0] == ("qe", CHANNEL, "/q:*[System[(EventID=1 or EventID=11 or EventID=3) and"
+    assert channel.args[1] == ("qe", CHANNEL, "/q:*[System[(EventID=1 or EventID=11 or EventID=3) and"
                                               " TimeCreated[@SystemTime>='2026-11-03T09:00:00.000Z']]]", "/c:2000",
                                "/f:xml")   # the first question, to the byte
-    assert tops == [(1, 79002), (2, 79005), (3, 79009)]   # on_pass's bound is the first read's
-    assert tree["registry_top"] == 79008 and os_sysmon.REGISTRY_CAP == 500
-    got = [(m["value_name"], m["image"], m["parent_image"], m["depth"]) for m in regs(lines)]
-    assert got == [("RaqibTestA", "reg", "agent", 1), ("RaqibTestB", "cmd", "agent", 1),
-                   ("RaqibTestC", "reg", "agent", 1), ("RaqibTestD", "cmd", "agent", 1)]   # each once, none other
-    pre = [(r["seq"], r["tool"]) for r in lines if r["phase"] == "pre"]
-    assert [t for _, t in pre] == ["process", "process", "registry", "process", "registry", "registry", "registry",
-                                   "net"]   # each pass's lines in the order of time
+    # B: cmd started and set its value after the registry's answer and before the other's: a line of pass 2, once;
+    # C: powershell started after both questions of pass 1: a line of pass 2; D: of pass 3; the outsider's: never
+    assert names(lines) == ["RaqibTestA", "RaqibTestB", "RaqibTestC", "RaqibTestD"]
+    assert [(m["image"], m["parent_image"], m["depth"]) for m in regs(lines)] == [
+        ("reg", "agent", 1), ("cmd", "agent", 1), ("powershell", "agent", 1), ("cmd", "agent", 1)]
+    # the main bound is the other answer's, never moved by an event 13; the registry's ran ahead of it after pass 2
+    # (79008 beside 79007: the measured order of bounds) and nothing was lost
+    assert tops == [(1, 79005, 79004), (2, 79007, 79008), (3, 79010, 79009)]
     assert silent == []
+    pre = [r for r in lines if r["phase"] == "pre"]
+    assert [r["tool"] for r in pre] == ["process", "process", "registry", "process",   # pass 1, in time's order
+                                        "registry", "process", "registry",             # pass 2
+                                        "registry", "net"]                             # pass 3
 
 
-def test_e2_a_follow_without_the_second_read_asks_one_question_and_writes_no_registry_line(tmp_path):
-    now, later = three_passes()
-    channel = Wevtutil(now)
-    lines, _, tops = follow(channel, later, 2, tmp_path, registry=False)
-    assert channel.args == [first_q((None, START)), first_q((79002, None))] and regs(lines) == []
-    assert "registry" in __import__("inspect").signature(os_sysmon.follow).parameters
+def test_e1_a_cut_of_the_other_answer_holds_the_value_above_it_for_the_next_pass(tmp_path):
+    x = export([("proc", "01.000", 4970, REG, 4950, SYN.AGENT), ("proc", "01.100", 4980, CMD, 4950, SYN.AGENT),
+                ("reg", "01.200", 4980, CMD, USER + "Run\\RaqibTestB")])
+    channel = Wevtutil(chunks(x))   # 79001 root, 79002 reg.exe, 79003 cmd (past the cut of 2), 79004 cmd's value
+    lines, silent, tops = follow(channel, 2, tmp_path, cap=2)
+    assert channel.args == [reg_q((None, START)), first_q((None, START), 2),
+                            reg_q((None, START)), first_q((79002, None), 2)]   # the value was held: asked again
+    assert tops == [(1, 79002, None), (2, 79003, 79004)]
+    assert names(lines) == ["RaqibTestB"] and regs(lines)[0]["image"] == "cmd"
+    assert [r["tool"] for r in lines if r["phase"] == "pre"] == ["process", "process", "process", "registry"]
+    assert silent == [os_sysmon.silence_line(4950, os_sysmon.FOLLOW_CUT % (2, 2, 79002))]
 
 
-def test_e2_a_second_read_at_its_cap_is_said_once_and_the_next_pass_reads_on(tmp_path, monkeypatch):
-    monkeypatch.setattr(os_sysmon, "REGISTRY_CAP", 1)
-    now, later = three_passes()
-    channel = Wevtutil(now)
-    lines, silent, _ = follow(channel, later, 3, tmp_path)
-    assert channel.args[1] == second_q((None, START), 1) and channel.args[3] == second_q((79003, None), 1)
-    cut = os_sysmon.REGISTRY_CUT % (1, 1, 79003)
-    assert cut == ("the follow's second read (event 13, a registry value set) read 1 events, its cap (/c:1): the"
-                   " records after record 79003 are read by its next pass")
-    assert silent.count(os_sysmon.silence_line(4950, cut)) == 1
-    assert [m["value_name"] for m in regs(lines)] == ["RaqibTestA", "RaqibTestB"]   # one a pass, read on
+def test_e1_a_failed_other_read_takes_no_value_and_the_registrys_bound_does_not_move(tmp_path):
+    now, grow = grown()
+    channel = Wevtutil(now, grow, fail={2})   # pass 1's other question does not return
+    lines, silent, tops = follow(channel, 3, tmp_path)
+    assert tops[0] == (1, None, None) and channel.args[2] == reg_q((None, START))
+    assert silent == [os_sysmon.silence_line(4950, TIMED_OUT)]
+    assert names(lines) == ["RaqibTestA", "RaqibTestB", "RaqibTestC", "RaqibTestD"]   # each once, none lost
 
 
-def test_e2_a_failed_second_read_beside_a_good_first_is_said_once_and_takes_nothing_from_the_pass(tmp_path):
-    now, later = three_passes()
-    channel = Wevtutil(now, fail={2, 4})   # the second question of passes 1 and 2
-    lines, silent, tops = follow(channel, later, 3, tmp_path)
-    why = os_sysmon.REGISTRY_FAILED % "wevtutil did not return in 10 s (SYNTHETIC)"
+def test_e1_a_failed_registry_read_is_said_once_and_takes_nothing_from_the_pass(tmp_path):
+    now, grow = grown()
+    channel = Wevtutil(now, grow, fail={1, 3})   # the registry's question of passes 1 and 2
+    lines, silent, tops = follow(channel, 3, tmp_path)
+    why = os_sysmon.REGISTRY_FAILED % TIMED_OUT
     assert silent == [os_sysmon.silence_line(4950, why)]   # said once, as its own silence
     assert [r["tool"] for r in lines if r["phase"] == "pre"][:3] == ["process", "process", "process"]
-    assert tops == [(1, 79002), (2, 79005), (3, 79009)]
-    # its bound did not move: the third pass asks since the start and reads every value of the tree, once
-    assert channel.args[5] == second_q((None, START))
-    assert sorted(m["value_name"] for m in regs(lines)) == ["RaqibTestA", "RaqibTestB", "RaqibTestC", "RaqibTestD"]
+    assert [t[:2] for t in tops] == [(1, 79005), (2, 79007), (3, 79010)] and tops[1][2] is None
+    assert channel.args[4] == reg_q((None, START))   # its bound did not move: pass 3 reads every value, once
+    assert sorted(names(lines)) == ["RaqibTestA", "RaqibTestB", "RaqibTestC", "RaqibTestD"]
 
 
-def test_e2_a_restart_resets_the_second_reads_bound_as_the_firsts(tmp_path):
-    now, later = three_passes()
-    channel, tree = Wevtutil(now), {}
+def test_e1_a_registry_read_at_its_cap_is_said_and_the_next_pass_reads_on(tmp_path, monkeypatch):
+    assert os_sysmon.REGISTRY_CAP == 500
+    monkeypatch.setattr(os_sysmon, "REGISTRY_CAP", 1)
+    now, grow = grown()
+    channel = Wevtutil(now, grow)
+    lines, silent, _ = follow(channel, 4, tmp_path)
+    assert channel.args[0] == reg_q((None, START), 1) and channel.args[2] == reg_q((79003, None), 1)
+    cut = os_sysmon.REGISTRY_CUT % (1, 1, 79003)
+    assert cut == ("the follow's read of event 13 (a registry value set) read 1 events, its cap (/c:1): the"
+                   " records after record 79003 are read by its next pass")
+    assert silent.count(os_sysmon.silence_line(4950, cut)) == 1
+    assert names(lines) == ["RaqibTestA", "RaqibTestB", "RaqibTestC"]   # one record a pass, none lost
+
+
+def test_e2_a_root_not_found_yet_does_not_move_the_registrys_bound(tmp_path):
+    x = SYN.Export(first_record=79001)
+    reg(x, "01.000", 4950, SYN.AGENT, USER + "Run\\RaqibTestR")   # the root's value, before any other event of it
+    x.net("01.100", 4950, SYN.AGENT, "192.0.2.20", 443)
+    c = chunks(x)
+    channel = Wevtutil(c[:1], {3: c[1:]})   # the root's connection comes before pass 2
+    lines, _, tops = follow(channel, 2, tmp_path)   # the root by its pid alone
+    assert tops == [(1, None, None), (2, 79002, 79001)]   # pass 1 found no root: the bound did not move
+    assert channel.args[2] == reg_q((None, START))
+    assert names(lines) == ["RaqibTestR"] and regs(lines)[0]["depth"] == 0
+
+
+def test_e1_a_restart_resets_the_registrys_bound_as_the_others(tmp_path):
+    now, grow = grown()
+    channel, tree = Wevtutil(now, grow), {}
     at = datetime.datetime(2026, 11, 3, 9, 0, 2, tzinfo=datetime.timezone.utc)
-    follow(channel, later, 2, tmp_path, tree=tree, restart=lambda: (1, at) if len(channel.args) >= 2 else None)
-    assert channel.args[2:] == [first_q((None, at)), second_q((None, at))]
-    assert tree["restart"] == (1, at) and tree["registry_top"] == 79007
+    follow(channel, 2, tmp_path, tree=tree, restart=lambda: (1, at) if len(channel.args) >= 2 else None)
+    assert channel.args[2:] == [reg_q((None, at)), first_q((None, at))]
+    assert tree["restart"] == (1, at)
 
 
-def test_e2_a_follow_attached_again_with_the_kept_tree_reads_none_twice(tmp_path):
-    now, later = three_passes()
-    channel, tree = Wevtutil(now), {}
-    one, _, tops = follow(channel, [], 1, tmp_path, name="one.jsonl", tree=tree)
-    assert [m["value_name"] for m in regs(one)] == ["RaqibTestA"] and tree["registry_top"] == 79004
-    again = Wevtutil(now + later[0])
-    two, _, _ = follow(again, [], 1, tmp_path, name="two.jsonl", tree=host.tree_copy(tree), after_record=tops[-1][1])
-    assert again.args == [first_q((79002, None)), second_q((79004, None))]
-    assert [m["value_name"] for m in regs(two)] == ["RaqibTestB", "RaqibTestC"]   # the earlier follow's never again
-    # a start read by the earlier follow gives the names (reg.exe's, 79002, is not read again)
-    assert [(m["image"], m["parent_image"]) for m in regs(two)] == [("cmd", "agent"), ("reg", "agent")]
+def test_e1_a_follow_attached_again_with_the_kept_tree_reads_none_twice(tmp_path):
+    now, grow = grown()
+    channel, tree = Wevtutil(now, {2: grow[2]}), {}
+    one, _, tops = follow(channel, 1, tmp_path, name="one.jsonl", tree=tree)
+    assert names(one) == ["RaqibTestA"] and tree["registry_top"] == 79004
+    again = Wevtutil(channel.log + grow[3])
+    two, _, _ = follow(again, 1, tmp_path, name="two.jsonl", tree=host.tree_copy(tree), after_record=tops[-1][1])
+    assert again.args == [reg_q((79004, None)), first_q((79005, None))]
+    assert names(two) == ["RaqibTestB", "RaqibTestC"]   # the earlier follow's never again
+    assert [(m["image"], m["parent_image"]) for m in regs(two)] == [("cmd", "agent"), ("powershell", "agent")]
 
 
-def test_e2_a_follow_given_no_bound_and_run_on_an_export_read_event_13_from_the_same_text(tmp_path):
-    now, later = three_passes()
-    text = HEAD + "".join(c for c, _, _ in now + later[0] + later[1])
+def test_e1_a_follow_without_registry_asks_one_question_and_writes_no_registry_line(tmp_path):
+    now, grow = grown()
+    channel = Wevtutil(now, grow)
+    lines, _, _ = follow(channel, 2, tmp_path, registry=False)
+    assert channel.args == [first_q((None, START)), first_q((79002, None))] and regs(lines) == []
+
+
+def test_e1_a_follow_given_no_bound_and_run_on_an_export_read_event_13_from_the_same_text(tmp_path):
+    now, grow = grown()
+    text = HEAD + "".join(c for c, _, _ in now + grow[2] + grow[3] + grow[5])
     stop = threading.Event()
     stop.set()
     os_sysmon.follow("4950", str(tmp_path / "whole.jsonl"), stop, live=lambda: (text, None), out=io.StringIO(),
@@ -401,9 +482,21 @@ def test_e2_a_follow_given_no_bound_and_run_on_an_export_read_event_13_from_the_
                   err=io.StringIO())
     ran = [json.loads(x) for x in (tmp_path / "run.jsonl").read_text(encoding="ascii").splitlines()
            if x.startswith("{")]
-    assert [m["value_name"] for m in regs(whole)] == [m["value_name"] for m in regs(ran)] == [
-        "RaqibTestA", "RaqibTestB", "RaqibTestC", "RaqibTestD"]
+    assert names(whole) == names(ran) == ["RaqibTestA", "RaqibTestB", "RaqibTestC", "RaqibTestD"]
     assert [r for r in whole if r["phase"] != "session_start"] == [r for r in ran if r["phase"] != "session_start"]
+
+
+def test_e7_the_registry_reads_problem_lines_and_an_event_with_no_target_object_are_said_as_its_own():
+    x = SYN.Export(first_record=79001)
+    reg(x, "01.000", 4950, SYN.AGENT, USER + "Run\\RaqibTestA", TEXT, None, ("TargetObject",))
+    reg(x, "01.100", 4950, SYN.AGENT, USER + "Run\\RaqibTestB")
+    second = x.text() + "<Event xmlns='%s'><System><EventID>13</EventID>\n" % SYN.NS   # cut short: no </Event>
+    first = export([]).text()
+    recs, said = built(first, tree={}, info={}, registry=second)
+    assert names(recs) == ["RaqibTestB"]
+    assert "the event at line 2 of the read of event 13 (Sysmon 13) has no TargetObject: it is not recorded" in said
+    assert ("the read of event 13: its line 4 cannot be read (an <Event> without </Event>): that event is not"
+            " recorded") in said
 
 
 # --- E4 (AB-1): the rule ----------------------------------------------------------------------------------------------
@@ -422,6 +515,10 @@ def test_e4_the_rule_as_amendment_b_rules_it():
     for start in ("a hive written offline or loaded from a file", "a value changed by a program of the system on the"
                   " tree's behalf", "Linux has no os source", "an export or a follow that reached its cap"):
         assert any(e.startswith(start) for e in r.evasion), start
+    assert not [e for e in r.evasion if e.startswith("a value whose name holds a backslash")]   # AC-3: no way round
+    assert "(not measured for the registry" in next(e for e in r.evasion if e.startswith("a value changed by"))
+    assert "registry is not read" not in " ".join(rule("PERSIST-AUTOSTART").evasion)   # AC-6
+    assert "PERSIST-RUN-KEY's: Sysmon event 13" in rule("PERSIST-AUTOSTART").evasion[0]
     third = r.evasion[2]
     assert "Raqib cannot tell that from nothing done" in third and "not said yet" in third
     for word in ("{input_meta.hive}", "{input_meta.autostart}", "{input_meta.value_name}", "{input_meta.program}",
@@ -445,8 +542,15 @@ def test_e4_the_fixtures_six_shapes_and_a_null_program_fire_and_the_negatives_do
     assert any(m["program"] is None for m in metas) and {"reg", "powershell", "agent"} == {m["image"] for m in metas}
     assert sorted(s for f in found for s in f["cited_seq"]) == expect and len(found) == len(metas) == 7
     assert notes == [] and all(f["severity"] == "high" for f in found)
-    assert found[0]["summary"] == ("reg sets a run value of the user hive at seq 5 (RaqibTestA: it would run cmd;"
-                                   " started by cmd)")
+    assert found[0]["summary"] == ('reg (started by cmd) sets the run value "RaqibTestA" of the user hive at seq 5; it'
+                                   " would run cmd; a backslash in the name: false (where true, the event cannot tell"
+                                   " a value whose name holds one from a value of a key under the Run or RunOnce key)")
+    assert all(m["nested"] is False for m in metas)
+    lines, expect, (found, notes) = judged("positive-nested.json")   # AC-3: both read as nested, both fire
+    assert [(m["value_name"], m["nested"]) for m in regs(lines)] == [("RaqibTestH\\Part", True),
+                                                                     ("RaqibTest\\Deeper\\Part", True)]
+    assert sorted(s for f in found for s in f["cited_seq"]) == expect and len(found) == 2 and notes == []
+    assert all("a backslash in the name: true (where true, the event cannot tell" in f["summary"] for f in found)
     lines, _, (found, notes) = judged("negative-not-a-run-value.json")
     assert found == [] and notes == []
     pre = [r for r in lines if r["phase"] == "pre"]
@@ -482,6 +586,64 @@ def test_e5_the_watch_knows_registry_and_judge_source_gives_one_high_source_find
     assert "PERSIST-RUN-KEY" not in {r.id for r in host.source_rules(RULES, host_lines=True)}
 
 
+CLAUSE = "; this follow does not read the registry (Sysmon event 13): no value it sets is a line here"
+
+
+class NamesRegistry:
+    """A tree's os follow for raqib watch --host whose signature names `registry` (as os_sysmon.follow's does): it
+    records what it is given, finishes one pass that writes nothing, then waits for its Stop."""
+
+    def __init__(self):
+        self.given = []
+
+    def __call__(self, root, log, stop, every=None, out=None, err=None, on_pass=None, after_record=None, helpers=None,
+                 since=None, tree=None, restart=None, server_hash=False, mark_under=None, registry=False):
+        self.given.append({"registry": registry, "server_hash": server_hash, "bounded": since is not None})
+        on_pass(1, None)
+        stop.wait()
+        return 1
+
+
+class TakesAnyWord:
+    """One whose signature does not name `registry` (it takes any keyword, as the tests' stand-ins of the real
+    follow do): it is called as before."""
+
+    def __init__(self):
+        self.given = []
+
+    def __call__(self, root, log, stop, **kw):
+        self.given.append(sorted(kw))
+        kw["on_pass"](1, None)
+        stop.wait()
+        return 1
+
+
+def watched(tmp_path, monkeypatch, follow):
+    sys.path.insert(0, str(ROOT / "tests"))
+    from test_host_follow_returns import Rounds, rounds   # noqa: E402  (kimi and its curls, SYNTHETIC)
+    from test_host_third_field_run import watch           # noqa: E402
+    from test_round_channel import WALL0                  # noqa: E402
+    w, _, _ = watch(tmp_path, monkeypatch, rounds(tmp_path, 3), channel=Rounds(), follow=follow, wall0=WALL0 + 240)
+    (key,) = [k for k in w.trees if k[0] == 9176]
+    assert w.sources[key].kind == "os"
+    return w.sources[key]
+
+
+def test_e5_the_watch_gives_registry_to_a_follow_that_names_it(tmp_path, monkeypatch):
+    follow = NamesRegistry()
+    src = watched(tmp_path, monkeypatch, follow)
+    assert follow.given == [{"registry": True, "server_hash": True, "bounded": True}]
+    assert CLAUSE not in src.text and "registry" in __import__("inspect").signature(os_sysmon.follow).parameters
+
+
+def test_e5_a_follow_that_does_not_name_it_is_called_as_before_and_its_source_says_so(tmp_path, monkeypatch):
+    follow = TakesAnyWord()
+    src = watched(tmp_path, monkeypatch, follow)
+    assert follow.given == [["after_record", "err", "every", "helpers", "mark_under", "on_pass", "out", "restart",
+                             "server_hash", "since", "tree"]]   # no `registry`: as before
+    assert src.text.startswith("os: Sysmon, rooted at pid 9176") and src.text.endswith(CLAUSE)
+
+
 def test_e5_a_registry_line_is_paired_with_no_hostchild_line():
     ts = "2026-11-03T09:00:01.200Z"
     reg_line = {"source": "os", "tool": "registry", "ts": ts, "input_meta": {"image": "reg"}}
@@ -504,7 +666,7 @@ def test_e5_check_rules_lists_the_rule_ok_within_its_budget():
                          text=True, timeout=300)
     assert out.returncode == 0, out.stderr
     rows = {line.split()[0]: line for line in out.stdout.splitlines()[1:]}
-    assert re.match(r"PERSIST-RUN-KEY +ok +0\.000 +0\.05 +1 positive; .* 1 measured, 9 unmeasured",
+    assert re.match(r"PERSIST-RUN-KEY +ok +0\.000 +0\.05 +2 positive; .* 1 measured, 9 unmeasured",
                     rows["PERSIST-RUN-KEY"])
 
 
@@ -518,6 +680,22 @@ def test_e6_the_guide_and_the_threat_model_hold_the_sentences_that_matter():
     assert ("It needs Windows with Sysmon logging a value set under these keys: where the configuration logs none,"
             " there is nothing to read. Linux has no os source for it: nothing there is judged by it |") in guide
     assert len(list(CATALOG.glob("*.yaml"))) == 17
+    # AC-6: what os-sysmon reads and writes, said where it is said
+    assert ("Sysmon events 1 (process create), 11 (file create), 3 (network connect) and 13 (a value set below the"
+            " registry's Run or RunOnce key, ADR-0014) of the tree under the root") in guide
+    assert '`source: "os"`, tool `process`, `file`, `net` or `registry`.' in guide
+    assert "Hashes of the command line, the path, the destination or the registry's target and value text" in guide
+    assert "before it, the follow asks one of its own for event 13" in guide
+    assert "A value under the registry's Run or RunOnce key is PERSIST-RUN-KEY's" in guide
+    assert "An autostart value of the registry, a scheduled task" not in guide
+    assert ("file, net (dest_port) or registry (a value set under the registry's Run or RunOnce key; depth)"
+            in host.SUSPECT_PROMPT)
+    helped = " ".join((ROOT / "raqib" / "cli.py").read_text(encoding="ascii").split())   # the os-sysmon help
+    assert ("1 (process create), 11 (file create), 3 (network connect) and 13 (a value set under the registry's"
+            in helped)
+    doc = " ".join(os_sysmon.__doc__.split())
+    assert "11 (file create), 3 (network connect) and 13 (a value set below the registry's Run or RunOnce key" in doc
+    assert "tool `process`, `file`, `net` or `registry`" in doc
     text = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
     part = text.split("### The registry's autostart values (PERSIST-RUN-KEY; ADR-0014 Amendment B)", 1)[1]
     flat = " ".join(part.split("### ", 1)[0].split())
@@ -531,6 +709,16 @@ def test_e6_the_guide_and_the_threat_model_hold_the_sentences_that_matter():
                      "A configuration that logs every key was not measured",
                      "Linux has no os source: the rule judges nothing there.",
                      "a net line whose `Initiated` was not read is not judged and nothing says so;",
+                     "asks its question for event 13 first (at most 500 events a pass), and then the first question,",
+                     "no event 13 above its last record is taken and the registry's bound stops there,",
+                     "while the tree's root is not found yet, the bound does not move either.",
+                     "the line says `nested`, the rule fires for both, and its sentence says that it cannot tell.",
+                     "(not measured for the registry; the measured case is the Schedule service's own TaskCache key).",
+                     "An event 13 named by its pid alone (no ProcessGuid)",
+                     "a later problem at a line number said before is not said again. Not measured.",
+                     "and so two acts. Not shown reachable.",
+                     "SYSTEM's own hive as `HKU\\S-1-5-18` or as `HKU\\.DEFAULT` (the second is not read): not"
+                     " measured.",
                      "a Sysmon channel that gives no file event, and now none of event 13, is not said."):
         assert sentence in flat, sentence
     assert not re.search(r"\bM\d+\.\d+", flat)   # no milestone token

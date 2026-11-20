@@ -3,8 +3,10 @@ Amendments C and D, rulings C-5 to C-7 of docs/review/2026-11-03-M5.3-ruling.md
 and D-3 to D-6, D-12 of docs/review/2026-11-03-M5.3-redo-ruling.md).
 
 `python -m raqib os-sysmon --root PID[:GUID] --log PATH [--from FILE.xml] [--cwd DIR]`
-reads Sysmon events 1 (process create), 11 (file create) and 3 (network
-connect) of the process tree under PID and appends them to the trace PATH.
+reads Sysmon events 1 (process create), 11 (file create), 3 (network
+connect) and 13 (a value set below the registry's Run or RunOnce key,
+ADR-0014 Amendments B and C) of the process tree under PID and appends them
+to the trace PATH.
 The os record is the only one the watched agent does not write: Sysmon
 writes it, from the kernel's view of the tree.
 
@@ -76,13 +78,14 @@ What is written (C-5), one session per run, `os-<PID>`:
   apart: its input_meta then has time_from "logged", time_skew_s and,
   where the EventRecordID was read, time_record (AN-6); the logged time is
   when the log took the event, which can be later than the act, never the
-  time of the read), tool `process`, `file` or `net`, and
+  time of the read), tool `process`, `file`, `net` or `registry`, and
   `source: "os"`; the post carries `ok: true` and `output_meta: {}` (an os
   event has no output);
 - input_sha256 is the sha256 of the canonical JSON of the command line
-  ({"command_line": CommandLine}), the path ({"path": TargetFilename}) or
-  the destination ({"destination": {hostname, ip, port, protocol}}); the
-  text itself is never written;
+  ({"command_line": CommandLine}), the path ({"path": TargetFilename}),
+  the destination ({"destination": {hostname, ip, port, protocol}}) or a
+  registry value set ({"target": TargetObject, "details": Details}); the
+  text itself is never written (a value's name is, as below);
 - input_meta: for a process {"command_head": NAME, "command_programs":
   [NAME], "image": IMAGE, "depth": D, "parent_seq": S}, NAME the basename of
   Image as Sysmon logged it if common's name rules accept it (HEAD_NAME, not
@@ -120,17 +123,20 @@ What is written (C-5), one session per run, `os-<PID>`:
   start (build's tree keeps the starts it read, "starts"); dest_port,
   dest_private and the hashes are what they were. ADR-0014 AB-2 (M15.2):
   an event 13 (a registry value set) is a line of tool `registry` only
-  where its TargetObject is a value directly under
-  ...\\CurrentVersion\\Run or \\RunOnce of HKU\\<a SID>\\SOFTWARE or
-  HKLM\\SOFTWARE (with or without \\Wow6432Node; autostart_value): its
-  input_meta is {"autostart": run|runonce, "hive": user|machine,
-  "view32": bool, "value_name": the value's name (common.redact,
-  bounded), "program": registry_program(Details), "image": the event's
-  own Image (a process line's gate), "parent_image": as a net line's,
-  "depth": D}, and its input_sha256 the hash of {"target": TargetObject,
-  "details": Details}; neither is written in the clear. Read from an
-  export (run) and a follow given no bound in the same text; under a
-  bounded follow by a second question of its own (follow's registry);
+  where its TargetObject is anything below ...\\CurrentVersion\\Run or
+  \\RunOnce of HKU\\<a SID>\\SOFTWARE or HKLM\\SOFTWARE (with or without
+  \\Wow6432Node; autostart_value, AC-3): its input_meta is {"autostart":
+  run|runonce, "hive": user|machine, "view32": bool, "value_name": all
+  that follows the key (value_name: common.redact, at most 80
+  characters, a double quote as an apostrophe), "nested": a backslash in
+  it (a value whose name holds one, or a value of a key under Run: the
+  event cannot tell), "program": registry_program(Details), "image": the
+  event's own Image (a process line's gate), "parent_image": as a net
+  line's, "depth": D}, and its input_sha256 the hash of {"target":
+  TargetObject, "details": Details}; neither is written in the clear.
+  Read from an export (run) and a follow given no bound in the same text;
+  under a bounded follow by a question of its own, asked first (follow's
+  registry, AC-1);
 - session_end at the last kept event's time;
 - cwd on every line: --cwd DIR (an absolute directory, Windows or POSIX:
   the export may be read on another host), else the CurrentDirectory of
@@ -187,12 +193,16 @@ REGISTRY_READ = (REGISTRY_EVENT,)
 REGISTRY_TOOL = "registry"
 TOOLS = {1: "process", 11: "file", 3: "net", REGISTRY_EVENT: REGISTRY_TOOL}
 REGISTRY_CAP = 500                # AB-3: a follow's second question, at most this many events 13 per pass
-# AB-2: a value directly under ...\CurrentVersion\Run or \RunOnce of a user's hive (HKU\<a SID>) or the machine's,
-# with or without \Wow6432Node after SOFTWARE, any case; the whole key, anchored at both ends (never RunNotification)
-AUTOSTART_VALUE = re.compile(r"(?i)\A(?:HKU\\(S-1-[0-9]+(?:-[0-9]+)+)|HKLM)\\SOFTWARE(\\Wow6432Node)?"
-                             r"\\Microsoft\\Windows\\CurrentVersion\\(Run|RunOnce)\\([^\\]+)\Z")
+# AB-2, AC-3: anything below ...\CurrentVersion\Run or \RunOnce of a user's hive (HKU\<a SID>) or the machine's,
+# with or without \Wow6432Node after SOFTWARE, any case; the whole key, anchored at both ends (never RunNotification);
+# what follows the key is the value's name (a backslash in it: `nested`); a target that ends at the key or with a
+# backslash is not one
+AUTOSTART_VALUE = re.compile(r"(?is)\A(?:HKU\\(S-1-[0-9]+(?:-[0-9]+)+)|HKLM)\\SOFTWARE(\\Wow6432Node)?"
+                             r"\\Microsoft\\Windows\\CurrentVersion\\(Run|RunOnce)\\(.*[^\\])\Z")
+VALUE_NAME_MAX = 80               # AC-4: a value's name in a line, at most (a longer one ends with ...)
 NOT_A_COMMAND = re.compile(r"\A(?:Binary Data\Z|[DQ]WORD \()")   # AB-2: Details that names no program
 SESSION_TOOL = "-"
+UNNAMED = "-"   # ADR-0007 BV-2: Sysmon's word for an Image or a CommandLine it does not hold
 SILENT_IF_MISSING = {
     1: "the export holds no event 1 (process create): no process of the tree is seen",
     11: "the export holds no event 11 (file create): no file write of the tree is seen; the Sysmon"
@@ -233,23 +243,35 @@ def program_name(image):
     if not isinstance(image, str) or not image.strip():
         return None
     base = image.strip().replace("/", "\\").rstrip("\\").rsplit("\\", 1)[-1]
+    if base == UNNAMED:   # ADR-0007 BV-2: "-" is Sysmon's word for an Image it does not hold, not a program's name
+        return None
     if base and common.HEAD_NAME.match(base) and not common.looks_like_key(base):
         return base
     return None
 
 
 def autostart_value(target):
-    """ADR-0014 AB-2: (autostart, hive, view32, value name) of an event 13's
-    TargetObject when it is a value directly under ...\\CurrentVersion\\Run
-    or \\RunOnce of HKU\\<a SID>\\SOFTWARE or HKLM\\SOFTWARE (with or without
-    \\Wow6432Node after SOFTWARE, any case): autostart "run" or "runonce",
-    hive "user" or "machine", view32 True under Wow6432Node; else None
-    (RunNotification, RunOnceEx, RunServices, a value of a key under Run,
-    the key itself, a trailing backslash, any other key)."""
+    """ADR-0014 AB-2, AC-3: (autostart, hive, view32, value name) of an
+    event 13's TargetObject when it is anything below
+    ...\\CurrentVersion\\Run or \\RunOnce of HKU\\<a SID>\\SOFTWARE or
+    HKLM\\SOFTWARE (with or without \\Wow6432Node after SOFTWARE, any case):
+    autostart "run" or "runonce", hive "user" or "machine", view32 True
+    under Wow6432Node, the value's name all of what follows the key (a
+    backslash in it: the event cannot tell a value whose name holds one
+    from a value of a key under Run); else None (RunNotification,
+    RunOnceEx, RunServices, the key itself, a trailing backslash, any
+    other key)."""
     m = AUTOSTART_VALUE.match(target) if isinstance(target, str) else None
     if m is None:
         return None
     return m.group(3).lower(), "user" if m.group(1) else "machine", m.group(2) is not None, m.group(4)
+
+
+def value_name(name):
+    """ADR-0014 AB-2, AC-4: a value's name as a line keeps it: redacted (common.redact), then one printable ASCII
+    line of at most VALUE_NAME_MAX characters (a longer one ends with ...), a double quote written as an apostrophe,
+    so a sentence that shows it between double quotes holds all of it inside them."""
+    return safe(common.redact(name), VALUE_NAME_MAX).replace('"', "'")
 
 
 def registry_program(details):
@@ -343,9 +365,24 @@ def dest_sha256(ip, port, protocol):
 
 def _guid(value):
     value = (value or "").strip()
-    if value and not value.strip("{}-0"):   # PROBE: Sysmon's empty ProcessGuid (all zeros) is no ProcessGuid
-        return None
     return value or None
+
+
+EMPTY_GUID = ("Sysmon wrote an empty ProcessGuid (all zeros) for a process or for a parent: it no longer held that"
+              " process. Those events are joined by the pid they name; a pid taken again is not told apart there")
+
+
+def empty_guid(value):
+    """ADR-0007 BV-1: True for the ProcessGuid Sysmon writes when it does not hold the process: all zeros."""
+    value = (value or "").strip()
+    return bool(value) and not value.strip("{}-0")
+
+
+def _event_guid(value):
+    """An event's ProcessGuid or ParentProcessGuid: None where the event has none, and where Sysmon wrote the
+    empty one (BV-1: an empty ProcessGuid is no ProcessGuid; the pid the event names decides, as for an event
+    that carries none)."""
+    return None if empty_guid(value) else _guid(value)
 
 
 def parse_root(value):
@@ -385,12 +422,12 @@ def _same_guid(a, b):
 
 
 def _read(text, ids, origin, silences, unread, present, problems):
-    """build's reading of one text (origin 0: the export or the first read; 1: a follow's second read, AB-3): the
+    """build's reading of one text (origin 0: the export or the first read; 1: a follow's read of event 13, AC-1): the
     events of ids, each with its pid, time and ProcessGuid; what is not recorded is said in silences. ADR-0014 AB-2:
     an event 13 is read only where its TargetObject is an autostart value (autostart_value); any other key is not a
     line, and an event 13 with no TargetObject is said as the other unread events are."""
     events = []
-    where = "" if origin == 0 else " of the second read (event 13)"
+    where = "" if origin == 0 else " of the read of event 13"
     for ev in discover.sysmon_events(text, "sysmon", problems, ids):
         d = ev["data"]
         if ev["event"] == REGISTRY_EVENT:
@@ -412,7 +449,9 @@ def _read(text, ids, origin, silences, unread, present, problems):
             silences.append("the event at line %d%s (Sysmon %d) has no ProcessId or UtcTime: it is not recorded"
                             % (ev["line"], where, ev["event"]))
             continue
-        events.append(dict(ev, pid=pid, ts=ts, guid=_guid(d.get("ProcessGuid")), time_from=time_from,
+        if (empty_guid(d.get("ProcessGuid")) or empty_guid(d.get("ParentProcessGuid"))) and EMPTY_GUID not in silences:
+            silences.append(EMPTY_GUID)   # BV-1: said (once a follow), never joined in silence
+        events.append(dict(ev, pid=pid, ts=ts, guid=_event_guid(d.get("ProcessGuid")), time_from=time_from,
                            time_skew_s=skew, origin=origin))
     return events
 
@@ -434,7 +473,7 @@ def _registry_kept(regs, members, starts):
 
 
 def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=None, tree=None, server_hash=False,
-          mark_under=None, registry=None, registry_after=None):
+          mark_under=None, registry=None, registry_after=None, registry_until=None):
     """(trace lines, silence details) for an export's text. Pure.
     API (M7.2b): after_record, when given, keeps only the tree's events
     whose EventRecordID is above it (an event with none was written by the
@@ -464,9 +503,11 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     registry (ADR-0014 AB-2, AB-3, M15.2): None, the events 13 of an
     autostart value are read from text itself (an export, the whole
     channel) and count in top_record as the others; a text, the bounded
-    follow's second read: the events 13 are read from it alone, kept above
-    registry_after, and never count in top_record (on_pass's bound is the
-    first read's). An event 13 is not used to find the root or the tree: it
+    follow's read of event 13: the events 13 are read from it alone, kept
+    above registry_after and, where registry_until is given (AC-1: the
+    other answer was cut at its cap, at that record), at or below it; they
+    never count in top_record (on_pass's bound is the first read's). An
+    event 13 is not used to find the root or the tree: it
     is the tree's where its ProcessGuid (or, with none, its pid) is a member
     as the walk of the other events left the tree, at that member's depth;
     its line is written among the others in the order of its time."""
@@ -478,10 +519,10 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     for p in problems:
         silences.append("the export's line %d cannot be read (%s): that event is not recorded"
                         % (p["line"], p["reason"]))
-    if registry:   # AB-3: the second read's text, its lines and problems said as its own
+    if registry:   # AB-3, AC-1: the read of event 13, its lines and problems said as its own
         problems = []
         events += _read(registry, REGISTRY_READ, 1, silences, unread, present, problems)
-        silences += ["the second read's (event 13) line %d cannot be read (%s): that event is not recorded"
+        silences += ["the read of event 13: its line %d cannot be read (%s): that event is not recorded"
                      % (p["line"], p["reason"]) for p in problems]
     regs = [e for e in events if e["event"] == REGISTRY_EVENT]
     events = [e for e in events if e["event"] != REGISTRY_EVENT]
@@ -520,6 +561,8 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
     bound = after_record if registry is None else registry_after
     if bound is not None:
         mine = [k for k in mine if k[0]["record_id"] is not None and k[0]["record_id"] > bound]
+    if registry is not None and registry_until is not None:   # AC-1: the other answer was cut: none above its end
+        mine = [k for k in mine if k[0]["record_id"] is not None and k[0]["record_id"] <= registry_until]
     if mine:   # in the order of time, as the events are sorted; the first read's before the second's at a tie
         kept = sorted(kept + mine, key=lambda k: (k[0]["ts"], k[0]["record_id"] if k[0]["record_id"] is not None
                                                   else float("inf"), k[0]["origin"], k[0]["line"]))
@@ -582,7 +625,7 @@ def _root(events, root, guid):
             first.setdefault(e["guid"], e["ts"])
             if e["event"] == 1:
                 start[e["guid"]] = (e["ts"], e["record_id"] if e["record_id"] is not None else -1)
-        pguid = _guid(d.get("ParentProcessGuid"))
+        pguid = _event_guid(d.get("ParentProcessGuid"))
         if e["event"] == 1 and _int(d.get("ParentProcessId")) == root and pguid:
             first.setdefault(pguid, e["ts"])
     named = any(e["pid"] == root or (e["event"] == 1 and _int(e["data"].get("ParentProcessId")) == root)
@@ -638,7 +681,7 @@ def _tree(events, root, root_guid, tree=None, parents=None):
         d = e["data"]
         parent = None
         if e["event"] == 1:
-            pguid, ppid = _guid(d.get("ParentProcessGuid")), _int(d.get("ParentProcessId"))
+            pguid, ppid = _event_guid(d.get("ParentProcessGuid")), _int(d.get("ParentProcessId"))
             if e["pid"] == root and (e["guid"] is None or _same_guid(e["guid"], root_guid)):
                 depth = 0
             elif pguid is not None:
@@ -715,8 +758,8 @@ def _event_fields(e, depth, server_hash=False):
     if e["event"] == REGISTRY_EVENT:   # ADR-0014 AB-2: facts of the event; the target and Details only in the hash
         target, details, image = d.get("TargetObject"), d.get("Details"), d.get("Image")
         autostart, hive, view32, name = autostart_value(target)
-        meta = {"autostart": autostart, "hive": hive, "view32": view32, "value_name": safe(common.redact(name)),
-                "program": registry_program(details),
+        meta = {"autostart": autostart, "hive": hive, "view32": view32, "value_name": value_name(name),
+                "nested": "\\" in name, "program": registry_program(details),
                 "image": _image(image) if program_name(image) else None,   # a process line's gate, the one function
                 "parent_image": (e.get("names") or (None, None))[1], "depth": depth}
         return common.canonical_sha256({"target": target, "details": details}), meta
@@ -787,6 +830,7 @@ def _lines(kept, root, cwd, start_seq, missing, server_hash=False, marks=None):
             if parent is not None and parent in line_of:
                 meta["parent_seq"] = line_of[parent]
             line_of[_gkey(e["guid"]) if e["guid"] is not None else ("pid", e["pid"])] = seq
+            line_of[("pid", e["pid"])] = seq   # BV-1: a parent named by its pid alone is the pid's present holder
         if marks is not None and marks[i] is not None:   # BC-1: at or under another tree's root (else no key)
             meta["under_root"] = marks[i]
         base = {"ts": discover.iso(e["ts"]), "seq": seq, "session_id": sid}
@@ -991,9 +1035,9 @@ def read_live_bounded(timeout=FOLLOW_TIMEOUT, helpers=None, popen=subprocess.Pop
 
 FOLLOW_CUT = ("the follow's pass read %d events, the cap (/c:%d): the records after record %s are read by its next"
               " pass")   # AI-1: a cut is a hole
-REGISTRY_CUT = ("the follow's second read (event 13, a registry value set) read %d events, its cap (/c:%d): the records"
+REGISTRY_CUT = ("the follow's read of event 13 (a registry value set) read %d events, its cap (/c:%d): the records"
                 " after record %s are read by its next pass")   # ADR-0014 AB-3: a hole of its kind
-REGISTRY_FAILED = ("the follow's second read (event 13, a registry value set) did not read the channel (%s): no"
+REGISTRY_FAILED = ("the follow's read of event 13 (a registry value set) did not read the channel (%s): no"
                    " autostart value of the tree is read by this pass; its other lines are written, and the next pass"
                    " asks again")
 
@@ -1050,20 +1094,27 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
     trees whose events this follow marks (roots_of; build's mark_under); it
     writes every event as without it, and a root no longer returned marks
     nothing from that pass on.
-    ADR-0014 AB-3 (M15.2): registry True (raqib watch --host gives it to a
-    follow that names it): a bounded follow's pass whose first question
-    was answered asks a second one, for event 13 alone (round_query over
-    REGISTRY_READ, round_args with REGISTRY_CAP), through the same reader
-    and helpers, after the records above its own highest (tree's
-    "registry_top", kept with the tree, so a follow attached again reads
-    none twice), or, before it read one, since the start (with no start:
-    after after_record); a restart resets it as it resets the first's
-    bound. Its events 13 of the tree are written in the pass's lines
-    (build's registry). A second read at its cap is said (REGISTRY_CUT),
-    one that fails is said once as its own silence (REGISTRY_FAILED) and
-    takes nothing from the pass's other lines. A follow given no bound
-    reads event 13 from the whole channel's text, as run() from an
-    export; registry False: a bounded follow reads no event 13."""
+    ADR-0014 AB-3 as Amendment C rules it (AC-1, AC-2; M15.2): registry
+    True (raqib watch --host gives it to a follow that names it): each
+    pass of a bounded follow asks its question for event 13 FIRST
+    (round_query over REGISTRY_READ, round_args with REGISTRY_CAP), through
+    the same reader and helpers, then the first question, to the byte what
+    it was: every event 13 the pass takes was logged before the other
+    question was asked, so its process's start is in that answer or an
+    earlier one. It asks after its own bound (tree's "registry_top", kept
+    with the tree, so a follow attached again reads none twice), or,
+    before it has one, since the start (with no start: after after_record);
+    a restart resets it as it resets the first's bound. The bound is the
+    highest record the pass took or passed over as not the tree's: where
+    the other answer is cut at its cap, no event 13 above its last record
+    is taken and the bound stops there (held for the next pass); where the
+    other read fails the pass takes none and the bound does not move; nor
+    does it while the root is not found. The main bound never moves
+    because of an event 13. A read of event 13 at its cap is said
+    (REGISTRY_CUT); one that fails is said once as its own silence
+    (REGISTRY_FAILED) and takes nothing from the pass's other lines. A
+    follow given no bound reads event 13 from the whole channel's text, as
+    run() from an export; registry False: a bounded follow reads none."""
     out = sys.stdout if out is None else out
     err = sys.stderr if err is None else err
     nt = (os.name == "nt") if nt is None else nt
@@ -1081,7 +1132,7 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
             raise UsageError("a follow's start must be an aware time: %s" % exc)
     tree = ({} if tree is None else tree) if bounded else None   # AI-1: the tree found; AJ-4 (R-1): an earlier one's
     top, said, passes = after_record, set(), 0
-    first_record = after_record   # AB-3: the second read's bound where it has read none and has no start
+    first_record = after_record   # AB-3: the read of event 13's bound where it has read none and has no start
     if bounded and restart is not None and "restart" not in tree:
         tree["restart"] = restart()   # AJ-4 (R-3): the round's restart this follow's bound belongs to
         if tree["restart"] is not None and top is None:
@@ -1092,15 +1143,12 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
             latest = restart()
             if latest is not None and latest != tree.get("restart"):   # the round's read restarted: so does the bound
                 tree["restart"], top, since = latest, None, latest[1]
-                tree.pop("registry_top", None)   # ADR-0014 AB-3: the second read's bound restarts with it
-        second, second_after, second_failed = (None if not bounded else ""), None, None
+                tree.pop("registry_top", None)   # ADR-0014 AB-3: the read of event 13's bound restarts with it
+        second, second_after, second_failed, until = (None if not bounded else ""), None, None, None
         if live is not None:
             text, failed = live()
         elif bounded:   # AI-1: only Raqib's own values in the query (the start, an integer record number)
-            args = round_args(round_query(top, None if top is not None else since, ids=READ), cap)
-            text, failed = reader(args, timeout) if reader is not None else \
-                read_live_bounded(timeout, helpers, args=args)
-            if registry and failed is None:   # ADR-0014 AB-3: the second question, event 13 alone, after the first
+            if registry:   # ADR-0014 AC-1: the question for event 13 FIRST, then the first question as it was
                 second_after = tree.get("registry_top")
                 if second_after is None and since is None:
                     second_after = first_record
@@ -1109,31 +1157,39 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
                 second, second_failed = reader(reg_args, timeout) if reader is not None else \
                     read_live_bounded(timeout, helpers, args=reg_args)
                 second = "" if second_failed is not None else second
+            args = round_args(round_query(top, None if top is not None else since, ids=READ), cap)
+            text, failed = reader(args, timeout) if reader is not None else \
+                read_live_bounded(timeout, helpers, args=args)
+            if second and failed is None and len(discover.EVENT_START.findall(text)) >= cap:
+                # AC-1: the other answer is cut: no event 13 above its last record is taken (held for the next pass)
+                until = max((int(m.group(1)) for m in RECORD_ID.finditer(text)), default=-1)
         else:
             text, failed = reader(LIVE_ARGS, timeout) if reader is not None else read_live_bounded(timeout, helpers)
-        if failed is not None:
+        if failed is not None:   # AC-1: the pass takes no event 13, and the registry's bound does not move
             lines, silences = [], [failed]
         else:
             info = {}
             roots = None if mark_under is None else roots_of(mark_under(), pid, guid)   # BC-2: asked at every pass
             lines, silences = build(text, pid, guid=guid, cwd=cwd, start_seq=last_seq(log, session_id(pid)),
                                     after_record=top, info=info, tree=tree, server_hash=server_hash,
-                                    mark_under=roots, registry=second, registry_after=second_after)
+                                    mark_under=roots, registry=second, registry_after=second_after,
+                                    registry_until=until)
             if info.get("top_record") is not None:
                 top = info["top_record"] if top is None else max(top, info["top_record"])
             if bounded and info.get("last_record") is not None:   # the records after the highest read, next
                 top = info["last_record"] if top is None else max(top, info["last_record"])
             if bounded and info.get("events", 0) >= cap:
                 silences.append(FOLLOW_CUT % (info["events"], cap, top))
-            if second:   # AB-3: the second read's own highest record (the whole export's), kept with the tree
+            if second:   # AC-1, AC-2: the registry's bound: what the pass took or passed over, never above a cut
                 ids = [int(m.group(1)) for m in RECORD_ID.finditer(second)]
-                if ids:
+                ids = [i for i in ids if until is None or i <= until]
+                if ids and tree.get("found"):   # a root not found yet: its values are asked again
                     tree["registry_top"] = max(ids + ([second_after] if second_after is not None else []))
                 count = len(discover.EVENT_START.findall(second))
                 if count >= REGISTRY_CAP:
                     silences.append(REGISTRY_CUT % (count, REGISTRY_CAP, tree.get("registry_top")))
-            if second_failed is not None:
-                silences.append(REGISTRY_FAILED % second_failed)
+        if second_failed is not None:
+            silences.append(REGISTRY_FAILED % second_failed)
         fresh = [s for s in silences if s not in said]
         said.update(fresh)
         marked = [silence_line(pid, s) for s in fresh]
@@ -1144,18 +1200,6 @@ def follow(root, log, stop, every=FOLLOW_EVERY, cwd=None, out=None, err=None, li
             append(log, marked + lines)
         out.write("raqib os-sysmon: follow pass %d: %d events of the tree under pid %d -> %s; %d RAQIB-SILENCE"
                   " line(s)\n" % (passes, max(0, (len(lines) - 2) // 2), pid, log, len(marked)))
-        try:   # PROBE ONLY (never merged): one line per pass, to find why a tree's last lines were lost
-            import time as _t
-            with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(log))), "follow-debug.log"), "a") as _d:
-                _d.write(json.dumps({"at": _t.strftime("%H:%M:%S", _t.gmtime()), "pid": pid, "pass": passes, "top": top,
-                                     "reg_top": (tree or {}).get("registry_top"), "text": len(text or ""),
-                                     "failed": failed, "second": None if second is None else len(second),
-                                     "second_failed": second_failed, "lines": len(lines),
-                                     "members": len((tree or {}).get("members") or (tree or {}).get("by_guid") or ()),
-                                     "keys": sorted((tree or {}).keys()),
-                                     "restart": str((tree or {}).get("restart"))}) + "\n")
-        except Exception as _e:
-            pass
         if on_read is not None:
             on_read(passes, failed is None, failed)
         if on_pass is not None:

@@ -1351,14 +1351,14 @@ def test_m41_b4_amendment_a_counts_the_lines_added_beyond_the_table():
     # M15.1 (ADR-0014): the two signatures of the 2026-11-20 note are not M4.1's; they are held by their own note:
     # its items start their first lines, in order, and the lines beyond them are the rest of ADR-0014 A-8
     # M15.2 (ADR-0014 Amendment B): the signature of the M15.2 note the same way, its lines beyond the note's the
-    # rest of the HANDOFF's E4 (a hive offline, a program of the system, Linux, a cap) and one more (a backslash)
+    # rest of the HANDOFF's E4 (a hive offline, a program of the system, Linux, a cap)
     m151 = dict(adr_note_m151()[0], **adr_note_m152()[0])
     assert set(every) == set(m41) | set(m151) and not set(m41) & set(m151)
     for rule_id, (_, items) in m151.items():
         assert [e.split(":", 1)[0] for e in every[rule_id].evasion[:len(items)]] == items, rule_id
     assert {rule_id: len(every[rule_id].evasion) - len(items) for rule_id, (_, items) in m151.items()} == {
         "PERSIST-AUTOSTART": 6, "NET-ADMIN-PORT": 7,   # ADR-0014 Amendment A: +3, +2
-        "PERSIST-RUN-KEY": 5}                          # M15.2
+        "PERSIST-RUN-KEY": 4}                          # M15.2; its REDO (ADR-0014 AC-3): the backslash line goes
     signatures = {rule_id: rule for rule_id, rule in every.items() if rule_id in m41}
     assert set(now) == set(signatures) == set(m41)
     # M7.2b (H-2): NET-TOOL and DESTRUCT-CMD gained one evasion line each, for the host source; the note's

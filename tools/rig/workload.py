@@ -25,6 +25,47 @@ def run(argv, wait=True, timeout=60):
     return child
 
 
+RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_VALUE = "RaqibRigValue"
+HARMLESS = "cmd /c rem raqib rig"
+
+
+def own_address():
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.connect(("192.0.2.1", 9))   # no packet is sent: the route's own address is asked for
+        return probe.getsockname()[0]
+    finally:
+        probe.close()
+
+
+def behaviour(startup):
+    """ADR-0014 (Windows): three harmless acts, each undone by undo(): a file in the user's Startup folder that
+    holds a remark, a connection to port 22 of this machine's own address (its own sshd answers), and a value under
+    the user's Run key that would run a remark. What each did is said, for tools/rig/check.py (X32 to X34)."""
+    run(["powershell", "-NoProfile", "-Command", "Set-Content -LiteralPath '%s' -Value 'rem raqib rig'" % startup])
+    say("startup file %s" % ("written" if os.path.exists(startup) else "not written"))
+    try:
+        address = own_address()
+    except OSError as exc:
+        say("port 22 not asked (%s)" % type(exc).__name__)
+    else:
+        child = run(["powershell", "-NoProfile", "-Command",
+                     "$c = New-Object Net.Sockets.TcpClient('%s', 22); Start-Sleep 2; $c.Close()" % address])
+        say("port 22 of this machine's own address %s" % ("reached" if child.returncode == 0 else "not reached"))
+    child = run(["reg", "add", RUN_KEY, "/v", RUN_VALUE, "/t", "REG_SZ", "/d", HARMLESS, "/f"])
+    say("autostart value %s" % ("set" if child.returncode == 0 else "not set"))
+
+
+def undo(startup):
+    try:
+        os.remove(startup)
+        say("undone: the startup file")
+    except OSError as exc:
+        say("the startup file was not there to undo (%s)" % type(exc).__name__)
+    run(["reg", "delete", RUN_KEY, "/v", RUN_VALUE, "/f"])
+
+
 def main():
     windows = os.name == "nt"
     nul = "NUL" if windows else "/dev/null"
@@ -46,9 +87,17 @@ def main():
     say("wrote raqib-rig-file.txt")
     os.remove(path)
     say("deleted raqib-rig-file.txt")
-    long_curl.wait(30)
-    say("end long curl rc=%s" % long_curl.returncode)
-    time.sleep(12)                                                                       # quiet, still talking
+    startup = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup",
+                           "raqib-rig-startup.cmd")
+    try:
+        if windows:
+            behaviour(startup)
+        long_curl.wait(30)
+        say("end long curl rc=%s" % long_curl.returncode)
+        time.sleep(12)                                                                   # quiet, still talking
+    finally:
+        if windows:
+            undo(startup)
     talk.close()
     say("done")
     return 0
