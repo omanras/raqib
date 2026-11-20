@@ -1,13 +1,14 @@
 # PROC-EVENTS - the reader of Linux's process events
 
-`raqib/procevents.py` (ADR-0007 Amendments BQ, BR, BS, BT, BU and BW). On Linux
-the kernel says, of every process, when it forks, when it changes its
+`raqib/procevents.py` (ADR-0007 Amendments BQ, BR, BS, BT, BU, BW and BY). On
+Linux the kernel says, of every process, when it forks, when it changes its
 program (exec) and when it exits. The reader listens to that, and to nothing
 else: it switches nothing on, asks for no right and reads no argument of any
 process. Since M14.1b a live watch on Linux runs it in a helper process of
-its own and counts what it gives (see "The helper" below); nothing is judged
-from it yet. Only one reader runs in a process (its bind is on the process's
-pid).
+its own and counts what it gives (see "The helper" below); since M14.1c each
+round takes the processes it gave (see "The round" below), so a child that
+began and ended between two samples is its tree's child. Only one reader
+runs in a process (its bind is on the process's pid).
 
 ## The layout
 
@@ -246,15 +247,16 @@ program. Where its output cannot be written it stops the Reader and exits 1.
 A Ctrl-C at the terminal does not end it: the end of its input does, so a
 watch that dies, however it dies, leaves no helper behind.
 
-What it loads (BW-5). The helper is the interpreter the watch runs under
-(`sys.executable`), with `-I` where the watch runs isolated and `-P`
-otherwise (no directory of its own before the import path), and `-c` with a
-fixed program, a constant of the module: it sets `sys.path` to the list
+What it loads (BW-5, BY-6). The helper is the interpreter the watch runs
+under (`sys.executable`), always with `-I` (isolated: no user site folder,
+no PYTHON* variable of the environment, no directory of its own before the
+import path), and `-c` with a fixed program, a constant of the module: it sets `sys.path` to the list
 given as its one argument - the watch's own `sys.path`, its absolute
 entries, in order, as JSON - and runs `raqib.procevents.main(["--serve"])`.
 Its directory is `/`, its standard error goes to nothing (a crash is said
-as an end), and its environment is the watch's. So it loads Raqib from where
-the watch loaded it and from nowhere else.
+as an end), and its environment is the watch's, which `-I` does not read. So
+it loads Raqib from where the watch loaded it and from nowhere else, and
+needs nothing of the user's environment or site folder.
 
 The client. `procevents.Helper` starts it and hands the process at once to
 the `started` callable it is given, so the watch records it as its own
@@ -265,7 +267,10 @@ LINE_MAX bytes (a longer one is `not a line`), at most 4 lines held unread
 (HELD_LINES), and an ask reads at most the ready line and one answer. At
 most one ask is unanswered: while one is, `ask` writes nothing and waits for
 that answer, and an answer that comes after its round is taken by the ask
-that reads it, so its numbers count once. Before the helper's first line,
+that reads it, so its numbers count once. The ask is written to the
+helper's input made non-blocking (BY-6): it never waits, and an input that
+is full (a part of the ask written, or none) is `ended`, said as "its input
+was full" (FULL). Before the helper's first line,
 `ask` says `starting` for 5 s after the start (STARTING_SECONDS), then
 `late`. A line of another version, a number that is no number or another
 shape is `not a line`. `stop()` closes the helper's input, waits 2 s
@@ -273,15 +278,21 @@ shape is `not a line`. `stop()` closes the helper's input, waits 2 s
 
 The watch (raqib/host.py, ProcEvents). On Linux the live reader starts one
 helper at its first round, before the round's sample, so the helper is in
-that sample as the watch's own; after each sample it asks it once and waits
-at most 2 s and at most a quarter of the watch's interval. The round's
+that sample as the watch's own; after each sample, and before discover
+builds the round, it asks it once and waits at most 2 s and at most a
+quarter of the watch's interval. The round's
 inventory carries `procevents`: `began` (the processes whose fork was heard
 and that were not given before), `inside` (those of them whose end came in
 the same answer: they began and ended between two asks), `unread_exe` (the
 step of the reader's `missed.exe`: reads, not programs), `beyond` and `lost`
 (the reader's, summed over every helper the watch had), `refused`, `hole`,
 `more`, `restarts`, `asked` and `answered`: numbers and the reader's or the
-watch's own words, never a program. A refusal is final. A helper that ended,
+watch's own words, never a program. A refusal is final. Before the first
+answered ask a hole of the helper is a blind spot that does not change the
+result; after it, a late answer, a line that is not the helper's, an end,
+a loss, a bound passed or an answer that holds back a rest for a next one
+is a hole of the result of the kind `procevents` (BY-5, BZ-6, see "The
+round"). A helper that ended,
 whose reader ended, or that was late three rounds running is ended and
 started again once, and a second end is final; between an end and the next
 start nothing is heard, and the report says so. A late answer and a line
@@ -292,6 +303,108 @@ is ended at once, each wait bounded by the ask's own time, so the round is
 not held for it. A line the watch cannot count (a record with no usable pid, counts of
 another shape) is `not a line`, never an exception. On Windows and elsewhere
 no helper is started and the key is absent.
+
+## The round (M14.1c, ADR-0007 Amendments BY and BZ)
+
+The text. After each answered ask the watch keeps the processes of the
+answer (at most SERVE_MAX entries, as an answer is bounded; a process of
+another shape, a time the round cannot read or one that is no real
+instant, or a pid at or above discover's bound for keying instances apart
+makes the answer `not a line`, BZ-4) for that round alone, and gives
+discover one text of the kind `procevents`: one JSON line per process
+whose fork was heard, `{pid, ppid, exe, ticks, began, ended, code}` and
+nothing else (`exe` and `ticks` null where not read). A round whose helper
+gave nothing has no such text, and is the round it was, byte for byte. A
+process the watch started itself (its pid in the watch's record of what it
+started, raqib/own.py, its parent the watch, its program the recorded image
+and its fork within the record's window) is the watch's own: it is not
+given (BY-6). The watch keeps its copies of that record until the answer
+that covers the round they were copied in is taken (a late answer, a rest
+held back), at most 1024 (BZ-7), and the section counts the processes of
+its own left out. The socket tool the round runs (`ss`) is in that record
+when it starts.
+
+The parser. `discover.parse_procevents` makes of each line a process
+record as `parse_proc` makes one of a sampled process: the pid, the parent
+the kernel named, the image by the same naming of the program's path, that
+path as its exe, no argument (the reader reads none), the start key
+`boot+<ticks>` where the ticks were read, and the time its fork was heard;
+it is marked as the reader's (`created`). A line that is not such a line
+(BZ-4 as above) is a problem of the round, never an exception.
+
+The join. A record is one process with the sampled process of its pid
+where their start ticks are the same, or where the sample read no start
+for that process (as the merge by pid was). A record whose ticks were not
+read joins the sampled process of its pid only where the sample read no
+start for it; where the sample read one, the two are kept apart (BZ-5: a
+line more, never a program named on another process). Otherwise it is
+another process, keyed apart. A child the reader gave is linked to the
+instance of its parent pid alive when its fork was heard, where the reader
+gave that instance. Then the round is built as any: each process goes to
+its nearest talking ancestor as an act, and an act is its tree's child and
+its HostChild line, so NET-TOOL and DESTRUCT-CMD judge it by the name of
+its program's file. A tree that is a candidate only by what the reader
+gave is as one that is so only by the channel on Windows (`candidate_by`
+"channel", AA-1), and the footprints are those of the round built without
+the reader's records (AD-1). An act-root is made only by what the samples
+alone make: its root, the shell under it and a command under that shell are
+each a process a sample held (BZ-1, CA-1, CB-1). A chain the reader alone
+gave under such a root - a second shell and its command, between two
+samples - adds its processes as the act-root's acts, which are judged; under
+a root the samples did not make an act-root it adds nothing, and that is not
+judged (the act-root's budget was measured on samples; whether the reader's
+word may make one is measured first, M14.1d). An end heard from the reader
+never ends a process the sample holds: the round's process list is the
+sample's. The round reads no /proc
+start of a child the reader alone gave and said ended: its start is the
+record's (BZ-8), kept in the round's record of starts apart from the /proc
+reads (`child_started.events`, "the process events: when its fork was
+heard"), and an act timed by it has the basis `events`, never `stat`
+(CA-4). A HostChild line of a round that read the reader's text says, in
+`input_meta.command_sources` and in the order of `command_programs`, where
+each program's children were seen: `sample`, `events` or `both` (CA-2); a
+line of a round with no reader's text has no such key, and no rule reads
+it. Where one name covers several children of a line, its word is theirs
+together (a sampled one and a heard one read `both`). The word is worked out
+from the records a child cites: a watch that takes more than one snapshot a
+round (`--window`) can say `sample` of a child the reader heard too (CB-3);
+a watch as it runs by default takes one.
+
+What is not judged (BY-3, BZ-3). A tree needs a talker at a sample, and a
+connection that opens and closes between two samples is unseen (M14.2): a
+tree that lives whole between two samples is in no round, and a child's own
+connections are not read. A program a process changes to after its line was
+written (a shell that runs its last command in its own place, in a later
+round) gets no second line, and a process's earlier programs are never
+given. A child whose parent was given in an earlier round and ended before
+this sample is in no tree. A child is named by its program's file (the
+target of a link: `nc.openbsd`, `busybox`), not by the name it was called
+by, so a rule's list of names can miss it. A child whose program was not
+read is in the round and counted; it gets no line and no hole.
+
+The words (BY-4). A program's name reaches a line's programs only through
+the gate a sampled child's name goes through (a plain program name, else
+the existing hole); the line's cites hold the reader's record itself, made
+printable and cut as a sampled child's is. The helper's lines are its
+word: what is judged from them comes from the reader, and the watch does
+not check them. The report's PROCESS EVENTS section says what is judged
+and what is not, and counts the processes given to the rounds, those
+joined to a tree as its child, and of them those with no program read.
+
+When the reader is not whole (BY-5, BZ-2, BZ-6). A refusal at the first
+start (a container, a right not given), a helper that could not start (an
+input that cannot be made unblocking among the causes, said), or a hole
+before its first answer: the blind spot as before, and the rounds are the
+sample's alone. After at least one answered ask: a late answer, an end
+(and its one restart), a loss of events, a bound passed, a line that is
+not the helper's, or an answer that holds back a rest for a next one (a
+child among the rest is judged a round late, and one whose parent has left
+by then is in no tree) is a hole of the result of the kind `procevents`,
+said once per episode with its round; the result is INCOMPLETE as any hole
+makes it, unless a finding makes it an alarm. The note of what lives
+between two rounds then says what was heard and judged and why the reader
+was not whole; "the rounds read /proc only" is said only where no ask was
+answered.
 
 ## What was measured
 

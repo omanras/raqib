@@ -44,6 +44,9 @@ def _home(tmp_path, monkeypatch):
     return path
 
 
+E, F = "2026-11-20T00:00:01.500000Z", "2026-11-20T00:00:02.500000Z"   # M14.1c REDO (BZ-4): an end is a readable time
+
+
 def rec(pid, began="2026-11-20T00:00:01.000000Z", ended=None, exe="/usr/bin/true", **kw):
     return dict({"pid": pid, "ppid": 1, "exe": exe, "earlier": [], "started_ticks": 9, "began": began,
                  "ended": ended, "code": 0 if ended else None, "signal": None, "unread": {}}, **kw)
@@ -128,15 +131,15 @@ def fake_client(drains=True, script=()):
 def test_e3_one_helper_started_at_the_first_round_before_its_sample_and_asked_after_each_sample(monkeypatch):
     log = []
     fake_round(monkeypatch, log)
-    make = factory(StandIn([answer([rec(1, ended="E"), rec(2), rec(3, began=None)], missed=1, beyond=4),
-                            answer([rec(1, ended="E"), rec(4, ended="F")], missed=3, more=True, beyond=4)], log=log))
+    make = factory(StandIn([answer([rec(1, ended=E), rec(2), rec(3, began=None)], missed=1, beyond=4),
+                            answer([rec(1, ended=E), rec(4, ended=F)], missed=3, more=True, beyond=4)], log=log))
     reader = host.live_reader(CATALOG, 0.0, "linux", helper=make)
     one, two, three = rounds(reader, 3)
     assert len(make.made) == 1
     assert log == ["start", "sample", ("ask", 2.0), "sample", ("ask", 2.0), "sample", ("ask", 2.0)]
     assert one == {"began": 2, "inside": 1, "unread_exe": 1, "beyond": 4, "lost": {"count": 0, "events": 0,
                    "why": None}, "refused": None, "hole": None, "more": False, "restarts": 0, "asked": True,
-                   "answered": True}
+                   "answered": True, "own": 0}   # M14.1c REDO (BZ-7): the watch's own left out of the round
     assert (two["began"], two["inside"], two["unread_exe"], two["more"]) == (1, 1, 2, True)   # pid 1 given again
     assert (three["began"], three["unread_exe"], three["hole"], three["beyond"]) == (0, 0, None, 0)
 
@@ -158,10 +161,10 @@ def test_e1_bw1_a_late_answer_is_taken_by_the_round_that_reads_it_and_counted_on
     reader = host.live_reader(CATALOG, 0.0, "linux", helper=make)
     first = reader()["procevents"]
     assert first["hole"] == host.PE_LATE % 2.0 and make.procs[0].asked == [b"read 1\n"]
-    make.procs[0].say(answer([rec(1, ended="E"), rec(2)], ask=1))
+    make.procs[0].say(answer([rec(1, ended=E), rec(2)], ask=1))
     second = reader()["procevents"]
     assert (second["began"], second["inside"], second["answered"]) == (2, 1, True)
-    make.procs[0].say(answer([rec(1, ended="E"), rec(2, ended="F")], ask=2))
+    make.procs[0].say(answer([rec(1, ended=E), rec(2, ended=F)], ask=2))
     third = reader()["procevents"]
     assert third["began"] == 0 and make.procs[0].asked == [b"read 1\n", b"read 2\n"]
 
@@ -384,16 +387,26 @@ def judged(w, code, home):
 
 
 @pytest.mark.parametrize("names", [["linux", "linux"], ["benign/windows-desktop", "windows"]])
-@pytest.mark.parametrize("events", [[pe(5, 3), pe(2, 2, 1)], [pe(hole=host.PE_LATE % 2.0), pe(lost=1)],
-                                    [pe(hole="refused: " + procevents.PREFIX + "x", refused="x")] * 2,
-                                    [pe(1, beyond=3, more=True), pe(hole=host.PE_ENDED % "x", restarts=1)]])
-def test_e9_no_finding_no_source_line_no_result_and_no_exit_code_changes_with_the_helper(tmp_path, names, events):
+@pytest.mark.parametrize("events,gaps", [([pe(5, 3), pe(2, 2, 1)], 0), ([pe(hole=host.PE_LATE % 2.0), pe(lost=1)], 1),
+                                         ([pe(hole="refused: " + procevents.PREFIX + "x", refused="x")] * 2, 0),
+                                         ([pe(1, beyond=3, more=True), pe(hole=host.PE_ENDED % "x", restarts=1)],
+                                          3)])   # M14.1c REDO (BZ-6): a rest held back is a hole of the result too
+def test_e9_no_finding_no_source_line_no_result_and_no_exit_code_changes_with_the_helper(tmp_path, names, events,
+                                                                                         gaps):
     w0, c0 = watch(tmp_path / "without", feed(names))
     _, code0 = run(w0, c0, 2)
     w1, c1 = watch(tmp_path / "with", feed(names, events))
     _, code1 = run(w1, c1, 2)
-    assert judged(w0, code0, tmp_path / "without" / "home") == judged(w1, code1, tmp_path / "with" / "home")
-    assert [h["kind"] for h in w0.holes] == [h["kind"] for h in w1.holes]
+    before, after = judged(w0, code0, tmp_path / "without" / "home"), judged(w1, code1, tmp_path / "with" / "home")
+    assert before[2:] == after[2:]   # no finding and no source line changes with the helper
+    # M14.1c (ADR-0007 BY-5) changes the result and the exit code exactly there: after an answered ask, a loss, a
+    # bound passed or an end of the helper is a hole of the result of its own kind (a late first round is not)
+    added = [h for h in w1.holes if h["kind"] == host.PE_HOLE_KIND]
+    assert len(added) == gaps and [h["kind"] for h in w0.holes] == [h["kind"] for h in w1.holes if h not in added]
+    alarm = before[1][0] == "alarm"   # a finding stays the result (exit 1); else the hole makes it incomplete (exit 3)
+    assert before[:2] == after[:2] if not gaps else (after[0], after[1][0]) == ((1, "alarm") if alarm else (
+        3, "incomplete"))
+    assert not gaps or "%d hole(s) of the watch" % gaps in "; ".join(after[1][1])
 
 
 def section(text):
@@ -412,10 +425,12 @@ def test_e4_e6_the_section_follows_the_channel_lines_place_and_says_what_was_hea
     text, code = run(w, clock, 3)
     lines, at, got = section(text)
     assert got == ["PROCESS EVENTS (Linux): the kernel's process events, read by a helper process of the watch's own;"
-                   " not judged yet: no rule reads them, no line of a tree's source is written from them",
+                   " " + host.PE_JUDGED,   # M14.1c (E6): what is judged from them and what is not
                    "  rounds asked: 3, answered: 3",
                    "  processes that began: 9; of them began and ended between two asks: 7",
                    "  programs not read: 1 (reads at an exec that failed)",
+                   "  given to the rounds: 0; joined to a tree as its child: 0; of them with no program read (no"
+                   " line): 0",
                    "  past the reader's bounds: 0",
                    "  lost: none"]
     assert lines[at - 1].startswith("  round 3") and lines[at + len(got)].startswith("TREES SEEN:")
@@ -455,6 +470,11 @@ def test_e3_where_the_reader_was_not_healthy_the_old_words_stand_with_the_reason
     w, clock = watch(tmp_path, feed(["linux"] * 3, events))
     text, _ = run(w, clock, 3)
     flat_ = " ".join(text.split())
+    if any(e["answered"] for e in events):   # M14.1c REDO (BZ-2): after an answered ask, what was heard and judged
+        note = next(x for x in w.notes if x.startswith(host.BETWEEN_HEARD))
+        assert note.startswith(host.BETWEEN_HEARD + "; the reader was not whole for the whole watch: ")
+        assert reason in note and host.BETWEEN_LINUX not in flat_
+        return
     note = next(x for x in w.notes if x.startswith(host.BETWEEN_HOLE % host.BETWEEN_LINUX))
     assert note.startswith(host.BETWEEN_HOLE % host.BETWEEN_LINUX + "; the process events are not counted for the"
                            " whole watch: ") and reason in note and host.BETWEEN_HEARD not in flat_
@@ -478,17 +498,19 @@ def test_e6_each_hole_is_a_blind_spot_of_its_own_kind_said_once_while_it_lasts_a
     late, bad = pe(hole=host.PE_LATE % 2.0), pe(hole=host.PE_NOT_A_LINE)
     w, clock = watch(tmp_path, feed(["linux"] * 6, [late, late, pe(1), late, bad, pe(1)]))
     text, code = run(w, clock, 6)
-    said = [x for x in w.out.getvalue().splitlines() if "BLIND SPOT" in x]
+    said = [x for x in w.out.getvalue().splitlines() if "BLIND SPOT" in x or "HOLE round" in x]
     assert len(said) == 3 and "round 1: the process events: late" in said[0] and "round 4" in said[1]
+    # M14.1c (ADR-0007 BY-5): before the first answered ask a blind spot as before; after it a hole of the result
     kinds = {b["kind"]: b["rounds"] for b in w.blind if b["kind"].startswith("process events")}
-    assert kinds == {"process events late": [1, 2, 4], "process events not a line": [5]}
-    assert all(b["class"] == host.BLIND for b in w.blind) and code == 0
+    assert kinds == {"process events late": [1, 2]} and "BLIND SPOT" in said[0] and "HOLE round 5" in said[2]
+    assert [h["round"] for h in w.holes if h["kind"] == host.PE_HOLE_KIND] == [4, 5]
+    assert all(b["class"] == host.BLIND for b in w.blind) and code == 3
     assert "  hole, round 1: late: the helper's answer did not come within 2 s" in text
     assert "  hole, round 4: late" in text and "  rounds asked: 6, answered: 2" in text
     many = [late if n % 2 else pe(1) for n in range(30)]
     w, clock = watch(tmp_path / "many", feed(["linux"] * 30, many))
     text, _ = run(w, clock, 30)
-    said = [x for x in w.out.getvalue().splitlines() if "BLIND SPOT" in x]
+    said = [x for x in w.out.getvalue().splitlines() if "HOLE round" in x]
     assert host.PE_EPISODES_MAX == 10 and len(said) == 11 and "more than 10 episodes" in said[-1]
     _, _, got = section(text)
     assert len([x for x in got if x.startswith("  hole, ")]) == 10 and "  and 5 more episode(s) of the helper, not" \
@@ -498,7 +520,7 @@ def test_e6_each_hole_is_a_blind_spot_of_its_own_kind_said_once_while_it_lasts_a
 def test_e4_bu4_a_programs_path_through_the_real_client_reaches_no_output_no_event_and_no_file(tmp_path,
                                                                                              monkeypatch):
     fake_round(monkeypatch, [])
-    evil = [rec(11, exe=EVIL, ended="E", unread={"exe": EVIL}, earlier=[{"exe": EVIL, "unread": {}}]),
+    evil = [rec(11, exe=EVIL, ended=E, unread={"exe": EVIL}, earlier=[{"exe": EVIL, "unread": {}}]),
             rec(12, exe=None, unread={"exe": "ENOENT " + EVIL})]
     make = fake_client(script=[answer(evil, missed=1, ask=n) for n in (1, 2, 3)])
     w, clock = watch(tmp_path, host.live_reader(CATALOG, 0.0, "linux", helper=make))
@@ -552,7 +574,7 @@ def flat(path):
     return " ".join((ROOT / path).read_text(encoding="utf-8").split())
 
 
-def test_e6_the_documents_say_what_the_helper_reads_loads_and_bounds_and_that_nothing_is_judged_from_it():
+def test_e6_the_documents_say_what_the_helper_reads_loads_and_bounds_and_what_is_judged_from_it():
     spec = flat("docs/specs/PROC-EVENTS.md")
     for sentence in (
             "`python -m raqib.procevents --serve` starts a Reader, then says `{\"ready\": null, \"v\": 1}`",
@@ -562,7 +584,8 @@ def test_e6_the_documents_say_what_the_helper_reads_loads_and_bounds_and_that_no
             "it stops the Reader and exits 0",
             "its Reader reads the kernel's socket and, at each exec, that process's /proc/PID/exe and /proc/PID/stat."
             " It opens no other file, writes only its standard output and starts no program.",
-            "So it loads Raqib from where the watch loaded it and from nowhere else.",
+            "So it loads Raqib from where the watch loaded it and from nowhere else, and needs nothing of the user's"
+            " environment or site folder.",   # M14.1c (BY-6): always -I
             "At most one ask is unanswered: while one is, `ask` writes nothing and waits for that answer",
             "`ask` says `starting` for 5 s after the start (STARTING_SECONDS), then `late`",
             "waits at most 2 s and at most a quarter of the watch's interval",
@@ -574,16 +597,20 @@ def test_e6_the_documents_say_what_the_helper_reads_loads_and_bounds_and_that_no
     for gone in ("reads nothing but its input", "never waits past its timeout"):
         assert gone not in spec, gone
     guide = flat("docs/GUIDE.md")
-    for sentence in ("PROCESS EVENTS (Linux):", "Nothing is judged from it yet", "No program's name or path is shown",
+    for sentence in ("PROCESS EVENTS (Linux):", "a process that began between two samples under a tree that talks at a"
+                     " sample is that tree's child",   # M14.1c (BY-2): no longer "Nothing is judged from it yet"
+                     "No program's name or path is shown",
                      "began and ended between two asks", "at most 10 such episodes are printed, then how many more",
                      "nothing was heard between its end and the new start"):
         assert sentence in guide, sentence
     threat = flat("docs/THREAT_MODEL.md")
     for sentence in ("a second process of Raqib's", "it ends when its input ends",
-                     "A program's path, text a process chose, reaches no output",
+                     "A program's path, text a process chose, reaches a tree's programs only through the gate a"
+                     " sampled child's name goes through",   # M14.1c (BY-4); its REDO (BZ-11): "programs", not "line"
                      "it opens no other file, writes only its output and starts no program",
                      "so it loads Raqib from where the watch did and from nowhere else",
-                     "costs the watch a hole, never its round or its Stop", "shows the helper's program as \"(deleted)\""):
+                     "costs the watch a hole, never its round or its Stop",
+                     "shows the helper's program with \" (deleted)\" after it"):   # M14.1c (BY-6)
         assert sentence in threat, sentence
     assert "opens no file and starts no program" not in threat
     service = flat("docs/specs/SERVICE.md")

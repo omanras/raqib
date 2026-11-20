@@ -134,3 +134,66 @@ The reviewer stopped at the search for silence. Measured before ruling (the prob
   pinned; the real watch of the job says heartbeats (a short beat).
 - SA-11 (said as not measured). The layer was never loaded into a Navigator; nothing of Splunk, Sentinel,
   Wazuh, an engine's own shipper tailing the file, or volume.
+
+## Amendment B (the Table, 2026-11-21) - the second review of M16.1 (docs/review/2026-11-21-M16.1-redo.md): REDO 2
+The reviewer's verdict is REDO with the claims all MET: what it suspects was never fed. Measured before this
+ruling (the probe branch 56ab935, tools/rig/siem_probe4.py, the content of 4aaa17c installed, Elasticsearch
+8.15.3 and OpenSearch 2.17.1, the same on both unless said):
+- A key of 40000 characters - a top-level key the spec does not know, one inside `result` or `watch`, one
+  inside an item of `evidence.cites` - passes the pipeline's check and the engine refuses the line (an immense
+  term in `raqib.unknown_keys`, or in the part kept whole). A key of 300 and one of 2000 characters are kept.
+- `watch.beat` or `rule.fp_budget` written `1e400` passes the check and is refused (the engine reads Infinity).
+  A beat of `1e308` and a beat of `-5` are kept as events.
+- Beside a shipper's own field that is a text where the content writes an object: `event`, `error`, `rule` or
+  `process` a text - the line is refused, an event or not; `host` or `observer` a text - an event is kept and
+  the shipper's text is gone without a word, an error document is refused.
+- The runs with no end: a `multi_terms` takes the order `[{"ends": "asc"}, {"deadline": "desc"}]` (the runs
+  that said no end first, the latest deadline first); `ends._count` and `ends>_count` are refused as paths. With
+  a size of 3 over 9 runs the answer's `sum_other_doc_count` is 8: it counts lines, not runs, and is 0 only
+  where nothing was cut. A `composite` of the two fields with the same selector, read in pages of 3, lists the
+  same five runs in four pages.
+- `Math.min(beat, 86400.0)` in the deadline's script is taken, and changes no deadline of a beat under a day.
+- SB-1 (no line is lost: the two the check let through). The pipeline's check also refuses, as an error
+  document: a key longer than 256 characters anywhere in the line, and a number that is not finite. The rig
+  feeds both among its odd lines. FOR: SA-5 holds for what was measured to break it. MUST NOT TOUCH: a key of
+  256 characters or fewer that the spec does not know is still an event with its name listed.
+- SB-2 (a shipper's field of another shape is moved aside, not lost and not a reason to lose the line). Before
+  anything else, where `host`, `event`, `error`, `observer`, `rule`, `process` or `threat` holds what is not an
+  object, the pipeline moves it to `displaced.NAME` as a text (at most 1024 characters of it); `displaced` is a
+  part kept whole. This runs first and cannot fail, so that an error document can always be written. The rig
+  feeds a `host` and an `event` that are texts, each with an event and with a line that is not JSON. FOR: an
+  old collector that writes `host` as a text loses neither its lines nor its host's name.
+- SB-3 (what the pipeline does to a shipper's fields, said exactly). Q2: an error document's `host.name` is
+  what the shipper set, never read from a line that could not be trusted as an event. Q3: `message` is the
+  Mapping's field for an event's `summary`; the shipper's `message` (the line) is replaced by it or, where the
+  event has none, removed - the line is whole in `event.original`. The page says each: which fields are set,
+  which are replaced, that `message` is, what is moved aside. The test that claimed "no field removed" is named
+  for what it holds.
+- SB-4 (the bound of the two searches says what it cuts). `runs-no-end.json` takes the measured order: past its
+  bound the runs that said an end are left out first, then the runs whose deadline is oldest. Its sentence and
+  the page say so, and that `sum_other_doc_count` above 0 in the answer means lines of runs beyond the bound
+  exist; the page gives the `composite` form as measured on the probe, not on the rig. `silence.json`'s
+  sentence says the same of its own bound.
+- SB-5 (a deadline counts a beat to a day). In both searches a line's deadline is its arrival and two of its
+  beat, the beat counted as at most 86400 s. FOR: one forged line keeps a host off the search for silence for
+  two days at most, not for as long as its number says. The page says it, and what it still trusts: a forged
+  `watch` end takes a run off the runs with no end for good; two hosts of one name are one host to silence.
+  Not measured: the two days themselves.
+- SB-6 (the error documents are found). A search of its own, `not-events.json`: the error documents, the
+  latest arrival first. The page says where to look for them again, that a host whose every line is an error
+  document is in no other search unless it once sent an event, and that an alarm whose line became an error
+  document is in that search and in no other.
+- SB-7 (the claims can fail, again). A read of silence or of the runs with no end that holds a group not sure
+  is not MET: it is said n/a with the reason. A connection that fails or an answer that is not JSON in the
+  middle of the run is each remaining claim said n/a with the reason, never a traceback behind a green job.
+  X39 holds, for each odd line, the reason its error document must name - a table of its own, not the same
+  rule written twice - and that every line of the real watch's file is an event, and prints the longest text
+  and the longest key of those lines. A host or run the engine lists that was never fed is MISSED. The runner
+  counts a text's length as the engine does.
+- SB-8 (words). Not said as fact: a `cardinality` of two fields; the names of an engine's paid features. The
+  questions file's sentence that an error document has no `event.ingested` is corrected in the new one. The
+  titles that still say "the catalog's rules" follow SA-8.
+- SB-9 (kept as built). Q1 the engine's clock by `System.currentTimeMillis()` (the rig ran it); Q4 the rule of
+  a heartbeat not WATCHING takes FINISHED too, said as a false positive; Q6, Q7, Q9, Q11; Q8 the pins equal
+  what the rig printed. Recorded, not built: the images are pinned by tag; more than one shard or node, a
+  clock skew between nodes, retention; a real shipper tailing the file.

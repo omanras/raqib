@@ -1,0 +1,6 @@
+{"began": "2026-11-20T09:59:59.100000Z", "code": null, "ended": null, "exe": "/usr/bin/bash", "pid": 1700, "ppid": 1600, "ticks": 2100}
+{"began": "2026-11-20T10:00:01.100000Z", "code": 0, "ended": "2026-11-20T10:00:01.400000Z", "exe": "/usr/bin/curl", "pid": 1801, "ppid": 1600, "ticks": 2200}
+{"began": "2026-11-20T10:00:02.000000Z", "code": 0, "ended": "2026-11-20T10:00:02.300000Z", "exe": "/usr/bin/bash", "pid": 1802, "ppid": 1600, "ticks": 2210}
+{"began": "2026-11-20T10:00:02.100000Z", "code": 0, "ended": "2026-11-20T10:00:02.200000Z", "exe": "/usr/bin/shred", "pid": 1803, "ppid": 1802, "ticks": 2211}
+{"began": "2026-11-20T09:59:59.500000Z", "code": 4, "ended": "2026-11-20T09:59:59.900000Z", "exe": "/usr/bin/wget", "pid": 1750, "ppid": 1600, "ticks": 2150}
+{"began": "2026-11-20T10:00:03.000000Z", "code": 0, "ended": "2026-11-20T10:00:03.010000Z", "exe": null, "pid": 1804, "ppid": 1600, "ticks": null}

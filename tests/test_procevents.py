@@ -900,9 +900,15 @@ def test_e9_no_socket_but_af_netlink_is_opened(monkeypatch):
 
 
 def test_e9_only_the_watch_imports_the_reader():
-    users = [p.relative_to(ROOT).as_posix() for p in (ROOT / "raqib").rglob("*.py")
-             if p.name != "procevents.py" and "procevents" in p.read_text(encoding="utf-8")]
-    assert users == ["raqib/host.py"]
+    users = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "raqib").rglob("*.py")
+                   if p.name != "procevents.py" and "procevents" in p.read_text(encoding="utf-8"))
+    # M14.1c (ADR-0007 BY-1): discover names the round's source of that kind and parses its text; it never imports
+    # the reader (only the watch does)
+    assert users == ["raqib/discover.py", "raqib/host.py"]
+    tree = ast.parse((ROOT / "raqib" / "discover.py").read_text(encoding="utf-8"))
+    names = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
+    names |= {n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    assert not [x for x in names if "procevents" in x]
 
 
 # --- E6: the docs ---------------------------------------------------------------------------------------------

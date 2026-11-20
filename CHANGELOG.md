@@ -5,6 +5,38 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.5.0 - 2026-11-21
+
+What is new:
+- On Linux, a program that starts and ends between two samples is judged (ADR-0007 Amendments BY to CB). The
+  watch's helper hears the kernel's process events; each round takes the processes it heard, and one that began
+  under a tree that talks at a sample is that tree's child: it gets its line, and NET-TOOL and DESTRUCT-CMD
+  judge it by the name of its program's file. Measured on GitHub's Linux machine: a `wget` that lived under a
+  second is a NET-TOOL finding of its tree. Until now such a program was not seen at all on Linux.
+- The report's PROCESS EVENTS section says what was given to the rounds, what was joined to a tree, what the
+  watch left out as its own, and every way the reader was not whole; a reader that was late, ended, lost
+  events or held back a rest after it had answered is a hole of the result, so the result says INCOMPLETE
+  unless a finding makes it an alarm.
+- A line of a tree's children says where each was seen (`command_sources`: the sample, the process events, or
+  both), in a round that heard the reader.
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+
+Not measured:
+- Three things a child can do and not be judged, said in the report and the guide, measured for the next step:
+  it changes its program after its line was written (a shell that runs its last command in its own place, in
+  a later round); its parent was given in an earlier round and has ended; its program's file is not called as
+  the tool is (on Ubuntu 24.04 `nc` is the file `nc.openbsd`, `telnet` is `inetutils-telnet`, `ftp` is
+  `tnftp`), so a rule's list of names can miss it.
+- A tree that lives whole between two samples, and what a short child talks to: not seen yet (the next tasks).
+- A desktop's ordinary work for an hour: how many findings the short children add (HOST-RHYTHM counts them as
+  acts now).
+
 ## 0.4.0 - 2026-11-21
 
 What is new:
