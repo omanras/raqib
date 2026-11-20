@@ -300,8 +300,11 @@ def test_e4_the_tool_checks_and_writes_the_examples_from_the_code(tmp_path, buil
     assert event_examples.main(["--check"], out=out, built=built) == 0, out.getvalue()
     doc = tmp_path / "EVENT.md"
     number, examples = '"version":"%s"' % raqib.__version__, len(event_examples.found(real))
-    assert real.count(number) == examples > 0   # every example holds the number once
-    doc.write_text(real.replace(number, '"version":"0.0.1"'), encoding="utf-8")   # a number that moved
+    # every example holds the number once (the made-up chained run of ADR-0016 HA-8 is no example and holds its own)
+    assert sum(line.count(number) for line in event_examples.found(real).values()) == examples > 0
+    moved = event_examples.EXAMPLE.sub(   # a number that moved, in the examples (the made-up chained run is not one)
+        lambda m: m.group(1) + m.group(3).replace(number, '"version":"0.0.1"') + m.group(4), real)
+    doc.write_text(moved, encoding="utf-8")
     out = io.StringIO()
     assert event_examples.main(["--check", "--doc", str(doc)], out=out, built=built) == 1
     assert out.getvalue().count("is not the code's own") == examples

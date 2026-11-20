@@ -1,19 +1,10 @@
-# HANDOFF — M14.1c REDO 2  (ADR-0007 Amendment CA, CA-1 to CA-6: the second review of M14.1c)
+# HANDOFF — none open  (M15.1, M14.1a, M15.2, M14.1b, M15.2b, M17.1, M15.3a, M13.1 and M14.1c landed by 2026-11-21; the next tasks are on their own branches)
 
-Task: the second review's findings, as the Table ruled them. Read docs/review/2026-11-20-M14.1c-redo.md (the packet; its file:line cites are of e9c7fa1, your own commit) and ADR-0007's Amendment CA, then do each item below. Nothing else changes.
+Task: none on main. Do not build here. In build on its branch: the REDO of M16.1 (claude/M16.1, ADR-0017 Amendment A: ready content for a SOC's tools). Reviewed, waiting for the Table's fixes and rulings: M15.3b (claude/M15.3b, ADR-0014 Amendment I: the autostart read made fit for the watch). Next: M14.1d (ADR-0007 BZ-3, CA-7, CB-3: what a process changes to, a child whose parent has gone, the name a program was called by; measured), M15.3c (the watch reads the autostart places and rules judge a change).
+
+From 0.2.0 on (ADR-0015): a merge into main that changes what Raqib does moves `raqib.__version__`, writes its entry at the top of CHANGELOG.md and runs `python3 tools/event_examples.py --write`. The Table does it in the merge.
 
 Scope:
-  raqib/discover.py (only the search for act-roots), raqib/host.py (only: a HostChild line's new key; the record of a child's start and the basis of an act's time; the copies of the watch's own record; the notes' and the section's words), tools/rig/check.py and tests/test_rig_check.py (X36), raqib/ruleform.py and raqib/rules/catalog/NET-TOOL.yaml and DESTRUCT-CMD.yaml (only CA-5's sentence in each: no match, no number), tests/test_procevents_round.py, tests/test_host_procevents.py, docs/specs/PROC-EVENTS.md, docs/GUIDE.md, docs/THREAT_MODEL.md, docs/review/2026-11-21-M14.1c-redo2-questions.md; and a test of tests/ or a fixture ONLY where it holds, word for word or by count, a line this task changes (named in the questions file; no other assertion weakened; no fixture's finding changes).
+  (none)
 
-Exit criteria:
-- S1 (CA-1) In the search for act-roots a shell that no sample held makes no chain. Tests: the tool sampled, its `sh -c` and git given by the reader alone: no act-root, no tree (today an act-root); the same chain with the shell sampled and git from the reader: the act-root as before, with git among its acts; every existing act-root test and the byte-for-byte test unchanged.
-- S2 (CA-2) A HostChild line of a round that read the reader's text carries `input_meta.command_sources`: a list in the order of `command_programs`, each `sample`, `events` or `both`. A line of a round with no reader's text has no such key and is byte for byte what it was (a test compares). No rule's match reads it; every rule fixture's finding is unchanged.
-- S3 (CA-3) X36: MET only where the wget's own entry in `command_sources` of its line is `events`; where it is `both`: n/a with the words "it lived to a sample: the reader and the sample both held it" (not MISSED); where it is `sample`, or no line names wget, or no sources were given: MISSED. Tests: each, and a line that names curl (`both`) and wget (`events`) together is MET.
-- S4 (CA-4) A child's start taken from the reader's record is named so in the round's record of starts (`from` says the process events, when its fork was heard) and gives an act's time a basis word of its own, never "stat"; a child whose start was read from /proc is as before. Tests: both in one round.
-- S5 (CA-5) The words: BETWEEN_HEARD without "for the whole watch" and with "not the name it was called by"; the two lists of the result's holes in THREAT_MODEL and PROC-EVENTS name the answer that holds back a rest; THREAT_MODEL says "no file of its choosing"; ruleform, NET-TOOL.yaml and DESTRUCT-CMD.yaml say the act-root's case beside "a tree that talks at a sample" (NET-TOOL.yaml's clause on a link's target, added in the first REDO, is ratified). A test holds the sentences.
-- S6 (CA-6) Tests that can fail: an ask written in round R, answered late and empty in R+1, then in R+2 an answer that carries the socket tool run after round R's build: no "did not start" hole (it fails where the covered round is taken as R+1); the report holds the section's line of the watch's own with its count. A copy written again for the same pid takes the new time, image and round; a copy forgotten at the bound is counted and said in the section. The test that empties the process's own record restores it.
-- S7 Gate green in the foreground; ASCII outside docs; Windows unchanged.
-Not in scope: CA-7 (M14.1d); the version and CHANGELOG.md (the Table's at the merge).
-If an item needs a file outside Scope: STOP and say which file and which line.
-Commit: `landed: M14.1c REDO 2 the second review's findings` or `STOP: M14.1c REDO 2 <reason>`.
-Read HANDOFF.md and do only the task it specifies.
+If you were started as a builder on this file: STOP, commit nothing, and say that no task is open.

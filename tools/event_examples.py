@@ -11,7 +11,12 @@ number (ADR-0015 V-1) is then one command, never eighteen lines edited by hand. 
 library, raqib and tests/test_event.py (VB-2: the fixture runs are that test's own, and it needs pytest, as the
 gate does; without pytest the tool ends with an ImportError and writes nothing).
 Run D's two os follows list their source findings in either order (EVENT.md says so): for the labels given as
-`varies`, an example's id, n and about are the document's, and the rest is compared and written."""
+`varies`, an example's VARIES (id, n, about, prev) are the document's, and the rest is compared and written.
+What `prev` in VARIES is for (ADR-0016 HA-8): no example holds one today - the examples are the builder functions'
+own events, and only the writer of the events file chains a line. Should an example of a run whose numbering
+varies ever hold one, its prev names the line said before it in that run, which varies with the order as its n
+does: it would be the document's, as its id, n and about are, and never compared. The made-up chained run of the
+document is under a heading that is not an example's, and tests/test_event_chain.py holds it."""
 import argparse
 import json
 import re
@@ -25,7 +30,7 @@ DOC = ROOT / "docs" / "specs" / "EVENT.md"
 # VB-3: the lines between an example's heading and its fence hold no heading and no fence (an example whose fence
 # is missing is then no example of the document, and is named; it never takes the next one's line)
 EXAMPLE = re.compile(r"^(### example: (.+?)\n(?:(?!#|```).*\n)*?```json\n)(.+?)(\n```)", re.M)
-VARIES = ("id", "n", "about")   # what a run of `varies` may number differently from the document
+VARIES = ("id", "n", "about", "prev")   # what a run of `varies` may number differently from the document
 
 
 def _event():
@@ -41,7 +46,7 @@ def found(text):
 
 
 def _kept(built, doc_line):
-    """The built event with the document's id, n and about where the document's line holds them."""
+    """The built event with the document's VARIES (id, n, about, prev) where the document's line holds them."""
     try:
         doc = json.loads(doc_line)
     except ValueError:
@@ -51,7 +56,8 @@ def _kept(built, doc_line):
 
 def differences(text, built, varies=()):
     """Each way the document's examples are not the code's own, as a sentence ([]: every one is). built:
-    {label: the event as the document writes it}. A label of `varies` is compared but for id, n and about."""
+    {label: the event as the document writes it}. A label of `varies` is compared but for VARIES (id, n, about,
+    prev)."""
     event = _event()
     doc = found(text)
     out = ["no example of %s in the document" % label for label in built if label not in doc]
@@ -74,7 +80,7 @@ def differences(text, built, varies=()):
 
 def rewrite(text, built, varies=()):
     """The document's text with each example's line made from built (the labels of `varies` keep the
-    document's id, n and about); an example of no built event is left as it is."""
+    document's VARIES: id, n, about, prev); an example of no built event is left as it is."""
     event = _event()
 
     def one(m):

@@ -659,8 +659,14 @@ def _parser():
                    help="port of the page on 127.0.0.1 (default %d, else any free port)" % watch.DEFAULT_PORT)
     a.add_argument("--refresh", type=_refresh, default=ui.REFRESH_DEFAULT, metavar="N",
                    help="the page reloads every N seconds, 1..%d (default %d)" % (ui.REFRESH_MAX, ui.REFRESH_DEFAULT))
-    ev = sub.add_parser("events", help="check an events file: every line a raqib-event/1 event (M10.2, ADR-0011 F-8)")
+    ev = sub.add_parser("events", help="check an events file: every line a raqib-event/1 event (M10.2, ADR-0011 F-8),"
+                                       " and each run's chain whole (M13.1, ADR-0016 H-4)")
     ev.add_argument("file", metavar="FILE", help="the events file (watch --host: ~/.raqib/host/events.jsonl)")
+    ev.add_argument("--against", metavar="OTHER", default=None,
+                    help="the lines a collector holds of this file (its own export, one line a line), compared with"
+                         " FILE's by host and id: which are not in FILE and which differ, each by its line numbers"
+                         " (ADR-0016 HA-5). It needs the collector's lines byte for byte as they were sent (a line"
+                         " end aside): a line stored otherwise is said to differ")
     fw = sub.add_parser("forward", help="send a watch's events file to one collector (HTTP or syslog), to the"
                                         " system's journal (journal:, Linux) or to the Windows event log (eventlog:,"
                                         " Windows), every whole line, at least once and in order (M10.3, ADR-0011 J;"
@@ -1472,15 +1478,31 @@ def cmd_app(args, out):
 
 def cmd_events(args, out):
     """M10.2 (ADR-0011 F-8): every line of FILE checked with event.check; the count per kind and each problem with
-    its line number. Exit 0 when every line is an event, 1 when not (a file that holds no event is not a watch's
-    events: rule 4), 2 when the file cannot be read. It reads; it sends nothing."""
+    its line number. M13.1 (ADR-0016 H-4, Amendment A): then each run (event.chains: by its host and run word, in
+    the file's order) in one line - its chain whole, not whole, not chained (an older build's run, not a
+    problem) or taken out (a version that writes the chain, and no line holds prev: HA-2) - and under a chain
+    not whole, where it began before the file and each break and line beside it, to a bound that is said (HA-7).
+    --against OTHER (HA-5): the lines a collector holds, compared with FILE's by host and id, byte for byte.
+    Exit 0 when every line is an event and every run's chain is whole or not chained (and, with OTHER, no line
+    of it is missing from FILE or differs), 1 when not (a file that holds no event is not a watch's events: rule
+    4), 2 when FILE or OTHER cannot be read. It reads; it sends nothing."""
     from raqib import event
-    try:
-        with open(args.file, "rb") as f:
-            data = f.read()
-    except OSError as exc:
-        sys.stderr.write("raqib events: cannot read %s: %s\n" % (args.file, exc.strerror or exc))
-        return 2
+    held = None
+    for which, path in enumerate((args.file, getattr(args, "against", None))):
+        if path is None:
+            continue
+        try:
+            with open(path, "rb") as f:
+                got = f.read()
+        except OSError as exc:
+            sys.stderr.write("raqib events: cannot read %s: %s\n" % (path, exc.strerror or exc))
+            return 2
+        if which == 0:   # HB-4: told by its place, never by the paths being one object
+            data = got
+        else:
+            held = got.split(b"\n")
+            if held and held[-1] == b"":
+                held.pop()
     rows = data.split(b"\n")
     if rows and rows[-1] == b"":
         rows.pop()   # the last line's own newline
@@ -1488,13 +1510,19 @@ def cmd_events(args, out):
     for i, raw in enumerate(rows, 1):
         try:
             obj = json.loads(raw.decode("ascii"))
-        except (UnicodeDecodeError, ValueError) as exc:
+        except (UnicodeDecodeError, ValueError, RecursionError) as exc:   # HA-9: a line never ends the reader
             problems.append("line %d: not an event: %s" % (i, "not ASCII" if isinstance(
-                exc, UnicodeDecodeError) else "not JSON (%s)" % exc))
+                exc, UnicodeDecodeError) else "not JSON (nested deeper than can be read)" if isinstance(
+                exc, RecursionError) else "not JSON (%s)" % exc))
             continue
-        found = event.check(obj)
-        key = (obj.get("watch") or {}).get("host") if isinstance(obj, dict) and isinstance(
-            obj.get("watch"), dict) else None, obj.get("id") if isinstance(obj, dict) else None
+        try:   # HB-2 (HA-9): no line ends the reader, whatever its values are
+            found = event.check(obj)
+        except Exception as exc:
+            problems.append("line %d: not an event: it cannot be checked (%s)" % (i, type(exc).__name__))
+            continue
+        host = (obj.get("watch") or {}).get("host") if isinstance(obj, dict) and isinstance(
+            obj.get("watch"), dict) else None
+        key = host if isinstance(host, str) else None, obj.get("id") if isinstance(obj, dict) else None
         if key[1] is not None and isinstance(key[1], str):
             if key in ids:
                 found.append("id: %s said twice in the file (line %d)" % (key[1], ids[key]))
@@ -1513,9 +1541,83 @@ def cmd_events(args, out):
         problems.append("no event")
         out.write("  the file holds no event: not a watch's events (silence is a finding)\n")
     bad = len({p.split(":", 1)[0] for p in problems})
-    out.write("RESULT: %s\n" % ("every line is an event" if not problems else
-                                "%d line(s) not an event" % bad if rows else "no event"))
-    return 0 if not problems else 1
+
+    def esc(text):   # a name read from a file never makes a line of its own: ASCII, no control character
+        return json.dumps(text if isinstance(text, str) else "%s" % text, ensure_ascii=True)[1:-1]
+
+    def said(c):
+        """ADR-0016 H-4, HA-2 to HA-7: one run's chain, a line and, under a chain not whole, a line for each
+        problem."""
+        name = "run %s (host %s)" % (esc(c["run"]), esc(c["host"]))
+        twice = ", %d said twice" % c["twice"] if c["twice"] else ""
+        shown = ", ".join(esc(v) for v in c["versions"]) or "none"
+        if c["state"] == event.UNCHAINED:
+            read = any(event.version_of(v) for v in c["versions"])
+            return ["%s: not chained, %d line(s) (no line holds prev: %s %s)" % (
+                name, c["lines"], "written by a Raqib before this one, version" if read else
+                "its version is not read:", shown)]
+        if c["state"] == event.TAKEN:
+            writes = ", ".join(esc(v) for v in c["versions"] if (event.version_of(v) or ()) >= event.CHAIN_SINCE)
+            return ["%s: no line holds prev, yet its version %s writes the chain (from %s): the chain was taken out,"
+                    " %d line(s)" % (name, writes, ".".join(str(x) for x in event.CHAIN_SINCE), c["lines"])]
+        if c["state"] == event.WHOLE:
+            return ["%s: chain whole, %d line(s)%s" % (name, c["lines"], twice)]
+        lines = ["%s: chain not whole, %d line(s)%s" % (name, c["lines"], twice)]
+        if c["late"] is not None:
+            lines.append("  begins before this file: its first line here, line %d, names no line of its run before"
+                         " it here (an export that starts late, or a file whose beginning was cut)" % c["late"])
+        for p in c["problems"]:
+            if p["what"] == event.BESIDE:
+                lines.append("  %d line(s) beside the chain, line %d%s: they follow %s, and line %d names %s again"
+                             " (not counted as written by the writer, or put there by another hand)" % (
+                                 p["count"], p["first"], " to line %d" % p["last"] if p["last"] != p["first"] else "",
+                                 "line %d" % p["named"] if p["named"] else "the run's start", p["again"],
+                                 "line %d" % p["named"] if p["named"] else "the run's start"))
+            else:
+                lines.append("  broken at line %d: %s" % (p["line"], {
+                    "none": "it holds no prev, in a run whose other lines hold it",
+                    "prev": "its prev is not the word first or a sha256",
+                    "names": "it does not name the run's line before it%s (one before it was removed, changed, added"
+                             " or moved)" % (", line %d" % p["before"] if p["before"] else "")}[p["why"]]))
+        if c["more"]:
+            lines.append("  the bound of %d a run reached: %d more not listed" % (event.BOUND, c["more"]))
+        return lines
+
+    chains = event.chains(rows)
+    for c in chains:
+        for ln in said(c):
+            out.write("  %s\n" % ln)
+    bad_runs = sum(c["state"] in (event.NOT_WHOLE, event.TAKEN) for c in chains)
+    cmp = None
+    if held is not None:   # HA-5: the collector's lines beside the file's
+        cmp = event.against(rows, held)
+        out.write("  against %s: %d line(s), %d in the file byte for byte, %d not in it, %d with other bytes, %d"
+                  " not read (no host and id); %d line(s) of the file it does not hold (a collector behind: not a"
+                  " problem)\n" % (args.against, cmp["read"], cmp["same"], len(cmp["missing"]) +
+                                    cmp["more_missing"], len(cmp["differ"]) + cmp["more_differ"], cmp["unread"],
+                                    cmp["behind"]))
+        for i, ident, host in cmp["missing"]:
+            out.write("    line %d of %s (id %s, host %s): not in the file\n" % (i, args.against, esc(ident),
+                                                                               esc(host)))
+        for i, ident, host, here in cmp["differ"]:
+            out.write("    line %d of %s (id %s, host %s): the file's line %s holds other bytes\n" % (
+                i, args.against, esc(ident), esc(host), ", ".join(str(n) for n in here[:3]) + (
+                    " and %d more" % (len(here) - 3) if len(here) > 3 else "")))
+        if cmp["more_missing"] or cmp["more_differ"]:
+            out.write("    the bound of %d reached: %d more not listed\n" % (
+                event.BOUND, cmp["more_missing"] + cmp["more_differ"]))
+    off = (len(cmp["missing"]) + cmp["more_missing"], len(cmp["differ"]) + cmp["more_differ"]) if cmp else (0, 0)
+    blind = cmp is not None and cmp["read"] == cmp["unread"]   # HB-3: nothing of OTHER could be compared
+    if blind:
+        out.write("    nothing compared: %s holds no line that names its host and id (an empty export, another"
+                  " envelope, or another encoding than the file's)\n" % args.against)
+    out.write("RESULT: %s%s%s%s%s\n" % ("every line is an event" if not problems else
+                                        "%d line(s) not an event" % bad if rows else "no event",
+                                        "; %d run(s) whose chain is not whole" % bad_runs if bad_runs else "",
+                                        "; %d line(s) of the collector's not in the file" % off[0] if off[0] else "",
+                                        "; %d line(s) of the collector's with other bytes" % off[1] if off[1] else "",
+                                        "; nothing of the collector's could be compared" if blind else ""))
+    return 0 if not problems and not bad_runs and not any(off) and not blind else 1
 
 
 def cmd_forward(args, out):

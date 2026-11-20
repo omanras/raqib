@@ -344,7 +344,7 @@ def by_about(events):
 def test_e1_the_module_reads_no_clock_file_network_or_environment():
     text = (ROOT / "raqib" / "event.py").read_text(encoding="ascii")
     imports = re.findall(r"^\s*(?:import|from)\s+([\w.]+)", text, re.M)
-    assert sorted(set(imports)) == ["datetime", "json", "raqib", "re"], imports
+    assert sorted(set(imports)) == ["datetime", "hashlib", "json", "raqib", "re"], imports   # hashlib: ADR-0016
     for word in ("import time", ".now(", "utcnow", "today(", "socket", "os.environ", "getenv", "open(", "urllib",
                  "random", "import host", "import watch", "uuid", "import os"):
         assert word not in text, word
@@ -448,7 +448,7 @@ def test_e1_snapshot_must_be_given_the_knock_rows_and_the_rule_table(runs):
 
 # --- E2 (C-2): the keys, in C-2's order; a key the entry does not hold is absent --------------------------
 
-C2 = ["schema", "id", "n", "time", "kind", "about", "rev", "severity", "alarm", "summary", "rule", "subject",
+C2 = ["schema", "id", "n", "prev", "time", "kind", "about", "rev", "severity", "alarm", "summary", "rule", "subject",
       "evidence", "hole", "knocked", "state", "result", "counts", "watch"]
 C2_PARTS = {"rule": ["id", "class", "kind", "fp_budget", "attack"],
             "subject": ["tree", "pid", "image", "started", "named", "agent", "path", "benign", "history", "by"],
