@@ -280,9 +280,9 @@ def test_e3_every_round_read_is_todays_line_byte_for_byte(tmp_path, monkeypatch)
     assert ("CHANNEL (the rounds read the Sysmon channel since the previous round): 3 read(s) kept, 0 failed, 0 at the"
             " cap of 2000; 0 event(s); kinds read: none; 0 brief tree(s) (seen in the channel only); no event 1"
             " read so far: a tree that starts and ends between two rounds may be unseen; no event 3 read so far: talk"
-            " between rounds may be unseen (Sysmon without -n logs none); no event 11 read so far: no file a tree makes"
-            " is seen, and PERSIST-AUTOSTART's os lines have nothing to read (this Sysmon's configuration may not log"
-            " file creation); no event 22 read so far: a name asked between two rounds may be unseen") in report(w)
+            " between rounds may be unseen (Sysmon without -n logs none); no event 11 read so far: a file a tree makes"
+            " may be unseen, and PERSIST-AUTOSTART's os lines may have nothing to read (this Sysmon's configuration may"
+            " not log file creation); no event 22 read so far: a name asked between two rounds may be unseen") in report(w)
 
 
 def test_e3_none_read_says_the_rounds_the_first_reason_and_how_the_trees_were_judged(tmp_path, monkeypatch):

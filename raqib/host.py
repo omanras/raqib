@@ -378,13 +378,14 @@ CHANNEL_KIND_ROUNDS = 3            # REDO X-8: a kind not read after this many r
 CHANNEL_HELD = {1: "no event 1 read so far: a tree that starts and ends between two rounds may be unseen",
                 3: "no event 3 read so far: talk between rounds may be unseen (Sysmon without -n logs none)",
                 # ADR-0014 AE-2 (M15.2b): the file events, said under the same rule (AA-4)
-                11: "no event 11 read so far: no file a tree makes is seen, and PERSIST-AUTOSTART's os lines have"
-                    " nothing to read (this Sysmon's configuration may not log file creation)",
+                11: "no event 11 read so far: a file a tree makes may be unseen, and PERSIST-AUTOSTART's os lines"
+                    " may have nothing to read (this Sysmon's configuration may not log file creation)",
                 22: "no event 22 read so far: a name asked between two rounds may be unseen"}
 # ADR-0014 AE-3 (M15.2b): the blind spot `registry`, from the channel's one question for event 13 (said once a run)
-REGISTRY_UNHELD = ("the Sysmon channel holds no event 13 (a registry value set): this Sysmon's configuration logs no"
-                   " registry value, or none was set under a key it logs since the log began; PERSIST-RUN-KEY has"
-                   " nothing to read here")
+REGISTRY_UNHELD = ("the Sysmon channel held no event 13 (a registry value set) at this watch's first read of it: this"
+                   " Sysmon's configuration may log no registry value, or none was set under a key it logs in what the"
+                   " channel then held; PERSIST-RUN-KEY may have nothing to read here (asked once a run: a value logged"
+                   " after it does not take this back)")
 REGISTRY_UNKNOWN = ("whether the Sysmon channel holds any event 13 (a registry value set) is not known (%s):"
                     " PERSIST-RUN-KEY may have nothing to read here")
 NO_CHANNEL_READ = ("the round's inventory carries no read of the Sysmon channel (a reader that does not read it): a tree"

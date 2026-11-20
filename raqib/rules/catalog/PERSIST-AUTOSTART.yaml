@@ -8,7 +8,7 @@ kind: signature
 evasion:
   - "another autostart place: a value under CurrentVersion\\Run or RunOnce (PERSIST-RUN-KEY's: Sysmon event 13, ADR-0014 Amendment B), a scheduled task or a service (written by the system's own service, not by the tree: S3), a Startup folder named by the registry's User Shell Folders when it is moved elsewhere"
   - "a file moved or renamed into the folder: not measured; a move or a rename within one volume is believed to be no file creation for Sysmon (event 11), a move from another volume is a copy and so one; a hooks line names the tool's own path only, so a Bash cp, mv or redirect into the folder is not a Write"
-  - "a Sysmon that logs no file creation there: nothing is then there to read, and Raqib cannot tell that from nothing done (under raqib watch --host a channel that gives no event 11 is not said yet: ADR-0014 Amendment A, AA-4)"
+  - "a Sysmon that logs no file creation there: nothing is then there to read, and Raqib cannot tell that from nothing done (under raqib watch --host a channel that gave no event 11 to three rounds is said once, as what may be unseen: ADR-0014 AE-2)"
   - "Linux has no os source: nothing there is judged by this rule (its autostart places are ADR-0014 S4); a hooks Write is judged on any system, by its path"
   - "a path written another way than the folder's own: an 8.3 short name (STARTM~1), a junction, a symlink or a mount point that leads into the folder, a path relative to it, or a file of the folder named through an environment variable the tool did not expand"
   - "an os file line with no path (TargetFilename unread) is not judged (partial, said)"
