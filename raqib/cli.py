@@ -1588,15 +1588,15 @@ def cmd_events(args, out):
         cmp = event.against(rows, held)
         out.write("  against %s: %d line(s), %d in the file byte for byte, %d not in it, %d with other bytes, %d"
                   " not read (no host and id); %d line(s) of the file it does not hold (a collector behind: not a"
-                  " problem)\n" % (esc(args.against), cmp["read"], cmp["same"], len(cmp["missing"]) +
+                  " problem)\n" % (args.against, cmp["read"], cmp["same"], len(cmp["missing"]) +
                                     cmp["more_missing"], len(cmp["differ"]) + cmp["more_differ"], cmp["unread"],
                                     cmp["behind"]))
         for i, ident, host in cmp["missing"]:
-            out.write("    line %d of %s (id %s, host %s): not in the file\n" % (i, esc(args.against), esc(ident),
+            out.write("    line %d of %s (id %s, host %s): not in the file\n" % (i, args.against, esc(ident),
                                                                                esc(host)))
         for i, ident, host, here in cmp["differ"]:
             out.write("    line %d of %s (id %s, host %s): the file's line %s holds other bytes\n" % (
-                i, esc(args.against), esc(ident), esc(host), ", ".join(str(n) for n in here[:3])))
+                i, args.against, esc(ident), esc(host), ", ".join(str(n) for n in here[:3])))
         if cmp["more_missing"] or cmp["more_differ"]:
             out.write("    the bound of %d reached: %d more not listed\n" % (
                 event.BOUND, cmp["more_missing"] + cmp["more_differ"]))
