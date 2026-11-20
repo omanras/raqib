@@ -43,7 +43,10 @@ SERVICES = "SYSTEM\\CurrentControlSet\\Services"
 TASK_CACHE = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Schedule\\TaskCache"
 TASK_TREE = TASK_CACHE + "\\Tree"
 TASK_BODIES = TASK_CACHE + "\\Tasks"
-TASK_DEPTH = 32                       # the scheduler's folders, at most this deep (a bound, never reached)
+TASK_DEPTH = 32                       # the scheduler's folders, at most this deep; a deeper one is said (AH-2)
+# ADR-0014 AH-1: a SID wherever it stands in a name an entry's maker chose (a per-user task of an updater holds one)
+SID_IN_NAME = re.compile(r"S-1-[0-9]+(?:-[0-9]+)+", re.I)
+GONE_WHILE_OPEN = 1018                # ERROR_KEY_DELETED: a key deleted while it is read is not there (AH-5)
 WINLOGON = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"
 WINLOGON_VALUES = ("Shell", "Userinit")
 STARTUP = ("Microsoft", "Windows", "Start Menu", "Programs", "Startup")
@@ -159,6 +162,12 @@ class _Place:
         except PermissionError:
             self.refused.append(ident)
             return None
+        except OSError as exc:
+            if getattr(exc, "winerror", None) == GONE_WHILE_OPEN:   # AH-5: deleted while it was read: not there
+                return None
+            if self.failed is None:
+                self.failed = _why(exc)
+            return None
         except Exception as exc:   # AG-2: another error is said with its reason
             if self.failed is None:
                 self.failed = _why(exc)
@@ -167,8 +176,9 @@ class _Place:
         return got
 
     def add(self, scope, view32, raw_name, program, digest, where):
+        shown = os_sysmon.value_name(SID_IN_NAME.sub("[sid]", raw_name))   # AH-1: a SID in a name is not shown
         self.entries.append({"place": self.name, "scope": scope, "view32": view32,
-                             "name": os_sysmon.value_name(raw_name), "program": program, "sha256": digest,
+                             "name": shown, "program": program, "sha256": digest,
                              "key": _hash("\0".join((self.name, where, "32" if view32 else "64", raw_name.lower())))})
 
     def said(self):
@@ -269,6 +279,10 @@ def _tasks(reg, place, path, rel, depth):
             place.add("machine", False, sub_rel, None, digest, "tree")
         if depth < TASK_DEPTH:
             _tasks(reg, place, sub, sub_rel, depth + 1)
+        else:   # AH-2: a folder below the bound is not walked, and is counted as a key not read (the place: partly)
+            deeper = place.ask("folder " + sub_rel, lambda: reg.subkeys("HKLM", sub, False))
+            if deeper:
+                place.refused.append("deeper " + sub_rel)
 
 
 def _winlogon(reg, place):

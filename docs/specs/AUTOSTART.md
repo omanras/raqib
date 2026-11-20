@@ -60,12 +60,26 @@ An entry is a dict:
   (binary, a number), names no such program, or was not read. An unquoted path
   with a blank in it is named by its first word (`C:\Program Files\x.exe` gives
   `Program`), as the line names it; `Userinit`'s usual text ends with a comma
-  and names no program.
+  and names no program. The name is of the first word only: a Winlogon value
+  that lists more than one program, or a text whose first word Windows does not
+  run as it stands, can be named by a program that is not the one that runs.
+  The change itself is still said, by its hash (AH-3: ruled before a rule's
+  sentence names a program from this read).
 - `sha256`: of the content (for a value: its registry type, then its data; for
   a file: its bytes; for a service: its three values; for a task: its two).
   None where the content was refused.
 - `key`: a sha256 of where the entry is (the place, the hive, the view, the
-  name in full), by which two reads are compared.
+  name in full), by which two reads are compared. For a user's entry the hive
+  is its SID, so the key is a hash over a SID; like `sha256` it has no salt: a
+  key or a content's hash can be matched by whoever tries the right SID or
+  text. Neither is printed by the command or written by the rig; a stage that
+  writes one into a line must rule it first (ADR-0014 AH-6).
+
+A name is text its maker chose. Where it holds a SID (a per-user task of an
+updater does), the name shown holds `[sid]` in its place (AH-1); the `key`
+holds the name as it is, so two entries that differ only there stay two. A
+user's name that a maker put into an entry's name cannot be told from any other
+word and is shown as it is.
 
 A value's text, a file's content, a SID and a user's name stay in the reading
 process's memory and leave it only as a hash: nothing `read` returns or the
@@ -102,6 +116,29 @@ What was there when the first read was made is never said as a change, and a
 change made and undone between two reads is not seen by this read (Sysmon's
 lines see it where its configuration logs it).
 
+What two reads can say that is not so, or leave unsaid (the review of M15.3a;
+each is ruled before the watch reads this, ADR-0014 AH-3):
+- An entry that first appears while its place is unread - refused, failed, or
+  read in part with other keys refused than before - is in the next read's
+  base and is never said as added. A Startup file held open without sharing
+  across one read does this, and any process of the user can hold its own file
+  so.
+- A hive that is loaded or unloaded between two reads (a logon, a task run as
+  another account) reads as its entries added or removed, though nobody set or
+  removed them.
+- A value the machine holds with the same content in both views is one entry;
+  when its 64-bit copy changes or goes, the 32-bit copy that was there all
+  along is said as added.
+- A key deleted while it is read is taken as not there (AH-5); an entry that
+  an enumeration skips because another was deleted meanwhile reads as removed
+  and then added.
+- A read has no bound on its size or its time: every value and every Startup
+  file is read whole at each read, and a Startup folder on a share is read
+  over the network. The scheduler's folders are walked 32 deep; a deeper one
+  is counted as a key not read and the place says `partly` (AH-2).
+- While a Startup file is hashed it is held open: a delete or a rename of it
+  by another process at that moment may fail (not measured).
+
 ## The command
 
     python -m raqib.autostart [--rounds N] [--every S]
@@ -114,13 +151,16 @@ the seconds it took); then, at each later read, one line per change, as
 
 and one `UNREAD round N:` line where a place gave no change. ASCII. It writes
 no file and opens no socket. Exit 0; 2 for an argument it does not take
-(`--rounds` below 1, `--every` below 0).
+(`--rounds` below 1, `--every` below 0 or not a finite number).
 
 ## What is not read (AG-5)
 
 The rule's ways round, listed: Image File Execution Options, `AppInit_DLLs`, a
 WMI subscription, the policies' Run keys, Active Setup, a service's
-`ServiceDll`, a driver, a COM object, a hive that is not loaded. Also not read
+`ServiceDll`, a COM object, a hive that is not loaded. A driver is not in
+this list: it is a key of the services with an `ImagePath`, so it is an entry
+of the place `service` like any other (its `Type` is in its hash), and the
+stage that judges a service rules whether a driver is said apart. Also not read
 by this stage: RunOnceEx and RunServices; a user's `Wow6432Node` Run key named
 as such; a user's own Winlogon values; the Startup folder of a user other than
 the reading one; the scheduler's folder of task files; a task's program (its
@@ -145,8 +185,11 @@ scheduler's tree and its folder refused whole.
 Not measured: a real desktop's churn (an updater that makes its own task or
 service); the scheduler's own query tool under fewer rights; how long the read
 takes on a machine with thousands of services; this module's own read on a
-real machine before the rig runs it (X37). The rig (`tools/rig/autostart_run.py`)
+real desktop. The rig (`tools/rig/autostart_run.py`)
 reads beside a run of the stand-in, which sets a Run value, writes a Startup
 file and makes a service that is never started (`cmd.exe /c echo`, start on
 demand), and undoes each; X37 is MET where each is an `added` change and later
 a `removed` one.
+
+Measured by the rig when this module landed (GitHub's Windows machine): X37 MET, the three acts each added and
+later removed, 39 reads of which the longest took 0.157 s, no place unread.

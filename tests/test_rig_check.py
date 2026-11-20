@@ -389,6 +389,17 @@ def test_x37_missed_where_the_removal_came_first_or_the_run_was_silent():
     assert x37(autostart_facts(not_run="why"))[0] == check.MISSED
 
 
+def test_x37_says_when_the_run_ended_the_stand_in_and_its_acts_were_not_undone():
+    """ADR-0014 AH-4: a stand-in the run had to end did not undo its acts; X37's row says so, MISSED."""
+    facts = autostart_facts(ended_by_run=True)
+    facts["changes"] = [c for c in facts["changes"] if c["change"] == "added"]
+    state, words = x37(facts)
+    assert state == check.MISSED and "the run ended the stand-in before its end: its acts were not undone" in words
+    state, words = x37(autostart_facts(error="OSError (5)", ended_by_run=True))
+    assert state == check.MISSED and "its acts were not undone" in words
+    assert "not undone" not in x37(autostart_facts(error="OSError (5)"))[1]
+
+
 def test_x37_n_a_off_windows_and_a_row_of_main_only_where_given(tmp_path, capsys):
     import json
     assert x37({"platform": "linux", "not_run": "not Windows (linux)"})[0] == check.SKIP

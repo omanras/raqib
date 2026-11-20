@@ -378,3 +378,39 @@ helper process, no right asked):
   File Execution Options, AppInit_DLLs, a WMI subscription, the policies' Run keys, Active Setup, a service's
   ServiceDll, a driver, a COM object, a hive that is not loaded. Whether the question of AE-3 is still needed
   once the watch reads the Run keys itself is ruled with M15.3b. Linux's places are S4 (M15.4).
+
+## Amendment H (the Table, 2026-11-20) - the review of M15.3a (docs/review/2026-11-20-M15.3a.md): M15.3a lands
+The reviewer's verdict is NEXT with four must-fix items. The field's word (the rig on 670ed0b, GitHub's Windows
+machine): X37 MET - the stand-in's Run value, Startup file and service each added and later removed, 39 reads,
+the longest 0.157 s, no place unread; the real read's own test green on both Windows jobs.
+- AH-1 (a SID in a name). A name is text its maker chose, and a per-user task of an updater holds its user's
+  SID. Wherever a SID stands in a name, the name shown holds `[sid]` in its place; the entry's key holds the
+  name as it is, so two entries that differ only there stay two. A user's name inside a name cannot be told
+  from any other word and is shown: said in the spec. FOR: AG-1's MUST NOT TOUCH holds for what a maker
+  writes too. MUST NOT TOUCH: what two reads compare.
+- AH-2 (the bound is said). A folder of tasks below the bound of the walk is counted as a key not read, and the
+  place says `partly`: a task that the read did not reach is never a place read whole.
+- AH-3 (ruled before the watch reads this: M15.3b). What two reads can say that is not so, or leave unsaid, is
+  in the spec now and is ruled with M15.3b, each measured first where it can be: an entry that first appears
+  while its place is unread is never said as added (the base of a comparison, per place and per key, must be
+  the last read that held that key); a hive loaded or unloaded reads as its entries added or removed; the
+  machine's 32-bit twin of a value said as added when its 64-bit twin changes; a program named from the first
+  word of a text that Windows runs otherwise (an unquoted path with a blank, a Winlogon value that lists more
+  than one program); a read with no bound on its size and its time, and a Startup folder on a share read over
+  the network (the capture path makes no network call: CLAUDE.md's rule 5 must hold when the watch reads it);
+  a file held open while it is hashed.
+- AH-4 (the rig's own acts). Where the rig's run has to end the stand-in, its acts are not undone: X37's row
+  says so, and an error is said by its kind alone. The rig's facts are kept with its other files.
+- AH-5 (a key deleted while it is read) is not there, as one that was never there; another error of a key still
+  fails its place, with its reason.
+- AH-6 (the hashes have no salt). An entry's key is a hash over where it is, a user's SID included, and its
+  content's hash is of the content alone: either can be matched by whoever tries the right text. Neither
+  leaves the process in M15.3a. A stage that writes one into a line rules first how (a salt of the run, as the
+  lines' own hashes have).
+- AH-7 (a driver). AG-5's list named "a driver" as not read. It is read: a driver is a key of the services with
+  an ImagePath. The word is withdrawn from the list; whether a rule's sentence tells a driver from a service
+  is M15.3b's.
+- AH-8 (the builder's questions). A task's program and a Startup link's target are not read in this stage (1,
+  4: the Actions' format is measured first; a link's target is inside its content). Userinit's comma and the
+  unquoted path (2, 3) are AH-3's. The coarse comparison of a place read in part (6) stands until AH-3 is
+  ruled. The rig's second run of the stand-in (8) stands; X36 is M14.1c's (7).

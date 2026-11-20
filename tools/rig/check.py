@@ -880,7 +880,9 @@ def read_autostart(facts):
         if facts.get("not_run"):
             return [(name, MISSED, "not run on Windows: %s" % facts["not_run"])]
         if facts.get("error"):
-            return [(name, MISSED, "the run failed: %s" % facts["error"])]
+            return [(name, MISSED, "the run failed: %s%s" % (facts["error"], (
+                "; the run ended the stand-in before its end: its acts were not undone"
+                if facts.get("ended_by_run") else "")))]
         changes = [c for c in facts.get("changes") or [] if isinstance(c, dict)]
         seen, missing = [], []
         for place, want in AUTOSTART_ACTS:
@@ -897,7 +899,10 @@ def read_autostart(facts):
         unread = ["read %s: %s" % (u.get("round"), ", ".join(sorted(u.get("places") or {})))
                   for u in facts.get("unread") or [] if isinstance(u, dict)]
         if missing:
-            return [(name, MISSED, "missing: %s; unread: %s" % ("; ".join(missing), "; ".join(unread) or "none"))]
+            ended = ("; the run ended the stand-in before its end: its acts were not undone"
+                     if facts.get("ended_by_run") else "")
+            return [(name, MISSED, "missing: %s; unread: %s%s" % ("; ".join(missing), "; ".join(unread) or "none",
+                                                               ended))]
         return [(name, MET, "%s; %s read(s), the longest %s s; unread: %s" % (
             "; ".join(seen), facts.get("reads"), facts.get("seconds_max"), "; ".join(unread) or "none"))]
     except Exception as exc:   # never raises: facts that cannot be read are MISSED

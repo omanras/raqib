@@ -92,7 +92,8 @@ def collect(reader=None, compare=None, start=None, platform=None, sleep=None, cl
         facts["workload_rc"] = child.wait(30)
         drain.join(10)
     except Exception as exc:
-        facts["error"] = "%s: %s" % (type(exc).__name__, " ".join(str(exc).split())[:200])
+        facts["error"] = autostart._why(exc)   # its kind and number alone: an error's text can hold a path
+        facts["ended_by_run"] = child is not None and child.poll() is None
         if child is not None and child.poll() is None:
             try:
                 child.kill()

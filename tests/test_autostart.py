@@ -161,6 +161,52 @@ def test_no_text_sid_or_user_name_leaves_the_read(folders):
     assert "content" not in said.replace("contents", "")
 
 
+def test_ah1_a_sid_in_a_name_its_maker_chose_is_never_shown(folders):
+    """ADR-0014 AH-1: a per-user task, a service or a Startup file whose NAME holds a SID is shown with [sid]."""
+    reg = machine()
+    reg.put("HKLM", TREE + "\\Vendor\\UpdateTaskUser" + SID + "Core", [("Id", "{0000-9}", SZ)], views=(False,))
+    reg.put("HKLM", TASKS + "\\{0000-9}", [("Actions", b"\x03\x00a", BINARY)], views=(False,))
+    reg.put("HKLM", autostart.SERVICES + "\\Sync_" + SID.lower(), [("ImagePath", "sync.exe", SZ)], views=(False,))
+    first = autostart.read(machine(), folders, platform="win32")
+    with open(os.path.join(folders["user"], "run-" + SID + ".cmd"), "w") as f:
+        f.write("rem")
+    got = autostart.read(reg, folders, platform="win32")
+    names = sorted(e["name"] for e in got["entries"] if "[sid]" in e["name"])
+    assert names == ["Sync_[sid]", "\\Vendor\\UpdateTaskUser[sid]Core", "run-[sid].cmd"]
+    out = io.StringIO()
+    reads = iter([first, got])
+    assert autostart.main(["--rounds", "2", "--every", "0"], out=out, reader=lambda: next(reads),
+                          sleep=lambda s: None) == 0
+    said = json.dumps(got) + out.getvalue()
+    assert SID not in said and SID.lower() not in said and "S-1-5-21" not in said.upper()
+    assert out.getvalue().count("[sid]") >= 3          # each is said as added, by the name shown
+    # two entries whose names differ only in their SID stay two entries (the key holds the name as it is)
+    assert len({e["key"] for e in got["entries"]}) == len(got["entries"])
+
+
+def test_ah2_a_folder_of_tasks_below_the_bound_is_said_as_not_read(folders):
+    reg = machine()
+    deep = TREE + "".join("\\d%d" % i for i in range(autostart.TASK_DEPTH + 3))
+    reg.put("HKLM", deep + "\\Hidden", [("Id", "{0000-8}", SZ)], views=(False,))
+    got = autostart.read(reg, folders, platform="win32")
+    t = got["places"]["task"]
+    assert (t["state"], t["keys_refused"]) == ("partly", 1)      # never "read": a task below the bound is not seen
+    assert not [e for e in entries(got, "task") if e["name"].endswith("Hidden")]
+    assert autostart.read(machine(), folders, platform="win32")["places"]["task"]["state"] == "read"
+
+
+def test_ah5_a_key_deleted_while_it_is_read_is_not_there(folders):
+    gone = OSError(22, "deleted")
+    gone.winerror = autostart.GONE_WHILE_OPEN
+    reg = machine().fail("HKLM", autostart.SERVICES + "\\RaqibRigService", gone, views=(False,))
+    got = autostart.read(reg, folders, platform="win32")
+    assert got["places"]["service"]["state"] == "read" and entries(got, "service") == []
+    other = OSError(22, "another")
+    other.winerror = 1
+    reg = machine().fail("HKLM", autostart.SERVICES + "\\RaqibRigService", other, views=(False,))
+    assert autostart.read(reg, folders, platform="win32")["places"]["service"]["state"] == "failed"
+
+
 def test_a_task_body_and_a_service_change_their_hash():
     reg, other = machine(), machine()
     other.vals[("HKLM", False, (TASKS + "\\{0000-1}").lower())][0] = ("Actions", b"\x03\x00new", BINARY)
@@ -505,7 +551,11 @@ def test_the_rig_run_off_windows_and_its_errors_are_facts(tmp_path, capsys):
 def test_the_spec_says_what_is_not_read_what_is_refused_and_what_was_measured():
     flat = " ".join((ROOT / "docs" / "specs" / "AUTOSTART.md").read_text(encoding="utf-8").split())
     for words in ("Image File Execution Options", "`AppInit_DLLs`", "a WMI subscription", "the policies' Run keys",
-                  "Active Setup", "`ServiceDll`", "a driver", "a COM object", "a hive that is not loaded",
+                  "Active Setup", "`ServiceDll`", "a COM object", "a hive that is not loaded",
+                  "A driver is not in this list: it is a key of the services with an `ImagePath`",
+                  "is in the next read's base and is never said as added",
+                  "the name shown holds `[sid]` in its place",
+                  "a deeper one is counted as a key not read and the place says `partly`",
                   "`refused`: every key asked was refused", "`partly`: some keys were refused", "0.07 s",
                   "236 tasks, 26 of its keys refused", "687 with an `ImagePath`", "Not measured: a real desktop's"):
         assert words in flat, words
