@@ -923,7 +923,10 @@ What it does not see:
   hashed, not parsed), so a task's change names no program; a program named
   from an unquoted text whose first word holds a separator, is followed by a
   blank and ends in no program's extension is said as one that `may run` - as
-  is one whose first word holds a `%`, one that holds a blank other than a
+  is one whose unquoted first word holds a `%` (but a machine's own text that
+  begins with `%SystemRoot%` or `%windir%`, AL-4: the system's root is taken as
+  a path with no blank where the reader's own value of it holds none - a text
+  of a user's own hive is never taken so), one that holds a blank other than a
   space or a tab, and one where more than one run of the text ends in a
   program's extension (AK-3) - and a Winlogon list of more than one program
   names none.

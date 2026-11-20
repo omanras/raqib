@@ -1235,12 +1235,34 @@ def test_ak1_the_registry_over_winreg_asks_at_most_1001_values():
 
 def test_ak3_a_name_is_sure_only_where_the_text_names_one_program():
     for text, sure in (("C:\\Windows\\system32\\svchost.exe -k netsvcs", True), ('"C:\\a b\\c.exe" /x', True),
-                       ("%ProgramFiles%\\x\\y.exe -z", False), ('"%ProgramFiles%\\x\\y.exe" -z', False),
+                       ("%ProgramFiles%\\x\\y.exe -z", False), ('"%ProgramFiles%\\x\\y.exe" -z', True),
                        ("C:\\Sites\\example.com files\\tool.exe", False), ("C:\\x\\a.exe\u00a0-q", False),
                        ("C:\\x\\a.exe -q\u2003x", False), ("C:\\x\\a.exe\t-q", True), ("C:\\x\\a.exe  -q", True),
                        ("cmd /c rem x", True), ("C:\\x\\run.CMD /q", True)):
         assert autostart._sure(text) is sure, text
     assert autostart._program("C:\\x\\tool.exe\t-k", "run") == ("tool.exe", True, False)   # a tab is a blank
+
+
+def test_al4_a_machines_text_that_begins_with_the_systems_root_is_sure_and_a_users_is_not():
+    """Measured before the ruling (GitHub's Windows machine): 243 of 689 services' ImagePath and both of the
+    machine's Run values hold a `%`, 239 of them an unquoted first word - `%SystemRoot%\\system32\\svchost.exe -k
+    netsvcs -p` and its like. AK-3 alone said each `may run`."""
+    env = {"SystemRoot": "C:\\Windows", "WINDIR": "C:\\Windows", "ProgramFiles": "C:\\Program Files"}
+    for text in ("%SystemRoot%\\system32\\svchost.exe -k netsvcs -p", "%windir%\\system32\\svchost.exe -k apphost",
+                 "%SystemRoot%\\System32\\alg.exe", "%WINDIR%\\system32\\SecurityHealthSystray.exe"):
+        assert autostart._sure(text, True, env) is True, text
+        assert autostart._sure(text, False, env) is False, text          # a user's own text: the variable is the user's
+        assert autostart._sure(text, True, {}) is False, text            # the reader does not hold the variable
+        assert autostart._sure(text, True, {"SystemRoot": "C:\\Win dows", "windir": "C:\\Win\tdows"}) is False, text
+    for text in ("%ProgramFiles%\\x\\y.exe -z", "%SystemRoot%\\%X%\\a.exe", "%SystemRootX%\\a.exe", "%Other%\\a.exe",
+                 "%SystemRoot%\\Sites\\example.com files\\tool.exe", "%SystemRoot%\\My Tools\\a b"):
+        assert autostart._sure(text, True, env) is False, text
+    for text, sure in (('"%ProgramFiles%\\Windows Media Player\\wmpnetwk.exe"', True),
+                       ('"%systemroot%\\Microsoft.NET\\SMSvcHost.exe" -NetMsmqActivator', True),
+                       ('"%X%"', False), ('"C:\\a\\%X%.exe" -q', False), ('"%X%/a.exe"', True)):
+        assert autostart._sure(text, False, {}) is sure, text            # quoted: the name alone decides
+    assert autostart._program("%SystemRoot%\\system32\\svchost.exe -k x", "service", True, env)[1] is True
+    assert autostart._program("%SystemRoot%\\system32\\svchost.exe -k x", "run", False, env)[1] is False
     assert autostart._program("C:\\x\\a.exe\u00a0-q", "run")[1] is False
 
 

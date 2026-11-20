@@ -98,12 +98,21 @@ An entry is a dict:
   line says `(a list of programs)`.
 - `link`: true for a link in a Startup folder (its `sha256` is the link's
   fixed word); its line says `a link (not opened or followed)`.
-- `sure` (AI-8, AJ-3, AK-3): whether the text names one program however it is
+- `sure` (AI-8, AJ-3, AK-3, AL-4): whether the text names one program however it is
   read. A text is split at spaces and tabs alone (taken as how Windows splits
   a command: not measured).
   Not sure: a text that holds a blank other than a space or a tab (a no-break
-  space, a line's end); a first word that holds a `%` (the read expands
-  nothing: the variable is the user's, not the reader's), quoted or not; an
+  space, a line's end); a quoted first word whose name - what follows its
+  last separator - holds a `%`; an unquoted first word that holds a `%` (the
+  read expands nothing), but for one case (AL-4): a text of the machine's own
+  (a service's, the machine's Run or RunOnce key, Winlogon) that begins with
+  `%SystemRoot%` or `%windir%` and holds no other `%` in its first word, where
+  the reader's own value of that variable holds no blank - the variable is then
+  taken as a path with no blank and the rest is judged as any text. A user's
+  own text is never taken so: the variable is the user's to set. Measured on
+  GitHub's Windows machine before AL-4: of 689 services' ImagePath, 239 were an
+  unquoted first word with a `%` and 4 a quoted one, and both of the machine's
+  Run values were; each would have been said `may run`. An
   unquoted text where more than one run from its start to a blank or to its end
   ends in a program's extension (`C:\Sites\example.com files\tool.exe`); an
   unquoted first word that holds a separator (`\` or `/`), is followed by a

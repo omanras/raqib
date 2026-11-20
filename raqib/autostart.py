@@ -88,6 +88,7 @@ FILE_ATTRIBUTE_REPARSE_POINT = 0x400  # AJ-4: a symbolic link or another reparse
 LOCAL_DRIVES = (2, 3, 5, 6)           # GetDriveTypeW: removable, fixed, CD-ROM, RAM disk; 0 and 1 are not known
 STEPS = ("run", "runonce", "startup", "service", "task", "winlogon")   # AJ-2, AK-2: a read begins one step further
 WINDOWS_BLANKS = " \t"                # AK-3: Windows splits a command at spaces and tabs alone
+SYSTEM_ROOTS = ("%systemroot%", "%windir%")   # AL-4: the two variables a machine's own text may begin with
 FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000   # AK-4: the open itself does not follow a link
 LINK_WORD = "a link: its content is not read"   # AK-4: a link's content, a fixed word of its own (hashed)
 SALT_ID = "the salt's own name"       # AJ-6: hashed under the salt, it tells two salts apart and tells neither
@@ -399,20 +400,31 @@ def _first_word(text):
     return re.split(r"[ \t]", text, maxsplit=1)[0]
 
 
-def _sure(text):
-    """AJ-3, AK-3: whether the text names one program however it is read. Not sure: a text that holds a blank
-    other than a space or a tab; a first word that holds a `%` (the read expands nothing); an unquoted text where
-    more than one run from its start to a blank or to its end ends in a program's extension; an unquoted first
-    word that holds a separator, is followed by a blank and ends in no program's extension. Sure: a quoted first
-    word; an unquoted one that ends in a program's extension; any other (`cmd /c ...`)."""
+def _sure(text, machine=False, environ=None):
+    """AJ-3, AK-3, AL-4: whether the text names one program however it is read. Not sure: a text that holds a blank
+    other than a space or a tab; a quoted first word whose name - what follows its last separator - holds a `%`;
+    an unquoted first word that holds a `%`, but for a leading `%SystemRoot%` or `%windir%` in a text of the
+    machine's own (a service's, the machine's Run key, Winlogon) where the reader's own value of that variable
+    holds no blank (the read expands nothing: the variable is then taken as a path with no blank, and the rest
+    judged as any text); an unquoted text where more than one run from its start to a blank or to its end ends
+    in a program's extension; an unquoted first word that holds a separator, is followed by a blank and ends in
+    no program's extension. Sure: any other. Measured on GitHub's Windows machine before AL-4: 243 of 689
+    services' texts and both of the machine's Run values held a `%` and were not sure."""
     if any(c.isspace() and c not in WINDOWS_BLANKS for c in text):
         return False
     if text.startswith('"'):
         end = text.find('"', 1)
-        return "%" not in (text[1:end] if end > 0 else text[1:])
+        inside = text[1:end] if end > 0 else text[1:]
+        return "%" not in re.split(r"[\\/]", inside)[-1]   # a variable before the name moves its folder, not it
     first = _first_word(text)
     if "%" in first:
-        return False
+        lead = next((v for v in SYSTEM_ROOTS if first.lower().startswith(v)), None)
+        if not machine or lead is None or "%" in first[len(lead):]:
+            return False
+        held = os.environ if environ is None else environ
+        value = next((v for k, v in held.items() if k.lower() == lead.strip("%")), None)
+        if not isinstance(value, str) or not value or any(c.isspace() for c in value):
+            return False
     runs = {text[:m.start()].rstrip(WINDOWS_BLANKS) for m in re.finditer(r"[ \t]", text)} | {text}
     if sum(1 for r in runs if r and r.lower().endswith(PROGRAM_EXTENSIONS)) > 1:
         return False
@@ -421,9 +433,9 @@ def _sure(text):
     return not (len(text) > len(first) and any(s in first for s in SEPARATORS))
 
 
-def _program(data, place):
+def _program(data, place, machine=False, environ=None):
     """(program, sure, listing): the program a content would run, as PERSIST-RUN-KEY's line names it, and whether
-    that name is sure (AJ-3, AK-3). A Winlogon value is a list: one program is named; a list of more than one names
+    that name is sure (AJ-3, AK-3; `machine`: the text is the machine's own, AL-4). A Winlogon value is a list: one program is named; a list of more than one names
     none (`listing` True, AJ-3). (None, None, False) where the content is not text or names no program."""
     if not isinstance(data, str) or not data.strip(WINDOWS_BLANKS):
         return None, None, False
@@ -438,7 +450,7 @@ def _program(data, place):
     program = os_sysmon.registry_program(text)
     if program is None:
         return None, None, False
-    return program, _sure(text), False
+    return program, _sure(text, machine, environ), False
 
 
 class _Deadline:
@@ -579,7 +591,7 @@ def _run_key(kind, reg, places, hives, memo, deadline, limit, turn):
         pid = place.part(ident, parent, read=place.given())
         for name, data, typ in place.bounded(got, ident, pid) or ():
             name = "" if name is None else str(name)
-            program, sure, listing = _program(data, kind)
+            program, sure, listing = _program(data, kind, machine=scope == "machine")
             place.add(scope, view32, name, program, sure, place.h.content((typ, data)), hive, pid, listing=listing)
 
 
@@ -658,7 +670,7 @@ def _services(reg, place, deadline, limit):
         held = {str(n_).lower(): (t, d) for n_, d, t in got}
         if "imagepath" not in held:   # a key of the services with no ImagePath runs nothing: not an entry
             continue
-        program, sure, _ = _program(held["imagepath"][1], "service")
+        program, sure, _ = _program(held["imagepath"][1], "service", machine=True)
         place.add("machine", False, name, program, sure,
                   place.h.content(held["imagepath"], held.get("start"), held.get("type")), "services", pid)
 
@@ -712,7 +724,7 @@ def _winlogon(reg, place):
     for want in WINLOGON_VALUES:
         if want.lower() in held:
             name, typ, data = held[want.lower()]
-            program, sure, listing = _program(data, "winlogon")
+            program, sure, listing = _program(data, "winlogon", machine=True)
             place.add("machine", False, name, program, sure, place.h.content((typ, data)), "winlogon", pid,
                       listing=listing)
 
