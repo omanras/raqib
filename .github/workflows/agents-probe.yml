@@ -185,6 +185,9 @@ jobs:
       - name: seq, the order at an overflow, a thread's exec under load (the second review of M14.1a)
         if: always()
         run: python3 tools/rig/linux_events_probe3.py
+      - name: the reader beside a busy interpreter, and in a process of its own (BR-9, before M14.1b is ruled)
+        if: always()
+        run: python3 tools/rig/reader_load_probe.py
       - name: the reader itself (M14.1a), as a plain user, five times
         if: always()
         run: |
