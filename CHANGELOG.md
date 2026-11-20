@@ -5,6 +5,45 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.7.0 - 2026-11-21
+
+What is new:
+- The read of Windows' autostart places is made fit for a watch (ADR-0014 Amendments I to L). `python -m
+  raqib.autostart` now keeps what every place, and every key inside it, last held, and says each change by its
+  kind: an entry added, changed or removed; a task rescheduled (its triggers moved, its actions the same); a
+  user's hive loaded or unloaded, as one change and not its entries; a Startup file that became a link. It
+  still stands alone: the watch does not read it yet, and no rule judges a change (the next task).
+- What it cannot say it says. A place the read's deadline cut, a key refused, a key or folder of more than a
+  thousand entries, a file held open by its maker: each is said as not read, at each read, and nothing in it is
+  said added or removed for having been out of reach. A part read for the first time late is taken as it is and
+  said once as that, never as hundreds of entries planted.
+- It does not get in the way: a Startup file is opened with every sharing and never through a link, and each
+  read begins one place further than the last, so that one slow key cannot keep the others unread.
+- A program's name is said `would run` where the text names one program however it is read, `may run` where it
+  does not. Every hash is salted anew by each process, so that two runs cannot be set side by side.
+- Measured on GitHub's Windows machines: a file held open with no sharing is said as added by the read made
+  while it was held and read after it was let go; a real symbolic link is read as a link; a file the module
+  holds is renamed and deleted by another call; of 687 services' texts 685 are `would run` (before the ruling
+  that measured it, 444 of 689); the stand-in's Run value, Startup file and service each said added and later
+  removed in 42 reads, the longest 0.125 s (X37 on the rig).
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+
+Not measured:
+- No read on a real machine met the deadline or a bound (the longest took 0.219 s): the cut, the turn of the
+  places and of the users, the bound of a thousand and a base taken late have run on made-up registries only.
+- A real desktop: how often Windows itself changes a service or a task (one change of a service that nobody of
+  the rig made was seen once), and so what a rule on these changes would cost.
+- An open by another process that asks for no sharing while the read holds a file; a file swapped for a link
+  between the listing and the open; a reparse point that is not a symbolic link; a hive loading at a logon.
+- Whether a plain user can deny its own Run key to a reader of another identity while Windows still runs it
+  (the service's case).
+
 ## 0.6.0 - 2026-11-21
 
 What is new:

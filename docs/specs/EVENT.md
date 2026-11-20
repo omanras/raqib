@@ -389,7 +389,7 @@ chained run, made up, is shown in the section for a reader of the file).
 From run B.
 
 ```json
-{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","round":2,"run":"fixture-run","seqs":[1]},"id":"fixture-run:3","kind":"finding","knocked":{"status":"off"},"n":3,"rev":1,"rule":{"attack":["T1059"],"class":"HOST","fp_budget":0.4,"id":"NEW-AGENT-UNKNOWN","kind":"anchor"},"schema":"raqib-event/1","severity":"medium","subject":{"image":"powershell","named":false,"pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"unknown agent tree powershell pid 5888 (round 2, was absent)","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","round":2,"run":"fixture-run","seqs":[1]},"id":"fixture-run:3","kind":"finding","knocked":{"status":"off"},"n":3,"rev":1,"rule":{"attack":["T1059"],"class":"HOST","fp_budget":0.4,"id":"NEW-AGENT-UNKNOWN","kind":"anchor"},"schema":"raqib-event/1","severity":"medium","subject":{"image":"powershell","named":false,"pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"unknown agent tree powershell pid 5888 (round 2, was absent)","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: finding: HOST-RHYTHM
@@ -397,7 +397,7 @@ From run B.
 From run R.
 
 ```json
-{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":2,"round":1,"seq":1,"src":"win-tcp"},{"line":4,"round":2,"seq":2,"src":"win-process"},{"line":2,"round":2,"seq":2,"src":"win-tcp"},{"line":5,"round":3,"seq":3,"src":"win-process"},{"line":2,"round":3,"seq":3,"src":"win-tcp"},{"line":6,"round":4,"seq":4,"src":"win-process"}],"record":"~/.raqib/host/rounds.jsonl","round":4,"rounds":[2,3,4],"run":"rhythm-run","seqs":[4]},"id":"rhythm-run:3","kind":"finding","knocked":{"status":"failed"},"n":3,"rev":1,"rule":{"attack":["T1059","T1071"],"class":"HOST","fp_budget":0.0,"id":"HOST-RHYTHM","kind":"anchor"},"schema":"raqib-event/1","severity":"high","subject":{"image":"relay-bot","named":false,"pid":4400,"tree":"4400:relay-bot:2026-11-03T09:00:00.000000Z"},"summary":"unknown tree relay-bot pid 4400: 3 talk-then-act cycles to 192.0.2.10:443 in the last 10 rounds (round 4)","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.6.0"}}
+{"about":"finding:1","alarm":true,"evidence":{"cites":[{"line":2,"round":1,"seq":1,"src":"win-tcp"},{"line":4,"round":2,"seq":2,"src":"win-process"},{"line":2,"round":2,"seq":2,"src":"win-tcp"},{"line":5,"round":3,"seq":3,"src":"win-process"},{"line":2,"round":3,"seq":3,"src":"win-tcp"},{"line":6,"round":4,"seq":4,"src":"win-process"}],"record":"~/.raqib/host/rounds.jsonl","round":4,"rounds":[2,3,4],"run":"rhythm-run","seqs":[4]},"id":"rhythm-run:3","kind":"finding","knocked":{"status":"failed"},"n":3,"rev":1,"rule":{"attack":["T1059","T1071"],"class":"HOST","fp_budget":0.0,"id":"HOST-RHYTHM","kind":"anchor"},"schema":"raqib-event/1","severity":"high","subject":{"image":"relay-bot","named":false,"pid":4400,"tree":"4400:relay-bot:2026-11-03T09:00:00.000000Z"},"summary":"unknown tree relay-bot pid 4400: 3 talk-then-act cycles to 192.0.2.10:443 in the last 10 rounds (round 4)","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.7.0"}}
 ```
 
 ### example: note
@@ -405,7 +405,7 @@ From run R.
 From run A (the dark note).
 
 ```json
-{"about":"note:4","evidence":{"cites":[{"line":2,"src":"footprints"}],"record":"~/.raqib/host/rounds.jsonl","round":13,"run":"field-run","seqs":[27]},"id":"field-run:11","kind":"note","n":11,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"agent":"kimi","path":"C:\\Users\\user\\.kimi","tree":"10728:kimi:11/2/2026 10:21:05 AM"},"summary":"round 13: kimi footprint C:\\Users\\user\\.kimi: dark after a live tree (note): no live tree for 3 rounds since its tree 10728:kimi:11/2/2026 10:21:05 AM was live (round 10, within the live window of 9 rounds); not a knock, not an alarm (cites run field-run seq 27)","time":"2026-11-03T10:02:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"field-run","version":"0.6.0"}}
+{"about":"note:4","evidence":{"cites":[{"line":2,"src":"footprints"}],"record":"~/.raqib/host/rounds.jsonl","round":13,"run":"field-run","seqs":[27]},"id":"field-run:11","kind":"note","n":11,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"agent":"kimi","path":"C:\\Users\\user\\.kimi","tree":"10728:kimi:11/2/2026 10:21:05 AM"},"summary":"round 13: kimi footprint C:\\Users\\user\\.kimi: dark after a live tree (note): no live tree for 3 rounds since its tree 10728:kimi:11/2/2026 10:21:05 AM was live (round 10, within the live window of 9 rounds); not a knock, not an alarm (cites run field-run seq 27)","time":"2026-11-03T10:02:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"field-run","version":"0.7.0"}}
 ```
 
 ### example: tree
@@ -413,7 +413,7 @@ From run A (the dark note).
 From run B.
 
 ```json
-{"about":"tree:5888:powershell:2026-11-10T07:50:00.000Z","evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","seqs":[2]},"id":"fixture-run:2","kind":"tree","knocked":{"status":"off"},"n":2,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"benign":false,"by":"sample","history":false,"image":"powershell","named":false,"pid":5888,"started":"2026-11-10T07:50:00.000Z","tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"tree:5888:powershell:2026-11-10T07:50:00.000Z","evidence":{"cites":[{"line":8,"src":"win-process-1"},{"line":4,"src":"win-tcp-1"},{"line":9,"src":"win-process-1"}],"record":"~/.raqib/host/rounds.jsonl","seqs":[2]},"id":"fixture-run:2","kind":"tree","knocked":{"status":"off"},"n":2,"rev":1,"schema":"raqib-event/1","severity":"info","subject":{"benign":false,"by":"sample","history":false,"image":"powershell","named":false,"pid":5888,"started":"2026-11-10T07:50:00.000Z","tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: hole
@@ -421,7 +421,7 @@ From run B.
 From run C.
 
 ```json
-{"about":"hole:1","alarm":true,"evidence":{"round":2},"hole":{"class":"hole","kind":"reader-failed"},"id":"hole-run:6","kind":"hole","knocked":{"status":"sent"},"n":6,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"reader-failed: round 2: the reader failed: OSError: snapshot failed","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"hole-run","version":"0.6.0"}}
+{"about":"hole:1","alarm":true,"evidence":{"round":2},"hole":{"class":"hole","kind":"reader-failed"},"id":"hole-run:6","kind":"hole","knocked":{"status":"sent"},"n":6,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"reader-failed: round 2: the reader failed: OSError: snapshot failed","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"hole-run","version":"0.7.0"}}
 ```
 
 ### example: hole: blind spot
@@ -429,7 +429,7 @@ From run C.
 From run B.
 
 ```json
-{"about":"blind:1","alarm":false,"evidence":{"round":1},"hole":{"class":"blind spot","count":3,"kind":"bytes"},"id":"fixture-run:7","kind":"hole","n":7,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"bytes: the reader gave no byte counts for the connections (no byte reader on fixture): bytes not read (does not change the result)","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"blind:1","alarm":false,"evidence":{"round":1},"hole":{"class":"blind spot","count":3,"kind":"bytes"},"id":"fixture-run:7","kind":"hole","n":7,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"bytes: the reader gave no byte counts for the connections (no byte reader on fixture): bytes not read (does not change the result)","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: hole: notifier's hole
@@ -437,7 +437,7 @@ From run B.
 From run R: the notifier failed; its hole holds its count and last time (D-1).
 
 ```json
-{"about":"notifier-hole:1","alarm":true,"hole":{"class":"hole","count":1,"kind":"notify-failed","last":"2026-11-03T10:00:30.000Z"},"id":"rhythm-run:4","kind":"hole","n":4,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"notify-failed: notify-send: boom","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.6.0"}}
+{"about":"notifier-hole:1","alarm":true,"hole":{"class":"hole","count":1,"kind":"notify-failed","last":"2026-11-03T10:00:30.000Z"},"id":"rhythm-run:4","kind":"hole","n":4,"rev":1,"schema":"raqib-event/1","severity":"hole","summary":"notify-failed: notify-send: boom","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"rhythm-run","version":"0.7.0"}}
 ```
 
 ### example: note: lost-words
@@ -445,7 +445,7 @@ From run R: the notifier failed; its hole holds its count and last time (D-1).
 From run L: the note of the words a terminal lost (D-1), said again only with a beat (F-3).
 
 ```json
-{"about":"note:lost-words","id":"lost-run:12","kind":"note","n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"19 writes to the terminal were lost since 2026-11-03T10:00:00Z: stdout: ValueError: I/O operation on closed file","time":"2026-11-03T10:02:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"lost-run","version":"0.6.0"}}
+{"about":"note:lost-words","id":"lost-run:12","kind":"note","n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"19 writes to the terminal were lost since 2026-11-03T10:00:00Z: stdout: ValueError: I/O operation on closed file","time":"2026-11-03T10:02:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"lost-run","version":"0.7.0"}}
 ```
 
 ### example: knock
@@ -453,7 +453,7 @@ From run L: the note of the words a terminal lost (D-1), said again only with a 
 From run B.
 
 ```json
-{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:12","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","for":"finding:1","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"knock:1","evidence":{"round":2},"id":"fixture-run:12","kind":"knock","knocked":{"called":"off","event":"NEW-AGENT-UNKNOWN","for":"finding:1","limit_id":"NEW-AGENT-UNKNOWN pid 5888","status":"off","title":"Raqib: NEW-AGENT-UNKNOWN powershell"},"n":12,"rev":1,"schema":"raqib-event/1","severity":"info","summary":"host, powershell pid 5888 (unknown)","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: heartbeat
@@ -461,7 +461,7 @@ From run B.
 From run B (at its last round, before its end).
 
 ```json
-{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"heartbeat","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"WATCHING","time":"2026-11-03T10:00:20.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"heartbeat","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"WATCHING","time":"2026-11-03T10:00:20.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: watch start
@@ -469,7 +469,7 @@ From run B (at its last round, before its end).
 From run B.
 
 ```json
-{"about":"watch","id":"fixture-run:1","kind":"watch","n":1,"rev":1,"schema":"raqib-event/1","severity":"info","state":"start","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"watch","id":"fixture-run:1","kind":"watch","n":1,"rev":1,"schema":"raqib-event/1","severity":"info","state":"start","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: watch end
@@ -477,7 +477,7 @@ From run B.
 From run B (after its end, exit 1).
 
 ```json
-{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"watch","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"end","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"watch","counts":{"blind":1,"findings":1,"holes":0,"knocks":2,"notes":4,"rounds":3,"source_findings":3,"trees":1},"id":"fixture-run:14","kind":"watch","n":14,"result":{"exit":1,"word":"ALARM"},"rev":1,"schema":"raqib-event/1","severity":"info","state":"end","time":"2026-11-03T10:00:30.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: source-finding: settled
@@ -485,7 +485,7 @@ From run B (after its end, exit 1).
 From run B.
 
 ```json
-{"about":"source-finding:1","alarm":true,"evidence":{"lines":[8,9],"run":"fixture-run","seqs":[5],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5888-04cd10d3a5.jsonl"},"id":"fixture-run:4","kind":"source-finding","knocked":{"status":"off (knocked on tree pid 5888)"},"n":4,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"settled","subject":{"image":"powershell","pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"process may reach the network at seq 5 (host -, program bitsadmin, programs [\"bitsadmin.exe\"])","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"source-finding:1","alarm":true,"evidence":{"lines":[8,9],"run":"fixture-run","seqs":[5],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5888-04cd10d3a5.jsonl"},"id":"fixture-run:4","kind":"source-finding","knocked":{"status":"off (knocked on tree pid 5888)"},"n":4,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"settled","subject":{"image":"powershell","pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"process may reach the network at seq 5 (host -, program bitsadmin, programs [\"bitsadmin.exe\"])","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: source-finding: history
@@ -493,7 +493,7 @@ From run B.
 From run D.
 
 ```json
-{"about":"source-finding:4","alarm":false,"evidence":{"lines":[1],"run":"fixture-run","seqs":[1],"source":"host","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0-host.jsonl"},"id":"fixture-run:8","kind":"source-finding","knocked":{"status":"history: not knocked"},"n":8,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"history","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"HostChild may reach the network at seq 1 (host -, program ssh, curl, programs [\"cmd\", \"ssh\", \"curl\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"source-finding:4","alarm":false,"evidence":{"lines":[1],"run":"fixture-run","seqs":[1],"source":"host","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0-host.jsonl"},"id":"fixture-run:8","kind":"source-finding","knocked":{"status":"history: not knocked"},"n":8,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"history","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"HostChild may reach the network at seq 1 (host -, program ssh, curl, programs [\"cmd\", \"ssh\", \"curl\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: source-finding: judged on another tree
@@ -501,7 +501,7 @@ From run D.
 From run D.
 
 ```json
-{"about":"source-finding:3","alarm":false,"evidence":{"lines":[14,15],"run":"fixture-run","seqs":[8],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:7","kind":"source-finding","knocked":{"status":"judged on another tree: judged on tree pid 6100 (one act, one finding)"},"n":7,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"judged on another tree","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 8 (host -, program curl, programs [\"curl.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"source-finding:3","alarm":false,"evidence":{"lines":[14,15],"run":"fixture-run","seqs":[8],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:7","kind":"source-finding","knocked":{"status":"judged on another tree: judged on tree pid 6100 (one act, one finding)"},"n":7,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"judged on another tree","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 8 (host -, program curl, programs [\"curl.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: source-finding: noted
@@ -509,7 +509,7 @@ From run D.
 From run D.
 
 ```json
-{"about":"source-finding:1","alarm":false,"evidence":{"lines":[6,7],"run":"fixture-run","seqs":[4],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:5","kind":"source-finding","knocked":{"status":"noted on a benign tree, not knocked (c:/windows/*)"},"n":5,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"noted","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 4 (host -, program ssh, programs [\"ssh.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"source-finding:1","alarm":false,"evidence":{"lines":[6,7],"run":"fixture-run","seqs":[4],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5100-7a6e6a35c0.jsonl"},"id":"fixture-run:5","kind":"source-finding","knocked":{"status":"noted on a benign tree, not knocked (c:/windows/*)"},"n":5,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"noted","subject":{"image":"explorer","pid":5100,"tree":"5100:explorer:2026-11-10T07:41:00.000Z"},"summary":"process may reach the network at seq 4 (host -, program ssh, programs [\"ssh.exe\"])","time":"2026-11-03T10:00:00.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ### example: source-finding: pending at exit
@@ -517,7 +517,7 @@ From run D.
 From run P.
 
 ```json
-{"about":"source-finding:1","alarm":true,"evidence":{"lines":[1],"run":"pending-run","seqs":[1],"source":"hooks","trace":"~/.raqib/traces/proj-HASH/raqib.log.jsonl"},"id":"pending-run:4","kind":"source-finding","knocked":{"status":"pending at exit: pending for good is silence (ADR-0005 B-1): an alarm of the tree, exit 1"},"n":4,"rev":1,"rule":{"attack":["T1562"],"class":"SILENCE","id":"SILENCE-OPEN","kind":"demand"},"schema":"raqib-event/1","severity":"high","state":"pending at exit","subject":{"image":"claude","pid":95,"tree":"95:claude:-"},"summary":"session started but its trace ends at session_start seq 1 without session_end or stop","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"pending-run","version":"0.6.0"}}
+{"about":"source-finding:1","alarm":true,"evidence":{"lines":[1],"run":"pending-run","seqs":[1],"source":"hooks","trace":"~/.raqib/traces/proj-HASH/raqib.log.jsonl"},"id":"pending-run:4","kind":"source-finding","knocked":{"status":"pending at exit: pending for good is silence (ADR-0005 B-1): an alarm of the tree, exit 1"},"n":4,"rev":1,"rule":{"attack":["T1562"],"class":"SILENCE","id":"SILENCE-OPEN","kind":"demand"},"schema":"raqib-event/1","severity":"high","state":"pending at exit","subject":{"image":"claude","pid":95,"tree":"95:claude:-"},"summary":"session started but its trace ends at session_start seq 1 without session_end or stop","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"test","run":"pending-run","version":"0.7.0"}}
 ```
 
 ### example: source-finding: not settled
@@ -525,7 +525,7 @@ From run P.
 From run N.
 
 ```json
-{"about":"source-finding:1","alarm":true,"evidence":{"lines":[8,9],"run":"fixture-run","seqs":[5],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5888-04cd10d3a5.jsonl"},"id":"fixture-run:4","kind":"source-finding","knocked":{"status":"not settled (RuntimeError: cannot decide (test))"},"n":4,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"not settled","subject":{"image":"powershell","pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"process may reach the network at seq 5 (host -, program bitsadmin, programs [\"bitsadmin.exe\"])","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.6.0"}}
+{"about":"source-finding:1","alarm":true,"evidence":{"lines":[8,9],"run":"fixture-run","seqs":[5],"source":"os","trace":"~/.raqib/host/sources/fixture-run-5888-04cd10d3a5.jsonl"},"id":"fixture-run:4","kind":"source-finding","knocked":{"status":"not settled (RuntimeError: cannot decide (test))"},"n":4,"rev":1,"rule":{"attack":["T1105","T1048"],"class":"NET","fp_budget":0.25,"id":"NET-TOOL","kind":"signature"},"schema":"raqib-event/1","severity":"medium","state":"not settled","subject":{"image":"powershell","pid":5888,"tree":"5888:powershell:2026-11-10T07:50:00.000Z"},"summary":"process may reach the network at seq 5 (host -, program bitsadmin, programs [\"bitsadmin.exe\"])","time":"2026-11-03T10:00:10.000Z","watch":{"beat":60.0,"host":"host.example","mode":"host","platform":"fixture","run":"fixture-run","version":"0.7.0"}}
 ```
 
 ## Not here

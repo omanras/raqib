@@ -68,8 +68,10 @@ def undo(startup):
     try:
         os.remove(startup)
         say("undone: the startup file")
-    except OSError as exc:
-        say("the startup file was not there to undo (%s)" % type(exc).__name__)
+    except FileNotFoundError:
+        say("the startup file was not there to undo")
+    except OSError as exc:   # ADR-0014 AI-10: a delete that failed beside the reads is said (X37)
+        say("the startup file's delete failed (%s)" % type(exc).__name__)
     run(["reg", "delete", RUN_KEY, "/v", RUN_VALUE, "/f"])
     child = run(["sc.exe", "delete", SERVICE])
     say("undone: the service" if child.returncode == 0 else "the service was not there to undo (rc=%s)" %
