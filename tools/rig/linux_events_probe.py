@@ -201,7 +201,7 @@ def main():
                   os.path.basename(first["exe"]) if "exe" in first else first.get("exe_error", "-"),
                   first.get("read_ms", "-"), first.get("ppid_read", first.get("stat_error", "-")) == me,
                   ("code %s" % exits[0].get("code")) if exits else "no", kid_exes or "none",
-                  [(s["dport"], "uid %d" % s["uid"], "bytes %s/%s" % (s.get("bytes_acked"), s.get("bytes_received")))
+                  [(s["dport"], "uid %d" % s["uid"], "inode %d" % s["inode"], "bytes %s/%s" % (s.get("bytes_acked"), s.get("bytes_received")))
                    for s in ends] or "none"))
     kinds = {}
     for e in EVENTS:
