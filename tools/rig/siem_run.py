@@ -1,21 +1,26 @@
-"""The rig's claims of siem/ (ADR-0017 S-2 and Amendment A, M16.1 and its REDO), against a search engine on this
-machine's own port. It installs siem/<engine>/'s pipeline and template and feeds them:
+"""The rig's claims of siem/ (ADR-0017 S-2, Amendments A and B, M16.1 and its two REDOs), against a search engine on
+this machine's own port. It installs siem/<engine>/'s pipeline and template and feeds them:
   - the examples of docs/specs/EVENT.md and a real watch's events file (its whole lines);
   - made-up events of each class the Sigma rules and the searches name, and a near miss for each (MADE);
   - the made-up hosts of the Table's measurement for silence and for the runs with no end (SILENCE_HOSTS), read
     at once and after waits;
-  - each odd line of Amendment A's SA-5 with a line after it (ODD), and two documents with a shipper's own fields.
-Then it prints one row a claim, MET or MISSED with its numbers, what was fed and the tools' versions:
-  X39 no line refused by the engine: each line an event or an error document as check_of() below says, and the
-      line after each odd line kept;
+  - each odd line of SA-5 and SB-1 with a line after it (ODD), and documents with a shipper's own fields (SHIPPED),
+    among them a `host` and an `event` that are texts (SB-2).
+Then it prints one row a claim, MET, MISSED or n/a with its numbers, what was fed and the tools' versions:
+  X39 no line refused by the engine: each line an event or an error document as check_of() below says, each odd
+      and shipped line's error document naming the reason REASONS (written by hand) gives, the line after each
+      odd line kept, every line of the real watch's file an event (the longest text and key of them printed);
   X40 every field the Mapping names holds the value ecs_of() computes from the event, for every event line;
-      event.ingested between the runner's clock before and after the send; a shipper's own fields kept;
+      event.ingested between the runner's clock before and after the send; a shipper's own fields kept, and the
+      ones of another shape moved to displaced.NAME (shipped_of()); an error document's message is its line;
   X41 each search of siem/<engine>/searches counts what a count made here from the fed lines says (the silence
-      and the runs with no end by the runner's own send times, never by the engine's numbers);
+      and the runs with no end by the runner's own send times, never by the engine's numbers; a read with a group
+      not sure is n/a, a host or run listed that was never fed is MISSED);
   X42 each Sigma rule of siem/sigma/rules, converted by sigma-cli with siem/sigma/pipeline-ecs.yml, counts what a
       count made here says, matches at least one line, and passes over each of its near misses.
 A MISSED claim is reported and does not fail the job (ADR-0012): the exit is 0 unless the usage is wrong (2). An
-engine that did not answer, or a sigma-cli that is not there, is said as n/a with its reason, never as MET.
+engine that did not answer, a connection that failed or an answer that is not JSON in the middle of the run, or a
+sigma-cli that is not there, is said as n/a with its reason for each claim not yet said, never as MET.
 It talks to the engine's URL only (default http://127.0.0.1:9200) and runs sigma-cli on this machine; nothing is
 sent off it. Standard library and raqib's own YAML reader only; raqib never imports it.
 
@@ -49,9 +54,20 @@ SEVERITY = {"high": 4, "medium": 3, "low": 2, "info": 1, "hole": 3}
 KINDS = ("finding", "source-finding", "note", "tree", "hole", "knock", "heartbeat", "watch")
 BASE = ("schema", "id", "n", "time", "kind", "about", "rev", "severity", "watch")
 WATCH_BASE = ("run", "host", "beat")
-# the bounds of SA-5 (the pipeline holds the same numbers)
-MAX_DEPTH, MAX_TEXT, MAX_KEYS, MAX_UNKNOWN = 10, 8000, 200, 50
+# the bounds of SA-5 and SB-1 (the pipeline holds the same numbers; a length is in UTF-16 units, as Painless counts)
+MAX_DEPTH, MAX_TEXT, MAX_KEYS, MAX_UNKNOWN, MAX_KEY = 10, 8000, 200, 50, 256
 LONG = 2 ** 63
+MAX_DOUBLE = sys.float_info.max
+# SB-2: the pipeline's first step moves each of these a shipper set as what is not an object to displaced.NAME, a text
+# of at most MAX_DISPLACED units; SB-5: a beat counts as at most DAY seconds in a deadline
+DISPLACE = ("host", "event", "error", "observer", "rule", "process", "threat")
+MAX_DISPLACED, DAY = 1024, 86400.0
+# the pipeline's own words for a line it keeps as an error document (its script's and its fail's), and the two
+# kinds of line whose reason is the engine's own processor's (json, date): check_of() says them so
+NOT, NOT_SCHEMA = "not an event: ", "not a raqib-event/1 event: its schema is not raqib-event/1"
+NOT_JSON = "not JSON (the engine's json processor gives its own words)"
+NOT_INSTANT = "time is not an instant (the engine's date processor gives its own words)"
+ENGINE_JSON = "the engine's json processor's own words"
 # a key's type in EVENT.md's Keys table -> the code the pipeline checks it by (None: not checked)
 CODE = {"str": "s", "instant": "s", "link": "s", "int": "i", "pos": "p", "count": "c", "bool": "b",
         "number": "f", "object": "o", "ids": "S"}
@@ -63,8 +79,18 @@ CLAIMS = ((39, "no line refused by the engine, each an event or an error documen
           (40, "every field the Mapping names holds the value the event holds"),
           (41, "each search counts what a count made here says"),
           (42, "each Sigma rule, converted by sigma-cli, counts what a count made here says"))
+WORD = {True: "MET", False: "MISSED", None: "n/a"}   # None: not judged (SB-7), never a MET
 SHIPPER = {"host": {"hostname": "shipper.example", "ip": "192.0.2.7", "name": "shipper.example"},
            "agent": {"type": "filebeat"}, "log": {"offset": 7}}
+# SB-2: an old collector's `host` as a text, and an `event` as a text longer than the bound whose cut would split a
+# pair of UTF-16 units (a character outside the BMP at units 1024 and 1025): it is cut at 1023
+LONG_EVENT_TEXT = "e" * 1023 + "\U0001F600" + "e" * 476
+# the documents with a shipper's fields: label -> (the shipper's fields, an event's line or a line that is not JSON)
+SHIPPED = (("shipper-fields", SHIPPER, True), ("shipper-fields-not-json", SHIPPER, False),
+           ("shipper-host-a-text", {"host": "a-shipper-text"}, True),
+           ("shipper-host-a-text-not-json", {"host": "a-shipper-text"}, False),
+           ("shipper-event-a-text", {"event": LONG_EVENT_TEXT}, True),
+           ("shipper-event-a-text-not-json", {"event": LONG_EVENT_TEXT}, False))
 
 # made-up events: label -> (the example it is made from, what is changed); POSITIVE and NEAR say which rule each
 # is for (MISS: a near miss, matching nothing new)
@@ -139,7 +165,52 @@ ODD = (
     ("a-dotted-key", lambda ev: dict(ev, **{"watch.run": {"x": 1}})),
     ("an-unknown-key", lambda ev: dict(ev, zz=1)),
     ("sixty-unknown-keys", lambda ev: dict(ev, **{"u%02d" % i: i for i in range(60)})),
+    # SB-1, as the Table measured them refused and lost: a key of 40000 characters (top-level, inside a part kept
+    # whole, inside an item of a list) and a number beyond a double (Python's json writes no 1e400: written as text)
+    ("a-long-key", lambda ev: dict(ev, **{"k" * 40000: 1})),
+    ("a-long-key-in-result", lambda ev: dict(ev, result={"exit": 0, "word": "CLEAN", "k" * 40000: "x"})),
+    ("a-long-key-in-cites", lambda ev: dict(ev, evidence={"cites": [{"k" * 40000: "x"}]})),
+    ("beat-1e400", lambda ev: line_of(ev).replace('"beat":600.0', '"beat":1e400')),
+    ("fp-budget-1e400", lambda ev: line_of(dict(ev, rule={"id": "NET-TOOL", "class": "NET", "kind": "signature",
+                                                          "fp_budget": 0.5, "attack": ["T1105"]})).replace(
+        '"fp_budget":0.5', '"fp_budget":1e400')),
+    ("a-256-key", lambda ev: dict(ev, **{"k" * 256: 1})),   # SB-1's MUST NOT TOUCH: still an event, its name listed
 )
+
+# X39's own table, written by hand (SB-7), not made from check_of(): label -> the words the error document's
+# error.message must hold, None where the line must be an event, ENGINE_JSON where the engine's json processor
+# refuses the line and the words are its own (then they must be none of the pipeline's)
+REASONS = {
+    "an-empty-key": "not an event: an empty key",
+    "run-an-object": "not an event: watch.run is not of its kind of value",
+    "kind-unknown": "not an event: its kind is not one of the spec's eight",
+    "n-missing": "not an event: the base key n is missing",
+    "n-beyond-a-long": "not an event: n is not of its kind of value",
+    "alarm-a-string": "not an event: alarm is not of its kind of value",
+    "deep-unknown-key": "not an event: deeper than 10 levels",
+    "deep-evidence": "not an event: deeper than 10 levels",
+    "many-unknown-keys": "not an event: more than 200 keys",
+    "a-long-word": "not an event: a text longer than 8000 characters",
+    "not-json": ENGINE_JSON,
+    "schema-2": "not a raqib-event/1 event: its schema is not raqib-event/1",
+    "fp-budget-a-text": "not an event: rule.fp_budget is not of its kind of value",
+    "attack-objects": "not an event: rule.attack is not of its kind of value",
+    "a-dotted-key": None,
+    "an-unknown-key": None,
+    "sixty-unknown-keys": None,
+    "a-long-key": "not an event: a key longer than 256 characters",
+    "a-long-key-in-result": "not an event: a key longer than 256 characters",
+    "a-long-key-in-cites": "not an event: a key longer than 256 characters",
+    "beat-1e400": "not an event: a number that is not finite",
+    "fp-budget-1e400": "not an event: a number that is not finite",
+    "a-256-key": None,
+    "shipper-fields": None,
+    "shipper-fields-not-json": ENGINE_JSON,
+    "shipper-host-a-text": None,
+    "shipper-host-a-text-not-json": ENGINE_JSON,
+    "shipper-event-a-text": None,
+    "shipper-event-a-text-not-json": ENGINE_JSON,
+}
 
 
 def _set(ev, path, value):
@@ -203,17 +274,29 @@ def typed(v, code):
             "S": isinstance(v, list) and all(isinstance(x, str) for x in v)}[code]
 
 
+def units(text):
+    """A text's length as Painless counts it (String.length()): in UTF-16 units, a character outside the BMP two."""
+    return len(text.encode("utf-16-le", "surrogatepass")) // 2
+
+
+def finite(v):
+    """A number within a double (the pipeline's test: -Double.MAX_VALUE <= v <= Double.MAX_VALUE; NaN is neither)."""
+    return -MAX_DOUBLE <= v <= MAX_DOUBLE
+
+
 def walk(v, depth, tally):
-    """The shape an engine would refuse (SA-5), the pipeline's own walk: a reason, else None."""
+    """The shape an engine would refuse (SA-5, SB-1), the pipeline's own walk: its words, else None."""
     if depth > MAX_DEPTH:
-        return "deeper than %d levels" % MAX_DEPTH
+        return NOT + "deeper than %d levels" % MAX_DEPTH
     if isinstance(v, dict):
         for k, x in v.items():
             if k == "":
-                return "an empty key"
+                return NOT + "an empty key"
+            if units(k) > MAX_KEY:
+                return NOT + "a key longer than %d characters" % MAX_KEY
             tally[0] += 1
             if tally[0] > MAX_KEYS:
-                return "more than %d keys" % MAX_KEYS
+                return NOT + "more than %d keys" % MAX_KEYS
             why = walk(x, depth + 1, tally)
             if why:
                 return why
@@ -222,42 +305,85 @@ def walk(v, depth, tally):
             why = walk(x, depth + 1, tally)
             if why:
                 return why
-    elif isinstance(v, str) and len(v) > MAX_TEXT:
-        return "a text longer than %d characters" % MAX_TEXT
+    elif isinstance(v, str) and units(v) > MAX_TEXT:
+        return NOT + "a text longer than %d characters" % MAX_TEXT
+    elif isinstance(v, float) and not finite(v):
+        return NOT + "a number that is not finite"
     return None
 
 
+def _no_constant(name):
+    raise ValueError("%s is not JSON" % name)
+
+
 def check_of(line, keys):
-    """Why the pipeline keeps a line as an error document (its own checks, SA-5), else None (an event)."""
+    """The words the pipeline's error document gives a line it keeps as one (its own checks, SA-5 and SB-1; for a
+    line the engine's json or date processor refuses, NOT_JSON or NOT_INSTANT), else None (an event)."""
     try:
-        r = json.loads(line)
+        r = json.loads(line, parse_constant=_no_constant)   # NaN, Infinity: not JSON to the engine's parser either
     except ValueError:
-        return "not JSON"
+        return NOT_JSON
     if not isinstance(r, dict) or r.get("schema") != "raqib-event/1":
-        return "another schema"
+        return NOT_SCHEMA
     why = walk(r, 1, [0])
     if why:
         return why
     top, _, checked = known(keys)
     for k in BASE:
         if k not in r:
-            return "the base key %s is missing" % k
+            return NOT + "the base key %s is missing" % k
     for k, code in top.items():
         if k in r and not typed(r[k], code):
-            return "%s is not of its kind of value" % k
+            return NOT + "%s is not of its kind of value" % k
     if r["kind"] not in KINDS:
-        return "the kind is not one of the spec's eight"
+        return NOT + "its kind is not one of the spec's eight"
     for k in WATCH_BASE:
         if k not in r["watch"]:
-            return "the base key watch.%s is missing" % k
+            return NOT + "the base key watch.%s is missing" % k
     for parent, subs in checked.items():
         part = r.get(parent)
         for k, code in subs.items():
             if isinstance(part, dict) and k in part and not typed(part[k], code):
-                return "%s.%s is not of its kind of value" % (parent, k)
+                return NOT + "%s.%s is not of its kind of value" % (parent, k)
     if instant_ms(r["time"]) is None:
-        return "time is not an instant"
+        return NOT_INSTANT
     return None
+
+
+def displaced_text(v):
+    """What the pipeline's first step writes of a shipper's field that is not an object: its text (Java's for the
+    kinds the rig sends: a text, null, true or false, a whole number), cut to MAX_DISPLACED UTF-16 units, one less
+    where the cut would split a pair."""
+    if isinstance(v, str):
+        text = v
+    elif v is None or isinstance(v, bool):
+        text = {None: "null", True: "true", False: "false"}[v]
+    elif isinstance(v, int):
+        text = str(v)
+    else:   # never sent by the rig: Java's text of a list or a double is not this one's
+        text = json.dumps(v)
+    raw = text.encode("utf-16-le", "surrogatepass")
+    if len(raw) <= 2 * MAX_DISPLACED:
+        return text
+    cut = MAX_DISPLACED - (1 if 0xD800 <= int.from_bytes(raw[2 * MAX_DISPLACED - 2:2 * MAX_DISPLACED], "little")
+                           <= 0xDBFF else 0)
+    return raw[:2 * cut].decode("utf-16-le", "surrogatepass")
+
+
+def shipped_of(extra):
+    """A shipper's fields as the pipeline's first step leaves them (SB-2): each of DISPLACE that holds what is not
+    an object moved to displaced.NAME as displaced_text() of it; a `displaced` that is not an object moved beside
+    them; every other field as it was."""
+    out = copy.deepcopy(extra or {})
+    moved = {k: displaced_text(out.pop(k)) for k in DISPLACE if k in out and not isinstance(out[k], dict)}
+    if moved:
+        if isinstance(out.get("displaced"), dict):
+            out["displaced"].update(moved)
+        else:
+            if "displaced" in out:
+                moved["displaced"] = displaced_text(out.pop("displaced"))
+            out["displaced"] = moved
+    return out
 
 
 def event_of(line):
@@ -365,7 +491,7 @@ def differences(want, have, window, extra=None):
     if arrived is None or not window[0] <= arrived <= window[1]:
         out.append("event.ingested: %s is not between the runner's clock before and after the send (%d, %d)" % (
             get(have, "event.ingested"), window[0], window[1]))
-    for field, value in leaves(extra or {}).items():
+    for field, value in leaves(shipped_of(extra)).items():
         if field != "host.name" and get(have, field) != value:
             out.append("%s: the shipper sent %s, the engine holds %s" % (field, json.dumps(value),
                                                                          json.dumps(get(have, field))))
@@ -398,6 +524,11 @@ def sigma_match(detection, ev):
     raise ValueError("the condition %r is not read here" % condition)
 
 
+class Lost(OSError):
+    """The engine was lost in the middle of the run: a connection that failed, or an answer that is not JSON (SB-7).
+    An OSError, so that waiting for the engine takes it as not yet there."""
+
+
 def http_ask(base):
     def ask(method, path, body=None, ndjson=False):
         data = None
@@ -405,15 +536,19 @@ def http_ask(base):
             data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
         req = urllib.request.Request(base + path, data=data, method=method, headers={
             "Content-Type": "application/x-ndjson" if ndjson else "application/json"})
+        where = "%s %s" % (method, path.split("?", 1)[0])
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                return resp.status, json.loads(resp.read().decode("utf-8") or "{}")
-        except urllib.error.HTTPError as exc:
-            text = exc.read().decode("utf-8", "replace")
             try:
-                return exc.code, json.loads(text)
-            except ValueError:
-                return exc.code, {"text": text[:400]}
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    code, raw = resp.status, resp.read()
+            except urllib.error.HTTPError as exc:
+                code, raw = exc.code, exc.read()
+        except Exception as exc:   # refused, reset, timed out, cut short: every way a connection fails
+            raise Lost("%s: the connection failed (%s: %s)" % (where, type(exc).__name__, str(exc)[:160])) from None
+        try:
+            return code, json.loads(raw.decode("utf-8") or "{}")
+        except ValueError:
+            raise Lost("%s: an answer that is not JSON (http %s, %r)" % (where, code, raw[:60])) from None
     return ask
 
 
@@ -566,7 +701,7 @@ def deadlines(sent, by):
     out = {}
     for s in sent:
         ev = json.loads(s["line"])
-        beat = ev["watch"]["beat"]
+        beat = min(ev["watch"]["beat"], DAY)   # SB-5: a beat counts as a day at most, as the searches count it
         lo, hi = s["window"][0] + int(2000 * beat), s["window"][1] + int(2000 * beat)
         key = by(ev)
         was = out.get(key, (lo, hi, False))
@@ -577,18 +712,23 @@ def deadlines(sent, by):
 
 def judge_deadlines(groups, read, got, runs):
     """(ok, text): the engine's list against the groups whose deadline has surely passed, or surely not, at the
-    read window (the runner's clock before and after the search)."""
+    read window (the runner's clock before and after the search). ok is False where the engine lists a group
+    surely not passed, leaves out one surely passed, lists one that was never fed, or (silence) is out of order;
+    else None (n/a, SB-7) where a group is not sure, for nothing was judged of it; else True."""
     sure = sorted(k for k, (lo, hi, end) in groups.items() if hi < read[0] and not (runs and end))
     never = sorted(k for k, (lo, hi, end) in groups.items() if lo >= read[1] or (runs and end))
     if not isinstance(got, list):
         return False, got
     keys = [k for k, _ in got]
-    ok = set(sure) <= set(keys) and not set(never) & set(keys)
+    unfed = sorted(set(keys) - set(groups))
+    ok = set(sure) <= set(keys) and not set(never) & set(keys) and not unfed
     if not runs:   # the hosts nearest their deadline's passing first
         order = [d for _, d in got if d is not None]
         ok = ok and order == sorted(order)
-    return ok, "engine %s; here %s surely, %d not sure" % (",".join(keys) or "none", ",".join(sure) or "none",
-                                                           len(groups) - len(sure) - len(never))
+    unsure = len(groups) - len(sure) - len(never)
+    text = "engine %s; here %s surely, %d not sure%s" % (",".join(keys) or "none", ",".join(sure) or "none", unsure,
+                                                         "; never fed: %s" % ",".join(unfed) if unfed else "")
+    return (None if ok and unsure else ok), text
 
 
 def buckets(code, got, name):
@@ -599,6 +739,37 @@ def buckets(code, got, name):
         key = "/".join(b["key"]) if isinstance(b.get("key"), list) else b.get("key")
         out.append((key, (b.get("deadline") or {}).get("value")))
     return out
+
+
+def reason_wrong(want, message):
+    """Where an error document's error.message is not what REASONS says (want), the difference, else None."""
+    if not isinstance(message, str) or not message:
+        return "no reason"
+    if want == ENGINE_JSON:
+        ours = NOT in message or NOT_SCHEMA.split(":", 1)[0] in message
+        return "the pipeline's own words where the engine's json processor's are due" if ours else None
+    return None if want in message else "not %r" % want
+
+
+def longest(lines):
+    """(the longest text, the longest key) of the lines' events, in UTF-16 units as Painless counts them."""
+    texts, keys = [0], [0]
+
+    def one(v):
+        if isinstance(v, dict):
+            for k, x in v.items():
+                keys.append(units(k))
+                one(x)
+        elif isinstance(v, list):
+            for x in v:
+                one(x)
+        elif isinstance(v, str):
+            texts.append(units(v))
+    for line in lines:
+        ev = event_of(line)
+        if ev is not None:
+            one(ev)
+    return max(texts), max(keys)
 
 
 def claim_x39(ask, feed):
@@ -614,18 +785,33 @@ def claim_x39(ask, feed):
         want = "event" if s["why"] is None else "error"
         if kind != want or (kind == "error" and not get(doc, "error.message")):
             wrong.append("%s %s: %s here, %s in the engine" % (s["index"], s["line"][:60], want, kind or "nothing"))
-        if s.get("label"):
-            said.append("%s %s" % (s["label"], kind or "lost"))
+        label = s.get("label")
+        if label:
+            reason = REASONS.get(label, "(no reason written for %s)" % label)
+            why = ("an event where %r is due" % reason if kind == "event" and reason is not None else
+                   "an error document where an event is due" if kind == "error" and reason is None else
+                   reason_wrong(reason, get(doc, "error.message")) if kind == "error" else None)
+            if why:
+                wrong.append("%s: %s (the engine: %s)" % (label, why, json.dumps(get(doc, "error.message"))[:120]))
+            said.append("%s %s" % (label, kind or "lost"))
     nexts = [s for s in feed.sent if s.get("after_odd")]
     kept_next = sum(1 for s in nexts if (s["index"], s["line"]) in docs)
     errors = sum(1 for s in feed.sent if s["why"] is not None)
-    ok = not feed.refused and not wrong and kept_next == len(nexts)
+    watched = [s for s in feed.sent if s.get("file")]
+    watched_events = sum(1 for s in watched if s["why"] is None and get((docs.get((s["index"], s["line"])) or [{}])[0],
+                                                                       "event.kind") in ("event", "alert"))
+    text_units, key_units = longest([s["line"] for s in watched])
+    ok = not feed.refused and not wrong and kept_next == len(nexts) and watched_events == len(watched)
     text = ("%d line(s) sent, %d refused, %d kept as events and %d as error documents here (%d wrong); the line "
-            "after each of %d odd lines kept: %d; the odd lines: %s") % (
+            "after each of %d odd lines kept: %d; the real watch's file: %d line(s), %d of them events in the engine "
+            "(its longest text %d and longest key %d UTF-16 units); the odd and shipped lines: %s") % (
         len(feed.sent), len(feed.refused), len(feed.sent) - errors, errors, len(wrong), len(nexts), kept_next,
-        ", ".join(said))
+        len(watched), watched_events, text_units, key_units, ", ".join(said))
     first = wrong[:2] + ["refused %s %s: %s" % r for r in feed.refused[:2]]
-    return ok, text + ("; first: %s" % " | ".join(first) if first else "")
+    text += "; first: %s" % " | ".join(first) if first else ""
+    if ok and not watched:   # nothing of the real watch was fed: that part is not judged
+        return None, text + "; no line of the real watch's file was fed: not judged"
+    return ok, text
 
 
 def claim_x40(ask, feed):
@@ -642,16 +828,23 @@ def claim_x40(ask, feed):
             continue
         diffs += ["%s %s" % (s["line"][:40], d) for d in differences(ecs_of(s["line"], feed.keys), have.pop(),
                                                                       s["window"], s["extra"])]
-    for s in (x for x in feed.sent if x["why"] is not None and x["extra"]):
-        have = by_line.get((s["index"], s["line"])) or [{}]
+    errors = [x for x in feed.sent if x["why"] is not None]
+    for s in errors:
+        have = (by_line.get((s["index"], s["line"])) or [{}])[0]
+        if get(have, "message") != s["line"]:   # SB-3: an error document's message is its line, as sent
+            diffs.append("error document %s: message is not the line" % s["line"][:30])
+        if not s["extra"]:
+            continue
         shipper += 1
-        for field, value in leaves(s["extra"]).items():
-            if get(have[0], field) != value:
-                diffs.append("error document %s: %s not kept" % (s["line"][:30], field))
+        for field, value in leaves(shipped_of(s["extra"])).items():   # host.name among them: the shipper's (SB-3)
+            if get(have, field) != value:
+                diffs.append("error document %s: %s not kept as %s" % (s["line"][:30], field, json.dumps(value)[:40]))
+    moved = sum(1 for s in feed.sent if "displaced" in shipped_of(s["extra"]))
     text = ("%d event line(s), %d found in the engine, %d difference(s) in %d named field(s), the namespace, the "
             "line, the arrival and the shipper's fields (%d document(s) with a shipper's fields, %d of them an "
-            "error document)") % (len(events), len(events) - missing, len(diffs), len(NAMED),
-                                  sum(1 for s in feed.sent if s["extra"]), shipper)
+            "error document, %d with a field moved to displaced); %d error document(s), each message its line") % (
+        len(events), len(events) - missing, len(diffs), len(NAMED), sum(1 for s in feed.sent if s["extra"]),
+        shipper, moved, len(errors))
     return not diffs and not missing, text + ("; first: %s" % " | ".join(diffs[:3]) if diffs else "")
 
 
@@ -674,6 +867,10 @@ def claim_x41(ask, searches, feed, reads):
     for rule_id in sorted({get(e, "rule.id") for e in events if get(e, "rule.id")} | {"NO-SUCH-RULE"}):
         one("rule " + rule_id, run_search(ask, INDEX, searches["rule.json"], {"rule_id": rule_id})[0],
             sum(1 for e in events if get(e, "rule.id") == rule_id))
+    for index in (INDEX, ODD_INDEX):   # SB-6: the error documents, against the lines here that are not events
+        one("not-events " + (index[len(INDEX):] or "-main"), run_search(ask, index, searches["not-events.json"])[0],
+            sum(1 for s in feed.sent if s["index"] == index and s["why"] is not None))
+    unsure = 0
     for label, index, read in reads:
         sent = feed.events(index)
         for name, by, runs in (("silence.json", lambda e: e["watch"]["host"], False),
@@ -682,10 +879,14 @@ def claim_x41(ask, searches, feed, reads):
             _, code, got = read[name]
             good, text = judge_deadlines(deadlines(sent, by), read["window"], buckets(
                 code, got, "runs" if runs else "hosts"), runs)
-            ok = ok and good
+            ok = ok and good is not False
+            unsure += good is None
             rows.append("%s %s %s: %s%s" % (name[:-5], index[len(INDEX):] or "-main", label, text,
-                                            "" if good else " (MISSED)"))
-    return ok, "; ".join(rows) + " (each: the engine's/the count here)"
+                                            {True: "", False: " (MISSED)", None: " (n/a: not judged)"}[good]))
+    text = "; ".join(rows) + " (each: the engine's/the count here)"
+    if ok and unsure:   # SB-7: a read with a group not sure judged nothing of it, and is never a MET
+        return None, text + "; %d read(s) with a group not sure: not judged" % unsure
+    return ok, text
 
 
 def claim_x42(ask, sigma, target, feed, made_ids):
@@ -737,11 +938,12 @@ def main(argv=None, ask=None, sigma=None, out=print, clock=time.time, sleep=time
     parser.add_argument("--summary", default=None, help="a file the rows are appended to")
     args = parser.parse_args(argv)
     ask = ask or http_ask(args.url.rstrip("/"))
-    rows, fed = [], []
+    rows, fed, said = [], [], set()
 
     def row(n, word, text):
         line = "%-7s X%d %s: %s [fed: %s]" % (word, n, dict(CLAIMS)[n], text, "; ".join(fed) or "nothing")
         rows.append(line)
+        said.add(n)
         out(line)
 
     with open(SPEC, encoding="utf-8") as f:
@@ -768,6 +970,23 @@ def main(argv=None, ask=None, sigma=None, out=print, clock=time.time, sleep=time
     for name in sorted(os.listdir(os.path.join(content, "searches"))):
         with open(os.path.join(content, "searches", name), encoding="utf-8") as f:
             searches[name] = json.load(f)
+    try:
+        if sigma is None:
+            path = args.sigma or shutil.which("sigma")
+            sigma = sigma_cli(path) if path else None
+        claims(ask, sigma, target, folder, pipeline, template, searches, spec, keys, examples, files, row, fed, out,
+               clock, sleep)
+    except OSError as exc:   # SB-7: a connection that failed or an answer that is not JSON, in the middle of the run
+        out("ENGINE lost: %s" % exc)
+        for n, _ in CLAIMS:
+            if n not in said:
+                row(n, "n/a", "the engine was lost in the middle of the run (%s): not judged" % str(exc)[:240])
+    return finish(rows, args.summary)
+
+
+def claims(ask, sigma, target, folder, pipeline, template, searches, spec, keys, examples, files, row, fed, out,
+           clock, sleep):
+    """Install, feed, read and say X39 to X42 (each row as it is judged; an OSError from ask leaves the rest)."""
     for index in (INDEX, ODD_INDEX, SILENCE_INDEX):
         ask("DELETE", "/" + index)
     installed = (put(ask, "/_ingest/pipeline/" + PIPELINE_ID, pipeline, out, "the pipeline")
@@ -775,15 +994,18 @@ def main(argv=None, ask=None, sigma=None, out=print, clock=time.time, sleep=time
     if not installed:
         for n, _ in CLAIMS:
             row(n, "MISSED", "the engine refused the content of siem/%s (above)" % folder)
-        return finish(rows, args.summary)
-
+        return
     feed, maker = Feed(ask, keys, clock), Maker(spec)
     made = {label: maker.make(base, "made.example", "made-run", **over) for label, base, over in MADE}
     made_ids = {label: ev["id"] for label, ev in made.items()}
+    first = len(feed.sent)
     feed.send(INDEX, examples + files + [line_of(made[label]) for label, _, _ in MADE])
-    shipped = [line_of(maker.make("heartbeat", "shipped.example", "shipped-run")), "{a line a shipper sent"]
-    for line in shipped:
-        feed.send(INDEX, [line], extra=SHIPPER)
+    for s in feed.sent[first + len(examples):first + len(examples) + len(files)]:
+        s["file"] = True   # the real watch's own lines, each to be an event (SB-7)
+    for label, extra, is_event in SHIPPED:
+        feed.send(INDEX, [line_of(maker.make("heartbeat", "shipped.example", "shipped-run")) if is_event
+                          else "{a line a shipper sent (%s)" % label], extra=extra)
+        feed.sent[-1]["label"] = label
     odd_lines = []
     for label, change in ODD:
         odd_lines += [line_of(change(maker.make("heartbeat", "odd.example", "odd", 600))),
@@ -795,7 +1017,9 @@ def main(argv=None, ask=None, sigma=None, out=print, clock=time.time, sleep=time
     fed += ["%d example(s) of EVENT.md" % len(examples), "%d line(s) of the events file(s)" % len(files),
             "%d made-up event(s) of the rules' classes and %d near miss(es)" % (
                 len({v for v in POSITIVE.values() if v}), len(MADE) - len({v for v in POSITIVE.values() if v})),
-            "%d odd line(s) and the line after each" % len(ODD), "%d document(s) with a shipper's fields" % len(shipped)]
+            "%d odd line(s) and the line after each" % len(ODD),
+            "%d document(s) with a shipper's fields, %d of them with a field moved aside" % (
+                len(SHIPPED), sum(1 for _, extra, _ in SHIPPED if "displaced" in shipped_of(extra)))]
 
     def read(label, index):
         before = int(clock() * 1000)
@@ -818,17 +1042,13 @@ def main(argv=None, ask=None, sigma=None, out=print, clock=time.time, sleep=time
     for n, claim in ((39, lambda: claim_x39(ask, feed)), (40, lambda: claim_x40(ask, feed)),
                      (41, lambda: claim_x41(ask, searches, feed, reads))):
         ok, text = claim()
-        row(n, "MET" if ok else "MISSED", text)
+        row(n, WORD[ok], text)
     if sigma is None:
-        path = args.sigma or shutil.which("sigma")
-        if not path:
-            row(42, "n/a", "sigma-cli is not installed here (no sigma on PATH): not run")
-            return finish(rows, args.summary)
-        sigma = sigma_cli(path)
+        row(42, "n/a", "sigma-cli is not installed here (no sigma on PATH): not run")
+        return
     fed.append(versions())
     ok, text = claim_x42(ask, sigma, target, feed, made_ids)
-    row(42, "MET" if ok else "MISSED", text)
-    return finish(rows, args.summary)
+    row(42, WORD[ok], text)
 
 
 def finish(rows, summary):

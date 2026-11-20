@@ -1,4 +1,4 @@
-# The catalog's rules and their ATT&CK techniques
+# Every rule the report lists and its ATT&CK techniques
 
 Made by `python3 tools/siem_content.py --write` from every rule the report lists (`raqib/report.py`,
 `rule_table`: the silence rules, the cross-source rule and the drift anchors of the code, and the rules of

@@ -108,6 +108,9 @@
             }
           }
         },
+        "displaced": {
+          "type": "flat_object"
+        },
         "raqib": {
           "properties": {
             "schema": {

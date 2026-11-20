@@ -1,4 +1,4 @@
-"""The files of siem/ that are made from the rules (ADR-0017 S-3 and Amendment A SA-8, M16.1 E4 and REDO R5):
+"""The files of siem/ that are made from the rules (ADR-0017 S-3, Amendment A SA-8 and B SB-8, M16.1 E4, REDO R5):
 siem/attack/rules.md, a table of every rule the report lists - raqib/report.py's own rule_table: the silence rules,
 the cross-source rule and the drift anchors the code holds, and the rules of raqib/rules/catalog - with its class,
 kind, severity and ATT&CK techniques, and siem/attack/raqib-layer.json, a layer for the ATT&CK Navigator of the
@@ -48,7 +48,7 @@ def techniques(rules):
 def table(rules):
     techs = techniques(rules)
     lines = [
-        "# The catalog's rules and their ATT&CK techniques",
+        "# Every rule the report lists and its ATT&CK techniques",
         "",
         "Made by `python3 tools/siem_content.py --write` from every rule the report lists (`raqib/report.py`,",
         "`rule_table`: the silence rules, the cross-source rule and the drift anchors of the code, and the rules of",
@@ -74,7 +74,7 @@ def layer(rules):
     by_id = {r["id"]: r for r in rules}
     techs = techniques(rules)
     body = {
-        "name": "Raqib - the techniques of the catalog's rules",
+        "name": "Raqib - the techniques of every rule the report lists",
         "versions": {"layer": "4.5"},
         "domain": "enterprise-attack",
         "description": ("Made by python3 tools/siem_content.py --write from every rule the report lists "

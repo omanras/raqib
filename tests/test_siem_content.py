@@ -1,6 +1,7 @@
-"""M16.1 and its REDO (ADR-0017 S-1 to S-5 and Amendment A): the ready content of siem/, held without an engine
-(E5, R8), and the rig's runner tools/rig/siem_run.py held against a stand-in engine (E6, R6): its mapping, its
-checks, its counts by the runner's own send times, its rows, and what it says when the engine does not answer.
+"""M16.1 and its two REDOs (ADR-0017 S-1 to S-5, Amendments A and B): the ready content of siem/, held without an
+engine (E5, R8; REDO 2 R7), and the rig's runner tools/rig/siem_run.py held against a stand-in engine (E6, R6): its
+mapping, its checks and their words, its counts by the runner's own send times, its rows, and what it says when the
+engine does not answer, answers what it cannot judge, or is lost in the middle of the run.
 No engine, no network: the stand-in is a function with a clock of its own, and the engine that does not answer is a
 closed port of this machine's loopback."""
 import copy
@@ -70,7 +71,7 @@ def scripts():
 def test_e5_every_json_and_yaml_file_of_siem_parses_with_the_standard_library_or_the_repos_reader():
     files = [p for p in SIEM.rglob("*") if p.is_file()]
     parsed = [p for p in files if p.suffix in (".json", ".yml", ".yaml")]
-    assert len(parsed) == 2 + 2 + 12 + 1 + 9 + 1
+    assert len(parsed) == 2 + 2 + 14 + 1 + 9 + 1   # REDO 2: not-events.json in each engine's searches
     for path in parsed:
         assert load(path) is not None, path
     assert {p.suffix for p in files} <= {".json", ".yml", ".md"}
@@ -80,7 +81,7 @@ def test_e1_one_pipeline_serves_both_engines_and_the_templates_differ_only_in_th
     assert (SIEM / "elastic" / "pipeline.json").read_bytes() == (SIEM / "opensearch" / "pipeline.json").read_bytes()
     es = (SIEM / "elastic" / "template.json").read_text(encoding="ascii")
     os_ = (SIEM / "opensearch" / "template.json").read_text(encoding="ascii")
-    assert es.count('"flattened"') == 6 and "flat_object" not in es and "copy_from" not in es
+    assert es.count('"flattened"') == 7 and "flat_object" not in es and "copy_from" not in es
     assert es.replace('"flattened"', '"flat_object"') == os_
     template = json.loads(es)
     assert template["template"]["settings"]["index"]["default_pipeline"] == "raqib-event-1"
@@ -92,6 +93,8 @@ def test_e1_one_pipeline_serves_both_engines_and_the_templates_differ_only_in_th
     whole = {k for k, v in raqib.items() if v.get("type") == "flattened"}
     assert whole == {"subject", "evidence", "hole", "knocked", "result", "counts"}   # subject.started among them
     assert raqib["prev"] == raqib["unknown_keys"] == {"type": "keyword"}
+    assert mappings["properties"]["displaced"] == {"type": "flattened"}   # SB-2: a part kept whole
+    assert json.loads(os_)["template"]["mappings"]["properties"]["displaced"] == {"type": "flat_object"}
 
 
 def test_e1_every_ecs_field_the_mapping_names_is_set_by_the_pipelines_text():
@@ -114,22 +117,61 @@ def test_e1_every_ecs_field_the_mapping_names_is_set_by_the_pipelines_text():
     assert sorted(siem_run.NAMED) == NAMED_ECS
 
 
-def test_r3_the_pipeline_names_every_reason_of_sa5_and_its_bounds():
-    check, mapping = scripts()
+def test_r3_r1_the_pipeline_names_every_reason_of_sa5_and_sb1_and_its_bounds():
+    displace, check, mapping = scripts()
     for reason in ("its schema is not raqib-event/1", "deeper than 10 levels", "a text longer than 8000 characters",
                    "more than 200 keys", "an empty key", "the base key ", "is not of its kind of value",
-                   "its kind is not one of the spec", "the base key watch."):
+                   "its kind is not one of the spec", "the base key watch.",
+                   "a key longer than 256 characters", "a number that is not finite"):   # the last two: SB-1
         assert reason in pipeline_text(), reason
-    assert (siem_run.MAX_DEPTH, siem_run.MAX_TEXT, siem_run.MAX_KEYS, siem_run.MAX_UNKNOWN) == (10, 8000, 200, 50)
+    assert (siem_run.MAX_DEPTH, siem_run.MAX_TEXT, siem_run.MAX_KEYS, siem_run.MAX_UNKNOWN, siem_run.MAX_KEY) == (
+        10, 8000, 200, 50, 256)
+    assert "if (e.getKey().length() > 256) { throw new IllegalArgumentException('not an event: a key longer than " \
+           "256 characters'); }" in check   # every key of every map, the items of a list among them
+    assert "(v instanceof Double || v instanceof Float) && !(v >= -Double.MAX_VALUE && v <= Double.MAX_VALUE)" \
+        in check
+    assert check.index("a key longer than 256") < check.index("tally.set(0")   # a key is read before it is counted
     assert "def base = %s;" % str(list(siem_run.BASE)).replace('"', "'") in check
     assert "def kinds = %s;" % str(list(siem_run.KINDS)).replace('"', "'") in check
     assert "def wbase = ['run', 'host', 'beat'];" in check
     assert "r.unknown_keys = unknown.size() > 50 ? new ArrayList(unknown.subList(0, 50)) : unknown" in mapping
     assert check.index("void walk(") < check.index("def r = ctx.raqib;")   # every check runs before any write
+    # every reason of the runner's that is the pipeline's own is, word for word, a message the pipeline gives
+    for word in ("deeper than 10 levels", "an empty key", "a key longer than 256 characters", "more than 200 keys",
+                 "a text longer than 8000 characters", "a number that is not finite"):
+        assert "'%s%s'" % (siem_run.NOT, word) in check, word
+    assert "'%sits kind is not one of the spec\\'s eight'" % siem_run.NOT in check
+    assert load(SIEM / "elastic" / "pipeline.json")["processors"][3]["fail"]["message"] == siem_run.NOT_SCHEMA
+    for left in (siem_run.NOT_JSON, siem_run.NOT_INSTANT, siem_run.ENGINE_JSON):   # the engine's own words
+        assert left not in pipeline_text()
+
+
+def test_r2_the_pipeline_begins_with_a_step_that_cannot_fail_and_moves_a_shippers_field_of_another_shape_aside():
+    pipeline = load(SIEM / "elastic" / "pipeline.json")
+    first = pipeline["processors"][0]
+    assert list(first) == ["script"] and set(first["script"]) == {"lang", "source"}   # no if, no on_failure
+    displace = first["script"]["source"]
+    assert scripts()[0] == displace and "throw" not in displace and "ctx.raqib" not in displace
+    names = "[%s]" % ", ".join("'%s'" % n for n in siem_run.DISPLACE)
+    assert names == "['host', 'event', 'error', 'observer', 'rule', 'process', 'threat']" and names in displace
+    assert "if (ctx.containsKey(k) && !(ctx[k] instanceof Map)) { moved[k] = text(ctx.remove(k)); }" in displace
+    assert "if (t.length() > 1024) { int cut = 1024; int c = (int) t.charAt(1023); if (c >= 55296 && c <= 56319)" \
+           " { cut = 1023; } t = t.substring(0, cut); }" in displace   # never half of a pair of units
+    assert "ctx.displaced = moved;" in displace and siem_run.MAX_DISPLACED == 1024
+    assert pipeline["processors"][1] == {"set": {"field": "event.original", "value": "{{{message}}}"}}
+    # the runner's mirror of the step
+    shipped = siem_run.shipped_of({"host": "old", "event": None, "rule": 7, "observer": True, "log": {"o": 1},
+                                   "process": {"pid": 1}})
+    assert shipped == {"log": {"o": 1}, "process": {"pid": 1},
+                       "displaced": {"host": "old", "event": "null", "rule": "7", "observer": "true"}}
+    assert siem_run.shipped_of({"host": "a", "displaced": "mine"})["displaced"] == {"host": "a", "displaced": "mine"}
+    assert siem_run.shipped_of({"host": {"name": "x"}}) == {"host": {"name": "x"}}
+    assert siem_run.displaced_text(siem_run.LONG_EVENT_TEXT) == "e" * 1023   # the pair at 1024-1025 is not split
+    assert siem_run.displaced_text("e" * 2000) == "e" * 1024 and siem_run.units(siem_run.LONG_EVENT_TEXT) == 1501
 
 
 def test_r3_the_pipelines_lists_of_known_keys_and_their_kinds_are_the_specs():
-    check, mapping = scripts()
+    _, check, mapping = scripts()
     top, parts, checked = siem_run.known(SPEC)
     assert "prev" in top and top["prev"] == "s" and top["alarm"] == "b" and top["n"] == "p"
     for key, code in top.items():
@@ -142,32 +184,49 @@ def test_r3_the_pipelines_lists_of_known_keys_and_their_kinds_are_the_specs():
     assert len(top) + sum(len(s) for s in parts.values()) == len(SPEC)
 
 
-def test_r3_no_field_a_shipper_set_is_removed_and_no_document_id_is_set():
+def test_r6_sb3_the_pipeline_removes_raqib_on_an_error_document_and_message_where_no_summary_and_sets_no_id():
+    """SB-3: what the pipeline removes, said exactly (this test was named for "no field removed")."""
     pipeline = load(SIEM / "elastic" / "pipeline.json")
     removes = [p["remove"] for p in pipeline["processors"] + pipeline["on_failure"] if "remove" in p]
-    assert removes == [{"field": "raqib", "ignore_missing": True}]
+    assert removes == [{"field": "raqib", "ignore_missing": True}]   # on an error document only
     assert {"set": {"field": "@timestamp", "value": "{{{_ingest.timestamp}}}", "override": False}} in \
         pipeline["on_failure"]
     text = pipeline_text()
+    _, _, mapping = scripts()
+    assert "if (r.containsKey('summary')) { ctx.message = r.remove('summary'); } else { ctx.remove('message'); }" \
+        in mapping and text.count("ctx.remove('message')") == 1   # an event with no summary: message removed
     assert not re.search(r"\b_id\b|ctx\._id", text) and "ctx.host = " not in text and "ctx.observer = " not in text
     assert "Map obj(Map m, String k) { if (!(m[k] instanceof Map)) { m[k] = [:]; } return m[k]; }" in text
+    description = pipeline["description"]
+    assert "no field a shipper set is removed" not in description
+    for said in ("moved to displaced.NAME", "message replaced by the event's summary or removed", "raqib removed",
+                 "@timestamp the arrival unless a shipper set it", "No document id is set"):
+        assert said in description, said
 
 
-def test_r3_the_runners_checks_keep_each_odd_line_as_the_ruling_says():
+def test_r3_r1_the_runners_checks_keep_each_odd_line_as_the_hand_written_table_says():
     maker = siem_run.Maker(EVENT_MD)
-    want = {"an-unknown-key": None, "a-dotted-key": None, "sixty-unknown-keys": None,
-            "an-empty-key": "an empty key", "run-an-object": "watch.run is not of its kind of value",
-            "kind-unknown": "the kind is not one of the spec's eight", "n-missing": "the base key n is missing",
-            "n-beyond-a-long": "n is not of its kind of value", "alarm-a-string": "alarm is not of its kind of value",
-            "deep-unknown-key": "deeper than 10 levels", "deep-evidence": "deeper than 10 levels",
-            "many-unknown-keys": "more than 200 keys", "a-long-word": "a text longer than 8000 characters",
-            "not-json": "not JSON", "schema-2": "another schema",
-            "fp-budget-a-text": "rule.fp_budget is not of its kind of value",
-            "attack-objects": "rule.attack is not of its kind of value"}
-    assert sorted(label for label, _ in siem_run.ODD) == sorted(want)
+    labels = [label for label, _ in siem_run.ODD] + [label for label, _, _ in siem_run.SHIPPED]
+    assert sorted(labels) == sorted(siem_run.REASONS) and len(siem_run.ODD) == 23 and len(siem_run.SHIPPED) == 6
     for label, change in siem_run.ODD:
         line = siem_run.line_of(change(maker.make("heartbeat", "odd.example", "odd", 600)))
-        assert siem_run.check_of(line, SPEC) == want[label], label
+        want = siem_run.REASONS[label]
+        assert siem_run.check_of(line, SPEC) == (siem_run.NOT_JSON if want == siem_run.ENGINE_JSON else want), label
+    # SB-1, as measured refused with the content of 4aaa17c; the 256-character key is still an event
+    for label in ("a-long-key", "a-long-key-in-result", "a-long-key-in-cites"):
+        assert siem_run.REASONS[label] == "not an event: a key longer than 256 characters"
+    for label in ("beat-1e400", "fp-budget-1e400"):
+        assert siem_run.REASONS[label] == "not an event: a number that is not finite"
+        line = siem_run.line_of(dict(siem_run.ODD)[label](maker.make("heartbeat", "odd.example", "odd", 600)))
+        assert "e400" in line and json.loads(line) is not None
+    key256 = dict(siem_run.ODD)["a-256-key"](maker.make("heartbeat", "odd.example", "odd", 600))
+    assert siem_run.REASONS["a-256-key"] is None
+    assert siem_run.ecs_of(siem_run.line_of(key256), SPEC)["raqib"]["unknown_keys"] == ["k" * 256]
+    assert siem_run.check_of(siem_run.line_of(dict(key256, **{"\U0001F600" * 129: 1})), SPEC) == \
+        "not an event: a key longer than 256 characters"   # 129 characters, 258 UTF-16 units: as Painless counts
+    assert siem_run.check_of(siem_run.line_of(dict(key256, zz="\U0001F600" * 4001)), SPEC) == \
+        "not an event: a text longer than 8000 characters"
+    assert siem_run.check_of('{"schema":"raqib-event/1","n":NaN}', SPEC) == siem_run.NOT_JSON
     sixty = dict(siem_run.ODD)["sixty-unknown-keys"](maker.make("heartbeat", "odd.example", "odd", 600))
     doc = siem_run.ecs_of(siem_run.line_of(sixty), SPEC)
     assert doc["raqib"]["unknown_keys"] == ["u%02d" % i for i in range(50)] and "u00" not in doc["raqib"]
@@ -198,7 +257,8 @@ def test_e1_the_runners_mapping_names_exactly_the_mappings_fields_and_keeps_ever
 
 def test_e2_r1_r2_each_search_is_a_file_with_one_sentence_the_same_in_both_engines_and_no_time_given():
     names = sorted(p.name for p in (SIEM / "elastic" / "searches").iterdir())
-    assert names == ["alarm.json", "hole.json", "rule.json", "runs-no-end.json", "silence.json", "watch-not-0.json"]
+    assert names == ["alarm.json", "hole.json", "not-events.json", "rule.json", "runs-no-end.json", "silence.json",
+                     "watch-not-0.json"]
     for name in names:
         es, os_ = (SIEM / e / "searches" / name for e in ENGINES)
         assert es.read_bytes() == os_.read_bytes(), name
@@ -209,7 +269,8 @@ def test_e2_r1_r2_each_search_is_a_file_with_one_sentence_the_same_in_both_engin
         text = es.read_text(encoding="ascii")
         assert "now" not in json.dumps(search["body"].get("params", {})) and "{{now" not in text, name
         assert not re.search(r"\d{12,}", text), name   # no default time anywhere
-    deadline = "doc['event.ingested'].value.toInstant().toEpochMilli() + (long)(2000 * doc['raqib.watch.beat'].value)"
+    deadline = ("doc['event.ingested'].value.toInstant().toEpochMilli() + (long)(2000 * "
+                "Math.min(doc['raqib.watch.beat'].value, 86400.0))")   # SB-5: a beat counts as a day at most
     for name, agg, selector in (("silence.json", "hosts", "params.d < System.currentTimeMillis()"),
                                 ("runs-no-end.json", "runs",
                                  "params.e == 0 && params.d < System.currentTimeMillis()")):
@@ -218,10 +279,24 @@ def test_e2_r1_r2_each_search_is_a_file_with_one_sentence_the_same_in_both_engin
         assert "@timestamp" not in text and "heartbeat" not in text   # every line counts, by its arrival
         aggs = body["aggs"][agg]
         assert aggs["aggs"]["deadline"] == {"max": {"script": {"source": deadline}}}
-        assert selector in text and "10000" in load(SIEM / "elastic" / "searches" / name)["finds"].replace(",", "")
+        finds = load(SIEM / "elastic" / "searches" / name)["finds"]
+        assert selector in text and "10000" in finds.replace(",", "") and "at most 86400 s" in finds
+        assert "left out first" in finds and "a sum_other_doc_count above 0 in the answer means" in finds   # SB-4
     silence = load(SIEM / "elastic" / "searches" / "silence.json")["body"]["aggs"]["hosts"]["terms"]
     assert silence == {"field": "host.name", "size": 10000, "order": {"deadline": "asc"}}
     runs = load(SIEM / "elastic" / "searches" / "runs-no-end.json")["body"]["aggs"]["runs"]
+    assert runs["multi_terms"]["order"] == [{"ends": "asc"}, {"deadline": "desc"}]   # SB-4, as the Table measured
+    assert runs["multi_terms"]["size"] == 10000 and runs["aggs"]["stopped"]["bucket_selector"]["buckets_path"] == {
+        "d": "deadline", "e": "ends._count"}
+    finds = load(SIEM / "elastic" / "searches" / "runs-no-end.json")["finds"]
+    assert "the runs that said an end are left out first and then the runs whose deadline is oldest" in finds
+    assert "the hosts whose deadline is latest are left out first" in load(
+        SIEM / "elastic" / "searches" / "silence.json")["finds"]
+    errors = load(SIEM / "elastic" / "searches" / "not-events.json")   # SB-6
+    assert errors["body"] == {"track_total_hits": True,
+                              "query": {"bool": {"filter": [{"term": {"event.kind": "pipeline_error"}}]}},
+                              "sort": [{"event.ingested": "desc"}]}
+    assert "error document" in errors["finds"] and "the latest arrival first" in errors["finds"]
     assert runs["aggs"]["ends"]["filter"]["bool"]["filter"] == [{"term": {"event.action": "watch"}},
                                                                 {"term": {"raqib.state": "end"}}]
 
@@ -382,18 +457,30 @@ class StandIn:
     engine is claimed to do), its searches are read from the runner's requests. Each knob spoils one thing."""
 
     def __init__(self, clock, distribution="opensearch", spoil=None, miscount=0, by_time=False, late=0,
-                 drop_shipper=False, refuse_deep=False):
+                 drop_shipper=False, refuse_deep=False, keep_text=False, reason=None, ghost=False, slow=0.0):
         self.clock, self.distribution, self.spoil, self.miscount = clock, distribution, spoil, miscount
         self.by_time, self.late, self.drop_shipper, self.refuse_deep = by_time, late, drop_shipper, refuse_deep
+        self.keep_text, self.reason, self.ghost, self.slow = keep_text, reason, ghost, slow
         self.indices = {}
 
     def ingest(self, sent):
-        line, extra = sent.pop("message"), sent
+        """The document the claimed pipeline makes, or None where the engine refuses it. keep_text: the pipeline of
+        4aaa17c as the Table measured it (no step moving a shipper's text aside: event, error, rule, process or
+        threat a text refused; host or observer a text gone from an event and refused with an error document)."""
+        line = sent.pop("message")
         now = int(self.clock() * 1000) + self.late
         why = siem_run.check_of(line, siem_run.spec_keys(EVENT_MD))
+        if self.keep_text:
+            texts = [k for k in siem_run.DISPLACE if k in sent and not isinstance(sent[k], dict)]
+            if texts and (why or set(texts) - {"host", "observer"}):
+                return None
+            extra = {k: v for k, v in sent.items() if k not in texts}
+        else:
+            extra = siem_run.shipped_of(sent)
         if why:
             doc = copy.deepcopy(extra)
-            doc.update(message=line, error={"message": why})
+            doc.update(message=line)
+            doc.setdefault("error", {})["message"] = self.reason(why) if self.reason else why
             doc.setdefault("event", {}).update(kind="pipeline_error", original=line, ingested=iso(now))
             doc.setdefault("@timestamp", iso(now))
             return doc
@@ -427,7 +514,7 @@ class StandIn:
 
     def deadline(self, doc):
         at = siem_run.instant_ms(doc["@timestamp"] if self.by_time else doc["event"]["ingested"])
-        return at + int(2000 * doc["raqib"]["watch"]["beat"])
+        return at + int(2000 * min(doc["raqib"]["watch"]["beat"], 86400.0))
 
     def aggregate(self, aggs, docs):
         now = int(self.clock() * 1000)
@@ -436,8 +523,9 @@ class StandIn:
             for d in docs:
                 groups.setdefault(d["host"]["name"], []).append(d)
             rows = sorted((max(self.deadline(d) for d in ds), h) for h, ds in groups.items())
-            return {"hosts": {"buckets": [{"key": h, "deadline": {"value": float(dl)}} for dl, h in rows
-                                          if dl < now]}}
+            ghost = [{"key": "ghost.example", "deadline": {"value": 0.0}}] if self.ghost else []
+            return {"hosts": {"buckets": ghost + [{"key": h, "deadline": {"value": float(dl)}} for dl, h in rows
+                                                  if dl < now]}}
         groups = {}
         for d in docs:
             groups.setdefault((d["host"]["name"], d["raqib"]["watch"]["run"]), []).append(d)
@@ -460,13 +548,17 @@ class StandIn:
             return 200, {}
         if path.endswith("_bulk?refresh=true"):
             items = []
+            self.clock.t += self.slow / 2   # a slow engine: each line arrives in the middle of a long send
             for part in body.decode("utf-8").splitlines()[1::2]:
                 sent = json.loads(part)
-                if self.refuse_deep and '"k":{"k":{"k":{"k":{"k":{"k":{"k":{"k":{"k":{"k":{"k"' in sent["message"]:
+                deep = '"k":{"k":{"k":{"k":{"k":{"k":{"k":{"k":{"k":{"k":{"k"' in sent["message"]
+                doc = self.ingest(sent)
+                if doc is None or (self.refuse_deep and deep):
                     items.append({"index": {"status": 400, "error": {"type": "document_parsing_exception"}}})
                     continue
-                self.indices.setdefault(index, []).append(self.ingest(sent))
+                self.indices.setdefault(index, []).append(doc)
                 items.append({"index": {"status": 201}})
+            self.clock.t += self.slow / 2
             return 200, {"items": items}
         if path.endswith("/_search/template"):
             text = json.dumps(body["source"])
@@ -511,15 +603,24 @@ def test_r6_a_faithful_engine_meets_every_claim_and_each_row_names_what_was_fed(
     assert "EVENTS events.jsonl: 6 line(s)" in text   # the torn last line is not whole and is not sent
     for n in (39, 40, 41, 42):
         assert "[fed: engine opensearch 0.0.0, siem/opensearch; %d example(s) of EVENT.md; 6 line(s) of the events" \
-               " file(s); 7 made-up event(s) of the rules' classes and 5 near miss(es); 17 odd line(s)" % len(
+               " file(s); 7 made-up event(s) of the rules' classes and 5 near miss(es); 23 odd line(s) and the line" \
+               " after each; 6 document(s) with a shipper's fields, 4 of them with a field moved aside" % len(
                    EXAMPLES) in row(said, n), n
     assert "sigma-cli" in row(said, 42) and "pySigma" in row(said, 42)
     x39 = row(said, 39)
-    assert "0 refused" in x39 and "(0 wrong)" in x39 and "the line after each of 17 odd lines kept: 17" in x39
+    assert "0 refused" in x39 and "(0 wrong)" in x39 and "the line after each of 23 odd lines kept: 23" in x39
     assert "an-empty-key error" in x39 and "an-unknown-key event" in x39 and "not-json error" in x39
-    assert "0 difference(s)" in row(said, 40) and "2 document(s) with a shipper's fields, 1 of them" in row(said, 40)
+    assert "a-long-key-in-cites error" in x39 and "beat-1e400 error" in x39 and "a-256-key event" in x39   # SB-1
+    assert "shipper-host-a-text event, shipper-host-a-text-not-json error" in x39   # SB-2: each kept
+    assert "the real watch's file: 6 line(s), 6 of them events in the engine (its longest text " in x39
+    assert re.search(r"longest text [1-9]\d* and longest key [1-9]\d* UTF-16 units", x39)
+    x40 = row(said, 40)
+    assert "0 difference(s)" in x40 and "6 document(s) with a shipper's fields, 3 of them an error document, 4 with" \
+        " a field moved to displaced" in x40 and "each message its line" in x40
     x41 = row(said, 41)
     assert "rule NO-SUCH-RULE 0/0" in x41 and "rule PERSIST-RUN-KEY 1/1" in x41 and "watch-not-0 " in x41
+    assert "not-events -main 3/3" in x41 and "not-events -odd 19/19" in x41   # SB-6: 16 odd lines and 3 shipped
+    assert "not sure: not judged" not in x41 and "(n/a" not in x41
     assert "silence -silence at +1.0 s: engine none; here none surely" in x41
     assert "silence -silence at +3.6 s: engine a.example,d.example,f.example,g.example; here a.example," \
            "d.example,f.example,g.example surely, 0 not sure" in x41
@@ -530,6 +631,103 @@ def test_r6_a_faithful_engine_meets_every_claim_and_each_row_names_what_was_fed(
     x42 = row(said, 42)
     assert "raqib_persist 1/1, its own persist 1, near miss drift 0,knock-persist 0" in x42
     assert "raqib_heartbeat_not_watching 1/1, its own not-watching 1, near miss heartbeat-incomplete 0" in x42
+
+
+def test_r5_r7_an_error_document_without_the_reason_the_hand_written_table_gives_is_missed_and_named(tmp_path):
+    code, said = run(tmp_path, reason=lambda why: why.replace("256", "255"))
+    assert rows(said)[39] == "MISSED" and "a-long-key: not 'not an event: a key longer than 256 characters'" in \
+        row(said, 39)
+    code, said = run(tmp_path, reason=lambda why: "not an event: x" if why == siem_run.NOT_JSON else why)
+    assert rows(said)[39] == "MISSED" and "not-json: the pipeline's own words where the engine's json processor's" \
+        in row(said, 39)
+
+
+def test_r2_r7_the_pipeline_of_4aaa17c_loses_a_shippers_text_and_its_lines_and_is_missed(tmp_path):
+    code, said = run(tmp_path, keep_text=True)   # as the Table measured that content: no step moving a text aside
+    assert rows(said)[39] == "MISSED" and rows(said)[40] == "MISSED"
+    assert "shipper-event-a-text lost" in row(said, 39) and "shipper-host-a-text-not-json lost" in row(said, 39)
+    assert "shipper-host-a-text event" in row(said, 39)   # kept, its text gone without a word: X40 says it
+    assert re.search(r"displaced\.host: the shipper sent \"a-shipper-text\", the engine holds null", row(said, 40))
+
+
+def test_r5_r7_a_read_with_a_group_not_sure_is_n_a_and_never_met(tmp_path):
+    code, said = run(tmp_path, slow=3.0)   # each send takes 3 s: a deadline of 2 s falls inside the reads' windows
+    x41 = row(said, 41)
+    assert code == 0 and rows(said)[41] == "n/a", x41
+    assert "(n/a: not judged)" in x41 and "read(s) with a group not sure: not judged" in x41
+    assert "(MISSED)" not in x41 and rows(said)[39] == "MET"
+
+
+def test_r5_r7_a_host_the_engine_lists_that_was_never_fed_is_missed(tmp_path):
+    code, said = run(tmp_path, ghost=True)
+    assert rows(said)[41] == "MISSED" and "never fed: ghost.example" in row(said, 41)
+
+
+class Answer:
+    """What urlopen gives: a status and a body read once."""
+
+    def __init__(self, status, raw):
+        self.status, self.raw = status, raw
+
+    def read(self):
+        return self.raw
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def through_http(monkeypatch, engine, fail):
+    """urlopen for http://stand.in: the stand-in's answer as bytes, until fail(method, path, the request's text)
+    says how it fails (an exception to raise, or bytes to answer)."""
+    def urlopen(req, timeout=None):
+        path, method = req.full_url[len("http://stand.in"):], req.get_method()
+        ndjson = req.get_header("Content-type") == "application/x-ndjson"
+        body = None if req.data is None else (req.data if ndjson else json.loads(req.data.decode("utf-8")))
+        how = fail(method, path, (req.data or b"").decode("utf-8"))
+        if isinstance(how, Exception):
+            raise how
+        if isinstance(how, bytes):
+            return Answer(200, how)
+        code, got = engine(method, path, body, ndjson)
+        return Answer(code, json.dumps(got).encode("utf-8"))
+    monkeypatch.setattr(siem_run.urllib.request, "urlopen", urlopen)
+
+
+def lost_run(tmp_path, monkeypatch, fail):
+    clock = Clock()
+    through_http(monkeypatch, StandIn(clock), fail)
+    events = tmp_path / "events.jsonl"
+    events.write_text("".join(x + "\n" for x in EXAMPLES[:6]), encoding="utf-8")
+    said = []
+    code = siem_run.main([str(ROOT / "docs" / "specs" / "EVENT.md"), str(events), "--url", "http://stand.in",
+                          "--wait", "1"], sigma=stand_in_sigma, out=said.append, clock=clock, sleep=clock.sleep)
+    return code, said
+
+
+def test_r5_r7_a_connection_that_fails_or_an_answer_that_is_not_json_mid_run_leaves_each_claim_left_n_a(
+        tmp_path, monkeypatch):
+    def at_sigma(method, path, text):   # the first count of a Sigma rule: X39 to X41 said, X42 left
+        return ConnectionResetError(104, "reset by peer") if "query_string" in text else None
+    code, said = lost_run(tmp_path, monkeypatch, at_sigma)
+    assert code == 0 and rows(said) == {39: "MET", 40: "MET", 41: "MET", 42: "n/a"}, "\n".join(said)
+    assert "the engine was lost in the middle of the run (POST /raqib-events-rig/_search: the connection failed " \
+           "(ConnectionResetError" in row(said, 42)
+
+    def at_alarm(method, path, text):   # the first search of X41 answers a page that is not JSON
+        return b"<html>502 Bad Gateway</html>" if '"event.kind": "alert"' in text else None
+    code, said = lost_run(tmp_path, monkeypatch, at_alarm)
+    assert rows(said) == {39: "MET", 40: "MET", 41: "n/a", 42: "n/a"}, "\n".join(said)
+    assert "an answer that is not JSON (http 200, b'<html>502 Bad Gateway</html>')" in row(said, 41)
+
+    def at_bulk(method, path, text):   # the first send: nothing is judged
+        return TimeoutError("timed out") if path.endswith("_bulk?refresh=true") else None
+    code, said = lost_run(tmp_path, monkeypatch, at_bulk)
+    assert rows(said) == {39: "n/a", 40: "n/a", 41: "n/a", 42: "n/a"} and "ENGINE lost: POST /raqib-events-rig/" \
+        "_bulk: the connection failed (TimeoutError: timed out)" in "\n".join(said)
+    assert not any("Traceback" in x for x in said)
 
 
 def test_r6_an_engine_that_judges_silence_by_the_events_time_is_missed(tmp_path):
@@ -621,7 +819,11 @@ def test_e6_the_runner_reads_instants_deadlines_and_the_summary_file(tmp_path):
     assert siem_run.judge_deadlines(groups, (50, 60), [("x", 20.0), ("y", 150.0)], False)[0] is False
     assert siem_run.judge_deadlines(groups, (50, 60), [("x", 20.0)], True)[0] is True   # z said its end
     assert siem_run.judge_deadlines(groups, (50, 60), [("x", 20.0), ("z", 20.0)], True)[0] is False
-    assert siem_run.judge_deadlines(groups, (15, 16), [], False) == (True, "engine none; here none surely, 2 not sure")
+    # SB-7: a read with a group not sure is n/a (None), never a MET (the first REDO held True here)
+    assert siem_run.judge_deadlines(groups, (15, 16), [], False) == (None, "engine none; here none surely, 2 not sure")
+    assert siem_run.judge_deadlines(groups, (15, 16), [("y", 150.0)], False)[0] is False   # surely not, and listed
+    assert siem_run.judge_deadlines(groups, (50, 60), [("x", 20.0), ("z", 20.0), ("w", 20.0)], False) == (
+        False, "engine x,z,w; here x,z surely, 0 not sure; never fed: w")   # SB-7: a host never fed is MISSED
     summary = tmp_path / "summary.md"
     events = tmp_path / "e.jsonl"
     events.write_text(EXAMPLES[0] + "\n", encoding="utf-8")

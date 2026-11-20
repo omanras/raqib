@@ -108,6 +108,9 @@
             }
           }
         },
+        "displaced": {
+          "type": "flattened"
+        },
         "raqib": {
           "properties": {
             "schema": {

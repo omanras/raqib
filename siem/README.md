@@ -1,6 +1,6 @@
 # Raqib's events in a SOC's search engine
 
-Ready content for a SOC (ADR-0017 and its Amendment A, M16.1): the files a SOC installs to read
+Ready content for a SOC (ADR-0017 and its Amendments A and B, M16.1): the files a SOC installs to read
 Raqib's events (`raqib-event/1`, docs/specs/EVENT.md) in Elasticsearch or OpenSearch, Sigma rules
 over the events, and a table of the rules with their ATT&CK techniques. Every file is made to the
 spec's Mapping and to nothing else. Nothing here is part of the package: raqib never imports or
@@ -20,53 +20,81 @@ reads it, and Raqib still sends nothing by itself.
 
 ## What a document holds
 
-Each document is one line of the events file, sent as a document whose `message` is the line. The
-pipeline gives ECS as EVENT.md's Mapping names it:
+Each document is one line of the events file, sent as a document whose `message` is the line.
 
-- `time` to `@timestamp`; `id` to `event.id`; `kind` to `event.action`; `severity` to
-  `event.severity` (high 4, medium 3, low 2, info 1, hole 3); `alarm` to `event.kind` (`alert` when
-  true, else `event`); `summary` to `message`; `rule.id` to `rule.id`; `rule.class` to
-  `rule.category`; `rule.attack` to `threat.technique.id`; `subject.pid` and `subject.image` to
-  `process.pid` and `process.name`; `watch.host` to `host.name`; `watch.version` to
-  `observer.version`, with `observer.product` Raqib.
-- Every other key the spec knows under `raqib`, as the event holds it (`raqib.about`,
-  `raqib.watch.run`, `raqib.prev`, `raqib.hole.kind`, `raqib.result.exit` ...).
-- A key the spec does not know is not indexed: its name is listed in `raqib.unknown_keys` (at most
-  50, sorted) and its value stays only in the whole line. A key added to the spec needs its line in
-  the pipeline's lists before it is indexed.
-- The whole line in `event.original` (kept, not searchable); the engine's own time of arrival in
-  `event.ingested`.
-- The pipeline sets `host.name` and removes no other field a shipper set (`host.hostname`,
-  `host.ip`, `agent.*`, `log.*` ...), on an event and on an error document alike. It sets no
-  document id: a line sent twice is two documents.
+The pipeline's first step cannot fail, and runs on every document: where a shipper's `host`,
+`event`, `error`, `observer`, `rule`, `process` or `threat` holds what is not an object (an old
+collector writes `host` as a text), it is moved to `displaced.NAME` as a text of at most 1024
+characters (UTF-16 units, cut one sooner rather than split a pair). `displaced` is kept whole
+(`flattened`, `flat_object`). A shipper's field of another shape is so kept, and is no reason to
+lose the line. Then the line is copied to `event.original`, read as JSON into `raqib`, and checked.
+
+On an event, the pipeline gives ECS as EVENT.md's Mapping names it, and sets or replaces:
+
+- `@timestamp` from `time`; `event.id` from `id`; `event.action` from `kind`; `event.severity`
+  from `severity` where it is one of the five (high 4, medium 3, low 2, info 1, hole 3);
+  `event.kind` from `alarm` (`alert` when true, else `event`); `rule.id` from `rule.id`;
+  `rule.category` from `rule.class`; `threat.technique.id` from `rule.attack`; `process.pid` and
+  `process.name` from `subject.pid` and `subject.image`; `host.name` from `watch.host`;
+  `observer.version` from `watch.version`, and `observer.product` Raqib. Each replaces what a
+  shipper set in that field; a shipper's other fields beside them (`host.hostname`, `host.ip`,
+  `event.dataset` ...) stay.
+- `event.original`, the whole line (kept, not searchable), and `event.ingested`, the engine's own
+  time of arrival: both replace a shipper's.
+- `message`: the Mapping's field for the event's `summary`. The shipper's `message` (the line) is
+  replaced by the summary or, where the event has none, removed: the line is whole in
+  `event.original`.
+- `raqib`: every other key the spec knows, as the event holds it (`raqib.about`,
+  `raqib.watch.run`, `raqib.prev`, `raqib.hole.kind`, `raqib.result.exit` ...). A key the spec
+  does not know is not indexed: its name is listed in `raqib.unknown_keys` (at most 50, sorted)
+  and its value stays only in the whole line. A key added to the spec needs its line in the
+  pipeline's lists before it is indexed.
+
+Nothing else a shipper set is removed or changed (`agent.*`, `log.*` ...). No document id is set:
+a line sent twice is two documents.
 
 The template guesses nothing: strings are keywords (a string over 1024 characters is kept but not
 searchable), a string that looks like a date is not taken for one, and the parts whose shape
 differs from kind to kind (`raqib.subject`, `raqib.evidence`, `raqib.hole`, `raqib.knocked`,
-`raqib.result`, `raqib.counts`) are kept whole (`flattened`, `flat_object`) and searched by their
-dotted names; their values are keywords, so a number there compares as text. The template sets
-the pipeline as the indices' default.
+`raqib.result`, `raqib.counts`, and `displaced`) are kept whole (`flattened`, `flat_object`) and
+searched by their dotted names; their values are keywords, so a number there compares as text. The
+template sets the pipeline as the indices' default.
 
 ## Which lines become error documents
 
-A line is kept as an error document - `event.kind` is `pipeline_error`, `error.message` says why,
-`message` and `event.original` hold the line, `@timestamp` is its arrival unless a shipper set
-one - when it is, by the pipeline's own checks:
+A line that is not an event by the pipeline's own checks is kept as an error document. On it the
+pipeline removes `raqib` (what it read of the line), and sets `event.kind` to `pipeline_error`,
+`error.message` to the reason, `event.ingested` to the arrival, and `@timestamp` to the arrival
+unless a shipper set one; `event.original` is the line, and `message` is the line as the shipper
+sent it. Nothing is read from the line: `host.name` is what the shipper set, or none, and every
+other field is as the shipper set it (or in `displaced`, above). The reasons, in the pipeline's
+words (`error.message`):
 
-- not JSON, or JSON that is not an object of schema `raqib-event/1`;
-- of a shape an engine would refuse: deeper than 10 levels, a text longer than 8000 characters,
-  more than 200 keys in all, or an empty key;
+- not JSON (the engine's json processor gives its own words), or JSON that is not an object of
+  schema `raqib-event/1` (`its schema is not raqib-event/1`);
+- of a shape an engine would refuse (`not an event: ...`): deeper than 10 levels, an empty key, a
+  key longer than 256 characters, more than 200 keys in all, a text longer than 8000 characters,
+  or a number that is not finite (`1e400`, which an engine reads as Infinity); a length is
+  counted in UTF-16 units, anywhere in the line, the items of a list among them;
 - missing a base key (`schema`, `id`, `n`, `time`, `kind`, `about`, `rev`, `severity`, `watch`,
   `watch.run`, `watch.host`, `watch.beat`);
 - holding a key the spec knows with another kind of value: a top-level key, a key of `watch` or of
   `rule`, `subject.pid` or `subject.image` (`alarm` that is not true or false, `n` that is not a
   whole number from 1 within a long, a number where a text is due ...);
 - of a `kind` that is not one of the spec's eight, or with a `time` the engine cannot read as an
-  instant.
+  instant (the engine's date processor gives its own words).
 
+A key of 256 characters or fewer that the spec does not know is still an event, its name listed.
 The pipeline checks what an engine needs and no more: the keys inside the parts kept whole are not
 checked, nor the words of a closed list but `kind`. The full check of a line is `raqib events FILE`
 on the host (docs/GUIDE.md, Commands).
+
+A line kept but not read is a finding, never "nothing happened". Search for the error documents:
+`event.kind: pipeline_error`, or `searches/not-events.json` (the latest arrival first, with an exact
+count). Two cases are found nowhere else. A host whose every line becomes an error document is in
+no other search, unless it once sent an event: then the search for silence lists it as silent, for
+an error document gives no deadline. An alarm whose line became an error document is in that
+search and in no other: no search of alarms or rules can read it.
 
 ## Install on Elasticsearch
 
@@ -111,18 +139,22 @@ Two ways, neither measured (see below):
   body: send to a collector, not to the engine's bulk address.
 
 Delivery is at least once (FORWARD.md), and a shipper may send a line again after a restart: a line
-sent twice is two documents, and the searches count both. To count once, count the distinct values
-of `host.name` and `event.id` together (a `cardinality` of the two, or a `terms` on both); a thing
-is `raqib.watch.run` and `raqib.about` together, and its latest saying is its highest `raqib.rev`.
+sent twice is two documents, and the searches count both. To count once, take `host.name` and
+`event.id` together (a `terms` on both, or a `composite` of them); a thing is `raqib.watch.run` and
+`raqib.about` together, and its latest saying is its highest `raqib.rev`.
 
 ## What the content trusts
 
 The content trusts every key of a line that passes its checks, `watch.host`, `watch.beat` and
 `time` among them, and the watched account can write the events file (docs/THREAT_MODEL.md). A
-forged line can say any host's name, and a forged line with a long beat keeps its host off the
-search for silence for two of that beat after its own arrival, and no longer. Where a line came
-from is what the collector holds: the shipper's own fields (`host.hostname`, `host.ip`, `agent.*`),
-which the pipeline keeps beside `host.name`.
+forged line can say any host's name. A forged line with a long beat keeps its host off the search
+for silence for two of that beat after its own arrival, the beat counted as a day at most: two days
+at most, not as long as its number says (the two days themselves were not measured). A forged
+`watch` end takes its run off the runs with no end for good. Two hosts of one name (two machines
+named alike, or two that each say `unnamed`) are one host to the search for silence: a dead one is
+masked by a live one; the runs with no end still part them by run. Where a line came from is what
+the collector holds: the shipper's own fields (`host.hostname`, `host.ip`, `agent.*`), which the
+pipeline keeps beside `host.name`.
 
 ## The searches
 
@@ -139,25 +171,51 @@ python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1]))['body
 - `rule.json`: every finding of one rule (a search template; the parameter `rule_id`).
 - `hole.json`: every hole of the capture and every blind spot (`raqib.hole.class` says which).
 - `watch-not-0.json`: every watch that ended with a result other than 0.
-- `silence.json`: the search for silence (ADR-0017 S-5 and SA-1). Every line gives a deadline: its
-  arrival by the engine's clock (`event.ingested`) and two of that line's own `watch.beat`. A host
-  is listed when the engine's own clock has passed the latest deadline any of its lines gave; the
-  nearest deadline comes first, and at most 10000 hosts are judged. No time is given by the
-  caller, and the event's `time` is never read. A host that has stopped, whose shipper or
-  forwarder has, or whose wire is cut is listed; so is a host whose watch ended in order, while
-  its lines are in the index.
+- `not-events.json`: every error document (above), the latest arrival first, its count exact.
+- `silence.json`: the search for silence (ADR-0017 S-5, SA-1 and SB-5). Every line gives a
+  deadline: its arrival by the engine's clock (`event.ingested`) and two of that line's own
+  `watch.beat`, the beat counted as at most 86400 s (a day). A host is listed when the engine's own
+  clock has passed the latest deadline any of its lines gave; the nearest deadline comes first. No
+  time is given by the caller, and the event's `time` is never read. A host that has stopped, whose
+  shipper or forwarder has, or whose wire is cut is listed; so is a host whose watch ended in order,
+  while its lines are in the index.
 - `runs-no-end.json`: the runs, by host and run, that said no watch end and whose latest deadline
-  the engine's clock has passed (SA-2): a watch that was killed, or whose end could not be written.
-  At most 10000 runs are judged.
+  (the same deadline) the engine's clock has passed (SA-2): a watch that was killed, or whose end
+  could not be written.
+
+The bounds and what they cut (SB-4). Each of the two judges at most 10000 groups, and only then
+picks the ones whose deadline has passed, so a cut can hide a group that should be listed. The
+search for silence keeps the hosts nearest their deadline: past its bound, the hosts whose deadline
+is latest are left out first. The runs with no end are ordered `[{"ends": "asc"}, {"deadline":
+"desc"}]`: past the bound, the runs that said an end are left out first, then the runs whose
+deadline is oldest. In either answer, `sum_other_doc_count` above 0 means that lines of groups
+beyond the bound exist (it counts lines, not hosts or runs, and is 0 only where nothing was cut).
+To read every run with no end however many there are, page a `composite` of `host.name` and
+`raqib.watch.run` with the same `deadline`, `ends` and selector, following `after_key`, as below.
+That form was measured on the Table's probe (pages of 3 listed the same five runs as the search, in
+four pages, with the deadline as it was before the day's bound), not on the rig:
+
+```json
+{"size": 0, "query": {"exists": {"field": "raqib.watch.beat"}},
+ "aggs": {"runs": {"composite": {"size": 1000, "sources": [{"host": {"terms": {"field": "host.name"}}},
+                                                         {"run": {"terms": {"field": "raqib.watch.run"}}}]},
+                   "aggs": {"deadline": {"max": {"script": {"source": "doc['event.ingested'].value.toInstant().toEpochMilli() + (long)(2000 * Math.min(doc['raqib.watch.beat'].value, 86400.0))"}}},
+                            "ends": {"filter": {"bool": {"filter": [{"term": {"event.action": "watch"}}, {"term": {"raqib.state": "end"}}]}}},
+                            "stopped": {"bucket_selector": {"buckets_path": {"d": "deadline", "e": "ends._count"},
+                                                            "script": "params.e == 0 && params.d < System.currentTimeMillis()"}}}}}}
+```
+
+Each next page adds `"after"` with the answer's `after_key` to `composite`, until no `after_key`
+is given. The bound is per shard, and more than one shard or node was not measured.
 
 `@timestamp` is the event's own `time`, the host's clock, and a first saying carries the entry's
 own older time (EVENT.md): a rule or a view that windows on `@timestamp` misses a line that arrives
-late. Window on `event.ingested`, the arrival, as the two searches above do.
+late. Window on `event.ingested`, the arrival, which the two searches of silence read for their
+deadlines (they set no window of their own).
 
 The two searches of silence fill nothing in: each is a whole search, and a person or a schedule
-runs it. Each engine has its own way to run a search on a schedule and alert on what it finds
-(Elasticsearch: Kibana's alerting rules or Watcher; OpenSearch: its Alerting plugin's monitors).
-None of them was set up or measured here.
+runs it. Running a search on a schedule and alerting on what it finds, in either engine, was not
+set up or measured here.
 
 ## Sigma
 
@@ -209,13 +267,21 @@ differs are kept whole.
   deadline of every line and the engine's own clock in the selector, at once and after waits; the
   runs with no end by host and run; a search inside a part kept whole; twelve odd lines, of which
   some were refused and lost with that content; a shipper's host fields, removed by that content.
+- The second review's measurement (ADR-0017 Amendment B, the Table's probe, both engines, the
+  content before this one): a key of 40000 characters and a number of `1e400` passed its check and
+  were refused; a shipper's `event`, `error`, `rule` or `process` as a text lost the line, a `host`
+  or `observer` as a text was lost from an event and lost an error document; the order of the runs
+  with no end above, `sum_other_doc_count` counting lines, the `composite` form, and the day's
+  bound in the deadline's script, which changed no deadline of a beat under a day.
 - This content, on every push: the rig's job `siem` (.github/workflows/rig.yml) starts both
   engines, installs these files and feeds them the examples, a short watch's file (a beat of 5 s),
   made-up events of each class the rules and searches name with a near miss for each, the made-up
-  hosts of the silence measurement, each odd line with the line after it, and documents with a
-  shipper's fields. `tools/rig/siem_run.py` says X39 to X42, MET or MISSED, each row with what was
-  fed and the versions of the tools. When this page was written that job had not yet run this
-  content: its rows are the rig's.
+  hosts of the silence measurement, each odd line with the line after it (a key of 40000
+  characters, a number of `1e400` and a key of 256 among them), and documents with a shipper's
+  fields (a `host` and an `event` that are texts among them). `tools/rig/siem_run.py` says X39 to
+  X42, MET, MISSED or n/a, each row with what was fed and the versions of the tools; X39 holds each
+  error document's reason to a table of its own. When this page was written that job had not yet
+  run this content: its rows are the rig's.
 
 ## What was not measured
 
