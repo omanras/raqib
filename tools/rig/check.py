@@ -4,7 +4,7 @@ its task). Every expectation names the field run that taught it. Stdlib only; it
 
     python tools/rig/check.py --report WATCH.out --workload WORKLOAD.out [--sources DIR] [--exit-code N]
                               [--platform win32|linux] [--sysmon] [--events FILE] [--forward FACTS.json]
-                              [--service FACTS.json] [--summary FILE] [--strict]
+                              [--service FACTS.json] [--procevents FACTS.json] [--summary FILE] [--strict]
 
 --events: the watch's events file (~/.raqib/host/events.jsonl, ADR-0011 F-9); every line is checked with
 raqib's own event.check where raqib can be imported (the rig installs it), else by the event's shape here.
@@ -14,6 +14,10 @@ event log (Y-7, Windows; not run elsewhere).
 --service: what tools/rig/service_run.py saw `raqib service` do as root on the Linux machine (ADR-0013 A-9): X28
 an install from a place a user can write is refused, X29 an install from root's own place gives an active unit
 that sees a second user's stand-in agent, X30 the removal leaves no unit (n/a where it was not run, AA-4).
+--procevents: what tools/rig/procevents_run.py saw the reader of Linux's process events give (ADR-0007 BQ-2, BR-7):
+X31 every short act that ran is given with its program, its parent (the run's own process) and its end's code, and
+nothing is lost (n/a off Linux, or where the start was refused for want of a right of this user, EPERM or EACCES;
+any other refusal is MISSED, the refusal said).
 
 The rules of behaviour (ADR-0014): the stand-in leaves a file in its user's Startup folder, reaches port 22 of
 this machine's own address and sets a value under its user's Run key (Windows; each harmless, each undone), and
@@ -756,6 +760,95 @@ def read_service(facts):
         return [(n, MISSED, "its facts cannot be read (%s)" % type(exc).__name__) for n in SERVICE_NAMES]
 
 
+PROCEVENTS_NAME = ("X31 every short act that ran is given by the process events' reader with its program, its parent"
+                   " and its end's code, and nothing is lost")
+NO_RIGHT = re.compile(r"\b(EPERM|EACCES)\b")
+
+
+def read_procevents(facts):
+    """X31's row, its words led by the kernel's release where the run's facts say it (BS-8)."""
+    rows = _procevents_rows(facts)
+    kernel = facts.get("kernel") if isinstance(facts, dict) else None
+    if kernel:
+        rows = [(n, state, "kernel %s: %s" % (kernel, words)) for n, state, words in rows]
+    return rows
+
+
+def _procevents_rows(facts):
+    """X31 (ADR-0007 BQ-2): what tools/rig/procevents_run.py saw raqib.procevents.Reader give for the short acts it
+    ran. MET where every act that ran was given by read() with its program read (the real path of the program the
+    run started), its parent the run's own process (`run_pid`, BR-7) and its end's code (the run's exit code: the
+    code where it exited, the signal where one ended it), and counts() shows no loss (nothing lost to ENOBUFS or
+    by the kernel's count, nothing beyond the bound, the thread not ended before the stop); MISSED with what is missing (facts None, not
+    run on Linux, an error: silence is a finding). A refused start: n/a where the refusal names a right this user
+    lacks (EPERM, EACCES), else MISSED (on the measured kernels the kernel answers, BR-7); n/a off Linux. It never
+    raises: facts that cannot be read are MISSED."""
+    name = PROCEVENTS_NAME
+    try:
+        if not isinstance(facts, dict):
+            return [(name, MISSED, "the process events' run left no facts (silence is a finding)")]
+        platform = str(facts.get("platform") or "")
+        if facts.get("not_run"):
+            if platform.startswith("linux"):
+                return [(name, MISSED, "not run on Linux: %s" % facts["not_run"])]
+            return [(name, SKIP, "not run: %s" % facts["not_run"])]
+        if not platform.startswith("linux"):
+            return [(name, SKIP, "not run: not Linux (%s)" % (platform or "no platform said"))]
+        if facts.get("refused"):
+            if NO_RIGHT.search(str(facts["refused"])):
+                return [(name, SKIP, "start() was refused for want of a right of this user: %s" % facts["refused"])]
+            return [(name, MISSED, "start() was refused where the kernel is known to answer: %s" % facts["refused"])]
+        if facts.get("error"):
+            return [(name, MISSED, "the run failed: %s" % facts["error"])]
+        acts = facts.get("acts") or []
+        ran = [a for a in acts if a.get("pid") is not None]
+        skipped = ["%s (%s)" % (a.get("act"), a.get("not_run")) for a in acts if a.get("pid") is None]
+        missing = [] if ran else ["no act ran"]
+        for a in ran:
+            act, g, rc = "%s (pid %s)" % (a.get("act"), a.get("pid")), a.get("given"), a.get("rc")
+            if not isinstance(g, dict):
+                missing.append("%s not given by read()" % act)
+                continue
+            if g.get("ppid") is None or g.get("ppid") != facts.get("run_pid"):
+                missing.append("%s: its parent %s, not the run's own %s" % (act, g.get("ppid"), facts.get("run_pid")))
+            if not g.get("exe") or g.get("exe") != a.get("expect"):
+                missing.append("%s: its program read as %s, not %s%s" % (
+                    act, g.get("exe"), a.get("expect"), " (unread: %s)" % g["unread"] if g.get("unread") else ""))
+            if g.get("ended") is None:
+                missing.append("%s: its end not heard" % act)
+            elif not isinstance(rc, int):
+                missing.append("%s: the run has no exit code for it" % act)
+            elif rc >= 0 and (g.get("code") != rc or g.get("signal") is not None):
+                missing.append("%s: its end's code %s (signal %s), not %d" % (act, g.get("code"), g.get("signal"), rc))
+            elif rc < 0 and g.get("signal") != -rc:
+                missing.append("%s: its end's signal %s, not %d" % (act, g.get("signal"), -rc))
+        c = facts.get("counts")
+        if not isinstance(c, dict):
+            missing.append("no counts")
+            c = {}
+        else:
+            lost = c.get("lost") if isinstance(c.get("lost"), dict) else {}
+            if lost.get("count") != 0:
+                missing.append("lost %s (%s)" % (lost.get("count"), lost.get("why")))
+            elif lost.get("events"):     # BS-5: a gap in the kernel's count with no ENOBUFS is a loss too
+                missing.append("at least %s event(s) lost by the kernel's count (%s)" % (lost["events"],
+                                                                                       lost.get("why")))
+            if c.get("beyond") != 0:
+                missing.append("beyond the bound %s" % c.get("beyond"))
+            if c.get("ended"):
+                missing.append("the reader's thread ended: %s" % c["ended"])
+        if facts.get("stop_problems"):
+            missing.append("the stop's problems: %s" % "; ".join(facts["stop_problems"]))
+        if missing:
+            return [(name, MISSED, "missing: " + "; ".join(missing))]
+        return [(name, MET, "%d act(s) given with their program and their end's code (%s); not run: %s; events %s,"
+                 " threads %s, reads missed %s, unread %s, lost 0, beyond 0" % (
+                     len(ran), ", ".join(sorted({str(a.get("act")) for a in ran})), ", ".join(skipped) or "none",
+                     c.get("events"), c.get("threads"), c.get("missed"), sum((c.get("unread") or {}).values())))]
+    except Exception as exc:   # never raises: facts that cannot be read are MISSED
+        return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
+
+
 def table(rows, title):
     width = max([len(r[0]) for r in rows] + [10])
     out = [title, ""] + ["%-6s  %-*s  %s" % (state, width, ident, words) for ident, state, words in rows]
@@ -775,6 +868,7 @@ def main(argv=None):
     p.add_argument("--events")
     p.add_argument("--forward")
     p.add_argument("--service")
+    p.add_argument("--procevents")
     p.add_argument("--summary")
     p.add_argument("--strict", action="store_true")
     a = p.parse_args(argv)
@@ -807,6 +901,12 @@ def main(argv=None):
         except (OSError, ValueError):
             service_facts = None
         rows += read_service(service_facts)
+    if a.procevents:   # X31 (ADR-0007 BQ-2): given and missing is the run's silence, MISSED
+        try:
+            procevents_facts = json.loads(text(a.procevents))
+        except (OSError, ValueError):
+            procevents_facts = None
+        rows += read_procevents(procevents_facts)
     out = table(rows, "The rig: %s%s" % (a.platform, ", Sysmon" if a.sysmon else ""))
     print(out)
     if a.summary:

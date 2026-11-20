@@ -1030,13 +1030,16 @@ def test_redo_k11_the_network_guard_covers_every_module(monkeypatch):
     hooks/proxy.py: the proxy source, ADR-0003; ui.py: the local page's http.server/socketserver; hooks/common.py:
     urllib.parse, no I/O; forward.py: the forwarder, a process of its own that sends the events file's lines to one
     collector - ADR-0011 J-1, K-1 (the Table): inside raqib only cli.cmd_forward imports it, so no watch and no
-    capture script can reach its network); subprocess never runs curl or wget in any module."""
+    capture script can reach its network; procevents.py: socket for AF_NETLINK alone, the kernel's process events
+    on this host and no network - ADR-0007 BQ-1, held by tests/test_procevents.py, which replaces socket.socket and
+    fails on any other family); subprocess never runs curl or wget in any module."""
     allowed = {"raqib/suspect/backends.py": {"urllib.error", "urllib.parse", "urllib.request"},
                "raqib/forward.py": {"http.client", "socket", "ssl", "urllib.parse"},
                "raqib/hooks/proxy.py": {"http.client", "http.server", "socket", "socketserver", "ssl",
                                         "urllib.parse"},
                "raqib/ui.py": {"http.server", "socketserver"},
-               "raqib/hooks/common.py": {"urllib.parse"}}
+               "raqib/hooks/common.py": {"urllib.parse"},
+               "raqib/procevents.py": {"socket"}}
     net = ("urllib", "http.client", "http.server", "socket", "socketserver", "ssl", "requests", "httpx", "aiohttp")
     for path in sorted((ROOT / "raqib").rglob("*.py")):
         rel = path.relative_to(ROOT).as_posix()

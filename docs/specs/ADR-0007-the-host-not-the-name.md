@@ -2897,3 +2897,165 @@ pruning by the provider's end events is a later task); the rhythm rule's own sen
 Windows as without byte counts (true where the tracing is not read; its wording is the rule's next change);
 IPv6 and mapped addresses in the field; a non-administrator's run in the field (the leftovers' note).
 
+
+## Amendment BQ (the Table, 2026-11-20) - Linux: what happens between two samples (measured first; M14.1)
+The commander's field test on Ubuntu (2026-11-20, main c596cbf, the window and the service; the agent a named
+one): the watch named the agent three seconds into the test and judged the children that lived about 25 s. It
+saw nothing of what ended between two samples: files made and removed in 0.15 s, three curls of under a second
+each, wget, a name lookup, nc. That is the hole the watch says at its start on Linux, and it is most of what an
+agent does.
+Measured (the probe branch, GitHub's Ubuntu 22.04 with kernel 6.8, and 24.04 and 26.04 with kernel 7.0; the
+standard library alone, AF_NETLINK): the kernel's process events (the netlink connector: fork, exec, exit) were
+heard for each of 14 short acts - touch (2 to 4 ms), mv, cp and rm (1 ms each), three curls, wget, getent, nc,
+Python's own client, sh, shred, git and its child - with the exit's code; and for every exec the program
+(/proc/PID/exe) and the parent (/proc/PID/stat) were read in time (0 of 16 to 20 missed; the read 0.02 to
+0.13 ms after the event). They were heard by a plain user on all three, and under the service's own limits
+(its seccomp filter, AF_UNIX and AF_NETLINK alone, its two capabilities). The end of every TCP socket was heard
+too (sock_diag's destroy groups) with its destination, its owner's uid and its bytes, but the socket's inode
+is 0 at its end and no process is said. Not measured: a kernel older than 6.8 (the connector may be root's
+there); whether a plain user hears another user's processes; a machine that starts thousands of processes a
+second; a process inside a container.
+- BQ-1 (the source). On Linux a live watch listens to the kernel's process events and takes from them the
+  processes that began since the round before: what the channel is on Windows for a process (M7.9), by the
+  same rule - it listens to what the kernel already says, switches nothing on, asks for no right; where the
+  kernel refuses, the refusal is the hole, in the watch's words, and the samples go on as before. FOR: a
+  child of a tree that starts and ends between two samples is an act of that tree, with its program, so the
+  rules that read programs and the rhythm judge it. MUST NOT TOUCH: no argument of a process is read from an
+  event (the program, the parent, the start, the end and its code only); the sample stays what says a tree is
+  alive.
+- BQ-2 (two tasks). M14.1a: the reader alone (raqib/procevents.py), as M7.21a built the tracing's: its
+  messages as measured, what is read at an exec, every way it can lose an event counted (the kernel's
+  ENOBUFS, a process gone before its program was read, a bound of its own), ended on every way out; and the
+  rig hears the stand-in's short children through it. M14.1b: the watch takes its events - a child told only
+  by an event is an act of its tree, once, whichever source tells it; a tree that lives wholly between two
+  samples is listed as the channel's brief trees are.
+- BQ-3 (connections, not ruled yet). A socket's end names a user and a destination, not a process. How a
+  short connection is given to its process (the tree's children read while they live, joined to the end by
+  its addresses) is to be measured before it is ruled: M14.2.
+- BQ-4 (recorded for its own ruling). An idle agent of a name the catalog holds was in no round for two
+  minutes, and AGENT-DARK-LIVE said "no live tree" of its footprints while its process lived.
+
+## Amendment BR (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1a.md (f0477be), two of them measured
+The reviewer said NEXT with fixes first, and asked of the kernel two things the Table measured before ruling
+(the probe branch 2552282; Ubuntu 22.04 with kernel 6.8, 24.04 and 26.04 with 7.0; a plain user; all three
+agree). After an overflow of the listener's queue (ENOBUFS) the events went on, for that listener alone and
+for a second one opened after it: the reviewer's fear that one overflow silences the source was not what these
+kernels did. When a thread that is not the leader called exec, the kernel sent an exit with pid equal to tgid
+(code 0), then the exec, then the process's real exit. When the leader thread ended and another thread lived
+on, the kernel sent an exit with pid equal to tgid (code 0) at once, and the process's own code (7) came on
+the last thread's exit, a pid not equal to its tgid. The reader's own run, 15 times on those images: no read
+missed, nothing lost, the start answered each time (the answer's ack is the ask's plus one there too).
+- BR-1 (F3: a process ends with its last thread). An exit with pid equal to tgid is the leader's, not the
+  process's, while a thread of it is known to live or an exec of it follows. The reader keeps the threads of
+  each process it holds (their forks and their exits): the process has ended when none is left, and its code
+  is the last exit's. An exec heard after such an exit is the same process, not a new one, and is never given
+  as "no fork heard". Where an event was lost the count of threads is not known, and that is said.
+- BR-2 (F2: every program a process had). A process that execs again keeps the programs it had before, in
+  order; a read that fails is `unread` for that exec and never replaces what an earlier read gave.
+- BR-3 (F4: the pid's holder). The start read from stat is held against the kernel's time of the exec: where
+  they cannot be one process's (the pid was taken again before the read), nothing of the read is given and
+  `unread` says another process held the pid. The spec no longer says that a pid and its start always name
+  one holder.
+- BR-4 (F1: what an overflow means). `counts()` gains the time the last datagram was heard, and the words of
+  a loss say what was measured: on kernels 6.8 and 7.0 the events went on after it; what was in the queue is
+  gone, and how many is not known.
+- BR-5 (F7, F8: no false refusal, no silent end). The ask's mark is one nobody can guess, not the reader's
+  pid. Every way the reader's thread can end before a stop sets `ended` with its reason.
+- BR-6 (F5, F6, F9, F10, F11: the words). An unreadable program is said with every cause it can have (gone;
+  hidden by the system; not readable by this user, which a program can arrange for itself). "Its program is
+  its parent's" is not said where an event was lost. A record the bound refused says so, not "no fork heard".
+  The bound counts over the reader's life and a process whose end was lost never leaves it: said as it is.
+  A child made to be its maker's sibling is given the parent the kernel names, which is not its maker: said
+  in the threat model. Which parent a tree uses is M14.1b's to rule.
+- BR-7 (R1, R2: the rig). X31 holds each act's parent to be the run's own process. A start refused on a
+  machine where the kernel is known to answer is MISSED, not n/a; n/a is for a system that is not Linux and
+  for a refusal that names no right of this user.
+- BR-8 (the gate on Windows). A test that names a system's error names it as that system does.
+- BR-9 (recorded for M14.1b). The reader's thread shares the interpreter with the watch: its misses under a
+  busy watch are to be measured there, with what would close them (the reader in a process of its own; the
+  kernel's own word of a process's name at its end, which needs the system's rights). `exe` is raw text of
+  the process's choosing in part and is escaped where it is shown. Only one Reader runs in a process.
+
+## Amendment BS (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1a-redo.md (8481d64), three measured
+The reviewer said NEXT with four fixes, and eight questions. Three were put to the kernel first (the probe
+branch 5f1de39; Ubuntu 22.04 with kernel 6.8, 24.04 and 26.04 with 7.0, four CPUs, a plain user; all three
+agree, and so does the builder's sandbox on 6.18).
+- The kernel's own count on each event (`seq`, one count per CPU): in a quiet run of 300 children it had no
+  gap and never went back.
+- At an overflow (a queue of 9216 bytes, 300 children made while nothing was read): the error (ENOBUFS) was
+  read first; after it the events the queue had held were still given (the first three children's); the other
+  297 children's were never given; events made afterwards and read at once all came. BR-4's words "what was in
+  the queue is gone" were wrong: what the queue held is given, what came while it was full is gone. The gaps
+  in `seq` over the events read added up to 275, 589 and 626 where some 890 events were lost: a count from
+  below, not the whole (a CPU the reader heard nothing from before has no count to compare).
+- A thread that is not the leader calling exec, with every CPU busy, 600 times on each: the exit with pid
+  equal to tgid came before the exec every time (1800 of 1800; 600 of 600 on 6.18). The other order was not
+  seen.
+The redone reader's own run, 15 times on those images: no read missed, nothing lost, none taken for another.
+- BS-1 (G1: the window as it is). The documents say what the code does: a pid taken again within one second
+  of the exec, before the read, is not told apart, and the newcomer's program and start are then given as the
+  first process's.
+- BS-2 (G4, question 4: taking a record up again). A record whose end was heard is taken up again by an exec
+  only where both starts are known and equal. Otherwise the exec is a new record, and it says what is not
+  known: a thread of the same process called exec, or another process took the pid and its fork was lost. A
+  read that was another process's (BR-3) takes nothing up again. FOR: one process's programs are never given
+  as another's. MUST NOT TOUCH: the two measured orders stay one process each.
+- BS-3 (G2, G3, G8, question 5: an end that may be a leader's alone). Every end the reader gives where the
+  process's threads are not known says so: an end of a process it does not hold, and any end given while
+  `lost` is not 0. Where a thread's exit follows such an end of a process not held, that exit is given too, as
+  the later end of the same pid with its code. A record taken up again before its end was read withdraws that
+  end; one whose end was read already says, when it is given again, that the end given before was its leader
+  thread's. For M14.1b: the watch takes an end of a process the reader did not hold as a hint beside its own
+  sample, never as the end.
+- BS-4 (G5, question 3: the bound of `earlier`). A record keeps its 16 newest earlier programs; the older ones
+  are counted on the record and the count is said. A bound, as every other table of the reader has.
+- BS-5 (G6, G17, questions 1 and 7: what a loss is, and how many). The reader reads each event's CPU and the
+  kernel's count on it. Where the count on a CPU jumps, the jump is added to `lost` as events lost at least,
+  with or without an ENOBUFS (a jump without one is a loss the kernel never told). A count that goes back is
+  not counted and is said once. The words of a loss are the measured ones above. FOR: a loss the kernel does
+  not announce is still counted; a number is given where there was none. It is said as a count from below.
+- BS-6 (G7, question 2). The other order of a thread's exec stays unbuilt: not seen in 2400 runs. The spec
+  says the count; the threat model says what the reader would then say (an end of a process that lives).
+- BS-7 (G11, G12, G13, G15, G16: said as it is). A boot clock that cannot be read is said (BR-3's check is
+  then off). The queue's size is compared as the kernel reports it (doubled). A start that got no answer while
+  the queue overflowed says the overflow. "Its parent's program" becomes the program of the process that made
+  it, which the kernel may name otherwise than as its parent. What is from the source and not measured stands
+  under that heading; the sandbox's runs of the REDO are in the spec beside the first build's.
+- BS-8 (question 6: X31). The run's facts carry the kernel's release and X31's line shows it. A refusal that
+  names a right stays n/a on any kernel: a right is the machine's, not the kernel's.
+- BS-9 (G9, G10: tests). `last` is told apart from `since`; a test fails if the start guard, the leader's
+  reset at an exec, a thread bound, an eviction, or the word for unknown ticks is removed.
+- BS-10 (recorded for M14.1b). Whether a record carries the kernel event's CPU and count as evidence
+  (question 8); a reader inside a time namespace, and event times after a suspend (G14): not measured.
+
+## Amendment BT (the Table, 2026-11-20) - rulings on review 2026-11-20-M14.1a-redo2.md (0c5014b); M14.1a lands
+The reviewer said NEXT: the commit does what BS rules, and two of BS-5's own rules still made the reader say
+something false. Both were the Table's words, not the builder's, and the Table put them right by hand in the
+commit that files the review, after measuring the first (the probe branch 1727304; kernels 6.8, 7.0 and 6.18).
+- Measured: while one listener read, a second asked to listen and to stop, three times. The first read six
+  answers, each with a real CPU and that CPU's next number of the kernel's count. Left out of the count, the
+  answers made six gaps; taken as part of it, none. The Table's note to the builder, that an answer carries the
+  ask's own number, was wrong.
+- BT-1 (H1: an answer is counted). An answer takes a number of its CPU's count as an event does, and the
+  reader counts it so. FOR: a second listener on the machine - another watch, the rig beside the service - is
+  never a loss the reader invents, and no user can make the reader say "lost" by asking the kernel to listen.
+- BT-2 (H2: told and untold). A gap is "a loss the kernel did not tell" only while no ENOBUFS has come since
+  the reader's start. After one, a gap is not told apart from it: the ENOBUFS is read before its gaps show, and
+  a CPU's gap shows only at that CPU's next event, which may be much later. The numbers do not change.
+- BT-3 (H3, H5: two sentences that were false). A later end of a process not held is one thread's, and says
+  so; it is never called a leader's. A record taken up again says "the end given before" only of an end that
+  was given: one past the bound of the ends never was.
+- BT-4 (H4, H6, H9: said as it is). Whether events made while the reader empties an overflowed queue are given
+  is not measured, and the spec says so. A bounded memory that forgets a pid is not counted; the pid is then
+  said as one whose fork was not heard; the module no longer says that every way it loses is counted.
+- BT-5 (recorded for M14.1b; H7, H8, H10, H11 and the reviewer's nine points). Under a loss a held process's
+  later thread's exit is dropped, and "the end given before was its leader's" may be another process's: after a
+  loss the watch takes every word about threads and ends as a hint beside its own sample. A record's join is by
+  pid, beginning and start together. The scan of unread ends at a take-up is to be measured under load.
+- BT-6 (the ground of M14.1b, measured: the probe branch c3c94d9 and b38f54c, three Ubuntu images, four CPUs).
+  200 children that live under a millisecond, three turns on each image, twice. With the reader's thread
+  inside a process whose other thread never yields: 158 to 202 programs of 200 not read. With that thread busy
+  half a second in every two: 10 to 29. With the reader in a process of its own while the process that
+  started it never yields: 0 to 2. Every fork, exec and exit was heard in every case; what is missed is the
+  program's name, read too late. Ruled: under the watch the reader runs in a process of its own, never as a
+  thread of the watch. FOR: the watch's own work does not blind it to the programs an agent starts.
