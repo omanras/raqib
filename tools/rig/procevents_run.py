@@ -10,8 +10,8 @@ An act whose program is not installed is said as not run. Off Linux nothing is r
 start the kernel refuses is the fact, in the reader's words. For every act that ran: its pid, its exit code as the
 run saw it (subprocess's own: negative for a signal), the program it is (the real path of the program the run
 started) and the process read() gave for its pid (its parent must be the run's own, `run_pid`), with the end a
-later read gave in `ends`; the programs of its children as read() gave them. The reader's counts and its stop's
-problems are kept too. The run's own thread does nothing between two acts, as the probe's did (the reader's thread
+later read gave in `ends`; the programs of its children as read() gave them. The reader's counts, its stop's
+problems and the kernel's release (`kernel`, BS-8) are kept too. The run's own thread does nothing between two acts, as the probe's did (the reader's thread
 shares the interpreter with it); read() is asked after the last act until every act's end is heard or READ_S
 passed. The acts are the run's own children (BQ-2 says the stand-in's: here the run stands in for it).
 
@@ -99,7 +99,8 @@ def run_act(argv, env, cwd):
 
 
 class Heard:
-    """What read() gave, put together: the last record of each pid, with the end a later read gave."""
+    """What read() gave, put together: the last record of each pid (a record given again replaces the one before,
+    its end too), with the end a later read gave to the same holder (the same pid and beginning)."""
 
     def __init__(self):
         self.by_pid = {}
@@ -109,7 +110,8 @@ class Heard:
             self.by_pid[p["pid"]] = dict(p)
         for e in got.get("ends", []):
             p = self.by_pid.get(e["pid"])
-            if p is not None and e.get("started_ticks") in (None, p.get("started_ticks")):
+            if p is not None and e.get("began") == p.get("began") and \
+                    e.get("started_ticks") in (None, p.get("started_ticks")):   # the same holder: its beginning
                 p.update(ended=e["ended"], code=e["code"], signal=e["signal"])
 
     def of(self, pid):
@@ -121,6 +123,7 @@ def collect(reader=None, run=None, which=None, server=None, platform=None, work=
     run, which, server = run or run_act, which or shutil.which, server or serve
     sleep, clock = sleep or time.sleep, clock or time.monotonic
     facts = {"platform": platform, "uid": os.geteuid() if hasattr(os, "geteuid") else None, "run_pid": os.getpid(),
+             "kernel": os.uname().release if hasattr(os, "uname") else None,
              "acts": [],
              "children": [], "counts": None, "refused": None, "stop_problems": None, "error": None}
     if not str(platform).startswith("linux"):

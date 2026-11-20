@@ -1,17 +1,17 @@
 # PROC-EVENTS - the reader of Linux's process events
 
-`raqib/procevents.py` (ADR-0007 Amendments BQ and BR). On Linux the kernel
-says, of every process, when it forks, when it changes its program (exec)
-and when it exits. The reader listens to that, and to nothing else: it
-switches nothing on, asks for no right and reads no argument of any
+`raqib/procevents.py` (ADR-0007 Amendments BQ, BR and BS). On Linux the
+kernel says, of every process, when it forks, when it changes its program
+(exec) and when it exits. The reader listens to that, and to nothing else:
+it switches nothing on, asks for no right and reads no argument of any
 process. It is the reader alone: no watch reads it yet; until one does,
 what a live watch sees on Linux between two samples is what it saw before.
 Only one reader runs in a process (its bind is on the process's pid).
 
-## The layout, as measured
+## The layout
 
-Measured on the probe branch (GitHub's Ubuntu 22.04 with kernel 6.8, and
-24.04 and 26.04 with kernel 7.0), with the standard library alone:
+As measured on the probe branch (GitHub's Ubuntu 22.04 with kernel 6.8,
+and 24.04 and 26.04 with kernel 7.0), with the standard library alone:
 
 - a socket of AF_NETLINK, SOCK_DGRAM, protocol 11 (the connector), bound to
   the reader's pid and group 1 (the connector's group of process events);
@@ -20,18 +20,19 @@ Measured on the probe branch (GitHub's Ubuntu 22.04 with kernel 6.8, and
   of 20 bytes (`=IIIIHH`: idx 1, val 1, seq 0, ack, len 4, flags 0) and the
   u32 1 (listen). At its stop the reader sends the same message with the
   u32 2 (ignore), then closes the socket;
-- the kernel answers every ask to the whole group: an event of `what` 0
-  whose u32 at 16 is an errno (0: the ask was taken), its connector ack the
-  ask's plus 1 (its seq is the kernel's own count). The ask's ack is a mark
-  of 4 random bytes (`os.urandom`), so only the answer that carries the
-  mark plus 1 is the reader's: another process cannot answer for it.
-  `start()` waits up to 2 s for it: a kernel that takes the ask and says
-  nothing is a refusal, not a silence;
+- the kernel answers the ask: an event of `what` 0 whose u32 at 16 is an
+  errno (0: the ask was taken), its connector ack the ask's plus 1. The
+  ask's ack is a mark of 4 random bytes (`os.urandom`), and only the answer
+  that carries the mark plus 1 is the reader's. `start()` waits up to 2 s
+  for it: a kernel that takes the ask and says nothing is a refusal, not a
+  silence;
 - an event is a netlink header, a connector header, then `what` u32, cpu
-  u32 and the kernel's time u64 (`=IIQ`, nanoseconds of the monotonic
-  clock; the reader puts it on the wall clock), then its data at 16:
-  fork (`what` 0x1) parent pid, parent tgid, child pid, child tgid;
-  exec (0x2) pid, tgid; exit (0x80000000) pid, tgid, code (at 24), signal.
+  u32 and the kernel's time u64 (`=IIQ`; the reader puts it on the wall
+  clock), then its data at 16: fork (`what` 0x1) parent pid, parent tgid,
+  child pid, child tgid; exec (0x2) pid, tgid; exit (0x80000000) pid, tgid,
+  code (at 24), signal;
+- the connector header's seq on an event (at 16 + 8 of the message) is the
+  kernel's own count of events on the event's CPU, one count per CPU.
 
 Several messages may come in one datagram, each padded to 4 bytes. A
 message shorter than its shape, of another `what` (uid, gid, sid, ptrace,
@@ -49,15 +50,30 @@ what ended the process: it is not kept.
 
 A fork whose child's tgid is not its pid is a thread of the process the tgid
 names: it is counted in `threads`, and the reader keeps, for each process it
-holds, the threads it heard begin and not end. An exit with pid equal to
-tgid while a thread of it is known to live is the leader thread's end, not
-the process's: the process ends at its last thread's exit, with that exit's
-code and time. An exec leaves a process one thread. An exec of a pid whose
-exit was heard, with no fork of that pid between, is the same process going
-on: its record goes on, never given as new or as "no fork heard". Where the
-kernel's queue overflowed (`lost` not 0), a record says its count of threads
-is not known, and its end may be its leader thread's; a process older than
-the reader says its threads from before the reader are not known.
+holds, the threads it heard begin and not end (at most 32768 of one
+process). An exit with pid equal to tgid while a thread of it is known to
+live is the leader thread's end, not the process's: the process ends at its
+last thread's exit, with that exit's code and time. An exec leaves a
+process one thread.
+
+An ended record is taken up again by an exec of its pid, with no fork
+between, only where its start and the exec's read start are both known and
+equal: the process went on. Otherwise the exec makes a new record whose
+`unread.began` says what is not known: a thread of the same process called
+exec, or another process took the pid and its fork was lost. A read that
+was another process's takes nothing up again. A record taken up again
+before its end was read withdraws that end; one whose end was read already
+says, when it is given again, that the end given before was its leader
+thread's (`unread.ended`).
+
+An end the reader gives where the process's threads are not known says it
+may be its leader thread's alone (`unread.threads`): the end of a process
+it did not hold from its fork, and every end given while events were lost.
+Where a thread's exit follows such an end of a process it did not hold, that
+exit is given too, in `older`, as the later end of the same pid with its
+code (one later end for each read; the latest of them); an exec of that pid
+with no fork between is a new record that says what is not known, as
+above.
 
 ## What is read at an exec, and what never is
 
@@ -67,23 +83,27 @@ the process. No argument, no environment, no working directory and no open
 file of a process is ever read, and nothing is read at a fork or an exit.
 
 - `exe` is the program a process has now; `earlier` holds, in order, the
-  programs it had before, each with what was unread of it. A process given
-  in an earlier read that execs again is given again, whole, with its
-  `earlier`. A failed read never replaces what an earlier read gave (the
-  start, the parent), and is named in `unread` for that exec.
+  programs it had before, each with what was unread of it. A record keeps
+  its newest 16 earlier programs (EARLIER_MAX); the number of older ones not
+  kept is said on the record (`unread.earlier`). A process given in an
+  earlier read that execs again is given again, whole, with its `earlier`.
+  A failed read never replaces what an earlier read gave (the start, the
+  parent), and is named in `unread` for that exec.
 - `exe` is the link as the kernel gives it, raw text of the process's
-  choosing in part: a program whose file was removed reads with
-  ` (deleted)` after it, a program run from memory as `/memfd:` and a name
-  it chose. Whatever shows it escapes it.
+  choosing in part (a program whose file was removed reads with
+  ` (deleted)` after it; a program run from memory as `/memfd:` and a name
+  it chose). A consumer that shows it must escape it.
 - The start is held against the exec's own time, both on the boot clock
-  (the kernel's stamp is on the monotonic one; the reader adds the time the
-  machine slept): a start later than the exec by more than 1 s is another
-  process's, read because the pid was taken again before the read, and
-  nothing of that read is given (`unread` for `exe` and `stat`: "another
-  process held the pid"; counted in `reused`). A later exec whose start is
-  not the process's own is the same. A pid and its start in clock ticks do
-  not always name one holder: a pid taken again within the tick, or a read
-  the check cannot hold (no ticks of a second known), is not told apart.
+  (the event's stamp is put on the boot clock with the difference of the
+  boot and monotonic clocks at the datagram's receipt): a start later than
+  the exec by more than 1 s is another process's, and nothing of that read
+  is given (`unread` for `exe` and `stat`: "another process held the pid";
+  counted in `reused`). A later exec whose start is not the process's own is
+  the same. A pid taken again within one second of the exec, before the
+  read, is not told apart, and the newcomer's program and start are then
+  given as the first process's. Where the boot clock cannot be read, or the
+  ticks of a second are not known, the check is off and that is said once
+  in `said`.
 - The parent is the fork's (the kernel's word at the moment the process
   began) where the fork was heard, else the stat's, which is the parent it
   has now, not its parent at birth (it may be pid 1 or a subreaper).
@@ -96,10 +116,11 @@ file of a process is ever read, and nothing is read at a fork or an exit.
   user's or a program that made itself so. A program can keep itself
   unread: by ending before the read, by making itself not readable by this
   user, or by being hidden from the reader by the system.
-- A process forked and never heard to exec runs its parent's program, which
-  is not read: it is given by its fork, its `exe` none and `unread` saying
-  so; where the kernel's queue overflowed it says instead that its program
-  is not known.
+- A process forked and never heard to exec runs the program of the process
+  that made it, which is not read: it is given by its fork, its `exe` none
+  and `unread` saying so (the kernel may name another process as its
+  parent); where events were lost it says instead that its program is not
+  known.
 
 ## What read() gives
 
@@ -116,7 +137,8 @@ file of a process is ever read, and nothing is read at a fork or an exit.
   saying so;
 - `older`: the ends of processes the reader never kept, in the shape of
   `ends`: older than the reader, their beginning lost ("no fork heard"), or
-  refused by the bound (which the record says).
+  refused by the bound (which the record says), and the later ends of their
+  threads.
 
 ## Every count, and what it means
 
@@ -134,25 +156,35 @@ file of a process is ever read, and nothing is read at a fork or an exit.
   reads, not processes: one process can add one to each of `exe` and `stat`.
 - `unread`: `{kind: n}`, the messages not read, by kind;
 - `threads`: events of threads;
-- `older`: ends of processes never kept;
+- `older`: ends given of processes never kept, later ends among them;
 - `reused`: reads at an exec that were of another process;
-- `lost`: `{count, why}`, each time the kernel said ENOBUFS (its queue for
-  this socket overflowed): what was in the queue is gone, and how many
-  events is not known; on kernels 6.8 and 7.0 the events went on after it
-  (measured); `why` is none while the count is 0;
-- `beyond`: what was past the reader's own bound, `PROCESSES_MAX` (32768),
-  a constant, for each of: the processes kept, the processes held for the
-  next read, the ends held for it, the threads of one process. `beyond`
-  counts events and records past the bound, not processes. The bound counts
-  over the reader's life: a process whose end was lost never leaves `live`,
-  so after enough losses every new process is past the bound.
+- `lost`: `{count, events, why}`: `count` is each time the kernel said
+  ENOBUFS (its queue for this socket overflowed); `events` is the events
+  lost at least, by the kernel's own count on each CPU: where the count on a
+  CPU steps over a number, the step less one is added. In the measured
+  words: what the queue held is given; what came while it was full is gone;
+  how many: at least the count. A step with no ENOBUFS since `counts()` was
+  last read is a loss the kernel did not tell, and `why` says so. A count
+  that does not step forward is not counted and is said once in `said`. A
+  CPU heard from for the first time has nothing to compare: the count is
+  from below. `why` is none while nothing was lost;
+- `beyond`: what was past a bound of the reader's own: `PROCESSES_MAX`
+  (32768), a constant, for each of the processes kept, the processes held
+  for the next read, the ends held for it, the threads of one process and
+  the memories of ended and refused pids (these forget their oldest);
+  CPUS_MAX (4096) CPUs whose count is kept. `beyond` counts events and
+  records past the bound, not processes. The bound counts over the reader's
+  life: a process whose end was lost never leaves `live`, so after enough
+  losses every new process is past the bound.
 - `live`: processes kept whose end is not heard yet;
 - `refused`: why the start was refused, in the reader's words, or none;
 - `ended`: why the reader's thread ended before the stop, or none: every
   way it can end (its receive failed, or anything it raised) is said here,
   and from then on nothing is heard;
-- `said`: what the start had to say of itself (the receive queue the system
-  kept, when less than the 1 MiB asked; the ticks of a second not known).
+- `said`: what the reader had to say of itself, each once: the receive
+  queue smaller than asked (the kernel reports it twice the size asked, and
+  both numbers are said), the ticks of a second not known, the boot clock
+  not readable, the kernel's count not stepping forward.
 
 ## The start, the stop
 
@@ -160,15 +192,16 @@ file of a process is ever read, and nothing is read at a fork or an exit.
 refusal), or its refusal in the reader's own words (beginning "the process
 events are not read: ") and raises nothing: not Linux; the socket, the bind
 or the ask refused (with the system's errno name); the kernel's answer an
-errno; no answer within 2 s. `stop()` ends the thread, asks the kernel to
-stop sending and closes the socket; a second `stop()` does nothing; the
-reader is a context manager; a reader started and never stopped is stopped
-at the interpreter's exit. Everything of the system goes through arguments
-a test replaces (the socket's maker, the reads of /proc, the clocks, the
-random mark, the ticks of a second, the thread, the exit registry, the
-platform).
+errno; no answer within 2 s (and, where the queue overflowed while the
+answer was awaited, that the answer may be among what was lost). `stop()`
+ends the thread, asks the kernel to stop sending and closes the socket; a
+second `stop()` does nothing; the reader is a context manager; a reader
+started and never stopped is stopped at the interpreter's exit. Everything
+of the system goes through arguments a test replaces (the socket's maker,
+the reads of /proc, the clocks, the random mark, the ticks of a second, the
+thread, the exit registry, the platform).
 
-## What was measured, and what was not
+## What was measured
 
 Measured (Amendment BQ): for each of 14 short acts - touch (2 to 4 ms), mv,
 cp and rm (1 ms each), three curls, wget, getent, nc, Python's own client,
@@ -190,20 +223,59 @@ process's own code came on the last thread's exit. The reader's own run, 15
 times on those images: no read missed, nothing lost, the start answered
 each time. The answer's ack is the ask's plus one there too.
 
-Seen in the builder's sandbox only (not a field measure). In the builder's
-sandbox (kernel 6.18, 2 CPUs, as root) the rig's run was MET once in nine
-runs; in the other eight, 1 to 3 of 14 programs were not read in time
-(ENOENT), each counted in `missed`. The programs missed were of touch, mv,
-cp, nc and sh, each living 1.4 to 5.5 ms; every fork, exec and exit was
-heard with the right code, and nothing was lost. The reader's thread shares
-the interpreter with the rest of its process: under a busy watch its reads
-may come later than under the rig (to be measured with the watch).
+Measured (Amendment BS; the probe branch, kernels 6.8 and 7.0, four CPUs, a
+plain user; all three images agree, and so does the builder's sandbox on
+6.18). In a quiet run of 300 children the kernel's count on each CPU had no
+gap and never went back. At an overflow (a queue of 9216 bytes, 300
+children made while nothing was read) the error (ENOBUFS) was read first;
+after it the events the queue had held were still given; the events made
+while it was full were never given; events made afterwards all came. The
+gaps in the kernel's count over the events read added up to 275, 589 and
+626 where some 890 events were lost: a count from below, not the whole. A
+thread that is not the leader calling exec, with every CPU busy: the exit
+with pid equal to tgid came before the exec every time (1800 of 1800 on the
+three images; 600 of 600 in the builder's sandbox on 6.18); the other order
+was not seen in 2400 runs. If it came, the reader would give the leader
+thread's exit as the end of a process that lives on, and its real end as an
+end of a process it did not hold. The redone reader's own run, 15 times on
+those images: no read missed, nothing lost, none taken for another.
+
+Seen in the builder's sandbox only (kernel 6.18, 2 CPUs, as root; not a
+field measure). In the builder's sandbox (kernel 6.18, 2 CPUs, as root) the
+first build's rig run was MET once in nine runs; in the other eight, 1 to 3
+of 14 programs were not read in time (ENOENT), each counted in `missed`
+(touch, mv, cp, nc and sh, each living 1.4 to 5.5 ms). The REDO's runs
+there: the real test missed 3 or 4 of 5 programs of `true` in three runs,
+and the rig was MET once in three runs, missing 3 of 14 in the other two.
+The second REDO's runs there: the real test missed 0, 3 and 1 of 5, and the
+rig missed 1 of 14 in each of three runs. In every run every fork, exec and
+exit was heard with the right code and parent, nothing was lost (the
+kernel's count had no gap), and no read was taken for another. The
+reader's thread shares the interpreter with the rest of its process: under
+a busy watch its reads may come later than under the rig (to be measured
+with the watch).
+
+## Read in the kernel's source, not measured
+
+Read in the kernel's source, not measured: the kernel sends the answer to
+every ask to the whole group (so the reader's mark is random); an ask from
+outside the system's first namespaces (as in a container) is not answered;
+the event's stamp is on the monotonic clock and stat's start on the boot
+clock, in ticks of a second; the kernel's send of an event can fail without
+an ENOBUFS (the count's gaps would show it); a child made with CLONE_PARENT
+is named its maker's parent's; a process hidden by the system's /proc
+options reads as gone (ENOENT); a process that made itself not dumpable
+reads as not readable (EACCES).
+
+## Not measured
 
 Not measured: a kernel older than 6.8 (the connector may be root's there);
 whether a plain user hears another user's processes; a machine that starts
-thousands of processes a second; a process inside a container.
+thousands of processes a second; a process inside a container; a reader
+inside a time namespace; the times of events read after the machine slept.
 
 The rig (`tools/rig/procevents_run.py`, X31 of `tools/rig/check.py`) hears
 its own short children through the reader, as the user that runs it, and
 states MET where every act that ran was given with its program read, its
-parent the run's own process and its end's code, and nothing was lost.
+parent the run's own process and its end's code, and nothing was lost; its
+line names the kernel's release.

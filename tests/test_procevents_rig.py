@@ -26,6 +26,8 @@ check = load("rig_check_procevents", ROOT / "tools" / "rig" / "check.py")
 TOOL = (ROOT / "tools" / "rig" / "procevents_run.py").read_text(encoding="ascii")
 NAMES = ["touch", "mv", "cp", "rm", "curl", "curl", "curl", "wget", "getent", "nc", "python", "sh", "shred", "git"]
 RUN_PID = 3131
+KERNEL = os.uname().release if hasattr(os, "uname") else None   # what the run writes of this system (BS-8)
+KERNEL_SAID = "kernel %s: " % KERNEL if KERNEL else ""
 CLEAN = {"since": "2026-11-20T10:00:00.000000Z", "last": "2026-11-20T10:00:02.000000Z", "reused": 0, "events": {"fork": 30, "exec": 16, "exit": 30}, "given": 16,
          "missed": {"exe": 0, "stat": 0}, "unread": {"comm": 3}, "threads": 4, "older": 2,
          "lost": {"count": 0, "why": None}, "beyond": 0, "live": 1, "refused": None, "ended": None, "said": []}
@@ -181,8 +183,8 @@ class World:
             self.pending.append({"pid": self.pid, "ppid": os.getpid(), "exe": os.path.realpath("/usr/bin/%s" % base),
                                  "started_ticks": 7,
                                  "began": "b", "ended": None, "code": None, "signal": None, "unread": {}})
-            self.ends.append({"pid": self.pid, "started_ticks": 7, "ended": "e", "code": rc, "signal": None,
-                              "unread": {}})
+            self.ends.append({"pid": self.pid, "started_ticks": 7, "began": "b", "ended": "e", "code": rc,
+                              "signal": None, "unread": {}})
         return {"pid": self.pid, "rc": rc, "ms": 1.0}
 
     def server(self):
@@ -256,7 +258,9 @@ def test_e6_off_linux_nothing_is_run_and_a_refusal_is_the_fact(tmp_path):
     why = "the process events are not read: the kernel did not answer the ask to listen within 2 s"
     refused = collect(World(refuse=why), tmp_path)
     assert refused["refused"] == why and refused["acts"] == [] and refused["counts"] == CLEAN
-    assert x31(refused) == (check.MISSED, "start() was refused where the kernel is known to answer: %s" % why)
+    assert x31(refused) == (check.MISSED, KERNEL_SAID + "start() was refused where the kernel is known to answer: %s"
+                            % why)
+    assert refused["kernel"] == KERNEL
     assert refused["run_pid"] == os.getpid()
 
 
@@ -288,3 +292,41 @@ def test_e6_the_runs_code_is_ascii_stdlib_and_raqibs_reader_alone_and_asks_no_ri
     assert (ROOT / "tools" / "rig" / "procevents_run.py").read_bytes().isascii()
     assert (ROOT / "tests" / "test_procevents_rig.py").read_bytes().isascii()
     assert (ROOT / "tools" / "rig" / "check.py").read_bytes().isascii()
+
+
+# --- REDO 2 (Amendment BS): the kernel's release, a loss by the kernel's count, a record given again -----------
+def test_e7_bs8_x31_shows_the_kernels_release_and_n_a_and_missed_are_as_they_were():
+    facts = dict(met_facts(), kernel="6.8.0-1017-made-up")
+    state, said = x31(facts)
+    assert state == check.MET and said.startswith("kernel 6.8.0-1017-made-up: 14 act(s) given")
+    why = "the process events are not read: the bind ... was refused (EPERM)"
+    assert x31(dict(facts, refused=why)) == (
+        check.SKIP, "kernel 6.8.0-1017-made-up: start() was refused for want of a right of this user: %s" % why)
+    why = "the process events are not read: the kernel did not answer the ask to listen within 2 s"
+    assert x31(dict(facts, refused=why))[0] == check.MISSED
+    assert x31({"platform": "win32", "kernel": None, "not_run": "not Linux (win32)"}) == (
+        check.SKIP, "not run: not Linux (win32)")
+
+
+def test_e7_bs5_a_loss_by_the_kernels_count_alone_is_x31_missed():
+    facts = met_facts()
+    facts["counts"]["lost"] = {"count": 0, "events": 3, "why": "3 of them came with no ENOBUFS: a loss the kernel did"
+                                                               " not tell"}
+    state, said = x31(facts)
+    assert state == check.MISSED and "at least 3 event(s) lost by the kernel's count (3 of them came" in said
+
+
+def test_e2_bs3_heard_takes_a_record_given_again_after_its_end_and_an_end_only_of_its_own_holder():
+    heard = run_tool.Heard()
+    p = {"pid": 7001, "ppid": RUN_PID, "exe": "/usr/bin/sh", "started_ticks": 9, "began": "b1", "ended": None,
+         "code": None, "signal": None, "unread": {}}
+    heard.take({"processes": [p], "ends": [], "older": []})
+    heard.take({"processes": [], "ends": [dict(pid=7001, started_ticks=9, began="b1", ended="e1", code=0, signal=None,
+                                               unread={})], "older": []})
+    assert heard.of(7001)["ended"] == "e1"
+    again = dict(p, exe="/usr/bin/curl", unread={"ended": "the end given before was its leader thread's"})
+    heard.take({"processes": [again], "ends": [], "older": []})
+    assert heard.of(7001)["ended"] is None and heard.of(7001)["exe"] == "/usr/bin/curl"
+    heard.take({"processes": [], "ends": [dict(pid=7001, started_ticks=None, began="b0", ended="e0", code=1,
+                                               signal=None, unread={})], "older": []})   # another holder's end
+    assert heard.of(7001)["ended"] is None
