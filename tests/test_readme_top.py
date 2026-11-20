@@ -296,6 +296,33 @@ GUIDE_NEW += SERVICE_ROWS
 NO_PAGE = ["`--no-page` serves no page: the watch opens no port and nothing listens on one, no page is opened in a"
            " browser, and its report and its events file are unchanged (ADR-0013 Amendment C, AC-1)."]
 GUIDE_NEW += NO_PAGE
+# M14.1b and its REDO (ADR-0007 BU-3, BW-3, BW-6): the report's PROCESS EVENTS section on Linux, said in the
+# guide's Watch the host
+PROCESS_EVENTS = [
+    'On Linux the watch also counts what happens between two rounds (ADR-0007 Amendments BU and BW): at'
+     ' its first round it starts a helper, a second process of its own that runs the reader of the'
+     " kernel's process events ([docs/specs/PROC-EVENTS.md](docs/specs/PROC-EVENTS.md)), and after each"
+     " round's sample it asks the helper once what it heard, waiting at most 2 s and at most a quarter of"
+     ' the interval.',
+    "Its report then has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line:"
+     ' the rounds asked and answered, the processes that began, those of them that began and ended'
+     ' between two asks, the programs not read (reads at an exec that failed: a process can end before'
+     " its program is read), what was past the reader's bounds, and what the reader lost, in its own"
+     ' words, over every helper the watch had.',
+    "Nothing is judged from it yet: no rule reads it, no line of a tree's source is written from it, and"
+     ' the findings, the result and the exit code are what they would be without it.',
+    "No program's name or path is shown: only numbers.",
+    'Only where every ask was answered in its round, no helper was started again, nothing was lost,'
+     " nothing was past the reader's bounds and the last answer left nothing for a next one, the note"
+     ' that what lives between two rounds is not seen on Linux says instead that a process that begins'
+     ' and ends between two rounds is heard and counted, not judged; otherwise the old words stand with'
+     ' each reason beside them.',
+    'A refused, late or ended helper is a blind spot of its own kind (it does not change the result),'
+     ' said once while it lasts, and at most 10 such episodes are printed, then how many more.',
+    'A helper that ends, or is late three rounds running, is started again once, and the section says'
+     ' that nothing was heard between its end and the new start; a second end is final.',
+]
+GUIDE_NEW += PROCESS_EVENTS
 # The two sentences the first build copied from the guide into "Where it runs" (Q-4); the guide's again (E-1).
 TKINTER_SENTENCE = ("It needs tkinter: python.org Python ships it; on Debian or Ubuntu `sudo apt install python3-tk`;"
                     " without it, or without a display, `raqib app` exits 2 and says so")

@@ -513,12 +513,50 @@ Rulings: ADR-0003 Amendments C and D.
     outside after it heard its first event freezes the counts unseen, and
     a sender whose pid in the tracing is not the connection's owner in
     the table (an inherited socket) is not matched.
-- **The kernel's process events on Linux (ADR-0007 Amendments BQ, BR
-  and BS; the reader alone, docs/specs/PROC-EVENTS.md):**
+- **The kernel's process events on Linux (ADR-0007 Amendments BQ, BR,
+  BS, BT, BU and BW; docs/specs/PROC-EVENTS.md):**
   - the reader listens to the kernel's word of every fork, exec and exit,
     and reads at an exec the program and the parent of the process and
-    nothing else; no watch reads it yet, so between two samples a live
-    watch on Linux still sees what it saw before;
+    nothing else; a live watch on Linux runs it in a helper and counts
+    what it gives, and judges nothing from it yet: between two samples
+    the watch's findings are what they were before;
+  - the helper is a second process of Raqib's, started by the watch with
+    the watch's own interpreter, `-I` where the watch is isolated and `-P`
+    otherwise, its directory `/`, and the watch's own import path given
+    entry for entry, so it loads Raqib from where the watch did and from
+    nowhere else; it is in the watch's record of what it started. It reads
+    its input, the kernel's socket and, at each exec, that process's
+    /proc/PID/exe and /proc/PID/stat; it opens no other file, writes only
+    its output and starts no program, and it ends when its input ends, so
+    a watch that dies, however it dies, leaves none behind. It adds a
+    process that holds a listener of the kernel's events for the watch's
+    life; it adds no right and no reach outside the machine. Each line it
+    writes is bounded (1 MiB) and the watch holds at most four unread and
+    at most one ask unanswered, so a helper that is stopped or slow costs
+    the watch a hole, never its round or its Stop (measured: a helper
+    stopped under a watch of ten rounds of three seconds; the watch ended
+    in 28 s, said the three late rounds and started the helper again once).
+    A process of the same user that writes the helper's output in its place
+    is not told apart from the helper: its numbers are counted as the
+    helper's, and one that answers while the helper reads nothing could
+    still hold the watch at a write; that process could as well stop the
+    watch itself. Before the helper's fixed program sets its import path,
+    the interpreter's own start reads what the watch's start read (the site
+    folders' own files; without isolation the user's too): the places are
+    the watch's, their contents are read again at each start. A helper that is
+    refused, late, or ended is a blind spot of the watch, said; one late
+    three rounds running is ended and started again once, a second end is
+    final, and the watch then counts nothing between two samples for the
+    rest of its run. A process of the same user can end or stop the
+    helper: that is said, never silent;
+  - A program's path, text a process chose, reaches no output: the helper
+    gives it to the watch, and the watch keeps and says only numbers, in
+    no report, event or file;
+  - when the interpreter's file is replaced on disk while the watch runs (a
+    package upgrade), /proc shows the helper's program as "(deleted)" and
+    the watch's record no longer proves the helper its own: the round then
+    says, as a hole, a process under the watch that it did not start
+    (recorded for a later task, ADR-0007 BW-9);
   - an agent that starts more processes than the reader's bound (32768)
     has the rest counted `beyond`, not kept; the bound counts over the
     reader's life, and a process whose end was lost never leaves it;
@@ -1124,7 +1162,7 @@ is amended by T-2, T-1 restated by V-1).
   (Sysmon's configuration: Raqib never changes it, A4) is said once and
   the report lists the kinds read; where neither a start time nor a
   ProcessGuid tells two processes of one image under one pid apart, they
-  are one tree. Linux (no audit source of process events is read) and a
+  are one tree. Linux (its process events are counted, not judged) and a
   Windows host without Sysmon keep the whole hole, said once: a `hole:`
   line of the watch's first lines, which speak from the watch's own check
   at its start and say so; where the live reader's first check differs
