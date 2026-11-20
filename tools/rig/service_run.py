@@ -1,32 +1,45 @@
-"""The rig's service run (ADR-0013 A-9): `raqib service` on the rig's Linux machine, as root. It writes what it saw as
-JSON for tools/rig/check.py (--service), which states X28 to X30; it judges nothing itself.
+"""The rig's service run (ADR-0013 A-9, AC-10): `raqib service` on the rig's Linux machine, as root. It writes what
+it saw as JSON for tools/rig/check.py (--service), which states X28 to X30; it judges nothing itself.
 
-    sudo python3 tools/rig/service_run.py --out FACTS.json [--work DIR]
+    sudo python3 tools/rig/service_run.py --throwaway --out FACTS.json [--work DIR]
 
-X28: a venv made in a folder every user can write (made here, mode 0777), raqib installed in it, and its
-`raqib service install --no-start`: the exit, what it said, and whether a unit is there after (it must be
-refused, exit 2, with the path said, and write nothing).
+It runs only with --throwaway: it makes a system user, root's venvs and a folder every user can write, has pip
+build raqib as root, and runs code from that folder as root. That is for a machine thrown away after the run (the
+rig's), never for one a person keeps. Without --throwaway it runs nothing and writes why as its fact.
+
+X28: a folder made root's alone under ROOT_PLACE (mode 0755), in it a folder every user can write and not sticky
+(mode 0777), a venv in that one, raqib installed in it, and its `raqib service install --no-start`: the exit,
+what it said, the modes and owners of the two folders as read back, and whether a unit is there after (it must
+be refused, exit 2, naming that folder or a path below it, and write nothing).
 X29: a folder made here root's alone (under ROOT_PLACE, mode 0755), a venv in it by the system's own
 interpreter (SYSTEM_PYTHON; the venv's python is a link to it), raqib installed in it from a copy of this
 checkout (pip's build leaves nothing of root's in the checkout), then `raqib service install`; the unit waited
 for until systemctl says it is active; the rig's stand-in agent (tools/rig/workload.py, copied there, readable
 by all) run as a second user (AGENT_USER, made if missing) by systemd-run --uid, so that it is a tree of its
-own and not under this run's; its main pid; and the service's events (EVENTS) read for a finding on that tree
-(its subject.tree begins with that pid), after the stand-in ended or for at most SEEN_S more.
-X30: `raqib service remove --purge`: its exit and words, whether the unit's file is left, and systemctl's
-LoadState of the unit (not-found where no unit is left). Then the rig cleans up after itself: where a unit is
-still there, it stops, disables and removes it by systemctl and says so (that is not X30's fact). The second
-user, the venvs and the folders are left for the machine to throw away.
+own and not under this run's; its main pid; the service's events (EVENTS) read for a finding on that tree (its
+subject.tree begins with that pid), after the stand-in ended or for at most SEEN_S more; the unit's main
+process's own word, read from PROC while the unit is active (its MainPID by systemctl): the lines CapBnd, CapEff,
+Seccomp and NoNewPrivs of its status (AD-6); then systemd's own word on the unit: its directives as `systemctl
+show` gives them, and the manager's journal lines of this boot that name the unit and say unknown, ignored,
+invalid or not support(ed) (JOURNAL_WORDS). These say what systemd warned of and what the main process holds,
+not every directive in force.
+X30: `raqib service remove --purge`: its exit and words, whether the unit's file is left, systemctl's LoadState
+and ActiveState of the unit, and whether the record's folder (STATE_DIR) is left. Then the rig cleans up after
+itself: where a unit is still there, it stops, disables and removes it by systemctl and says so (that is not
+X30's fact). The second user, the venvs and the folders are left for the machine to throw away.
 
-It never raises: each case is its own, an error in one is a fact of that case; off Linux nothing is run and the
-reason is the fact (n/a), and not as root it is an error. Facts written, exit 0 whatever happened (2 only for
-its own usage). Every program is started by `run` (a test hands its own; no test needs root, Linux or
-systemctl); the waits go through SLEEP and CLOCK. Stdlib only; never imported by raqib.
+It never raises: each case is its own, an error in one is a fact of that case; off Linux, or without
+--throwaway, nothing is run and the reason is the fact, and not as root it is an error. Facts written, exit 0
+whatever happened (2 only for its own usage). Every program is started by `run`, by its whole path (a test hands
+its own; no test needs root, Linux or systemctl); the waits go through SLEEP and CLOCK. Stdlib only; never
+imported by raqib.
 """
 import argparse
 import json
 import os
+import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -38,9 +51,14 @@ PLATFORM = sys.platform
 UNIT = "raqib-watch.service"
 UNIT_PATH = "/etc/systemd/system/raqib-watch.service"
 EVENTS = "/var/lib/raqib/.raqib/host/events.jsonl"
+STATE_DIR = "/var/lib/raqib"           # the service's record's folder (X30: gone after --purge)
 SYSTEMCTL = "/usr/bin/systemctl"
+JOURNALCTL = "/usr/bin/journalctl"
+SYSTEMD_RUN = "/usr/bin/systemd-run"
+ID = "/usr/bin/id"
+USERADD = "/usr/sbin/useradd"
 SYSTEM_PYTHON = "/usr/bin/python3"
-ROOT_PLACE = "/usr/local/lib"          # where the rig makes root's own folder (X29)
+ROOT_PLACE = "/usr/local/lib"          # where the rig makes root's own folders (X28's parent, X29)
 AGENT_USER = "raqib-rig-agent"         # the second user (made up; made here if missing)
 WORKLOAD = os.path.join(HERE, "workload.py")
 ACTIVE_S = 90.0                        # the unit is waited for until active for at most this long
@@ -49,6 +67,10 @@ SEEN_S = 90.0                          # after the stand-in ended, the events ar
 POLL_S = 2.0
 KEPT = 40                              # findings kept in the facts
 SAID = 1500                            # characters of a program's words kept
+WHOLE = 4000000                        # characters kept of what is read whole (the unit's show, the journal)
+JOURNAL_WORDS = re.compile(r"unknown|ignor|invalid|not support", re.I)   # AC-10, AD-6: systemd's warnings on a unit
+PROC = "/proc"
+PROC_KEYS = ("CapBnd", "CapEff", "Seccomp", "NoNewPrivs")   # AD-6: what the main process holds, by its own word
 SLEEP = time.sleep
 CLOCK = time.monotonic
 
@@ -57,14 +79,14 @@ def euid():
     return os.geteuid()
 
 
-def run(argv, timeout=120.0):
+def run(argv, timeout=120.0, keep=SAID):
     """{"argv", "exit", "out", "err"} of one program, never raised: a timeout or a failed start is exit None and
-    its reason. No shell; the folder /."""
+    its reason. No shell; the folder /; the last `keep` characters of each output."""
     try:
         got = subprocess.run(list(argv), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              cwd="/", timeout=timeout, check=False)
-        return {"argv": list(argv), "exit": got.returncode, "out": got.stdout.decode("utf-8", "replace")[-SAID:],
-                "err": got.stderr.decode("utf-8", "replace")[-SAID:]}
+        return {"argv": list(argv), "exit": got.returncode, "out": got.stdout.decode("utf-8", "replace")[-keep:],
+                "err": got.stderr.decode("utf-8", "replace")[-keep:]}
     except subprocess.TimeoutExpired:
         return {"argv": list(argv), "exit": None, "out": "", "err": "no end in %d s (stopped)" % timeout}
     except OSError as exc:
@@ -99,12 +121,23 @@ def raqib(venv, *args, timeout=300.0):
     return run([venv + "/bin/python", "-I", "-m", "raqib", "service"] + list(args), timeout=timeout)
 
 
+def mode_of(path):
+    """(uid, mode as four octal digits) of a path as read back, not through a link."""
+    st = os.lstat(path)
+    return st.st_uid, "%04o" % stat.S_IMODE(st.st_mode)
+
+
 def x28(work, src, out):
-    """An install from a place every user can write: refused, nothing written. Its facts go into `out` as they
-    are seen (an error later keeps them)."""
-    place = tempfile.mkdtemp(prefix="raqib-x28-", dir=work)
-    os.chmod(place, 0o777)
-    out.update(place=place, mode="0777", unit_before=os.path.lexists(UNIT_PATH))
+    """An install from a place every user can write, not sticky, inside a folder root's alone: refused, naming
+    that place, nothing written. Its facts go into `out` as they are seen (an error later keeps them)."""
+    parent = tempfile.mkdtemp(prefix="raqib-x28-", dir=ROOT_PLACE)
+    os.chmod(parent, 0o755)
+    place = os.path.join(parent, "open")
+    os.mkdir(place)
+    os.chmod(place, 0o777)   # every user may write; no sticky bit
+    (parent_uid, parent_mode), (uid, mode) = mode_of(parent), mode_of(place)
+    out.update(place=place, mode=mode, uid=uid, parent=parent, parent_mode=parent_mode, parent_uid=parent_uid,
+               root_place=ROOT_PLACE, unit_before=os.path.lexists(UNIT_PATH))
     made = make_venv(os.path.join(place, "venv"), src)
     if made.get("error"):
         out["error"] = made["error"]
@@ -115,6 +148,53 @@ def x28(work, src, out):
 
 def systemctl(*args, timeout=60.0):
     return run([SYSTEMCTL] + list(args), timeout=timeout)
+
+
+def props(text):
+    """{key: value} of `systemctl show`'s lines."""
+    out = {}
+    for line in (text or "").splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key:
+            out[key] = value
+    return out
+
+
+def systemd_word(out):
+    """AC-10: systemd's own word on the installed unit, into `out`: its directives as `systemctl show` gives
+    them, and the manager's journal lines of this boot that name the unit and say unknown, ignored, invalid or
+    not supported."""
+    shown = run([SYSTEMCTL, "show", UNIT, "--no-pager"], timeout=60, keep=WHOLE)
+    out["show"] = props(shown["out"]) if shown["exit"] == 0 else {}
+    if shown["exit"] != 0:
+        out["show_error"] = "exit %s: %s" % (shown["exit"], shown["err"].strip()[:SAID])
+    journal = run([JOURNALCTL, "--no-pager", "-b", "-o", "cat", "_PID=1"], timeout=120, keep=WHOLE)
+    lines = journal["out"].splitlines()
+    named = [x for x in lines if "raqib-watch" in x and JOURNAL_WORDS.search(x)]
+    out["journal"] = {"exit": journal["exit"], "read": len(lines), "lines": named[:KEPT],
+                      "err": journal["err"].strip()[:SAID]}
+
+
+def proc_facts():
+    """AD-6: the unit's main process's own word, from PROC/<MainPID>/status: its CapBnd, CapEff, Seccomp and
+    NoNewPrivs lines as written there; "error" where there is no main pid or the file cannot be read."""
+    shown = systemctl("show", "--property=MainPID", "--value", UNIT)
+    pid = shown["out"].strip()
+    out = {"pid": int(pid) if pid.isdigit() and pid != "0" else None}
+    if out["pid"] is None:
+        out["error"] = "no main pid (systemctl show: %s)" % (pid or shown["err"].strip() or shown["exit"])
+        return out
+    try:
+        with open(os.path.join(PROC, str(out["pid"]), "status"), "rb") as f:
+            lines = f.read().decode("ascii", "replace").splitlines()
+    except OSError as exc:
+        out["error"] = "%s cannot be read (%s)" % (os.path.join(PROC, str(out["pid"]), "status"), type(exc).__name__)
+        return out
+    for line in lines:
+        key, sep, value = line.partition(":")
+        if sep and key in PROC_KEYS:
+            out[key] = value.strip()
+    return out
 
 
 def wait_for(ask, done, limit):
@@ -167,16 +247,17 @@ def x29(work, src, out):
     out["install"] = {"exit": got["exit"], "said": (got["out"] + got["err"]).strip()}
     answer, asked = wait_for(lambda: systemctl("is-active", UNIT), lambda a: a["out"].strip() == "active", ACTIVE_S)
     out["active"], out["active_asked"] = answer["out"].strip() or answer["err"].strip(), asked
-    if run(["id", "-u", AGENT_USER])["exit"] != 0:
-        made = run(["useradd", "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", AGENT_USER])
+    out["proc"] = proc_facts()   # while the unit is active
+    if run([ID, "-u", AGENT_USER])["exit"] != 0:
+        made = run([USERADD, "--system", "--no-create-home", "--shell", "/usr/sbin/nologin", AGENT_USER])
         out["useradd"] = made["exit"]
-    uid = run(["id", "-u", AGENT_USER])
+    uid = run([ID, "-u", AGENT_USER])
     out["user"] = {"name": AGENT_USER, "uid": uid["out"].strip() if uid["exit"] == 0 else None}
     copy = os.path.join(place, "workload.py")
     shutil.copyfile(WORKLOAD, copy)
     os.chmod(copy, 0o644)
     agent = "raqib-rig-agent-%d" % os.getpid()
-    started = run(["systemd-run", "--uid=" + AGENT_USER, "--collect", "--unit=" + agent, "--quiet", SYSTEM_PYTHON,
+    started = run([SYSTEMD_RUN, "--uid=" + AGENT_USER, "--collect", "--unit=" + agent, "--quiet", SYSTEM_PYTHON,
                    copy], timeout=60)
     pid = systemctl("show", "--property=MainPID", "--value", agent)["out"].strip()
     out["agent"] = {"unit": agent, "exit": started["exit"], "err": started["err"].strip(),
@@ -187,10 +268,12 @@ def x29(work, src, out):
     out["events"], out["findings"], out["mine"], out["read_asked"] = seen[0], seen[1], seen[2], asked
     status = raqib(venv, "status", timeout=60)
     out["status"] = {"exit": status["exit"], "said": status["out"].strip()}
+    systemd_word(out)
 
 
 def x30(venv):
-    """The removal leaves no unit: raqib's own removal, judged before the rig cleans up anything."""
+    """The removal leaves no unit, nothing of it running, and (with --purge) no record: raqib's own removal,
+    judged before the rig cleans up anything."""
     out = {}
     if venv:
         got = raqib(venv, "remove", "--purge")
@@ -198,8 +281,10 @@ def x30(venv):
     else:
         out["error"] = "no venv of root's to run the removal from (X29 made none)"
     out["unit_file"] = os.path.lexists(UNIT_PATH)
-    show = systemctl("show", "--property=LoadState", "--value", UNIT)
-    out["load_state"] = show["out"].strip() if show["exit"] == 0 else None
+    show = systemctl("show", "--property=LoadState,ActiveState", UNIT)
+    got = props(show["out"]) if show["exit"] == 0 else {}
+    out["load_state"], out["active_state"] = got.get("LoadState"), got.get("ActiveState")
+    out["state_dir"] = os.path.lexists(STATE_DIR)
     return out
 
 
@@ -244,11 +329,17 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog="tools/rig/service_run.py")
     p.add_argument("--out", required=True)
     p.add_argument("--work")
+    p.add_argument("--throwaway", action="store_true",
+                   help="this machine is thrown away after the run (the rig's): without it nothing is run")
     a = p.parse_args(argv)
     facts = {"platform": PLATFORM}
     try:
         if not PLATFORM.startswith("linux"):
             facts["not_run"] = "not Linux (%s): the service is a unit of systemd's (ADR-0013 A-2, S1)" % PLATFORM
+        elif not a.throwaway:
+            facts["not_run"] = ("no --throwaway: this run makes a system user, root's venvs and a folder every user"
+                                " can write, and runs code from it as root; it runs only on a machine thrown away"
+                                " after it (ADR-0013 AC-10)")
         elif euid() != 0:
             facts["error"] = "not run as root (uid %d): the rig runs it with sudo" % euid()
         else:
