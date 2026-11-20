@@ -178,7 +178,9 @@ def test_e1_hashes_of_command_line_path_and_destination_never_the_text():
     api = rows[("net", "2026-11-03T09:00:01.000Z")]
     assert api["input_sha256"] == common.canonical_sha256(
         {"destination": {"hostname": "api.example.com", "ip": "203.0.113.7", "port": "443", "protocol": "tcp"}})
-    assert api["input_meta"] == {"dest_port": 443, "dest_private": False}   # ADR-0007 AW-2: no key unasked
+    # ADR-0014 A-5 (M15.1): the four keys join (the agent's own connection; its start says explorer started it)
+    four = {"initiated": True, "dest_scope": "public", "image": "agent", "parent_image": "explorer"}
+    assert api["input_meta"] == dict({"dest_port": 443, "dest_private": False}, **four)   # ADR-0007 AW-2: no key unasked
     udp = rows[("net", "2026-11-03T09:00:01.500Z")]
     assert udp["input_sha256"] == common.canonical_sha256(
         {"destination": {"hostname": "-", "ip": "203.0.113.9", "port": "443", "protocol": "udp"}})
@@ -187,7 +189,7 @@ def test_e1_hashes_of_command_line_path_and_destination_never_the_text():
     asked = {(r["tool"], r["ts"]): r for r in pres(built(cwd=CWD, server_hash=True)[0])}
     assert asked[("net", "2026-11-03T09:00:01.000Z")]["input_meta"] == {
         "dest_port": 443, "dest_private": False,
-        "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a"}
+        "dest_sha256": "3d9e4b6f1a605a7c6ccc2b22b448938f2c30e915078e16133fe9b60d8eca8b3a", **four}
     assert asked[("net", "2026-11-03T09:00:01.500Z")]["input_meta"]["dest_sha256"] == \
         "93a39da482d470fdafb521acb8b524ce0b98034a4c3fdb237cda490f0dc0347a"
     assert all(asked[k]["input_sha256"] == rows[k]["input_sha256"] for k in rows)

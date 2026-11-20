@@ -360,7 +360,9 @@ def test_c5_an_os_trace_reports_no_partial_from_the_guarded_signatures():
     found, notes = cli.run_rules(recs, engine.load_catalog(CATALOG), {"scope": ["."], "root": "C:\\w"}, 60)
     # M7.8 (ADR-0007 P-1): the os process line of curl.exe carries image curl, so NET-TOOL judges it and fires;
     # every other os line is judged (not partial): no signature says it could not judge an os line
-    curl = [r["seq"] for r in recs if r["phase"] == "pre" and r["input_meta"].get("image") == "curl"]
+    # ADR-0014 A-5 (M15.1): curl's net line carries its image too; NET-TOOL cites the process line
+    curl = [r["seq"] for r in recs if r["phase"] == "pre" and r["tool"] == "process"
+            and r["input_meta"].get("image") == "curl"]
     assert [(f["rule_id"], f["cited_seq"]) for f in found] == [("NET-TOOL", curl)]
     assert [(n["rule_id"], n["status"]) for n in notes] == [("CROSS-SOURCE", "partial")]
 
@@ -369,7 +371,7 @@ def test_c5_an_os_trace_reports_no_partial_from_the_guarded_signatures():
 
 def test_c9_readme_names_the_rule_the_shell_tools_the_window_and_sysmon_n():
     flat = " ".join(GUIDE.split())   # M9.2: the os-sysmon section, the rule count and the table: docs/GUIDE.md
-    for phrase in ("Twenty-two rules turn the trace into findings",   # M4.2b: was Thirteen; M4.3: Seventeen; M7.2: Nineteen; REDO: Twenty; M7.2b: Twenty-one; M7.4: Twenty-two
+    for phrase in ("Twenty-four rules turn the trace into findings",   # M4.2b: was Thirteen; M4.3: Seventeen; M7.2: Nineteen; REDO: Twenty; M7.2b: Twenty-one; M7.4: Twenty-two; M15.1: Twenty-four
                    "| CROSS-SOURCE | only in a trace with `os` lines:",
                    "`raqib os-sysmon --root PID[:GUID] --log TRACE [--from FILE.xml] [--cwd DIR]`",
                    "a `pre` of `Bash` or of any tool whose name, in lower case, holds `bash`, `shell`,"

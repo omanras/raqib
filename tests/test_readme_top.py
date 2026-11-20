@@ -55,6 +55,13 @@ CHANGED = {
     " within 30 s, 3 times in the last 10 rounds (the think-act cycle; medium; once per streak) |":
     "| HOST-RHYTHM | only under `raqib watch --host`: a tree that talks to one destination and then starts a child"
     " within 30 s, 3 times in the last 10 rounds (the think-act cycle; high; once per streak) |",
+    # M15.1 (ADR-0014): two YAML rules more, PERSIST-AUTOSTART and NET-ADMIN-PORT; the two counts move, nothing else
+    "**Rules.** Twenty-two rules turn the trace into findings, and every finding cites the trace lines behind it (A5).":
+    "**Rules.** Twenty-four rules turn the trace into findings, and every finding cites the trace lines behind it (A5).",
+    "The rules are 5 silence rules, 1 cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 16 more: 14 YAML"
+    " rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED, INDEX-UNTOUCHED, `raqib/rules/tree.py`).":
+    "The rules are 5 silence rules, 1 cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 18 more: 16 YAML"
+    " rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED, INDEX-UNTOUCHED, `raqib/rules/tree.py`).",
 }
 # The README's own two sentences that "Where it runs" keeps from the old Install and watch (ADR-0010 E-5: the
 # Windows install line is in "Where it runs"); the old split rule cuts the first at its colon.
@@ -184,6 +191,21 @@ BYTES_WIN = [
     " memory only); a killed watch leaves it until the next start, which stops it and says so.",
 ]
 GUIDE_NEW = ["# The Raqib guide"] + [LINK_LINE % (t, "", t.lower().replace(" ", "-")) for t in SPLIT] + NEW_ROWS + GUIDE_ROWS + HOST_UNREAD + BYTES_WIN
+# M15.1 (ADR-0014 A-3, A-4): the two rules of behaviour, rows of the guide's What it catches
+BEHAVIOUR_ROWS = [
+    "| PERSIST-AUTOSTART | a file written directly in a Startup folder of Windows (`...\\Microsoft\\Windows"
+    "\\Start Menu\\Programs\\Startup\\`, a user's or all users', either slash, any case; `desktop.ini` and de"
+    "eper folders left out), read from Sysmon's file line (event 11) of a watched tree or from a Write, E"
+    "dit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: ther"
+    "e only a hooks file tool is judged. An autostart value of the registry, a scheduled task and a file "
+    "moved or renamed into the folder are not read yet |",
+    "| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` tru"
+    "e) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback "
+    "nor link-local (`dest_scope` private), whatever program opened the socket (PowerShell's own included"
+    "), unless it is ssh started by git (high). Linux has no os source for it: nothing there is judged by"
+    " it, and the host's own sample of a connection is not judged yet |",
+]
+GUIDE_NEW += BEHAVIOUR_ROWS
 # M10.4b (ADR-0011 R-2, R-3, T-1, T-5, V): the window's Link screen, said where the window's screens are
 LINK_SCREEN = [
     "Link, the rail's item under Log, shows the forwarders of `raqib forward` as their states in "
@@ -608,7 +630,7 @@ def test_e2_the_sample_report_is_the_codes_own(monkeypatch):
     assert code == 1 and text.endswith("RESULT: ALARM (exit 1)\n")
     block = section("What an alarm looks like").split("```text\n", 1)[1].split("```", 1)[0]
     assert block == with_the_cut(text)
-    assert block.count(RULES_CUT % 22) == 1 and "SILENCE-GAP     SILENCE" not in block and "  id  " not in block
+    assert block.count(RULES_CUT % 24) == 1 and "SILENCE-GAP     SILENCE" not in block and "  id  " not in block
     findings = re.findall(r"^  \[(\w+)\] (\S+) ", block, re.M)
     assert findings == [("medium", "DESTRUCT-CMD"), ("medium", "NET-TOOL")], findings
     assert '      Bash runs rm at seq 2 (programs ["curl", "bash", "rm"])\n' in block

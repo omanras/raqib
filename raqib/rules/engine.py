@@ -5,7 +5,7 @@ A rule file holds one mapping:
 
     id: NET-TOOL                      # [A-Z][A-Z0-9]*(-[A-Z0-9]+)+, = file name
     title: Tool call reaches the network   # no { or }
-    class: NET                        # SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT|USER|HOST
+    class: NET                        # SCOPE|NET|DESTRUCT|SECRET|SILENCE|DRIFT|USER|HOST|PERSIST
                                       # (USER: a person's rule made from the form, M8.2)
                                       # (CROSS is cross.py's, never a YAML rule's)
     kind: signature                   # signature|demand|anchor (ADR-0002)
@@ -121,6 +121,7 @@ from raqib.rules import yamlite
 from raqib.rules.trace import is_record, is_seq, parse_ts
 
 CLASSES = ("SCOPE", "NET", "DESTRUCT", "SECRET", "SILENCE", "DRIFT", "CROSS",  # CROSS: M5.3 C-1
+           "PERSIST",   # PERSIST: M15.1 (ADR-0014 A-3), what a tree leaves to run at the next logon
            "USER",   # USER: M8.2 REDO E-7, a person's rule made from the form (ADR-0009 Amendment E)
            "HOST")   # HOST: M7.2 REDO C-13, the rules of raqib watch --host (host lines, not a session)
 CODE_CLASS = "CROSS"   # findings of raqib/rules/cross.py only: no YAML rule declares it (M5.3 D-11)

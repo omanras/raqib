@@ -391,7 +391,7 @@ def test_e5_the_rule_kinds_are_unchanged():
     """No rule added or removed: the catalog's YAML kinds as before (the gate's line, 4 : 7 : 11, counts the
     code and silence rules too and is recorded in the questions file)."""
     kinds = [r.kind for r in catalog()]
-    assert (kinds.count("signature"), kinds.count("demand"), kinds.count("anchor"), len(kinds)) == (4, 2, 8, 14)
+    assert (kinds.count("signature"), kinds.count("demand"), kinds.count("anchor"), len(kinds)) == (6, 2, 8, 16)   # M15.1 (ADR-0014): PERSIST-AUTOSTART, NET-ADMIN-PORT
 
 
 def test_e5_new_and_changed_files_are_ascii_and_the_readme_says_it_in_two_lines():

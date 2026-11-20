@@ -1,0 +1,43 @@
+# A connection to another machine's login or administration port (ADR-0014 A-4, M15.1).
+id: NET-ADMIN-PORT
+title: Connection to a login or administration port of the network
+class: NET
+attack: [T1021]
+# ADR-0002: the shape of a bad act (a port of a private address), so it lists its evasions (ADR-0014 A-8).
+kind: signature
+evasion:
+  - "another port: only 22, 23, 135, 445, 3389, 5900, 5985 and 5986 are on the list (a service moved to another port, a web console on 443 or 8443, a database's port, are not)"
+  - "a public address: only a private address that is neither loopback nor link-local is judged (a machine reached on the internet, or over IPv6 by a global address, is not)"
+  - "a relay or a tunnel: a connection through a proxy, a VPN, a jump host or a forwarded port reaches the relay's port, not the machine's (a loopback destination, WSL or a forwarded port, is not this rule's: ADR-0014 A-4)"
+  - "a Sysmon that logs no connection there (installed without -n, or a filter of its configuration): nothing is then there to read, and Raqib cannot tell that from nothing done"
+  - "the host's own sample of a connection (raqib watch --host's HostConnection line, Linux, and Windows without Sysmon) is not judged until ADR-0014 S3: Linux has no os source, so nothing there is judged by this rule"
+  - "this machine's own private address, which a line cannot tell from another machine's (a connection to the host's own sshd on its LAN address fires)"
+  - "ssh started by git is left out (NET-TOOL's own exception, ADR-0007 R-7): the parent is known by its name only, so any program named git.exe that starts one named ssh.exe is left out, and what real git's ssh reaches is what the agent configures"
+  - "a net line written before M15.1 has no initiated, dest_scope, image or parent_image: the rule cannot judge it (partial, said), never guesses it; a line whose Initiated was not read (initiated null) is not judged as initiated"
+severity: high
+# Reaching another machine's login or administration port is not ordinary work: the budget is tight.
+fp_budget: 0.05
+description: "ADR-0014 A-4 (M15.1): an os net line (source os, tool net, Sysmon event 3) of a connection the process itself made (input_meta.initiated true; false is a connection it accepted, which says the listener's own port as its destination) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback nor link-local (input_meta.dest_scope private: 10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7), whatever program opened the socket (the measured case: PowerShell's own socket, no ssh), unless the process is ssh started by git (input_meta.image ssh and input_meta.parent_image git, the names its own start gave its process line; null where the follow holds no start of it, so such a connection is judged). NET-TOOL is as it was: ssh by its name stays its finding; the two say two things, that a program ran and that a port was reached (MUST NOT TOUCH)."
+summary: "{tool} reaches port {input_meta.dest_port} of a private address at seq {seq} (program {input_meta.image}, started by {input_meta.parent_image})"
+match:
+  all:
+    - {field: phase, eq: pre}
+    # a line with no source is a hooks line (written before M5.2), never an os line: judged, not this rule's
+    - {field: source, exists: true}
+    - {field: source, eq: os}
+    - {field: tool, eq: net}
+    - {field: input_meta.initiated, eq: true}
+    - {field: input_meta.dest_scope, eq: private}
+    - field: input_meta.dest_port
+      in: [22, 23, 135, 445, 3389, 5900, 5985, 5986]
+    # NET-TOOL's own exception (ADR-0007 R-7): ssh started by git is git over SSH
+    - not:
+        all:
+          - {field: input_meta.image, eq: ssh}
+          - {field: input_meta.parent_image, eq: git}
+fixtures:
+  positive:
+    - tests/fixtures/rules/NET-ADMIN-PORT/positive-admin-ports.json
+  negative:
+    - tests/fixtures/rules/NET-ADMIN-PORT/negative-not-admin.json
+    - tests/fixtures/rules/NET-ADMIN-PORT/negative-before-the-keys.json

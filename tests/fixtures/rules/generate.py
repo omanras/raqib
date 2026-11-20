@@ -326,3 +326,95 @@ for _name, (_names, _cite) in OS.OS_RULE_FIXTURES.items():
     os.makedirs(os.path.dirname(R + _name), exist_ok=True)
     open(R + _name, "w", newline="\n").write(OS.os_rule_fixture(_names, _cite, _exports))
     print("wrote", R + _name)
+
+# M15.1 (ADR-0014 A-3, A-4): PERSIST-AUTOSTART and NET-ADMIN-PORT, the first rules of behaviour. Their os lines are
+# os-sysmon's own (os_sysmon.build) of SYNTHETIC exports made here with synthetic.py's Export (user `user`, private
+# example or documentation addresses); their hooks lines are written as capture writes a file tool's.
+from raqib.hooks import os_sysmon as _OS_SYSMON  # noqa: E402  (the checkout is on sys.path since host/make.py's load above)
+STARTUP = "C:\\Users\\user\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\"
+ALL_STARTUP = "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp\\"   # all users'; Windows' own case
+PWSH = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+OS_SSH = "C:\\Windows\\System32\\OpenSSH\\ssh.exe"
+CMD_EXE = "C:\\Windows\\System32\\cmd.exe"
+
+def os_export(first, root, acts):
+    """A SYNTHETIC export: the agent (root) under explorer, then acts, each ("proc", at, pid, image, ppid, pimage),
+    ("file", at, pid, image, path) or ("net", at, pid, image, ip, port[, initiated]); initiated "-" drops the field."""
+    x = OS.Export(first_record=first)
+    x.proc("00.100", root, OS.AGENT, '"%s"' % OS.AGENT, 900, OS.EXPLORER, "C:\\Windows\\Explorer.EXE")
+    for act in acts:
+        if act[0] == "proc":
+            _, at, pid, image, ppid, pimage = act
+            x.proc(at, pid, image, '"%s"' % image, ppid, pimage, '"%s"' % pimage)
+        elif act[0] == "file":
+            x.file(*act[1:])
+        else:
+            _, at, pid, image, ip, port = act[:6]
+            x.net(at, pid, image, ip, port, sport=50001)
+            said = act[6] if len(act) > 6 else "true"
+            line = x.lines[-1].replace("<Data Name='Initiated'>true</Data>",
+                                       "" if said == "-" else "<Data Name='Initiated'>%s</Data>" % said)
+            x.lines[-1] = line.replace("<Data Name='DestinationIsIpv6'>false</Data>",
+                                       "<Data Name='DestinationIsIpv6'>%s</Data>" % ("true" if ":" in ip else "false"))
+    return x.text()
+
+def os_doc(path, export, root, cite=None, strip=()):
+    """os-sysmon's lines of the export's tree (keys in strip taken out of every net line: a line written before them);
+    a positive's expect_seq is the seq of every pre line of the tool cite names whose path or port is cited."""
+    got, _ = _OS_SYSMON.build(export, root, cwd=OS.OS_CWD)
+    lines = [json.loads(line) for line in got]
+    for r in lines:
+        if r["tool"] == "net":
+            for key in strip:
+                r["input_meta"].pop(key)
+    doc = {"lines": lines}
+    if cite:
+        doc["expect_seq"] = sorted(r["seq"] for r in lines if r["phase"] == "pre" and cite(r))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(path, "w", newline="\n").write(json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=True) + "\n")
+    print("wrote", path, len(lines))
+
+# PERSIST-AUTOSTART: a file directly in a user's and in all users' Startup folder (os), a hooks Write in both slashes.
+os_doc(R + "PERSIST-AUTOSTART/positive-os-file.json", os_export(75001, 4900, [
+    ("proc", "02.000", 4910, CMD_EXE, 4900, OS.AGENT), ("proc", "02.100", 4920, PWSH, 4910, CMD_EXE),
+    ("file", "02.500", 4920, PWSH, STARTUP + "raqib-rig-test.cmd"),
+    ("file", "03.000", 4900, OS.AGENT, ALL_STARTUP + "agent-helper.lnk")]), 4900,
+    cite=lambda r: r["tool"] == "file" and "\\Startup\\" in r["input_meta"]["path"].replace("StartUp", "Startup"))
+s = S("fixture-rules-persist-1", cwd=W); seqs = [s.call("Write", {"path": STARTUP + "run.cmd"}),
+                                             s.call("Write", {"path": STARTUP.replace("\\", "/") + "run.bat"})]
+write(R + "PERSIST-AUTOSTART/positive-hooks-write.json", s.lines, expect=seqs)
+# Not a Startup file: desktop.ini (Windows' own), a deeper folder, another folder of the Start Menu, a file under TEMP
+# (ADR-0014 A-6: an agent's ordinary work, recorded and judged by no rule).
+os_doc(R + "PERSIST-AUTOSTART/negative-os-file.json", os_export(75101, 4901, [
+    ("proc", "02.000", 4911, CMD_EXE, 4901, OS.AGENT), ("proc", "02.100", 4921, PWSH, 4911, CMD_EXE),
+    ("file", "02.500", 4921, PWSH, "C:\\Users\\user\\AppData\\Local\\Temp\\raqib-effect-1.txt"),
+    ("file", "03.000", 4901, OS.AGENT, STARTUP + "desktop.ini"),
+    ("file", "03.500", 4901, OS.AGENT, STARTUP + "old\\run.cmd"),
+    ("file", "04.000", 4901, OS.AGENT, STARTUP.replace("Startup\\", "Accessories\\") + "notes.lnk")]), 4901)
+s = S("fixture-rules-persist-2", cwd=W); s.call("Read", {"path": STARTUP + "run.cmd"})
+s.call("Glob", {"path": STARTUP}); s.call("Write", {"path": STARTUP.replace("\\", "/") + "DESKTOP.INI"})
+s.call("Edit", {"path": "C:\\proj\\Startup\\run.cmd"}); s.command("ls")
+write(R + "PERSIST-AUTOSTART/negative-hooks.json", s.lines)
+# NET-ADMIN-PORT: PowerShell's own socket to 22 of a private address (the measured case), an ssh not started by git,
+# and the other ports and private ranges of the rule in IPv4 and IPv6.
+os_doc(R + "NET-ADMIN-PORT/positive-admin-ports.json", os_export(75201, 4950, [
+    ("proc", "02.000", 4960, CMD_EXE, 4950, OS.AGENT), ("proc", "02.100", 4970, PWSH, 4960, CMD_EXE),
+    ("net", "02.500", 4970, PWSH, "192.168.1.20", 22),
+    ("proc", "03.000", 4980, OS_SSH, 4950, OS.AGENT), ("net", "03.200", 4980, OS_SSH, "10.0.0.5", 22),
+    ("net", "04.000", 4950, OS.AGENT, "172.16.4.8", 3389), ("net", "04.100", 4950, OS.AGENT, "100.64.0.9", 5985),
+    ("net", "04.200", 4970, PWSH, "fd00::25", 445), ("net", "04.300", 4970, PWSH, "::ffff:192.168.1.21", 5986)]),
+    4950, cite=lambda r: r["tool"] == "net")
+# Not this rule's: loopback, link-local (IPv4, IPv6) and public 22, private 443, a connection accepted on 22 (the
+# listener's own port), an ssh started by git, a 22 whose Initiated is not read.
+os_doc(R + "NET-ADMIN-PORT/negative-not-admin.json", os_export(75301, 4951, [
+    ("proc", "02.000", 4961, PWSH, 4951, OS.AGENT),
+    ("net", "02.100", 4961, PWSH, "127.0.0.1", 22), ("net", "02.200", 4961, PWSH, "169.254.10.20", 22),
+    ("net", "02.300", 4961, PWSH, "fe80::1", 22), ("net", "02.400", 4961, PWSH, "203.0.113.7", 22),
+    ("net", "02.500", 4961, PWSH, "192.168.1.20", 443), ("net", "02.600", 4961, PWSH, "192.168.1.20", 22, "false"),
+    ("net", "02.700", 4961, PWSH, "192.168.1.20", 22, "-"),
+    ("proc", "03.000", 4971, OS.GIT, 4951, OS.AGENT), ("proc", "03.100", 4981, OS.GIT_SSH, 4971, OS.GIT),
+    ("net", "03.200", 4981, OS.GIT_SSH, "10.0.0.5", 22)]), 4951)
+# A net line written before M15.1 (no initiated, dest_scope, image, parent_image): not judged (partial), never fired.
+os_doc(R + "NET-ADMIN-PORT/negative-before-the-keys.json", os_export(75401, 4952, [
+    ("proc", "02.000", 4962, PWSH, 4952, OS.AGENT), ("net", "02.100", 4962, PWSH, "192.168.1.20", 22)]), 4952,
+    strip=("initiated", "dest_scope", "image", "parent_image"))
