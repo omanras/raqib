@@ -1,20 +1,10 @@
-# HANDOFF — M16.1 REDO 2  (ADR-0017 Amendment B, SB-1 to SB-8: the second review of M16.1)
+# HANDOFF — none open  (M15.1, M14.1a, M15.2, M14.1b, M15.2b, M17.1, M15.3a, M13.1, M14.1c and M16.1 landed by 2026-11-21; the next tasks are on their own branches)
 
-Task: the second review's findings, as the Table measured and ruled them. Read docs/review/2026-11-21-M16.1-redo.md (the packet; its file:line cites are of commit 4aaa17c) and ADR-0017's Amendment B (the measurements are in its first paragraph; the probe is `git show origin/claude/rig-probe:tools/rig/siem_probe4.py`), then do each item below. Main (0.5.0) has been merged in.
+Task: none on main. Do not build here. In build on its branch: the second REDO of M14.1d (claude/M14.1d, ADR-0007 Amendment CE: every program of a short child, a process is its maker's child). Reviewed three times, the Table's last fixes in: M15.3b (claude/M15.3b, ADR-0014 Amendments K and L: the autostart read made fit for the watch). Next: M15.3c (the watch reads the autostart places and rules judge a change), M16.2 (a Splunk app from siem/), M14.2 (a short connection given to its process).
+
+From 0.2.0 on (ADR-0015): a merge into main that changes what Raqib does moves `raqib.__version__`, writes its entry at the top of CHANGELOG.md and runs `python3 tools/event_examples.py --write`. The Table does it in the merge.
 
 Scope:
-  siem/, tools/siem_content.py, tools/rig/siem_run.py, .github/workflows/rig.yml (only the job `siem`), tests/test_siem_content.py, docs/GUIDE.md (only the section that points to siem/README.md), docs/review/2026-11-21-M16.1-redo2-questions.md; and a test of tests/ ONLY where it holds, word for word or by count, a line this task changes (named in the questions file; no other assertion weakened).
+  (none)
 
-Exit criteria:
-- R1 (SB-1) Both pipelines' check, and the runner's own: a key longer than 256 characters anywhere in the line, and a number that is not finite (wherever a number is checked), are error documents with reasons of their own. Odd lines added to the rig's feed: a key of 40000 characters top-level, inside `result`, inside an item of `evidence.cites`; `watch.beat` 1e400; `rule.fp_budget` 1e400 (written as text: Python's json writes no 1e400).
-- R2 (SB-2) Both pipelines begin with a step that cannot fail: where `host`, `event`, `error`, `observer`, `rule`, `process` or `threat` is not an object it is moved to `displaced.NAME` as a text of at most 1024 characters; the templates keep `displaced` whole (`flattened`, `flat_object`). The rig feeds `host` a text and `event` a text, each with an event and with a line that is not JSON; X39 holds each kept and X40 the displaced text.
-- R3 (SB-4, SB-5) `runs-no-end.json`: the order `[{"ends": "asc"}, {"deadline": "desc"}]`; both searches of silence count a beat as `Math.min(beat, 86400.0)`; each sentence (`finds`) says what its bound leaves out first and that `sum_other_doc_count` above 0 means a cut. The runner's own count uses the same day.
-- R4 (SB-6) A new search `not-events.json` on both engines (the error documents, the latest arrival first, `track_total_hits`), with its sentence; X41 counts it against the runner's own count.
-- R5 (SB-7) siem_run.py: a read with a group not sure is n/a with the reason, never MET (the test that held MET there now holds n/a); a failed connection or an answer that is not JSON mid-run gives every remaining claim as n/a with the reason and no traceback; X39 holds each odd line's reason from a table of label to reason written by hand, holds every line of the real watch's file an event, and prints the longest text and the longest key of those lines; a host or run the engine lists that was not fed is MISSED; a text's length is counted in UTF-16 units as Painless does.
-- R6 (SB-3, SB-4, SB-5, SB-6, SB-8) siem/README.md: exactly what the pipeline sets, replaces (`message`, `@timestamp`, `event.*`), removes and moves aside, on an event and on an error document; an error document's `host.name` is the shipper's; where the error documents are found and the two cases of SB-6; the bounds' cuts and the composite form (said as measured on the probe, not on the rig); the day; what is still trusted (a forged end, two hosts of one name); no `cardinality` claim, no name of a paid feature - "not measured" only. siem/attack/rules.md's and siem_content.py's titles follow SA-8.
-- R7 tests/test_siem_content.py follows (no engine): each new reason in both pipelines' text; `displaced`; the order and the day in the searches; the runner's n/a paths with a stand-in (not sure; a connection that fails mid-run); the hand-written table of reasons against the stand-in; the test named for "no field removed" renamed for what it holds. No assertion that cannot fail.
-- R8 Gate green in the foreground; ASCII outside docs; nothing under raqib/ edited; no new dependency of Raqib.
-Not in scope: Splunk, Sentinel, Wazuh, OCSF documents; the version and CHANGELOG.md (the Table's at the merge).
-If an item needs a file outside Scope: STOP and say which file and which line.
-Commit: `landed: M16.1 REDO 2 the second review's findings` or `STOP: M16.1 REDO 2 <reason>`.
-Read HANDOFF.md and do only the task it specifies.
+If you were started as a builder on this file: STOP, commit nothing, and say that no task is open.

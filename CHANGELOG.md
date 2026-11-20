@@ -5,6 +5,47 @@ Every merge into `main` that changes what Raqib does has a number and an entry h
 knows which Raqib is running without reading sentences. Each entry says what is new, how to update, and what
 was not measured.
 
+## 0.6.0 - 2026-11-21
+
+What is new:
+- Ready content for a SOC's search engine, under `siem/` (ADR-0017 and its Amendments A to C): for Elasticsearch
+  and for OpenSearch an ingest pipeline and an index template that turn each line of the events file into one
+  document - an event with the fields EVENT.md's Mapping names, or an error document that keeps the whole line
+  and says why it is no event; none is dropped. Seven searches: every alarm, one rule's findings, the holes, the
+  watches that did not end clean, the lines kept as error documents, the hosts that went silent, and the runs
+  that stopped with no end. Nine Sigma rules with a pipeline of names, and a table and an ATT&CK layer of every
+  rule the report lists. `siem/README.md` says how to install each and what the content trusts.
+- Silence is judged by the engine's own clock against a deadline every line gives - its arrival and two of its
+  own heartbeat's interval, an interval counted as a day at most - so no time is given by the person who asks,
+  and a host's clock cannot hide it.
+- Measured on GitHub's Linux machine against Elasticsearch 8.15.3 and OpenSearch 2.17.1 (the rig's claims X39 to
+  X42, each run): 111 lines sent, none refused - the real watch's own file, every example of the spec, made-up
+  events of each rule's class with a near miss for each, 23 malformed lines (each an error document with the
+  reason the page names, and the line after it kept), and a shipper's own fields kept or moved aside; every
+  search equal to a count made apart from the engine, the two searches of silence at four moments; each Sigma
+  rule, converted by pinned tools, matching its own event and not its near miss.
+- Nothing of the watch itself changes in this number: the same events, the same rules.
+
+To update:
+- As 0.2.0's entry says, by how Raqib was installed (`git pull`, then `pipx install --force .`, or
+  `pip install --upgrade .` in the same venv, or `py -m pip install --upgrade .`; the service's copy as there:
+  `sudo cp -r . DIR/src-NUMBER`, `sudo DIR/bin/pip install --upgrade DIR/src-NUMBER`,
+  `sudo DIR/bin/raqib service install`). First stop a running watch, window or service.
+- Then `raqib --version` says the number at the top of this file.
+- The content is not installed with Raqib: it is files of the checkout, installed on the engine as
+  siem/README.md says (the pipeline and the template before the first line reaches the index).
+
+Not measured:
+- Splunk, Microsoft Sentinel and Wazuh: no content for them yet (the next tasks), and nothing of this content
+  was run on them. The Sigma rules were converted and run for Elasticsearch and OpenSearch only.
+- A real shipper tailing the file on a host (Filebeat, Fluent Bit, Logstash): the rig sends the lines itself.
+  A shipper's field of another shape than the ones the page names may make an engine refuse a line.
+- Volume, more than one node or shard, retention, an engine with its security on, and either search of silence
+  run on a schedule with an alert: each engine has its own way, and none was set up here.
+- The two days a forged heartbeat can keep a host off the search for silence, and a bound of 10000 hosts or
+  runs being met: ruled and said, not run.
+- The ATT&CK layer was never loaded into a Navigator.
+
 ## 0.5.0 - 2026-11-21
 
 What is new:
