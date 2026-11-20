@@ -261,3 +261,66 @@ in four runs of seventeen; a value whose name holds a backslash was a finding th
   tree's source only where that tree's own event was joined by pid; whether a child joined by its parent's pid
   should carry that parent's mark of a nested root; a placeholder of the rules' sentences chosen by a boolean
   (the nested clause is printed on every finding until then); AA-3 and AA-4 (M15.2b).
+
+## Amendment E (the Table, 2026-11-20) - M15.2b: what was not read is said (AA-3, AA-4)
+Two silences of the rules of behaviour were recorded when they landed (AA-3, AA-4) and left for this task.
+Neither needs a measurement to rule: each is a fact the watch already holds and does not say.
+- AE-1 (AA-3: an unread Initiated). An os net line whose `Initiated` was not read carries no `initiated` key
+  (it carried null). A fact that is not there is unknown to the engine, so NET-ADMIN-PORT cannot judge the
+  line and says so in its partial note, as it does for a line written before the four keys. FOR: a connection
+  the rule could not judge is never counted as judged. MUST NOT TOUCH: a line whose Initiated was read, to the
+  byte.
+- AE-2 (AA-4: a channel that gives no event 11). The watch already says, once, when its rounds have read no
+  event 1, 3 or 22 of the channel. It says the same of event 11: no file a tree makes is then seen, and
+  PERSIST-AUTOSTART's os lines have nothing to read.
+- AE-3 (AA-4: a channel that holds no event 13). The rounds do not read event 13 (a follow does, for its
+  tree). At its first read the round's channel asks one bounded question more: the newest event 13 the
+  channel holds, whatever its key. Where it holds none, that is a blind spot of the run, said once:
+  PERSIST-RUN-KEY has nothing to read on this machine unless this Sysmon's configuration is changed. Where it
+  holds one, the inventory carries its time and nothing is said: it shows that this Sysmon logs some registry
+  values, not that it logs the Run keys, and the documents say that limit. Where the question cannot be
+  asked, that is said as not known. FOR: a person learns at the start of a watch that a rule of his is blind
+  here, not after an agent has used it. MUST NOT TOUCH: the round's own question each round, to the byte; the
+  result and the exit code (a blind spot is counted apart).
+- AE-4 (recorded). The certain cure is ADR-0014 S3: the autostart places read by Raqib itself each round, so
+  that no rule of persistence hangs on Sysmon's configuration. It is the next stage of this track (M15.3).
+
+## Amendment F (the Table, 2026-11-20) - the review of M15.2b (docs/review/2026-11-20-M15.2b.md): M15.2b lands
+The reviewer's verdict is NEXT with five must-fix items, all words. Measured before ruling (the probe branch
+10e54be, GitHub's Windows machine, two Sysmon configurations): under one that logs no file and no registry value
+the watch said at round 3 that no event 11 was read and, at round 1, the blind spot `registry`, and its result
+was what it was. Under one that logs the Run keys, on a fresh machine, the blind spot was said at round 1 and
+stood for the whole watch though a value was logged seconds after the question.
+- AF-1 (AE-2's words). Three rounds that read no event 11 are a Sysmon that logs no file creation, or three
+  rounds in which no file was made: the watch cannot tell the two apart. Its sentence says what may be unseen,
+  as the sentences of events 1, 3 and 22 do: a file a tree makes may be unseen, and PERSIST-AUTOSTART's os lines
+  may have nothing to read. FOR: the watch never states as fact what it only failed to see. MUST NOT TOUCH: the
+  rule that says it (once, after three rounds with the channel) and the three older sentences.
+- AF-2 (AE-3's words). The question is asked once, at the watch's first read of the channel. Its answer is a
+  fact of that moment, so the blind spot is said in the past tense and of that read: the channel held no event
+  13 then; this Sysmon's configuration may log no registry value, or none was set under a key it logs in what
+  the channel then held (a channel that wrapped or was cleared holds its latest part only); PERSIST-RUN-KEY may
+  have nothing to read here; a value logged after it does not take the sentence back. Not ruled here: asking
+  again each round, or taking the blind spot back when a tree's follow reads an event 13. That is a change of
+  what a blind spot is (said once a run) and belongs with M15.3, where the autostart places are read by Raqib
+  itself and the question is no longer needed. FOR: a sentence a later minute makes false is not said as a
+  standing fact. MUST NOT TOUCH: when the question is asked, its arguments, the result and the exit code.
+- AF-3 (the catalog). PERSIST-AUTOSTART's and PERSIST-RUN-KEY's lines that said the watch does "not say yet"
+  what AE-2 and AE-3 now say are put right. NET-ADMIN-PORT says what AE-1 left unsaid: a line written by an
+  earlier build with a null `initiated` is judged as not initiated, and nothing says so (a null is a value to
+  the engine; such lines are in events files written between M15.1 and this build, and real Sysmon writes
+  Initiated always).
+- AF-4 (what the question costs, said and not measured). It is asked once: one that fails is not asked again,
+  and the run says not known. It runs inside the first round that reads the channel, after its read, with the
+  round's own timeout: a slow answer delays that round and can make it late; one that did not return is ended
+  and recorded, and the next round carries that record as a hole of the channel's read (named as that round's),
+  so the result is then incomplete; a run with no next round makes no hole. THREAT_MODEL says all of it. How
+  long the question takes on a full channel that holds no event 13 is not measured (the runners' channels are
+  minutes old): it is the first thing to measure on a real desktop, and where it is slow the cure is AF-2's.
+- AF-5 (an answer that is not none). An answer that holds no event and is not empty (wevtutil's own words on
+  its standard output, an encoding the reader cannot cut) is not "none": it is said as not known, with its
+  length. FOR: silence is an alarm; a blind spot is never said from an answer that was not read.
+- AF-6 (recorded). The blind spot's kind `registry` shares its word with the hole kind of the watches'
+  registry in one report; the start line's and the guide's "one bounded wevtutil" a round is two in the first
+  round; the answer's event is not checked to be Sysmon's event 13 (the round's read checks what it asked);
+  a stand-in channel with no question says nothing. Each waits for M15.3, which removes the question.

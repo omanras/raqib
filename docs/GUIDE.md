@@ -216,14 +216,33 @@ row that each sampled a process created a round earlier and read no event 1 at a
 read restarts - on a quiet desktop it is not said, a hole that remains; an image whose event 1 does
 not come while others do is a note (left out by its configuration, or late), withdrawn when an event
 1 of that image comes and said again at its next miss; a kind not read after three rounds (no event
-1, 3 or 22) is said once, and the report lists the kinds read. On Linux, and on Windows without
+1, 3, 11 or 22) is said once, and the report lists the kinds read. On Linux, and on Windows without
 Sysmon, a tree that lives between two rounds is not seen, and the watch says so once: in its first
 lines where its own check at its start finds no Sysmon, else in the line of the round the live
 reader's first check is made in, when that check finds none. Since M7.8 an os process line carries
 its image name in discover's form (`input_meta.image`: `curl.exe` -> `curl`), so NET-TOOL and
 DESTRUCT-CMD judge the programs Sysmon saw the tree start as they judge the host's children, Windows
 programs included (bitsadmin, plink, vssadmin, diskpart and the like); a cmdlet, a shell builtin, a
-renamed copy and every argument stay unseen.
+renamed copy and every argument stay unseen. On Linux the watch also counts what happens between two
+rounds (ADR-0007 Amendments BU and BW): at its first round it starts a helper, a second process of
+its own that runs the reader of the kernel's process events
+([docs/specs/PROC-EVENTS.md](specs/PROC-EVENTS.md)), and after each round's sample it asks the
+helper once what it heard, waiting at most 2 s and at most a quarter of the interval. Its report
+then has a section `PROCESS EVENTS (Linux):` after the place of Windows' CHANNEL line: the rounds
+asked and answered, the processes that began, those of them that began and ended between two asks,
+the programs not read (reads at an exec that failed: a process can end before its program is read),
+what was past the reader's bounds, and what the reader lost, in its own words, over every helper the
+watch had. Nothing is judged from it yet: no rule reads it, no line of a tree's source is written
+from it, and the findings, the result and the exit code are what they would be without it. No
+program's name or path is shown: only numbers. Only where every ask was answered in its round, no
+helper was started again, nothing was lost, nothing was past the reader's bounds and the last answer
+left nothing for a next one, the note that what lives between two rounds is not seen on Linux says
+instead that a process that begins and ends between two rounds is heard and counted, not judged;
+otherwise the old words stand with each reason beside them. A refused, late or ended helper is a
+blind spot of its own kind (it does not change the result), said once while it lasts, and at most 10
+such episodes are printed, then how many more. A helper that ends, or is late three rounds running,
+is started again once, and the section says that nothing was heard between its end and the new
+start; a second end is final.
 
 A tree whose root process is still in the round's sample and is not in the round is `quiet (its root
 alive in round N; not seen talking with an act at the sample; source kept)` ("source kept" only when
@@ -439,9 +458,9 @@ design, a quiet minute is reported, not assumed harmless.
 | SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
 | NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command; under `raqib watch --host` also a tree's child of those names (the host's record, or Sysmon's process line by `input_meta.image`, Windows programs such as bitsadmin and plink included) |
 | DESTRUCT-CMD | rm, dd, shred, mkfs and the like anywhere in a Bash command; under `raqib watch --host` also a tree's child of those names (the host's record, or Sysmon's process line by `input_meta.image`, Windows programs such as vssadmin, diskpart and format included) |
-| PERSIST-AUTOSTART | a file written directly in a Startup folder of Windows (`...\Microsoft\Windows\Start Menu\Programs\Startup\`, a user's or all users', either slash, any case; `desktop.ini` and deeper folders left out), read from Sysmon's file line (event 11) of a watched tree or from a Write, Edit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: there only a hooks file tool is judged. A value under the registry's Run or RunOnce key is PERSIST-RUN-KEY's; a scheduled task and a file moved or renamed into the folder are not read yet |
-| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` true) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's own included), unless it is ssh started by git (high). Linux has no os source for it: nothing there is judged by it, and the host's own sample of a connection is not judged yet |
-| PERSIST-RUN-KEY | a value set under a Run or RunOnce key of the registry (anything below `...\Microsoft\Windows\CurrentVersion\Run\` or `\RunOnce\` of a user's hive or the machine's, the 32-bit view too, any case; `RunNotification`, `RunOnceEx` and `RunServices` left out), read from Sysmon's registry line (event 13) of a watched tree, whatever program of the tree set it; the finding names the hive, run or runonce, the value's name between double quotes (at most 80 characters), the program the value would run and the program that set it, never the value's text (high). Where the name holds a backslash the event cannot tell it from a value of a key under Run, and the finding says so. It needs Windows with Sysmon logging a value set under these keys: where the configuration logs none, there is nothing to read. Linux has no os source for it: nothing there is judged by it |
+| PERSIST-AUTOSTART | a file written directly in a Startup folder of Windows (`...\Microsoft\Windows\Start Menu\Programs\Startup\`, a user's or all users', either slash, any case; `desktop.ini` and deeper folders left out), read from Sysmon's file line (event 11) of a watched tree or from a Write, Edit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: there only a hooks file tool is judged. A value under the registry's Run or RunOnce key is PERSIST-RUN-KEY's; a scheduled task and a file moved or renamed into the folder are not read yet. Its os lines need Windows with Sysmon logging file creation (event 11): under `raqib watch --host` the watch says once when its rounds have read no event 11 of the channel (a file a tree makes may then be unseen) |
+| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` true) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's own included), unless it is ssh started by git (high). Linux has no os source for it: nothing there is judged by it, and the host's own sample of a connection is not judged yet. It needs Windows with Sysmon logging connections (event 3; Sysmon without -n logs none): under `raqib watch --host` the watch says once when its rounds have read no event 3 of the channel; a net line whose `initiated` was not read (no key) is not judged, and the rule's partial note says so |
+| PERSIST-RUN-KEY | a value set under a Run or RunOnce key of the registry (anything below `...\Microsoft\Windows\CurrentVersion\Run\` or `\RunOnce\` of a user's hive or the machine's, the 32-bit view too, any case; `RunNotification`, `RunOnceEx` and `RunServices` left out), read from Sysmon's registry line (event 13) of a watched tree, whatever program of the tree set it; the finding names the hive, run or runonce, the value's name between double quotes (at most 80 characters), the program the value would run and the program that set it, never the value's text (high). Where the name holds a backslash the event cannot tell it from a value of a key under Run, and the finding says so. Under `raqib watch --host` the watch asks the channel once, at its first read, for its newest event 13; where it holds none then, the blind spot `registry` says that PERSIST-RUN-KEY may have nothing to read here (a value logged later does not take it back), and where the question fails, that this is not known (one that holds some event 13 may still not log the Run keys, and nothing is said). It needs Windows with Sysmon logging a value set under these keys: where the configuration logs none, there is nothing to read. Linux has no os source for it: nothing there is judged by it |
 | SECRET-OUTPUT | a key, token or private key in a tool's output (by pattern name; the text is never stored) |
 | DRIFT-FILES | edits to more than two files outside the task's declared scope |
 | LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py` on the same Bash call or before it in the session (holes such as a stale, piped or backgrounded gate are listed in the rule) |

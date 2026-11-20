@@ -8,7 +8,7 @@ kind: signature
 evasion:
   - "another autostart place of the registry: only what is set below CurrentVersion\\Run or RunOnce of a user's hive (HKU\\<a SID>) or the machine's (HKLM), the 32-bit views too, is read; RunOnceEx, RunServices, a user's hive not named by a SID (HKU\\.DEFAULT), a scheduled task and a service (ADR-0014 S3) are not; a file in a Startup folder is PERSIST-AUTOSTART's"
   - "a value or a key renamed into place: a rename is Sysmon's event 14, which is not read; only a value set (event 13) is (not measured)"
-  - "a Sysmon that logs no value set there: a configuration that logs no value set under these keys leaves nothing to read, and Raqib cannot tell that from nothing done (under raqib watch --host a channel that gives no event 13 is not said yet: ADR-0014 Amendment B, AB-5)"
+  - "a Sysmon that logs no value set there: a configuration that logs no value set under these keys leaves nothing to read, and Raqib cannot tell that from nothing done (under raqib watch --host a channel that held no event 13 at the watch's first read is said as the blind spot registry, one that holds some event 13 of other keys only is not: ADR-0014 AE-3)"
   - "a hive written offline or loaded from a file: a value written into a hive's file, or set in a hive loaded from one, is not believed to be an event 13 under these keys (not measured)"
   - "a value changed by a program of the system on the tree's behalf: the event is believed to name that program (a service, the system's own process), not a process of the tree, so the line is not the tree's (not measured for the registry; ADR-0014 S3)"
   - "Linux has no os source: nothing there is judged by this rule (its autostart places are ADR-0014 S4)"

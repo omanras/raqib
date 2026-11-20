@@ -1,8 +1,13 @@
 """Linux: the processes that began, read from the kernel's own process events
 (the netlink connector: fork, exec, exit) by a listener of the reader's own
-(ADR-0007 Amendments BQ, BR and BS). This is the reader alone: no watch reads
-it yet. docs/specs/PROC-EVENTS.md says all of it in prose, and keeps what was
-measured apart from what is read in the kernel's source.
+(ADR-0007 Amendments BQ, BR, BS, BT, BU and BW). A live watch on Linux runs it
+in a helper process of its own (serve(), started by its client Helper with
+the fixed program SERVE_PROGRAM, or `python -m raqib.procevents --serve`),
+and counts what it gives; nothing is judged from it yet. The helper reads its
+input, the kernel's socket and, at each exec, /proc/PID/exe and
+/proc/PID/stat; it writes only its output. docs/specs/PROC-EVENTS.md says all
+of it in prose, and keeps what was measured apart from what is read in the
+kernel's source.
 
 The messages (measured on kernels 6.8 and 7.0): a socket of AF_NETLINK,
 SOCK_DGRAM, protocol 11 (the connector), bound to (the reader's pid, group
@@ -62,15 +67,20 @@ exit. Only one Reader runs in a process (the bind is on its pid).
 Everything of the system goes through arguments a test replaces: the
 socket's maker, the reads of /proc, the clocks, the random mark, the ticks
 of a second, the thread class, the exit registry, the platform. The
-standard library only. It imports `socket` for AF_NETLINK alone; it starts
-no program and writes no file. It imports on every system.
+standard library only. It imports `socket` for AF_NETLINK alone; it writes
+no file. The Reader and serve() start no program; Helper starts one, the
+helper, through the callable the watch gives it (BU-1). It imports on every
+system.
 """
 from __future__ import annotations
 
 import atexit
 import datetime
 import errno
+import json
 import os
+import queue
+import signal
 import socket
 import struct
 import sys
@@ -809,3 +819,364 @@ class Reader:
         self._state = "stopped"
         self.stop_problems = problems
         return problems
+
+
+# --- the helper (ADR-0007 Amendments BU and BW): the reader in a process of its own -------------------------------
+VERSION = 1                # every line the helper writes carries "v": VERSION (BW-8)
+SERVE_MAX = 2000           # entries one answer holds at most, processes, ends and older together (BU-2); the rest next
+LINE_MAX = 1 << 20         # bytes one line of the helper holds at most, its newline included (BW-1)
+HELD_LINES = 4             # lines of the helper the client holds unread at most (BW-1)
+ASK_SECONDS = 2.0          # the longest the watch waits for an answer; a watch's own is at most its interval / 4
+STARTING_SECONDS = 5.0     # until the ready line comes: `starting` for this long after the start, then `late` (BW-4)
+STOP_SECONDS = 2.0         # stop(): how long the helper is waited for once its input is closed, before it is ended
+KILL_SECONDS = 1.0         # and after it is ended, before it is killed
+LATE, ENDED, NOT_A_LINE, REFUSED, STARTING = "late", "ended", "not a line", "refused", "starting"   # not an answer
+TOO_LONG = object()        # the client's mark of a line longer than LINE_MAX
+NOT_A_COMMAND = "not a command: the helper answers `read`, `read N` and `stop`"
+ANSWER_KEYS = ("v", "ask", "processes", "ends", "older", "more", "counts")
+TOO_LONG_EXE = "its program's path is not given: the record alone would pass the line's bound (LINE_MAX)"
+# the helper's program (BW-5): a constant; its one argument is the watch's own import path as JSON
+PATH_PROGRAM = "import json, sys; sys.path[:] = json.loads(sys.argv[1])"
+SERVE_PROGRAM = PATH_PROGRAM + "; from raqib import procevents; sys.exit(procevents.main(['--serve']))"
+
+
+def _line(value):
+    return json.dumps(dict(value, v=VERSION), sort_keys=True, ensure_ascii=True) + "\n"
+
+
+def _size(value):
+    return len(json.dumps(value, sort_keys=True, ensure_ascii=True))
+
+
+def _shrunk(entry):
+    """An entry whose program paths are not given, each said unread (an entry alone past LINE_MAX)."""
+    out = dict(entry)
+    unread = dict(out.get("unread") or {})
+    if "exe" in out:
+        out["exe"] = None
+        unread["exe"] = TOO_LONG_EXE
+    if out.get("earlier"):
+        out["earlier"] = [{"exe": None, "unread": {"exe": TOO_LONG_EXE}} for _ in out["earlier"]]
+    out["unread"] = unread
+    return out
+
+
+def pack(held, counts, ask, bound=SERVE_MAX, line_max=LINE_MAX):
+    """One answer from `held` ({processes, ends, older}, taken from in place): its entries in order until the line
+    would pass `line_max` bytes or hold `bound` entries; "more" where any is left. An entry that alone would pass
+    the line's bound is given with its programs unread (TOO_LONG_EXE)."""
+    out = {"ask": ask, "processes": [], "ends": [], "older": [], "more": False, "counts": counts}
+    size, room = len(_line(out)), bound
+    for key in ("processes", "ends", "older"):
+        while held[key] and room > 0:
+            entry, cost = held[key][0], _size(held[key][0]) + 2   # the entry and its ", "
+            if size + cost > line_max:
+                if out["processes"] or out["ends"] or out["older"]:
+                    break            # it comes with the next answer
+                entry = _shrunk(entry)
+                cost = _size(entry) + 2
+                if size + cost > line_max:
+                    break            # never: a record with no path is small
+            out[key].append(entry)
+            del held[key][0]
+            size, room = size + cost, room - 1
+        if held[key]:
+            break
+    out["more"] = any(held.values())
+    return out
+
+
+def serve(stdin=None, stdout=None, reader=None, bound=SERVE_MAX, line_max=LINE_MAX):
+    """BU-1, BW-1, BW-8: the helper's loop. Starts the reader, says `{"ready": null, "v": 1}` (or the refusal in
+    "ready", and returns 0), then answers each line of stdin: `read` or `read N` -> one JSON line {"v", "ask",
+    "processes", "ends", "older", "more", "counts"} of at most `line_max` bytes and `bound` entries (pack(); what
+    does not fit comes with the next `read`, and "more" says so; "ask" is N, or None); `stop` or the end of stdin
+    -> the reader stopped, 0; any other line, `read` with anything int() refuses -> {"error": NOT_A_COMMAND, "v"}
+    (the line is not echoed) and the helper lives. A new read() of the reader is taken only when what it holds
+    from the reads before was given whole, so what it holds is bounded by the reader's own bounds. serve itself
+    reads only its input and writes only its output; its Reader reads the kernel's socket and, at each exec,
+    /proc/PID/exe and /proc/PID/stat. 1 where the output cannot be written."""
+    stdin = sys.stdin if stdin is None else stdin
+    stdout = sys.stdout if stdout is None else stdout
+    reader = Reader() if reader is None else reader
+    held = {"processes": [], "ends": [], "older": []}
+    try:
+        why = reader.start()
+        if why == RUNNING:
+            why = None
+        try:
+            stdout.write(_line({"ready": why}))
+            stdout.flush()
+        except (OSError, ValueError):
+            return 1
+        if why:
+            return 0
+        for raw in stdin:
+            words = raw.split()
+            if words == ["stop"]:
+                return 0
+            number = None
+            ok = bool(words) and words[0] == "read" and len(words) <= 2
+            if ok and len(words) == 2:
+                try:
+                    number = int(words[1])
+                except ValueError:
+                    ok = False
+            if not ok:
+                out = {"error": NOT_A_COMMAND}
+            else:
+                if not any(held.values()):
+                    got = reader.read()
+                    for key in held:
+                        held[key] = list(got.get(key) or ())
+                out = pack(held, reader.counts(), number, bound, line_max)
+            try:
+                stdout.write(_line(out))
+                stdout.flush()
+            except (OSError, ValueError):
+                return 1
+        return 0
+    finally:
+        reader.stop()
+
+
+def main(argv=None):
+    """`python -m raqib.procevents --serve`, and the helper's own program (SERVE_PROGRAM): the helper (BU-1). A
+    Ctrl-C at the terminal does not end it: the end of its input does, so a watch that dies leaves none behind."""
+    argv = sys.argv[1:] if argv is None else argv
+    if argv != ["--serve"]:
+        sys.stderr.write("usage: python -m raqib.procevents --serve\n")
+        return 2
+    if hasattr(signal, "SIGINT"):
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+    return serve()
+
+
+def command(executable=None, isolated=None, path=None):
+    """BW-5: the helper's command: this interpreter; -I where this process runs isolated, else -P (no directory of
+    its own before the path); -c SERVE_PROGRAM, a constant; its one argument this process's import path, its
+    absolute entries in order, as JSON. The helper loads Raqib from where this process did, and from nowhere else."""
+    executable = sys.executable if executable is None else executable
+    isolated = bool(sys.flags.isolated) if isolated is None else isolated
+    path = [p for p in (sys.path if path is None else path) if isinstance(p, str) and os.path.isabs(p)]
+    return [executable, "-I" if isolated else "-P", "-c", SERVE_PROGRAM, json.dumps(path)]
+
+
+def _pump(out, lines, stop, line_max=LINE_MAX):
+    """The client's thread: each line of the helper's output into `lines` (a queue of HELD_LINES), a line longer
+    than `line_max` as TOO_LONG (the rest of it read and let go), then None at its end. It holds the pipe and the
+    queue, never the client; a full queue waits, and a stop lets it go."""
+    def put(item):
+        while True:
+            try:
+                lines.put(item, timeout=0.2)
+                return True
+            except queue.Full:
+                if stop.is_set():
+                    return False
+    try:
+        while True:
+            raw = out.readline(line_max + 1)
+            if not raw:
+                break
+            if len(raw) > line_max or not raw.endswith(b"\n"):
+                while raw and not raw.endswith(b"\n"):
+                    raw = out.readline(line_max + 1)
+                if not put(TOO_LONG):
+                    return
+                if not raw:
+                    break
+                continue
+            if not put(raw):
+                return
+    except Exception:
+        pass
+    put(None)
+
+
+class Helper:
+    """The watch's client of the helper (BU-1, BU-2, BW-1, BW-4, BW-5). start() returns None or why the helper
+    could not be started (and raises nothing), and does not wait for it: the process is started by `popen` (in
+    the directory /, command()) and handed at once to `started` (raqib/own.py: the watch's record). ask(timeout)
+    -> (the answer, None) or (None, LATE | ENDED | NOT_A_LINE | REFUSED | STARTING). At most one ask is
+    unanswered: while one is, ask writes nothing and waits for that answer, and an answer that comes after its
+    round is taken by the ask that reads it. Before the ready line it says STARTING for STARTING_SECONDS after the
+    start, then LATE. It waits at most its timeout: a thread reads the helper's output, lines of at most LINE_MAX
+    bytes (a longer one is NOT_A_LINE), at most HELD_LINES of them held unread. stop() closes the helper's input,
+    waits STOP_SECONDS, then ends it, and returns its problems ([] when clean); a second stop() does nothing."""
+
+    def __init__(self, started=None, popen=None, argv=None, thread=None, clock=None):
+        self._started = started or (lambda proc: proc)
+        self._popen = popen
+        self.argv = list(argv) if argv is not None else command()
+        self._thread_class = thread or threading.Thread
+        self._clock = clock or time.monotonic
+        self.proc = None
+        self.ready = False
+        self.refused = None
+        self.ended = False           # its output ended: the helper is gone
+        self.asks = 0                # asks written
+        self.outstanding = None      # the number of the ask written and not answered yet
+        self.began = None            # when it was started (the clock's)
+        self.stop_problems = None
+        self._lines = queue.Queue(HELD_LINES)
+        self._stop = threading.Event()
+        self._thread = None
+
+    def start(self):
+        if self.proc is not None:
+            return None
+        try:
+            popen = self._popen
+            if popen is None:
+                import subprocess
+                popen = subprocess.Popen
+                kw = {"stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL,
+                      "close_fds": True, "cwd": "/"}
+            else:
+                kw = {"cwd": "/"}
+            self.began = self._clock()
+            self.proc = self._started(popen(self.argv, **kw))
+        except Exception as exc:
+            self.proc = None
+            return "the helper could not be started (%s)" % _flat(exc)
+        try:   # the thread holds the pipe and the queue, not the client: a client let go ends its helper
+            self._thread = self._thread_class(target=_pump, args=(self.proc.stdout, self._lines, self._stop),
+                                              name="raqib-procevents-helper", daemon=True)
+            self._thread.start()
+        except Exception as exc:
+            self._thread = None
+            self.stop()
+            return "the helper's output could not be read (%s)" % _flat(exc)
+        return None
+
+    def _next(self, deadline):
+        """The next line of the helper's output, None at its end, TOO_LONG, or LATE where none came in time. One
+        line at most: it never loops."""
+        left = deadline - self._clock()
+        try:
+            return self._lines.get(timeout=left) if left > 0 else self._lines.get_nowait()
+        except queue.Empty:
+            return LATE
+
+    @staticmethod
+    def _parse(raw):
+        """The line as a dict of this protocol's version, or None."""
+        if raw is TOO_LONG or not isinstance(raw, (bytes, str)):
+            return None
+        try:
+            value = json.loads(raw.decode("ascii") if isinstance(raw, bytes) else raw)
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return None
+        if not isinstance(value, dict) or value.get("v") != VERSION or isinstance(value.get("v"), bool):
+            return None
+        return value
+
+    @staticmethod
+    def _answer(got, number):
+        """Whether `got` is the answer to ask `number`, in its shape."""
+        return (got is not None and set(got) == set(ANSWER_KEYS) and got["ask"] == number
+                and isinstance(got["ask"], int) and not isinstance(got["ask"], bool)
+                and all(isinstance(got[k], list) for k in ("processes", "ends", "older"))
+                and isinstance(got["more"], bool) and isinstance(got["counts"], dict))
+
+    def _end(self):
+        self.ended = True
+        return None, ENDED
+
+    def ask(self, timeout=ASK_SECONDS):
+        if self.refused is not None:
+            return None, REFUSED
+        if self.proc is None or self.ended:
+            return None, ENDED
+        deadline = self._clock() + timeout
+        if not self.ready:
+            raw = self._next(deadline)
+            if raw is LATE:
+                starting = self.began is not None and self._clock() - self.began < STARTING_SECONDS
+                return None, STARTING if starting else LATE
+            if raw is None:
+                return self._end()
+            first = self._parse(raw)
+            if first is None or set(first) != {"v", "ready"} or not (first["ready"] is None or isinstance(
+                    first["ready"], str)):
+                return None, NOT_A_LINE
+            if first["ready"] is not None:
+                self.refused = first["ready"]
+                return None, REFUSED
+            self.ready = True
+        if self.outstanding is None:   # BW-1: a new ask only where the last was answered
+            self.asks += 1
+            try:
+                self.proc.stdin.write(b"read %d\n" % self.asks)
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                return self._end()
+            self.outstanding = self.asks
+        raw = self._next(deadline)
+        if raw is LATE:
+            return None, LATE
+        if raw is None:
+            return self._end()
+        got = self._parse(raw)
+        if not self._answer(got, self.outstanding):
+            return None, NOT_A_LINE
+        self.outstanding = None
+        return got, None
+
+    def __del__(self):
+        """A client let go without stop(): its helper's input is closed, so the helper ends (BU-1). subprocess
+        keeps a Popen whose child runs alive to reap it later, so the pipe would not close by itself."""
+        proc = getattr(self, "proc", None)
+        if proc is not None and getattr(self, "stop_problems", None) is None:
+            try:
+                self._stop.set()
+                proc.stdin.close()
+            except Exception:
+                pass
+
+    def stop(self, within=None):
+        """Ends the helper. Without `within`: its input is closed and it is given STOP_SECONDS to end by itself
+        (the watch's own Stop). With `within` (seconds; ADR-0007 BX-1, the second review's M1: a helper the watch
+        ends inside a round - late, ended or refused): its input is closed and it is ended at once, and each wait
+        is at most `within`, so the round that ends it is not held for the helper's sake."""
+        if self.stop_problems is not None:
+            return []
+        self.stop_problems = problems = []
+        self._stop.set()
+        proc = self.proc
+        if proc is None:
+            return problems
+        try:
+            proc.stdin.close()
+        except Exception as exc:
+            problems.append("the helper's input could not be closed (%s)" % _flat(exc))
+        wait = KILL_SECONDS if within is None else max(0.0, min(KILL_SECONDS, within))
+        try:
+            if within is not None:
+                raise TimeoutError("ended at once")
+            proc.wait(STOP_SECONDS)
+        except Exception:
+            if within is None:
+                problems.append("the helper did not end within %g s of its input's end: it was ended" % STOP_SECONDS)
+            try:
+                if within is not None:   # a stopped process takes no SIGTERM until it is continued: the kill ends it
+                    raise TimeoutError("ended at once")
+                proc.terminate()
+                proc.wait(wait)
+            except Exception:
+                try:
+                    proc.kill()
+                    proc.wait(wait)
+                except Exception as exc:
+                    problems.append("the helper could not be ended (%s)" % _flat(exc))
+        if self._thread is not None:   # its output ends with it: the thread that read it ends too (bounded)
+            try:
+                self._thread.join(wait)
+            except Exception:
+                pass
+        return problems
+
+
+if __name__ == "__main__":
+    sys.exit(main())

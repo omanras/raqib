@@ -513,12 +513,50 @@ Rulings: ADR-0003 Amendments C and D.
     outside after it heard its first event freezes the counts unseen, and
     a sender whose pid in the tracing is not the connection's owner in
     the table (an inherited socket) is not matched.
-- **The kernel's process events on Linux (ADR-0007 Amendments BQ, BR
-  and BS; the reader alone, docs/specs/PROC-EVENTS.md):**
+- **The kernel's process events on Linux (ADR-0007 Amendments BQ, BR,
+  BS, BT, BU and BW; docs/specs/PROC-EVENTS.md):**
   - the reader listens to the kernel's word of every fork, exec and exit,
     and reads at an exec the program and the parent of the process and
-    nothing else; no watch reads it yet, so between two samples a live
-    watch on Linux still sees what it saw before;
+    nothing else; a live watch on Linux runs it in a helper and counts
+    what it gives, and judges nothing from it yet: between two samples
+    the watch's findings are what they were before;
+  - the helper is a second process of Raqib's, started by the watch with
+    the watch's own interpreter, `-I` where the watch is isolated and `-P`
+    otherwise, its directory `/`, and the watch's own import path given
+    entry for entry, so it loads Raqib from where the watch did and from
+    nowhere else; it is in the watch's record of what it started. It reads
+    its input, the kernel's socket and, at each exec, that process's
+    /proc/PID/exe and /proc/PID/stat; it opens no other file, writes only
+    its output and starts no program, and it ends when its input ends, so
+    a watch that dies, however it dies, leaves none behind. It adds a
+    process that holds a listener of the kernel's events for the watch's
+    life; it adds no right and no reach outside the machine. Each line it
+    writes is bounded (1 MiB) and the watch holds at most four unread and
+    at most one ask unanswered, so a helper that is stopped or slow costs
+    the watch a hole, never its round or its Stop (measured: a helper
+    stopped under a watch of ten rounds of three seconds; the watch ended
+    in 28 s, said the three late rounds and started the helper again once).
+    A process of the same user that writes the helper's output in its place
+    is not told apart from the helper: its numbers are counted as the
+    helper's, and one that answers while the helper reads nothing could
+    still hold the watch at a write; that process could as well stop the
+    watch itself. Before the helper's fixed program sets its import path,
+    the interpreter's own start reads what the watch's start read (the site
+    folders' own files; without isolation the user's too): the places are
+    the watch's, their contents are read again at each start. A helper that is
+    refused, late, or ended is a blind spot of the watch, said; one late
+    three rounds running is ended and started again once, a second end is
+    final, and the watch then counts nothing between two samples for the
+    rest of its run. A process of the same user can end or stop the
+    helper: that is said, never silent;
+  - A program's path, text a process chose, reaches no output: the helper
+    gives it to the watch, and the watch keeps and says only numbers, in
+    no report, event or file;
+  - when the interpreter's file is replaced on disk while the watch runs (a
+    package upgrade), /proc shows the helper's program as "(deleted)" and
+    the watch's record no longer proves the helper its own: the round then
+    says, as a hole, a process under the watch that it did not start
+    (recorded for a later task, ADR-0007 BW-9);
   - an agent that starts more processes than the reader's bound (32768)
     has the rest counted `beyond`, not kept; the bound counts over the
     reader's life, and a process whose end was lost never leaves it;
@@ -706,10 +744,18 @@ What they do not see:
   Windows machine is so outside NET-ADMIN-PORT.
 - Another machine on the same link reached by its link-local address is left
   out with loopback. An address of 100.64.0.0/10 counts as private.
-- A net line whose `Initiated` was not read is not judged, and nothing says
-  so: a silence of this rule. Under `raqib watch --host` a Sysmon that gives no
-  file event is not said either. Both wait for the stage after the registry's
-  values (ADR-0014 AB-5): until then they are said here.
+- A net line whose Initiated was not read has no `initiated` key (ADR-0014 AE-1):
+  NET-ADMIN-PORT does not judge it, and its partial note says so, as for a line
+  written before the four keys. Real Sysmon writes Initiated always, so the reach
+  is small. A line written by an earlier build with a null `initiated` (its
+  Initiated not read) is judged as not initiated, and nothing says so. Under `raqib watch --host` the watch says once, after three rounds
+  that read the channel, that no event 11 was read (ADR-0014 AE-2, its
+  words Amendment F's): a file a tree makes may then be unseen, and
+  PERSIST-AUTOSTART's os lines may have nothing to read (three rounds with no
+  file made are said the same way: the watch cannot tell the two apart).
+  It is learned from what the rounds read, as for events 1, 3 and 22, not from
+  the configuration: a channel that gave an event 11 in those rounds is not said
+  at all, and a note once said is not taken back in that run.
 - The budgets of the two rules were measured on no real desktop's work. A
   deploy over ssh to a machine of the same network, a remote session of an
   editor, a local virtual machine reached at its private address, a profile's
@@ -829,10 +875,31 @@ What it does not see:
   installer, an updater) would fire, and how often is not known.
 - Not measured either: the commander's own Sysmon.
 - Linux has no os source: the rule judges nothing there.
-- Still waiting, and said here until they are closed: a net line whose
-  `Initiated` was not read is not judged and nothing says so; under
-  `raqib watch --host` a Sysmon channel that gives no file event, and now none
-  of event 13, is not said.
+- Said (ADR-0014 AE-3): at the first round that reads the channel, the watch
+  asks it once for its newest event 13, whatever its key (a bounded question of
+  its own; the round's own question is what it was). Where it holds none then,
+  that is a blind spot of the run, `registry`, said once and in the past tense
+  (Amendment F): this Sysmon's configuration may log no registry value, or none
+  was set under a key it logs in what the channel then held, and PERSIST-RUN-KEY
+  may have nothing to read here. It is asked once a run, so a value logged after
+  it does not take the sentence back: measured on a fresh machine whose Sysmon
+  logs the Run keys, the watch said it for all its rounds though a value was
+  logged seconds after the question (a tree's follow asks for its own values
+  each pass, and that is not changed). Where the question cannot be asked or is
+  not answered, it is said as not known, with the reason. Where it holds one,
+  the inventory carries its time and nothing is said. The question is asked
+  once: one that fails is not asked again, and the run says not known. It is
+  asked inside the first round that reads the channel, after its read, with the
+  round's own timeout: a slow answer delays that round's inventory and can make
+  the round late; a question that did not return is ended and recorded, and the
+  next round carries that record as a hole of the channel's read (named as that
+  round's, which it was not), so the result is then incomplete; in a run with no
+  next round no hole is made, and only the blind spot's reason says it. Not
+  measured: how long the question takes on a full channel that holds none. The
+  limit:
+  a channel that holds some event 13 may still not log the Run keys (a
+  configuration that logs other keys only), and that is not said. The certain
+  cure is Raqib reading the autostart places itself (ADR-0014 S3).
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
@@ -1120,11 +1187,11 @@ is amended by T-2, T-1 restated by V-1).
   fails, times out or reaches the cap of events per round is a hole of
   that round (the next round reads on from the last record read, so a
   channel busier than the cap makes the rounds lag; a lag of more than a
-  round is said); a kind of event 1, 3 or 22 not read after three rounds
+  round is said); a kind of event 1, 3, 11 or 22 not read after three rounds
   (Sysmon's configuration: Raqib never changes it, A4) is said once and
   the report lists the kinds read; where neither a start time nor a
   ProcessGuid tells two processes of one image under one pid apart, they
-  are one tree. Linux (no audit source of process events is read) and a
+  are one tree. Linux (its process events are counted, not judged) and a
   Windows host without Sysmon keep the whole hole, said once: a `hole:`
   line of the watch's first lines, which speak from the watch's own check
   at its start and say so; where the live reader's first check differs
