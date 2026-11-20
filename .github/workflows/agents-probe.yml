@@ -179,6 +179,20 @@ jobs:
           persist-credentials: false
       - name: the kernel's process events and socket ends, as root, and under the unit's limits
         run: bash tools/rig/linux_events_probe.sh
+      - name: the reader itself (M14.1a), as a plain user, five times
+        if: always()
+        run: |
+          for i in 1 2 3 4 5; do
+            python3 tools/rig/procevents_run.py --out "$RUNNER_TEMP/pe-$i.json" || true
+            python3 -c "
+          import json,sys
+          d=json.load(open(sys.argv[1]))
+          acts=d.get('acts') or []
+          print('run', sys.argv[2], {k: d.get(k) for k in ('platform','refused','not_run','error') if d.get(k)}, 'acts', len(acts), 'counts', json.dumps(d.get('counts'), sort_keys=True)[:600])
+          for a in acts:
+              print('   ', json.dumps(a, sort_keys=True)[:260])
+          " "$RUNNER_TEMP/pe-$i.json" $i
+          done
 
   rules:
     name: a person's rules added, switched off and removed, against a live watch (${{ matrix.os }})

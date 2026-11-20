@@ -513,6 +513,26 @@ Rulings: ADR-0003 Amendments C and D.
     outside after it heard its first event freezes the counts unseen, and
     a sender whose pid in the tracing is not the connection's owner in
     the table (an inherited socket) is not matched.
+- **The kernel's process events on Linux (ADR-0007 Amendment BQ; the
+  reader alone, docs/specs/PROC-EVENTS.md):**
+  - the reader listens to the kernel's word of every fork, exec and exit,
+    and reads at an exec the program and the parent of the process and
+    nothing else; no watch reads it yet, so between two samples a live
+    watch on Linux still sees what it saw before;
+  - an agent that starts more processes between two reads than the
+    reader's bound (32768) has the rest counted `beyond`, not kept;
+  - a process that ends before its program is read is given without it:
+    the read is counted in `missed` and named in its `unread`; a process
+    of another user, read by a plain user, is the same (not measured);
+  - a burst the kernel cannot queue for the reader is counted in `lost`
+    (ENOBUFS), never as nothing happened; how many events it held is not
+    known;
+  - a kernel that refuses (an older one, or a container's) is the hole,
+    said in the reader's words as `refused`, and nothing else is tried;
+    no right is asked;
+  - a program run from a removed file or from memory reads as the kernel
+    names it (not measured); no argument of any process is read, so what
+    a program was asked to do is not in this source.
 - **What CROSS-SOURCE does not judge, by ruling:**
   - C-2, both directions: a trace with no os line (Linux, macOS, or
     os-sysmon not run) gets no finding and no note, and the report's

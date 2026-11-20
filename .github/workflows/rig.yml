@@ -65,10 +65,14 @@ jobs:
         if: always()
         shell: pwsh
         run: python tools\rig\service_run.py --out $env:RUNNER_TEMP\service.json
+      - name: the process events are Linux's (X31 said as not run)
+        if: always()
+        shell: pwsh
+        run: python tools\rig\procevents_run.py --out $env:RUNNER_TEMP\procevents.json
       - name: read the report against what the stand-in did
         if: always()
         shell: pwsh
-        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --summary $env:GITHUB_STEP_SUMMARY
+        run: python tools\rig\check.py --report $env:RUNNER_TEMP\watch.out --workload $env:RUNNER_TEMP\workload.out --sources $HOME\.raqib\host\sources --exit-code $env:code --platform win32 --sysmon --events $HOME\.raqib\host\events.jsonl --forward $env:RUNNER_TEMP\forward.json --service $env:RUNNER_TEMP\service.json --procevents $env:RUNNER_TEMP\procevents.json --summary $env:GITHUB_STEP_SUMMARY
       - name: gather what the watch wrote
         if: always()
         shell: pwsh
@@ -117,9 +121,12 @@ jobs:
           sudo /usr/bin/python3 tools/rig/service_run.py --throwaway --out "$RUNNER_TEMP/service.json" || true
           sudo chmod 0644 "$RUNNER_TEMP/service.json" || true
           echo "=== what the service run saw"; cat "$RUNNER_TEMP/service.json" || true
+      - name: the reader of the kernel's process events hears short acts (X31)
+        if: always()
+        run: python tools/rig/procevents_run.py --out "$RUNNER_TEMP/procevents.json" || true
       - name: read the report against what the stand-in did
         if: always()
-        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --summary "$GITHUB_STEP_SUMMARY"
+        run: python tools/rig/check.py --report "$RUNNER_TEMP/watch.out" --workload "$RUNNER_TEMP/workload.out" --sources "$HOME/.raqib/host/sources" --exit-code "$code" --platform linux --events "$HOME/.raqib/host/events.jsonl" --forward "$RUNNER_TEMP/forward.json" --service "$RUNNER_TEMP/service.json" --procevents "$RUNNER_TEMP/procevents.json" --summary "$GITHUB_STEP_SUMMARY"
       - name: gather what the watch wrote
         if: always()
         run: |
@@ -127,7 +134,7 @@ jobs:
           cp "$RUNNER_TEMP/watch.out" "$RUNNER_TEMP/watch.err" "$RUNNER_TEMP/workload.out" rig-out/ 2>/dev/null || true
           cp -r "$HOME/.raqib/host/sources" rig-out/sources 2>/dev/null || true
           cp "$HOME/.raqib/host/events.jsonl" rig-out/ 2>/dev/null || true
-          cp "$RUNNER_TEMP/forward.json" "$RUNNER_TEMP/service.json" rig-out/ 2>/dev/null || true
+          cp "$RUNNER_TEMP/forward.json" "$RUNNER_TEMP/service.json" "$RUNNER_TEMP/procevents.json" rig-out/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:

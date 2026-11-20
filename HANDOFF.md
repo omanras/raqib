@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # HANDOFF — M15.1  (ADR-0014 A-1 to A-8, stage S1: the first two rules of behaviour, over the os source's lines)
 
 Task: two YAML rules, PERSIST-AUTOSTART and NET-ADMIN-PORT, and the four keys an os net line must carry for the second. Read ADR-0014 whole first (its "Measured" section is the ground), then the note of 2026-11-20 under ADR-0002's table.
@@ -16,4 +17,25 @@ Exit criteria:
 Not in scope: registry events (S2), the host's own lines (HostConnection, S3), Linux, raqib/host.py, raqib/discover.py, ADRs (the Table's), the rig.
 If an exit criterion needs a file outside Scope: STOP and say which file and which line.
 Commit: `landed: M15.1 the first two rules of behaviour` or `STOP: M15.1 <reason>`.
+=======
+# HANDOFF — M14.1a  (ADR-0007 Amendment BQ, BQ-1 and BQ-2: the reader of Linux's process events, alone)
+
+Task: raqib/procevents.py, a reader of the kernel's process events (fork, exec, exit) on Linux, alone: no watch uses it yet (that is M14.1b). The pattern is raqib/etwnet.py (M7.21a): read its docstring and its tests' shape first, then Amendment BQ.
+
+Scope:
+  raqib/procevents.py (new), tests/test_procevents.py (new), tools/rig/procevents_run.py (new), tools/rig/check.py (X31 only), tests/test_procevents_rig.py (new), docs/specs/PROC-EVENTS.md (new), docs/THREAT_MODEL.md, tests/test_rhythm.py (only: raqib/procevents.py joins the list of modules allowed to import `socket`, with its reason: AF_NETLINK alone, held by a test of this task), docs/review/2026-11-20-M14.1a-questions.md
+
+Exit criteria:
+- E1 The messages, as measured (probe branch, kernels 6.8 and 7.0): a socket of AF_NETLINK, SOCK_DGRAM, protocol 11 (the connector), bound to (the reader's pid, group 1); one message asks to listen (nlmsghdr of 16 bytes, type 3; cn_msg of 20 bytes with idx 1, val 1, len 4; the u32 1). An event is nlmsghdr, cn_msg, then `what` u32, cpu u32, a u64 time, then: fork (what 0x1) parent pid, parent tgid, child pid, child tgid; exec (0x2) pid, tgid; exit (0x80000000) pid, tgid, code, signal. Several messages may come in one datagram, each padded to 4 bytes. A thread (tgid not equal to pid) is not a process and is counted apart; a message shorter than its shape, or of another `what`, is counted as unread by its kind, never guessed.
+- E2 `Reader`: `start()` returns None or the refusal in this module's own words (not Linux; the socket, the bind or the ask refused, with the system's errno name) and raises nothing; `read()` returns the processes that began since the read before, each `{pid, ppid, exe, started_ticks, began, ended, code, signal, unread}`: at an exec the reader reads at once `/proc/PID/exe` (the link) and `/proc/PID/stat` (the parent and the start in clock ticks), and nothing else of the process (no cmdline, no environ, no cwd); a process gone before a read is given with what was read and `unread` naming the rest; `ended` and `code` where its exit was heard by then (a later read gives the ends of processes given before, as `ends`). `counts()` says: events by kind, processes given, reads missed, unread messages by kind, threads, lost (the kernel's ENOBUFS, each counted, with `why`), beyond (its own bound PROCESSES_MAX, a constant: what is past it is counted, not kept), refused, since. `stop()` ends the thread and closes the socket; a second stop does nothing; the Reader is a context manager; a reader started and never stopped is stopped at the interpreter's exit.
+- E3 Everything of the system goes through arguments a test replaces (the socket's maker, the reads of /proc, the clock): no test opens a real netlink socket except one that is skipped where the platform is not Linux or the kernel refuses, and that one hears a child it starts itself (`true`) with its program and its exit code.
+- E4 The module is the standard library's alone, opens no socket but AF_NETLINK (a test replaces `socket.socket` and fails on any other family), starts no program, writes no file, and is imported by nothing in raqib/ yet (a test holds each).
+- E5 Losses are said, never smoothed: tests feed a datagram with ENOBUFS between two, a process whose exe read fails, an exit with no exec heard (a process older than the reader), an exec of a pid heard twice (a second exec of one process: the program it became is the one given), a fork with no exec (a process that never changed its program: given with its parent's program unread, by its fork), a pid reused within one read, PROCESSES_MAX passed.
+- E6 The rig: tools/rig/procevents_run.py (Linux; the watch's own user, no rights asked) starts a Reader, runs the short acts the probe ran (touch, mv, cp, rm, curl, wget, getent, nc, python's own client, sh, shred, git; one not installed is said as not run), and writes facts; tools/rig/check.py X31 from them: MET where every act that ran was given by `read()` with its program read and its end's code, and `counts()` shows no loss; MISSED with what is missing; n/a off Linux or where `start()` was refused, with the refusal said. Tests feed made-up facts. The workflow is the Table's to wire.
+- E7 docs/specs/PROC-EVENTS.md: the layout, what is read at an exec and what never is, every count and what it means, what was measured and what was not (Amendment BQ's list). docs/THREAT_MODEL.md (no milestone token): what an agent can do about this source (start more processes than the bound; end before the read; a kernel that refuses), in the words of what is counted. A test holds the sentences that matter.
+- E8 Gate green in the foreground; ASCII outside docs; tests/test_own_tree.py passes unchanged.
+Not in scope: raqib/host.py, raqib/discover.py, raqib/cli.py, the socket ends (sock_diag), README.md, docs/GUIDE.md, .github/workflows/.
+If an exit criterion needs a file outside Scope: STOP and say which file and which line.
+Commit: `landed: M14.1a the reader of Linux's process events` or `STOP: M14.1a <reason>`.
+>>>>>>> origin/claude/M14.1a
 Read HANDOFF.md and do only the task it specifies.
