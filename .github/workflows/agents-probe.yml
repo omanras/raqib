@@ -401,6 +401,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: how M15.3b's `sure` labels this machine's own texts, and how many hives are loaded (the third review's S3 and Q3)
+        shell: pwsh
+        run: |
+          git fetch -q --depth 1 origin claude/M15.3b
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\m153b" | Out-Null
+          git show FETCH_HEAD:raqib/autostart.py | Set-Content -Encoding utf8 "$env:RUNNER_TEMP\m153b\autostart.py"
+          python tools\rig\sure_probe.py "$env:RUNNER_TEMP\m153b"
       - name: the places read, a quiet minute and a half, four acts each undone
         shell: pwsh
         run: python tools\rig\autostart_probe.py
