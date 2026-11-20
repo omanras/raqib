@@ -248,6 +248,15 @@ talks and its children's start times):
 
 Ratio after M7.4: 4 : 7 : 11.
 
+Note (2026-11-20, M15.1, ADR-0014 A-3 and A-4): two signature rows join the
+table, judged on the lines of a tree's sources (the first rules of
+behaviour: what a tree does to the host, beside what its program is called):
+
+| PERSIST-AUTOSTART | signature | another autostart place; a file moved or renamed into the folder; a Sysmon that logs no file creation there |
+| NET-ADMIN-PORT   | signature | another port; a public address; a relay or a tunnel |
+
+Ratio after M15.1: 6 : 7 : 11.
+
 ## Consequences
 - Schema: `kind` required on every YAML rule; `evasion` required when
   kind is signature, forbidden otherwise. Silence rules declare their kind
