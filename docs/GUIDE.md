@@ -901,3 +901,13 @@ Status: v0.1 candidate: capture, rules, report, suspicion
 layer, evaluation, web view and docs. The last exit criterion of the plan
 (M3.3) is still open: one person outside the project runs the quickstart in the README
 ([Install and watch](../README.md#install-and-watch)) and files one issue.
+
+### Into a SOC's search engine
+
+`siem/` holds what a SOC installs to read the events (`~/.raqib/host/events.jsonl`, or what
+`raqib forward` sends) in Elasticsearch or OpenSearch: an ingest pipeline to the ECS fields of the
+spec's Mapping, a template for each engine, the searches (an alarm, a rule's findings, a hole, a
+watch that did not end with 0, the search for silence, the runs that stopped with no end and the
+lines kept as error documents), Sigma rules over the events' own keys, and a table of every rule the
+report lists with its ATT&CK techniques. How to install it, and what was
+measured and what was not: [siem/README.md](../siem/README.md).

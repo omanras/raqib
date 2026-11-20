@@ -880,16 +880,25 @@ def _procevents_rows(facts):
 
 
 AUTOSTART_NAME = ("X37 the autostart places read by Raqib itself: the stand-in's Run value, its Startup file and its"
-                  " service are each added and later removed")
+                  " service are each added and later removed, its delete of its Startup file did not fail, and a"
+                  " file held open is said as added by the first read that lists it")
+AUTOSTART_HELD = "raqib-rig-held.cmd"          # tools/rig/autostart_run.py's HELD_NAME
+AUTOSTART_DELETE_FAILED = "the startup file's delete failed"   # tools/rig/workload.py's words (AI-10)
 AUTOSTART_ACTS = (("run", "RaqibRigValue"), ("startup", "raqib-rig-startup.cmd"), ("service", "RaqibRigService"))
 
 
 def read_autostart(facts):
-    """X37 (ADR-0014 AG-4): what tools/rig/autostart_run.py saw raqib.autostart's reads give while the stand-in
-    worked. MET where each of the stand-in's three acts (its Run value, its Startup file, its service: AUTOSTART_ACTS,
-    the names tools/rig/workload.py gives them) is an `added` change and, in a later read, a `removed` one; MISSED
+    """X37 (ADR-0014 AG-4, AI-10): what tools/rig/autostart_run.py saw raqib.autostart's watcher give while the
+    stand-in worked. MET where each of the stand-in's three acts (its Run value, its Startup file, its service:
+    AUTOSTART_ACTS, the names tools/rig/workload.py gives them) is an `added` change and, in a later read, a
+    `removed` one; no WORKLOAD line says the stand-in's delete of its Startup file failed; and the file the run held
+    open with no sharing across one read was made, said as `added` by the first read that listed it - the read
+    made while it was held, its content not read - read by a later read after it was let go (AK-7), and removed
+    after (AJ-7). MISSED
     otherwise, with what is missing and the reads that left a place unread (facts None, not run on Windows, an
-    error: silence is a finding); n/a off Windows. It never raises: facts that cannot be read are MISSED."""
+    error: silence is a finding); n/a off Windows. Its words name every other change by its kind and place (one
+    nobody of the rig made: Windows moves some of its own tasks). It never raises: facts that cannot be read are
+    MISSED."""
     name = AUTOSTART_NAME
     try:
         if not isinstance(facts, dict):
@@ -916,15 +925,60 @@ def read_autostart(facts):
                 missing.append("%s %s: added in read %d, no removed change after it" % (place, want, min(added)))
             else:
                 seen.append("%s added in read %d, removed in read %d" % (place, min(added), min(removed)))
-        unread = ["read %s: %s" % (u.get("round"), ", ".join(sorted(u.get("places") or {})))
-                  for u in facts.get("unread") or [] if isinstance(u, dict)]
+        workload = [str(x) for x in facts.get("workload") or []]
+        failed = [x for x in workload if AUTOSTART_DELETE_FAILED in x]
+        if failed:
+            kind = failed[0].split(AUTOSTART_DELETE_FAILED, 1)[1].strip(" ()")
+            missing.append("the stand-in's delete of its Startup file failed beside the reads (%s)" % (kind or "said"))
+        held = facts.get("held") if isinstance(facts.get("held"), dict) else {}
+        listed = [r for r in held.get("reads") or [] if isinstance(r, dict) and r.get("listed")]
+        if not held.get("made"):
+            missing.append("the held file was not made (%s)" % (held.get("error") or "no word"))
+        elif not listed:
+            missing.append("the held file was listed by no read")
+        elif "added" not in (listed[0].get("changes") or []):
+            missing.append("the held file was not said as added by the first read that listed it (read %s: %s)" % (
+                listed[0].get("round"), ", ".join(listed[0].get("changes") or []) or "no change"))
+        elif not (listed[0].get("held") is True and listed[0].get("content") == "not read"):
+            missing.append("the read that first listed the held file was not the one made while it was held with"
+                           " its content not read (read %s: held %s, content %s)" % (
+                               listed[0].get("round"), listed[0].get("held"), listed[0].get("content")))
+        elif not [r for r in held.get("reads") or [] if isinstance(r, dict) and r.get("held") is False
+                  and r.get("content") == "read" and (r.get("round") or 0) > (listed[0].get("round") or 0)]:
+            missing.append("no later read, after the held file was let go, read its content (AK-7)")
+        elif held.get("removed") is not True:
+            missing.append("the held file was not removed after (it may be left in the Startup folder)")
+        else:
+            seen.append("the held file added in read %s while held, its content not read, read after it was let"
+                        " go, and removed after" % listed[0].get("round"))
+        ours = {(p, w.lower()) for p, w in AUTOSTART_ACTS} | {("startup", AUTOSTART_HELD)}
+        others = {}
+        for c in changes:
+            if (c.get("place"), str(c.get("name") or "").lower()) not in ours:
+                k = "%s %s" % (c.get("change"), c.get("place"))
+                others[k] = others.get(k, 0) + 1
+        other = "other changes: %s" % (", ".join("%s %d" % (k, others[k]) for k in sorted(others)) or "none")
+        unread, partly = [], []   # AJ-7: a place read in part is said as that, not as unread
+        for u in facts.get("unread") or []:
+            if isinstance(u, dict):
+                places = u.get("places") or {}
+                gone = sorted(p for p in places if not str(places[p]).startswith("in part"))
+                inpart = sorted(p for p in places if str(places[p]).startswith("in part"))
+                if gone:
+                    unread.append("read %s: %s" % (u.get("round"), ", ".join(gone)))
+                if inpart:
+                    partly.append("read %s: %s" % (u.get("round"), ", ".join(inpart)))
+        partly += ["read %s: %s" % (u.get("round"), ", ".join(sorted(u.get("places") or {})))
+                   for u in facts.get("partly") or [] if isinstance(u, dict)]
+        unread = "; ".join(unread) or "none"
+        if partly:
+            unread += "; read in part: %s" % "; ".join(partly)
         if missing:
             ended = ("; the run ended the stand-in before its end: its acts were not undone"
                      if facts.get("ended_by_run") else "")
-            return [(name, MISSED, "missing: %s; unread: %s%s" % ("; ".join(missing), "; ".join(unread) or "none",
-                                                               ended))]
-        return [(name, MET, "%s; %s read(s), the longest %s s; unread: %s" % (
-            "; ".join(seen), facts.get("reads"), facts.get("seconds_max"), "; ".join(unread) or "none"))]
+            return [(name, MISSED, "missing: %s; %s; unread: %s%s" % ("; ".join(missing), other, unread, ended))]
+        return [(name, MET, "%s; %s; %s read(s), the longest %s s; unread: %s" % (
+            "; ".join(seen), other, facts.get("reads"), facts.get("seconds_max"), unread))]
     except Exception as exc:   # never raises: facts that cannot be read are MISSED
         return [(name, MISSED, "its facts cannot be read (%s)" % type(exc).__name__)]
 

@@ -970,26 +970,77 @@ What it does not see:
 
 ### The autostart places read by Raqib itself (ADR-0014 Amendment G; M15.3a)
 - **What this read does not see** (docs/specs/AUTOSTART.md; the read stands
-  alone in M15.3a: no watch reads it and no rule judges it yet). The places
-  AG-5 lists - Image File Execution Options, AppInit_DLLs, a WMI subscription,
-  the policies' Run keys, Active Setup, a service's ServiceDll, a COM
-  object, a hive that is not loaded (a driver is read: it is a key of the
-  services) - and RunOnceEx, RunServices, a user's
-  own Winlogon values, another user's Startup folder and the scheduler's
-  folder of task files. A change made and undone between two reads, and what
-  was there before the first read. Who made a change: the read names the
-  entry, never a process. A place the reading user's rights refuse (measured:
-  the scheduler's tree under a deny-only Administrators group) is said as
-  refused, never as empty, and gives no change; a task's program is not read
-  (its Actions are hashed, not parsed), so a task's change names no program. An
-  agent that runs as an administrator can change what the read reads (a key's
-  rights, the folder's listing) as it can any watcher of its own user; that is
-  not measured. A way round that needs no such right: an entry that first
-  appears while its place is unread (a Startup file its maker holds open
-  without sharing across one read) is in the next read's base and is never said
-  as added; the read says the place unread, and names no entry. A hive loaded
-  between two reads reads as its entries added. Both are ruled before the watch
-  reads this (ADR-0014 AH-3).
+  alone in M15.3a and M15.3b: no watch reads it and no rule judges it yet). The
+  places AG-5 lists - Image File Execution Options, AppInit_DLLs, a WMI
+  subscription, the policies' Run keys, Active Setup, a service's ServiceDll, a
+  COM object, a hive that is not loaded (a driver is read: it is a key of the
+  services) - and RunOnceEx, RunServices, a user's own Winlogon values, another
+  user's Startup folder, a Startup folder on a share or on a drive whose kind is
+  not known, what a link in a Startup folder leads to (not followed: it may
+  lead to a share), a content beyond its first 64 KiB, and a key's values or a
+  folder's files beyond 1000. What was there before the first read, and what a
+  part held when it was first read: it is the base, and is never said (a part
+  read late is said once as a base taken late, with its count, never its
+  entries). A change made and undone between two reads, and one made and
+  undone while its place or its key is not read. Who made a change: the read
+  names the entry, never a process. A place the reading user's rights refuse
+  (measured: the scheduler's tree under a deny-only Administrators group) is
+  said as refused, never as empty; a place the read's deadline (5 s) did not
+  reach is said as not read. A task's program is not read (its Actions are
+  hashed, not parsed), so a task's change names no program; a program named
+  from an unquoted text whose first word holds a separator, is followed by a
+  blank and ends in no program's extension is said as one that `may run` - as
+  is one whose unquoted first word holds a `%` (but a machine's own text that
+  begins with `%SystemRoot%` or `%windir%`, AL-4: the system's root is taken as
+  a path with no blank where the reader's own value of it holds none - a text
+  of a user's own hive is never taken so), one that holds a blank other than a
+  space or a tab, and one where more than one run of the text ends in a
+  program's extension (AK-3) - and a Winlogon list of more than one program
+  names none.
+- **The lever that is left** (ADR-0014 AJ-2), as AK-2 and AK-6 leave it. Any process of the
+  user can make its own Startup folder or Run key slow or large (many files,
+  many or large values, a file slow to open). The deadline is looked at between
+  keys and files, never inside one call: one listing, one key's enumeration or
+  one open runs to its end, a key's enumeration reads each value whole and a
+  folder's listing every name (the bound of 1000 is of the entries compared and
+  64 KiB of what is hashed, not of what is read). In a read that reaches the
+  slow key, the keys after it in its step and the steps after its step are not
+  reached, and that is said; in a later read they are reached before it (the
+  steps turn at each read, the users' hives turn once a whole turn of the
+  steps, the machine's key or folder comes first), so a change in them is said
+  late - where the slow keys are one user's own, within six reads for each
+  user's hive loaded - by the first read that reads them whole, unless it was
+  made and undone in that time, which is not said. Nothing turns inside the
+  services' or the tasks' step: a slow key there delays the keys after it in
+  every read, said `in part` each time (those keys are the machine's; whether a
+  plain user can make one slow is not measured). A key or folder held over 1000
+  entries is never compared while it is over: a plain user can do that to its
+  own Run key and Startup folder, and every change in it is then unsaid but for
+  the words `in part` at each read. A plain user can also deny its own Run key
+  or Startup folder to a reader of another identity while Windows still runs
+  them (AJ-8; not measured): the place is then read in part for good, and said.
+  An agent that runs as an administrator can change what the read reads (a
+  key's rights, the folder's listing) as it can any watcher of its own user;
+  that is not measured.
+- **Closed** (ADR-0014 Amendments I and J). An entry that first appears while
+  a place or a key that was read before is unread - a Startup file its maker
+  holds open without sharing across one read - is said as added by the first
+  read that reads it (a held file: listed, said as added with its content not
+  read); a hive loaded between two reads is one change, `hive loaded`, not its
+  entries added; a part read for the first time late is its base, not its
+  entries planted. The read opens a Startup file by its listed name in the long
+  form, asks Windows not to follow a link, and opens with every sharing, so it
+  does not hold a file against its maker's rename or delete: measured before the
+  change, a rename failed 5406 times of 5406 while a 24 MB file was hashed;
+  measured since, on Windows, by a test in which another call renames and then
+  deletes a file while the module's own opener holds it, and by the rig's held
+  file and the stand-in's delete (X37), not on a 24 MB file again. An open by
+  another process that asks for no sharing still fails while the read holds the
+  file, for the instant of the read (Windows' rule; not measured). A file
+  swapped for a link under the same name, or a link for a file, is said as
+  changed whether or not the content of either was read (AK-4, AL-3). Every hash
+  is salted, so a key cannot be matched by trying a SID, and a read of another
+  salt is not taken.
 
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the

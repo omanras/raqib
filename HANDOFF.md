@@ -1,20 +1,10 @@
-# HANDOFF — M14.1d REDO 2  (ADR-0007 Amendment CE, CE-1 to CE-7: the review of M14.1d and its REDO)
+# HANDOFF — none open  (M15.1, M14.1a, M15.2, M14.1b, M15.2b, M17.1, M15.3a, M13.1, M14.1c, M16.1, M15.3b and M14.1d landed by 2026-11-21; the next tasks are on their own branches)
 
-Task: the review's findings, as the Table ruled them. Read docs/review/2026-11-21-M14.1d.md (the packet; its file:line cites are of commit c260c0e) and ADR-0007's Amendments CC, CD and CE (the end of the ADR), then do each item below.
+Task: none on main. Do not build here. Next, each on a branch of its own when the Table writes it: M15.3c (the watch reads Windows' autostart places and rules judge a change; ADR-0014 AL-6 lists what it measures first), M14.2 (a short connection given to its process; an act-root's acts by the reader's links; a tree kept alive by the children it left; ADR-0007 CF-1, CF-4), M16.2 (a Splunk app from siem/).
+
+From 0.2.0 on (ADR-0015): a merge into main that changes what Raqib does moves `raqib.__version__`, writes its entry at the top of CHANGELOG.md and runs `python3 tools/event_examples.py --write`. The Table does it in the merge.
 
 Scope:
-  raqib/discover.py, raqib/host.py (only what CE-1 to CE-6 name), tools/rig/workload.py, tools/rig/check.py and tests/test_rig_check.py (X43 to X46), tests/test_procevents_round.py, tests/test_host_procevents.py, new files under tests/fixtures/, docs/specs/PROC-EVENTS.md, docs/GUIDE.md, docs/THREAT_MODEL.md, docs/review/2026-11-21-M14.1d-redo2-questions.md; and a test of tests/ ONLY where it holds, word for word or by count, a line this task changes (named in the questions file; no other assertion weakened; no rule fixture's finding changes).
+  (none)
 
-Exit criteria:
-- R1 (CE-1) The quiet-tree road goes the held trees' road whole (marks, the writable test, the held-not-given hole, `dropped` counted); a kept child given again with nothing new writes no line; for a gone tree nothing is written and the section and one hole of the result say how many processes its kept children were heard to start. Tests, each shown to fail with the road taken out: the tree quiet in the round of the fetch (no sampled act of it that round); the tree gone in that round; a kept child given again with nothing new.
-- R2 (CE-2) The act-root search reads the samples' own parent links (keep the sampled parent beside the merged one). The reader's parent stands only where it is a process of the round (sample or text) or a kept child. Tests: the review's case 5 (no act-root where the samples alone make none); a sampled child given again whose reader's parent is in neither sample nor text keeps the sample's parent and its tree; the field's case still passes.
-- R3 (CE-3) A reader-only child whose file was not read and whose kernel name was: a line by that name (through the name gate), its `command_sources` and a word in the line that the file was not read; counted apart in the section from children with no line. Test: such a child named `wget`: NET-TOOL fires; one with neither file nor name: no line, counted as that.
-- R4 (CE-4) Where `programs` exist the act's own gated image is still named where no program gives it; a file not read is not `unfit`. Tests: a child seen by both whose reader file is None; one whose kernel name is cut.
-- R5 (CE-5) X43, X45: the child's own entry in the line's children names the tool and a NET-TOOL finding cites that line (its seq); a test with one shared line that must be MISSED. X44: says the sources. X46 (new): the stand-in runs the same harmless fetch through `sudo -n` where `sudo -n true` succeeds (said in WORKLOAD lines, n/a otherwise); MET where a line of the stand-in's tree names the fetch for a child seen by the events alone with its file not read and NET-TOOL cites it.
-- R6 (CE-6) A kept child's tree by the tree's key; a kept child let go where the round holds its pid with another start (tests: a root pid reused; a stale kept child). A round with no reader's text, and Windows, write a child's line as M14.1c did (test: a sampled child whose image changes between rounds with no reader's text gets no second line).
-- R7 (CE-7) Words: THREAT_MODEL, PROC-EVENTS, GUIDE, the section (judged, not judged, the counts) and the notes; the test that held M14.1c's sentences holds the new ones and asserts the old gone. The review's weak tests made able to fail (the self-comparison at its :1045; the SKIP-or-MISSED at test_rig_check.py :636; the bound test shows what is let go).
-- R8 Gate green in the foreground; ASCII outside docs; no rule's match or number changed; no network call from the capture path. Run the Table's reproduction again (scratchpad/x45/standin.py, as in the first REDO) and say what the lines said.
-Not in scope: CC-6; a tree kept alive by its kept children (M14.2); the version and CHANGELOG.md. The stand-in's acts are harmless fetches thrown away; no exploit code or attack steps.
-If an item needs a file outside Scope: STOP and say which file and which line.
-Commit: `landed: M14.1d REDO 2 the review's findings` or `STOP: M14.1d REDO 2 <reason>`.
-Read HANDOFF.md and do only the task it specifies.
+If you were started as a builder on this file: STOP, commit nothing, and say that no task is open.

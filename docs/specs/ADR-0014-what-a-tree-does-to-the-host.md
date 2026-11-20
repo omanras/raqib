@@ -414,3 +414,189 @@ the longest 0.157 s, no place unread; the real read's own test green on both Win
   4: the Actions' format is measured first; a link's target is inside its content). Userinit's comma and the
   unquoted path (2, 3) are AH-3's. The coarse comparison of a place read in part (6) stands until AH-3 is
   ruled. The rig's second run of the stand-in (8) stands; X36 is M14.1c's (7).
+
+## Amendment I (the Table, 2026-11-21) - AH-3 measured and ruled: the read made fit for the watch (M15.3b)
+AH-3 left for this stage what two reads can say that is not so. Measured before ruling (the probe branch acdc838,
+GitHub's Windows machine, the module of 0.3.0):
+- A Startup file made and held open with no sharing across one read: that read says the place read in part
+  and gives no change; the next read, compared with it, gives no change either (the refused keys differ); the
+  entry is said as added only against the read before both. Compared read by read, as the command does, the
+  entry is never said. The reviewer's reading, shown in the field.
+- While the module hashes a Startup file of 24 MB, a rename of that file by another handle failed 5406 times
+  of 5406: the read holds the file against the watched process for as long as it reads it.
+- Beside the rig's stand-in, 70 reads a second apart: the stand-in's three acts each added and removed, and one
+  change nobody made - a task of Windows' own (`SoftwareProtectionPlatform\SvcRestartTask`) said as changed.
+  A quiet 90 s on the same machine had shown none: Windows moves some of its own tasks by itself.
+- Not measured: which part of that task changed (its actions or its triggers); a hive loaded by a logon; a
+  real desktop.
+
+- AI-1 (the base of a comparison is the last read that read the thing). The module keeps, for one watcher, what
+  each place last held when it was read - and inside a place read in part, what each of its keys last held -
+  and compares a read with that, part by part. An entry that first appears while its place, or its key, is
+  not read is said as added by the first read that reads it. FOR: no entry is passed over because the read
+  before could not see. MUST NOT TOUCH: `changes(before, after)` of two reads, as it is.
+- AI-2 (an entry that is listed is an entry). A Startup file that the folder lists and whose content cannot be
+  read is an entry with no content hash, said as added with its content not read; when its content is first
+  read that is said as read, not as a change.
+- AI-3 (the read never holds what it reads). A Startup file is opened with every sharing, so that another
+  process's delete or rename of it does not fail while it is read; where it cannot be opened so, it is not
+  opened. FOR: Raqib does not stop or hinder what it watches (ADR-0011 A).
+- AI-4 (a read is bounded, and says its bounds). A content is hashed by its length and its first 64 KiB; a
+  read has a deadline (5 s by default) after which the places not reached are said as not read, with that
+  reason; a Startup folder that is on a share is not read at all and is said so: the capture path makes no
+  network call (CLAUDE.md, rule 5).
+- AI-5 (a task's two parts). A task's actions and its triggers are hashed apart. A change of its triggers alone
+  is a change of its own kind, `rescheduled`; `changed` is for what it would run. FOR: a task that Windows
+  re-arms by itself is not said in the words of a task that was made to run something else.
+- AI-6 (a hive that comes or goes). The entries of a user's hive that the last read did not list are not said
+  one by one as added: the change is the hive's own (`hive loaded`, with how many entries it holds), and its
+  entries become the base; likewise a hive that is no longer listed. FOR: a logon is not read as its user's
+  entries being planted.
+- AI-7 (the machine's two views are two keys). An entry of the machine's 32-bit view is its own entry, always;
+  it is not folded with the 64-bit one. A user's hive is read in one view.
+- AI-8 (a name that may not be what runs is said so). Where a content is a text whose first word is not a
+  whole quoted path - an unquoted text with a blank after a separator, a list of more than one program - the
+  entry says that its program is not sure, and a sentence says "may run", not "would run".
+- AI-9 (the hashes are salted). An entry's key and its content's hash are made with a salt of the watcher,
+  random and never written: neither can be matched by trying texts, nor between two machines or two watches.
+- AI-10 (the rig). X37 holds also that the stand-in's own delete of its Startup file did not fail beside the
+  reads, that a file held open across a read is said as added by the first read that lists it, and names
+  every change that is not the stand-in's by its kind (measured so far: one task rescheduled or changed).
+- AI-11 (stages). M15.3b is this, in the module alone: nothing of the watch changes. M15.3c: the watch reads
+  at its start and each round, a change is a host line, and the rules of AG-4 judge it.
+
+## Amendment J (the Table, 2026-11-21) - the review of M15.3b (docs/review/2026-11-21-M15.3b.md): REDO
+The reviewer's verdict is NEXT with six must-fix items and two findings for the Table to rule before the watch
+reads this. The field's word (the rig on b1a3f00, the code's first run on Windows): X37 MET with the held file
+and the stand-in's delete; the one change nobody made was a task rescheduled - the measurement Amendment I left
+open: it is that task's triggers that Windows moves.
+- AJ-1 (what a part held when it was first read is never said). The base of a part - a place, a key, a hive -
+  is what it held the first time it was read, whenever that is: its entries are taken as the base then and
+  none is said as added. The watcher says that it took a base late (the part and how many entries), once.
+  AI-1 holds for a part that was read before: what appears in it while it is not read is said by the first
+  read that reads it again. FOR: a first read that the deadline cut, or a hive whose key was refused at first,
+  does not become hundreds of entries said as planted. MUST NOT TOUCH: AG-3 - what was there when the watch
+  began is never said.
+- AJ-2 (no place is starved). A read begins with the place after the one the read before began with, and a
+  place that the deadline cuts keeps what it read of itself: the keys and files reached are parts read, the
+  rest not read. A folder and a key are read to a bound of entries that is said when met. FOR: a process that
+  makes its own Startup folder or Run key slow cannot keep the services, the tasks and Winlogon unread for
+  good; each is read whole at least every few reads, and the watcher says which were cut. The spec says that
+  the deadline is looked at between keys and files, not inside one call, and the threat model says the lever
+  that is left (a place made slow is itself cut, said each time, and names no entry).
+- AJ-3 (a name that is sure). An unquoted text's first word is sure where it ends in a program's extension;
+  it is not sure where it holds a separator, is followed by a blank and ends in none (`C:\Program Files\x.exe`
+  read to its first blank). A quoted first word is sure. A Winlogon value that lists more than one program
+  names none, and its line says that it is a list.
+- AJ-4 (a file is read as it is listed, and a link is not followed). A Startup file is opened by the name the
+  folder listed, in the path's long form, so that Windows does not read another name for it; a file that is a
+  link is listed and its content is not read (it may lead to a share). A file that cannot be opened for
+  another reason is an entry with its content not read and that reason; only the folder's own listing can fail
+  the place. A drive whose kind cannot be told is not read.
+- AJ-5 (a hive that comes while Run or RunOnce is not read). Its entries are not said as added: every part of
+  a hive that the base does not hold is the hive's, by AJ-1.
+- AJ-6 (a read of another salt is not taken). The watcher takes only reads made with its own salt; another is
+  refused and said, and changes nothing of the base.
+- AJ-7 (the claims and the tests can fail). X37 is MET only where the read that first listed the held file was
+  the read made while it was held, with its content not read, and the held file was removed after; the rig's
+  words say a place read in part as that. A test on Windows holds AI-3's property itself: while the module's
+  own opener holds a file, another handle renames it and deletes it, and both succeed. The assertion the
+  first build weakened is put back.
+- AJ-8 (recorded). A plain user can deny its own Run key or Startup folder to a reader of another identity
+  while Windows still runs them (the service's case): the place is then read in part for good, and said. A
+  value set in a hive in the interval it was loaded in is taken into the base with the hive. Whether a logon
+  gives the count the watcher says. Each is measured with M15.3c.
+
+## Amendment K (the Table, 2026-11-21) - the second review of M15.3b (docs/review/2026-11-21-M15.3b-redo.md): REDO 2
+The reviewer's verdict is REDO, small: two items of code, the words, a line of the questions file. Nothing here was
+measured before it was ruled: each item is the watcher's own logic over what a registry or a folder gives it, and
+GitHub's Windows machine gives no slow key and no key of a thousand values (the longest read there is 0.156 s).
+The field's word on 0333a02: the gate green on six jobs, R7's test passed on Windows, X37 MET with the held read.
+- AK-1 (the bound is said on every key). Every key the read takes values of - a service's, a task's, Winlogon's,
+  as Run's - passes the same bound, and a key met at the bound is a part not read, said each read: none of its
+  entries is compared, so none is said removed or changed for a value that was only out of reach. FOR: a key
+  filled past the bound can no longer make a false `removed`, nor hold an entry that is never said, in silence.
+  MUST NOT TOUCH: the bound itself (1000), and the subkeys of the services' key and of the tasks' tree, which
+  are keys of their own under the deadline (the builder's choice 5, kept).
+- AK-2 (no key is starved inside a step). RunOnce is a step of its own (six steps); inside a step the machine's
+  key or folder is read before the users'; and the users' hives and folders of a step are begun one further at
+  each read, as the steps are. FOR: one slow key of one user cannot keep RunOnce, the machine's Run keys, the
+  machine's Startup folder or another user's key unread for good. The test of AJ-2 holds RunOnce and the
+  machine's keys too. MUST NOT TOUCH: AJ-1 - a part first read late is still a base.
+- AK-3 (a name that is sure, again). Not sure: a first word that holds a `%` (the read expands nothing: the
+  variable is the user's, not the reader's); an unquoted text where more than one run from its start to a blank
+  or to its end ends in a program's extension (`C:\Sites\example.com files\tool.exe`); a text that holds a
+  blank other than a space or a tab. A text is split at spaces and tabs only. `svchost.exe -k netsvcs` stays
+  sure. FOR: `sure` is said only where the text names one program however it is read. MUST NOT TOUCH:
+  raqib/hooks/os_sysmon.py's own reading of a Run value (PERSIST-RUN-KEY's; its blanks are a recorded debt,
+  ruled with M15.3c). Not measured, said: whether Winlogon keeps a quoted comma inside one program's name.
+- AK-4 (a link is never followed, and a swap is said). The module's opener asks Windows not to follow a link at
+  the open itself, and a file whose handle says it is a link is an entry said as a link with its content not
+  read. A link's content is a fixed word of its own, so a file that becomes a link under the same name, or a
+  link that becomes a file, is said as changed. Two names of one folder that differ only by case are one key:
+  the second is a part not read, said. FOR: between the listing and the open nothing can turn the read toward
+  a share (rule 5) or hide a swap behind an old hash.
+- AK-5 (a failed step, a salt, a bad argument). A step that raises marks the parts it had listed as not read
+  (so that they are not new when next seen). `Watcher` takes no salt from a caller: the command's own use is a
+  private flag that takes the process's salt. `read` gives a failed read, never an exception, for a `begin`
+  that is no step.
+- AK-6 (the words say what the code does and what ran). The spec, the threat model and the module's own words
+  say: which parts a slow key still delays and that a key or folder over the bound is never compared while it
+  is over (a plain user can do that to its own Run key and Startup folder: the lever that is left); that a key's
+  enumeration reads each value whole and a folder's listing every name (the bound is of entries compared, the
+  64 KiB of what is hashed); that a change made and undone while a part is unread is not said; that what was
+  measured of a held file is another call's rename and delete - an open that asks for no sharing still fails
+  while the read holds the file, for the instant of the read (not measured: put back); that a part read late
+  is a base. Everything that never ran on Windows is listed as that: the long form's effect on odd names, a
+  link, drive kinds 0, 1 and 4, a cut, the rotation, the bound, a late base.
+- AK-7 (the claims and the tests). X37 is MET only where a later read, after the held file was let go, read its
+  content. The tests the review names are made able to fail or added (its S5 a to g): a whole read before the
+  cut one; a made-up directory entry that is a reparse point; WinRegistry's own bound; the process's salt and
+  the word salt in what is said; the invalid escape; `late` asserted at the bound; `read` on Windows using the
+  module's opener. The questions file names every phrase of the spec a test no longer holds.
+- AK-8 (recorded for M15.3c). A base taken late is a line of the host's own (rule 4: it is what the watch did
+  not see added), not only a count on the command's output. `pending` grows with keys made and removed while a
+  place keeps failing (bounded by what exists; low). `changes()` alone, outside the watcher, compares the first
+  thousand of a key over the bound.
+
+## Amendment L (the Table, 2026-11-21) - the third review of M15.3b (docs/review/2026-11-21-M15.3b-redo2.md): lands
+The reviewer's verdict is NEXT, with fixes the Table makes by hand and two questions to rule. Measured before the
+one ruling that needed it (the probe branch ab206af and f7da80f, GitHub's Windows machine, the module's own
+function over the machine's own texts): of 689 services' ImagePath, 239 are an unquoted first word that holds
+a `%` (`%SystemRoot%\system32\svchost.exe -k netsvcs -p` and its like), 4 a quoted one, 2 a driver's path with a
+blank and no program's extension; both values of the machine's Run key begin with `%windir%`. AK-3 alone said
+245 services and both Run values `may run`. Five users' hives are loaded there: `.DEFAULT`, `S-1-5-18`, `-19`,
+`-20` and the user's own. After AL-4, on the same machine: 685 of 687 services' texts sure, the two drivers'
+paths not; both Run values sure; Winlogon's two sure.
+- AL-1 (a hive that comes in a read whose step raised). The marking of AK-5 never takes a hive's own part: a
+  hive first listed in a read whose Run or RunOnce step raised is said `hive loaded` by that read, and none of
+  its keys enters the base without a word (the builder's question 8, ruled; the review's MUST FIX 1). A test
+  reaches the raise itself, which the first did not.
+- AL-2 (the users turn once a turn of the steps). The users' hives of a step are begun one further at each
+  whole turn of the six steps, not at each read: a turn of users that moved with the steps gave some pairs of
+  step and user never (the builder's question 3; the review's MUST FIX 4b: with four hives, one hive's RunOnce
+  was never read whole). The words say the bound that holds - where the slow keys are one user's own, every
+  other key is read whole within six reads for each hive loaded - and what has no turn: a slow key inside the
+  services' or the tasks' step. FOR: AK-2's promise is true for the case it was made for, and is not said for
+  more. Not measured: any slow key on a real machine (the longest read there is 0.219 s).
+- AL-3 (a swap is said whatever was read). A file that becomes a link, or a link a file, under one name is
+  `changed` though the base held no content of it (a file held or refused when it was first listed).
+- AL-4 (`sure`, by what a real machine holds). A quoted first word is sure unless its name - what follows its
+  last separator - holds a `%`: a variable before the name moves its folder, not the name. An unquoted first
+  word that holds a `%` is not sure, but for a text of the machine's own (a service's, the machine's Run or
+  RunOnce key, Winlogon) that begins with `%SystemRoot%` or `%windir%` and holds no other, where the reader's
+  own value of that variable holds no blank: the variable is then taken as a path with no blank. A user's own
+  text is never taken so. FOR: `may run` says something - two texts of 687 on the measured machine, not 245.
+  MUST NOT TOUCH: AK-3's other two cases; the program's name, which is still PERSIST-RUN-KEY's reading.
+- AL-5 (small). The watcher's read number is its own (no caller sets it). The rig's `content read` is never a
+  link's fixed word. The tests the review found unable to fail are made able to, each checked by taking its
+  fix out: the step that raises, the turn (RunOnce and the machine's keys, and `startup` back among the places
+  read whole), a task's body over the bound. The questions file's "nothing no longer held" for the turn's test
+  was the third such slip of this task: from M15.3c on a builder lists every assertion it removes, and the
+  reviewer is asked to diff the test's assertions, not to trust the list.
+- AL-6 (kept, or recorded for M15.3c). Kept as built: the builder's questions 1 (which parts list what is
+  under them), 2, 4, 5, 6, 7, 9 (by AL-4), 10, 11. Recorded: a Startup folder over the bound still opens and
+  hashes a thousand files a read; every reparse point is a link, so a file that is one of another kind is
+  never read; a change of a service that nobody of the rig made was seen once (`changed service 1`): M15.3c
+  measures what Windows changes by itself before a rule judges `changed service`; X37's SKIP for facts that
+  name no platform; a count of `sure` False a place in the rig's facts.

@@ -1,0 +1,22 @@
+{
+  "finds": "Every hole of the capture and every blind spot the watch said (kind hole; raqib.hole.class says which).",
+  "request": "POST raqib-events*/_search",
+  "body": {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "term": {
+              "event.action": "hole"
+            }
+          }
+        ]
+      }
+    },
+    "sort": [
+      {
+        "event.ingested": "desc"
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+title: Raqib - a hole of the capture
+id: 6f3d2a91-4c1e-4b8a-9d27-1e5a0c7b3f42
+status: experimental
+description: 'The watch says it could not see something (kind hole; hole.class says a hole or a blind spot). Silence is an alarm.'
+author: Raqib
+logsource:
+  product: raqib
+detection:
+  selection:
+    kind: hole
+  condition: selection
+level: medium

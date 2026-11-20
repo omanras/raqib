@@ -1,0 +1,16 @@
+title: Raqib - a heartbeat that says the watch is not watching
+id: 2c9e7f54-8b1a-4d36-a5e0-93f1b7c4d812
+status: experimental
+description: 'A heartbeat whose state is not WATCHING (SILENT, AGENT GONE, CAPTURE FAILED, READER LATE, HOST READER FAILED or FINISHED) - the watch says it is blind or has stopped watching.'
+author: Raqib
+logsource:
+  product: raqib
+detection:
+  selection:
+    kind: heartbeat
+  filter:
+    state: WATCHING
+  condition: selection and not filter
+falsepositives:
+  - 'FINISHED, the heartbeat of a watch that ended its rounds in order'
+level: medium

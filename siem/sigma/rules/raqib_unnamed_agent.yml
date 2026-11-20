@@ -1,0 +1,19 @@
+title: Raqib - an agent nobody named
+id: 6f3d2a91-4c1e-4b8a-9d27-1e5a0c7b3f47
+status: experimental
+description: 'A finding of NEW-AGENT-UNKNOWN (a tree that behaves as an agent and is not one of the named agents).'
+author: Raqib
+logsource:
+  product: raqib
+detection:
+  selection:
+    kind:
+      - finding
+      - source-finding
+    rule.id: NEW-AGENT-UNKNOWN
+  condition: selection
+falsepositives:
+  - 'The rule''s own false-positive budget (rule.fp_budget)'
+level: medium
+tags:
+  - attack.t1059
