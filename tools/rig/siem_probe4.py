@@ -37,7 +37,7 @@ def main(spec, content):
         return json.dumps(ev, sort_keys=True, separators=(",", ":"))
 
     def odd(label, first, extra=None):
-        index = INDEX + "-odd2-" + label
+        index = INDEX + "-odd2-" + re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
         got = send([first], index=index, extra=extra) + send([made(run="odd2-next")], index=index)
         code, hit = ask("POST", "/%s/_search" % index, {"size": 5, "_source": [
             "event.kind", "error.message", "host", "raqib.unknown_keys", "raqib.watch.beat", "error", "event.action"]})
