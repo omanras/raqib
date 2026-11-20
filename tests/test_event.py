@@ -54,6 +54,7 @@ DOC = ROOT / "docs" / "specs" / "EVENT.md"
 NOTE = "a rule about the agent's own work or the watch's own sight, not a technique"
 B5 = {"NEW-AGENT": ["T1059"], "NEW-AGENT-UNKNOWN": ["T1059"], "HOST-RHYTHM": ["T1059", "T1071"],
       "NET-TOOL": ["T1105", "T1048"], "DESTRUCT-CMD": ["T1485"], "SECRET-OUTPUT": ["T1552"], "SCOPE-PATH": ["T1005"],
+      "PERSIST-AUTOSTART": ["T1547.001"], "NET-ADMIN-PORT": ["T1021"],   # M15.1 (ADR-0014 A-3, A-4)
       "SILENCE-GAP": ["T1562"], "SILENCE-OPEN": ["T1562"], "SILENCE-HALF": ["T1562"], "SILENCE-ORDER": ["T1562"],
       "SILENCE-EMPTY": ["T1562"], "CROSS-SOURCE": ["T1562"],
       "AGENT-DARK-LIVE": [], "HOST-UNWATCHED": [], "SCOPE-CWD-ROOT": [], "SCOPE-CWD-MOVED": [], "DRIFT-FILES": [],

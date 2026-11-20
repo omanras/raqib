@@ -1269,7 +1269,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "agent",
+    "initiated": true,
+    "parent_image": "explorer"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "phase": "pre",
@@ -1283,7 +1287,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "agent",
+    "initiated": true,
+    "parent_image": "explorer"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "ok": true,
@@ -1299,7 +1307,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "agent",
+    "initiated": true,
+    "parent_image": "explorer"
    },
    "input_sha256": "f9eb80e3e920d765a9c231fd2c9b62ea980c208d49ab6bec60cbd504ffee4aaf",
    "phase": "pre",
@@ -1313,7 +1325,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "agent",
+    "initiated": true,
+    "parent_image": "explorer"
    },
    "input_sha256": "f9eb80e3e920d765a9c231fd2c9b62ea980c208d49ab6bec60cbd504ffee4aaf",
    "ok": true,
@@ -1609,7 +1625,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "curl",
+    "initiated": true,
+    "parent_image": "bash"
    },
    "input_sha256": "edab6deb69f359b9c6c52c08e043427f45a55694eb208787e950bdc020ac477d",
    "phase": "pre",
@@ -1623,7 +1643,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "curl",
+    "initiated": true,
+    "parent_image": "bash"
    },
    "input_sha256": "edab6deb69f359b9c6c52c08e043427f45a55694eb208787e950bdc020ac477d",
    "ok": true,
@@ -1697,7 +1721,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "agent",
+    "initiated": true,
+    "parent_image": "explorer"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "phase": "pre",
@@ -1711,7 +1739,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "agent",
+    "initiated": true,
+    "parent_image": "explorer"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "ok": true,
@@ -2026,7 +2058,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "agent",
+    "initiated": true,
+    "parent_image": "explorer"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "phase": "pre",
@@ -2040,7 +2076,11 @@
    "cwd": "C:\\work\\proj",
    "input_meta": {
     "dest_port": 443,
-    "dest_private": false
+    "dest_private": false,
+    "dest_scope": "public",
+    "image": "agent",
+    "initiated": true,
+    "parent_image": "explorer"
    },
    "input_sha256": "f681b46d62f6502fd5c9347e71eaab3e2c183ca5c59a729ecbd3d8ef587e5e9a",
    "ok": true,

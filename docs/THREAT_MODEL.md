@@ -602,6 +602,72 @@ Rulings: ADR-0003 Amendments C and D.
   not judged by HOST-RHYTHM; where its two times agree, a process's start
   (event 1) matches a sampled CreationDate exactly as before.
 
+### The rules of behaviour (PERSIST-AUTOSTART, NET-ADMIN-PORT; ADR-0014)
+Rulings: ADR-0014 A-3 to A-6 and A-8. Two signatures judge what a tree does to the
+host, beside what its program is called, from the lines its sources write. What
+was measured (a stand-in agent on a Windows machine with Sysmon logging events 1,
+3, 11 and 22, each act harmless and undone) is the ground of what follows.
+
+What they see:
+- PERSIST-AUTOSTART: a file the tree created directly in a Startup folder of
+  Windows (a user's or all users'), as Sysmon's file creation (event 11) names it,
+  or the path of a hooks Write, Edit, MultiEdit or NotebookEdit. Measured: the
+  stand-in's file in the user's Startup folder was a file line with its whole
+  path. `desktop.ini`, which Windows keeps there, is left out.
+- NET-ADMIN-PORT: a connection the process itself made, as event 3 says it
+  (`Initiated`), to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private
+  address that is neither loopback nor link-local, whatever program of the tree
+  opened the socket. Measured: PowerShell's own socket to port 22 and an ssh to the same
+  port were each a net line with port 22 and a private address, and no rule
+  judged the first. An os net line now carries `initiated`, `dest_scope`, `image`
+  and `parent_image` (the names its process's own start gave); the address and
+  the command line stay hashes.
+
+What they do not see:
+- Every autostart place the rule does not read yet. Measured: an autostart value
+  under `CurrentVersion\Run` is Sysmon's event 13, with the program that set it,
+  and Raqib does not read event 13 yet; a scheduled task is written by the
+  Schedule service (svchost, as SYSTEM, 24 ms after schtasks started), not by a
+  process of the tree.
+- A file moved or renamed into the folder: not measured. A move within one
+  volume is believed to be no file creation for Sysmon; a move from another
+  volume is a copy, and so one. A file already there changed in place, and a
+  hard link made there, are believed to be none either.
+- What the kernel does for a tree: Windows' own SMB client (a share, a named
+  pipe, sc or schtasks against another machine) connects to port 445 as System,
+  not as a process of the tree. Not measured here; the commonest way to another
+  Windows machine is so outside NET-ADMIN-PORT.
+- Another machine on the same link reached by its link-local address is left
+  out with loopback. An address of 100.64.0.0/10 counts as private.
+- A net line whose `Initiated` was not read is not judged, and nothing says
+  so: a silence of this rule. Under `raqib watch --host` a Sysmon that gives no
+  file event is not said either. Both are the next stage's to close.
+- The budgets of the two rules were measured on no real desktop's work. A
+  deploy over ssh to a machine of the same network, a remote session of an
+  editor, a local virtual machine reached at its private address, a profile's
+  copy that holds a Startup folder: each would fire, and how often is not
+  known.
+- A Sysmon that logs no file creation or no connection there: nothing is then
+  there to read, and Raqib cannot tell that from nothing done.
+- A port not on the list, a public address, a relay or a tunnel.
+- The host's own sample of a connection (Linux, and Windows without Sysmon).
+  Measured: the two short connections to port 22 were in no sample of the host.
+- This machine's own private address, which a line cannot tell from another
+  machine's. Measured: the stand-in reached its own machine's private address,
+  and the line says a private address as it would for another machine.
+- A connection accepted rather than made. Measured: the machine's own sshd had
+  the same two connections as events with `Initiated: false` and port 22 as their
+  destination (the listener's own port); NET-ADMIN-PORT does not judge them.
+- A net line written before these keys: NET-ADMIN-PORT cannot judge it (partial,
+  and said), and never guesses it.
+- Linux has no os source: neither rule judges an os line there; a hooks file
+  tool is judged by its path on any system.
+
+What is not a finding (A-6): a file under TEMP, and a shell under a shell, are an
+agent's ordinary work. They are recorded (the lines are in the tree's source) and
+judged by no rule. Measured: a file under TEMP written by a powershell under a cmd
+was a file line with its path, and nothing fired on it, by design.
+
 ### The host watch (`raqib watch --host`; ADR-0007, Amendments P and R)
 Rulings: ADR-0007 Amendments C, H, I, M, N, P, R, T, V, X. True of the
 tree as P-1..P-4, R-2..R-9, T-2..T-8, V-1..V-6 and X-1..X-9 leave it (R-1

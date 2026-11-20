@@ -1,0 +1,46 @@
+# A file left in a Startup folder of Windows (ADR-0014 A-3, M15.1): the first rule of behaviour.
+id: PERSIST-AUTOSTART
+title: File written in a Windows Startup folder
+class: PERSIST
+attack: [T1547.001]
+# ADR-0002: the shape of a bad act (a place on the disk), so it lists its evasions (ADR-0014 A-8).
+kind: signature
+evasion:
+  - "another autostart place: a value under CurrentVersion\\Run or RunOnce (the registry is not read until ADR-0014 S2: Sysmon event 13), a scheduled task or a service (written by the system's own service, not by the tree: S3), a Startup folder named by the registry's User Shell Folders when it is moved elsewhere"
+  - "a file moved or renamed into the folder: not measured; a move or a rename within one volume is believed to be no file creation for Sysmon (event 11), a move from another volume is a copy and so one; a hooks line names the tool's own path only, so a Bash cp, mv or redirect into the folder is not a Write"
+  - "a Sysmon that logs no file creation there: nothing is then there to read, and Raqib cannot tell that from nothing done (under raqib watch --host a channel that gives no event 11 is not said yet: ADR-0014 Amendment A, AA-4)"
+  - "Linux has no os source: nothing there is judged by this rule (its autostart places are ADR-0014 S4); a hooks Write is judged on any system, by its path"
+  - "a path written another way than the folder's own: an 8.3 short name (STARTM~1), a junction, a symlink or a mount point that leads into the folder, a path relative to it, or a file of the folder named through an environment variable the tool did not expand"
+  - "an os file line with no path (TargetFilename unread) is not judged (partial, said)"
+  - "a file already in the folder changed in place, or a hard link made in the folder: neither is believed to be a file creation for Sysmon (not measured); a hooks Edit of a file there is matched"
+  - "a hooks path that is not in its plain form (a . or .. part, a doubled separator, a path relative to a folder above Startup): the pattern reads the path as it is written"
+  - "a write by a file tool of another name (an MCP server's own write tool, a patch tool whose paths are inside its text): only Write, Edit, MultiEdit and NotebookEdit are matched"
+severity: high
+# A Startup file is not written by ordinary work: the budget is tight.
+fp_budget: 0.05
+description: "ADR-0014 A-3 (M15.1): an os file line (source os, tool file, Sysmon event 11, a file the tree created) or a hooks line of a file tool (Write, Edit, MultiEdit, NotebookEdit; a line with no source is a hooks line) whose input_meta.path is a file directly in a Startup folder of Windows (...\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\, a user's or all users'; either slash, any case; desktop.ini, which Windows itself keeps there, left out; not a deeper folder). Something left there runs at the next logon. On a benign tree a source finding is noted, not knocked, as before (MUST NOT TOUCH). The path is the line's own (os-sysmon writes the TargetFilename redacted by common.redact; capture the tool's path): never guessed from a command."
+summary: "{tool} writes a file in a Startup folder at seq {seq} ({input_meta.path})"
+match:
+  all:
+    - {field: phase, eq: pre}
+    - any:
+        # an os file line: the tree created a file there (Sysmon event 11)
+        - all:
+            - {field: source, eq: os}
+            - {field: tool, eq: file}
+        # a hooks line of a file tool; a line with no source (written before M5.2) is a hooks line
+        - all:
+            - any:
+                - {field: source, exists: false}
+                - {field: source, ne: os}
+            - {field: tool, in: [Write, Edit, MultiEdit, NotebookEdit]}
+    # a file directly in ...\Microsoft\Windows\Start Menu\Programs\Startup\ (a user's, all users'), never desktop.ini
+    - field: input_meta.path
+      regex: "(?i)[\\\\/]microsoft[\\\\/]windows[\\\\/]start menu[\\\\/]programs[\\\\/]startup[\\\\/](?!desktop\\.ini$)[^\\\\/]+$"
+fixtures:
+  positive:
+    - tests/fixtures/rules/PERSIST-AUTOSTART/positive-os-file.json
+    - tests/fixtures/rules/PERSIST-AUTOSTART/positive-hooks-write.json
+  negative:
+    - tests/fixtures/rules/PERSIST-AUTOSTART/negative-os-file.json
+    - tests/fixtures/rules/PERSIST-AUTOSTART/negative-hooks.json

@@ -553,12 +553,15 @@ def test_redo_c1a_check_rules_counts_before_and_after_are_in_the_questions_file(
                    "HOST-RHYTHM": (11, 8), "HOST-UNWATCHED": (4, 8),
                    "LANDED-NO-GATE": (8, 2), "NET-TOOL": (12, 0), "NEW-AGENT": (5, 8), "NEW-AGENT-UNKNOWN": (5, 8),
                    "SCOPE-CWD-MOVED": (10, 0), "SCOPE-CWD-ROOT": (10, 0), "SCOPE-PATH": (10, 0),
-                   "SECRET-OUTPUT": (7, 2)}
+                   "SECRET-OUTPUT": (7, 2),
+                   # M15.1 (ADR-0014): no benign file holds an os net line (NET-ADMIN-PORT's gate); PERSIST-AUTOSTART has none
+                   "NET-ADMIN-PORT": (1, 9), "PERSIST-AUTOSTART": (10, 0)}
     text = (ROOT / "docs" / "review" / "2026-11-04-M7.2b-questions.md").read_text(encoding="utf-8")
     text += (ROOT / "docs" / "review" / "2026-11-04-M7.4-questions.md").read_text(encoding="utf-8")   # M7.4: HOST-RHYTHM
     text += (ROOT / "docs" / "review" / "2026-11-09-M7.5-questions.md").read_text(encoding="utf-8")   # M7.5: both again
     text += (ROOT / "docs" / "review" / "2026-11-09-M7.6c-questions.md").read_text(encoding="utf-8")   # M7.6c REDO: both again
     text += (ROOT / "docs" / "review" / "2026-11-10-M7.8-questions.md").read_text(encoding="utf-8")   # M7.8: the os lines
+    text += (ROOT / "docs" / "review" / "2026-11-20-M15.1-questions.md").read_text(encoding="utf-8")   # M15.1: the two rules
     # ADR-0007 AP-3: HOST-RHYTHM's 9 measured are asserted above from check-rules; the files read here hold the 7 of
     # their time (the new count is said in its own review file, which no test reads)
     recorded = dict(got, **{"HOST-RHYTHM": (7, 8)})

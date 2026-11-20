@@ -502,7 +502,10 @@ def test_m12_e1_rule_set_v1_ships():
         ("DESTRUCT-CMD", "DESTRUCT"), ("DRIFT-FILES", "DRIFT"), ("EDIT-NO-TEST", "DRIFT"),
         ("HOST-RHYTHM", "HOST"),      # M7.4 (ADR-0007 decision 4): the think-act cycle
         ("HOST-UNWATCHED", "HOST"),   # M7.2b (ADR-0007 H-3): a candidate tree with no source
-        ("LANDED-NO-GATE", "DRIFT"), ("NET-TOOL", "NET"), ("NEW-AGENT-UNKNOWN", "HOST"), ("NEW-AGENT", "HOST"),
+        ("LANDED-NO-GATE", "DRIFT"),
+        ("NET-ADMIN-PORT", "NET"),          # M15.1 (ADR-0014 A-4): a login or administration port reached
+        ("NET-TOOL", "NET"), ("NEW-AGENT-UNKNOWN", "HOST"), ("NEW-AGENT", "HOST"),
+        ("PERSIST-AUTOSTART", "PERSIST"),   # M15.1 (ADR-0014 A-3): a file left in a Startup folder
         ("SCOPE-CWD-MOVED", "SCOPE"), ("SCOPE-CWD-ROOT", "SCOPE"),
         ("SCOPE-PATH", "SCOPE"), ("SECRET-OUTPUT", "SECRET")]
 
@@ -949,6 +952,7 @@ M78_EVASION = "os source (M7.8"
 # M7.4 (ADR-0007 decision 4): the note the Table writes under "Ratio after M7.2b", with the HOST-RHYTHM row and
 # "Ratio after M7.4: 4 : 7 : 11." (asked in docs/review/2026-11-04-M7.4-questions.md).
 M74_NOTE = "Note (2026-11-04, M7.4, ADR-0007 decision 4"
+M151_NOTE = "Note (2026-11-20, M15.1, ADR-0014 A-3 and A-4"   # the first rules of behaviour (two signatures)
 M74_QUESTIONS = ROOT / "docs" / "review" / "2026-11-04-M7.4-questions.md"   # the one evasion line each of NET-TOOL and DESTRUCT-CMD gained (H-2)
 
 
@@ -1083,7 +1087,16 @@ def adr_note_m74():
     if M74_NOTE not in section:
         return None
     assert section.count(M74_NOTE) == 1
-    note = section.split(M74_NOTE, 1)[1].split("## ", 1)[0]
+    note = section.split(M74_NOTE, 1)[1].split("## ", 1)[0].split(M151_NOTE, 1)[0]
+    return table_rows(note), note
+
+
+def adr_note_m151():
+    """The M15.1 note (ADR-0014 A-3 and A-4): (rows it adds, its text), as
+    adr_note_m74 reads its note."""
+    _, section = adr_table()
+    assert section.count(M151_NOTE) == 1
+    note = section.split(M151_NOTE, 1)[1].split("## ", 1)[0]
     return table_rows(note), note
 
 
@@ -1111,6 +1124,14 @@ def adr_table_after_m74():
     return out
 
 
+def adr_table_after_m151():
+    out = adr_table_after_m74()
+    rows, _ = adr_note_m151()
+    assert not set(rows) & set(out)
+    out.update(rows)
+    return out
+
+
 def rules_kind_holes(rule):
     return rule.kind == "anchor" and bool(rule.holes) and rule.evasion == ()
 
@@ -1121,7 +1142,7 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     M4.2b, Amendment G: the two demand rows and their holes; M4.3, Amendment
     J: the two tree anchors, code rules with their kinds and holes in tree.py)."""
     from raqib.rules import cross, tree
-    table = adr_table_after_m74()   # M7.2 REDO C-11: the Table's note holds the host anchors
+    table = adr_table_after_m151()   # M7.2 REDO C-11: the Table's note holds the host anchors; M15.1: two signatures
     before, section = adr_table()
     rules = {r.id: r for r in engine.load_catalog(CATALOG)}
     # The M7.2b and M7.4 notes are written (ADR-0007 K-12): nothing is set aside.
@@ -1129,7 +1150,8 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
     m72b_pending = {}
     assert len(before) == 11 and len(adr_table_after_m42()) == 12 and len(adr_table_after_m53()) == 13
     assert len(adr_table_after_m42b()) == 15 and len(adr_table_after_m43()) == 17
-    assert len(adr_table_after_m72()) == 20 and len(table) == 22 - len(m72b_pending)
+    assert len(adr_table_after_m72()) == 20 and len(adr_table_after_m74()) == 22
+    assert len(table) == 24 - len(m72b_pending)   # M15.1 (ADR-0014): PERSIST-AUTOSTART and NET-ADMIN-PORT
     assert set(table) == set(rules) | set(silence.RULE_KINDS) | set(cross.RULE_KINDS) | set(tree.RULE_KINDS)
     for rule_id, (kind, items) in table.items():
         if rule_id in silence.RULE_KINDS:
@@ -1179,11 +1201,17 @@ def test_m41_e2_every_rule_carries_the_kind_and_evasion_of_the_adr_table():
         cross.RULE_KINDS.values()) + list(tree.RULE_KINDS.values())
     assert counts == [kinds.count(kind) for kind in engine.KINDS]
     pending = [sum(1 for r in m72b_pending.values() if r.kind == kind) for kind in engine.KINDS]
-    assert [c + p for c, p in zip(counts, pending)] == [4, 7, 11]   # the gate's line (test_gate.py), M7.4
+    assert [c + p for c, p in zip(counts, pending)] == [6, 7, 11]   # the gate's line (test_gate.py), M15.1
+    m74 = [sum(1 for k, _ in adr_table_after_m74().values() if k == kind) for kind in engine.KINDS]
     if adr_note_m74() is not None:   # M7.4: the Table's note and its ratio line
-        assert "Ratio after M7.4: %d : %d : %d." % tuple(counts) in section and counts == [4, 7, 11]
+        assert "Ratio after M7.4: %d : %d : %d." % tuple(m74) in section and m74 == [4, 7, 11]
         assert set(adr_note_m74()[0]) == {"HOST-RHYTHM"}
         assert section.index("Ratio after M7.2b:") < section.index(M74_NOTE) < section.index("Ratio after M7.4:")
+    # M15.1 (ADR-0014 A-3, A-4): the Table's note of 2026-11-20 and its ratio line, after M7.4's
+    assert "Ratio after M15.1: %d : %d : %d." % tuple(counts) in section and counts == [6, 7, 11]
+    assert set(adr_note_m151()[0]) == {"PERSIST-AUTOSTART", "NET-ADMIN-PORT"}
+    assert all(table[rid][0] == "signature" for rid in adr_note_m151()[0])
+    assert section.index("Ratio after M7.4:") < section.index(M151_NOTE) < section.index("Ratio after M15.1:")
     assert set(adr_note_m72()[0]) == {"NEW-AGENT", "NEW-AGENT-UNKNOWN", "AGENT-DARK-LIVE"}
     assert section.index("Ratio after M4.3:") < section.index(M72_NOTE) < section.index("Ratio after M7.2:")
     assert section.index("Ratio after M4.2b:") < section.index(M43_NOTE) < section.index("Ratio after M4.3: 4 : 7 : 6.")
@@ -1294,7 +1322,16 @@ def test_m41_b4_amendment_a_counts_the_lines_added_beyond_the_table():
     (line_now,) = [x for x in note.splitlines() if x.startswith("Lines beyond the table now: ")]
     now = dict((rule_id, int(n)) for rule_id, n in re.findall(r"([A-Z]+-[A-Z]+) \+(\d+)", line_now))
     table = adr_table_after_m42()
-    signatures = {r.id: r for r in engine.load_catalog(CATALOG) if r.kind == "signature"}
+    every = {r.id: r for r in engine.load_catalog(CATALOG) if r.kind == "signature"}
+    # M15.1 (ADR-0014): the two signatures of the 2026-11-20 note are not M4.1's; they are held by their own note:
+    # its items start their first lines, in order, and the lines beyond them are the rest of ADR-0014 A-8
+    m151 = adr_note_m151()[0]
+    assert set(every) == set(m41) | set(m151) and not set(m41) & set(m151)
+    for rule_id, (_, items) in m151.items():
+        assert [e.split(":", 1)[0] for e in every[rule_id].evasion[:len(items)]] == items, rule_id
+    assert {rule_id: len(every[rule_id].evasion) - len(items) for rule_id, (_, items) in m151.items()} == {
+        "PERSIST-AUTOSTART": 6, "NET-ADMIN-PORT": 7}   # ADR-0014 Amendment A: +3, +2
+    signatures = {rule_id: rule for rule_id, rule in every.items() if rule_id in m41}
     assert set(now) == set(signatures) == set(m41)
     # M7.2b (H-2): NET-TOOL and DESTRUCT-CMD gained one evasion line each, for the host source; the note's
     # "now" line is the Table's (asked in docs/review/2026-11-04-M7.2b-questions.md), so they are counted apart.

@@ -530,7 +530,10 @@ def every_fixture_build():
     return hashlib.sha256("\n".join(out).encode("utf-8")).hexdigest(), len(out)
 
 
-FIXTURES_BUILT = ("c3d84456c2d1d899b64eb9bc20fa72e300f5b5bafcd274acc27b12468a94dca2", 2179)   # the parent commit's code (b713bd2) gave these, to the byte
+# the parent commit's code (b713bd2) gave c3d84456c2d1d899b64eb9bc20fa72e300f5b5bafcd274acc27b12468a94dca2, 2179, to the
+# byte; ADR-0014 A-5 (M15.1): an os net line's four new keys give these, and with the four keys taken out of every net
+# line the old bytes again (tests/test_behaviour_rules.py holds that)
+FIXTURES_BUILT = ("f9689c7afad5172cc7288a0c0847017dfc1ecbabcc337e8e20ac8ad52b912320", 2179)
 
 
 def test_e2_an2_not_touched_every_fixture_gives_the_lines_it_gave_to_the_byte():

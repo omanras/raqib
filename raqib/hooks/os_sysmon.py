@@ -108,7 +108,17 @@ What is written (C-5), one session per run, `os-<PID>`:
   caller asks for it (build's and follow's server_hash, which the host
   watch's follow gives): it is absent when it is not asked for, and when
   the address, the port or the protocol does not parse. UDP connections
-  are written like TCP ones (the protocol is in the hashes only);
+  are written like TCP ones (the protocol is in the hashes only). ADR-0014
+  A-5 (M15.1): a connection's line also carries "initiated" (true where
+  the process made the connection, false where it accepted one, as the
+  event's Initiated says; null where that is not read), "dest_scope"
+  (dest_scope(): loopback, link-local, private or public; null where the
+  address is not one) and "image" and "parent_image": the names of the
+  process the event names and of its parent as that process's own event 1
+  said them (the same gate and the same values as its process line), null
+  where neither this export nor an earlier pass of the follow holds that
+  start (build's tree keeps the starts it read, "starts"); dest_port,
+  dest_private and the hashes are what they were;
 - session_end at the last kept event's time;
 - cwd on every line: --cwd DIR (an absolute directory, Windows or POSIX:
   the export may be read on another host), else the CurrentDirectory of
@@ -168,6 +178,9 @@ SILENT_IF_MISSING = {
 PRIVATE_NETS = tuple(ipaddress.ip_network(n) for n in (
     "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "169.254.0.0/16", "100.64.0.0/10",
     "::1/128", "fc00::/7", "fe80::/10"))
+SCOPE_NETS = (   # ADR-0014 A-5: dest_scope's first two, of PRIVATE_NETS; the rest of it is "private"
+    ("loopback", tuple(ipaddress.ip_network(n) for n in ("127.0.0.0/8", "::1/128"))),
+    ("link-local", tuple(ipaddress.ip_network(n) for n in ("169.254.0.0/16", "fe80::/10"))))
 TEXT_MAX = 300
 # --root PID[:GUID] (ruling D-5): a Sysmon ProcessGuid, braces optional.
 ROOT_SPEC = re.compile(r"([0-9]+)(?::(\{?[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}?))?\Z")
@@ -202,16 +215,46 @@ def program_name(image):
     return None
 
 
-def dest_private(text):
-    """True when the address is on a private, loopback or link-local network,
-    False for any other address, None when it is not an address."""
+def _address(text):
+    """The address of a text (an IPv4-mapped IPv6 address as its IPv4), or None."""
     try:
         ip = ipaddress.ip_address((text or "").strip().split("%")[0])
     except ValueError:
         return None
     if ip.version == 6 and ip.ipv4_mapped:
         ip = ip.ipv4_mapped
+    return ip
+
+
+def dest_private(text):
+    """True when the address is on a private, loopback or link-local network,
+    False for any other address, None when it is not an address."""
+    ip = _address(text)
+    if ip is None:
+        return None
     return any(ip.version == net.version and ip in net for net in PRIVATE_NETS)
+
+
+def dest_scope(text):
+    """ADR-0014 A-5: "loopback", "link-local", "private" or "public" (None
+    when the text is not an address; an IPv4-mapped IPv6 address is read as
+    its IPv4). One with dest_private: where it is True the scope is one of
+    the first three (the private ones are PRIVATE_NETS' others: 10/8,
+    172.16/12, 192.168/16, 100.64/10, fc00::/7), where it is False public."""
+    ip = _address(text)
+    if ip is None:
+        return None
+    for scope, nets in SCOPE_NETS:
+        if any(ip.version == net.version and ip in net for net in nets):
+            return scope
+    return "private" if dest_private(text) else "public"
+
+
+def initiated(value):
+    """ADR-0014 A-5: an event 3's Initiated as Sysmon writes it (true or
+    false, any case), else None (not read)."""
+    word = value.strip().lower() if isinstance(value, str) else None
+    return {"true": True, "false": False}.get(word)
 
 
 def _int(value):
@@ -356,6 +399,7 @@ def build(text, root, guid=None, cwd=None, start_seq=0, after_record=None, info=
         return [], silences
     parents = None if mark_under is None else (tree if tree is not None else {}).setdefault("parents", {})   # BC-2
     kept = _tree(events, root, root_guid, tree, parents)
+    _start_names(kept, {} if tree is None else tree.setdefault("starts", {}))   # ADR-0014 A-5: before after_record
     if info is not None:
         ids = [e["record_id"] for e, _, _ in kept if e["record_id"] is not None]
         info["top_record"] = max(ids) if ids else None
@@ -556,7 +600,34 @@ def _event_fields(e, depth, server_hash=False):
     server = dest_sha256(d.get("DestinationIp"), d.get("DestinationPort"), d.get("Protocol")) if server_hash else None
     if server is not None:   # AU-1, AW-2: the server alone (no host name), where asked; input_sha256 is what it was
         meta["dest_sha256"] = server
+    # ADR-0014 A-5: who made the connection, where it goes, and the names its process's own start said (_start_names)
+    image, parent_image = e.get("names") or (None, None)
+    meta.update(initiated=initiated(d.get("Initiated")), dest_scope=dest_scope(d.get("DestinationIp")),
+                image=image, parent_image=parent_image)
     return common.canonical_sha256({"destination": destination}), meta
+
+
+def _start_names(kept, starts):
+    """ADR-0014 A-5: each net event of kept gets "names", the (image,
+    parent_image) its process's own event 1 gave its process line (read
+    from _event_fields, the one gate), or (None, None) where no start of it
+    is held. starts (identity -> names) holds the starts read so far: a
+    bounded follow's tree keeps it across passes; it is grown here. A start
+    keyed by ProcessGuid is taken from the whole pass (AN-2: a mixed clock
+    may sort a connection before its start), one keyed by a pid alone as
+    the walk meets it (a pid is only somebody's at a time)."""
+    def names(e, depth):
+        meta = _event_fields(e, depth)[1]
+        return (meta["image"], meta["parent_image"])
+
+    for e, depth, _ in kept:
+        if e["event"] == 1 and e["guid"] is not None:
+            starts[_gkey(e["guid"])] = names(e, depth)
+    for e, depth, _ in kept:
+        if e["event"] == 1 and e["guid"] is None:
+            starts[("pid", e["pid"])] = names(e, depth)
+        elif e["event"] == 3:
+            e["names"] = starts.get(_gkey(e["guid"]) if e["guid"] is not None else ("pid", e["pid"]), (None, None))
 
 
 def _lines(kept, root, cwd, start_seq, missing, server_hash=False, marks=None):

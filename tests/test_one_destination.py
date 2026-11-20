@@ -68,7 +68,11 @@ def test_e1_one_server_named_and_not_is_one_dest_sha256_and_two_input_sha256():
     for digest, hostname in ((named, "model.example"), (plain, None)):
         assert digest == common.canonical_sha256({"destination": {"hostname": hostname, "ip": "192.0.2.20",
                                                                    "port": "443", "protocol": "tcp"}})
-    assert set(meta_plain) == {"dest_port", "dest_private", "dest_sha256"}
+    # ADR-0014 A-5 (M15.1): the four keys join; this event says no Initiated and its process's start is not held
+    assert set(meta_plain) == {"dest_port", "dest_private", "dest_sha256", "initiated", "dest_scope", "image",
+                               "parent_image"}
+    assert {k: meta_plain[k] for k in ("initiated", "dest_scope", "image", "parent_image")} == {
+        "initiated": None, "dest_scope": "public", "image": None, "parent_image": None}
     assert meta_plain["dest_port"] == 443 and meta_plain["dest_private"] is False
 
 

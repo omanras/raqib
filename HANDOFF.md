@@ -1,6 +1,6 @@
-# HANDOFF — none open  (M12.1 landed 2026-11-18; the next task is not yet handed off)
+# HANDOFF — none open  (M15.1 landed 2026-11-20; the next tasks are handed off on their own branches)
 
-Task: none. Do not build. The next task is M12.2 (ADR-0013 A-2, stage S2: the forwarder as a unit of its own). The Table measures on the probe branch and rules before it writes a HANDOFF: what the forwarder's unit must read (the service's events file, root's alone) and reach (a collector, the journal), under which user, and what its rights open.
+Task: none on main. Do not build here. In build on their branches: M14.1a REDO (claude/M14.1a, ADR-0007 Amendment BR: the reader of Linux's process events after its review). Next on track one: M15.2 (ADR-0014 A-7: the registry's autostart values read as os lines), which the Table measures on the probe branch under two public Sysmon configurations before it writes its HANDOFF.
 
 Scope:
   (none)

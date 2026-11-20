@@ -354,9 +354,9 @@ overlay)" ([ADR-0008](specs/ADR-0008-the-rules-panel.md)).
    lines also carry the local git state, read from the files under `.git`
    (no `git` is run): the head commit, the sha256 of the index, and why
    either could not be read.
-2. **Rules.** Twenty-two rules turn the trace into findings, and every finding
+2. **Rules.** Twenty-four rules turn the trace into findings, and every finding
    cites the trace lines behind it (A5). The rules are 5 silence rules, 1
-   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 16 more: 14
+   cross-source rule (CROSS-SOURCE, `raqib/rules/cross.py`) and 18 more: 16
    YAML rules in `raqib/rules/catalog` and 2 tree anchors (HEAD-UNMOVED,
    INDEX-UNTOUCHED, `raqib/rules/tree.py`). Each YAML rule declares its
    false-positive budget and is measured against fixtures (A6); CROSS-SOURCE
@@ -413,6 +413,8 @@ design, a quiet minute is reported, not assumed harmless.
 | SCOPE-CWD-ROOT / -MOVED | a session running from `/` or a home directory; a working directory that changes |
 | NET-TOOL | WebFetch, WebSearch, a URL, or curl, wget, ssh, nc and the like anywhere in a Bash command; under `raqib watch --host` also a tree's child of those names (the host's record, or Sysmon's process line by `input_meta.image`, Windows programs such as bitsadmin and plink included) |
 | DESTRUCT-CMD | rm, dd, shred, mkfs and the like anywhere in a Bash command; under `raqib watch --host` also a tree's child of those names (the host's record, or Sysmon's process line by `input_meta.image`, Windows programs such as vssadmin, diskpart and format included) |
+| PERSIST-AUTOSTART | a file written directly in a Startup folder of Windows (`...\Microsoft\Windows\Start Menu\Programs\Startup\`, a user's or all users', either slash, any case; `desktop.ini` and deeper folders left out), read from Sysmon's file line (event 11) of a watched tree or from a Write, Edit, MultiEdit or NotebookEdit of the hooks, by its path (high). Linux has no os source for it: there only a hooks file tool is judged. An autostart value of the registry, a scheduled task and a file moved or renamed into the folder are not read yet |
+| NET-ADMIN-PORT | a connection the process itself made (Sysmon's net line, event 3: `initiated` true) to port 22, 23, 135, 445, 3389, 5900, 5985 or 5986 of a private address that is neither loopback nor link-local (`dest_scope` private), whatever program of the tree opened the socket (PowerShell's own included), unless it is ssh started by git (high). Linux has no os source for it: nothing there is judged by it, and the host's own sample of a connection is not judged yet |
 | SECRET-OUTPUT | a key, token or private key in a tool's output (by pattern name; the text is never stored) |
 | DRIFT-FILES | edits to more than two files outside the task's declared scope |
 | LANDED-NO-GATE | a `landed:` commit with no ok run of `gate.sh` or `gate.py` on the same Bash call or before it in the session (holes such as a stale, piped or backgrounded gate are listed in the rule) |
