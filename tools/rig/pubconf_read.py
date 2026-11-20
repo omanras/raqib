@@ -45,6 +45,9 @@ for ev in events:
         if len(parts) > 1 and parts[0] == "HKU":
             parts[1] = "<SID>"
         fam["\\".join(parts[:6])] += 1
+        if "Slash" in target:
+            print("event 13 of the value whose name holds a backslash: TargetObject %r" % re.sub(
+                r"^HKU\\[^\\]+", r"HKU\\<SID>", target))
         if RUN.search(target):
             run.append((field(ev, "Image"), re.sub(r"^HKU\\[^\\]+", r"HKU\\<SID>", target)))
     elif i == 11:
